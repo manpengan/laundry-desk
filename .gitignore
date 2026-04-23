@@ -1,0 +1,52 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+out/
+build/
+release/
+*.asar
+
+# packaged binaries
+*.exe
+*.dmg
+*.pkg
+*.zip
+*.blockmap
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+.idea/
+*.swp
+*.swo
+
+# runtime (Electron userData during dev)
+userData/
+backups/
+photos/
+*.sqlite
+*.sqlite-journal
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
