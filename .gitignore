@@ -8,6 +8,7 @@ out/
 build/
 release/
 *.asar
+test-results/
 
 # packaged binaries
 *.exe
@@ -26,6 +27,7 @@ release/
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
+*.tsbuildinfo
 
 # OS
 .DS_Store

@@ -1,0 +1,55 @@
+name: Build/Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test -- --run
+
+      - name: Build app
+        run: npm run build
+
+      - name: E2E smoke
+        run: npm run test:e2e
+
+      - name: Build
+        run: npm run build:win
+
+      - name: Generate SHA256
+        shell: pwsh
+        run: |
+          Get-ChildItem dist/*.exe | ForEach-Object {
+            $hash = Get-FileHash $_.FullName -Algorithm SHA256
+            "$($hash.Hash)  $($_.Name)" | Out-File -Encoding ascii "$($_.FullName).sha256"
+          }
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: laundry-desk-win
+          path: |
+            dist/*.exe
+            dist/*.exe.sha256
