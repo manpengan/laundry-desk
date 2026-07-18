@@ -41,6 +41,8 @@ export default function Receive() {
   const phoneInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
+  const [discountAmount, setDiscountAmount] = useState(0);
+
   const totalAmount = items.reduce(
     (acc, item) => acc + item.quantity * item.unitPrice,
     0,
@@ -59,8 +61,8 @@ export default function Receive() {
   }, []);
 
   useEffect(() => {
-    setPaidAmount(totalAmount);
-  }, [totalAmount]);
+    setPaidAmount(Math.max(0, totalAmount - discountAmount));
+  }, [totalAmount, discountAmount]);
 
   const handlePhoneChange = async (phone: string) => {
     setCustomer((current) => ({ ...current, phone }));
@@ -133,7 +135,7 @@ export default function Receive() {
         quantity,
         unitPrice,
       })),
-      totalAmount,
+      totalAmount: Math.max(0, totalAmount - discountAmount),
       paidAmount,
       paymentMethod: paidAmount === 0 ? "unpaid" : paymentMethod,
     });
@@ -258,10 +260,24 @@ export default function Receive() {
             ))}
 
             <div className="pt-4 border-t border-slate-100 space-y-4">
+              <div className="grid gap-3 md:grid-cols-2 items-center">
+                <span className="text-slate-500">
+                  合计 {items.length} 件，原价: {formatCurrency(totalAmount)}
+                </span>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="优惠金额(元)"
+                  value={centsToInput(discountAmount)}
+                  onChange={(event) =>
+                    setDiscountAmount(yuanInputToCents(event.target.value))
+                  }
+                />
+              </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-500">合计 {items.length} 件</span>
+                <span className="text-slate-500 font-semibold">折后应收</span>
                 <span className="text-xl font-bold text-blue-600">
-                  {formatCurrency(totalAmount)}
+                  {formatCurrency(Math.max(0, totalAmount - discountAmount))}
                 </span>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
@@ -287,6 +303,14 @@ export default function Receive() {
                   <option value="card">刷卡</option>
                 </select>
               </div>
+              {paidAmount < Math.max(0, totalAmount - discountAmount) && (
+                <div className="text-sm text-red-500 font-medium pl-1">
+                  将记为欠款:{" "}
+                  {formatCurrency(
+                    Math.max(0, totalAmount - discountAmount) - paidAmount,
+                  )}
+                </div>
+              )}
             </div>
 
             <Button

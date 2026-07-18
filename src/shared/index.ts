@@ -96,3 +96,9 @@ export interface BackupInfoDto {
   size: number;
   createdAt: string;
 }
+
+export interface ReportDataDto {
+  date: string;
+  count: number;
+  income: number;
+}

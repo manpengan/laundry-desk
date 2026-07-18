@@ -4,6 +4,7 @@ import {
   IdSchema,
   PaginationSchema,
   PickupSchema,
+  ReportInputSchema,
   SearchOrdersSchema,
 } from "../../shared/schemas";
 import { OrderService } from "../services/orderService";
@@ -21,6 +22,9 @@ export function registerOrderIpc(): void {
   );
   registerIpcHandler("orders:getStats", z.undefined(), () =>
     OrderService.getStats(),
+  );
+  registerIpcHandler("orders:getReport", ReportInputSchema, (input) =>
+    OrderService.getReport(input),
   );
   registerIpcHandler("orders:pickup", PickupSchema, (input) =>
     OrderService.pickup(input),

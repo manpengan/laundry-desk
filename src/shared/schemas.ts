@@ -94,3 +94,8 @@ export type SearchOrdersInput = z.infer<typeof SearchOrdersSchema>;
 export type CustomerSearchInput = z.infer<typeof CustomerSearchSchema>;
 export type PaymentMethod = z.infer<typeof PaymentMethodSchema>;
 export type ServiceType = z.infer<typeof ServiceTypeSchema>;
+
+export const ReportInputSchema = z.object({
+  type: z.enum(["daily", "monthly"]),
+});
+export type ReportInput = z.infer<typeof ReportInputSchema>;

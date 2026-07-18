@@ -8,6 +8,7 @@ import { BackupService } from "@main/services/backupService";
 import { CustomerService } from "@main/services/customerService";
 import { OrderService } from "@main/services/orderService";
 import { PickupCodeService } from "@main/services/pickupCodeService";
+import { ExcelService } from "@main/services/excelService";
 
 describe("M1 services", () => {
   let sqlite: Database.Database;
@@ -279,6 +280,112 @@ describe("M1 services", () => {
     expect(stats.chartData).toHaveLength(7);
     expect(stats.chartData.at(-1)?.count).toBeGreaterThanOrEqual(3);
     expect(todayOrder.pickupCode).toMatch(/^\d{4}$/);
+  });
+
+  describe("M2 services", () => {
+    it("generates daily and monthly financial reports", async () => {
+      const customer = await CustomerService.upsertByPhone(
+        "报表客户",
+        "13000130000",
+        db,
+      );
+      OrderService.createOrder(
+        {
+          customerId: customer.id,
+          items: [
+            {
+              itemType: "外套",
+              serviceType: "dry_clean",
+              quantity: 1,
+              unitPrice: 5000,
+            },
+          ],
+          totalAmount: 5000,
+          paidAmount: 4000,
+          paymentMethod: "cash",
+        },
+        db,
+      );
+
+      const daily = await OrderService.getReport({ type: "daily" }, db);
+      const monthly = await OrderService.getReport({ type: "monthly" }, db);
+
+      expect(daily).toHaveLength(30);
+      expect(daily.at(-1)?.income).toBe(40);
+      expect(daily.at(-1)?.count).toBe(1);
+
+      expect(monthly).toHaveLength(12);
+      expect(monthly.at(-1)?.income).toBe(40);
+      expect(monthly.at(-1)?.count).toBe(1);
+    });
+
+    it("imports and exports customers and orders via ExcelService", async () => {
+      const tempExcelDir = fs.mkdtempSync(join(os.tmpdir(), "laundry-excel-"));
+      const customersPath = join(tempExcelDir, "customers.xlsx");
+      const ordersPath = join(tempExcelDir, "orders.xlsx");
+
+      try {
+        const customer = await CustomerService.upsertByPhone(
+          "王老板",
+          "13111111111",
+          db,
+        );
+        OrderService.createOrder(
+          {
+            customerId: customer.id,
+            items: [
+              {
+                itemType: "羽绒服",
+                serviceType: "dry_clean",
+                quantity: 2,
+                unitPrice: 8000,
+              },
+            ],
+            totalAmount: 16000,
+            paidAmount: 16000,
+            paymentMethod: "wechat",
+          },
+          db,
+        );
+
+        await ExcelService.exportCustomers(customersPath, db);
+        await ExcelService.exportOrders(ordersPath, db);
+
+        expect(fs.existsSync(customersPath)).toBe(true);
+        expect(fs.existsSync(ordersPath)).toBe(true);
+
+        const sqlite2 = new Database(":memory:");
+        const db2 = createDbClient(sqlite2);
+
+        const custResult = await ExcelService.importCustomers(
+          customersPath,
+          db2,
+        );
+        expect(custResult?.successCount).toBe(1);
+
+        const importedCusts = await db2.query.customers.findMany();
+        expect(importedCusts).toHaveLength(1);
+        expect(importedCusts[0].name).toBe("王老板");
+        expect(importedCusts[0].phone).toBe("13111111111");
+
+        const orderResult = await ExcelService.importOrders(ordersPath, db2);
+        expect(orderResult?.successCount).toBe(1);
+
+        const importedOrders = await db2.query.orders.findMany({
+          with: { items: true, customer: true },
+        });
+        expect(importedOrders).toHaveLength(1);
+        expect(importedOrders[0].orderNo).toMatch(/^\d{8}-\d{4}$/);
+        expect(importedOrders[0].customer.phone).toBe("13111111111");
+        expect(importedOrders[0].items).toHaveLength(1);
+        expect(importedOrders[0].items[0].itemType).toBe("羽绒服");
+        expect(importedOrders[0].items[0].quantity).toBe(2);
+
+        sqlite2.close();
+      } finally {
+        fs.rmSync(tempExcelDir, { recursive: true, force: true });
+      }
+    });
   });
 });
 

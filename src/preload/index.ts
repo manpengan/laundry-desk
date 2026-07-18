@@ -7,6 +7,7 @@ import type {
   OrderSearchResultDto,
   OrderWithDetailsDto,
   StatsDto,
+  ReportDataDto,
 } from "../shared";
 import type {
   CreateOrderInput,
@@ -25,6 +26,9 @@ export interface LaundryDeskApi {
       id: number,
     ) => Promise<ApiResponse<OrderWithDetailsDto | undefined>>;
     getStats: () => Promise<ApiResponse<StatsDto>>;
+    getReport: (params: {
+      type: "daily" | "monthly";
+    }) => Promise<ApiResponse<ReportDataDto[]>>;
     pickup: (input: PickupInput) => Promise<ApiResponse<OrderDto>>;
     searchForPickup: (
       query: string,
@@ -47,6 +51,12 @@ export interface LaundryDeskApi {
   excel: {
     exportOrders: () => Promise<ApiResponse<string | null>>;
     exportCustomers: () => Promise<ApiResponse<string | null>>;
+    importOrders: () => Promise<
+      ApiResponse<{ successCount: number; skipCount: number }>
+    >;
+    importCustomers: () => Promise<
+      ApiResponse<{ successCount: number; skipCount: number }>
+    >;
   };
   photos: {
     save: (
@@ -69,6 +79,7 @@ const api: LaundryDeskApi = {
     findAll: (params) => ipcRenderer.invoke("orders:findAll", params),
     findById: (id) => ipcRenderer.invoke("orders:findById", id),
     getStats: () => ipcRenderer.invoke("orders:getStats"),
+    getReport: (params) => ipcRenderer.invoke("orders:getReport", params),
     pickup: (input) => ipcRenderer.invoke("orders:pickup", input),
     searchForPickup: (query) =>
       ipcRenderer.invoke("orders:searchForPickup", { query }),
@@ -86,6 +97,8 @@ const api: LaundryDeskApi = {
   excel: {
     exportOrders: () => ipcRenderer.invoke("excel:exportOrders"),
     exportCustomers: () => ipcRenderer.invoke("excel:exportCustomers"),
+    importOrders: () => ipcRenderer.invoke("excel:importOrders"),
+    importCustomers: () => ipcRenderer.invoke("excel:importCustomers"),
   },
   photos: {
     save: (orderId, base64Data) =>
