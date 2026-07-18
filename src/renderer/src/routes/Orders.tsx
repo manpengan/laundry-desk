@@ -1,81 +1,93 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent } from "../components/ui/Card";
-import { Button } from "../components/ui/Button";
-import { formatCurrency, cn } from "@renderer/lib/utils";
 import { useNavigate } from "react-router-dom";
-
-const STATUS_MAP = {
-  pending: { label: "待处理", color: "bg-yellow-50 text-yellow-600" },
-  ready: { label: "可取件", color: "bg-blue-50 text-blue-600" },
-  picked_up: { label: "已取件", color: "bg-green-50 text-green-600" },
-  cancelled: { label: "已取消", color: "bg-red-50 text-red-600" },
-};
+import type { OrderWithDetailsDto } from "@shared/index";
+import { Button } from "../components/ui/Button";
+import { formatCurrency } from "@renderer/lib/utils";
+import { itemSummary, orderStatus } from "../components/home/homeData";
 
 export default function Orders() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<OrderWithDetailsDto[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
-    window.api.orders.findAll().then((res: any) => {
+    void window.api.orders.findAll({ limit: 100 }).then((res) => {
       if (res.ok) setOrders(res.data);
     });
   }, []);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">订单列表</h2>
+    <div className="space-y-4">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--lg-ink3)]">
+            Orders
+          </p>
+          <h2 className="mt-1 text-[24px] font-bold leading-none tracking-[-0.02em]">
+            订单列表
+          </h2>
+        </div>
         <Button onClick={() => navigate("/receive")}>新收件</Button>
       </div>
 
-      <div className="grid gap-4">
-        {orders.map((order) => (
-          <Card
-            key={order.id}
-            className="border-none shadow-sm hover:ring-1 hover:ring-blue-100 transition-all cursor-pointer"
-            onClick={() => navigate(`/orders/${order.id}`)}
-          >
-            <CardContent className="p-5 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-slate-50 flex items-center justify-center font-bold text-blue-600">
-                  {order.pickupCode}
+      <div className="grid gap-2.5">
+        {orders.map((order) => {
+          const st = orderStatus(order);
+          return (
+            <button
+              key={order.id}
+              type="button"
+              onClick={() => navigate(`/orders/${order.id}`)}
+              className="lg-card lg-spec lg-pressable flex items-center gap-4 rounded-[18px] p-3.5 text-left"
+            >
+              <span
+                className="lg-inset grid h-12 w-16 flex-none place-items-center rounded-[12px] text-[17px] font-bold tracking-[0.1em] text-[var(--lg-accent)]"
+                style={{ fontVariantNumeric: "tabular-nums" }}
+              >
+                {order.pickupCode}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="text-[14.5px] font-bold"
+                    style={{ fontVariantNumeric: "tabular-nums" }}
+                  >
+                    {order.orderNo}
+                  </span>
+                  <span className={`lg-pill ${st.cls}`}>{st.text}</span>
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-lg">{order.orderNo}</span>
-                    <span
-                      className={cn(
-                        "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                        STATUS_MAP[order.status as keyof typeof STATUS_MAP]
-                          .color,
-                      )}
-                    >
-                      {
-                        STATUS_MAP[order.status as keyof typeof STATUS_MAP]
-                          .label
-                      }
-                    </span>
-                  </div>
-                  <div className="text-sm text-slate-500 mt-1">
-                    {order.customer.name} · {order.customer.phone}
-                  </div>
+                <div className="mt-1 truncate text-[12.5px] text-[var(--lg-ink2)]">
+                  {order.customer?.name} · {order.customer?.phone}
+                  <span className="hidden sm:inline">
+                    {" "}
+                    · {itemSummary(order)}
+                  </span>
                 </div>
               </div>
-
-              <div className="text-right">
-                <div className="font-bold text-lg text-blue-600">
+              <div className="flex-none text-right">
+                <div
+                  className="text-[15px] font-bold text-[var(--lg-accent)]"
+                  style={{ fontVariantNumeric: "tabular-nums" }}
+                >
                   {formatCurrency(order.totalAmount)}
                 </div>
-                <div className="text-xs text-slate-400 mt-1">
-                  {new Date(order.receiveDate).toLocaleString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})}
+                <div className="mt-0.5 text-[11.5px] text-[var(--lg-ink3)]">
+                  {order.receiveDate
+                    ? new Date(order.receiveDate).toLocaleString("zh-CN", {
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "—"}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        ))}
-
+            </button>
+          );
+        })}
         {orders.length === 0 && (
-          <div className="py-20 text-center text-slate-400">暂无订单记录</div>
+          <div className="py-16 text-center text-[13.5px] text-[var(--lg-ink3)]">
+            暂无订单记录
+          </div>
         )}
       </div>
     </div>

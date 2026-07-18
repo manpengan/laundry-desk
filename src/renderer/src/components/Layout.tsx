@@ -16,13 +16,13 @@ import { cn } from "@renderer/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 
 const nav = [
-  { to: "/", icon: LayoutGrid, label: "总览" },
-  { to: "/receive", icon: ReceiptText, label: "收件登记" },
-  { to: "/pickup", icon: PackageSearch, label: "取件查询" },
-  { to: "/orders", icon: ListChecks, label: "订单列表" },
-  { to: "/customers", icon: Users2, label: "客户管理" },
-  { to: "/stats", icon: BarChart3, label: "统计报表" },
-  { to: "/settings", icon: Settings2, label: "系统设置" },
+  { to: "/", icon: LayoutGrid, label: "总览", short: "总览" },
+  { to: "/receive", icon: ReceiptText, label: "收件登记", short: "收件" },
+  { to: "/pickup", icon: PackageSearch, label: "取件查询", short: "取件" },
+  { to: "/orders", icon: ListChecks, label: "订单列表", short: "订单" },
+  { to: "/customers", icon: Users2, label: "客户管理", short: "客户" },
+  { to: "/stats", icon: BarChart3, label: "统计报表", short: "统计" },
+  { to: "/settings", icon: Settings2, label: "系统设置", short: "设置" },
 ];
 
 function useTheme() {
@@ -42,13 +42,28 @@ function useTheme() {
   };
 }
 
+function BrandMark({ size = 22 }: { size?: number }) {
+  return (
+    <span
+      className="flex items-center justify-center rounded-[7px] bg-gradient-to-br from-[var(--lg-accent2)] to-[var(--lg-accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]"
+      style={{ width: size, height: size }}
+    >
+      <Shirt
+        style={{ width: size * 0.6, height: size * 0.6 }}
+        className="text-white"
+        strokeWidth={2.4}
+      />
+    </span>
+  );
+}
+
 export default function Layout() {
   const location = useLocation();
   const outlet = useOutlet();
   const { theme, toggle } = useTheme();
 
   return (
-    <div className="relative h-screen overflow-hidden p-3">
+    <div className="relative h-full overflow-hidden p-0 md:p-3">
       <div className="lg-aurora" aria-hidden="true">
         <i></i>
         <i></i>
@@ -56,20 +71,15 @@ export default function Layout() {
         <i></i>
       </div>
 
-      {/* 应用窗口（window 档玻璃，唯一 blur 层） */}
-      <div className="lg-glass relative z-10 flex h-full flex-col overflow-hidden rounded-[30px]">
-        {/* 标题栏 */}
+      {/* 应用窗口（window 档玻璃，唯一 blur 层）；移动端全屏无框 */}
+      <div className="lg-glass relative z-10 flex h-full flex-col overflow-hidden rounded-none md:rounded-[30px]">
+        {/* 桌面标题栏 */}
         <div
-          className="flex items-center justify-between border-b px-5 py-3"
+          className="hidden items-center justify-between border-b px-5 py-3 md:flex"
           style={{ borderColor: "var(--lg-hair)" }}
         >
           <span className="flex items-center gap-2.5 text-[13px] font-semibold text-[var(--lg-ink2)]">
-            <span className="flex h-[22px] w-[22px] items-center justify-center rounded-[7px] bg-gradient-to-br from-[var(--lg-accent2)] to-[var(--lg-accent)] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]">
-              <Shirt
-                className="h-[13px] w-[13px] text-white"
-                strokeWidth={2.4}
-              />
-            </span>
+            <BrandMark />
             宏发洗衣店 — 柜台端
           </span>
           <span className="flex gap-1.5" aria-hidden="true">
@@ -85,10 +95,39 @@ export default function Layout() {
           </span>
         </div>
 
+        {/* 移动端顶栏 */}
+        <div
+          className="flex items-center justify-between border-b px-4 py-3 md:hidden"
+          style={{ borderColor: "var(--lg-hair)" }}
+        >
+          <span className="flex items-center gap-2.5">
+            <BrandMark size={26} />
+            <span className="leading-tight">
+              <span className="block text-[15px] font-bold tracking-[-0.01em]">
+                宏发洗衣店
+              </span>
+              <span className="block text-[9px] font-bold uppercase tracking-[0.2em] text-[var(--lg-ink3)]">
+                Counter OS
+              </span>
+            </span>
+          </span>
+          <button
+            onClick={toggle}
+            aria-label="切换主题"
+            className="lg-pressable lg-inset grid h-9 w-9 place-items-center rounded-full text-[var(--lg-ink2)]"
+          >
+            {theme === "dark" ? (
+              <Moon className="h-4 w-4" strokeWidth={2.2} />
+            ) : (
+              <Sun className="h-4 w-4" strokeWidth={2.2} />
+            )}
+          </button>
+        </div>
+
         <div className="flex min-h-0 flex-1">
-          {/* 侧边栏 */}
+          {/* 桌面侧边栏 */}
           <aside
-            className="flex w-[228px] flex-col border-r px-3.5 py-5"
+            className="hidden w-[228px] flex-col border-r px-3.5 py-5 md:flex"
             style={{ borderColor: "var(--lg-hair)" }}
           >
             <div className="px-3 pb-4">
@@ -171,7 +210,7 @@ export default function Layout() {
 
           {/* 内容区 */}
           <main className="min-w-0 flex-1 overflow-y-auto">
-            <div className="mx-auto max-w-[1080px] px-7 py-6">
+            <div className="mx-auto max-w-[1080px] px-4 py-4 md:px-7 md:py-6">
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
                   key={location.pathname}
@@ -195,6 +234,38 @@ export default function Layout() {
             </div>
           </main>
         </div>
+
+        {/* 移动端底部标签栏 */}
+        <nav
+          className="flex border-t pb-[env(safe-area-inset-bottom)] md:hidden"
+          style={{ borderColor: "var(--lg-hair)" }}
+        >
+          {nav.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/"}
+              className="min-w-0 flex-1"
+            >
+              {({ isActive }) => (
+                <span
+                  className={cn(
+                    "lg-pressable flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold transition-colors",
+                    isActive
+                      ? "text-[var(--lg-accent)]"
+                      : "text-[var(--lg-ink3)]",
+                  )}
+                >
+                  <item.icon
+                    className="h-[20px] w-[20px]"
+                    strokeWidth={isActive ? 2.4 : 2}
+                  />
+                  {item.short}
+                </span>
+              )}
+            </NavLink>
+          ))}
+        </nav>
       </div>
     </div>
   );

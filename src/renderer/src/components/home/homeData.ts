@@ -124,7 +124,11 @@ export function orderStatus(o: OrderWithDetailsDto): {
   return { cls: "busy", text: "在洗" };
 }
 
-const serviceLabel: Record<string, string> = { wash: "水洗", dry_clean: "干洗", iron: "熨烫" };
+export const serviceTypeLabel: Record<string, string> = {
+  wash: "水洗",
+  dry_clean: "干洗",
+  iron: "熨烫",
+};
 
 export const itemSummary = (o: OrderWithDetailsDto): string => {
   const parts = o.items
@@ -132,6 +136,6 @@ export const itemSummary = (o: OrderWithDetailsDto): string => {
     .join(" · ");
   if (!parts) return "—";
   const services = new Set(o.items.map((i) => i.serviceType));
-  const suffix = services.size === 1 ? serviceLabel[[...services][0]] : "";
+  const suffix = services.size === 1 ? serviceTypeLabel[[...services][0]] : "";
   return suffix ? `${parts} · ${suffix}` : parts;
 };

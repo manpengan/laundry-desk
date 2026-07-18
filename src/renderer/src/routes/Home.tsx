@@ -224,7 +224,7 @@ export default function Home() {
                   key={o.id}
                   type="button"
                   onClick={() => nav(`/orders/${o.id}`)}
-                  className="lg-pressable grid grid-cols-[1.2fr_1.4fr_auto_auto] items-center gap-3 rounded-[15px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--lg-leaf-hover)]"
+                  className="lg-pressable grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1.2fr_1.4fr_auto_auto] items-center gap-3 rounded-[15px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--lg-leaf-hover)]"
                 >
                   <span className="min-w-0">
                     <span
@@ -237,7 +237,7 @@ export default function Home() {
                       {o.customer?.name ?? "散客"}
                     </span>
                   </span>
-                  <span className="truncate text-[13px] text-[var(--lg-ink2)]">
+                  <span className="hidden truncate text-[13px] text-[var(--lg-ink2)] sm:block">
                     {itemSummary(o)}
                   </span>
                   <span

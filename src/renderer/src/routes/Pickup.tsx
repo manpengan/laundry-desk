@@ -128,7 +128,7 @@ export default function Pickup() {
           return (
             <div
               key={order.id}
-              className="lg-card lg-spec flex items-center gap-4 rounded-[20px] p-4"
+              className="lg-card lg-spec flex flex-wrap items-center gap-4 rounded-[20px] p-4"
             >
               <span
                 className="lg-inset grid h-[58px] w-[86px] flex-none place-items-center rounded-[14px] text-[24px] font-bold tracking-[0.12em] text-[var(--lg-accent)]"
