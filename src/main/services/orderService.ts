@@ -3,6 +3,7 @@ import { getDb, schema, type DbExecutor } from "../db";
 import { type CreateOrderInput, type PickupInput } from "../../shared/schemas";
 import { AuditService } from "./auditService";
 import { PickupCodeService } from "./pickupCodeService";
+import { PhotoService } from "./photoService";
 
 export interface OrderSearchResult {
   id: number;
@@ -116,6 +117,22 @@ export class OrderService {
             },
             tx,
           );
+
+          if (data.photos && data.photos.length > 0) {
+            data.photos.forEach((base64Data, index) => {
+              const fileName = PhotoService.savePhoto(
+                orderNo,
+                index + 1,
+                base64Data,
+              );
+              tx.insert(schema.orderPhotos)
+                .values({
+                  orderId: order.id,
+                  filePath: fileName,
+                })
+                .run();
+            });
+          }
 
           return order;
         });

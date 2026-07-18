@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, Plus, Trash2, Camera, Upload, X } from "lucide-react";
 import type { ServiceType } from "@shared/schemas";
 import {
   Card,
@@ -42,6 +42,69 @@ export default function Receive() {
   const navigate = useNavigate();
 
   const [discountAmount, setDiscountAmount] = useState(0);
+
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const startCamera = async () => {
+    setIsCameraOpen(true);
+    setTimeout(async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+        });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (err) {
+        console.error("无法启动摄像头:", err);
+        setError("无法访问摄像头，请检查设备权限或使用文件上传功能");
+        setIsCameraOpen(false);
+      }
+    }, 100);
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    setIsCameraOpen(false);
+  };
+
+  const takeSnapshot = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement("canvas");
+      canvas.width = videoRef.current.videoWidth || 640;
+      canvas.height = videoRef.current.videoHeight || 480;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        setPhotos((curr) => [...curr, dataUrl].slice(0, 4));
+      }
+    }
+    stopCamera();
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files) {
+      Array.from(files).forEach((file) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (typeof reader.result === "string") {
+            setPhotos((curr) => [...curr, reader.result as string].slice(0, 4));
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
 
   const totalAmount = items.reduce(
     (acc, item) => acc + item.quantity * item.unitPrice,
@@ -138,6 +201,7 @@ export default function Receive() {
       totalAmount: Math.max(0, totalAmount - discountAmount),
       paidAmount,
       paymentMethod: paidAmount === 0 ? "unpaid" : paymentMethod,
+      photos,
     });
     setLoading(false);
 
@@ -147,6 +211,14 @@ export default function Receive() {
     }
 
     const pickupCode = orderResponse.data.pickupCode;
+
+    // 异步触发打印收件凭单，不阻塞路由跳转
+    try {
+      await window.api.printer.printReceipt(orderResponse.data.id);
+    } catch (printErr) {
+      console.error("小票打印失败:", printErr);
+    }
+
     setSuccessMessage(`收件成功，取件码 ${pickupCode}`);
     navigate(`/orders/${orderResponse.data.id}`, {
       state: {
@@ -165,26 +237,89 @@ export default function Receive() {
       {error && <Notice variant="error">{error}</Notice>}
 
       <div className="grid gap-6 md:grid-cols-3">
-        <Card className="md:col-span-1 border-none shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">客户信息</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Input
-              ref={phoneInputRef}
-              placeholder="手机号"
-              value={customer.phone}
-              onChange={(event) => handlePhoneChange(event.target.value)}
-            />
-            <Input
-              placeholder="客户姓名"
-              value={customer.name}
-              onChange={(event) =>
-                setCustomer({ ...customer, name: event.target.value })
-              }
-            />
-          </CardContent>
-        </Card>
+        <div className="md:col-span-1 space-y-6">
+          <Card className="border-none shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">客户信息</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Input
+                ref={phoneInputRef}
+                placeholder="手机号"
+                value={customer.phone}
+                onChange={(event) => handlePhoneChange(event.target.value)}
+              />
+              <Input
+                placeholder="客户姓名"
+                value={customer.name}
+                onChange={(event) =>
+                  setCustomer({ ...customer, name: event.target.value })
+                }
+              />
+            </CardContent>
+          </Card>
+
+          <Card className="border-none shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center justify-between">
+                <span>衣物留样照片</span>
+                <span className="text-xs font-normal text-slate-400">
+                  最多 4 张
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                {photos.map((photo, idx) => (
+                  <div
+                    key={idx}
+                    className="relative aspect-square rounded-xl overflow-hidden border border-slate-100 group bg-slate-50"
+                  >
+                    <img src={photo} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPhotos((curr) => curr.filter((_, i) => i !== idx))
+                      }
+                      className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 text-xs"
+                  onClick={startCamera}
+                  disabled={photos.length >= 4}
+                >
+                  <Camera className="w-3.5 h-3.5 mr-1" /> 拍摄照片
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 text-xs"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={photos.length >= 4}
+                >
+                  <Upload className="w-3.5 h-3.5 mr-1" /> 上传本地
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         <Card className="md:col-span-2 border-none shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between">
@@ -325,6 +460,30 @@ export default function Receive() {
           </CardContent>
         </Card>
       </div>
+
+      {isCameraOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-white/40 space-y-4">
+            <h3 className="text-lg font-bold">拍摄衣物留样</h3>
+            <div className="relative aspect-video bg-black rounded-2xl overflow-hidden">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="ghost" onClick={stopCamera}>
+                取消
+              </Button>
+              <Button onClick={takeSnapshot}>
+                <Camera className="w-4 h-4 mr-2" /> 拍照截图
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

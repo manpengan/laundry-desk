@@ -63,6 +63,11 @@ export default function OrderDetail() {
       if (res.ok) {
         setNotice({ variant: "success", message: "取件成功" });
         setPickupPending(false);
+        try {
+          await window.api.printer.printPickup(order.id);
+        } catch (printErr) {
+          console.error("取件小票打印失败:", printErr);
+        }
         const updated = await window.api.orders.findById(order.id);
         if (updated.ok) setOrder(updated.data ?? null);
       } else {
@@ -149,6 +154,30 @@ export default function OrderDetail() {
               </p>
             </CardContent>
           </Card>
+
+          {order.photos && order.photos.length > 0 && (
+            <Card className="border-none shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg">衣物留样照片</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {order.photos.map((photo: any) => (
+                    <div
+                      key={photo.id}
+                      className="relative aspect-square rounded-xl overflow-hidden border border-slate-100 bg-slate-50 group"
+                    >
+                      <img
+                        src={`media://${photo.filePath}`}
+                        className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform duration-200"
+                        onClick={() => window.open(`media://${photo.filePath}`)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <div className="space-y-6">
@@ -223,7 +252,17 @@ export default function OrderDetail() {
           </Card>
 
           <div className="space-y-3">
-            <Button className="w-full" variant="outline">
+            <Button
+              className="w-full"
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await window.api.printer.printReceipt(order.id);
+                } catch (err) {
+                  console.error("登记单打印失败:", err);
+                }
+              }}
+            >
               <Printer className="w-4 h-4 mr-2" /> 打印票据
             </Button>
             {pickupPending && order.status !== "picked_up" && (

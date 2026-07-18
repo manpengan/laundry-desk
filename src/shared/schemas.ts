@@ -28,6 +28,7 @@ export const CreateOrderSchema = z.object({
   expectedPickupDate: z.coerce.date().optional(),
   notes: z.string().trim().max(1000).optional(),
   staffId: z.number().int().positive().optional(),
+  photos: z.array(z.string()).optional(),
 });
 
 export const UpsertCustomerSchema = z.object({

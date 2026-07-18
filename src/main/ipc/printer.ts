@@ -9,4 +9,10 @@ export function registerPrinterIpc(): void {
     if (!order) throw new Error("订单不存在");
     return await PrinterService.printReceipt(order);
   });
+
+  registerIpcHandler("printer:printPickup", IdSchema, async (orderId) => {
+    const order = await OrderService.findById(orderId);
+    if (!order) throw new Error("订单不存在");
+    return await PrinterService.printPickupReceipt(order);
+  });
 }

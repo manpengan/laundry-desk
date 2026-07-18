@@ -66,6 +66,7 @@ export interface LaundryDeskApi {
   };
   printer: {
     printReceipt: (orderId: number) => Promise<ApiResponse<boolean>>;
+    printPickup: (orderId: number) => Promise<ApiResponse<boolean>>;
   };
   backup: {
     runNow: () => Promise<ApiResponse<string>>;
@@ -107,6 +108,8 @@ const api: LaundryDeskApi = {
   printer: {
     printReceipt: (orderId) =>
       ipcRenderer.invoke("printer:printReceipt", orderId),
+    printPickup: (orderId) =>
+      ipcRenderer.invoke("printer:printPickup", orderId),
   },
   backup: {
     runNow: () => ipcRenderer.invoke("backup:runNow"),

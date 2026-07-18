@@ -62,9 +62,17 @@ export interface OrderDto {
   updatedAt: Date | null;
 }
 
+export interface OrderPhotoDto {
+  id: number;
+  orderId: number;
+  filePath: string;
+  takenAt: Date | null;
+}
+
 export interface OrderWithDetailsDto extends OrderDto {
   customer: CustomerDto;
   items: OrderItemDto[];
+  photos: OrderPhotoDto[];
 }
 
 export interface OrderSearchResultDto {

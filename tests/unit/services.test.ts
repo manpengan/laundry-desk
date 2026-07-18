@@ -2,13 +2,29 @@ import Database from "better-sqlite3";
 import fs from "fs";
 import os from "os";
 import { join } from "path";
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { createDbClient, type AppDb } from "@main/db";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
+
+vi.mock("electron", () => {
+  return {
+    app: {
+      getPath: (name: string) => {
+        if (name === "userData") {
+          return join(os.tmpdir(), "laundry-desk-test-userdata");
+        }
+        return "";
+      },
+      isPackaged: false,
+    },
+  };
+});
+import { createDbClient, type AppDb, schema } from "@main/db";
 import { BackupService } from "@main/services/backupService";
 import { CustomerService } from "@main/services/customerService";
 import { OrderService } from "@main/services/orderService";
 import { PickupCodeService } from "@main/services/pickupCodeService";
 import { ExcelService } from "@main/services/excelService";
+import { PhotoService } from "@main/services/photoService";
+import { eq } from "drizzle-orm";
 
 describe("M1 services", () => {
   let sqlite: Database.Database;
@@ -443,5 +459,71 @@ describe("BackupService", () => {
     expect(backups).toHaveLength(30);
     expect(backups[0].fileName).toBe("backup-2026-04-23-34.zip");
     expect(backups.at(-1)?.fileName).toBe("backup-2026-04-23-05.zip");
+  });
+});
+
+describe("M3 services", () => {
+  let sqlite: Database.Database;
+  let db: AppDb;
+  const tempUserData = join(os.tmpdir(), "laundry-desk-test-userdata");
+
+  beforeEach(() => {
+    sqlite = new Database(":memory:");
+    db = createDbClient(sqlite);
+    fs.mkdirSync(tempUserData, { recursive: true });
+  });
+
+  afterEach(() => {
+    sqlite.close();
+    fs.rmSync(tempUserData, { recursive: true, force: true });
+  });
+
+  it("saves photo base64 to disk and returns relative path", () => {
+    const base64Jpg =
+      "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
+    const orderNo = "20260718-0001";
+    const relativePath = PhotoService.savePhoto(orderNo, 1, base64Jpg);
+
+    expect(relativePath).toMatch(/^\d{4}-\d{2}\/20260718-0001_1\.jpg$/);
+    const absPath = PhotoService.getPhotoPath(relativePath);
+    expect(fs.existsSync(absPath)).toBe(true);
+  });
+
+  it("creates order with photos transactionally", async () => {
+    const customer = await CustomerService.upsertByPhone(
+      "小李",
+      "13800138999",
+      db,
+    );
+    const base64Jpg =
+      "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
+
+    const orderInput = {
+      customerId: customer.id,
+      items: [
+        {
+          itemType: "外套",
+          serviceType: "dry_clean" as const,
+          quantity: 1,
+          unitPrice: 1500, // 15元
+        },
+      ],
+      totalAmount: 1500,
+      paidAmount: 1500,
+      paymentMethod: "wechat" as const,
+      photos: [base64Jpg],
+    };
+
+    const order = await OrderService.createOrder(orderInput, db);
+    expect(order.orderNo).toMatch(/^\d{8}-\d{4}$/);
+
+    const photos = await db.query.orderPhotos.findMany({
+      where: eq(schema.orderPhotos.orderId, order.id),
+    });
+    expect(photos).toHaveLength(1);
+    expect(photos[0].filePath).toMatch(/^\d{4}-\d{2}\/.*_1\.jpg$/);
+
+    const absPath = PhotoService.getPhotoPath(photos[0].filePath);
+    expect(fs.existsSync(absPath)).toBe(true);
   });
 });

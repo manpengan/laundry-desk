@@ -34,5 +34,10 @@ test("launches the desktop shell and renders M1 navigation", async () => {
   await expect(page.getByText("价格模板管理")).toBeVisible();
   await expect(page.getByText("外部数据导入")).toBeVisible();
 
+  const receiveLink = page.getByRole("link", { name: /收件登记/ });
+  await expect(receiveLink).toBeVisible();
+  await receiveLink.click();
+  await expect(page.getByText("衣物留样照片")).toBeVisible();
+
   await app.close();
 });
