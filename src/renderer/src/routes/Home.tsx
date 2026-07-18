@@ -1,105 +1,266 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { ReceiptText } from "lucide-react";
+import type { CustomerDto, OrderWithDetailsDto, StatsDto } from "@shared/index";
 import {
-  ReceiptText, PackageSearch, Clock3, AlertTriangle, ArrowUpRight, Wallet,
-} from "lucide-react";
-
-interface Stats {
-  todayCount: number;
-  todayIncome: number;
-  pendingCount: number;
-  overdueCount: number;
-  monthIncome: number;
-}
-const yuan = (c: number) => (c / 100).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  buildView,
+  itemSummary,
+  orderStatus,
+  periodLabel,
+  useCountUp,
+  yuan,
+  type Period,
+} from "@renderer/components/home/homeData";
+import { Sparkline } from "@renderer/components/home/Sparkline";
+import { PickupKeypad } from "@renderer/components/home/PickupKeypad";
 
 export default function Home() {
-  const [d, setD] = useState<Stats | null>(null);
-  const [now] = useState(() => new Date());
   const nav = useNavigate();
+  const [period, setPeriod] = useState<Period>("today");
+  const [stats, setStats] = useState<StatsDto | null>(null);
+  const [orders, setOrders] = useState<OrderWithDetailsDto[]>([]);
+  const [customers, setCustomers] = useState<CustomerDto[]>([]);
+  const segRef = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState({ x: 4, w: 0 });
 
   useEffect(() => {
     let off = false;
-    window.api.orders.getStats().then((r) => { if (!off && r.ok) setD(r.data); }).catch(() => {});
-    return () => { off = true; };
+    void window.api.orders.getStats().then((r) => {
+      if (!off && r.ok) setStats(r.data);
+    });
+    void window.api.orders.findAll({ limit: 60 }).then((r) => {
+      if (!off && r.ok) setOrders(r.data);
+    });
+    void window.api.customers.findAll().then((r) => {
+      if (!off && r.ok) setCustomers(r.data);
+    });
+    return () => {
+      off = true;
+    };
   }, []);
 
-  const h = now.getHours();
-  const hi = h < 6 ? "凌晨好" : h < 12 ? "上午好" : h < 14 ? "中午好" : h < 18 ? "下午好" : "晚上好";
-  const dateStr = now.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
+  useEffect(() => {
+    const el = segRef.current?.querySelector<HTMLButtonElement>(
+      `button[data-p="${period}"]`,
+    );
+    if (el) setThumb({ x: el.offsetLeft - 4, w: el.offsetWidth });
+  }, [period, stats]);
 
-  const metrics = [
-    { label: "今日收件", value: d ? String(d.todayCount) : "—", unit: "单", icon: ReceiptText, bg: "var(--lg-info-bg)", ink: "var(--lg-info-ink)", to: "/receive" },
-    { label: "待取件", value: d ? String(d.pendingCount) : "—", unit: "单", icon: PackageSearch, bg: "var(--lg-ok-bg)", ink: "var(--lg-ok-ink)", to: "/pickup" },
-    { label: "逾期未取", value: d ? String(d.overdueCount) : "—", unit: "单", icon: AlertTriangle, bg: "var(--lg-late-bg)", ink: "var(--lg-late-ink)", to: "/orders" },
-    { label: "本月实收", value: d ? `¥${yuan(d.monthIncome)}` : "—", icon: Wallet, bg: "var(--lg-warn-bg)", ink: "var(--lg-warn-ink)", to: "/stats" },
-  ];
+  const view = useMemo(
+    () => (stats ? buildView(period, stats, orders, customers) : null),
+    [period, stats, orders, customers],
+  );
+  const incomeAnim = useCountUp(view?.income ?? 0);
+  const countAnim = useCountUp(view?.count ?? 0);
+  const pendingAnim = useCountUp(stats?.pendingCount ?? 0);
+  const newcAnim = useCountUp(view?.newCustomers ?? 0);
+  const returning =
+    customers.length > 0
+      ? Math.round(
+          (customers.filter((c) => c.totalOrders >= 2).length /
+            customers.length) *
+            100,
+        )
+      : null;
+  const spark = useMemo(
+    () => (stats ? stats.chartData.slice(-7).map((r) => r.income) : []),
+    [stats],
+  );
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-end justify-between gap-4">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-[28px] font-bold leading-none tracking-[-0.03em]">{hi}，周店长</h2>
-          <p className="mt-2 text-[13.5px] text-[var(--lg-ink2)]">{dateStr} · 宏发洗衣店运行正常</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--lg-ink3)]">
+            Dashboard
+          </p>
+          <h2 className="mt-1 text-[24px] font-bold leading-none tracking-[-0.02em]">
+            {periodLabel[period]}总览
+          </h2>
         </div>
-        <button
-          onClick={() => nav("/receive")}
-          className="lg-pressable inline-flex items-center gap-2 rounded-[13px] bg-gradient-to-b from-[var(--lg-accent2)] to-[var(--lg-accent)] px-5 py-3 text-[14px] font-semibold text-white shadow-[0_12px_28px_-10px_var(--lg-accent-soft),inset_0_1px_0_rgba(255,255,255,0.35)]"
-        >
-          <ReceiptText className="h-[18px] w-[18px]" strokeWidth={2.2} />新建收件
-        </button>
-      </header>
-
-      {/* 营业额主卡 */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-        className="lg-card lg-spec relative overflow-hidden rounded-[22px]"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-6 p-7">
-          <div>
-            <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--lg-ink2)]">
-              <span className="flex h-7 w-7 items-center justify-center rounded-[9px]" style={{ background: "var(--lg-info-bg)", color: "var(--lg-info-ink)" }}>
-                <ArrowUpRight className="h-4 w-4" strokeWidth={2.4} />
-              </span>
-              今日营业额
-            </div>
-            <div className="mt-3.5 flex items-baseline gap-1 leading-none" style={{ fontVariantNumeric: "tabular-nums" }}>
-              <span className="text-[26px] font-semibold text-[var(--lg-ink2)]">¥</span>
-              <span className="text-[48px] font-bold tracking-[-0.04em]">{d ? yuan(d.todayIncome) : "—"}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2.5 rounded-[14px] px-4 py-3" style={{ background: "var(--lg-leaf)" }}>
-            <Clock3 className="h-[18px] w-[18px] text-[var(--lg-ink3)]" strokeWidth={2} />
-            <div className="leading-tight">
-              <p className="text-[12px] text-[var(--lg-ink3)]">本月累计</p>
-              <p className="text-[16px] font-bold tracking-[-0.02em]" style={{ fontVariantNumeric: "tabular-nums" }}>¥{d ? yuan(d.monthIncome) : "—"}</p>
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* 指标卡 */}
-      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
-        {metrics.map((m, i) => (
-          <motion.button
-            key={m.label}
-            onClick={() => nav(m.to)}
-            initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.06 + i * 0.05, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-            className="lg-card lg-spec lg-pressable rounded-[18px] p-5 text-left"
+        <div className="flex items-center gap-3">
+          <div
+            className="lg-seg"
+            ref={segRef}
+            role="tablist"
+            aria-label="统计周期"
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-[11px]" style={{ background: m.bg, color: m.ink }}>
-              <m.icon className="h-[18px] w-[18px]" strokeWidth={2.2} />
+            <span
+              className="lg-seg-thumb"
+              style={{ transform: `translateX(${thumb.x}px)`, width: thumb.w }}
+            />
+            {(["today", "week", "month"] as Period[]).map((p) => (
+              <button
+                key={p}
+                data-p={p}
+                type="button"
+                className={period === p ? "on" : ""}
+                onClick={() => setPeriod(p)}
+              >
+                {periodLabel[p]}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => nav("/receive")}
+            className="lg-pressable inline-flex items-center gap-2 rounded-full bg-gradient-to-b from-[var(--lg-accent2)] to-[var(--lg-accent)] px-5 py-[11px] text-[14px] font-semibold text-[var(--lg-accent-ink)] shadow-[0_14px_34px_var(--lg-accent-soft),inset_0_1px_0_rgba(255,255,255,0.45)]"
+          >
+            <ReceiptText className="h-[17px] w-[17px]" strokeWidth={2.2} />
+            收件登记
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
+        <div className="lg-card lg-spec rounded-[20px] p-4 pb-3">
+          <div className="flex items-center justify-between text-[12px] font-semibold text-[var(--lg-ink2)]">
+            营业额
+            {view?.chip && (
+              <span
+                className={`lg-pill ${view.chip.startsWith("+") ? "ok" : "late"}`}
+              >
+                {view.chip}
+              </span>
+            )}
+          </div>
+          <div
+            className="mt-2 leading-none"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            <span className="mr-0.5 text-[17px] font-semibold text-[var(--lg-ink2)]">
+              ¥
             </span>
-            <div className="mt-3.5 leading-none" style={{ fontVariantNumeric: "tabular-nums" }}>
-              <span className="text-[27px] font-bold tracking-[-0.03em]">{m.value}</span>
-              {m.unit && <span className="ml-1 text-[14px] font-semibold text-[var(--lg-ink2)]">{m.unit}</span>}
-            </div>
-            <p className="mt-2 text-[13px] font-medium text-[var(--lg-ink2)]">{m.label}</p>
-          </motion.button>
-        ))}
+            <span className="text-[30px] font-bold tracking-[-0.03em]">
+              {yuan(Math.round(incomeAnim))}
+            </span>
+          </div>
+          <Sparkline points={spark} />
+        </div>
+
+        <div className="lg-card lg-spec rounded-[20px] p-4">
+          <div className="text-[12px] font-semibold text-[var(--lg-ink2)]">
+            收件单数
+          </div>
+          <div
+            className="mt-2 leading-none"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            <span className="text-[30px] font-bold tracking-[-0.03em]">
+              {Math.round(countAnim)}
+            </span>
+            <span className="ml-1 text-[15px] font-semibold text-[var(--lg-ink2)]">
+              单
+            </span>
+          </div>
+          <p className="mt-2.5 text-[12px] text-[var(--lg-ink3)]">
+            共 {view?.pieces ?? "—"} 件衣物
+          </p>
+        </div>
+
+        <div className="lg-card lg-spec rounded-[20px] p-4">
+          <div className="flex items-center justify-between text-[12px] font-semibold text-[var(--lg-ink2)]">
+            待取件
+            {stats && stats.overdueCount > 0 && (
+              <span className="lg-pill late">逾期 {stats.overdueCount}</span>
+            )}
+          </div>
+          <div
+            className="mt-2 leading-none"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            <span className="text-[30px] font-bold tracking-[-0.03em]">
+              {Math.round(pendingAnim)}
+            </span>
+            <span className="ml-1 text-[15px] font-semibold text-[var(--lg-ink2)]">
+              单
+            </span>
+          </div>
+          <p className="mt-2.5 text-[12px] text-[var(--lg-ink3)]">
+            今日应交付 {stats?.dueTodayCount ?? "—"} 单
+          </p>
+        </div>
+
+        <div className="lg-card lg-spec rounded-[20px] p-4">
+          <div className="text-[12px] font-semibold text-[var(--lg-ink2)]">
+            新客
+          </div>
+          <div
+            className="mt-2 leading-none"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            <span className="text-[30px] font-bold tracking-[-0.03em]">
+              {Math.round(newcAnim)}
+            </span>
+            <span className="ml-1 text-[15px] font-semibold text-[var(--lg-ink2)]">
+              位
+            </span>
+          </div>
+          <p className="mt-2.5 text-[12px] text-[var(--lg-ink3)]">
+            {returning !== null ? `回头率 ${returning}%` : "暂无客户数据"}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid items-start gap-3.5 xl:grid-cols-[1.65fr_1fr]">
+        <div className="lg-card lg-spec rounded-[22px]">
+          <div className="flex items-center justify-between px-5 pb-1 pt-4">
+            <h3 className="text-[16px] font-semibold tracking-[-0.01em]">
+              最近订单
+            </h3>
+            <button
+              type="button"
+              onClick={() => nav("/orders")}
+              className="text-[13px] font-semibold text-[var(--lg-accent)]"
+            >
+              全部订单 ›
+            </button>
+          </div>
+          <div className="flex flex-col p-2">
+            {orders.slice(0, 5).map((o) => {
+              const st = orderStatus(o);
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => nav(`/orders/${o.id}`)}
+                  className="lg-pressable grid grid-cols-[1.2fr_1.4fr_auto_auto] items-center gap-3 rounded-[15px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--lg-leaf-hover)]"
+                >
+                  <span className="min-w-0">
+                    <span
+                      className="block text-[13px] font-bold"
+                      style={{ fontVariantNumeric: "tabular-nums" }}
+                    >
+                      {o.orderNo}
+                    </span>
+                    <span className="block truncate text-[11px] font-semibold text-[var(--lg-ink3)]">
+                      {o.customer?.name ?? "散客"}
+                    </span>
+                  </span>
+                  <span className="truncate text-[13px] text-[var(--lg-ink2)]">
+                    {itemSummary(o)}
+                  </span>
+                  <span
+                    className="text-[14px] font-bold"
+                    style={{ fontVariantNumeric: "tabular-nums" }}
+                  >
+                    ¥ {yuan(o.totalAmount)}
+                  </span>
+                  <span className={`lg-pill ${st.cls} justify-self-end`}>
+                    {st.text}
+                  </span>
+                </button>
+              );
+            })}
+            {orders.length === 0 && (
+              <p className="px-3 py-8 text-center text-[13px] text-[var(--lg-ink3)]">
+                暂无订单，点击右上角「收件登记」开单
+              </p>
+            )}
+          </div>
+        </div>
+
+        <PickupKeypad />
       </div>
     </div>
   );
