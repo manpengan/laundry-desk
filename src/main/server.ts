@@ -1,7 +1,12 @@
 import http from "http";
 import fs from "fs";
 import { extname, join, normalize } from "path";
-import { registerAllChannels } from "./ipc/registerAll";
+import { registerBackupIpc } from "./ipc/backup";
+import { registerCustomerIpc } from "./ipc/customers";
+import { registerOrderIpc } from "./ipc/orders";
+import { registerPhotoIpc } from "./ipc/photos";
+import { registerSettingsIpc } from "./ipc/settings";
+import { BackupService } from "./services/backupService";
 import { invokeChannel } from "./ipc/helpers";
 import { migrate } from "./db/migrate";
 import { getSqlite } from "./db";
@@ -59,7 +64,13 @@ async function handleInvoke(req: http.IncomingMessage, res: http.ServerResponse)
 async function bootstrap(): Promise<void> {
   migrate(getSqlite());
   await SettingsService.initDefaults();
-  registerAllChannels();
+  // 仅注册无 Electron 依赖的核心域；excel/printer 为桌面端专属（服务器上无 electron 包）
+  registerOrderIpc();
+  registerCustomerIpc();
+  registerSettingsIpc();
+  registerPhotoIpc();
+  registerBackupIpc();
+  BackupService.initAutoBackup();
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? HOST}`);
     const path = url.pathname;
