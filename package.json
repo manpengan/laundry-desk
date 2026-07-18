@@ -17,7 +17,11 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win --x64",
     "test": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "rebuild:node": "npm rebuild better-sqlite3",
+    "build:web": "electron-vite build && node scripts/fix-web-html.mjs",
+    "serve": "npm run build:web && npm run rebuild:node && node out/main/server.js",
+    "serve:only": "npm run rebuild:node && node out/main/server.js"
   },
   "build": {
     "appId": "com.laundry-desk",

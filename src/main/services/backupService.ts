@@ -1,4 +1,3 @@
-import { app } from "electron";
 import {
   createWriteStream,
   existsSync,
@@ -10,6 +9,7 @@ import {
 } from "fs";
 import { join } from "path";
 import archiver from "archiver";
+import { ensureDataSubdir } from "../env/appPaths";
 import cron from "node-cron";
 import type Database from "better-sqlite3";
 import { getDbPath, getSqlite } from "../db";
@@ -91,7 +91,7 @@ export class BackupService {
   }
 
   private static getBackupDir(): string {
-    return join(app.getPath("userData"), "backups");
+    return ensureDataSubdir("backups");
   }
 
   private static ensureBackupDir(backupDir = this.getBackupDir()): string {

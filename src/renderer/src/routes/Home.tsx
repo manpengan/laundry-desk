@@ -1,233 +1,105 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/Card";
-import { cn } from "@renderer/lib/utils";
-import {
-  AlertCircle,
-  ArrowRight,
-  Clock,
-  Coins,
-  PackageCheck,
-  ReceiptText,
-  Sparkles,
-} from "lucide-react";
-import { Link } from "react-router-dom";
-import type { StatsDto } from "@shared/index";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { formatCurrency } from "@renderer/lib/utils";
+import {
+  ReceiptText, PackageSearch, Clock3, AlertTriangle, ArrowUpRight, Wallet,
+} from "lucide-react";
+
+interface Stats {
+  todayCount: number;
+  todayIncome: number;
+  pendingCount: number;
+  overdueCount: number;
+  monthIncome: number;
+}
+const yuan = (c: number) => (c / 100).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function Home() {
-  const [stats, setStats] = useState<StatsDto | null>(null);
+  const [d, setD] = useState<Stats | null>(null);
+  const [now] = useState(() => new Date());
+  const nav = useNavigate();
 
   useEffect(() => {
-    window.api.orders.getStats().then((response) => {
-      if (response.ok) setStats(response.data);
-    });
+    let off = false;
+    window.api.orders.getStats().then((r) => { if (!off && r.ok) setD(r.data); }).catch(() => {});
+    return () => { off = true; };
   }, []);
 
-  const dashboardCards = useMemo(
-    () => [
-      {
-        label: "今日收件",
-        value: stats?.todayCount ?? 0,
-        icon: ReceiptText,
-        color: "text-blue-600",
-        bg: "bg-blue-50",
-      },
-      {
-        label: "待取件",
-        value: stats?.pendingCount ?? 0,
-        icon: PackageCheck,
-        color: "text-green-600",
-        bg: "bg-green-50",
-      },
-      {
-        label: "逾期未取",
-        value: stats?.overdueCount ?? 0,
-        icon: AlertCircle,
-        color: "text-red-600",
-        bg: "bg-red-50",
-      },
-      {
-        label: "预计今日交付",
-        value: stats?.dueTodayCount ?? 0,
-        icon: Clock,
-        color: "text-orange-600",
-        bg: "bg-orange-50",
-      },
-    ],
-    [stats],
-  );
+  const h = now.getHours();
+  const hi = h < 6 ? "凌晨好" : h < 12 ? "上午好" : h < 14 ? "中午好" : h < 18 ? "下午好" : "晚上好";
+  const dateStr = now.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
 
-  const todayLabel = new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  }).format(new Date());
+  const metrics = [
+    { label: "今日收件", value: d ? String(d.todayCount) : "—", unit: "单", icon: ReceiptText, bg: "var(--lg-info-bg)", ink: "var(--lg-info-ink)", to: "/receive" },
+    { label: "待取件", value: d ? String(d.pendingCount) : "—", unit: "单", icon: PackageSearch, bg: "var(--lg-ok-bg)", ink: "var(--lg-ok-ink)", to: "/pickup" },
+    { label: "逾期未取", value: d ? String(d.overdueCount) : "—", unit: "单", icon: AlertTriangle, bg: "var(--lg-late-bg)", ink: "var(--lg-late-ink)", to: "/orders" },
+    { label: "本月实收", value: d ? `¥${yuan(d.monthIncome)}` : "—", icon: Wallet, bg: "var(--lg-warn-bg)", ink: "var(--lg-warn-ink)", to: "/stats" },
+  ];
 
   return (
-    <div className="space-y-9">
-      <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-          className="flex flex-col gap-5"
+    <div className="space-y-6">
+      <header className="flex items-end justify-between gap-4">
+        <div>
+          <h2 className="text-[28px] font-bold leading-none tracking-[-0.03em]">{hi}，周店长</h2>
+          <p className="mt-2 text-[13.5px] text-[var(--lg-ink2)]">{dateStr} · 宏发洗衣店运行正常</p>
+        </div>
+        <button
+          onClick={() => nav("/receive")}
+          className="lg-pressable inline-flex items-center gap-2 rounded-[13px] bg-gradient-to-b from-[var(--lg-accent2)] to-[var(--lg-accent)] px-5 py-3 text-[14px] font-semibold text-white shadow-[0_12px_28px_-10px_var(--lg-accent-soft),inset_0_1px_0_rgba(255,255,255,0.35)]"
         >
-          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/70 bg-white/70 px-4 py-2 text-sm font-semibold text-slate-600 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
-            <Sparkles className="h-4 w-4 text-[#0071e3]" />
-            今日营业中
-          </div>
+          <ReceiptText className="h-[18px] w-[18px]" strokeWidth={2.2} />新建收件
+        </button>
+      </header>
+
+      {/* 营业额主卡 */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+        className="lg-card lg-spec relative overflow-hidden rounded-[22px]"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-6 p-7">
           <div>
-            <h2 className="max-w-3xl text-[56px] font-semibold leading-[0.98] tracking-[-0.06em] text-slate-950">
-              你好，周学胜
-            </h2>
-            <p className="mt-4 text-xl font-medium text-slate-500">
-              今天是 {todayLabel}，宏发洗衣店运行正常。
-            </p>
+            <div className="flex items-center gap-2 text-[13px] font-semibold text-[var(--lg-ink2)]">
+              <span className="flex h-7 w-7 items-center justify-center rounded-[9px]" style={{ background: "var(--lg-info-bg)", color: "var(--lg-info-ink)" }}>
+                <ArrowUpRight className="h-4 w-4" strokeWidth={2.4} />
+              </span>
+              今日营业额
+            </div>
+            <div className="mt-3.5 flex items-baseline gap-1 leading-none" style={{ fontVariantNumeric: "tabular-nums" }}>
+              <span className="text-[26px] font-semibold text-[var(--lg-ink2)]">¥</span>
+              <span className="text-[48px] font-bold tracking-[-0.04em]">{d ? yuan(d.todayIncome) : "—"}</span>
+            </div>
           </div>
-        </motion.div>
+          <div className="flex items-center gap-2.5 rounded-[14px] px-4 py-3" style={{ background: "var(--lg-leaf)" }}>
+            <Clock3 className="h-[18px] w-[18px] text-[var(--lg-ink3)]" strokeWidth={2} />
+            <div className="leading-tight">
+              <p className="text-[12px] text-[var(--lg-ink3)]">本月累计</p>
+              <p className="text-[16px] font-bold tracking-[-0.02em]" style={{ fontVariantNumeric: "tabular-nums" }}>¥{d ? yuan(d.monthIncome) : "—"}</p>
+            </div>
+          </div>
+        </div>
+      </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <Card className="overflow-hidden bg-[linear-gradient(140deg,rgba(255,255,255,0.92),rgba(243,247,255,0.82))]">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Coins className="h-5 w-5 text-[#0071e3]" />
-                经营概览
-              </CardTitle>
-              <CardDescription>
-                首页数据已切到实时统计，不再使用占位数字。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-3 xl:grid-cols-1">
-              <div className="rounded-[22px] border border-white/80 bg-white/80 p-4">
-                <div className="text-sm font-medium text-slate-500">
-                  今日实收
-                </div>
-                <div className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">
-                  {formatCurrency(stats?.todayIncome ?? 0)}
-                </div>
-              </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/80 p-4">
-                <div className="text-sm font-medium text-slate-500">
-                  本月实收
-                </div>
-                <div className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">
-                  {formatCurrency(stats?.monthIncome ?? 0)}
-                </div>
-              </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/80 p-4">
-                <div className="text-sm font-medium text-slate-500">
-                  本月收件
-                </div>
-                <div className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">
-                  {(stats?.monthCount ?? 0).toLocaleString("zh-CN")}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {dashboardCards.map((stat, index) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: 0.3,
-              delay: 0.08 + index * 0.05,
-              ease: [0.22, 1, 0.36, 1],
-            }}
+      {/* 指标卡 */}
+      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+        {metrics.map((m, i) => (
+          <motion.button
+            key={m.label}
+            onClick={() => nav(m.to)}
+            initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.06 + i * 0.05, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="lg-card lg-spec lg-pressable rounded-[18px] p-5 text-left"
           >
-            <Card className="group overflow-hidden transition-all hover:-translate-y-1 hover:bg-white/95">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-semibold text-slate-500">
-                  {stat.label}
-                </CardTitle>
-                <div
-                  className={cn(
-                    "rounded-2xl p-3 transition-all group-hover:scale-105",
-                    stat.bg,
-                    stat.color,
-                  )}
-                >
-                  <stat.icon className="h-5 w-5" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-[42px] font-semibold tracking-[-0.05em]">
-                  {stat.value.toLocaleString("zh-CN")}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+            <span className="flex h-9 w-9 items-center justify-center rounded-[11px]" style={{ background: m.bg, color: m.ink }}>
+              <m.icon className="h-[18px] w-[18px]" strokeWidth={2.2} />
+            </span>
+            <div className="mt-3.5 leading-none" style={{ fontVariantNumeric: "tabular-nums" }}>
+              <span className="text-[27px] font-bold tracking-[-0.03em]">{m.value}</span>
+              {m.unit && <span className="ml-1 text-[14px] font-semibold text-[var(--lg-ink2)]">{m.unit}</span>}
+            </div>
+            <p className="mt-2 text-[13px] font-medium text-[var(--lg-ink2)]">{m.label}</p>
+          </motion.button>
         ))}
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, delay: 0.28, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <Card className="overflow-hidden transition-all hover:-translate-y-1 hover:bg-white/95">
-            <CardHeader>
-              <CardTitle>快速收件</CardTitle>
-              <CardDescription>
-                录入客户、物品与付款信息，生成取件码。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <p className="text-base font-medium leading-7 text-slate-500">
-                点击进入收件流程，支持自动识别回头客。
-              </p>
-              <Link
-                className="inline-flex items-center gap-2 text-sm font-semibold text-[#0071e3]"
-                to="/receive"
-              >
-                开始收件
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </CardContent>
-          </Card>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, delay: 0.34, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <Card className="overflow-hidden transition-all hover:-translate-y-1 hover:bg-white/95">
-            <CardHeader>
-              <CardTitle>快速取件</CardTitle>
-              <CardDescription>
-                输入取件码、订单号或手机号，实时完成出库。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <p className="text-base font-medium leading-7 text-slate-500">
-                报取件码或手机号快速结账取走衣物。
-              </p>
-              <Link
-                className="inline-flex items-center gap-2 text-sm font-semibold text-[#0071e3]"
-                to="/pickup"
-              >
-                查询取件
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </CardContent>
-          </Card>
-        </motion.div>
       </div>
     </div>
   );

@@ -307,7 +307,7 @@ export default function Settings() {
               >
                 <div className="font-medium">{backup.fileName}</div>
                 <div className="text-slate-500">
-                  {new Date(backup.createdAt).toLocaleString()} ·{" "}
+                  {new Date(backup.createdAt).toLocaleString("zh-CN")} ·{" "}
                   {(backup.size / 1024).toFixed(1)} KB
                 </div>
               </div>

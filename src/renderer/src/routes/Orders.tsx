@@ -67,7 +67,7 @@ export default function Orders() {
                   {formatCurrency(order.totalAmount)}
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
-                  {new Date(order.receiveDate).toLocaleString()}
+                  {new Date(order.receiveDate).toLocaleString("zh-CN",{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})}
                 </div>
               </div>
             </CardContent>

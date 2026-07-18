@@ -298,7 +298,7 @@ export default function Stats() {
                         {order.expectedPickupDate
                           ? new Date(
                               order.expectedPickupDate,
-                            ).toLocaleDateString()
+                            ).toLocaleDateString("zh-CN",{month:"2-digit",day:"2-digit"})
                           : "-"}
                       </td>
                       <td className="px-4 py-3">

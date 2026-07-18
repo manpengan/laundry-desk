@@ -1,39 +1,178 @@
 @import "tailwindcss";
 
+/* ============================================================
+   宏发洗衣店 · 液态玻璃设计系统
+   克制、精确、有质感 —— token 唯一来源
+   ============================================================ */
 :root {
-  color: #0f172a;
-  background:
-    radial-gradient(
-      circle at 18% 12%,
-      rgba(0, 113, 227, 0.16),
-      transparent 32%
-    ),
-    radial-gradient(
-      circle at 88% 0%,
-      rgba(99, 102, 241, 0.13),
-      transparent 28%
-    ),
-    linear-gradient(135deg, #fbfbfd 0%, #f5f5f7 44%, #eef2f8 100%);
+  --lg-bg: #f4f5f8;
+  --lg-bg-solid: #eef0f4;
+  --lg-ink: #16181d;
+  --lg-ink2: #5c616e;
+  --lg-ink3: #9aa0ad;
+  --lg-accent: #0068d6;
+  --lg-accent2: #37a0f4;
+  --lg-accent-soft: rgba(0, 104, 214, 0.1);
+  --lg-accent-ink: #ffffff;
+
+  --lg-surface: rgba(255, 255, 255, 0.72);
+  --lg-surface-hi: rgba(255, 255, 255, 0.9);
+  --lg-glass: rgba(255, 255, 255, 0.6);
+  --lg-glass-hi: rgba(255, 255, 255, 0.82);
+  --lg-glass-lo: rgba(255, 255, 255, 0.42);
+  --lg-leaf: rgba(255, 255, 255, 0.55);
+  --lg-leaf-hover: rgba(255, 255, 255, 0.85);
+
+  --lg-hair: rgba(18, 24, 40, 0.08);
+  --lg-line: rgba(255, 255, 255, 0.75);
+  --lg-inner-hi: rgba(255, 255, 255, 0.85);
+  --lg-spec: rgba(255, 255, 255, 0.5);
+
+  --lg-shadow: 0 22px 60px -20px rgba(20, 33, 66, 0.28);
+  --lg-shadow-sm: 0 10px 30px -12px rgba(20, 33, 66, 0.22);
+  --lg-shadow-xs: 0 2px 8px rgba(20, 33, 66, 0.06);
+
+  --lg-ok-bg: rgba(30, 170, 90, 0.13);
+  --lg-ok-ink: #1a884a;
+  --lg-info-bg: rgba(0, 104, 214, 0.12);
+  --lg-info-ink: #0060c8;
+  --lg-warn-bg: rgba(230, 126, 20, 0.14);
+  --lg-warn-ink: #b96a12;
+  --lg-late-bg: rgba(224, 49, 47, 0.12);
+  --lg-late-ink: #c5342f;
+  --lg-done-bg: rgba(120, 128, 145, 0.14);
+  --lg-done-ink: #6b7180;
+
+  --lg-blob-a: rgba(0, 104, 214, 0.16);
+  --lg-blob-b: rgba(90, 190, 245, 0.15);
+  --lg-blob-c: rgba(150, 120, 235, 0.1);
+  --lg-noise: 0.02;
+
+  color: var(--lg-ink);
   font-synthesis: none;
-  text-rendering: geometricPrecision;
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root {
+    --lg-bg: #0b0d12;
+    --lg-bg-solid: #0b0d12;
+    --lg-ink: #f2f3f6;
+    --lg-ink2: #a4abbb;
+    --lg-ink3: #6a7180;
+    --lg-accent: #3898f7;
+    --lg-accent2: #6fc0ff;
+    --lg-accent-soft: rgba(56, 152, 247, 0.16);
+    --lg-surface: rgba(30, 34, 44, 0.66);
+    --lg-surface-hi: rgba(38, 43, 55, 0.8);
+    --lg-glass: rgba(26, 30, 40, 0.58);
+    --lg-glass-hi: rgba(40, 45, 58, 0.72);
+    --lg-glass-lo: rgba(18, 21, 29, 0.44);
+    --lg-leaf: rgba(255, 255, 255, 0.05);
+    --lg-leaf-hover: rgba(255, 255, 255, 0.1);
+    --lg-hair: rgba(255, 255, 255, 0.08);
+    --lg-line: rgba(255, 255, 255, 0.1);
+    --lg-inner-hi: rgba(255, 255, 255, 0.12);
+    --lg-spec: rgba(255, 255, 255, 0.14);
+    --lg-shadow: 0 24px 64px -20px rgba(0, 0, 0, 0.7);
+    --lg-shadow-sm: 0 12px 32px -14px rgba(0, 0, 0, 0.6);
+    --lg-shadow-xs: 0 2px 8px rgba(0, 0, 0, 0.35);
+    --lg-ok-bg: rgba(48, 200, 110, 0.16);
+    --lg-ok-ink: #45d17e;
+    --lg-info-bg: rgba(56, 152, 247, 0.18);
+    --lg-info-ink: #6fb6ff;
+    --lg-warn-bg: rgba(240, 160, 40, 0.16);
+    --lg-warn-ink: #f0a838;
+    --lg-late-bg: rgba(255, 80, 70, 0.18);
+    --lg-late-ink: #ff8079;
+    --lg-done-bg: rgba(120, 128, 145, 0.22);
+    --lg-done-ink: #969db0;
+    --lg-blob-a: rgba(20, 90, 200, 0.2);
+    --lg-blob-b: rgba(50, 140, 230, 0.14);
+    --lg-blob-c: rgba(130, 90, 220, 0.12);
+    --lg-noise: 0.035;
+  }
+}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --lg-bg: #0b0d12; --lg-bg-solid: #0b0d12; --lg-ink: #f2f3f6; --lg-ink2: #a4abbb; --lg-ink3: #6a7180;
+  --lg-accent: #3898f7; --lg-accent2: #6fc0ff; --lg-accent-soft: rgba(56,152,247,0.16);
+  --lg-surface: rgba(30,34,44,0.66); --lg-surface-hi: rgba(38,43,55,0.8);
+  --lg-glass: rgba(26,30,40,0.58); --lg-glass-hi: rgba(40,45,58,0.72); --lg-glass-lo: rgba(18,21,29,0.44);
+  --lg-leaf: rgba(255,255,255,0.05); --lg-leaf-hover: rgba(255,255,255,0.1);
+  --lg-hair: rgba(255,255,255,0.08); --lg-line: rgba(255,255,255,0.1); --lg-inner-hi: rgba(255,255,255,0.12); --lg-spec: rgba(255,255,255,0.14);
+  --lg-shadow: 0 24px 64px -20px rgba(0,0,0,0.7); --lg-shadow-sm: 0 12px 32px -14px rgba(0,0,0,0.6); --lg-shadow-xs: 0 2px 8px rgba(0,0,0,0.35);
+  --lg-ok-bg: rgba(48,200,110,0.16); --lg-ok-ink: #45d17e; --lg-info-bg: rgba(56,152,247,0.18); --lg-info-ink: #6fb6ff;
+  --lg-warn-bg: rgba(240,160,40,0.16); --lg-warn-ink: #f0a838; --lg-late-bg: rgba(255,80,70,0.18); --lg-late-ink: #ff8079;
+  --lg-done-bg: rgba(120,128,145,0.22); --lg-done-ink: #969db0;
+  --lg-blob-a: rgba(20,90,200,0.2); --lg-blob-b: rgba(50,140,230,0.14); --lg-blob-c: rgba(130,90,220,0.12); --lg-noise: 0.035;
+}
+
+* { box-sizing: border-box; }
 body {
   margin: 0;
-  padding: 0;
-  background: transparent;
-  font-family:
-    "SF Pro Display", "SF Pro Text", "PingFang SC", "Microsoft YaHei",
-    sans-serif;
+  background: var(--lg-bg);
+  color: var(--lg-ink);
+  font-family: "SF Pro Display","SF Pro Text",-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  transition: background-color .5s ease, color .5s ease;
+  letter-spacing: -0.005em;
+}
+#root { height: 100vh; width: 100vw; }
+::selection { background: var(--lg-accent-soft); }
+:is(button,a,[tabindex]):focus-visible { outline: 2px solid var(--lg-accent); outline-offset: 2px; border-radius: 12px; }
+
+/* 极光背景：克制、缓慢 */
+.lg-aurora { position: fixed; inset: -25%; z-index: 0; pointer-events: none; filter: blur(100px); }
+.lg-aurora i { position: absolute; display: block; border-radius: 50%; }
+.lg-aurora i:nth-child(1){ width: 44vw; height: 44vw; left: -8%; top: -12%; background: var(--lg-blob-a); animation: lg-a 46s ease-in-out infinite alternate; }
+.lg-aurora i:nth-child(2){ width: 36vw; height: 36vw; right: -6%; top: 4%; background: var(--lg-blob-b); animation: lg-b 52s ease-in-out infinite alternate; }
+.lg-aurora i:nth-child(3){ width: 40vw; height: 40vw; left: 30%; bottom: -22%; background: var(--lg-blob-c); animation: lg-a 60s ease-in-out infinite alternate-reverse; }
+@keyframes lg-a { from{ transform: translate3d(0,0,0) scale(1);} to{ transform: translate3d(6vw,5vh,0) scale(1.14);} }
+@keyframes lg-b { from{ transform: translate3d(0,0,0) scale(1.08);} to{ transform: translate3d(-5vw,7vh,0) scale(0.94);} }
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  opacity: var(--lg-noise); mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-#root {
-  height: 100vh;
-  width: 100vw;
+/* 玻璃材质 */
+.lg-glass {
+  background: linear-gradient(160deg, var(--lg-glass-hi), var(--lg-glass) 60%, var(--lg-glass-lo));
+  border: 1px solid var(--lg-line);
+  box-shadow: var(--lg-shadow), inset 0 1px 0 var(--lg-inner-hi);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
 }
+.lg-card {
+  background: var(--lg-surface);
+  border: 1px solid var(--lg-hair);
+  box-shadow: var(--lg-shadow-sm), inset 0 1px 0 var(--lg-inner-hi);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+}
+.lg-inset { background: var(--lg-leaf); border: 1px solid var(--lg-hair); }
+@supports not (backdrop-filter: blur(1px)) { .lg-glass,.lg-card { background: var(--lg-surface-hi); } }
 
-::selection {
-  background: rgba(0, 113, 227, 0.18);
+/* 镜面追光 */
+.lg-spec { position: relative; }
+.lg-spec::before {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(240px circle at var(--mx,50%) var(--my,-40px), var(--lg-spec), transparent 60%);
+  opacity: 0; transition: opacity .45s ease;
+}
+.lg-spec:hover::before { opacity: 1; }
+.lg-spec > * { position: relative; z-index: 1; }
+
+/* 涟漪 + 回压 */
+.lg-pressable { position: relative; overflow: hidden; transform: translateZ(0); transition: transform .5s cubic-bezier(.34,1.56,.64,1); }
+.lg-pressable:active { transform: scale(.97); transition-duration: .08s; }
+.lg-ripple { position: absolute; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, var(--lg-spec) 0%, transparent 70%); transform: scale(0); opacity: .8; animation: lg-rip .6s cubic-bezier(.2,.7,.3,1) forwards; }
+@keyframes lg-rip { to { transform: scale(1); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-aurora i { animation: none; }
+  * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

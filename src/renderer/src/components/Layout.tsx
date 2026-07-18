@@ -1,112 +1,108 @@
 import { NavLink, useLocation, useOutlet } from "react-router-dom";
+import { useEffect, useState } from "react";
 import {
-  LayoutDashboard,
-  ReceiptText,
-  PackageCheck,
-  Users,
-  Settings,
-  BarChart3,
-  ListOrdered,
+  LayoutGrid, ReceiptText, PackageSearch, ListChecks, Users2,
+  BarChart3, Settings2, Sun, Moon, Shirt,
 } from "lucide-react";
 import { cn } from "@renderer/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 
-const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "总览" },
+const nav = [
+  { to: "/", icon: LayoutGrid, label: "总览" },
   { to: "/receive", icon: ReceiptText, label: "收件登记" },
-  { to: "/pickup", icon: PackageCheck, label: "取件查询" },
-  { to: "/orders", icon: ListOrdered, label: "订单列表" },
-  { to: "/customers", icon: Users, label: "客户管理" },
+  { to: "/pickup", icon: PackageSearch, label: "取件查询" },
+  { to: "/orders", icon: ListChecks, label: "订单列表" },
+  { to: "/customers", icon: Users2, label: "客户管理" },
   { to: "/stats", icon: BarChart3, label: "统计报表" },
-  { to: "/settings", icon: Settings, label: "系统设置" },
+  { to: "/settings", icon: Settings2, label: "系统设置" },
 ];
+
+function useTheme() {
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    const s = document.documentElement.dataset.theme;
+    if (s === "light" || s === "dark") return s;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
+  useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
+  return { theme, toggle: () => setTheme((t) => (t === "dark" ? "light" : "dark")) };
+}
 
 export default function Layout() {
   const location = useLocation();
   const outlet = useOutlet();
+  const { theme, toggle } = useTheme();
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-[#f5f5f7] text-slate-950">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_22%_8%,rgba(0,113,227,0.18),transparent_30%),radial-gradient(circle_at_88%_6%,rgba(175,82,222,0.12),transparent_26%),linear-gradient(135deg,#fbfbfd_0%,#f5f5f7_42%,#edf2f8_100%)]" />
-      <div className="pointer-events-none absolute left-[300px] top-20 h-48 w-48 rounded-full bg-sky-200/40 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-16 right-24 h-56 w-56 rounded-full bg-indigo-200/35 blur-3xl" />
+    <div className="relative flex h-screen overflow-hidden">
+      <div className="lg-aurora" aria-hidden="true"><i></i><i></i><i></i></div>
 
-      <aside className="relative z-10 flex w-[280px] flex-col border-r border-white/70 bg-white/62 shadow-[20px_0_70px_rgba(15,23,42,0.06)] backdrop-blur-2xl">
-        <div className="p-6 pb-4">
-          <div className="mb-8 flex gap-2">
-            <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
-            <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
-            <span className="h-3 w-3 rounded-full bg-[#28c840]" />
+      <aside className="lg-glass lg-spec relative z-10 m-2.5 mr-0 flex w-[248px] flex-col rounded-[24px]">
+        <div className="flex items-center gap-3 px-5 pb-4 pt-6">
+          <span className="flex h-10 w-10 items-center justify-center rounded-[13px] bg-gradient-to-br from-[var(--lg-accent2)] to-[var(--lg-accent)] shadow-[0_6px_16px_-4px_var(--lg-accent-soft),inset_0_1px_0_rgba(255,255,255,0.4)]">
+            <Shirt className="h-[22px] w-[22px] text-white" strokeWidth={2} />
+          </span>
+          <div>
+            <h1 className="text-[16px] font-bold leading-tight tracking-[-0.02em]">宏发洗衣店</h1>
+            <p className="text-[11px] font-medium text-[var(--lg-ink3)]">柜台管理系统</p>
           </div>
-          <h1 className="text-[28px] font-semibold tracking-[-0.04em] text-[#0071e3]">
-            宏发洗衣店
-          </h1>
-          <p className="mt-1 text-xs font-medium uppercase tracking-[0.24em] text-slate-400">
-            柜台管理系统
-          </p>
         </div>
 
-        <nav className="flex-1 space-y-2 px-4">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                cn(
-                  "group flex items-center gap-3 rounded-[20px] px-4 py-3 text-[15px] font-semibold transition-all",
-                  isActive
-                    ? "bg-white/90 text-[#0071e3] shadow-[0_16px_36px_rgba(15,23,42,0.08)] ring-1 ring-white/80"
-                    : "text-slate-500 hover:bg-white/60 hover:text-slate-950",
-                )
-              }
-            >
-              <item.icon
-                className={cn(
-                  "h-5 w-5 transition-colors group-hover:text-[#0071e3]",
-                )}
-              />
-              {item.label}
+        <div className="mx-4 mb-1 mt-1 h-px bg-[var(--lg-hair)]" />
+
+        <nav className="flex-1 space-y-0.5 px-2.5 py-2">
+          {nav.map((item) => (
+            <NavLink key={item.to} to={item.to} end={item.to === "/"}>
+              {({ isActive }) => (
+                <span
+                  className={cn(
+                    "lg-pressable group relative flex items-center gap-3 rounded-[13px] px-3.5 py-2.5 text-[14px] font-medium transition-colors duration-200",
+                    isActive ? "text-[var(--lg-accent)]" : "text-[var(--lg-ink2)] hover:text-[var(--lg-ink)]",
+                  )}
+                >
+                  {isActive && (
+                    <motion.span
+                      layoutId="nav-pill"
+                      className="lg-inset absolute inset-0 -z-10 rounded-[13px] shadow-[var(--lg-shadow-xs)]"
+                      style={{ background: "var(--lg-leaf-hover)" }}
+                      transition={{ type: "spring", stiffness: 480, damping: 36 }}
+                    />
+                  )}
+                  <item.icon className="h-[18px] w-[18px] flex-none" strokeWidth={2} />
+                  {item.label}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
 
-        <div className="p-4">
-          <div className="flex items-center gap-3 rounded-[24px] border border-white/70 bg-white/72 p-3 shadow-[0_12px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0071e3]/10 text-sm font-bold text-[#0071e3]">
-              AD
-            </div>
-            <div>
-              <p className="text-sm font-semibold">店长：周学胜</p>
-              <p className="text-xs font-medium text-emerald-600">店长在线</p>
+        <div className="space-y-2 p-2.5">
+          <button
+            onClick={toggle}
+            className="lg-pressable lg-inset flex w-full items-center gap-2.5 rounded-[13px] px-3.5 py-2.5 text-[13px] font-medium text-[var(--lg-ink2)] transition-colors hover:text-[var(--lg-ink)]"
+          >
+            {theme === "dark" ? <Moon className="h-[17px] w-[17px]" strokeWidth={2} /> : <Sun className="h-[17px] w-[17px]" strokeWidth={2} />}
+            {theme === "dark" ? "深色模式" : "浅色模式"}
+          </button>
+          <div className="lg-inset flex items-center gap-3 rounded-[15px] p-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[var(--lg-accent-soft)] text-[13px] font-bold text-[var(--lg-accent)]">周</span>
+            <div className="min-w-0 leading-tight">
+              <p className="truncate text-[13px] font-semibold">周学胜</p>
+              <p className="flex items-center gap-1 text-[11px] text-[var(--lg-ok-ink)]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[var(--lg-ok-ink)]" />店长 · 在线
+              </p>
             </div>
           </div>
         </div>
       </aside>
 
       <main className="relative z-10 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-7xl p-10">
+        <div className="mx-auto max-w-[1160px] px-8 py-7">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={location.pathname}
-              initial={{ opacity: 0, y: 18, filter: "blur(8px)" }}
-              animate={{
-                opacity: 1,
-                y: 0,
-                filter: "blur(0px)",
-                transition: {
-                  duration: 0.26,
-                  ease: [0.22, 1, 0.36, 1],
-                },
-              }}
-              exit={{
-                opacity: 0,
-                y: -12,
-                filter: "blur(8px)",
-                transition: {
-                  duration: 0.18,
-                  ease: [0.4, 0, 1, 1],
-                },
-              }}
+              initial={{ opacity: 0, y: 14, filter: "blur(5px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.24, ease: [0.22, 1, 0.36, 1] } }}
+              exit={{ opacity: 0, y: -8, filter: "blur(5px)", transition: { duration: 0.14 } }}
             >
               {outlet}
             </motion.div>

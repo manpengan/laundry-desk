@@ -6,33 +6,22 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
-    resolve: {
-      alias: {
-        "@main": resolve("src/main"),
-        "@shared": resolve("src/shared"),
-      },
-    },
     build: {
       rollupOptions: {
-        external: ["@electron-toolkit/utils"],
+        input: {
+          index: resolve("src/main/index.ts"),
+          server: resolve("src/main/server.ts"),
+        },
       },
     },
+    resolve: { alias: { "@main": resolve("src/main"), "@shared": resolve("src/shared") } },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
-    resolve: {
-      alias: {
-        "@shared": resolve("src/shared"),
-      },
-    },
+    build: { rollupOptions: { input: { index: resolve("src/preload/index.ts") } } },
   },
   renderer: {
-    resolve: {
-      alias: {
-        "@renderer": resolve("src/renderer/src"),
-        "@shared": resolve("src/shared"),
-      },
-    },
+    resolve: { alias: { "@renderer": resolve("src/renderer/src"), "@shared": resolve("src/shared") } },
     plugins: [react(), tailwindcss()],
   },
 });
