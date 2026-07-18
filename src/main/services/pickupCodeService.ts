@@ -1,5 +1,6 @@
 import { and, eq, gte, lt } from "drizzle-orm";
 import { getDb, schema, type DbExecutor } from "../db";
+import { AppError } from "@shared/index";
 
 export class PickupCodeService {
   static generate(db: DbExecutor = getDb(), now = new Date()): string {
@@ -27,6 +28,6 @@ export class PickupCodeService {
       if (!existing) return code;
     }
 
-    throw new Error("无法生成唯一的取件码，请重试");
+    throw new AppError("INTERNAL_ERROR", "无法生成唯一的取件码，请重试");
   }
 }

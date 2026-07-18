@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
 import { ZodError, type ZodType } from "zod";
-import { type ApiErrorCode, type ApiResponse } from "../../shared";
+import { type ApiResponse, AppError } from "../../shared";
 
 export function registerIpcHandler<Input, Output>(
   channel: string,
@@ -32,23 +32,23 @@ function toApiError(channel: string, error: unknown): ApiResponse<never> {
     };
   }
 
+  if (error instanceof AppError) {
+    return {
+      ok: false,
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    };
+  }
+
   console.error(`IPC Error [${channel}]:`, error);
 
   return {
     ok: false,
     error: {
-      code: toErrorCode(error),
+      code: "INTERNAL_ERROR",
       message: error instanceof Error ? error.message : "系统内部错误",
     },
   };
-}
-
-function toErrorCode(error: unknown): ApiErrorCode {
-  if (!(error instanceof Error)) return "INTERNAL_ERROR";
-  if (error.message.includes("不存在")) return "NOT_FOUND";
-  if (error.message.includes("已取件") || error.message.includes("已取消"))
-    return "CONFLICT";
-  if (error.message.includes("金额") || error.message.includes("欠款"))
-    return "VALIDATION_FAILED";
-  return "INTERNAL_ERROR";
 }

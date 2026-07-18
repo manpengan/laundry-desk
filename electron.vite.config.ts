@@ -33,6 +33,21 @@ export default defineConfig({
         "@shared": resolve("src/shared"),
       },
     },
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: "clean-csp-localhost",
+        transformIndexHtml(html) {
+          if (process.env.NODE_ENV === "production") {
+            return html.replace(
+              /connect-src\s+'self'\s+http:\/\/localhost:\*\s+ws:\/\/localhost:\*/g,
+              "connect-src 'self'",
+            );
+          }
+          return html;
+        },
+      },
+    ],
   },
 });

@@ -24,6 +24,7 @@ import { OrderService } from "@main/services/orderService";
 import { PickupCodeService } from "@main/services/pickupCodeService";
 import { ExcelService } from "@main/services/excelService";
 import { PhotoService } from "@main/services/photoService";
+import { ReportService } from "@main/services/reportService";
 import { eq } from "drizzle-orm";
 
 describe("M1 services", () => {
@@ -285,7 +286,7 @@ describe("M1 services", () => {
 
     OrderService.pickup({ orderId: pickedUpOrder.id, paidAmount: 0 }, db);
 
-    const stats = await OrderService.getStats(db);
+    const stats = await ReportService.getStats(db);
 
     expect(stats.todayCount).toBe(3);
     expect(stats.pendingCount).toBe(2);
@@ -323,8 +324,8 @@ describe("M1 services", () => {
         db,
       );
 
-      const daily = await OrderService.getReport({ type: "daily" }, db);
-      const monthly = await OrderService.getReport({ type: "monthly" }, db);
+      const daily = await ReportService.getReport({ type: "daily" }, db);
+      const monthly = await ReportService.getReport({ type: "monthly" }, db);
 
       expect(daily).toHaveLength(30);
       expect(daily.at(-1)?.income).toBe(40);
