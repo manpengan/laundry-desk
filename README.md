@@ -45,9 +45,9 @@ v2 里程碑：M0 技术验证 → M1 基座（命令总线 + RLS + Edge）→ M
 - **Claude** — 设计 / spec / 门禁验收 / code review / ADR — 见 [CLAUDE.md](CLAUDE.md)
 - **Codex** — 安全与基座实现 + 关键节点二审（架构 / 安全 / 并发 / 密码学）— 见 [AGENTS.md](AGENTS.md)
 - **Gemini** — 领域实现（domain/服务/迁移/工具）— 见 [GEMINI.md](GEMINI.md)
-- **Grok** — 端与硬件（edge-agent 桌面 / web 柜台 / 小程序）
+- **Grok** — 端与硬件（edge-agent 桌面 / web 柜台 / 小程序）— 见 [GROK.md](GROK.md)
 - **manpengan** — 决策 / UI 走查 / 发版
-- v2 分工细则见 [实施计划 §3](docs/superpowers/plans/2026-07-19-v2-m0-m1-implementation-plan.md)（提案，待拍板）
+- v2 分工已拍板，四份任务书见 [docs/superpowers/plans/tasks/](docs/superpowers/plans/tasks/)
 
 ## 开发（Gemini 实现 M1 后补）
 

@@ -1,0 +1,19 @@
+# 统一 LF：杜绝 Windows runner autocrlf 造成的 prettier CRLF 警告风暴
+* text=auto eol=lf
+
+# 二进制不做行尾处理
+*.png binary
+*.jpg binary
+*.JPG binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.exe binary
+*.dll binary
+*.zip binary
+*.gz binary
+*.db binary
