@@ -1,0 +1,12 @@
+   relname   |     owner     | relrowsecurity | relforcerowsecurity
+-------------+---------------+----------------+---------------------
+ garments    | laundry_owner | t              | t
+ order_lines | laundry_owner | t              | t
+ orders      | laundry_owner | t              | t
+(3 rows)
+
+    rolname    | rolsuper | rolbypassrls
+---------------+----------+--------------
+ laundry_app   | f        | f
+ laundry_owner | f        | f
+(2 rows)

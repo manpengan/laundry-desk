@@ -1,0 +1,16 @@
+name: laundry-m0-2-lease
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: laundry_lease_spike
+      POSTGRES_PASSWORD: ${LEASE_DB_PASSWORD:?set LEASE_DB_PASSWORD}
+      POSTGRES_USER: postgres
+    ports:
+      - "127.0.0.1:${LEASE_DB_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d laundry_lease_spike"]
+      interval: 1s
+      timeout: 3s
+      retries: 30

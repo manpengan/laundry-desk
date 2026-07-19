@@ -1,0 +1,23 @@
+src/lease-service.mjs:13:     FOR UPDATE`,
+src/trusted-clock.mjs:4:      "SELECT clock_timestamp() AS trusted_now",
+src/replay.mjs:9:     FOR UPDATE`,
+src/replay.mjs:62:     FOR UPDATE`,
+src/replay.mjs:77:    return Object.freeze({ decision: "arbitrate", reason: "released-lease" });
+src/edge-time.mjs:36:function hasValidSignature(lease, verifyLease) {
+src/edge-time.mjs:38:    return typeof verifyLease === "function" && verifyLease(lease);
+src/edge-time.mjs:75:function enabledSession(input, localDeadlineMonoMs) {
+src/edge-time.mjs:79:    localDeadlineMonoMs,
+src/edge-time.mjs:80:    authorizedDurationMs: localDeadlineMonoMs - requestStartMonoMs,
+src/edge-time.mjs:86:    invalidated: false,
+src/edge-time.mjs:99:    verifyLease,
+src/edge-time.mjs:101:  if (!hasValidSignature(lease, verifyLease)) {
+src/edge-time.mjs:128:  const localDeadlineMonoMs =
+src/edge-time.mjs:130:  if (responseMonoMs >= localDeadlineMonoMs) {
+src/edge-time.mjs:134:  return enabledSession(input, localDeadlineMonoMs);
+src/edge-time.mjs:137:function invalidated(session, reason) {
+src/edge-time.mjs:138:  const nextSession = Object.freeze({ ...session, invalidated: true });
+src/edge-time.mjs:152:  if (observation.monoMs >= session.localDeadlineMonoMs) return "lease-expired";
+src/edge-time.mjs:164:  if (!session || session.invalidated) {
+src/edge-time.mjs:165:    return invalidated(session ?? {}, "session-invalidated");
+src/edge-time.mjs:171:    return invalidated(session, "continuity-unprovable");
+src/edge-time.mjs:175:    return invalidated(session, reason);
