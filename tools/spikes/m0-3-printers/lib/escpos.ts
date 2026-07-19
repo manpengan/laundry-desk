@@ -5,6 +5,18 @@ const GS = 0x1d;
 const FS = 0x1c;
 const LF = 0x0a;
 
+/** 58mm @ ~203dpi printable width ≈ 384 dots (not full 58mm roll). */
+export const XP58_PRINTABLE_DOTS = 384;
+
+export type Code128Mode = "B" | "C" | "BC";
+
+export type Code128Options = {
+  mode?: Code128Mode;
+  /** GS w n — module width 1–6; keep ≤2 on 58mm. */
+  moduleWidth?: 1 | 2 | 3;
+  height?: number;
+};
+
 export function concat(...parts: Buffer[]): Buffer {
   return Buffer.concat(parts);
 }
@@ -60,13 +72,77 @@ export function chineseOff(): Buffer {
   return Buffer.from([FS, 0x2e]);
 }
 
-/** Code39-ish barcode via GS k — length-prefixed CODE128 subset B where supported. */
-export function barcodeCode128(data: string): Buffer {
-  const payload = Buffer.from(data, "ascii");
+/**
+ * Build GS k 73 (CODE128) payload with mandatory code-set prefix.
+ * Epson/Xprinter: first bytes must be {A / {B / {C (0x7B + set).
+ */
+export function encodeCode128Payload(
+  data: string,
+  mode: Code128Mode = "BC",
+): Buffer {
+  if (!/^[\x20-\x7E]+$/.test(data)) {
+    throw new Error("CODE128 data must be printable ASCII");
+  }
+  if (mode === "B") {
+    return Buffer.from(`{B${data}`, "ascii");
+  }
+  if (mode === "C") {
+    if (!/^\d+$/.test(data) || data.length % 2 !== 0) {
+      throw new Error("CODE128 C requires even-length digits");
+    }
+    return Buffer.from(`{C${data}`, "ascii");
+  }
+  // BC mixed: non-digit prefix in B, even digit run in C (narrower on 58mm).
+  const match = /^([^0-9]*)(\d*)$/.exec(data);
+  if (!match) {
+    return Buffer.from(`{B${data}`, "ascii");
+  }
+  const prefix = match[1] ?? "";
+  let digits = match[2] ?? "";
+  if (!digits) {
+    return Buffer.from(`{B${data}`, "ascii");
+  }
+  if (digits.length % 2 === 1) {
+    // Keep last digit in B with prefix to avoid invalid C pairs.
+    const last = digits.slice(-1);
+    digits = digits.slice(0, -1);
+    if (!digits) {
+      return Buffer.from(`{B${data}`, "ascii");
+    }
+    return Buffer.from(`{B${prefix}${last}{C${digits}`, "ascii");
+  }
+  if (!prefix) {
+    return Buffer.from(`{C${digits}`, "ascii");
+  }
+  return Buffer.from(`{B${prefix}{C${digits}`, "ascii");
+}
+
+/**
+ * Rough symbol width in dots for field planning (not firmware-exact).
+ * CODE128: quiet + start + symbols*11 + check + stop, module = GS w n.
+ */
+export function estimateCode128Dots(
+  payloadAsciiLen: number,
+  moduleWidth: number,
+): number {
+  const symbols = payloadAsciiLen; // each payload byte ≈ one symbol after set codes
+  const modules = 10 + symbols * 11 + 13; // quiet-ish + body + stop
+  return modules * moduleWidth;
+}
+
+/** GS k 73 CODE128 with code-set prefix. Default BC + module 1 for 58mm. */
+export function barcodeCode128(
+  data: string,
+  options: Code128Options = {},
+): Buffer {
+  const mode = options.mode ?? "BC";
+  const moduleWidth = options.moduleWidth ?? 1;
+  const height = options.height ?? 60;
+  const payload = encodeCode128Payload(data, mode);
   return concat(
-    Buffer.from([GS, 0x68, 60]), // height
-    Buffer.from([GS, 0x77, 2]), // width
-    Buffer.from([GS, 0x48, 2]), // HRI below
+    Buffer.from([GS, 0x68, height]),
+    Buffer.from([GS, 0x77, moduleWidth]),
+    Buffer.from([GS, 0x48, 2]),
     Buffer.from([GS, 0x6b, 73, payload.length]),
     payload,
     Buffer.from([LF]),

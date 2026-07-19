@@ -4,6 +4,7 @@ import {
   concat,
   direction,
   gapMm,
+  labelHeightDots,
   print,
   sizeMm,
   text,
@@ -45,47 +46,63 @@ function stickerValues(order: SampleOrder): Record<StickerVar, string> {
 }
 
 /**
- * GP-3120 TSPL sticker. Default 40×30 mm; adjust SIZE/GAP on field if media differs.
- * Font TSS24.BF2 is stock on most Gprinter CN firmware.
+ * Full-variable TSPL sticker.
+ * 22 lines need height > 60mm: use 40×90mm (720dot) so BARCODE stays above edge.
+ * Compact production layout remains 40×30.
  */
 export function buildGp3120Sticker(order: SampleOrder): Buffer {
   const v = stickerValues(order);
-  const yStep = 22;
-  let y = 8;
+  const heightMm = 90;
+  const maxY = labelHeightDots(heightMm);
+  const barH = 40;
+  const marginBottom = 8;
   const parts: Buffer[] = [
-    sizeMm(40, 60),
+    sizeMm(40, heightMm),
     gapMm(2, 0),
     direction(1),
     cls(),
-    text(10, y, "TSS24.BF2", "不干胶全变量", 1, 1),
+    text(8, 8, "TSS24.BF2", "不干胶全变量", 1, 1, 0, 24),
+    text(8, 32, "TSS16.BF2", `vars=${STICKER_VARS.length} h=${heightMm}mm`, 1, 1),
   ];
-  y += yStep;
-  parts.push(text(10, y, "TSS16.BF2", `vars=${STICKER_VARS.length}`, 1, 1));
-  y += yStep;
 
+  let y = 52;
+  const lineH = 26;
   for (const key of STICKER_VARS) {
-    parts.push(text(10, y, "TSS16.BF2", `${key}:${v[key]}`, 1, 1));
-    y += 18;
+    parts.push(text(8, y, "TSS16.BF2", `${key}:${v[key]}`, 1, 1, 0, 36));
+    y += lineH;
   }
 
-  parts.push(barcode(10, y + 4, order.barcode, 48, 1), print(1, 1));
+  const barY = Math.min(y + 6, maxY - barH - marginBottom);
+  if (barY + barH + marginBottom > maxY) {
+    throw new Error(
+      `sticker layout overflow: barY=${barY} barH=${barH} maxY=${maxY}`,
+    );
+  }
+  parts.push(barcode(8, barY, order.barcode, barH, 1), print(1, 1));
   return concat(...parts);
 }
 
-/** Compact 40×30 production-like layout (4 lines, matches 顺科 shop template spirit). */
+/** Compact 40×30 production-like layout. */
 export function buildGp3120StickerCompact(order: SampleOrder): Buffer {
   const v = stickerValues(order);
+  const heightMm = 30;
+  const maxY = labelHeightDots(heightMm);
+  const barH = 36;
+  const barY = 150;
+  if (barY + barH > maxY) {
+    throw new Error(`compact sticker overflow: ${barY + barH} > ${maxY}`);
+  }
   return concat(
-    sizeMm(40, 30),
+    sizeMm(40, heightMm),
     gapMm(2, 0),
     direction(1),
     cls(),
-    text(16, 10, "TSS24.BF2", `${v.名称} ${v.颜色}`, 1, 1),
-    text(16, 40, "TSS16.BF2", `${v.服务} ${v.挂点} ${v.加急}`, 1, 1),
-    text(16, 65, "TSS16.BF2", `${v.姓名} ${v.电话}`, 1, 1),
-    text(16, 90, "TSS16.BF2", `${v.票单号} ${v.收件日期}`, 1, 1),
-    text(16, 115, "TSS16.BF2", `${v.已消毒} 打开:${v.打开存放}`, 1, 1),
-    barcode(16, 140, order.barcode, 40, 1),
+    text(16, 8, "TSS24.BF2", `${v.名称} ${v.颜色}`, 1, 1, 0, 20),
+    text(16, 36, "TSS16.BF2", `${v.服务} ${v.挂点} ${v.加急}`, 1, 1, 0, 28),
+    text(16, 58, "TSS16.BF2", `${v.姓名} ${v.电话}`, 1, 1, 0, 28),
+    text(16, 80, "TSS16.BF2", `${v.票单号} ${v.收件日期}`, 1, 1, 0, 28),
+    text(16, 102, "TSS16.BF2", `${v.已消毒} 打开:${v.打开存放}`, 1, 1, 0, 28),
+    barcode(16, barY, order.barcode, barH, 1),
     print(1, 1),
   );
 }

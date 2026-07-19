@@ -1,10 +1,18 @@
 # Windows field helper: send raw .bin to a USB/COM printer.
-# Prefer share-name raw copy when printer is installed as a Windows printer.
+#
+# ★ Prefer Node on Windows PowerShell 5.1:
+#   node send/send-raw.mjs --file out\xp58-receipt.bin --target COM3
+#
+# -Port via System.IO.File.Open on COM often FAILS under Windows PowerShell 5.1
+# (access denied / invalid handle). Use:
+#   1) Node send-raw.mjs  (recommended)
+#   2) -PrinterName with Generic/Text Only RAW share
+#   3) pwsh 7+ if you insist on -Port
 #
 # Examples:
-#   .\send-windows.ps1 -File ..\out\xp58-receipt.bin -Port COM3
-#   .\send-windows.ps1 -File ..\out\xp58-receipt.bin -PrinterName "XP-58"
-#   .\send-windows.ps1 -File ..\out\gp3120-sticker-compact.bin -Tcp "192.168.1.50:9100"
+#   powershell -File .\send\send-windows.ps1 -File .\out\xp58-receipt.bin -PrinterName "XP-58"
+#   pwsh -File .\send\send-windows.ps1 -File .\out\xp58-receipt.bin -Port COM3
+#   powershell -File .\send\send-windows.ps1 -File .\out\gp3120-sticker-compact.bin -Tcp "192.168.1.50:9100"
 
 param(
   [Parameter(Mandatory = $true)][string]$File,
@@ -17,6 +25,7 @@ $ErrorActionPreference = "Stop"
 if (-not (Test-Path $File)) { throw "file not found: $File" }
 $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $File))
 Write-Host "bytes=$($bytes.Length) file=$File"
+Write-Host "PSVersion=$($PSVersionTable.PSVersion) Edition=$($PSVersionTable.PSEdition)"
 
 if ($Tcp) {
   $hostPort = $Tcp.Split(":")
@@ -30,6 +39,17 @@ if ($Tcp) {
 }
 
 if ($Port) {
+  $ver = $PSVersionTable.PSVersion
+  if ($ver.Major -lt 7) {
+    Write-Host @"
+ERROR: -Port is unreliable on Windows PowerShell 5.1 (COM open often denied).
+Use one of:
+  node send/send-raw.mjs --file `"$File`" --target $Port
+  powershell -File .\send\send-windows.ps1 -File `"$File`" -PrinterName `"<share>`"
+  pwsh 7+  -File .\send\send-windows.ps1 -File `"$File`" -Port $Port
+"@
+    exit 2
+  }
   $path = if ($Port -match '^COM\d+$') { "\\.\$Port" } else { $Port }
   $fs = [System.IO.File]::Open($path, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::Write)
   $fs.Write($bytes, 0, $bytes.Length)
@@ -56,4 +76,4 @@ if ($PrinterName) {
   exit 0
 }
 
-throw "specify -Port or -PrinterName or -Tcp"
+throw "specify -PrinterName (preferred) or -Tcp; -Port only on pwsh7+. Prefer: node send/send-raw.mjs"

@@ -6,7 +6,9 @@
 2. `app://` 加载**内置（签名占位）SPA**：断电/断网冷启动进本地工作台  
 3. A/B 双槽 + 健康检查 + 本地库快照 + **按支持矩阵回滚判定**（禁盲目降级）
 
-> 无 Windows 实机时：本目录即为可执行演练包；单测在 macOS/Linux 可先绿。现场按 `ops/WINDOWS-DRILL-RUNBOOK.md`。
+> 无 Windows 实机时：本目录即为可执行演练包；单测在 macOS/Linux 可先绿。现场按 `ops/WINDOWS-DRILL-RUNBOOK.md`。  
+> Node **≥ 22.6**。LNA 的 L2 **禁止** loopback→loopback（见 `channel/LNA-CHECKLIST.md`）。  
+> 回传录屏/截图 **去 EXIF**；仓库 PUBLIC。
 
 ## 目录
 

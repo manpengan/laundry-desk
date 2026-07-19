@@ -10,7 +10,7 @@
     "send": "node send/send-raw.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.6"
   },
   "dependencies": {
     "iconv-lite": "^0.6.3"

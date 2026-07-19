@@ -3,6 +3,11 @@
 操作人：manpengan　主样张：`out/dl206-wash-fullvars.bin`  
 切刀备选：`out/dl206-wash-cut-esc-i.bin`
 
+## 红线（回传前必读）
+
+- 样张照片 **先去 EXIF**（时间/GPS/设备序列号）。
+- 材料按 **仓库 PUBLIC** 处理：禁止真实客户 PII / 真实门店票。
+
 ## 接机
 
 1. USB 连接；记录 `Port` / `PrinterName`。
@@ -17,8 +22,11 @@
 
 ```powershell
 npm run generate
-powershell -File .\send\send-windows.ps1 -File .\out\dl206-wash-fullvars.bin -Port COM4
-powershell -File .\send\send-windows.ps1 -File .\out\dl206-wash-cut-esc-i.bin -Port COM4
+# 首选 Node（PS 5.1 -Port 不可靠）
+node send/send-raw.mjs --file out/dl206-wash-fullvars.bin --target COM4
+node send/send-raw.mjs --file out/dl206-wash-cut-esc-i.bin --target COM4
+# 或共享名
+powershell -File .\send\send-windows.ps1 -File .\out\dl206-wash-fullvars.bin -PrinterName "DL-206"
 ```
 
 ## 验收勾选
@@ -31,6 +39,10 @@ powershell -File .\send\send-windows.ps1 -File .\out\dl206-wash-cut-esc-i.bin -P
 | 4 | **切刀动作**发生且切口干净 |  | 记成功指令：GS V / ESC i / 其他 |
 | 5 | 切后无连续空走纸失控 |  | |
 | 6 | 紧凑三行块可用于生产模板基线 |  | |
+
+## 边界样张（可选）
+
+`out/boundary-empty-dl206.bin` / `boundary-long-dl206.bin` / `boundary-special-dl206.bin`
 
 ## 切刀结论（必填）
 
@@ -48,3 +60,4 @@ powershell -File .\send\send-windows.ps1 -File .\out\dl206-wash-cut-esc-i.bin -P
 
 - 指令族：________
 - 样张：通过 / 不通过 / 需改设计：________
+- 证据（去 EXIF）：________

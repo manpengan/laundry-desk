@@ -6,6 +6,18 @@ export function cmd(line: string): Buffer {
   return Buffer.concat([Buffer.from(line, "ascii"), Buffer.from("\r\n")]);
 }
 
+/**
+ * Escape TEXT/BARCODE string content for TSPL double-quoted fields.
+ * - strip CR/LF (newline breaks command framing)
+ * - replace ASCII " with fullwidth ＂ so quotes do not terminate the field
+ * - optional hard truncate (GBK byte-safe at char level for spike)
+ */
+export function escapeTsplText(text: string, maxChars = 48): string {
+  const flat = text.replace(/[\r\n]+/g, " ").replace(/"/g, "＂");
+  if (flat.length <= maxChars) return flat;
+  return `${flat.slice(0, Math.max(0, maxChars - 1))}…`;
+}
+
 export function cmdGbk(prefix: string, text: string, suffix = '"'): Buffer {
   // TEXT x,y,"font",rotation,xmul,ymul,"content"
   return Buffer.concat([
@@ -39,8 +51,13 @@ export function text(
   xmul = 1,
   ymul = 1,
   rotation = 0,
+  maxChars = 48,
 ): Buffer {
-  return cmdGbk(`TEXT ${x},${y},"${font}",${rotation},${xmul},${ymul},"`, content);
+  const safe = escapeTsplText(content, maxChars);
+  return cmdGbk(
+    `TEXT ${x},${y},"${font}",${rotation},${xmul},${ymul},"`,
+    safe,
+  );
 }
 
 export function barcode(
@@ -50,9 +67,9 @@ export function barcode(
   height = 60,
   readable = 1,
 ): Buffer {
-  // CODE128
+  const safe = escapeTsplText(data, 32);
   return cmd(
-    `BARCODE ${x},${y},"128",${height},${readable},0,2,2,"${data}"`,
+    `BARCODE ${x},${y},"128",${height},${readable},0,2,2,"${safe}"`,
   );
 }
 
@@ -62,4 +79,9 @@ export function print(sets = 1, copies = 1): Buffer {
 
 export function concat(...parts: Buffer[]): Buffer {
   return Buffer.concat(parts);
+}
+
+/** Layout helper: max Y for barcode bottom inside label height (8 dot/mm). */
+export function labelHeightDots(heightMm: number): number {
+  return Math.floor(heightMm * 8);
 }

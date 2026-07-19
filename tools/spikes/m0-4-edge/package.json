@@ -12,13 +12,14 @@
     "ab:install-fail": "node ab-upgrade/drill.mjs install-standby --health fail",
     "ab:rollback-ok": "node ab-upgrade/drill.mjs rollback --matrix-compatible true",
     "ab:rollback-blocked": "node ab-upgrade/drill.mjs rollback --matrix-compatible false",
+    "ab:rollback-matrix": "node ab-upgrade/drill.mjs rollback",
     "ab:snapshot": "node ab-upgrade/drill.mjs snapshot",
     "ab:restore": "node ab-upgrade/drill.mjs restore-snapshot",
     "test": "node --test test/*.test.mjs",
     "cold-start:hint": "node cold-start/print-runbook.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.6"
   },
   "dependencies": {
     "ws": "^8.18.0"
