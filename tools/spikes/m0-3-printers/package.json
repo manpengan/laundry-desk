@@ -1,0 +1,18 @@
+{
+  "name": "m0-3-printers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "M0-3 spike: XP-58 ESC/POS + DASCOM DL-206 wash label + Gprinter GP-3120 TSPL",
+  "scripts": {
+    "generate": "node --experimental-strip-types src/generate-all.ts",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "send": "node send/send-raw.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "iconv-lite": "^0.6.3"
+  }
+}

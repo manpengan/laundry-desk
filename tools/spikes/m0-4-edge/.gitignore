@@ -1,0 +1,5 @@
+node_modules/
+channel/certs/
+ab-upgrade/slots/
+cold-start/electron-app/node_modules/
+*.log

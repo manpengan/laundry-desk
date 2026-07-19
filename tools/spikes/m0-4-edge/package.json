@@ -1,0 +1,26 @@
+{
+  "name": "m0-4-edge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "M0-4 spike: localhost WSS channel, app:// cold start, A/B upgrade drill",
+  "scripts": {
+    "cert": "node channel/generate-localhost-cert.mjs",
+    "wss": "node channel/wss-server.mjs",
+    "ab:init": "node ab-upgrade/drill.mjs init",
+    "ab:install-ok": "node ab-upgrade/drill.mjs install-standby --health pass",
+    "ab:install-fail": "node ab-upgrade/drill.mjs install-standby --health fail",
+    "ab:rollback-ok": "node ab-upgrade/drill.mjs rollback --matrix-compatible true",
+    "ab:rollback-blocked": "node ab-upgrade/drill.mjs rollback --matrix-compatible false",
+    "ab:snapshot": "node ab-upgrade/drill.mjs snapshot",
+    "ab:restore": "node ab-upgrade/drill.mjs restore-snapshot",
+    "test": "node --test test/*.test.mjs",
+    "cold-start:hint": "node cold-start/print-runbook.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
