@@ -6,18 +6,49 @@
 
 ---
 
-## 给 Codex（通过，收尾动作）
+## 给 Codex（M0 通过 + **M1 线已放行，即刻开工**）
 
 ```text
-你的 M0-1/M0-2 经独立实跑复核：20/20 条全过，门禁判定通过（唯一一家零返工）。收尾三件事：
-1. 推送分支并开 PR：git push -u origin codex/m0-spikes；等 main 上 #27 修复合入转绿后，
-   开 PR（标题 "spike(m0): RLS 三元隔离 + Primary lease 验证（门禁已过）"），
-   其中 docs/research/2026-07-19-v2-m0-findings.md 会与已合入的 claude/m0-gates 版本冲突——
-   以 main 版为基底，把你的 M0-1/M0-2 小节内容 rebase 进去，勿动他人小节与门禁总表。
-2. 清理你遗留的容器：cd tools/spikes/m0-1-rls && docker compose down -v --remove-orphans。
-3. 三条低危备忘（benchmark 连接身份 / 压测口径 / 非法 UUID GUC 报错语义）无需返工，
-   已转 M1 实现须知；M1 契约冻结时与 Claude 结对处理 replay seq 水位语义。
-完成后停下，等 contracts@v0.1.0 冻结信号（你的 M1 线已被门禁预放行）。
+【M0 结果】你的 M0-1/M0-2 经独立实跑复核 20/20 全过，是唯一零返工的一家，门禁通过。
+
+【放行通知】manpengan 已批准 Codex 线分批放行：你的 M1 工作即刻开工，不再等其他家。
+理由：命令总线是全队关键路径，等下去三线空转。
+
+━━━ 第一步：M0 收尾（先做完，30 分钟内）━━━
+1. git push -u origin codex/m0-spikes（分支还没推远端）。PR 等 main 上 #27 修复合入转绿后再开，
+   标题 "spike(m0): RLS 三元隔离 + Primary lease 验证（门禁已过）"；其中
+   docs/research/2026-07-19-v2-m0-findings.md 会与已合入的 claude/m0-gates 版本冲突——
+   以 main 版为基底，只把你的 M0-1/M0-2 小节内容 rebase 进去，勿动他人小节与门禁总表。
+2. 清理遗留容器：cd tools/spikes/m0-1-rls && docker compose down -v --remove-orphans
+
+━━━ 第二步：M1 开工（新分支 codex/m1-foundation，从 main 起）━━━
+任务书：docs/superpowers/plans/tasks/2026-07-19-task-codex.md §3（包 A + 包 C1–C5）
+放行时同步解开三处依赖，按下面执行，不要卡住：
+
+D1【新增职责】monorepo 骨架归你，此前无人认领：pnpm workspaces + Turborepo +
+   apps/{server,web,edge-agent} 与 packages/{contracts,domain,ui,config} 空壳 +
+   共享 tsconfig/eslint/prettier。这是全队地基，请作为**第一个 PR 单独交付**，
+   让 Gemini/Grok 能尽早在上面接活。
+
+D2【解除跨家阻塞】原定 C1 命令总线依赖 Gemini 的 B2 校验链纯函数骨架——Gemini 正在返工，
+   不等他：由你在 packages/contracts 内**定义 B2 的接口并 stub**（纯类型 + 抛
+   NotImplemented 的占位实现），C1 照此接口编码。Gemini 返工完成后按接口填充，
+   接口一旦冻结不得由填充方擅改。
+
+D3【本地环境】M0-6 compose 未通过验收，暂用你自己 M0-1 spike 的 compose 作为开发 PG；
+   待 M0-6 复验通过后全队统一切到 tools/compose/，切换成本由我（Claude）跟踪。
+
+交付顺序建议：D1 骨架 PR → A1–A7 contracts（我评审后冻结 tag contracts@v0.1.0）
+→ C1 总线 → C2 RLS 接入（直接复用你 M0-1 的策略模板与 GUC 注入实现）
+→ C3 审计（同事务 + 仅 INSERT）→ C4 Tool Registry 投影 → C5 Policy Engine v0
+（确认卡 canonical 冻结 + R4 同步 step-up；lease 相关直接复用 M0-2 产出）。
+
+契约评审是结对进行：A1–A7 每完成一组就 @我 评审，不要攒到最后一次性提交。
+三条 M0 低危备忘（benchmark 连接身份 / 压测口径 / 非法 UUID GUC）已转 M1 实现须知，
+契约冻结时我们一并处理 replay seq 水位语义。
+
+【仍需你二审的他家 PR】Gemini 的 C6/C8 鉴权、Grok 的 D2/D3 配对签名与队列加密，
+以及任何触碰 RLS 策略/审计权限/Policy/lease 的变更——他们返工完成后会找你。
 ```
 
 ---
