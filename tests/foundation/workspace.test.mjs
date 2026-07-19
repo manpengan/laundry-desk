@@ -44,6 +44,9 @@ test("declares pnpm workspaces and Turborepo at the repository root", async () =
   assert.match(workspaceConfig, /allowBuilds:\n  better-sqlite3: true/);
   assert.match(gitignore, /^\.turbo\/$/m);
   assert.match(foundationWorkflow, /node-version: 22/);
+  assert.match(foundationWorkflow, /uses: actions\/checkout@v7/);
+  assert.match(foundationWorkflow, /uses: actions\/setup-node@v7/);
+  assert.match(foundationWorkflow, /uses: pnpm\/action-setup@v6/);
   assert.match(foundationWorkflow, /version: 11\.15\.0/);
   assert.deepEqual(turboConfig.tasks.build.dependsOn, ["^build"]);
   assert.deepEqual(turboConfig.tasks.build.outputs, ["dist/**"]);
