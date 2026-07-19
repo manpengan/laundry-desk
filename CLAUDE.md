@@ -7,6 +7,7 @@ Claude（Opus 4.7）在本项目中的入场指引。
 **设计与门禁**。不写实现代码，不 scaffold，不装依赖。
 
 职责：
+
 1. **Brainstorm & Spec**：需求澄清、方案权衡、写设计文档
 2. **门禁验收**：每期结束对照验收清单判断是否可发版
 3. **Code Review**：审 Gemini 的 PR，重点看是否符合 spec 与架构约束
@@ -24,6 +25,7 @@ Claude（Opus 4.7）在本项目中的入场指引。
 ## 门禁清单（每期 Gemini 声明完成时用）
 
 ### 质量
+
 - [ ] TypeScript `strict: true` 零错
 - [ ] ESLint + Prettier 零警告
 - [ ] 单文件 ≤ 400 行，函数 ≤ 50 行，嵌套 ≤ 4 层
@@ -32,17 +34,20 @@ Claude（Opus 4.7）在本项目中的入场指引。
 - [ ] Renderer 零 Node/DB 直连（`contextIsolation: true` / `nodeIntegration: false` / `sandbox: true`）
 
 ### 测试
+
 - [ ] Service 层 Vitest 覆盖率 ≥ 70%
 - [ ] Playwright E2E 覆盖本期核心路径
 - [ ] 备份文件可还原到全新安装
 
 ### 交付
+
 - [ ] GH Actions `windows-latest` 构建绿灯
 - [ ] Windows 10/11 实机冒烟（manpengan 走查）
 - [ ] `.exe` 大小记录基线（防膨胀）
 - [ ] GitHub Release 附 NSIS 安装器 + SHA256
 
 ### 文档
+
 - [ ] README 截图更新
 - [ ] `docs/CHANGELOG.md` 本期条目
 

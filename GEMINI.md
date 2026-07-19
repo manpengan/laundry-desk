@@ -5,6 +5,7 @@ Gemini 在本项目中的入场指引。你是**主力实现者**。
 ## 你在这个项目里的角色
 
 把 Claude 的 spec 落成能在 Windows 10/11 上跑的 exe。包括：
+
 - 代码实现（main / preload / renderer / shared / services）
 - 测试编写（Vitest + Playwright）
 - 构建配置（Vite / electron-vite / electron-builder）
@@ -21,17 +22,17 @@ Gemini 在本项目中的入场指引。你是**主力实现者**。
 
 ## 代码红线（硬性）
 
-| 项 | 红线 |
-|---|---|
-| TypeScript | `strict: true`，零 `any`，必要时用 `unknown` + Zod |
-| 文件 | ≤ 400 行 |
-| 函数 | ≤ 50 行 |
-| 嵌套 | ≤ 4 层 |
-| 金额 | 一律 `int`（分），禁浮点 |
-| 密钥 | 不入代码、不入库明文（M4 用 `keytar`） |
-| IPC | 入参过 Zod，返回 `{ ok: true, data } \| { ok: false, error: { code, message } }` |
-| Electron | `contextIsolation: true` / `nodeIntegration: false` / `sandbox: true` / 严格 CSP |
-| 不可变 | 数据操作返回新对象，避免就地修改 |
+| 项         | 红线                                                                             |
+| ---------- | -------------------------------------------------------------------------------- |
+| TypeScript | `strict: true`，零 `any`，必要时用 `unknown` + Zod                               |
+| 文件       | ≤ 400 行                                                                         |
+| 函数       | ≤ 50 行                                                                          |
+| 嵌套       | ≤ 4 层                                                                           |
+| 金额       | 一律 `int`（分），禁浮点                                                         |
+| 密钥       | 不入代码、不入库明文（M4 用 `keytar`）                                           |
+| IPC        | 入参过 Zod，返回 `{ ok: true, data } \| { ok: false, error: { code, message } }` |
+| Electron   | `contextIsolation: true` / `nodeIntegration: false` / `sandbox: true` / 严格 CSP |
+| 不可变     | 数据操作返回新对象，避免就地修改                                                 |
 
 ## 目录骨架（M1 一次落盘）
 
@@ -51,6 +52,7 @@ tests/
 **按顺序做，不跳期。每期完成一轮"代码 → 测试 → CI 绿 → 实机冒烟 → 过门禁 → tag"。**
 
 ### M1（v0.1.0）— 基础
+
 1. 脚手架：Electron + Vite + electron-vite + TS + Tailwind 4 + shadcn/ui + Framer Motion + Zustand + React Router 7
 2. Apple HIG 设计系统：字体、色彩 token、全局 CSS、基础组件（Button / Card / Input / Dialog / Sheet / Toast）
 3. DB 层：Drizzle schema + migrations（8 张表，见 spec §4）+ better-sqlite3 连接
@@ -64,18 +66,21 @@ tests/
 11. E2E：收件→取件的完整流程
 
 ### M2（v0.2.0）— 收款 & 统计
+
 - `settings.price_templates` + 价格 autocomplete
 - 付款方式、折扣、欠款
 - 日/月报表（Recharts）、逾期未取列表
 - Excel 导入导出（exceljs）：客户 / 订单 / 明细
 
 ### M3（v0.3.0）— 照片 & 打印
+
 - 收件页：调用摄像头 or 选本地文件，存 `userData/photos/YYYY-MM/<order>_<n>.jpg`
 - `PrinterDriver` 抽象 + 58mm ESC/POS 实现（`electron-pos-printer`）
 - 登记单模板：店名 / 单号 / 取件码 / 电话尾 4 位 / 明细表 / 总价
 - 取件条模板：取件码 / 单号 / 取件人 / 金额结清
 
 ### M4（v0.4.0 → v1.0.0）— 员工 & 短信
+
 - Argon2 密码哈希，Login 页
 - 权限中间件（IPC handler 包装层）：admin 可进 Settings / Customers，staff 仅收件 / 取件
 - `audit_log` 全面绑定（每个写入 IPC）
