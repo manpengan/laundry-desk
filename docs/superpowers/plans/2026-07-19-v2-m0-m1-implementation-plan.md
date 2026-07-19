@@ -134,7 +134,8 @@ M2… 柜台核心 + 只读 AI（另计划）
 | **Gemini** | 领域实现（广度） | `packages/domain`(TDD) · server 业务服务(identity/platform 起，后续 order/catalog/payment/membership) · `tools`(迁移器/种子/compose) | 高吞吐 CRUD 与纯函数实现，适合领域服务铺量 |
 | **Grok** | 端与硬件 | `apps/edge-agent`(桌面/硬件/离线) · `apps/web`(柜台 UI) · `apps/miniprogram`(后期) | 桌面为主的战略下，端 + 硬件调试是关键路径，单独一条线 |
 
-> 前端若需更强设计执行，可把 `apps/web` 从 Grok 拆出另配；Edge 硬件调试重，建议 Grok 专注 edge-agent + web 两端。最终指派由 manpengan 拍板。
+> **已拍板（2026-07-19，manpengan）**：按上表四线分工执行。四份任务书已下发就绪：
+> [Claude](tasks/2026-07-19-task-claude.md) · [Codex](tasks/2026-07-19-task-codex.md) · [Gemini](tasks/2026-07-19-task-gemini.md) · [Grok](tasks/2026-07-19-task-grok.md)（Grok 入口守则见根目录 `GROK.md`）
 
 ### 3.2 协作节奏
 
