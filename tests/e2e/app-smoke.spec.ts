@@ -13,7 +13,7 @@ test("launches the desktop shell and renders M1 navigation", async () => {
   page.on("pageerror", (err) => console.error("PAGE ERROR:", err.message));
 
   await expect(page.getByRole("heading", { name: "宏发洗衣店" })).toBeVisible();
-  await expect(page.getByText("店长：周学胜")).toBeVisible();
+  await expect(page.getByText(/店长\s*·\s*周学胜/)).toBeVisible();
   await expect(page.getByRole("link", { name: /收件登记/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /取件查询/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /订单列表/ })).toBeVisible();
@@ -21,7 +21,7 @@ test("launches the desktop shell and renders M1 navigation", async () => {
   const statsLink = page.getByRole("link", { name: /统计报表/ });
   await expect(statsLink).toBeVisible();
   await statsLink.click();
-  await expect(page.getByRole("heading", { name: "业务统计" })).toBeVisible({
+  await expect(page.getByRole("heading", { name: "统计报表" })).toBeVisible({
     timeout: 15000,
   });
   await expect(page.getByText("今日收入")).toBeVisible();
