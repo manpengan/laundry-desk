@@ -1,6 +1,6 @@
 # ADR-03: 件级衣物 / 订单行 / 账务状态模型
 
-- 日期：2026-07-19　状态：Proposed　父文档：[总 RFC](2026-07-19-v2-productization-and-ai.md)
+- 日期：2026-07-19　状态：**Accepted**（2026-07-19 定点复核通过，批量签署）　父文档：[总 RFC](2026-07-19-v2-productization-and-ai.md)
 - 详设：架构 §7
 
 ## 决策

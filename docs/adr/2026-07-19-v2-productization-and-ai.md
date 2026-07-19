@@ -1,7 +1,7 @@
 # RFC: v2 产品化架构 + AI 能力层（总纲）
 
 - 日期：2026-07-19（同日历经 draft2 → draft3 → draft3.1 → **draft3.1a** 四轮修订）
-- 状态：**Proposed**（终审裁决：**ADR-05/06 已单独转 Accepted**；RFC 与 ADR-01/02/03/04/07/08 待 draft3.1a 补丁经 Codex diff 复核后签署，无需再做完整终审轮）
+- 状态：**Accepted**（2026-07-19：draft3.1a 经五轮评审 + 定点复核通过，manpengan 签署；全部 8 份子 ADR 同日 Accepted，v2 设计定稿）
 - 决策人：manpengan；起草：Claude（设计与门禁）；修订依据：Codex 2026-07-19 三轮评审
 
 ## 背景
@@ -15,16 +15,16 @@
 
 原单一 ADR 捆绑了过多独立决策（Codex 二审意见），现拆分。本文件保留为总纲与索引；各子 ADR 独立评审、独立转状态：
 
-| 子 ADR | 主题 | 状态（终审后） |
+| 子 ADR | 主题 | 状态（定稿） |
 |---|---|---|
-| [ADR-01](2026-07-19-adr-01-web-first-edge-agent.md) | Web-first + Local Edge Agent | Proposed——待 draft3.1a 补丁 diff 复核 |
-| [ADR-02](2026-07-19-adr-02-postgres-multitenancy-rls.md) | PostgreSQL 多租户与 RLS（M1 强制） | Proposed——**内容已过终审**（补 WITH CHECK 模板），按批量门禁随补丁一并签署 |
-| [ADR-03](2026-07-19-adr-03-garment-order-accounting-model.md) | 件级衣物 / 订单行 / 账务状态模型 | Proposed——**内容已过终审**，按批量门禁随补丁一并签署 |
-| [ADR-04](2026-07-19-adr-04-offline-consistency.md) | 离线一致性 | Proposed——draft3.1a 已补可信时间契约，待 diff 复核 |
-| [ADR-05](2026-07-19-adr-05-ai-command-policy-approval.md) | AI 命令总线 / 风险策略 / 确认与审批 | **Accepted（2026-07-19 终审裁决）** |
-| [ADR-06](2026-07-19-adr-06-byok-provider-network-key-mgmt.md) | BYOK / Provider 网络 / 密钥管理 | **Accepted（2026-07-19 终审裁决）** |
-| [ADR-07](2026-07-19-adr-07-v1-migration-and-milestones.md) | v1→v2 迁移与里程碑（方案 B） | Proposed——待 diff 复核 |
-| [ADR-08](2026-07-19-adr-08-release-desktop-upgrade-lts-support.md) | 发布、桌面升级、LTS 与技术支持（三审新拆） | Proposed——draft3.1a 已修回滚冲突，待 diff 复核 |
+| [ADR-01](2026-07-19-adr-01-web-first-edge-agent.md) | Web-first + Local Edge Agent | **Accepted**（2026-07-19 定点复核通过） |
+| [ADR-02](2026-07-19-adr-02-postgres-multitenancy-rls.md) | PostgreSQL 多租户与 RLS（M1 强制） | **Accepted**（同上） |
+| [ADR-03](2026-07-19-adr-03-garment-order-accounting-model.md) | 件级衣物 / 订单行 / 账务状态模型 | **Accepted**（同上） |
+| [ADR-04](2026-07-19-adr-04-offline-consistency.md) | 离线一致性（Primary lease 契约） | **Accepted**（同上） |
+| [ADR-05](2026-07-19-adr-05-ai-command-policy-approval.md) | AI 命令总线 / 风险策略 / 确认与审批 | **Accepted**（2026-07-19 终审裁决先行） |
+| [ADR-06](2026-07-19-adr-06-byok-provider-network-key-mgmt.md) | BYOK / Provider 网络 / 密钥管理 | **Accepted**（同上） |
+| [ADR-07](2026-07-19-adr-07-v1-migration-and-milestones.md) | v1→v2 迁移与里程碑（方案 B） | **Accepted**（2026-07-19 定点复核通过） |
+| [ADR-08](2026-07-19-adr-08-release-desktop-upgrade-lts-support.md) | 发布、桌面升级、LTS 与技术支持 | **Accepted**（同上） |
 
 ## 二审处置记录（2026-07-19）
 
@@ -77,10 +77,11 @@ P1 同步落地：票号去"单调"（时间排序用 ULID）；N-1 明确为 **
 
 快速 diff 复核确认回滚冲突、contracts major、WITH CHECK、UI/路径 P1 全部通过，余一簇 lease 精确化 + `.gitignore` 锚定，已落档：①**签发串行化**——新增 `primary_lease_heads(org_id, store_id)`（PK 二元）+ `primary_leases UNIQUE(org_id, store_id, primary_epoch)`，签发/release ACK/晋升同一事务内对 head 行 `SELECT ... FOR UPDATE` 后 epoch++，提交后才返回签名 lease；②**截止公式固定**——`server_not_after = issued_at + ttl_ms`（入签名），`local_deadline = request_start_mono + ttl_ms − safety_margin_ms`（锚点取发起请求前），Edge 授权恒 ≤ `not_after`，RTT ≥ TTL fail-closed；③**epoch/seq 职责边界修正**——只管幂等/防重放/顺序/审计归属，旧 epoch 回执写不可变审计、不自动应用、转仲裁，防物理双交付依赖串行化+不重叠 lease+可信截止；④M0 增加并发签发与长 RTT 演练；⑤`.gitignore` 改根锚定 `/shunke/`（不再误伤 `docs/assets/shunke/`）。落点：架构 §7/§10/§14，ADR-04。
 
-## 转 Accepted 的条件
+## 签署记录（转 Accepted 条件已全部满足）
 
-1. ~~ADR-05/06~~ **已于 2026-07-19 转 Accepted**（终审裁决）。
-2. 其余（RFC、ADR-01/02/03/04/07/08）：Codex 对 **draft3.1a 补丁 diff 复核通过**（终审明示无需再做完整审核轮）+ manpengan 签署（重点确认：lease 可信时间 fail-closed 的可用性代价、离线退款禁用、桌面为主交付顺序、LTS 承诺）。
+1. ADR-05/06 于终审轮（第四轮）先行 Accepted。
+2. RFC 与 ADR-01/02/03/04/07/08 于定点复核（第五轮）通过后，经 manpengan 签署于 2026-07-19 批量 Accepted。基线 commit `8d903c9`（draft3.1a 全量），签署状态变更见后续 commit。
+3. 后续设计变更一律走新增 ADR，不回改本 RFC 与已 Accepted 的 ADR 正文。
 
 ## 全局影响
 

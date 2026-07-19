@@ -1,6 +1,6 @@
 # ADR-07: v1→v2 迁移与里程碑（方案 B）
 
-- 日期：2026-07-19　状态：Proposed　父文档：[总 RFC](2026-07-19-v2-productization-and-ai.md)
+- 日期：2026-07-19　状态：**Accepted**（2026-07-19 定点复核通过，批量签署）　父文档：[总 RFC](2026-07-19-v2-productization-and-ai.md)
 - 详设：架构 §14
 
 ## 决策

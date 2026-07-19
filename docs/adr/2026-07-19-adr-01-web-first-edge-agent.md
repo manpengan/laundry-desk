@@ -1,6 +1,6 @@
 # ADR-01: Web-first + Local Edge Agent
 
-- 日期：2026-07-19　状态：Proposed　父文档：[总 RFC](2026-07-19-v2-productization-and-ai.md)
+- 日期：2026-07-19　状态：**Accepted**（2026-07-19 定点复核通过，批量签署）　父文档：[总 RFC](2026-07-19-v2-productization-and-ai.md)
 - 详设：架构 §2、§10
 
 ## 决策
