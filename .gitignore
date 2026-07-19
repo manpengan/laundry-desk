@@ -5,8 +5,10 @@ node_modules/
 # build output
 dist/
 out/
-build/
 release/
+# 注意：build/ 不在此列——它存放打包源资产（icon.ico / installer.nsh），
+# 产物目录是 dist/(electron-builder) 与 out/(electron-vite)。
+# 曾误忽略 build/ 导致 CI 打包报 "cannot find build/installer.nsh"。
 *.asar
 test-results/
 
