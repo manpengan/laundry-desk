@@ -52,3 +52,6 @@ photos/
 *.db-journal
 *.db-shm
 *.db-wal
+
+# 顺科原始截图（2026-07-19 终审裁决：610MB 且含 GPS/设备 EXIF，不入公开 Git；脱敏代表图另走 docs/assets/shunke/）
+/shunke/
