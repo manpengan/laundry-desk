@@ -55,21 +55,14 @@ function loadSample(): SampleOrder {
   ) as SampleOrder;
 }
 
-function main(): void {
-  mkdirSync(outDir, { recursive: true });
-  const order = loadSample();
-  const files: string[] = [];
-
-  const defaultReceipt = buildXp58Receipt(order);
-  writeBin("xp58-receipt.bin", defaultReceipt);
+function emitCoreBins(order: SampleOrder, files: string[]): void {
+  writeBin("xp58-receipt.bin", buildXp58Receipt(order));
   files.push("xp58-receipt.bin");
-
   for (const variant of XP58_BARCODE_VARIANTS) {
     const name = `xp58-receipt-${variant.label}.bin`;
     writeBin(name, buildXp58ReceiptVariant(order, variant));
     files.push(name);
   }
-
   writeBin("dl206-wash-fullvars.bin", buildDl206WashLabel(order));
   writeBin("dl206-wash-cut-esc-i.bin", buildDl206WashLabelEscI(order));
   writeBin("dl206-wash-cut-feed.bin", buildDl206WashLabelFeedCut(order));
@@ -82,24 +75,28 @@ function main(): void {
     "gp3120-sticker-fullvars.bin",
     "gp3120-sticker-compact.bin",
   );
+}
 
+function emitBoundaryBins(files: string[]): void {
   const boundaries: Array<[string, SampleOrder]> = [
     ["empty", emptyVarsOrder()],
     ["long", longTextOrder()],
     ["special", specialCharsOrder()],
   ];
   for (const [tag, sample] of boundaries) {
-    const names = [
+    const jobs = [
       [`boundary-${tag}-xp58.bin`, buildXp58Receipt(sample)],
       [`boundary-${tag}-dl206.bin`, buildDl206WashLabel(sample)],
       [`boundary-${tag}-gp3120.bin`, buildGp3120StickerCompact(sample)],
     ] as const;
-    for (const [name, buf] of names) {
+    for (const [name, buf] of jobs) {
       writeBin(name, buf);
       files.push(name);
     }
   }
+}
 
+function emitReports(order: SampleOrder, files: string[]): void {
   const payloadBc = encodeCode128Payload(order.barcode, "BC");
   const payloadB = encodeCode128Payload(order.barcode, "B");
   writeText(
@@ -113,7 +110,6 @@ function main(): void {
       `# Pure B @ GS w 2 exceeds 384 → will clip; prefer BC+w1 or B+w1`,
     ].join("\n"),
   );
-
   writeText(
     "wash-vars-rendered.txt",
     [
@@ -128,7 +124,6 @@ function main(): void {
       ...listStickerVarsRendered(order),
     ].join("\n"),
   );
-
   writeText(
     "MANIFEST.json",
     JSON.stringify(
@@ -146,6 +141,15 @@ function main(): void {
       2,
     ),
   );
+}
+
+function main(): void {
+  mkdirSync(outDir, { recursive: true });
+  const order = loadSample();
+  const files: string[] = [];
+  emitCoreBins(order, files);
+  emitBoundaryBins(files);
+  emitReports(order, files);
 }
 
 main();

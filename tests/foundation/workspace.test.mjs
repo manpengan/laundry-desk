@@ -89,15 +89,28 @@ test("publishes shared TypeScript, ESLint, and Prettier configuration", async ()
 });
 
 test("exposes stable entry points for reusable libraries", async () => {
+  const baseExport = {
+    ".": {
+      types: "./dist/index.d.ts",
+      default: "./dist/index.js",
+    },
+  };
+
   for (const libraryName of libraryNames) {
     const libraryPackage = await readJson(`${libraryName}/package.json`);
 
-    assert.deepEqual(libraryPackage.exports, {
-      ".": {
-        types: "./dist/index.d.ts",
-        default: "./dist/index.js",
-      },
-    });
+    if (libraryName === "packages/ui") {
+      // E2 ships CSS tokens/components as package subpath exports (not compiled into dist).
+      assert.deepEqual(libraryPackage.exports, {
+        ...baseExport,
+        "./styles.css": "./src/styles/tokens.css",
+        "./styles/components.css": "./src/styles/components.css",
+      });
+      assert.deepEqual(libraryPackage.files, ["dist", "src/styles"]);
+      continue;
+    }
+
+    assert.deepEqual(libraryPackage.exports, baseExport);
     assert.deepEqual(libraryPackage.files, ["dist"]);
   }
 });
