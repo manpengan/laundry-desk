@@ -177,7 +177,7 @@ importers:
   apps/web:
     dependencies:
       '@laundry/ui':
-        specifier: workspace:*
+        specifier: file:../../packages/ui
         version: link:../../packages/ui
       react:
         specifier: ^19.0.0

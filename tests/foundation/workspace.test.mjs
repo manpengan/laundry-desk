@@ -100,9 +100,13 @@ test("exposes stable entry points for reusable libraries", async () => {
     const libraryPackage = await readJson(`${libraryName}/package.json`);
 
     if (libraryName === "packages/ui") {
-      // E2 ships CSS tokens/components as package subpath exports (not compiled into dist).
+      // Types point at source so dependents typecheck without a prior ui build (CI).
+      // CSS tokens/components ship as package subpath exports (not compiled into dist).
       assert.deepEqual(libraryPackage.exports, {
-        ...baseExport,
+        ".": {
+          types: "./src/index.ts",
+          default: "./dist/index.js",
+        },
         "./styles.css": "./src/styles/tokens.css",
         "./styles/components.css": "./src/styles/components.css",
       });
