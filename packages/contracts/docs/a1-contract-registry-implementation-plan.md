@@ -32,7 +32,7 @@
 **文件：** `src/registry/schemas.ts`、`test/command-metadata.test.ts`、`test/query-metadata.test.ts`。
 
 - [ ] 命令六个安全维度齐全：risk、idempotent、offline_mode、data_classification、limits、redaction；另含 `description_llm`。
-- [ ] 验证离线授权必须幂等；secret 必须 R5、denied 且有输入脱敏。
+- [ ] 验证离线授权必须幂等；secret 与 R5 独立，secret 必须 denied、remove-only 输入脱敏、审计整体省略入参、禁止 examples 且不可 AI 投影。
 - [ ] 非空风险升级只允许基础 R3；secret 输入脱敏只允许 `remove`。
 - [ ] 查询固定 R0–R2、幂等、无不变量/副作用、offline denied，并要求正安全整数 `max_result_rows`。
 - [ ] PII 查询必须 R2 且结果脱敏非空；查询禁止 secret。
@@ -48,13 +48,13 @@
 - [ ] 使用非导出唯一品牌和 WeakSet 来源标记，实现 `isContractDefinition()`。
 - [ ] 保留判别联合与 `InferContractInput` / `InferContractOutput` 推导。
 
-## Task 5：R5 投影守卫、导出面与消费样例
+## Task 5：secret/R5 投影守卫、导出面与消费样例
 
 **文件：** `src/index.ts`、`test/consumers.test.ts`、`README.md`。
 
-- [ ] 实现 `isAiProjectableDefinition()`，R5 必须 false，并以类型守卫收窄可投影定义。
+- [ ] 实现 `isAiProjectableDefinition()`，R5 或 secret 必须 false，并以类型守卫收窄可投影定义。
 - [ ] 只导出 A1 支持面，不泄漏私有品牌或内部 schema 组装细节。
-- [ ] 添加 C1 来源验证、C4 R5 排除、C5 覆盖校验三个编译/运行样例。
+- [ ] 添加 C1 来源验证、C4 secret/R5 排除、C5 覆盖校验三个编译/运行样例。
 - [ ] README 记录字段到规范映射和 A1 评审六项冻结答复。
 
 ## Task 6：验收、审查与交付

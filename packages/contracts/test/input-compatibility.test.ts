@@ -60,6 +60,41 @@ describe("supported contract input schemas", () => {
     });
   });
 
+  it("supports Zod multi-value literals without leaking a raw construction error", async () => {
+    const definition = defineCommand({
+      ...baseCommand,
+      input: z.strictObject({ state: z.literal(["received", "cleaning"]) }),
+    });
+
+    await expect(parseContractInput(definition, { state: "received" })).resolves.toEqual({
+      state: "received",
+    });
+    await expect(parseContractInput(definition, { state: "lost" })).rejects.toThrow(ZodError);
+  });
+
+  it.each([
+    ["undefined", undefined],
+    ["BigInt", 1n],
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+  ])("rejects non-JSON literal constraints: %s", (_label, value) => {
+    expect(() =>
+      defineCommand({
+        ...baseCommand,
+        input: z.strictObject({ value: z.literal(value as never) }),
+      }),
+    ).toThrow(ZodError);
+  });
+
+  it("rejects a multi-value literal when any declared value is not JSON", () => {
+    expect(() =>
+      defineCommand({
+        ...baseCommand,
+        input: z.strictObject({ value: z.literal(["ok", undefined]) }),
+      }),
+    ).toThrow(ZodError);
+  });
+
   it("reads a caller shape accessor once and validates that exact snapshot", async () => {
     const input = z.strictObject({ code: z.string() });
     let reads = 0;

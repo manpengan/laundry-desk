@@ -3,14 +3,23 @@ export {
   BatchMeasureSchema,
   LimitConfigurationSchema,
   PositiveSafeIntegerSchema,
+  QueryResultLimitOverrideSchema,
   SizeMeasuresSchema,
   ThresholdsSchema,
   validateStricterLimitOverride,
+  validateStricterQueryResultLimitOverride,
 } from "./registry/limits.js";
-export type { LimitGroups } from "./registry/limits.js";
+export type {
+  EffectiveQueryResultLimit,
+  LimitGroups,
+  QueryResultLimitOverride,
+} from "./registry/limits.js";
 
 export {
   CommandNameSchema,
+  ContractExampleSchema,
+  ContractExamplesSchema,
+  ExampleArgsSchema,
   JsonPointerSchema,
   RedactionRuleSchema,
   RedactionRulesSchema,
@@ -19,12 +28,13 @@ export {
   StableBindingIdSchema,
   StableBindingIdsSchema,
 } from "./registry/primitives.js";
-export type { RedactionRule } from "./registry/primitives.js";
+export type { ContractExample, RedactionRule } from "./registry/primitives.js";
 
 export {
   CommandDataClassificationSchema,
   CommandMetadataSchema,
   DataClassificationSchema,
+  getInputAuditDisposition,
   InputRedactionRuleSchema,
   OfflineModeSchema,
   PII_QUERY_MAX_RESULT_ROWS,

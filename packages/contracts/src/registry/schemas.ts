@@ -8,6 +8,7 @@ import {
 } from "./limits.js";
 import {
   CommandNameSchema,
+  ContractExamplesSchema,
   RedactionRuleSchema,
   RedactionRulesSchema,
   SemVerSchema,
@@ -45,6 +46,8 @@ const CommonMetadataShape = {
   description: z.string().trim().min(1),
   /** ADR-05 #2: authoritative LLM-facing behavior description used by C4. */
   description_llm: z.string().trim().min(1),
+  /** Architecture §6.5 / ADR-05 #2: JSON-only examples projected to C4 without a second source. */
+  examples: ContractExamplesSchema.optional(),
   /** Architecture §6.5: executable invariant binding names. */
   invariants: StableBindingIdsSchema,
   /** Architecture §6.5: whether replay with one idempotency key is safe. */
@@ -65,7 +68,7 @@ const CommandMetadataBaseSchema = z
     kind: z.literal("command"),
     /** Architecture §6.5 / ADR-05 #4: R0 through R5 command risk. */
     risk: RiskSchema,
-    /** ADR-05 #12: includes secret for credential-bearing R5 command input. */
+    /** ADR-05 #12: includes secret for credential-bearing command input, independent of risk. */
     data_classification: CommandDataClassificationSchema,
     /** ADR-09: deterministic batch and/or amount measurement declarations. */
     size_measures: SizeMeasuresSchema.optional(),
@@ -101,9 +104,6 @@ const addSecretIssues = (
   context: z.core.$RefinementCtx<CommandMetadataValue>,
 ): void => {
   if (metadata.data_classification !== "secret") return;
-  if (metadata.risk !== "R5") {
-    context.addIssue({ code: "custom", message: "Secret commands must be R5", path: ["risk"] });
-  }
   if (metadata.offline_mode !== "denied") {
     context.addIssue({
       code: "custom",
@@ -119,6 +119,13 @@ const addSecretIssues = (
       code: "custom",
       message: "Secret command input redaction must be non-empty and remove-only",
       path: ["input_redaction"],
+    });
+  }
+  if (metadata.examples !== undefined) {
+    context.addIssue({
+      code: "custom",
+      message: "Secret commands must not declare examples",
+      path: ["examples"],
     });
   }
 };
@@ -200,3 +207,8 @@ export type ResultRedactionRule = RedactionRule;
 export type InputRedactionRule = RedactionRule;
 export type CommandMetadata = DeepReadonly<z.infer<typeof CommandMetadataSchema>>;
 export type QueryMetadata = DeepReadonly<z.infer<typeof QueryMetadataSchema>>;
+
+/** C3 audit boundary: credential-bearing command inputs are never persisted as argument payloads. */
+export const getInputAuditDisposition = (
+  dataClassification: DataClassification,
+): "redact" | "omit" => (dataClassification === "secret" ? "omit" : "redact");

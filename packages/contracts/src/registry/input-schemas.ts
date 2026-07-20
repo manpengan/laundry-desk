@@ -35,7 +35,7 @@ const decodePointer = (path: string): readonly string[] =>
     .split("/")
     .map((token) => token.replaceAll("~1", "/").replaceAll("~0", "~"));
 
-/** Resolves only statically knowable strict-object/array paths; transforms remain downstream checks. */
+/** Resolves only statically knowable strict-object/array paths; callers fail closed on unresolved paths. */
 export const resolveInputPath = (root: z.ZodObject, path: string): PathResolution => {
   let current: z.ZodType = root;
   for (const segment of decodePointer(path)) {

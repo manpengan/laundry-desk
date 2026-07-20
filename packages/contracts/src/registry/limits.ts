@@ -143,6 +143,40 @@ type DeepReadonly<T> = T extends readonly (infer Item)[]
 
 export type LimitGroups = DeepReadonly<z.infer<typeof LimitGroupsSchema>>;
 
+/** A1 query policy: an organization may supply a lower result-row ceiling only. */
+export const QueryResultLimitOverrideSchema = z
+  .object({ max_result_rows: PositiveSafeIntegerSchema.optional() })
+  .strict()
+  .superRefine((override, context) => {
+    if (Object.hasOwn(override, "max_result_rows") && override.max_result_rows === undefined) {
+      context.addIssue({
+        code: "custom",
+        message: "Query result overrides may not explicitly unset max_result_rows",
+        path: ["max_result_rows"],
+      });
+    }
+  });
+
+const QueryResultLimitConfigurationSchema = z
+  .object({
+    factory_max_result_rows: PositiveSafeIntegerSchema,
+    override: QueryResultLimitOverrideSchema,
+  })
+  .strict()
+  .superRefine((configuration, context) => {
+    const override = configuration.override.max_result_rows;
+    if (override !== undefined && override > configuration.factory_max_result_rows) {
+      context.addIssue({
+        code: "custom",
+        message: "An organization query result override may only tighten the factory limit",
+        path: ["override", "max_result_rows"],
+      });
+    }
+  });
+
+export type QueryResultLimitOverride = DeepReadonly<z.infer<typeof QueryResultLimitOverrideSchema>>;
+export type EffectiveQueryResultLimit = Readonly<{ max_result_rows: number }>;
+
 const LIMIT_GROUPS = ["hard_limits", "risk_escalation"] as const;
 const LIMIT_DIMENSIONS = ["max_batch", "max_amount_cents"] as const;
 
@@ -203,5 +237,20 @@ export const validateStricterLimitOverride = (
     ...(merged.risk_escalation === undefined
       ? {}
       : { risk_escalation: Object.freeze(merged.risk_escalation) }),
+  });
+};
+
+/** Returns the server-side SQL/result limit after validating a non-widening org override. */
+export const validateStricterQueryResultLimitOverride = (
+  factoryMaxResultRows: number,
+  overrideInput: QueryResultLimitOverride,
+): EffectiveQueryResultLimit => {
+  const configuration = QueryResultLimitConfigurationSchema.parse({
+    factory_max_result_rows: factoryMaxResultRows,
+    override: overrideInput,
+  });
+  return Object.freeze({
+    max_result_rows:
+      configuration.override.max_result_rows ?? configuration.factory_max_result_rows,
   });
 };

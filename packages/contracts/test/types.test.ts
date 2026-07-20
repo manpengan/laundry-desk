@@ -78,10 +78,11 @@ it("rejects a caller-supplied kind at compile time", () => {
   }
 });
 
-it("narrows AI-projectable definitions away from R5", () => {
+it("narrows AI-projectable definitions away from R5 and secret data", () => {
   const inspect = (definition: ContractDefinition<"command" | "query", z.ZodObject>): void => {
     if (isAiProjectableDefinition(definition)) {
       expectTypeOf(definition.risk).toEqualTypeOf<"R0" | "R1" | "R2" | "R3" | "R4">();
+      expectTypeOf(definition.data_classification).toEqualTypeOf<"public" | "internal" | "pii">();
     }
   };
 

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { copyJsonMetadata } from "./schema-graph.js";
+
 const STABLE_ID = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/u;
 const COMMAND_NAME = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/u;
 const SEMVER =
@@ -48,6 +50,29 @@ export const CommandNameSchema = z.string().regex(COMMAND_NAME);
 /** ADR-08: each command/query definition carries a complete SemVer. */
 export const SemVerSchema = z.string().regex(SEMVER);
 
+/** C4: an example argument object is inert, acyclic JSON metadata, never executable input. */
+export const ExampleArgsSchema = z.custom<Readonly<Record<string, unknown>>>(
+  (value) => {
+    try {
+      copyJsonMetadata(value);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  { message: "Example args must be a JSON-compatible object" },
+);
+
+/** Architecture §6.5 / ADR-05 #2: one authoritative LLM projection example. */
+export const ContractExampleSchema = z
+  .object({
+    args: ExampleArgsSchema,
+    description: z.string().trim().min(1).optional(),
+  })
+  .strict();
+
+export const ContractExamplesSchema = z.array(ContractExampleSchema);
+
 /** ADR-05 #2/#12: a non-root, prototype-safe RFC 6901 JSON Pointer. */
 export const JsonPointerSchema = z.string().refine(isSafePointer, {
   message: "Expected a non-root, prototype-safe RFC 6901 JSON Pointer",
@@ -94,3 +119,4 @@ export const StableBindingIdsSchema = z
   });
 
 export type RedactionRule = Readonly<z.infer<typeof RedactionRuleSchema>>;
+export type ContractExample = Readonly<z.infer<typeof ContractExampleSchema>>;

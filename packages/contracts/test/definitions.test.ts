@@ -241,6 +241,27 @@ describe("immutable branded definitions", () => {
     expect(Object.isFrozen(hardLimits)).toBe(false);
   });
 
+  it("stores immutable JSON-only examples as authoritative projection metadata", () => {
+    const examples = [
+      {
+        args: { amount_cents: 500, orderId: "order_123", order_ids: ["order_123"] },
+        description: "Cancel one order after confirming the amount.",
+      },
+    ];
+    const definition = defineCommand({ ...validCommand, examples });
+
+    examples[0]!.args.amount_cents = 1;
+
+    expect(definition.examples).toEqual([
+      {
+        args: { amount_cents: 500, orderId: "order_123", order_ids: ["order_123"] },
+        description: "Cancel one order after confirming the amount.",
+      },
+    ]);
+    expect(Object.isFrozen(definition.examples)).toBe(true);
+    expect(Object.isFrozen(definition.examples?.[0]?.args)).toBe(true);
+  });
+
   it("uses registry provenance rather than structural shape", () => {
     const definition = defineCommand(validCommand);
     const spreadClone = { ...definition };
@@ -252,18 +273,24 @@ describe("immutable branded definitions", () => {
     expect(Object.getOwnPropertySymbols(definition)).toEqual([]);
   });
 
-  it("mechanically excludes R5 commands from AI projection", () => {
+  it("mechanically excludes R5 and secret commands from AI projection", () => {
     const r5 = defineCommand({
       ...validCommand,
       risk: "R5",
-      data_classification: "secret",
-      input_redaction: [{ path: "/orderId", strategy: "remove" }],
+      data_classification: "internal",
+      input_redaction: [],
       hard_limits: undefined,
       risk_escalation: undefined,
       size_measures: undefined,
     });
+    const secretR3 = defineCommand({
+      ...validCommand,
+      data_classification: "secret",
+      input_redaction: [{ path: "/orderId", strategy: "remove" }],
+    });
 
     expect(isAiProjectableDefinition(r5)).toBe(false);
+    expect(isAiProjectableDefinition(secretR3)).toBe(false);
     expect(isAiProjectableDefinition(defineCommand(validCommand))).toBe(true);
     expect(isAiProjectableDefinition(defineQuery(validQuery))).toBe(true);
   });

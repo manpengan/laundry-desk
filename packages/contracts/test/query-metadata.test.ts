@@ -25,6 +25,15 @@ describe("query fail-closed metadata", () => {
     expect(QueryMetadataSchema.parse(validQuery)).toEqual(validQuery);
   });
 
+  it("accepts JSON-only examples for a non-secret query", () => {
+    expect(
+      QueryMetadataSchema.parse({
+        ...validQuery,
+        examples: [{ args: { order_id: "order_123" }, description: "Look up one order." }],
+      }).examples,
+    ).toEqual([{ args: { order_id: "order_123" }, description: "Look up one order." }]);
+  });
+
   it.each(["R3", "R4", "R5"])("rejects query risk %s", (risk) => {
     expect(() => QueryMetadataSchema.parse({ ...validQuery, risk })).toThrow(ZodError);
   });

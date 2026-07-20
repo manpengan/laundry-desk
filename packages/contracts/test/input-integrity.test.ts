@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { z, ZodError } from "zod";
 import * as mini from "zod/mini";
 
-import { defineCommand, isContractDefinition, parseContractInput } from "../src/index.js";
+import {
+  defineCommand,
+  defineQuery,
+  isContractDefinition,
+  parseContractInput,
+} from "../src/index.js";
 
 const baseCommand = {
   name: "orders.cancel",
@@ -173,6 +178,102 @@ describe("definition input snapshot", () => {
         size_measures: { batch: { kind: "array_length", path: "/amount_cents" } },
         hard_limits: { max_batch: 1 },
         risk_escalation: { max_batch: 1 },
+      }),
+    ).toThrow(ZodError);
+  });
+
+  it.each([
+    {
+      input_redaction: [{ path: "/transformed/bogus/deep", strategy: "mask" as const }],
+    },
+    {
+      size_measures: { amount: { kind: "field" as const, path: "/transformed/value" } },
+      hard_limits: { max_amount_cents: 1 },
+      risk_escalation: { max_amount_cents: 1 },
+    },
+    {
+      size_measures: { batch: { kind: "array_length" as const, path: "/transformed/value" } },
+      hard_limits: { max_batch: 1 },
+      risk_escalation: { max_batch: 1 },
+    },
+  ])(
+    "rejects declarations that cannot be statically checked through a transform %#",
+    (metadata) => {
+      const input = z.strictObject({
+        transformed: z.strictObject({ value: z.string() }).transform((value) => value),
+      });
+
+      expect(() => defineCommand({ ...baseCommand, input, ...metadata })).toThrow(ZodError);
+    },
+  );
+
+  it.each([
+    ["command transform", z.strictObject({ token: z.string() }).transform((value) => value)],
+    [
+      "command pipe",
+      z.strictObject({ token: z.string() }).pipe(z.strictObject({ token: z.string() })),
+    ],
+  ])("rejects input redaction that crosses a %s", (_label, wrapped) => {
+    expect(() =>
+      defineCommand({
+        ...baseCommand,
+        input: z.strictObject({ credentials: wrapped }),
+        input_redaction: [{ path: "/credentials/token", strategy: "remove" }],
+      }),
+    ).toThrow(ZodError);
+  });
+
+  it.each([
+    ["transform", z.strictObject({ token: z.string() }).transform((value) => value)],
+    ["pipe", z.strictObject({ token: z.string() }).pipe(z.strictObject({ token: z.string() }))],
+  ])("rejects query input redaction that crosses a %s", (_label, wrapped) => {
+    expect(() =>
+      defineQuery({
+        name: "orders.lookup",
+        version: "1.0.0",
+        description: "Look up one order",
+        description_llm: "Look up one order after authorization.",
+        risk: "R1",
+        invariants: [],
+        idempotent: true,
+        sideEffects: [],
+        offline_mode: "denied",
+        data_classification: "internal",
+        input_redaction: [{ path: "/credentials/token", strategy: "remove" }],
+        result_redaction: [],
+        max_result_rows: 1,
+        input: z.strictObject({ credentials: wrapped }),
+      }),
+    ).toThrow(ZodError);
+  });
+
+  it("fails closed for secret offline and redaction declaration boundaries", () => {
+    const input = z.strictObject({
+      credentials: z.strictObject({ token: z.string() }),
+      transformed: z.strictObject({ token: z.string() }).transform((value) => value),
+    });
+    const secretMetadata = {
+      data_classification: "secret" as const,
+      input_redaction: [{ path: "/credentials/token", strategy: "remove" as const }],
+    };
+
+    expect(() =>
+      defineCommand({ ...baseCommand, input, ...secretMetadata, offline_mode: "primary_lease" }),
+    ).toThrow(ZodError);
+    expect(() =>
+      defineCommand({
+        ...baseCommand,
+        input,
+        ...secretMetadata,
+        input_redaction: [{ path: "/missing/token", strategy: "remove" }],
+      }),
+    ).toThrow(ZodError);
+    expect(() =>
+      defineCommand({
+        ...baseCommand,
+        input,
+        ...secretMetadata,
+        input_redaction: [{ path: "/transformed/token", strategy: "remove" }],
       }),
     ).toThrow(ZodError);
   });

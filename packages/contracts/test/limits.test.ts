@@ -7,6 +7,7 @@ import {
   ThresholdsSchema,
   type LimitGroups,
   validateStricterLimitOverride,
+  validateStricterQueryResultLimitOverride,
 } from "../src/registry/limits.js";
 
 const assertDeepReadonlyLimitGroups = (limits: LimitGroups): void => {
@@ -165,4 +166,27 @@ describe("stricter per-org overrides", () => {
       ).toThrow(ZodError);
     },
   );
+});
+
+describe("stricter per-org query result limits", () => {
+  it("returns the effective max_result_rows without widening the factory limit", () => {
+    expect(validateStricterQueryResultLimitOverride(100, { max_result_rows: 25 })).toEqual({
+      max_result_rows: 25,
+    });
+    expect(validateStricterQueryResultLimitOverride(100, { max_result_rows: 100 })).toEqual({
+      max_result_rows: 100,
+    });
+    expect(validateStricterQueryResultLimitOverride(100, {})).toEqual({ max_result_rows: 100 });
+  });
+
+  it.each([
+    { max_result_rows: 101 },
+    { max_result_rows: 0 },
+    { max_result_rows: undefined },
+    { unexpected: 1 },
+  ])("rejects a wider or malformed query result override %#", (override) => {
+    expect(() => validateStricterQueryResultLimitOverride(100, override as never)).toThrow(
+      ZodError,
+    );
+  });
 });

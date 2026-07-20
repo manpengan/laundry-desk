@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 
-import { CommandMetadataSchema } from "../src/registry/schemas.js";
+import { CommandMetadataSchema, getInputAuditDisposition } from "../src/registry/schemas.js";
 
 const commandWithoutEscalation = {
   kind: "command",
@@ -109,32 +109,91 @@ describe("command risk and secret rules", () => {
     );
   });
 
-  it("accepts a fail-closed secret command with remove-only input redaction", () => {
+  it("accepts a secret command without coupling it to R5 and mechanically omits audit args", () => {
     const secretCommand = {
       ...commandWithoutEscalation,
-      risk: "R5",
+      risk: "R3",
       data_classification: "secret",
       input_redaction: [{ path: "/credentials/token", strategy: "remove" }],
     };
 
-    expect(CommandMetadataSchema.parse(secretCommand).data_classification).toBe("secret");
+    const metadata = CommandMetadataSchema.parse(secretCommand);
+
+    expect(metadata.data_classification).toBe("secret");
+    expect(getInputAuditDisposition(metadata.data_classification)).toBe("omit");
   });
 
   it.each([
-    { risk: "R4" },
     { offline_mode: "grant" },
     { input_redaction: [] },
     { input_redaction: [{ path: "/credentials/token", strategy: "mask" }] },
   ])("rejects unsafe secret combination %#", (change) => {
     const secretCommand = {
       ...commandWithoutEscalation,
-      risk: "R5",
+      risk: "R3",
       data_classification: "secret",
       input_redaction: [{ path: "/credentials/token", strategy: "remove" }],
       ...change,
     };
 
     expect(() => CommandMetadataSchema.parse(secretCommand)).toThrow(ZodError);
+  });
+
+  it("rejects examples for secret commands, including redacted placeholders", () => {
+    expect(() =>
+      CommandMetadataSchema.parse({
+        ...commandWithoutEscalation,
+        risk: "R3",
+        data_classification: "secret",
+        input_redaction: [{ path: "/credentials/token", strategy: "remove" }],
+        examples: [{ args: { credentials: { token: "<redacted>" } } }],
+      }),
+    ).toThrow(ZodError);
+  });
+
+  it("keeps non-secret command arguments on the redact audit path", () => {
+    expect(getInputAuditDisposition("internal")).toBe("redact");
+  });
+});
+
+describe("authoritative projection examples", () => {
+  it.each([
+    ["undefined", { value: undefined }],
+    ["non-finite number", { value: Number.NaN }],
+    ["BigInt", { value: 1n }],
+    ["function", { value: () => undefined }],
+  ])("rejects non-JSON example args: %s", (_label, args) => {
+    expect(() =>
+      CommandMetadataSchema.parse({
+        ...validCommand,
+        examples: [{ args }],
+      }),
+    ).toThrow(ZodError);
+  });
+
+  it("rejects cyclic example args", () => {
+    const args: Record<string, unknown> = {};
+    args.self = args;
+
+    expect(() => CommandMetadataSchema.parse({ ...validCommand, examples: [{ args }] })).toThrow(
+      ZodError,
+    );
+  });
+
+  it("rejects an example accessor without evaluating it", () => {
+    let reads = 0;
+    const args = Object.defineProperty({}, "token", {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+        return "secret";
+      },
+    });
+
+    expect(() => CommandMetadataSchema.parse({ ...validCommand, examples: [{ args }] })).toThrow(
+      ZodError,
+    );
+    expect(reads).toBe(0);
   });
 });
 

@@ -4,6 +4,7 @@ import {
   CommandMetadataSchema,
   QueryMetadataSchema,
   type CommandMetadata,
+  type DataClassification,
   type QueryMetadata,
   type Risk,
 } from "./schemas.js";
@@ -41,8 +42,13 @@ export type ContractDefinition<
 
 export type CommandDefinition<TInput extends z.ZodObject> = ContractDefinition<"command", TInput>;
 export type QueryDefinition<TInput extends z.ZodObject> = ContractDefinition<"query", TInput>;
+type AiProjectableCommandDefinition<TInput extends z.ZodObject> = CommandDefinition<TInput> &
+  Readonly<{
+    data_classification: Exclude<DataClassification, "secret">;
+    risk: Exclude<Risk, "R5">;
+  }>;
 export type AiProjectableDefinition<TInput extends z.ZodObject = z.ZodObject> =
-  (CommandDefinition<TInput> & { readonly risk: Exclude<Risk, "R5"> }) | QueryDefinition<TInput>;
+  AiProjectableCommandDefinition<TInput> | QueryDefinition<TInput>;
 
 export type InferContractInput<TDefinition extends { readonly input: z.ZodType }> = z.input<
   TDefinition["input"]
@@ -88,6 +94,11 @@ type DefinitionRegistration = Readonly<{
   verify: () => boolean;
 }>;
 
+type InputSnapshot<TInput extends z.ZodObject> = Readonly<{
+  schema: TInput;
+  verify: () => boolean;
+}>;
+
 const registeredDefinitions = new WeakMap<object, DefinitionRegistration>();
 
 const isPlainRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
@@ -109,7 +120,7 @@ const copyAndDeepFreeze = <T>(value: T): T => {
   return value;
 };
 
-const snapshotInput = <TInput extends z.ZodObject>(input: z.ZodObject): TInput => {
+const snapshotInput = <TInput extends z.ZodObject>(input: z.ZodObject): InputSnapshot<TInput> => {
   try {
     const snapshot = cloneContractInput(input);
     if (!isSafeContractInput(snapshot)) {
@@ -119,7 +130,7 @@ const snapshotInput = <TInput extends z.ZodObject>(input: z.ZodObject): TInput =
       );
     }
     validateSchemaMetadata(snapshot);
-    return snapshot as TInput;
+    return { schema: snapshot as TInput, verify: captureInputIntegrity(snapshot) };
   } catch (error) {
     if (error instanceof z.ZodError) throw error;
     return inputPathError(
@@ -155,8 +166,13 @@ const requireInputPath = (
   expected?: new (...args: never[]) => z.ZodType,
 ): void => {
   const resolution = resolveInputPath(input, pointer);
-  if (resolution.status === "missing") {
-    inputPathError(issuePath, "Declared input path does not exist in the input schema");
+  if (resolution.status !== "resolved") {
+    inputPathError(
+      issuePath,
+      resolution.status === "missing"
+        ? "Declared input path does not exist in the input schema"
+        : "Declared input path crosses a transform or pipe and cannot be statically validated",
+    );
   }
   if (
     resolution.status === "resolved" &&
@@ -198,14 +214,13 @@ const validateCommandInputPaths = (metadata: CommandMetadata, input: z.ZodObject
 
 const createRegisteredDefinition = <TDefinition extends object, TInput extends z.ZodObject>(
   metadata: object,
-  schema: TInput,
+  snapshot: InputSnapshot<TInput>,
 ): TDefinition => {
-  const verify = captureInputIntegrity(schema);
   const result = Object.freeze({
     ...copyAndDeepFreeze(metadata),
-    input: createProtectedInputView(schema, verify),
+    input: createProtectedInputView(snapshot.schema, snapshot.verify),
   });
-  return registerDefinition<TDefinition>(result, { schema, verify });
+  return registerDefinition<TDefinition>(result, snapshot);
 };
 
 const createCommandDefinition = <TInput extends z.ZodObject>(
@@ -215,7 +230,7 @@ const createCommandDefinition = <TInput extends z.ZodObject>(
   const callerMetadata = omitProperty(parsedEnvelope, "input");
   const metadata = CommandMetadataSchema.parse({ ...callerMetadata, kind: "command" });
   const input = snapshotInput<TInput>(parsedEnvelope.input);
-  validateCommandInputPaths(metadata, input);
+  validateCommandInputPaths(metadata, input.schema);
 
   return createRegisteredDefinition<CommandDefinition<TInput>, TInput>(metadata, input);
 };
@@ -228,7 +243,7 @@ const createQueryDefinition = <TInput extends z.ZodObject>(
   const metadata = QueryMetadataSchema.parse({ ...callerMetadata, kind: "query" });
   const input = snapshotInput<TInput>(parsedEnvelope.input);
   metadata.input_redaction.forEach((rule, index) =>
-    requireInputPath(input, rule.path, ["input_redaction", index, "path"]),
+    requireInputPath(input.schema, rule.path, ["input_redaction", index, "path"]),
   );
 
   return createRegisteredDefinition<QueryDefinition<TInput>, TInput>(metadata, input);
@@ -280,8 +295,10 @@ export const parseContractInput = <TInput extends z.ZodObject>(
     });
 };
 
-/** C4 guard: registry provenance is required and R5 commands are mechanically excluded. */
+/** C4 guard: registry provenance is required; R5 and secret commands are mechanically excluded. */
 export const isAiProjectableDefinition = <TInput extends z.ZodObject>(
   definition: ContractDefinition<ContractKind, TInput>,
 ): definition is AiProjectableDefinition<TInput> =>
-  isContractDefinition(definition) && definition.risk !== "R5";
+  isContractDefinition(definition) &&
+  definition.risk !== "R5" &&
+  definition.data_classification !== "secret";

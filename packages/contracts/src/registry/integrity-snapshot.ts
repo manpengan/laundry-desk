@@ -5,6 +5,7 @@ import { type IntegrityCheck, schemaMetadataOf, visitZodGraph, zodCoreOf } from 
 type DescriptorSnapshot = Readonly<{
   property: PropertyKey;
   descriptor: PropertyDescriptor;
+  accessorRead: boolean;
   accessorValue?: unknown;
 }>;
 
@@ -66,6 +67,9 @@ const schemaAccessorKeys = (schema: z.ZodType): ReadonlySet<PropertyKey> => {
   if (schema.def.type === "literal") keys.add("value");
   return keys;
 };
+
+const shouldReadAccessor = (target: object, property: PropertyKey): boolean =>
+  !(target instanceof z.ZodLiteral && property === "value");
 
 class IntegritySnapshotBuilder {
   readonly #seen = new WeakSet<object>();
@@ -165,16 +169,19 @@ class IntegritySnapshotBuilder {
       if (descriptor === undefined) throw new TypeError("Unable to snapshot schema descriptor");
       if ("value" in descriptor) {
         this.#collect(descriptor.value);
-        return { property, descriptor };
+        return { accessorRead: false, property, descriptor };
       }
       if (!(this.#allowedAccessors.get(target)?.has(property) ?? false)) {
         throw new TypeError(
           `Contract input schema contains an unsafe accessor: ${String(property)}`,
         );
       }
+      if (!shouldReadAccessor(target, property)) {
+        return { accessorRead: false, property, descriptor };
+      }
       const accessorValue = Reflect.get(target, property, target) as unknown;
       this.#collect(accessorValue);
-      return { property, descriptor, accessorValue };
+      return { accessorRead: true, property, descriptor, accessorValue };
     });
     this.#objects.push({ target, prototype: Object.getPrototypeOf(target), descriptors });
   }
@@ -224,10 +231,10 @@ class IntegritySnapshotBuilder {
         ) {
           return false;
         }
-        return descriptors.every(({ property, descriptor, accessorValue }) => {
+        return descriptors.every(({ property, descriptor, accessorRead, accessorValue }) => {
           const current = Object.getOwnPropertyDescriptor(target, property);
           if (!descriptorMatches(current, descriptor)) return false;
-          if ("value" in descriptor) return true;
+          if ("value" in descriptor || !accessorRead) return true;
           return Object.is(Reflect.get(target, property, target), accessorValue);
         });
       }) &&

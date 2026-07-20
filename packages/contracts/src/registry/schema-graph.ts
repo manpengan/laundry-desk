@@ -104,6 +104,17 @@ export const visitZodGraph = (
 
 const coreType = (core: ZodCoreRecord): unknown => dataValue(core.def, "type");
 
+const isJsonLiteralValue = (value: unknown): boolean =>
+  value === null ||
+  typeof value === "boolean" ||
+  typeof value === "string" ||
+  (typeof value === "number" && Number.isFinite(value));
+
+const hasJsonLiteralValues = (core: ZodCoreRecord): boolean => {
+  const values = dataValue(core.def, "values");
+  return Array.isArray(values) && values.length > 0 && values.every(isJsonLiteralValue);
+};
+
 const isStrictClassicObject = (schema: z.ZodType, core: ZodCoreRecord): boolean => {
   if (coreType(core) !== "object") return true;
   if (!(schema instanceof z.ZodObject)) return false;
@@ -156,6 +167,7 @@ export const isSafeContractInput = (value: unknown): value is z.ZodObject => {
         type === "catch" ||
         type === "default" ||
         type === "prefault" ||
+        (type === "literal" && !hasJsonLiteralValues(core)) ||
         (type === "custom" && role !== "check") ||
         (type === "transform" && role !== "output") ||
         !isStrictClassicObject(schema, core)
