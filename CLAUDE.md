@@ -17,10 +17,11 @@ Claude（Opus 4.7）在本项目中的入场指引。
 
 ## 入场必读
 
-1. [`docs/superpowers/specs/2026-04-23-laundry-desk-design.md`](docs/superpowers/specs/2026-04-23-laundry-desk-design.md) — 设计真源
-2. `~/pro/kb/projects/laundry-desk/status.md` — 当前阶段
-3. `~/pro/kb/workflows/standard-dev-process/SKILL.md` — 10 阶段门禁流程
-4. `~/.claude/rules/common/coding-style.md` — 代码红线（文件 ≤ 400 行、函数 ≤ 50 行、嵌套 ≤ 4 层、金额零浮点、不可变优先）
+1. [`docs/superpowers/specs/2026-04-23-laundry-desk-design.md`](docs/superpowers/specs/2026-04-23-laundry-desk-design.md) — 设计真源（v1.1）
+2. [`docs/adr/2026-07-18-liquid-glass-ui-2.md`](docs/adr/2026-07-18-liquid-glass-ui-2.md) — 液态玻璃 UI 2.0 设计系统（token / 动效 / 性能红线）
+3. `~/pro/kb/projects/laundry-desk/status.md` — 当前阶段
+4. `~/pro/kb/workflows/standard-dev-process/SKILL.md` — 10 阶段门禁流程
+5. `~/.claude/rules/common/coding-style.md` — 代码红线（文件 ≤ 400 行、函数 ≤ 50 行、嵌套 ≤ 4 层、金额零浮点、不可变优先）
 
 ## 门禁清单（每期 Gemini 声明完成时用）
 
@@ -32,6 +33,15 @@ Claude（Opus 4.7）在本项目中的入场指引。
 - [ ] 无硬编码密钥（短信凭证走 settings + keytar）
 - [ ] 所有 IPC handler 入参过 Zod，返回统一信封 `{ ok, data } | { ok, error }`
 - [ ] Renderer 零 Node/DB 直连（`contextIsolation: true` / `nodeIntegration: false` / `sandbox: true`）
+
+### UI（M5 起）
+
+- [ ] 组件零硬编码色值 / 阴影 / 圆角（全走 `--lg-*` token）
+- [ ] 深浅双主题全路由走查（跟随系统 + settings 手动覆盖）
+- [ ] 同屏 `backdrop-filter` ≤ 8 层；列表滚动区无逐行玻璃
+- [ ] 动画仅 `transform` / `opacity` / `filter`
+- [ ] Windows 实机 60fps（页面切换 / 涟漪连点 / 列表滚动）
+- [ ] `prefers-reduced-motion` 与 `ui.reduce_motion` 降级生效
 
 ### 测试
 
@@ -58,7 +68,7 @@ Claude（Opus 4.7）在本项目中的入场指引。
 3. **事务**：收件 / 取件 / 备份等多表写入是否包事务
 4. **金额**：是否全程用 `int`（分），禁浮点
 5. **错误处理**：无 `catch` 吞异常、无裸 `any`、不静默失败
-6. **Apple HIG**：圆角 / 动效 / 配色 / 深色模式是否落地
+6. **液态玻璃 UI 2.0**：是否只引用 `--lg-*` token、动效是否用 ADR 规格曲线、性能红线是否守住（见 `docs/adr/2026-07-18-liquid-glass-ui-2.md`）
 
 ## 变更流程
 
@@ -70,5 +80,5 @@ Claude（Opus 4.7）在本项目中的入场指引。
 
 - 不直接改 `src/` 下的实现代码（Gemini 负责）
 - 不装 npm 依赖
-- 不跑 `pnpm build`
-- 不跳阶段（按 M1 → M2 → M3 → M4 顺序）
+- 不跑 build（`npm run build` / `build:win` 由 Gemini / CI 负责）
+- 不跳阶段（收口 v0.3.0 → M4 ∥ M5 → v1.0.0；M4 与 M5 可并行，其余按序）

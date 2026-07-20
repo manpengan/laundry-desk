@@ -1,7 +1,9 @@
 ---
 title: laundry-desk 设计文档
 date: 2026-04-23
-status: approved (M0 — 待 Gemini 实现)
+updated: 2026-07-18
+version: 1.1
+status: approved (v1.1 — 收口路线 + UI 2.0 立项，详见 docs/adr/2026-07-18-liquid-glass-ui-2.md)
 authors: claude (brainstorm), manpengan (decision)
 ---
 
@@ -49,7 +51,7 @@ authors: claude (brainstorm), manpengan (decision)
 | 测试     | Vitest（单测）+ Playwright（E2E）                  |
 | CI       | GitHub Actions（`windows-latest` 构建 + artifact） |
 
-**UI 视觉规范（Apple HIG）：** SF Pro + PingFang SC、圆角 12–16px、半透明/毛玻璃卡片、macOS System Colors（`systemBlue #007AFF` 等）、Framer Motion 过渡、深色模式跟随系统、窗口 `titleBarStyle: 'hiddenInset'`（Mac 开发态）/ Windows 下降级为圆角无边框。
+**UI 视觉规范（v1.1 起以液态玻璃 UI 2.0 为准）：** 设计系统详见 [ADR 2026-07-18](../../adr/2026-07-18-liquid-glass-ui-2.md)——六条语汇（三层玻璃 / 镜面追光 / 液态涟漪 / 磁性焦点 / 呼吸背景 / 深浅同构）、`--lg-*` 设计 token 双主题全量、动效规格表、性能与可及性红线。字体保持 SF Pro + PingFang SC；品牌蓝 `#0071e3`（暗色 `#0A84FF`）；深色模式跟随系统 + settings 手动覆盖。窗口使用系统标准框（实现现状，稳定性优先；`hiddenInset` 仅 Mac 开发态可选项）。
 
 ## 4. 数据模型（SQLite + Drizzle）
 
@@ -125,16 +127,21 @@ src/
 
 ## 7. 分期路线图
 
-| 期     | Tag                 | 交付                                                                                              |
-| ------ | ------------------- | ------------------------------------------------------------------------------------------------- |
-| **M1** | `v0.1.0`            | 项目骨架 + Apple HIG 设计系统 + 收件/取件/列表/详情 + 客户自动去重 + 自动备份 + Windows NSIS 打包 |
-| **M2** | `v0.2.0`            | 价格模板 + 按件计费 + 折扣 + 付款/欠款 + 日/月报表（Recharts）+ 逾期未取 + Excel 导入导出         |
-| **M3** | `v0.3.0`            | 收件拍照（1–3 张，存 `userData/photos/YYYY-MM/`）+ 58mm 热敏打印登记单 / 取件条                   |
-| **M4** | `v0.4.0` → `v1.0.0` | 登录（Argon2）+ 权限（admin/staff）+ 审计日志全面绑定 + 腾讯云 SMS 可取件通知（可关闭）           |
+| 期     | Tag      | 交付                                                                                              |
+| ------ | -------- | ------------------------------------------------------------------------------------------------- |
+| **M1** | `v0.1.0` | 项目骨架 + Apple HIG 设计系统 + 收件/取件/列表/详情 + 客户自动去重 + 自动备份 + Windows NSIS 打包 |
+| **M2** | `v0.2.0` | 价格模板 + 按件计费 + 折扣 + 付款/欠款 + 日/月报表（Recharts）+ 逾期未取 + Excel 导入导出         |
+| **M3** | `v0.3.0` | 收件拍照（1–3 张，存 `userData/photos/YYYY-MM/`）+ 58mm 热敏打印登记单 / 取件条                   |
+| **M4** | `v0.4.0` | 登录（Argon2）+ 权限（admin/staff）+ 审计日志全面绑定 + 腾讯云 SMS 可取件通知（可关闭）           |
+| **M5** | `v0.5.0` | 液态玻璃 UI 2.0 设计系统（与 M4 并行，见 ADR 2026-07-18）                                         |
+| **GA** | `v1.0.0` | M4 + M5 完成、门禁全绿后发布                                                                      |
+
+**2026-07-18 路线修订（路线 A，manpengan 批准）：** M1–M3 实现已完成于 `codex/hongfa-m1-release`，先走门禁验收合并 main、补打 `v0.1.0`–`v0.3.0` tag，并清理 P0/P1 技术债（GitHub milestone「收口: v0.3.0」）；随后 M4（main 进程为主）与 M5（renderer 为主）双线并行。
 
 ## 8. 验收门禁（每期必过）
 
 **质量：** TS strict 零错、ESLint/Prettier 零警、文件/函数/嵌套红线、无硬编码密钥、所有 IPC 过 Zod。
+**UI（M5 起）：** 双主题全路由走查、同屏 backdrop-filter ≤ 8、动画仅 transform/opacity/filter、Windows 实机 60fps、reduced-motion 降级、组件零硬编码色值（`--lg-*` token 化）。
 **测试：** Service 单测覆盖率 ≥ 70%、Playwright E2E 覆盖本期核心路径、备份可从 zip 还原到新安装。
 **交付：** GH Actions `windows-latest` 构建绿灯；Windows 10/11 实机冒烟（manpengan）；`.exe` 大小记录基线；GitHub Release 附安装器 + SHA256。
 **文档：** `README.md` 截图更新；`docs/CHANGELOG.md` 本期条目。

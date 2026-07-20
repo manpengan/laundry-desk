@@ -110,3 +110,13 @@ export interface ReportDataDto {
   count: number;
   income: number;
 }
+
+export class AppError extends Error {
+  constructor(
+    public code: ApiErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AppError";
+  }
+}
