@@ -2,17 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, Plus, Trash2 } from "lucide-react";
 import type { ServiceType } from "@shared/schemas";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Button } from "../components/ui/Button";
 import { Notice } from "../components/ui/Notice";
+import { PhotoCard } from "../components/receive/PhotoCard";
 import { formatCurrency } from "@renderer/lib/utils";
-import { PhotoCapture } from "../components/PhotoCapture";
 
 interface OrderItem {
   id: string;
@@ -39,20 +33,19 @@ export default function Receive() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [photos, setPhotos] = useState<string[]>([]);
   const phoneInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-
-  const [discountAmount, setDiscountAmount] = useState(0);
-
-  const [photos, setPhotos] = useState<string[]>([]);
 
   const totalAmount = items.reduce(
     (acc, item) => acc + item.quantity * item.unitPrice,
     0,
   );
+  const payable = Math.max(0, totalAmount - discountAmount);
 
   useEffect(() => {
-    window.api.settings
+    void window.api.settings
       .get<PriceTemplate[]>("price_templates")
       .then((response) => {
         if (response.ok && response.data) setTemplates(response.data);
@@ -67,7 +60,7 @@ export default function Receive() {
     setPaidAmount(Math.max(0, totalAmount - discountAmount));
   }, [totalAmount, discountAmount]);
 
-  const handlePhoneChange = async (phone: string) => {
+  const handlePhoneChange = async (phone: string): Promise<void> => {
     setCustomer((current) => ({ ...current, phone }));
     if (/^1[3-9]\d{9}$/.test(phone)) {
       const response = await window.api.customers.findByPhone(phone);
@@ -77,23 +70,19 @@ export default function Receive() {
     }
   };
 
-  const updateItem = (id: string, patch: Partial<OrderItem>) => {
+  const updateItem = (id: string, patch: Partial<OrderItem>): void => {
     setItems((current) =>
       current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
     );
   };
 
-  const addItem = () => {
-    setItems((current) => [...current, createBlankItem()]);
-  };
-
-  const removeItem = (id: string) => {
+  const removeItem = (id: string): void => {
     setItems((current) =>
       current.length === 1 ? current : current.filter((item) => item.id !== id),
     );
   };
 
-  const selectTemplate = (id: string, template: PriceTemplate) => {
+  const selectTemplate = (id: string, template: PriceTemplate): void => {
     updateItem(id, {
       itemType: template.itemType,
       serviceType: template.serviceType,
@@ -101,7 +90,7 @@ export default function Receive() {
     });
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (): Promise<void> => {
     setError("");
     setSuccessMessage("");
     if (!customer.name.trim() || !/^1[3-9]\d{9}$/.test(customer.phone)) {
@@ -138,7 +127,7 @@ export default function Receive() {
         quantity,
         unitPrice,
       })),
-      totalAmount: Math.max(0, totalAmount - discountAmount),
+      totalAmount: payable,
       paidAmount,
       paymentMethod: paidAmount === 0 ? "unpaid" : paymentMethod,
       photos,
@@ -151,8 +140,6 @@ export default function Receive() {
     }
 
     const pickupCode = orderResponse.data.pickupCode;
-
-    // 异步触发打印收件凭单，不阻塞路由跳转
     try {
       await window.api.printer.printReceipt(orderResponse.data.id);
     } catch (printErr) {
@@ -171,23 +158,30 @@ export default function Receive() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <h2 className="text-2xl font-bold">收件登记</h2>
+    <div className="space-y-4">
+      <div>
+        <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--lg-ink3)]">
+          Receive
+        </p>
+        <h2 className="mt-1 text-[24px] font-bold leading-none tracking-[-0.02em]">
+          收件登记
+        </h2>
+      </div>
       {successMessage && <Notice variant="success">{successMessage}</Notice>}
       {error && <Notice variant="error">{error}</Notice>}
 
-      <div className="grid gap-6 md:grid-cols-3">
-        <div className="md:col-span-1 space-y-6">
-          <Card className="border-none shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">客户信息</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+      <div className="grid items-start gap-3.5 md:grid-cols-3">
+        <div className="space-y-3.5 md:col-span-1">
+          <div className="lg-card lg-spec rounded-[20px]">
+            <div className="px-5 pb-1 pt-4">
+              <h3 className="text-[15px] font-semibold">客户信息</h3>
+            </div>
+            <div className="space-y-3 p-4 pt-2">
               <Input
                 ref={phoneInputRef}
                 placeholder="手机号"
                 value={customer.phone}
-                onChange={(event) => handlePhoneChange(event.target.value)}
+                onChange={(event) => void handlePhoneChange(event.target.value)}
               />
               <Input
                 placeholder="客户姓名"
@@ -196,24 +190,27 @@ export default function Receive() {
                   setCustomer({ ...customer, name: event.target.value })
                 }
               />
-            </CardContent>
-          </Card>
-
-          <PhotoCapture photos={photos} onChange={setPhotos} />
+            </div>
+          </div>
+          <PhotoCard photos={photos} onChange={setPhotos} onError={setError} />
         </div>
 
-        <Card className="md:col-span-2 border-none shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">物品明细</CardTitle>
-            <Button variant="outline" size="sm" onClick={addItem}>
-              <Plus className="w-4 h-4 mr-1" /> 添加
+        <div className="lg-card lg-spec rounded-[22px] md:col-span-2">
+          <div className="flex items-center justify-between px-5 pb-1 pt-4">
+            <h3 className="text-[15px] font-semibold">物品明细</h3>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setItems((c) => [...c, createBlankItem()])}
+            >
+              <Plus className="mr-1 h-4 w-4" /> 添加
             </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          </div>
+          <div className="space-y-4 p-4 pt-2">
             {items.map((item) => (
               <div
                 key={item.id}
-                className="grid gap-3 md:grid-cols-[1fr_120px_90px_44px] items-end"
+                className="grid items-end gap-3 md:grid-cols-[1fr_120px_90px_44px]"
               >
                 <div className="space-y-2">
                   <Input
@@ -224,7 +221,7 @@ export default function Receive() {
                     }
                   />
                   {item.itemType && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {templates
                         .filter((template) =>
                           template.itemType.includes(item.itemType),
@@ -234,7 +231,7 @@ export default function Receive() {
                           <button
                             key={`${template.itemType}-${template.serviceType}`}
                             type="button"
-                            className="rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-600"
+                            className="lg-pressable rounded-full bg-[var(--lg-accent-soft)] px-3 py-1 text-[12px] font-semibold text-[var(--lg-accent)]"
                             onClick={() => selectTemplate(item.id, template)}
                           >
                             {template.itemType} {formatCurrency(template.price)}
@@ -267,18 +264,21 @@ export default function Receive() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="text-red-400"
+                  className="text-[var(--lg-late-ink)]"
                   onClick={() => removeItem(item.id)}
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             ))}
 
-            <div className="pt-4 border-t border-slate-100 space-y-4">
-              <div className="grid gap-3 md:grid-cols-2 items-center">
-                <span className="text-slate-500">
-                  合计 {items.length} 件，原价: {formatCurrency(totalAmount)}
+            <div
+              className="space-y-4 border-t pt-4"
+              style={{ borderColor: "var(--lg-hair)" }}
+            >
+              <div className="grid items-center gap-3 md:grid-cols-2">
+                <span className="text-[13.5px] text-[var(--lg-ink2)]">
+                  合计 {items.length} 件，原价 {formatCurrency(totalAmount)}
                 </span>
                 <Input
                   type="number"
@@ -291,9 +291,14 @@ export default function Receive() {
                 />
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-500 font-semibold">折后应收</span>
-                <span className="text-xl font-bold text-blue-600">
-                  {formatCurrency(Math.max(0, totalAmount - discountAmount))}
+                <span className="text-[14px] font-semibold text-[var(--lg-ink2)]">
+                  折后应收
+                </span>
+                <span
+                  className="text-[22px] font-bold tracking-[-0.02em] text-[var(--lg-accent)]"
+                  style={{ fontVariantNumeric: "tabular-nums" }}
+                >
+                  {formatCurrency(payable)}
                 </span>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
@@ -307,7 +312,11 @@ export default function Receive() {
                   }
                 />
                 <select
-                  className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm"
+                  className="h-11 rounded-[12px] border px-3.5 text-[14px] text-[var(--lg-ink)] focus:border-[var(--lg-accent)] focus:outline-none focus:ring-[3px] focus:ring-[var(--lg-accent-soft)]"
+                  style={{
+                    background: "var(--lg-leaf)",
+                    borderColor: "var(--lg-hair)",
+                  }}
                   value={paymentMethod}
                   onChange={(event) =>
                     setPaymentMethod(event.target.value as typeof paymentMethod)
@@ -319,27 +328,24 @@ export default function Receive() {
                   <option value="card">刷卡</option>
                 </select>
               </div>
-              {paidAmount < Math.max(0, totalAmount - discountAmount) && (
-                <div className="text-sm text-red-500 font-medium pl-1">
-                  将记为欠款:{" "}
-                  {formatCurrency(
-                    Math.max(0, totalAmount - discountAmount) - paidAmount,
-                  )}
+              {paidAmount < payable && (
+                <div className="lg-pill late inline-block">
+                  将记为欠款 {formatCurrency(payable - paidAmount)}
                 </div>
               )}
             </div>
 
             <Button
-              className="w-full mt-6"
+              className="mt-2 w-full"
               size="lg"
-              onClick={handleSubmit}
+              onClick={() => void handleSubmit()}
               disabled={loading}
             >
-              <CheckCircle2 className="w-5 h-5 mr-2" />
+              <CheckCircle2 className="mr-2 h-5 w-5" />
               {loading ? "提交中..." : "确认收件"}
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

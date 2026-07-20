@@ -1,39 +1,462 @@
 @import "tailwindcss";
 
+/* ============================================================
+   宏发洗衣店 · 液态玻璃设计系统（基准：ADR 2026-07-18 / 视觉 Demo 34c6aaf2）
+   token 唯一真源，组件禁止硬编码色值
+   ============================================================ */
 :root {
-  color: #0f172a;
-  background:
-    radial-gradient(
-      circle at 18% 12%,
-      rgba(0, 113, 227, 0.16),
-      transparent 32%
-    ),
-    radial-gradient(
-      circle at 88% 0%,
-      rgba(99, 102, 241, 0.13),
-      transparent 28%
-    ),
-    linear-gradient(135deg, #fbfbfd 0%, #f5f5f7 44%, #eef2f8 100%);
+  --lg-bg: #f2f3f7;
+  --lg-ink: #1d1d1f;
+  --lg-ink2: rgba(29, 29, 31, 0.62);
+  --lg-ink3: rgba(29, 29, 31, 0.38);
+  --lg-accent: #0071e3;
+  --lg-accent2: #3d9bff;
+  --lg-accent-soft: rgba(0, 113, 227, 0.12);
+  --lg-accent-ink: #ffffff;
+  --lg-glass-hi: rgba(255, 255, 255, 0.82);
+  --lg-glass: rgba(255, 255, 255, 0.55);
+  --lg-glass-lo: rgba(255, 255, 255, 0.34);
+  --lg-leaf: rgba(255, 255, 255, 0.52);
+  --lg-leaf-hover: rgba(255, 255, 255, 0.72);
+  --lg-line: rgba(255, 255, 255, 0.9);
+  --lg-hair: rgba(20, 30, 60, 0.08);
+  --lg-inner-hi: rgba(255, 255, 255, 0.95);
+  --lg-spec: rgba(255, 255, 255, 0.55);
+  --lg-shadow: 0 30px 80px rgba(24, 39, 75, 0.14);
+  --lg-shadow-sm: 0 12px 32px rgba(24, 39, 75, 0.1);
+  --lg-shadow-xs: 0 2px 8px rgba(24, 39, 75, 0.07);
+  --lg-surface: rgba(255, 255, 255, 0.72);
+  --lg-ok-bg: rgba(52, 199, 89, 0.16);
+  --lg-ok-ink: #1d7a35;
+  --lg-busy-bg: rgba(0, 113, 227, 0.12);
+  --lg-busy-ink: #0058c7;
+  --lg-late-bg: rgba(255, 59, 48, 0.13);
+  --lg-late-ink: #c22318;
+  --lg-done-bg: rgba(120, 120, 128, 0.14);
+  --lg-done-ink: #6e6e73;
+  --lg-info-bg: var(--lg-busy-bg);
+  --lg-info-ink: var(--lg-busy-ink);
+  --lg-warn-bg: rgba(255, 159, 10, 0.16);
+  --lg-warn-ink: #b06a00;
+  --lg-blob-a: rgba(0, 113, 227, 0.3);
+  --lg-blob-b: rgba(100, 210, 255, 0.32);
+  --lg-blob-c: rgba(175, 82, 222, 0.2);
+  --lg-blob-d: rgba(255, 159, 10, 0.16);
+  --lg-noise: 0.028;
+  color: var(--lg-ink);
   font-synthesis: none;
-  text-rendering: geometricPrecision;
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-
-body {
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  font-family:
-    "SF Pro Display", "SF Pro Text", "PingFang SC", "Microsoft YaHei",
-    sans-serif;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --lg-bg: #07070c;
+    --lg-ink: #f5f5f7;
+    --lg-ink2: rgba(245, 245, 247, 0.62);
+    --lg-ink3: rgba(245, 245, 247, 0.38);
+    --lg-accent: #0a84ff;
+    --lg-accent2: #57b1ff;
+    --lg-accent-soft: rgba(10, 132, 255, 0.18);
+    --lg-glass-hi: rgba(44, 48, 62, 0.66);
+    --lg-glass: rgba(24, 26, 34, 0.55);
+    --lg-glass-lo: rgba(16, 18, 26, 0.42);
+    --lg-leaf: rgba(255, 255, 255, 0.06);
+    --lg-leaf-hover: rgba(255, 255, 255, 0.11);
+    --lg-line: rgba(255, 255, 255, 0.13);
+    --lg-hair: rgba(255, 255, 255, 0.07);
+    --lg-inner-hi: rgba(255, 255, 255, 0.16);
+    --lg-spec: rgba(255, 255, 255, 0.17);
+    --lg-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+    --lg-shadow-sm: 0 12px 32px rgba(0, 0, 0, 0.4);
+    --lg-shadow-xs: 0 2px 8px rgba(0, 0, 0, 0.35);
+    --lg-surface: rgba(30, 34, 44, 0.66);
+    --lg-ok-bg: rgba(48, 209, 88, 0.18);
+    --lg-ok-ink: #4cd964;
+    --lg-busy-bg: rgba(10, 132, 255, 0.2);
+    --lg-busy-ink: #6cb2ff;
+    --lg-late-bg: rgba(255, 69, 58, 0.2);
+    --lg-late-ink: #ff8078;
+    --lg-done-bg: rgba(120, 120, 128, 0.24);
+    --lg-done-ink: #98989d;
+    --lg-warn-bg: rgba(255, 159, 10, 0.18);
+    --lg-warn-ink: #f0a838;
+    --lg-blob-a: rgba(10, 100, 220, 0.34);
+    --lg-blob-b: rgba(60, 160, 255, 0.22);
+    --lg-blob-c: rgba(150, 80, 220, 0.22);
+    --lg-blob-d: rgba(255, 140, 40, 0.1);
+    --lg-noise: 0.05;
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --lg-bg: #07070c;
+  --lg-ink: #f5f5f7;
+  --lg-ink2: rgba(245, 245, 247, 0.62);
+  --lg-ink3: rgba(245, 245, 247, 0.38);
+  --lg-accent: #0a84ff;
+  --lg-accent2: #57b1ff;
+  --lg-accent-soft: rgba(10, 132, 255, 0.18);
+  --lg-glass-hi: rgba(44, 48, 62, 0.66);
+  --lg-glass: rgba(24, 26, 34, 0.55);
+  --lg-glass-lo: rgba(16, 18, 26, 0.42);
+  --lg-leaf: rgba(255, 255, 255, 0.06);
+  --lg-leaf-hover: rgba(255, 255, 255, 0.11);
+  --lg-line: rgba(255, 255, 255, 0.13);
+  --lg-hair: rgba(255, 255, 255, 0.07);
+  --lg-inner-hi: rgba(255, 255, 255, 0.16);
+  --lg-spec: rgba(255, 255, 255, 0.17);
+  --lg-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  --lg-shadow-sm: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --lg-shadow-xs: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --lg-surface: rgba(30, 34, 44, 0.66);
+  --lg-ok-bg: rgba(48, 209, 88, 0.18);
+  --lg-ok-ink: #4cd964;
+  --lg-busy-bg: rgba(10, 132, 255, 0.2);
+  --lg-busy-ink: #6cb2ff;
+  --lg-late-bg: rgba(255, 69, 58, 0.2);
+  --lg-late-ink: #ff8078;
+  --lg-done-bg: rgba(120, 120, 128, 0.24);
+  --lg-done-ink: #98989d;
+  --lg-warn-bg: rgba(255, 159, 10, 0.18);
+  --lg-warn-ink: #f0a838;
+  --lg-blob-a: rgba(10, 100, 220, 0.34);
+  --lg-blob-b: rgba(60, 160, 255, 0.22);
+  --lg-blob-c: rgba(150, 80, 220, 0.22);
+  --lg-blob-d: rgba(255, 140, 40, 0.1);
+  --lg-noise: 0.05;
 }
 
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--lg-bg);
+  color: var(--lg-ink);
+  font-family:
+    "SF Pro Display",
+    "SF Pro Text",
+    -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    "Microsoft YaHei",
+    "Segoe UI",
+    sans-serif;
+  transition:
+    background-color 0.45s ease,
+    color 0.45s ease;
+}
 #root {
   height: 100vh;
   width: 100vw;
 }
-
 ::selection {
-  background: rgba(0, 113, 227, 0.18);
+  background: var(--lg-accent-soft);
+}
+:is(button, a, [tabindex]):focus-visible {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+
+/* 呼吸背景（语汇5）：色斑 26–40s 漂移，仅 transform */
+.lg-aurora {
+  position: fixed;
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(90px);
+}
+.lg-aurora i {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+}
+.lg-aurora i:nth-child(1) {
+  width: 44vw;
+  height: 44vw;
+  left: -6%;
+  top: -8%;
+  background: var(--lg-blob-a);
+  animation: lg-da 34s ease-in-out infinite alternate;
+}
+.lg-aurora i:nth-child(2) {
+  width: 36vw;
+  height: 36vw;
+  right: -4%;
+  top: 2%;
+  background: var(--lg-blob-b);
+  animation: lg-db 28s ease-in-out infinite alternate;
+}
+.lg-aurora i:nth-child(3) {
+  width: 40vw;
+  height: 40vw;
+  left: 28%;
+  bottom: -18%;
+  background: var(--lg-blob-c);
+  animation: lg-dc 40s ease-in-out infinite alternate;
+}
+.lg-aurora i:nth-child(4) {
+  width: 24vw;
+  height: 24vw;
+  right: 18%;
+  bottom: 4%;
+  background: var(--lg-blob-d);
+  animation: lg-da 26s ease-in-out infinite alternate-reverse;
+}
+@keyframes lg-da {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(8vw, 6vh, 0) scale(1.18);
+  }
+}
+@keyframes lg-db {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.1);
+  }
+  to {
+    transform: translate3d(-7vw, 9vh, 0) scale(0.92);
+  }
+}
+@keyframes lg-dc {
+  from {
+    transform: translate3d(0, 0, 0) scale(0.95);
+  }
+  to {
+    transform: translate3d(6vw, -8vh, 0) scale(1.15);
+  }
+}
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: var(--lg-noise);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* 三层玻璃（语汇1）：blur 只在窗口层；面板染色；1px 内高光 */
+.lg-glass {
+  background: linear-gradient(
+    135deg,
+    var(--lg-glass-hi) 0%,
+    var(--lg-glass) 42%,
+    var(--lg-glass-lo) 100%
+  );
+  border: 1px solid var(--lg-line);
+  box-shadow:
+    var(--lg-shadow),
+    inset 0 1px 0 var(--lg-inner-hi),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(26px) saturate(1.8);
+  -webkit-backdrop-filter: blur(26px) saturate(1.8);
+}
+.lg-card {
+  background: linear-gradient(150deg, var(--lg-leaf-hover), var(--lg-leaf));
+  border: 1px solid var(--lg-line);
+  box-shadow:
+    var(--lg-shadow-sm),
+    inset 0 1px 0 var(--lg-inner-hi);
+}
+.lg-inset {
+  background: var(--lg-leaf);
+  border: 1px solid var(--lg-hair);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .lg-glass {
+    background: var(--lg-glass-hi);
+  }
+}
+
+/* 镜面追光（语汇2）：radial 260px 随指针 */
+.lg-spec {
+  position: relative;
+}
+.lg-spec::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(
+    260px circle at var(--mx, 50%) var(--my, -60px),
+    var(--lg-spec),
+    transparent 62%
+  );
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.lg-spec:hover::before {
+  opacity: 1;
+}
+.lg-spec > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* 液态涟漪 + 回压回弹（语汇3） */
+.lg-pressable {
+  position: relative;
+  overflow: hidden;
+  transform: translateZ(0);
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.lg-pressable:active {
+  transform: scale(0.965);
+  transition-duration: 0.08s;
+}
+.lg-ripple {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--lg-spec) 0%, transparent 70%);
+  transform: scale(0);
+  opacity: 0.9;
+  animation: lg-rip 0.62s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes lg-rip {
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* 状态胶囊（语义四色，独立于品牌蓝） */
+.lg-pill {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 11px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.lg-pill.ok {
+  background: var(--lg-ok-bg);
+  color: var(--lg-ok-ink);
+}
+.lg-pill.busy {
+  background: var(--lg-busy-bg);
+  color: var(--lg-busy-ink);
+}
+.lg-pill.late {
+  background: var(--lg-late-bg);
+  color: var(--lg-late-ink);
+}
+.lg-pill.done {
+  background: var(--lg-done-bg);
+  color: var(--lg-done-ink);
+}
+
+/* 分段控件（磁性 thumb） */
+.lg-seg {
+  position: relative;
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--lg-leaf);
+  border: 1px solid var(--lg-hair);
+}
+.lg-seg-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--lg-glass-hi), var(--lg-leaf-hover));
+  border: 1px solid var(--lg-line);
+  box-shadow:
+    var(--lg-shadow-xs),
+    inset 0 1px 0 var(--lg-inner-hi);
+  transition:
+    transform 0.4s cubic-bezier(0.3, 1.3, 0.5, 1),
+    width 0.4s cubic-bezier(0.3, 1.3, 0.5, 1);
+}
+.lg-seg button {
+  position: relative;
+  z-index: 1;
+  border: 0;
+  background: none;
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lg-ink2);
+  cursor: pointer;
+  transition: color 0.25s;
+  font-family: inherit;
+}
+.lg-seg button.on {
+  color: var(--lg-ink);
+}
+
+/* 取件码键盘 */
+.lg-slot {
+  width: 52px;
+  height: 62px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  background: var(--lg-leaf);
+  border: 1px solid var(--lg-line);
+  box-shadow:
+    inset 0 2px 6px rgba(15, 25, 55, 0.06),
+    inset 0 1px 0 var(--lg-inner-hi);
+  transition:
+    transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.3s,
+    background-color 0.3s;
+}
+.lg-slot.fill {
+  transform: scale(1.07);
+  border-color: var(--lg-accent);
+}
+.lg-slot.win {
+  background: var(--lg-ok-bg);
+  border-color: transparent;
+  color: var(--lg-ok-ink);
+  transform: scale(1.04);
+}
+.lg-slot.miss {
+  background: var(--lg-late-bg);
+  border-color: transparent;
+  color: var(--lg-late-ink);
+}
+.lg-key {
+  height: 50px;
+  border-radius: 16px;
+  border: 1px solid var(--lg-line);
+  background: linear-gradient(150deg, var(--lg-leaf-hover), var(--lg-leaf));
+  box-shadow:
+    var(--lg-shadow-xs),
+    inset 0 1px 0 var(--lg-inner-hi);
+  font-size: 18px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--lg-ink);
+  cursor: pointer;
+  font-family: inherit;
+}
+.lg-key.fn {
+  font-size: 13px;
+  color: var(--lg-ink2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-aurora i {
+    animation: none;
+  }
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

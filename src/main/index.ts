@@ -2,13 +2,8 @@ import { app, BrowserWindow, net, protocol } from "electron";
 import { electronApp, is, optimizer } from "@electron-toolkit/utils";
 import { join, normalize } from "path";
 import { pathToFileURL } from "url";
-import { registerBackupIpc } from "./ipc/backup";
-import { registerCustomerIpc } from "./ipc/customers";
-import { registerExcelIpc } from "./ipc/excel";
-import { registerOrderIpc } from "./ipc/orders";
-import { registerPhotoIpc } from "./ipc/photos";
-import { registerPrinterIpc } from "./ipc/printer";
-import { registerSettingsIpc } from "./ipc/settings";
+import { registerAllChannels } from "./ipc/registerAll";
+import { bindElectronIpc } from "./ipc/electronBridge";
 import { BackupService } from "./services/backupService";
 import { PhotoService } from "./services/photoService";
 import { SettingsService } from "./services/settingsService";
@@ -43,6 +38,7 @@ function createWindow(): void {
   }
 }
 
+// 单实例锁：第二个实例直接退出并聚焦已有窗口，避免多开争抢 SQLite 与打印设备
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
@@ -58,7 +54,8 @@ if (!gotTheLock) {
   app.whenReady().then(async () => {
     electronApp.setAppUserModelId("com.laundry-desk");
     registerMediaProtocol();
-    registerIpc();
+    registerAllChannels();
+    bindElectronIpc();
 
     try {
       await SettingsService.initDefaults();
@@ -83,15 +80,7 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-function registerIpc(): void {
-  registerOrderIpc();
-  registerCustomerIpc();
-  registerSettingsIpc();
-  registerExcelIpc();
-  registerPhotoIpc();
-  registerPrinterIpc();
-  registerBackupIpc();
-}
+
 
 function registerMediaProtocol(): void {
   protocol.handle("media", (request) => {

@@ -1,233 +1,266 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ReceiptText } from "lucide-react";
+import type { CustomerDto, OrderWithDetailsDto, StatsDto } from "@shared/index";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../components/ui/Card";
-import { cn } from "@renderer/lib/utils";
-import {
-  AlertCircle,
-  ArrowRight,
-  Clock,
-  Coins,
-  PackageCheck,
-  ReceiptText,
-  Sparkles,
-} from "lucide-react";
-import { Link } from "react-router-dom";
-import type { StatsDto } from "@shared/index";
-import { motion } from "framer-motion";
-import { formatCurrency } from "@renderer/lib/utils";
+  buildView,
+  itemSummary,
+  orderStatus,
+  periodLabel,
+  useCountUp,
+  yuan,
+  type Period,
+} from "@renderer/components/home/homeData";
+import { Sparkline } from "@renderer/components/home/Sparkline";
+import { PickupKeypad } from "@renderer/components/home/PickupKeypad";
 
 export default function Home() {
+  const nav = useNavigate();
+  const [period, setPeriod] = useState<Period>("today");
   const [stats, setStats] = useState<StatsDto | null>(null);
+  const [orders, setOrders] = useState<OrderWithDetailsDto[]>([]);
+  const [customers, setCustomers] = useState<CustomerDto[]>([]);
+  const segRef = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState({ x: 4, w: 0 });
 
   useEffect(() => {
-    window.api.orders.getStats().then((response) => {
-      if (response.ok) setStats(response.data);
+    let off = false;
+    void window.api.orders.getStats().then((r) => {
+      if (!off && r.ok) setStats(r.data);
     });
+    void window.api.orders.findAll({ limit: 60 }).then((r) => {
+      if (!off && r.ok) setOrders(r.data);
+    });
+    void window.api.customers.findAll().then((r) => {
+      if (!off && r.ok) setCustomers(r.data);
+    });
+    return () => {
+      off = true;
+    };
   }, []);
 
-  const dashboardCards = useMemo(
-    () => [
-      {
-        label: "今日收件",
-        value: stats?.todayCount ?? 0,
-        icon: ReceiptText,
-        color: "text-blue-600",
-        bg: "bg-blue-50",
-      },
-      {
-        label: "待取件",
-        value: stats?.pendingCount ?? 0,
-        icon: PackageCheck,
-        color: "text-green-600",
-        bg: "bg-green-50",
-      },
-      {
-        label: "逾期未取",
-        value: stats?.overdueCount ?? 0,
-        icon: AlertCircle,
-        color: "text-red-600",
-        bg: "bg-red-50",
-      },
-      {
-        label: "预计今日交付",
-        value: stats?.dueTodayCount ?? 0,
-        icon: Clock,
-        color: "text-orange-600",
-        bg: "bg-orange-50",
-      },
-    ],
+  useEffect(() => {
+    const el = segRef.current?.querySelector<HTMLButtonElement>(
+      `button[data-p="${period}"]`,
+    );
+    if (el) setThumb({ x: el.offsetLeft - 4, w: el.offsetWidth });
+  }, [period, stats]);
+
+  const view = useMemo(
+    () => (stats ? buildView(period, stats, orders, customers) : null),
+    [period, stats, orders, customers],
+  );
+  const incomeAnim = useCountUp(view?.income ?? 0);
+  const countAnim = useCountUp(view?.count ?? 0);
+  const pendingAnim = useCountUp(stats?.pendingCount ?? 0);
+  const newcAnim = useCountUp(view?.newCustomers ?? 0);
+  const returning =
+    customers.length > 0
+      ? Math.round(
+          (customers.filter((c) => c.totalOrders >= 2).length /
+            customers.length) *
+            100,
+        )
+      : null;
+  const spark = useMemo(
+    () => (stats ? stats.chartData.slice(-7).map((r) => r.income) : []),
     [stats],
   );
 
-  const todayLabel = new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  }).format(new Date());
-
   return (
-    <div className="space-y-9">
-      <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-          className="flex flex-col gap-5"
-        >
-          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/70 bg-white/70 px-4 py-2 text-sm font-semibold text-slate-600 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
-            <Sparkles className="h-4 w-4 text-[#0071e3]" />
-            今日营业中
-          </div>
-          <div>
-            <h2 className="max-w-3xl text-[56px] font-semibold leading-[0.98] tracking-[-0.06em] text-slate-950">
-              你好，周学胜
-            </h2>
-            <p className="mt-4 text-xl font-medium text-slate-500">
-              今天是 {todayLabel}，宏发洗衣店运行正常。
-            </p>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <Card className="overflow-hidden bg-[linear-gradient(140deg,rgba(255,255,255,0.92),rgba(243,247,255,0.82))]">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Coins className="h-5 w-5 text-[#0071e3]" />
-                经营概览
-              </CardTitle>
-              <CardDescription>
-                首页数据已切到实时统计，不再使用占位数字。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-3 xl:grid-cols-1">
-              <div className="rounded-[22px] border border-white/80 bg-white/80 p-4">
-                <div className="text-sm font-medium text-slate-500">
-                  今日实收
-                </div>
-                <div className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">
-                  {formatCurrency(stats?.todayIncome ?? 0)}
-                </div>
-              </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/80 p-4">
-                <div className="text-sm font-medium text-slate-500">
-                  本月实收
-                </div>
-                <div className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">
-                  {formatCurrency(stats?.monthIncome ?? 0)}
-                </div>
-              </div>
-              <div className="rounded-[22px] border border-white/80 bg-white/80 p-4">
-                <div className="text-sm font-medium text-slate-500">
-                  本月收件
-                </div>
-                <div className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-slate-950">
-                  {(stats?.monthCount ?? 0).toLocaleString("zh-CN")}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {dashboardCards.map((stat, index) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: 0.3,
-              delay: 0.08 + index * 0.05,
-              ease: [0.22, 1, 0.36, 1],
-            }}
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--lg-ink3)]">
+            Dashboard
+          </p>
+          <h2 className="mt-1 text-[24px] font-bold leading-none tracking-[-0.02em]">
+            {periodLabel[period]}总览
+          </h2>
+        </div>
+        <div className="flex items-center gap-3">
+          <div
+            className="lg-seg"
+            ref={segRef}
+            role="tablist"
+            aria-label="统计周期"
           >
-            <Card className="group overflow-hidden transition-all hover:-translate-y-1 hover:bg-white/95">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-semibold text-slate-500">
-                  {stat.label}
-                </CardTitle>
-                <div
-                  className={cn(
-                    "rounded-2xl p-3 transition-all group-hover:scale-105",
-                    stat.bg,
-                    stat.color,
-                  )}
-                >
-                  <stat.icon className="h-5 w-5" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-[42px] font-semibold tracking-[-0.05em]">
-                  {stat.value.toLocaleString("zh-CN")}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
+            <span
+              className="lg-seg-thumb"
+              style={{ transform: `translateX(${thumb.x}px)`, width: thumb.w }}
+            />
+            {(["today", "week", "month"] as Period[]).map((p) => (
+              <button
+                key={p}
+                data-p={p}
+                type="button"
+                className={period === p ? "on" : ""}
+                onClick={() => setPeriod(p)}
+              >
+                {periodLabel[p]}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => nav("/receive")}
+            className="lg-pressable inline-flex items-center gap-2 rounded-full bg-gradient-to-b from-[var(--lg-accent2)] to-[var(--lg-accent)] px-5 py-[11px] text-[14px] font-semibold text-[var(--lg-accent-ink)] shadow-[0_14px_34px_var(--lg-accent-soft),inset_0_1px_0_rgba(255,255,255,0.45)]"
+          >
+            <ReceiptText className="h-[17px] w-[17px]" strokeWidth={2.2} />
+            收件登记
+          </button>
+        </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, delay: 0.28, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <Card className="overflow-hidden transition-all hover:-translate-y-1 hover:bg-white/95">
-            <CardHeader>
-              <CardTitle>快速收件</CardTitle>
-              <CardDescription>
-                录入客户、物品与付款信息，生成取件码。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <p className="text-base font-medium leading-7 text-slate-500">
-                点击进入收件流程，支持自动识别回头客。
-              </p>
-              <Link
-                className="inline-flex items-center gap-2 text-sm font-semibold text-[#0071e3]"
-                to="/receive"
+      <div className="grid grid-cols-2 gap-3.5 xl:grid-cols-4">
+        <div className="lg-card lg-spec rounded-[20px] p-4 pb-3">
+          <div className="flex items-center justify-between text-[12px] font-semibold text-[var(--lg-ink2)]">
+            营业额
+            {view?.chip && (
+              <span
+                className={`lg-pill ${view.chip.startsWith("+") ? "ok" : "late"}`}
               >
-                开始收件
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </CardContent>
-          </Card>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, delay: 0.34, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <Card className="overflow-hidden transition-all hover:-translate-y-1 hover:bg-white/95">
-            <CardHeader>
-              <CardTitle>快速取件</CardTitle>
-              <CardDescription>
-                输入取件码、订单号或手机号，实时完成出库。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              <p className="text-base font-medium leading-7 text-slate-500">
-                报取件码或手机号快速结账取走衣物。
+                {view.chip}
+              </span>
+            )}
+          </div>
+          <div
+            className="mt-2 leading-none"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            <span className="mr-0.5 text-[17px] font-semibold text-[var(--lg-ink2)]">
+              ¥
+            </span>
+            <span className="text-[30px] font-bold tracking-[-0.03em]">
+              {yuan(Math.round(incomeAnim))}
+            </span>
+          </div>
+          <Sparkline points={spark} />
+        </div>
+
+        <div className="lg-card lg-spec rounded-[20px] p-4">
+          <div className="text-[12px] font-semibold text-[var(--lg-ink2)]">
+            收件单数
+          </div>
+          <div
+            className="mt-2 leading-none"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            <span className="text-[30px] font-bold tracking-[-0.03em]">
+              {Math.round(countAnim)}
+            </span>
+            <span className="ml-1 text-[15px] font-semibold text-[var(--lg-ink2)]">
+              单
+            </span>
+          </div>
+          <p className="mt-2.5 text-[12px] text-[var(--lg-ink3)]">
+            共 {view?.pieces ?? "—"} 件衣物
+          </p>
+        </div>
+
+        <div className="lg-card lg-spec rounded-[20px] p-4">
+          <div className="flex items-center justify-between text-[12px] font-semibold text-[var(--lg-ink2)]">
+            待取件
+            {stats && stats.overdueCount > 0 && (
+              <span className="lg-pill late">逾期 {stats.overdueCount}</span>
+            )}
+          </div>
+          <div
+            className="mt-2 leading-none"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            <span className="text-[30px] font-bold tracking-[-0.03em]">
+              {Math.round(pendingAnim)}
+            </span>
+            <span className="ml-1 text-[15px] font-semibold text-[var(--lg-ink2)]">
+              单
+            </span>
+          </div>
+          <p className="mt-2.5 text-[12px] text-[var(--lg-ink3)]">
+            今日应交付 {stats?.dueTodayCount ?? "—"} 单
+          </p>
+        </div>
+
+        <div className="lg-card lg-spec rounded-[20px] p-4">
+          <div className="text-[12px] font-semibold text-[var(--lg-ink2)]">
+            新客
+          </div>
+          <div
+            className="mt-2 leading-none"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            <span className="text-[30px] font-bold tracking-[-0.03em]">
+              {Math.round(newcAnim)}
+            </span>
+            <span className="ml-1 text-[15px] font-semibold text-[var(--lg-ink2)]">
+              位
+            </span>
+          </div>
+          <p className="mt-2.5 text-[12px] text-[var(--lg-ink3)]">
+            {returning !== null ? `回头率 ${returning}%` : "暂无客户数据"}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid items-start gap-3.5 xl:grid-cols-[1.65fr_1fr]">
+        <div className="lg-card lg-spec rounded-[22px]">
+          <div className="flex items-center justify-between px-5 pb-1 pt-4">
+            <h3 className="text-[16px] font-semibold tracking-[-0.01em]">
+              最近订单
+            </h3>
+            <button
+              type="button"
+              onClick={() => nav("/orders")}
+              className="text-[13px] font-semibold text-[var(--lg-accent)]"
+            >
+              全部订单 ›
+            </button>
+          </div>
+          <div className="flex flex-col p-2">
+            {orders.slice(0, 5).map((o) => {
+              const st = orderStatus(o);
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => nav(`/orders/${o.id}`)}
+                  className="lg-pressable grid grid-cols-[1fr_auto_auto] sm:grid-cols-[1.2fr_1.4fr_auto_auto] items-center gap-3 rounded-[15px] px-3 py-2.5 text-left transition-colors hover:bg-[var(--lg-leaf-hover)]"
+                >
+                  <span className="min-w-0">
+                    <span
+                      className="block text-[13px] font-bold"
+                      style={{ fontVariantNumeric: "tabular-nums" }}
+                    >
+                      {o.orderNo}
+                    </span>
+                    <span className="block truncate text-[11px] font-semibold text-[var(--lg-ink3)]">
+                      {o.customer?.name ?? "散客"}
+                    </span>
+                  </span>
+                  <span className="hidden truncate text-[13px] text-[var(--lg-ink2)] sm:block">
+                    {itemSummary(o)}
+                  </span>
+                  <span
+                    className="text-[14px] font-bold"
+                    style={{ fontVariantNumeric: "tabular-nums" }}
+                  >
+                    ¥ {yuan(o.totalAmount)}
+                  </span>
+                  <span className={`lg-pill ${st.cls} justify-self-end`}>
+                    {st.text}
+                  </span>
+                </button>
+              );
+            })}
+            {orders.length === 0 && (
+              <p className="px-3 py-8 text-center text-[13px] text-[var(--lg-ink3)]">
+                暂无订单，点击右上角「收件登记」开单
               </p>
-              <Link
-                className="inline-flex items-center gap-2 text-sm font-semibold text-[#0071e3]"
-                to="/pickup"
-              >
-                查询取件
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </CardContent>
-          </Card>
-        </motion.div>
+            )}
+          </div>
+        </div>
+
+        <PickupKeypad />
       </div>
     </div>
   );

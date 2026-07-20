@@ -15,9 +15,14 @@
     "build": "npm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win --x64",
+    "build:win": "npm run build && electron-builder --win --x64 --publish never",
     "test": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "rebuild:node": "npm rebuild better-sqlite3",
+    "build:web": "electron-vite build && node scripts/fix-web-html.mjs",
+    "serve": "npm run build:web && npm run rebuild:node && node out/main/server.js",
+    "serve:only": "npm run rebuild:node && node out/main/server.js",
+    "serve:lan": "LAUNDRY_HOST=0.0.0.0 npm run serve:only"
   },
   "build": {
     "appId": "com.laundry-desk",

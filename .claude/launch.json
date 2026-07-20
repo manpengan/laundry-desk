@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "serve"],
+      "port": 8620
+    },
+    {
+      "name": "web-only",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "serve:only"],
+      "port": 8620
+    },
+    {
+      "name": "web-lan",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "serve:lan"],
+      "port": 8620
+    },
+    {
+      "name": "electron-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173
+    }
+  ]
+}

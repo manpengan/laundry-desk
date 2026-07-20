@@ -1,13 +1,10 @@
-import { app } from "electron";
 import { join } from "path";
 import fs from "fs";
+import { ensureDataSubdir, getDataDir } from "../env/appPaths";
 
 export class PhotoService {
   private static getPhotoDir() {
-    const photoDir = join(app.getPath("userData"), "photos");
-    if (!fs.existsSync(photoDir)) {
-      fs.mkdirSync(photoDir, { recursive: true });
-    }
+    const photoDir = ensureDataSubdir("photos");
     return photoDir;
   }
 
@@ -23,7 +20,7 @@ export class PhotoService {
    */
   static savePhoto(orderNo: string, index: number, base64Data: string): string {
     const yearMonth = this.getYearMonthStr();
-    const photoDir = join(app.getPath("userData"), "photos", yearMonth);
+    const photoDir = join(getDataDir(), "photos", yearMonth);
     if (!fs.existsSync(photoDir)) {
       fs.mkdirSync(photoDir, { recursive: true });
     }

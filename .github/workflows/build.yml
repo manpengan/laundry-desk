@@ -26,8 +26,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
+      - name: Rebuild sqlite for Node test environment
+        run: npm run rebuild:node
+
+      - name: Run unit tests
         run: npm test -- --run
+
+      - name: Rebuild sqlite for Electron production
+        run: npm run postinstall
 
       - name: Build app
         run: npm run build

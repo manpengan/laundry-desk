@@ -5,8 +5,10 @@ node_modules/
 # build output
 dist/
 out/
-build/
 release/
+# 注意：build/ 不在此列——它存放打包源资产（icon.ico / installer.nsh），
+# 产物目录是 dist/(electron-builder) 与 out/(electron-vite)。
+# 曾误忽略 build/ 导致 CI 打包报 "cannot find build/installer.nsh"。
 *.asar
 test-results/
 
@@ -24,6 +26,9 @@ test-results/
 
 # logs
 *.log
+# 例外：spike 证据日志必须入库——M0 验收单硬要求 evidence/ 随产出提交，
+# findings 用相对链接引用它；被 *.log 吞掉会导致 clone 后全是死链。
+!tools/spikes/**/evidence/*.log
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
@@ -52,3 +57,6 @@ photos/
 *.db-journal
 *.db-shm
 *.db-wal
+
+# 顺科原始截图（2026-07-19 终审裁决：610MB 且含 GPS/设备 EXIF，不入公开 Git；脱敏代表图另走 docs/assets/shunke/）
+/shunke/

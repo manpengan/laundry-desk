@@ -6,25 +6,19 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
-    resolve: {
-      alias: {
-        "@main": resolve("src/main"),
-        "@shared": resolve("src/shared"),
-      },
-    },
     build: {
       rollupOptions: {
-        external: ["@electron-toolkit/utils"],
+        input: {
+          index: resolve("src/main/index.ts"),
+          server: resolve("src/main/server.ts"),
+        },
       },
     },
+    resolve: { alias: { "@main": resolve("src/main"), "@shared": resolve("src/shared") } },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
-    resolve: {
-      alias: {
-        "@shared": resolve("src/shared"),
-      },
-    },
+    build: { rollupOptions: { input: { index: resolve("src/preload/index.ts") } } },
   },
   renderer: {
     resolve: {
@@ -37,6 +31,7 @@ export default defineConfig({
       react(),
       tailwindcss(),
       {
+        // 生产构建移除 CSP 里的 localhost 白名单（开发态才需要）
         name: "clean-csp-localhost",
         transformIndexHtml(html) {
           if (process.env.NODE_ENV === "production") {
