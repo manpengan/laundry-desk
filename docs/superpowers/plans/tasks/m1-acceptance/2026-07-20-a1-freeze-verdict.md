@@ -4,11 +4,11 @@
 > 评审基准：[A1 评审单](a1-command-registry.md)　设计依据：[ADR-09](../../../../adr/2026-07-20-adr-09-command-metadata-precision.md)（含修订 1、2）
 > 核验方式：独立复现测试与覆盖率（含变异抽查）+ README 安全声明逐条对代码 + 文档与实现一致性核验 + Claude 亲自做 spec 语义比对
 
-## 结论：**通过**（5 项必修、3 项须补文档、11 项记录）
+## 结论：**通过**（6 项必修、3 项须补文档、14 项记录）
 
-评审单 §4 的十项通过标准**逐条满足**；§6 的两条否决条件（字段缺失 / §3.1–§3.2 未按 ADR-09 落地）均不触发。下列 F/D 项是精确化与文档订正，不构成退回理由——但 **F1 必须在 A6 开工前裁定**，**F7 建议在打 tag 前修**。
+评审单 §4 的十项通过标准**逐条满足**；§6 的两条否决条件（字段缺失 / §3.1–§3.2 未按 ADR-09 落地）均不触发；防篡改核心机制经全量 fuzz 无绕过。下列 F/D 项是精确化与文档订正，不构成退回理由——但 **F1 必须在 A6 开工前裁定**，**F7 与 F12 必须在打 tag 前修**。
 
-> 一项独立的防篡改层绕过复审仍在进行中；若其发现 P0，本结论将追加修订。截至本文，未发现可利用的绕过路径。
+> **防篡改层已过独立绕过复审**：对 978 个图内对象 + 24 条原型做全量变异 fuzz（加属性、改值、换对象/函数、Set/Map/Date/RegExp 内容变更），**零漏检**；所有对外可得引用均为受保护代理，无一原始 schema 图对象泄漏。`parseContractInput` 的异步窗口真实存在，但实测无可用原始句柄可利用（调用方可控 getter 在解析中途篡改，全部抛 `TypeError: Contract input schema is read-only`）。**未发现可利用绕过路径。**
 
 ## 一、证据核验（红线 1 与红线 3）
 
@@ -33,12 +33,31 @@ Codex 的声明**全部属实**，在 Codex 工作树只读复现并在独立工
 `schemas.ts` 强制 `data_classification === "secret"` 时 `risk === "R5"`。但 A6 第一批就是 identity 域：`identity.login` 带密码、PIN 快切带 PIN，都是 secret 入参，却不属于 ADR-05 #4 给 R5 的枚举（权限/密钥/备份恢复/审计删除/系统设置）。「入参含密钥」与「操作属 R5 类」是两件事。
 **须二选一并写入 README**：① 放宽为 secret 不蕴含 R5（另以 `offline_mode: denied` + remove-only 脱敏约束兜底）；② 保留耦合，但明确 `secret` 的语义收窄为「凭据管理类命令」，login/PIN 走 `pii` + remove 脱敏。
 
-### F7（P1，建议打 tag 前修）声明路径无法静态解析时**静默放行**
+### F7（P1，**打 tag 前必修**）声明路径落在 `transform`/`pipe` 之下时，存在性与类型校验被静默跳过
 
-`definitions.ts` 的 `requireInputPath` 只处理 `missing`（报错）与 `resolved`（类型校验）两个分支；`resolveInputPath` 的第三种返回 `unresolved` 两个 `if` 都不触发，**静默接受**。
-该状态可达且是受支持场景：`schema-graph.ts:160` 允许 pipe 输出侧的 transform，`types.test.ts:31` 即有 `z.string().transform(Number)` 作为合法输入。任何位于 transform 之下的路径段（**含打错字的**）都会被接受——例如 `profile` 带 transform 时，`/profile/phoneTYPO` 在第二段命中 pipe 即返回 `unresolved`。
-后果落在最不该失手处：`input_redaction` 路径写错则定义期无错、规则永不匹配，PII 直接进审计日志与 LLM 上下文；`size_measures` 同理，C5 算不出规模若当 0 处理，R3 命令永不升 R4。`unresolved` 在测试中**一次未出现**（全仓 grep 只见于源码），正对应 `input-schemas.ts` 69.38%/60% 的覆盖率洼地。
-源码注释「transforms remain downstream checks」表明是有意识延后。但对脱敏而言 downstream 就是审计写入，在那里才发现声明是错的已经晚了。**建议定义期 fail-closed 拒绝 `unresolved`**——命令作者总能把被脱敏/被计量的字段移出 transform。
+`definitions.ts` 的 `requireInputPath` 只对 `missing` 报错、只在 `resolved` 时做类型检查；`resolveInputPath` 的第三种返回 `unresolved` 两边都不管，**静默接受**。该状态可达且受支持：`schema-graph.ts:160` 明确放行 pipe 输出侧的 transform。
+
+**三种触发形态均已实测**（input 为 `z.strictObject({ t: z.strictObject({ x: z.string() }).transform(o => o) })`）：
+
+```js
+input_redaction: [{ path: "/t/bogus/deep", strategy: "mask" }]   // 路径根本不存在 → 接受
+size_measures: { amount: { kind: "field",        path: "/t/x" } } // x 是 string 非 number → 接受
+size_measures: { batch:  { kind: "array_length", path: "/t/x" } } // x 是 string 非 array  → 接受
+```
+
+对照组证明校验本该生效：同样声明打在无 transform 的 `/x` 上会被正确拒绝（"incompatible schema type"），`/nope` 也会被拒（"does not exist"）。
+
+**关键在于本包内没有任何下游补检**：`limits.ts` 全文只做配置自洽性校验，**没有运行时 measure 求值器**。也就是说 `requireInputPath(..., z.ZodNumber)` 是 A1 层对「金额路径确实指向数字」的**唯一**静态保证，而它可被一个 transform 完全绕开。源码注释「transforms remain downstream checks」描述的是意图，当前实现是**静默放行且不留痕**，不是可控延后。
+
+后果：`input_redaction` 路径写错则定义期无错、规则永不匹配，PII 直接进审计日志与 LLM 上下文；`size_measures` 指错则 C5 算不出规模，若当 0 处理则 R3 命令永不升 R4。`unresolved` 在测试中**一次未出现**，正对应 `input-schemas.ts` 69.38%/60% 的覆盖率洼地。
+
+**修法**：定义期把 `unresolved` 一并当错误（至少对 `size_measures` 强制要求 `resolved`）。命令作者总能把被脱敏/被计量的字段移出 transform。
+
+### F12（P1）合法的 `z.literal([...])` 无法注册，且抛裸 `Error`
+
+`integrity-snapshot.ts:66` 对所有 `literal` 类型把 `value` 加入 accessor 白名单，`:175` 强制求值该 getter——而 Zod v4 多值字面量的 `value` getter 会主动抛错。实测 `defineCommand({ input: z.strictObject({ f: z.literal(["a","b"]) }) })`：clone ok → isSafeContractInput ok → validateSchemaMetadata ok → **`captureInputIntegrity` 抛 `Error`（非 `ZodError`）**。
+
+两个问题：① 一个完全合法的 Zod v4 schema 无法注册，A6 写枚举型字段时会撞上；② 该错误逃逸了 design §8 的「所有构造校验失败统一抛 ZodError」契约——因为 `captureInputIntegrity` 的调用点在 `snapshotInput` 的 try/catch **之外**（这也让下方 D4 从「理论路径」变为**已证实可达**）。
 
 ### F2（P1）`examples` 没有契约承载
 
@@ -74,7 +93,9 @@ README 与 design 都写了「组织/预设只能进一步收紧 `max_result_row
 | D1 | 嵌套裸伪造解析器无专门检查 | README/design 称「拒绝任意层级的伪造解析器」，但只有根级与 mini/core 变体有实现；shape 内的 `{parse(){}}` 裸对象不触发任何拒绝规则，只在下游以**非 ZodError** 形式炸开。非安全漏洞（假解析器不会真被当校验器用），属声明与实现不符 |
 | D2 | 「**无法静态展开的** `z.lazy()`」限定词在代码里不存在 | `schema-graph.ts:155` 无条件拒绝全部 lazy。文档语义比实现宽，应改文档 |
 | D3 | 「不修改调用者对象」与实现相抵 | `schema-clone.ts` 读调用方 `def.shape` 的自替换记忆化 getter，会把调用方 def 改写成数据属性。canonical 隔离仍成立，但该措辞字面不成立 |
-| D4 | `TypeError` 可逃逸 design §8 的「统一 ZodError」 | `captureInputIntegrity` 的调用点在 `snapshotInput` 的 try/catch 之外。因其输入是已消毒的克隆体，实践中大概率不可达，但路径存在 |
+| D4 | 裸错误逃逸 design §8 的「统一 ZodError」——**已证实可达** | `captureInputIntegrity` 的调用点在 `snapshotInput` 的 try/catch 之外。原判「实践中大概率不可达」被推翻：F12 的 `z.literal([...])` 即可触发 |
+| F13 | 错误类型随嵌套深度变化 | 同 D4 根因。实测：深度 ≤900 正常注册；1500 抛**裸 `RangeError`**；3000 抛 `ZodError`（已归一化）。递归遍历无深度上限但**无静默截断**（要么走完要么抛），故安全性无碍，属错误契约不一致 |
+| F14 | `protectResult` 让原始函数逃出膜 | `input-membrane.ts:96` 对非 object 原样返回，故 `typeof === "function"` 直接透出：`definition.input._zod.deferred.at(0)` 返回**原始闭包**（而 `[0]` 返回 guarded 包装器）。实测**不可利用**——它是读/调用 oracle 而非写入原语，给泄漏函数加属性后 `isContractDefinition` 仍为 true 且校验行为不变，承载容器仍拦截所有变更。记录为一致性缺口 |
 | D5 | 非法 Date 阈值的检查实现在**克隆器**而非校验器 | README 把它与 `default`/`prefault`/`catch` 并列写在「输入图拒绝」下，读者会预期它在 `isSafeContractInput` 中。检查本身真实有效且有测试，属文档定位误导后续维护者 |
 
 ## 五、超出要求的部分（据实记录）
