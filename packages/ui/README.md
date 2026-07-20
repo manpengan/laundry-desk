@@ -7,13 +7,7 @@
 ```tsx
 import "@laundry/ui/styles.css";
 import "@laundry/ui/styles/components.css";
-import {
-  Button,
-  MoneyText,
-  StatusBadge,
-  ToastProvider,
-  installLiquidGlass,
-} from "@laundry/ui";
+import { Button, MoneyText, StatusBadge, ToastProvider, installLiquidGlass } from "@laundry/ui";
 
 // app bootstrap
 installLiquidGlass();
@@ -25,13 +19,13 @@ function Price() {
 
 ## 组件
 
-| 组件 | 说明 |
-|---|---|
-| `Button` / `Input` / `Table` | 基础控件，触控高度 ≥44px |
-| `Drawer` / `Dialog` | 右侧抽屉 / 居中对话框（Esc 关闭） |
-| `ToastProvider` + `useToast` | 轻提示 |
-| **`MoneyText`** | **全局唯一**金额渲染（整数分→元） |
-| **`StatusBadge`** | 状态色+形双编码（garment/order/print/sync） |
+| 组件                         | 说明                                        |
+| ---------------------------- | ------------------------------------------- |
+| `Button` / `Input` / `Table` | 基础控件，触控高度 ≥44px                    |
+| `Drawer` / `Dialog`          | 右侧抽屉 / 居中对话框（Esc 关闭）           |
+| `ToastProvider` + `useToast` | 轻提示                                      |
+| **`MoneyText`**              | **全局唯一**金额渲染（整数分→元）           |
+| **`StatusBadge`**            | 状态色+形双编码（garment/order/print/sync） |
 
 ## 红线
 
