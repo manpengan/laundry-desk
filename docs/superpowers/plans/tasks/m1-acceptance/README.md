@@ -7,7 +7,7 @@
 
 | 组 | 评审单 | 状态 |
 |---|---|---|
-| A1 | [命令/查询注册表 schema](a1-command-registry.md) | **实现已提交（PR #43 @ 9620618），冻结评审中**（设计稿评审[回执](2026-07-20-a1-review-response.md)） |
+| A1 | [命令/查询注册表 schema](a1-command-registry.md) | **✅ 通过**（[冻结结论](2026-07-20-a1-freeze-verdict.md)：5 必修 / 3 补文档 / 11 记录；设计稿[回执](2026-07-20-a1-review-response.md)） |
 | A2 | [统一信封 + 错误码表](a2-envelope-and-errors.md) | **已提前发出**——含两处 P0 形状陷阱预登记（租户自报、args/confirm_ref 并存） |
 | A3 | 租户表矩阵 + 三元组合键 + RLS 模板 | 待发（**直接采信 M0-1 实测底稿，不重新设计**） |
 | A4 | Edge 桥协议类型 | 待发（**直接采信 M0-2 签名 lease 对象结构**） |
