@@ -3,17 +3,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  fenToYuanText,
-  fenToYuanWithSign,
-  YUAN_SIGN,
-} from "../lib/money.ts";
+import { fenToYuanText, fenToYuanWithSign, YUAN_SIGN } from "../lib/money.ts";
 import { encodeGbk } from "../lib/encode.ts";
-import {
-  WASH_LABEL_VARS,
-  STICKER_VARS,
-  type SampleOrder,
-} from "../lib/variables.ts";
+import { WASH_LABEL_VARS, STICKER_VARS, type SampleOrder } from "../lib/variables.ts";
 import {
   encodeCode128Payload,
   estimateCode128Dots,
@@ -22,11 +14,7 @@ import {
   XP58_PRINTABLE_DOTS,
 } from "../lib/escpos.ts";
 import { escapeTsplText, text as tsplText } from "../lib/tspl.ts";
-import {
-  emptyVarsOrder,
-  longTextOrder,
-  specialCharsOrder,
-} from "../lib/boundary.ts";
+import { emptyVarsOrder, longTextOrder, specialCharsOrder } from "../lib/boundary.ts";
 import { buildXp58Receipt, XP58_BARCODE_VARIANTS } from "../src/xp58-receipt.ts";
 import {
   buildDl206WashLabel,
@@ -96,6 +84,15 @@ describe("CODE128 code-set prefix", () => {
     const bW2 = estimateCode128Dots(b, 2);
     assert.ok(bcW1 <= XP58_PRINTABLE_DOTS, `BC w1 ${bcW1} > ${XP58_PRINTABLE_DOTS}`);
     assert.ok(bW2 > XP58_PRINTABLE_DOTS, `expected B w2 ${bW2} to exceed paper`);
+  });
+
+  it("estimateCode128Dots uses 11n+55 modules (not the old 11n+23 undercount)", () => {
+    // Single CODE-B glyph "A" → n=1 → modules = 11*1+55 = 66
+    const one = Buffer.from("A", "ascii");
+    assert.equal(estimateCode128Dots(one, 1), 66);
+    assert.equal(estimateCode128Dots(one, 2), 132);
+    // Old buggy formula 11n+23 would yield 34 — must not regress
+    assert.notEqual(estimateCode128Dots(one, 1), 11 * 1 + 23);
   });
 
   it("GS k payload includes 0x7B code-set marker", () => {
@@ -185,11 +182,7 @@ describe("generators", () => {
   });
 
   it("boundary samples generate without throw", () => {
-    for (const sample of [
-      emptyVarsOrder(),
-      longTextOrder(),
-      specialCharsOrder(),
-    ]) {
+    for (const sample of [emptyVarsOrder(), longTextOrder(), specialCharsOrder()]) {
       assert.ok(buildXp58Receipt(sample).length > 20);
       assert.ok(buildDl206WashLabel(sample).length > 20);
       assert.ok(buildGp3120StickerCompact(sample).length > 20);

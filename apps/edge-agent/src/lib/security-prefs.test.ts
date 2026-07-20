@@ -1,0 +1,38 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
+import { IPC_CHANNELS, SECURITY_WEB_PREFERENCES } from "./security-prefs.js";
+
+// Compiled tests live in dist/lib/; package sources stay under src/.
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
+const srcRoot = join(packageRoot, "src");
+
+test("SECURITY_WEB_PREFERENCES hard baseline values", () => {
+  assert.equal(SECURITY_WEB_PREFERENCES.nodeIntegration, false);
+  assert.equal(SECURITY_WEB_PREFERENCES.contextIsolation, true);
+  assert.equal(SECURITY_WEB_PREFERENCES.sandbox, true);
+  assert.equal(SECURITY_WEB_PREFERENCES.webSecurity, true);
+  assert.equal(SECURITY_WEB_PREFERENCES.allowRunningInsecureContent, false);
+});
+
+test("main/window/preload sources wire baseline and guards", () => {
+  const main = readFileSync(join(srcRoot, "main.ts"), "utf8");
+  const windowSrc = readFileSync(join(srcRoot, "window.ts"), "utf8");
+  const preload = readFileSync(join(srcRoot, "preload.ts"), "utf8");
+  const ipc = readFileSync(join(srcRoot, "ipc.ts"), "utf8");
+
+  assert.match(windowSrc, /SECURITY_WEB_PREFERENCES/);
+  assert.match(windowSrc, /setWindowOpenHandler/);
+  assert.match(windowSrc, /will-navigate/);
+  assert.match(main, /setPermissionRequestHandler/);
+  assert.match(main, /registerSchemesAsPrivileged/);
+  assert.match(main, /verifySpaIntegrity/);
+  assert.match(preload, /contextBridge\.exposeInMainWorld/);
+  assert.match(preload, /edgeBridge/);
+  assert.doesNotMatch(preload, /require\(/);
+  assert.match(ipc, /isValidAppSender/);
+  assert.match(ipc, /IPC_CHANNELS\.ping/);
+  assert.equal(IPC_CHANNELS.ping, "edge:ping");
+});

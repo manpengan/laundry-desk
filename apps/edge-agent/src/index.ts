@@ -1,1 +1,52 @@
-export {};
+/**
+ * Library surface for unit tests and future adapters.
+ * Runtime entry is `main.ts` (package.json `"main"`).
+ */
+export { mimeFor } from "./lib/mime.js";
+export {
+  isSpaManifest,
+  loadManifest,
+  sha256Hex,
+  verifySpaIntegrity,
+  type SpaManifest,
+} from "./lib/integrity.js";
+export { resolveSpaPath } from "./lib/spa-path.js";
+export { isValidAppSender } from "./lib/sender.js";
+export {
+  APP_ENTRY_URL,
+  APP_HOST,
+  APP_SCHEME,
+  IPC_CHANNELS,
+  SECURITY_WEB_PREFERENCES,
+} from "./lib/security-prefs.js";
+export {
+  manifestPathFromSpaRoot,
+  packageRootFromModuleUrl,
+  preloadPathFromDistDir,
+  spaRootFromPackageRoot,
+} from "./lib/paths.js";
+export { createAppProtocolHandler } from "./protocol.js";
+export {
+  appendHistory,
+  canRestoreSnapshot,
+  compareVersion,
+  createInitialState,
+  decideRollback,
+  DEFAULT_MIN_SECURE_VERSION,
+  healthFromPassFail,
+  installStandby,
+  isBelowMinSecure,
+  isHealthPassing,
+  rollbackSlot,
+  snapshotId,
+  standbySlot,
+} from "./upgrade/index.js";
+export type {
+  HealthReport,
+  InstallInput,
+  InstallResult,
+  RollbackInput,
+  RollbackResult,
+  SupportMatrix,
+  UpgradeState,
+} from "./upgrade/index.js";

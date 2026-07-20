@@ -1,0 +1,5 @@
+{
+  "version": "0.1.0-d1",
+  "indexSha256": "bfff16f8949eb59bd304ec8e7bb8c901a953d4607471b0ef5ba68f7cac5779d5",
+  "note": "M1 stand-in SHA-256; production uses detached asymmetric signature + cert pin."
+}
