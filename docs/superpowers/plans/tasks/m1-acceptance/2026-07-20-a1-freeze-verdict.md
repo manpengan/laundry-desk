@@ -33,7 +33,9 @@ Codex 的声明**全部属实**，在 Codex 工作树只读复现并在独立工
 `schemas.ts` 强制 `data_classification === "secret"` 时 `risk === "R5"`。但 A6 第一批就是 identity 域：`identity.login` 带密码、PIN 快切带 PIN，都是 secret 入参，却不属于 ADR-05 #4 给 R5 的枚举（权限/密钥/备份恢复/审计删除/系统设置）。「入参含密钥」与「操作属 R5 类」是两件事。
 **须二选一并写入 README**：① 放宽为 secret 不蕴含 R5（另以 `offline_mode: denied` + remove-only 脱敏约束兜底）；② 保留耦合，但明确 `secret` 的语义收窄为「凭据管理类命令」，login/PIN 走 `pii` + remove 脱敏。
 
-### F7（P1，**打 tag 前必修**）声明路径落在 `transform`/`pipe` 之下时，存在性与类型校验被静默跳过
+> **已裁定（2026-07-20）：取 ①，见 [F1 裁定](2026-07-20-f1-secret-risk-ruling.md)。** Codex 于 `875ae3c` 已按此改毕并另加禁 `examples` 一条，本项确认无需再改。裁定另出两条补充：**F7 的修复时点由「打 tag 前」提前至「A6 落 identity 域之前」**（secret 的 remove-only 兜底完全依赖 `input_redaction` 生效，而 F7 使其可被静默跳过）；A6 评审单须增加漏标 `secret` 的逐命令核对项（契约层无法检测漏标）。
+
+### F7（P1，**打 tag 前必修** → 裁定后提前为 **A6 开工前必修**）声明路径落在 `transform`/`pipe` 之下时，存在性与类型校验被静默跳过
 
 `definitions.ts` 的 `requireInputPath` 只对 `missing` 报错、只在 `resolved` 时做类型检查；`resolveInputPath` 的第三种返回 `unresolved` 两边都不管，**静默接受**。该状态可达且受支持：`schema-graph.ts:160` 明确放行 pipe 输出侧的 transform。
 
