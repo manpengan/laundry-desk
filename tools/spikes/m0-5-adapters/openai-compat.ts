@@ -137,6 +137,8 @@ export class OpenaiCompatAdapter implements LlmAdapter {
 
     if (choice.message.tool_calls) {
       for (const call of choice.message.tool_calls) {
+        // openai v6 起 tool_calls 是联合类型（function | custom），须按 type 收窄
+        if (call.type !== 'function') continue;
         parts.push({
           type: 'tool_use',
           id: call.id,
