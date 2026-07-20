@@ -166,7 +166,11 @@ importers:
         specifier: ^3.2.6
         version: 3.2.7(@types/debug@4.1.13)(@types/node@20.19.43)(lightningcss@1.32.0)(supports-color@7.2.0)
 
-  apps/edge-agent: {}
+  apps/edge-agent:
+    devDependencies:
+      electron:
+        specifier: ^41.3.0
+        version: 41.10.2(supports-color@7.2.0)
 
   apps/server: {}
 

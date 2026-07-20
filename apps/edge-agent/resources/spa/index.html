@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' app:; script-src 'self' app:; style-src 'self' 'unsafe-inline' app:; connect-src 'self' app:;"
+    />
+    <title>本地离线工作台</title>
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        margin: 0;
+        background: #f5f7fb;
+        color: #111;
+      }
+      header {
+        padding: 16px 20px;
+        background: #111827;
+        color: #fff;
+      }
+      main {
+        padding: 20px;
+      }
+      .card {
+        background: rgba(255, 255, 255, 0.85);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+        max-width: 640px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: #fef3c7;
+        color: #92400e;
+        font-weight: 600;
+      }
+      pre {
+        background: #0b1020;
+        color: #dbeafe;
+        padding: 12px;
+        border-radius: 8px;
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>laundry-desk · 内置 SPA（app://）</div>
+      <small>D1 Edge Agent 壳 — 断网冷启动 last-known-good</small>
+    </header>
+    <main>
+      <div class="card">
+        <p><span class="badge">离线工作台</span></p>
+        <p>本页由安装包内置静态资产经 <code>app://</code> 加载。断电重启 + 断网应仍能进入本页。</p>
+        <p>安全基线：nodeIntegration=false / contextIsolation / sandbox / webSecurity。</p>
+        <button type="button" id="btn">探测 edgeBridge.ping()</button>
+        <pre id="out">尚未调用</pre>
+      </div>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>
