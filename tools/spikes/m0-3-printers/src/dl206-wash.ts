@@ -86,7 +86,8 @@ export function buildDl206WashLabelEscI(order: SampleOrder): Buffer {
     chineseOn(),
     line("【水洗唛 ESC i 切刀】"),
     line(`${values.名称} ${values.颜色} ${values.服务}`),
-    line(`${values.票单号} ${values.条码号}`),
+    line(`${values.单价} ${values.票单号}`),
+    line(`${values.条码号}`),
     feed(3),
     cutEscI(),
   );

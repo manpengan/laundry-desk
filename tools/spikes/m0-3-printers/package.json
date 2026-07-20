@@ -7,6 +7,9 @@
   "scripts": {
     "generate": "node --experimental-strip-types src/generate-all.ts",
     "test": "node --experimental-strip-types --test test/*.test.ts",
+    "verify": "node --experimental-strip-types src/verify-offline.ts",
+    "mock-send": "node send/mock-send.mjs",
+    "lab:offline": "npm test && npm run generate && npm run verify && npm run mock-send",
     "send": "node send/send-raw.mjs"
   },
   "engines": {

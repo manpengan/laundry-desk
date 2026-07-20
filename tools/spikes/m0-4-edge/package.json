@@ -16,6 +16,7 @@
     "ab:snapshot": "node ab-upgrade/drill.mjs snapshot",
     "ab:restore": "node ab-upgrade/drill.mjs restore-snapshot",
     "test": "node --test test/*.test.mjs",
+    "lab:offline": "node scripts/lab-offline.mjs",
     "cold-start:hint": "node cold-start/print-runbook.mjs"
   },
   "engines": {

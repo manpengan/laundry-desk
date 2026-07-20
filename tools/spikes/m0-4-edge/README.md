@@ -6,9 +6,10 @@
 2. `app://` 加载**内置（签名占位）SPA**：断电/断网冷启动进本地工作台  
 3. A/B 双槽 + 健康检查 + 本地库快照 + **按支持矩阵回滚判定**（禁盲目降级）
 
-> 无 Windows 实机时：本目录即为可执行演练包；单测在 macOS/Linux 可先绿。现场按 `ops/WINDOWS-DRILL-RUNBOOK.md`。  
-> Node **≥ 22.6**。LNA 的 L2 **禁止** loopback→loopback（见 `channel/LNA-CHECKLIST.md`）。  
-> 回传录屏/截图 **去 EXIF**；仓库 PUBLIC。
+> **现状（2026-07-20）**：开发侧 **无 Windows 测试机**。默认 `npm run lab:offline`（macOS/Linux）。  
+> Windows 专属项（防火墙 UX、证书导入店员路径、断电冷启动）**挂起**，见 `ops/NO-WINDOWS-LAB.md`。  
+> 有 Windows 时再跑 `ops/WINDOWS-DRILL-RUNBOOK.md`。  
+> Node **≥ 22.6**。LNA L2 **禁止** loopback→loopback。回传去 EXIF；仓库 PUBLIC。
 
 ## 目录
 
@@ -20,17 +21,20 @@ ops/               Windows 总 runbook + 回传模板
 test/              离线单测
 ```
 
-## 快速开始
+## 快速开始（无 Windows — 当前默认）
 
 ```bash
 cd tools/spikes/m0-4-edge
 npm install
-npm test
-npm run cert          # 需要本机 openssl
-npm run wss           # https/wss://127.0.0.1:17443
-# 另开终端：
-npm run ab:init && npm run ab:install-fail && npm run ab:init && npm run ab:install-ok
+npm run lab:offline   # 单测 + 证书 + A/B + 快照恢复（不启 Electron）
+```
+
+本机可选增强（macOS 也可）：
+
+```bash
+npm run cert && npm run wss          # 浏览器 L1
 node cold-start/print-runbook.mjs
+cd cold-start/electron-app && npm i && npm start
 ```
 
 明文对照实验（仅 lab）：

@@ -1,6 +1,7 @@
 # M0-4 Windows 总演练包（交 manpengan 现场执行）
 
-> 本机若无 Windows / 无实机：开发侧已交付脚本与单测；本清单在 Windows 10/11 柜台测试机上跑完并回传结果。
+> **2026-07-20**：当前 **无 Windows 测试机** → 先跑 `npm run lab:offline` 与 `ops/NO-WINDOWS-LAB.md`。  
+> 本清单仅在有 Windows 10/11 柜台测试机时执行。
 
 ## 红线
 

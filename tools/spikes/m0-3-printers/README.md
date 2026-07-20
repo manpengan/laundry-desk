@@ -9,9 +9,11 @@
 | Gprinter GP-3120 | 不干胶 | TSPL | `out/gp3120-sticker-*.bin` |
 
 变量真源：顺科矩阵 IMG_2315/2316（水洗唛命名变量全集 / 不干胶 22 变量）。  
-金额：**整数分**，仅在渲染时格式化为元文字。
+金额：**整数分**，渲染为全角 **￥**（U+FFE5，GBK 安全）。
 
-> 当前环境若无实机：先生成指令流 + 发送脚本 + `ops/` 清单，由 manpengan 在测试机执行并回传 `ops/FIELD-RESULTS.md`。
+> **现状（2026-07-20）**：开发侧 **无打印机、无 Windows 测试机**。  
+> 默认走 **离线 lab**（`npm run lab:offline`）；实机出纸挂起，见 `ops/NO-PRINTER-LAB.md`。  
+> 有机后再按 `ops/CHECKLIST-*.md` 执行并回传 `FIELD-RESULTS.md`。
 
 ## 目录
 
@@ -30,14 +32,19 @@ test/                        # 离线单测（不依赖硬件）
 - 回传照片 **去 EXIF**；材料按 **仓库 PUBLIC**（虚构 PII only）。
 - Node **≥ 22.6**。Windows 发 COM **优先 `node send/send-raw.mjs`**（PS 5.1 `-Port` 不可靠）。
 
-## 快速开始（开发机 / 测试机通用）
+## 快速开始（无打印机 — 当前默认）
 
 ```bash
 cd tools/spikes/m0-3-printers
 npm install
-npm test
+npm run lab:offline    # test + generate + verify + mock-send
+```
+
+有打印机时再：
+
+```bash
 npm run generate
-ls out/
+node send/send-raw.mjs --file out/xp58-receipt.bin --target COM3
 ```
 
 生成物要点：
