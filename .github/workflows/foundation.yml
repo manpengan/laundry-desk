@@ -1,0 +1,41 @@
+name: V2 Foundation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "tests/foundation/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - ".github/workflows/foundation.yml"
+  push:
+    branches: [main]
+
+jobs:
+  workspace-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies without native lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Check workspace foundation
+        run: pnpm run workspace:check
