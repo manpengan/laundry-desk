@@ -1,0 +1,32 @@
+# ADR 索引
+
+> 维护：Claude（设计与门禁）　建立：2026-07-20
+> **为何独立成文**：总 RFC 的子 ADR 表是 Accepted 正文，按签署记录第 3 条不回改；新增 ADR（09 起）需要一个可持续维护的入口，故本索引附加而非改表。
+
+## v2 产品化线
+
+| ADR | 主题 | 状态 |
+|---|---|---|
+| [总 RFC](2026-07-19-v2-productization-and-ai.md) | v2 产品化架构 + AI 能力层（总纲，下辖 01–08） | **Accepted** 2026-07-19 |
+| [ADR-01](2026-07-19-adr-01-web-first-edge-agent.md) | Web-first + Local Edge Agent | **Accepted** |
+| [ADR-02](2026-07-19-adr-02-postgres-multitenancy-rls.md) | PostgreSQL 多租户与 RLS（M1 强制） | **Accepted** |
+| [ADR-03](2026-07-19-adr-03-garment-order-accounting-model.md) | 件级衣物 / 订单行 / 账务状态模型 | **Accepted** |
+| [ADR-04](2026-07-19-adr-04-offline-consistency.md) | 离线一致性（Primary lease 契约） | **Accepted** |
+| [ADR-05](2026-07-19-adr-05-ai-command-policy-approval.md) | AI 命令总线 / 风险策略 / 确认与审批 | **Accepted** |
+| [ADR-06](2026-07-19-adr-06-byok-provider-network-key-mgmt.md) | BYOK / Provider 网络 / 密钥管理 | **Accepted** |
+| [ADR-07](2026-07-19-adr-07-v1-migration-and-milestones.md) | v1→v2 迁移与里程碑（方案 B） | **Accepted** |
+| [ADR-08](2026-07-19-adr-08-release-desktop-upgrade-lts-support.md) | 发布、桌面升级、LTS 与技术支持 | **Accepted** |
+| [ADR-09](2026-07-20-adr-09-command-metadata-precision.md) | 命令元数据字段精确化（离线档位 / 风险升级阈值） | **Proposed** 待签署 |
+
+## v1 线
+
+| ADR | 主题 | 状态 |
+|---|---|---|
+| [液态玻璃 UI 2.0](2026-07-18-liquid-glass-ui-2.md) | v1 设计系统升级 | 见文内 |
+
+## 规矩
+
+1. 设计变更**一律新增 ADR**，不回改已 Accepted 的正文（含总 RFC 与架构 spec 定稿部分）。
+2. 新 ADR 编号顺延，文件名 `YYYY-MM-DD-adr-NN-<topic>.md`；建后**在本表登记**。
+3. 状态流转：`Proposed`（Claude 起草）→ manpengan 签署 → `Accepted`；被后续 ADR 取代的标 `Superseded by ADR-NN`。
+4. ADR 正文格式沿用既有：`决策 / 理由 / 否决的备选 / 后果`。
