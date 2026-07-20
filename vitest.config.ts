@@ -5,12 +5,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["tests/unit/**/*.{test,spec}.ts"],
+    include: ["tests/unit/**/*.{test,spec}.ts", "packages/**/*.test.ts"],
   },
   resolve: {
     alias: {
       "@main": resolve(__dirname, "./src/main"),
       "@shared": resolve(__dirname, "./src/shared"),
+      "@laundry/domain": resolve(__dirname, "./packages/domain/src"),
     },
   },
 });
