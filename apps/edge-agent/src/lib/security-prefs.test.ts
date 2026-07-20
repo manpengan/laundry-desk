@@ -34,5 +34,10 @@ test("main/window/preload sources wire baseline and guards", () => {
   assert.doesNotMatch(preload, /require\(/);
   assert.match(ipc, /isValidAppSender/);
   assert.match(ipc, /IPC_CHANNELS\.ping/);
+  assert.match(ipc, /IPC_CHANNELS\.health/);
+  assert.match(ipc, /IPC_CHANNELS\.upgradeStatus/);
+  assert.match(main, /claimPrimaryInstance|requestSingleInstanceLock/);
+  assert.match(main, /createAppTray/);
   assert.equal(IPC_CHANNELS.ping, "edge:ping");
+  assert.equal(IPC_CHANNELS.health, "edge:health");
 });

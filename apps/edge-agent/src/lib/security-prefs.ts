@@ -17,4 +17,9 @@ export const APP_ENTRY_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
 /** IPC channel whitelist (preload may only expose these). */
 export const IPC_CHANNELS = {
   ping: "edge:ping",
+  health: "edge:health",
+  upgradeStatus: "edge:upgrade-status",
+  connection: "edge:connection",
+  printEnqueue: "edge:print-enqueue",
+  printList: "edge:print-list",
 } as const;
