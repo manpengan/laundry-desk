@@ -53,6 +53,16 @@
 - [ ] C5 Policy Engine v0：R0–R5 判定 + 参数阈值升级（R3→R4）；确认卡 `ai_pending_actions`（canonical args 服务端冻结、args_hash、实体版本、nonce、5 分钟有效期、幂等键、确认只提交 nonce）；R4 同步 step-up（具备审批权限者现场 PIN/扫码、**不可自核**、原子单次消费）
 - **验收**：架构测试（依赖规则 lint）证明 apps 层无法绕过总线直调 service；确认卡 WYSIWYS 断言（换参作废/过期不可执行/canonical 冻结）绿；Claude 提供的 AI 红队用例集全绿
 
+### C 包 · 安全与身份（**2026-07-20 由 Gemini 移交**）
+
+manpengan 按 M0 实测表现重新配比：安全敏感与高复杂度任务集中到你这里。以下四项原属 Gemini，现归你。
+
+- [ ] **B4** 风险分级判定：R0–R5 + 数量/金额阈值升级 R3→R4（阈值只可调严）。与 C5 Policy Engine 强耦合，故一并归你；纯函数部分仍放 `packages/domain`
+- [ ] **C6** identity：argon2id（参数需说明选型依据）、JWT access(15min，仅存内存)/refresh(14d，httpOnly+SameSite，轮换)、CSRF 双提交、柜台 PIN 快切、RBAC ~40 权限点（高危独立组）
+- [ ] **C8** 鉴权中间件：actor/tenant **只从服务端认证会话注入**，拒绝客户端/LLM/Edge 自报的 org/store——这是跨租户安全边界，与你的 RLS 工作同源，M0-1 的五类旁路用例可直接复用为回归
+- [ ] **F1** `tools/migrate-v1`：v1 SQLite → v2 PG（`order_items` 按 qty 拆 `order_lines`+`garments` 并补发条码；customers/photos/settings 直迁；缺失 `expected_pickup_date` 按规则补算）。M1 只做**只读试跑 + 差异报告**，不写宏发真实库——件级拆分是 v1→v2 最大不可逆点，出错会污染真实数据
+- **验收**：C6/C8 的跨租户负向测试复用 M0-1 五类旁路；F1 试跑差异报告须做到金额/件数/客户数三项零丢失；这四项**不再需要他人二审**（你本就是二审方），但必须附实跑证据
+
 ## 4. 依赖与交接
 
 - 你依赖：Claude 的 contracts 语义评审（结对，开工首日起）；Gemini 的 `packages/domain` 校验链纯函数骨架（B2）
