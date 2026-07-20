@@ -8,7 +8,7 @@
 | 组 | 评审单 | 状态 |
 |---|---|---|
 | A1 | [命令/查询注册表 schema](a1-command-registry.md) | **✅ 通过**（[冻结结论](2026-07-20-a1-freeze-verdict.md)：6 必修 / 3 补文档 / 14 记录；设计稿[回执](2026-07-20-a1-review-response.md)）<br>F1 **已裁定**取解耦（[裁定书](2026-07-20-f1-secret-risk-ruling.md)）；**F7 修复时点因此提前至 A6 开工前** |
-| A2 | [统一信封 + 错误码表](a2-envelope-and-errors.md) | **已提前发出**——含两处 P0 形状陷阱预登记（租户自报、args/confirm_ref 并存） |
+| A2 | [统一信封 + 错误码表](a2-envelope-and-errors.md) | **✅ 已冻结**（[冻结结论](2026-07-20-a2-freeze-verdict.md)：0 必修 / 1 记录；§2.1–§2.6 全部以机制实现）。下游 Gemini C7 的两前置已到其一，仍等 A6 |
 | A3 | 租户表矩阵 + 三元组合键 + RLS 模板 | 待发（**直接采信 M0-1 实测底稿，不重新设计**） |
 | A4 | [Edge 桥协议类型](a4-edge-bridge-protocol.md) | **已提前发出**——4 处 P0 形状陷阱预登记（lease 字段清单三处不一致、canonical 签名范围、三条签名线可互换、grant 白名单可越过 `offline_mode`）。**直接采信 M0-2 实测底稿，不重新设计** |
 | A5 | 会话/CSRF 契约 | 待发 |
