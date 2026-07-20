@@ -1,0 +1,68 @@
+ Container laundry-m0-2-lease-db-1 Running
+ Container laundry-m0-2-lease-db-1 Waiting
+ Container laundry-m0-2-lease-db-1 Healthy
+DO
+ALTER ROLE
+NOTICE:  table "replay_domain_effects" does not exist, skipping
+DROP TABLE
+DROP TABLE
+NOTICE:  table "primary_lease_replay_state" does not exist, skipping
+NOTICE:  table "offline_command_audit" does not exist, skipping
+DROP TABLE
+NOTICE:  table "primary_leases" does not exist, skipping
+DROP TABLE
+NOTICE:  table "primary_lease_heads" does not exist, skipping
+DROP TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+REVOKE
+GRANT
+GRANT
+GRANT
+
+> laundry-m0-2-lease-spike@0.0.0 test
+> node --test --test-concurrency=1 test/*.test.mjs
+
+✔ request-start monotonic anchor rejects RTT at least TTL (1.466959ms)
+✔ near-TTL response never extends the signed server deadline (0.153541ms)
+✔ invalid safety margin fails closed instead of extending authority (0.178584ms)
+✔ signed issued_at, ttl and not_after must agree (0.142709ms)
+✔ missing or tampered server signature fails closed (0.265834ms)
+✔ a signed lease still requires every authority field (0.232875ms)
+✔ unprovable creation continuity fails closed (0.293125ms)
+✔ request crossing sleep or reboot cannot enable a lease (0.149084ms)
+✔ a continuity failure permanently invalidates the session (0.158375ms)
+✔ missing or non-finite observations fail closed (0.142334ms)
+✔ wall-clock rollback fails closed (0.111708ms)
+✔ wall-clock forward jump fails closed (0.092125ms)
+✔ process restart fails closed (0.079375ms)
+✔ OS restart fails closed (0.084084ms)
+✔ sleep/resume fails closed (0.070833ms)
+✔ old primary lost past deadline fails closed (0.079292ms)
+✔ two owners concurrently promote through distinct locked connections (30.822375ms)
+✔ without ACK promotion waits until old not_after plus skew (10.916708ms)
+✔ valid signed release ACK permits immediate strictly-incremented epoch (31.240792ms)
+✔ release ACK device field must match the current lease device (10.251167ms)
+✔ device key resolution cannot await external I/O while head is locked (9.949833ms)
+✔ release and promotion race serializes without overlapping leases (11.759834ms)
+✔ unique epoch violation rolls back the entire attempted promotion (11.543541ms)
+✔ lease durations must fit PostgreSQL integer columns (5.494375ms)
+✔ old epoch command is audited and arbitrated without domain mutation (31.637667ms)
+✔ replay is strictly ordered and exact duplicates are idempotent (19.244167ms)
+✔ a released lease cannot apply commands before the next promotion (12.37825ms)
+✔ application role can append audit but cannot mutate or erase it (23.695917ms)
+✔ lease signature format has a versioned cross-runtime canonical message (0.605916ms)
+✔ signed lease covers not_after and all authority fields (0.898667ms)
+✔ release ACK is device-signed and tamper evident (0.243375ms)
+✔ default trusted time is read from PostgreSQL clock_timestamp (12.442542ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 608.137166

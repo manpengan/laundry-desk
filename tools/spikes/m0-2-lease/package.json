@@ -1,0 +1,12 @@
+{
+  "name": "laundry-m0-2-lease-spike",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 test/*.test.mjs"
+  },
+  "dependencies": {
+    "pg": "8.22.0"
+  }
+}

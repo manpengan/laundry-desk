@@ -1,0 +1,15 @@
+{"scenario":"clock-rollback","expected":"clock-discontinuity","actual":"clock-discontinuity","pass":true,"details":{"local_deadline_mono_ms":90,"observation":{"bootId":"boot-a","processId":"process-a","wakeSequence":1,"wallMs":400,"monoMs":20}}}
+{"scenario":"clock-forward","expected":"clock-discontinuity","actual":"clock-discontinuity","pass":true,"details":{"local_deadline_mono_ms":90,"observation":{"bootId":"boot-a","processId":"process-a","wakeSequence":1,"wallMs":2000,"monoMs":20}}}
+{"scenario":"process-restart","expected":"process-changed","actual":"process-changed","pass":true,"details":{"local_deadline_mono_ms":90,"observation":{"bootId":"boot-a","processId":"process-b","wakeSequence":1,"wallMs":1010,"monoMs":20}}}
+{"scenario":"os-restart","expected":"boot-changed","actual":"boot-changed","pass":true,"details":{"local_deadline_mono_ms":90,"observation":{"bootId":"boot-b","processId":"process-a","wakeSequence":1,"wallMs":1010,"monoMs":20}}}
+{"scenario":"sleep-resume","expected":"wake-sequence-changed","actual":"wake-sequence-changed","pass":true,"details":{"local_deadline_mono_ms":90,"observation":{"bootId":"boot-a","processId":"process-a","wakeSequence":2,"wallMs":1010,"monoMs":20}}}
+{"scenario":"old-primary-lost","expected":"lease-expired","actual":"lease-expired","pass":true,"details":{"local_deadline_mono_ms":90,"observation":{"bootId":"boot-a","processId":"process-a","wakeSequence":1,"wallMs":1080,"monoMs":90}}}
+{"scenario":"rtt-at-least-ttl","expected":"fail-closed","actual":"rtt-at-least-ttl","pass":true,"details":{"rtt_ms":100}}
+{"scenario":"rtt-near-ttl","expected":"deadline=90ms","actual":"deadline=90ms","pass":true,"details":{"rtt_ms":85}}
+{"scenario":"request-crosses-sleep","expected":"fail-closed","actual":"request-continuity-lost","pass":true,"details":{}}
+{"scenario":"concurrent-promotion","expected":"exactly-one-issued","actual":"1-issued","pass":true,"details":{"backend_pids":[106,107]}}
+{"scenario":"signed-lease-sample","expected":"signed-authority-object","actual":{"lease_id":"5837dde1-4820-4b74-9399-3caea8aa3863","store_id":"10000000-0000-4000-8000-000000000001","device_id":"20000000-0000-4000-8000-000000000002","primary_epoch":1,"issued_at":"2026-07-19T00:00:00.000Z","ttl_ms":100,"max_clock_skew_ms":10,"not_after":"2026-07-19T00:00:00.100Z","sig":"-eds2f9gbSiIPWB1kgrI3VUJ6BgPLbqrrGBFJ5-maQ2EENE1nAJYEu_2EqYRbn804F_wm354UZWKms7IRYh8Dg"},"pass":true,"details":{}}
+{"scenario":"no-ack-wait","expected":"online-only-until-not_after+skew","actual":"issued","pass":true,"details":{"old_not_after":"2026-07-19T00:00:00.100Z","max_clock_skew_ms":10,"waiting_at":"2026-07-19T00:00:00.109Z","issued_at":"2026-07-19T00:00:00.110Z"}}
+{"scenario":"signed-release-ack","expected":"immediate-epoch-increment","actual":2,"pass":true,"details":{}}
+{"scenario":"release-promotion-race","expected":"at-most-one-active","actual":1,"pass":true,"details":{}}
+{"scenario":"old-epoch-replay","expected":"audit+arbitrate+no-apply","actual":"arbitrate","pass":true,"details":{"audit":{"decision":"arbitrate","reason":"stale-epoch","arbitration_required":true}}}

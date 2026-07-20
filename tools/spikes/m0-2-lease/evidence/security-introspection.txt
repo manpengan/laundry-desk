@@ -1,0 +1,15 @@
+      rolname      | rolsuper | rolbypassrls
+-------------------+----------+--------------
+ laundry_lease_app | f        | f
+(1 row)
+
+ privilege_type
+----------------
+ INSERT
+ SELECT
+(2 rows)
+
+ can_update_audit | can_delete_audit | can_truncate_audit
+------------------+------------------+--------------------
+ f                | f                | f
+(1 row)
