@@ -16,7 +16,11 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "lint": "eslint src --ext .ts,.tsx --max-warnings=0",
-    "test": "node --test",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.7",
+    "vitest": "^3.2.7"
   }
 }

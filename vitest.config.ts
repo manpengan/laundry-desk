@@ -11,6 +11,7 @@ export default defineConfig({
     alias: {
       "@main": resolve(__dirname, "./src/main"),
       "@shared": resolve(__dirname, "./src/shared"),
+      "@laundry/domain": resolve(__dirname, "./packages/domain/src"),
     },
   },
 });
