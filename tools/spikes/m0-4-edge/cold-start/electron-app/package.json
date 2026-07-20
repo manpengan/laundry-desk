@@ -1,0 +1,13 @@
+{
+  "name": "m0-4-cold-start",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.mjs",
+  "description": "Minimal Electron app:// cold-start spike (security baseline)",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^35.0.0"
+  }
+}

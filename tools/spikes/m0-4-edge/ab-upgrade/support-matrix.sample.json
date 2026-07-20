@@ -1,0 +1,32 @@
+{
+  "release": "2026.07.19-spike",
+  "dimensions": [
+    "server",
+    "web",
+    "edge",
+    "contractsMajor",
+    "edgeLocalSchema"
+  ],
+  "rows": [
+    {
+      "server": "2.0.0",
+      "web": "2.0.0",
+      "edge": "2.0.0",
+      "contractsMajor": 1,
+      "edgeLocalSchema": 3,
+      "rollbackToEdge": "1.9.0",
+      "rollbackReadsSchema": true,
+      "notes": "contract 段未执行，可回 1.9.0"
+    },
+    {
+      "server": "2.0.0",
+      "web": "2.0.0",
+      "edge": "2.1.0",
+      "contractsMajor": 1,
+      "edgeLocalSchema": 4,
+      "rollbackToEdge": "2.0.0",
+      "rollbackReadsSchema": false,
+      "notes": "schema contract 已执行，禁止盲目回 2.0.0 → 恢复模式"
+    }
+  ]
+}

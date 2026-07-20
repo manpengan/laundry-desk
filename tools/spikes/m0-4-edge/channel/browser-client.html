@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>M0-4 Edge 本地通道探针</title>
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        max-width: 720px;
+        margin: 24px auto;
+        padding: 0 16px;
+        line-height: 1.5;
+      }
+      code {
+        background: #f4f4f5;
+        padding: 0 4px;
+        border-radius: 4px;
+      }
+      #log {
+        white-space: pre-wrap;
+        background: #0b1020;
+        color: #d1e7ff;
+        padding: 12px;
+        border-radius: 8px;
+        min-height: 200px;
+        font-size: 13px;
+      }
+      button {
+        margin-right: 8px;
+        margin-bottom: 8px;
+        padding: 8px 12px;
+      }
+      .ok {
+        color: #16a34a;
+      }
+      .bad {
+        color: #dc2626;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>M0-4 本地通道探针</h1>
+    <p>
+      目标：验证浏览器 → <code>wss://127.0.0.1</code> 证书信任、Chrome Local
+      Network Access、消息防重放。本页无业务逻辑。
+    </p>
+    <p>
+      URL：
+      <input id="url" style="width: 70%" value="wss://127.0.0.1:17443" />
+    </p>
+    <button id="btnConnect">连接</button>
+    <button id="btnPing">发送 ping（合法）</button>
+    <button id="btnReplay">重放上一 nonce（应失败）</button>
+    <button id="btnClear">清日志</button>
+    <h2>环境探测</h2>
+    <ul id="env"></ul>
+    <h2>日志</h2>
+    <div id="log"></div>
+    <script>
+      const logEl = document.getElementById("log");
+      const envEl = document.getElementById("env");
+      let ws = null;
+      let lastMsg = null;
+      let seq = 0;
+
+      function log(line, cls) {
+        const span = document.createElement("div");
+        if (cls) span.className = cls;
+        span.textContent = `[${new Date().toISOString()}] ${line}`;
+        logEl.appendChild(span);
+      }
+
+      function envItem(k, v) {
+        const li = document.createElement("li");
+        li.innerHTML = `<strong>${k}</strong>: ${v}`;
+        envEl.appendChild(li);
+      }
+
+      envItem("location", String(location.href));
+      envItem("origin", String(location.origin));
+      envItem("userAgent", navigator.userAgent);
+      envItem(
+        "isSecureContext",
+        String(window.isSecureContext)
+      );
+      envItem(
+        "permissions.query",
+        typeof navigator.permissions?.query === "function" ? "yes" : "no"
+      );
+
+      // Best-effort LNA / private network probes (API surface differs by Chrome version)
+      (async () => {
+        try {
+          if (navigator.permissions?.query) {
+            const names = [
+              "local-network-access",
+              "private-network-access",
+            ];
+            for (const name of names) {
+              try {
+                const st = await navigator.permissions.query({ name });
+                envItem(`permission:${name}`, st.state);
+              } catch (e) {
+                envItem(`permission:${name}`, `n/a (${e.name})`);
+              }
+            }
+          }
+        } catch (e) {
+          envItem("permission probe", String(e));
+        }
+      })();
+
+      function buildMsg(payload) {
+        seq += 1;
+        const msg = {
+          nonce: crypto.randomUUID(),
+          seq,
+          exp: Date.now() + 15_000,
+          payload,
+        };
+        lastMsg = msg;
+        return msg;
+      }
+
+      document.getElementById("btnConnect").onclick = () => {
+        if (ws) ws.close();
+        const url = document.getElementById("url").value.trim();
+        log(`connecting ${url}`);
+        try {
+          ws = new WebSocket(url);
+        } catch (e) {
+          log(`constructor error: ${e}`, "bad");
+          return;
+        }
+        ws.onopen = () => log("open", "ok");
+        ws.onclose = (ev) =>
+          log(`close code=${ev.code} reason=${ev.reason || "-"}`, "bad");
+        ws.onerror = () => log("error event (see DevTools; often cert/LNA)", "bad");
+        ws.onmessage = (ev) => log(`← ${ev.data}`);
+      };
+
+      document.getElementById("btnPing").onclick = () => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          log("not connected", "bad");
+          return;
+        }
+        const msg = buildMsg({ type: "ping", t: Date.now() });
+        ws.send(JSON.stringify(msg));
+        log(`→ ping seq=${msg.seq}`);
+      };
+
+      document.getElementById("btnReplay").onclick = () => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          log("not connected", "bad");
+          return;
+        }
+        if (!lastMsg) {
+          log("no previous message", "bad");
+          return;
+        }
+        ws.send(JSON.stringify(lastMsg));
+        log(`→ replay nonce=${lastMsg.nonce} (expect error:replay)`);
+      };
+
+      document.getElementById("btnClear").onclick = () => {
+        logEl.textContent = "";
+      };
+    </script>
+  </body>
+</html>
