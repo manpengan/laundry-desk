@@ -9,13 +9,13 @@ export interface ToolUsePart {
   type: 'tool_use';
   id: string;
   name: string;
-  input: any;
+  input: Record<string, unknown>;
 }
 
 export interface ToolResultPart {
   type: 'tool_result';
   tool_use_id: string;
-  name: string; // 对齐新映射，必填工具名称，拒绝 hardcode
+  name: string;
   content: string;
   is_error?: boolean;
 }
@@ -41,7 +41,7 @@ export interface ToolDefinition {
   description: string;
   input_schema: {
     type: 'object';
-    properties: Record<string, any>;
+    properties: Record<string, unknown>;
     required?: string[];
   };
 }
@@ -67,7 +67,7 @@ export interface LlmResponse {
   message: Message;
   stop_reason: StopReason;
   usage?: TokenUsage;
-  raw: any;
+  raw: unknown;
 }
 
 export interface LlmAdapter {

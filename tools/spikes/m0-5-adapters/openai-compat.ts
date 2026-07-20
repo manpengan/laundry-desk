@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart, LlmResponse } from './types';
+import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart, LlmResponse, TextPart } from './types';
 
 export class OpenaiCompatAdapter implements LlmAdapter {
   name = 'openai-compat';
@@ -37,14 +37,23 @@ export class OpenaiCompatAdapter implements LlmAdapter {
     this.model = finalModel;
   }
 
-  private mapMessages(messages: Message[]): any[] {
-    return messages.map((m) => {
+  private mapMessages(messages: Message[]): OpenAI.Chat.Completions.ChatCompletionMessageParam[] {
+    const result: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [];
+
+    for (const m of messages) {
       if (typeof m.content === 'string') {
-        return { role: m.role, content: m.content };
+        if (m.role === 'system') {
+          result.push({ role: 'system', content: m.content });
+        } else if (m.role === 'user') {
+          result.push({ role: 'user', content: m.content });
+        } else if (m.role === 'assistant') {
+          result.push({ role: 'assistant', content: m.content });
+        }
+        continue;
       }
 
-      const contentParts: any[] = [];
-      const toolCalls: any[] = [];
+      const contentParts: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [];
+      const toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] = [];
 
       for (const part of m.content) {
         if (part.type === 'text') {
@@ -59,11 +68,11 @@ export class OpenaiCompatAdapter implements LlmAdapter {
             },
           });
         } else if (part.type === 'tool_result') {
-          return {
+          result.push({
             role: 'tool',
             tool_call_id: part.tool_use_id,
             content: part.content,
-          };
+          });
         } else if (part.type === 'image') {
           contentParts.push({
             type: 'image_url',
@@ -74,22 +83,28 @@ export class OpenaiCompatAdapter implements LlmAdapter {
         }
       }
 
-      const res: any = { role: m.role };
-      if (contentParts.length > 0) {
-        res.content = contentParts.length === 1 && contentParts[0].type === 'text'
-          ? contentParts[0].text
-          : contentParts;
+      if (m.role === 'user') {
+        result.push({ role: 'user', content: contentParts.length === 1 && contentParts[0].type === 'text' ? contentParts[0].text : contentParts });
+      } else if (m.role === 'assistant') {
+        const assistantMsg: OpenAI.Chat.Completions.ChatCompletionAssistantMessageParam = {
+          role: 'assistant',
+        };
+        if (contentParts.length > 0) {
+          assistantMsg.content = contentParts.length === 1 && contentParts[0].type === 'text' ? contentParts[0].text : (contentParts as unknown as string);
+        }
+        if (toolCalls.length > 0) {
+          assistantMsg.tool_calls = toolCalls;
+        }
+        result.push(assistantMsg);
       }
-      if (toolCalls.length > 0) {
-        res.tool_calls = toolCalls;
-      }
-      return res;
-    });
+    }
+
+    return result;
   }
 
-  private mapTools(tools: ToolDefinition[]): any[] {
+  private mapTools(tools: ToolDefinition[]): OpenAI.Chat.Completions.ChatCompletionTool[] {
     return tools.map((t) => ({
-      type: 'function',
+      type: 'function' as const,
       function: {
         name: t.name,
         description: t.description,
@@ -98,7 +113,7 @@ export class OpenaiCompatAdapter implements LlmAdapter {
     }));
   }
 
-  async generate(messages: Message[], tools: ToolDefinition[], options?: any): Promise<LlmResponse> {
+  async generate(messages: Message[], tools: ToolDefinition[], options?: { temperature?: number }): Promise<LlmResponse> {
     if (!this.hasApiKey) {
       return this.mockGenerate(messages);
     }
@@ -149,7 +164,7 @@ export class OpenaiCompatAdapter implements LlmAdapter {
     messages: Message[],
     tools: ToolDefinition[],
     onEvent: (event: StreamEvent) => void,
-    options?: any
+    options?: { temperature?: number }
   ): Promise<LlmResponse> {
     if (!this.hasApiKey) {
       return this.mockGenerateStream(messages, onEvent);
@@ -250,7 +265,7 @@ export class OpenaiCompatAdapter implements LlmAdapter {
     if (!lastUser) return false;
     const text = typeof lastUser.content === 'string'
       ? lastUser.content
-      : lastUser.content.filter((p) => p.type === 'text').map((p: any) => p.text).join(' ');
+      : (lastUser.content as TextPart[]).filter((p) => p.type === 'text').map((p) => p.text).join(' ');
     return text.includes('单工具') || text.includes('只查询天气');
   }
 

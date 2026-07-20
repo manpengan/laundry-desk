@@ -17,21 +17,21 @@ export class AnthropicAdapter implements LlmAdapter {
     this.model = model;
   }
 
-  private mapMessages(messages: Message[]): { system?: string; messages: any[] } {
+  private mapMessages(messages: Message[]): { system?: string; messages: Anthropic.MessageParam[] } {
     const systemMessage = messages.find((m) => m.role === 'system');
     const system = typeof systemMessage?.content === 'string'
       ? systemMessage.content
       : systemMessage?.content
-        ? (systemMessage.content as any[]).map((c) => c.text).join('\n')
+        ? (systemMessage.content as TextPart[]).map((c) => c.text).join('\n')
         : undefined;
 
     const filtered = messages.filter((m) => m.role !== 'system');
-    const mapped = filtered.map((m) => {
-      let content: any;
+    const mapped: Anthropic.MessageParam[] = filtered.map((m) => {
+      let content: string | Anthropic.ContentBlockParam[];
       if (typeof m.content === 'string') {
         content = m.content;
       } else {
-        content = m.content.map((part) => {
+        content = m.content.map((part): Anthropic.ContentBlockParam => {
           if (part.type === 'text') {
             return { type: 'text', text: part.text };
           } else if (part.type === 'tool_use') {
@@ -53,29 +53,29 @@ export class AnthropicAdapter implements LlmAdapter {
               type: 'image',
               source: {
                 type: 'base64',
-                media_type: part.source.media_type,
+                media_type: part.source.media_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
                 data: part.source.data,
               },
             };
           }
-          return part;
+          throw new Error('Unsupported part type');
         });
       }
-      return { role: m.role, content };
+      return { role: m.role as 'user' | 'assistant', content };
     });
 
     return { system, messages: mapped };
   }
 
-  private mapTools(tools: ToolDefinition[]): any[] {
+  private mapTools(tools: ToolDefinition[]): Anthropic.Tool[] {
     return tools.map((t) => ({
       name: t.name,
       description: t.description,
-      input_schema: t.input_schema,
+      input_schema: t.input_schema as Anthropic.Tool.InputSchema,
     }));
   }
 
-  async generate(messages: Message[], tools: ToolDefinition[], options?: any): Promise<LlmResponse> {
+  async generate(messages: Message[], tools: ToolDefinition[], options?: { temperature?: number }): Promise<LlmResponse> {
     if (!this.hasApiKey) {
       return this.mockGenerate(messages);
     }
@@ -92,7 +92,7 @@ export class AnthropicAdapter implements LlmAdapter {
       temperature: options?.temperature,
     });
 
-    const parts: ContentPart[] = response.content.map((block: any) => {
+    const parts: ContentPart[] = response.content.map((block) => {
       if (block.type === 'text') {
         return { type: 'text', text: block.text };
       } else if (block.type === 'tool_use') {
@@ -100,7 +100,7 @@ export class AnthropicAdapter implements LlmAdapter {
           type: 'tool_use',
           id: block.id,
           name: block.name,
-          input: block.input,
+          input: block.input as Record<string, unknown>,
         };
       }
       throw new Error(`Unsupported content block: ${block.type}`);
@@ -124,7 +124,7 @@ export class AnthropicAdapter implements LlmAdapter {
     messages: Message[],
     tools: ToolDefinition[],
     onEvent: (event: StreamEvent) => void,
-    options?: any
+    options?: { temperature?: number }
   ): Promise<LlmResponse> {
     if (!this.hasApiKey) {
       return this.mockGenerateStream(messages, onEvent);
@@ -144,7 +144,7 @@ export class AnthropicAdapter implements LlmAdapter {
     });
 
     const parts: ContentPart[] = [];
-    let currentToolUse: any = null;
+    let currentToolUse: { id: string; name: string; input_string: string } | null = null;
     let finalStopReason: string = 'end_turn';
 
     for await (const event of stream) {
@@ -213,7 +213,7 @@ export class AnthropicAdapter implements LlmAdapter {
     if (!lastUser) return false;
     const text = typeof lastUser.content === 'string'
       ? lastUser.content
-      : lastUser.content.filter((p) => p.type === 'text').map((p: any) => p.text).join(' ');
+      : (lastUser.content as TextPart[]).filter((p) => p.type === 'text').map((p) => p.text).join(' ');
     return text.includes('单工具') || text.includes('只查询天气');
   }
 

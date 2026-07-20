@@ -14,6 +14,9 @@ const GetStoreStatsSchema = z.object({
   metrics: z.array(z.string()).min(1, '必须选择至少一个统计指标')
 });
 
+type GetWeatherArgs = z.infer<typeof GetWeatherSchema>;
+type GetStoreStatsArgs = z.infer<typeof GetStoreStatsSchema>;
+
 // 定义测试使用的 tools 定义 (转为 JSON schema)
 const mockTools: ToolDefinition[] = [
   {
@@ -46,18 +49,20 @@ const mockTools: ToolDefinition[] = [
 ];
 
 // 本地模拟工具执行逻辑
-function executeTool(name: string, args: any): string {
+function executeTool(name: string, args: GetWeatherArgs | GetStoreStatsArgs): string {
   console.log(`[Tool Runner] Executing tool '${name}' with validated args:`, args);
   if (name === 'get_weather') {
+    const wArgs = args as GetWeatherArgs;
     return JSON.stringify({
-      city: args.city,
+      city: wArgs.city,
       condition: 'Sunny',
       temperature: '25C',
       humidity: '60%'
     });
   } else if (name === 'get_store_stats') {
+    const sArgs = args as GetStoreStatsArgs;
     return JSON.stringify({
-      store_id: args.store_id,
+      store_id: sArgs.store_id,
       revenue: 500000,
       order_count: 120,
       currency: 'CNY'
@@ -67,7 +72,7 @@ function executeTool(name: string, args: any): string {
 }
 
 // 通过 Zod 门禁校验后，才执行工具
-function validateAndExecuteTool(name: string, input: any): string {
+function validateAndExecuteTool(name: string, input: unknown): string {
   console.log(`[Zod Gate] Validating inputs for tool '${name}' via Zod schema...`);
   if (name === 'get_weather') {
     const validatedArgs = GetWeatherSchema.parse(input);
@@ -224,7 +229,7 @@ async function main() {
   console.log(`==================================================\n`);
 }
 
-main().catch(err => {
+main().catch((err: unknown) => {
   console.error('Fatal test execution error:', err);
   process.exit(1);
 });

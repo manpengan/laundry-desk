@@ -1,5 +1,5 @@
-import { GoogleGenAI } from '@google/genai';
-import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart, LlmResponse } from './types';
+import { GoogleGenAI, Content, Part } from '@google/genai';
+import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart, LlmResponse, TextPart } from './types';
 
 export class GeminiAdapter implements LlmAdapter {
   name = 'gemini';
@@ -9,17 +9,17 @@ export class GeminiAdapter implements LlmAdapter {
     this.model = model;
   }
 
-  private mapMessages(messages: Message[]): any[] {
+  private mapMessages(messages: Message[]): Content[] {
     const filtered = messages.filter((m) => m.role !== 'system');
 
-    return filtered.map((m) => {
+    return filtered.map((m): Content => {
       const role = m.role === 'assistant' ? 'model' : 'user';
 
       if (typeof m.content === 'string') {
         return { role, parts: [{ text: m.content }] };
       }
 
-      const parts: any[] = [];
+      const parts: Part[] = [];
       for (const part of m.content) {
         if (part.type === 'text') {
           parts.push({ text: part.text });
@@ -51,7 +51,7 @@ export class GeminiAdapter implements LlmAdapter {
     });
   }
 
-  private mapTools(tools: ToolDefinition[]): any[] {
+  private mapTools(tools: ToolDefinition[]) {
     if (tools.length === 0) return [];
     return [
       {
@@ -69,10 +69,10 @@ export class GeminiAdapter implements LlmAdapter {
     if (!system) return undefined;
     return typeof system.content === 'string'
       ? system.content
-      : (system.content as any[]).map((c) => c.text).join('\n');
+      : (system.content as TextPart[]).map((c) => c.text).join('\n');
   }
 
-  async generate(messages: Message[], tools: ToolDefinition[], options?: any): Promise<LlmResponse> {
+  async generate(messages: Message[], tools: ToolDefinition[], options?: { temperature?: number }): Promise<LlmResponse> {
     if (!process.env.GEMINI_API_KEY) {
       return this.mockGenerate(messages);
     }
@@ -107,7 +107,7 @@ export class GeminiAdapter implements LlmAdapter {
             type: 'tool_use',
             id: `gemini_call_${Math.random().toString(36).substring(2, 7)}`,
             name: call.name ?? 'unknown_tool',
-            input: call.args,
+            input: (call.args as Record<string, unknown>) ?? {},
           });
         }
       }
@@ -131,7 +131,7 @@ export class GeminiAdapter implements LlmAdapter {
     messages: Message[],
     tools: ToolDefinition[],
     onEvent: (event: StreamEvent) => void,
-    options?: any
+    options?: { temperature?: number }
   ): Promise<LlmResponse> {
     if (!process.env.GEMINI_API_KEY) {
       return this.mockGenerateStream(messages, onEvent);
@@ -181,7 +181,7 @@ export class GeminiAdapter implements LlmAdapter {
               type: 'tool_use',
               id: callId,
               name: call.name ?? 'unknown_tool',
-              input: call.args,
+              input: (call.args as Record<string, unknown>) ?? {},
             });
           }
         }
@@ -215,7 +215,7 @@ export class GeminiAdapter implements LlmAdapter {
     if (!lastUser) return false;
     const text = typeof lastUser.content === 'string'
       ? lastUser.content
-      : lastUser.content.filter((p) => p.type === 'text').map((p: any) => p.text).join(' ');
+      : (lastUser.content as TextPart[]).filter((p) => p.type === 'text').map((p) => p.text).join(' ');
     return text.includes('单工具') || text.includes('只查询天气');
   }
 
