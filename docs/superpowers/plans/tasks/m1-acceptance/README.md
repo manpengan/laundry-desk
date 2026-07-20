@@ -22,9 +22,9 @@
 | 资产 | 规格 | 执行方 | 状态 |
 |---|---|---|---|
 | 每包 PR 验收 checklist 模板 | [pr-checklist-template.md](pr-checklist-template.md) | 全员自查 | **已出** |
-| 跨租户五类旁路负向用例 → CI 门禁 | 待出（M0-1 转正） | Codex（C2） | 待发 |
-| AI 红队用例集 ≥20 条 | 待出 | Codex（C4/C5 消费） | 待发 |
-| 确认卡 WYSIWYS E2E 断言规格 | 待出 | Codex（C5） | 待发 |
+| 跨租户五类旁路负向用例 → CI 门禁 | [t5-cross-tenant-ci-gate.md](t5-cross-tenant-ci-gate.md) | Codex（随 C2 交付） | **已出** |
+| AI 红队用例集 ≥20 条 | 待出——**依赖 A1 的 Tool Registry 投影形状**，A1 通过后即出 | Codex（C4/C5 消费） | 待发 |
+| 确认卡 WYSIWYS E2E 断言规格 | 待出——**依赖 A1/A2 的确认卡契约形状**，两组通过后即出 | Codex（C5） | 待发 |
 
 ## 四条本期红线（M0 实测教训，已写入 PR checklist）
 
