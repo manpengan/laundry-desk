@@ -4,7 +4,7 @@
  * 遵循 GEMINI.md 红线：禁浮点数，全半角 GBK 兼容（全角 ￥ U+FFE5）。
  */
 
-export const FULLWIDTH_YEN_SYMBOL = '\uFFE5'; // 全角 ￥，防止 GBK 编码下显示为 ?
+export const FULLWIDTH_YEN_SYMBOL = "\uFFE5"; // 全角 ￥，防止 GBK 编码下显示为 ?
 
 /**
  * 校验输入必须为整数分
@@ -23,7 +23,7 @@ export function validateCents(cents: number): void {
  */
 export function formatFen(
   cents: number,
-  options?: { showSymbol?: boolean; symbol?: string }
+  options?: { showSymbol?: boolean; symbol?: string },
 ): string {
   validateCents(cents);
   const showSymbol = options?.showSymbol ?? true;
@@ -34,11 +34,11 @@ export function formatFen(
   const yuanPart = Math.floor(absCents / 100);
   const fenPart = absCents % 100;
 
-  const paddedFen = fenPart.toString().padStart(2, '0');
+  const paddedFen = fenPart.toString().padStart(2, "0");
   const amountText = `${yuanPart}.${paddedFen}`;
 
-  const prefix = isNegative ? '-' : '';
-  const currencyPrefix = showSymbol ? symbol : '';
+  const prefix = isNegative ? "-" : "";
+  const currencyPrefix = showSymbol ? symbol : "";
 
   return `${prefix}${currencyPrefix}${amountText}`;
 }
@@ -48,7 +48,7 @@ export function formatFen(
  * @param yuanStr 元文本，如 "29.00" 或 "5" 或 "0.05"
  */
 export function yuanToFen(yuanStr: string | number): number {
-  if (typeof yuanStr === 'number') {
+  if (typeof yuanStr === "number") {
     if (Number.isInteger(yuanStr)) {
       yuanStr = `${yuanStr}.00`;
     } else {
@@ -56,9 +56,9 @@ export function yuanToFen(yuanStr: string | number): number {
     }
   }
 
-  const str = yuanStr.trim().replace(/^[\uFFE5\u00A5$]/, '');
+  const str = yuanStr.trim().replace(/^[\uFFE5\u00A5$]/, "");
   if (!str) {
-    throw new Error('Invalid empty yuan string');
+    throw new Error("Invalid empty yuan string");
   }
 
   const match = str.match(/^(-)?(\d+)(?:\.(\d{1,2}))?$/);
@@ -66,10 +66,10 @@ export function yuanToFen(yuanStr: string | number): number {
     throw new Error(`Invalid yuan string format: "${yuanStr}"`);
   }
 
-  const isNegative = match[1] === '-';
-  const integerPart = parseInt(match[2] ?? '0', 10);
-  const rawDec = match[3] ?? '0';
-  const decimalPart = parseInt(rawDec.padEnd(2, '0'), 10);
+  const isNegative = match[1] === "-";
+  const integerPart = parseInt(match[2] ?? "0", 10);
+  const rawDec = match[3] ?? "0";
+  const decimalPart = parseInt(rawDec.padEnd(2, "0"), 10);
 
   const totalCents = integerPart * 100 + decimalPart;
   return isNegative ? -totalCents : totalCents;
@@ -102,13 +102,13 @@ export function subtractCents(a: number, b: number): number {
 export function multiplyCents(
   cents: number,
   factor: number,
-  mode: 'round' | 'floor' | 'ceil' = 'round'
+  mode: "round" | "floor" | "ceil" = "round",
 ): number {
   validateCents(cents);
   const raw = cents * factor;
-  if (mode === 'round') {
+  if (mode === "round") {
     return Math.round(raw);
-  } else if (mode === 'floor') {
+  } else if (mode === "floor") {
     return Math.floor(raw);
   } else {
     return Math.ceil(raw);
@@ -122,10 +122,7 @@ export function multiplyCents(
  * @param totalDiscountCents 总优惠/折扣金额（分）
  * @param itemCentsList 各明细原始金额（分）列表
  */
-export function apportionDiscount(
-  totalDiscountCents: number,
-  itemCentsList: number[]
-): number[] {
+export function apportionDiscount(totalDiscountCents: number, itemCentsList: number[]): number[] {
   validateCents(totalDiscountCents);
   itemCentsList.forEach(validateCents);
 

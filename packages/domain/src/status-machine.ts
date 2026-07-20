@@ -5,24 +5,17 @@
  */
 
 export type GarmentStatus =
-  | 'received'
-  | 'washing'
-  | 'ready'
-  | 'racked'
-  | 'picked_up'
-  | 'delivered'
-  | 'reworked'
-  | 'lost';
+  "received" | "washing" | "ready" | "racked" | "picked_up" | "delivered" | "reworked" | "lost";
 
 export const ALL_GARMENT_STATUSES: readonly GarmentStatus[] = [
-  'received',
-  'washing',
-  'ready',
-  'racked',
-  'picked_up',
-  'delivered',
-  'reworked',
-  'lost',
+  "received",
+  "washing",
+  "ready",
+  "racked",
+  "picked_up",
+  "delivered",
+  "reworked",
+  "lost",
 ] as const;
 
 export class InvalidStateTransitionError extends Error {
@@ -33,12 +26,12 @@ export class InvalidStateTransitionError extends Error {
   constructor(
     currentStatus: GarmentStatus,
     targetStatus: GarmentStatus,
-    fulfillmentEnabled: boolean
+    fulfillmentEnabled: boolean,
   ) {
     super(
-      `Invalid garment status transition: cannot transition from '${currentStatus}' to '${targetStatus}' (fulfillmentEnabled=${fulfillmentEnabled})`
+      `Invalid garment status transition: cannot transition from '${currentStatus}' to '${targetStatus}' (fulfillmentEnabled=${fulfillmentEnabled})`,
     );
-    this.name = 'InvalidStateTransitionError';
+    this.name = "InvalidStateTransitionError";
     this.currentStatus = currentStatus;
     this.targetStatus = targetStatus;
     this.fulfillmentEnabled = fulfillmentEnabled;
@@ -49,11 +42,11 @@ export class InvalidStateTransitionError extends Error {
  * 完整履约模式 (fulfillmentEnabled = true) 下的显式状态转移表
  */
 const FULL_TRANSITION_MAP: Record<GarmentStatus, readonly GarmentStatus[]> = {
-  received: ['washing', 'picked_up', 'delivered', 'lost'],
-  washing: ['ready', 'reworked', 'lost'],
-  ready: ['racked', 'picked_up', 'delivered', 'reworked', 'lost'],
-  racked: ['picked_up', 'delivered', 'reworked', 'lost'],
-  reworked: ['washing', 'ready', 'lost'],
+  received: ["washing", "picked_up", "delivered", "lost"],
+  washing: ["ready", "reworked", "lost"],
+  ready: ["racked", "picked_up", "delivered", "reworked", "lost"],
+  racked: ["picked_up", "delivered", "reworked", "lost"],
+  reworked: ["washing", "ready", "lost"],
   picked_up: [], // 终态
   delivered: [], // 终态
   lost: [], // 高危终态，绝对不可转出
@@ -63,7 +56,7 @@ const FULL_TRANSITION_MAP: Record<GarmentStatus, readonly GarmentStatus[]> = {
  * 极简/关闭履约模式 (fulfillmentEnabled = false) 下的坍缩状态转移表
  */
 const COLLAPSED_TRANSITION_MAP: Record<GarmentStatus, readonly GarmentStatus[]> = {
-  received: ['picked_up', 'delivered', 'lost'],
+  received: ["picked_up", "delivered", "lost"],
   washing: [],
   ready: [],
   racked: [],
@@ -82,12 +75,10 @@ const COLLAPSED_TRANSITION_MAP: Record<GarmentStatus, readonly GarmentStatus[]> 
 export function canTransition(
   currentStatus: GarmentStatus,
   targetStatus: GarmentStatus,
-  options?: { fulfillmentEnabled?: boolean }
+  options?: { fulfillmentEnabled?: boolean },
 ): boolean {
   const fulfillmentEnabled = options?.fulfillmentEnabled ?? true;
-  const transitionMap = fulfillmentEnabled
-    ? FULL_TRANSITION_MAP
-    : COLLAPSED_TRANSITION_MAP;
+  const transitionMap = fulfillmentEnabled ? FULL_TRANSITION_MAP : COLLAPSED_TRANSITION_MAP;
 
   const validTargets = transitionMap[currentStatus];
   if (!validTargets) {
@@ -103,7 +94,7 @@ export function canTransition(
 export function transition(
   currentStatus: GarmentStatus,
   targetStatus: GarmentStatus,
-  options?: { fulfillmentEnabled?: boolean }
+  options?: { fulfillmentEnabled?: boolean },
 ): GarmentStatus {
   const fulfillmentEnabled = options?.fulfillmentEnabled ?? true;
   if (!canTransition(currentStatus, targetStatus, { fulfillmentEnabled })) {
@@ -117,12 +108,10 @@ export function transition(
  */
 export function getValidTransitions(
   currentStatus: GarmentStatus,
-  options?: { fulfillmentEnabled?: boolean }
+  options?: { fulfillmentEnabled?: boolean },
 ): GarmentStatus[] {
   const fulfillmentEnabled = options?.fulfillmentEnabled ?? true;
-  const transitionMap = fulfillmentEnabled
-    ? FULL_TRANSITION_MAP
-    : COLLAPSED_TRANSITION_MAP;
+  const transitionMap = fulfillmentEnabled ? FULL_TRANSITION_MAP : COLLAPSED_TRANSITION_MAP;
 
   return [...(transitionMap[currentStatus] || [])];
 }
