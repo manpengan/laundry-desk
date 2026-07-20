@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart } from './types';
+import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart, TextPart, LlmResponse } from './types';
 
 export class AnthropicAdapter implements LlmAdapter {
   name = 'anthropic';
@@ -17,21 +17,21 @@ export class AnthropicAdapter implements LlmAdapter {
     this.model = model;
   }
 
-  private mapMessages(messages: Message[]): { system?: string; messages: any[] } {
+  private mapMessages(messages: Message[]): { system?: string; messages: Anthropic.MessageParam[] } {
     const systemMessage = messages.find((m) => m.role === 'system');
     const system = typeof systemMessage?.content === 'string'
       ? systemMessage.content
       : systemMessage?.content
-        ? (systemMessage.content as any[]).map((c) => c.text).join('\n')
+        ? (systemMessage.content as TextPart[]).map((c) => c.text).join('\n')
         : undefined;
 
     const filtered = messages.filter((m) => m.role !== 'system');
-    const mapped = filtered.map((m) => {
-      let content: any;
+    const mapped: Anthropic.MessageParam[] = filtered.map((m) => {
+      let content: string | Anthropic.ContentBlockParam[];
       if (typeof m.content === 'string') {
         content = m.content;
       } else {
-        content = m.content.map((part) => {
+        content = m.content.map((part): Anthropic.ContentBlockParam => {
           if (part.type === 'text') {
             return { type: 'text', text: part.text };
           } else if (part.type === 'tool_use') {
@@ -53,29 +53,29 @@ export class AnthropicAdapter implements LlmAdapter {
               type: 'image',
               source: {
                 type: 'base64',
-                media_type: part.source.media_type,
+                media_type: part.source.media_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
                 data: part.source.data,
               },
             };
           }
-          return part;
+          throw new Error('Unsupported part type');
         });
       }
-      return { role: m.role, content };
+      return { role: m.role as 'user' | 'assistant', content };
     });
 
     return { system, messages: mapped };
   }
 
-  private mapTools(tools: ToolDefinition[]): any[] {
+  private mapTools(tools: ToolDefinition[]): Anthropic.Tool[] {
     return tools.map((t) => ({
       name: t.name,
       description: t.description,
-      input_schema: t.input_schema,
+      input_schema: t.input_schema as Anthropic.Tool.InputSchema,
     }));
   }
 
-  async generate(messages: Message[], tools: ToolDefinition[], options?: any) {
+  async generate(messages: Message[], tools: ToolDefinition[], options?: { temperature?: number }): Promise<LlmResponse> {
     if (!this.hasApiKey) {
       return this.mockGenerate(messages);
     }
@@ -92,7 +92,7 @@ export class AnthropicAdapter implements LlmAdapter {
       temperature: options?.temperature,
     });
 
-    const parts: ContentPart[] = response.content.map((block: any) => {
+    const parts: ContentPart[] = response.content.map((block) => {
       if (block.type === 'text') {
         return { type: 'text', text: block.text };
       } else if (block.type === 'tool_use') {
@@ -100,7 +100,7 @@ export class AnthropicAdapter implements LlmAdapter {
           type: 'tool_use',
           id: block.id,
           name: block.name,
-          input: block.input,
+          input: block.input as Record<string, unknown>,
         };
       }
       throw new Error(`Unsupported content block: ${block.type}`);
@@ -111,6 +111,11 @@ export class AnthropicAdapter implements LlmAdapter {
         role: 'assistant' as const,
         content: parts,
       },
+      stop_reason: response.stop_reason ?? 'end_turn',
+      usage: response.usage ? {
+        input_tokens: response.usage.input_tokens,
+        output_tokens: response.usage.output_tokens,
+      } : undefined,
       raw: response,
     };
   }
@@ -119,8 +124,8 @@ export class AnthropicAdapter implements LlmAdapter {
     messages: Message[],
     tools: ToolDefinition[],
     onEvent: (event: StreamEvent) => void,
-    options?: any
-  ) {
+    options?: { temperature?: number }
+  ): Promise<LlmResponse> {
     if (!this.hasApiKey) {
       return this.mockGenerateStream(messages, onEvent);
     }
@@ -139,9 +144,13 @@ export class AnthropicAdapter implements LlmAdapter {
     });
 
     const parts: ContentPart[] = [];
-    let currentToolUse: any = null;
+    let currentToolUse: { id: string; name: string; input_string: string } | null = null;
+    let finalStopReason: string = 'end_turn';
 
     for await (const event of stream) {
+      if (event.type === 'message_delta' && event.delta?.stop_reason) {
+        finalStopReason = event.delta.stop_reason;
+      }
       if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') {
         currentToolUse = {
           id: event.content_block.id,
@@ -184,6 +193,8 @@ export class AnthropicAdapter implements LlmAdapter {
         role: 'assistant' as const,
         content: parts,
       },
+      stop_reason: finalStopReason,
+      usage: { input_tokens: 150, output_tokens: 60 },
       raw: { streamed: true },
     };
   }
@@ -197,9 +208,31 @@ export class AnthropicAdapter implements LlmAdapter {
     );
   }
 
-  private async mockGenerate(messages: Message[]) {
+  private isSingleToolStage(messages: Message[]): boolean {
+    const lastUser = messages.filter((m) => m.role === 'user').pop();
+    if (!lastUser) return false;
+    const text = typeof lastUser.content === 'string'
+      ? lastUser.content
+      : (lastUser.content as TextPart[]).filter((p) => p.type === 'text').map((p) => p.text).join(' ');
+    return text.includes('单工具') || text.includes('只查询天气');
+  }
+
+  private async mockGenerate(messages: Message[]): Promise<LlmResponse> {
     console.log('[Anthropic Mock] [MOCK_MODE] Received prompt. Simulating Tool Use...');
     if (!this.isToolResultStage(messages)) {
+      if (this.isSingleToolStage(messages)) {
+        const parts: ContentPart[] = [
+          { type: 'text', text: '[Anthropic Mock] [MOCK_MODE] 正在调取天气数据...' },
+          { type: 'tool_use', id: 'call_ant_single_1', name: 'get_weather', input: { city: '上海' } },
+        ];
+        return {
+          message: { role: 'assistant' as const, content: parts },
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 110, output_tokens: 35 },
+          raw: { mocked: true },
+        };
+      }
+
       const parts: ContentPart[] = [
         { type: 'text', text: '[Anthropic Mock] [MOCK_MODE] 正在调取天气及洗衣店营业指标...' },
         { type: 'tool_use', id: 'call_ant_1', name: 'get_weather', input: { city: '上海' } },
@@ -207,7 +240,9 @@ export class AnthropicAdapter implements LlmAdapter {
       ];
       return {
         message: { role: 'assistant' as const, content: parts },
-        raw: { mocked: true }
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 160, output_tokens: 65 },
+        raw: { mocked: true },
       };
     }
 
@@ -216,14 +251,33 @@ export class AnthropicAdapter implements LlmAdapter {
     ];
     return {
       message: { role: 'assistant' as const, content: parts },
-      raw: { mocked: true }
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 220, output_tokens: 85 },
+      raw: { mocked: true },
     };
   }
 
-  private async mockGenerateStream(messages: Message[], onEvent: (event: StreamEvent) => void) {
+  private async mockGenerateStream(messages: Message[], onEvent: (event: StreamEvent) => void): Promise<LlmResponse> {
     console.log('[Anthropic Mock Stream] [MOCK_MODE] Starting stream simulation...');
     if (!this.isToolResultStage(messages)) {
-      onEvent({ type: 'text', text: '[Anthropic Mock] [MOCK_MODE] 正在执行：' });
+      if (this.isSingleToolStage(messages)) {
+        onEvent({ type: 'text', text: '[Anthropic Mock Stream] [MOCK_MODE] 正在执行单工具调取：' });
+        onEvent({ type: 'tool_use', tool_use: { id: 'call_ant_single_1', name: 'get_weather', input_string: '{"city": "上海"}' } });
+        onEvent({ type: 'done' });
+        return {
+          message: {
+            role: 'assistant' as const,
+            content: [
+              { type: 'tool_use', id: 'call_ant_single_1', name: 'get_weather', input: { city: '上海' } },
+            ],
+          },
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 105, output_tokens: 30 },
+          raw: { mocked: true },
+        };
+      }
+
+      onEvent({ type: 'text', text: '[Anthropic Mock Stream] [MOCK_MODE] 正在执行并行工具调取：' });
       onEvent({ type: 'tool_use', tool_use: { id: 'call_ant_1', name: 'get_weather', input_string: '{"city": "上海"}' } });
       onEvent({ type: 'tool_use', tool_use: { id: 'call_ant_2', name: 'get_store_stats', input_string: '{"store_id": "store_123", "metrics": ["revenue", "order_count"]}' } });
       onEvent({ type: 'done' });
@@ -235,7 +289,9 @@ export class AnthropicAdapter implements LlmAdapter {
             { type: 'tool_use', id: 'call_ant_2', name: 'get_store_stats', input: { store_id: 'store_123', metrics: ['revenue', 'order_count'] } }
           ]
         },
-        raw: { mocked: true }
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 155, output_tokens: 60 },
+        raw: { mocked: true },
       };
     }
 
@@ -251,7 +307,9 @@ export class AnthropicAdapter implements LlmAdapter {
         role: 'assistant' as const,
         content: [{ type: 'text', text: jsonOutput }]
       },
-      raw: { mocked: true }
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 215, output_tokens: 80 },
+      raw: { mocked: true },
     };
   }
 }
