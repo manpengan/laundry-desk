@@ -70,3 +70,37 @@ export type {
   InferContractOutput,
   QueryDefinition,
 } from "./registry/definitions.js";
+
+export {
+  CommandWirePayloadSchema,
+  ConfirmReferenceSchema,
+  IdempotencyKeySchema,
+  parseCommandWirePayload,
+  WireArgumentsSchema,
+} from "./envelope/wire-payload.js";
+export type {
+  CommandWirePayload,
+  ConfirmCommandWirePayload,
+  DirectCommandWirePayload,
+} from "./envelope/wire-payload.js";
+
+export {
+  AuthenticatedCommandContextSchema,
+  CommandViaSchema,
+  injectAuthenticatedCommandContext,
+  isServerCommandEnvelope,
+} from "./envelope/server-envelope.js";
+export type { ServerCommandEnvelope } from "./envelope/server-envelope.js";
+
+export {
+  CommandErrorCodeSchema,
+  CommandErrorSchema,
+  CommandResponseSchema,
+  createCommandError,
+} from "./envelope/responses.js";
+export type {
+  CommandError,
+  CommandErrorCode,
+  CommandErrorDetail,
+  CommandResponse,
+} from "./envelope/responses.js";
