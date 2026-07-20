@@ -32,29 +32,42 @@
 
 ## 3. M1 任务（生产代码）
 
+> **2026-07-20 分工调整**：manpengan 决定按各家实测表现重新配比——安全敏感与高复杂度任务集中给 Codex，你这边**任务量减少、难度降低**，聚焦规则明确、可被测试完全覆盖的工作。原属你的 C6/C8（identity 与鉴权中间件）、F1（迁移器）已移交 Codex。
+
 ### B 包 · `packages/domain`（纯函数，TDD，**覆盖率 100%**）
 
+规则在 spec 里写死，无需设计决策；每条都能用穷举单测证明对错——这是本包的价值。
+
 - [ ] B1 金额工具：整数分、格式化、分摊/取整规则；任何浮点出现即测试失败
-- [ ] B2 命令校验链的纯逻辑骨架（Zod→RBAC→租户→Policy→不变量 的判定函数，IO 由 server 注入）
 - [ ] B3 order/garment 状态机显式转移表（含 delivered/reworked/lost；fulfillment 关闭坍缩为 received→picked_up|delivered）+ 穷举单测（非法转移全被拒）
-- [ ] B4 风险分级判定：R0–R5 + 数量/金额阈值升级 R3→R4（阈值只可调严）
+
+> B2（命令校验链骨架）已由 Codex 在 contracts 内定义接口并 stub（见放行记录 D2），你不再负责。
+> B4（风险分级判定 R0–R5）随 Policy Engine 一并移交 Codex——它与确认卡、step-up 强耦合。
 
 ### C 包 · `apps/server` 业务服务（等 Codex C1 总线就绪后接入）
 
-- [ ] C6 identity：argon2id、JWT access(15min,内存)/refresh(14d,httpOnly+SameSite 轮换)、CSRF 双提交、柜台 PIN 快切、RBAC ~40 权限点（高危独立组）——**过 Codex 二审**
 - [ ] C7 platform：settings、`store_features` flags、审计查询（只读）
-- [ ] C8 鉴权中间件：actor/tenant 只从服务端会话注入，**拒绝客户端/LLM/Edge 自报的 org/store**——**过 Codex 二审**
+
+> C6 identity 与 C8 鉴权中间件移交 Codex：涉及 argon2id 参数、JWT/refresh 轮换、CSRF、
+> 以及"拒绝客户端/LLM/Edge 自报租户"这一跨租户安全边界，与他的 RLS/Policy 工作同源。
 
 ### F 包 · `tools/`
 
-- [ ] F1 `tools/migrate-v1` 骨架：v1 SQLite → v2 PG 映射（`order_items` 按 qty 拆 `order_lines`+`garments` 并补发条码；customers/photos/settings 直迁；缺失 `expected_pickup_date` 按规则补算）；M1 只做只读试跑 + 差异报告
 - [ ] F2 种子数据：1 org / 1 store / 管理员+店员 / 价目字典（参考顺科 11 服务 × 品类）
-- [ ] F3 compose 转正（承接 M0-6）
+- [ ] F3 compose 转正（承接 M0-6，门禁通过后执行）
+
+> F1 迁移器移交 Codex：件级拆分 + 条码补发是 v1→v2 最大不可逆点，出错会污染宏发真实数据。
 
 ## 4. 依赖与交接
 
-- 你依赖：`contracts@v0.1.0`（B 包只依赖类型，可开工最早）；Codex C1 总线（C6/C7 接入点）
-- 依赖你：全队用你的 F2 种子与 F3 compose；Codex C1 用你的 B2 骨架；Grok 的 web 登录闭环用你的 C6
+- 你依赖：`contracts@v0.1.0`（B 包只依赖类型，可最早开工）；Codex C1 总线（C7 接入点）
+- 依赖你：全队用你的 F2 种子与 F3 compose
+
+## 5. 给你的三条工作建议（基于 M0 复盘）
+
+1. **证据即结论**：findings 里的结论行不得超出证据强度。无真实 key 时写「待实测」而非「通过」——M0-5 首轮判负正因于此。
+2. **先 rebase 再提交**：M0 期间在过时工作树上提交，覆盖了 main 已有的 CI 修复（build/ 资产、workflow、e2e 断言三处回退）。每次开工前 `git fetch && git rebase origin/main`。
+3. **断言必须能失败**：`|| echo "PASS"` 对任何非零退出都通过，等于永不失败（M0-6 Test 4 判负原因）。写完测试先人为破坏一次，确认它真会红。
 
 ## 5. 提交 PR 前门禁自查
 
