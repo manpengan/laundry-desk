@@ -26,6 +26,16 @@ export {
   spaRootFromPackageRoot,
 } from "./lib/paths.js";
 export { createAppProtocolHandler } from "./protocol.js";
+export { checkShellHealth, type ShellHealth } from "./shell/health.js";
+export { mockConnection, type EdgeConnectionSnapshot } from "./shell/connection-mock.js";
+export {
+  advanceJob,
+  createMockSpool,
+  enqueue,
+  listJobs,
+  type MockPrintJob,
+  type MockSpool,
+} from "./print/mock-spool.js";
 export {
   appendHistory,
   canRestoreSnapshot,

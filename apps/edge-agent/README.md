@@ -1,8 +1,8 @@
-# `@laundry/edge-agent` — Local Edge Agent（D1 壳）
+# `@laundry/edge-agent` — Local Edge Agent（D1 壳 + D5 + mock 打印）
 
-Electron 壳：`app://` 内置 SPA、断网冷启动路径、ADR-01 安全基线。
+Electron 壳：`app://` 内置 SPA、断网冷启动、ADR-01 安全基线、单实例、托盘。
 
-**本包边界**：无业务校验；校验语义全在 server 命令总线。D2/D3/D4/D5 后续迭加。
+**本包边界**：无业务校验；校验语义全在 server 命令总线。
 
 ## 安全基线（九项）
 
@@ -12,48 +12,35 @@ Electron 壳：`app://` 内置 SPA、断网冷启动路径、ADR-01 安全基线
 | `contextIsolation: true` | 同上                                      |
 | `sandbox: true`          | 同上                                      |
 | `webSecurity: true`      | 同上                                      |
-| 最小 preload 白名单      | `src/preload.ts`（仅 `edgeBridge.ping`）  |
+| 最小 preload 白名单      | `src/preload.ts`                          |
 | IPC sender 校验          | `src/ipc.ts` + `isValidAppSender`         |
 | 禁新窗口                 | `setWindowOpenHandler` deny               |
 | 禁外链导航               | `will-navigate` 仅 `app://`               |
 | 权限默认拒绝             | `setPermissionRequestHandler` → false     |
 
+## IPC 白名单（preload）
+
+| 通道                                     | 用途                    |
+| ---------------------------------------- | ----------------------- |
+| `edge:ping`                              | 存活探测                |
+| `edge:health`                            | SPA/manifest 存在性     |
+| `edge:upgrade-status`                    | D5 状态机只读投影       |
+| `edge:connection`                        | 连接条 mock（待 A4/E1） |
+| `edge:print-enqueue` / `edge:print-list` | 打印 mock 队列（待 A4） |
+
 ## 开发
 
 ```bash
-# 从仓库根
 pnpm --filter @laundry/edge-agent test
-pnpm --filter @laundry/edge-agent typecheck
 pnpm --filter @laundry/edge-agent build
-
-# 启动壳（需先 build；依赖根或本包 electron）
 pnpm exec electron apps/edge-agent
 ```
 
-内置 SPA 资产：`resources/spa/`（`manifest.json` 的 `indexSha256` 须与 `index.html` 一致）。
-篡改 index 后启动应失败退出——这是冷启动完整性闸。
+内置 SPA：`resources/spa/`（改 `index.html` 后须重算 `manifest.json` 的 `indexSha256`）。
 
-## D5 A/B 升级骨架（`src/upgrade/`）
+## 范围
 
-纯状态机（无 autoUpdater I/O），对照 ADR-08：
-
-| 规则                           | 实现                                       |
-| ------------------------------ | ------------------------------------------ |
-| 队列未清空不得安装             | `installStandby` → `queue_not_empty`       |
-| 升级窗口内禁止新 Primary lease | `primaryLeaseIssuanceBlocked`              |
-| 升级前快照事件                 | `snapshot_before_install` history          |
-| 健康检查失败回原槽             | `health_check_failed`，active 不变         |
-| 支持矩阵回滚判定               | `decideRollback` / `rollbackSlot`          |
-| 不可回滚 → 恢复模式            | `RECOVERY_MODE` + `print_only`/`read_only` |
-| anti-rollback                  | `minSecureVersion` 门槛                    |
-
-```bash
-pnpm --filter @laundry/edge-agent test   # 含 upgrade 场景
-```
-
-## M1 范围说明
-
-- 完整性：SHA-256 自证（生产将换非对称签名 + 证书钉扎）
-- SPA：占位离线工作台，非业务页
-- D5：状态机骨架已落地；打包双槽与签名更新包仍属 M2
-- 未做：配对/签名（D2）、SQLCipher 队列（D3）、打印（D4）——等 A4 契约
+- ✅ D1 壳 + 单实例 + 托盘 + 健康/升级 IPC
+- ✅ D5 A/B 状态机骨架
+- ✅ 打印 mock spool（本地状态，非实机）
+- ⏳ D2 配对签名 / D3 SQLCipher / D4 真打印回执 → **等 A4**

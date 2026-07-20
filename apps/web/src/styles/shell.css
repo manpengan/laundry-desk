@@ -1,0 +1,144 @@
+/* Counter shell layout (UI spec §3). Uses --lg-* tokens from @laundry/ui. */
+
+.ld-shell {
+  display: flex;
+  min-height: 100vh;
+  background: var(--lg-bg);
+  color: var(--lg-ink);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.ld-shell-sidebar {
+  width: 64px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 8px;
+  background: var(--lg-glass);
+  border-right: 1px solid var(--lg-hair);
+  backdrop-filter: blur(16px);
+}
+
+.ld-shell-sidebar--open {
+  width: 208px;
+}
+
+.ld-shell-sidebar__toggle {
+  border: 0;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-leaf);
+  color: var(--lg-ink2);
+  padding: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ld-shell-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ld-shell-navitem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--lg-radius-md);
+  background: transparent;
+  color: var(--lg-ink);
+  padding: 8px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ld-shell-navitem:hover {
+  background: var(--lg-leaf-hover);
+}
+
+.ld-shell-navitem--active {
+  background: var(--lg-accent-soft);
+  color: var(--lg-accent);
+  font-weight: 600;
+}
+
+.ld-shell-navitem__icon {
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.ld-shell-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ld-shell-topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 56px;
+  padding: 8px 20px;
+  background: var(--lg-surface);
+  border-bottom: 1px solid var(--lg-hair);
+  backdrop-filter: blur(12px);
+}
+
+.ld-shell-topbar__store {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+}
+
+.ld-shell-topbar__staff {
+  font-size: 12px;
+  color: var(--lg-ink2);
+}
+
+.ld-shell-topbar__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  font-size: 14px;
+}
+
+.ld-shell-topbar__actions {
+  margin-left: auto;
+}
+
+.ld-shell-main {
+  margin: 20px;
+  padding: 20px;
+  border-radius: var(--lg-radius-lg);
+  background: var(--lg-glass-hi);
+  box-shadow: var(--lg-shadow-sm);
+}
+
+.ld-shell-main__title {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.ld-shell-main__hint {
+  margin: 0 0 20px;
+  color: var(--lg-ink2);
+  font-size: 14px;
+}
+
+.ld-shell-demo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.ld-shell-demo-label {
+  font-size: 12px;
+  color: var(--lg-ink3);
+  margin-bottom: 6px;
+}

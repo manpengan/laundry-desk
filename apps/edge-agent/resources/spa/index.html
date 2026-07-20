@@ -56,7 +56,11 @@
         <p><span class="badge">离线工作台</span></p>
         <p>本页由安装包内置静态资产经 <code>app://</code> 加载。断电重启 + 断网应仍能进入本页。</p>
         <p>安全基线：nodeIntegration=false / contextIsolation / sandbox / webSecurity。</p>
-        <button type="button" id="btn">探测 edgeBridge.ping()</button>
+        <p class="actions">
+          <button type="button" id="btn">ping</button>
+          <button type="button" id="btn-health">health / upgrade / connection</button>
+          <button type="button" id="btn-print">mock print enqueue</button>
+        </p>
         <pre id="out">尚未调用</pre>
       </div>
     </main>
