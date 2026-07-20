@@ -26,3 +26,27 @@ export {
   spaRootFromPackageRoot,
 } from "./lib/paths.js";
 export { createAppProtocolHandler } from "./protocol.js";
+export {
+  appendHistory,
+  canRestoreSnapshot,
+  compareVersion,
+  createInitialState,
+  decideRollback,
+  DEFAULT_MIN_SECURE_VERSION,
+  healthFromPassFail,
+  installStandby,
+  isBelowMinSecure,
+  isHealthPassing,
+  rollbackSlot,
+  snapshotId,
+  standbySlot,
+} from "./upgrade/index.js";
+export type {
+  HealthReport,
+  InstallInput,
+  InstallResult,
+  RollbackInput,
+  RollbackResult,
+  SupportMatrix,
+  UpgradeState,
+} from "./upgrade/index.js";
