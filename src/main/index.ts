@@ -38,29 +38,43 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(async () => {
-  electronApp.setAppUserModelId("com.laundry-desk");
-  registerMediaProtocol();
-  registerAllChannels();
-  bindElectronIpc();
-
-  try {
-    await SettingsService.initDefaults();
-    BackupService.initAutoBackup();
-  } catch (error) {
-    console.error("[Main] initialization failed:", error);
-  }
-
-  createWindow();
-
-  app.on("browser-window-created", (_, window) => {
-    optimizer.watchWindowShortcuts(window);
+// 单实例锁：第二个实例直接退出并聚焦已有窗口，避免多开争抢 SQLite 与打印设备
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
   });
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  app.whenReady().then(async () => {
+    electronApp.setAppUserModelId("com.laundry-desk");
+    registerMediaProtocol();
+    registerAllChannels();
+    bindElectronIpc();
+
+    try {
+      await SettingsService.initDefaults();
+      BackupService.initAutoBackup();
+    } catch (error) {
+      console.error("[Main] initialization failed:", error);
+    }
+
+    createWindow();
+
+    app.on("browser-window-created", (_, window) => {
+      optimizer.watchWindowShortcuts(window);
+    });
+
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
   });
-});
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

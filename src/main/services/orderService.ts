@@ -4,6 +4,7 @@ import { type CreateOrderInput, type PickupInput } from "../../shared/schemas";
 import { AuditService } from "./auditService";
 import { PickupCodeService } from "./pickupCodeService";
 import { PhotoService } from "./photoService";
+import { AppError } from "@shared/index";
 
 export interface OrderSearchResult {
   id: number;
@@ -15,12 +16,6 @@ export interface OrderSearchResult {
   receiveDate: Date;
   customerName: string;
   customerPhone: string;
-}
-
-interface ChartPoint {
-  date: string;
-  count: number;
-  income: number;
 }
 
 export class OrderService {
@@ -42,7 +37,7 @@ export class OrderService {
     const nextNum = lastOrder ? Number(lastOrder.orderNo.split("-")[1]) + 1 : 1;
 
     if (nextNum > 9999) {
-      throw new Error("今日订单号已达到 9999 上限");
+      throw new AppError("INTERNAL_ERROR", "今日订单号已达到 9999 上限");
     }
 
     return `${formatLocalDate(now)}-${nextNum.toString().padStart(4, "0")}`;
@@ -51,10 +46,10 @@ export class OrderService {
   static createOrder(data: CreateOrderInput, db = getDb()) {
     const totalAmount = calculateTotal(data.items);
     if (totalAmount !== data.totalAmount) {
-      throw new Error("订单总额与明细小计不一致");
+      throw new AppError("VALIDATION_FAILED", "订单总额与明细小计不一致");
     }
     if (data.paidAmount > data.totalAmount) {
-      throw new Error("实收金额不能超过订单总额");
+      throw new AppError("VALIDATION_FAILED", "实收金额不能超过订单总额");
     }
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -142,7 +137,7 @@ export class OrderService {
       }
     }
 
-    throw new Error("订单创建失败，请重试");
+    throw new AppError("INTERNAL_ERROR", "订单创建失败，请重试");
   }
 
   static async findAll(
@@ -209,151 +204,6 @@ export class OrderService {
       .all();
   }
 
-  static async getReport(
-    params: { type: "daily" | "monthly" },
-    db: DbExecutor = getDb(),
-  ): Promise<ChartPoint[]> {
-    const today = startOfDay(new Date());
-    const result: ChartPoint[] = [];
-
-    if (params.type === "daily") {
-      const startDate = new Date(today);
-      startDate.setDate(startDate.getDate() - 29);
-      const endDate = new Date(today);
-      endDate.setDate(endDate.getDate() + 1);
-
-      const rows = db
-        .select({
-          dateStr: sql<string>`strftime('%Y-%m-%d', datetime(${schema.orders.receiveDate}, 'unixepoch', 'localtime'))`,
-          count: sql<number>`count(*)`,
-          income: sql<number>`sum(${schema.orders.paidAmount})`,
-        })
-        .from(schema.orders)
-        .where(
-          and(
-            gte(schema.orders.receiveDate, startDate),
-            lt(schema.orders.receiveDate, endDate),
-          ),
-        )
-        .groupBy(
-          sql`strftime('%Y-%m-%d', datetime(${schema.orders.receiveDate}, 'unixepoch', 'localtime'))`,
-        )
-        .all();
-
-      const rowMap = new Map<string, { count: number; income: number }>();
-      rows.forEach((row) => {
-        rowMap.set(row.dateStr, {
-          count: row.count,
-          income: (row.income ?? 0) / 100,
-        });
-      });
-
-      for (let i = 29; i >= 0; i -= 1) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        const k = formatLocalDateStr(d);
-        const val = rowMap.get(k) || { count: 0, income: 0 };
-        result.push({
-          date: d.toLocaleDateString("zh-CN", {
-            month: "short",
-            day: "numeric",
-          }),
-          count: val.count,
-          income: val.income,
-        });
-      }
-    } else {
-      const startDate = new Date(today.getFullYear(), today.getMonth() - 11, 1);
-      const endDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-
-      const rows = db
-        .select({
-          dateStr: sql<string>`strftime('%Y-%m', datetime(${schema.orders.receiveDate}, 'unixepoch', 'localtime'))`,
-          count: sql<number>`count(*)`,
-          income: sql<number>`sum(${schema.orders.paidAmount})`,
-        })
-        .from(schema.orders)
-        .where(
-          and(
-            gte(schema.orders.receiveDate, startDate),
-            lt(schema.orders.receiveDate, endDate),
-          ),
-        )
-        .groupBy(
-          sql`strftime('%Y-%m', datetime(${schema.orders.receiveDate}, 'unixepoch', 'localtime'))`,
-        )
-        .all();
-
-      const rowMap = new Map<string, { count: number; income: number }>();
-      rows.forEach((row) => {
-        rowMap.set(row.dateStr, {
-          count: row.count,
-          income: (row.income ?? 0) / 100,
-        });
-      });
-
-      for (let i = 11; i >= 0; i -= 1) {
-        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-        const k = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, "0")}`;
-        const val = rowMap.get(k) || { count: 0, income: 0 };
-        result.push({
-          date: d.toLocaleDateString("zh-CN", {
-            year: "numeric",
-            month: "short",
-          }),
-          count: val.count,
-          income: val.income,
-        });
-      }
-    }
-
-    return result;
-  }
-
-  static async getStats(db: DbExecutor = getDb()) {
-    const today = startOfDay(new Date());
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const todayOrders = await db.query.orders.findMany({
-      where: gte(schema.orders.receiveDate, today),
-    });
-    const monthOrders = await db.query.orders.findMany({
-      where: gte(schema.orders.receiveDate, monthStart),
-    });
-    const pendingOrders = await db.query.orders.findMany({
-      where: inArray(schema.orders.status, ["pending", "ready"]),
-    });
-
-    const dailyReport = await this.getReport({ type: "daily" }, db);
-    const chartData = dailyReport.slice(-7);
-
-    return {
-      todayIncome: todayOrders.reduce(
-        (sum, order) => sum + order.paidAmount,
-        0,
-      ),
-      monthIncome: monthOrders.reduce(
-        (sum, order) => sum + order.paidAmount,
-        0,
-      ),
-      todayCount: todayOrders.length,
-      monthCount: monthOrders.length,
-      pendingCount: pendingOrders.length,
-      overdueCount: pendingOrders.filter(
-        (order) =>
-          order.expectedPickupDate !== null && order.expectedPickupDate < today,
-      ).length,
-      dueTodayCount: pendingOrders.filter(
-        (order) =>
-          order.expectedPickupDate !== null &&
-          order.expectedPickupDate >= today &&
-          order.expectedPickupDate < tomorrow,
-      ).length,
-      chartData,
-    };
-  }
-
   static pickup(input: PickupInput, db = getDb()) {
     return db.transaction((tx) => {
       const order = tx
@@ -361,17 +211,19 @@ export class OrderService {
         .from(schema.orders)
         .where(eq(schema.orders.id, input.orderId))
         .get();
-      if (!order) throw new Error("订单不存在");
-      if (order.status === "picked_up") throw new Error("订单已取件");
-      if (order.status === "cancelled") throw new Error("订单已取消");
+      if (!order) throw new AppError("NOT_FOUND", "订单不存在");
+      if (order.status === "picked_up")
+        throw new AppError("CONFLICT", "订单已取件");
+      if (order.status === "cancelled")
+        throw new AppError("CONFLICT", "订单已取消");
 
       const paidExtra = input.paidAmount ?? 0;
       const nextPaidAmount = order.paidAmount + paidExtra;
       if (nextPaidAmount > order.totalAmount) {
-        throw new Error("实收金额不能超过订单总额");
+        throw new AppError("VALIDATION_FAILED", "实收金额不能超过订单总额");
       }
       if (nextPaidAmount < order.totalAmount) {
-        throw new Error("订单仍有欠款，需结清后取件");
+        throw new AppError("VALIDATION_FAILED", "订单仍有欠款，需结清后取件");
       }
 
       const updated = tx
@@ -437,11 +289,4 @@ function isUniqueConstraintError(error: unknown): boolean {
   return (
     error instanceof Error && error.message.includes("UNIQUE constraint failed")
   );
-}
-
-function formatLocalDateStr(date: Date): string {
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, "0");
-  const day = date.getDate().toString().padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }

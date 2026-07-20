@@ -1,0 +1,16 @@
+name: laundry-m0-1-rls
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: laundry_rls_spike
+      POSTGRES_PASSWORD: ${RLS_DB_PASSWORD:?set RLS_DB_PASSWORD}
+      POSTGRES_USER: postgres
+    ports:
+      - "127.0.0.1:${RLS_DB_PORT:-55431}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d laundry_rls_spike"]
+      interval: 1s
+      timeout: 3s
+      retries: 30

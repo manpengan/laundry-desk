@@ -8,6 +8,7 @@ import {
   SearchOrdersSchema,
 } from "../../shared/schemas";
 import { OrderService } from "../services/orderService";
+import { ReportService } from "../services/reportService";
 import { registerIpcHandler } from "./helpers";
 
 export function registerOrderIpc(): void {
@@ -21,10 +22,10 @@ export function registerOrderIpc(): void {
     OrderService.findById(id),
   );
   registerIpcHandler("orders:getStats", z.undefined(), () =>
-    OrderService.getStats(),
+    ReportService.getStats(),
   );
   registerIpcHandler("orders:getReport", ReportInputSchema, (input) =>
-    OrderService.getReport(input),
+    ReportService.getReport(input),
   );
   registerIpcHandler("orders:pickup", PickupSchema, (input) =>
     OrderService.pickup(input),

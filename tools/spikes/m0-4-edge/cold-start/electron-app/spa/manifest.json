@@ -1,0 +1,5 @@
+{
+  "version": "0.1.0-spike",
+  "indexSha256": "4794ae28fc7bef689b4b39f9d2dfd3b222c169ef3af9db987e936c6db59ba689",
+  "note": "Stand-in for signed SPA package; production uses detached signature + cert pin."
+}

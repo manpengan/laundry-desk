@@ -1,4 +1,4 @@
-import { GoogleGenAI, Content, Part } from '@google/genai';
+import { GoogleGenAI, Content, Part, ToolListUnion, FunctionDeclaration } from '@google/genai';
 import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart, LlmResponse, TextPart } from './types';
 
 export class GeminiAdapter implements LlmAdapter {
@@ -51,14 +51,15 @@ export class GeminiAdapter implements LlmAdapter {
     });
   }
 
-  private mapTools(tools: ToolDefinition[]) {
+  private mapTools(tools: ToolDefinition[]): ToolListUnion {
     if (tools.length === 0) return [];
     return [
       {
         functionDeclarations: tools.map((t) => ({
           name: t.name,
           description: t.description,
-          parameters: t.input_schema,
+          // JSON Schema 与 SDK Schema 结构等价但标称类型不同，显式转换
+          parameters: t.input_schema as unknown as FunctionDeclaration['parameters'],
         })),
       },
     ];

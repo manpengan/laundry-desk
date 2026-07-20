@@ -117,3 +117,85 @@
 ✔ Postgres container is HEALTHY.
 Waiting for Mock Edge Server container to become healthy...
 Waiting for Mock Edge Server container to become healthy...
+Waiting for Mock Edge Server container to become healthy...
+✔ Mock Edge Server container is HEALTHY.
+✔ Mock Cloud Server container is HEALTHY.
+
+=== [M0-6 Spike] 3. Starting HTTP API Round-Trip & Security Boundary Tests ===
+
+[Step A] Creating order (Order: ord_1001, Tenant: org_aaa/store_1)...
+{
+   "message" : "Order created successfully under RLS context",
+   "success" : true
+}
+✔ [PASS] Step A (Create order) succeeded.
+
+[Step B] Fetching & Printing Receipt (Order: ord_1001, Tenant: org_aaa/store_1)...
+{
+   "receipt" : "\n========================================\n       MOCK LAUNDRY RECEIPT (EDGE)\n========================================\nTenant Org  : org_aaa\nStore ID    : store_1\nOrder ID    : ord_1001\nCustomer    : 张三\nDate        : Mon Jul 20 2026 01:23:07 GMT+0000 (Coordinated Universal Time)\n----------------------------------------\nOrder Lines :\n - Line ID: line_1, Price: ¥29.00\n----------------------------------------\nGarment Items :\n - Barcode: BC_0001, Status: received\n========================================\n",
+   "success" : true
+}
+✔ [PASS] Step B (Print receipt) succeeded.
+
+[Step C - SECURITY] Attempting unauthorized pickup using Tenant B context...
+✔ [PASS] Security Isolation Working! Server blocked unauthorized request with status 404 (Not Found or RLS violation).
+
+[Step D] Performing legitimate pickup using Tenant A context...
+{
+   "success" : true,
+   "updated_garment" : {
+      "barcode" : "BC_0001",
+      "id" : "garm_1",
+      "order_id" : "ord_1001",
+      "order_line_id" : "line_1",
+      "org_id" : "org_aaa",
+      "status" : "picked_up",
+      "store_id" : "store_1"
+   }
+}
+✔ [PASS] Step D (Legitimate pickup) succeeded.
+
+=== [M0-6 Spike] 4. Running Database Constraint and internal RLS Validation ===
+Running Test 1: default-closed behavior without session variables...
+ count 
+-------
+     0
+(1 row)
+
+Running Test 2: reading data inside legitimate session...
+BEGIN
+SET
+SET
+    id    | customer_name 
+----------+---------------
+ ord_1001 | 张三
+(1 row)
+
+COMMIT
+Running Test 3: checking multi-tenant isolation under tenant org_bbb...
+BEGIN
+SET
+SET
+ count 
+-------
+     0
+(1 row)
+
+COMMIT
+Running Test 4: checking cross-order foreign key constraint breach prevention...
+BEGIN
+SET
+SET
+INSERT 0 1
+INSERT 0 1
+COMMIT
+
+[Test 4 Constraint Action] Attempting to insert a garment with mismatched order_id and order_line_id...
+BEGIN
+SET
+SET
+ERROR:  insert or update on table "garments" violates foreign key constraint "garments_org_id_store_id_order_id_order_line_id_fkey"
+DETAIL:  Key is not present in table "order_lines".
+✔ [PASS] 四元外键真实生效：跨订单挂靠被 FK 拦截。
+
+=== [M0-6 Spike] All Smoke Tests Completed successfully ===

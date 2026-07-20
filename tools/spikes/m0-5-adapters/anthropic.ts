@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart, LlmResponse } from './types';
+import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart, TextPart, LlmResponse } from './types';
 
 export class AnthropicAdapter implements LlmAdapter {
   name = 'anthropic';
