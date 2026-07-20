@@ -45,6 +45,17 @@ export const ThresholdsSchema = z
     max_amount_cents: PositiveSafeIntegerSchema.optional(),
   })
   .strict()
+  .superRefine((thresholds, context) => {
+    (["max_batch", "max_amount_cents"] as const).forEach((dimension) => {
+      if (Object.hasOwn(thresholds, dimension) && thresholds[dimension] === undefined) {
+        context.addIssue({
+          code: "custom",
+          message: "Threshold values may not be explicitly undefined",
+          path: [dimension],
+        });
+      }
+    });
+  })
   .refine(
     (thresholds) => thresholds.max_batch !== undefined || thresholds.max_amount_cents !== undefined,
     { message: "A threshold group must declare batch or amount" },

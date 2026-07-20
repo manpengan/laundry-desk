@@ -27,6 +27,7 @@ export {
   DataClassificationSchema,
   InputRedactionRuleSchema,
   OfflineModeSchema,
+  PII_QUERY_MAX_RESULT_ROWS,
   QueryDataClassificationSchema,
   QueryMetadataSchema,
   QueryRiskSchema,
@@ -49,6 +50,7 @@ export {
   defineQuery,
   isAiProjectableDefinition,
   isContractDefinition,
+  parseContractInput,
 } from "./registry/definitions.js";
 export type {
   AiProjectableDefinition,

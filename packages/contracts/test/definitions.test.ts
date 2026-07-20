@@ -6,9 +6,14 @@ import {
   defineQuery,
   isAiProjectableDefinition,
   isContractDefinition,
+  parseContractInput,
 } from "../src/index.js";
 
-const commandInput = z.strictObject({ orderId: z.string().uuid() });
+const commandInput = z.strictObject({
+  orderId: z.string().uuid(),
+  order_ids: z.array(z.string().uuid()),
+  amount_cents: z.number().int(),
+});
 
 const validCommand = {
   name: "orders.cancel",
@@ -104,6 +109,16 @@ describe("strict definition input boundary", () => {
   };
 
   it.each([
+    ["command", validCommand, (candidate: never) => defineCommand(candidate)],
+    ["query", validQuery, (candidate: never) => defineQuery(candidate)],
+  ] as const)("rejects a %s definition missing input", (_kind, definition, factory) => {
+    const candidate: Record<string, unknown> = { ...definition };
+    delete candidate.input;
+
+    expect(() => factory(candidate as never)).toThrow(ZodError);
+  });
+
+  it.each([
     ["z.any", z.any()],
     ["z.unknown", z.unknown()],
     ["array", z.array(z.string())],
@@ -126,13 +141,30 @@ describe("strict definition input boundary", () => {
   });
 
   it.each([
+    ["nested z.any", z.strictObject({ payload: z.object({ value: z.any() }).strict() })],
+    ["nested z.unknown", z.strictObject({ payload: z.array(z.unknown()) })],
+    ["nested lazy any", z.strictObject({ payload: z.lazy(() => z.any()) })],
+    ["standalone custom", z.strictObject({ payload: z.custom() })],
+    ["standalone transform", z.strictObject({ payload: z.transform((value) => value) })],
+    ["custom pipe output", z.strictObject({ payload: z.string().pipe(z.custom()) })],
+    ["nested default-strip object", z.strictObject({ payload: z.object({ value: z.string() }) })],
+    [
+      "nested passthrough object",
+      z.strictObject({ payload: z.object({ value: z.string() }).passthrough() }),
+    ],
+  ])("rejects %s in a contract input graph", (_label, input) => {
+    expectInputIssue(() => defineCommand({ ...validCommand, input } as never));
+    expectInputIssue(() => defineQuery({ ...validQuery, input } as never));
+  });
+
+  it.each([
     ["command", () => defineCommand(undefined as never)],
     ["query", () => defineQuery(null as never)],
   ])("reports an invalid %s envelope as ZodError", (_kind, operation) => {
     expect(operation).toThrow(ZodError);
   });
 
-  it("uses the input value captured by validation instead of reading a caller getter twice", () => {
+  it("uses the input value captured by validation instead of reading a caller getter twice", async () => {
     const candidate = { ...validCommand };
     let reads = 0;
     Object.defineProperty(candidate, "input", {
@@ -147,39 +179,13 @@ describe("strict definition input boundary", () => {
     const definition = defineCommand(candidate);
 
     expect(reads).toBe(1);
-    expect(definition.input.safeParse({ orderId: crypto.randomUUID() }).success).toBe(true);
-  });
-});
-
-describe("definition input snapshot", () => {
-  it("preserves strictness, refinements, transforms, and public metadata", () => {
-    const input = z
-      .strictObject({ quantity: z.string().transform(Number) })
-      .refine(({ quantity }) => quantity > 0, "quantity must be positive")
-      .meta({ title: "Positive quantity", description: "Decimal quantity string" });
-    const definition = defineCommand({ ...validCommand, input });
-
-    expect(definition.input).not.toBe(input);
-    expect(definition.input.meta()).toEqual(input.meta());
-    expect(definition.input.safeParse({ quantity: "0" }).success).toBe(false);
-    expect(definition.input.safeParse({ quantity: "2" })).toMatchObject({
-      success: true,
-      data: { quantity: 2 },
-    });
-    expect(definition.input.safeParse({ quantity: "2", unknown: true }).success).toBe(false);
-  });
-
-  it("is not changed when the caller replaces the original object shape", () => {
-    const input = z.strictObject({ quantity: z.string().transform(Number) });
-    const definition = defineCommand({ ...validCommand, input });
-
-    expect(Reflect.set(input.shape, "quantity", z.number())).toBe(true);
-
-    expect(input.safeParse({ quantity: "2" }).success).toBe(false);
-    expect(definition.input.safeParse({ quantity: "2" })).toMatchObject({
-      success: true,
-      data: { quantity: 2 },
-    });
+    await expect(
+      parseContractInput(definition, {
+        orderId: crypto.randomUUID(),
+        order_ids: [],
+        amount_cents: 0,
+      }),
+    ).resolves.toBeDefined();
   });
 });
 
@@ -199,6 +205,12 @@ describe("immutable branded definitions", () => {
     const definition = defineCommand({
       ...validCommand,
       invariants,
+      input: z.strictObject({
+        orderId: z.string().uuid(),
+        order_ids: z.array(z.string().uuid()),
+        amount_cents: z.number().int(),
+        pin: z.string(),
+      }),
       input_redaction: [inputRule],
       size_measures: sizeMeasures,
       hard_limits: hardLimits,

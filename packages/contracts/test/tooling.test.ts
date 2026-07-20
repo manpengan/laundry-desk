@@ -55,3 +55,11 @@ it("declares the package-local V8 coverage provider", () => {
 
   expect(packageJson.devDependencies["@vitest/coverage-v8"]).toBeDefined();
 });
+
+it("runs coverage thresholds in the canonical package test gate", () => {
+  const packageJson = z
+    .object({ scripts: z.object({ test: z.string() }) })
+    .parse(readJson("package.json"));
+
+  expect(packageJson.scripts.test).toBe("vitest run --coverage");
+});

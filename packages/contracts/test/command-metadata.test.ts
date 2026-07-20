@@ -32,18 +32,44 @@ describe("command metadata safety fields", () => {
   });
 
   it.each([
+    "kind",
+    "name",
+    "version",
+    "description",
+    "description_llm",
     "risk",
+    "invariants",
     "idempotent",
+    "sideEffects",
     "offline_mode",
     "data_classification",
     "input_redaction",
     "result_redaction",
-    "description_llm",
-  ] as const)("rejects missing %s", (field) => {
+  ])("rejects missing required %s", (field) => {
     const candidate: Record<string, unknown> = { ...validCommand };
     delete candidate[field];
 
     expect(() => CommandMetadataSchema.parse(candidate)).toThrow(ZodError);
+  });
+
+  it.each([
+    ["kind", "query"],
+    ["name", "Orders"],
+    ["version", "1"],
+    ["description", ""],
+    ["description_llm", ""],
+    ["risk", "R6"],
+    ["invariants", ["Orders.exists"]],
+    ["idempotent", "yes"],
+    ["sideEffects", ["orders-status-changed"]],
+    ["offline_mode", "sometimes"],
+    ["data_classification", "classified"],
+    ["input_redaction", [{ path: "bad", strategy: "remove" }]],
+    ["result_redaction", [{ path: "/phone", strategy: "erase" }]],
+  ] as const)("rejects invalid %s", (field, value) => {
+    expect(() => CommandMetadataSchema.parse({ ...validCommand, [field]: value })).toThrow(
+      ZodError,
+    );
   });
 
   it.each(["denied", "grant", "primary_lease"])("accepts offline mode %s", (offline_mode) => {

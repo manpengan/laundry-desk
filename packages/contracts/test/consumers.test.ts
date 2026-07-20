@@ -5,6 +5,7 @@ import {
   defineCommand,
   defineQuery,
   isAiProjectableDefinition,
+  parseContractInput,
   validateStricterLimitOverride,
   type CommandDefinition,
   type ContractDefinition,
@@ -55,10 +56,13 @@ describe("C1 command-bus consumer", () => {
   const execute = <TInput extends z.ZodObject>(
     definition: CommandDefinition<TInput>,
     rawInput: unknown,
-  ): z.output<TInput> => z.parse(definition.input, rawInput);
+  ): Promise<z.output<TInput>> => parseContractInput(definition, rawInput);
 
-  it("validates through the preserved input schema and reads executable bindings", () => {
-    const parsed = execute(command, { order_ids: [crypto.randomUUID()], amount_cents: 1_000 });
+  it("validates through the preserved input schema and reads executable bindings", async () => {
+    const parsed = await execute(command, {
+      order_ids: [crypto.randomUUID()],
+      amount_cents: 1_000,
+    });
 
     expect(parsed.amount_cents).toBe(1_000);
     expect(command.invariants).toEqual(["orders.cancelable"]);

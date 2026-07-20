@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 
-import { QueryMetadataSchema } from "../src/registry/schemas.js";
+import { PII_QUERY_MAX_RESULT_ROWS, QueryMetadataSchema } from "../src/registry/schemas.js";
 
 const validQuery = {
   kind: "query",
@@ -51,6 +51,32 @@ describe("query fail-closed metadata", () => {
       QueryMetadataSchema.parse({ ...validQuery, hard_limits: { max_batch: 10 } }),
     ).toThrow(ZodError);
   });
+
+  it.each(Object.keys(validQuery))("rejects missing required field %s", (field) => {
+    const candidate: Record<string, unknown> = { ...validQuery };
+    delete candidate[field];
+
+    expect(() => QueryMetadataSchema.parse(candidate)).toThrow(ZodError);
+  });
+
+  it.each([
+    ["kind", "command"],
+    ["name", "Orders"],
+    ["version", "1"],
+    ["description", ""],
+    ["description_llm", ""],
+    ["risk", "R3"],
+    ["invariants", ["orders.exists"]],
+    ["idempotent", false],
+    ["sideEffects", ["orders.read"]],
+    ["offline_mode", "grant"],
+    ["data_classification", "secret"],
+    ["input_redaction", [{ path: "bad", strategy: "remove" }]],
+    ["result_redaction", [{ path: "/phone", strategy: "erase" }]],
+    ["max_result_rows", 0],
+  ] as const)("rejects invalid %s", (field, value) => {
+    expect(() => QueryMetadataSchema.parse({ ...validQuery, [field]: value })).toThrow(ZodError);
+  });
 });
 
 describe("PII query constraints", () => {
@@ -63,6 +89,25 @@ describe("PII query constraints", () => {
 
   it("accepts R2 PII with result redaction", () => {
     expect(QueryMetadataSchema.parse(piiQuery).data_classification).toBe("pii");
+  });
+
+  it("caps PII result rows while leaving non-PII queries generally bounded", () => {
+    expect(
+      QueryMetadataSchema.parse({ ...piiQuery, max_result_rows: PII_QUERY_MAX_RESULT_ROWS })
+        .max_result_rows,
+    ).toBe(PII_QUERY_MAX_RESULT_ROWS);
+    expect(() =>
+      QueryMetadataSchema.parse({
+        ...piiQuery,
+        max_result_rows: PII_QUERY_MAX_RESULT_ROWS + 1,
+      }),
+    ).toThrow(ZodError);
+    expect(
+      QueryMetadataSchema.parse({
+        ...validQuery,
+        max_result_rows: PII_QUERY_MAX_RESULT_ROWS + 1,
+      }).max_result_rows,
+    ).toBe(PII_QUERY_MAX_RESULT_ROWS + 1);
   });
 
   it.each([{ risk: "R1" }, { result_redaction: [] }])(

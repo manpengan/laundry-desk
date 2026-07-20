@@ -33,6 +33,9 @@ export const DataClassificationSchema = CommandDataClassificationSchema;
 export const ResultRedactionRuleSchema = RedactionRuleSchema;
 export const InputRedactionRuleSchema = RedactionRuleSchema;
 
+/** A1 fail-closed ceiling for PII query projection and transport. */
+export const PII_QUERY_MAX_RESULT_ROWS = 1_000;
+
 const CommonMetadataShape = {
   /** Architecture §6.5: stable dotted command/query identifier. */
   name: CommandNameSchema,
@@ -172,6 +175,13 @@ export const QueryMetadataSchema = QueryMetadataBaseSchema.superRefine((metadata
       code: "custom",
       message: "PII queries must declare result redaction",
       path: ["result_redaction"],
+    });
+  }
+  if (metadata.max_result_rows > PII_QUERY_MAX_RESULT_ROWS) {
+    context.addIssue({
+      code: "custom",
+      message: `PII queries may return at most ${PII_QUERY_MAX_RESULT_ROWS} rows`,
+      path: ["max_result_rows"],
     });
   }
 });

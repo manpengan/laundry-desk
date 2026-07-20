@@ -32,10 +32,12 @@ Laundry Desk V2 的跨层契约包。A1 只冻结命令/查询定义与注册边
 
 ## 关键安全语义
 
-- 构造器只接受严格 `ZodObject` 根输入，拒绝 `z.any()`、strip/passthrough object 和伪造解析器。
+- 构造器递归检查完整输入图：根与所有嵌套 object 都必须 strict，并拒绝任意层级的 `z.any()`、`z.unknown()` 与伪造解析器。
 - 调用方不得提供 `kind`；无论值是否匹配，都按未知字段拒绝。
-- 脱敏与规模路径使用受限 RFC 6901 JSON Pointer，拒绝根/空键及原型污染段。
-- 工厂返回定义带私有品牌和运行时来源标记；C1 注册前使用 `isContractDefinition()` 校验来源。
+- 脱敏与规模路径使用受限 RFC 6901 JSON Pointer，拒绝根/空键、原型污染段、重复路径与祖先/后代重叠。
+- 工厂返回定义带私有品牌和运行时来源标记；C1 注册前使用 `isContractDefinition()` 校验来源，并且只用异步 `parseContractInput()` 解析原始输入。两者都会复核 canonical schema 完整性；公开 `.shape` 是只读视图，Zod/Standard Schema/core 的直接解析入口均被阻断。调用方必须 `await` canonical parser，不能改用 `z.parse(definition.input, raw)`。
+- 工厂会深克隆调用方提供的 schema 图；注册后对原 schema、共享 child、metadata、Date 或 RegExp 的改写不会改变 canonical 定义。输入图拒绝 `default`、`prefault`、`catch`、非法 Date 阈值及带 `g`/`y` 标志的状态型 RegExp，避免隐式 fallback 与跨解析状态。
+- 自定义 refinement/transform 回调属于同进程可信程序代码，必须是无外部可变状态的纯回调；不可变膜保护的是 schema/metadata 的结构图，不提供闭包沙箱。需要隔离不可信代码时必须放到进程边界之外，不能注册为 A1 schema。
 - C4 投影前必须调用 `isAiProjectableDefinition()`；R5 永远返回 `false`。
 - C5 顺序固定为：求值 `size_measures` → 检查 `hard_limits` → 应用 `risk_escalation`。
 - 非空 `risk_escalation` 只允许基础 R3；并存时按现行 ADR-09 要求升级线不高于硬上限。
@@ -46,6 +48,7 @@ Laundry Desk V2 的跨层契约包。A1 只冻结命令/查询定义与注册边
 ```ts
 // C1：只注册由本包工厂产生的定义。
 if (!isContractDefinition(candidate)) throw new Error("untrusted contract definition");
+const canonicalArgs = await parseContractInput(candidate, rawInput);
 
 // C4：R5 由类型守卫和运行时判定共同排除。
 if (isAiProjectableDefinition(candidate)) projectReadOnlyTool(candidate);
@@ -61,6 +64,13 @@ const limits = validateStricterLimitOverride(
 ```
 
 这些示例只说明编译边界；注册、投影与 Policy 实现分别属于 C1、C4、C5。
+
+`defineCommand()` 会对能够静态解析的 `input_redaction` 与 `size_measures` 路径绑定输入
+schema，并校验规模目标类型。遇到 transform 等无法静态判定的 schema 路径时，C1/C3/C5
+在实际 canonical args 上解析；路径不存在、数组元素/数值类型不符都必须 fail-closed。
+`result_redaction` 在 A1 没有对应 output schema，C1/C3/C4 执行结果脱敏时同样必须把
+missing/type mismatch 当作契约执行失败，禁止跳过规则后继续返回。PII 查询另有
+`max_result_rows <= 1000` 的契约硬上限；组织/预设只能进一步收紧。
 
 > 配对评审待裁决：ADR-09 当前允许升级线等于硬上限，同时要求 C5 先判硬上限；若两种
 > 判定都采用“超出”语义，相等会让 R4 通道不可达。A1 先按权威 ADR 接受相等，Claude

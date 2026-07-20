@@ -154,4 +154,15 @@ describe("stricter per-org overrides", () => {
       }),
     ).toThrow(ZodError);
   });
+
+  it.each(["hard_limits", "risk_escalation"] as const)(
+    "rejects explicit undefined that would delete a factory %s line",
+    (group) => {
+      expect(() =>
+        validateStricterLimitOverride(factory, {
+          [group]: { max_batch: undefined },
+        } as never),
+      ).toThrow(ZodError);
+    },
+  );
 });
