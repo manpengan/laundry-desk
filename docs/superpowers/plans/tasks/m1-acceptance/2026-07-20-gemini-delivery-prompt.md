@@ -39,13 +39,15 @@ format:check && lint && typecheck && test && build 的**串行链**，
 顺带一句：这是本周第二个 AI 栽在同一处（Grok 的 #41 同样卡在
 prettier 第一步）。推送前跑一次 pnpm -w workspace:check，别让 CI 替你发现。
 
-【需要你书面说明的两点（PR 描述里补）】
-1. B3 状态机的**穷举方式**。任务书写明「所有非法转移必须全被拒绝——
-   这是本项的核心价值」。你有 12 个 it 块，请说明是逐条列举还是
-   it.each/循环覆盖全部 status × status 组合，以及组合总数是多少。
-   若不是全组合覆盖，请补到全覆盖。
-2. B1 的**浮点防线**。任务书要求「任何浮点出现即测试失败」。请指出
-   是哪条断言在守这个，并按红线 3 人为破坏一次确认它真会红。
+【原本要问你的两点，我自己查完了——都达标，不用回应】
+1. B3 穷举：达标。status-machine.test.ts:69 与 :118 各有一个
+   exhaustive check，双层 for (const from of ALL_GARMENT_STATUSES)
+   × (const to of ...) 全组合遍历，且 full fulfillment 与 collapsed
+   两种模式各跑一遍；lost 与 picked_up/delivered 三个终态另有单独锁定。
+   任务书要的「所有非法转移必须全被拒绝」是真做到了。
+2. B1 浮点防线：达标，且不止一条。validateCents(29.99) / (0.1) /
+   (NaN)、formatFen(29.5)、addCents(10.5, 20)、yuanToFen('29.999')
+   全部断言 toThrow(TypeError)。
 
 【C7 的问题：你跳了闸，需要一个返工计划】
 C7 platform 在任务书里是【等 contracts@v0.1.0 冻结后】那一栏，依赖
