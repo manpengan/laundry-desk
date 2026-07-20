@@ -14,7 +14,7 @@ import {
   type Code128Options,
 } from "../lib/escpos.ts";
 import { maskPhone } from "../lib/encode.ts";
-import { fenToYuanText } from "../lib/money.ts";
+import { fenToYuanWithSign } from "../lib/money.ts";
 import type { SampleOrder } from "../lib/variables.ts";
 
 export type Xp58BarcodeVariant = {
@@ -59,24 +59,22 @@ export function buildXp58Receipt(
   ];
 
   for (const row of order.lines) {
-    const amount = fenToYuanText(row.unitPriceFen * row.qty);
+    const amount = fenToYuanWithSign(row.unitPriceFen * row.qty);
     parts.push(
-      line(
-        `${row.name} ${row.service} ${row.color} x${row.qty} ¥${amount}`,
-      ),
+      line(`${row.name} ${row.service} ${row.color} x${row.qty} ${amount}`),
     );
   }
 
   parts.push(
     hr(),
     bold(true),
-    line(`合计 ¥${fenToYuanText(order.totalFen)}`),
-    line(`实收 ¥${fenToYuanText(order.paidFen)}  ${order.payMethod}`),
+    line(`合计 ${fenToYuanWithSign(order.totalFen)}`),
+    line(`实收 ${fenToYuanWithSign(order.paidFen)}  ${order.payMethod}`),
     bold(false),
   );
 
   if (order.debtFen > 0) {
-    parts.push(line(`欠款 ¥${fenToYuanText(order.debtFen)}`));
+    parts.push(line(`欠款 ${fenToYuanWithSign(order.debtFen)}`));
   }
 
   parts.push(

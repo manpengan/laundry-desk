@@ -9,7 +9,7 @@ import {
   sizeMm,
   text,
 } from "../lib/tspl.ts";
-import { fenToYuanText } from "../lib/money.ts";
+import { fenToYuanWithSign } from "../lib/money.ts";
 import {
   STICKER_VARS,
   type SampleOrder,
@@ -18,12 +18,12 @@ import {
 
 function stickerValues(order: SampleOrder): Record<StickerVar, string> {
   const debt =
-    order.debtFen > 0 ? `欠¥${fenToYuanText(order.debtFen)}` : "已清";
+    order.debtFen > 0 ? `欠${fenToYuanWithSign(order.debtFen)}` : "已清";
   return {
     名称: order.itemName,
     颜色: order.color,
     服务: order.service,
-    单价: `¥${fenToYuanText(order.unitPriceFen)}`,
+    单价: fenToYuanWithSign(order.unitPriceFen),
     件数: String(order.qty),
     序号: `${order.itemIndex}/${order.itemCount}`,
     挂点: order.hangPoint,

@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { fenToYuanText } from "../lib/money.ts";
+import {
+  fenToYuanText,
+  fenToYuanWithSign,
+  YUAN_SIGN,
+} from "../lib/money.ts";
+import { encodeGbk } from "../lib/encode.ts";
 import {
   WASH_LABEL_VARS,
   STICKER_VARS,
@@ -13,6 +18,7 @@ import {
   encodeCode128Payload,
   estimateCode128Dots,
   barcodeCode128,
+  cutFeedFull,
   XP58_PRINTABLE_DOTS,
 } from "../lib/escpos.ts";
 import { escapeTsplText, text as tsplText } from "../lib/tspl.ts";
@@ -22,7 +28,11 @@ import {
   specialCharsOrder,
 } from "../lib/boundary.ts";
 import { buildXp58Receipt, XP58_BARCODE_VARIANTS } from "../src/xp58-receipt.ts";
-import { buildDl206WashLabel, listWashVarsRendered } from "../src/dl206-wash.ts";
+import {
+  buildDl206WashLabel,
+  buildDl206WashLabelFeedCut,
+  listWashVarsRendered,
+} from "../src/dl206-wash.ts";
 import {
   buildGp3120Sticker,
   buildGp3120StickerCompact,
@@ -40,7 +50,29 @@ describe("money fen", () => {
     assert.equal(fenToYuanText(1), "0.01");
     assert.throws(() => fenToYuanText(1.5));
   });
+
+  it("uses fullwidth ￥ (U+FFE5) not halfwidth ¥", () => {
+    assert.equal(YUAN_SIGN, "\uFFE5");
+    assert.equal(fenToYuanWithSign(6000), "￥60.00");
+    assert.notEqual(YUAN_SIGN, "\u00A5");
+  });
+
+  it("GBK-encodes yuan amount without 0x3F fallback", () => {
+    const gbk = encodeGbk(fenToYuanWithSign(4500));
+    assert.ok(!gbk.includes(0x3f), `unexpected ?: ${gbk.toString("hex")}`);
+    // ￥ in GBK is A3 A4
+    assert.equal(gbk[0], 0xa3);
+    assert.equal(gbk[1], 0xa4);
+  });
 });
+
+/** Halfwidth ¥ under GBK becomes "?" — regression for all three printer builders. */
+function assertNoGbkQuestionMark(buf: Buffer, label: string): void {
+  assert.ok(
+    !buf.includes(0x3f),
+    `${label} contains 0x3F ('?') — likely U+00A5 ¥ or other unmapped char: ${buf.toString("hex").slice(0, 80)}…`,
+  );
+}
 
 describe("CODE128 code-set prefix", () => {
   it("prefixes {B for pure B", () => {
@@ -60,8 +92,8 @@ describe("CODE128 code-set prefix", () => {
   it("BC+w1 estimate fits 58mm printable; pure B+w2 does not", () => {
     const bc = encodeCode128Payload(order.barcode, "BC");
     const b = encodeCode128Payload(order.barcode, "B");
-    const bcW1 = estimateCode128Dots(bc.length, 1);
-    const bW2 = estimateCode128Dots(b.length, 2);
+    const bcW1 = estimateCode128Dots(bc, 1);
+    const bW2 = estimateCode128Dots(b, 2);
     assert.ok(bcW1 <= XP58_PRINTABLE_DOTS, `BC w1 ${bcW1} > ${XP58_PRINTABLE_DOTS}`);
     assert.ok(bW2 > XP58_PRINTABLE_DOTS, `expected B w2 ${bW2} to exceed paper`);
   });
@@ -110,12 +142,31 @@ describe("generators", () => {
     assert.equal(XP58_BARCODE_VARIANTS.length, 4);
   });
 
+  it("amount lines encode without GBK '?' on all three printers", () => {
+    assertNoGbkQuestionMark(buildXp58Receipt(order), "xp58");
+    assertNoGbkQuestionMark(buildDl206WashLabel(order), "dl206");
+    assertNoGbkQuestionMark(buildGp3120Sticker(order), "gp3120-full");
+    assertNoGbkQuestionMark(buildGp3120StickerCompact(order), "gp3120-compact");
+  });
+
   it("renders all wash variables and includes cutter", () => {
     const lines = listWashVarsRendered(order);
     assert.equal(lines.length, WASH_LABEL_VARS.length);
     const buf = buildDl206WashLabel(order);
     const idx = buf.indexOf(Buffer.from([0x1d, 0x56, 0x00]));
     assert.ok(idx >= 0, "expected GS V 0 cutter");
+  });
+
+  it("feed-cut variant ends with GS V 66 n after extra LF feed", () => {
+    const buf = buildDl206WashLabelFeedCut(order);
+    const marker = cutFeedFull(3);
+    assert.ok(buf.includes(marker[0]!) && buf.includes(0x42));
+    const idx = buf.indexOf(marker);
+    assert.ok(idx >= 0, "expected GS V 66 3 at end");
+    // at least 6 LF before cut marker
+    let lf = 0;
+    for (let i = idx - 1; i >= 0 && buf[i] === 0x0a; i -= 1) lf += 1;
+    assert.ok(lf >= 6, `expected feed(6), got ${lf} LF`);
   });
 
   it("fullvars sticker fits raised SIZE 40x90", () => {

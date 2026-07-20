@@ -54,6 +54,15 @@ export function cut(mode: 0 | 1 = 0): Buffer {
   return Buffer.from([GS, 0x56, mode]);
 }
 
+/**
+ * GS V 66 n — feed `n` units then full cut (Epson/Xprinter family).
+ * Use when knife sits past the print head (typically need extra feed).
+ */
+export function cutFeedFull(units = 3): Buffer {
+  const n = Math.min(255, Math.max(0, units));
+  return Buffer.from([GS, 0x56, 66, n]);
+}
+
 /** Alternate cutters used by some DASCOM firmwares. */
 export function cutEscI(): Buffer {
   return Buffer.from([ESC, 0x69]);
@@ -118,15 +127,52 @@ export function encodeCode128Payload(
 }
 
 /**
- * Rough symbol width in dots for field planning (not firmware-exact).
- * CODE128: quiet + start + symbols*11 + check + stop, module = GS w n.
+ * Count CODE128 symbols in a GS k 73 payload (with {A/{B/{C/{S escapes).
+ * `{X` code-set selectors count as 1 symbol; CODE C digit pairs as 1.
+ */
+export function countCode128Symbols(payload: Buffer): number {
+  const s = payload.toString("ascii");
+  let i = 0;
+  let symbols = 0;
+  let codeSet: "A" | "B" | "C" = "B";
+  while (i < s.length) {
+    if (s[i] === "{" && i + 1 < s.length && "ABCS".includes(s[i + 1]!)) {
+      const tag = s[i + 1]!;
+      if (tag === "A" || tag === "B" || tag === "C") {
+        codeSet = tag;
+      }
+      symbols += 1;
+      i += 2;
+      continue;
+    }
+    if (codeSet === "C") {
+      if (i + 1 < s.length && /\d/.test(s[i]!) && /\d/.test(s[i + 1]!)) {
+        symbols += 1;
+        i += 2;
+        continue;
+      }
+      // odd trailing digit falls back to one symbol
+      symbols += 1;
+      i += 1;
+      continue;
+    }
+    symbols += 1;
+    i += 1;
+  }
+  return symbols;
+}
+
+/**
+ * Rough printed width in dots (moduleWidth = GS w n).
+ * Formula: start(11) + n*11 + check(11) + stop(13) + quiet 10×2 = 11n + 55.
+ * `payload` is the GS k body including `{B`/`{C` prefixes.
  */
 export function estimateCode128Dots(
-  payloadAsciiLen: number,
+  payload: Buffer,
   moduleWidth: number,
 ): number {
-  const symbols = payloadAsciiLen; // each payload byte ≈ one symbol after set codes
-  const modules = 10 + symbols * 11 + 13; // quiet-ish + body + stop
+  const n = countCode128Symbols(payload);
+  const modules = 11 * n + 55;
   return modules * moduleWidth;
 }
 

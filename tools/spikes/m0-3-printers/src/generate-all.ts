@@ -21,6 +21,7 @@ import {
 import {
   buildDl206WashLabel,
   buildDl206WashLabelEscI,
+  buildDl206WashLabelFeedCut,
   listWashVarsRendered,
 } from "./dl206-wash.ts";
 import {
@@ -71,11 +72,13 @@ function main(): void {
 
   writeBin("dl206-wash-fullvars.bin", buildDl206WashLabel(order));
   writeBin("dl206-wash-cut-esc-i.bin", buildDl206WashLabelEscI(order));
+  writeBin("dl206-wash-cut-feed.bin", buildDl206WashLabelFeedCut(order));
   writeBin("gp3120-sticker-fullvars.bin", buildGp3120Sticker(order));
   writeBin("gp3120-sticker-compact.bin", buildGp3120StickerCompact(order));
   files.push(
     "dl206-wash-fullvars.bin",
     "dl206-wash-cut-esc-i.bin",
+    "dl206-wash-cut-feed.bin",
     "gp3120-sticker-fullvars.bin",
     "gp3120-sticker-compact.bin",
   );
@@ -104,9 +107,10 @@ function main(): void {
     [
       `# barcode=${order.barcode}`,
       `# XP-58 printable dots ≈ ${XP58_PRINTABLE_DOTS}`,
-      `BC payload=${payloadBc.toString("ascii")} len=${payloadBc.length} est@w1=${estimateCode128Dots(payloadBc.length, 1)} est@w2=${estimateCode128Dots(payloadBc.length, 2)}`,
-      `B  payload=${payloadB.toString("ascii")} len=${payloadB.length} est@w1=${estimateCode128Dots(payloadB.length, 1)} est@w2=${estimateCode128Dots(payloadB.length, 2)}`,
-      `# Pure B @ GS w 2 historically ~422 dots > 384 → will clip; prefer BC+w1 or B+w1`,
+      `# estimate = (11*symbols + 55) * moduleWidth; {B/{C count as 1 symbol each`,
+      `BC payload=${payloadBc.toString("ascii")} est@w1=${estimateCode128Dots(payloadBc, 1)} est@w2=${estimateCode128Dots(payloadBc, 2)}`,
+      `B  payload=${payloadB.toString("ascii")} est@w1=${estimateCode128Dots(payloadB, 1)} est@w2=${estimateCode128Dots(payloadB, 2)}`,
+      `# Pure B @ GS w 2 exceeds 384 → will clip; prefer BC+w1 or B+w1`,
     ].join("\n"),
   );
 

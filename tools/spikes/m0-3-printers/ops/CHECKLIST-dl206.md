@@ -1,7 +1,9 @@
 # 现场清单 · DASCOM DL-206 水洗唛（含切刀）
 
 操作人：manpengan　主样张：`out/dl206-wash-fullvars.bin`  
-切刀备选：`out/dl206-wash-cut-esc-i.bin`
+切刀备选：
+- `out/dl206-wash-cut-esc-i.bin`（`ESC i`）
+- `out/dl206-wash-cut-feed.bin`（`feed(6)` + `GS V 66 n` 走纸到切刀位再全切）
 
 ## 红线（回传前必读）
 
@@ -16,14 +18,16 @@
 
 ## 发送顺序
 
-1. 先打 `dl206-wash-fullvars.bin`（含 `GS V 0` 全切）。
-2. 若只出纸不切 → 再打 `dl206-wash-cut-esc-i.bin`（`ESC i`）。
-3. 仍不切 → 记录固件版本，试 `ESC m`（需改生成器后重打）。
+1. 先打 `dl206-wash-fullvars.bin`（短 feed + `GS V 0` 全切）。
+2. 若**切进内容**（切口在字上）→ 打 `dl206-wash-cut-feed.bin`（加长走纸 + `GS V 66 n`）。
+3. 若只出纸**不切** → 再打 `dl206-wash-cut-esc-i.bin`（`ESC i`）。
+4. 仍不切 → 记录固件版本，试 `ESC m`（需改生成器后重打）。
 
 ```powershell
 npm run generate
 # 首选 Node（PS 5.1 -Port 不可靠）
 node send/send-raw.mjs --file out/dl206-wash-fullvars.bin --target COM4
+node send/send-raw.mjs --file out/dl206-wash-cut-feed.bin --target COM4
 node send/send-raw.mjs --file out/dl206-wash-cut-esc-i.bin --target COM4
 # 或共享名
 powershell -File .\send\send-windows.ps1 -File .\out\dl206-wash-fullvars.bin -PrinterName "DL-206"
@@ -46,8 +50,9 @@ powershell -File .\send\send-windows.ps1 -File .\out\dl206-wash-fullvars.bin -Pr
 
 ## 切刀结论（必填）
 
-- 生效指令字节：________（例：`1D 56 00` 或 `1B 69`）
-- 切前是否需要额外 feed：________
+- 生效文件：fullvars / cut-feed / cut-esc-i / 其他：________
+- 生效指令字节：________（例：`1D 56 00` / `1D 56 42 03` / `1B 69`）
+- 切前是否需要额外 feed：________（cut-feed 已预置 feed(6)+GS V 66）
 - 固件/驱动版本：________
 
 ## 已知坑（回填）
