@@ -1,0 +1,101 @@
+==================================================
+Starting M0-5 Spike Test for Adapter: [ANTHROPIC]
+==================================================
+[Step 1] Sending initial prompt. Watching streamed events...
+[Anthropic Mock Stream] [MOCK_MODE] Starting stream simulation...
+[Anthropic Mock] [MOCK_MODE] 正在执行：
+[Stream Event] Tool Use Delta: get_weather (id: call_ant_1) input: {"city": "上海"}
+
+[Stream Event] Tool Use Delta: get_store_stats (id: call_ant_2) input: {"store_id": "store_123", "metrics": ["revenue", "order_count"]}
+
+[Step 1 Complete] Stream finished.
+Assistant requested 2 tool calls.
+[Zod Gate] Validating inputs for tool 'get_weather' via Zod schema...
+[Tool Runner] Executing tool 'get_weather' with validated args: { city: '上海' }
+[Zod Gate] Validating inputs for tool 'get_store_stats' via Zod schema...
+[Tool Runner] Executing tool 'get_store_stats' with validated args: { store_id: 'store_123', metrics: [ 'revenue', 'order_count' ] }
+
+[Step 2] Sending Tool Results to get final JSON summary...
+[Anthropic Mock Stream] [MOCK_MODE] Starting stream simulation...
+{
+  "weather_summary": "上海天气晴朗，气温 25 度。",
+  "store_metrics": {
+    "revenue": 500000,
+    "order_count": 120
+  }
+}
+[Step 2 Complete] Final output stream finished.
+
+[Step 3] Performing strict JSON validation on final output...
+✔ JSON Verification Success! Parsed object: {
+  weather_summary: '上海天气晴朗，气温 25 度。',
+  store_metrics: { revenue: 500000, order_count: 120 }
+}
+
+==================================================
+Starting M0-5 Spike Test for Adapter: [OPENAI-COMPAT]
+==================================================
+[Step 1] Sending initial prompt. Watching streamed events...
+[OpenAI Mock Stream] [MOCK_MODE] Starting stream simulation...
+[OpenAI Mock] [MOCK_MODE] 正在执行：
+[Stream Event] Tool Use Delta: get_weather (id: call_openai_1) input: {"city": "北京"}
+
+[Stream Event] Tool Use Delta: get_store_stats (id: call_openai_2) input: {"store_id": "store_123", "metrics": ["revenue", "order_count"]}
+
+[Step 1 Complete] Stream finished.
+Assistant requested 2 tool calls.
+[Zod Gate] Validating inputs for tool 'get_weather' via Zod schema...
+[Tool Runner] Executing tool 'get_weather' with validated args: { city: '北京' }
+[Zod Gate] Validating inputs for tool 'get_store_stats' via Zod schema...
+[Tool Runner] Executing tool 'get_store_stats' with validated args: { store_id: 'store_123', metrics: [ 'revenue', 'order_count' ] }
+
+[Step 2] Sending Tool Results to get final JSON summary...
+[OpenAI Mock Stream] [MOCK_MODE] Starting stream simulation...
+{
+  "weather_summary": "北京天气晴朗，气温 25 度。",
+  "store_metrics": {
+    "revenue": 500000,
+    "order_count": 120
+  }
+}
+[Step 2 Complete] Final output stream finished.
+
+[Step 3] Performing strict JSON validation on final output...
+✔ JSON Verification Success! Parsed object: {
+  weather_summary: '北京天气晴朗，气温 25 度。',
+  store_metrics: { revenue: 500000, order_count: 120 }
+}
+
+==================================================
+Starting M0-5 Spike Test for Adapter: [GEMINI]
+==================================================
+[Step 1] Sending initial prompt. Watching streamed events...
+[Gemini Mock Stream] [MOCK_MODE] Starting stream simulation...
+[Gemini Mock] [MOCK_MODE] 正在调取数据：
+[Stream Event] Tool Use Delta: get_weather (id: call_gemini_1) input: {"city": "广州"}
+
+[Stream Event] Tool Use Delta: get_store_stats (id: call_gemini_2) input: {"store_id": "store_123", "metrics": ["revenue", "order_count"]}
+
+[Step 1 Complete] Stream finished.
+Assistant requested 2 tool calls.
+[Zod Gate] Validating inputs for tool 'get_weather' via Zod schema...
+[Tool Runner] Executing tool 'get_weather' with validated args: { city: '广州' }
+[Zod Gate] Validating inputs for tool 'get_store_stats' via Zod schema...
+[Tool Runner] Executing tool 'get_store_stats' with validated args: { store_id: 'store_123', metrics: [ 'revenue', 'order_count' ] }
+
+[Step 2] Sending Tool Results to get final JSON summary...
+[Gemini Mock Stream] [MOCK_MODE] Starting stream simulation...
+{
+  "weather_summary": "广州天气晴朗，气温 25 度。",
+  "store_metrics": {
+    "revenue": 500000,
+    "order_count": 120
+  }
+}
+[Step 2 Complete] Final output stream finished.
+
+[Step 3] Performing strict JSON validation on final output...
+✔ JSON Verification Success! Parsed object: {
+  weather_summary: '广州天气晴朗，气温 25 度。',
+  store_metrics: { revenue: 500000, order_count: 120 }
+}
