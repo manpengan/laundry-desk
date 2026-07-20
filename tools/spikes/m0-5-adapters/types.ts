@@ -56,18 +56,32 @@ export interface StreamEvent {
   };
 }
 
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+}
+
+export type StopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'stop' | string;
+
+export interface LlmResponse {
+  message: Message;
+  stop_reason: StopReason;
+  usage?: TokenUsage;
+  raw: any;
+}
+
 export interface LlmAdapter {
   name: string;
   generate(
     messages: Message[],
     tools: ToolDefinition[],
     options?: { temperature?: number }
-  ): Promise<{ message: Message; raw: any }>;
+  ): Promise<LlmResponse>;
 
   generateStream(
     messages: Message[],
     tools: ToolDefinition[],
     onEvent: (event: StreamEvent) => void,
     options?: { temperature?: number }
-  ): Promise<{ message: Message; raw: any }>;
+  ): Promise<LlmResponse>;
 }

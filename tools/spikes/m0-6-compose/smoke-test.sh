@@ -7,42 +7,46 @@ cd "$(dirname "$0")"
 # ==============================================================================
 # V2-M0-6 Compose and RLS Isolation Smoke Test Script
 # 演练内容:
-#   1. 一键拉起 PG16 + Mock Server 双容器
+#   1. 一键拉起 PG16 + Mock Server (Edge & Cloud 分立) 容器拓扑
 #   2. 等待 Healthcheck
-#   3. HTTP API 三步往返测试 (假开单 -> 打印(mock) -> 正常取衣)
+#   3. HTTP API 三步往返测试 (假开单 -> 打印(mock) -> 正常取衣) 严格断言
 #   4. RLS 安全防护边界测试 (Tenant B 越权取 Tenant A 衣物被拦截)
-#   5. Postgres 物理主键、外键约束逻辑校验
+#   5. Postgres 物理主键、四元外键约束逻辑校验
 # ==============================================================================
 
 echo "=== [M0-6 Spike] [LOCAL_ONLY] 1. Rebuilding and launching docker-compose services ==="
-# 注意：曾硬编码 DOCKER_BUILDKIT=0 / COMPOSE_DOCKER_CLI_BUILD=0 强制 legacy builder，
-# 但 Docker 28+ 已移除该 builder，构建会无限挂起（实测 >8 分钟 CPU 0%）。
-# 现使用默认 BuildKit；如需在极旧 Docker 上运行，请自行 export 上述变量。
 docker compose down -v || true
-docker compose build --no-cache mock-edge-server
+docker compose build --no-cache mock-edge-server mock-cloud-server
 docker compose up -d
 
-echo "=== [M0-6 Spike] 2. Waiting for Postgres and Mock Server health checks ==="
+echo "=== [M0-6 Spike] 2. Waiting for Postgres, Edge and Cloud Server health checks ==="
 # 等待 Postgres 健康
-until [ "$(docker inspect --format='{{json .State.Health.Status}}' laundry-postgres-spike)" == "\"healthy\"" ]; do
+until [ "$(docker inspect --format='{{json .State.Health.Status}}' laundry-postgres-spike 2>/dev/null)" == "\"healthy\"" ]; do
   echo "Waiting for Postgres container to become healthy..."
   sleep 2
 done
 echo "✔ Postgres container is HEALTHY."
 
-# 等待 Mock Server 健康
-until [ "$(docker inspect --format='{{json .State.Health.Status}}' laundry-mock-edge-server-spike)" == "\"healthy\"" ]; do
+# 等待 Edge Mock Server 健康
+until [ "$(docker inspect --format='{{json .State.Health.Status}}' laundry-mock-edge-server-spike 2>/dev/null)" == "\"healthy\"" ]; do
   echo "Waiting for Mock Edge Server container to become healthy..."
   sleep 2
 done
 echo "✔ Mock Edge Server container is HEALTHY."
+
+# 等待 Cloud Mock Server 健康
+until [ "$(docker inspect --format='{{json .State.Health.Status}}' laundry-mock-cloud-server-spike 2>/dev/null)" == "\"healthy\"" ]; do
+  echo "Waiting for Mock Cloud Server container to become healthy..."
+  sleep 2
+done
+echo "✔ Mock Cloud Server container is HEALTHY."
 
 # 3. HTTP API 三步往返与 RLS 强隔离边界测试
 echo -e "\n=== [M0-6 Spike] 3. Starting HTTP API Round-Trip & Security Boundary Tests ==="
 
 # Step A: 假开单
 echo -e "\n[Step A] Creating order (Order: ord_1001, Tenant: org_aaa/store_1)..."
-curl -s -X POST http://localhost:8080/api/order \
+RESPONSE_A=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8080/api/order \
   -H "Content-Type: application/json" \
   -d '{
     "org_id": "org_aaa",
@@ -53,17 +57,33 @@ curl -s -X POST http://localhost:8080/api/order \
     "price_cents": 2900,
     "garment_id": "garm_1",
     "barcode": "BC_0001"
-  }' | json_pp || echo "Curl error"
+  }')
+BODY_A=$(echo "$RESPONSE_A" | sed '$d')
+STATUS_A=$(echo "$RESPONSE_A" | tail -n 1)
+echo "$BODY_A" | json_pp || echo "$BODY_A"
+if [ "$STATUS_A" != "201" ] || ! echo "$BODY_A" | grep -q '"success":true'; then
+  echo "❌ [FAIL] Step A (Create order) failed with status $STATUS_A"
+  exit 1
+fi
+echo "✔ [PASS] Step A (Create order) succeeded."
 
 # Step B: 打印 mock 登记单
 echo -e "\n[Step B] Fetching & Printing Receipt (Order: ord_1001, Tenant: org_aaa/store_1)..."
-curl -s -X POST http://localhost:8080/api/print \
+RESPONSE_B=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8080/api/print \
   -H "Content-Type: application/json" \
   -d '{
     "org_id": "org_aaa",
     "store_id": "store_1",
     "order_id": "ord_1001"
-  }' | json_pp || echo "Curl error"
+  }')
+BODY_B=$(echo "$RESPONSE_B" | sed '$d')
+STATUS_B=$(echo "$RESPONSE_B" | tail -n 1)
+echo "$BODY_B" | json_pp || echo "$BODY_B"
+if [ "$STATUS_B" != "200" ] || ! echo "$BODY_B" | grep -q '"success":true'; then
+  echo "❌ [FAIL] Step B (Print receipt) failed with status $STATUS_B"
+  exit 1
+fi
+echo "✔ [PASS] Step B (Print receipt) succeeded."
 
 # Step C: RLS 越权测试 - 使用 Tenant B (org_bbb) 身份去操作 Tenant A 的衣服
 echo -e "\n[Step C - SECURITY] Attempting unauthorized pickup using Tenant B context..."
@@ -85,14 +105,22 @@ fi
 
 # Step D: 正常取衣
 echo -e "\n[Step D] Performing legitimate pickup using Tenant A context..."
-curl -s -X POST http://localhost:8080/api/pickup \
+RESPONSE_D=$(curl -s -w "\n%{http_code}" -X POST http://localhost:8080/api/pickup \
   -H "Content-Type: application/json" \
   -d '{
     "org_id": "org_aaa",
     "store_id": "store_1",
     "order_id": "ord_1001",
     "garment_id": "garm_1"
-  }' | json_pp || echo "Curl error"
+  }')
+BODY_D=$(echo "$RESPONSE_D" | sed '$d')
+STATUS_D=$(echo "$RESPONSE_D" | tail -n 1)
+echo "$BODY_D" | json_pp || echo "$BODY_D"
+if [ "$STATUS_D" != "200" ] || ! echo "$BODY_D" | grep -q '"success":true'; then
+  echo "❌ [FAIL] Step D (Legitimate pickup) succeeded."
+  exit 1
+fi
+echo "✔ [PASS] Step D (Legitimate pickup) succeeded."
 
 
 # 4. Postgres 物理主键、外键约束逻辑校验
@@ -126,16 +154,17 @@ docker exec -i laundry-postgres-spike psql -U laundry_app -d laundry_v2 -c "
 
 # Test 4: 违反 4 元外键约束校验 - 尝试在插入衣服时，关联到其他订单的 order_line 上 (应触发 constraint error 拦截)
 echo "Running Test 4: checking cross-order foreign key constraint breach prevention..."
-docker exec -i laundry-postgres-spike psql -U laundry_owner -d laundry_v2 -c "
-  -- 尝试往 orders/order_lines 插入另外一条数据
+docker exec -i laundry-postgres-spike psql -U laundry_app -d laundry_v2 -c "
+  BEGIN;
+  SET LOCAL app.org_id = 'org_aaa';
+  SET LOCAL app.store_id = 'store_1';
+  -- 插入另外一条订单 ord_2002
   INSERT INTO orders (org_id, store_id, id, customer_name) VALUES ('org_aaa', 'store_1', 'ord_2002', '李四');
   INSERT INTO order_lines (org_id, store_id, order_id, id, price_cents) VALUES ('org_aaa', 'store_1', 'ord_2002', 'line_2', 3900);
-" || true
+  COMMIT;
+"
 
 echo -e "\n[Test 4 Constraint Action] Attempting to insert a garment with mismatched order_id and order_line_id..."
-# 必须以 laundry_app + 正确 GUC 执行：owner 无 BYPASSRLS 且无策略覆盖，
-# 用 owner 会被 FORCE RLS 直接拒绝，根本走不到外键校验（曾导致本用例假阳性）。
-# 断言也必须校验错误类型——只判非零退出会把 RLS 拒绝误认成外键生效。
 T4_OUT=$(docker exec -i laundry-postgres-spike psql -U laundry_app -d laundry_v2 -c "
   BEGIN;
   SET LOCAL app.org_id = 'org_aaa';

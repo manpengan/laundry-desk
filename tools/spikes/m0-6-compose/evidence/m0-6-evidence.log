@@ -1,9 +1,12 @@
 === [M0-6 Spike] [LOCAL_ONLY] 1. Rebuilding and launching docker-compose services ===
-time="2026-07-19T20:56:34+08:00" level=warning msg="/Users/manpengan/pro/laundry-gemini/tools/spikes/m0-6-compose/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
  Container laundry-mock-edge-server-spike Stopping 
+ Container laundry-mock-cloud-server-spike Stopping 
  Container laundry-mock-edge-server-spike Stopped 
  Container laundry-mock-edge-server-spike Removing 
  Container laundry-mock-edge-server-spike Removed 
+ Container laundry-mock-cloud-server-spike Stopped 
+ Container laundry-mock-cloud-server-spike Removing 
+ Container laundry-mock-cloud-server-spike Removed 
  Container laundry-postgres-spike Stopping 
  Container laundry-postgres-spike Stopped 
  Container laundry-postgres-spike Removing 
@@ -12,137 +15,105 @@ time="2026-07-19T20:56:34+08:00" level=warning msg="/Users/manpengan/pro/laundry
  Volume m0-6-compose_pgdata-spike Removing 
  Volume m0-6-compose_pgdata-spike Removed 
  Network m0-6-compose_default Removed 
-time="2026-07-19T20:56:36+08:00" level=warning msg="/Users/manpengan/pro/laundry-gemini/tools/spikes/m0-6-compose/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
  Image m0-6-compose-mock-edge-server Building 
- Image m0-6-compose-mock-edge-server Building 
-Sending build context to Docker daemon  2.251kB
-Step 1/8 : FROM node:20-alpine
- ---> fb4cd12c85ee
-Step 2/8 : WORKDIR /app
- ---> Running in aff7e3e591ac
- ---> Removed intermediate container aff7e3e591ac
- ---> 262770f6be12
-Step 3/8 : COPY package*.json ./
- ---> f58beb386355
-Step 4/8 : RUN npm install
- ---> Running in 4c1a0fc0066d
+ Image m0-6-compose-mock-cloud-server Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.26kB done
+#1 DONE 0.0s
 
-added 82 packages, and audited 83 packages in 32s
+#2 [mock-cloud-server internal] load build definition from Dockerfile
+#2 transferring dockerfile: 163B done
+#2 DONE 0.0s
 
-15 packages are looking for funding
-  run `npm fund` for details
+#3 [mock-edge-server internal] load metadata for docker.io/library/node:20-alpine
+#3 DONE 0.0s
 
-found 0 vulnerabilities
-npm notice
-npm notice New major version of npm available! 10.8.2 -> 12.0.1
-npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.1
-npm notice To update run: npm install -g npm@12.0.1
-npm notice
- ---> Removed intermediate container 4c1a0fc0066d
- ---> 9813ff618f30
-Step 5/8 : COPY server.js .
- ---> 14e44d6a9b04
-Step 6/8 : EXPOSE 3000
- ---> Running in d36f97ebd71c
- ---> Removed intermediate container d36f97ebd71c
- ---> 3b029225dfcc
-Step 7/8 : CMD ["node", "server.js"]
- ---> Running in 8d43f6856a45
- ---> Removed intermediate container 8d43f6856a45
- ---> ccba4eb301e0
-Step 8/8 : LABEL com.docker.compose.image.builder=classic
- ---> Running in 9ddd24b52d83
- ---> Removed intermediate container 9ddd24b52d83
- ---> 5d774a5acf50
-Successfully built 5d774a5acf50
-Successfully tagged m0-6-compose-mock-edge-server:latest
+#4 [mock-edge-server internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [mock-cloud-server internal] load build context
+#5 transferring context: 63B done
+#5 DONE 0.0s
+
+#6 [mock-cloud-server 1/5] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#6 resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 0.0s done
+#6 DONE 0.0s
+
+#7 [mock-edge-server 2/5] WORKDIR /app
+#7 CACHED
+
+#8 [mock-edge-server 3/5] COPY package*.json ./
+#8 DONE 0.0s
+
+#9 [mock-edge-server 4/5] RUN npm install
+#9 23.88 
+#9 23.88 added 82 packages, and audited 83 packages in 24s
+#9 23.88 
+#9 23.88 15 packages are looking for funding
+#9 23.88   run `npm fund` for details
+#9 23.88 
+#9 23.88 found 0 vulnerabilities
+#9 23.88 npm notice
+#9 23.88 npm notice New major version of npm available! 10.8.2 -> 12.0.1
+#9 23.88 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.1
+#9 23.88 npm notice To update run: npm install -g npm@12.0.1
+#9 23.88 npm notice
+#9 DONE 23.9s
+
+#10 [mock-cloud-server 5/5] COPY server.js .
+#10 DONE 0.0s
+
+#11 [mock-cloud-server] exporting to image
+#11 exporting layers 0.1s done
+#11 exporting manifest sha256:8f8bae8881662822baf52f0e409a37f4e4e728d612f00a5cc79b8896f3e2864f
+#11 exporting manifest sha256:8f8bae8881662822baf52f0e409a37f4e4e728d612f00a5cc79b8896f3e2864f done
+#11 exporting config sha256:46923e4c569c942cc63b1045b17ae06d8487e2f765845a4cde5a77ea76c05914 done
+#11 exporting attestation manifest sha256:3de71b1bf99d61c4988111b080a80b1164411f252fcca218ac6fbe2e274fa207 done
+#11 exporting manifest list sha256:6c346f2bbea364376cd2f29f031f9471cbe9b04248acc8aa0129e5c03f1c4afc done
+#11 naming to docker.io/library/m0-6-compose-mock-cloud-server:latest done
+#11 unpacking to docker.io/library/m0-6-compose-mock-cloud-server:latest
+#11 unpacking to docker.io/library/m0-6-compose-mock-cloud-server:latest 0.1s done
+#11 DONE 0.3s
+
+#12 [mock-edge-server] exporting to image
+#12 exporting layers 0.1s done
+#12 exporting manifest sha256:07061ccb8735bcb8d41a01bbe76a111fd052cc2ff01d421d1024de1262f5a69a done
+#12 exporting config sha256:f2802788cecbce0d9413060da62d7caa006ecbf7805e13323c006d313ec9624a done
+#12 exporting attestation manifest sha256:faeadd25ac336c93d8c634b0cf2f11e4d9d163ea369335fc308e3172c0e21eee done
+#12 exporting manifest list sha256:b2ca59078c84336dea262a9ff5066a53bac4d1f39f9bb61a7527e26ebe5f1490 done
+#12 naming to docker.io/library/m0-6-compose-mock-edge-server:latest done
+#12 unpacking to docker.io/library/m0-6-compose-mock-edge-server:latest 0.1s done
+#12 DONE 0.3s
+
+#13 [mock-edge-server] resolving provenance for metadata file
+#13 DONE 0.0s
+
+#14 [mock-cloud-server] resolving provenance for metadata file
+#14 DONE 0.0s
  Image m0-6-compose-mock-edge-server Built 
- Image m0-6-compose-mock-edge-server Built 
-time="2026-07-19T20:57:10+08:00" level=warning msg="/Users/manpengan/pro/laundry-gemini/tools/spikes/m0-6-compose/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+ Image m0-6-compose-mock-cloud-server Built 
  Network m0-6-compose_default Creating 
  Network m0-6-compose_default Created 
  Volume m0-6-compose_pgdata-spike Creating 
  Volume m0-6-compose_pgdata-spike Created 
  Container laundry-postgres-spike Creating 
  Container laundry-postgres-spike Created 
+ Container laundry-mock-cloud-server-spike Creating 
  Container laundry-mock-edge-server-spike Creating 
+ Container laundry-mock-cloud-server-spike Created 
  Container laundry-mock-edge-server-spike Created 
  Container laundry-postgres-spike Starting 
  Container laundry-postgres-spike Started 
  Container laundry-postgres-spike Waiting 
+ Container laundry-postgres-spike Waiting 
  Container laundry-postgres-spike Healthy 
+ Container laundry-postgres-spike Healthy 
+ Container laundry-mock-cloud-server-spike Starting 
  Container laundry-mock-edge-server-spike Starting 
+ Container laundry-mock-cloud-server-spike Started 
  Container laundry-mock-edge-server-spike Started 
-=== [M0-6 Spike] 2. Waiting for Postgres and Mock Server health checks ===
+=== [M0-6 Spike] 2. Waiting for Postgres, Edge and Cloud Server health checks ===
 ✔ Postgres container is HEALTHY.
 Waiting for Mock Edge Server container to become healthy...
 Waiting for Mock Edge Server container to become healthy...
-Waiting for Mock Edge Server container to become healthy...
-✔ Mock Edge Server container is HEALTHY.
-
-=== [M0-6 Spike] 3. Starting HTTP API Round-Trip & Security Boundary Tests ===
-
-[Step A] Creating order (Order: ord_1001, Tenant: org_aaa/store_1)...
-{
-   "message" : "Order created successfully under RLS context",
-   "success" : true
-}
-
-[Step B] Fetching & Printing Receipt (Order: ord_1001, Tenant: org_aaa/store_1)...
-{
-   "receipt" : "\n========================================\n       MOCK LAUNDRY RECEIPT (EDGE)\n========================================\nTenant Org  : org_aaa\nStore ID    : store_1\nOrder ID    : ord_1001\nCustomer    : 张三\nDate        : Sun Jul 19 2026 12:57:22 GMT+0000 (Coordinated Universal Time)\n----------------------------------------\nOrder Lines :\n - Line ID: line_1, Price: ¥29.00\n----------------------------------------\nGarment Items :\n - Barcode: BC_0001, Status: received\n========================================\n",
-   "success" : true
-}
-
-[Step C - SECURITY] Attempting unauthorized pickup using Tenant B context...
-✔ [PASS] Security Isolation Working! Server blocked unauthorized request with status 404 (Not Found or RLS violation).
-
-[Step D] Performing legitimate pickup using Tenant A context...
-{
-   "success" : true,
-   "updated_garment" : {
-      "barcode" : "BC_0001",
-      "id" : "garm_1",
-      "order_id" : "ord_1001",
-      "order_line_id" : "line_1",
-      "org_id" : "org_aaa",
-      "status" : "picked_up",
-      "store_id" : "store_1"
-   }
-}
-
-=== [M0-6 Spike] 4. Running Database Constraint and internal RLS Validation ===
-Running Test 1: default-closed behavior without session variables...
- count 
--------
-     0
-(1 row)
-
-Running Test 2: reading data inside legitimate session...
-BEGIN
-SET
-SET
-    id    | customer_name 
-----------+---------------
- ord_1001 | 张三
-(1 row)
-
-COMMIT
-Running Test 3: checking multi-tenant isolation under tenant org_bbb...
-BEGIN
-SET
-SET
- count 
--------
-     0
-(1 row)
-
-COMMIT
-Running Test 4: checking cross-order foreign key constraint breach prevention...
-ERROR:  new row violates row-level security policy for table "orders"
-
-[Test 4 Constraint Action] Attempting to insert a garment with mismatched order_id and order_line_id...
-ERROR:  new row violates row-level security policy for table "garments"
-✔ [PASS] Database blocked mismatched link: foreign key constraint failed as expected.
-
-=== [M0-6 Spike] All Smoke Tests Completed successfully ===

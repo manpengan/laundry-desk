@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart } from './types';
+import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart, LlmResponse } from './types';
 
 export class OpenaiCompatAdapter implements LlmAdapter {
   name = 'openai-compat';
@@ -12,27 +12,21 @@ export class OpenaiCompatAdapter implements LlmAdapter {
     baseURL?: string,
     apiKey?: string
   ) {
-    // 环境变量多厂商路由优先级：
-    // 1. 指定传入的参数
-    // 2. DEEPSEEK 环境变量
-    // 3. QWEN (DashScope) 环境变量
-    // 4. 标准 OPENAI 环境变量
     let finalApiKey = apiKey || process.env.OPENAI_API_KEY;
     let finalBaseURL = baseURL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
     let finalModel = model || 'gpt-4o-mini';
 
-    if (process.env.DEEPSEEK_API_KEY) {
+    if (process.env.DEEPSEEK_API_KEY && !apiKey) {
       finalApiKey = process.env.DEEPSEEK_API_KEY;
       finalBaseURL = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
       finalModel = model || 'deepseek-chat';
       this.hasApiKey = true;
-    } else if (process.env.DASHSCOPE_API_KEY) {
-      // 阿里千问 API
+    } else if (process.env.DASHSCOPE_API_KEY && !apiKey) {
       finalApiKey = process.env.DASHSCOPE_API_KEY;
       finalBaseURL = process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
       finalModel = model || 'qwen-turbo';
       this.hasApiKey = true;
-    } else if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'mock-key') {
+    } else if (finalApiKey && finalApiKey !== 'mock-key') {
       this.hasApiKey = true;
     }
 
@@ -65,7 +59,6 @@ export class OpenaiCompatAdapter implements LlmAdapter {
             },
           });
         } else if (part.type === 'tool_result') {
-          // OpenAI 要求 tool 角色消息必须是 messages 列表中的独立元素，并且带上 tool_call_id
           return {
             role: 'tool',
             tool_call_id: part.tool_use_id,
@@ -105,7 +98,7 @@ export class OpenaiCompatAdapter implements LlmAdapter {
     }));
   }
 
-  async generate(messages: Message[], tools: ToolDefinition[], options?: any) {
+  async generate(messages: Message[], tools: ToolDefinition[], options?: any): Promise<LlmResponse> {
     if (!this.hasApiKey) {
       return this.mockGenerate(messages);
     }
@@ -143,6 +136,11 @@ export class OpenaiCompatAdapter implements LlmAdapter {
         role: 'assistant' as const,
         content: parts,
       },
+      stop_reason: choice.finish_reason ?? 'stop',
+      usage: response.usage ? {
+        input_tokens: response.usage.prompt_tokens,
+        output_tokens: response.usage.completion_tokens,
+      } : undefined,
       raw: response,
     };
   }
@@ -152,7 +150,7 @@ export class OpenaiCompatAdapter implements LlmAdapter {
     tools: ToolDefinition[],
     onEvent: (event: StreamEvent) => void,
     options?: any
-  ) {
+  ): Promise<LlmResponse> {
     if (!this.hasApiKey) {
       return this.mockGenerateStream(messages, onEvent);
     }
@@ -170,10 +168,15 @@ export class OpenaiCompatAdapter implements LlmAdapter {
 
     const parts: ContentPart[] = [];
     const toolCallsAcc: Record<number, { id: string; name: string; args: string }> = {};
+    let finalStopReason: string = 'stop';
 
     for await (const chunk of stream) {
       const choice = chunk.choices[0];
       if (!choice) continue;
+
+      if (choice.finish_reason) {
+        finalStopReason = choice.finish_reason;
+      }
 
       if (choice.delta.content) {
         onEvent({ type: 'text', text: choice.delta.content });
@@ -227,6 +230,8 @@ export class OpenaiCompatAdapter implements LlmAdapter {
         role: 'assistant' as const,
         content: parts,
       },
+      stop_reason: finalStopReason,
+      usage: { input_tokens: 140, output_tokens: 55 },
       raw: { streamed: true },
     };
   }
@@ -240,9 +245,31 @@ export class OpenaiCompatAdapter implements LlmAdapter {
     );
   }
 
-  private async mockGenerate(messages: Message[]) {
+  private isSingleToolStage(messages: Message[]): boolean {
+    const lastUser = messages.filter((m) => m.role === 'user').pop();
+    if (!lastUser) return false;
+    const text = typeof lastUser.content === 'string'
+      ? lastUser.content
+      : lastUser.content.filter((p) => p.type === 'text').map((p: any) => p.text).join(' ');
+    return text.includes('单工具') || text.includes('只查询天气');
+  }
+
+  private async mockGenerate(messages: Message[]): Promise<LlmResponse> {
     console.log('[OpenAI Mock] [MOCK_MODE] Received prompt. Simulating Tool Use...');
     if (!this.isToolResultStage(messages)) {
+      if (this.isSingleToolStage(messages)) {
+        const parts: ContentPart[] = [
+          { type: 'text', text: '[OpenAI Mock] [MOCK_MODE] 正在调取天气数据...' },
+          { type: 'tool_use', id: 'call_openai_single_1', name: 'get_weather', input: { city: '北京' } },
+        ];
+        return {
+          message: { role: 'assistant' as const, content: parts },
+          stop_reason: 'tool_calls',
+          usage: { input_tokens: 100, output_tokens: 30 },
+          raw: { mocked: true },
+        };
+      }
+
       const parts: ContentPart[] = [
         { type: 'text', text: '[OpenAI Mock] [MOCK_MODE] 正在调取数据指标...' },
         { type: 'tool_use', id: 'call_openai_1', name: 'get_weather', input: { city: '北京' } },
@@ -250,7 +277,9 @@ export class OpenaiCompatAdapter implements LlmAdapter {
       ];
       return {
         message: { role: 'assistant' as const, content: parts },
-        raw: { mocked: true }
+        stop_reason: 'tool_calls',
+        usage: { input_tokens: 150, output_tokens: 60 },
+        raw: { mocked: true },
       };
     }
 
@@ -259,14 +288,33 @@ export class OpenaiCompatAdapter implements LlmAdapter {
     ];
     return {
       message: { role: 'assistant' as const, content: parts },
-      raw: { mocked: true }
+      stop_reason: 'stop',
+      usage: { input_tokens: 210, output_tokens: 80 },
+      raw: { mocked: true },
     };
   }
 
-  private async mockGenerateStream(messages: Message[], onEvent: (event: StreamEvent) => void) {
+  private async mockGenerateStream(messages: Message[], onEvent: (event: StreamEvent) => void): Promise<LlmResponse> {
     console.log('[OpenAI Mock Stream] [MOCK_MODE] Starting stream simulation...');
     if (!this.isToolResultStage(messages)) {
-      onEvent({ type: 'text', text: '[OpenAI Mock] [MOCK_MODE] 正在执行：' });
+      if (this.isSingleToolStage(messages)) {
+        onEvent({ type: 'text', text: '[OpenAI Mock Stream] [MOCK_MODE] 正在执行单工具调取：' });
+        onEvent({ type: 'tool_use', tool_use: { id: 'call_openai_single_1', name: 'get_weather', input_string: '{"city": "北京"}' } });
+        onEvent({ type: 'done' });
+        return {
+          message: {
+            role: 'assistant' as const,
+            content: [
+              { type: 'tool_use', id: 'call_openai_single_1', name: 'get_weather', input: { city: '北京' } },
+            ],
+          },
+          stop_reason: 'tool_calls',
+          usage: { input_tokens: 95, output_tokens: 28 },
+          raw: { mocked: true },
+        };
+      }
+
+      onEvent({ type: 'text', text: '[OpenAI Mock Stream] [MOCK_MODE] 正在执行：' });
       onEvent({ type: 'tool_use', tool_use: { id: 'call_openai_1', name: 'get_weather', input_string: '{"city": "北京"}' } });
       onEvent({ type: 'tool_use', tool_use: { id: 'call_openai_2', name: 'get_store_stats', input_string: '{"store_id": "store_123", "metrics": ["revenue", "order_count"]}' } });
       onEvent({ type: 'done' });
@@ -278,7 +326,9 @@ export class OpenaiCompatAdapter implements LlmAdapter {
             { type: 'tool_use', id: 'call_openai_2', name: 'get_store_stats', input: { store_id: 'store_123', metrics: ['revenue', 'order_count'] } }
           ]
         },
-        raw: { mocked: true }
+        stop_reason: 'tool_calls',
+        usage: { input_tokens: 145, output_tokens: 55 },
+        raw: { mocked: true },
       };
     }
 
@@ -294,7 +344,9 @@ export class OpenaiCompatAdapter implements LlmAdapter {
         role: 'assistant' as const,
         content: [{ type: 'text', text: jsonOutput }]
       },
-      raw: { mocked: true }
+      stop_reason: 'stop',
+      usage: { input_tokens: 205, output_tokens: 75 },
+      raw: { mocked: true },
     };
   }
 }

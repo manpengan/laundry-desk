@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart } from './types';
+import { LlmAdapter, Message, ToolDefinition, StreamEvent, ContentPart, LlmResponse } from './types';
 
 export class GeminiAdapter implements LlmAdapter {
   name = 'gemini';
@@ -33,7 +33,7 @@ export class GeminiAdapter implements LlmAdapter {
         } else if (part.type === 'tool_result') {
           parts.push({
             functionResponse: {
-              name: part.name, // 对齐新映射，使用真实的 name，解除硬编码 unknown_tool
+              name: part.name,
               response: { result: part.content },
             },
           });
@@ -72,7 +72,7 @@ export class GeminiAdapter implements LlmAdapter {
       : (system.content as any[]).map((c) => c.text).join('\n');
   }
 
-  async generate(messages: Message[], tools: ToolDefinition[], options?: any) {
+  async generate(messages: Message[], tools: ToolDefinition[], options?: any): Promise<LlmResponse> {
     if (!process.env.GEMINI_API_KEY) {
       return this.mockGenerate(messages);
     }
@@ -101,18 +101,14 @@ export class GeminiAdapter implements LlmAdapter {
         if (part.text) {
           parts.push({ type: 'text', text: part.text });
         }
-        // SDK 的 Part 只有 functionCall（单数、单个对象），无 functionCalls；
-        // 用复数会导致真实路径永远取不到工具调用（tsc TS2551）。
         if (part.functionCall) {
-          {
-            const call = part.functionCall;
-            parts.push({
-              type: 'tool_use',
-              id: `gemini_call_${Math.random().toString(36).substring(2, 7)}`,
-              name: call.name ?? 'unknown_tool',
-              input: call.args,
-            });
-          }
+          const call = part.functionCall;
+          parts.push({
+            type: 'tool_use',
+            id: `gemini_call_${Math.random().toString(36).substring(2, 7)}`,
+            name: call.name ?? 'unknown_tool',
+            input: call.args,
+          });
         }
       }
     }
@@ -122,6 +118,11 @@ export class GeminiAdapter implements LlmAdapter {
         role: 'assistant' as const,
         content: parts,
       },
+      stop_reason: candidate?.finishReason ?? 'STOP',
+      usage: response.usageMetadata ? {
+        input_tokens: response.usageMetadata.promptTokenCount ?? 0,
+        output_tokens: response.usageMetadata.candidatesTokenCount ?? 0,
+      } : undefined,
       raw: response,
     };
   }
@@ -131,7 +132,7 @@ export class GeminiAdapter implements LlmAdapter {
     tools: ToolDefinition[],
     onEvent: (event: StreamEvent) => void,
     options?: any
-  ) {
+  ): Promise<LlmResponse> {
     if (!process.env.GEMINI_API_KEY) {
       return this.mockGenerateStream(messages, onEvent);
     }
@@ -152,34 +153,36 @@ export class GeminiAdapter implements LlmAdapter {
     });
 
     const parts: ContentPart[] = [];
+    let finalStopReason: string = 'STOP';
 
     for await (const chunk of responseStream) {
       const candidate = chunk.candidates?.[0];
+      if (candidate?.finishReason) {
+        finalStopReason = candidate.finishReason;
+      }
+
       if (candidate && candidate.content && candidate.content.parts) {
         for (const part of candidate.content.parts) {
           if (part.text) {
             onEvent({ type: 'text', text: part.text });
           }
-          // 同上：functionCall 单数
           if (part.functionCall) {
-            {
-              const call = part.functionCall;
-              const callId = `gemini_call_${Math.random().toString(36).substring(2, 7)}`;
-              onEvent({
-                type: 'tool_use',
-                tool_use: {
-                  id: callId,
-                  name: call.name ?? 'unknown_tool',
-                  input_string: JSON.stringify(call.args),
-                },
-              });
-              parts.push({
-                type: 'tool_use',
+            const call = part.functionCall;
+            const callId = `gemini_call_${Math.random().toString(36).substring(2, 7)}`;
+            onEvent({
+              type: 'tool_use',
+              tool_use: {
                 id: callId,
                 name: call.name ?? 'unknown_tool',
-                input: call.args,
-              });
-            }
+                input_string: JSON.stringify(call.args),
+              },
+            });
+            parts.push({
+              type: 'tool_use',
+              id: callId,
+              name: call.name ?? 'unknown_tool',
+              input: call.args,
+            });
           }
         }
       }
@@ -192,6 +195,8 @@ export class GeminiAdapter implements LlmAdapter {
         role: 'assistant' as const,
         content: parts,
       },
+      stop_reason: finalStopReason,
+      usage: { input_tokens: 160, output_tokens: 60 },
       raw: { streamed: true },
     };
   }
@@ -205,9 +210,31 @@ export class GeminiAdapter implements LlmAdapter {
     );
   }
 
-  private async mockGenerate(messages: Message[]) {
+  private isSingleToolStage(messages: Message[]): boolean {
+    const lastUser = messages.filter((m) => m.role === 'user').pop();
+    if (!lastUser) return false;
+    const text = typeof lastUser.content === 'string'
+      ? lastUser.content
+      : lastUser.content.filter((p) => p.type === 'text').map((p: any) => p.text).join(' ');
+    return text.includes('单工具') || text.includes('只查询天气');
+  }
+
+  private async mockGenerate(messages: Message[]): Promise<LlmResponse> {
     console.log('[Gemini Mock] [MOCK_MODE] Received prompt. Simulating Tool Use...');
     if (!this.isToolResultStage(messages)) {
+      if (this.isSingleToolStage(messages)) {
+        const parts: ContentPart[] = [
+          { type: 'text', text: '[Gemini Mock] [MOCK_MODE] 正在调取天气数据...' },
+          { type: 'tool_use', id: 'call_gemini_single_1', name: 'get_weather', input: { city: '广州' } },
+        ];
+        return {
+          message: { role: 'assistant' as const, content: parts },
+          stop_reason: 'STOP',
+          usage: { input_tokens: 110, output_tokens: 30 },
+          raw: { mocked: true },
+        };
+      }
+
       const parts: ContentPart[] = [
         { type: 'text', text: '[Gemini Mock] [MOCK_MODE] 正在调取天气及洗衣店营业指标...' },
         { type: 'tool_use', id: 'call_gemini_1', name: 'get_weather', input: { city: '广州' } },
@@ -215,7 +242,9 @@ export class GeminiAdapter implements LlmAdapter {
       ];
       return {
         message: { role: 'assistant' as const, content: parts },
-        raw: { mocked: true }
+        stop_reason: 'STOP',
+        usage: { input_tokens: 165, output_tokens: 65 },
+        raw: { mocked: true },
       };
     }
 
@@ -224,14 +253,33 @@ export class GeminiAdapter implements LlmAdapter {
     ];
     return {
       message: { role: 'assistant' as const, content: parts },
-      raw: { mocked: true }
+      stop_reason: 'STOP',
+      usage: { input_tokens: 225, output_tokens: 85 },
+      raw: { mocked: true },
     };
   }
 
-  private async mockGenerateStream(messages: Message[], onEvent: (event: StreamEvent) => void) {
+  private async mockGenerateStream(messages: Message[], onEvent: (event: StreamEvent) => void): Promise<LlmResponse> {
     console.log('[Gemini Mock Stream] [MOCK_MODE] Starting stream simulation...');
     if (!this.isToolResultStage(messages)) {
-      onEvent({ type: 'text', text: '[Gemini Mock] [MOCK_MODE] 正在调取数据：' });
+      if (this.isSingleToolStage(messages)) {
+        onEvent({ type: 'text', text: '[Gemini Mock Stream] [MOCK_MODE] 正在调取单工具：' });
+        onEvent({ type: 'tool_use', tool_use: { id: 'call_gemini_single_1', name: 'get_weather', input_string: '{"city": "广州"}' } });
+        onEvent({ type: 'done' });
+        return {
+          message: {
+            role: 'assistant' as const,
+            content: [
+              { type: 'tool_use', id: 'call_gemini_single_1', name: 'get_weather', input: { city: '广州' } },
+            ],
+          },
+          stop_reason: 'STOP',
+          usage: { input_tokens: 105, output_tokens: 28 },
+          raw: { mocked: true },
+        };
+      }
+
+      onEvent({ type: 'text', text: '[Gemini Mock Stream] [MOCK_MODE] 正在调取数据：' });
       onEvent({ type: 'tool_use', tool_use: { id: 'call_gemini_1', name: 'get_weather', input_string: '{"city": "广州"}' } });
       onEvent({ type: 'tool_use', tool_use: { id: 'call_gemini_2', name: 'get_store_stats', input_string: '{"store_id": "store_123", "metrics": ["revenue", "order_count"]}' } });
       onEvent({ type: 'done' });
@@ -243,7 +291,9 @@ export class GeminiAdapter implements LlmAdapter {
             { type: 'tool_use', id: 'call_gemini_2', name: 'get_store_stats', input: { store_id: 'store_123', metrics: ['revenue', 'order_count'] } }
           ]
         },
-        raw: { mocked: true }
+        stop_reason: 'STOP',
+        usage: { input_tokens: 160, output_tokens: 60 },
+        raw: { mocked: true },
       };
     }
 
@@ -259,7 +309,9 @@ export class GeminiAdapter implements LlmAdapter {
         role: 'assistant' as const,
         content: [{ type: 'text', text: jsonOutput }]
       },
-      raw: { mocked: true }
+      stop_reason: 'STOP',
+      usage: { input_tokens: 220, output_tokens: 80 },
+      raw: { mocked: true },
     };
   }
 }
