@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AnthropicAdapter } from './anthropic';
 import { OpenaiCompatAdapter } from './openai-compat';
 import { GeminiAdapter } from './gemini';
-import { Message, ToolDefinition, ContentPart } from './types';
+import { Message, ToolDefinition } from './types';
 
 // 1. 工具参数的 Zod 严格校验 Schema 定义
 const GetWeatherSchema = z.object({
