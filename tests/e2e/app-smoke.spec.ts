@@ -8,7 +8,9 @@ test("launches the desktop shell and renders M1 navigation", async () => {
   app
     .process()
     .stderr?.on("data", (data) => console.error("STDERR:", data.toString()));
-  const page = await app.firstWindow();
+  // Electron 冷启动在 CI 上可能很慢；不设超时会表现为整测 30s 超时且无有效报错。
+  const page = await app.firstWindow({ timeout: 30_000 });
+  await page.waitForLoadState("domcontentloaded");
   page.on("console", (msg) => console.log("PAGE LOG:", msg.text()));
   page.on("pageerror", (err) => console.error("PAGE ERROR:", err.message));
 
