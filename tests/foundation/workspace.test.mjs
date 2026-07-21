@@ -11,10 +11,11 @@ const workspaceNames = [
   "apps/edge-agent",
   "packages/contracts",
   "packages/domain",
+  "packages/db",
   "packages/ui",
   "packages/config",
 ];
-const libraryNames = ["packages/contracts", "packages/domain", "packages/ui"];
+const libraryNames = ["packages/contracts", "packages/domain", "packages/db", "packages/ui"];
 const generatedSourceDirectories = new Set(["dist", "node_modules", ".turbo", "coverage"]);
 
 async function readJson(path) {
