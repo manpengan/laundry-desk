@@ -211,7 +211,7 @@ git commit -m "[LAUNDRY][CONTRACTS] 冻结 refresh 轮换与撤销"
 - Create: `packages/contracts/src/auth/csrf.ts`
 - Create: `packages/contracts/test/auth-csrf.test.ts`
 
-- [ ] **Step 1: Write failing CSRF tests**
+- [x] **Step 1: Write failing CSRF tests**
 
 Assert exact `__Host-laundry_csrf`/`x-csrf-token` constants and cookie attributes. Test safe methods GET/HEAD/OPTIONS, unsafe POST/PUT/PATCH/DELETE, absent/malformed tokens, C6-reported mismatch/invalid proof, disallowed Origin/Fetch Metadata and no token contents in failure output.
 
@@ -229,23 +229,23 @@ type CsrfRequestFacts = Readonly<{
 }>;
 ```
 
-- [ ] **Step 2: Run tests to verify RED**
+- [x] **Step 2: Run tests to verify RED**
 
 Run: `pnpm --filter @laundry/contracts test -- auth-csrf`
 
 Expected: FAIL because the module is absent.
 
-- [ ] **Step 3: Implement minimal evaluator**
+- [x] **Step 3: Implement minimal evaluator**
 
 Validate each transport token separately with a versioned opaque proof schema, but do not compare raw secrets in contracts. C6 supplies `tokens_match` using a platform constant-time primitive and `proof_valid` after MAC/session binding. A5 returns only `{allowed:true}` or a fixed reason enum and never receives a key or echoes a token.
 
-- [ ] **Step 4: Run focused GREEN checks**
+- [x] **Step 4: Run focused GREEN checks**
 
 Run: `pnpm --filter @laundry/contracts test -- auth-csrf`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/contracts/src/auth/csrf.ts packages/contracts/test/auth-csrf.test.ts
