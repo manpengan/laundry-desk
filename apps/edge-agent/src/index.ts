@@ -67,3 +67,30 @@ export type {
   SupportMatrix,
   UpgradeState,
 } from "./upgrade/index.js";
+
+// D2 pairing + capability ticket verify + execution receipt sign (pure core).
+export {
+  DEVICE_KEY_ALGORITHM,
+  EDGE_SIGNED_PROTOCOL_VERSION,
+  MemoryDeviceKeyStore,
+  OneTimePairingCodeService,
+  PAIRING_CODE_DIGITS,
+  PAIRING_CODE_TTL_MS,
+  UnimplementedOsDeviceKeyStore,
+  createPairingSession,
+  generateDigitCode,
+  generateEd25519Material,
+  signReceipt,
+  verifyCapabilityTicket,
+} from "./pairing/index.js";
+export type {
+  DeviceKeyMaterial,
+  DeviceKeyStore,
+  DevicePublicKeyExport,
+  PairingCreateCodeResult,
+  PairingSession,
+  PairingSessionStatus,
+  SignedExecutionReceipt,
+  TicketVerifyContext,
+  TicketVerifyResult,
+} from "./pairing/index.js";

@@ -17,6 +17,9 @@
     "test": "tsc -p tsconfig.json && node --test $(find dist -name '*.test.js')",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "dependencies": {
+    "@laundry/contracts": "file:../../packages/contracts"
+  },
   "devDependencies": {
     "electron": "^41.3.0"
   }

@@ -75,6 +75,7 @@ function boot(): void {
     setSpool: (spool) => {
       runtime.spool = spool;
     },
+    getPairing: () => runtime.pairing,
   });
 
   showMainWindow();
