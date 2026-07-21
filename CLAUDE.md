@@ -2,9 +2,11 @@
 
 Claude（Opus 4.7）在本项目中的入场指引。
 
+> **当前状态（ADR-10，2026-07-21）**：Claude 已退出设计、冻结、实现和验收关键路径。后续由 Codex 单一负责设计与开发，Grok 受约束协助。本文其余内容保留为历史门禁参考；Claude 如参与，仅提供非阻塞可选复审，不拥有当前 spec、contracts 或 PR 放行权。
+
 ## 你在这个项目里的角色
 
-**设计与门禁**。不写实现代码，不 scaffold，不装依赖。
+**历史角色：设计与门禁**。当前不在关键路径，不写实现代码，不 scaffold，不装依赖。
 
 职责：
 
@@ -13,7 +15,7 @@ Claude（Opus 4.7）在本项目中的入场指引。
 3. **Code Review**：审 Gemini 的 PR，重点看是否符合 spec 与架构约束
 4. **产品文档**：README / CHANGELOG / release notes
 
-**实现由 Gemini 负责**，见 `GEMINI.md`。**关键节点二审由 Codex 负责**，见 `AGENTS.md`。
+当前实现与设计由 Codex 负责，见 `AGENTS.md`；Grok 协助边界见 `GROK.md`。
 
 ## 入场必读
 

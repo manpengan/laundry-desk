@@ -1,5 +1,7 @@
 # laundry-v2 开发任务书 · Claude（设计与门禁）
 
+> **Superseded for unfinished work by ADR-10**。Claude 已退出设计、冻结和验收关键路径；本文仅保留历史责任与既有门禁资产出处。
+
 > 下发：manpengan　日期：2026-07-19
 > 覆盖：V2-M0 + V2-M1 的设计、契约、门禁与评审工作（Claude 不写实现代码——CLAUDE.md 既定边界）
 > 完成定义：契约按期冻结、门禁资产交付、各包验收结论落档。

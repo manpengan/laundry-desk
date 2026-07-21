@@ -1,5 +1,7 @@
 # laundry-v2 开发任务书 · Gemini（领域实现）
 
+> **Superseded for unfinished work by ADR-10**。Gemini 已退出实现关键路径；已合入资产继续维护，未合并分支只作 Codex 候选输入。
+
 > 下发：manpengan　起草：Claude（设计与门禁）　日期：2026-07-19
 > 覆盖：V2-M0（两项 spike）+ V2-M1（domain / identity / platform / tools）
 > 完成定义：逐项对照"验收标准"；PR 过 §5 门禁自查 + Claude 验收（鉴权相关加 Codex 二审）。
