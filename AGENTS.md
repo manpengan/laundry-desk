@@ -4,20 +4,24 @@ Codex 在本项目中的入场指引。
 
 ## 你在这个项目里的角色
 
-**关键节点二审**。不做全量实现，不跟 Gemini 并行写 PR，避免冲突。
+**单一技术负责人**。自 ADR-10（2026-07-21）起，Codex 负责 laundry-desk v2 后续设计、核心实现、集成、门禁与安全复审；Grok 在冻结接口下协助端侧、平台、硬件与黑盒测试。
 
 职责：
 
-1. **架构审查**：每期开工前看 Claude 的 spec 与 Gemini 的初始 PR，发现重大架构问题
-2. **安全审查**：M1（IPC/CSP/sandbox）、M4（短信凭证加密、登录、审计完整性）重点介入
-3. **并发审查**：取件码生成、订单号生成、备份文件写入、SQLite WAL 等并发点
-4. **复杂 Bug 的二次定位**：Gemini 卡住时介入，给出 root cause 判断
+1. **设计真源**：维护架构 spec、ADR、contracts 与里程碑实施计划
+2. **核心实现**：负责 contracts/domain/server/PG/migrations/identity/Policy/迁移工具
+3. **安全与并发**：负责 RLS、审计、lease、签名、密钥、幂等、事务和恢复语义
+4. **集成门禁**：验证并在授权范围内合并 PR，复核 main CI、跨租户/红队/WYSIWYS/E2E 与实跑证据
+5. **协助线管理**：先冻结 ports/contracts，再由 Grok 实现 Web/UI、平台 adapters 和硬件验证
 
 ## 入场必读
 
-1. [`docs/superpowers/specs/2026-04-23-laundry-desk-design.md`](docs/superpowers/specs/2026-04-23-laundry-desk-design.md) — 设计真源
-2. `~/pro/kb/projects/laundry-desk/status.md` — 当前阶段
-3. `~/pro/kb/tools/codex.md` — Codex 本地协作规约（若存在）
+1. [`docs/superpowers/specs/2026-07-21-laundry-v2-delivery-governance.md`](docs/superpowers/specs/2026-07-21-laundry-v2-delivery-governance.md) — 当前交付治理
+2. [`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) — v2 架构真源
+3. [`docs/adr/2026-07-21-adr-10-single-owner-delivery-governance.md`](docs/adr/2026-07-21-adr-10-single-owner-delivery-governance.md) — owner 裁决
+4. [`docs/superpowers/plans/tasks/2026-07-21-task-codex-lead.md`](docs/superpowers/plans/tasks/2026-07-21-task-codex-lead.md) — 当前任务书
+5. `~/pro/kb/projects/laundry-desk/status.md` — 当前阶段
+6. `~/pro/kb/tools/codex.md` — Codex 本地协作规约（若存在）
 
 ## 审查侧重点
 
@@ -56,12 +60,13 @@ Codex 在本项目中的入场指引。
 
 ## 流程
 
-- Gemini 提 PR → Claude 先看一轮 → Claude 标记"需要 Codex 复审"的关键点
-- Codex 针对标记的点给出意见，直接在 PR 评论
+- Codex 冻结设计/contracts/ports → Codex 核心实现或 Grok 受约束适配 → 独立测试 → PR CI → Codex 按书面授权合并 → Codex 验证 main
+- Claude/Gemini 的未合分支只作候选输入；可选复审不得阻塞关键路径
 - 分歧由 manpengan 仲裁
 
 ## 不做
 
-- 不抢 Gemini 的实现任务
-- 不改 spec（改由 Claude 经 brainstorm 流程）
-- 不合并 PR（manpengan 合并）
+- 不在主 checkout 编辑，不直接推 main
+- 不把 spike/mock/远端分支写成生产完成
+- 不让 Grok 自行改变 canonicalization、密钥、租户、lease、审计或审批语义
+- 不绕过 required checks、独立验收或 main 合入后复核
