@@ -1,6 +1,7 @@
 /**
- * Connection strip model (UI placeholder — no real session yet).
- * E1 will bind this to Edge bridge + server heartbeat.
+ * Connection strip model for SyncStatusBar.
+ * Store/staff labels come from memory AccessSession after E1 login;
+ * mode/pending still mock until Edge bridge heartbeat lands.
  */
 
 export type ConnectionMode = "online" | "offline" | "degraded";

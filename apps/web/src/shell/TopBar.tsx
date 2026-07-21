@@ -8,6 +8,8 @@ export type TopBarProps = {
   onCycleTheme: () => void;
   printSummary?: PrintJobSummary;
   onOpenPrintQueue?: () => void;
+  /** Open PIN quick-switch when session is present. */
+  onSwitchStaff?: () => void;
 };
 
 export function TopBar({
@@ -16,6 +18,7 @@ export function TopBar({
   onCycleTheme,
   printSummary = { queued: 0, failed: 0 },
   onOpenPrintQueue,
+  onSwitchStaff,
 }: TopBarProps) {
   return (
     <header className="ld-shell-topbar" role="banner">
@@ -27,6 +30,11 @@ export function TopBar({
         <SyncStatusBar mode={connection.mode} pendingSyncCount={connection.pendingSyncCount} />
       </div>
       <div className="ld-shell-topbar__actions">
+        {onSwitchStaff ? (
+          <Button variant="secondary" size="sm" type="button" onClick={onSwitchStaff}>
+            切换员工
+          </Button>
+        ) : null}
         {onOpenPrintQueue ? (
           <PrintJobIndicator summary={printSummary} onOpen={onOpenPrintQueue} />
         ) : (
