@@ -80,6 +80,7 @@ function boot(): void {
       runtime.printJobs = store;
     },
     getPairing: () => runtime.pairing,
+    getQueue: () => runtime.queue,
   });
 
   showMainWindow();

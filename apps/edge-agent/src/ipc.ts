@@ -15,6 +15,7 @@ import {
   type PrintJobKind,
   type PrintJobStore,
 } from "./print/print-jobs.js";
+import { MemoryEncryptedQueue, MemoryKekStore } from "./queue/index.js";
 import { mockConnection } from "./shell/connection-mock.js";
 import { checkShellHealth, type ShellHealth } from "./shell/health.js";
 import { createInitialState, type UpgradeState } from "./upgrade/index.js";
@@ -30,6 +31,7 @@ export type IpcContext = {
   getPrintJobs: () => PrintJobStore;
   setPrintJobs: (store: PrintJobStore) => void;
   getPairing: () => PairingSession;
+  getQueue: () => MemoryEncryptedQueue;
 };
 
 function assertAppSender(event: IpcMainInvokeEvent): void {
@@ -90,16 +92,12 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     return { ok: true as const, data: mockConnection() };
   });
 
-  // D4: print:enqueue — status view only; no device paths / raw bytes / ticket nonce.
   ipcMain.handle(IPC_CHANNELS.printEnqueue, (event, kindRaw: unknown = "xp58") => {
     assertAppSender(event);
     const kind = parsePrintKind(kindRaw);
     const now = Date.now();
-
     const enq = enqueuePrintJob(ctx.getPrintJobs(), kind, now);
     const mock = enqueue(ctx.getSpool(), kind, now);
-
-    // Auto-execute XP-58 via mock spool (sync, never blocks forever).
     if (kind === "xp58") {
       const result = executeJob(
         enq.store,
@@ -114,20 +112,17 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       const status = listPrintJobStatus(result.store).find((j) => j.id === enq.job.id);
       return { ok: true as const, data: status ?? null };
     }
-
     ctx.setPrintJobs(enq.store);
     ctx.setSpool(mock.spool);
     const status = listPrintJobStatus(enq.store).find((j) => j.id === enq.job.id);
     return { ok: true as const, data: status ?? null };
   });
 
-  // D4: print:list — status only.
   ipcMain.handle(IPC_CHANNELS.printList, (event) => {
     assertAppSender(event);
     return { ok: true as const, data: listPrintJobStatus(ctx.getPrintJobs()) };
   });
 
-  // D2 pairing — public surface only; private keys never cross IPC.
   ipcMain.handle(IPC_CHANNELS.pairingCreateCode, (event) => {
     assertAppSender(event);
     const data = ctx.getPairing().createCode();
@@ -139,20 +134,25 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     const data = ctx.getPairing().status();
     return { ok: true as const, data };
   });
+
+  ipcMain.handle(IPC_CHANNELS.queueStatus, (event) => {
+    assertAppSender(event);
+    return { ok: true as const, data: ctx.getQueue().status() };
+  });
 }
 
-/** Default runtime state bag for main process. */
 export function createRuntimeState(): {
   upgrade: UpgradeState;
   spool: MockSpool;
   printJobs: PrintJobStore;
   pairing: PairingSession;
+  queue: MemoryEncryptedQueue;
 } {
   return {
     upgrade: createInitialState(),
     spool: createMockSpool(),
     printJobs: createPrintJobStore(),
-    // Production must swap MemoryDeviceKeyStore for OS credential-store adapter.
     pairing: createPairingSession(new MemoryDeviceKeyStore()),
+    queue: new MemoryEncryptedQueue({ kekStore: new MemoryKekStore() }),
   };
 }

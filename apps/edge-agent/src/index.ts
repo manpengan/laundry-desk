@@ -127,3 +127,28 @@ export type {
   TicketVerifyContext,
   TicketVerifyResult,
 } from "./pairing/index.js";
+
+// D3 encrypted offline queue skeleton (DEK/KEK + AES-GCM memory store).
+export {
+  DEFAULT_QUEUE_ENVELOPE_VERSION,
+  generateDek,
+  generateKek,
+  KEY_BYTE_LENGTH,
+  MemoryEncryptedQueue,
+  MemoryKekStore,
+  QUEUE_STORAGE_VERSION,
+  QueueCryptoError,
+  rewrapDek,
+  UnimplementedOsKekStore,
+  unwrapDek,
+  wrapDek,
+} from "./queue/index.js";
+export type {
+  Dek,
+  Kek,
+  KekStore,
+  QueueItem,
+  QueueStatusSnapshot,
+  QueueStore,
+  WrappedDek,
+} from "./queue/index.js";
