@@ -28,4 +28,6 @@ export const IPC_CHANNELS = {
   pairingCreateCode: "pairing:createCode",
   /** D2: public pairing status only (has key / code active window). */
   pairingStatus: "pairing:status",
+  /** D3 — status only; never DEK/KEK. */
+  queueStatus: "edge:queue-status",
 } as const;

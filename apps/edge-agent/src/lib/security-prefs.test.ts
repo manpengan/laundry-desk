@@ -49,4 +49,5 @@ test("main/window/preload sources wire baseline and guards", () => {
   assert.equal(IPC_CHANNELS.health, "edge:health");
   assert.equal(IPC_CHANNELS.pairingCreateCode, "pairing:createCode");
   assert.equal(IPC_CHANNELS.pairingStatus, "pairing:status");
+  assert.equal(IPC_CHANNELS.queueStatus, "edge:queue-status");
 });

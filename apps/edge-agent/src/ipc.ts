@@ -15,6 +15,7 @@ import {
   type PrintJobKind,
   type PrintJobStore,
 } from "./print/print-jobs.js";
+import { MemoryEncryptedQueue, MemoryKekStore } from "./queue/index.js";
 import { mockConnection } from "./shell/connection-mock.js";
 import { checkShellHealth, type ShellHealth } from "./shell/health.js";
 import { createInitialState, type UpgradeState } from "./upgrade/index.js";
@@ -30,6 +31,7 @@ export type IpcContext = {
   getPrintJobs: () => PrintJobStore;
   setPrintJobs: (store: PrintJobStore) => void;
   getPairing: () => PairingSession;
+  getQueue: () => MemoryEncryptedQueue;
 };
 
 function assertAppSender(event: IpcMainInvokeEvent): void {
@@ -139,6 +141,12 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     const data = ctx.getPairing().status();
     return { ok: true as const, data };
   });
+
+  // D3 queue — status only; DEK/KEK/envelopes never cross IPC.
+  ipcMain.handle(IPC_CHANNELS.queueStatus, (event) => {
+    assertAppSender(event);
+    return { ok: true as const, data: ctx.getQueue().status() };
+  });
 }
 
 /** Default runtime state bag for main process. */
@@ -147,6 +155,7 @@ export function createRuntimeState(): {
   spool: MockSpool;
   printJobs: PrintJobStore;
   pairing: PairingSession;
+  queue: MemoryEncryptedQueue;
 } {
   return {
     upgrade: createInitialState(),
@@ -154,5 +163,6 @@ export function createRuntimeState(): {
     printJobs: createPrintJobStore(),
     // Production must swap MemoryDeviceKeyStore for OS credential-store adapter.
     pairing: createPairingSession(new MemoryDeviceKeyStore()),
+    queue: new MemoryEncryptedQueue({ kekStore: new MemoryKekStore() }),
   };
 }
