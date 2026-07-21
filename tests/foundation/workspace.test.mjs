@@ -71,6 +71,17 @@ test("provides compileable shells for every assigned workspace", async () => {
   }
 });
 
+test("builds file-linked workspace dependencies before their consumers test", async () => {
+  const turboConfig = await readJson("turbo.json");
+  const webPackage = await readJson("apps/web/package.json");
+  const uiPackage = await readJson("packages/ui/package.json");
+
+  assert.deepEqual(turboConfig.tasks[`${webPackage.name}#test`]?.dependsOn, [
+    "^build",
+    `${uiPackage.name}#build`,
+  ]);
+});
+
 test("publishes shared TypeScript, ESLint, and Prettier configuration", async () => {
   const configPackage = await readJson("packages/config/package.json");
 

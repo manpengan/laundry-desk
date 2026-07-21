@@ -17,6 +17,10 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "@laundry/web#test": {
+      "dependsOn": ["^build", "@laundry/ui#build"],
+      "outputs": []
+    },
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"],
       "outputs": []
