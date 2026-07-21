@@ -2,6 +2,11 @@ import { ipcMain, type IpcMainInvokeEvent } from "electron";
 import { IPC_CHANNELS } from "./lib/security-prefs.js";
 import { isValidAppSender } from "./lib/sender.js";
 import {
+  createPairingSession,
+  MemoryDeviceKeyStore,
+  type PairingSession,
+} from "./pairing/index.js";
+import {
   createMockSpool,
   enqueue,
   listJobs,
@@ -18,6 +23,7 @@ export type IpcContext = {
   getUpgradeState: () => UpgradeState;
   getSpool: () => MockSpool;
   setSpool: (spool: MockSpool) => void;
+  getPairing: () => PairingSession;
 };
 
 function assertAppSender(event: IpcMainInvokeEvent): void {
@@ -34,7 +40,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       ok: true as const,
       data: {
         offlineCapable: true,
-        mode: "edge-agent-d1",
+        mode: "edge-agent-d2",
         at: Date.now(),
       },
     };
@@ -79,15 +85,31 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     assertAppSender(event);
     return { ok: true as const, data: listJobs(ctx.getSpool()) };
   });
+
+  // D2 pairing — public surface only; private keys never cross IPC.
+  ipcMain.handle(IPC_CHANNELS.pairingCreateCode, (event) => {
+    assertAppSender(event);
+    const data = ctx.getPairing().createCode();
+    return { ok: true as const, data };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.pairingStatus, (event) => {
+    assertAppSender(event);
+    const data = ctx.getPairing().status();
+    return { ok: true as const, data };
+  });
 }
 
 /** Default runtime state bag for main process. */
 export function createRuntimeState(): {
   upgrade: UpgradeState;
   spool: MockSpool;
+  pairing: PairingSession;
 } {
   return {
     upgrade: createInitialState(),
     spool: createMockSpool(),
+    // Production must swap MemoryDeviceKeyStore for OS credential-store adapter.
+    pairing: createPairingSession(new MemoryDeviceKeyStore()),
   };
 }

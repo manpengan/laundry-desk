@@ -22,4 +22,8 @@ export const IPC_CHANNELS = {
   connection: "edge:connection",
   printEnqueue: "edge:print-enqueue",
   printList: "edge:print-list",
+  /** D2: issue 60s single-use pairing code + ensure device pubkey (never private key). */
+  pairingCreateCode: "pairing:createCode",
+  /** D2: public pairing status only (has key / code active window). */
+  pairingStatus: "pairing:status",
 } as const;
