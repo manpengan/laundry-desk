@@ -70,6 +70,7 @@ const DECLARED_UNIQUE_KEY_LAYOUTS: Readonly<Partial<Record<V2TableName, readonly
   Object.freeze({
     orders: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
     order_lines: ORDER_LINE_UNIQUE_KEY_COLUMNS,
+    garments: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
   });
 
 export const defineTenantUniqueKey = (input: TenantUniqueKeyInput): TenantUniqueKeyDescriptor => {
@@ -119,6 +120,12 @@ const DECLARED_FOREIGN_KEY_LAYOUTS = Object.freeze({
     ["org_id", "store_id", "order_id", "order_line_id"],
     "order_lines",
     ORDER_LINE_UNIQUE_KEY_COLUMNS,
+  ),
+  paymentsToOrders: declareForeignKeyLayout(
+    "payments",
+    ["org_id", "store_id", "order_id"],
+    "orders",
+    STORE_ENTITY_UNIQUE_KEY_COLUMNS,
   ),
 });
 
@@ -176,3 +183,4 @@ export const defineTenantForeignKey = (
 export const ORDER_LINES_ORDER_FOREIGN_KEY = DECLARED_FOREIGN_KEY_LAYOUTS.orderLinesToOrders;
 export const GARMENTS_ORDER_FOREIGN_KEY = DECLARED_FOREIGN_KEY_LAYOUTS.garmentsToOrders;
 export const GARMENTS_ORDER_LINE_FOREIGN_KEY = DECLARED_FOREIGN_KEY_LAYOUTS.garmentsToOrderLines;
+export const PAYMENTS_ORDER_FOREIGN_KEY = DECLARED_FOREIGN_KEY_LAYOUTS.paymentsToOrders;

@@ -202,12 +202,13 @@ owner/app 角色、事务级 `SET LOCAL`、worker 注入和五类旁路门禁全
 
 ### 三元键与外键
 
-当前只接受架构明确声明的唯一键：`orders(org_id, store_id, id)` 与
-`order_lines(org_id, store_id, order_id, id)`。`defineTenantUniqueKey()` 不会因为某表属于
-store scope 就推断它有 `id`；例如 `primary_lease_heads` 的显式主键不是该模板，因此拒绝。
-`defineTenantForeignKey()` 同样只接受下列三条 ADR-02/架构显式映射，不从父表复数名推断引用列。
-两个校验器都返回新的深冻结描述符，并拒绝未声明 pair、长度或顺序不一致、重复列、缺失精确
-`org_id, store_id` 前缀及跨 parent 布局。
+当前只接受 M0-1 schema 与架构 §7 无歧义声明的唯一键：`orders(org_id, store_id, id)`、
+`order_lines(org_id, store_id, order_id, id)` 与 `garments(org_id, store_id, id)`。
+`defineTenantUniqueKey()` 不会因为某表属于 store scope 就推断它有 `id`；例如
+`primary_lease_heads` 的显式主键不是该模板，因此拒绝。`defineTenantForeignKey()` 同样只接受
+下列四条 M0-1/ADR-02/架构 §7 显式映射，不从父表复数名推断引用列。两个校验器都返回新的
+深冻结描述符，并拒绝未声明 pair、长度或顺序不一致、重复列、缺失精确 `org_id, store_id`
+前缀及跨 parent 布局。
 
 冻结的订单链为：
 
@@ -218,9 +219,13 @@ garments(org_id, store_id, order_id)
   -> orders(org_id, store_id, id)
 garments(org_id, store_id, order_id, order_line_id)
   -> order_lines(org_id, store_id, order_id, id)
+payments(org_id, store_id, order_id)
+  -> orders(org_id, store_id, id)
 ```
 
-最后一条必须保留 `order_id`，从数据库键形状上阻止衣物引用同店另一订单的计价行。
+`garments -> order_lines` 必须保留 `order_id`，从数据库键形状上阻止衣物引用同店另一订单的计价行。
+`garment_status_log`、`print_jobs` 与 `ticket_no_blocks` 在当前架构表格中的简写不足以确定父表和
+引用列；A3 不猜测这些映射，在正式 schema 契约明确前保持 fail-closed。
 
 ### RLS 生成契约
 

@@ -4,7 +4,8 @@
 > 依据：[ADR-02](../../../../adr/2026-07-19-adr-02-postgres-multitenancy-rls.md)、
 > [架构 §4/§7](../../../specs/2026-07-19-laundry-v2-architecture.md)、
 > [M0-1 验收单](../m0-acceptance/m0-1-rls.md) 与
-> [M0-1 SQL 底稿](../../../../../tools/spikes/m0-1-rls/sql/policy-templates.sql)
+> [M0-1 schema 底稿](../../../../../tools/spikes/m0-1-rls/sql/schema.sql) 与
+> [M0-1 policy 底稿](../../../../../tools/spikes/m0-1-rls/sql/policy-templates.sql)
 
 ## 1. 范围与非结论
 
@@ -33,10 +34,13 @@ git diff --exit-code -- package-lock.json pnpm-lock.yaml
 
 - 架构 §7 的 53 张表恰好一次落入 global/org/store；未知表抛错，矩阵与条目均不可变；
 - `automation_policies.store_id?` 仍是 org scope，不能因可选过滤误套 store policy；
-- 唯一键校验只接受架构显式声明的 `orders` 与 `order_lines` 布局；不能从 store scope 推断
-  `primary_lease_heads` 等表含 `(org_id, store_id, id)`；
+- 唯一键校验只接受 M0-1 schema 与架构明确的 `orders`、`order_lines`、`garments` 布局；不能
+  从 store scope 推断 `primary_lease_heads` 等表含 `(org_id, store_id, id)`；
 - `garments -> order_lines` 精确为四列对四列，缺 `order_id`、乱序、重复列、长度不等或跨 parent
-  布局全部拒绝；外键校验只接受订单链三条显式映射，其他 pair 即使形状合理也拒绝；
+  布局全部拒绝；外键校验只接受 `order_lines -> orders`、`garments -> orders`、
+  `garments -> order_lines`、`payments -> orders` 四条无歧义映射；`garment_status_log`、
+  `print_jobs`、`ticket_no_blocks` 等简写未明确父表/引用列，在正式 schema 契约明确前保持
+  fail-closed；
 - org/store SQL 同时含 ENABLE、FORCE、USING、WITH CHECK，输出重复调用完全一致；builder 只能
   接收矩阵中对应 scope 的表，mismatch、global 或未知表全部拒绝；
 - 缺失/空 GUC 使用 `NULLIF(current_setting(..., true), '')::uuid` fail-closed，谓词没有跨表子查询；
@@ -47,16 +51,17 @@ git diff --exit-code -- package-lock.json pnpm-lock.yaml
 ## 3. RED → GREEN 证据要求
 
 初始三轮测试都必须先因对应模块/API 缺失而 RED；审查修正继续分别以 non-owner allowlist、
-scope mismatch/global/unknown、未声明键布局负例观测 RED，再写最小实现并运行同一 focused 命令
-到 GREEN。不能以拼写错误或恒真 shell 代替。最终结论只引用新鲜的全量
-test/typecheck/lint/diff 输出。
+scope mismatch/global/unknown、未声明键布局负例，以及 `garments` 唯一键、`payments -> orders`
+显式布局和公开描述符缺失观测 RED，再写最小实现并运行同一 focused 命令到 GREEN。不能以拼写
+错误或恒真 shell 代替。最终结论只引用新鲜的全量 test/typecheck/lint/diff 输出。
 
 ## 4. ADR-02 / M0-1 映射
 
 | 契约项                           | ADR-02                      | M0-1 底稿                     | A3 边界                          |
 | -------------------------------- | --------------------------- | ----------------------------- | -------------------------------- |
 | 三类作用域矩阵                   | #1、#8                      | 三表仅验证 store 模板         | 穷举 §7 当前 53 张表             |
-| 三元/四元组合键                  | #8                          | `schema.sql` 订单/行/衣物约束 | 仅接受三条显式订单链映射         |
+| 三元/四元唯一键                  | #8                          | `schema.sql` 订单/行/衣物约束 | 仅接受三条已声明唯一键布局       |
+| 租户复合外键                     | #8                          | 订单/行/衣物约束              | 仅接受 M0-1/§7 四条无歧义映射    |
 | org/store RLS                    | #2、#9、#10                 | `policy-templates.sql`        | 生成 scope-bound 确定性 SQL      |
 | missing/empty GUC fail-closed    | #10                         | 五类旁路读写实测              | 冻结 `NULLIF(current_setting())` |
 | owner maintenance policy         | FORCE RLS 与独立 owner 后果 | M0-6 后续补出的 owner 修正    | 仅允许 canonical `laundry_owner` |

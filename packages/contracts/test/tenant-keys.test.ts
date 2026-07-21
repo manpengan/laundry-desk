@@ -5,6 +5,7 @@ import {
   GARMENTS_ORDER_LINE_FOREIGN_KEY,
   ORDER_LINES_ORDER_FOREIGN_KEY,
   ORDER_LINE_UNIQUE_KEY_COLUMNS,
+  PAYMENTS_ORDER_FOREIGN_KEY,
   STORE_ENTITY_UNIQUE_KEY_COLUMNS,
   defineTenantForeignKey,
   defineTenantUniqueKey,
@@ -49,6 +50,12 @@ describe("A3 tenant composite unique keys", () => {
     ).toThrowError("order_lines key");
   });
 
+  it("accepts the garments entity key declared by the M0-1 schema", () => {
+    expect(
+      defineTenantUniqueKey({ table: "garments", columns: STORE_ENTITY_UNIQUE_KEY_COLUMNS }),
+    ).toEqual({ table: "garments", columns: STORE_ENTITY_UNIQUE_KEY_COLUMNS });
+  });
+
   it("rejects non-store entity tables", () => {
     expect(() =>
       defineTenantUniqueKey({ table: "customers", columns: STORE_ENTITY_UNIQUE_KEY_COLUMNS }),
@@ -85,6 +92,13 @@ describe("A3 tenant composite foreign keys", () => {
       parentTable: "order_lines",
       parentColumns: ["org_id", "store_id", "order_id", "id"],
     });
+    expect(PAYMENTS_ORDER_FOREIGN_KEY).toEqual({
+      childTable: "payments",
+      childColumns: ["org_id", "store_id", "order_id"],
+      parentTable: "orders",
+      parentColumns: ["org_id", "store_id", "id"],
+    });
+    expect(Object.isFrozen(PAYMENTS_ORDER_FOREIGN_KEY)).toBe(true);
     expect(Object.isFrozen(GARMENTS_ORDER_LINE_FOREIGN_KEY)).toBe(true);
     expect(Object.isFrozen(GARMENTS_ORDER_LINE_FOREIGN_KEY.childColumns)).toBe(true);
     expect(Object.isFrozen(GARMENTS_ORDER_LINE_FOREIGN_KEY.parentColumns)).toBe(true);
@@ -170,14 +184,37 @@ describe("A3 tenant composite foreign keys", () => {
     ).toThrowError("cross-parent");
   });
 
-  it("rejects a structurally plausible but undeclared foreign-key pair", () => {
-    expect(() =>
+  it("accepts the payments order reference declared by architecture section 7", () => {
+    expect(
       defineTenantForeignKey({
         childTable: "payments",
         childColumns: ["org_id", "store_id", "order_id"],
         parentTable: "orders",
         parentColumns: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
       }),
-    ).toThrowError("No declared tenant foreign-key layout for payments -> orders");
+    ).toEqual({
+      childTable: "payments",
+      childColumns: ["org_id", "store_id", "order_id"],
+      parentTable: "orders",
+      parentColumns: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
+    });
   });
+
+  it.each([
+    ["garment_status_log", ["org_id", "store_id", "garment_id"], "garments"],
+    ["print_jobs", ["org_id", "store_id", "order_id"], "orders"],
+    ["ticket_no_blocks", ["org_id", "store_id", "device_id"], "devices"],
+  ] as const)(
+    "does not infer the ambiguous %s parent mapping",
+    (childTable, childColumns, parentTable) => {
+      expect(() =>
+        defineTenantForeignKey({
+          childTable,
+          childColumns,
+          parentTable,
+          parentColumns: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
+        }),
+      ).toThrowError(`No declared tenant foreign-key layout for ${childTable} -> ${parentTable}`);
+    },
+  );
 });
