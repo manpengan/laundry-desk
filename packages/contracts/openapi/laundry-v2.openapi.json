@@ -71,13 +71,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "access_token",
-          "token_type",
-          "expires_in",
-          "storage",
-          "session"
-        ],
+        "required": ["access_token", "token_type", "expires_in", "storage", "session"],
         "type": "object"
       },
       "auth.empty.request": {
@@ -111,13 +105,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "org_code",
-          "store_code",
-          "username",
-          "password",
-          "device_id"
-        ],
+        "required": ["org_code", "store_code", "username", "password", "device_id"],
         "type": "object"
       },
       "auth.logout.response": {
@@ -128,9 +116,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "logged_out"
-        ],
+        "required": ["logged_out"],
         "type": "object"
       },
       "auth.pin_challenge.request": {
@@ -148,10 +134,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "purpose",
-              "target_staff_id"
-            ],
+            "required": ["purpose", "target_staff_id"],
             "type": "object"
           },
           {
@@ -171,11 +154,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "purpose",
-              "pending_action_ref",
-              "approver_staff_id"
-            ],
+            "required": ["purpose", "pending_action_ref", "approver_staff_id"],
             "type": "object"
           }
         ]
@@ -198,19 +177,11 @@
             "type": "number"
           },
           "purpose": {
-            "enum": [
-              "quick_switch",
-              "step_up"
-            ],
+            "enum": ["quick_switch", "step_up"],
             "type": "string"
           }
         },
-        "required": [
-          "challenge_id",
-          "purpose",
-          "expires_at",
-          "max_attempts"
-        ],
+        "required": ["challenge_id", "purpose", "expires_at", "max_attempts"],
         "type": "object"
       },
       "auth.pin_verify.request": {
@@ -226,10 +197,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "challenge_id",
-          "pin"
-        ],
+        "required": ["challenge_id", "pin"],
         "type": "object"
       },
       "auth.pin_verify.response": {
@@ -304,13 +272,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "access_token",
-              "token_type",
-              "expires_in",
-              "storage",
-              "session"
-            ],
+            "required": ["access_token", "token_type", "expires_in", "storage", "session"],
             "type": "object"
           },
           {
@@ -327,10 +289,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "step_up_proof_id",
-              "expires_at"
-            ],
+            "required": ["step_up_proof_id", "expires_at"],
             "type": "object"
           }
         ]
@@ -357,10 +316,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "path"
-                    ],
+                    "required": ["kind", "path"],
                     "type": "object"
                   },
                   {
@@ -380,10 +336,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "reason"
-                    ],
+                    "required": ["kind", "reason"],
                     "type": "object"
                   },
                   {
@@ -399,10 +352,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "confirm_ref"
-                    ],
+                    "required": ["kind", "confirm_ref"],
                     "type": "object"
                   },
                   {
@@ -414,20 +364,14 @@
                       },
                       "methods": {
                         "items": {
-                          "enum": [
-                            "pin",
-                            "qr"
-                          ],
+                          "enum": ["pin", "qr"],
                           "type": "string"
                         },
                         "minItems": 1,
                         "type": "array"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "methods"
-                    ],
+                    "required": ["kind", "methods"],
                     "type": "object"
                   },
                   {
@@ -443,10 +387,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "approval_ref"
-                    ],
+                    "required": ["kind", "approval_ref"],
                     "type": "object"
                   }
                 ]
@@ -456,10 +397,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -482,10 +420,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "path"
-                    ],
+                    "required": ["kind", "path"],
                     "type": "object"
                   },
                   {
@@ -505,10 +440,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "reason"
-                    ],
+                    "required": ["kind", "reason"],
                     "type": "object"
                   },
                   {
@@ -524,10 +456,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "confirm_ref"
-                    ],
+                    "required": ["kind", "confirm_ref"],
                     "type": "object"
                   },
                   {
@@ -539,20 +468,14 @@
                       },
                       "methods": {
                         "items": {
-                          "enum": [
-                            "pin",
-                            "qr"
-                          ],
+                          "enum": ["pin", "qr"],
                           "type": "string"
                         },
                         "minItems": 1,
                         "type": "array"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "methods"
-                    ],
+                    "required": ["kind", "methods"],
                     "type": "object"
                   },
                   {
@@ -568,10 +491,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "approval_ref"
-                    ],
+                    "required": ["kind", "approval_ref"],
                     "type": "object"
                   }
                 ]
@@ -581,10 +501,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -607,10 +524,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "path"
-                    ],
+                    "required": ["kind", "path"],
                     "type": "object"
                   },
                   {
@@ -630,10 +544,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "reason"
-                    ],
+                    "required": ["kind", "reason"],
                     "type": "object"
                   },
                   {
@@ -649,10 +560,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "confirm_ref"
-                    ],
+                    "required": ["kind", "confirm_ref"],
                     "type": "object"
                   },
                   {
@@ -664,20 +572,14 @@
                       },
                       "methods": {
                         "items": {
-                          "enum": [
-                            "pin",
-                            "qr"
-                          ],
+                          "enum": ["pin", "qr"],
                           "type": "string"
                         },
                         "minItems": 1,
                         "type": "array"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "methods"
-                    ],
+                    "required": ["kind", "methods"],
                     "type": "object"
                   },
                   {
@@ -693,10 +595,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "approval_ref"
-                    ],
+                    "required": ["kind", "approval_ref"],
                     "type": "object"
                   }
                 ]
@@ -706,10 +605,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -732,10 +628,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "path"
-                    ],
+                    "required": ["kind", "path"],
                     "type": "object"
                   },
                   {
@@ -755,10 +648,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "reason"
-                    ],
+                    "required": ["kind", "reason"],
                     "type": "object"
                   },
                   {
@@ -774,10 +664,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "confirm_ref"
-                    ],
+                    "required": ["kind", "confirm_ref"],
                     "type": "object"
                   },
                   {
@@ -789,20 +676,14 @@
                       },
                       "methods": {
                         "items": {
-                          "enum": [
-                            "pin",
-                            "qr"
-                          ],
+                          "enum": ["pin", "qr"],
                           "type": "string"
                         },
                         "minItems": 1,
                         "type": "array"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "methods"
-                    ],
+                    "required": ["kind", "methods"],
                     "type": "object"
                   },
                   {
@@ -818,10 +699,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "approval_ref"
-                    ],
+                    "required": ["kind", "approval_ref"],
                     "type": "object"
                   }
                 ]
@@ -831,10 +709,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -857,10 +732,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "path"
-                    ],
+                    "required": ["kind", "path"],
                     "type": "object"
                   },
                   {
@@ -880,10 +752,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "reason"
-                    ],
+                    "required": ["kind", "reason"],
                     "type": "object"
                   },
                   {
@@ -899,10 +768,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "confirm_ref"
-                    ],
+                    "required": ["kind", "confirm_ref"],
                     "type": "object"
                   },
                   {
@@ -914,20 +780,14 @@
                       },
                       "methods": {
                         "items": {
-                          "enum": [
-                            "pin",
-                            "qr"
-                          ],
+                          "enum": ["pin", "qr"],
                           "type": "string"
                         },
                         "minItems": 1,
                         "type": "array"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "methods"
-                    ],
+                    "required": ["kind", "methods"],
                     "type": "object"
                   },
                   {
@@ -943,10 +803,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "approval_ref"
-                    ],
+                    "required": ["kind", "approval_ref"],
                     "type": "object"
                   }
                 ]
@@ -956,10 +813,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -982,10 +836,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "path"
-                    ],
+                    "required": ["kind", "path"],
                     "type": "object"
                   },
                   {
@@ -1005,10 +856,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "reason"
-                    ],
+                    "required": ["kind", "reason"],
                     "type": "object"
                   },
                   {
@@ -1024,10 +872,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "confirm_ref"
-                    ],
+                    "required": ["kind", "confirm_ref"],
                     "type": "object"
                   },
                   {
@@ -1039,20 +884,14 @@
                       },
                       "methods": {
                         "items": {
-                          "enum": [
-                            "pin",
-                            "qr"
-                          ],
+                          "enum": ["pin", "qr"],
                           "type": "string"
                         },
                         "minItems": 1,
                         "type": "array"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "methods"
-                    ],
+                    "required": ["kind", "methods"],
                     "type": "object"
                   },
                   {
@@ -1068,10 +907,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "approval_ref"
-                    ],
+                    "required": ["kind", "approval_ref"],
                     "type": "object"
                   }
                 ]
@@ -1081,10 +917,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -1107,10 +940,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "path"
-                    ],
+                    "required": ["kind", "path"],
                     "type": "object"
                   },
                   {
@@ -1130,10 +960,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "reason"
-                    ],
+                    "required": ["kind", "reason"],
                     "type": "object"
                   },
                   {
@@ -1149,10 +976,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "confirm_ref"
-                    ],
+                    "required": ["kind", "confirm_ref"],
                     "type": "object"
                   },
                   {
@@ -1164,20 +988,14 @@
                       },
                       "methods": {
                         "items": {
-                          "enum": [
-                            "pin",
-                            "qr"
-                          ],
+                          "enum": ["pin", "qr"],
                           "type": "string"
                         },
                         "minItems": 1,
                         "type": "array"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "methods"
-                    ],
+                    "required": ["kind", "methods"],
                     "type": "object"
                   },
                   {
@@ -1193,10 +1011,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "approval_ref"
-                    ],
+                    "required": ["kind", "approval_ref"],
                     "type": "object"
                   }
                 ]
@@ -1206,10 +1021,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -1232,10 +1044,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "path"
-                    ],
+                    "required": ["kind", "path"],
                     "type": "object"
                   },
                   {
@@ -1255,10 +1064,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "reason"
-                    ],
+                    "required": ["kind", "reason"],
                     "type": "object"
                   },
                   {
@@ -1274,10 +1080,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "confirm_ref"
-                    ],
+                    "required": ["kind", "confirm_ref"],
                     "type": "object"
                   },
                   {
@@ -1289,20 +1092,14 @@
                       },
                       "methods": {
                         "items": {
-                          "enum": [
-                            "pin",
-                            "qr"
-                          ],
+                          "enum": ["pin", "qr"],
                           "type": "string"
                         },
                         "minItems": 1,
                         "type": "array"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "methods"
-                    ],
+                    "required": ["kind", "methods"],
                     "type": "object"
                   },
                   {
@@ -1318,10 +1115,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "approval_ref"
-                    ],
+                    "required": ["kind", "approval_ref"],
                     "type": "object"
                   }
                 ]
@@ -1331,10 +1125,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -1357,10 +1148,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "path"
-                    ],
+                    "required": ["kind", "path"],
                     "type": "object"
                   },
                   {
@@ -1380,10 +1168,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "reason"
-                    ],
+                    "required": ["kind", "reason"],
                     "type": "object"
                   },
                   {
@@ -1399,10 +1184,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "confirm_ref"
-                    ],
+                    "required": ["kind", "confirm_ref"],
                     "type": "object"
                   },
                   {
@@ -1414,20 +1196,14 @@
                       },
                       "methods": {
                         "items": {
-                          "enum": [
-                            "pin",
-                            "qr"
-                          ],
+                          "enum": ["pin", "qr"],
                           "type": "string"
                         },
                         "minItems": 1,
                         "type": "array"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "methods"
-                    ],
+                    "required": ["kind", "methods"],
                     "type": "object"
                   },
                   {
@@ -1443,10 +1219,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "approval_ref"
-                    ],
+                    "required": ["kind", "approval_ref"],
                     "type": "object"
                   }
                 ]
@@ -1456,10 +1229,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -1482,10 +1252,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "path"
-                    ],
+                    "required": ["kind", "path"],
                     "type": "object"
                   },
                   {
@@ -1505,10 +1272,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "reason"
-                    ],
+                    "required": ["kind", "reason"],
                     "type": "object"
                   },
                   {
@@ -1524,10 +1288,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "confirm_ref"
-                    ],
+                    "required": ["kind", "confirm_ref"],
                     "type": "object"
                   },
                   {
@@ -1539,20 +1300,14 @@
                       },
                       "methods": {
                         "items": {
-                          "enum": [
-                            "pin",
-                            "qr"
-                          ],
+                          "enum": ["pin", "qr"],
                           "type": "string"
                         },
                         "minItems": 1,
                         "type": "array"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "methods"
-                    ],
+                    "required": ["kind", "methods"],
                     "type": "object"
                   },
                   {
@@ -1568,10 +1323,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "approval_ref"
-                    ],
+                    "required": ["kind", "approval_ref"],
                     "type": "object"
                   }
                 ]
@@ -1581,10 +1333,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -1607,10 +1356,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "path"
-                    ],
+                    "required": ["kind", "path"],
                     "type": "object"
                   },
                   {
@@ -1630,10 +1376,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "reason"
-                    ],
+                    "required": ["kind", "reason"],
                     "type": "object"
                   },
                   {
@@ -1649,10 +1392,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "confirm_ref"
-                    ],
+                    "required": ["kind", "confirm_ref"],
                     "type": "object"
                   },
                   {
@@ -1664,20 +1404,14 @@
                       },
                       "methods": {
                         "items": {
-                          "enum": [
-                            "pin",
-                            "qr"
-                          ],
+                          "enum": ["pin", "qr"],
                           "type": "string"
                         },
                         "minItems": 1,
                         "type": "array"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "methods"
-                    ],
+                    "required": ["kind", "methods"],
                     "type": "object"
                   },
                   {
@@ -1693,10 +1427,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "approval_ref"
-                    ],
+                    "required": ["kind", "approval_ref"],
                     "type": "object"
                   }
                 ]
@@ -1706,10 +1437,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -1732,10 +1460,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "path"
-                    ],
+                    "required": ["kind", "path"],
                     "type": "object"
                   },
                   {
@@ -1755,10 +1480,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "reason"
-                    ],
+                    "required": ["kind", "reason"],
                     "type": "object"
                   },
                   {
@@ -1774,10 +1496,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "confirm_ref"
-                    ],
+                    "required": ["kind", "confirm_ref"],
                     "type": "object"
                   },
                   {
@@ -1789,20 +1508,14 @@
                       },
                       "methods": {
                         "items": {
-                          "enum": [
-                            "pin",
-                            "qr"
-                          ],
+                          "enum": ["pin", "qr"],
                           "type": "string"
                         },
                         "minItems": 1,
                         "type": "array"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "methods"
-                    ],
+                    "required": ["kind", "methods"],
                     "type": "object"
                   },
                   {
@@ -1818,10 +1531,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "kind",
-                      "approval_ref"
-                    ],
+                    "required": ["kind", "approval_ref"],
                     "type": "object"
                   }
                 ]
@@ -1831,10 +1541,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -1849,10 +1556,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -1867,10 +1571,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           },
           {
@@ -1885,10 +1586,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "code",
-              "message"
-            ],
+            "required": ["code", "message"],
             "type": "object"
           }
         ]
@@ -1918,10 +1616,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "path"
-                        ],
+                        "required": ["kind", "path"],
                         "type": "object"
                       },
                       {
@@ -1941,10 +1636,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "reason"
-                        ],
+                        "required": ["kind", "reason"],
                         "type": "object"
                       },
                       {
@@ -1960,10 +1652,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "confirm_ref"
-                        ],
+                        "required": ["kind", "confirm_ref"],
                         "type": "object"
                       },
                       {
@@ -1975,20 +1664,14 @@
                           },
                           "methods": {
                             "items": {
-                              "enum": [
-                                "pin",
-                                "qr"
-                              ],
+                              "enum": ["pin", "qr"],
                               "type": "string"
                             },
                             "minItems": 1,
                             "type": "array"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "methods"
-                        ],
+                        "required": ["kind", "methods"],
                         "type": "object"
                       },
                       {
@@ -2004,10 +1687,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "approval_ref"
-                        ],
+                        "required": ["kind", "approval_ref"],
                         "type": "object"
                       }
                     ]
@@ -2017,10 +1697,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -2043,10 +1720,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "path"
-                        ],
+                        "required": ["kind", "path"],
                         "type": "object"
                       },
                       {
@@ -2066,10 +1740,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "reason"
-                        ],
+                        "required": ["kind", "reason"],
                         "type": "object"
                       },
                       {
@@ -2085,10 +1756,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "confirm_ref"
-                        ],
+                        "required": ["kind", "confirm_ref"],
                         "type": "object"
                       },
                       {
@@ -2100,20 +1768,14 @@
                           },
                           "methods": {
                             "items": {
-                              "enum": [
-                                "pin",
-                                "qr"
-                              ],
+                              "enum": ["pin", "qr"],
                               "type": "string"
                             },
                             "minItems": 1,
                             "type": "array"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "methods"
-                        ],
+                        "required": ["kind", "methods"],
                         "type": "object"
                       },
                       {
@@ -2129,10 +1791,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "approval_ref"
-                        ],
+                        "required": ["kind", "approval_ref"],
                         "type": "object"
                       }
                     ]
@@ -2142,10 +1801,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -2168,10 +1824,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "path"
-                        ],
+                        "required": ["kind", "path"],
                         "type": "object"
                       },
                       {
@@ -2191,10 +1844,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "reason"
-                        ],
+                        "required": ["kind", "reason"],
                         "type": "object"
                       },
                       {
@@ -2210,10 +1860,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "confirm_ref"
-                        ],
+                        "required": ["kind", "confirm_ref"],
                         "type": "object"
                       },
                       {
@@ -2225,20 +1872,14 @@
                           },
                           "methods": {
                             "items": {
-                              "enum": [
-                                "pin",
-                                "qr"
-                              ],
+                              "enum": ["pin", "qr"],
                               "type": "string"
                             },
                             "minItems": 1,
                             "type": "array"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "methods"
-                        ],
+                        "required": ["kind", "methods"],
                         "type": "object"
                       },
                       {
@@ -2254,10 +1895,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "approval_ref"
-                        ],
+                        "required": ["kind", "approval_ref"],
                         "type": "object"
                       }
                     ]
@@ -2267,10 +1905,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -2293,10 +1928,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "path"
-                        ],
+                        "required": ["kind", "path"],
                         "type": "object"
                       },
                       {
@@ -2316,10 +1948,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "reason"
-                        ],
+                        "required": ["kind", "reason"],
                         "type": "object"
                       },
                       {
@@ -2335,10 +1964,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "confirm_ref"
-                        ],
+                        "required": ["kind", "confirm_ref"],
                         "type": "object"
                       },
                       {
@@ -2350,20 +1976,14 @@
                           },
                           "methods": {
                             "items": {
-                              "enum": [
-                                "pin",
-                                "qr"
-                              ],
+                              "enum": ["pin", "qr"],
                               "type": "string"
                             },
                             "minItems": 1,
                             "type": "array"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "methods"
-                        ],
+                        "required": ["kind", "methods"],
                         "type": "object"
                       },
                       {
@@ -2379,10 +1999,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "approval_ref"
-                        ],
+                        "required": ["kind", "approval_ref"],
                         "type": "object"
                       }
                     ]
@@ -2392,10 +2009,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -2418,10 +2032,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "path"
-                        ],
+                        "required": ["kind", "path"],
                         "type": "object"
                       },
                       {
@@ -2441,10 +2052,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "reason"
-                        ],
+                        "required": ["kind", "reason"],
                         "type": "object"
                       },
                       {
@@ -2460,10 +2068,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "confirm_ref"
-                        ],
+                        "required": ["kind", "confirm_ref"],
                         "type": "object"
                       },
                       {
@@ -2475,20 +2080,14 @@
                           },
                           "methods": {
                             "items": {
-                              "enum": [
-                                "pin",
-                                "qr"
-                              ],
+                              "enum": ["pin", "qr"],
                               "type": "string"
                             },
                             "minItems": 1,
                             "type": "array"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "methods"
-                        ],
+                        "required": ["kind", "methods"],
                         "type": "object"
                       },
                       {
@@ -2504,10 +2103,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "approval_ref"
-                        ],
+                        "required": ["kind", "approval_ref"],
                         "type": "object"
                       }
                     ]
@@ -2517,10 +2113,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -2543,10 +2136,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "path"
-                        ],
+                        "required": ["kind", "path"],
                         "type": "object"
                       },
                       {
@@ -2566,10 +2156,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "reason"
-                        ],
+                        "required": ["kind", "reason"],
                         "type": "object"
                       },
                       {
@@ -2585,10 +2172,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "confirm_ref"
-                        ],
+                        "required": ["kind", "confirm_ref"],
                         "type": "object"
                       },
                       {
@@ -2600,20 +2184,14 @@
                           },
                           "methods": {
                             "items": {
-                              "enum": [
-                                "pin",
-                                "qr"
-                              ],
+                              "enum": ["pin", "qr"],
                               "type": "string"
                             },
                             "minItems": 1,
                             "type": "array"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "methods"
-                        ],
+                        "required": ["kind", "methods"],
                         "type": "object"
                       },
                       {
@@ -2629,10 +2207,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "approval_ref"
-                        ],
+                        "required": ["kind", "approval_ref"],
                         "type": "object"
                       }
                     ]
@@ -2642,10 +2217,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -2668,10 +2240,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "path"
-                        ],
+                        "required": ["kind", "path"],
                         "type": "object"
                       },
                       {
@@ -2691,10 +2260,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "reason"
-                        ],
+                        "required": ["kind", "reason"],
                         "type": "object"
                       },
                       {
@@ -2710,10 +2276,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "confirm_ref"
-                        ],
+                        "required": ["kind", "confirm_ref"],
                         "type": "object"
                       },
                       {
@@ -2725,20 +2288,14 @@
                           },
                           "methods": {
                             "items": {
-                              "enum": [
-                                "pin",
-                                "qr"
-                              ],
+                              "enum": ["pin", "qr"],
                               "type": "string"
                             },
                             "minItems": 1,
                             "type": "array"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "methods"
-                        ],
+                        "required": ["kind", "methods"],
                         "type": "object"
                       },
                       {
@@ -2754,10 +2311,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "approval_ref"
-                        ],
+                        "required": ["kind", "approval_ref"],
                         "type": "object"
                       }
                     ]
@@ -2767,10 +2321,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -2793,10 +2344,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "path"
-                        ],
+                        "required": ["kind", "path"],
                         "type": "object"
                       },
                       {
@@ -2816,10 +2364,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "reason"
-                        ],
+                        "required": ["kind", "reason"],
                         "type": "object"
                       },
                       {
@@ -2835,10 +2380,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "confirm_ref"
-                        ],
+                        "required": ["kind", "confirm_ref"],
                         "type": "object"
                       },
                       {
@@ -2850,20 +2392,14 @@
                           },
                           "methods": {
                             "items": {
-                              "enum": [
-                                "pin",
-                                "qr"
-                              ],
+                              "enum": ["pin", "qr"],
                               "type": "string"
                             },
                             "minItems": 1,
                             "type": "array"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "methods"
-                        ],
+                        "required": ["kind", "methods"],
                         "type": "object"
                       },
                       {
@@ -2879,10 +2415,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "approval_ref"
-                        ],
+                        "required": ["kind", "approval_ref"],
                         "type": "object"
                       }
                     ]
@@ -2892,10 +2425,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -2918,10 +2448,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "path"
-                        ],
+                        "required": ["kind", "path"],
                         "type": "object"
                       },
                       {
@@ -2941,10 +2468,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "reason"
-                        ],
+                        "required": ["kind", "reason"],
                         "type": "object"
                       },
                       {
@@ -2960,10 +2484,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "confirm_ref"
-                        ],
+                        "required": ["kind", "confirm_ref"],
                         "type": "object"
                       },
                       {
@@ -2975,20 +2496,14 @@
                           },
                           "methods": {
                             "items": {
-                              "enum": [
-                                "pin",
-                                "qr"
-                              ],
+                              "enum": ["pin", "qr"],
                               "type": "string"
                             },
                             "minItems": 1,
                             "type": "array"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "methods"
-                        ],
+                        "required": ["kind", "methods"],
                         "type": "object"
                       },
                       {
@@ -3004,10 +2519,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "approval_ref"
-                        ],
+                        "required": ["kind", "approval_ref"],
                         "type": "object"
                       }
                     ]
@@ -3017,10 +2529,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -3043,10 +2552,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "path"
-                        ],
+                        "required": ["kind", "path"],
                         "type": "object"
                       },
                       {
@@ -3066,10 +2572,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "reason"
-                        ],
+                        "required": ["kind", "reason"],
                         "type": "object"
                       },
                       {
@@ -3085,10 +2588,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "confirm_ref"
-                        ],
+                        "required": ["kind", "confirm_ref"],
                         "type": "object"
                       },
                       {
@@ -3100,20 +2600,14 @@
                           },
                           "methods": {
                             "items": {
-                              "enum": [
-                                "pin",
-                                "qr"
-                              ],
+                              "enum": ["pin", "qr"],
                               "type": "string"
                             },
                             "minItems": 1,
                             "type": "array"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "methods"
-                        ],
+                        "required": ["kind", "methods"],
                         "type": "object"
                       },
                       {
@@ -3129,10 +2623,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "approval_ref"
-                        ],
+                        "required": ["kind", "approval_ref"],
                         "type": "object"
                       }
                     ]
@@ -3142,10 +2633,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -3168,10 +2656,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "path"
-                        ],
+                        "required": ["kind", "path"],
                         "type": "object"
                       },
                       {
@@ -3191,10 +2676,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "reason"
-                        ],
+                        "required": ["kind", "reason"],
                         "type": "object"
                       },
                       {
@@ -3210,10 +2692,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "confirm_ref"
-                        ],
+                        "required": ["kind", "confirm_ref"],
                         "type": "object"
                       },
                       {
@@ -3225,20 +2704,14 @@
                           },
                           "methods": {
                             "items": {
-                              "enum": [
-                                "pin",
-                                "qr"
-                              ],
+                              "enum": ["pin", "qr"],
                               "type": "string"
                             },
                             "minItems": 1,
                             "type": "array"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "methods"
-                        ],
+                        "required": ["kind", "methods"],
                         "type": "object"
                       },
                       {
@@ -3254,10 +2727,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "approval_ref"
-                        ],
+                        "required": ["kind", "approval_ref"],
                         "type": "object"
                       }
                     ]
@@ -3267,10 +2737,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -3293,10 +2760,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "path"
-                        ],
+                        "required": ["kind", "path"],
                         "type": "object"
                       },
                       {
@@ -3316,10 +2780,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "reason"
-                        ],
+                        "required": ["kind", "reason"],
                         "type": "object"
                       },
                       {
@@ -3335,10 +2796,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "confirm_ref"
-                        ],
+                        "required": ["kind", "confirm_ref"],
                         "type": "object"
                       },
                       {
@@ -3350,20 +2808,14 @@
                           },
                           "methods": {
                             "items": {
-                              "enum": [
-                                "pin",
-                                "qr"
-                              ],
+                              "enum": ["pin", "qr"],
                               "type": "string"
                             },
                             "minItems": 1,
                             "type": "array"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "methods"
-                        ],
+                        "required": ["kind", "methods"],
                         "type": "object"
                       },
                       {
@@ -3379,10 +2831,7 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "kind",
-                          "approval_ref"
-                        ],
+                        "required": ["kind", "approval_ref"],
                         "type": "object"
                       }
                     ]
@@ -3392,10 +2841,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -3410,10 +2856,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -3428,10 +2871,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               },
               {
@@ -3446,10 +2886,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "code",
-                  "message"
-                ],
+                "required": ["code", "message"],
                 "type": "object"
               }
             ]
@@ -3459,10 +2896,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "ok",
-          "error"
-        ],
+        "required": ["ok", "error"],
         "type": "object"
       },
       "CommandResponse": {
@@ -3541,10 +2975,7 @@
                         "$ref": "#/definitions/__schema0"
                       }
                     },
-                    "required": [
-                      "execution",
-                      "result"
-                    ],
+                    "required": ["execution", "result"],
                     "type": "object"
                   },
                   {
@@ -3558,10 +2989,7 @@
                         "$ref": "#/definitions/__schema1"
                       }
                     },
-                    "required": [
-                      "execution",
-                      "result"
-                    ],
+                    "required": ["execution", "result"],
                     "type": "object"
                   }
                 ]
@@ -3571,10 +2999,7 @@
                 "type": "boolean"
               }
             },
-            "required": [
-              "ok",
-              "data"
-            ],
+            "required": ["ok", "data"],
             "type": "object"
           },
           {
@@ -3602,10 +3027,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "path"
-                            ],
+                            "required": ["kind", "path"],
                             "type": "object"
                           },
                           {
@@ -3625,10 +3047,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "reason"
-                            ],
+                            "required": ["kind", "reason"],
                             "type": "object"
                           },
                           {
@@ -3644,10 +3063,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "confirm_ref"
-                            ],
+                            "required": ["kind", "confirm_ref"],
                             "type": "object"
                           },
                           {
@@ -3659,20 +3075,14 @@
                               },
                               "methods": {
                                 "items": {
-                                  "enum": [
-                                    "pin",
-                                    "qr"
-                                  ],
+                                  "enum": ["pin", "qr"],
                                   "type": "string"
                                 },
                                 "minItems": 1,
                                 "type": "array"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "methods"
-                            ],
+                            "required": ["kind", "methods"],
                             "type": "object"
                           },
                           {
@@ -3688,10 +3098,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "approval_ref"
-                            ],
+                            "required": ["kind", "approval_ref"],
                             "type": "object"
                           }
                         ]
@@ -3701,10 +3108,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -3727,10 +3131,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "path"
-                            ],
+                            "required": ["kind", "path"],
                             "type": "object"
                           },
                           {
@@ -3750,10 +3151,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "reason"
-                            ],
+                            "required": ["kind", "reason"],
                             "type": "object"
                           },
                           {
@@ -3769,10 +3167,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "confirm_ref"
-                            ],
+                            "required": ["kind", "confirm_ref"],
                             "type": "object"
                           },
                           {
@@ -3784,20 +3179,14 @@
                               },
                               "methods": {
                                 "items": {
-                                  "enum": [
-                                    "pin",
-                                    "qr"
-                                  ],
+                                  "enum": ["pin", "qr"],
                                   "type": "string"
                                 },
                                 "minItems": 1,
                                 "type": "array"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "methods"
-                            ],
+                            "required": ["kind", "methods"],
                             "type": "object"
                           },
                           {
@@ -3813,10 +3202,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "approval_ref"
-                            ],
+                            "required": ["kind", "approval_ref"],
                             "type": "object"
                           }
                         ]
@@ -3826,10 +3212,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -3852,10 +3235,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "path"
-                            ],
+                            "required": ["kind", "path"],
                             "type": "object"
                           },
                           {
@@ -3875,10 +3255,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "reason"
-                            ],
+                            "required": ["kind", "reason"],
                             "type": "object"
                           },
                           {
@@ -3894,10 +3271,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "confirm_ref"
-                            ],
+                            "required": ["kind", "confirm_ref"],
                             "type": "object"
                           },
                           {
@@ -3909,20 +3283,14 @@
                               },
                               "methods": {
                                 "items": {
-                                  "enum": [
-                                    "pin",
-                                    "qr"
-                                  ],
+                                  "enum": ["pin", "qr"],
                                   "type": "string"
                                 },
                                 "minItems": 1,
                                 "type": "array"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "methods"
-                            ],
+                            "required": ["kind", "methods"],
                             "type": "object"
                           },
                           {
@@ -3938,10 +3306,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "approval_ref"
-                            ],
+                            "required": ["kind", "approval_ref"],
                             "type": "object"
                           }
                         ]
@@ -3951,10 +3316,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -3977,10 +3339,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "path"
-                            ],
+                            "required": ["kind", "path"],
                             "type": "object"
                           },
                           {
@@ -4000,10 +3359,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "reason"
-                            ],
+                            "required": ["kind", "reason"],
                             "type": "object"
                           },
                           {
@@ -4019,10 +3375,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "confirm_ref"
-                            ],
+                            "required": ["kind", "confirm_ref"],
                             "type": "object"
                           },
                           {
@@ -4034,20 +3387,14 @@
                               },
                               "methods": {
                                 "items": {
-                                  "enum": [
-                                    "pin",
-                                    "qr"
-                                  ],
+                                  "enum": ["pin", "qr"],
                                   "type": "string"
                                 },
                                 "minItems": 1,
                                 "type": "array"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "methods"
-                            ],
+                            "required": ["kind", "methods"],
                             "type": "object"
                           },
                           {
@@ -4063,10 +3410,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "approval_ref"
-                            ],
+                            "required": ["kind", "approval_ref"],
                             "type": "object"
                           }
                         ]
@@ -4076,10 +3420,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -4102,10 +3443,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "path"
-                            ],
+                            "required": ["kind", "path"],
                             "type": "object"
                           },
                           {
@@ -4125,10 +3463,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "reason"
-                            ],
+                            "required": ["kind", "reason"],
                             "type": "object"
                           },
                           {
@@ -4144,10 +3479,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "confirm_ref"
-                            ],
+                            "required": ["kind", "confirm_ref"],
                             "type": "object"
                           },
                           {
@@ -4159,20 +3491,14 @@
                               },
                               "methods": {
                                 "items": {
-                                  "enum": [
-                                    "pin",
-                                    "qr"
-                                  ],
+                                  "enum": ["pin", "qr"],
                                   "type": "string"
                                 },
                                 "minItems": 1,
                                 "type": "array"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "methods"
-                            ],
+                            "required": ["kind", "methods"],
                             "type": "object"
                           },
                           {
@@ -4188,10 +3514,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "approval_ref"
-                            ],
+                            "required": ["kind", "approval_ref"],
                             "type": "object"
                           }
                         ]
@@ -4201,10 +3524,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -4227,10 +3547,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "path"
-                            ],
+                            "required": ["kind", "path"],
                             "type": "object"
                           },
                           {
@@ -4250,10 +3567,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "reason"
-                            ],
+                            "required": ["kind", "reason"],
                             "type": "object"
                           },
                           {
@@ -4269,10 +3583,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "confirm_ref"
-                            ],
+                            "required": ["kind", "confirm_ref"],
                             "type": "object"
                           },
                           {
@@ -4284,20 +3595,14 @@
                               },
                               "methods": {
                                 "items": {
-                                  "enum": [
-                                    "pin",
-                                    "qr"
-                                  ],
+                                  "enum": ["pin", "qr"],
                                   "type": "string"
                                 },
                                 "minItems": 1,
                                 "type": "array"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "methods"
-                            ],
+                            "required": ["kind", "methods"],
                             "type": "object"
                           },
                           {
@@ -4313,10 +3618,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "approval_ref"
-                            ],
+                            "required": ["kind", "approval_ref"],
                             "type": "object"
                           }
                         ]
@@ -4326,10 +3628,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -4352,10 +3651,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "path"
-                            ],
+                            "required": ["kind", "path"],
                             "type": "object"
                           },
                           {
@@ -4375,10 +3671,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "reason"
-                            ],
+                            "required": ["kind", "reason"],
                             "type": "object"
                           },
                           {
@@ -4394,10 +3687,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "confirm_ref"
-                            ],
+                            "required": ["kind", "confirm_ref"],
                             "type": "object"
                           },
                           {
@@ -4409,20 +3699,14 @@
                               },
                               "methods": {
                                 "items": {
-                                  "enum": [
-                                    "pin",
-                                    "qr"
-                                  ],
+                                  "enum": ["pin", "qr"],
                                   "type": "string"
                                 },
                                 "minItems": 1,
                                 "type": "array"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "methods"
-                            ],
+                            "required": ["kind", "methods"],
                             "type": "object"
                           },
                           {
@@ -4438,10 +3722,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "approval_ref"
-                            ],
+                            "required": ["kind", "approval_ref"],
                             "type": "object"
                           }
                         ]
@@ -4451,10 +3732,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -4477,10 +3755,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "path"
-                            ],
+                            "required": ["kind", "path"],
                             "type": "object"
                           },
                           {
@@ -4500,10 +3775,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "reason"
-                            ],
+                            "required": ["kind", "reason"],
                             "type": "object"
                           },
                           {
@@ -4519,10 +3791,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "confirm_ref"
-                            ],
+                            "required": ["kind", "confirm_ref"],
                             "type": "object"
                           },
                           {
@@ -4534,20 +3803,14 @@
                               },
                               "methods": {
                                 "items": {
-                                  "enum": [
-                                    "pin",
-                                    "qr"
-                                  ],
+                                  "enum": ["pin", "qr"],
                                   "type": "string"
                                 },
                                 "minItems": 1,
                                 "type": "array"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "methods"
-                            ],
+                            "required": ["kind", "methods"],
                             "type": "object"
                           },
                           {
@@ -4563,10 +3826,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "approval_ref"
-                            ],
+                            "required": ["kind", "approval_ref"],
                             "type": "object"
                           }
                         ]
@@ -4576,10 +3836,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -4602,10 +3859,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "path"
-                            ],
+                            "required": ["kind", "path"],
                             "type": "object"
                           },
                           {
@@ -4625,10 +3879,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "reason"
-                            ],
+                            "required": ["kind", "reason"],
                             "type": "object"
                           },
                           {
@@ -4644,10 +3895,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "confirm_ref"
-                            ],
+                            "required": ["kind", "confirm_ref"],
                             "type": "object"
                           },
                           {
@@ -4659,20 +3907,14 @@
                               },
                               "methods": {
                                 "items": {
-                                  "enum": [
-                                    "pin",
-                                    "qr"
-                                  ],
+                                  "enum": ["pin", "qr"],
                                   "type": "string"
                                 },
                                 "minItems": 1,
                                 "type": "array"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "methods"
-                            ],
+                            "required": ["kind", "methods"],
                             "type": "object"
                           },
                           {
@@ -4688,10 +3930,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "approval_ref"
-                            ],
+                            "required": ["kind", "approval_ref"],
                             "type": "object"
                           }
                         ]
@@ -4701,10 +3940,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -4727,10 +3963,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "path"
-                            ],
+                            "required": ["kind", "path"],
                             "type": "object"
                           },
                           {
@@ -4750,10 +3983,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "reason"
-                            ],
+                            "required": ["kind", "reason"],
                             "type": "object"
                           },
                           {
@@ -4769,10 +3999,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "confirm_ref"
-                            ],
+                            "required": ["kind", "confirm_ref"],
                             "type": "object"
                           },
                           {
@@ -4784,20 +4011,14 @@
                               },
                               "methods": {
                                 "items": {
-                                  "enum": [
-                                    "pin",
-                                    "qr"
-                                  ],
+                                  "enum": ["pin", "qr"],
                                   "type": "string"
                                 },
                                 "minItems": 1,
                                 "type": "array"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "methods"
-                            ],
+                            "required": ["kind", "methods"],
                             "type": "object"
                           },
                           {
@@ -4813,10 +4034,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "approval_ref"
-                            ],
+                            "required": ["kind", "approval_ref"],
                             "type": "object"
                           }
                         ]
@@ -4826,10 +4044,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -4852,10 +4067,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "path"
-                            ],
+                            "required": ["kind", "path"],
                             "type": "object"
                           },
                           {
@@ -4875,10 +4087,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "reason"
-                            ],
+                            "required": ["kind", "reason"],
                             "type": "object"
                           },
                           {
@@ -4894,10 +4103,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "confirm_ref"
-                            ],
+                            "required": ["kind", "confirm_ref"],
                             "type": "object"
                           },
                           {
@@ -4909,20 +4115,14 @@
                               },
                               "methods": {
                                 "items": {
-                                  "enum": [
-                                    "pin",
-                                    "qr"
-                                  ],
+                                  "enum": ["pin", "qr"],
                                   "type": "string"
                                 },
                                 "minItems": 1,
                                 "type": "array"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "methods"
-                            ],
+                            "required": ["kind", "methods"],
                             "type": "object"
                           },
                           {
@@ -4938,10 +4138,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "approval_ref"
-                            ],
+                            "required": ["kind", "approval_ref"],
                             "type": "object"
                           }
                         ]
@@ -4951,10 +4148,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -4977,10 +4171,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "path"
-                            ],
+                            "required": ["kind", "path"],
                             "type": "object"
                           },
                           {
@@ -5000,10 +4191,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "reason"
-                            ],
+                            "required": ["kind", "reason"],
                             "type": "object"
                           },
                           {
@@ -5019,10 +4207,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "confirm_ref"
-                            ],
+                            "required": ["kind", "confirm_ref"],
                             "type": "object"
                           },
                           {
@@ -5034,20 +4219,14 @@
                               },
                               "methods": {
                                 "items": {
-                                  "enum": [
-                                    "pin",
-                                    "qr"
-                                  ],
+                                  "enum": ["pin", "qr"],
                                   "type": "string"
                                 },
                                 "minItems": 1,
                                 "type": "array"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "methods"
-                            ],
+                            "required": ["kind", "methods"],
                             "type": "object"
                           },
                           {
@@ -5063,10 +4242,7 @@
                                 "type": "string"
                               }
                             },
-                            "required": [
-                              "kind",
-                              "approval_ref"
-                            ],
+                            "required": ["kind", "approval_ref"],
                             "type": "object"
                           }
                         ]
@@ -5076,10 +4252,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -5094,10 +4267,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -5112,10 +4282,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   },
                   {
@@ -5130,10 +4297,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "code",
-                      "message"
-                    ],
+                    "required": ["code", "message"],
                     "type": "object"
                   }
                 ]
@@ -5143,10 +4307,7 @@
                 "type": "boolean"
               }
             },
-            "required": [
-              "ok",
-              "error"
-            ],
+            "required": ["ok", "error"],
             "type": "object"
           }
         ]
@@ -5177,13 +4338,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "org_code",
-          "store_code",
-          "username",
-          "password",
-          "device_id"
-        ],
+        "required": ["org_code", "store_code", "username", "password", "device_id"],
         "type": "object"
       },
       "input.command.identity.logout": {
@@ -5204,10 +4359,7 @@
             "type": "string"
           },
           "purpose": {
-            "enum": [
-              "quick_switch",
-              "step_up"
-            ],
+            "enum": ["quick_switch", "step_up"],
             "type": "string"
           },
           "target_staff_id": {
@@ -5216,9 +4368,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "purpose"
-        ],
+        "required": ["purpose"],
         "type": "object"
       },
       "input.command.identity.pin_verify": {
@@ -5234,10 +4384,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "challenge_id",
-          "pin"
-        ],
+        "required": ["challenge_id", "pin"],
         "type": "object"
       },
       "input.command.identity.refresh": {
@@ -5261,10 +4408,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "key",
-                "value_json"
-              ],
+              "required": ["key", "value_json"],
               "type": "object"
             },
             "maxItems": 20,
@@ -5272,9 +4416,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "entries"
-        ],
+        "required": ["entries"],
         "type": "object"
       },
       "input.query.platform.audit.list": {
@@ -5296,11 +4438,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "from_epoch_s",
-          "to_epoch_s",
-          "limit"
-        ],
+        "required": ["from_epoch_s", "to_epoch_s", "limit"],
         "type": "object"
       },
       "input.query.platform.settings.get": {
@@ -5316,9 +4454,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "keys"
-        ],
+        "required": ["keys"],
         "type": "object"
       },
       "input.query.platform.store_features.get": {
@@ -5330,9 +4466,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "store_id"
-        ],
+        "required": ["store_id"],
         "type": "object"
       }
     },
@@ -5425,9 +4559,7 @@
           }
         },
         "summary": "Auth login",
-        "tags": [
-          "auth"
-        ],
+        "tags": ["auth"],
         "x-laundry-kind": "auth"
       }
     },
@@ -5515,9 +4647,7 @@
           }
         ],
         "summary": "Auth logout",
-        "tags": [
-          "auth"
-        ],
+        "tags": ["auth"],
         "x-laundry-kind": "auth"
       }
     },
@@ -5608,9 +4738,7 @@
           }
         ],
         "summary": "Auth pin_challenge",
-        "tags": [
-          "auth"
-        ],
+        "tags": ["auth"],
         "x-laundry-kind": "auth"
       }
     },
@@ -5710,9 +4838,7 @@
           }
         ],
         "summary": "Auth pin_verify",
-        "tags": [
-          "auth"
-        ],
+        "tags": ["auth"],
         "x-laundry-kind": "auth"
       }
     },
@@ -5800,9 +4926,7 @@
           }
         ],
         "summary": "Auth refresh",
-        "tags": [
-          "auth"
-        ],
+        "tags": ["auth"],
         "x-laundry-kind": "auth"
       }
     },
@@ -5848,9 +4972,7 @@
           }
         ],
         "summary": "Authenticate staff with password and establish browser session cookies.",
-        "tags": [
-          "commands"
-        ],
+        "tags": ["commands"],
         "x-laundry-classification": "secret",
         "x-laundry-kind": "command",
         "x-laundry-offline-mode": "denied",
@@ -5900,9 +5022,7 @@
           }
         ],
         "summary": "Revoke the current refresh family and clear auth cookies.",
-        "tags": [
-          "commands"
-        ],
+        "tags": ["commands"],
         "x-laundry-classification": "internal",
         "x-laundry-kind": "command",
         "x-laundry-offline-mode": "denied",
@@ -5952,9 +5072,7 @@
           }
         ],
         "summary": "Create a single-use PIN challenge for quick switch or step-up.",
-        "tags": [
-          "commands"
-        ],
+        "tags": ["commands"],
         "x-laundry-classification": "internal",
         "x-laundry-kind": "command",
         "x-laundry-offline-mode": "denied",
@@ -6004,9 +5122,7 @@
           }
         ],
         "summary": "Verify PIN against an open challenge for quick switch or step-up proof.",
-        "tags": [
-          "commands"
-        ],
+        "tags": ["commands"],
         "x-laundry-classification": "secret",
         "x-laundry-kind": "command",
         "x-laundry-offline-mode": "denied",
@@ -6056,9 +5172,7 @@
           }
         ],
         "summary": "Rotate refresh session and issue a new memory-only access token.",
-        "tags": [
-          "commands"
-        ],
+        "tags": ["commands"],
         "x-laundry-classification": "internal",
         "x-laundry-kind": "command",
         "x-laundry-offline-mode": "denied",
@@ -6108,9 +5222,7 @@
           }
         ],
         "summary": "Update system/store settings entries (high risk).",
-        "tags": [
-          "commands"
-        ],
+        "tags": ["commands"],
         "x-laundry-classification": "internal",
         "x-laundry-kind": "command",
         "x-laundry-offline-mode": "denied",
@@ -6160,9 +5272,7 @@
           }
         ],
         "summary": "List audit events in a time window (read-only).",
-        "tags": [
-          "queries"
-        ],
+        "tags": ["queries"],
         "x-laundry-classification": "pii",
         "x-laundry-kind": "query",
         "x-laundry-offline-mode": "denied",
@@ -6212,9 +5322,7 @@
           }
         ],
         "summary": "Read store/org settings values by key list.",
-        "tags": [
-          "queries"
-        ],
+        "tags": ["queries"],
         "x-laundry-classification": "internal",
         "x-laundry-kind": "query",
         "x-laundry-offline-mode": "denied",
@@ -6264,9 +5372,7 @@
           }
         ],
         "summary": "Read feature flags for one store.",
-        "tags": [
-          "queries"
-        ],
+        "tags": ["queries"],
         "x-laundry-classification": "internal",
         "x-laundry-kind": "query",
         "x-laundry-offline-mode": "denied",
