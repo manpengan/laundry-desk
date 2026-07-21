@@ -9,6 +9,12 @@ export const STEP_UP_PROOF_TTL_SECONDS = 300;
 
 export const PinSchema = z.string().regex(/^[0-9]{4,8}$/u, "PIN must be 4-8 ASCII digits");
 
+/** Structural C6 result only; C6 remains responsible for verification authority/provenance. */
+export const PinVerificationSchema = z.discriminatedUnion("valid", [
+  z.strictObject({ valid: z.literal(false) }),
+  z.strictObject({ valid: z.literal(true), verified_staff_id: z.uuid() }),
+]);
+
 const PositiveSafeIntegerSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const IncrementableSessionVersionSchema = PositiveSafeIntegerSchema.max(
   Number.MAX_SAFE_INTEGER - 1,
@@ -163,6 +169,15 @@ export const StepUpProofSchema = StepUpProofObjectSchema.superRefine((proof, con
   if (proof.expires_at !== proof.issued_at + STEP_UP_PROOF_TTL_SECONDS) {
     context.addIssue({ code: "custom", message: "Step-up proof TTL must be exactly 300 seconds" });
   }
+  if (
+    proof.issued_at < proof.challenge_binding.issued_at ||
+    proof.issued_at >= proof.challenge_binding.expires_at
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "Step-up proof must be issued while its challenge is active",
+    });
+  }
 });
 
 export type PinChallenge = DeepReadonly<z.output<typeof PinChallengeSchema>>;
@@ -210,14 +225,22 @@ export type PinAttemptRejectionReason =
   | "CHALLENGE_EXPIRED"
   | "CHALLENGE_CONSUMED"
   | "CHALLENGE_EXHAUSTED"
+  | "PIN_PRINCIPAL_MISMATCH"
   | "REPLACEMENT_IDENTITIES_REUSED";
 
 type RejectedAttempt = Readonly<{ kind: "reject"; reason: PinAttemptRejectionReason }>;
-type FailurePlan = Readonly<{
-  kind: "record_failure";
+type ChallengeCasCompare = Readonly<{
   challenge_id: string;
-  next_failed_attempts: number;
-  challenge_exhausted: boolean;
+  status: "active";
+  failed_attempts: number;
+}>;
+type FailurePlan = DeepReadonly<{
+  kind: "record_failure";
+  compare: ChallengeCasCompare;
+  effects: {
+    next_failed_attempts: number;
+    challenge_exhausted: boolean;
+  };
 }>;
 
 export type QuickSwitchAttemptPlan =
@@ -225,10 +248,13 @@ export type QuickSwitchAttemptPlan =
   | FailurePlan
   | DeepReadonly<{
       kind: "quick_switch_success";
-      consume_challenge: true;
-      next_actor_staff_id: string;
-      actor_change_mode: "replacement_session_only";
-      replacement: SessionFamilyReplacementPlan;
+      compare: ChallengeCasCompare;
+      atomic_effects: {
+        consume_challenge: true;
+        next_actor_staff_id: string;
+        actor_change_mode: "replacement_session_only";
+        replacement: SessionFamilyReplacementPlan;
+      };
     }>;
 
 export type StepUpAttemptPlan =
@@ -236,22 +262,34 @@ export type StepUpAttemptPlan =
   | FailurePlan
   | DeepReadonly<{
       kind: "step_up_success";
-      consume_challenge: true;
-      actor_effect: "unchanged";
-      session_effect: "unchanged";
-      proof: StepUpProof;
+      compare: ChallengeCasCompare;
+      atomic_effects: {
+        consume_challenge: true;
+        actor_effect: "unchanged";
+        session_effect: "unchanged";
+        proof: StepUpProof;
+      };
     }>;
 
 const rejectAttempt = (reason: PinAttemptRejectionReason): RejectedAttempt =>
   Object.freeze({ kind: "reject", reason });
 
+const challengeCompare = (challenge: PinChallenge): ChallengeCasCompare =>
+  Object.freeze({
+    challenge_id: challenge.challenge_id,
+    status: "active",
+    failed_attempts: challenge.failed_attempts,
+  });
+
 const planFailure = (challenge: PinChallenge): FailurePlan => {
   const nextFailedAttempts = challenge.failed_attempts + 1;
-  return Object.freeze({
+  return deepFreeze({
     kind: "record_failure",
-    challenge_id: challenge.challenge_id,
-    next_failed_attempts: nextFailedAttempts,
-    challenge_exhausted: nextFailedAttempts === PIN_CHALLENGE_MAX_ATTEMPTS,
+    compare: challengeCompare(challenge),
+    effects: {
+      next_failed_attempts: nextFailedAttempts,
+      challenge_exhausted: nextFailedAttempts === PIN_CHALLENGE_MAX_ATTEMPTS,
+    },
   });
 };
 
@@ -320,14 +358,14 @@ const QuickSwitchAttemptInputSchema = z.strictObject({
   challenge: PinChallengeSchema,
   current_binding: PinChallengeBindingSchema,
   now_epoch_seconds: EpochSecondsSchema,
-  pin_valid: z.boolean(),
+  pin_verification: PinVerificationSchema,
   previous_session_id: z.uuid(),
   previous_family_id: z.uuid(),
   next_session_id: z.uuid(),
   next_family_id: z.uuid(),
 });
 
-/** Plans one atomic quick-switch result without receiving the raw PIN. */
+/** Produces compare/effects that C6 must execute in one transaction; it receives no raw PIN. */
 export const planQuickSwitchAttempt = (input: unknown): QuickSwitchAttemptPlan => {
   const facts = parseSnapshot(QuickSwitchAttemptInputSchema, input, "quick-switch attempt facts");
   if (
@@ -344,7 +382,10 @@ export const planQuickSwitchAttempt = (input: unknown): QuickSwitchAttemptPlan =
   }
   const stateRejection = challengeStateRejection(facts.challenge, facts.now_epoch_seconds);
   if (stateRejection !== undefined) return rejectAttempt(stateRejection);
-  if (!facts.pin_valid) return planFailure(facts.challenge);
+  if (!facts.pin_verification.valid) return planFailure(facts.challenge);
+  if (facts.pin_verification.verified_staff_id !== facts.challenge.target_staff_id) {
+    return rejectAttempt("PIN_PRINCIPAL_MISMATCH");
+  }
   if (
     facts.next_session_id === facts.previous_session_id ||
     facts.next_family_id === facts.previous_family_id
@@ -362,10 +403,13 @@ export const planQuickSwitchAttempt = (input: unknown): QuickSwitchAttemptPlan =
   });
   return deepFreeze({
     kind: "quick_switch_success" as const,
-    consume_challenge: true as const,
-    next_actor_staff_id: facts.challenge.target_staff_id,
-    actor_change_mode: "replacement_session_only" as const,
-    replacement,
+    compare: challengeCompare(facts.challenge),
+    atomic_effects: {
+      consume_challenge: true as const,
+      next_actor_staff_id: facts.challenge.target_staff_id,
+      actor_change_mode: "replacement_session_only" as const,
+      replacement,
+    },
   });
 };
 
@@ -373,7 +417,7 @@ const StepUpAttemptInputSchema = z.strictObject({
   challenge: PinChallengeSchema,
   current_binding: PinChallengeBindingSchema,
   now_epoch_seconds: ProofIssuedAtSchema,
-  pin_valid: z.boolean(),
+  pin_verification: PinVerificationSchema,
   proof_id: z.uuid(),
 });
 
@@ -398,7 +442,7 @@ const copyStepUpBinding = (
   approver_staff_id: challenge.approver_staff_id,
 });
 
-/** Plans one step-up verification result without switching the active actor or session. */
+/** Produces compare/effects that C6 must execute in one transaction without switching actor. */
 export const planStepUpAttempt = (input: unknown): StepUpAttemptPlan => {
   const facts = parseSnapshot(StepUpAttemptInputSchema, input, "step-up attempt facts");
   if (facts.challenge.purpose !== "step_up" || facts.current_binding.purpose !== "step_up") {
@@ -409,19 +453,25 @@ export const planStepUpAttempt = (input: unknown): StepUpAttemptPlan => {
   }
   const stateRejection = challengeStateRejection(facts.challenge, facts.now_epoch_seconds);
   if (stateRejection !== undefined) return rejectAttempt(stateRejection);
-  if (!facts.pin_valid) return planFailure(facts.challenge);
+  if (!facts.pin_verification.valid) return planFailure(facts.challenge);
+  if (facts.pin_verification.verified_staff_id !== facts.challenge.approver_staff_id) {
+    return rejectAttempt("PIN_PRINCIPAL_MISMATCH");
+  }
 
   return deepFreeze({
     kind: "step_up_success" as const,
-    consume_challenge: true as const,
-    actor_effect: "unchanged" as const,
-    session_effect: "unchanged" as const,
-    proof: {
-      proof_id: facts.proof_id,
-      status: "active" as const,
-      challenge_binding: copyStepUpBinding(facts.challenge),
-      issued_at: facts.now_epoch_seconds,
-      expires_at: facts.now_epoch_seconds + STEP_UP_PROOF_TTL_SECONDS,
+    compare: challengeCompare(facts.challenge),
+    atomic_effects: {
+      consume_challenge: true as const,
+      actor_effect: "unchanged" as const,
+      session_effect: "unchanged" as const,
+      proof: {
+        proof_id: facts.proof_id,
+        status: "active" as const,
+        challenge_binding: copyStepUpBinding(facts.challenge),
+        issued_at: facts.now_epoch_seconds,
+        expires_at: facts.now_epoch_seconds + STEP_UP_PROOF_TTL_SECONDS,
+      },
     },
   });
 };
@@ -431,15 +481,32 @@ export type StepUpProofDecision =
       kind: "reject";
       reason: "PROOF_BINDING_MISMATCH" | "PROOF_NOT_ACTIVE" | "PROOF_EXPIRED" | "PROOF_CONSUMED";
     }>
-  | Readonly<{
+  | DeepReadonly<{
       kind: "consume_step_up_proof";
-      proof_id: string;
-      consume_proof: true;
-      current_actor_staff_id: string;
-      current_session_id: string;
-      actor_effect: "unchanged";
-      session_effect: "unchanged";
+      compare: { proof_id: string; status: "active" };
+      atomic_effects: {
+        consume_proof: true;
+        current_actor_staff_id: string;
+        current_session_id: string;
+        actor_effect: "unchanged";
+        session_effect: "unchanged";
+      };
     }>;
+
+export type SingleUseCasCommitDisposition =
+  Readonly<{ kind: "committed" }> | Readonly<{ kind: "stale"; action: "reload_and_reject" }>;
+
+const SingleUseCasCommitInputSchema = z.strictObject({
+  matched_rows: z.union([z.literal(0), z.literal(1)]),
+});
+
+/** Classifies the C6/C5 database CAS result; it does not provide database atomicity itself. */
+export const classifySingleUseCasCommit = (input: unknown): SingleUseCasCommitDisposition => {
+  const facts = parseSnapshot(SingleUseCasCommitInputSchema, input, "single-use CAS result");
+  return facts.matched_rows === 1
+    ? Object.freeze({ kind: "committed" })
+    : Object.freeze({ kind: "stale", action: "reload_and_reject" });
+};
 
 const EvaluateStepUpProofInputSchema = z.strictObject({
   proof: StepUpProofSchema,
@@ -468,13 +535,15 @@ export const evaluateStepUpProof = (input: unknown): StepUpProofDecision => {
   if (facts.now_epoch_seconds < facts.proof.issued_at) return rejectProof("PROOF_NOT_ACTIVE");
   if (facts.now_epoch_seconds >= facts.proof.expires_at) return rejectProof("PROOF_EXPIRED");
 
-  return Object.freeze({
+  return deepFreeze({
     kind: "consume_step_up_proof",
-    proof_id: facts.proof.proof_id,
-    consume_proof: true,
-    current_actor_staff_id: facts.current_actor_staff_id,
-    current_session_id: facts.current_session_id,
-    actor_effect: "unchanged",
-    session_effect: "unchanged",
+    compare: { proof_id: facts.proof.proof_id, status: "active" as const },
+    atomic_effects: {
+      consume_proof: true as const,
+      current_actor_staff_id: facts.current_actor_staff_id,
+      current_session_id: facts.current_session_id,
+      actor_effect: "unchanged" as const,
+      session_effect: "unchanged" as const,
+    },
   });
 };

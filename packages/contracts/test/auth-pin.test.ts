@@ -7,6 +7,7 @@ import {
   PinChallengeSchema,
   PinSchema,
   StepUpProofSchema,
+  classifySingleUseCasCommit,
   createPinChallenge,
   evaluateStepUpProof,
   planQuickSwitchAttempt,
@@ -91,7 +92,7 @@ const quickAttemptInput = (overrides: Readonly<Record<string, unknown>> = {}) =>
   challenge: createPinChallenge(quickChallengeInput()),
   current_binding: quickBinding(),
   now_epoch_seconds: ACTIVE_NOW,
-  pin_valid: true,
+  pin_verification: { valid: true, verified_staff_id: ids.target },
   previous_session_id: ids.session,
   previous_family_id: ids.family,
   next_session_id: ids.nextSession,
@@ -103,7 +104,7 @@ const stepUpAttemptInput = (overrides: Readonly<Record<string, unknown>> = {}) =
   challenge: createPinChallenge(stepUpChallengeInput()),
   current_binding: stepUpBinding(),
   now_epoch_seconds: ACTIVE_NOW,
-  pin_valid: true,
+  pin_verification: { valid: true, verified_staff_id: ids.approver },
   proof_id: ids.proof,
   ...overrides,
 });
@@ -147,6 +148,18 @@ describe("A5 PIN raw request schema", () => {
       1234,
       new String("1234"),
     ].forEach((candidate) => expect(() => PinSchema.parse(candidate)).toThrow());
+  });
+
+  it("does not echo a malformed PIN value in schema errors", () => {
+    const rawPin = "12 34-sensitive";
+    let error: unknown;
+    try {
+      PinSchema.parse(rawPin);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).not.toContain(rawPin);
   });
 });
 
@@ -230,39 +243,64 @@ describe("A5 quick-switch attempt planning", () => {
 
     expect(plan).toEqual({
       kind: "quick_switch_success",
-      consume_challenge: true,
-      next_actor_staff_id: ids.target,
-      actor_change_mode: "replacement_session_only",
-      replacement: {
-        kind: "replace_session_family",
-        cause: "pin_switch",
-        steps: [
-          {
-            order: 1,
-            action: "revoke_previous",
-            session_id: ids.session,
-            family_id: ids.family,
-            next_session_version: 5,
-          },
-          {
-            order: 2,
-            action: "create_replacement",
-            session_id: ids.nextSession,
-            family_id: ids.nextFamily,
-          },
-        ],
+      compare: { challenge_id: ids.challenge, status: "active", failed_attempts: 0 },
+      atomic_effects: {
+        consume_challenge: true,
+        next_actor_staff_id: ids.target,
+        actor_change_mode: "replacement_session_only",
+        replacement: {
+          kind: "replace_session_family",
+          cause: "pin_switch",
+          steps: [
+            {
+              order: 1,
+              action: "revoke_previous",
+              session_id: ids.session,
+              family_id: ids.family,
+              next_session_version: 5,
+            },
+            {
+              order: 2,
+              action: "create_replacement",
+              session_id: ids.nextSession,
+              family_id: ids.nextFamily,
+            },
+          ],
+        },
       },
     });
     expect(input).toEqual(quickAttemptInput());
     expectDeepFrozen(plan);
   });
 
+  it("binds successful verification to the target staff principal", () => {
+    expect(
+      planQuickSwitchAttempt(
+        quickAttemptInput({
+          pin_verification: { valid: true, verified_staff_id: ids.requester },
+        }),
+      ),
+    ).toEqual({ kind: "reject", reason: "PIN_PRINCIPAL_MISMATCH" });
+    expect(() =>
+      planQuickSwitchAttempt(quickAttemptInput({ pin_verification: { valid: true } })),
+    ).toThrow();
+    expect(() =>
+      planQuickSwitchAttempt(
+        quickAttemptInput({
+          pin_verification: { valid: false, verified_staff_id: ids.target },
+        }),
+      ),
+    ).toThrow();
+    expect(() => planQuickSwitchAttempt(quickAttemptInput({ pin_valid: true }))).toThrow();
+  });
+
   it("increments failures and makes the fifth failure explicitly exhausted", () => {
-    expect(planQuickSwitchAttempt(quickAttemptInput({ pin_valid: false }))).toEqual({
+    expect(
+      planQuickSwitchAttempt(quickAttemptInput({ pin_verification: { valid: false } })),
+    ).toEqual({
       kind: "record_failure",
-      challenge_id: ids.challenge,
-      next_failed_attempts: 1,
-      challenge_exhausted: false,
+      compare: { challenge_id: ids.challenge, status: "active", failed_attempts: 0 },
+      effects: { next_failed_attempts: 1, challenge_exhausted: false },
     });
     expect(
       planQuickSwitchAttempt(
@@ -271,29 +309,31 @@ describe("A5 quick-switch attempt planning", () => {
             ...createPinChallenge(quickChallengeInput()),
             failed_attempts: 4,
           },
-          pin_valid: false,
+          pin_verification: { valid: false },
         }),
       ),
     ).toEqual({
       kind: "record_failure",
-      challenge_id: ids.challenge,
-      next_failed_attempts: 5,
-      challenge_exhausted: true,
+      compare: { challenge_id: ids.challenge, status: "active", failed_attempts: 4 },
+      effects: { next_failed_attempts: 5, challenge_exhausted: true },
     });
   });
 
-  it.each([true, false])("rejects every attempt after five failures (pin_valid=%s)", (pinValid) => {
-    const plan = planQuickSwitchAttempt(
-      quickAttemptInput({
-        challenge: {
-          ...createPinChallenge(quickChallengeInput()),
-          failed_attempts: 5,
-        },
-        pin_valid: pinValid,
-      }),
-    );
-    expect(plan).toEqual({ kind: "reject", reason: "CHALLENGE_EXHAUSTED" });
-  });
+  it.each([{ valid: false } as const, { valid: true, verified_staff_id: ids.target } as const])(
+    "rejects every attempt after five failures",
+    (pinVerification) => {
+      const plan = planQuickSwitchAttempt(
+        quickAttemptInput({
+          challenge: {
+            ...createPinChallenge(quickChallengeInput()),
+            failed_attempts: 5,
+          },
+          pin_verification: pinVerification,
+        }),
+      );
+      expect(plan).toEqual({ kind: "reject", reason: "CHALLENGE_EXHAUSTED" });
+    },
+  );
 
   it("rejects expired, not-yet-active and consumed challenges", () => {
     expect(
@@ -354,6 +394,41 @@ describe("A5 quick-switch attempt planning", () => {
       planQuickSwitchAttempt(quickAttemptInput({ current_binding: quickBinding(bindingOverride) })),
     ).toEqual({ kind: "reject", reason: "CHALLENGE_BINDING_MISMATCH" });
   });
+
+  it("gives the fifth failure and competing success the same CAS compare", () => {
+    const challenge = {
+      ...createPinChallenge(quickChallengeInput()),
+      failed_attempts: 4,
+    };
+    const failure = planQuickSwitchAttempt(
+      quickAttemptInput({ challenge, pin_verification: { valid: false } }),
+    );
+    const success = planQuickSwitchAttempt(quickAttemptInput({ challenge }));
+    if (failure.kind !== "record_failure") throw new Error("Expected failure plan");
+    if (success.kind !== "quick_switch_success") throw new Error("Expected success plan");
+
+    expect(failure.compare).toEqual({
+      challenge_id: ids.challenge,
+      status: "active",
+      failed_attempts: 4,
+    });
+    expect(success.compare).toEqual(failure.compare);
+  });
+});
+
+describe("A5 single-use CAS classification", () => {
+  it("commits exactly one row and rejects a stale zero-row race", () => {
+    expect(classifySingleUseCasCommit({ matched_rows: 1 })).toEqual({ kind: "committed" });
+    expect(classifySingleUseCasCommit({ matched_rows: 0 })).toEqual({
+      kind: "stale",
+      action: "reload_and_reject",
+    });
+  });
+
+  it("rejects non-single-row and non-exact CAS results", () => {
+    expect(() => classifySingleUseCasCommit({ matched_rows: 2 })).toThrow();
+    expect(() => classifySingleUseCasCommit({ matched_rows: 1, extra: true })).toThrow();
+  });
 });
 
 describe("A5 step-up attempt and proof", () => {
@@ -362,20 +437,33 @@ describe("A5 step-up attempt and proof", () => {
 
     expect(plan).toEqual({
       kind: "step_up_success",
-      consume_challenge: true,
-      actor_effect: "unchanged",
-      session_effect: "unchanged",
-      proof: {
-        proof_id: ids.proof,
-        status: "active",
-        challenge_binding: stepUpBinding(),
-        issued_at: ACTIVE_NOW,
-        expires_at: ACTIVE_NOW + 300,
+      compare: { challenge_id: ids.challenge, status: "active", failed_attempts: 0 },
+      atomic_effects: {
+        consume_challenge: true,
+        actor_effect: "unchanged",
+        session_effect: "unchanged",
+        proof: {
+          proof_id: ids.proof,
+          status: "active",
+          challenge_binding: stepUpBinding(),
+          issued_at: ACTIVE_NOW,
+          expires_at: ACTIVE_NOW + 300,
+        },
       },
     });
     expectDeepFrozen(plan);
     if (plan.kind !== "step_up_success") throw new Error("Expected step-up success");
-    expect(StepUpProofSchema.parse(plan.proof)).toEqual(plan.proof);
+    expect(StepUpProofSchema.parse(plan.atomic_effects.proof)).toEqual(plan.atomic_effects.proof);
+  });
+
+  it("binds successful verification to the approver principal", () => {
+    expect(
+      planStepUpAttempt(
+        stepUpAttemptInput({
+          pin_verification: { valid: true, verified_staff_id: ids.requester },
+        }),
+      ),
+    ).toEqual({ kind: "reject", reason: "PIN_PRINCIPAL_MISMATCH" });
   });
 
   it("uses the same fifth-failure ceiling for step-up", () => {
@@ -385,14 +473,13 @@ describe("A5 step-up attempt and proof", () => {
           ...createPinChallenge(stepUpChallengeInput()),
           failed_attempts: 4,
         },
-        pin_valid: false,
+        pin_verification: { valid: false },
       }),
     );
     expect(plan).toEqual({
       kind: "record_failure",
-      challenge_id: ids.challenge,
-      next_failed_attempts: 5,
-      challenge_exhausted: true,
+      compare: { challenge_id: ids.challenge, status: "active", failed_attempts: 4 },
+      effects: { next_failed_attempts: 5, challenge_exhausted: true },
     });
   });
 
@@ -459,7 +546,7 @@ describe("A5 step-up attempt and proof", () => {
     if (issued.kind !== "step_up_success") throw new Error("Expected step-up success");
 
     const decision = evaluateStepUpProof({
-      proof: issued.proof,
+      proof: issued.atomic_effects.proof,
       expected_binding: stepUpBinding(),
       current_actor_staff_id: ids.requester,
       current_session_id: ids.session,
@@ -468,12 +555,14 @@ describe("A5 step-up attempt and proof", () => {
 
     expect(decision).toEqual({
       kind: "consume_step_up_proof",
-      proof_id: ids.proof,
-      consume_proof: true,
-      current_actor_staff_id: ids.requester,
-      current_session_id: ids.session,
-      actor_effect: "unchanged",
-      session_effect: "unchanged",
+      compare: { proof_id: ids.proof, status: "active" },
+      atomic_effects: {
+        consume_proof: true,
+        current_actor_staff_id: ids.requester,
+        current_session_id: ids.session,
+        actor_effect: "unchanged",
+        session_effect: "unchanged",
+      },
     });
     expectDeepFrozen(decision);
   });
@@ -482,7 +571,7 @@ describe("A5 step-up attempt and proof", () => {
     const issued = planStepUpAttempt(stepUpAttemptInput());
     if (issued.kind !== "step_up_success") throw new Error("Expected step-up success");
     const base = {
-      proof: issued.proof,
+      proof: issued.atomic_effects.proof,
       expected_binding: stepUpBinding(),
       current_actor_staff_id: ids.requester,
       current_session_id: ids.session,
@@ -498,7 +587,7 @@ describe("A5 step-up attempt and proof", () => {
     expect(
       evaluateStepUpProof({
         ...base,
-        proof: { ...issued.proof, status: "consumed" },
+        proof: { ...issued.atomic_effects.proof, status: "consumed" },
         now_epoch_seconds: ACTIVE_NOW + 1,
       }),
     ).toEqual({ kind: "reject", reason: "PROOF_CONSUMED" });
@@ -527,7 +616,7 @@ describe("A5 step-up attempt and proof", () => {
     changedBindings.forEach((expectedBinding) =>
       expect(
         evaluateStepUpProof({
-          proof: issued.proof,
+          proof: issued.atomic_effects.proof,
           expected_binding: expectedBinding,
           current_actor_staff_id: ids.requester,
           current_session_id: ids.session,
@@ -537,7 +626,7 @@ describe("A5 step-up attempt and proof", () => {
     );
     expect(
       evaluateStepUpProof({
-        proof: issued.proof,
+        proof: issued.atomic_effects.proof,
         expected_binding: stepUpBinding(),
         current_actor_staff_id: ids.target,
         current_session_id: ids.session,
@@ -546,7 +635,7 @@ describe("A5 step-up attempt and proof", () => {
     ).toEqual({ kind: "reject", reason: "PROOF_BINDING_MISMATCH" });
     expect(
       evaluateStepUpProof({
-        proof: issued.proof,
+        proof: issued.atomic_effects.proof,
         expected_binding: stepUpBinding(),
         current_actor_staff_id: ids.requester,
         current_session_id: ids.otherSession,
@@ -560,15 +649,39 @@ describe("A5 step-up attempt and proof", () => {
     if (issued.kind !== "step_up_success") throw new Error("Expected step-up success");
     expect(() =>
       StepUpProofSchema.parse({
-        ...issued.proof,
+        ...issued.atomic_effects.proof,
         challenge_binding: {
-          ...issued.proof.challenge_binding,
+          ...issued.atomic_effects.proof.challenge_binding,
           approver_staff_id: ids.requester,
         },
       }),
     ).toThrow();
     expect(() =>
-      StepUpProofSchema.parse({ ...issued.proof, expires_at: ACTIVE_NOW + 301 }),
+      StepUpProofSchema.parse({
+        ...issued.atomic_effects.proof,
+        expires_at: ACTIVE_NOW + 301,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects proof issuance before challenge issuance or at challenge expiry", () => {
+    const issued = planStepUpAttempt(stepUpAttemptInput());
+    if (issued.kind !== "step_up_success") throw new Error("Expected step-up success");
+    const proof = issued.atomic_effects.proof;
+
+    expect(() =>
+      StepUpProofSchema.parse({
+        ...proof,
+        issued_at: ISSUED_AT - 1,
+        expires_at: ISSUED_AT - 1 + STEP_UP_PROOF_TTL_SECONDS,
+      }),
+    ).toThrow();
+    expect(() =>
+      StepUpProofSchema.parse({
+        ...proof,
+        issued_at: ISSUED_AT + PIN_CHALLENGE_TTL_SECONDS,
+        expires_at: ISSUED_AT + PIN_CHALLENGE_TTL_SECONDS + STEP_UP_PROOF_TTL_SECONDS,
+      }),
     ).toThrow();
   });
 });
@@ -607,11 +720,11 @@ describe("A5 PIN plain-data and secret boundary", () => {
     expect(() => planStepUpAttempt({ ...stepUpAttemptInput(), extra: true })).toThrow();
     let getterCalls = 0;
     const accessorInput = quickAttemptInput();
-    Object.defineProperty(accessorInput, "pin_valid", {
+    Object.defineProperty(accessorInput, "pin_verification", {
       enumerable: true,
       get() {
         getterCalls += 1;
-        return true;
+        return { valid: true, verified_staff_id: ids.target };
       },
     });
     expect(() => planQuickSwitchAttempt(accessorInput)).toThrow();
@@ -620,7 +733,7 @@ describe("A5 PIN plain-data and secret boundary", () => {
     if (issued.kind !== "step_up_success") throw new Error("Expected step-up success");
     expect(() =>
       evaluateStepUpProof({
-        proof: issued.proof,
+        proof: issued.atomic_effects.proof,
         expected_binding: stepUpBinding(),
         current_actor_staff_id: ids.requester,
         current_session_id: ids.session,
@@ -632,7 +745,7 @@ describe("A5 PIN plain-data and secret boundary", () => {
       evaluateStepUpProof(
         unstableProxy(
           {
-            proof: issued.proof,
+            proof: issued.atomic_effects.proof,
             expected_binding: stepUpBinding(),
             current_actor_staff_id: ids.requester,
             current_session_id: ids.session,
@@ -648,7 +761,7 @@ describe("A5 PIN plain-data and secret boundary", () => {
     const rawPin = "93847561";
     const outputs = [
       createPinChallenge(quickChallengeInput()),
-      planQuickSwitchAttempt(quickAttemptInput({ pin_valid: false })),
+      planQuickSwitchAttempt(quickAttemptInput({ pin_verification: { valid: false } })),
       planQuickSwitchAttempt(quickAttemptInput()),
       planStepUpAttempt(stepUpAttemptInput()),
     ];
