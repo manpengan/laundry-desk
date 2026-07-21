@@ -54,6 +54,15 @@ describe("A3 tenant composite unique keys", () => {
       defineTenantUniqueKey({ table: "customers", columns: STORE_ENTITY_UNIQUE_KEY_COLUMNS }),
     ).toThrowError("store-scope table");
   });
+
+  it("rejects an id-based key for a store table without a declared entity layout", () => {
+    expect(() =>
+      defineTenantUniqueKey({
+        table: "primary_lease_heads",
+        columns: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
+      }),
+    ).toThrowError('No declared tenant unique-key layout for table "primary_lease_heads"');
+  });
 });
 
 describe("A3 tenant composite foreign keys", () => {
@@ -85,7 +94,7 @@ describe("A3 tenant composite foreign keys", () => {
     const childColumns = ["org_id", "store_id", "order_id"];
     const parentColumns = ["org_id", "store_id", "id"];
     const descriptor = defineTenantForeignKey({
-      childTable: "payments",
+      childTable: "order_lines",
       childColumns,
       parentTable: "orders",
       parentColumns,
@@ -101,7 +110,7 @@ describe("A3 tenant composite foreign keys", () => {
   it.each([
     [
       {
-        childTable: "payments",
+        childTable: "order_lines",
         childColumns: ["org_id", "store_id"],
         parentTable: "orders",
         parentColumns: ["org_id", "store_id", "id"],
@@ -110,7 +119,7 @@ describe("A3 tenant composite foreign keys", () => {
     ],
     [
       {
-        childTable: "payments",
+        childTable: "order_lines",
         childColumns: ["store_id", "org_id", "order_id"],
         parentTable: "orders",
         parentColumns: ["org_id", "store_id", "id"],
@@ -119,7 +128,7 @@ describe("A3 tenant composite foreign keys", () => {
     ],
     [
       {
-        childTable: "payments",
+        childTable: "order_lines",
         childColumns: ["org_id", "store_id", "store_id"],
         parentTable: "orders",
         parentColumns: ["org_id", "store_id", "id"],
@@ -128,7 +137,7 @@ describe("A3 tenant composite foreign keys", () => {
     ],
     [
       {
-        childTable: "payments",
+        childTable: "order_lines",
         childColumns: ["org_id", "store_id", "garment_id"],
         parentTable: "orders",
         parentColumns: ["org_id", "store_id", "id"],
@@ -159,5 +168,16 @@ describe("A3 tenant composite foreign keys", () => {
         parentColumns: ["org_id", "store_id", "order_id", "id"],
       }),
     ).toThrowError("cross-parent");
+  });
+
+  it("rejects a structurally plausible but undeclared foreign-key pair", () => {
+    expect(() =>
+      defineTenantForeignKey({
+        childTable: "payments",
+        childColumns: ["org_id", "store_id", "order_id"],
+        parentTable: "orders",
+        parentColumns: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
+      }),
+    ).toThrowError("No declared tenant foreign-key layout for payments -> orders");
   });
 });

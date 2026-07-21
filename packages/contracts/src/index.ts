@@ -111,6 +111,9 @@ export {
   getTenantTableScope,
 } from "./tenant/table-matrix.js";
 export type {
+  GlobalScopeTableName,
+  OrgScopeTableName,
+  StoreScopeTableName,
   TenantTableDescriptor,
   TenantTableScope,
   V2TableName,
@@ -134,6 +137,7 @@ export {
   buildOrgTenantPolicySql,
   buildStoreTenantPolicySql,
 } from "./tenant/rls-templates.js";
+export type { TenantPolicySqlInput } from "./tenant/rls-templates.js";
 
 export {
   canonicalizeCapabilityTicketForSigning,

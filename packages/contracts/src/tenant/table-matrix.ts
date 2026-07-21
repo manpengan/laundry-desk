@@ -95,6 +95,9 @@ const STORE_TABLES = describeTables(
 const TABLE_MATRIX = [...GLOBAL_TABLES, ...ORG_TABLES, ...STORE_TABLES] as const;
 
 export type V2TableName = (typeof TABLE_MATRIX)[number]["table"];
+export type GlobalScopeTableName = (typeof GLOBAL_TABLES)[number]["table"];
+export type OrgScopeTableName = (typeof ORG_TABLES)[number]["table"];
+export type StoreScopeTableName = (typeof STORE_TABLES)[number]["table"];
 
 const matrixByTable = new Map<V2TableName, TenantTableDescriptor<V2TableName>>();
 

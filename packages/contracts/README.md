@@ -202,10 +202,12 @@ owner/app 角色、事务级 `SET LOCAL`、worker 注入和五类旁路门禁全
 
 ### 三元键与外键
 
-普通门店实体唯一键固定为 `(org_id, store_id, id)`；`order_lines` 为
-`(org_id, store_id, order_id, id)`。`defineTenantUniqueKey()` 与
-`defineTenantForeignKey()` 返回新的深冻结描述符，并拒绝未知/非 store 表、长度或顺序不一致、
-重复列、缺失精确 `org_id, store_id` 前缀及跨 parent 布局。
+当前只接受架构明确声明的唯一键：`orders(org_id, store_id, id)` 与
+`order_lines(org_id, store_id, order_id, id)`。`defineTenantUniqueKey()` 不会因为某表属于
+store scope 就推断它有 `id`；例如 `primary_lease_heads` 的显式主键不是该模板，因此拒绝。
+`defineTenantForeignKey()` 同样只接受下列三条 ADR-02/架构显式映射，不从父表复数名推断引用列。
+两个校验器都返回新的深冻结描述符，并拒绝未声明 pair、长度或顺序不一致、重复列、缺失精确
+`org_id, store_id` 前缀及跨 parent 布局。
 
 冻结的订单链为：
 
@@ -224,7 +226,9 @@ garments(org_id, store_id, order_id, order_line_id)
 
 `buildOrgTenantPolicySql()` / `buildStoreTenantPolicySql()` 生成固定顺序的
 `ENABLE ROW LEVEL SECURITY`、`FORCE ROW LEVEL SECURITY`、`CREATE POLICY`、`USING` 与
-`WITH CHECK`。谓词只比较本行列与以下 GUC，不生成 `SELECT`/`JOIN`/`EXISTS`：
+`WITH CHECK`。前者只接受矩阵中的 org-scope 表，后者只接受 store-scope 表；scope mismatch、
+global 表和矩阵外表名均 fail-closed。谓词只比较本行列与以下 GUC，不生成
+`SELECT`/`JOIN`/`EXISTS`：
 
 ```sql
 org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
@@ -236,9 +240,10 @@ store_id = NULLIF(current_setting('app.store_id', true), '')::uuid
 
 所有 schema/table/policy/role 标识符先通过 ASCII 小写白名单
 `[a-z][a-z0-9_]{0,62}`，再以双引号输出；点号、空格、引号、注释、分号、大小写和 PostgreSQL
-会截断的超长名称均拒绝。`buildMaintenancePolicySql()` 只对显式、已校验的 maintenance role
-生成 `FOR ALL ... USING (true) WITH CHECK (true)`；它用于 FORCE RLS 下的 migration/backfill/seed，
-不得授予 `laundry_app`，也不能当成应用跨租户旁路。
+会截断的超长名称均拒绝。`buildMaintenancePolicySql()` 只接受 ADR/M0/compose 的 canonical
+owner 角色 `laundry_owner`，并生成 `FOR ALL ... USING (true) WITH CHECK (true)`；它用于 FORCE RLS
+下的 migration/backfill/seed。任何其他语法合法角色（包括 app、reporting 或 worker）也拒绝，
+不能获得跨租户维护旁路。
 
 ## A4 Edge 桥协议
 

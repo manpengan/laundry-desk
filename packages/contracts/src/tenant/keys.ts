@@ -66,12 +66,20 @@ const requireStoreTable = (table: string, label: string): TenantTableDescriptor<
 const freezeColumns = (columns: readonly string[]): readonly string[] =>
   Object.freeze([...columns]);
 
+const DECLARED_UNIQUE_KEY_LAYOUTS: Readonly<Partial<Record<V2TableName, readonly string[]>>> =
+  Object.freeze({
+    orders: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
+    order_lines: ORDER_LINE_UNIQUE_KEY_COLUMNS,
+  });
+
 export const defineTenantUniqueKey = (input: TenantUniqueKeyInput): TenantUniqueKeyDescriptor => {
   const table = requireStoreTable(input.table, "Tenant unique key table").table;
   assertColumns(input.columns, "Tenant unique key");
 
-  const expectedColumns =
-    table === "order_lines" ? ORDER_LINE_UNIQUE_KEY_COLUMNS : STORE_ENTITY_UNIQUE_KEY_COLUMNS;
+  const expectedColumns = DECLARED_UNIQUE_KEY_LAYOUTS[table];
+  if (expectedColumns === undefined) {
+    throw new TypeError(`No declared tenant unique-key layout for table "${table}"`);
+  }
   if (!sameColumns(input.columns, expectedColumns)) {
     const layout = table === "order_lines" ? "order_lines key" : "store entity key";
     throw new TypeError(`${layout} must be (${expectedColumns.join(", ")})`);
@@ -80,44 +88,47 @@ export const defineTenantUniqueKey = (input: TenantUniqueKeyInput): TenantUnique
   return Object.freeze({ table, columns: freezeColumns(input.columns) });
 };
 
-const referenceColumnFor = (parentTable: V2TableName): string => {
-  const singularParent = parentTable.endsWith("ies")
-    ? `${parentTable.slice(0, -3)}y`
-    : parentTable.endsWith("s")
-      ? parentTable.slice(0, -1)
-      : parentTable;
-  return `${singularParent}_id`;
-};
-
-const assertOrderLineReference = (input: TenantForeignKeyInput): void => {
-  const expectedChildColumns = ["org_id", "store_id", "order_id", "order_line_id"];
-  if (
-    input.childTable !== "garments" ||
-    !sameColumns(input.childColumns, expectedChildColumns) ||
-    !sameColumns(input.parentColumns, ORDER_LINE_UNIQUE_KEY_COLUMNS)
-  ) {
-    throw new TypeError(
-      "order_lines foreign key must use the exact garments -> order_lines layout " +
-        "(org_id, store_id, order_id, order_line_id) -> (org_id, store_id, order_id, id)",
-    );
-  }
-};
-
-const assertStoreParentReference = (
-  input: TenantForeignKeyInput,
+const declareForeignKeyLayout = (
+  childTable: V2TableName,
+  childColumns: readonly string[],
   parentTable: V2TableName,
-): void => {
-  const expectedChildColumns = [...TENANT_PREFIX, referenceColumnFor(parentTable)];
-  if (
-    !sameColumns(input.childColumns, expectedChildColumns) ||
-    !sameColumns(input.parentColumns, STORE_ENTITY_UNIQUE_KEY_COLUMNS)
-  ) {
-    throw new TypeError(
-      `cross-parent foreign key layout for ${input.childTable} -> ${parentTable}; expected ` +
-        `(${expectedChildColumns.join(", ")}) -> (${STORE_ENTITY_UNIQUE_KEY_COLUMNS.join(", ")})`,
-    );
-  }
-};
+  parentColumns: readonly string[],
+): TenantForeignKeyDescriptor =>
+  Object.freeze({
+    childTable,
+    childColumns: freezeColumns(childColumns),
+    parentTable,
+    parentColumns: freezeColumns(parentColumns),
+  });
+
+const DECLARED_FOREIGN_KEY_LAYOUTS = Object.freeze({
+  orderLinesToOrders: declareForeignKeyLayout(
+    "order_lines",
+    ["org_id", "store_id", "order_id"],
+    "orders",
+    STORE_ENTITY_UNIQUE_KEY_COLUMNS,
+  ),
+  garmentsToOrders: declareForeignKeyLayout(
+    "garments",
+    ["org_id", "store_id", "order_id"],
+    "orders",
+    STORE_ENTITY_UNIQUE_KEY_COLUMNS,
+  ),
+  garmentsToOrderLines: declareForeignKeyLayout(
+    "garments",
+    ["org_id", "store_id", "order_id", "order_line_id"],
+    "order_lines",
+    ORDER_LINE_UNIQUE_KEY_COLUMNS,
+  ),
+});
+
+const findDeclaredForeignKeyLayout = (
+  childTable: V2TableName,
+  parentTable: V2TableName,
+): TenantForeignKeyDescriptor | undefined =>
+  Object.values(DECLARED_FOREIGN_KEY_LAYOUTS).find(
+    (layout) => layout.childTable === childTable && layout.parentTable === parentTable,
+  );
 
 export const defineTenantForeignKey = (
   input: TenantForeignKeyInput,
@@ -131,10 +142,27 @@ export const defineTenantForeignKey = (
   assertColumns(input.childColumns, "Tenant foreign key child columns");
   assertColumns(input.parentColumns, "Tenant foreign key parent columns");
 
-  if (parentTable === "order_lines") {
-    assertOrderLineReference(input);
-  } else {
-    assertStoreParentReference(input, parentTable);
+  const declaredLayout = findDeclaredForeignKeyLayout(childTable, parentTable);
+  if (declaredLayout === undefined) {
+    throw new TypeError(
+      `No declared tenant foreign-key layout for ${childTable} -> ${parentTable}`,
+    );
+  }
+  if (
+    !sameColumns(input.childColumns, declaredLayout.childColumns) ||
+    !sameColumns(input.parentColumns, declaredLayout.parentColumns)
+  ) {
+    if (childTable === "garments" && parentTable === "order_lines") {
+      throw new TypeError(
+        "order_lines foreign key must use the exact garments -> order_lines layout " +
+          "(org_id, store_id, order_id, order_line_id) -> (org_id, store_id, order_id, id)",
+      );
+    }
+    throw new TypeError(
+      `cross-parent foreign key layout for ${childTable} -> ${parentTable}; expected ` +
+        `(${declaredLayout.childColumns.join(", ")}) -> ` +
+        `(${declaredLayout.parentColumns.join(", ")})`,
+    );
   }
 
   return Object.freeze({
@@ -145,23 +173,6 @@ export const defineTenantForeignKey = (
   });
 };
 
-export const ORDER_LINES_ORDER_FOREIGN_KEY = defineTenantForeignKey({
-  childTable: "order_lines",
-  childColumns: ["org_id", "store_id", "order_id"],
-  parentTable: "orders",
-  parentColumns: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
-});
-
-export const GARMENTS_ORDER_FOREIGN_KEY = defineTenantForeignKey({
-  childTable: "garments",
-  childColumns: ["org_id", "store_id", "order_id"],
-  parentTable: "orders",
-  parentColumns: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
-});
-
-export const GARMENTS_ORDER_LINE_FOREIGN_KEY = defineTenantForeignKey({
-  childTable: "garments",
-  childColumns: ["org_id", "store_id", "order_id", "order_line_id"],
-  parentTable: "order_lines",
-  parentColumns: ORDER_LINE_UNIQUE_KEY_COLUMNS,
-});
+export const ORDER_LINES_ORDER_FOREIGN_KEY = DECLARED_FOREIGN_KEY_LAYOUTS.orderLinesToOrders;
+export const GARMENTS_ORDER_FOREIGN_KEY = DECLARED_FOREIGN_KEY_LAYOUTS.garmentsToOrders;
+export const GARMENTS_ORDER_LINE_FOREIGN_KEY = DECLARED_FOREIGN_KEY_LAYOUTS.garmentsToOrderLines;

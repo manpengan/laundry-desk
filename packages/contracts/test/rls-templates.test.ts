@@ -14,13 +14,27 @@ const tenantPolicyInput = Object.freeze({
   policy: "orders_store_scope",
   role: "laundry_app",
 });
+const orgTenantPolicyInput = Object.freeze({
+  ...tenantPolicyInput,
+  table: "customers",
+  policy: "customers_org_scope",
+});
+
+type RuntimeTenantPolicyBuilder = (input: {
+  readonly schema: string;
+  readonly table: string;
+  readonly policy: string;
+  readonly role: string;
+}) => string;
+
+const runtimeBuildOrgTenantPolicySql = buildOrgTenantPolicySql as RuntimeTenantPolicyBuilder;
+const runtimeBuildStoreTenantPolicySql = buildStoreTenantPolicySql as RuntimeTenantPolicyBuilder;
 
 describe("A3 tenant RLS SQL templates", () => {
   it("builds deterministic org-scope SQL with the fail-closed predicate", () => {
-    const input = { ...tenantPolicyInput, table: "customers", policy: "customers_org_scope" };
-    const sql = buildOrgTenantPolicySql(input);
+    const sql = buildOrgTenantPolicySql(orgTenantPolicyInput);
 
-    expect(sql).toBe(buildOrgTenantPolicySql(input));
+    expect(sql).toBe(buildOrgTenantPolicySql(orgTenantPolicyInput));
     expect(sql).toBe(`ALTER TABLE "public"."customers" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."customers" FORCE ROW LEVEL SECURITY;
 CREATE POLICY "customers_org_scope" ON "public"."customers"
@@ -48,16 +62,50 @@ CREATE POLICY "customers_org_scope" ON "public"."customers"
     );
   });
 
-  it.each([buildOrgTenantPolicySql, buildStoreTenantPolicySql])(
-    "keeps tenant predicates row-local without cross-table SQL",
-    (buildSql) => {
-      const sql = buildSql(tenantPolicyInput);
+  it.each([
+    [runtimeBuildOrgTenantPolicySql, orgTenantPolicyInput],
+    [runtimeBuildStoreTenantPolicySql, tenantPolicyInput],
+  ] as const)("keeps tenant predicates row-local without cross-table SQL", (buildSql, input) => {
+    const sql = buildSql(input);
 
-      expect(sql).not.toMatch(/\b(?:SELECT|FROM|JOIN|EXISTS)\b/i);
-      expect(sql).toContain("USING");
-      expect(sql).toContain("WITH CHECK");
+    expect(sql).not.toMatch(/\b(?:SELECT|FROM|JOIN|EXISTS)\b/i);
+    expect(sql).toContain("USING");
+    expect(sql).toContain("WITH CHECK");
+  });
+
+  it.each([
+    [runtimeBuildOrgTenantPolicySql, tenantPolicyInput, "requires an org-scope table"],
+    [runtimeBuildStoreTenantPolicySql, orgTenantPolicyInput, "requires a store-scope table"],
+    [
+      runtimeBuildOrgTenantPolicySql,
+      { ...tenantPolicyInput, table: "orgs", policy: "orgs_scope" },
+      "cannot target global-scope table",
+    ],
+    [
+      runtimeBuildStoreTenantPolicySql,
+      { ...tenantPolicyInput, table: "orgs", policy: "orgs_scope" },
+      "cannot target global-scope table",
+    ],
+    [
+      runtimeBuildStoreTenantPolicySql,
+      { ...tenantPolicyInput, table: "future_orders" },
+      'Unknown v2 tenant table "future_orders"',
+    ],
+  ] as const)(
+    "fails closed when a tenant policy table is out of scope",
+    (buildSql, input, error) => {
+      expect(() => buildSql(input)).toThrowError(error);
     },
   );
+
+  it("types tenant policy builders to their matrix scope", () => {
+    if (Math.random() < 0) {
+      // @ts-expect-error Store tables cannot enter the org-scope SQL builder.
+      buildOrgTenantPolicySql(tenantPolicyInput);
+      // @ts-expect-error Org tables cannot enter the store-scope SQL builder.
+      buildStoreTenantPolicySql(orgTenantPolicyInput);
+    }
+  });
 
   it.each([
     ["schema", "public.orders"],
@@ -75,7 +123,7 @@ CREATE POLICY "customers_org_scope" ON "public"."customers"
 
   it("rejects overlong PostgreSQL identifiers instead of allowing truncation collisions", () => {
     expect(() =>
-      buildOrgTenantPolicySql({ ...tenantPolicyInput, policy: "p".repeat(64) }),
+      buildOrgTenantPolicySql({ ...orgTenantPolicyInput, policy: "p".repeat(64) }),
     ).toThrowError("Invalid SQL policy identifier");
   });
 });
@@ -120,14 +168,17 @@ describe("A3 maintenance policy SQL template", () => {
     );
   });
 
-  it("rejects the application role as a maintenance bypass", () => {
-    expect(() =>
-      buildMaintenancePolicySql({
-        schema: "public",
-        table: "orders",
-        policy: "orders_maintenance",
-        maintenanceRole: "laundry_app",
-      }),
-    ).toThrowError("Maintenance policy cannot target the application role laundry_app");
-  });
+  it.each(["laundry_app", "reporting_app", "migration_worker"])(
+    "rejects non-owner role %s as a maintenance bypass",
+    (maintenanceRole) => {
+      expect(() =>
+        buildMaintenancePolicySql({
+          schema: "public",
+          table: "orders",
+          policy: "orders_maintenance",
+          maintenanceRole,
+        }),
+      ).toThrowError("Maintenance policy role must be laundry_owner");
+    },
+  );
 });
