@@ -78,6 +78,22 @@ Also assert A2 rejects a caller-shaped `{actor,tenant}` and source/via mismatche
 Browser ingress must accept an active, current session record only. Edge ingress must require one exact input containing a server-verified device-session context plus the parsed A4 queue envelope and its grant/lease authorization summary:
 
 ```ts
+type VerifiedEdgeAuthorization =
+  | Readonly<{
+      kind: "grant";
+      grant_id: string;
+      allowed_commands: readonly string[];
+      primary_lease_commands: readonly string[];
+    }>
+  | Readonly<{
+      kind: "primary_lease";
+      grant_id: string;
+      lease_id: string;
+      primary_epoch: number;
+      allowed_commands: readonly string[];
+      primary_lease_commands: readonly string[];
+    }>;
+
 type VerifiedEdgeReplayInput = Readonly<{
   device_session_id: string;
   org_id: string;
@@ -86,8 +102,11 @@ type VerifiedEdgeReplayInput = Readonly<{
   device_id: string;
   permission_version: number;
   queue_envelope: EdgeQueueEnvelope;
+  authorization: VerifiedEdgeAuthorization;
 }>;
 ```
+
+The restricted Edge authority is the capability boundary for these server-verified facts. It must copy one exact descriptor snapshot, match `grant_id` and, for primary lease authorization, `lease_id/primary_epoch` against the queue envelope, require the command in `allowed_commands`, and require the primary-lease branch when it appears in `primary_lease_commands`. The structurally forgeable A4 `OfflineGrantAuthorizationSummary` alone is not provenance and must not be accepted as the issuance input.
 
 The root export must not expose either issue factory. Package subpaths are exactly `@laundry/contracts/browser-auth-ingress` and `@laundry/contracts/edge-auth-ingress`; foundation lint rejects imports outside `apps/server/src/auth/**` and `apps/server/src/edge-ingress/**` respectively.
 

@@ -60,7 +60,10 @@ JWT/HMAC/Argon2、cookie I/O 与数据库轮换属于 C6。把这些放入 contr
 - A2 `injectAuthenticatedCommandContext` 必须改为接受有来源登记的判别联合，而不是解析任意同形
   actor/tenant：`browser_session` 消费上述 active/version snapshot 且 `via` 仅 ui/ai/automation；
   `edge_replay` 消费 A4 device-session + grant/lease/queue 已复核 snapshot 且 `via` 固定
-  edge_replay。错误的 provenance/via 组合一律拒绝。两个 authority 分别只由 C6/C8 与 Edge ingress
+  edge_replay。Edge authority 必须把队列信封中的 `grant_id`，以及 primary lease 分支的
+  `lease_id/primary_epoch`，与服务端复核结果逐项绑定；仅有
+  `allowed_commands/primary_lease_commands` 的结构摘要不构成可信来源。错误的
+  provenance/via/authorization 组合一律拒绝。两个 authority 分别只由 C6/C8 与 Edge ingress
   持有，并由 apps/server 架构 lint 禁止其他入口调用。
 
 ### 3.2 `auth/refresh`
