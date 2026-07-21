@@ -34,6 +34,26 @@
     "@laundry/db#build": {
       "dependsOn": ["^build", "@laundry/contracts#build"],
       "outputs": ["dist/**"]
+    },
+    "@laundry/edge-agent#typecheck": {
+      "dependsOn": ["^build", "@laundry/contracts#build"]
+    },
+    "@laundry/edge-agent#test": {
+      "dependsOn": ["^build", "@laundry/contracts#build"]
+    },
+    "@laundry/edge-agent#build": {
+      "dependsOn": ["^build", "@laundry/contracts#build"],
+      "outputs": ["dist/**"]
+    },
+    "@laundry/server#typecheck": {
+      "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/domain#build"]
+    },
+    "@laundry/server#test": {
+      "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/domain#build"]
+    },
+    "@laundry/server#build": {
+      "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/domain#build"],
+      "outputs": ["dist/**"]
     }
   }
 }
