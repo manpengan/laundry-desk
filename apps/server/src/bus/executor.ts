@@ -31,6 +31,7 @@ import type {
   HandlerOutcome,
   IdempotencyStore,
 } from "./types.js";
+import { HandlerCommandError } from "./types.js";
 
 export type ExecuteCommandOptions = Readonly<{
   actor: ActorContext;
@@ -89,6 +90,7 @@ export async function executeCommand(
     );
   } catch (error) {
     if (error instanceof CommandBusTxnError) return fail(error.commandError);
+    if (error instanceof HandlerCommandError) return fail(error.commandError);
     // Handler / audit failure already rolled back via withTenantTransaction.
     return fail(createCommandError("TRANSACTION_FAILED"));
   }

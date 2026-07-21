@@ -20,6 +20,10 @@ export type ActorContext = Readonly<{
   staffId: Uuid;
   deviceId: Uuid | null;
   via: CommandVia;
+  /** Permission codes for RBAC / policy (simple set; optional for unit stubs). */
+  permissions?: readonly string[];
+  /** AI risk ceiling when via=ai (architecture §9.4). */
+  riskCap?: "R0" | "R1" | "R2" | "R3" | "R4" | "R5";
 }>;
 
 /** Caller-facing request assembled after auth (C8) or test harness. */
@@ -82,6 +86,21 @@ export type HandlerContext = Readonly<{
 
 /** Business mutation handler — runs only when chain passes and dry_run is false. */
 export type CommandHandler = (ctx: HandlerContext) => Promise<HandlerOutcome>;
+
+/**
+ * Throw from a handler to surface a stable A2 command error (rolled back with the txn).
+ * Prefer this over raw throws so AUTHENTICATION_FAILED / POLICY_* are not collapsed to
+ * TRANSACTION_FAILED.
+ */
+export class HandlerCommandError extends Error {
+  readonly commandError: CommandError;
+
+  constructor(commandError: CommandError) {
+    super(commandError.message);
+    this.name = "HandlerCommandError";
+    this.commandError = commandError;
+  }
+}
 
 export type RegisteredCommand = Readonly<{
   definition: BusCommandDefinition;

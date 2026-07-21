@@ -38,6 +38,7 @@ export {
   createM1CommandRegistry,
   createChainPorts,
   executeCommand,
+  HandlerCommandError,
   MemoryIdempotencyStore,
   runCommandChain,
 } from "./bus/index.js";
@@ -198,6 +199,35 @@ export type {
   AuditListItem,
   AuditQueryStore,
 } from "./platform/index.js";
+
+/**
+ * M1 integration wiring — register identity + platform handlers on C1 bus.
+ * Prefer registerM1Handlers / createRegisteredM1Bus from bootstrap.
+ */
+export {
+  actorPermissionSet,
+  createDefaultChainHooks,
+  createIdentityHandlers,
+  createRegisteredM1Bus,
+  defaultCheckInvariants,
+  defaultCheckPolicy,
+  defaultCheckRbac,
+  defaultCheckTenant,
+  identityHandlerNames,
+  registerIdentityCommandHandlers,
+  registerM1Handlers,
+  registerPlatformHandlers,
+  requiredPermissionsFromInvariants,
+  toAccessSessionResponse,
+} from "./handlers/index.js";
+export type {
+  IdentityHandlerDeps,
+  IdentityHandlerMap,
+  IdentityHandlerName,
+  IdentitySessionBinding,
+  RegisterM1Deps,
+  RegisterM1Result,
+} from "./handlers/index.js";
 
 export {
   checkPolicy,
