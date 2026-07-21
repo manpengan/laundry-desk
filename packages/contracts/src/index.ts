@@ -106,6 +106,36 @@ export type {
 } from "./envelope/responses.js";
 
 export {
+  TENANT_TABLE_MATRIX,
+  getTenantTableDescriptor,
+  getTenantTableScope,
+} from "./tenant/table-matrix.js";
+export type {
+  TenantTableDescriptor,
+  TenantTableScope,
+  V2TableName,
+} from "./tenant/table-matrix.js";
+
+export {
+  GARMENTS_ORDER_FOREIGN_KEY,
+  GARMENTS_ORDER_LINE_FOREIGN_KEY,
+  ORDER_LINES_ORDER_FOREIGN_KEY,
+  ORDER_LINE_UNIQUE_KEY_COLUMNS,
+  STORE_ENTITY_UNIQUE_KEY_COLUMNS,
+  defineTenantForeignKey,
+  defineTenantUniqueKey,
+} from "./tenant/keys.js";
+export type { TenantForeignKeyDescriptor, TenantUniqueKeyDescriptor } from "./tenant/keys.js";
+
+export {
+  ORG_TENANT_PREDICATE_SQL,
+  STORE_TENANT_PREDICATE_SQL,
+  buildMaintenancePolicySql,
+  buildOrgTenantPolicySql,
+  buildStoreTenantPolicySql,
+} from "./tenant/rls-templates.js";
+
+export {
   canonicalizeCapabilityTicketForSigning,
   canonicalizeExecutionReceiptForSigning,
   canonicalizeForSignatureVerification,
