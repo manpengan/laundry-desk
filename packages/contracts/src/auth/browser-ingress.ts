@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { snapshotPlainData } from "./plain-data.js";
+import { registerIdentityLifecycleEnvelope, type IdentityLifecycleEnvelope } from "./operations.js";
 import { registerBrowserSessionSource } from "./source-registry.js";
 import {
   AccessTokenClaimsSchema,
@@ -59,3 +60,7 @@ export const issueBrowserSessionSource = (input: unknown): BrowserSessionSource 
   }) as BrowserSessionSource;
   return registerBrowserSessionSource(source);
 };
+
+/** Restricted C6/C8 authority for one lifecycle HTTP request after all required gates passed. */
+export const issueIdentityLifecycleEnvelope = (input: unknown): IdentityLifecycleEnvelope =>
+  registerIdentityLifecycleEnvelope(input);
