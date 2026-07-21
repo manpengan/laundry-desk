@@ -16,8 +16,8 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 进行中
 
-- **V2-M1 基座**：contracts@v0.1.0 冻结中（A1–A7 逐组评审，见 [M1 门禁资产索引](superpowers/plans/tasks/m1-acceptance/README.md)）；命令总线 + RLS 接入 + 审计 + Tool Registry + Policy Engine v0 + Edge v0
-- 设计变更新增 [ADR-09 命令元数据字段精确化](adr/2026-07-20-adr-09-command-metadata-precision.md)（Proposed）
+- **V2-M1 基座**：contracts 组冻结中（A1–A5 已合入；A6/A7 待做，见 [M1 门禁资产索引](superpowers/plans/tasks/m1-acceptance/README.md)）；命令总线 + 正式 PG + Identity runtime 未开
+- 治理：[ADR-12 Grok 统一交付所有权](adr/2026-07-21-adr-12-grok-unified-delivery-ownership.md)（Accepted）；[ADR-09](adr/2026-07-20-adr-09-command-metadata-precision.md) 仍 Proposed 待签署
 
 ### 已完成（未发版）
 
