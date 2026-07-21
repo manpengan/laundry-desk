@@ -66,7 +66,7 @@ function asRecord(parsed: unknown): Readonly<Record<string, unknown>> {
   return parsed as Readonly<Record<string, unknown>>;
 }
 
-function requireString(value: unknown, _field: string): string {
+function requireString(value: unknown): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
   }
@@ -103,12 +103,7 @@ export function toAccessSessionResponse(issued: SessionIssueResult): Readonly<{
   session: SessionIssueResult["session"];
 }> {
   return Object.freeze({
-    access_token: issued.access_token,
-    token_type: "Bearer" as const,
-    expires_in: issued.expires_in ?? ACCESS_TOKEN_TTL_SECONDS,
-    storage: "memory_only" as const,
-    session: issued.session,
-  });
+    access_token: issued.access_token);
 }
 
 function loginHandler(deps: IdentityHandlerDeps): CommandHandler {
@@ -317,14 +312,14 @@ function pinChallengeHandler(deps: IdentityHandlerDeps): CommandHandler {
         throw new HandlerCommandError(createCommandError("AUTHENTICATION_FAILED"));
       }
       const input = asRecord(ctx.parsed);
-      const purpose = requireString(input.purpose, "purpose");
+      const purpose = requireString(input.purpose);
       if (purpose === "quick_switch") {
-        const target = requireString(input.target_staff_id, "target_staff_id");
+        const target = requireString(input.target_staff_id);
         return await issueQuickSwitchChallenge(deps, binding.session, target);
       }
       if (purpose === "step_up") {
-        const pendingRef = requireString(input.pending_action_ref, "pending_action_ref");
-        const approver = requireString(input.approver_staff_id, "approver_staff_id");
+        const pendingRef = requireString(input.pending_action_ref);
+        const approver = requireString(input.approver_staff_id);
         return await issueStepUpChallenge(deps, binding.session, pendingRef, approver);
       }
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
@@ -342,8 +337,8 @@ function pinVerifyHandler(deps: IdentityHandlerDeps): CommandHandler {
         throw new HandlerCommandError(createCommandError("AUTHENTICATION_FAILED"));
       }
       const input = asRecord(ctx.parsed);
-      const challengeId = requireString(input.challenge_id, "challenge_id");
-      const pin = requireString(input.pin, "pin");
+      const challengeId = requireString(input.challenge_id);
+      const pin = requireString(input.pin);
       const verifyInput: VerifyPinInput = Object.freeze({
         challenge_id: challengeId,
         pin,

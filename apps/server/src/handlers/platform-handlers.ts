@@ -9,8 +9,6 @@ import {
   platformHandlerNames,
   registerPlatformCommandHandlers,
   type PlatformHandlerDeps,
-  type PlatformHandlerMap,
-  type PlatformHandlerName,
 } from "../platform/handlers.js";
 
 export type {
