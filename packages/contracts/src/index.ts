@@ -85,12 +85,33 @@ export type {
 } from "./envelope/wire-payload.js";
 
 export {
-  AuthenticatedCommandContextSchema,
   CommandViaSchema,
   injectAuthenticatedCommandContext,
   isServerCommandEnvelope,
 } from "./envelope/server-envelope.js";
 export type { ServerCommandEnvelope } from "./envelope/server-envelope.js";
+
+export {
+  ACCESS_TOKEN_TTL_SECONDS,
+  AccessTokenClaimsSchema,
+  AuthenticationMethodSchema,
+  BrowserCommandViaSchema,
+  isAuthenticatedExecutionSource,
+  isBrowserSessionSource,
+  isEdgeReplaySource,
+  parseAccessTokenClaims,
+  ServerSessionRecordSchema,
+} from "./auth/session.js";
+export type {
+  AccessTokenClaims,
+  AuthenticatedActor,
+  AuthenticatedExecutionSource,
+  AuthenticatedTenant,
+  BrowserCommandVia,
+  BrowserSessionSource,
+  ServerSessionRecord,
+} from "./auth/session.js";
+export type { EdgeReplaySource } from "./auth/edge-ingress.js";
 
 export {
   CommandErrorCodeSchema,

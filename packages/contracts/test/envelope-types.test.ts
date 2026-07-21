@@ -1,5 +1,6 @@
 import { expectTypeOf, it } from "vitest";
 
+import { issueBrowserSessionSource } from "../src/auth/browser-ingress.js";
 import {
   CommandErrorSchema,
   CommandResponseSchema,
@@ -8,8 +9,37 @@ import {
   type CommandError,
   type CommandResponse,
   type CommandWirePayload,
+  type BrowserSessionSource,
   type ServerCommandEnvelope,
 } from "../src/index.js";
+
+const browserSource = (): BrowserSessionSource =>
+  issueBrowserSessionSource({
+    via: "ui",
+    claims: {
+      session_id: "1131e8c3-b7e3-4633-8af8-a5e3286570e1",
+      session_version: 4,
+      org_id: "692e7b46-2c52-4b77-b790-c2cb4037b9ef",
+      store_id: "74b83b3d-a9db-4d82-ba36-bb25a685cd3f",
+      staff_id: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
+      device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
+      permission_version: 9,
+      authentication_method: "password",
+      iat: 1_800_000_000,
+      exp: 1_800_000_900,
+    },
+    session_record: {
+      status: "active",
+      session_id: "1131e8c3-b7e3-4633-8af8-a5e3286570e1",
+      session_version: 4,
+      org_id: "692e7b46-2c52-4b77-b790-c2cb4037b9ef",
+      store_id: "74b83b3d-a9db-4d82-ba36-bb25a685cd3f",
+      staff_id: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
+      device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
+      permission_version: 9,
+      authentication_method: "password",
+    },
+  });
 
 it("keeps wire payloads structurally distinct from trusted server envelopes", () => {
   const wirePayload = CommandWirePayloadSchema.parse({
@@ -40,17 +70,7 @@ it("prevents a trusted server envelope from being sent as a wire payload", () =>
       idempotency_key: "9dfc4424-9b9a-4e52-baaa-c02868f8e7de",
       dry_run: false,
     },
-    {
-      actor: {
-        staff_id: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
-        device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
-        via: "ui",
-      },
-      tenant: {
-        org_id: "692e7b46-2c52-4b77-b790-c2cb4037b9ef",
-        store_id: "74b83b3d-a9db-4d82-ba36-bb25a685cd3f",
-      },
-    },
+    browserSource(),
   );
 
   if (Math.random() < 0) {
