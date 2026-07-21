@@ -277,3 +277,8 @@ export type {
   PendingActionStatus,
   PendingActionStore,
 } from "./pending-actions/index.js";
+
+export { createLocalApp } from "./http/create-app.js";
+export type { CreateAppOptions } from "./http/create-app.js";
+export { createLocalRuntime, DEMO_PASSWORD, DEMO_PIN } from "./local/demo-seed.js";
+export type { LocalRuntime } from "./local/demo-seed.js";
