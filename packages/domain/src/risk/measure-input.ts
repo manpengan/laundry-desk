@@ -152,7 +152,10 @@ const addSafeInteger = (left: number, right: number): number | MeasureFailure =>
   return sum;
 };
 
-const measureArrayLength = (input: unknown, measure: ArrayLengthMeasure): MeasureResult | number => {
+const measureArrayLength = (
+  input: unknown,
+  measure: ArrayLengthMeasure,
+): MeasureResult | number => {
   const resolved = resolvePointer(input, measure.path);
   if (!resolved.ok) return resolved;
   if (!Array.isArray(resolved.value)) {
@@ -181,7 +184,10 @@ const measureNumericSum = (input: unknown, measure: NumericSumMeasure): MeasureR
       return fail("type_mismatch", `numeric_sum element ${index} must be a plain object`);
     }
     if (!Object.hasOwn(element, measure.field)) {
-      return fail("path_not_found", `numeric_sum field "${measure.field}" missing at index ${index}`);
+      return fail(
+        "path_not_found",
+        `numeric_sum field "${measure.field}" missing at index ${index}`,
+      );
     }
     const raw = readOwn(element, measure.field);
     const cents = requireSafeInteger(raw, `numeric_sum[${index}].${measure.field}`);
@@ -209,7 +215,10 @@ const measureAmount = (input: unknown, measure: AmountMeasure): MeasureResult | 
   return measureNumericSum(input, measure);
 };
 
-const freezeMeasures = (batch: number | undefined, amountCents: number | undefined): MeasuredSizes => {
+const freezeMeasures = (
+  batch: number | undefined,
+  amountCents: number | undefined,
+): MeasuredSizes => {
   const measures: { batch?: number; amount_cents?: number } = {};
   if (batch !== undefined) measures.batch = batch;
   if (amountCents !== undefined) measures.amount_cents = amountCents;

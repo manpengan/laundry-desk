@@ -102,10 +102,7 @@ describe("measureInput numeric_sum", () => {
   it("fails closed on sum overflow past MAX_SAFE_INTEGER", () => {
     const result = measureInput(
       {
-        lines: [
-          { amount_cents: Number.MAX_SAFE_INTEGER },
-          { amount_cents: 1 },
-        ],
+        lines: [{ amount_cents: Number.MAX_SAFE_INTEGER }, { amount_cents: 1 }],
       },
       { amount: { kind: "numeric_sum", path: "/lines", field: "amount_cents" } },
     );
@@ -177,9 +174,10 @@ describe("measureInput combined measures", () => {
   };
 
   it("returns both batch and amount_cents", () => {
-    expect(
-      measureInput({ recipients: [1, 2, 3, 4], total_cents: 2500 }, measures),
-    ).toEqual({ ok: true, measures: { batch: 4, amount_cents: 2500 } });
+    expect(measureInput({ recipients: [1, 2, 3, 4], total_cents: 2500 }, measures)).toEqual({
+      ok: true,
+      measures: { batch: 4, amount_cents: 2500 },
+    });
   });
 
   it("fails closed on empty measure declarations", () => {

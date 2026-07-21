@@ -69,7 +69,10 @@ const fail = (
 const isPositiveSafeInteger = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
-const readDimension = (thresholds: Thresholds | undefined, dimension: Dimension): number | undefined => {
+const readDimension = (
+  thresholds: Thresholds | undefined,
+  dimension: Dimension,
+): number | undefined => {
   if (thresholds === undefined || !Object.hasOwn(thresholds, dimension)) return undefined;
   const value = thresholds[dimension];
   return value;
@@ -99,7 +102,10 @@ const validateThresholds = (
   return undefined;
 };
 
-const validateLimitGroups = (limits: LimitGroups, label: string): EvaluateRiskFailure | undefined => {
+const validateLimitGroups = (
+  limits: LimitGroups,
+  label: string,
+): EvaluateRiskFailure | undefined => {
   for (const group of LIMIT_GROUPS) {
     const invalid = validateThresholds(limits[group], group);
     if (invalid !== undefined) {
