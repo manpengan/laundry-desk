@@ -6,8 +6,12 @@ import {
   MemoryDeviceKeyStore,
   type PairingSession,
 } from "./pairing/index.js";
+<<<<<<< HEAD
 import { DEFAULT_SAMPLE_TICKET, executeJob } from "./print/executor.js";
 import { createMockSpool, enqueue, type MockSpool } from "./print/mock-spool.js";
+=======
+import { MemoryEncryptedQueue, MemoryKekStore } from "./queue/index.js";
+>>>>>>> 27e6a12 (fix(edge-agent): remove unused QueueStatusSnapshot import)
 import {
   createPrintJobStore,
   enqueuePrintJob,
