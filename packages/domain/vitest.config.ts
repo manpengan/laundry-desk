@@ -5,5 +5,16 @@ export default defineConfig({
     globals: true,
     environment: "node",
     include: ["src/**/__tests__/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      include: ["src/command-chain/**/*.ts"],
+      exclude: ["src/command-chain/**/__tests__/**"],
+      thresholds: {
+        lines: 100,
+        functions: 100,
+        branches: 100,
+        statements: 100,
+      },
+    },
   },
 });
