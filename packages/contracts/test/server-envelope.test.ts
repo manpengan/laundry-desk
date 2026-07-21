@@ -70,7 +70,7 @@ const edgeSource = () => {
     device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
     permission_version: 9,
     queue_envelope: queueEnvelope,
-    verified_authorization: {
+    authorization: {
       kind: "grant",
       grant_id: "f7c4b945-2f08-41f3-b8da-b1af3f7ac547",
       allowed_commands: [wirePayload.command],

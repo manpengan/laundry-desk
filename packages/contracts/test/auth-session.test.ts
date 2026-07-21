@@ -96,7 +96,7 @@ const edgeInput = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   device_id: ids.device,
   permission_version: 9,
   queue_envelope: grantQueueEnvelope(),
-  verified_authorization: {
+  authorization: {
     kind: "grant" as const,
     grant_id: ids.grant,
     allowed_commands: [wirePayload.command],
@@ -272,7 +272,7 @@ describe("A5 verified Edge replay source", () => {
     });
     expect(source.tenant).toEqual({ org_id: ids.org, store_id: ids.store });
     expect(source.queue_envelope.authorization).toEqual({ kind: "grant", grant_id: ids.grant });
-    expect(source.verified_authorization).toEqual({
+    expect(source.authorization).toEqual({
       kind: "grant",
       grant_id: ids.grant,
       allowed_commands: [wirePayload.command],
@@ -280,7 +280,7 @@ describe("A5 verified Edge replay source", () => {
     });
     expect(Object.isFrozen(source)).toBe(true);
     expect(Object.isFrozen(source.queue_envelope)).toBe(true);
-    expect(Object.isFrozen(source.verified_authorization.allowed_commands)).toBe(true);
+    expect(Object.isFrozen(source.authorization.allowed_commands)).toBe(true);
     expect(isEdgeReplaySource(source)).toBe(true);
     expect(isAuthenticatedExecutionSource(source)).toBe(true);
   });
@@ -289,7 +289,7 @@ describe("A5 verified Edge replay source", () => {
     const source = issueEdgeReplaySource(
       edgeInput({
         queue_envelope: primaryLeaseQueueEnvelope(),
-        verified_authorization: {
+        authorization: {
           kind: "primary_lease",
           grant_id: ids.grant,
           lease_id: ids.lease,
@@ -300,14 +300,14 @@ describe("A5 verified Edge replay source", () => {
       }),
     );
 
-    expect(source.verified_authorization.kind).toBe("primary_lease");
+    expect(source.authorization.kind).toBe("primary_lease");
     expect(source.queue_envelope.authorization.kind).toBe("primary_lease");
   });
 
   it.each([
     [
       {
-        verified_authorization: {
+        authorization: {
           kind: "grant",
           grant_id: "4c0c60e4-59df-4d8b-95f1-2ffebc143ecd",
           allowed_commands: [wirePayload.command],
@@ -319,7 +319,7 @@ describe("A5 verified Edge replay source", () => {
     [
       {
         queue_envelope: primaryLeaseQueueEnvelope(),
-        verified_authorization: {
+        authorization: {
           kind: "primary_lease",
           grant_id: ids.grant,
           lease_id: "4c0c60e4-59df-4d8b-95f1-2ffebc143ecd",
@@ -333,7 +333,7 @@ describe("A5 verified Edge replay source", () => {
     [
       {
         queue_envelope: primaryLeaseQueueEnvelope(),
-        verified_authorization: {
+        authorization: {
           kind: "primary_lease",
           grant_id: ids.grant,
           lease_id: ids.lease,
@@ -346,7 +346,7 @@ describe("A5 verified Edge replay source", () => {
     ],
     [
       {
-        verified_authorization: {
+        authorization: {
           kind: "grant",
           grant_id: ids.grant,
           allowed_commands: ["orders.create_offline"],
@@ -357,7 +357,7 @@ describe("A5 verified Edge replay source", () => {
     ],
     [
       {
-        verified_authorization: {
+        authorization: {
           kind: "grant",
           grant_id: ids.grant,
           allowed_commands: [wirePayload.command],
@@ -368,6 +368,20 @@ describe("A5 verified Edge replay source", () => {
     ],
   ])("rejects Edge authorization inconsistency: %s", (overrides, caseName) => {
     expect(() => issueEdgeReplaySource(edgeInput(overrides)), caseName).toThrow();
+  });
+
+  it("accepts the planned authorization key and rejects the former alias", () => {
+    const plannedInput = edgeInput();
+    const source = issueEdgeReplaySource(plannedInput);
+    const { authorization, ...withoutAuthorization } = plannedInput;
+
+    expect(source.authorization).toEqual(authorization);
+    expect(() =>
+      issueEdgeReplaySource({
+        ...withoutAuthorization,
+        verified_authorization: authorization,
+      }),
+    ).toThrow(/exactly/u);
   });
 
   it("rejects Edge accessors without executing them and fails closed on malformed inputs", () => {
@@ -409,7 +423,7 @@ describe("A5 verified Edge replay source", () => {
         actor: source.actor,
         tenant: source.tenant,
         queue_envelope: source.queue_envelope,
-        verified_authorization: source.verified_authorization,
+        authorization: source.authorization,
       }),
     ).toBe(false);
   });

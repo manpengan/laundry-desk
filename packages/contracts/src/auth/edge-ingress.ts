@@ -65,7 +65,7 @@ export type EdgeReplaySource = Readonly<{
   actor: Readonly<AuthenticatedActor & { via: "edge_replay" }>;
   tenant: AuthenticatedTenant;
   queue_envelope: EdgeQueueEnvelope;
-  verified_authorization: VerifiedEdgeAuthorization;
+  authorization: VerifiedEdgeAuthorization;
   [EDGE_REPLAY_SOURCE_BRAND]: true;
 }>;
 
@@ -77,7 +77,7 @@ const EDGE_INPUT_KEYS = [
   "device_id",
   "permission_version",
   "queue_envelope",
-  "verified_authorization",
+  "authorization",
 ] as const;
 
 const VerifiedDeviceSessionContextSchema = z.strictObject({
@@ -143,7 +143,7 @@ export const issueEdgeReplaySource = (input: unknown): EdgeReplaySource => {
   });
   const queueEnvelope = parseEdgeQueueEnvelope(captured.queue_envelope);
   const authorization = freezeAuthorization(
-    VerifiedEdgeAuthorizationSchema.parse(captured.verified_authorization),
+    VerifiedEdgeAuthorizationSchema.parse(captured.authorization),
   );
   requireMatchingAuthorization(queueEnvelope, authorization);
 
@@ -158,7 +158,7 @@ export const issueEdgeReplaySource = (input: unknown): EdgeReplaySource => {
     }),
     tenant: Object.freeze({ org_id: deviceSession.org_id, store_id: deviceSession.store_id }),
     queue_envelope: queueEnvelope,
-    verified_authorization: authorization,
+    authorization,
   }) as EdgeReplaySource;
   return registerEdgeReplaySource(source);
 };
