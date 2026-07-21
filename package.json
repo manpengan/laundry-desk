@@ -39,7 +39,9 @@
     "workspace:lint": "turbo run lint",
     "workspace:test": "node --test tests/foundation/workspace.test.mjs && turbo run test",
     "workspace:typecheck": "turbo run typecheck",
-    "workspace:check": "pnpm run workspace:format:check && pnpm run workspace:lint && pnpm run workspace:typecheck && pnpm run workspace:test && pnpm run workspace:build"
+    "workspace:check": "pnpm run workspace:format:check && pnpm run workspace:lint && pnpm run workspace:typecheck && pnpm run workspace:test && pnpm run workspace:build",
+    "local:server": "pnpm --filter @laundry/contracts build && pnpm --filter @laundry/domain build && pnpm --filter @laundry/server build && node apps/server/dist/http/main.js",
+    "local:web": "pnpm --filter @laundry/ui build && pnpm --filter @laundry/web exec vite --config vite.config.ts"
   },
   "build": {
     "appId": "com.laundry-desk",

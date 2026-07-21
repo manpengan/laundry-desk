@@ -33,6 +33,10 @@ export {
   type AuthClient,
   type MockAuthClientOptions,
 } from "./auth/AuthClient.js";
+export {
+  createHttpAuthClient,
+  type HttpAuthClientOptions,
+} from "./auth/HttpAuthClient.js";
 export type {
   AccessSession,
   AuthError,

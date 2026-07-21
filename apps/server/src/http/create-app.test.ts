@@ -1,0 +1,183 @@
+/**
+ * Local Fastify inject tests — no real listen / no Postgres.
+ */
+
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { CSRF_HEADER_NAME } from "@laundry/contracts";
+
+import { createLocalApp } from "./create-app.js";
+import { createLocalRuntime, DEMO_PASSWORD, DEMO_PIN } from "../local/demo-seed.js";
+import { LOCAL_COOKIE_NAMES } from "./types.js";
+
+const DEVICE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+
+async function buildApp() {
+  const runtime = await createLocalRuntime();
+  const app = await createLocalApp({ runtime });
+  return { app, runtime };
+}
+
+function parseSetCookie(headers: Record<string, unknown>): Record<string, string> {
+  const raw = headers["set-cookie"];
+  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+  const out: Record<string, string> = {};
+  for (const line of list) {
+    const [pair] = line.split(";");
+    if (pair === undefined) continue;
+    const eq = pair.indexOf("=");
+    if (eq <= 0) continue;
+    out[pair.slice(0, eq)] = pair.slice(eq + 1);
+  }
+  return out;
+}
+
+test("GET /health returns ok local-memory", async () => {
+  const { app } = await buildApp();
+  const res = await app.inject({ method: "GET", url: "/health" });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as { ok: boolean; data: { mode: string } };
+  assert.equal(body.ok, true);
+  assert.equal(body.data.mode, "local-memory");
+  await app.close();
+});
+
+test("POST /api/v2/auth/login succeeds with demo credentials and sets cookies", async () => {
+  const { app } = await buildApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    payload: {
+      org_code: "hongfa",
+      store_code: "main",
+      username: "admin",
+      password: DEMO_PASSWORD,
+      device_id: DEVICE,
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  const body = res.json() as {
+    ok: boolean;
+    data: { access_token: string; storage: string; session: { staff_id: string } };
+  };
+  assert.equal(body.ok, true);
+  assert.equal(body.data.storage, "memory_only");
+  assert.ok(body.data.access_token.length > 10);
+  const cookies = parseSetCookie(res.headers as Record<string, unknown>);
+  assert.ok(cookies[LOCAL_COOKIE_NAMES.refresh]);
+  assert.ok(cookies[LOCAL_COOKIE_NAMES.csrf]);
+  await app.close();
+});
+
+test("POST /api/v2/auth/login rejects bad password", async () => {
+  const { app } = await buildApp();
+  const res = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    payload: {
+      org_code: "hongfa",
+      store_code: "main",
+      username: "admin",
+      password: "wrong",
+      device_id: DEVICE,
+    },
+  });
+  assert.equal(res.statusCode, 401);
+  const body = res.json() as { ok: boolean };
+  assert.equal(body.ok, false);
+  await app.close();
+});
+
+test("authenticated command path requires bearer", async () => {
+  const { app } = await buildApp();
+  const denied = await app.inject({
+    method: "POST",
+    url: "/v1/commands/platform.settings.set",
+    payload: { key: "pricing.min_order_cents", value: 100 },
+  });
+  assert.equal(denied.statusCode, 401);
+
+  const login = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    payload: {
+      org_code: "hongfa",
+      store_code: "main",
+      username: "admin",
+      password: DEMO_PASSWORD,
+      device_id: DEVICE,
+    },
+  });
+  const loginBody = login.json() as { data: { access_token: string } };
+  const cmd = await app.inject({
+    method: "POST",
+    url: "/v1/commands/platform.settings.set",
+    headers: { authorization: `Bearer ${loginBody.data.access_token}` },
+    payload: {
+      entries: [{ key: "pricing.min_order_cents", value_json: "100" }],
+    },
+  });
+  assert.equal(cmd.statusCode, 200, cmd.body);
+  const cmdBody = cmd.json() as { ok: boolean };
+  assert.equal(cmdBody.ok, true);
+  await app.close();
+});
+
+test("PIN challenge + verify with CSRF cookies", async () => {
+  const { app, runtime } = await buildApp();
+  const staffA = runtime.staffDirectory.find((s) => s.username === "staff");
+  assert.ok(staffA);
+
+  const login = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    payload: {
+      org_code: "hongfa",
+      store_code: "main",
+      username: "admin",
+      password: DEMO_PASSWORD,
+      device_id: DEVICE,
+    },
+  });
+  assert.equal(login.statusCode, 200);
+  const loginBody = login.json() as { data: { access_token: string } };
+  const cookies = parseSetCookie(login.headers as Record<string, unknown>);
+  const csrf = cookies[LOCAL_COOKIE_NAMES.csrf] ?? "";
+  const cookieHeader = Object.entries(cookies)
+    .map(([k, v]) => `${k}=${v}`)
+    .join("; ");
+
+  const challenge = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/pin/challenges",
+    headers: {
+      authorization: `Bearer ${loginBody.data.access_token}`,
+      [CSRF_HEADER_NAME]: csrf,
+      cookie: cookieHeader,
+    },
+    payload: { purpose: "quick_switch", target_staff_id: staffA.staff_id },
+  });
+  assert.equal(challenge.statusCode, 200, challenge.body);
+  const challengeBody = challenge.json() as {
+    ok: boolean;
+    data: { challenge_id: string };
+  };
+  assert.equal(challengeBody.ok, true);
+
+  const verify = await app.inject({
+    method: "POST",
+    url: `/api/v2/auth/pin/challenges/${challengeBody.data.challenge_id}/verify`,
+    headers: {
+      authorization: `Bearer ${loginBody.data.access_token}`,
+      [CSRF_HEADER_NAME]: csrf,
+      cookie: cookieHeader,
+    },
+    payload: { challenge_id: challengeBody.data.challenge_id, pin: DEMO_PIN },
+  });
+  assert.equal(verify.statusCode, 200, verify.body);
+  const verifyBody = verify.json() as { ok: boolean; data: { access_token: string } };
+  assert.equal(verifyBody.ok, true);
+  assert.ok(verifyBody.data.access_token.length > 10);
+  await app.close();
+});
