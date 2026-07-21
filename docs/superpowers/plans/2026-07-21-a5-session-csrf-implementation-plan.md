@@ -147,7 +147,7 @@ git commit -m "[LAUNDRY][CONTRACTS] 冻结认证会话来源"
 - Create: `packages/contracts/src/auth/refresh.ts`
 - Create: `packages/contracts/test/auth-refresh.test.ts`
 
-- [ ] **Step 1: Write failing refresh tests**
+- [x] **Step 1: Write failing refresh tests**
 
 Assert `REFRESH_TOKEN_TTL_SECONDS === 1_209_600`, exact `__Host-laundry_refresh` attributes, active→rotated decision, rotated reuse→revoke family+session, revoked/expired/unknown uniform rejection, session-version increment and logout clear-cookie attributes. Test every revocation cause: `logout | refresh_reuse | pin_switch | admin_revoke | credential_change`.
 
@@ -181,23 +181,23 @@ type RefreshMutationPlan =
   | Readonly<{ kind: "reject"; public_code: "AUTHENTICATION_FAILED" }>;
 ```
 
-- [ ] **Step 2: Run tests to verify RED**
+- [x] **Step 2: Run tests to verify RED**
 
 Run: `pnpm --filter @laundry/contracts test -- auth-refresh`
 
 Expected: FAIL because the module is absent.
 
-- [ ] **Step 3: Implement minimal immutable schemas/decisions**
+- [x] **Step 3: Implement minimal immutable schemas/decisions**
 
 Model family and token records as discriminated unions, including `replacement_token_id` only on rotated tokens. Accept trusted `now_epoch_seconds` and a server-generated replacement token id as exact plain-data inputs, never `Date.now()`. Return no token/hash value. Export a CAS commit classifier where exactly one matched row is success and zero rows means stale/reload-and-reject; A5 does not claim concurrent single-winner without C6 enforcing the compare block. Login/PIN replacement plans must revoke the previous session/family before creating the next; logout storage no-op and repeated HTTP 401 remain distinct assertions.
 
-- [ ] **Step 4: Run focused GREEN checks**
+- [x] **Step 4: Run focused GREEN checks**
 
 Run: `pnpm --filter @laundry/contracts test -- auth-refresh`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/contracts/src/auth/refresh.ts packages/contracts/test/auth-refresh.test.ts
