@@ -1,8 +1,6 @@
 # A5 会话、refresh、CSRF 与 PIN 契约设计
 
-> 日期：2026-07-21  
-> 状态：Approved for implementation（manpengan 已授权 Codex 采用推荐方案并独立完成）  
-> 范围：`packages/contracts`；不包含 JWT 签名、密码哈希、数据库、HTTP middleware 或 UI
+> 日期：2026-07-21；状态：Approved for implementation（manpengan 已授权 Codex 采用推荐方案并独立完成）；范围：`packages/contracts`，不包含 JWT 签名、密码哈希、数据库、HTTP middleware 或 UI。
 
 ## 1. 目标与依据
 
