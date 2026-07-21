@@ -351,4 +351,28 @@ describe("A3 tenant composite foreign keys", () => {
     expect(indexReads).toBe(0);
     expect(descriptor).toEqual(PAYMENTS_ORDER_FOREIGN_KEY);
   });
+
+  it("rejects an oversized Proxy array length before allocating index keys", () => {
+    let lengthDescriptorReads = 0;
+    const childColumns = new Proxy<string[]>([], {
+      getOwnPropertyDescriptor: (target, property) => {
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, property);
+        if (property === "length" && descriptor !== undefined) {
+          lengthDescriptorReads += 1;
+          return { ...descriptor, value: 100_000 };
+        }
+        return descriptor;
+      },
+    });
+
+    expect(() =>
+      runtimeDefineTenantForeignKey({
+        childTable: "payments",
+        childColumns,
+        parentTable: "orders",
+        parentColumns: ["org_id", "store_id", "id"],
+      }),
+    ).toThrowError("must contain at most 4 entries");
+    expect(lengthDescriptorReads).toBe(1);
+  });
 });

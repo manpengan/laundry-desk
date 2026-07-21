@@ -233,9 +233,10 @@ payments(org_id, store_id, order_id)
 
 唯一键与外键描述符同样带包私有品牌和运行时 provenance；只能由对应 factory 或本包权威常量
 产生，并分别通过 `isTenantUniqueKeyDescriptor()` / `isTenantForeignKeyDescriptor()` 证明来源。
-factory 只接受 exact-shape 的 plain own-data 输入；表名必须是 primitive string，列必须是连续、
-无额外属性且每项都是 primitive string 的 plain array。输入对象、列数组和 Proxy 后端都只读取
-一次 property-descriptor 快照，accessor 不会执行，校验完成后也不会回读 caller。
+factory 只接受 exact-shape 的 plain own-data 输入；表名必须是 primitive string，列必须是最多四项、
+连续、无额外属性且每项都是 primitive string 的 plain array。列数上限在任何按 `length` 分配前
+检查；输入对象、列数组和 Proxy 后端都只读取一次 property-descriptor 快照，accessor 不会执行，
+校验完成后也不会回读 caller。
 
 ### RLS 生成契约
 

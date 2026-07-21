@@ -46,8 +46,9 @@ git diff --exit-code -- package-lock.json pnpm-lock.yaml
 - org/store SQL 同时含 ENABLE、FORCE、USING、WITH CHECK，输出重复调用完全一致；builder 只能
   接收矩阵中对应 scope 的表，mismatch、global 或未知表全部拒绝；
 - SQL builder 与 key factory 只接收 exact-shape plain own-data 输入和 primitive string；列必须为
-  连续 plain string array。missing/extra、accessor、boxed/null/undefined/non-string、非 plain 对象
-  均 fail-closed；每个对象/数组只消费一次 descriptors 快照，此后不得回读 caller；
+  最多四项的连续 plain string array，列数上限必须先于任何按 `length` 分配。missing/extra、
+  accessor、boxed/null/undefined/non-string、非 plain 对象均 fail-closed；每个对象/数组只消费一次
+  descriptors 快照，此后不得回读 caller；
 - 缺失/空 GUC 使用 `NULLIF(current_setting(..., true), '')::uuid` fail-closed，谓词没有跨表子查询；
 - schema/table/policy/role 的注入、大小写、点号和超过 63 字节的 ASCII 标识符均拒绝；
 - maintenance policy 的 table 在类型与运行时都只允许矩阵中的 org/store 表，unknown/global 拒绝；

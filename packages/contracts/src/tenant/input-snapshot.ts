@@ -1,5 +1,7 @@
 type CapturedOwnDataProperties<TKey extends string> = Readonly<Record<TKey, unknown>>;
 
+const MAX_TENANT_KEY_COLUMN_COUNT = 4;
+
 const hasOwn = (value: object, property: PropertyKey): boolean =>
   Object.prototype.hasOwnProperty.call(value, property);
 
@@ -108,6 +110,9 @@ export const capturePrimitiveStringArray = (input: unknown, label: string): read
   }
 
   const length = lengthDescriptor.value;
+  if (length > MAX_TENANT_KEY_COLUMN_COUNT) {
+    throw new TypeError(`${label} must contain at most ${MAX_TENANT_KEY_COLUMN_COUNT} entries`);
+  }
   const expectedKeys = Object.freeze([
     ...Array.from({ length }, (_, index) => String(index)),
     "length",
