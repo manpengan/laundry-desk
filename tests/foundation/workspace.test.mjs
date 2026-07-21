@@ -97,11 +97,12 @@ function isRestrictedAuthTargetAllowed(path, target) {
     ].includes(path);
   }
   if (target === "identity-lifecycle-authority") {
-    // A6 command catalog reuses A5 request schemas; runtime issue factories stay ingress-only.
+    // A6 catalog + A7 OpenAPI project A5 request schemas; runtime issue factories stay ingress-only.
     return (
       path === "packages/contracts/src/index.ts" ||
       path === "packages/contracts/src/auth/browser-ingress.ts" ||
-      path.startsWith("packages/contracts/src/commands/")
+      path.startsWith("packages/contracts/src/commands/") ||
+      path.startsWith("packages/contracts/src/openapi/")
     );
   }
   return false;

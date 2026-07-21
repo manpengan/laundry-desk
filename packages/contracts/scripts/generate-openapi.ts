@@ -1,6 +1,6 @@
 /**
  * Deterministic OpenAPI 3.1 snapshot writer for A7.
- * Run via: pnpm --filter @laundry/contracts generate:openapi
+ * Run via: pnpm --filter @laundry/contracts build && node --experimental-strip-types packages/contracts/scripts/generate-openapi.ts
  * (builds dist/, then executes this file against compiled modules — no timestamps).
  */
 import { mkdirSync, writeFileSync } from "node:fs";
