@@ -23,6 +23,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "generate:openapi": "tsc -p tsconfig.json && node --experimental-strip-types ./scripts/generate-openapi.ts",
     "lint": "eslint src test --ext .ts,.tsx --max-warnings=0",
     "test": "vitest run --coverage",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"

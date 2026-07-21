@@ -342,3 +342,14 @@ export {
   M1_FIRST_WAVE_DEFINITIONS,
   M1_FIRST_WAVE_QUERY_NAMES,
 } from "./commands/catalog.js";
+
+export {
+  OPENAPI_INFO_VERSION,
+  OPENAPI_SNAPSHOT_RELATIVE_PATH,
+  OPENAPI_VERSION,
+  buildLaundryOpenApiDocument,
+  serializeOpenApiDocument,
+  sortKeysDeep,
+  zodToOpenApiSchema,
+} from "./openapi/build-document.js";
+export type { OpenApiDocument, OpenApiSchemaObject } from "./openapi/build-document.js";
