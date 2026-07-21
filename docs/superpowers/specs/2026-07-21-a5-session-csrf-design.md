@@ -28,6 +28,7 @@ contracts 冻结：
 - access/session、refresh family/token、CSRF proof、PIN challenge 的严格 schema；
 - 不可由同形对象伪造的运行时 provenance；
 - safe/unsafe method、refresh 状态迁移、reuse 后果、PIN challenge 可消费性的纯判定；
+- session active/version 校验、logout 与 refresh reuse 的级联撤销；
 - 浏览器可见数据与服务端状态的显式分离。
 
 C6/C8 注入可信时钟、密码学、数据库事务和 allowlist，不让 contracts 连接外部系统。
@@ -47,12 +48,17 @@ JWT/HMAC/Argon2、cookie I/O 与数据库轮换属于 C6。把这些放入 contr
 ### 3.1 `auth/session`
 
 - `ACCESS_TOKEN_TTL_SECONDS = 900`；解析后要求 `exp - iat` 精确为 900 秒。
-- access claims 绑定 `session_id/org_id/store_id/staff_id/device_id`、权限版本、认证方式、
-  `iat/exp`；不接受客户端自报身份。
+- access claims 绑定 `session_id/session_version/org_id/store_id/staff_id/device_id`、权限版本、
+  认证方式、`iat/exp`；不接受客户端自报身份。
 - 登录/refresh/PIN 快切的浏览器响应可含 access token，但字段标注为 memory-only；不得提供
   localStorage/sessionStorage/cookie 持久化选项。
+- 服务端 session record 显式区分 `active | revoked` 并携带单调 `session_version`。C8 在每次请求
+  验签后仍须从服务端状态读取 session，要求 active，且 version、actor、tenant、device 与 claims
+  全部一致；状态不可读时 fail-closed。不能因 access JWT 尚未到期而跳过撤销检查。
 - 服务端认证 session snapshot 使用私有品牌与运行时 provenance；同形 JSON、spread/clone
-  不能成为 C8 的可信 actor/tenant 来源。
+  不能成为 C8 的可信 actor/tenant 来源。A2 `injectAuthenticatedCommandContext` 必须改为只接受
+  该 snapshot 与服务端选定的 `via`，不再解析任意同形 actor/tenant 对象。snapshot authority 仅由
+  C6/C8 认证模块持有，并由 apps/server 架构 lint 禁止其他入口调用。
 
 ### 3.2 `auth/refresh`
 
@@ -66,6 +72,10 @@ JWT/HMAC/Argon2、cookie I/O 与数据库轮换属于 C6。把这些放入 contr
   线路错误不泄露 token 是否存在。
 - 登录和 PIN 快切创建新 session + 新 family；旧 session/family 先撤销，防止固定攻击以及前一
   员工继续刷新。
+- family reuse、logout、PIN 快切、管理员撤销或凭据变更均须撤销关联 session 并递增其 version，
+  从而使旧 access 在下一次请求立即失效；不能只撤销 refresh token。
+- logout 是明确状态迁移：原子撤销当前 session 与 family，并以与签发相同的 host/path/security
+  属性把 refresh/CSRF cookie 设为 Max-Age=0。重复 logout 可幂等成功，但绝不恢复状态。
 
 ### 3.3 `auth/csrf`
 
@@ -84,14 +94,20 @@ JWT/HMAC/Argon2、cookie I/O 与数据库轮换属于 C6。把这些放入 contr
 ### 3.4 `auth/pin`
 
 - PIN 是 4–8 位 ASCII 数字 secret；不得 trim、coerce、示例化或进入结果。
-- challenge 绑定 `challenge_id/session_id/org_id/store_id/device_id/target_staff_id/purpose/nonce`
-  与绝对过期时间。`purpose` 仅为 `quick_switch | step_up`。
+- challenge 绑定 `challenge_id/session_id/session_version/org_id/store_id/device_id/purpose/nonce`
+  与绝对过期时间。`purpose` 仅为 `quick_switch | step_up`；两种 purpose 使用判别联合而不是可选
+  字段拼盘。
+- quick-switch challenge 额外绑定 `requester_staff_id/target_staff_id`，两者可相同（重新认证）也可
+  不同（换班）。
+- step-up challenge 必须显式绑定 `pending_action_ref`、`args_hash`、`entity_versions`、
+  `idempotency_key`、`requester_staff_id` 与 `approver_staff_id`，且 requester 与 approver 不得相同。
 - challenge 默认 120 秒、最多 5 次失败；第 5 次失败后 challenge 不可再消费。C6 还必须按
   org/store/staff/device 维度实施 15 分钟锁定与速率限制，不能只依赖单 challenge 计数。
 - quick switch 成功创建新 session/family，撤销旧 session/family；不会在原 session 上原地改
   `staff_id`。
-- step-up 成功只产生短时、单次 proof，不切换当前操作者。proof 绑定审批对象，由 C5 执行
-  不可自核与原子单次消费；A5 冻结 purpose/expiry 和身份字段。
+- step-up 成功只产生 5 分钟有效、单次的 proof，不切换当前操作者。proof 逐字段复制 challenge
+  的 pending action、canonical args hash、实体版本、幂等键、请求人和审批人绑定；C5 只能按完整
+  绑定原子消费，任一字段变化、过期、已消费或自核均拒绝。
 
 ## 4. 数据流
 
@@ -101,7 +117,8 @@ JWT/HMAC/Argon2、cookie I/O 与数据库轮换属于 C6。把这些放入 contr
 2. 响应体返回 memory-only access token 与安全 session view；Set-Cookie 写 refresh 与 CSRF。
 3. refresh 请求同时携带 httpOnly refresh cookie、可读 CSRF cookie 和同值 header。
 4. C8 验 Origin/CSRF；C6 对 refresh token hash 行加锁并原子轮换。
-5. 成功返回新 access token并覆盖两个 cookie；reuse 则撤销整族并返回统一认证失败。
+5. 成功返回新 access token并覆盖两个 cookie；reuse 则撤销整族和关联 session、递增 version，
+   并返回统一认证失败。
 
 ### 4.2 PIN 快切
 
@@ -109,6 +126,12 @@ JWT/HMAC/Argon2、cookie I/O 与数据库轮换属于 C6。把这些放入 contr
 2. 浏览器只提交 `challenge_id + pin`；身份与租户从服务端 challenge/session 取，不接收自报值。
 3. C6 验证过期、次数、锁定和 PIN；失败原子递增，成功原子消费。
 4. quick switch 撤销旧 session/family并创建新 session/family；step-up 只签发绑定 proof。
+
+### 4.3 logout 与每请求认证
+
+1. C8 验 JWT 后加载 session record；active/version/actor/tenant/device 任一不符即拒绝。
+2. logout 请求必须通过 Origin 与 CSRF，并原子撤销 session/family、递增 version、清两个 cookie。
+3. logout 后旧 access 即使 `exp` 未到也在第 1 步失败；重复 logout 不产生新 session。
 
 ## 5. 错误与泄露控制
 
@@ -124,19 +147,37 @@ JWT/HMAC/Argon2、cookie I/O 与数据库轮换属于 C6。把这些放入 contr
 测试先 RED 后 GREEN，至少覆盖：
 
 1. access 15 分钟、refresh 14 天和两种 cookie 的完整安全属性；
-2. access/session provenance，spread、JSON 与同形对象均不能变成可信 session；
-3. refresh 正常轮换、并发旧 token 单胜、rotated reuse 撤销整族、revoked/expired/unknown 拒绝；
+2. access/session provenance，spread、JSON 与同形对象均不能变成可信 session；A2 注入拒绝
+   任意同形 context，只接受 active/version 已复核的 A5 snapshot；
+3. refresh 正常轮换、并发旧 token 单胜、rotated reuse 撤销整族和 session、revoked/expired/
+   unknown 拒绝；旧 access 在 session version 变化后立即拒绝；
 4. unsafe method 缺 cookie/header、不相等、跨源、malformed proof 全拒；safe method 规则稳定；
 5. PIN 非 ASCII/长度错误、challenge 过期/已消费/次数耗尽、purpose mismatch 全拒；
-6. quick switch 必须换 session/family；step-up proof 不得改变当前 actor；
-7. secret 不可进入 examples/result/session view，生成对象深冻结且调用方输入不会被修改；
-8. contracts 全量 test/typecheck/lint、workspace 门禁、diff-check 与双锁文件检查全绿。
+6. quick switch 必须换 session/family；step-up proof 不得改变当前 actor，且换参、换实体版本、
+   换幂等键、自核、过期与重复消费全部拒绝；
+7. logout 撤销 session/family、递增 version、生成精确清 cookie 属性，且重复调用幂等；
+8. secret 不可进入 examples/result/session view，生成对象深冻结且调用方输入不会被修改；
+9. contracts 全量 test/typecheck/lint、workspace 门禁、diff-check 与双锁文件检查全绿。
 
 ## 7. 后续消费约束
 
 - A6 定义 login/refresh/logout/PIN 命令时复用 A5 schema；secret 输入必须 remove-only redaction，
   不得提供 examples。
 - A7 只生成浏览器可见 request/response；服务端 refresh 状态、token hash、品牌工厂不投影。
-- C6/C8 必须以数据库事务证明 rotation/reuse、固定攻击和 challenge 单次消费，而不是以内存 mock
-  宣称完成。
+- C6/C8 必须以数据库事务证明 rotation/reuse、logout、session version、固定攻击和 challenge
+  单次消费，而不是以内存 mock 宣称完成。
 - Grok E1/E3 只能使用 A7 生成物；access token 留内存，不能自行持久化。
+
+## 8. 实现文件边界
+
+A5 预计新增：
+
+- `packages/contracts/src/auth/session.ts`
+- `packages/contracts/src/auth/refresh.ts`
+- `packages/contracts/src/auth/csrf.ts`
+- `packages/contracts/src/auth/pin.ts`
+- 对应 `packages/contracts/test/auth-*.test.ts`
+
+A5 必须同时调整 `packages/contracts/src/envelope/server-envelope.ts` 及其测试，使 A2 信封注入消费
+A5 的可信 snapshot；否则 provenance 只存在于孤立类型中。修改 `packages/contracts/src/index.ts`、
+README 和 A5 验收单。所有改变仍限制在 contracts/docs，不在本 PR 写 C6 数据库或 HTTP 运行时。
