@@ -19,6 +19,8 @@ export const BUS_ONLY_PATH_PREFIXES = Object.freeze([
 /**
  * Import path substrings that indicate a forbidden direct write dependency.
  * Matches relative imports like `../services/order-write` or `@laundry/server/repos/`.
+ * C7: routes/ai/workers must not import platform store modules (settings/features/audit-query);
+ * platform writes go through createPlatformHandlers → bus only.
  */
 export const FORBIDDEN_IMPORT_PATTERNS = Object.freeze([
   /from\s+['"][^'"]*\/services\/[^'"]*write[^'"]*['"]/u,
@@ -27,6 +29,10 @@ export const FORBIDDEN_IMPORT_PATTERNS = Object.freeze([
   /from\s+['"][^'"]*\/repositories\//u,
   /from\s+['"][^'"]*write-service[^'"]*['"]/u,
   /require\(\s*['"][^'"]*\/(services|repos?|repositories)\//u,
+  /from\s+['"][^'"]*\/platform\/settings(?:\.js)?['"]/u,
+  /from\s+['"][^'"]*\/platform\/features(?:\.js)?['"]/u,
+  /from\s+['"][^'"]*\/platform\/audit-query(?:\.js)?['"]/u,
+  /require\(\s*['"][^'"]*\/platform\/(settings|features|audit-query)/u,
 ] as const);
 
 export type BoundaryViolation = Readonly<{
