@@ -12,7 +12,7 @@
 | A3  | [租户表矩阵 + 三元组合键 + RLS 模板](a3-tenant-rls.md) | **✅ 已冻结**（PR #56 合入；contract-only；正式 migration 与五类旁路实跑留 C2/P4）                                                 |
 | A4  | [Edge 桥协议类型](a4-edge-bridge-protocol.md)          | **✅ 已冻结**（PR #53）；canonical、签名线品牌、grant 子集与 queue replay tuple 均有机制测试                                     |
 | A5  | [会话/CSRF 契约](a5-session-csrf.md)                   | **✅ 已冻结**（PR #58 合入；contract-only；C6/C8 runtime 仍是缺口）                                                               |
-| A6  | M1 首批命令定义（identity/platform）                   | **待 Grok 开工**；旧 `claude/m1-gates` 仅作草稿输入                                                                                  |
+| A6  | [首批命令 identity/platform](a6-first-command-definitions.md) | **✅ 已冻结（本 PR）** — 9 定义；secret≠R5；settings.set=R5；587 contracts tests |
 | A7  | zod-to-openapi + OpenAPI 快照进契约测试                | 待发                                                                                                                                 |
 
 **逐组节奏**：每完成一组即合入并提交可复现证据，不攒批。

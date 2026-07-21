@@ -313,3 +313,32 @@ export type {
   QueueAuthorization,
   QueueEnvelopeVersionDisposition,
 } from "./edge/queue-envelope.js";
+
+export {
+  IDENTITY_COMMAND_NAMES,
+  IDENTITY_COMMANDS,
+  IdentityPinChallengeInputSchema,
+  identityLoginCommand,
+  identityLogoutCommand,
+  identityPinChallengeCommand,
+  identityPinVerifyCommand,
+  identityRefreshCommand,
+} from "./commands/identity.js";
+export {
+  PLATFORM_COMMANDS,
+  PLATFORM_DEFINITIONS,
+  PLATFORM_QUERIES,
+  PlatformAuditListInputSchema,
+  PlatformSettingsGetInputSchema,
+  PlatformSettingsSetInputSchema,
+  PlatformStoreFeaturesGetInputSchema,
+  platformAuditListQuery,
+  platformSettingsGetQuery,
+  platformSettingsSetCommand,
+  platformStoreFeaturesGetQuery,
+} from "./commands/platform.js";
+export {
+  M1_FIRST_WAVE_COMMAND_NAMES,
+  M1_FIRST_WAVE_DEFINITIONS,
+  M1_FIRST_WAVE_QUERY_NAMES,
+} from "./commands/catalog.js";

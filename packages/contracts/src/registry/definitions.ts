@@ -19,10 +19,11 @@ import {
 
 type ContractKind = "command" | "query";
 
-declare const CONTRACT_DEFINITION_BRAND: unique symbol;
+/** Brand key for registry-minted definitions (must be exportable for declaration emit). */
+export declare const CONTRACT_DEFINITION_BRAND: unique symbol;
 
-type ContractDefinitionBrand = Readonly<{
-  [CONTRACT_DEFINITION_BRAND]: true;
+export type ContractDefinitionBrand = Readonly<{
+  readonly [CONTRACT_DEFINITION_BRAND]: true;
 }>;
 
 type ContractInputMember<TInput extends z.ZodObject> = Readonly<{
