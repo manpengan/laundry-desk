@@ -13,10 +13,15 @@ const workspaceNames = [
   "packages/config",
 ];
 const libraryNames = ["packages/contracts", "packages/domain", "packages/ui"];
+const generatedSourceDirectories = new Set(["dist", "node_modules", ".turbo", "coverage"]);
 
 async function readJson(path) {
   const contents = await readFile(new URL(path, rootUrl), "utf8");
   return JSON.parse(contents);
+}
+
+function shouldDescendSourceDirectory(directoryName) {
+  return !generatedSourceDirectories.has(directoryName);
 }
 
 async function collectSourceFiles(directory) {
@@ -24,7 +29,11 @@ async function collectSourceFiles(directory) {
   const nested = await Promise.all(
     entries.map(async (entry) => {
       const relativePath = `${directory}${entry.name}`;
-      if (entry.isDirectory()) return collectSourceFiles(`${relativePath}/`);
+      if (entry.isDirectory()) {
+        return shouldDescendSourceDirectory(entry.name)
+          ? collectSourceFiles(`${relativePath}/`)
+          : [];
+      }
       return /\.(?:[cm]?[jt]s|tsx)$/u.test(entry.name) ? [relativePath] : [];
     }),
   );
@@ -40,6 +49,14 @@ function isRestrictedContractsImportAllowed(path, subpath) {
   }
   return false;
 }
+
+test("does not descend into generated workspace directories", () => {
+  for (const directory of ["dist", "node_modules", ".turbo", "coverage"]) {
+    assert.equal(shouldDescendSourceDirectory(directory), false, `${directory} must be skipped`);
+  }
+  assert.equal(shouldDescendSourceDirectory("src"), true);
+  assert.equal(shouldDescendSourceDirectory("auth"), true);
+});
 
 test("declares pnpm workspaces and Turborepo at the repository root", async () => {
   const rootPackage = await readJson("package.json");
