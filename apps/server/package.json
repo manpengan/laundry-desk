@@ -3,11 +3,17 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "lint": "eslint src --ext .ts,.tsx --max-warnings=0",
-    "test": "node --test",
+    "test": "tsc -p tsconfig.json && node --test 'dist/**/*.test.js'",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }
 }
