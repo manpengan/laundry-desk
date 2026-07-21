@@ -28,11 +28,24 @@ import { OrderRepo } from "../repos/orders.js";
   assert.ok(violations.some((v) => v.snippet.includes("repos/orders")));
 });
 
+test("findForbiddenImports flags platform store imports from routes", () => {
+  const dirty = `
+import { createMemorySettingsStore } from "../platform/settings.js";
+import { createMemoryFeaturesStore } from "../platform/features.js";
+`;
+  const violations = findForbiddenImports(dirty, "routes/settings.ts");
+  assert.ok(violations.length >= 2);
+  assert.ok(violations.some((v) => v.snippet.includes("platform/settings")));
+  assert.ok(violations.some((v) => v.snippet.includes("platform/features")));
+});
+
 test("findForbiddenImports allows bus-only imports", () => {
   const clean = `
 import { executeCommand } from "../bus/executor.js";
 import type { CommandResult } from "../bus/types.js";
 import { createCommandError } from "@laundry/contracts";
+import { createPlatformHandlers } from "../platform/handlers.js";
+import { listTools } from "../tools/list-tools.js";
 `;
   assert.deepEqual(findForbiddenImports(clean), []);
 });

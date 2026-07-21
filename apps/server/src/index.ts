@@ -1,6 +1,7 @@
 /**
  * @laundry/server public surface.
- * C2 tenant GUC ports + C1 command bus + C3 append-only audit + C6 identity + C8 auth skeleton.
+ * C2 tenant GUC ports + C1 command bus + C3 append-only audit +
+ * C4 tool registry projection + C6 identity + C7 platform handlers + C8 auth skeleton.
  * Fastify HTTP plugins and identity bus handlers are residual (not wired here).
  */
 export {
@@ -159,3 +160,42 @@ export type {
   ResolveSessionDeps,
   ResolveSessionInput,
 } from "./auth/index.js";
+
+/** C4 — read-only AI tool projection (no model I/O). */
+export {
+  AI_PRESET_WHITELISTS,
+  listToolNames,
+  listTools,
+  projectCatalogToTools,
+  projectDefinitionToTool,
+} from "./tools/index.js";
+export type {
+  JsonSchemaProjection,
+  ListToolsFilter,
+  LlmToolDescriptor,
+  LlmToolLimits,
+  ToolExample,
+} from "./tools/index.js";
+
+/**
+ * C7 — platform bus handlers only on the public write surface.
+ * Memory/SQL store factories stay module-local (bootstrap injects them);
+ * routes must not import platform/settings|features|audit-query directly.
+ */
+export {
+  createPlatformHandlers,
+  platformHandlerNames,
+  registerPlatformCommandHandlers,
+} from "./platform/index.js";
+export type {
+  PlatformHandlerDeps,
+  PlatformHandlerMap,
+  PlatformHandlerName,
+  SettingsEntry,
+  SettingsStore,
+  FeaturesStore,
+  StoreFeatureFlags,
+  AuditListFilter,
+  AuditListItem,
+  AuditQueryStore,
+} from "./platform/index.js";
