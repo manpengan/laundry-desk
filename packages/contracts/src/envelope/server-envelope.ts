@@ -1,40 +1,18 @@
 import { z } from "zod";
 
+import {
+  isBrowserSessionSource,
+  isEdgeReplaySource,
+  type AuthenticatedActor,
+  type AuthenticatedExecutionSource,
+  type AuthenticatedTenant,
+} from "../auth/session.js";
+import { plainDataEquals, snapshotPlainData } from "../auth/plain-data.js";
 import { parseUnbrandedCommandWirePayload } from "./wire-payload.js";
 
 /** Architecture §6.5 / ADR-05 #1: the audited source of an authenticated command. */
 export const CommandViaSchema = z.enum(["ui", "ai", "automation", "edge_replay"]);
 
-const AuthenticatedActorSchema = z
-  .object({
-    /** C8 injects this identity from the authenticated server-side session only. */
-    staff_id: z.uuid(),
-    /** C8 resolves the authenticated workstation or registered Edge device. */
-    device_id: z.uuid(),
-    /** C1/C3/C5 use the source to select Policy and audit behavior. */
-    via: CommandViaSchema,
-  })
-  .strict();
-
-const AuthenticatedTenantSchema = z
-  .object({
-    /** ADR-02 #10: organization identity is never caller supplied. */
-    org_id: z.uuid(),
-    /** ADR-02 #10: store identity is never caller supplied. */
-    store_id: z.uuid(),
-  })
-  .strict();
-
-/**
- * C8's trusted input to A2 injection. Parsing validates shape only; C8 remains responsible for
- * deriving it from the server authentication session rather than a browser, LLM, or Edge request.
- */
-export const AuthenticatedCommandContextSchema = z
-  .object({ actor: AuthenticatedActorSchema, tenant: AuthenticatedTenantSchema })
-  .strict();
-
-type AuthenticatedActor = Readonly<z.output<typeof AuthenticatedActorSchema>>;
-type AuthenticatedTenant = Readonly<z.output<typeof AuthenticatedTenantSchema>>;
 type AuthenticatedCommandContext = Readonly<{
   actor: AuthenticatedActor;
   tenant: AuthenticatedTenant;
@@ -75,10 +53,26 @@ const registerServerEnvelope = (fields: ServerEnvelopeFields): ServerCommandEnve
  */
 export const injectAuthenticatedCommandContext = (
   wirePayload: unknown,
-  authenticatedContext: unknown,
+  source: AuthenticatedExecutionSource,
 ): ServerCommandEnvelope => {
-  const wire = parseUnbrandedCommandWirePayload(wirePayload);
-  const context = freezeContext(AuthenticatedCommandContextSchema.parse(authenticatedContext));
+  const wireSnapshot = snapshotPlainData(wirePayload, "command wire payload");
+  const wire = parseUnbrandedCommandWirePayload(wireSnapshot);
+  if (!isBrowserSessionSource(source) && !isEdgeReplaySource(source)) {
+    throw new TypeError("Authenticated execution source requires registered provenance");
+  }
+  if (isEdgeReplaySource(source) && source.actor.via !== "edge_replay") {
+    throw new TypeError("Authenticated execution source does not match actor via");
+  }
+  if (
+    isEdgeReplaySource(source) &&
+    !plainDataEquals(
+      snapshotPlainData(wire, "parsed command wire payload"),
+      snapshotPlainData(source.queue_envelope.payload, "verified Edge queue payload"),
+    )
+  ) {
+    throw new TypeError("Edge source does not match the verified queue payload");
+  }
+  const context = freezeContext({ actor: source.actor, tenant: source.tenant });
   return registerServerEnvelope({ ...wire, ...context });
 };
 

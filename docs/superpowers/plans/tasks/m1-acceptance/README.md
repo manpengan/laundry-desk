@@ -11,7 +11,7 @@
 | A2  | [统一信封 + 错误码表](a2-envelope-and-errors.md)       | **✅ 已冻结**（[冻结结论](2026-07-20-a2-freeze-verdict.md)：0 必修 / 1 记录；§2.1–§2.6 全部以机制实现）。C7 由 Codex 在 A6+C1 后重写 |
 | A3  | [租户表矩阵 + 三元组合键 + RLS 模板](a3-tenant-rls.md) | **✅ 实现与独立复审通过，待 PR 合入冻结**（contract-only；25 files / 415 tests；正式 migration 与旁路实跑留 C2/P4）                  |
 | A4  | [Edge 桥协议类型](a4-edge-bridge-protocol.md)          | **✅ 已冻结**（PR #53 / `a051b5e` 合入）；canonical、签名线品牌、grant 子集与 queue replay tuple 均有机制测试                        |
-| A5  | 会话/CSRF 契约                                         | 待发                                                                                                                                 |
+| A5  | [会话/CSRF 契约](a5-session-csrf.md)                   | **✅ contract-only 冻结候选，待 PR/main CI**（581 tests；authority 受限子路径；C6/C8 runtime 实测仍是缺口）                          |
 | A6  | M1 首批命令定义（identity/platform）                   | 待 Codex 开工；旧 `claude/m1-gates` 仅作草稿输入                                                                                     |
 | A7  | zod-to-openapi + OpenAPI 快照进契约测试                | 待发                                                                                                                                 |
 

@@ -17,6 +17,9 @@ export const CommandErrorCodeSchema = z.enum([
   "EVENT_DISPATCH_FAILED",
   "IDEMPOTENCY_REPLAY_UNSUPPORTED",
   "IDEMPOTENCY_CONFLICT",
+  "AUTHENTICATION_FAILED",
+  "CSRF_REJECTED",
+  "RATE_LIMITED",
 ]);
 
 export type CommandErrorCode = z.infer<typeof CommandErrorCodeSchema>;
@@ -34,7 +37,32 @@ const PublicErrorMessages = {
   EVENT_DISPATCH_FAILED: "Command event dispatch failed",
   IDEMPOTENCY_REPLAY_UNSUPPORTED: "This command cannot be replayed",
   IDEMPOTENCY_CONFLICT: "Idempotency key conflicts with an existing request",
+  AUTHENTICATION_FAILED: "Authentication failed",
+  CSRF_REJECTED: "Request origin verification failed",
+  RATE_LIMITED: "Too many requests",
 } as const satisfies Record<CommandErrorCode, string>;
+
+export const AUTH_PUBLIC_ERROR_DESCRIPTORS = Object.freeze({
+  AUTHENTICATION_FAILED: Object.freeze({
+    code: "AUTHENTICATION_FAILED" as const,
+    message: PublicErrorMessages.AUTHENTICATION_FAILED,
+    http_status: 401 as const,
+  }),
+  CSRF_REJECTED: Object.freeze({
+    code: "CSRF_REJECTED" as const,
+    message: PublicErrorMessages.CSRF_REJECTED,
+    http_status: 403 as const,
+  }),
+  RATE_LIMITED: Object.freeze({
+    code: "RATE_LIMITED" as const,
+    message: PublicErrorMessages.RATE_LIMITED,
+    http_status: 429 as const,
+  }),
+});
+
+export type AuthPublicErrorDescriptor =
+  (typeof AUTH_PUBLIC_ERROR_DESCRIPTORS)[keyof typeof AUTH_PUBLIC_ERROR_DESCRIPTORS];
+export type AuthPublicErrorCode = keyof typeof AUTH_PUBLIC_ERROR_DESCRIPTORS;
 
 const ErrorDetailSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("field"), path: JsonPointerSchema }).strict(),
@@ -49,7 +77,13 @@ const ErrorDetailSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("approval"), approval_ref: z.uuid() }).strict(),
 ]);
 
-export type CommandErrorDetail = Readonly<z.output<typeof ErrorDetailSchema>>;
+type DeepReadonly<T> = T extends readonly (infer Item)[]
+  ? readonly DeepReadonly<Item>[]
+  : T extends object
+    ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+    : T;
+
+export type CommandErrorDetail = DeepReadonly<z.output<typeof ErrorDetailSchema>>;
 
 const createErrorSchema = <TCode extends CommandErrorCode, TMessage extends string>(
   code: TCode,
@@ -62,6 +96,11 @@ const createErrorSchema = <TCode extends CommandErrorCode, TMessage extends stri
       detail: ErrorDetailSchema.optional(),
     })
     .strict();
+
+const createFixedAuthErrorSchema = <TCode extends AuthPublicErrorCode, TMessage extends string>(
+  code: TCode,
+  message: TMessage,
+) => z.strictObject({ code: z.literal(code), message: z.literal(message) });
 
 /**
  * Error output is strict and uses code-owned public messages. The only optional detail values are
@@ -87,22 +126,47 @@ export const CommandErrorSchema = z.discriminatedUnion("code", [
     PublicErrorMessages.IDEMPOTENCY_REPLAY_UNSUPPORTED,
   ),
   createErrorSchema("IDEMPOTENCY_CONFLICT", PublicErrorMessages.IDEMPOTENCY_CONFLICT),
+  createFixedAuthErrorSchema("AUTHENTICATION_FAILED", PublicErrorMessages.AUTHENTICATION_FAILED),
+  createFixedAuthErrorSchema("CSRF_REJECTED", PublicErrorMessages.CSRF_REJECTED),
+  createFixedAuthErrorSchema("RATE_LIMITED", PublicErrorMessages.RATE_LIMITED),
 ]);
 
-export type CommandError = Readonly<z.output<typeof CommandErrorSchema>>;
+export type CommandError = DeepReadonly<z.output<typeof CommandErrorSchema>>;
 
-/** Builds a non-leaking command error after C1/C3 applied A1 redaction and audit disposition. */
-export const createCommandError = <TCode extends CommandErrorCode>(
+type DetailedCommandErrorCode = Exclude<CommandErrorCode, AuthPublicErrorCode>;
+
+const freezeCommandError = (error: CommandError): CommandError => {
+  if (!("detail" in error) || error.detail === undefined) return Object.freeze(error);
+  const detail =
+    error.detail.kind === "step_up"
+      ? { ...error.detail, methods: [...error.detail.methods] }
+      : { ...error.detail };
+  if (detail.kind === "step_up") Object.freeze(detail.methods);
+  return Object.freeze({ ...error, detail: Object.freeze(detail) });
+};
+
+/** Builds one fixed auth error or a redacted A2 command error. Auth errors never accept detail. */
+export function createCommandError<TCode extends CommandErrorCode>(
   code: TCode,
+): Extract<CommandError, Readonly<{ code: TCode }>>;
+export function createCommandError<TCode extends DetailedCommandErrorCode>(
+  code: TCode,
+  detail: CommandErrorDetail,
+): Extract<CommandError, Readonly<{ code: TCode }>>;
+export function createCommandError(
+  code: CommandErrorCode,
   detail?: CommandErrorDetail,
-): Extract<CommandError, Readonly<{ code: TCode }>> => {
+): CommandError {
+  if (code in AUTH_PUBLIC_ERROR_DESCRIPTORS && detail !== undefined) {
+    throw new TypeError("Fixed auth errors must not include detail");
+  }
   const error = {
     code,
     message: PublicErrorMessages[code],
     ...(detail === undefined ? {} : { detail }),
   };
-  return CommandErrorSchema.parse(error) as Extract<CommandError, Readonly<{ code: TCode }>>;
-};
+  return freezeCommandError(CommandErrorSchema.parse(error));
+}
 
 const CommandSuccessDataSchema = z.discriminatedUnion("execution", [
   z.object({ execution: z.literal("preview"), result: z.json() }).strict(),
@@ -126,4 +190,4 @@ export const CommandResponseSchema = z.discriminatedUnion("ok", [
   CommandFailureResponseSchema,
 ]);
 
-export type CommandResponse = Readonly<z.output<typeof CommandResponseSchema>>;
+export type CommandResponse = DeepReadonly<z.output<typeof CommandResponseSchema>>;

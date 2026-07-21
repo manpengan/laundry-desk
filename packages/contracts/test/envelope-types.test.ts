@@ -1,15 +1,62 @@
 import { expectTypeOf, it } from "vitest";
 
+import { issueBrowserSessionSource } from "../src/auth/browser-ingress.js";
 import {
+  AUTH_OPERATION_MATRIX,
+  AccessSessionResponseSchema,
   CommandErrorSchema,
   CommandResponseSchema,
   CommandWirePayloadSchema,
+  LoginRequestSchema,
+  PinChallengeRequestSchema,
+  PinVerifyRequestSchema,
+  classifyRefreshCasCommit,
+  evaluateCsrfRequest,
   injectAuthenticatedCommandContext,
+  isIdentityLifecycleEnvelope,
+  type AccessSessionResponse,
+  type AuthOperationDescriptor,
   type CommandError,
   type CommandResponse,
   type CommandWirePayload,
+  type BrowserSessionSource,
+  type CsrfDecision,
+  type IdentityLifecycleEnvelope,
+  type LoginRequest,
+  type PinChallengeRequest,
+  type PinVerifyRequest,
+  type RefreshCasCommitDisposition,
   type ServerCommandEnvelope,
 } from "../src/index.js";
+import * as PublicContracts from "../src/index.js";
+
+const browserSource = (): BrowserSessionSource =>
+  issueBrowserSessionSource({
+    via: "ui",
+    claims: {
+      session_id: "1131e8c3-b7e3-4633-8af8-a5e3286570e1",
+      session_version: 4,
+      org_id: "692e7b46-2c52-4b77-b790-c2cb4037b9ef",
+      store_id: "74b83b3d-a9db-4d82-ba36-bb25a685cd3f",
+      staff_id: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
+      device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
+      permission_version: 9,
+      authentication_method: "password",
+      iat: 1_800_000_000,
+      exp: 1_800_000_900,
+    },
+    session_record: {
+      status: "active",
+      session_id: "1131e8c3-b7e3-4633-8af8-a5e3286570e1",
+      session_version: 4,
+      org_id: "692e7b46-2c52-4b77-b790-c2cb4037b9ef",
+      store_id: "74b83b3d-a9db-4d82-ba36-bb25a685cd3f",
+      staff_id: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
+      device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
+      permission_version: 9,
+      authentication_method: "password",
+    },
+  });
 
 it("keeps wire payloads structurally distinct from trusted server envelopes", () => {
   const wirePayload = CommandWirePayloadSchema.parse({
@@ -40,17 +87,7 @@ it("prevents a trusted server envelope from being sent as a wire payload", () =>
       idempotency_key: "9dfc4424-9b9a-4e52-baaa-c02868f8e7de",
       dry_run: false,
     },
-    {
-      actor: {
-        staff_id: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
-        device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
-        via: "ui",
-      },
-      tenant: {
-        org_id: "692e7b46-2c52-4b77-b790-c2cb4037b9ef",
-        store_id: "74b83b3d-a9db-4d82-ba36-bb25a685cd3f",
-      },
-    },
+    browserSource(),
   );
 
   if (Math.random() < 0) {
@@ -75,6 +112,48 @@ it("binds each public error code to its fixed public message at compile time", (
   }
 });
 
+it("keeps nested public error details readonly at compile time", () => {
+  const stepUp: CommandError = CommandErrorSchema.parse({
+    code: "POLICY_STEP_UP_REQUIRED",
+    message: "Step-up verification is required",
+    detail: { kind: "step_up", methods: ["pin"] },
+  });
+  const field: CommandError = CommandErrorSchema.parse({
+    code: "VALIDATION_FAILED",
+    message: "Request validation failed",
+    detail: { kind: "field", path: "/username" },
+  });
+  const response: CommandResponse = CommandResponseSchema.parse({
+    ok: false,
+    error: {
+      code: "POLICY_STEP_UP_REQUIRED",
+      message: "Step-up verification is required",
+      detail: { kind: "step_up", methods: ["pin"] },
+    },
+  });
+
+  if (Math.random() < 0) {
+    if (stepUp.code === "POLICY_STEP_UP_REQUIRED" && stepUp.detail?.kind === "step_up") {
+      // @ts-expect-error Runtime freezes this array, so the public type must forbid mutation.
+      stepUp.detail.methods.push("qr");
+      // @ts-expect-error Runtime freezes each nested detail value.
+      stepUp.detail.methods[0] = "qr";
+    }
+    if (field.code === "VALIDATION_FAILED" && field.detail?.kind === "field") {
+      // @ts-expect-error Runtime freezes the nested detail object.
+      field.detail.path = "/password";
+    }
+    if (
+      !response.ok &&
+      response.error.code === "POLICY_STEP_UP_REQUIRED" &&
+      response.error.detail?.kind === "step_up"
+    ) {
+      // @ts-expect-error Failure responses expose the same deeply readonly public error.
+      response.error.detail.methods.push("qr");
+    }
+  }
+});
+
 it("keeps public schema output assignable to every corresponding public type", () => {
   const wirePayload: CommandWirePayload = CommandWirePayloadSchema.parse({
     command: "orders.cancel",
@@ -96,4 +175,79 @@ it("keeps public schema output assignable to every corresponding public type", (
   expectTypeOf(wirePayload).toMatchTypeOf<CommandWirePayload>();
   expectTypeOf(error).toMatchTypeOf<CommandError>();
   expectTypeOf(response).toMatchTypeOf<CommandResponse>();
+});
+
+it("keeps every public browser auth schema aligned with its root type", () => {
+  const login: LoginRequest = LoginRequestSchema.parse({
+    org_code: "org-001",
+    store_code: "store-001",
+    username: "cashier-001",
+    password: "request-only-secret",
+    device_id: "10000000-0000-4000-8000-000000000001",
+  });
+  const challenge: PinChallengeRequest = PinChallengeRequestSchema.parse({
+    purpose: "quick_switch",
+    target_staff_id: "10000000-0000-4000-8000-000000000002",
+  });
+  const verification: PinVerifyRequest = PinVerifyRequestSchema.parse({
+    challenge_id: "10000000-0000-4000-8000-000000000003",
+    pin: "1234",
+  });
+  const response: AccessSessionResponse = AccessSessionResponseSchema.parse({
+    access_token: "header.payload.signature",
+    token_type: "Bearer",
+    expires_in: 900,
+    storage: "memory_only",
+    session: {
+      session_id: "10000000-0000-4000-8000-000000000004",
+      session_version: 1,
+      org_id: "10000000-0000-4000-8000-000000000005",
+      store_id: "10000000-0000-4000-8000-000000000006",
+      staff_id: "10000000-0000-4000-8000-000000000007",
+      device_id: "10000000-0000-4000-8000-000000000001",
+      permission_version: 1,
+    },
+  });
+  const csrf: CsrfDecision = evaluateCsrfRequest({
+    method: "GET",
+    origin_allowed: false,
+    fetch_site: "cross-site",
+    cookie_present: false,
+    header_present: false,
+    tokens_match: false,
+    proof_valid: false,
+  });
+  const refresh: RefreshCasCommitDisposition = classifyRefreshCasCommit({ matched_rows: 1 });
+  const firstOperation: AuthOperationDescriptor = AUTH_OPERATION_MATRIX[0];
+
+  expectTypeOf(login).toMatchTypeOf<LoginRequest>();
+  expectTypeOf(challenge).toMatchTypeOf<PinChallengeRequest>();
+  expectTypeOf(verification).toMatchTypeOf<PinVerifyRequest>();
+  expectTypeOf(response).toMatchTypeOf<AccessSessionResponse>();
+  expectTypeOf(csrf).toMatchTypeOf<CsrfDecision>();
+  expectTypeOf(refresh).toMatchTypeOf<RefreshCasCommitDisposition>();
+  expectTypeOf(firstOperation).toMatchTypeOf<AuthOperationDescriptor>();
+});
+
+it("narrows lifecycle envelopes with the public guard but keeps all authority off root types", () => {
+  const candidate: unknown = {};
+  if (isIdentityLifecycleEnvelope(candidate)) {
+    expectTypeOf(candidate).toMatchTypeOf<IdentityLifecycleEnvelope>();
+  }
+
+  expectTypeOf<
+    "issueBrowserSessionSource" extends keyof typeof PublicContracts ? true : false
+  >().toEqualTypeOf<false>();
+  expectTypeOf<
+    "issueEdgeReplaySource" extends keyof typeof PublicContracts ? true : false
+  >().toEqualTypeOf<false>();
+  expectTypeOf<
+    "issueIdentityLifecycleEnvelope" extends keyof typeof PublicContracts ? true : false
+  >().toEqualTypeOf<false>();
+  expectTypeOf<
+    "registerIdentityLifecycleEnvelope" extends keyof typeof PublicContracts ? true : false
+  >().toEqualTypeOf<false>();
+  expectTypeOf<
+    "ServerSessionRecordSchema" extends keyof typeof PublicContracts ? true : false
+  >().toEqualTypeOf<false>();
 });
