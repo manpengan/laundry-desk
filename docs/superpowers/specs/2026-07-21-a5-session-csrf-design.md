@@ -1,0 +1,142 @@
+# A5 会话、refresh、CSRF 与 PIN 契约设计
+
+> 日期：2026-07-21  
+> 状态：Approved for implementation（manpengan 已授权 Codex 采用推荐方案并独立完成）  
+> 范围：`packages/contracts`；不包含 JWT 签名、密码哈希、数据库、HTTP middleware 或 UI
+
+## 1. 目标与依据
+
+A5 冻结 C6/C8、A6/A7 和 Grok E1/E3 共同消费的身份线路边界，依据：
+
+- 架构 §3：access 15 分钟、仅内存；refresh 14 天、httpOnly + SameSite cookie 轮换；
+  命令类 POST 使用 CSRF 双提交；柜台支持 PIN 快切；
+- ADR-02 #10：actor 与 tenant 只能来自服务端认证会话；
+- ADR-05 #11：step-up 短时、单次、不可自核；
+- 当前治理门禁：refresh reuse、会话撤销/固定攻击、CSRF 跨源、PIN 暴力破解与
+  step-up 过期必须有可失败的负向测试。
+
+A5 是契约冻结，不宣称身份服务已经可用。C6/C8 仍必须实现并实测密码学、原子轮换、持久化、
+限速、cookie 写入、Origin 校验和服务端认证上下文注入。
+
+## 2. 方案取舍
+
+### 2.1 采用：安全语义契约 + 纯判定
+
+contracts 冻结：
+
+- TTL、cookie/header 名称和安全属性；
+- access/session、refresh family/token、CSRF proof、PIN challenge 的严格 schema；
+- 不可由同形对象伪造的运行时 provenance；
+- safe/unsafe method、refresh 状态迁移、reuse 后果、PIN challenge 可消费性的纯判定；
+- 浏览器可见数据与服务端状态的显式分离。
+
+C6/C8 注入可信时钟、密码学、数据库事务和 allowlist，不让 contracts 连接外部系统。
+
+### 2.2 未采用：仅做 DTO
+
+DTO 无法冻结 refresh reuse、会话固定攻击、CSRF session 绑定和 PIN 单次消费。各消费方会形成
+第二套安全语义，直到集成阶段才暴露分歧。
+
+### 2.3 未采用：在 contracts 实现完整身份运行时
+
+JWT/HMAC/Argon2、cookie I/O 与数据库轮换属于 C6。把这些放入 contracts 会引入平台依赖，破坏
+纯契约包，并让前端生成物意外携带服务端能力。
+
+## 3. 组件边界
+
+### 3.1 `auth/session`
+
+- `ACCESS_TOKEN_TTL_SECONDS = 900`；解析后要求 `exp - iat` 精确为 900 秒。
+- access claims 绑定 `session_id/org_id/store_id/staff_id/device_id`、权限版本、认证方式、
+  `iat/exp`；不接受客户端自报身份。
+- 登录/refresh/PIN 快切的浏览器响应可含 access token，但字段标注为 memory-only；不得提供
+  localStorage/sessionStorage/cookie 持久化选项。
+- 服务端认证 session snapshot 使用私有品牌与运行时 provenance；同形 JSON、spread/clone
+  不能成为 C8 的可信 actor/tenant 来源。
+
+### 3.2 `auth/refresh`
+
+- `REFRESH_TOKEN_TTL_SECONDS = 1_209_600`（14 天）。
+- refresh 秘密只允许 cookie 传输，响应 JSON、日志结构与例子均不得包含 token。
+- 固定 cookie：`__Host-laundry_refresh`、`Secure`、`HttpOnly`、`SameSite=Strict`、`Path=/`、
+  禁止 Domain，Max-Age 为 14 天。
+- token 属于一个 family。每次成功 refresh 必须在一个原子操作内消费旧 token、创建新 token、
+  标记 replacement；不得允许两个并发请求都成功。
+- 已 rotated token 再次提交为 reuse：整族撤销并拒绝签发。revoked/expired/unknown 统一拒绝，
+  线路错误不泄露 token 是否存在。
+- 登录和 PIN 快切创建新 session + 新 family；旧 session/family 先撤销，防止固定攻击以及前一
+  员工继续刷新。
+
+### 3.3 `auth/csrf`
+
+- 固定 cookie：`__Host-laundry_csrf`、`Secure`、非 HttpOnly、`SameSite=Strict`、`Path=/`、
+  禁止 Domain；固定 header：`x-csrf-token`。
+- CSRF token 是不透明 proof，由 C6 绑定 session/family 后签发。A5 只验证版本化、安全字符和
+  长度，不实现或暴露 MAC 密钥。
+- 浏览器的 POST/PUT/PATCH/DELETE 必须同时通过 allowlisted Origin 与 cookie/header 同值；
+  refresh、logout 和命令 POST 不能豁免。
+- GET/HEAD/OPTIONS 不要求双提交 token，但认证与授权照常执行，且不得产生业务变更。
+- 初始 login 尚无 session，可不要求双提交 token，但仍必须通过 Origin/Fetch Metadata 防跨源；
+  C6 不得把该豁免扩展到已认证命令。
+- 比较与 proof 验证由 C6 使用恒定时间原语完成；contracts 的纯判定只返回结构化原因，禁止
+  把 token 写入错误文本。
+
+### 3.4 `auth/pin`
+
+- PIN 是 4–8 位 ASCII 数字 secret；不得 trim、coerce、示例化或进入结果。
+- challenge 绑定 `challenge_id/session_id/org_id/store_id/device_id/target_staff_id/purpose/nonce`
+  与绝对过期时间。`purpose` 仅为 `quick_switch | step_up`。
+- challenge 默认 120 秒、最多 5 次失败；第 5 次失败后 challenge 不可再消费。C6 还必须按
+  org/store/staff/device 维度实施 15 分钟锁定与速率限制，不能只依赖单 challenge 计数。
+- quick switch 成功创建新 session/family，撤销旧 session/family；不会在原 session 上原地改
+  `staff_id`。
+- step-up 成功只产生短时、单次 proof，不切换当前操作者。proof 绑定审批对象，由 C5 执行
+  不可自核与原子单次消费；A5 冻结 purpose/expiry 和身份字段。
+
+## 4. 数据流
+
+### 4.1 登录与 refresh
+
+1. C6 在 allowlisted Origin 下验证登录凭据，建立服务端 session/family。
+2. 响应体返回 memory-only access token 与安全 session view；Set-Cookie 写 refresh 与 CSRF。
+3. refresh 请求同时携带 httpOnly refresh cookie、可读 CSRF cookie 和同值 header。
+4. C8 验 Origin/CSRF；C6 对 refresh token hash 行加锁并原子轮换。
+5. 成功返回新 access token并覆盖两个 cookie；reuse 则撤销整族并返回统一认证失败。
+
+### 4.2 PIN 快切
+
+1. 已认证柜台 session 请求服务端 challenge，challenge 固定目标员工、设备、门店与 purpose。
+2. 浏览器只提交 `challenge_id + pin`；身份与租户从服务端 challenge/session 取，不接收自报值。
+3. C6 验证过期、次数、锁定和 PIN；失败原子递增，成功原子消费。
+4. quick switch 撤销旧 session/family并创建新 session/family；step-up 只签发绑定 proof。
+
+## 5. 错误与泄露控制
+
+- Zod 边界使用 strict object；未知字段、accessor/非 plain 动态输入在纯工厂边界 fail-closed。
+- 认证失败与 CSRF/Origin 拒绝统一映射现有 A2 `PERMISSION_DENIED`；限速/锁定映射
+  `RESOURCE_UNAVAILABLE` + 固定 `retry_later` detail。内部 reason 可审计，线路 message 不区分
+  unknown/revoked/reused token，也不为 A5 另造第二套公共错误信封。
+- 任何错误对象不得包含 password、PIN、refresh token、CSRF token、JWT 或其稳定片段。
+- 时间字段使用整数 epoch seconds；C6 使用可信服务端时间，浏览器时间不参与有效性判断。
+
+## 6. 测试与验收
+
+测试先 RED 后 GREEN，至少覆盖：
+
+1. access 15 分钟、refresh 14 天和两种 cookie 的完整安全属性；
+2. access/session provenance，spread、JSON 与同形对象均不能变成可信 session；
+3. refresh 正常轮换、并发旧 token 单胜、rotated reuse 撤销整族、revoked/expired/unknown 拒绝；
+4. unsafe method 缺 cookie/header、不相等、跨源、malformed proof 全拒；safe method 规则稳定；
+5. PIN 非 ASCII/长度错误、challenge 过期/已消费/次数耗尽、purpose mismatch 全拒；
+6. quick switch 必须换 session/family；step-up proof 不得改变当前 actor；
+7. secret 不可进入 examples/result/session view，生成对象深冻结且调用方输入不会被修改；
+8. contracts 全量 test/typecheck/lint、workspace 门禁、diff-check 与双锁文件检查全绿。
+
+## 7. 后续消费约束
+
+- A6 定义 login/refresh/logout/PIN 命令时复用 A5 schema；secret 输入必须 remove-only redaction，
+  不得提供 examples。
+- A7 只生成浏览器可见 request/response；服务端 refresh 状态、token hash、品牌工厂不投影。
+- C6/C8 必须以数据库事务证明 rotation/reuse、固定攻击和 challenge 单次消费，而不是以内存 mock
+  宣称完成。
+- Grok E1/E3 只能使用 A7 生成物；access token 留内存，不能自行持久化。
