@@ -259,7 +259,7 @@ git commit -m "[LAUNDRY][CONTRACTS] 冻结 CSRF 双提交契约"
 - Create: `packages/contracts/src/auth/pin.ts`
 - Create: `packages/contracts/test/auth-pin.test.ts`
 
-- [ ] **Step 1: Write failing PIN tests**
+- [x] **Step 1: Write failing PIN tests**
 
 Assert PIN is untrimmed 4–8 ASCII digits and never returned. Test 120-second challenge TTL, five-attempt ceiling, expired/consumed/exhausted/purpose mismatch rejection and immutable outputs. Both challenge variants copy and compare `challenge_id/session_id/session_version/org_id/store_id/device_id/nonce/issued_at/expires_at`. Quick-switch additionally binds requester/target and its success decision explicitly revokes the previous session/family before creating a new session/family.
 
@@ -278,23 +278,23 @@ type StepUpBinding = Readonly<{
 
 Assert requester≠approver, exact field-by-field challenge→proof binding, five-minute proof TTL, expiry and one-time consumed state. Step-up success keeps the current actor/session unchanged; quick-switch success changes them only through the replacement plan.
 
-- [ ] **Step 2: Run tests to verify RED**
+- [x] **Step 2: Run tests to verify RED**
 
 Run: `pnpm --filter @laundry/contracts test -- auth-pin`
 
 Expected: FAIL because the module is absent.
 
-- [ ] **Step 3: Implement discriminated unions and pure decisions**
+- [x] **Step 3: Implement discriminated unions and pure decisions**
 
 Use separate quick_switch/step_up schemas, SHA-256 hex for `args_hash`, duplicate-free entity snapshots and strict integer epochs. Do not hash PIN or persist attempts in contracts.
 
-- [ ] **Step 4: Run focused GREEN checks**
+- [x] **Step 4: Run focused GREEN checks**
 
 Run: `pnpm --filter @laundry/contracts test -- auth-pin`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/contracts/src/auth/pin.ts packages/contracts/test/auth-pin.test.ts
