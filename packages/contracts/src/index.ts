@@ -100,7 +100,6 @@ export {
   isBrowserSessionSource,
   isEdgeReplaySource,
   parseAccessTokenClaims,
-  ServerSessionRecordSchema,
 } from "./auth/session.js";
 export type {
   AccessTokenClaims,
@@ -114,12 +113,92 @@ export type {
 export type { EdgeReplaySource } from "./auth/edge-ingress.js";
 
 export {
+  REFRESH_COOKIE_CLEAR_DESCRIPTOR,
+  REFRESH_COOKIE_DESCRIPTOR,
+  REFRESH_TOKEN_TTL_SECONDS,
+  classifyLogoutHttpCredential,
+  classifyLogoutStorageMutation,
+  classifyRefreshCasCommit,
+  planRefreshMutation,
+  planRefreshRevocation,
+  planSessionFamilyReplacement,
+} from "./auth/refresh.js";
+export type {
+  LogoutHttpCredentialDisposition,
+  LogoutStorageDisposition,
+  RefreshCasCommitDisposition,
+  RefreshMutationPlan,
+  RefreshRevocationCause,
+  SessionFamilyReplacementPlan,
+} from "./auth/refresh.js";
+
+export {
+  CSRF_COOKIE_CLEAR_DESCRIPTOR,
+  CSRF_COOKIE_DESCRIPTOR,
+  CSRF_COOKIE_NAME,
+  CSRF_HEADER_NAME,
+  CsrfProofSchema,
+  CsrfRejectionReasonSchema,
+  evaluateCsrfRequest,
+  evaluateLoginPreAuthOrigin,
+  validateCsrfTransportProofs,
+} from "./auth/csrf.js";
+export type { CsrfDecision, CsrfRejectionReason } from "./auth/csrf.js";
+
+export {
+  PIN_CHALLENGE_MAX_ATTEMPTS,
+  PIN_CHALLENGE_TTL_SECONDS,
+  STEP_UP_PROOF_TTL_SECONDS,
+  PinSchema,
+  classifySingleUseCasCommit,
+  createPinChallenge,
+  evaluateStepUpProof,
+  planQuickSwitchAttempt,
+  planStepUpAttempt,
+} from "./auth/pin.js";
+export type {
+  PinAttemptRejectionReason,
+  PinChallenge,
+  QuickSwitchAttemptPlan,
+  SingleUseCasCommitDisposition,
+  StepUpAttemptPlan,
+  StepUpProof,
+  StepUpProofDecision,
+} from "./auth/pin.js";
+
+export {
+  AUTH_OPERATION_MATRIX,
+  AccessSessionResponseSchema,
+  EmptyBodySchema,
+  IdentityLifecycleOperationSchema,
+  LoginRequestSchema,
+  LogoutResponseSchema,
+  PinChallengeRequestSchema,
+  PinChallengeResponseSchema,
+  PinVerifyRequestSchema,
+  PinVerifyResponseSchema,
+  isIdentityLifecycleEnvelope,
+} from "./auth/operations.js";
+export type {
+  AccessSessionResponse,
+  AuthOperationDescriptor,
+  EmptyBody,
+  IdentityLifecycleEnvelope,
+  LoginRequest,
+  PinChallengeRequest,
+  PinVerifyRequest,
+} from "./auth/operations.js";
+
+export {
+  AUTH_PUBLIC_ERROR_DESCRIPTORS,
   CommandErrorCodeSchema,
   CommandErrorSchema,
   CommandResponseSchema,
   createCommandError,
 } from "./envelope/responses.js";
 export type {
+  AuthPublicErrorCode,
+  AuthPublicErrorDescriptor,
   CommandError,
   CommandErrorCode,
   CommandErrorDetail,

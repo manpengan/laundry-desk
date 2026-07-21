@@ -77,7 +77,13 @@ const ErrorDetailSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("approval"), approval_ref: z.uuid() }).strict(),
 ]);
 
-export type CommandErrorDetail = Readonly<z.output<typeof ErrorDetailSchema>>;
+type DeepReadonly<T> = T extends readonly (infer Item)[]
+  ? readonly DeepReadonly<Item>[]
+  : T extends object
+    ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+    : T;
+
+export type CommandErrorDetail = DeepReadonly<z.output<typeof ErrorDetailSchema>>;
 
 const createErrorSchema = <TCode extends CommandErrorCode, TMessage extends string>(
   code: TCode,
@@ -125,7 +131,7 @@ export const CommandErrorSchema = z.discriminatedUnion("code", [
   createFixedAuthErrorSchema("RATE_LIMITED", PublicErrorMessages.RATE_LIMITED),
 ]);
 
-export type CommandError = Readonly<z.output<typeof CommandErrorSchema>>;
+export type CommandError = DeepReadonly<z.output<typeof CommandErrorSchema>>;
 
 type DetailedCommandErrorCode = Exclude<CommandErrorCode, AuthPublicErrorCode>;
 
@@ -184,4 +190,4 @@ export const CommandResponseSchema = z.discriminatedUnion("ok", [
   CommandFailureResponseSchema,
 ]);
 
-export type CommandResponse = Readonly<z.output<typeof CommandResponseSchema>>;
+export type CommandResponse = DeepReadonly<z.output<typeof CommandResponseSchema>>;

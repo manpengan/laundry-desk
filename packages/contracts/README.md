@@ -350,6 +350,41 @@ major 转 `recover_to_arbitration`；回滚后遇到任一未来版本转 `read_
 物理双交付**。物理保护仍只来自 head 行锁串行签发、不重叠 lease 与可信本地截止，任何下游均
 不得因 epoch/seq 存在而放松这三条防线。
 
+## A5 会话、refresh、CSRF 与 PIN 契约
+
+A5 只冻结可执行契约，不代表 identity HTTP 服务已经实现。根入口公开浏览器请求/响应 schema、
+纯判定函数、provenance guard 和对应类型；产生可信来源的 authority 只存在于受限子路径：
+`@laundry/contracts/browser-auth-ingress` 与 `@laundry/contracts/edge-auth-ingress`。普通消费者不得从
+根入口取得 `issueBrowserSessionSource()`、`issueEdgeReplaySource()`、
+`issueIdentityLifecycleEnvelope()` 或内部 registrar，也不得用同形对象、spread 或 JSON 往返伪造
+可信 session/lifecycle 来源。
+
+ADR-11 把 `identity.login | identity.refresh | identity.logout` 放进窄化 lifecycle 信封：它们仍须经过
+注册表、限速、事务、安全事件审计和事件投递，但不伪造尚不存在或已经过期的 actor/tenant。
+PIN challenge/verify 则只接受 active browser session，且禁止 Edge、AI、automation 与 offline。
+access token 响应明确为 `memory_only`；调用方不得把它写入 localStorage、sessionStorage 或 cookie。
+
+### A7 投影边界
+
+`AUTH_OPERATION_MATRIX` 是 auth OpenAPI 的唯一投影源。A7 必须逐行使用矩阵中的
+`request_schema` / `response_schema` 和 literal schema id，不得扫描根入口猜测 HTTP API。矩阵精确
+包含 login、refresh、logout、PIN challenge、PIN verify 五行；server-only session/refresh record、
+token hash、PIN challenge/proof 持久化 schema、authority 和品牌 factory 均不在投影面。
+
+密码/PIN 只存在于 request schema，且没有 examples。所有响应 schema 都是 strict object/union，
+会拒绝 `password`、`pin`、`refresh_token`、`csrf_token`、`token_hash` 和 `challenge_binding` 回显。
+固定认证错误只公开 `AUTHENTICATION_FAILED`/401、`CSRF_REJECTED`/403、`RATE_LIMITED`/429，不接受
+detail，避免暴露 refresh 是否 unknown、revoked 或 reused。
+
+### C6/C8 仍须提供的运行时事实
+
+- C6 实现 Argon2id/JWT/MAC、密钥管理、session/refresh/challenge 持久化、行锁/CAS 与原子事务、
+  cookie 写入/清理、恒定时间比较、reuse/锁定/限速、安全事件审计和事件投递，并以真实并发测试
+  证明 single-winner；contracts 的纯 plan/classifier 不是数据库成功证据。
+- C8 实现 allowlisted Origin/Fetch Metadata、CSRF 中间件、每请求 JWT 验签与 active/version/session
+  回读、actor/tenant 注入以及两个受限 authority 的唯一调用点。HTTP/E2E 和旧 access 撤销实测仍
+  属于 C6/C8，不由 A5 contract-only 测试替代。
+
 ## 冻结记录与 A6 须知
 
 | 记录 | 冻结语义 / 维护约束                                                                                                                                                                                                                             |

@@ -401,11 +401,11 @@ git commit -m "[LAUNDRY][CONTRACTS] 冻结身份生命周期入口"
 - Create: `docs/superpowers/plans/tasks/m1-acceptance/a5-session-csrf.md`
 - Modify: `docs/superpowers/plans/tasks/m1-acceptance/README.md`
 
-- [ ] **Step 1: Write/extend export and consumer tests**
+- [x] **Step 1: Write/extend export and consumer tests**
 
 Update `packages/contracts/test/consumers.test.ts` and type tests so public browser schemas fail to import before exports are added, while server authority issue methods remain absent from the root entry point. Assert secret-bearing request schemas have no examples/result echoes.
 
-- [ ] **Step 2: Run tests to verify RED**
+- [x] **Step 2: Run tests to verify RED**
 
 Run: `pnpm --filter @laundry/contracts test -- consumers auth-`
 
@@ -413,15 +413,15 @@ Run: `pnpm --filter @laundry/contracts typecheck`
 
 Expected: FAIL because the remaining public auth exports are not yet wired.
 
-- [ ] **Step 3: Export APIs and keep authority factories off the root**
+- [x] **Step 3: Export APIs and keep authority factories off the root**
 
 Export browser schemas, decisions, guards and types from `src/index.ts`; export browser/Edge authority factories only through their restricted package subpaths. Update consumer/type tests and run the same commands to GREEN.
 
-- [ ] **Step 4: Write acceptance documentation**
+- [x] **Step 4: Write acceptance documentation**
 
 Document contract-only evidence, RED/GREEN commands, ADR-11, C6/C8 runtime gaps, A7 projection rules and exact negative assertions. Mark A5 only as a freeze candidate until PR/main CI pass.
 
-- [ ] **Step 5: Run fresh full verification**
+- [x] **Step 5: Run fresh full verification**
 
 Run:
 
@@ -436,11 +436,11 @@ git diff --exit-code origin/main -- package-lock.json pnpm-lock.yaml
 
 Expected: all zero; coverage remains ≥70%; both lockfiles remain unchanged because A5 adds no dependency.
 
-- [ ] **Step 6: Independent reviews**
+- [x] **Step 6: Independent reviews**
 
 Request whole-range spec, TypeScript quality and security reviews. Fix every blocker/major with a new failing regression before implementation; rerun all reviewers after fixes.
 
-- [ ] **Step 7: Commit docs/exports**
+- [x] **Step 7: Commit docs/exports**
 
 ```bash
 git add packages/contracts/src/index.ts packages/contracts/test/consumers.test.ts \
