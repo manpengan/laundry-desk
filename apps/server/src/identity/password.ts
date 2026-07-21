@@ -1,0 +1,125 @@
+/**
+ * Password hashing port for C6.
+ *
+ * Production target is Argon2id (see defaults below for Windows counter PCs).
+ * This skeleton ships a `node:crypto` scrypt implementation so unit tests need
+ * no native argon2 binary or specialized hardware. Swap via PasswordPort.
+ *
+ * Argon2id recommended defaults for laundry-desk counter PCs (Windows 10/11,
+ * typical dual/quad-core storefront CPUs — keep login latency under ~300ms):
+ *   memoryCost: 19_456 KiB (~19 MiB)
+ *   timeCost: 2
+ *   parallelism: 1
+ * Raise memoryCost only after measuring on the lowest-end storefront SKU.
+ */
+
+import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+
+type ScryptOptions = Readonly<{ N: number; r: number; p: number }>;
+
+const scryptAsync = (
+  password: string,
+  salt: Buffer,
+  keylen: number,
+  options: ScryptOptions,
+): Promise<Buffer> =>
+  new Promise((resolve, reject) => {
+    scryptCallback(password, salt, keylen, options, (error, derivedKey) => {
+      if (error !== null) {
+        reject(error);
+        return;
+      }
+      resolve(derivedKey as Buffer);
+    });
+  });
+
+/** Portable hash / verify interface — Argon2 or scrypt adapters plug in here. */
+export type PasswordPort = Readonly<{
+  hashPassword: (password: string) => Promise<string>;
+  verifyPassword: (password: string, storedHash: string) => Promise<boolean>;
+}>;
+
+const SCRYPT_N = 16_384;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
+const SCRYPT_KEYLEN = 32;
+const SCRYPT_SALT_BYTES = 16;
+const SCRYPT_PREFIX = "scrypt";
+
+const encode = (buf: Buffer): string => buf.toString("base64url");
+const decode = (value: string): Buffer => Buffer.from(value, "base64url");
+
+/**
+ * scrypt-based PasswordPort (Node built-in). Format:
+ *   scrypt$N$r$p$salt_b64url$key_b64url
+ */
+export const createScryptPasswordPort = (): PasswordPort => {
+  const hashPassword = async (password: string): Promise<string> => {
+    if (password.length === 0 || password.length > 1_024) {
+      throw new RangeError("password length out of bounds");
+    }
+    const salt = randomBytes(SCRYPT_SALT_BYTES);
+    const key = await scryptAsync(password, salt, SCRYPT_KEYLEN, {
+      N: SCRYPT_N,
+      r: SCRYPT_R,
+      p: SCRYPT_P,
+    });
+    return `${SCRYPT_PREFIX}$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${encode(salt)}$${encode(key)}`;
+  };
+
+  const verifyPassword = async (password: string, storedHash: string): Promise<boolean> => {
+    const parts = storedHash.split("$");
+    if (parts.length !== 6 || parts[0] !== SCRYPT_PREFIX) return false;
+    const n = Number(parts[1]);
+    const r = Number(parts[2]);
+    const p = Number(parts[3]);
+    const saltB64 = parts[4];
+    const keyB64 = parts[5];
+    if (
+      !Number.isInteger(n) ||
+      !Number.isInteger(r) ||
+      !Number.isInteger(p) ||
+      saltB64 === undefined ||
+      keyB64 === undefined
+    ) {
+      return false;
+    }
+    try {
+      const salt = decode(saltB64);
+      const expected = decode(keyB64);
+      const actual = await scryptAsync(password, salt, expected.length, {
+        N: n,
+        r,
+        p,
+      });
+      if (actual.length !== expected.length) return false;
+      return timingSafeEqual(actual, expected);
+    } catch {
+      return false;
+    }
+  };
+
+  return Object.freeze({ hashPassword, verifyPassword });
+};
+
+/**
+ * Deterministic test double — not for production.
+ * Format: test$base64url(password) so tests stay pure and fast.
+ */
+export const createTestPasswordPort = (): PasswordPort => {
+  const hashPassword = async (password: string): Promise<string> =>
+    `test$${Buffer.from(password, "utf8").toString("base64url")}`;
+
+  const verifyPassword = async (password: string, storedHash: string): Promise<boolean> => {
+    const expected = await hashPassword(password);
+    const a = Buffer.from(expected, "utf8");
+    const b = Buffer.from(storedHash, "utf8");
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
+  };
+
+  return Object.freeze({ hashPassword, verifyPassword });
+};
+
+/** PIN uses the same port shape (4–8 digit secrets hashed like passwords). */
+export type PinPort = PasswordPort;
