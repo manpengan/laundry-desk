@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PrintJobSummary } from "@laundry/ui";
 import type { AuthClient } from "../auth/AuthClient.js";
+import { filterNavItems, permissionContextFrom } from "../auth/permissions.js";
 import type { AccessSession } from "../auth/types.js";
 import { createMockConnection, type ConnectionStatus } from "../connection.js";
 import type { NavItemId } from "../nav.js";
 import { PageHost } from "../pages/PageHost.js";
+import { RouteGate } from "../routing/RouteGate.js";
 import {
   applyThemeToDocument,
   cycleThemePreference,
@@ -69,6 +71,13 @@ export function CounterShell({
   );
   const dark = systemDark ?? readSystemDark();
 
+  // UI gate only; C8 enforces.
+  const permission = useMemo(
+    () => permissionContextFrom(session.role, session.features),
+    [session.role, session.features],
+  );
+  const navItems = useMemo(() => filterNavItems(permission), [permission]);
+
   useEffect(() => {
     const doc = documentRef ?? (typeof document !== "undefined" ? document : null);
     if (!doc) return;
@@ -82,7 +91,7 @@ export function CounterShell({
   }, [initialLoadingMs]);
 
   return (
-    <div className="ld-shell" data-shell="counter" data-nav={activeId}>
+    <div className="ld-shell" data-shell="counter" data-nav={activeId} data-role={session.role}>
       <a className="ld-skip-link" href="#main-content">
         跳到主内容
       </a>
@@ -91,6 +100,7 @@ export function CounterShell({
         activeId={activeId}
         onSelect={setActiveId}
         onToggleExpand={() => setExpanded((v) => !v)}
+        items={navItems}
       />
       <div className="ld-shell-body">
         <TopBar
@@ -100,7 +110,9 @@ export function CounterShell({
           printSummary={printSummary}
           onSwitchStaff={() => setPinOpen(true)}
         />
-        <PageHost activeId={activeId} loading={loading} onNavigate={setActiveId} />
+        <RouteGate permission={permission} activeId={activeId} onNavigate={setActiveId}>
+          <PageHost activeId={activeId} loading={loading} onNavigate={setActiveId} />
+        </RouteGate>
       </div>
       <PinSwitchDialog
         open={pinOpen}

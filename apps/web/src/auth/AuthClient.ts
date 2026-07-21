@@ -1,3 +1,9 @@
+import {
+  FULL_STORE_FEATURES,
+  STAFF_STORE_FEATURES,
+  type StaffRole,
+  type StoreFeatureFlags,
+} from "./permissions.js";
 import { getDeviceId } from "./device-id.js";
 import type {
   AccessSession,
@@ -28,14 +34,17 @@ const DEMO_STAFF: readonly SwitchableStaff[] = Object.freeze([
   Object.freeze({
     staff_id: "11111111-1111-4111-8111-111111111101",
     display_name: "店员甲",
+    role: "staff" as const,
   }),
   Object.freeze({
     staff_id: "11111111-1111-4111-8111-111111111102",
     display_name: "店员乙",
+    role: "staff" as const,
   }),
   Object.freeze({
     staff_id: "11111111-1111-4111-8111-111111111103",
     display_name: "店长",
+    role: "admin" as const,
   }),
 ]);
 
@@ -49,6 +58,10 @@ export type MockAuthClientOptions = Readonly<{
   /** Force PIN verify to fail. */
   failPinWith?: string;
   staff?: readonly SwitchableStaff[];
+  /** Override features for admin projection. */
+  adminFeatures?: StoreFeatureFlags;
+  /** Override features for staff projection. */
+  staffFeatures?: StoreFeatureFlags;
 }>;
 
 function toBase64Url(text: string): string {
@@ -82,9 +95,30 @@ function uuidFromSeed(seed: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
+/**
+ * Login username → role projection.
+ * Default login is admin (full features). Username "staff" yields staff subset.
+ * UI gate only; C8 enforces.
+ */
+function roleFromLoginUsername(username: string): StaffRole {
+  const key = username.trim().toLowerCase();
+  // Explicit staff mock user; everything else (incl. admin/demo/clerk) → admin full pack.
+  if (key === "staff" || key === "店员") return "staff";
+  return "admin";
+}
+function featuresForRole(
+  role: StaffRole,
+  adminFeatures: StoreFeatureFlags,
+  staffFeatures: StoreFeatureFlags,
+): Readonly<Record<string, boolean>> {
+  return role === "admin" ? adminFeatures : staffFeatures;
+}
+
 function buildSession(
   values: Pick<LoginRequest, "org_code" | "store_code" | "username" | "device_id">,
   staff: SwitchableStaff,
+  role: StaffRole,
+  features: Readonly<Record<string, boolean>>,
   sessionVersion = 1,
 ): AccessSession {
   const sessionId = uuidFromSeed(`sess${values.username}${sessionVersion}`);
@@ -102,6 +136,8 @@ function buildSession(
       device_id: values.device_id,
       permission_version: 1,
     }),
+    role,
+    features: Object.freeze({ ...features }),
     display: Object.freeze({
       store_name: `门店 ${values.store_code}`,
       staff_name: staff.display_name,
@@ -114,11 +150,16 @@ function buildSession(
 /**
  * In-memory mock AuthClient for UI + unit tests.
  * Never logs password/PIN; never writes Web Storage.
+ * Default login → admin + full features; username "staff" → staff subset.
+ * PIN switch applies target staff.role + matching feature pack.
+ * UI gate only; C8 enforces.
  */
 export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthClient {
   const validPassword = options.validPassword ?? "demo";
   const validPin = options.validPin ?? "1234";
   const staffList = options.staff ?? DEMO_STAFF;
+  const adminFeatures = options.adminFeatures ?? FULL_STORE_FEATURES;
+  const staffFeatures = options.staffFeatures ?? STAFF_STORE_FEATURES;
   const challenges = new Map<string, { target_staff_id: string; expires_at: number }>();
   let lastLogin: LoginFormValues | null = null;
   let sessionVersion = 1;
@@ -143,7 +184,10 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthC
           },
         };
       }
-      const primary = staffList[0];
+      const role = roleFromLoginUsername(values.username);
+      const features = featuresForRole(role, adminFeatures, staffFeatures);
+      // Prefer a roster entry matching the projected role; else first entry.
+      const primary = staffList.find((s) => s.role === role) ?? staffList[0] ?? null;
       if (!primary) {
         return {
           ok: false,
@@ -157,6 +201,7 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthC
         password: "", // never retain password
       };
       sessionVersion = 1;
+      const displayName = values.username.trim() || primary.display_name;
       const session = buildSession(
         {
           org_code: lastLogin.org_code,
@@ -166,8 +211,11 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthC
         },
         {
           staff_id: primary.staff_id,
-          display_name: values.username.trim() || primary.display_name,
+          display_name: displayName,
+          role,
         },
+        role,
+        features,
         sessionVersion,
       );
       return { ok: true, data: session };
@@ -234,6 +282,8 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthC
         password: "",
       };
       sessionVersion += 1;
+      const role = target.role;
+      const features = featuresForRole(role, adminFeatures, staffFeatures);
       const session = buildSession(
         {
           org_code: base.org_code,
@@ -242,6 +292,8 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthC
           device_id: getDeviceId(),
         },
         target,
+        role,
+        features,
         sessionVersion,
       );
       return { ok: true, data: session };

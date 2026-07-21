@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
 import { createMockAuthClient } from "../auth/AuthClient.js";
+import { FULL_STORE_FEATURES } from "../auth/permissions.js";
 import type { AccessSession } from "../auth/types.js";
 import { createMockConnection } from "../connection.js";
 import { App } from "../App.js";
@@ -24,6 +25,8 @@ const sampleSession: AccessSession = Object.freeze({
     device_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
     permission_version: 1,
   }),
+  role: "admin" as const,
+  features: FULL_STORE_FEATURES,
   display: Object.freeze({
     store_name: "宏发演示店",
     staff_name: "店员",
