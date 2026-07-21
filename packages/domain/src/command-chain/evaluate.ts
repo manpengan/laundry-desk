@@ -52,9 +52,7 @@ export async function evaluateCommandChain<
 >(
   context: CommandChainContext<TMeta, TInput>,
   ports: CommandChainPorts<TMeta, TInput, TParsed, TError, TPolicyData, TInvariantData>,
-): Promise<
-  CommandChainResult<CommandChainData<TParsed, TPolicyData, TInvariantData>, TError>
-> {
+): Promise<CommandChainResult<CommandChainData<TParsed, TPolicyData, TInvariantData>, TError>> {
   const parsedResult = await ports.parseInput(context.input, context);
   if (parsedResult.ok === false) {
     return freezeFailure("parseInput", parsedResult.error);

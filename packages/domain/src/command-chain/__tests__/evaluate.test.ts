@@ -67,9 +67,7 @@ const createPassingPorts = (overrides: Partial<TestPorts> = {}): InstrumentedPor
 };
 
 /** Build ports that fail at `failAt` and record which steps actually ran. */
-const createFailAtPorts = (
-  failAt: CommandChainStep,
-): { ports: TestPorts; calls: string[] } => {
+const createFailAtPorts = (failAt: CommandChainStep): { ports: TestPorts; calls: string[] } => {
   const calls: string[] = [];
   const record = (step: CommandChainStep): void => {
     calls.push(step);
@@ -123,13 +121,7 @@ const expectedCallsThrough = (failAt: CommandChainStep): string[] => {
 
 describe("B2 command validation chain (fixed order, fail-closed)", () => {
   it("exposes the fixed step order Zod → RBAC → tenant → Policy → invariant", () => {
-    expect(COMMAND_CHAIN_STEPS).toEqual([
-      "parseInput",
-      "rbac",
-      "tenant",
-      "policy",
-      "invariants",
-    ]);
+    expect(COMMAND_CHAIN_STEPS).toEqual(["parseInput", "rbac", "tenant", "policy", "invariants"]);
   });
 
   it("runs all five ports in order and returns frozen success data", async () => {
@@ -138,13 +130,7 @@ describe("B2 command validation chain (fixed order, fail-closed)", () => {
 
     const result = await evaluateCommandChain(context, ports);
 
-    expect(ports.calls).toEqual([
-      "parseInput",
-      "rbac",
-      "tenant",
-      "policy",
-      "invariants",
-    ]);
+    expect(ports.calls).toEqual(["parseInput", "rbac", "tenant", "policy", "invariants"]);
     expect(result).toEqual({
       ok: true,
       data: {
@@ -202,9 +188,9 @@ describe("B2 command validation chain (fixed order, fail-closed)", () => {
       meta: Object.freeze({ actorId: "staff_03", orgId: "org_03" }),
       input: Object.freeze({ amount_cents: 200 as number, note: "frozen" }),
     });
-    await expect(
-      evaluateCommandChain(frozenContext, createPassingPorts()),
-    ).resolves.toMatchObject({ ok: true });
+    await expect(evaluateCommandChain(frozenContext, createPassingPorts())).resolves.toMatchObject({
+      ok: true,
+    });
   });
 
   it("propagates thrown errors from ports without silent catch", async () => {
@@ -258,18 +244,9 @@ describe("B2 command validation chain (fixed order, fail-closed)", () => {
 
     await evaluateCommandChain(context, ports);
 
-    expect(checkRbac).toHaveBeenCalledWith(
-      { amount_cents: 500, note: "parsed-note" },
-      context,
-    );
-    expect(checkTenant).toHaveBeenCalledWith(
-      { amount_cents: 500, note: "parsed-note" },
-      context,
-    );
-    expect(checkPolicy).toHaveBeenCalledWith(
-      { amount_cents: 500, note: "parsed-note" },
-      context,
-    );
+    expect(checkRbac).toHaveBeenCalledWith({ amount_cents: 500, note: "parsed-note" }, context);
+    expect(checkTenant).toHaveBeenCalledWith({ amount_cents: 500, note: "parsed-note" }, context);
+    expect(checkPolicy).toHaveBeenCalledWith({ amount_cents: 500, note: "parsed-note" }, context);
     expect(checkInvariants).toHaveBeenCalledWith(
       { amount_cents: 500, note: "parsed-note" },
       context,
