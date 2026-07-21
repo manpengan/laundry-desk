@@ -1,9 +1,9 @@
 # ADR-10: 单一技术负责人 + 受约束协助线
 
 - 日期：2026-07-21
-- 状态：**Accepted**（manpengan 选择方案 A）
-- 详设：[单一技术负责人交付治理](../superpowers/specs/2026-07-21-laundry-v2-delivery-governance.md)
-- 触发：M1 实装盘点发现四 AI 分工产生契约等待、目录锁、半成品支线和多份状态真源；manpengan 裁定后续设计与开发由 Codex 负责，Grok 协助。
+- 状态：**Superseded by [ADR-12](2026-07-21-adr-12-grok-unified-delivery-ownership.md)**（原 Accepted：manpengan 选择方案 A；owner 改派见 ADR-12）
+- 详设：[单一技术负责人交付治理](../superpowers/specs/2026-07-21-laundry-v2-delivery-governance.md)（owner 以 ADR-12 为准）
+- 触发：M1 实装盘点发现四 AI 分工产生契约等待、目录锁、半成品支线和多份状态真源；当时裁定 Codex 负责、Grok 协助。
 
 ## 决策
 

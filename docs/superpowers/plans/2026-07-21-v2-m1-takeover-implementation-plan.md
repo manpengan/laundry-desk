@@ -2,7 +2,7 @@
 
 > **执行者要求：** 按独立 worktree 与单能力 PR 执行；每项先写失败测试并确认红灯，再写最小实现。
 > **目标：** 在不推倒已合入资产的前提下，闭合 contracts → PG/RLS → Command Bus/Audit → Identity/Policy → Edge/Web → 迁移与门禁的 M1 纵向链。
-> **架构：** Codex 单一负责核心设计与实现；Grok 只实现冻结 ports/contracts 后的平台 adapters、Web/UI 和实机验证。正式 PG schema 独立为 `packages/db`，避免根 v1 SQLite `drizzle.config.ts` 被误用。
+> **架构 / owner（ADR-12）：** **Grok** 统一负责核心设计与实现（含 contracts/server/Edge core/Web）。正式 PG schema 独立为 `packages/db`，避免根 v1 SQLite `drizzle.config.ts` 被误用。文中历史「Codex 执行 / Grok 协助」字样，**执行时一律读作 Grok**。
 > **技术栈：** TypeScript strict、Zod、Fastify、PostgreSQL 16、Drizzle PG、Vitest、Playwright、pnpm/Turborepo。
 
 ## 总体 PR 队列

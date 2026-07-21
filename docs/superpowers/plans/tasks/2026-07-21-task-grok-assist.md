@@ -1,5 +1,8 @@
 # laundry-v2 当前任务书 · Grok（受约束协助线）
 
+> **SUPERSEDED by [task-grok-lead](2026-07-21-task-grok-lead.md) / [ADR-12](../../../adr/2026-07-21-adr-12-grok-unified-delivery-ownership.md)**（2026-07-21）。协助线模型已取消；下文保留为历史边界参考。
+
+
 > 下发：manpengan　日期：2026-07-21
 > 决策依据：[ADR-10](../../../adr/2026-07-21-adr-10-single-owner-delivery-governance.md)
 > 上游 owner：Codex。未收到冻结 contracts/ports 与验收断言，不自行设计协议。

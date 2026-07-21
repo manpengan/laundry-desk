@@ -1,5 +1,8 @@
 # laundry-v2 当前任务书 · Codex（单一技术负责人）
 
+> **SUPERSEDED by [task-grok-lead](2026-07-21-task-grok-lead.md) / [ADR-12](../../../adr/2026-07-21-adr-12-grok-unified-delivery-ownership.md)**（2026-07-21）。下文保留为历史 Codex-lead 记录，不再作为当前任务真源。
+
+
 > 下发：manpengan　日期：2026-07-21
 > 决策依据：[ADR-10](../../../adr/2026-07-21-adr-10-single-owner-delivery-governance.md)
 > 详设：[单一技术负责人交付治理](../../specs/2026-07-21-laundry-v2-delivery-governance.md)
