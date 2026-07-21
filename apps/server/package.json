@@ -15,5 +15,10 @@
     "lint": "eslint src --ext .ts,.tsx --max-warnings=0",
     "test": "tsc -p tsconfig.json && node --test 'dist/**/*.test.js'",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@laundry/contracts": "file:../../packages/contracts",
+    "@laundry/domain": "file:../../packages/domain",
+    "zod": "4.4.3"
   }
 }

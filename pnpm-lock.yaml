@@ -176,7 +176,17 @@ importers:
         specifier: ^41.3.0
         version: 41.10.2(supports-color@7.2.0)
 
-  apps/server: {}
+  apps/server:
+    dependencies:
+      '@laundry/contracts':
+        specifier: file:../../packages/contracts
+        version: link:../../packages/contracts
+      '@laundry/domain':
+        specifier: file:../../packages/domain
+        version: link:../../packages/domain
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   apps/web:
     dependencies:
