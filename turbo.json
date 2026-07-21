@@ -24,6 +24,16 @@
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"],
       "outputs": []
+    },
+    "@laundry/db#test": {
+      "dependsOn": ["^build", "@laundry/contracts#build"]
+    },
+    "@laundry/db#typecheck": {
+      "dependsOn": ["^build", "@laundry/contracts#build"]
+    },
+    "@laundry/db#build": {
+      "dependsOn": ["^build", "@laundry/contracts#build"],
+      "outputs": ["dist/**"]
     }
   }
 }
