@@ -49,8 +49,7 @@ export type CommandChainFailureResult<TError> = Readonly<{
  * - failure: first failing step name + its error (later steps not run)
  */
 export type CommandChainResult<TData, TError> =
-  | CommandChainSuccessResult<TData>
-  | CommandChainFailureResult<TError>;
+  CommandChainSuccessResult<TData> | CommandChainFailureResult<TError>;
 
 /**
  * Immutable evaluation context.
