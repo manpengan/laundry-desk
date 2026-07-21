@@ -1,8 +1,7 @@
 /**
  * @laundry/server public surface.
- * C2 tenant GUC ports + C1 command bus + C3 append-only audit +
- * C4 tool registry projection + C6 identity + C7 platform handlers + C8 auth skeleton.
- * Fastify HTTP plugins and identity bus handlers are residual (not wired here).
+ * C1–C8 skeletons: GUC, bus, audit, policy/pending, identity/auth, tools, platform handlers.
+ * Fastify HTTP plugins and full production PG adapters are residual.
  */
 export {
   RLS_BYPASS_CLASSES,
@@ -199,3 +198,52 @@ export type {
   AuditListItem,
   AuditQueryStore,
 } from "./platform/index.js";
+
+export {
+  checkPolicy,
+  createStepUpProof,
+  evaluatePolicy,
+  policyDecisionToPortError,
+  STEP_UP_PROOF_TTL_SECONDS,
+  verifyStepUpProof,
+} from "./policy/index.js";
+
+export type {
+  EvaluatePolicyInput,
+  PolicyActor,
+  PolicyCommandMeta,
+  PolicyDecision,
+  PolicyDecisionAllow,
+  PolicyDecisionConfirm,
+  PolicyDecisionDeny,
+  PolicyDecisionStepUp,
+  PolicyDenyReason,
+  PolicyOutcome,
+  PolicyPortError,
+  PolicyRiskInput,
+  StepUpProof,
+  StepUpProofStatus,
+  StepUpVerifyRejectReason,
+  StepUpVerifyResult,
+} from "./policy/index.js";
+
+export {
+  canonicalize,
+  freezeCanonical,
+  hashCanonical,
+  MemoryPendingActionStore,
+  PENDING_ACTION_TTL_SECONDS,
+} from "./pending-actions/index.js";
+
+export type {
+  CanonicalJson,
+  ConsumeFailure,
+  ConsumeRejectReason,
+  ConsumeResult,
+  ConsumeSuccess,
+  CreatePendingActionInput,
+  EntityVersion,
+  PendingAction,
+  PendingActionStatus,
+  PendingActionStore,
+} from "./pending-actions/index.js";
