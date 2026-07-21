@@ -50,7 +50,7 @@ Every implementation commit ends with `Co-Authored-By: Codex <codex@openai.com>`
 - Modify: `packages/contracts/package.json`
 - Modify: `tests/foundation/workspace.test.mjs`
 
-- [ ] **Step 1: Write failing session tests**
+- [x] **Step 1: Write failing session tests**
 
 Cover exact 900-second TTL, strict claims, active/version/actor/tenant/device comparison, revoked/missing/mismatch fail-closed, deep immutability and provenance rejection for plain/spread/JSON objects. Every unknown-input factory must reject class instances, accessor-bearing objects without executing getters, extra/missing keys and unstable Proxy descriptors.
 
@@ -110,17 +110,17 @@ The restricted Edge authority is the capability boundary for these server-verifi
 
 The root export must not expose either issue factory. Package subpaths are exactly `@laundry/contracts/browser-auth-ingress` and `@laundry/contracts/edge-auth-ingress`; foundation lint rejects imports outside `apps/server/src/auth/**` and `apps/server/src/edge-ingress/**` respectively.
 
-- [ ] **Step 2: Run tests to verify RED**
+- [x] **Step 2: Run tests to verify RED**
 
 Run: `pnpm --filter @laundry/contracts test -- auth-session server-envelope`
 
 Expected: FAIL because `auth/session.ts` exports and the new A2 API do not exist.
 
-- [ ] **Step 3: Implement the minimum session module and A2 adapter**
+- [x] **Step 3: Implement the minimum session module and A2 adapter**
 
 Use the descriptor-based plain-data snapshot before Zod. Keep browser and Edge authority factories in separate subpath modules backed by a package-internal registry; root exports only types/guards. Do not export an assertion/cast path. Make `injectAuthenticatedCommandContext(wire, source)` derive actor/tenant/via only from the branded union. Add an architecture import scan to the existing foundation test.
 
-- [ ] **Step 4: Run focused GREEN checks**
+- [x] **Step 4: Run focused GREEN checks**
 
 Run: `pnpm --filter @laundry/contracts test -- auth-session server-envelope envelope-types`
 
@@ -130,7 +130,7 @@ Run: `node --test tests/foundation/workspace.test.mjs`
 
 Expected: PASS, including all existing A2 tests updated to use a test authority.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/contracts/src/auth packages/contracts/test/auth-session.test.ts \
