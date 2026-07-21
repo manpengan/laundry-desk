@@ -20,7 +20,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
-    "@laundry/contracts": "workspace:*",
+    "@laundry/contracts": "file:../contracts",
     "drizzle-orm": "0.45.2"
   },
   "devDependencies": {

@@ -214,7 +214,7 @@ importers:
   packages/db:
     dependencies:
       '@laundry/contracts':
-        specifier: workspace:*
+        specifier: file:../contracts
         version: link:../contracts
       drizzle-orm:
         specifier: 0.45.2
@@ -5448,7 +5448,7 @@ snapshots:
 
   '@types/fs-extra@9.0.13':
     dependencies:
-      '@types/node': 20.19.43
+      '@types/node': 22.20.1
 
   '@types/ms@2.1.0': {}
 
@@ -5470,7 +5470,7 @@ snapshots:
 
   '@types/plist@3.0.5':
     dependencies:
-      '@types/node': 20.19.43
+      '@types/node': 22.20.1
       xmlbuilder: 15.1.1
     optional: true
 
