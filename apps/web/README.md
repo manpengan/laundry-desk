@@ -20,7 +20,8 @@ import { App } from "@laundry/web";
 createRoot(document.getElementById("root")!).render(<App />);
 ```
 
-M1 本包只保证 **tsc 可编译 + 组件 SSR 单测**；完整 Vite 打包进 M2 与 Edge 内置 SPA 合并。
+M1 本包：多页空态占位（工作台/开单/取衣/客户/统计/设置）、跳过链接、SyncStatusBar、打印队列指示。  
+完整 Vite 打包与 Edge 内置 SPA 合并进后续里程碑；登录/权限等 A5–A7。
 
 ## 开发
 

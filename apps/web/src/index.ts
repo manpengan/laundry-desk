@@ -23,7 +23,5 @@ export { App, type AppProps } from "./App.js";
 export { CounterShell, type CounterShellProps } from "./shell/CounterShell.js";
 export { Sidebar, type SidebarProps } from "./shell/Sidebar.js";
 export { TopBar, type TopBarProps } from "./shell/TopBar.js";
-export {
-  WorkbenchPlaceholder,
-  type WorkbenchPlaceholderProps,
-} from "./shell/WorkbenchPlaceholder.js";
+export { PageHost, type PageHostProps } from "./pages/PageHost.js";
+export { pageCopy, type PageCopy } from "./pages/page-copy.js";

@@ -36,6 +36,13 @@ export {
   type MockPrintJob,
   type MockSpool,
 } from "./print/mock-spool.js";
+export { fenToYuanGbk, fenToYuanText, YUAN_SIGN_GBK } from "./drivers/render/money-gbk.js";
+export {
+  estimateCode128Dots,
+  estimateCode128Modules,
+  fitsXp58,
+  XP58_PRINTABLE_DOTS,
+} from "./drivers/render/code128-width.js";
 export {
   appendHistory,
   canRestoreSnapshot,
