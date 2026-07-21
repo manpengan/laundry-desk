@@ -75,6 +75,10 @@ function boot(): void {
     setSpool: (spool) => {
       runtime.spool = spool;
     },
+    getPrintJobs: () => runtime.printJobs,
+    setPrintJobs: (store) => {
+      runtime.printJobs = store;
+    },
     getPairing: () => runtime.pairing,
   });
 

@@ -36,6 +36,39 @@ export {
   type MockPrintJob,
   type MockSpool,
 } from "./print/mock-spool.js";
+export {
+  buildExecutionReceiptPayload,
+  createPrintJobStore,
+  enqueuePrintJob,
+  getPrintJob,
+  listPrintJobStatus,
+  transitionPrintJob,
+  type PrintJobKind,
+  type PrintJobRecord,
+  type PrintJobStatus,
+  type PrintJobStatusView,
+  type PrintJobStore,
+} from "./print/print-jobs.js";
+export {
+  buildXp58EscPos,
+  escAlign,
+  escCut,
+  escFeed,
+  escInit,
+  escLine,
+} from "./print/escpos-xp58.js";
+export {
+  renderTicketTemplate,
+  type RenderedTicket,
+  type TicketLineItem,
+  type TicketTemplateInput,
+} from "./print/template-render.js";
+export {
+  DEFAULT_SAMPLE_TICKET,
+  executeJob,
+  type ExecuteJobOptions,
+  type ExecuteJobResult,
+} from "./print/executor.js";
 export { fenToYuanGbk, fenToYuanText, YUAN_SIGN_GBK } from "./drivers/render/money-gbk.js";
 export {
   estimateCode128Dots,

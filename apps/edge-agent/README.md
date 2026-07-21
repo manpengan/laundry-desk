@@ -1,4 +1,4 @@
-# `@laundry/edge-agent` — Local Edge Agent（D1 壳 + D2 配对骨架 + D5 + mock 打印）
+# `@laundry/edge-agent` — Local Edge Agent（D1 壳 + D2 配对 + D4 打印骨架 + D5）
 
 Electron 壳：`app://` 内置 SPA、断网冷启动、ADR-01 安全基线、单实例、托盘。
 
@@ -20,15 +20,15 @@ Electron 壳：`app://` 内置 SPA、断网冷启动、ADR-01 安全基线、单
 
 ## IPC 白名单（preload）
 
-| 通道                                     | 用途                                            |
-| ---------------------------------------- | ----------------------------------------------- |
-| `edge:ping`                              | 存活探测                                        |
-| `edge:health`                            | SPA/manifest 存在性                             |
-| `edge:upgrade-status`                    | D5 状态机只读投影                               |
-| `edge:connection`                        | 连接条 mock（待 E1）                            |
-| `edge:print-enqueue` / `edge:print-list` | 打印 mock 队列（待 D4）                         |
-| `pairing:createCode`                     | D2：签发 60s 一次性配对码 + 确保设备公钥        |
-| `pairing:status`                         | D2：是否有设备公钥 / 当前码是否仍有效（无私钥） |
+| 通道                                     | 用途                                              |
+| ---------------------------------------- | ------------------------------------------------- |
+| `edge:ping`                              | 存活探测                                          |
+| `edge:health`                            | SPA/manifest 存在性                               |
+| `edge:upgrade-status`                    | D5 状态机只读投影                                 |
+| `edge:connection`                        | 连接条 mock（待 E1）                              |
+| `edge:print-enqueue` / `edge:print-list` | D4：入队+执行（status only，无设备路径/原始字节） |
+| `pairing:createCode`                     | D2：签发 60s 一次性配对码 + 确保设备公钥          |
+| `pairing:status`                         | D2：是否有设备公钥 / 当前码是否仍有效（无私钥）   |
 
 ## D2 配对 / 票据（pure core）
 
@@ -40,6 +40,18 @@ Electron 壳：`app://` 内置 SPA、断网冷启动、ADR-01 安全基线、单
 | `src/pairing/sign-receipt.ts`  | 设备私钥签执行回执（A4 domain + contracts canonical）               |
 
 **红线**：设备私钥永不进入 renderer / preload / IPC 返回值；生产私钥仅 OS 凭据区。
+
+## D4 打印（模板渲染 + XP-58 + print_jobs 回执）
+
+| 模块                           | 职责                                                               |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `src/print/template-render.ts` | 票面变量纯渲染：分→￥（money-gbk）、CODE128 宽度（code128-width）  |
+| `src/print/escpos-xp58.ts`     | 最小 ESC/POS（init / 文本行 / cut）；无 USB                        |
+| `src/print/print-jobs.ts`      | 状态机 queued→printing→done\|failed + A4 执行回执 payload          |
+| `src/print/executor.ts`        | mock spool 执行；失败写 error；不阻塞；产出 receipt 供 signReceipt |
+| `src/print/mock-spool.ts`      | 本地 mock 队列镜像（半步）                                         |
+
+IPC 只返回 status 视图（id/kind/status/timestamps/error），不暴露设备路径、原始字节、ticketNonce。
 
 ## 开发
 
@@ -56,6 +68,6 @@ pnpm exec electron apps/edge-agent
 
 - ✅ D1 壳 + 单实例 + 托盘 + 健康/升级 IPC
 - ✅ D2 配对码 + 设备密钥端口 + 能力票据验签 + 执行回执签名（骨架）
+- ✅ D4 签名打印模板本地渲染 + XP-58 ESC/POS 骨架 + print_jobs 回执
 - ✅ D5 A/B 状态机骨架
-- ✅ 打印 mock spool（本地状态，非实机）
-- ⏳ D3 SQLCipher / D4 真打印回执 / OS keytar 适配器
+- ⏳ D3 SQLCipher / 真机 USB / OS keytar 适配器

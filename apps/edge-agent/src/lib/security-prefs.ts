@@ -20,7 +20,9 @@ export const IPC_CHANNELS = {
   health: "edge:health",
   upgradeStatus: "edge:upgrade-status",
   connection: "edge:connection",
+  /** D4 print:enqueue — status only (no device paths / raw bytes). */
   printEnqueue: "edge:print-enqueue",
+  /** D4 print:list — status only. */
   printList: "edge:print-list",
   /** D2: issue 60s single-use pairing code + ensure device pubkey (never private key). */
   pairingCreateCode: "pairing:createCode",

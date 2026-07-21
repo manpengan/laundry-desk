@@ -6,16 +6,20 @@ import {
   MemoryDeviceKeyStore,
   type PairingSession,
 } from "./pairing/index.js";
+import { DEFAULT_SAMPLE_TICKET, executeJob } from "./print/executor.js";
+import { createMockSpool, enqueue, type MockSpool } from "./print/mock-spool.js";
 import {
-  createMockSpool,
-  enqueue,
-  listJobs,
-  type MockPrintJob,
-  type MockSpool,
-} from "./print/mock-spool.js";
+  createPrintJobStore,
+  enqueuePrintJob,
+  listPrintJobStatus,
+  type PrintJobKind,
+  type PrintJobStore,
+} from "./print/print-jobs.js";
 import { mockConnection } from "./shell/connection-mock.js";
 import { checkShellHealth, type ShellHealth } from "./shell/health.js";
 import { createInitialState, type UpgradeState } from "./upgrade/index.js";
+
+const PRINT_KINDS: ReadonlySet<string> = new Set(["xp58", "dl206", "gp3120"]);
 
 export type IpcContext = {
   spaRoot: string;
@@ -23,6 +27,8 @@ export type IpcContext = {
   getUpgradeState: () => UpgradeState;
   getSpool: () => MockSpool;
   setSpool: (spool: MockSpool) => void;
+  getPrintJobs: () => PrintJobStore;
+  setPrintJobs: (store: PrintJobStore) => void;
   getPairing: () => PairingSession;
 };
 
@@ -33,6 +39,16 @@ function assertAppSender(event: IpcMainInvokeEvent): void {
   }
 }
 
+function parsePrintKind(kind: unknown): PrintJobKind {
+  if (kind === undefined || kind === null || kind === "") {
+    return "xp58";
+  }
+  if (typeof kind !== "string" || !PRINT_KINDS.has(kind)) {
+    throw new Error("invalid print kind");
+  }
+  return kind as PrintJobKind;
+}
+
 export function registerIpcHandlers(ctx: IpcContext): void {
   ipcMain.handle(IPC_CHANNELS.ping, (event) => {
     assertAppSender(event);
@@ -40,7 +56,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
       ok: true as const,
       data: {
         offlineCapable: true,
-        mode: "edge-agent-d2",
+        mode: "edge-agent-d4",
         at: Date.now(),
       },
     };
@@ -74,16 +90,41 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     return { ok: true as const, data: mockConnection() };
   });
 
-  ipcMain.handle(IPC_CHANNELS.printEnqueue, (event, kind: MockPrintJob["kind"] = "xp58") => {
+  // D4: print:enqueue — status view only; no device paths / raw bytes / ticket nonce.
+  ipcMain.handle(IPC_CHANNELS.printEnqueue, (event, kindRaw: unknown = "xp58") => {
     assertAppSender(event);
-    const { spool, job } = enqueue(ctx.getSpool(), kind);
-    ctx.setSpool(spool);
-    return { ok: true as const, data: job };
+    const kind = parsePrintKind(kindRaw);
+    const now = Date.now();
+
+    const enq = enqueuePrintJob(ctx.getPrintJobs(), kind, now);
+    const mock = enqueue(ctx.getSpool(), kind, now);
+
+    // Auto-execute XP-58 via mock spool (sync, never blocks forever).
+    if (kind === "xp58") {
+      const result = executeJob(
+        enq.store,
+        mock.spool,
+        enq.job.id,
+        DEFAULT_SAMPLE_TICKET,
+        { now },
+        mock.job.id,
+      );
+      ctx.setPrintJobs(result.store);
+      ctx.setSpool(result.spool);
+      const status = listPrintJobStatus(result.store).find((j) => j.id === enq.job.id);
+      return { ok: true as const, data: status ?? null };
+    }
+
+    ctx.setPrintJobs(enq.store);
+    ctx.setSpool(mock.spool);
+    const status = listPrintJobStatus(enq.store).find((j) => j.id === enq.job.id);
+    return { ok: true as const, data: status ?? null };
   });
 
+  // D4: print:list — status only.
   ipcMain.handle(IPC_CHANNELS.printList, (event) => {
     assertAppSender(event);
-    return { ok: true as const, data: listJobs(ctx.getSpool()) };
+    return { ok: true as const, data: listPrintJobStatus(ctx.getPrintJobs()) };
   });
 
   // D2 pairing — public surface only; private keys never cross IPC.
@@ -104,11 +145,13 @@ export function registerIpcHandlers(ctx: IpcContext): void {
 export function createRuntimeState(): {
   upgrade: UpgradeState;
   spool: MockSpool;
+  printJobs: PrintJobStore;
   pairing: PairingSession;
 } {
   return {
     upgrade: createInitialState(),
     spool: createMockSpool(),
+    printJobs: createPrintJobStore(),
     // Production must swap MemoryDeviceKeyStore for OS credential-store adapter.
     pairing: createPairingSession(new MemoryDeviceKeyStore()),
   };
