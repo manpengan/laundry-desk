@@ -20,15 +20,11 @@ const orgTenantPolicyInput = Object.freeze({
   policy: "customers_org_scope",
 });
 
-type RuntimeTenantPolicyBuilder = (input: {
-  readonly schema: string;
-  readonly table: string;
-  readonly policy: string;
-  readonly role: string;
-}) => string;
+type RuntimePolicyBuilder = (input: unknown) => string;
 
-const runtimeBuildOrgTenantPolicySql = buildOrgTenantPolicySql as RuntimeTenantPolicyBuilder;
-const runtimeBuildStoreTenantPolicySql = buildStoreTenantPolicySql as RuntimeTenantPolicyBuilder;
+const runtimeBuildOrgTenantPolicySql = buildOrgTenantPolicySql as RuntimePolicyBuilder;
+const runtimeBuildStoreTenantPolicySql = buildStoreTenantPolicySql as RuntimePolicyBuilder;
+const runtimeBuildMaintenancePolicySql = buildMaintenancePolicySql as RuntimePolicyBuilder;
 
 describe("A3 tenant RLS SQL templates", () => {
   it("builds deterministic org-scope SQL with the fail-closed predicate", () => {
@@ -126,6 +122,87 @@ CREATE POLICY "customers_org_scope" ON "public"."customers"
       buildOrgTenantPolicySql({ ...orgTenantPolicyInput, policy: "p".repeat(64) }),
     ).toThrowError("Invalid SQL policy identifier");
   });
+
+  it("rejects a boxed stateful identifier without coercing it", () => {
+    let coercions = 0;
+    const statefulIdentifier = {
+      [Symbol.toPrimitive]: () => {
+        coercions += 1;
+        return coercions === 1 ? "public" : 'public"; DROP TABLE orgs; --';
+      },
+    };
+
+    expect(() =>
+      runtimeBuildStoreTenantPolicySql({
+        ...tenantPolicyInput,
+        schema: statefulIdentifier,
+      }),
+    ).toThrowError("must be a primitive string");
+    expect(coercions).toBe(0);
+  });
+
+  it("uses one own data snapshot when a Proxy changes table reads", () => {
+    let tableReads = 0;
+    const input = new Proxy(
+      { ...tenantPolicyInput },
+      {
+        get: (target, property, receiver) => {
+          if (property === "table") {
+            tableReads += 1;
+            return tableReads === 1 ? "customers" : "orders";
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    );
+
+    const sql = runtimeBuildStoreTenantPolicySql(input);
+
+    expect(tableReads).toBe(0);
+    expect(sql).toContain('ALTER TABLE "public"."orders" ENABLE ROW LEVEL SECURITY;');
+    expect(sql).not.toContain('"customers"');
+  });
+
+  it.each([
+    ["schema", null],
+    ["policy", undefined],
+    ["role", 42],
+    ["table", new String("orders")],
+  ] as const)("rejects a non-primitive %s field", (field, value) => {
+    expect(() =>
+      runtimeBuildStoreTenantPolicySql({ ...tenantPolicyInput, [field]: value }),
+    ).toThrowError("must be a primitive string");
+  });
+
+  it("rejects accessor-bearing policy input without invoking the accessor", () => {
+    let reads = 0;
+    const input = { ...tenantPolicyInput } as Record<string, unknown>;
+    Object.defineProperty(input, "table", {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+        return "orders";
+      },
+    });
+
+    expect(() => runtimeBuildStoreTenantPolicySql(input)).toThrowError("own data property");
+    expect(reads).toBe(0);
+  });
+
+  it.each([
+    [Object.assign(Object.create({ inherited: true }), tenantPolicyInput), "plain object"],
+    [
+      {
+        schema: tenantPolicyInput.schema,
+        table: tenantPolicyInput.table,
+        policy: tenantPolicyInput.policy,
+      },
+      "exactly the properties",
+    ],
+    [{ ...tenantPolicyInput, extra: "unexpected" }, "exactly the properties"],
+  ] as const)("rejects an invalid policy input object", (input, error) => {
+    expect(() => runtimeBuildStoreTenantPolicySql(input)).toThrowError(error);
+  });
 });
 
 describe("A3 maintenance policy SQL template", () => {
@@ -181,4 +258,45 @@ describe("A3 maintenance policy SQL template", () => {
       ).toThrowError("Maintenance policy role must be laundry_owner");
     },
   );
+
+  it("uses one own data snapshot when a Proxy changes maintenanceRole reads", () => {
+    let roleReads = 0;
+    const input = new Proxy(
+      {
+        schema: "public",
+        table: "orders",
+        policy: "orders_maintenance",
+        maintenanceRole: "laundry_owner",
+      },
+      {
+        get: (target, property, receiver) => {
+          if (property === "maintenanceRole") {
+            roleReads += 1;
+            return roleReads === 1 ? "reporting_app" : "laundry_owner";
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    );
+
+    const sql = runtimeBuildMaintenancePolicySql(input);
+
+    expect(roleReads).toBe(0);
+    expect(sql).toContain('TO "laundry_owner"');
+    expect(sql).not.toContain('"reporting_app"');
+  });
+
+  it.each([
+    ["future_orders", 'Unknown v2 tenant table "future_orders"'],
+    ["orgs", "cannot target global-scope table"],
+  ] as const)("rejects maintenance policy table %s", (table, error) => {
+    expect(() =>
+      runtimeBuildMaintenancePolicySql({
+        schema: "public",
+        table,
+        policy: "maintenance_scope",
+        maintenanceRole: "laundry_owner",
+      }),
+    ).toThrowError(error);
+  });
 });

@@ -1,8 +1,5 @@
-import {
-  getTenantTableDescriptor,
-  type TenantTableDescriptor,
-  type V2TableName,
-} from "./table-matrix.js";
+import { getTenantTableDescriptor, type V2TableName } from "./table-matrix.js";
+import { captureOwnDataProperties, capturePrimitiveStringArray } from "./input-snapshot.js";
 
 const TENANT_PREFIX = Object.freeze(["org_id", "store_id"] as const);
 const COLUMN_NAME = /^[a-z][a-z0-9_]*$/;
@@ -14,16 +11,29 @@ export const ORDER_LINE_UNIQUE_KEY_COLUMNS = Object.freeze([
   "id",
 ] as const);
 
-export type TenantUniqueKeyDescriptor = Readonly<{
-  table: V2TableName;
-  columns: readonly string[];
+declare const TENANT_UNIQUE_KEY_DESCRIPTOR_BRAND: unique symbol;
+declare const TENANT_FOREIGN_KEY_DESCRIPTOR_BRAND: unique symbol;
+
+export type TenantUniqueKeyDescriptor<
+  TTable extends V2TableName = V2TableName,
+  TColumns extends readonly string[] = readonly string[],
+> = Readonly<{
+  table: TTable;
+  columns: TColumns;
+  [TENANT_UNIQUE_KEY_DESCRIPTOR_BRAND]: true;
 }>;
 
-export type TenantForeignKeyDescriptor = Readonly<{
-  childTable: V2TableName;
-  childColumns: readonly string[];
-  parentTable: V2TableName;
-  parentColumns: readonly string[];
+export type TenantForeignKeyDescriptor<
+  TChildTable extends V2TableName = V2TableName,
+  TChildColumns extends readonly string[] = readonly string[],
+  TParentTable extends V2TableName = V2TableName,
+  TParentColumns extends readonly string[] = readonly string[],
+> = Readonly<{
+  childTable: TChildTable;
+  childColumns: TChildColumns;
+  parentTable: TParentTable;
+  parentColumns: TParentColumns;
+  [TENANT_FOREIGN_KEY_DESCRIPTOR_BRAND]: true;
 }>;
 
 type TenantUniqueKeyInput = Readonly<{
@@ -37,6 +47,14 @@ type TenantForeignKeyInput = Readonly<{
   parentTable: string;
   parentColumns: readonly string[];
 }>;
+
+const UNIQUE_KEY_INPUT_KEYS = ["table", "columns"] as const;
+const FOREIGN_KEY_INPUT_KEYS = [
+  "childTable",
+  "childColumns",
+  "parentTable",
+  "parentColumns",
+] as const;
 
 const sameColumns = (actual: readonly string[], expected: readonly string[]): boolean =>
   actual.length === expected.length && actual.every((column, index) => column === expected[index]);
@@ -55,52 +73,114 @@ const assertColumns = (columns: readonly string[], label: string): void => {
   }
 };
 
-const requireStoreTable = (table: string, label: string): TenantTableDescriptor<V2TableName> => {
+const requirePrimitiveString = (value: unknown, label: string): string => {
+  if (typeof value !== "string") {
+    throw new TypeError(`${label} must be a primitive string`);
+  }
+  return value;
+};
+
+const requireStoreTable = (table: string, label: string): V2TableName => {
   const descriptor = getTenantTableDescriptor(table);
   if (descriptor.scope !== "store") {
     throw new TypeError(`${label} must be a store-scope table`);
   }
+  return descriptor.table;
+};
+
+const freezeColumns = <const TColumns extends readonly string[]>(
+  columns: TColumns,
+): Readonly<TColumns> => Object.freeze([...columns]) as Readonly<TColumns>;
+
+const registeredTenantUniqueKeyDescriptors = new WeakSet<object>();
+const registeredTenantForeignKeyDescriptors = new WeakSet<object>();
+
+const registerUniqueKeyDescriptor = <
+  const TTable extends V2TableName,
+  const TColumns extends readonly string[],
+>(
+  table: TTable,
+  columns: TColumns,
+): TenantUniqueKeyDescriptor<TTable, Readonly<TColumns>> => {
+  const descriptor = Object.freeze({
+    table,
+    columns: freezeColumns(columns),
+  }) as TenantUniqueKeyDescriptor<TTable, Readonly<TColumns>>;
+  registeredTenantUniqueKeyDescriptors.add(descriptor);
   return descriptor;
 };
 
-const freezeColumns = (columns: readonly string[]): readonly string[] =>
-  Object.freeze([...columns]);
+const DECLARED_UNIQUE_KEY_LAYOUTS = Object.freeze({
+  orders: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
+  order_lines: ORDER_LINE_UNIQUE_KEY_COLUMNS,
+  garments: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
+} as const);
 
-const DECLARED_UNIQUE_KEY_LAYOUTS: Readonly<Partial<Record<V2TableName, readonly string[]>>> =
-  Object.freeze({
-    orders: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
-    order_lines: ORDER_LINE_UNIQUE_KEY_COLUMNS,
-    garments: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
-  });
+type DeclaredTenantUniqueKeyDescriptor = {
+  [TTable in keyof typeof DECLARED_UNIQUE_KEY_LAYOUTS]: TenantUniqueKeyDescriptor<
+    TTable,
+    (typeof DECLARED_UNIQUE_KEY_LAYOUTS)[TTable]
+  >;
+}[keyof typeof DECLARED_UNIQUE_KEY_LAYOUTS];
 
-export const defineTenantUniqueKey = (input: TenantUniqueKeyInput): TenantUniqueKeyDescriptor => {
-  const table = requireStoreTable(input.table, "Tenant unique key table").table;
-  assertColumns(input.columns, "Tenant unique key");
+export const defineTenantUniqueKey = (
+  input: TenantUniqueKeyInput,
+): DeclaredTenantUniqueKeyDescriptor => {
+  const captured = captureOwnDataProperties(
+    input,
+    UNIQUE_KEY_INPUT_KEYS,
+    "Tenant unique key input",
+  );
+  const table = requireStoreTable(
+    requirePrimitiveString(captured.table, "Tenant unique key input.table"),
+    "Tenant unique key table",
+  );
+  const columns = capturePrimitiveStringArray(captured.columns, "Tenant unique key columns");
+  assertColumns(columns, "Tenant unique key");
 
-  const expectedColumns = DECLARED_UNIQUE_KEY_LAYOUTS[table];
+  const expectedColumns =
+    DECLARED_UNIQUE_KEY_LAYOUTS[table as keyof typeof DECLARED_UNIQUE_KEY_LAYOUTS];
   if (expectedColumns === undefined) {
     throw new TypeError(`No declared tenant unique-key layout for table "${table}"`);
   }
-  if (!sameColumns(input.columns, expectedColumns)) {
+  if (!sameColumns(columns, expectedColumns)) {
     const layout = table === "order_lines" ? "order_lines key" : "store entity key";
     throw new TypeError(`${layout} must be (${expectedColumns.join(", ")})`);
   }
 
-  return Object.freeze({ table, columns: freezeColumns(input.columns) });
+  return registerUniqueKeyDescriptor(table, columns) as DeclaredTenantUniqueKeyDescriptor;
 };
 
-const declareForeignKeyLayout = (
-  childTable: V2TableName,
-  childColumns: readonly string[],
-  parentTable: V2TableName,
-  parentColumns: readonly string[],
-): TenantForeignKeyDescriptor =>
-  Object.freeze({
+const declareForeignKeyLayout = <
+  const TChildTable extends V2TableName,
+  const TChildColumns extends readonly string[],
+  const TParentTable extends V2TableName,
+  const TParentColumns extends readonly string[],
+>(
+  childTable: TChildTable,
+  childColumns: TChildColumns,
+  parentTable: TParentTable,
+  parentColumns: TParentColumns,
+): TenantForeignKeyDescriptor<
+  TChildTable,
+  Readonly<TChildColumns>,
+  TParentTable,
+  Readonly<TParentColumns>
+> => {
+  const descriptor = Object.freeze({
     childTable,
     childColumns: freezeColumns(childColumns),
     parentTable,
     parentColumns: freezeColumns(parentColumns),
-  });
+  }) as TenantForeignKeyDescriptor<
+    TChildTable,
+    Readonly<TChildColumns>,
+    TParentTable,
+    Readonly<TParentColumns>
+  >;
+  registeredTenantForeignKeyDescriptors.add(descriptor);
+  return descriptor;
+};
 
 const DECLARED_FOREIGN_KEY_LAYOUTS = Object.freeze({
   orderLinesToOrders: declareForeignKeyLayout(
@@ -129,25 +209,47 @@ const DECLARED_FOREIGN_KEY_LAYOUTS = Object.freeze({
   ),
 });
 
+type DeclaredTenantForeignKeyDescriptor =
+  (typeof DECLARED_FOREIGN_KEY_LAYOUTS)[keyof typeof DECLARED_FOREIGN_KEY_LAYOUTS];
+
 const findDeclaredForeignKeyLayout = (
   childTable: V2TableName,
   parentTable: V2TableName,
-): TenantForeignKeyDescriptor | undefined =>
+): DeclaredTenantForeignKeyDescriptor | undefined =>
   Object.values(DECLARED_FOREIGN_KEY_LAYOUTS).find(
     (layout) => layout.childTable === childTable && layout.parentTable === parentTable,
   );
 
 export const defineTenantForeignKey = (
   input: TenantForeignKeyInput,
-): TenantForeignKeyDescriptor => {
-  const childTable = requireStoreTable(input.childTable, "Foreign key child").table;
-  const parentTable = requireStoreTable(input.parentTable, "Foreign key parent").table;
+): DeclaredTenantForeignKeyDescriptor => {
+  const captured = captureOwnDataProperties(
+    input,
+    FOREIGN_KEY_INPUT_KEYS,
+    "Tenant foreign key input",
+  );
+  const childTable = requireStoreTable(
+    requirePrimitiveString(captured.childTable, "Tenant foreign key input.childTable"),
+    "Foreign key child",
+  );
+  const parentTable = requireStoreTable(
+    requirePrimitiveString(captured.parentTable, "Tenant foreign key input.parentTable"),
+    "Foreign key parent",
+  );
+  const childColumns = capturePrimitiveStringArray(
+    captured.childColumns,
+    "Tenant foreign key child columns",
+  );
+  const parentColumns = capturePrimitiveStringArray(
+    captured.parentColumns,
+    "Tenant foreign key parent columns",
+  );
 
-  if (input.childColumns.length !== input.parentColumns.length) {
+  if (childColumns.length !== parentColumns.length) {
     throw new TypeError("Tenant foreign key child and parent columns must have the same length");
   }
-  assertColumns(input.childColumns, "Tenant foreign key child columns");
-  assertColumns(input.parentColumns, "Tenant foreign key parent columns");
+  assertColumns(childColumns, "Tenant foreign key child columns");
+  assertColumns(parentColumns, "Tenant foreign key parent columns");
 
   const declaredLayout = findDeclaredForeignKeyLayout(childTable, parentTable);
   if (declaredLayout === undefined) {
@@ -156,8 +258,8 @@ export const defineTenantForeignKey = (
     );
   }
   if (
-    !sameColumns(input.childColumns, declaredLayout.childColumns) ||
-    !sameColumns(input.parentColumns, declaredLayout.parentColumns)
+    !sameColumns(childColumns, declaredLayout.childColumns) ||
+    !sameColumns(parentColumns, declaredLayout.parentColumns)
   ) {
     if (childTable === "garments" && parentTable === "order_lines") {
       throw new TypeError(
@@ -172,15 +274,25 @@ export const defineTenantForeignKey = (
     );
   }
 
-  return Object.freeze({
+  return declareForeignKeyLayout(
     childTable,
-    childColumns: freezeColumns(input.childColumns),
+    childColumns,
     parentTable,
-    parentColumns: freezeColumns(input.parentColumns),
-  });
+    parentColumns,
+  ) as DeclaredTenantForeignKeyDescriptor;
 };
 
 export const ORDER_LINES_ORDER_FOREIGN_KEY = DECLARED_FOREIGN_KEY_LAYOUTS.orderLinesToOrders;
 export const GARMENTS_ORDER_FOREIGN_KEY = DECLARED_FOREIGN_KEY_LAYOUTS.garmentsToOrders;
 export const GARMENTS_ORDER_LINE_FOREIGN_KEY = DECLARED_FOREIGN_KEY_LAYOUTS.garmentsToOrderLines;
 export const PAYMENTS_ORDER_FOREIGN_KEY = DECLARED_FOREIGN_KEY_LAYOUTS.paymentsToOrders;
+
+export const isTenantUniqueKeyDescriptor = (
+  value: unknown,
+): value is DeclaredTenantUniqueKeyDescriptor =>
+  typeof value === "object" && value !== null && registeredTenantUniqueKeyDescriptors.has(value);
+
+export const isTenantForeignKeyDescriptor = (
+  value: unknown,
+): value is DeclaredTenantForeignKeyDescriptor =>
+  typeof value === "object" && value !== null && registeredTenantForeignKeyDescriptors.has(value);

@@ -4,6 +4,7 @@ import {
   TENANT_TABLE_MATRIX,
   getTenantTableDescriptor,
   getTenantTableScope,
+  isTenantTableDescriptor,
 } from "../src/index.js";
 
 const EXPECTED_TABLES = Object.freeze([
@@ -162,5 +163,21 @@ describe("A3 tenant table matrix", () => {
     expect(Object.isFrozen(orders)).toBe(true);
     expect(Reflect.set(orders, "scope", "global")).toBe(false);
     expect(getTenantTableScope("orders")).toBe("store");
+  });
+
+  it("proves table descriptor provenance instead of trusting structural clones", () => {
+    const orders = getTenantTableDescriptor("orders");
+
+    expect(isTenantTableDescriptor(orders)).toBe(true);
+    expect(TENANT_TABLE_MATRIX.every(isTenantTableDescriptor)).toBe(true);
+    expect(isTenantTableDescriptor({ ...orders })).toBe(false);
+    expect(isTenantTableDescriptor(JSON.parse(JSON.stringify(orders)))).toBe(false);
+    expect(
+      isTenantTableDescriptor({
+        table: "orders",
+        scope: "store",
+        scopeBasis: orders.scopeBasis,
+      }),
+    ).toBe(false);
   });
 });

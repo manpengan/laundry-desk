@@ -9,7 +9,14 @@ import {
   STORE_ENTITY_UNIQUE_KEY_COLUMNS,
   defineTenantForeignKey,
   defineTenantUniqueKey,
+  isTenantForeignKeyDescriptor,
+  isTenantUniqueKeyDescriptor,
 } from "../src/index.js";
+
+type RuntimeKeyFactory = (input: unknown) => unknown;
+
+const runtimeDefineTenantUniqueKey = defineTenantUniqueKey as RuntimeKeyFactory;
+const runtimeDefineTenantForeignKey = defineTenantForeignKey as RuntimeKeyFactory;
 
 describe("A3 tenant composite unique keys", () => {
   it("freezes the canonical store entity and order-line identities", () => {
@@ -69,6 +76,36 @@ describe("A3 tenant composite unique keys", () => {
         columns: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
       }),
     ).toThrowError('No declared tenant unique-key layout for table "primary_lease_heads"');
+  });
+
+  it("rejects a changing table accessor without invoking it", () => {
+    let reads = 0;
+    const input = {
+      columns: ["org_id", "store_id", "id"],
+    } as Record<string, unknown>;
+    Object.defineProperty(input, "table", {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+        return reads === 1 ? "orders" : "garments";
+      },
+    });
+
+    expect(() => runtimeDefineTenantUniqueKey(input)).toThrowError("own data property");
+    expect(reads).toBe(0);
+  });
+
+  it.each([
+    [null, "plain object"],
+    [{ table: "orders" }, "exactly the properties"],
+    [
+      { table: "orders", columns: ["org_id", "store_id", "id"], extra: true },
+      "exactly the properties",
+    ],
+    [{ table: new String("orders"), columns: ["org_id", "store_id", "id"] }, "primitive string"],
+    [{ table: "orders", columns: "org_id,store_id,id" }, "plain string array"],
+  ] as const)("rejects malformed unique-key input %#", (input, error) => {
+    expect(() => runtimeDefineTenantUniqueKey(input)).toThrowError(error);
   });
 });
 
@@ -217,4 +254,101 @@ describe("A3 tenant composite foreign keys", () => {
       ).toThrowError(`No declared tenant foreign-key layout for ${childTable} -> ${parentTable}`);
     },
   );
+
+  it("proves key descriptor provenance instead of trusting structural clones", () => {
+    const uniqueKey = defineTenantUniqueKey({
+      table: "orders",
+      columns: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
+    });
+    const foreignKey = defineTenantForeignKey({
+      childTable: "payments",
+      childColumns: ["org_id", "store_id", "order_id"],
+      parentTable: "orders",
+      parentColumns: STORE_ENTITY_UNIQUE_KEY_COLUMNS,
+    });
+
+    expect(isTenantUniqueKeyDescriptor(uniqueKey)).toBe(true);
+    expect(isTenantUniqueKeyDescriptor({ ...uniqueKey })).toBe(false);
+    expect(isTenantUniqueKeyDescriptor(JSON.parse(JSON.stringify(uniqueKey)))).toBe(false);
+    expect(isTenantForeignKeyDescriptor(foreignKey)).toBe(true);
+    expect(isTenantForeignKeyDescriptor(PAYMENTS_ORDER_FOREIGN_KEY)).toBe(true);
+    expect(isTenantForeignKeyDescriptor({ ...foreignKey })).toBe(false);
+    expect(isTenantForeignKeyDescriptor(JSON.parse(JSON.stringify(foreignKey)))).toBe(false);
+  });
+
+  it("rejects changing foreign-key property accessors without invoking them", () => {
+    let tableReads = 0;
+    let columnReads = 0;
+    const input = {
+      parentTable: "orders",
+      parentColumns: ["org_id", "store_id", "id"],
+    } as Record<string, unknown>;
+    Object.defineProperties(input, {
+      childTable: {
+        enumerable: true,
+        get: () => {
+          tableReads += 1;
+          return tableReads === 1 ? "payments" : "garments";
+        },
+      },
+      childColumns: {
+        enumerable: true,
+        get: () => {
+          columnReads += 1;
+          return columnReads < 4
+            ? ["org_id", "store_id", "order_id"]
+            : ["org_id", "store_id", "garment_id"];
+        },
+      },
+    });
+
+    expect(() => runtimeDefineTenantForeignKey(input)).toThrowError("own data property");
+    expect(tableReads).toBe(0);
+    expect(columnReads).toBe(0);
+  });
+
+  it("rejects accessor-bearing column arrays without invoking an index getter", () => {
+    let reads = 0;
+    const childColumns = ["org_id", "store_id", "order_id"];
+    Object.defineProperty(childColumns, "2", {
+      enumerable: true,
+      get: () => {
+        reads += 1;
+        return reads === 1 ? "order_id" : "garment_id";
+      },
+    });
+
+    expect(() =>
+      runtimeDefineTenantForeignKey({
+        childTable: "payments",
+        childColumns,
+        parentTable: "orders",
+        parentColumns: ["org_id", "store_id", "id"],
+      }),
+    ).toThrowError("array index 2 must be an own data property");
+    expect(reads).toBe(0);
+  });
+
+  it("uses one descriptor snapshot for a Proxy-backed column array", () => {
+    let indexReads = 0;
+    const childColumns = new Proxy(["org_id", "store_id", "order_id"], {
+      get: (target, property, receiver) => {
+        if (property === "2") {
+          indexReads += 1;
+          return indexReads === 1 ? "order_id" : "garment_id";
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+
+    const descriptor = runtimeDefineTenantForeignKey({
+      childTable: "payments",
+      childColumns,
+      parentTable: "orders",
+      parentColumns: ["org_id", "store_id", "id"],
+    });
+
+    expect(indexReads).toBe(0);
+    expect(descriptor).toEqual(PAYMENTS_ORDER_FOREIGN_KEY);
+  });
 });

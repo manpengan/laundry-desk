@@ -200,6 +200,10 @@ owner/app 角色、事务级 `SET LOCAL`、worker 注入和五类旁路门禁全
 - 未登记表名由 `getTenantTableDescriptor()` / `getTenantTableScope()` 抛错，调用方不能把未知表
   默认为 global 或 org 后继续。
 
+`TenantTableDescriptor` 是带包私有品牌的 opaque 类型，且只有矩阵中的原始冻结对象登记了运行时
+provenance。`isTenantTableDescriptor()` 只认可这些对象；展开、JSON 往返或手写同形对象都不能
+伪造来源。矩阵 tuple 保留每一项的精确 table/scope literal，不把权威常量拓宽成普通字符串。
+
 ### 三元键与外键
 
 当前只接受 M0-1 schema 与架构 §7 无歧义声明的唯一键：`orders(org_id, store_id, id)`、
@@ -227,6 +231,12 @@ payments(org_id, store_id, order_id)
 `garment_status_log`、`print_jobs` 与 `ticket_no_blocks` 在当前架构表格中的简写不足以确定父表和
 引用列；A3 不猜测这些映射，在正式 schema 契约明确前保持 fail-closed。
 
+唯一键与外键描述符同样带包私有品牌和运行时 provenance；只能由对应 factory 或本包权威常量
+产生，并分别通过 `isTenantUniqueKeyDescriptor()` / `isTenantForeignKeyDescriptor()` 证明来源。
+factory 只接受 exact-shape 的 plain own-data 输入；表名必须是 primitive string，列必须是连续、
+无额外属性且每项都是 primitive string 的 plain array。输入对象、列数组和 Proxy 后端都只读取
+一次 property-descriptor 快照，accessor 不会执行，校验完成后也不会回读 caller。
+
 ### RLS 生成契约
 
 `buildOrgTenantPolicySql()` / `buildStoreTenantPolicySql()` 生成固定顺序的
@@ -245,10 +255,15 @@ store_id = NULLIF(current_setting('app.store_id', true), '')::uuid
 
 所有 schema/table/policy/role 标识符先通过 ASCII 小写白名单
 `[a-z][a-z0-9_]{0,62}`，再以双引号输出；点号、空格、引号、注释、分号、大小写和 PostgreSQL
-会截断的超长名称均拒绝。`buildMaintenancePolicySql()` 只接受 ADR/M0/compose 的 canonical
-owner 角色 `laundry_owner`，并生成 `FOR ALL ... USING (true) WITH CHECK (true)`；它用于 FORCE RLS
-下的 migration/backfill/seed。任何其他语法合法角色（包括 app、reporting 或 worker）也拒绝，
-不能获得跨租户维护旁路。
+会截断的超长名称均拒绝。三个 builder 都只接受 exact-shape 的 plain own-data 对象和 primitive
+string 字段；missing/extra、accessor、boxed/non-string 与非 plain 输入在任何正则、引号化或矩阵
+检查前拒绝。实现只消费一次 descriptors 快照，随后不回读 caller，因此 stateful coercion 或 Proxy
+getter 不能让 SQL 文本与门禁看到不同值。
+
+`buildMaintenancePolicySql()` 只接受矩阵中的 org/store tenant table；global 和未知表在类型与运行时
+都拒绝。角色固定为 ADR/M0/compose 的 canonical `laundry_owner`，并生成
+`FOR ALL ... USING (true) WITH CHECK (true)`，用于 FORCE RLS 下的 migration/backfill/seed。任何其他
+语法合法角色（包括 app、reporting 或 worker）也拒绝，不能获得跨租户维护旁路。
 
 ## A4 Edge 桥协议
 

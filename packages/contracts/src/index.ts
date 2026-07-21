@@ -109,6 +109,7 @@ export {
   TENANT_TABLE_MATRIX,
   getTenantTableDescriptor,
   getTenantTableScope,
+  isTenantTableDescriptor,
 } from "./tenant/table-matrix.js";
 export type {
   GlobalScopeTableName,
@@ -128,6 +129,8 @@ export {
   STORE_ENTITY_UNIQUE_KEY_COLUMNS,
   defineTenantForeignKey,
   defineTenantUniqueKey,
+  isTenantForeignKeyDescriptor,
+  isTenantUniqueKeyDescriptor,
 } from "./tenant/keys.js";
 export type { TenantForeignKeyDescriptor, TenantUniqueKeyDescriptor } from "./tenant/keys.js";
 
@@ -138,7 +141,7 @@ export {
   buildOrgTenantPolicySql,
   buildStoreTenantPolicySql,
 } from "./tenant/rls-templates.js";
-export type { TenantPolicySqlInput } from "./tenant/rls-templates.js";
+export type { MaintenancePolicySqlInput, TenantPolicySqlInput } from "./tenant/rls-templates.js";
 
 export {
   canonicalizeCapabilityTicketForSigning,

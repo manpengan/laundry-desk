@@ -33,6 +33,8 @@ git diff --exit-code -- package-lock.json pnpm-lock.yaml
 测试必须直接断言真实导出 API，并覆盖：
 
 - 架构 §7 的 53 张表恰好一次落入 global/org/store；未知表抛错，矩阵与条目均不可变；
+- 三类 descriptor 都带不可公开构造的类型品牌及运行时 provenance；factory/矩阵原件通过 guard，
+  展开、JSON 往返和同形手写对象均失败；权威矩阵与外键常量保留精确 literal tuple 类型；
 - `automation_policies.store_id?` 仍是 org scope，不能因可选过滤误套 store policy；
 - 唯一键校验只接受 M0-1 schema 与架构明确的 `orders`、`order_lines`、`garments` 布局；不能
   从 store scope 推断 `primary_lease_heads` 等表含 `(org_id, store_id, id)`；
@@ -43,26 +45,33 @@ git diff --exit-code -- package-lock.json pnpm-lock.yaml
   fail-closed；
 - org/store SQL 同时含 ENABLE、FORCE、USING、WITH CHECK，输出重复调用完全一致；builder 只能
   接收矩阵中对应 scope 的表，mismatch、global 或未知表全部拒绝；
+- SQL builder 与 key factory 只接收 exact-shape plain own-data 输入和 primitive string；列必须为
+  连续 plain string array。missing/extra、accessor、boxed/null/undefined/non-string、非 plain 对象
+  均 fail-closed；每个对象/数组只消费一次 descriptors 快照，此后不得回读 caller；
 - 缺失/空 GUC 使用 `NULLIF(current_setting(..., true), '')::uuid` fail-closed，谓词没有跨表子查询；
 - schema/table/policy/role 的注入、大小写、点号和超过 63 字节的 ASCII 标识符均拒绝；
-- maintenance policy 只 `TO laundry_owner`，任何其他语法合法角色也拒绝，并同时含
-  `USING (true)` / `WITH CHECK (true)`。
+- maintenance policy 的 table 在类型与运行时都只允许矩阵中的 org/store 表，unknown/global 拒绝；
+  角色只允许 `laundry_owner`，其他语法合法角色也拒绝，并同时含 `USING (true)` /
+  `WITH CHECK (true)`。
 
 ## 3. RED → GREEN 证据要求
 
 初始三轮测试都必须先因对应模块/API 缺失而 RED；审查修正继续分别以 non-owner allowlist、
 scope mismatch/global/unknown、未声明键布局负例，以及 `garments` 唯一键、`payments -> orders`
-显式布局和公开描述符缺失观测 RED，再写最小实现并运行同一 focused 命令到 GREEN。不能以拼写
-错误或恒真 shell 代替。最终结论只引用新鲜的全量 test/typecheck/lint/diff 输出。
+显式布局和公开描述符缺失观测 RED；安全复审还必须以 stateful coercion、Proxy/accessor 时序、
+malformed exact-shape、maintenance unknown/global 及 descriptor 结构伪造观测 RED，再写最小实现并
+运行同一 focused 命令到 GREEN。不能以拼写错误或恒真 shell 代替。最终结论只引用新鲜的全量
+test/typecheck/lint/diff 输出。
 
 ## 4. ADR-02 / M0-1 映射
 
-| 契约项                           | ADR-02                      | M0-1 底稿                     | A3 边界                          |
-| -------------------------------- | --------------------------- | ----------------------------- | -------------------------------- |
-| 三类作用域矩阵                   | #1、#8                      | 三表仅验证 store 模板         | 穷举 §7 当前 53 张表             |
-| 三元/四元唯一键                  | #8                          | `schema.sql` 订单/行/衣物约束 | 仅接受三条已声明唯一键布局       |
-| 租户复合外键                     | #8                          | 订单/行/衣物约束              | 仅接受 M0-1/§7 四条无歧义映射    |
-| org/store RLS                    | #2、#9、#10                 | `policy-templates.sql`        | 生成 scope-bound 确定性 SQL      |
-| missing/empty GUC fail-closed    | #10                         | 五类旁路读写实测              | 冻结 `NULLIF(current_setting())` |
-| owner maintenance policy         | FORCE RLS 与独立 owner 后果 | M0-6 后续补出的 owner 修正    | 仅允许 canonical `laundry_owner` |
-| 正式 migration / 角色 / 旁路门禁 | ADR-02 的 M1 生产要求       | spike 证据不能替代生产        | **不在 A3，留给 C2/P4**          |
+| 契约项                           | ADR-02                      | M0-1 底稿                     | A3 边界                            |
+| -------------------------------- | --------------------------- | ----------------------------- | ---------------------------------- |
+| 三类作用域矩阵                   | #1、#8                      | 三表仅验证 store 模板         | 穷举 §7 当前 53 张表               |
+| 三元/四元唯一键                  | #8                          | `schema.sql` 订单/行/衣物约束 | 仅接受三条已声明唯一键布局         |
+| 租户复合外键                     | #8                          | 订单/行/衣物约束              | 仅接受 M0-1/§7 四条无歧义映射      |
+| org/store RLS                    | #2、#9、#10                 | `policy-templates.sql`        | 生成 scope-bound 确定性 SQL        |
+| missing/empty GUC fail-closed    | #10                         | 五类旁路读写实测              | 冻结 `NULLIF(current_setting())`   |
+| owner maintenance policy         | FORCE RLS 与独立 owner 后果 | M0-6 后续补出的 owner 修正    | 仅允许 canonical `laundry_owner`   |
+| 动态输入/描述符来源              | #8、#10                     | spike 未覆盖 JS 对象时序      | 单次 data 快照与 opaque provenance |
+| 正式 migration / 角色 / 旁路门禁 | ADR-02 的 M1 生产要求       | spike 证据不能替代生产        | **不在 A3，留给 C2/P4**            |

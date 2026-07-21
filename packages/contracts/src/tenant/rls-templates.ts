@@ -4,6 +4,7 @@ import {
   type StoreScopeTableName,
   type V2TableName,
 } from "./table-matrix.js";
+import { capturePrimitiveStringProperties } from "./input-snapshot.js";
 
 const SQL_IDENTIFIER = /^[a-z][a-z0-9_]{0,62}$/;
 
@@ -19,15 +20,18 @@ export type TenantPolicySqlInput<TTable extends V2TableName = V2TableName> = Rea
   role: string;
 }>;
 
-type MaintenancePolicySqlInput = Readonly<{
+export type MaintenancePolicySqlInput = Readonly<{
   schema: string;
-  table: string;
+  table: OrgScopeTableName | StoreScopeTableName;
   policy: string;
   maintenanceRole: string;
 }>;
 
-const quoteIdentifier = (identifier: string, label: string): string => {
-  if (!SQL_IDENTIFIER.test(identifier)) {
+const TENANT_POLICY_INPUT_KEYS = ["schema", "table", "policy", "role"] as const;
+const MAINTENANCE_POLICY_INPUT_KEYS = ["schema", "table", "policy", "maintenanceRole"] as const;
+
+const quoteIdentifier = (identifier: unknown, label: string): string => {
+  if (typeof identifier !== "string" || !SQL_IDENTIFIER.test(identifier)) {
     throw new TypeError(`Invalid SQL ${label} identifier`);
   }
   return `"${identifier}"`;
@@ -50,15 +54,27 @@ const requireTenantTableScope = (table: string, expectedScope: "org" | "store"):
   }
 };
 
+const requireMaintenanceTenantTable = (table: string): void => {
+  const descriptor = getTenantTableDescriptor(table);
+  if (descriptor.scope === "global") {
+    throw new TypeError(`Maintenance policy cannot target global-scope table "${table}"`);
+  }
+};
+
 const buildTenantPolicySql = (
   input: TenantPolicySqlInput,
   predicate: string,
   expectedScope: "org" | "store",
 ): string => {
-  const table = qualifiedTable(input.schema, input.table);
-  const policy = quoteIdentifier(input.policy, "policy");
-  const role = quoteIdentifier(input.role, "role");
-  requireTenantTableScope(input.table, expectedScope);
+  const captured = capturePrimitiveStringProperties(
+    input,
+    TENANT_POLICY_INPUT_KEYS,
+    "Tenant policy input",
+  );
+  const table = qualifiedTable(captured.schema, captured.table);
+  const policy = quoteIdentifier(captured.policy, "policy");
+  const role = quoteIdentifier(captured.role, "role");
+  requireTenantTableScope(captured.table, expectedScope);
 
   return `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ${table} FORCE ROW LEVEL SECURITY;
@@ -78,10 +94,16 @@ export const buildStoreTenantPolicySql = (
 ): string => buildTenantPolicySql(input, STORE_TENANT_PREDICATE_SQL, "store");
 
 export const buildMaintenancePolicySql = (input: MaintenancePolicySqlInput): string => {
-  const table = qualifiedTable(input.schema, input.table);
-  const policy = quoteIdentifier(input.policy, "policy");
-  const maintenanceRole = quoteIdentifier(input.maintenanceRole, "maintenance role");
-  if (input.maintenanceRole !== "laundry_owner") {
+  const captured = capturePrimitiveStringProperties(
+    input,
+    MAINTENANCE_POLICY_INPUT_KEYS,
+    "Maintenance policy input",
+  );
+  const table = qualifiedTable(captured.schema, captured.table);
+  const policy = quoteIdentifier(captured.policy, "policy");
+  const maintenanceRole = quoteIdentifier(captured.maintenanceRole, "maintenance role");
+  requireMaintenanceTenantTable(captured.table);
+  if (captured.maintenanceRole !== "laundry_owner") {
     throw new TypeError("Maintenance policy role must be laundry_owner");
   }
 

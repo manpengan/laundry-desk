@@ -1,25 +1,52 @@
 export type TenantTableScope = "global" | "org" | "store";
 
-export type TenantTableDescriptor<TTable extends string = string> = Readonly<{
+declare const TENANT_TABLE_DESCRIPTOR_BRAND: unique symbol;
+
+export type TenantTableDescriptor<
+  TTable extends string = string,
+  TScope extends TenantTableScope = TenantTableScope,
+  TScopeBasis extends string = string,
+> = Readonly<{
   table: TTable;
-  scope: TenantTableScope;
-  scopeBasis: string;
+  scope: TScope;
+  scopeBasis: TScopeBasis;
+  [TENANT_TABLE_DESCRIPTOR_BRAND]: true;
 }>;
 
-const describeTables = <const TTables extends readonly string[]>(
-  scope: TenantTableScope,
-  scopeBasis: string,
+type TenantTableDescriptorTuple<
+  TTables extends readonly string[],
+  TScope extends TenantTableScope,
+  TScopeBasis extends string,
+> = {
+  readonly [TIndex in keyof TTables]: TenantTableDescriptor<
+    TTables[TIndex] & string,
+    TScope,
+    TScopeBasis
+  >;
+};
+
+const registeredTenantTableDescriptors = new WeakSet<object>();
+
+const describeTables = <
+  const TScope extends TenantTableScope,
+  const TScopeBasis extends string,
+  const TTables extends readonly string[],
+>(
+  scope: TScope,
+  scopeBasis: TScopeBasis,
   tables: TTables,
-): readonly TenantTableDescriptor<TTables[number]>[] =>
+): TenantTableDescriptorTuple<TTables, TScope, TScopeBasis> =>
   Object.freeze(
-    tables.map((table) =>
-      Object.freeze({
+    tables.map((table) => {
+      const descriptor = Object.freeze({
         table,
         scope,
         scopeBasis,
-      }),
-    ),
-  );
+      }) as TenantTableDescriptor<typeof table, TScope, TScopeBasis>;
+      registeredTenantTableDescriptors.add(descriptor);
+      return descriptor;
+    }),
+  ) as unknown as TenantTableDescriptorTuple<TTables, TScope, TScopeBasis>;
 
 const GLOBAL_TABLES = describeTables(
   "global",
@@ -92,14 +119,16 @@ const STORE_TABLES = describeTables(
   ] as const,
 );
 
-const TABLE_MATRIX = [...GLOBAL_TABLES, ...ORG_TABLES, ...STORE_TABLES] as const;
+const TABLE_MATRIX = Object.freeze([...GLOBAL_TABLES, ...ORG_TABLES, ...STORE_TABLES] as const);
 
 export type V2TableName = (typeof TABLE_MATRIX)[number]["table"];
 export type GlobalScopeTableName = (typeof GLOBAL_TABLES)[number]["table"];
 export type OrgScopeTableName = (typeof ORG_TABLES)[number]["table"];
 export type StoreScopeTableName = (typeof STORE_TABLES)[number]["table"];
 
-const matrixByTable = new Map<V2TableName, TenantTableDescriptor<V2TableName>>();
+type TenantTableMatrixDescriptor = (typeof TABLE_MATRIX)[number];
+
+const matrixByTable = new Map<V2TableName, TenantTableMatrixDescriptor>();
 
 for (const descriptor of TABLE_MATRIX) {
   if (matrixByTable.has(descriptor.table)) {
@@ -108,16 +137,22 @@ for (const descriptor of TABLE_MATRIX) {
   matrixByTable.set(descriptor.table, descriptor);
 }
 
-export const TENANT_TABLE_MATRIX: readonly TenantTableDescriptor<V2TableName>[] =
-  Object.freeze(TABLE_MATRIX);
+export const TENANT_TABLE_MATRIX = TABLE_MATRIX;
 
-export const getTenantTableDescriptor = (table: string): TenantTableDescriptor<V2TableName> => {
+export function getTenantTableDescriptor<const TTable extends V2TableName>(
+  table: TTable,
+): Extract<TenantTableMatrixDescriptor, { readonly table: TTable }>;
+export function getTenantTableDescriptor(table: string): TenantTableMatrixDescriptor;
+export function getTenantTableDescriptor(table: string): TenantTableMatrixDescriptor {
   const descriptor = matrixByTable.get(table as V2TableName);
   if (descriptor === undefined) {
     throw new TypeError(`Unknown v2 tenant table "${table}"`);
   }
   return descriptor;
-};
+}
 
 export const getTenantTableScope = (table: string): TenantTableScope =>
   getTenantTableDescriptor(table).scope;
+
+export const isTenantTableDescriptor = (value: unknown): value is TenantTableMatrixDescriptor =>
+  typeof value === "object" && value !== null && registeredTenantTableDescriptors.has(value);
