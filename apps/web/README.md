@@ -1,8 +1,16 @@
 # `@laundry/web` — 柜台 SPA 骨架（M1）
 
-UI spec §3 桌面壳：左侧导航 + 顶栏门店/连接状态 + 主题切换 + 工作台占位。
+UI spec §3 桌面壳：登录 → 左侧导航 + 顶栏门店/连接状态 + 主题切换 + 工作台占位。
 
-**未做（等契约）**：E1 登录/PIN、E3 权限路由、真实会话与 Edge 通道。
+**E1 已交付（骨架）**：
+
+- 登录页（org_code / store_code / username / password）
+- 可注入 `AuthClient` 端口（默认 mock：密码 `demo`，PIN `1234`）
+- Access session **仅内存**（React state），不写 localStorage / sessionStorage
+- 顶栏「切换员工」→ PIN quick-switch dialog（`purpose: quick_switch`）
+- 连接状态条（SyncStatusBar）在已登录壳内展示
+
+**未做**：E3 权限路由、真实 C6 JWT/argon2、A7 OpenAPI HTTP 客户端。
 
 ## 使用
 
@@ -11,17 +19,17 @@ UI spec §3 桌面壳：左侧导航 + 顶栏门店/连接状态 + 主题切换 
 ```ts
 import "@laundry/ui/styles.css";
 import "@laundry/ui/styles/components.css";
-// shell layout classes:
-import "./styles/shell.css"; // or package-relative path once bundled
+import "./styles/shell.css";
 
 import { createRoot } from "react-dom/client";
-import { App } from "@laundry/web";
+import { App, createMockAuthClient } from "@laundry/web";
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <App authClient={createMockAuthClient()} />,
+);
 ```
 
-M1 本包：多页空态占位（工作台/开单/取衣/客户/统计/设置）、跳过链接、SyncStatusBar、打印队列指示。  
-完整 Vite 打包与 Edge 内置 SPA 合并进后续里程碑；登录/权限等 A5–A7。
+Mock 登录：任意机构/门店/用户名 + 密码 `demo`。PIN 快切：`1234`。
 
 ## 开发
 

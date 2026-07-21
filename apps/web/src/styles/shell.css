@@ -131,6 +131,97 @@
 
 .ld-shell-topbar__actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* —— Login (E1) —— */
+
+.ld-login {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--lg-bg);
+  color: var(--lg-ink);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.ld-login__card {
+  width: min(420px, 100%);
+  padding: 28px 24px;
+  border-radius: var(--lg-radius-lg);
+  background: var(--lg-glass-hi);
+  box-shadow: var(--lg-shadow);
+  border: 1px solid var(--lg-hair);
+  backdrop-filter: blur(16px);
+}
+
+.ld-login__header {
+  margin-bottom: 20px;
+}
+
+.ld-login__title {
+  margin: 0 0 8px;
+  font-size: 22px;
+  color: var(--lg-ink);
+}
+
+.ld-login__hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--lg-ink2);
+}
+
+.ld-login__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ld-login__error {
+  padding: 10px 12px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-late-bg);
+  color: var(--lg-late-ink);
+  font-size: 13px;
+}
+
+/* —— PIN quick-switch (E1) —— */
+
+.ld-pin-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ld-pin-switch__hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--lg-ink2);
+}
+
+.ld-pin-switch__staff {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ld-pin-switch__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lg-ink2);
+}
+
+.ld-pin-switch__error {
+  padding: 10px 12px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-late-bg);
+  color: var(--lg-late-ink);
+  font-size: 13px;
 }
 
 .ld-shell-main {

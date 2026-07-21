@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PrintJobSummary } from "@laundry/ui";
+import type { AuthClient } from "../auth/AuthClient.js";
+import type { AccessSession } from "../auth/types.js";
 import { createMockConnection, type ConnectionStatus } from "../connection.js";
 import type { NavItemId } from "../nav.js";
 import { PageHost } from "../pages/PageHost.js";
@@ -9,10 +11,14 @@ import {
   resolveTheme,
   type ThemePreference,
 } from "../theme.js";
+import { PinSwitchDialog } from "./PinSwitchDialog.js";
 import { Sidebar } from "./Sidebar.js";
 import { TopBar } from "./TopBar.js";
 
 export type CounterShellProps = {
+  session: AccessSession;
+  authClient: AuthClient;
+  onSessionChange: (session: AccessSession | null) => void;
   initialConnection?: ConnectionStatus;
   initialTheme?: ThemePreference;
   initialNav?: NavItemId;
@@ -28,7 +34,22 @@ function readSystemDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
+function connectionFromSession(
+  session: AccessSession,
+  initial: ConnectionStatus | undefined,
+): ConnectionStatus {
+  const base = initial ?? createMockConnection();
+  return {
+    ...base,
+    storeName: session.display.store_name,
+    staffName: session.display.staff_name,
+  };
+}
+
 export function CounterShell({
+  session,
+  authClient,
+  onSessionChange,
   initialConnection,
   initialTheme = "system",
   initialNav = "workbench",
@@ -41,9 +62,10 @@ export function CounterShell({
   const [activeId, setActiveId] = useState<NavItemId>(initialNav);
   const [themePref, setThemePref] = useState<ThemePreference>(initialTheme);
   const [loading, setLoading] = useState(initialLoadingMs > 0);
+  const [pinOpen, setPinOpen] = useState(false);
   const connection = useMemo(
-    () => initialConnection ?? createMockConnection(),
-    [initialConnection],
+    () => connectionFromSession(session, initialConnection),
+    [session, initialConnection],
   );
   const dark = systemDark ?? readSystemDark();
 
@@ -76,9 +98,20 @@ export function CounterShell({
           themePreference={themePref}
           onCycleTheme={() => setThemePref((p) => cycleThemePreference(p))}
           printSummary={printSummary}
+          onSwitchStaff={() => setPinOpen(true)}
         />
         <PageHost activeId={activeId} loading={loading} onNavigate={setActiveId} />
       </div>
+      <PinSwitchDialog
+        open={pinOpen}
+        onClose={() => setPinOpen(false)}
+        authClient={authClient}
+        currentStaffId={session.session.staff_id}
+        onSwitched={(next) => {
+          onSessionChange(next);
+          setPinOpen(false);
+        }}
+      />
     </div>
   );
 }
