@@ -104,3 +104,74 @@ export type {
   CommandErrorDetail,
   CommandResponse,
 } from "./envelope/responses.js";
+
+export {
+  canonicalizeCapabilityTicketForSigning,
+  canonicalizeExecutionReceiptForSigning,
+  canonicalizeForSignatureVerification,
+  canonicalizeOfflineGrantForSigning,
+  canonicalizePrimaryLeaseForSigning,
+} from "./edge/canonical.js";
+
+export {
+  Base64UrlSignatureSchema,
+  EdgeCapabilityActionSchema,
+  EdgeExecutionResultSchema,
+  EdgeNonceSchema,
+  EdgeOriginSchema,
+  ExactUtcTimestampSchema,
+} from "./edge/primitives.js";
+
+export {
+  CapabilityTicketPayloadSchema,
+  ExecutionReceiptPayloadSchema,
+  OFFLINE_GRANT_MAX_TTL_MS,
+  OfflineGrantPayloadSchema,
+  PrimaryLeasePayloadSchema,
+} from "./edge/protocols.js";
+export type {
+  CapabilityTicketPayload,
+  ExecutionReceiptPayload,
+  OfflineGrantPayload,
+  PrimaryLeasePayload,
+} from "./edge/protocols.js";
+
+export {
+  createOfflineGrantRegistrySnapshot,
+  isOfflineGrantRegistrySnapshot,
+  validateOfflineGrantAllowedCommands,
+} from "./edge/offline-grant.js";
+export type {
+  OfflineGrantAuthorizationSummary,
+  OfflineGrantDefinitionReference,
+  OfflineGrantRegistrySnapshot,
+} from "./edge/offline-grant.js";
+
+export {
+  isDeviceSignatureExecutionReceiptCandidate,
+  isServerSignatureCapabilityTicketCandidate,
+  isServerSignatureOfflineGrantCandidate,
+  isServerSignaturePrimaryLeaseCandidate,
+  parseDeviceSignatureExecutionReceiptCandidate,
+  parseServerSignatureCapabilityTicketCandidate,
+  parseServerSignatureOfflineGrantCandidate,
+  parseServerSignaturePrimaryLeaseCandidate,
+} from "./edge/signed-envelope.js";
+export type {
+  DeviceSignatureExecutionReceiptCandidate,
+  EdgeSignatureCandidate,
+  ServerSignatureCapabilityTicketCandidate,
+  ServerSignatureOfflineGrantCandidate,
+  ServerSignaturePrimaryLeaseCandidate,
+} from "./edge/signed-envelope.js";
+
+export {
+  classifyQueueEnvelopeCompatibility,
+  parseEdgeQueueEnvelope,
+  QueueAuthorizationSchema,
+} from "./edge/queue-envelope.js";
+export type {
+  EdgeQueueEnvelope,
+  QueueAuthorization,
+  QueueEnvelopeVersionDisposition,
+} from "./edge/queue-envelope.js";
