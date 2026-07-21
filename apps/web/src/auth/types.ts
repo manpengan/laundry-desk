@@ -4,6 +4,8 @@
  * Access tokens stay memory-only — never Web Storage / cookies from SPA code.
  */
 
+import type { StaffRole } from "./permissions.js";
+
 export type LoginFormValues = Readonly<{
   org_code: string;
   store_code: string;
@@ -33,6 +35,16 @@ export type AccessSession = Readonly<{
   expires_in: number;
   storage: "memory_only";
   session: BrowserSessionView;
+  /**
+   * Client IA projection only — UI gate only; C8 enforces.
+   * Not a security claim; server remains the authority.
+   */
+  role: StaffRole;
+  /**
+   * store_features-like flags (e.g. ai_enabled, member_enabled).
+   * UI gate only; C8 enforces.
+   */
+  features: Readonly<Record<string, boolean>>;
   /** UI labels not part of JWT claims; filled by AuthClient mock / future API. */
   display: Readonly<{
     store_name: string;
@@ -62,6 +74,8 @@ export type PinVerifyRequest = Readonly<{
 export type SwitchableStaff = Readonly<{
   staff_id: string;
   display_name: string;
+  /** Client projection role for this staff (mock / future list API). */
+  role: StaffRole;
 }>;
 
 export type AuthError = Readonly<{

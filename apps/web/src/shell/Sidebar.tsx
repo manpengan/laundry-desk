@@ -1,14 +1,22 @@
 import { cn } from "@laundry/ui";
-import { COUNTER_NAV, type NavItemId } from "../nav.js";
+import { COUNTER_NAV, type NavItem, type NavItemId } from "../nav.js";
 
 export type SidebarProps = {
   expanded: boolean;
   activeId: NavItemId;
   onSelect: (id: NavItemId) => void;
   onToggleExpand: () => void;
+  /** Permission-filtered items; defaults to full COUNTER_NAV (tests / host). */
+  items?: readonly NavItem[];
 };
 
-export function Sidebar({ expanded, activeId, onSelect, onToggleExpand }: SidebarProps) {
+export function Sidebar({
+  expanded,
+  activeId,
+  onSelect,
+  onToggleExpand,
+  items = COUNTER_NAV,
+}: SidebarProps) {
   return (
     <aside
       className={cn("ld-shell-sidebar", expanded && "ld-shell-sidebar--open")}
@@ -23,7 +31,7 @@ export function Sidebar({ expanded, activeId, onSelect, onToggleExpand }: Sideba
         {expanded ? "收起" : "展开"}
       </button>
       <nav className="ld-shell-sidebar__nav">
-        {COUNTER_NAV.map((item) => (
+        {items.map((item) => (
           <button
             key={item.id}
             type="button"
@@ -31,6 +39,7 @@ export function Sidebar({ expanded, activeId, onSelect, onToggleExpand }: Sideba
             onClick={() => onSelect(item.id)}
             title={item.label}
             aria-current={activeId === item.id ? "page" : undefined}
+            data-nav-id={item.id}
           >
             <span className="ld-shell-navitem__icon" aria-hidden>
               {item.icon}

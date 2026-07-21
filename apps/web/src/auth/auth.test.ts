@@ -46,7 +46,7 @@ test("mock login success returns memory_only session and no web storage write", 
   const result = await client.login({
     org_code: "ORG",
     store_code: "S1",
-    username: "clerk",
+    username: "admin",
     password: "demo",
   });
   assert.equal(result.ok, true);
@@ -55,10 +55,30 @@ test("mock login success returns memory_only session and no web storage write", 
   assert.equal(result.data.token_type, "Bearer");
   assert.ok(result.data.access_token.includes("."));
   assert.equal(result.data.session.device_id, DEVICE);
+  assert.equal(result.data.role, "admin");
+  assert.equal(result.data.features.ai_enabled, true);
+  assert.equal(result.data.features.member_enabled, true);
   assertNoAuthSecretsInWebStorage();
   assert.equal(webStorageHasAuthSecrets(), false);
 });
 
+test("mock login as staff returns subset features", async () => {
+  setDeviceIdForTests(DEVICE);
+  const client = createMockAuthClient({ validPassword: "demo" });
+  const result = await client.login({
+    org_code: "ORG",
+    store_code: "S1",
+    username: "staff",
+    password: "demo",
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.data.role, "staff");
+  assert.equal(result.data.features.ai_enabled, false);
+  assert.equal(result.data.features.member_enabled, true);
+  assert.equal(result.data.storage, "memory_only");
+  assertNoAuthSecretsInWebStorage();
+});
 test("mock login failure does not return a token", async () => {
   setDeviceIdForTests(DEVICE);
   const client = createMockAuthClient({ validPassword: "demo" });
@@ -107,6 +127,8 @@ test("PIN challenge + verify switches staff without web storage", async () => {
   assert.equal(verified.data.session.staff_id, target.staff_id);
   assert.equal(verified.data.display.staff_name, target.display_name);
   assert.equal(verified.data.storage, "memory_only");
+  assert.equal(verified.data.role, target.role);
+  assert.equal(typeof verified.data.features.ai_enabled, "boolean");
   assertNoAuthSecretsInWebStorage();
 });
 

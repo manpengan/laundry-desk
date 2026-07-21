@@ -9,6 +9,7 @@ import { LoginPage } from "../pages/LoginPage.js";
 import { PinSwitchDialog } from "../shell/PinSwitchDialog.js";
 import { createMockAuthClient } from "./AuthClient.js";
 import { setDeviceIdForTests } from "./device-id.js";
+import { FULL_STORE_FEATURES } from "./permissions.js";
 import type { AccessSession } from "./types.js";
 import { assertNoAuthSecretsInWebStorage } from "./storage-guard.js";
 
@@ -29,6 +30,8 @@ function sampleSession(): AccessSession {
       device_id: DEVICE,
       permission_version: 1,
     }),
+    role: "admin" as const,
+    features: FULL_STORE_FEATURES,
     display: Object.freeze({
       store_name: "宏发演示店",
       staff_name: "店员甲",

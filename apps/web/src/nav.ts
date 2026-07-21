@@ -1,4 +1,4 @@
-/** Desktop left rail items (UI spec §3). Auth gating is E3 — all visible for now. */
+/** Desktop left rail items (UI spec §3). Visibility filtered by E3 permissions. */
 
 export type NavItemId = "workbench" | "receive" | "pickup" | "customers" | "stats" | "settings";
 

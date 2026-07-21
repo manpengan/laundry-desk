@@ -1,6 +1,7 @@
 /**
  * @laundry/web — counter SPA shell (M1).
- * E1: login + PIN quick-switch; session memory-only. E3 route gates still pending.
+ * E1: login + PIN quick-switch; session memory-only.
+ * E3: permission route gate (role × store_features UI projection; C8 enforces).
  */
 export {
   connectionModeLabel,
@@ -43,6 +44,33 @@ export type {
   PinVerifyRequest,
   SwitchableStaff,
 } from "./auth/types.js";
+export {
+  FULL_STORE_FEATURES,
+  STAFF_STORE_FEATURES,
+  STORE_FEATURE_KEYS,
+  NAV_ACCESS_RULES,
+  allowedNavKeys,
+  defaultAllowedNavId,
+  filterNavItems,
+  hasFeature,
+  isNavAllowed,
+  isRuleSatisfied,
+  permissionContextFrom,
+  type NavAccessRule,
+  type PermissionContext,
+  type StaffRole,
+  type StoreFeatureFlags,
+  type StoreFeatureKey,
+} from "./auth/permissions.js";
+export {
+  DENIED_PAGE_COPY,
+  canOpenRoute,
+  resolveRouteGate,
+  visibleNavItems,
+  type DeniedPageCopy,
+  type RouteGateDecision,
+} from "./routing/route-gate.js";
+export { RouteGate, type RouteGateProps } from "./routing/RouteGate.js";
 export {
   hasLoginFieldErrors,
   validateLoginForm,
