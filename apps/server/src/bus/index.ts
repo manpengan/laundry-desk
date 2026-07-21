@@ -20,6 +20,8 @@ export type {
   Uuid,
 } from "./types.js";
 
+export { HandlerCommandError } from "./types.js";
+
 export { createM1CommandRegistry } from "./registry.js";
 export type { MutableCommandRegistry } from "./registry.js";
 
