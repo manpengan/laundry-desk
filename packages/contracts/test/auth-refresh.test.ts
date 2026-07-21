@@ -183,6 +183,46 @@ describe("A5 refresh rotation and reuse decisions", () => {
     expectDeepFrozen(plan);
   });
 
+  it("rejects an expired rotated token instead of treating it as live reuse", () => {
+    const plan = planRefreshMutation(
+      mutationInput({
+        token: {
+          ...activeToken,
+          status: "rotated",
+          replacement_token_id: "fa069359-d900-442d-b10b-3478e37f7156",
+          expires_at: 1_800_000_000,
+        },
+        now_epoch_seconds: 1_800_000_000,
+      }),
+    );
+
+    expect(plan).toEqual({ kind: "reject", public_code: "AUTHENTICATION_FAILED" });
+    expectDeepFrozen(plan);
+  });
+
+  it("uniformly rejects active and rotated mutation at maximum session version", () => {
+    const rejected = { kind: "reject", public_code: "AUTHENTICATION_FAILED" };
+    const tokens = [
+      activeToken,
+      {
+        ...activeToken,
+        status: "rotated" as const,
+        replacement_token_id: "fa069359-d900-442d-b10b-3478e37f7156",
+      },
+    ];
+
+    tokens.forEach((token) => {
+      const plan = planRefreshMutation(
+        mutationInput({
+          token,
+          session: { ...activeSession, session_version: Number.MAX_SAFE_INTEGER },
+        }),
+      );
+      expect(plan).toEqual(rejected);
+      expectDeepFrozen(plan);
+    });
+  });
+
   it("uniformly rejects revoked, expired and unknown tokens without state disclosure", () => {
     const revoked = planRefreshMutation(
       mutationInput({ token: { ...activeToken, status: "revoked" } }),

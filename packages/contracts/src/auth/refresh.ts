@@ -163,14 +163,14 @@ export const planRefreshMutation = (input: unknown): RefreshMutationPlan => {
     return REJECT_PLAN;
   }
   if (!hasCurrentBindings(facts.token, facts.family, facts.session)) return REJECT_PLAN;
+  if (facts.token.expires_at <= facts.now_epoch_seconds) return REJECT_PLAN;
+  if (!IncrementableSessionVersionSchema.safeParse(facts.session.session_version).success) {
+    return REJECT_PLAN;
+  }
   if (facts.token.status === "rotated") {
     return createRevocationPlan("refresh_reuse", facts.session.session_version);
   }
-  if (
-    facts.token.status !== "active" ||
-    facts.token.expires_at <= facts.now_epoch_seconds ||
-    facts.replacement_token_id === facts.token.token_id
-  ) {
+  if (facts.token.status !== "active" || facts.replacement_token_id === facts.token.token_id) {
     return REJECT_PLAN;
   }
 
