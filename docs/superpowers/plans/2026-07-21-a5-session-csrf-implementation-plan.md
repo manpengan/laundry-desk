@@ -310,7 +310,7 @@ git commit -m "[LAUNDRY][CONTRACTS] 冻结 PIN 与 step-up 绑定"
 - Modify: `packages/contracts/src/envelope/responses.ts`
 - Modify: `packages/contracts/test/responses.test.ts`
 
-- [ ] **Step 1: Write failing operation/error tests**
+- [x] **Step 1: Write failing operation/error tests**
 
 Assert a provenance-checked `IdentityLifecycleEnvelope` only accepts login/refresh/logout and has no actor/tenant/dry_run/confirm_ref. Freeze these exact rows:
 
@@ -368,23 +368,23 @@ Each matrix row lists its allowed existing A2 errors plus the applicable auth er
 
 Unknown/revoked/reused refresh must all emit identical `AUTHENTICATION_FAILED` public output.
 
-- [ ] **Step 2: Run tests to verify RED**
+- [x] **Step 2: Run tests to verify RED**
 
 Run: `pnpm --filter @laundry/contracts test -- auth-operations responses`
 
 Expected: FAIL because lifecycle exports/error codes are absent.
 
-- [ ] **Step 3: Implement immutable matrix and A2 extensions**
+- [x] **Step 3: Implement immutable matrix and A2 extensions**
 
 Use fixed literal rows and a `WeakSet` lifecycle-ingress authority available only from the browser-ingress subpath. Keep browser-visible schema ids separate from server-only schemas so A7 cannot project refresh hashes or authority factories. All unknown factory inputs pass through the auth plain-data membrane before Zod.
 
-- [ ] **Step 4: Run focused GREEN checks**
+- [x] **Step 4: Run focused GREEN checks**
 
 Run: `pnpm --filter @laundry/contracts test -- auth-operations responses`
 
 Expected: PASS, with pre-existing A2 error tests unchanged except exhaustive additions.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/contracts/src/auth/operations.ts packages/contracts/test/auth-operations.test.ts \
