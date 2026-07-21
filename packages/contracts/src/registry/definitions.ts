@@ -100,6 +100,8 @@ type InputSnapshot<TInput extends z.ZodObject> = Readonly<{
 }>;
 
 const registeredDefinitions = new WeakMap<object, DefinitionRegistration>();
+const registeredCommandDefinitions = new Set<CommandDefinition<z.ZodObject>>();
+let commandRegistrySealed = false;
 
 const isPlainRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" &&
@@ -226,13 +228,18 @@ const createRegisteredDefinition = <TDefinition extends object, TInput extends z
 const createCommandDefinition = <TInput extends z.ZodObject>(
   definition: CommandDefinitionInput<TInput>,
 ): CommandDefinition<TInput> => {
+  if (commandRegistrySealed) {
+    throw new TypeError("The supported command registry is already sealed");
+  }
   const parsedEnvelope = CommandDefinitionInputSchema.parse(definition);
   const callerMetadata = omitProperty(parsedEnvelope, "input");
   const metadata = CommandMetadataSchema.parse({ ...callerMetadata, kind: "command" });
   const input = snapshotInput<TInput>(parsedEnvelope.input);
   validateCommandInputPaths(metadata, input.schema);
 
-  return createRegisteredDefinition<CommandDefinition<TInput>, TInput>(metadata, input);
+  const registered = createRegisteredDefinition<CommandDefinition<TInput>, TInput>(metadata, input);
+  registeredCommandDefinitions.add(registered as CommandDefinition<z.ZodObject>);
+  return registered;
 };
 
 const createQueryDefinition = <TInput extends z.ZodObject>(
@@ -266,6 +273,16 @@ export const isContractDefinition = (
   typeof value === "object" &&
   value !== null &&
   (registeredDefinitions.get(value)?.verify() ?? false);
+
+/**
+ * @internal A4 composition-root boundary. It atomically seals A1 command registration and returns
+ * every command registered in this module instance. Callers cannot select a subset, and later
+ * command registration fails closed. This helper is intentionally absent from the package entry.
+ */
+export const sealRegisteredCommandDefinitions = (): readonly CommandDefinition<z.ZodObject>[] => {
+  commandRegistrySealed = true;
+  return Object.freeze([...registeredCommandDefinitions]);
+};
 
 /**
  * C1 input boundary: verifies registry provenance and schema integrity before parsing raw input.
