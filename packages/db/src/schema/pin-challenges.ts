@@ -1,6 +1,7 @@
 import {
   foreignKey,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -15,6 +16,7 @@ import { stores } from "./stores.js";
 /**
  * Single-use PIN challenges for quick-switch / step-up (A5).
  * status: open | consumed | expired | exhausted.
+ * step_up binds args_hash / entity_versions / idempotency_key (WYSIWYS).
  */
 export const pinChallenges = pgTable(
   "pin_challenges",
@@ -29,6 +31,9 @@ export const pinChallenges = pgTable(
     targetStaffId: uuid("target_staff_id"),
     approverStaffId: uuid("approver_staff_id"),
     pendingActionRef: text("pending_action_ref"),
+    argsHash: text("args_hash"),
+    entityVersions: jsonb("entity_versions").notNull().default([]),
+    idempotencyKey: uuid("idempotency_key"),
     nonce: text("nonce").notNull(),
     attempts: integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(5),

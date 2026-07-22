@@ -93,6 +93,12 @@ export const pinStatusFromSql = (status: string): "active" | "consumed" | null =
   return null;
 };
 
+export type PinEntityVersionRow = Readonly<{
+  entity_type: string;
+  entity_id: string;
+  version: number;
+}>;
+
 export type PinRow = {
   id: string;
   org_id: string;
@@ -104,6 +110,9 @@ export type PinRow = {
   target_staff_id: string | null;
   approver_staff_id: string | null;
   pending_action_ref: string | null;
+  args_hash: string | null;
+  entity_versions: unknown;
+  idempotency_key: string | null;
   nonce: string;
   attempts: number;
   max_attempts: number;
@@ -111,6 +120,40 @@ export type PinRow = {
   issued_at: Date | string;
   expires_at: Date | string;
   requester_staff_id: string | null;
+};
+
+const parseEntityVersions = (raw: unknown): readonly PinEntityVersionRow[] | null => {
+  if (raw === null || raw === undefined) return Object.freeze([]);
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(value)) return null;
+  const out: PinEntityVersionRow[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return null;
+    const record = entry as Record<string, unknown>;
+    if (
+      typeof record.entity_type !== "string" ||
+      typeof record.entity_id !== "string" ||
+      typeof record.version !== "number" ||
+      !Number.isSafeInteger(record.version)
+    ) {
+      return null;
+    }
+    out.push(
+      Object.freeze({
+        entity_type: record.entity_type,
+        entity_id: record.entity_id,
+        version: record.version,
+      }),
+    );
+  }
+  return Object.freeze(out);
 };
 
 export const mapPin = (row: PinRow): PinChallengeRecord | null => {
@@ -142,11 +185,20 @@ export const mapPin = (row: PinRow): PinChallengeRecord | null => {
       target_staff_id: row.target_staff_id,
     });
   }
+  const entityVersions = parseEntityVersions(row.entity_versions);
+  if (entityVersions === null) return null;
+  if (row.pending_action_ref === null || row.args_hash === null || row.idempotency_key === null) {
+    return null;
+  }
+  if (row.approver_staff_id === null) return null;
   return Object.freeze({
     ...base,
     purpose: "step_up" as const,
-    ...(row.approver_staff_id !== null ? { approver_staff_id: row.approver_staff_id } : {}),
-    ...(row.pending_action_ref !== null ? { pending_action_ref: row.pending_action_ref } : {}),
+    pending_action_ref: row.pending_action_ref,
+    args_hash: row.args_hash,
+    entity_versions: entityVersions,
+    idempotency_key: row.idempotency_key,
+    approver_staff_id: row.approver_staff_id,
   });
 };
 
