@@ -1,6 +1,6 @@
 # ADR-09: 命令元数据字段精确化（离线档位与风险升级阈值）
 
-- 日期：2026-07-20　状态：**Proposed**（起草：Claude；待 manpengan 签署）　父文档：[总 RFC](2026-07-19-v2-productization-and-ai.md)
+- 日期：2026-07-20　状态：**Accepted** 2026-07-22（起草：Claude；签署：manpengan 经会话授权 Grok 落档）　父文档：[总 RFC](2026-07-19-v2-productization-and-ai.md)
 - 详设：架构 §6.5（命令定义）、§11（离线矩阵）；上游：ADR-04 第 7 条、ADR-05 第 4/12 条
 - 触发：A1 契约落地评审准备（Claude，2026-07-20）——架构 §6.5 的两处字段形态与已 Accepted 的 ADR-04/05 语义不自洽，冻结前必须定形状
 
@@ -60,13 +60,16 @@
 
 ## 签署
 
-_待 manpengan 签署转 Accepted。签署前 Codex 按本 ADR 落地——理由：三值枚举是与已 Accepted 的 ADR-04 第 7 条唯一自洽的形状，等待签署会阻塞全队发令枪；若裁定有变，调整成本如上。_
+- **2026-07-22 Accepted**：manpengan 在 Grok 交付会话中书面授权落档（「同意授权你」）。
+- 签署前 A1 已按本 ADR（含修订 1/2）落地；`packages/contracts` 实现与本决策一致。
+- 本签署解除 `contracts@v0.1.0` 的 ADR-09 前置闸（另需 A1–A7 全组冻结，见门禁索引）。
 
 ## 修订记录
 
 - **修订 1（2026-07-20）**：决策 2 由「`max_batch` 拆为 `risk_escalation` 二选一」改为 `size_measures` / `hard_limits` / `risk_escalation` 三字段并存，补两条良构约束（阈值蕴含求值声明必填；升级阈值不得高于硬上限）。
   触发：Codex 在未见本 ADR 的情况下独立完成 A1 设计稿（`packages/contracts/docs/a1-contract-registry-design.md`），其 §3 指出初稿未定义批量规模的求值方式——该缺口成立，予以采纳并致谢；其"升级阈值下沉实现层"的主张不予采纳，理由见「否决的备选」。
-  本 ADR 仍为 Proposed，修订不改变签署状态。
+  修订时仍为 Proposed。
 - **修订 2（2026-07-20）**：决策 2 补第三条良构约束——`risk_escalation` 仅 R3 可声明。
   触发：A1 冻结评审发现实现已作此收窄（`schemas.ts`）且 A1 自身文档有载，但**本 ADR 无此限制**——实现严于其治理 ADR 是隐患（后人依 ADR 放宽即静默削弱）。经比对 §6.5 与 ADR-05 第 4 条，该收窄忠实于 spec（升级路径只有 R3→R4 一条），故补记入 ADR 使二者对齐，而非要求实现放宽。
-  本 ADR 仍为 Proposed，修订不改变签署状态。
+  修订时仍为 Proposed。
+- **签署（2026-07-22）**：manpengan 授权 → **Accepted**；同步门禁索引与 `contracts@v0.1.0` 封版准备。

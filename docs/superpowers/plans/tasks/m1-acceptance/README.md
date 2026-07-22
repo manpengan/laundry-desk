@@ -13,11 +13,13 @@
 | A4  | [Edge 桥协议类型](a4-edge-bridge-protocol.md)          | **✅ 已冻结**（PR #53）；canonical、签名线品牌、grant 子集与 queue replay tuple 均有机制测试                                     |
 | A5  | [会话/CSRF 契约](a5-session-csrf.md)                   | **✅ 已冻结**（PR #58 合入；contract-only；C6/C8 runtime 仍是缺口）                                                               |
 | A6  | [首批命令 identity/platform](a6-first-command-definitions.md) | **✅ 已冻结** — 9 定义；secret≠R5；settings.set=R5 |
-| A7  | [OpenAPI 3.1 快照](a7-openapi.md)                      | **implemented-in-PR** — Zod4 `toJSONSchema` 投影；auth 矩阵 + bus 命令/查询；快照进契约测试 |
+| A7  | [OpenAPI 3.1 快照](a7-openapi.md)                      | **✅ 已冻结** — Zod4 `toJSONSchema` 投影；auth 矩阵 + bus 命令/查询；`openapi/laundry-v2.openapi.json` 快照进契约测试 |
 
 **逐组节奏**：每完成一组即合入并提交可复现证据，不攒批。
 
 **放行语义（manpengan 裁定；ADR-12 后由 Grok 维护）**：tag `contracts@v0.1.0` 是最终封版标记，不是放行闸。每组评审通过并合入即冻结、下游可依赖；七组全绿且 ADR-09 已签署后打 tag。
+
+**封版状态（2026-07-22）**：A1–A7 **全绿** + [ADR-09 Accepted](../../../../adr/2026-07-20-adr-09-command-metadata-precision.md)（manpengan 会话授权）→ 允许打 git tag `contracts@v0.1.0`（`@laundry/contracts` package version `0.1.0`）。
 
 | 组冻结           | 解闸的下游                          |
 | ---------------- | ----------------------------------- |
@@ -48,4 +50,4 @@
 
 spec 歧义一律以**新增 ADR** 或 spec 补丁澄清，已 Accepted 的 ADR 正文不回改。本期已出：
 
-- [ADR-09 命令元数据字段精确化](../../../../adr/2026-07-20-adr-09-command-metadata-precision.md)（Proposed，待签署；**含修订 1**）——`offline_allowed` 三值化；`max_batch` 拆 `size_measures`（怎么算）/ `hard_limits`（超即拒）/ `risk_escalation`（超即升 R4）三字段。**A1 按此落地，勿按 §6.5 字面。**修订 1 采纳自 Codex A1 设计稿指出的求值缺口。
+- [ADR-09 命令元数据字段精确化](../../../../adr/2026-07-20-adr-09-command-metadata-precision.md)（**Accepted** 2026-07-22；含修订 1/2）——`offline_mode` 三值化；`max_batch` 拆 `size_measures` / `hard_limits` / `risk_escalation`。**A1 按此落地，勿按 §6.5 字面。**
