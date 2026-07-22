@@ -122,12 +122,25 @@ export type IdempotencyStore = Readonly<{
   ) => Promise<void>;
 }>;
 
+/**
+ * When set, executeCommand already validated a confirm_ref pending card and
+ * rewrote request.input to frozen args. Policy must allow; executor consumes card.
+ */
+export type ConfirmAuthorization = Readonly<{
+  confirmRef: string;
+  /** SHA-256 hex of frozen args (WYSIWYS re-check at consume). */
+  argsHash: string;
+}>;
+
 /** Runtime context shared by chain adapter + executor. */
 export type BusContext = Readonly<{
   tenant: TenantContext;
   actor: ActorContext;
   request: CommandRequest;
   definition: BusCommandDefinition;
+  /** True after confirm_ref pre-validation; skips confirm/step_up card creation. */
+  confirmAuthorized?: boolean;
+  confirmAuthorization?: ConfirmAuthorization;
 }>;
 
 export type ChainError = CommandError;

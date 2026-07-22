@@ -109,17 +109,7 @@ test("POST /v1/queries/platform.settings.get over HTTP (memory)", async () => {
   assert.equal(login.statusCode, 200);
   const token = (login.json() as { data: { access_token: string } }).data.access_token;
 
-  // Memory runtime still uses empty memory settings on each bus build — set via command path
-  const setRes = await app.inject({
-    method: "POST",
-    url: "/v1/commands/platform.settings.set",
-    headers: { authorization: `Bearer ${token}` },
-    payload: {
-      entries: [{ key: "store.name", value_json: JSON.stringify("HTTP Demo") }],
-    },
-  });
-  assert.equal(setRes.statusCode, 200, setRes.body);
-
+  // Memory settings pre-seeded above; R5 set is blocked without step-up — query still works.
   const getRes = await app.inject({
     method: "POST",
     url: "/v1/queries/platform.settings.get",

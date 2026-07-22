@@ -316,6 +316,12 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       return fail("VALIDATION_FAILED");
     }
     const body = isRecord(request.body) ? request.body : {};
+    // Confirm / step-up second hop: body may be { confirm_ref } only (WYSIWYS).
+    const confirmRef =
+      typeof body.confirm_ref === "string" && body.confirm_ref.length > 0
+        ? body.confirm_ref
+        : undefined;
+    const input = confirmRef !== undefined ? Object.freeze({}) : body;
     const { registry, chainHooks } = createRegisteredM1Bus({
       identity: runtime.identity,
       platform: runtime.platform,
@@ -323,15 +329,26 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     const tenant = tenantFromSession(session);
     const actor = actorFromSession(session);
     const result = await runWithSql((sql) =>
-      executeCommand(sql, tenant, name, body, {
+      executeCommand(sql, tenant, name, input, {
         registry,
         actor,
         chainHooks,
+        ...(confirmRef !== undefined ? { confirmRef } : {}),
       }),
     );
 
     if (!result.ok) {
-      reply.code(400);
+      // Policy gates are authorization outcomes, not bad requests.
+      if (
+        result.error.code === "POLICY_STEP_UP_REQUIRED" ||
+        result.error.code === "POLICY_CONFIRMATION_REQUIRED" ||
+        result.error.code === "POLICY_DENIED" ||
+        result.error.code === "PERMISSION_DENIED"
+      ) {
+        reply.code(403);
+      } else {
+        reply.code(400);
+      }
     }
     return result;
   });

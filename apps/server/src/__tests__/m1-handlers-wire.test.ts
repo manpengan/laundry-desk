@@ -163,7 +163,8 @@ test("platform.settings.set via registerM1Handlers + default C5 policy hooks", a
   assert.ok(registered.includes("platform.settings.set"));
 
   const client = new FakeSqlClient();
-  const result = await executeCommand(
+  // R5: direct execution is blocked; pending card issued.
+  const gated = await executeCommand(
     client,
     TENANT,
     "platform.settings.set",
@@ -178,8 +179,35 @@ test("platform.settings.set via registerM1Handlers + default C5 policy hooks", a
       newId: FIXED_ID,
     },
   );
+  assert.equal(gated.ok, false);
+  if (gated.ok) assert.fail("expected step-up");
+  assert.equal(gated.error.code, "POLICY_STEP_UP_REQUIRED");
+  const detail = "detail" in gated.error ? gated.error.detail : undefined;
+  assert.equal(detail?.kind, "confirmation");
+  if (detail?.kind !== "confirmation") assert.fail("confirm_ref required");
 
-  assert.equal(result.ok, true);
+  const approver: ActorContext = Object.freeze({
+    staffId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    deviceId: DEVICE_ID,
+    via: "ui" as const,
+    permissions: Object.freeze(["settings_admin"]),
+  });
+  const result = await executeCommand(
+    client,
+    { ...TENANT, staffId: approver.staffId },
+    "platform.settings.set",
+    {},
+    {
+      actor: approver,
+      registry,
+      chainHooks,
+      confirmRef: detail.confirm_ref,
+      now: FIXED_NOW,
+      newId: FIXED_ID,
+    },
+  );
+
+  assert.equal(result.ok, true, JSON.stringify(result));
   if (result.ok) {
     assert.equal(result.data.execution, "executed");
     assert.deepEqual(result.data.result, { updated: 1 });
