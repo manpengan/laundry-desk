@@ -14,7 +14,7 @@ import { withPoolClient } from "../db/pg-sql-client.js";
 import type { TenantContext } from "../db/types.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { seedDemoIdentity } from "../local/pg-seed.js";
-import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
+import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 
 const urls =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true"
@@ -29,11 +29,18 @@ const TENANT: TenantContext = Object.freeze({
   staffId: DEMO_ADMIN_ID,
 });
 
-const ACTOR: ActorContext = Object.freeze({
+const ADMIN: ActorContext = Object.freeze({
   staffId: DEMO_ADMIN_ID,
   deviceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   via: "ui" as const,
   permissions: Object.freeze(["settings_admin", "staff_read", "staff_write"]),
+});
+
+const STAFF: ActorContext = Object.freeze({
+  staffId: DEMO_STAFF_A_ID,
+  deviceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  via: "ui" as const,
+  permissions: Object.freeze(["settings_admin", "staff_read"]),
 });
 
 maybe("platform.settings.set persists settings + audit_log under laundry_app", async () => {
@@ -68,7 +75,8 @@ maybe("platform.settings.set persists settings + audit_log under laundry_app", a
     const key = `smoke.bus.min_order_cents`;
     const value = JSON.stringify(2500);
 
-    const result = await withPoolClient(appPool, async (sql) =>
+    // R5: first hop creates pending + POLICY_STEP_UP_REQUIRED
+    const gated = await withPoolClient(appPool, async (sql) =>
       executeCommand(
         sql,
         TENANT,
@@ -76,8 +84,30 @@ maybe("platform.settings.set persists settings + audit_log under laundry_app", a
         { entries: [{ key, value_json: value }] },
         {
           registry,
-          actor: ACTOR,
+          actor: ADMIN,
           chainHooks,
+        },
+      ),
+    );
+    assert.equal(gated.ok, false, JSON.stringify(gated));
+    const gatedDetail = !gated.ok && "detail" in gated.error ? gated.error.detail : undefined;
+    if (gatedDetail?.kind !== "confirmation") {
+      assert.fail("expected step-up confirm_ref");
+    }
+    const confirmRef = gatedDetail.confirm_ref;
+
+    // Other staff resumes with confirm_ref (WYSIWYS frozen args)
+    const result = await withPoolClient(appPool, async (sql) =>
+      executeCommand(
+        sql,
+        { ...TENANT, staffId: DEMO_STAFF_A_ID },
+        "platform.settings.set",
+        {},
+        {
+          registry,
+          actor: STAFF,
+          chainHooks,
+          confirmRef,
         },
       ),
     );
@@ -94,7 +124,7 @@ maybe("platform.settings.set persists settings + audit_log under laundry_app", a
         TENANT,
         "platform.settings.get",
         { keys: [key] },
-        { registry: queryRegistry, actor: ACTOR },
+        { registry: queryRegistry, actor: ADMIN },
       ),
     );
     assert.equal(queryResult.ok, true, JSON.stringify(queryResult));
@@ -113,7 +143,7 @@ maybe("platform.settings.set persists settings + audit_log under laundry_app", a
           to_epoch_s: Math.floor(Date.now() / 1000) + 60,
           limit: 20,
         },
-        { registry: queryRegistry, actor: ACTOR },
+        { registry: queryRegistry, actor: ADMIN },
       ),
     );
     assert.equal(auditResult.ok, true, JSON.stringify(auditResult));

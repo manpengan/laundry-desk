@@ -127,9 +127,16 @@ test("authenticated command path requires bearer", async () => {
       entries: [{ key: "pricing.min_order_cents", value_json: "100" }],
     },
   });
-  assert.equal(cmd.statusCode, 200, cmd.body);
-  const cmdBody = cmd.json() as { ok: boolean };
-  assert.equal(cmdBody.ok, true);
+  // R5 settings require step-up — direct execute is blocked.
+  assert.equal(cmd.statusCode, 403, cmd.body);
+  const cmdBody = cmd.json() as {
+    ok: boolean;
+    error: { code: string; detail?: { kind: string; confirm_ref?: string } };
+  };
+  assert.equal(cmdBody.ok, false);
+  assert.equal(cmdBody.error.code, "POLICY_STEP_UP_REQUIRED");
+  assert.equal(cmdBody.error.detail?.kind, "confirmation");
+  assert.ok(cmdBody.error.detail?.confirm_ref);
   await app.close();
 });
 

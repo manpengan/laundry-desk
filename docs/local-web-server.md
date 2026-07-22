@@ -131,10 +131,17 @@ pnpm --filter @laundry/web test
 ```bash
 # 登录后
 TOKEN=…  # access_token
+# R5 写：先被 step-up 拦住，拿 confirm_ref
 curl -s -X POST http://127.0.0.1:8787/v1/commands/platform.settings.set \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
   -d '{"entries":[{"key":"pricing.min_order_cents","value_json":"1500"}]}'
+# → 403 POLICY_STEP_UP_REQUIRED + detail.confirm_ref
+# 另一名具备 settings_admin 的员工提交 confirm_ref（不可自核）：
+curl -s -X POST http://127.0.0.1:8787/v1/commands/platform.settings.set \
+  -H "authorization: Bearer $STAFF_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"confirm_ref":"<uuid>"}'
 
 curl -s -X POST http://127.0.0.1:8787/v1/queries/platform.settings.get \
   -H "authorization: Bearer $TOKEN" \
@@ -157,4 +164,4 @@ LAUNDRY_USE_LOCAL_PG=1 node --test apps/server/dist/__tests__/bus-pg-smoke.test.
 
 - pin_lockouts 落表
 - ADR-09 签署 → contracts@v0.1.0
-- R5 step-up 真拦截（当前 step_up 仍放行执行）
+- step-up 与 PIN 快切联动（第二员工现场 PIN 后自动 confirm）
