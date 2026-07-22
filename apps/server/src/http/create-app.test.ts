@@ -9,14 +9,16 @@ import { CSRF_HEADER_NAME } from "@laundry/contracts";
 
 import { createLocalApp } from "./create-app.js";
 import { createMemoryLocalRuntime, DEMO_PASSWORD, DEMO_PIN } from "../local/demo-seed.js";
+import { resolveCookiePolicy } from "./cookie-policy.js";
 import { LOCAL_COOKIE_NAMES } from "./types.js";
 
 const DEVICE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const localCookies = resolveCookiePolicy({ secure: false });
 
 async function buildApp() {
   // Inject tests must stay offline — force memory even if DATABASE_URL is set.
   const runtime = await createMemoryLocalRuntime();
-  const app = await createLocalApp({ runtime });
+  const app = await createLocalApp({ runtime, cookiePolicy: localCookies });
   return { app, runtime };
 }
 
@@ -68,6 +70,12 @@ test("POST /api/v2/auth/login succeeds with demo credentials and sets cookies", 
   const cookies = parseSetCookie(res.headers as Record<string, unknown>);
   assert.ok(cookies[LOCAL_COOKIE_NAMES.refresh]);
   assert.ok(cookies[LOCAL_COOKIE_NAMES.csrf]);
+  assert.equal(LOCAL_COOKIE_NAMES.refresh, "laundry_refresh");
+  assert.equal(LOCAL_COOKIE_NAMES.csrf, "laundry_csrf");
+  // Set-Cookie lines should advertise SameSite=Strict (contracts alignment)
+  const raw = res.headers["set-cookie"];
+  const lines = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+  assert.ok(lines.some((line) => /SameSite=Strict/i.test(line)));
   await app.close();
 });
 

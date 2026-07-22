@@ -13,7 +13,7 @@ import {
   DEMO_STAFF_B_ID,
   DEMO_STORE_ID,
 } from "./demo-ids.js";
-import { createScryptPasswordPort } from "../identity/password.js";
+import { createPasswordPort } from "../identity/password.js";
 
 export type SeedDemoResult = Readonly<{
   org_id: string;
@@ -26,7 +26,7 @@ export type SeedDemoResult = Readonly<{
  * Call with admin/superuser URL so FORCE RLS does not block bootstrap.
  */
 export async function seedDemoIdentity(pool: PgPool): Promise<SeedDemoResult> {
-  const passwordPort = createScryptPasswordPort();
+  const passwordPort = createPasswordPort();
   const passwordHash = await passwordPort.hashPassword(DEMO_PASSWORD);
   const pinHash = await passwordPort.hashPassword(DEMO_PIN);
   const now = new Date();

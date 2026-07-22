@@ -21,6 +21,7 @@
     "@fastify/cors": "^11.3.0",
     "@laundry/contracts": "file:../../packages/contracts",
     "@laundry/domain": "file:../../packages/domain",
+    "@node-rs/argon2": "^2.0.2",
     "fastify": "^5.10.0",
     "pg": "^8.22.0",
     "zod": "4.4.3"

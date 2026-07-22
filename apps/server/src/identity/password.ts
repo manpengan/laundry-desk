@@ -1,19 +1,21 @@
 /**
  * Password hashing port for C6.
  *
- * Production target is Argon2id (see defaults below for Windows counter PCs).
- * This skeleton ships a `node:crypto` scrypt implementation so unit tests need
- * no native argon2 binary or specialized hardware. Swap via PasswordPort.
- *
- * Argon2id recommended defaults for laundry-desk counter PCs (Windows 10/11,
- * typical dual/quad-core storefront CPUs — keep login latency under ~300ms):
+ * Production default: **Argon2id** via `@node-rs/argon2` (PHC string).
+ * Parameters sized for Windows counter PCs (login target ~300ms on low-end SKUs):
  *   memoryCost: 19_456 KiB (~19 MiB)
  *   timeCost: 2
  *   parallelism: 1
- * Raise memoryCost only after measuring on the lowest-end storefront SKU.
+ *
+ * Verify still accepts legacy `scrypt$…` hashes for expand-only migration.
+ * Unit tests may use `createTestPasswordPort` (no crypto cost).
  */
 
+import { hash as argon2Hash, verify as argon2Verify } from "@node-rs/argon2";
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+
+/** Argon2id algorithm id from @node-rs/argon2 (avoid ambient const enum under isolatedModules). */
+const ARGON2ID_ALGORITHM = 2;
 
 type ScryptOptions = Readonly<{ N: number; r: number; p: number }>;
 
@@ -39,25 +41,38 @@ export type PasswordPort = Readonly<{
   verifyPassword: (password: string, storedHash: string) => Promise<boolean>;
 }>;
 
+/** Documented Argon2id defaults (KiB / iterations / lanes). */
+export const ARGON2ID_DEFAULTS = Object.freeze({
+  memoryCost: 19_456,
+  timeCost: 2,
+  parallelism: 1,
+  algorithm: ARGON2ID_ALGORITHM,
+});
+
 const SCRYPT_N = 16_384;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const SCRYPT_KEYLEN = 32;
 const SCRYPT_SALT_BYTES = 16;
 const SCRYPT_PREFIX = "scrypt";
+const ARGON2_PREFIX = "$argon2";
 
 const encode = (buf: Buffer): string => buf.toString("base64url");
 const decode = (value: string): Buffer => Buffer.from(value, "base64url");
 
+const assertPasswordLength = (password: string): void => {
+  if (password.length === 0 || password.length > 1_024) {
+    throw new RangeError("password length out of bounds");
+  }
+};
+
 /**
- * scrypt-based PasswordPort (Node built-in). Format:
- *   scrypt$N$r$p$salt_b64url$key_b64url
+ * scrypt PasswordPort (legacy). Format: scrypt$N$r$p$salt_b64url$key_b64url
+ * Kept for verify fallback and offline unit tests without native argon2.
  */
 export const createScryptPasswordPort = (): PasswordPort => {
   const hashPassword = async (password: string): Promise<string> => {
-    if (password.length === 0 || password.length > 1_024) {
-      throw new RangeError("password length out of bounds");
-    }
+    assertPasswordLength(password);
     const salt = randomBytes(SCRYPT_SALT_BYTES);
     const key = await scryptAsync(password, salt, SCRYPT_KEYLEN, {
       N: SCRYPT_N,
@@ -100,6 +115,53 @@ export const createScryptPasswordPort = (): PasswordPort => {
   };
 
   return Object.freeze({ hashPassword, verifyPassword });
+};
+
+/**
+ * Argon2id PasswordPort (PHC). Format: $argon2id$v=19$m=…,t=…,p=…$…
+ */
+export const createArgon2idPasswordPort = (): PasswordPort => {
+  const hashPassword = async (password: string): Promise<string> => {
+    assertPasswordLength(password);
+    return argon2Hash(password, {
+      memoryCost: ARGON2ID_DEFAULTS.memoryCost,
+      timeCost: ARGON2ID_DEFAULTS.timeCost,
+      parallelism: ARGON2ID_DEFAULTS.parallelism,
+      algorithm: ARGON2ID_DEFAULTS.algorithm,
+    });
+  };
+
+  const verifyPassword = async (password: string, storedHash: string): Promise<boolean> => {
+    if (!storedHash.startsWith(ARGON2_PREFIX)) return false;
+    try {
+      return await argon2Verify(storedHash, password);
+    } catch {
+      return false;
+    }
+  };
+
+  return Object.freeze({ hashPassword, verifyPassword });
+};
+
+/**
+ * Production port: hash with Argon2id; verify Argon2id or legacy scrypt.
+ */
+export const createPasswordPort = (): PasswordPort => {
+  const argon = createArgon2idPasswordPort();
+  const scrypt = createScryptPasswordPort();
+
+  return Object.freeze({
+    hashPassword: (password: string) => argon.hashPassword(password),
+    verifyPassword: async (password: string, storedHash: string): Promise<boolean> => {
+      if (storedHash.startsWith(ARGON2_PREFIX)) {
+        return argon.verifyPassword(password, storedHash);
+      }
+      if (storedHash.startsWith(`${SCRYPT_PREFIX}$`)) {
+        return scrypt.verifyPassword(password, storedHash);
+      }
+      return false;
+    },
+  });
 };
 
 /**

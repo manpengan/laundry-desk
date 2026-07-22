@@ -107,8 +107,17 @@ LAUNDRY_USE_LOCAL_PG=1 node --test apps/server/dist/identity/pg-store.test.js
 pnpm --filter @laundry/web test
 ```
 
+### Cookie / 密码
+
+| 环境              | Cookie 名                                        | Secure / SameSite                 | 密码哈希                                |
+| ----------------- | ------------------------------------------------ | --------------------------------- | --------------------------------------- |
+| 本地 HTTP（默认） | `laundry_refresh` / `laundry_csrf`               | Secure=false，SameSite=**Strict** | Argon2id（verify 仍接受 legacy scrypt） |
+| 生产 HTTPS        | `__Host-laundry_refresh` / `__Host-laundry_csrf` | Secure=true，Strict               | 同上                                    |
+
+- 强制 Secure：`LAUNDRY_COOKIE_SECURE=1` 或 `NODE_ENV=production`
+- Argon2id 参数：m=19456 KiB，t=2，p=1（见 `ARGON2ID_DEFAULTS`）
+
 ## 后续
 
-- cookie 名 / CSRF 与 contracts 描述符严格对齐
-- 生产 Argon2id 替换 scrypt
 - pin_lockouts 落表
+- ADR-09 签署 → contracts@v0.1.0

@@ -3,7 +3,13 @@
  * Bus handlers / Fastify plugins are intentionally not wired yet.
  */
 
-export { createScryptPasswordPort, createTestPasswordPort } from "./password.js";
+export {
+  ARGON2ID_DEFAULTS,
+  createArgon2idPasswordPort,
+  createPasswordPort,
+  createScryptPasswordPort,
+  createTestPasswordPort,
+} from "./password.js";
 export type { PasswordPort, PinPort } from "./password.js";
 
 export {
