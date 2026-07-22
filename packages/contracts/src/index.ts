@@ -341,7 +341,18 @@ export {
   M1_FIRST_WAVE_COMMAND_NAMES,
   M1_FIRST_WAVE_DEFINITIONS,
   M1_FIRST_WAVE_QUERY_NAMES,
+  M2_SKELETON_COMMAND_NAMES,
+  M2_SKELETON_DEFINITIONS,
 } from "./commands/catalog.js";
+export {
+  ORDER_COMMAND_NAMES,
+  ORDER_COMMANDS,
+  OrderPickupInputSchema,
+  OrderReceiveInputSchema,
+  OrderReceiveLineSchema,
+  orderPickupCommand,
+  orderReceiveCommand,
+} from "./commands/order.js";
 
 export {
   OPENAPI_INFO_VERSION,

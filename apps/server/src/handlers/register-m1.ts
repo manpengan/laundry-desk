@@ -5,6 +5,8 @@
 import type { ChainPortHooks } from "../bus/chain-adapter.js";
 import { createM1CommandRegistry, type MutableCommandRegistry } from "../bus/registry.js";
 import { createM1QueryRegistry, type MutableQueryRegistry } from "../bus/query-registry.js";
+import type { OrderHandlerDeps } from "../order/handlers.js";
+import { registerOrderCommandHandlers } from "../order/handlers.js";
 import type { IdentityHandlerDeps } from "./identity-handlers.js";
 import { registerIdentityCommandHandlers } from "./identity-handlers.js";
 import type { PlatformHandlerDeps } from "./platform-handlers.js";
@@ -14,6 +16,8 @@ import { createDefaultChainHooks } from "./default-chain-hooks.js";
 export type RegisterM1Deps = Readonly<{
   identity?: IdentityHandlerDeps;
   platform?: PlatformHandlerDeps;
+  /** M2 skeleton order receive/pickup (memory store). */
+  order?: OrderHandlerDeps;
 }>;
 
 export type RegisterM1Result = Readonly<{
@@ -48,6 +52,11 @@ export function registerM1Handlers(
   if (deps.platform !== undefined) {
     registerPlatformHandlers(registry, deps.platform);
     registered.push("platform.settings.set");
+  }
+
+  if (deps.order !== undefined) {
+    registerOrderCommandHandlers(registry, deps.order);
+    registered.push("order.receive", "order.pickup");
   }
 
   return Object.freeze(registered);
