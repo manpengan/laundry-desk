@@ -6,3 +6,4 @@ export * from "./command-chain/types.js";
 export * from "./command-chain/evaluate.js";
 export * from "./order/index.js";
 export * from "./catalog/index.js";
+export * from "./print/index.js";

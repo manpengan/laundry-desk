@@ -20,7 +20,7 @@ type AnyDefinition = ContractsCommandDefinition<z.ZodObject> | QueryDefinition<z
 const isCommandDefinition = (def: AnyDefinition): def is ContractsCommandDefinition<z.ZodObject> =>
   def.kind === "command";
 
-/** M1 A6 catalog + M2 order skeleton command definitions. */
+/** M1 A6 catalog + M2 order/print skeleton command definitions. */
 export const DEFAULT_BUS_COMMAND_DEFINITIONS: readonly AnyDefinition[] = Object.freeze([
   ...M1_FIRST_WAVE_DEFINITIONS,
   ...M2_SKELETON_DEFINITIONS,
@@ -33,7 +33,7 @@ export type MutableCommandRegistry = CommandRegistry &
 
 /**
  * Load command definitions into a mutable handler map.
- * Default: M1 first-wave + M2 order skeleton. Queries excluded.
+ * Default: M1 first-wave + M2 order/print skeleton. Queries excluded.
  */
 export function createM1CommandRegistry(
   definitions: readonly AnyDefinition[] = DEFAULT_BUS_COMMAND_DEFINITIONS,

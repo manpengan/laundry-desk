@@ -13,6 +13,8 @@ import { createPgCatalogStore } from "../catalog/pg-catalog-store.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
+import { createMemoryPrintJobStore } from "../print/memory-store.js";
+import type { PrintHandlerDeps } from "../print/handlers.js";
 import { createPgOrderStore } from "../order/pg-order-store.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
@@ -62,6 +64,8 @@ export type LocalRuntime = Readonly<{
   order: OrderHandlerDeps;
   /** M2 catalog price list (memory seed or PG catalog_items). */
   catalog: CatalogHandlerDeps;
+  /** M2 print job queue (memory-first; no PG print_jobs yet). */
+  print: PrintHandlerDeps;
   accessTokenSecret: string;
   staffDirectory: readonly LocalStaffDirectoryEntry[];
   /** Shared with Command Bus for confirm_ref / step-up PIN. */
@@ -204,6 +208,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     platform: buildPlatform("memory"),
     order: Object.freeze({ store: createMemoryOrderStore() }),
     catalog: Object.freeze({ store: createMemoryCatalogStore() }),
+    print: Object.freeze({ store: createMemoryPrintJobStore() }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,
@@ -255,6 +260,8 @@ export async function createPgLocalRuntime(
         storeId: DEMO_STORE_ID,
       }),
     }),
+    // Print jobs stay memory until print_jobs migration.
+    print: Object.freeze({ store: createMemoryPrintJobStore() }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,

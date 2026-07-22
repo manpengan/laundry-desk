@@ -212,6 +212,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@laundry/domain':
+        specifier: file:../../packages/domain
+        version: link:../../packages/domain
       '@laundry/ui':
         specifier: file:../../packages/ui
         version: link:../../packages/ui

@@ -2,6 +2,7 @@
  * 开单（order.receive）— M2 counter form over command bus + catalog picker.
  */
 
+import type { TicketPreview } from "@laundry/domain";
 import { Button, Input, MoneyText, StatusBadge, useToast } from "@laundry/ui";
 import { useCallback, useState } from "react";
 import type { CatalogListItem } from "../commands/query-client.js";
@@ -14,12 +15,25 @@ import {
   type ReceiveLineDraft,
   type ReceiveOrderResult,
 } from "./order-form.js";
+import { TicketPreviewPanel } from "./TicketPreviewPanel.js";
+import {
+  buildReceiveTicketPreview,
+  formatReceiveDateLabel,
+  readBuiltLines,
+} from "./ticket-preview.js";
 
 export type ReceivePageProps = {
   commandClient: CommandPort;
   /** Optional price-list query port (catalog.items.list). */
   queryClient?: QueryPort;
+  /** Store label on 58mm ticket preview. */
+  storeName?: string;
+  storePhone?: string;
+  /** Optional hook when ticket preview is ready (USB enqueue later). */
+  onTicketReady?: (preview: TicketPreview) => void;
 };
+
+const DEFAULT_STORE_NAME = "洗衣店";
 
 function updateLine(
   lines: readonly ReceiveLineDraft[],
@@ -80,7 +94,13 @@ function applyCatalogPick(
   return { lines: [...lines, next], focusedKey: next.key };
 }
 
-export function ReceivePage({ commandClient, queryClient }: ReceivePageProps) {
+export function ReceivePage({
+  commandClient,
+  queryClient,
+  storeName = DEFAULT_STORE_NAME,
+  storePhone,
+  onTicketReady,
+}: ReceivePageProps) {
   const toast = useToast();
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
@@ -90,6 +110,7 @@ export function ReceivePage({ commandClient, queryClient }: ReceivePageProps) {
   const [focusedLineKey, setFocusedLineKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ReceiveOrderResult | null>(null);
+  const [ticketPreview, setTicketPreview] = useState<TicketPreview | null>(null);
 
   const onAddLine = useCallback(() => {
     setLines((prev) => [...prev, newLineDraft(prev.length)]);
@@ -134,12 +155,34 @@ export function ReceivePage({ commandClient, queryClient }: ReceivePageProps) {
         toast.push("开单成功但结果无法解析", "error");
         return;
       }
+      const preview = buildReceiveTicketPreview({
+        result: payload,
+        lines: readBuiltLines(built.body),
+        storeName,
+        storePhone,
+        receiveDate: formatReceiveDateLabel(),
+        customerName: name.trim() || null,
+        customerPhone: phone.trim() || null,
+      });
       setResult(payload);
+      setTicketPreview(preview);
+      onTicketReady?.(preview);
       toast.push(`开单成功 ${payload.ticket_no}`, "success");
     } finally {
       setBusy(false);
     }
-  }, [commandClient, lines, name, note, paidText, phone, toast]);
+  }, [
+    commandClient,
+    lines,
+    name,
+    note,
+    onTicketReady,
+    paidText,
+    phone,
+    storeName,
+    storePhone,
+    toast,
+  ]);
 
   const onReset = useCallback(() => {
     setPhone("");
@@ -149,16 +192,31 @@ export function ReceivePage({ commandClient, queryClient }: ReceivePageProps) {
     setLines([newLineDraft(0)]);
     setFocusedLineKey(null);
     setResult(null);
+    setTicketPreview(null);
   }, []);
+
+  /** Best-effort bus enqueue before browser print (memory print_jobs). */
+  const onEnqueuePrint = useCallback(async () => {
+    if (result === null) return;
+    const res = await commandClient.execute<unknown>("print.ticket.enqueue", {
+      order_id: result.order_id,
+      ticket_no: result.ticket_no,
+    });
+    if (!res.ok) {
+      toast.push(res.error.message ?? res.error.code, "error");
+      return;
+    }
+    toast.push(`已排队打印 ${result.ticket_no}`, "success");
+  }, [commandClient, result, toast]);
 
   return (
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
-      <h1 className="ld-shell-main__title">开单</h1>
-      <p className="ld-shell-main__hint">
+      <h1 className="ld-shell-main__title ld-no-print">开单</h1>
+      <p className="ld-shell-main__hint ld-no-print">
         创建订单与衣物件（整数分）。可选手机号建档；提交后显示票号与条码。
       </p>
 
-      <div className="ld-order-form">
+      <div className="ld-order-form ld-no-print">
         <div className="ld-order-form__row">
           <Input
             name="customer-phone"
@@ -281,7 +339,7 @@ export function ReceivePage({ commandClient, queryClient }: ReceivePageProps) {
       </div>
 
       {result !== null ? (
-        <section className="ld-order-result" aria-live="polite">
+        <section className="ld-order-result ld-no-print" aria-live="polite">
           <h2 className="ld-order-result__title">开单结果</h2>
           <dl className="ld-order-result__meta">
             <div>
@@ -324,6 +382,15 @@ export function ReceivePage({ commandClient, queryClient }: ReceivePageProps) {
             ))}
           </ul>
         </section>
+      ) : null}
+
+      {ticketPreview !== null ? (
+        <TicketPreviewPanel
+          preview={ticketPreview}
+          onTicketReady={onTicketReady}
+          onEnqueuePrint={onEnqueuePrint}
+          disabled={busy}
+        />
       ) : null}
     </main>
   );
