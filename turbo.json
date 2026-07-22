@@ -18,8 +18,15 @@
       "outputs": []
     },
     "@laundry/web#test": {
-      "dependsOn": ["^build", "@laundry/ui#build"],
+      "dependsOn": ["^build", "@laundry/ui#build", "@laundry/domain#build"],
       "outputs": []
+    },
+    "@laundry/web#typecheck": {
+      "dependsOn": ["^build", "@laundry/ui#build", "@laundry/domain#build"]
+    },
+    "@laundry/web#build": {
+      "dependsOn": ["^build", "@laundry/ui#build", "@laundry/domain#build"],
+      "outputs": ["dist/**"]
     },
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"],
