@@ -2,7 +2,7 @@
 
 > 主责：**Grok**（ADR-12）　落点：`packages/contracts/src/openapi/`  
 > 前置：A1 注册表、A2 信封、A5 `AUTH_OPERATION_MATRIX`、A6 `M1_FIRST_WAVE_DEFINITIONS`  
-> 状态：**本 PR 实现中（implemented-in-PR）**
+> 状态：**✅ 已冻结**（合入 main；快照 `openapi/laundry-v2.openapi.json` + 契约测试）
 
 ## 1. 范围
 

@@ -16,7 +16,7 @@
 | [ADR-06](2026-07-19-adr-06-byok-provider-network-key-mgmt.md)      | BYOK / Provider 网络 / 密钥管理                 | **Accepted**                      |
 | [ADR-07](2026-07-19-adr-07-v1-migration-and-milestones.md)         | v1→v2 迁移与里程碑（方案 B）                    | **Accepted**                      |
 | [ADR-08](2026-07-19-adr-08-release-desktop-upgrade-lts-support.md) | 发布、桌面升级、LTS 与技术支持                  | **Accepted**                      |
-| [ADR-09](2026-07-20-adr-09-command-metadata-precision.md)          | 命令元数据字段精确化（离线档位 / 风险升级阈值） | **Proposed** 待签署               |
+| [ADR-09](2026-07-20-adr-09-command-metadata-precision.md)          | 命令元数据字段精确化（离线档位 / 风险升级阈值） | **Accepted** 2026-07-22           |
 | [ADR-10](2026-07-21-adr-10-single-owner-delivery-governance.md)    | 单一技术负责人 + 受约束协助线（Codex lead）     | **Superseded by ADR-12**          |
 | [ADR-11](2026-07-21-adr-11-auth-lifecycle-envelope.md)             | 身份生命周期信封与认证来源                      | **Accepted**                      |
 | [ADR-12](2026-07-21-adr-12-grok-unified-delivery-ownership.md)     | Grok 统一交付所有权（设计 + 实现）              | **Accepted** 2026-07-21           |

@@ -26,7 +26,7 @@
 | 部分实现 | D1 缺签名 SPA 与 Windows 证据；D5 缺 updater I/O；F3 仍 mock server；A3/A5 的 **runtime** 未转正 |
 | 未实现 | A6/A7、B2/B4、C1–C8、F1、D2/D3 正式、E1/E3、packages/db 生产 migrations |
 | 仅候选输入 | `feat/m1-c7-platform` 内存 C7；`claude/m1-gates` A6 草稿；各远端 AI worktree 未合 diff |
-| 治理 | 无 `contracts@v0.1.0` tag；ADR-09 仍 Proposed；正式 v2 PG schema 不存在 |
+| 治理 | ADR-09 **Accepted**（2026-07-22）；`contracts@v0.1.0` 封版（A1–A7 全绿）；正式 v2 PG schema 持续扩展（identity/session/pin_lockouts 已落） |
 
 六档状态：已设计 / 已编码 / 已开 PR / 已合 main / CI 绿 / 实机通过。
 
@@ -76,7 +76,7 @@ Edge 仍建议目录：
 ### P0：治理
 
 1. 合入 ADR-12 与入口/任务书/status 刷新（本变更）。
-2. 请 manpengan 签署 ADR-09（未签不打最终 contracts tag）。
+2. ~~请 manpengan 签署 ADR-09~~ **完成**（2026-07-22 Accepted；`contracts@v0.1.0`）。
 
 ### P1：契约与纯函数
 
