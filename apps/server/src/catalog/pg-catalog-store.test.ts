@@ -136,10 +136,7 @@ test("listAll skips seed when store already has rows", async () => {
   assert.equal(items.length, 1);
   assert.equal(items[0]?.code, "custom_item");
   assert.equal(items[0]?.mnemonic, undefined);
-  assert.equal(
-    queries.filter((q) => q.sql.includes("INSERT INTO catalog_items")).length,
-    0,
-  );
+  assert.equal(queries.filter((q) => q.sql.includes("INSERT INTO catalog_items")).length, 0);
 });
 
 test("mapRow omits empty mnemonic", async () => {
