@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { executeCommand } from "../bus/executor.js";
+import { executeQuery } from "../bus/execute-query.js";
 import type { ActorContext } from "../bus/types.js";
 import { createPgPool, resolvePgUrls } from "../db/pg-pool.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
@@ -42,28 +43,27 @@ maybe("platform.settings.set persists settings + audit_log under laundry_app", a
   try {
     await seedDemoIdentity(adminPool);
 
-    const { registry, chainHooks } = createRegisteredM1Bus({
-      platform: Object.freeze({
-        persistence: "sql" as const,
-        // Placeholders — sql mode rebinds from ctx.client inside handlers.
-        settings: {
-          getMany: async () => Object.freeze({}),
-          setMany: async () => undefined,
-        },
-        features: {
-          get: async () =>
-            Object.freeze({
-              fulfillment: true,
-              membership: false,
-              shift_closing: false,
-              delivery: false,
-              marketing: false,
-              ai: false,
-            }),
-        },
-        audit: { list: async () => Object.freeze([]) },
-      }),
+    const platform = Object.freeze({
+      persistence: "sql" as const,
+      // Placeholders — sql mode rebinds from ctx.client inside handlers.
+      settings: {
+        getMany: async () => Object.freeze({}),
+        setMany: async () => undefined,
+      },
+      features: {
+        get: async () =>
+          Object.freeze({
+            fulfillment: true,
+            membership: false,
+            shift_closing: false,
+            delivery: false,
+            marketing: false,
+            ai: false,
+          }),
+      },
+      audit: { list: async () => Object.freeze([]) },
     });
+    const { registry, queryRegistry, chainHooks } = createRegisteredM1Bus({ platform });
 
     const key = `smoke.bus.min_order_cents`;
     const value = JSON.stringify(2500);
@@ -85,6 +85,43 @@ maybe("platform.settings.set persists settings + audit_log under laundry_app", a
     assert.equal(result.ok, true, JSON.stringify(result));
     if (result.ok) {
       assert.equal(result.data.execution, "executed");
+    }
+
+    // Read path via executeQuery under same laundry_app + GUC
+    const queryResult = await withPoolClient(appPool, async (sql) =>
+      executeQuery(
+        sql,
+        TENANT,
+        "platform.settings.get",
+        { keys: [key] },
+        { registry: queryRegistry, actor: ACTOR },
+      ),
+    );
+    assert.equal(queryResult.ok, true, JSON.stringify(queryResult));
+    if (queryResult.ok) {
+      const payload = queryResult.data.result as { values: Record<string, string> };
+      assert.equal(payload.values[key], value);
+    }
+
+    const auditResult = await withPoolClient(appPool, async (sql) =>
+      executeQuery(
+        sql,
+        TENANT,
+        "platform.audit.list",
+        {
+          from_epoch_s: 0,
+          to_epoch_s: Math.floor(Date.now() / 1000) + 60,
+          limit: 20,
+        },
+        { registry: queryRegistry, actor: ACTOR },
+      ),
+    );
+    assert.equal(auditResult.ok, true, JSON.stringify(auditResult));
+    if (auditResult.ok) {
+      const payload = auditResult.data.result as {
+        items: readonly { command: string; entity: string | null }[];
+      };
+      assert.ok(payload.items.some((item) => item.command === "platform.settings.set"));
     }
 
     // Verify rows via app role + GUC (not superuser bypass).

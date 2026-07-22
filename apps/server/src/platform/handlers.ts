@@ -187,7 +187,7 @@ export function createPlatformHandlers(deps: PlatformHandlerDeps): PlatformHandl
 
 /**
  * Register platform *command* handlers onto a C1 registry.
- * Queries are returned by createPlatformHandlers but not registered on the command bus.
+ * Queries use registerPlatformQueryHandlers on the query registry.
  */
 export function registerPlatformCommandHandlers(
   registry: Readonly<{ registerHandler: (name: string, handler: CommandHandler) => void }>,
@@ -195,4 +195,17 @@ export function registerPlatformCommandHandlers(
 ): void {
   const handlers = createPlatformHandlers(deps);
   registry.registerHandler("platform.settings.set", handlers["platform.settings.set"]!);
+}
+
+/**
+ * Register platform *query* handlers onto a query registry.
+ */
+export function registerPlatformQueryHandlers(
+  registry: Readonly<{ registerHandler: (name: string, handler: CommandHandler) => void }>,
+  deps: PlatformHandlerDeps,
+): void {
+  const handlers = createPlatformHandlers(deps);
+  registry.registerHandler("platform.settings.get", handlers["platform.settings.get"]!);
+  registry.registerHandler("platform.store_features.get", handlers["platform.store_features.get"]!);
+  registry.registerHandler("platform.audit.list", handlers["platform.audit.list"]!);
 }

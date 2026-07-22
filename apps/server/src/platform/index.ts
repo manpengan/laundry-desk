@@ -9,6 +9,7 @@ export {
   createPlatformHandlers,
   platformHandlerNames,
   registerPlatformCommandHandlers,
+  registerPlatformQueryHandlers,
 } from "./handlers.js";
 export type {
   PlatformHandlerDeps,

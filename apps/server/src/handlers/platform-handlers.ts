@@ -8,6 +8,7 @@ import {
   createPlatformHandlers,
   platformHandlerNames,
   registerPlatformCommandHandlers,
+  registerPlatformQueryHandlers,
   type PlatformHandlerDeps,
 } from "../platform/handlers.js";
 
@@ -15,13 +16,19 @@ export type {
   PlatformHandlerDeps,
   PlatformHandlerMap,
   PlatformHandlerName,
+  PlatformPersistence,
 } from "../platform/handlers.js";
 
-export { createPlatformHandlers, platformHandlerNames, registerPlatformCommandHandlers };
+export {
+  createPlatformHandlers,
+  platformHandlerNames,
+  registerPlatformCommandHandlers,
+  registerPlatformQueryHandlers,
+};
 
 /**
  * Alias used by registerM1Handlers — registers only platform *commands*
- * (platform.settings.set). Queries stay off the command bus.
+ * (platform.settings.set). Queries use registerPlatformQueryHandlers.
  */
 export function registerPlatformHandlers(
   registry: Readonly<{ registerHandler: (name: string, handler: CommandHandler) => void }>,
