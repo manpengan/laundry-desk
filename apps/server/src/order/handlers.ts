@@ -23,7 +23,7 @@ function asRecord(parsed: unknown): Readonly<Record<string, unknown>> {
   return parsed as Readonly<Record<string, unknown>>;
 }
 
-function requireString(value: unknown, _field: string): string {
+function requireString(value: unknown): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
   }
@@ -59,8 +59,8 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
     const lines = linesRaw.map((row) => {
       const r = asRecord(row);
       return Object.freeze({
-        service_code: requireString(r.service_code, "service_code"),
-        category_code: requireString(r.category_code, "category_code"),
+        service_code: requireString(r.service_code),
+        category_code: requireString(r.category_code),
         unit_price_cents: requireNumber(r.unit_price_cents),
         qty: requireNumber(r.qty),
         ...(typeof r.color === "string" ? { color: r.color } : {}),
@@ -175,13 +175,13 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
 function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
-    const orderId = requireString(input.order_id, "order_id");
+    const orderId = requireString(input.order_id);
     const collectCents = requireNumber(input.collect_cents);
     const garmentIdsRaw = input.garment_ids;
     if (!Array.isArray(garmentIdsRaw)) {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
-    const selectedIds = garmentIdsRaw.map((id) => requireString(id, "garment_id"));
+    const selectedIds = garmentIdsRaw.map((id) => requireString(id));
 
     const order = deps.store.getOrder(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
     if (order === null) {
