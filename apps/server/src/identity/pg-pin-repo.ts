@@ -2,9 +2,17 @@
  * PIN challenge / lockout repos for PG identity (GUC writes + definer reads).
  */
 
+import { randomUUID } from "node:crypto";
+
 import type { PgPool } from "../db/pg-pool.js";
 import { withStoreGuc } from "../db/tenant-guc-client.js";
-import { epochToDate, mapPin, pinStatusToSql, type PinRow } from "./pg-store-mappers.js";
+import {
+  dateToEpoch,
+  epochToDate,
+  mapPin,
+  pinStatusToSql,
+  type PinRow,
+} from "./pg-store-mappers.js";
 import type {
   PinChallengeRepository,
   PinLockoutRecord,
@@ -12,8 +20,24 @@ import type {
   Uuid,
 } from "./types.js";
 
-const lockoutKey = (orgId: Uuid, storeId: Uuid, staffId: Uuid, deviceId: Uuid): string =>
-  `${orgId}|${storeId}|${staffId}|${deviceId}`;
+type LockoutRow = {
+  org_id: string;
+  store_id: string;
+  staff_id: string;
+  device_id: string;
+  locked_until: Date | string;
+  failed_attempts: number;
+};
+
+const mapLockout = (row: LockoutRow): PinLockoutRecord =>
+  Object.freeze({
+    org_id: row.org_id,
+    store_id: row.store_id,
+    staff_id: row.staff_id,
+    device_id: row.device_id,
+    locked_until: dateToEpoch(row.locked_until),
+    failed_attempts: row.failed_attempts,
+  });
 
 export function createPinChallengeRepo(pool: PgPool): PinChallengeRepository {
   return Object.freeze({
@@ -97,19 +121,83 @@ export function createPinChallengeRepo(pool: PgPool): PinChallengeRepository {
   });
 }
 
-export function createPinLockoutRepo(): PinLockoutRepository {
-  const lockouts = new Map<string, PinLockoutRecord>();
+/**
+ * Durable pin_lockouts under laundry_app + store GUC.
+ * Natural key: (org_id, store_id, staff_id, device_id).
+ */
+export function createPinLockoutRepo(pool: PgPool): PinLockoutRepository {
   return Object.freeze({
     get: async (orgId, storeId, staffId, deviceId) =>
-      lockouts.get(lockoutKey(orgId, storeId, staffId, deviceId)) ?? null,
+      withStoreGuc(pool, { orgId, storeId, staffId }, async (client) => {
+        const result = await client.query<LockoutRow>(
+          `SELECT org_id::text, store_id::text, staff_id::text, device_id::text,
+                    locked_until, failed_attempts
+             FROM pin_lockouts
+             WHERE org_id = $1::uuid AND store_id = $2::uuid
+               AND staff_id = $3::uuid AND device_id = $4::uuid
+             LIMIT 1`,
+          [orgId, storeId, staffId, deviceId],
+        );
+        const row = result.rows[0];
+        return row === undefined ? null : mapLockout(row);
+      }),
     upsert: async (record) => {
-      lockouts.set(
-        lockoutKey(record.org_id, record.store_id, record.staff_id, record.device_id),
-        record,
+      await withStoreGuc(
+        pool,
+        {
+          orgId: record.org_id,
+          storeId: record.store_id,
+          staffId: record.staff_id,
+        },
+        async (client) => {
+          await client.query(
+            `INSERT INTO pin_lockouts (
+               id, org_id, store_id, staff_id, device_id,
+               locked_until, failed_attempts, updated_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+             ON CONFLICT (org_id, store_id, staff_id, device_id) DO UPDATE
+             SET locked_until = EXCLUDED.locked_until,
+                 failed_attempts = EXCLUDED.failed_attempts,
+                 updated_at = NOW()`,
+            [
+              randomUUID(),
+              record.org_id,
+              record.store_id,
+              record.staff_id,
+              record.device_id,
+              epochToDate(record.locked_until),
+              record.failed_attempts,
+            ],
+          );
+        },
       );
     },
     clear: async (orgId, storeId, staffId, deviceId) => {
-      lockouts.delete(lockoutKey(orgId, storeId, staffId, deviceId));
+      await withStoreGuc(pool, { orgId, storeId, staffId }, async (client) => {
+        await client.query(
+          `DELETE FROM pin_lockouts
+             WHERE org_id = $1::uuid AND store_id = $2::uuid
+               AND staff_id = $3::uuid AND device_id = $4::uuid`,
+          [orgId, storeId, staffId, deviceId],
+        );
+      });
+    },
+  });
+}
+
+/** Process-local lockouts for unit tests that do not open a pool. */
+export function createMemoryPinLockoutRepo(): PinLockoutRepository {
+  const lockouts = new Map<string, PinLockoutRecord>();
+  const key = (orgId: Uuid, storeId: Uuid, staffId: Uuid, deviceId: Uuid): string =>
+    `${orgId}|${storeId}|${staffId}|${deviceId}`;
+  return Object.freeze({
+    get: async (orgId, storeId, staffId, deviceId) =>
+      lockouts.get(key(orgId, storeId, staffId, deviceId)) ?? null,
+    upsert: async (record) => {
+      lockouts.set(key(record.org_id, record.store_id, record.staff_id, record.device_id), record);
+    },
+    clear: async (orgId, storeId, staffId, deviceId) => {
+      lockouts.delete(key(orgId, storeId, staffId, deviceId));
     },
   });
 }

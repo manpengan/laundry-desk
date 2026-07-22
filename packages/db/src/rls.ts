@@ -32,6 +32,7 @@ export const M1_SESSION_RLS_TABLES = Object.freeze([
   "refresh_families",
   "refresh_tokens",
   "pin_challenges",
+  "pin_lockouts",
 ] as const);
 
 const STORE_PREDICATE = `org_id = NULLIF(current_setting('app.org_id', true), '')::uuid

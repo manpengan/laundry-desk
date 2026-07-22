@@ -9,6 +9,7 @@ export { sessions } from "./sessions.js";
 export { refreshFamilies } from "./refresh-families.js";
 export { refreshTokens } from "./refresh-tokens.js";
 export { pinChallenges } from "./pin-challenges.js";
+export { pinLockouts } from "./pin-lockouts.js";
 
 import { orgs } from "./orgs.js";
 import { stores } from "./stores.js";
@@ -21,6 +22,7 @@ import { sessions } from "./sessions.js";
 import { refreshFamilies } from "./refresh-families.js";
 import { refreshTokens } from "./refresh-tokens.js";
 import { pinChallenges } from "./pin-challenges.js";
+import { pinLockouts } from "./pin-lockouts.js";
 
 /** M1 tables present in the A3 tenant matrix. */
 export const M1_MATRIX_TABLES = Object.freeze({
@@ -39,6 +41,7 @@ export const M1_SESSION_TABLES = Object.freeze({
   refresh_families: refreshFamilies,
   refresh_tokens: refreshTokens,
   pin_challenges: pinChallenges,
+  pin_lockouts: pinLockouts,
 } as const);
 
 /** Full M1 identity/platform schema surface for drizzle-kit and public API. */

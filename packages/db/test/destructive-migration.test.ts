@@ -43,6 +43,7 @@ describe("destructive migration static reject", () => {
       "0002_m1_identity_platform.sql",
       "0003_rls_and_grants.sql",
       "0004_auth_lookup_functions.sql",
+      "0005_pin_lockouts.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
@@ -58,8 +59,12 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS audit_log/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS sessions/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS refresh_tokens/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS pin_lockouts/iu);
     expect(combined).toMatch(/FORCE ROW LEVEL SECURITY/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE audit_log TO laundry_app/iu);
+    expect(combined).toMatch(
+      /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE pin_lockouts TO laundry_app/iu,
+    );
     expect(combined).not.toMatch(/GRANT[^;]*UPDATE[^;]*audit_log/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*audit_log/iu);
     expect(combined).not.toMatch(/dialect\s*[:=]\s*['"]sqlite['"]/iu);
