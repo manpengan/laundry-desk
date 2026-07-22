@@ -181,14 +181,19 @@ export type {
 } from "./tools/index.js";
 
 /**
- * M2 catalog memory price list (no PG tables yet).
+ * M2 catalog price list (memory seed or PG catalog_items).
  */
 export {
   createMemoryCatalogStore,
+  createPgCatalogStore,
   DEMO_CATALOG_ITEMS,
   registerCatalogQueryHandlers,
 } from "./catalog/index.js";
-export type { CatalogHandlerDeps, CatalogStore } from "./catalog/index.js";
+export type {
+  CatalogHandlerDeps,
+  CatalogStore,
+  CreatePgCatalogStoreOptions,
+} from "./catalog/index.js";
 
 /**
  * C7 — platform bus handlers only on the public write surface.

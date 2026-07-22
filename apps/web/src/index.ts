@@ -45,7 +45,15 @@ export {
   isStepUpRequired,
   type HttpCommandClientOptions,
 } from "./commands/command-client.js";
-export type { CommandFailure, CommandPort, CommandResult } from "./commands/types.js";
+export {
+  createHttpQueryClient,
+  createMockQueryClient,
+  DEMO_CATALOG_ITEMS,
+  type CatalogListItem,
+  type CatalogListResult,
+  type HttpQueryClientOptions,
+} from "./commands/query-client.js";
+export type { CommandFailure, CommandPort, CommandResult, QueryPort } from "./commands/types.js";
 export type {
   AccessSession,
   AuthError,

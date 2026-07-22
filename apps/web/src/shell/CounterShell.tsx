@@ -4,7 +4,8 @@ import type { AuthClient } from "../auth/AuthClient.js";
 import { filterNavItems, permissionContextFrom } from "../auth/permissions.js";
 import type { AccessSession } from "../auth/types.js";
 import { createHttpCommandClient, createMockCommandClient } from "../commands/command-client.js";
-import type { CommandPort } from "../commands/types.js";
+import { createHttpQueryClient, createMockQueryClient } from "../commands/query-client.js";
+import type { CommandPort, QueryPort } from "../commands/types.js";
 import { createMockConnection, type ConnectionStatus } from "../connection.js";
 import type { NavItemId } from "../nav.js";
 import { PageHost } from "../pages/PageHost.js";
@@ -35,6 +36,8 @@ export type CounterShellProps = {
   apiBaseUrl?: string;
   /** Inject command port (tests / mock). */
   commandClient?: CommandPort;
+  /** Inject query port (tests / mock). */
+  queryClient?: QueryPort;
 };
 
 function readSystemDark(): boolean {
@@ -67,6 +70,7 @@ export function CounterShell({
   initialLoadingMs = 0,
   apiBaseUrl = "",
   commandClient: commandClientProp,
+  queryClient: queryClientProp,
 }: CounterShellProps) {
   const [expanded, setExpanded] = useState(false);
   const [activeId, setActiveId] = useState<NavItemId>(initialNav);
@@ -89,6 +93,17 @@ export function CounterShell({
     }
     return createMockCommandClient();
   }, [apiBaseUrl, commandClientProp, session.access_token]);
+
+  const queryClient = useMemo(() => {
+    if (queryClientProp !== undefined) return queryClientProp;
+    if (apiBaseUrl.length > 0) {
+      return createHttpQueryClient({
+        apiBaseUrl,
+        getAccessToken: () => session.access_token,
+      });
+    }
+    return createMockQueryClient();
+  }, [apiBaseUrl, queryClientProp, session.access_token]);
 
   // UI gate only; C8 enforces.
   const permission = useMemo(
@@ -137,6 +152,7 @@ export function CounterShell({
             session={session}
             authClient={authClient}
             commandClient={commandClient}
+            queryClient={queryClient}
           />
         </RouteGate>
       </div>
