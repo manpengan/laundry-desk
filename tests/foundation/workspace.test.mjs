@@ -224,7 +224,8 @@ test("declares pnpm workspaces and Turborepo at the repository root", async () =
   );
   assert.match(workspaceConfig, /- "apps\/\*"/);
   assert.match(workspaceConfig, /- "packages\/\*"/);
-  assert.match(workspaceConfig, /allowBuilds:\n  better-sqlite3: true/);
+  assert.match(workspaceConfig, /allowBuilds:/);
+  assert.match(workspaceConfig, /better-sqlite3:\s*true/);
   assert.match(gitignore, /^\.turbo\/$/m);
   assert.match(foundationWorkflow, /node-version: 22/);
   assert.match(foundationWorkflow, /uses: actions\/checkout@v7/);

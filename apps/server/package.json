@@ -22,9 +22,11 @@
     "@laundry/contracts": "file:../../packages/contracts",
     "@laundry/domain": "file:../../packages/domain",
     "fastify": "^5.10.0",
+    "pg": "^8.22.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^22.20.1"
+    "@types/node": "^22.20.1",
+    "@types/pg": "^8.20.0"
   }
 }

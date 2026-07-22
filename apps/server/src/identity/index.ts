@@ -39,6 +39,9 @@ export type { LoginResult, LoginServiceDeps } from "./login.js";
 export { createMemoryIdentityStore } from "./memory-store.js";
 export type { MemoryIdentityStore } from "./memory-store.js";
 
+export { createPgIdentityStore } from "./pg-store.js";
+export type { PgIdentityStore } from "./pg-store.js";
+
 export {
   buildAccessClaims,
   constantTimeEqual,

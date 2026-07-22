@@ -8,13 +8,14 @@ import test from "node:test";
 import { CSRF_HEADER_NAME } from "@laundry/contracts";
 
 import { createLocalApp } from "./create-app.js";
-import { createLocalRuntime, DEMO_PASSWORD, DEMO_PIN } from "../local/demo-seed.js";
+import { createMemoryLocalRuntime, DEMO_PASSWORD, DEMO_PIN } from "../local/demo-seed.js";
 import { LOCAL_COOKIE_NAMES } from "./types.js";
 
 const DEVICE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 async function buildApp() {
-  const runtime = await createLocalRuntime();
+  // Inject tests must stay offline — force memory even if DATABASE_URL is set.
+  const runtime = await createMemoryLocalRuntime();
   const app = await createLocalApp({ runtime });
   return { app, runtime };
 }

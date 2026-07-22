@@ -41,6 +41,7 @@
     "workspace:typecheck": "turbo run typecheck",
     "workspace:check": "pnpm run workspace:format:check && pnpm run workspace:lint && pnpm run workspace:typecheck && pnpm run workspace:test && pnpm run workspace:build",
     "local:server": "pnpm --filter @laundry/contracts build && pnpm --filter @laundry/domain build && pnpm --filter @laundry/server build && node apps/server/dist/http/main.js",
+    "local:server:pg": "pnpm --filter @laundry/contracts build && pnpm --filter @laundry/domain build && pnpm --filter @laundry/server build && LAUNDRY_USE_LOCAL_PG=1 node apps/server/dist/http/main.js",
     "local:web": "pnpm --filter @laundry/ui build && pnpm --filter @laundry/web exec vite --config vite.config.ts"
   },
   "build": {
