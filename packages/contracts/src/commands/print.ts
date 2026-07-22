@@ -1,7 +1,8 @@
 /**
- * M2 skeleton print ticket job queue (enqueue + status list).
- * Memory-first; not in OpenAPI freeze snapshot.
- * Status flow mirrors edge-agent: queued → printing → done | failed.
+ * M2 print ticket job queue (enqueue + process + status list).
+ * Memory default; PG print_jobs when runtime is pg. Not in OpenAPI freeze snapshot.
+ * Status flow: queued → printing → done | failed.
+ * process builds XP-58 ESC/POS bytes in-process (no USB / device I/O).
  */
 
 import { z } from "zod";
@@ -23,12 +24,17 @@ export const PrintTicketEnqueueInputSchema = z.strictObject({
   kind: PrintJobKindSchema.optional(),
 });
 
+export const PrintTicketProcessInputSchema = z.strictObject({
+  job_id: z.uuid(),
+});
+
 export const PrintJobsListInputSchema = z.strictObject({
   /** Newest-first row cap (max 50). Omit for handler default 20. */
   limit: z.number().int().positive().max(50).optional(),
 });
 
 type EnqueueInput = typeof PrintTicketEnqueueInputSchema;
+type ProcessInput = typeof PrintTicketProcessInputSchema;
 type ListInput = typeof PrintJobsListInputSchema;
 
 /** 排队打印小票：绑定 order_id / ticket_no，返回 job_id（status=queued）。 */
@@ -37,7 +43,7 @@ export const printTicketEnqueueCommand: CommandDefinition<EnqueueInput> = define
   version: "0.1.0",
   description: "Enqueue a ticket print job bound to an order and ticket number.",
   description_llm:
-    "Queue a counter ticket print job (kind xp58|dl206|gp3120). Returns job_id with status queued. No device I/O in this skeleton.",
+    "Queue a counter ticket print job (kind xp58|dl206|gp3120). Returns job_id with status queued. No device I/O.",
   input: PrintTicketEnqueueInputSchema,
   risk: "R1",
   invariants: ["rbac.order_write"],
@@ -49,13 +55,35 @@ export const printTicketEnqueueCommand: CommandDefinition<EnqueueInput> = define
   result_redaction: [],
 });
 
-/** 打印任务状态列表：最近 N 条（无设备路径 / 无 payload bytes）。 */
+/**
+ * 处理排队中的 XP-58 打印任务：queued → printing → done|failed。
+ * Builds ESC/POS bytes in-process (mock device success); no USB.
+ */
+export const printTicketProcessCommand: CommandDefinition<ProcessInput> = defineCommand({
+  name: "print.ticket.process",
+  version: "0.1.0",
+  description: "Process a queued XP-58 print job: build ESC/POS bytes and mark done or failed.",
+  description_llm:
+    "Load print job by job_id. kind must be xp58. Transition queued→printing, build ESC/POS payload, set payload_bytes and status done. On error mark failed with error text. No USB/device I/O.",
+  input: PrintTicketProcessInputSchema,
+  risk: "R1",
+  invariants: ["rbac.order_write"],
+  idempotent: false,
+  sideEffects: ["print.job_processed", "audit.print_job"],
+  // Process is a server-side state machine step; not offline-granted (must be idempotent if grant).
+  offline_mode: "denied",
+  data_classification: "internal",
+  input_redaction: [],
+  result_redaction: [],
+});
+
+/** 打印任务状态列表：最近 N 条（可含 payload_bytes，无设备路径）。 */
 export const printJobsListQuery: QueryDefinition<ListInput> = defineQuery({
   name: "print.jobs.list",
   version: "0.1.0",
-  description: "List recent print job status views (no device paths or payload bytes).",
+  description: "List recent print job status views (no device paths).",
   description_llm:
-    "Return newest-first print job status rows (job_id, kind, status, order_id, ticket_no, timestamps, optional error).",
+    "Return newest-first print job status rows (job_id, kind, status, order_id, ticket_no, timestamps, optional error/payload_bytes).",
   input: PrintJobsListInputSchema,
   risk: "R1",
   invariants: [],
@@ -68,11 +96,14 @@ export const printJobsListQuery: QueryDefinition<ListInput> = defineQuery({
   max_result_rows: 50,
 });
 
-export const PRINT_COMMANDS = Object.freeze([printTicketEnqueueCommand] as const);
+export const PRINT_COMMANDS = Object.freeze([
+  printTicketEnqueueCommand,
+  printTicketProcessCommand,
+] as const);
 
 export const PRINT_COMMAND_NAMES = Object.freeze(
   PRINT_COMMANDS.map((command) => command.name),
-) as readonly ["print.ticket.enqueue"];
+) as readonly ["print.ticket.enqueue", "print.ticket.process"];
 
 export const PRINT_QUERIES = Object.freeze([printJobsListQuery] as const);
 

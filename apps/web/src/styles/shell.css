@@ -323,3 +323,131 @@
   color: var(--lg-ink3);
   margin-bottom: 6px;
 }
+
+/* —— Print queue panel (M2 TopBar) —— */
+
+.ld-print-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(360px, 100%);
+  max-height: 360px;
+}
+
+.ld-print-queue__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--lg-ink2);
+}
+
+.ld-print-queue__error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-late-bg);
+  color: var(--lg-late-ink);
+  font-size: 13px;
+}
+
+.ld-print-queue__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 280px;
+}
+
+.ld-print-queue__row {
+  padding: 10px 12px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-leaf);
+  border: 1px solid var(--lg-hair);
+}
+
+.ld-print-queue__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ld-print-queue__ticket {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--lg-ink);
+  font-family: ui-monospace, monospace;
+}
+
+.ld-print-queue__status {
+  font-size: 12px;
+  color: var(--lg-ink2);
+  flex-shrink: 0;
+}
+
+.ld-print-queue__row[data-status="failed"] .ld-print-queue__status {
+  color: var(--lg-late-ink);
+}
+
+.ld-print-queue__row[data-status="queued"] .ld-print-queue__status,
+.ld-print-queue__row[data-status="printing"] .ld-print-queue__status {
+  color: var(--lg-accent);
+}
+
+.ld-print-queue__job-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--lg-late-ink);
+}
+
+/* Day stats (M2 stats.day.summary) — --lg-* tokens only */
+.ld-stats-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.ld-stats-form__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ld-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.ld-stats-card {
+  padding: 14px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-leaf);
+}
+
+.ld-stats-card__label {
+  font-size: 12px;
+  color: var(--lg-ink3);
+  margin-bottom: 8px;
+}
+
+.ld-stats-card__value {
+  color: var(--lg-ink);
+  margin-bottom: 6px;
+}
+
+.ld-stats-metric__num {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--lg-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.ld-stats-card__foot {
+  font-size: 12px;
+  color: var(--lg-ink2);
+}

@@ -1,5 +1,5 @@
 /**
- * M2 print handlers: print.ticket.enqueue + print.jobs.list (memory PrintJobStore).
+ * M2 print handlers: print.ticket.enqueue | print.ticket.process + print.jobs.list.
  */
 
 import { createCommandError } from "@laundry/contracts";
@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
+import { processXp58PrintJob, type ProcessXp58Result } from "./process-xp58.js";
 import type { PrintJobKind, PrintJobStore } from "./types.js";
 
 export type PrintHandlerDeps = Readonly<{
@@ -44,6 +45,20 @@ function parseKind(value: unknown): PrintJobKind {
     throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
   }
   return value as PrintJobKind;
+}
+
+function mapProcessError(err: unknown): never {
+  const message = err instanceof Error ? err.message : String(err);
+  if (message.includes("not found")) {
+    throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+  }
+  if (message.includes("is not xp58") || message.includes("is not queued")) {
+    throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+  }
+  if (message.includes("terminal") || message.includes("cannot move")) {
+    throw new HandlerCommandError(createCommandError("INVARIANT_FAILED"));
+  }
+  throw new HandlerCommandError(createCommandError("TRANSACTION_FAILED"));
 }
 
 function enqueueHandler(deps: PrintHandlerDeps): CommandHandler {
@@ -96,6 +111,52 @@ function enqueueHandler(deps: PrintHandlerDeps): CommandHandler {
   };
 }
 
+function processHandler(deps: PrintHandlerDeps): CommandHandler {
+  return async (ctx): Promise<HandlerOutcome> => {
+    const input = asRecord(ctx.parsed);
+    const jobId = requireString(input.job_id);
+    const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
+
+    let result: ProcessXp58Result;
+    try {
+      result = await processXp58PrintJob(deps.store, jobId, { now });
+    } catch (err) {
+      mapProcessError(err);
+    }
+
+    const job = result.job;
+    return Object.freeze({
+      result: Object.freeze({
+        job_id: job.job_id,
+        status: job.status,
+        kind: job.kind,
+        order_id: job.order_id,
+        ticket_no: job.ticket_no,
+        payload_bytes: result.payload_bytes,
+      }),
+      audit: Object.freeze({
+        entity: "print_job",
+        entityId: job.job_id,
+        afterJson: JSON.stringify({
+          kind: job.kind,
+          status: job.status,
+          payload_bytes: result.payload_bytes,
+        }),
+      }),
+      events: Object.freeze([
+        Object.freeze({
+          type: "print.job_processed",
+          payload: Object.freeze({
+            job_id: job.job_id,
+            status: job.status,
+            payload_bytes: result.payload_bytes,
+          }),
+        }),
+      ]),
+    });
+  };
+}
+
 function listHandler(deps: PrintHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
@@ -114,6 +175,7 @@ export function createPrintCommandHandlers(
 ): Readonly<Record<string, CommandHandler>> {
   return Object.freeze({
     "print.ticket.enqueue": enqueueHandler(deps),
+    "print.ticket.process": processHandler(deps),
   });
 }
 
@@ -131,6 +193,7 @@ export function registerPrintCommandHandlers(
 ): void {
   const handlers = createPrintCommandHandlers(deps);
   registry.registerHandler("print.ticket.enqueue", handlers["print.ticket.enqueue"]!);
+  registry.registerHandler("print.ticket.process", handlers["print.ticket.process"]!);
 }
 
 export function registerPrintQueryHandlers(

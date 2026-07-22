@@ -7,6 +7,7 @@ import { pageCopy } from "./page-copy.js";
 import { PickupPage } from "./PickupPage.js";
 import { ReceivePage } from "./ReceivePage.js";
 import { SettingsPage } from "./SettingsPage.js";
+import { StatsPage } from "./StatsPage.js";
 
 export type PageHostProps = {
   activeId: NavItemId;
@@ -66,6 +67,10 @@ export function PageHost({
         {...(queryClient !== undefined ? { queryClient } : {})}
       />
     );
+  }
+
+  if (activeId === "stats" && session !== undefined && queryClient !== undefined) {
+    return <StatsPage queryClient={queryClient} />;
   }
 
   if (

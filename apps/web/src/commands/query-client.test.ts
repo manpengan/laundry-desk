@@ -108,3 +108,14 @@ test("mock query client filters by query and respects limit", async () => {
   assert.ok(payload.items.length <= 2);
   assert.ok(payload.items.every((i) => i.name.includes("干洗") || i.code.startsWith("dry")));
 });
+
+test("mock query client returns empty print.jobs.list", async () => {
+  const client = createMockQueryClient();
+  const result = await client.execute("print.jobs.list", { limit: 20 });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const payload = unwrapCommandResult<{ jobs: readonly unknown[] }>(result.data);
+  assert.ok(payload !== null);
+  assert.ok(Array.isArray(payload.jobs));
+  assert.equal(payload.jobs.length, 0);
+});

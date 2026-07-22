@@ -1,5 +1,5 @@
 /**
- * Process-local print job store (M2 skeleton).
+ * Process-local print job store (M2).
  * Append-only list + legal status transitions (queued → printing → done|failed).
  */
 
@@ -11,23 +11,12 @@ import type {
   PrintJobStatus,
   PrintJobStatusView,
   PrintJobStore,
+  TransitionPrintJobOptions,
 } from "./types.js";
 
 const TERMINAL: ReadonlySet<PrintJobStatus> = new Set(["done", "failed"]);
 
 function toStatusView(job: PrintJobRecord): PrintJobStatusView {
-  if (job.error !== undefined) {
-    return Object.freeze({
-      job_id: job.job_id,
-      kind: job.kind,
-      status: job.status,
-      order_id: job.order_id,
-      ticket_no: job.ticket_no,
-      created_at: job.created_at,
-      updated_at: job.updated_at,
-      error: job.error,
-    });
-  }
   return Object.freeze({
     job_id: job.job_id,
     kind: job.kind,
@@ -36,7 +25,24 @@ function toStatusView(job: PrintJobRecord): PrintJobStatusView {
     ticket_no: job.ticket_no,
     created_at: job.created_at,
     updated_at: job.updated_at,
+    ...(job.error !== undefined ? { error: job.error } : {}),
+    ...(job.payload_bytes !== undefined ? { payload_bytes: job.payload_bytes } : {}),
   });
+}
+
+function assertLegalTransition(current: PrintJobStatus, next: PrintJobStatus, jobId: string): void {
+  if (TERMINAL.has(current)) {
+    throw new Error(`print job ${jobId} is already terminal (${current})`);
+  }
+  if (next === "printing" && current !== "queued") {
+    throw new Error(`cannot move ${current} → printing`);
+  }
+  if ((next === "done" || next === "failed") && current !== "printing") {
+    throw new Error(`cannot move ${current} → ${next}`);
+  }
+  if (next === "queued") {
+    throw new Error("cannot transition back to queued");
+  }
 }
 
 export class MemoryPrintJobStore implements PrintJobStore {
@@ -70,25 +76,14 @@ export class MemoryPrintJobStore implements PrintJobStore {
   async transition(
     jobId: string,
     status: PrintJobStatus,
-    options: Readonly<{ error?: string; now?: number }> = {},
+    options: TransitionPrintJobOptions = {},
   ): Promise<PrintJobRecord> {
     const index = this.jobs.findIndex((j) => j.job_id === jobId);
     if (index < 0) {
       throw new Error(`print job not found: ${jobId}`);
     }
     const current = this.jobs[index]!;
-    if (TERMINAL.has(current.status)) {
-      throw new Error(`print job ${jobId} is already terminal (${current.status})`);
-    }
-    if (status === "printing" && current.status !== "queued") {
-      throw new Error(`cannot move ${current.status} → printing`);
-    }
-    if ((status === "done" || status === "failed") && current.status !== "printing") {
-      throw new Error(`cannot move ${current.status} → ${status}`);
-    }
-    if (status === "queued") {
-      throw new Error("cannot transition back to queued");
-    }
+    assertLegalTransition(current.status, status, jobId);
     if (status === "failed" && (options.error === undefined || options.error.length === 0)) {
       throw new Error("failed jobs require non-empty error text");
     }
@@ -105,6 +100,9 @@ export class MemoryPrintJobStore implements PrintJobStore {
             created_at: current.created_at,
             updated_at: now,
             error: options.error as string,
+            ...(current.payload_bytes !== undefined
+              ? { payload_bytes: current.payload_bytes }
+              : {}),
           })
         : Object.freeze({
             job_id: current.job_id,
@@ -114,6 +112,11 @@ export class MemoryPrintJobStore implements PrintJobStore {
             ticket_no: current.ticket_no,
             created_at: current.created_at,
             updated_at: now,
+            ...(options.payload_bytes !== undefined
+              ? { payload_bytes: options.payload_bytes }
+              : current.payload_bytes !== undefined
+                ? { payload_bytes: current.payload_bytes }
+                : {}),
           });
 
     this.jobs[index] = next;

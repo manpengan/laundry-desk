@@ -87,7 +87,12 @@ export type OrderStore = Readonly<{
     options?: PickupApplyOptions,
   ) => Promise<PickupApplyResult | null>;
   nextTicketSeq: (orgId: string, storeId: string, dayKey: string) => Promise<number>;
-  /** Optional ledger read for tests / future queries. */
+  /**
+   * List all orders for an org/store (day stats / reports).
+   * Optional so older test doubles stay valid; memory + PG implement it.
+   */
+  listOrders?: (orgId: string, storeId: string) => Promise<readonly OrderRecord[]>;
+  /** Optional ledger read for tests / stats / future queries. */
   listPayments?: (
     orgId: string,
     storeId: string,

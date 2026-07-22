@@ -17,8 +17,10 @@ import {
   type ThemePreference,
 } from "../theme.js";
 import { PinSwitchDialog } from "./PinSwitchDialog.js";
+import { PrintQueuePanel } from "./PrintQueuePanel.js";
 import { Sidebar } from "./Sidebar.js";
 import { TopBar } from "./TopBar.js";
+import { usePrintJobSummary } from "./use-print-job-summary.js";
 
 export type CounterShellProps = {
   session: AccessSession;
@@ -29,6 +31,10 @@ export type CounterShellProps = {
   initialNav?: NavItemId;
   systemDark?: boolean;
   documentRef?: Pick<Document, "documentElement"> | null;
+  /**
+   * When set, indicator uses this fixed summary (tests).
+   * When omitted, shell polls print.jobs.list via queryClient.
+   */
   printSummary?: PrintJobSummary;
   /** Simulate first-paint skeleton once (ms). 0 = off. */
   initialLoadingMs?: number;
@@ -66,7 +72,7 @@ export function CounterShell({
   initialNav = "workbench",
   systemDark,
   documentRef = null,
-  printSummary = { queued: 0, failed: 0 },
+  printSummary: printSummaryProp,
   initialLoadingMs = 0,
   apiBaseUrl = "",
   commandClient: commandClientProp,
@@ -77,6 +83,8 @@ export function CounterShell({
   const [themePref, setThemePref] = useState<ThemePreference>(initialTheme);
   const [loading, setLoading] = useState(initialLoadingMs > 0);
   const [pinOpen, setPinOpen] = useState(false);
+  const [printQueueOpen, setPrintQueueOpen] = useState(false);
+
   const connection = useMemo(
     () => connectionFromSession(session, initialConnection),
     [session, initialConnection],
@@ -104,6 +112,8 @@ export function CounterShell({
     }
     return createMockQueryClient();
   }, [apiBaseUrl, queryClientProp, session.access_token]);
+
+  const printSummary = usePrintJobSummary(queryClient, printSummaryProp);
 
   // UI gate only; C8 enforces.
   const permission = useMemo(
@@ -142,6 +152,7 @@ export function CounterShell({
           themePreference={themePref}
           onCycleTheme={() => setThemePref((p) => cycleThemePreference(p))}
           printSummary={printSummary}
+          onOpenPrintQueue={() => setPrintQueueOpen(true)}
           onSwitchStaff={() => setPinOpen(true)}
         />
         <RouteGate permission={permission} activeId={activeId} onNavigate={setActiveId}>
@@ -165,6 +176,11 @@ export function CounterShell({
           onSessionChange(next);
           setPinOpen(false);
         }}
+      />
+      <PrintQueuePanel
+        open={printQueueOpen}
+        onClose={() => setPrintQueueOpen(false)}
+        queryClient={queryClient}
       />
     </div>
   );

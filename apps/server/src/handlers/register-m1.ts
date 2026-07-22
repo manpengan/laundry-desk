@@ -1,6 +1,6 @@
 /**
  * M1 handler registration — loads A6 command/query definitions and attaches handlers.
- * Optional M2 order/catalog/print when deps provided.
+ * Optional M2 order/catalog/print/stats when deps provided.
  */
 
 import type { ChainPortHooks } from "../bus/chain-adapter.js";
@@ -12,6 +12,8 @@ import type { OrderHandlerDeps } from "../order/handlers.js";
 import { registerOrderCommandHandlers, registerOrderQueryHandlers } from "../order/handlers.js";
 import type { PrintHandlerDeps } from "../print/handlers.js";
 import { registerPrintCommandHandlers, registerPrintQueryHandlers } from "../print/handlers.js";
+import type { StatsHandlerDeps } from "../stats/handlers.js";
+import { registerStatsQueryHandlers } from "../stats/handlers.js";
 import type { IdentityHandlerDeps } from "./identity-handlers.js";
 import { registerIdentityCommandHandlers } from "./identity-handlers.js";
 import type { PlatformHandlerDeps } from "./platform-handlers.js";
@@ -25,8 +27,10 @@ export type RegisterM1Deps = Readonly<{
   order?: OrderHandlerDeps;
   /** M2 catalog price list (memory or PG). */
   catalog?: CatalogHandlerDeps;
-  /** M2 print ticket job queue (memory first). */
+  /** M2 print ticket job queue (memory or PG). */
   print?: PrintHandlerDeps;
+  /** M2 day stats (order-backed or seeded). */
+  stats?: StatsHandlerDeps;
 }>;
 
 export type RegisterM1Result = Readonly<{
@@ -70,7 +74,7 @@ export function registerM1Handlers(
 
   if (deps.print !== undefined) {
     registerPrintCommandHandlers(registry, deps.print);
-    registered.push("print.ticket.enqueue");
+    registered.push("print.ticket.enqueue", "print.ticket.process");
   }
 
   return Object.freeze(registered);
@@ -102,12 +106,18 @@ export function registerM1QueryHandlers(
     names.push("print.jobs.list");
   }
 
+  if (deps.stats !== undefined) {
+    registerStatsQueryHandlers(queryRegistry, deps.stats);
+    names.push("stats.day.summary");
+  }
+
   return Object.freeze(names);
 }
 
 /**
  * Convenience: fresh M1 command + query registries + handlers + default chain hooks.
- * Query registry includes M2 catalog + order.get + print.jobs.list; handlers attach when deps set.
+ * Query registry includes M2 catalog + order.get + print.jobs.list + stats.day.summary;
+ * handlers attach when deps set.
  */
 export function createRegisteredM1Bus(deps: RegisterM1Deps): RegisterM1Result {
   const registry = createM1CommandRegistry();

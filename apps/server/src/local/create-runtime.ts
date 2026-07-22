@@ -15,7 +15,10 @@ import type { OrderHandlerDeps } from "../order/handlers.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
 import { createMemoryPrintJobStore } from "../print/memory-store.js";
 import type { PrintHandlerDeps } from "../print/handlers.js";
+import { createPgPrintJobStore } from "../print/pg-print-store.js";
 import { createPgOrderStore } from "../order/pg-order-store.js";
+import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
+import type { StatsHandlerDeps } from "../stats/handlers.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import {
@@ -64,8 +67,10 @@ export type LocalRuntime = Readonly<{
   order: OrderHandlerDeps;
   /** M2 catalog price list (memory seed or PG catalog_items). */
   catalog: CatalogHandlerDeps;
-  /** M2 print job queue (memory-first; no PG print_jobs yet). */
+  /** M2 print job queue (memory or PG print_jobs). */
   print: PrintHandlerDeps;
+  /** M2 day stats (order-backed). */
+  stats: StatsHandlerDeps;
   accessTokenSecret: string;
   staffDirectory: readonly LocalStaffDirectoryEntry[];
   /** Shared with Command Bus for confirm_ref / step-up PIN. */
@@ -197,6 +202,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   seedStaff(DEMO_STAFF_A_ID, "staff", "店员甲");
   seedStaff(DEMO_STAFF_B_ID, "staffb", "店员乙");
 
+  const orderStore = createMemoryOrderStore();
   return Object.freeze({
     mode: "memory" as const,
     identity: buildIdentityDeps(
@@ -206,9 +212,10 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       processStepUpProofStore,
     ),
     platform: buildPlatform("memory"),
-    order: Object.freeze({ store: createMemoryOrderStore() }),
+    order: Object.freeze({ store: orderStore }),
     catalog: Object.freeze({ store: createMemoryCatalogStore() }),
     print: Object.freeze({ store: createMemoryPrintJobStore() }),
+    stats: Object.freeze({ source: createOrderBackedStatsQuery(orderStore) }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,
@@ -243,6 +250,7 @@ export async function createPgLocalRuntime(
 
   const store = createPgIdentityStore(appPool);
   const passwordPort = createPasswordPort();
+  const orderStore = createPgOrderStore(appPool);
 
   return Object.freeze({
     mode: "pg" as const,
@@ -253,15 +261,20 @@ export async function createPgLocalRuntime(
       processStepUpProofStore,
     ),
     platform: buildPlatform("sql"),
-    order: Object.freeze({ store: createPgOrderStore(appPool) }),
+    order: Object.freeze({ store: orderStore }),
     catalog: Object.freeze({
       store: createPgCatalogStore(appPool, {
         orgId: DEMO_ORG_ID,
         storeId: DEMO_STORE_ID,
       }),
     }),
-    // Print jobs stay memory until print_jobs migration.
-    print: Object.freeze({ store: createMemoryPrintJobStore() }),
+    print: Object.freeze({
+      store: createPgPrintJobStore(appPool, {
+        orgId: DEMO_ORG_ID,
+        storeId: DEMO_STORE_ID,
+      }),
+    }),
+    stats: Object.freeze({ source: createOrderBackedStatsQuery(orderStore) }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,

@@ -327,6 +327,34 @@ export function createPgOrderStore(
         loadOrder(client, orgId, storeId, orderId),
       ),
 
+    listOrders: async (orgId, storeId) =>
+      withStoreGuc(pool, { orgId, storeId }, async (client) => {
+        const orderResult = await client.query<OrderRow>(
+          `SELECT id::text, org_id::text, store_id::text, ticket_no, status,
+                  customer_phone, customer_name, note,
+                  subtotal_cents, payable_cents, paid_cents, balance_cents,
+                  created_at, updated_at, created_by_staff_id::text
+           FROM orders
+           WHERE org_id = $1::uuid AND store_id = $2::uuid
+           ORDER BY created_at ASC`,
+          [orgId, storeId],
+        );
+        const orders: OrderRecord[] = [];
+        for (const row of orderResult.rows) {
+          const linesResult = await client.query<OrderLineRow>(
+            `SELECT id::text, org_id::text, store_id::text, order_id::text, line_index,
+                    service_code, category_code, unit_price_cents, qty, line_total_cents,
+                    color, brand
+             FROM order_lines
+             WHERE org_id = $1::uuid AND store_id = $2::uuid AND order_id = $3::uuid
+             ORDER BY line_index ASC`,
+            [orgId, storeId, row.id],
+          );
+          orders.push(mapOrder(row, linesResult.rows.map(mapOrderLine)));
+        }
+        return Object.freeze(orders);
+      }),
+
     listGarments: async (orgId, storeId, orderId) =>
       withStoreGuc(pool, { orgId, storeId }, async (client) =>
         loadGarments(client, orgId, storeId, orderId),

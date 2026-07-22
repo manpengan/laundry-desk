@@ -1,7 +1,8 @@
 /**
  * M1 query registry — A6 query definitions from @laundry/contracts.
  * Handlers registered separately; definitions alone are not executable.
- * Default also loads M2 catalog + order.get + print.jobs.list (not in OpenAPI freeze).
+ * Default also loads M2 catalog + order.get + print.jobs.list + stats.day.summary
+ * (not in OpenAPI freeze).
  */
 
 import {
@@ -9,6 +10,7 @@ import {
   M2_CATALOG_DEFINITIONS,
   M2_ORDER_QUERY_DEFINITIONS,
   M2_PRINT_QUERY_DEFINITIONS,
+  M2_STATS_QUERY_DEFINITIONS,
 } from "@laundry/contracts";
 import type { QueryDefinition } from "@laundry/contracts";
 import type { z } from "zod";
@@ -36,17 +38,19 @@ type AnyDefinition = { kind: string; name: string };
 
 const isQueryDefinition = (def: AnyDefinition): def is BusQueryDefinition => def.kind === "query";
 
-/** M1 platform queries + M2 catalog + order.get + print.jobs.list. */
+/** M1 platform queries + M2 catalog + order.get + print.jobs.list + stats.day.summary. */
 export const DEFAULT_BUS_QUERY_DEFINITIONS: readonly AnyDefinition[] = Object.freeze([
   ...(M1_FIRST_WAVE_DEFINITIONS as readonly AnyDefinition[]),
   ...(M2_CATALOG_DEFINITIONS as readonly AnyDefinition[]),
   ...(M2_ORDER_QUERY_DEFINITIONS as readonly AnyDefinition[]),
   ...(M2_PRINT_QUERY_DEFINITIONS as readonly AnyDefinition[]),
+  ...(M2_STATS_QUERY_DEFINITIONS as readonly AnyDefinition[]),
 ]);
 
 /**
  * Load frozen query definitions into a mutable handler map.
- * Default: M1 first-wave queries + M2 catalog + order.get + print.jobs.list. Commands excluded.
+ * Default: M1 first-wave queries + M2 catalog + order.get + print.jobs.list + stats.
+ * Commands excluded.
  */
 export function createM1QueryRegistry(
   definitions: readonly AnyDefinition[] = DEFAULT_BUS_QUERY_DEFINITIONS,
