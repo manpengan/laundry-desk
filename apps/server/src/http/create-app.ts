@@ -277,6 +277,8 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       identity: runtime.identity,
       platform: runtime.platform,
       order: runtime.order,
+      catalog: runtime.catalog,
+      print: runtime.print,
     });
     const tenant = tenantFromSession(session);
     const actor = actorFromSession(session);
@@ -323,7 +325,9 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     const { queryRegistry } = createRegisteredM1Bus({
       identity: runtime.identity,
       platform: runtime.platform,
+      order: runtime.order,
       catalog: runtime.catalog,
+      print: runtime.print,
     });
     const tenant = tenantFromSession(session);
     const actor = actorFromSession(session);

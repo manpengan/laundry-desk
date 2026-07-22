@@ -345,6 +345,10 @@ export {
   M2_CATALOG_QUERY_NAMES,
   M2_ORDER_QUERY_DEFINITIONS,
   M2_ORDER_QUERY_NAMES,
+  M2_PRINT_COMMAND_DEFINITIONS,
+  M2_PRINT_COMMAND_NAMES,
+  M2_PRINT_QUERY_DEFINITIONS,
+  M2_PRINT_QUERY_NAMES,
   M2_SKELETON_COMMAND_NAMES,
   M2_SKELETON_DEFINITIONS,
 } from "./commands/catalog.js";
@@ -369,6 +373,18 @@ export {
   orderPickupCommand,
   orderReceiveCommand,
 } from "./commands/order.js";
+export {
+  PRINT_COMMAND_NAMES,
+  PRINT_COMMANDS,
+  PRINT_QUERY_NAMES,
+  PRINT_QUERIES,
+  PrintJobKindSchema,
+  PrintJobStatusSchema,
+  PrintJobsListInputSchema,
+  PrintTicketEnqueueInputSchema,
+  printJobsListQuery,
+  printTicketEnqueueCommand,
+} from "./commands/print.js";
 
 export {
   OPENAPI_INFO_VERSION,
