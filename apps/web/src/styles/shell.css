@@ -1,3 +1,5 @@
+@import "./order-form.css";
+
 /* Counter shell layout (UI spec §3). Uses --lg-* tokens from @laundry/ui. */
 
 .ld-skip-link {

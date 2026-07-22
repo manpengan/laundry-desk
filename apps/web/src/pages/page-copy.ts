@@ -16,15 +16,15 @@ const COPY: Record<NavItemId, PageCopy> = {
   },
   receive: {
     title: "开单",
-    emptyTitle: "还没有价目",
-    emptyDescription: "先在设置里维护品类与价格，再开始收衣。",
+    emptyTitle: "登录后开单",
+    emptyDescription: "会话就绪后可在此录入衣物明细与整数分收款。",
     actionLabel: "去设置",
   },
   pickup: {
     title: "取衣",
-    emptyTitle: "没有待取件",
-    emptyDescription: "扫码或输入取件码后，会在此载入件级清单。",
-    actionLabel: "输入取件码",
+    emptyTitle: "登录后取衣",
+    emptyDescription: "会话就绪后按订单 UUID 取件；件 ID 可留空取全部。",
+    actionLabel: "去开单",
   },
   customers: {
     title: "客户",

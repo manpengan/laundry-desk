@@ -6,6 +6,7 @@ import { ToastProvider } from "@laundry/ui";
 import { createMockAuthClient } from "../auth/AuthClient.js";
 import { FULL_STORE_FEATURES } from "../auth/permissions.js";
 import type { AccessSession } from "../auth/types.js";
+import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockConnection } from "../connection.js";
 import { App } from "../App.js";
 import { PageHost } from "../pages/PageHost.js";
@@ -35,7 +36,7 @@ const sampleSession: AccessSession = Object.freeze({
   }),
 });
 
-test("PageHost empty state for receive points to settings copy", () => {
+test("PageHost empty state for receive without session uses fallback copy", () => {
   const html = renderToStaticMarkup(
     createElement(PageHost, {
       activeId: "receive",
@@ -43,8 +44,45 @@ test("PageHost empty state for receive points to settings copy", () => {
     }),
   );
   assert.match(html, /开单/);
-  assert.match(html, /还没有价目/);
+  assert.match(html, /登录后开单/);
   assert.match(html, /role="status"/);
+});
+
+test("PageHost receive with session+commandClient mounts ReceivePage form", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(PageHost, {
+        activeId: "receive",
+        onNavigate: () => undefined,
+        session: sampleSession,
+        authClient: createMockAuthClient(),
+        commandClient: createMockCommandClient(),
+      }),
+    ),
+  );
+  assert.match(html, /确认开单/);
+  assert.match(html, /衣物明细/);
+  assert.doesNotMatch(html, /登录后开单/);
+});
+
+test("PageHost pickup with session+commandClient mounts PickupPage form", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(PageHost, {
+        activeId: "pickup",
+        onNavigate: () => undefined,
+        session: sampleSession,
+        authClient: createMockAuthClient(),
+        commandClient: createMockCommandClient(),
+      }),
+    ),
+  );
+  assert.match(html, /确认取衣/);
+  assert.match(html, /订单 ID/);
 });
 
 test("PageHost loading exposes aria-busy skeleton", () => {

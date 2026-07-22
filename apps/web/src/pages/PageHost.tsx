@@ -4,13 +4,15 @@ import type { AccessSession } from "../auth/types.js";
 import type { CommandPort } from "../commands/types.js";
 import type { NavItemId } from "../nav.js";
 import { pageCopy } from "./page-copy.js";
+import { PickupPage } from "./PickupPage.js";
+import { ReceivePage } from "./ReceivePage.js";
 import { SettingsPage } from "./SettingsPage.js";
 
 export type PageHostProps = {
   activeId: NavItemId;
   loading?: boolean;
   onNavigate: (id: NavItemId) => void;
-  /** Required for settings R5 step-up demo. */
+  /** Required for settings R5 step-up demo and M2 order forms. */
   session?: AccessSession;
   authClient?: AuthClient;
   commandClient?: CommandPort;
@@ -18,6 +20,7 @@ export type PageHostProps = {
 
 function actionTarget(from: NavItemId): NavItemId {
   if (from === "receive") return "settings";
+  if (from === "pickup") return "receive";
   if (from === "stats" || from === "settings") return "workbench";
   if (from === "workbench") return "receive";
   return from;
@@ -42,6 +45,14 @@ export function PageHost({
         </div>
       </main>
     );
+  }
+
+  if (activeId === "receive" && session !== undefined && commandClient !== undefined) {
+    return <ReceivePage commandClient={commandClient} />;
+  }
+
+  if (activeId === "pickup" && session !== undefined && commandClient !== undefined) {
+    return <PickupPage commandClient={commandClient} />;
   }
 
   if (

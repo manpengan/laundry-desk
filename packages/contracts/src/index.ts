@@ -341,9 +341,19 @@ export {
   M1_FIRST_WAVE_COMMAND_NAMES,
   M1_FIRST_WAVE_DEFINITIONS,
   M1_FIRST_WAVE_QUERY_NAMES,
+  M2_CATALOG_DEFINITIONS,
+  M2_CATALOG_QUERY_NAMES,
   M2_SKELETON_COMMAND_NAMES,
   M2_SKELETON_DEFINITIONS,
 } from "./commands/catalog.js";
+export {
+  CATALOG_SKELETON_DEFINITIONS,
+  CATALOG_SKELETON_QUERY_NAMES,
+  CatalogItemsGetInputSchema,
+  CatalogItemsListInputSchema,
+  catalogItemsGetQuery,
+  catalogItemsListQuery,
+} from "./commands/catalog-items.js";
 export {
   ORDER_COMMAND_NAMES,
   ORDER_COMMANDS,

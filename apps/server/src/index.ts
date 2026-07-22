@@ -181,6 +181,16 @@ export type {
 } from "./tools/index.js";
 
 /**
+ * M2 catalog memory price list (no PG tables yet).
+ */
+export {
+  createMemoryCatalogStore,
+  DEMO_CATALOG_ITEMS,
+  registerCatalogQueryHandlers,
+} from "./catalog/index.js";
+export type { CatalogHandlerDeps, CatalogStore } from "./catalog/index.js";
+
+/**
  * C7 — platform bus handlers only on the public write surface.
  * Memory/SQL store factories stay module-local (bootstrap injects them);
  * routes must not import platform/settings|features|audit-query directly.
