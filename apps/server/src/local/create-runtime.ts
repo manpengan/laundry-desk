@@ -8,6 +8,9 @@ import { createPgIdentityStore } from "../identity/pg-store.js";
 import { createPasswordPort } from "../identity/password.js";
 import type { StaffRecord, Uuid } from "../identity/types.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
+import type { OrderHandlerDeps } from "../order/handlers.js";
+import { createMemoryOrderStore } from "../order/memory-store.js";
+import { createPgOrderStore } from "../order/pg-order-store.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import {
@@ -52,6 +55,8 @@ export type LocalRuntime = Readonly<{
   mode: LocalRuntimeMode;
   identity: IdentityHandlerDeps;
   platform: PlatformHandlerDeps;
+  /** M2 order receive/pickup (memory or PG). */
+  order: OrderHandlerDeps;
   accessTokenSecret: string;
   staffDirectory: readonly LocalStaffDirectoryEntry[];
   /** Shared with Command Bus for confirm_ref / step-up PIN. */
@@ -192,6 +197,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       processStepUpProofStore,
     ),
     platform: buildPlatform("memory"),
+    order: Object.freeze({ store: createMemoryOrderStore() }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,
@@ -236,6 +242,7 @@ export async function createPgLocalRuntime(
       processStepUpProofStore,
     ),
     platform: buildPlatform("sql"),
+    order: Object.freeze({ store: createPgOrderStore(appPool) }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,

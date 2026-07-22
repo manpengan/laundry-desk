@@ -1,5 +1,6 @@
 /**
- * M2 skeleton in-memory order/garment records (runtime, not contracts).
+ * M2 skeleton order/garment records (runtime, not contracts).
+ * OrderStore is async so memory and Postgres backends share one interface.
  */
 
 import type { GarmentStatus } from "@laundry/domain";
@@ -23,6 +24,8 @@ export type GarmentRecord = Readonly<{
   org_id: string;
   store_id: string;
   line_index: number;
+  /** PG order_lines.id; optional for memory path until insert. */
+  order_line_id?: string;
   seq: number;
   barcode: string;
   service_code: string;
@@ -52,10 +55,19 @@ export type OrderRecord = Readonly<{
   created_by_staff_id: string;
 }>;
 
+export type PickupApplyResult = Readonly<{
+  order: OrderRecord;
+  garments: readonly GarmentRecord[];
+}>;
+
 export type OrderStore = Readonly<{
-  insertOrder: (order: OrderRecord, garments: readonly GarmentRecord[]) => void;
-  getOrder: (orgId: string, storeId: string, orderId: string) => OrderRecord | null;
-  listGarments: (orgId: string, storeId: string, orderId: string) => readonly GarmentRecord[];
+  insertOrder: (order: OrderRecord, garments: readonly GarmentRecord[]) => Promise<void>;
+  getOrder: (orgId: string, storeId: string, orderId: string) => Promise<OrderRecord | null>;
+  listGarments: (
+    orgId: string,
+    storeId: string,
+    orderId: string,
+  ) => Promise<readonly GarmentRecord[]>;
   applyPickup: (
     orgId: string,
     storeId: string,
@@ -63,6 +75,6 @@ export type OrderStore = Readonly<{
     garmentIds: readonly string[],
     collectCents: number,
     nowEpoch: number,
-  ) => Readonly<{ order: OrderRecord; garments: readonly GarmentRecord[] }> | null;
-  nextTicketSeq: (orgId: string, storeId: string, dayKey: string) => number;
+  ) => Promise<PickupApplyResult | null>;
+  nextTicketSeq: (orgId: string, storeId: string, dayKey: string) => Promise<number>;
 }>;

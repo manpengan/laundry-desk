@@ -7,6 +7,7 @@ import {
   APP_ORG_ID_GUC,
   APP_STAFF_ID_GUC,
   APP_STORE_ID_GUC,
+  DEFERRED_V2_TABLES_NOTE,
   LAUNDRY_APP_ROLE,
   LAUNDRY_OWNER_ROLE,
   M1_ALL_TABLE_NAMES,
@@ -14,6 +15,9 @@ import {
   M1_MATRIX_TABLES,
   M1_SESSION_TABLE_NAMES,
   M1_SESSION_TABLES,
+  M2_ORDER_RLS_TABLES,
+  M2_ORDER_TABLE_NAMES,
+  M2_ORDER_TABLES,
   buildM1RlsMigrationSql,
   schema,
 } from "../src/index.js";
@@ -109,6 +113,76 @@ describe("M1 schema contract vs A3 matrix", () => {
 
   it("lists a stable full M1 table set", () => {
     expect(M1_ALL_TABLE_NAMES).toEqual([...M1_MATRIX_TABLE_NAMES, ...M1_SESSION_TABLE_NAMES]);
-    expect(Object.keys(schema).sort()).toEqual([...M1_ALL_TABLE_NAMES].sort());
+  });
+
+  it("exports M2 order skeleton tables with store tenant columns", () => {
+    expect(Object.keys(M2_ORDER_TABLES).sort()).toEqual([...M2_ORDER_TABLE_NAMES].sort());
+    expect([...M2_ORDER_RLS_TABLES].sort()).toEqual([...M2_ORDER_TABLE_NAMES].sort());
+
+    for (const name of ["orders", "order_lines", "garments"] as const) {
+      const columns = columnNames(M2_ORDER_TABLES[name]);
+      expect(columns).toContain("org_id");
+      expect(columns).toContain("store_id");
+      expect(columns).toContain("id");
+    }
+
+    const counterCols = columnNames(M2_ORDER_TABLES.ticket_counters);
+    expect(counterCols).toContain("org_id");
+    expect(counterCols).toContain("store_id");
+    expect(counterCols).toContain("day_key");
+    expect(counterCols).toContain("last_seq");
+    expect(counterCols).not.toContain("id");
+  });
+
+  it("declares M2 tenant unique layouts for order graph FKs", () => {
+    const ordersConfig = getTableConfig(M2_ORDER_TABLES.orders);
+    const hasOrdersTenantUnique = ordersConfig.indexes.some((index) => {
+      const cols = index.config.columns.map((column) => {
+        if (typeof column === "string") return column;
+        if ("name" in column && typeof column.name === "string") return column.name;
+        return "";
+      });
+      return cols[0] === "org_id" && cols[1] === "store_id" && cols.includes("id");
+    });
+    expect(hasOrdersTenantUnique).toBe(true);
+
+    const linesConfig = getTableConfig(M2_ORDER_TABLES.order_lines);
+    const hasLinesTenantUnique = linesConfig.indexes.some((index) => {
+      const cols = index.config.columns.map((column) => {
+        if (typeof column === "string") return column;
+        if ("name" in column && typeof column.name === "string") return column.name;
+        return "";
+      });
+      return (
+        cols[0] === "org_id" &&
+        cols[1] === "store_id" &&
+        cols.includes("order_id") &&
+        cols.includes("id")
+      );
+    });
+    expect(hasLinesTenantUnique).toBe(true);
+
+    const garmentsConfig = getTableConfig(M2_ORDER_TABLES.garments);
+    const hasGarmentsTenantUnique = garmentsConfig.indexes.some((index) => {
+      const cols = index.config.columns.map((column) => {
+        if (typeof column === "string") return column;
+        if ("name" in column && typeof column.name === "string") return column.name;
+        return "";
+      });
+      return cols[0] === "org_id" && cols[1] === "store_id" && cols.includes("id");
+    });
+    expect(hasGarmentsTenantUnique).toBe(true);
+  });
+
+  it("exposes full schema as M1 + M2 order tables", () => {
+    const expected = [...M1_ALL_TABLE_NAMES, ...M2_ORDER_TABLE_NAMES].sort();
+    expect(Object.keys(schema).sort()).toEqual(expected);
+  });
+
+  it("no longer defers orders/order_lines/garments past M2 skeleton", () => {
+    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("orders");
+    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("order_lines");
+    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("garments");
+    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).toContain("payments");
   });
 });

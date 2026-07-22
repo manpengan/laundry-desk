@@ -17,10 +17,13 @@ export {
   type M1SessionTableNameLiteral,
 } from "./m1-tables.js";
 
+export { M2_ORDER_TABLE_NAMES, type M2OrderTableNameLiteral } from "./m2-tables.js";
+
 export {
   M1_ORG_RLS_TABLES,
   M1_SESSION_RLS_TABLES,
   M1_STORE_RLS_TABLES,
+  M2_ORDER_RLS_TABLES,
   buildM1RlsMigrationSql,
 } from "./rls.js";
 
@@ -34,9 +37,14 @@ export {
 export {
   M1_MATRIX_TABLES,
   M1_SESSION_TABLES,
+  M2_ORDER_TABLES,
   auditLog,
+  garments,
+  orderLines,
+  orders,
   orgs,
   pinChallenges,
+  pinLockouts,
   refreshFamilies,
   refreshTokens,
   schema,
@@ -46,7 +54,10 @@ export {
   staffs,
   storeFeatures,
   stores,
+  ticketCounters,
   type M1MatrixTableName,
   type M1SessionTableName,
   type M1TableName,
+  type M2OrderTableName,
+  type SchemaTableName,
 } from "./schema/index.js";

@@ -10,6 +10,10 @@ export { refreshFamilies } from "./refresh-families.js";
 export { refreshTokens } from "./refresh-tokens.js";
 export { pinChallenges } from "./pin-challenges.js";
 export { pinLockouts } from "./pin-lockouts.js";
+export { orders } from "./orders.js";
+export { orderLines } from "./order-lines.js";
+export { garments } from "./garments.js";
+export { ticketCounters } from "./ticket-counters.js";
 
 import { orgs } from "./orgs.js";
 import { stores } from "./stores.js";
@@ -23,6 +27,10 @@ import { refreshFamilies } from "./refresh-families.js";
 import { refreshTokens } from "./refresh-tokens.js";
 import { pinChallenges } from "./pin-challenges.js";
 import { pinLockouts } from "./pin-lockouts.js";
+import { orders } from "./orders.js";
+import { orderLines } from "./order-lines.js";
+import { garments } from "./garments.js";
+import { ticketCounters } from "./ticket-counters.js";
 
 /** M1 tables present in the A3 tenant matrix. */
 export const M1_MATRIX_TABLES = Object.freeze({
@@ -44,12 +52,23 @@ export const M1_SESSION_TABLES = Object.freeze({
   pin_lockouts: pinLockouts,
 } as const);
 
+/** M2 order skeleton tables (store-scoped; maps runtime OrderRecord). */
+export const M2_ORDER_TABLES = Object.freeze({
+  orders,
+  order_lines: orderLines,
+  garments,
+  ticket_counters: ticketCounters,
+} as const);
+
 /** Full M1 identity/platform schema surface for drizzle-kit and public API. */
 export const schema = Object.freeze({
   ...M1_MATRIX_TABLES,
   ...M1_SESSION_TABLES,
+  ...M2_ORDER_TABLES,
 } as const);
 
 export type M1MatrixTableName = keyof typeof M1_MATRIX_TABLES;
 export type M1SessionTableName = keyof typeof M1_SESSION_TABLES;
-export type M1TableName = keyof typeof schema;
+export type M2OrderTableName = keyof typeof M2_ORDER_TABLES;
+export type M1TableName = keyof typeof M1_MATRIX_TABLES | keyof typeof M1_SESSION_TABLES;
+export type SchemaTableName = keyof typeof schema;

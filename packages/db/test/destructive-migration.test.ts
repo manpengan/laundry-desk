@@ -35,7 +35,7 @@ describe("destructive migration static reject", () => {
     ).toThrow(/Destructive migration SQL rejected/u);
   });
 
-  it("ships only expand-friendly M1 SQL migrations", () => {
+  it("ships only expand-friendly M1+M2 SQL migrations", () => {
     const migrations = readMigrations();
     expect(migrations.length).toBeGreaterThanOrEqual(3);
     expect(migrations.map((item) => item.file)).toEqual([
@@ -45,6 +45,7 @@ describe("destructive migration static reject", () => {
       "0004_auth_lookup_functions.sql",
       "0005_pin_lockouts.sql",
       "0006_pin_challenge_stepup_binding.sql",
+      "0007_m2_orders.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
@@ -61,6 +62,10 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS sessions/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS refresh_tokens/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS pin_lockouts/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS orders/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS order_lines/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS garments/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS ticket_counters/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS args_hash/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS entity_versions/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS idempotency_key/iu);
@@ -68,6 +73,12 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE audit_log TO laundry_app/iu);
     expect(combined).toMatch(
       /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE pin_lockouts TO laundry_app/iu,
+    );
+    expect(combined).toMatch(
+      /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE orders TO laundry_app/iu,
+    );
+    expect(combined).toMatch(
+      /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE garments TO laundry_app/iu,
     );
     expect(combined).not.toMatch(/GRANT[^;]*UPDATE[^;]*audit_log/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*audit_log/iu);

@@ -1,8 +1,8 @@
 /**
- * Process-local order/garment store for M2 skeleton (no PG yet).
+ * Process-local order/garment store for M2 skeleton (async OrderStore).
  */
 
-import type { GarmentRecord, OrderRecord, OrderStore } from "./types.js";
+import type { GarmentRecord, OrderRecord, OrderStore, PickupApplyResult } from "./types.js";
 
 const key = (orgId: string, storeId: string, orderId: string): string =>
   `${orgId}|${storeId}|${orderId}`;
@@ -12,7 +12,7 @@ export class MemoryOrderStore implements OrderStore {
   private readonly garments = new Map<string, GarmentRecord[]>();
   private readonly ticketSeq = new Map<string, number>();
 
-  insertOrder(order: OrderRecord, garments: readonly GarmentRecord[]): void {
+  async insertOrder(order: OrderRecord, garments: readonly GarmentRecord[]): Promise<void> {
     const k = key(order.org_id, order.store_id, order.order_id);
     if (this.orders.has(k)) {
       throw new Error(`Order already exists: ${order.order_id}`);
@@ -24,22 +24,26 @@ export class MemoryOrderStore implements OrderStore {
     );
   }
 
-  getOrder(orgId: string, storeId: string, orderId: string): OrderRecord | null {
+  async getOrder(orgId: string, storeId: string, orderId: string): Promise<OrderRecord | null> {
     return this.orders.get(key(orgId, storeId, orderId)) ?? null;
   }
 
-  listGarments(orgId: string, storeId: string, orderId: string): readonly GarmentRecord[] {
+  async listGarments(
+    orgId: string,
+    storeId: string,
+    orderId: string,
+  ): Promise<readonly GarmentRecord[]> {
     return this.garments.get(key(orgId, storeId, orderId)) ?? Object.freeze([]);
   }
 
-  applyPickup(
+  async applyPickup(
     orgId: string,
     storeId: string,
     orderId: string,
     garmentIds: readonly string[],
     collectCents: number,
     nowEpoch: number,
-  ): Readonly<{ order: OrderRecord; garments: readonly GarmentRecord[] }> | null {
+  ): Promise<PickupApplyResult | null> {
     const k = key(orgId, storeId, orderId);
     const order = this.orders.get(k);
     const list = this.garments.get(k);
@@ -66,7 +70,7 @@ export class MemoryOrderStore implements OrderStore {
     return Object.freeze({ order: nextOrder, garments: Object.freeze(nextGarments) });
   }
 
-  nextTicketSeq(orgId: string, storeId: string, dayKey: string): number {
+  async nextTicketSeq(orgId: string, storeId: string, dayKey: string): Promise<number> {
     const k = `${orgId}|${storeId}|${dayKey}`;
     const current = this.ticketSeq.get(k) ?? 0;
     const next = current + 1;
