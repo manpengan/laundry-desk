@@ -1,9 +1,10 @@
 import type { CommandDefinition, QueryDefinition } from "../registry/definitions.js";
 import { IDENTITY_COMMANDS, IDENTITY_COMMAND_NAMES } from "./identity.js";
+import { ORDER_COMMANDS, ORDER_COMMAND_NAMES } from "./order.js";
 import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./platform.js";
 import type { z } from "zod";
 
-/** M1 first-wave registered definitions (A6). */
+/** M1 first-wave registered definitions (A6). OpenAPI snapshot remains M1-only. */
 export const M1_FIRST_WAVE_DEFINITIONS: readonly (
   CommandDefinition<z.ZodObject> | QueryDefinition<z.ZodObject>
 )[] = Object.freeze([...IDENTITY_COMMANDS, ...PLATFORM_DEFINITIONS]);
@@ -14,3 +15,13 @@ export const M1_FIRST_WAVE_COMMAND_NAMES = Object.freeze([
 ] as const);
 
 export const M1_FIRST_WAVE_QUERY_NAMES = Object.freeze(PLATFORM_QUERIES.map((query) => query.name));
+
+/**
+ * M2 skeleton order commands (receive/pickup). Not yet in OpenAPI freeze snapshot;
+ * server may load these alongside M1 via createM1CommandRegistry([...M1, ...M2]).
+ */
+export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] = Object.freeze([
+  ...ORDER_COMMANDS,
+]);
+
+export const M2_SKELETON_COMMAND_NAMES = ORDER_COMMAND_NAMES;
