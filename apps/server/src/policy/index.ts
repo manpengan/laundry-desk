@@ -1,5 +1,6 @@
 export { checkPolicy, evaluatePolicy, policyDecisionToPortError } from "./evaluate-policy.js";
 export { STEP_UP_PROOF_TTL_SECONDS, createStepUpProof, verifyStepUpProof } from "./step-up.js";
+export { MemoryStepUpProofStore, processStepUpProofStore } from "./step-up-proof-store.js";
 export type {
   CommandVia,
   EvaluatePolicyInput,
@@ -21,3 +22,4 @@ export type {
   StepUpVerifyRejectReason,
   StepUpVerifyResult,
 } from "./step-up.js";
+export type { StepUpProofStore } from "./step-up-proof-store.js";

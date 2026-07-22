@@ -39,6 +39,14 @@ export type {
   VerifyPinInput,
 } from "./pin.js";
 
+export { createPinStepUpService, createStepUpChallenge, verifyStepUpPin } from "./pin-step-up.js";
+export type {
+  CreateStepUpChallengeInput,
+  PinStepUpDeps,
+  StepUpVerifyResult,
+  VerifyStepUpPinInput,
+} from "./pin-step-up.js";
+
 export { createLoginService, loginWithPassword } from "./login.js";
 export type { LoginResult, LoginServiceDeps } from "./login.js";
 

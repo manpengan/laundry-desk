@@ -20,7 +20,6 @@ import type { SqlClient, TenantContext } from "../db/types.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { createAccessTokenSigner } from "../identity/crypto-util.js";
 import { loginWithPassword } from "../identity/login.js";
-import { createQuickSwitchChallenge, verifyQuickSwitchPin } from "../identity/pin.js";
 import { logoutSession, rotateRefresh } from "../identity/session.js";
 import type { SessionIssueResult, SessionRecord } from "../identity/types.js";
 import { IdentityError } from "../identity/types.js";
@@ -31,6 +30,7 @@ import {
   resolveCookiePolicy,
   type CookiePolicy,
 } from "./cookie-policy.js";
+import { registerPinRoutes } from "./pin-routes.js";
 
 export type CreateAppOptions = Readonly<{
   runtime: LocalRuntime;
@@ -233,67 +233,17 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     return Object.freeze({ ok: true as const, data: Object.freeze({ logged_out: true as const }) });
   });
 
-  app.post("/api/v2/auth/pin/challenges", async (request, reply) => {
-    const session = await resolveSession(runtime, readBearer(request));
-    if (session === null) {
-      reply.code(401);
-      return fail("AUTHENTICATION_FAILED");
-    }
-    const csrf = requireCsrf(request, reply, cookiePolicy);
-    if (csrf !== true) return csrf;
-    const body = isRecord(request.body) ? request.body : {};
-    try {
-      if (body.purpose !== "quick_switch" || typeof body.target_staff_id !== "string") {
-        reply.code(400);
-        return fail("VALIDATION_FAILED");
-      }
-      const challenge = await createQuickSwitchChallenge(runtime.identity.pin, {
-        purpose: "quick_switch",
-        session,
-        target_staff_id: body.target_staff_id,
-      });
-      return Object.freeze({
-        ok: true as const,
-        data: Object.freeze({
-          challenge_id: challenge.challenge_id,
-          purpose: challenge.purpose,
-          expires_at: challenge.expires_at,
-          max_attempts: challenge.max_attempts,
-        }),
-      });
-    } catch (error) {
-      return mapIdentityHttpError(error, reply);
-    }
-  });
-
-  app.post("/api/v2/auth/pin/challenges/:challengeId/verify", async (request, reply) => {
-    const session = await resolveSession(runtime, readBearer(request));
-    if (session === null) {
-      reply.code(401);
-      return fail("AUTHENTICATION_FAILED");
-    }
-    const csrf = requireCsrf(request, reply, cookiePolicy);
-    if (csrf !== true) return csrf;
-    const params = request.params as { challengeId?: string };
-    const body = isRecord(request.body) ? request.body : {};
-    const challengeId =
-      typeof body.challenge_id === "string"
-        ? body.challenge_id
-        : typeof params.challengeId === "string"
-          ? params.challengeId
-          : "";
-    const pin = typeof body.pin === "string" ? body.pin : "";
-    try {
-      const issued = await verifyQuickSwitchPin(runtime.identity.pin, {
-        challenge_id: challengeId,
-        pin,
-        session,
-      });
-      setAuthCookies(reply, cookiePolicy, issued.refresh.refresh_token, issued.csrf.csrf_token);
-      return Object.freeze({ ok: true as const, data: publicAccessBody(issued) });
-    } catch (error) {
-      return mapIdentityHttpError(error, reply);
-    }
+  registerPinRoutes(app, {
+    runtime,
+    cookiePolicy,
+    readBearer,
+    resolveSession,
+    requireCsrf,
+    mapIdentityHttpError,
+    setAuthCookies,
+    publicAccessBody,
+    isRecord,
+    fail,
   });
 
   const runWithSql = async <T>(fn: (sql: SqlClient) => Promise<T>): Promise<T> => {
@@ -333,6 +283,8 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
         registry,
         actor,
         chainHooks,
+        pendingStore: runtime.pendingStore,
+        stepUpProofStore: runtime.stepUpProofStore,
         ...(confirmRef !== undefined ? { confirmRef } : {}),
       }),
     );
