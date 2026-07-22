@@ -13,6 +13,7 @@ import type {
   PinChallengeRequest,
   PinChallengeResponse,
   PinVerifyRequest,
+  StepUpProofResult,
   SwitchableStaff,
 } from "./types.js";
 
@@ -23,7 +24,10 @@ import type {
 export type AuthClient = Readonly<{
   login: (values: LoginFormValues) => Promise<AuthResult<AccessSession>>;
   createPinChallenge: (request: PinChallengeRequest) => Promise<AuthResult<PinChallengeResponse>>;
+  /** quick_switch: issues replacement session. */
   verifyPin: (request: PinVerifyRequest) => Promise<AuthResult<AccessSession>>;
+  /** step_up: issues proof without switching actor. */
+  verifyStepUpPin: (request: PinVerifyRequest) => Promise<AuthResult<StepUpProofResult>>;
   listSwitchableStaff: () => readonly SwitchableStaff[];
 }>;
 
@@ -160,7 +164,15 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthC
   const staffList = options.staff ?? DEMO_STAFF;
   const adminFeatures = options.adminFeatures ?? FULL_STORE_FEATURES;
   const staffFeatures = options.staffFeatures ?? STAFF_STORE_FEATURES;
-  const challenges = new Map<string, { target_staff_id: string; expires_at: number }>();
+  type ChallengeRow =
+    | Readonly<{ purpose: "quick_switch"; target_staff_id: string; expires_at: number }>
+    | Readonly<{
+        purpose: "step_up";
+        pending_action_ref: string;
+        approver_staff_id: string;
+        expires_at: number;
+      }>;
+  const challenges = new Map<string, ChallengeRow>();
   let lastLogin: LoginFormValues | null = null;
   let sessionVersion = 1;
 
@@ -224,23 +236,42 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthC
     async createPinChallenge(
       request: PinChallengeRequest,
     ): Promise<AuthResult<PinChallengeResponse>> {
-      if (request.purpose !== "quick_switch") {
+      const expiresAt = Math.floor(Date.now() / 1000) + 120;
+      if (request.purpose === "quick_switch") {
+        const challengeId = uuidFromSeed(`chal${request.target_staff_id}${Date.now()}`);
+        challenges.set(challengeId, {
+          purpose: "quick_switch",
+          target_staff_id: request.target_staff_id,
+          expires_at: expiresAt,
+        });
         return {
-          ok: false,
-          error: { code: "VALIDATION_FAILED", message: "仅支持员工快切" },
+          ok: true,
+          data: Object.freeze({
+            challenge_id: challengeId,
+            purpose: "quick_switch" as const,
+            expires_at: expiresAt,
+            max_attempts: PIN_MAX_ATTEMPTS,
+          }),
         };
       }
-      const challengeId = uuidFromSeed(`chal${request.target_staff_id}${Date.now()}`);
-      const expiresAt = Math.floor(Date.now() / 1000) + 120;
+      if (request.approver_staff_id.length === 0 || request.pending_action_ref.length === 0) {
+        return {
+          ok: false,
+          error: { code: "VALIDATION_FAILED", message: "step-up 参数不完整" },
+        };
+      }
+      const challengeId = uuidFromSeed(`step${request.pending_action_ref}${Date.now()}`);
       challenges.set(challengeId, {
-        target_staff_id: request.target_staff_id,
+        purpose: "step_up",
+        pending_action_ref: request.pending_action_ref,
+        approver_staff_id: request.approver_staff_id,
         expires_at: expiresAt,
       });
       return {
         ok: true,
         data: Object.freeze({
           challenge_id: challengeId,
-          purpose: "quick_switch" as const,
+          purpose: "step_up" as const,
           expires_at: expiresAt,
           max_attempts: PIN_MAX_ATTEMPTS,
         }),
@@ -255,7 +286,7 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthC
         };
       }
       const challenge = challenges.get(request.challenge_id);
-      if (!challenge) {
+      if (!challenge || challenge.purpose !== "quick_switch") {
         return {
           ok: false,
           error: { code: "AUTHENTICATION_FAILED", message: "挑战无效或已过期" },
@@ -297,6 +328,37 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthC
         sessionVersion,
       );
       return { ok: true, data: session };
+    },
+
+    async verifyStepUpPin(request: PinVerifyRequest): Promise<AuthResult<StepUpProofResult>> {
+      if (options.failPinWith) {
+        return {
+          ok: false,
+          error: { code: "AUTHENTICATION_FAILED", message: options.failPinWith },
+        };
+      }
+      const challenge = challenges.get(request.challenge_id);
+      if (!challenge || challenge.purpose !== "step_up") {
+        return {
+          ok: false,
+          error: { code: "AUTHENTICATION_FAILED", message: "挑战无效或已过期" },
+        };
+      }
+      challenges.delete(request.challenge_id);
+      if (request.pin !== validPin) {
+        return {
+          ok: false,
+          error: { code: "AUTHENTICATION_FAILED", message: "PIN 错误" },
+        };
+      }
+      const now = Math.floor(Date.now() / 1000);
+      return {
+        ok: true,
+        data: Object.freeze({
+          step_up_proof_id: uuidFromSeed(`proof${challenge.pending_action_ref}${now}`),
+          expires_at: now + 300,
+        }),
+      };
     },
   };
 }

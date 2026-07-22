@@ -12,6 +12,7 @@ import type {
   PinChallengeRequest,
   PinChallengeResponse,
   PinVerifyRequest,
+  StepUpProofResult,
   SwitchableStaff,
 } from "./types.js";
 import type { AuthClient } from "./AuthClient.js";
@@ -34,6 +35,13 @@ function asError(message: string): AuthResult<AccessSession> {
 }
 
 function asPinError(message: string): AuthResult<PinChallengeResponse> {
+  return Object.freeze({
+    ok: false as const,
+    error: Object.freeze({ code: "AUTH_CLIENT", message }),
+  });
+}
+
+function asStepUpError(message: string): AuthResult<StepUpProofResult> {
   return Object.freeze({
     ok: false as const,
     error: Object.freeze({ code: "AUTH_CLIENT", message }),
@@ -277,6 +285,10 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
       if (!isRecord(body) || body.ok !== true) {
         return asError("PIN 验证失败");
       }
+      // step_up responses must not be parsed as session switches.
+      if (isRecord(body.data) && typeof body.data.step_up_proof_id === "string") {
+        return asError("当前挑战为 step-up，请使用现场复核流程");
+      }
       const payload = readAccessPayload(body.data);
       if (payload === null) return asError("PIN 验证响应格式错误");
       accessToken = payload.access_token;
@@ -293,6 +305,48 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
     }
   };
 
+  const verifyStepUpPin = async (
+    request: PinVerifyRequest,
+  ): Promise<AuthResult<StepUpProofResult>> => {
+    if (accessToken === null) return asStepUpError("未登录");
+    const csrf = readCsrf();
+    if (csrf === null) return asStepUpError("缺少 CSRF cookie");
+    try {
+      const res = await fetchImpl(
+        `${base}/api/v2/auth/pin/challenges/${encodeURIComponent(request.challenge_id)}/verify`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${accessToken}`,
+            [CSRF_HEADER_NAME]: csrf,
+          },
+          body: JSON.stringify(request),
+        },
+      );
+      const body: unknown = await res.json();
+      if (!isRecord(body) || body.ok !== true || !isRecord(body.data)) {
+        return asStepUpError("现场复核 PIN 失败");
+      }
+      const proofId = body.data.step_up_proof_id;
+      const expiresAt = body.data.expires_at;
+      if (typeof proofId !== "string" || typeof expiresAt !== "number") {
+        return asStepUpError("step-up 响应格式错误");
+      }
+      // A5: do not rotate cookies or access token.
+      return Object.freeze({
+        ok: true as const,
+        data: Object.freeze({
+          step_up_proof_id: proofId,
+          expires_at: expiresAt,
+        }),
+      });
+    } catch {
+      return asStepUpError("无法连接本地服务器");
+    }
+  };
+
   const listSwitchableStaff = (): readonly SwitchableStaff[] =>
     Object.freeze(staffDirectory.map((s) => Object.freeze({ ...s })));
 
@@ -300,6 +354,7 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
     login,
     createPinChallenge,
     verifyPin,
+    verifyStepUpPin,
     listSwitchableStaff,
   });
 }

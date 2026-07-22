@@ -54,10 +54,16 @@ export type AccessSession = Readonly<{
   }>;
 }>;
 
-export type PinChallengeRequest = Readonly<{
-  purpose: "quick_switch";
-  target_staff_id: string;
-}>;
+export type PinChallengeRequest =
+  | Readonly<{
+      purpose: "quick_switch";
+      target_staff_id: string;
+    }>
+  | Readonly<{
+      purpose: "step_up";
+      pending_action_ref: string;
+      approver_staff_id: string;
+    }>;
 
 export type PinChallengeResponse = Readonly<{
   challenge_id: string;
@@ -69,6 +75,12 @@ export type PinChallengeResponse = Readonly<{
 export type PinVerifyRequest = Readonly<{
   challenge_id: string;
   pin: string;
+}>;
+
+/** A5 step-up success: single-use proof; session actor unchanged. */
+export type StepUpProofResult = Readonly<{
+  step_up_proof_id: string;
+  expires_at: number;
 }>;
 
 export type SwitchableStaff = Readonly<{

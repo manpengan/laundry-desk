@@ -2,6 +2,7 @@
  * @laundry/web — counter SPA shell (M1).
  * E1: login + PIN quick-switch; session memory-only.
  * E3: permission route gate (role × store_features UI projection; C8 enforces).
+ * R5: settings step-up PIN confirm (confirm_ref resume; actor unchanged).
  */
 export {
   connectionModeLabel,
@@ -25,7 +26,9 @@ export { CounterShell, type CounterShellProps } from "./shell/CounterShell.js";
 export { Sidebar, type SidebarProps } from "./shell/Sidebar.js";
 export { TopBar, type TopBarProps } from "./shell/TopBar.js";
 export { PinSwitchDialog, type PinSwitchDialogProps } from "./shell/PinSwitchDialog.js";
+export { StepUpConfirmDialog, type StepUpConfirmDialogProps } from "./shell/StepUpConfirmDialog.js";
 export { PageHost, type PageHostProps } from "./pages/PageHost.js";
+export { SettingsPage, type SettingsPageProps } from "./pages/SettingsPage.js";
 export { LoginPage, type LoginPageProps } from "./pages/LoginPage.js";
 export { pageCopy, type PageCopy } from "./pages/page-copy.js";
 export {
@@ -34,6 +37,13 @@ export {
   type MockAuthClientOptions,
 } from "./auth/AuthClient.js";
 export { createHttpAuthClient, type HttpAuthClientOptions } from "./auth/HttpAuthClient.js";
+export {
+  createHttpCommandClient,
+  createMockCommandClient,
+  isStepUpRequired,
+  type HttpCommandClientOptions,
+} from "./commands/command-client.js";
+export type { CommandFailure, CommandPort, CommandResult } from "./commands/types.js";
 export type {
   AccessSession,
   AuthError,
@@ -43,6 +53,7 @@ export type {
   PinChallengeRequest,
   PinChallengeResponse,
   PinVerifyRequest,
+  StepUpProofResult,
   SwitchableStaff,
 } from "./auth/types.js";
 export {
