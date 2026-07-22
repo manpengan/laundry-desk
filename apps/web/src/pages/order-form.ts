@@ -42,6 +42,108 @@ export type PickupOrderResult = Readonly<{
   picked_garment_ids: readonly string[];
 }>;
 
+/** Garment row from order.get (partial pickup multi-select). */
+export type OrderGetGarment = Readonly<{
+  garment_id: string;
+  barcode: string;
+  status: string;
+  line_index: number;
+  seq: number;
+  unit_price_cents: number;
+}>;
+
+export type OrderGetResult = Readonly<{
+  order_id: string;
+  ticket_no: string;
+  status: string;
+  customer_phone: string | null;
+  customer_name: string | null;
+  payable_cents: number;
+  paid_cents: number;
+  balance_cents: number;
+  garments: readonly OrderGetGarment[];
+}>;
+
+/**
+ * Collapsed fulfillment (fulfillment_enabled=false): only `received` may → picked_up.
+ * Keep client-side so web does not depend on @laundry/domain.
+ */
+export function isPickableGarmentStatus(status: string): boolean {
+  return status === "received";
+}
+
+export function listPickableGarments(
+  garments: readonly OrderGetGarment[],
+): readonly OrderGetGarment[] {
+  return Object.freeze(garments.filter((g) => isPickableGarmentStatus(g.status)));
+}
+
+export function pickableGarmentIds(garments: readonly OrderGetGarment[]): readonly string[] {
+  return Object.freeze(listPickableGarments(garments).map((g) => g.garment_id));
+}
+
+export function toggleGarmentSelection(
+  selected: ReadonlySet<string>,
+  garmentId: string,
+): ReadonlySet<string> {
+  const next = new Set(selected);
+  if (next.has(garmentId)) next.delete(garmentId);
+  else next.add(garmentId);
+  return next;
+}
+
+export function selectAllPickableIds(garments: readonly OrderGetGarment[]): ReadonlySet<string> {
+  return new Set(pickableGarmentIds(garments));
+}
+
+function parseOrderGetGarment(row: unknown): OrderGetGarment | null {
+  if (typeof row !== "object" || row === null) return null;
+  const r = row as Record<string, unknown>;
+  if (typeof r.garment_id !== "string" || typeof r.barcode !== "string") return null;
+  if (typeof r.status !== "string") return null;
+  if (typeof r.line_index !== "number" || !Number.isInteger(r.line_index)) return null;
+  if (typeof r.seq !== "number" || !Number.isInteger(r.seq)) return null;
+  if (typeof r.unit_price_cents !== "number" || !Number.isInteger(r.unit_price_cents)) return null;
+  if (r.unit_price_cents < 0) return null;
+  return Object.freeze({
+    garment_id: r.garment_id,
+    barcode: r.barcode,
+    status: r.status,
+    line_index: r.line_index,
+    seq: r.seq,
+    unit_price_cents: r.unit_price_cents,
+  });
+}
+
+/** Parse order.get result envelope for the pickup form. */
+export function parseOrderGetResult(raw: unknown): OrderGetResult | null {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.order_id !== "string" || typeof r.ticket_no !== "string") return null;
+  if (typeof r.status !== "string") return null;
+  if (typeof r.payable_cents !== "number" || !Number.isInteger(r.payable_cents)) return null;
+  if (typeof r.paid_cents !== "number" || !Number.isInteger(r.paid_cents)) return null;
+  if (typeof r.balance_cents !== "number" || !Number.isInteger(r.balance_cents)) return null;
+  if (!Array.isArray(r.garments)) return null;
+  const garments: OrderGetGarment[] = [];
+  for (const row of r.garments) {
+    const g = parseOrderGetGarment(row);
+    if (g === null) return null;
+    garments.push(g);
+  }
+  return Object.freeze({
+    order_id: r.order_id,
+    ticket_no: r.ticket_no,
+    status: r.status,
+    customer_phone: typeof r.customer_phone === "string" ? r.customer_phone : null,
+    customer_name: typeof r.customer_name === "string" ? r.customer_name : null,
+    payable_cents: r.payable_cents,
+    paid_cents: r.paid_cents,
+    balance_cents: r.balance_cents,
+    garments: Object.freeze(garments),
+  });
+}
+
 export function parseNonNegCents(text: string): number | null {
   const trimmed = text.trim();
   if (!/^\d+$/u.test(trimmed)) return null;
@@ -188,10 +290,20 @@ export type BuildPickupBodyResult =
   | Readonly<{ ok: true; body: Readonly<Record<string, unknown>> }>
   | Readonly<{ ok: false; message: string }>;
 
+/**
+ * Build order.pickup body.
+ * - Prefer explicit `garment_ids` (multi-select UX). Empty selection → error.
+ * - Legacy `garment_ids_text` still accepted; blank text = empty list (server = all pickable).
+ */
 export function buildPickupBody(input: {
   order_id: string;
   collect_cents: string;
-  garment_ids_text: string;
+  /** Explicit multi-select IDs. When provided, empty is an error. */
+  garment_ids?: readonly string[];
+  /** Legacy free-text UUID list (comma/space). */
+  garment_ids_text?: string;
+  /** When true (default if garment_ids provided), empty selection errors. */
+  require_selection?: boolean;
 }): BuildPickupBodyResult {
   const orderId = input.order_id.trim();
   if (!isValidUuid(orderId)) {
@@ -202,24 +314,34 @@ export function buildPickupBody(input: {
     return Object.freeze({ ok: false as const, message: "收款金额须为整数分" });
   }
 
-  const raw = input.garment_ids_text.trim();
   let garmentIds: string[] = [];
-  if (raw.length > 0) {
-    garmentIds = raw
-      .split(/[\s,，]+/u)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-    if (garmentIds.length > 200) {
-      return Object.freeze({ ok: false as const, message: "件 ID 最多 200 个" });
+  if (input.garment_ids !== undefined) {
+    garmentIds = [...input.garment_ids];
+  } else if (input.garment_ids_text !== undefined) {
+    const raw = input.garment_ids_text.trim();
+    if (raw.length > 0) {
+      garmentIds = raw
+        .split(/[\s,，]+/u)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
     }
-    for (const id of garmentIds) {
-      if (!isValidUuid(id)) {
-        return Object.freeze({
-          ok: false as const,
-          message: `无效 garment_id：${id.slice(0, 12)}…`,
-        });
-      }
+  }
+
+  if (garmentIds.length > 200) {
+    return Object.freeze({ ok: false as const, message: "件 ID 最多 200 个" });
+  }
+  for (const id of garmentIds) {
+    if (!isValidUuid(id)) {
+      return Object.freeze({
+        ok: false as const,
+        message: `无效 garment_id：${id.slice(0, 12)}…`,
+      });
     }
+  }
+
+  const requireSelection = input.require_selection ?? input.garment_ids !== undefined;
+  if (requireSelection && garmentIds.length === 0) {
+    return Object.freeze({ ok: false as const, message: "请至少选择一件可取衣物" });
   }
 
   return Object.freeze({

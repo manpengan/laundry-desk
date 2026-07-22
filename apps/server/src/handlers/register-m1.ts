@@ -1,6 +1,6 @@
 /**
  * M1 handler registration — loads A6 command/query definitions and attaches handlers.
- * Optional M2 order commands + catalog queries when deps provided.
+ * Optional M2 order commands/queries + catalog queries when deps provided.
  */
 
 import type { ChainPortHooks } from "../bus/chain-adapter.js";
@@ -9,7 +9,7 @@ import { createM1QueryRegistry, type MutableQueryRegistry } from "../bus/query-r
 import type { CatalogHandlerDeps } from "../catalog/handlers.js";
 import { registerCatalogQueryHandlers } from "../catalog/handlers.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
-import { registerOrderCommandHandlers } from "../order/handlers.js";
+import { registerOrderCommandHandlers, registerOrderQueryHandlers } from "../order/handlers.js";
 import type { IdentityHandlerDeps } from "./identity-handlers.js";
 import { registerIdentityCommandHandlers } from "./identity-handlers.js";
 import type { PlatformHandlerDeps } from "./platform-handlers.js";
@@ -19,7 +19,7 @@ import { createDefaultChainHooks } from "./default-chain-hooks.js";
 export type RegisterM1Deps = Readonly<{
   identity?: IdentityHandlerDeps;
   platform?: PlatformHandlerDeps;
-  /** M2 skeleton order receive/pickup (memory or PG store). */
+  /** M2 skeleton order receive/pickup/get (memory or PG store). */
   order?: OrderHandlerDeps;
   /** M2 catalog price list (memory or PG). */
   catalog?: CatalogHandlerDeps;
@@ -83,12 +83,17 @@ export function registerM1QueryHandlers(
     names.push("catalog.items.list", "catalog.items.get");
   }
 
+  if (deps.order !== undefined) {
+    registerOrderQueryHandlers(queryRegistry, deps.order);
+    names.push("order.get");
+  }
+
   return Object.freeze(names);
 }
 
 /**
  * Convenience: fresh M1 command + query registries + handlers + default chain hooks.
- * Query registry includes M2 catalog definitions; handlers attach only when deps set.
+ * Query registry includes M2 catalog + order.get definitions; handlers attach when deps set.
  */
 export function createRegisteredM1Bus(deps: RegisterM1Deps): RegisterM1Result {
   const registry = createM1CommandRegistry();

@@ -60,7 +60,12 @@ export function PageHost({
   }
 
   if (activeId === "pickup" && session !== undefined && commandClient !== undefined) {
-    return <PickupPage commandClient={commandClient} />;
+    return (
+      <PickupPage
+        commandClient={commandClient}
+        {...(queryClient !== undefined ? { queryClient } : {})}
+      />
+    );
   }
 
   if (

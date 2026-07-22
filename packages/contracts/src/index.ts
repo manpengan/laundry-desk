@@ -343,6 +343,8 @@ export {
   M1_FIRST_WAVE_QUERY_NAMES,
   M2_CATALOG_DEFINITIONS,
   M2_CATALOG_QUERY_NAMES,
+  M2_ORDER_QUERY_DEFINITIONS,
+  M2_ORDER_QUERY_NAMES,
   M2_SKELETON_COMMAND_NAMES,
   M2_SKELETON_DEFINITIONS,
 } from "./commands/catalog.js";
@@ -357,9 +359,13 @@ export {
 export {
   ORDER_COMMAND_NAMES,
   ORDER_COMMANDS,
+  ORDER_QUERY_NAMES,
+  ORDER_QUERIES,
+  OrderGetInputSchema,
   OrderPickupInputSchema,
   OrderReceiveInputSchema,
   OrderReceiveLineSchema,
+  orderGetQuery,
   orderPickupCommand,
   orderReceiveCommand,
 } from "./commands/order.js";

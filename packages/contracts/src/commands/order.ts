@@ -1,11 +1,16 @@
 /**
- * M2 skeleton order commands (contract-only first wave for receive/pickup).
+ * M2 skeleton order commands + order.get query (receive/pickup first wave).
  * Full catalog/payment/fulfillment land in later M2 increments (contracts v0.2).
  */
 
 import { z } from "zod";
 
-import { defineCommand, type CommandDefinition } from "../registry/definitions.js";
+import {
+  defineCommand,
+  defineQuery,
+  type CommandDefinition,
+  type QueryDefinition,
+} from "../registry/definitions.js";
 
 const ServiceCodeSchema = z
   .string()
@@ -43,8 +48,13 @@ export const OrderPickupInputSchema = z.strictObject({
   collect_cents: NonNegCentsSchema,
 });
 
+export const OrderGetInputSchema = z.strictObject({
+  order_id: z.uuid(),
+});
+
 type ReceiveInput = typeof OrderReceiveInputSchema;
 type PickupInput = typeof OrderPickupInputSchema;
+type GetInput = typeof OrderGetInputSchema;
 
 /** 开单：生成 order + order_lines 语义 + 按 qty 拆 garments（runtime）。 */
 export const orderReceiveCommand: CommandDefinition<ReceiveInput> = defineCommand({
@@ -91,8 +101,33 @@ export const orderPickupCommand: CommandDefinition<PickupInput> = defineCommand(
   hard_limits: { max_batch: 200, max_amount_cents: 5_000_000 },
 });
 
+/** 读单：取衣前加载订单摘要 + 件列表（多选 partial pickup）。 */
+export const orderGetQuery: QueryDefinition<GetInput> = defineQuery({
+  name: "order.get",
+  version: "0.1.0",
+  description: "Load one order summary and its garments for counter pickup.",
+  description_llm:
+    "Fetch order by id with garment list (id, barcode, status, line_index, seq, unit_price_cents). PII may appear.",
+  input: OrderGetInputSchema,
+  // PII queries must be ≥ R2 (QueryMetadataSchema); task asked R1, schema wins.
+  risk: "R2",
+  invariants: [],
+  idempotent: true,
+  sideEffects: [],
+  offline_mode: "denied",
+  data_classification: "pii",
+  input_redaction: [],
+  result_redaction: [{ path: "/customer_phone", strategy: "mask" }],
+  max_result_rows: 1,
+});
 export const ORDER_COMMANDS = Object.freeze([orderReceiveCommand, orderPickupCommand] as const);
 
 export const ORDER_COMMAND_NAMES = Object.freeze(
   ORDER_COMMANDS.map((command) => command.name),
 ) as readonly ["order.receive", "order.pickup"];
+
+export const ORDER_QUERIES = Object.freeze([orderGetQuery] as const);
+
+export const ORDER_QUERY_NAMES = Object.freeze(
+  ORDER_QUERIES.map((query) => query.name),
+) as readonly ["order.get"];

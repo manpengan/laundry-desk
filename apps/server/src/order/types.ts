@@ -1,11 +1,20 @@
 /**
- * M2 skeleton order/garment records (runtime, not contracts).
+ * M2 skeleton order/garment/payment records (runtime, not contracts).
  * OrderStore is async so memory and Postgres backends share one interface.
  */
 
-import type { GarmentStatus } from "@laundry/domain";
+import type { GarmentStatus, PaymentMethod, PaymentRow } from "@laundry/domain";
 
 export type OrderStatus = "open" | "closed" | "cancelled";
+
+export type { PaymentMethod, PaymentRow };
+
+export type PickupApplyOptions = Readonly<{
+  staffId: string;
+  method?: PaymentMethod;
+  /** Override UUID generation for the payment row (tests). */
+  paymentId?: string;
+}>;
 
 export type OrderLineRecord = Readonly<{
   line_index: number;
@@ -75,6 +84,13 @@ export type OrderStore = Readonly<{
     garmentIds: readonly string[],
     collectCents: number,
     nowEpoch: number,
+    options?: PickupApplyOptions,
   ) => Promise<PickupApplyResult | null>;
   nextTicketSeq: (orgId: string, storeId: string, dayKey: string) => Promise<number>;
+  /** Optional ledger read for tests / future queries. */
+  listPayments?: (
+    orgId: string,
+    storeId: string,
+    orderId?: string,
+  ) => Promise<readonly PaymentRow[]>;
 }>;

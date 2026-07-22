@@ -305,7 +305,9 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
   };
 
   const { pool, queries } = createCapturingPool(handler);
-  const store = createPgOrderStore(pool);
+  const store = createPgOrderStore(pool, {
+    newId: () => "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  });
   const applied = await store.applyPickup(
     DEMO_ORG_ID,
     DEMO_STORE_ID,
@@ -313,6 +315,7 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
     garments.map((g) => g.garment_id),
     2500,
     1_700_000_100,
+    Object.freeze({ staffId: DEMO_STAFF_A_ID, method: "cash" as const }),
   );
   assert.ok(applied);
   assert.equal(applied.order.paid_cents, 3000);
@@ -325,6 +328,103 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
 
   assert.ok(queries.some((q) => q.sql.includes("UPDATE garments") && q.sql.includes("picked_up")));
   assert.ok(queries.some((q) => q.sql.includes("UPDATE orders")));
+  const paymentInsert = queries.find((q) => q.sql.includes("INTO payments"));
+  assert.ok(paymentInsert, "expected INSERT INTO payments when collectCents > 0");
+  assert.equal(paymentInsert.params?.[4], "cash");
+  assert.equal(paymentInsert.params?.[5], 2500);
+  assert.equal(paymentInsert.params?.[6], "pay");
+  assert.equal(paymentInsert.params?.[8], DEMO_STAFF_A_ID);
+});
+
+test("applyPickup with collectCents 0 skips payments insert", async () => {
+  const order = sampleOrder();
+  const garments = sampleGarments();
+  const handler: MockQueryHandler = (sql) => {
+    if (sql.includes("FROM orders") && sql.includes("WHERE")) {
+      return {
+        rows: [
+          {
+            id: order.order_id,
+            org_id: order.org_id,
+            store_id: order.store_id,
+            ticket_no: order.ticket_no,
+            status: order.status,
+            customer_phone: order.customer_phone,
+            customer_name: order.customer_name,
+            note: order.note,
+            subtotal_cents: order.subtotal_cents,
+            payable_cents: order.payable_cents,
+            paid_cents: order.paid_cents,
+            balance_cents: order.balance_cents,
+            created_at: new Date(order.created_at * 1000),
+            updated_at: new Date(order.updated_at * 1000),
+            created_by_staff_id: order.created_by_staff_id,
+          },
+        ],
+        rowCount: 1,
+      };
+    }
+    if (sql.includes("FROM order_lines")) {
+      return {
+        rows: [
+          {
+            id: "line-uuid",
+            org_id: order.org_id,
+            store_id: order.store_id,
+            order_id: order.order_id,
+            line_index: 0,
+            service_code: "wash",
+            category_code: "shirt",
+            unit_price_cents: 1500,
+            qty: 2,
+            line_total_cents: 3000,
+            color: null,
+            brand: null,
+          },
+        ],
+        rowCount: 1,
+      };
+    }
+    if (sql.includes("FROM garments")) {
+      return {
+        rows: garments.map((g) => ({
+          id: g.garment_id,
+          org_id: g.org_id,
+          store_id: g.store_id,
+          order_id: g.order_id,
+          order_line_id: "line-uuid",
+          line_index: g.line_index,
+          seq: g.seq,
+          barcode: g.barcode,
+          service_code: g.service_code,
+          category_code: g.category_code,
+          unit_price_cents: g.unit_price_cents,
+          color: g.color,
+          brand: g.brand,
+          status: g.status,
+        })),
+        rowCount: garments.length,
+      };
+    }
+    return { rows: [], rowCount: 0 };
+  };
+
+  const { pool, queries } = createCapturingPool(handler);
+  const store = createPgOrderStore(pool);
+  const applied = await store.applyPickup(
+    DEMO_ORG_ID,
+    DEMO_STORE_ID,
+    order.order_id,
+    [garments[0]!.garment_id],
+    0,
+    1_700_000_100,
+    Object.freeze({ staffId: DEMO_STAFF_A_ID }),
+  );
+  assert.ok(applied);
+  assert.equal(
+    queries.some((q) => q.sql.includes("INTO payments")),
+    false,
+  );
 });
 
 // Optional live PG smoke — tables may not exist until migration lands.

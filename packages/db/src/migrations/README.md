@@ -14,6 +14,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0005_pin_lockouts.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0006_pin_challenge_stepup_binding.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0007_m2_orders.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0008_catalog_items.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0009_payments.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -30,5 +31,6 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **M1**: identity/platform + A5 session tables
 - **M2 skeleton** (0007): `orders`, `order_lines`, `garments`, `ticket_counters`
 - **M2 catalog** (0008): `catalog_items` (store-scoped price list; app seeds demo on first list if empty)
-- Still deferred: customers, payments, edge lease, AI matrix tables
+- **M2 payments** (0009): `payments` append-only ledger (`SELECT, INSERT` only for `laundry_app`)
+- Still deferred: customers, edge lease, AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

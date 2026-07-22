@@ -212,6 +212,15 @@ export function createMockQueryClient(handler?: QueryPort["execute"]): QueryPort
           }) as T,
         });
       }
+      if (name === "order.get") {
+        return Object.freeze({
+          ok: false as const,
+          error: Object.freeze({
+            code: "RESOURCE_UNAVAILABLE",
+            message: "mock 未配置 order.get 数据",
+          }),
+        });
+      }
       return Object.freeze({
         ok: false as const,
         error: Object.freeze({ code: "RESOURCE_UNAVAILABLE", message: "未知查询" }),

@@ -21,6 +21,9 @@ import {
   M2_ORDER_RLS_TABLES,
   M2_ORDER_TABLE_NAMES,
   M2_ORDER_TABLES,
+  M2_PAYMENT_RLS_TABLES,
+  M2_PAYMENT_TABLE_NAMES,
+  M2_PAYMENT_TABLES,
   buildM1RlsMigrationSql,
   schema,
 } from "../src/index.js";
@@ -214,20 +217,52 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(hasCodeUnique).toBe(true);
   });
 
-  it("exposes full schema as M1 + M2 order + catalog tables", () => {
+  it("exports M2 payments tables with store tenant columns and ledger fields", () => {
+    expect(Object.keys(M2_PAYMENT_TABLES).sort()).toEqual([...M2_PAYMENT_TABLE_NAMES].sort());
+    expect([...M2_PAYMENT_RLS_TABLES].sort()).toEqual([...M2_PAYMENT_TABLE_NAMES].sort());
+
+    const columns = columnNames(M2_PAYMENT_TABLES.payments);
+    expect(columns).toContain("org_id");
+    expect(columns).toContain("store_id");
+    expect(columns).toContain("id");
+    expect(columns).toContain("order_id");
+    expect(columns).toContain("method");
+    expect(columns).toContain("amount_cents");
+    expect(columns).toContain("kind");
+    expect(columns).toContain("ref_payment_id");
+    expect(columns).toContain("staff_id");
+    expect(columns).toContain("at");
+  });
+
+  it("declares M2 payments tenant unique layout", () => {
+    const config = getTableConfig(M2_PAYMENT_TABLES.payments);
+    const hasTenantUnique = config.indexes.some((index) => {
+      const cols = index.config.columns.map((column) => {
+        if (typeof column === "string") return column;
+        if ("name" in column && typeof column.name === "string") return column.name;
+        return "";
+      });
+      return cols[0] === "org_id" && cols[1] === "store_id" && cols.includes("id");
+    });
+    expect(hasTenantUnique).toBe(true);
+  });
+
+  it("exposes full schema as M1 + M2 order + catalog + payments tables", () => {
     const expected = [
       ...M1_ALL_TABLE_NAMES,
       ...M2_ORDER_TABLE_NAMES,
       ...M2_CATALOG_TABLE_NAMES,
+      ...M2_PAYMENT_TABLE_NAMES,
     ].sort();
     expect(Object.keys(schema).sort()).toEqual(expected);
   });
 
-  it("no longer defers orders/order_lines/garments/catalog past M2 skeleton", () => {
+  it("no longer defers orders/order_lines/garments/catalog/payments past M2 skeleton", () => {
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("orders");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("order_lines");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("garments");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("catalog_items");
-    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).toContain("payments");
+    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("payments");
+    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).toContain("customers");
   });
 });

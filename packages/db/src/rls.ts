@@ -52,6 +52,11 @@ export const M2_ORDER_RLS_TABLES = Object.freeze([
  */
 export const M2_CATALOG_RLS_TABLES = Object.freeze(["catalog_items"] as const);
 
+/**
+ * M2 payments ledger uses store-scope RLS (append-only grants in 0009_payments.sql).
+ */
+export const M2_PAYMENT_RLS_TABLES = Object.freeze(["payments"] as const);
+
 const STORE_PREDICATE = `org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
     AND store_id = NULLIF(current_setting('app.store_id', true), '')::uuid`;
 
