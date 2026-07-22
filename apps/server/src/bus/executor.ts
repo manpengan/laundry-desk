@@ -16,6 +16,8 @@ import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingAction, PendingActionStore } from "../pending-actions/types.js";
+import { verifyStepUpProof } from "../policy/step-up.js";
+import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
 import {
   chainFailureToResult,
   createChainPorts,
@@ -51,6 +53,8 @@ export type ExecuteCommandOptions = Readonly<{
   idempotencyStore?: IdempotencyStore;
   /** Defaults to process-local MemoryPendingActionStore. */
   pendingStore?: PendingActionStore;
+  /** Defaults to process-local MemoryStepUpProofStore. */
+  stepUpProofStore?: StepUpProofStore;
   now?: () => Date;
   newId?: () => string;
 }>;
@@ -260,14 +264,37 @@ async function runInsideTransaction(
 
   // Consume pending card after chain pass, before mutation (CAS fail-closed).
   if (busCtx.confirmAuthorization !== undefined) {
-    const consume = pendingStore.atomicConsume(
-      busCtx.confirmAuthorization.confirmRef,
-      busCtx.actor.staffId,
-      {
-        expectedArgsHash: busCtx.confirmAuthorization.argsHash,
-        nowEpochSeconds: Math.floor((opts.now?.() ?? new Date()).getTime() / 1000),
-      },
-    );
+    const nowEpochSeconds = Math.floor((opts.now?.() ?? new Date()).getTime() / 1000);
+    const confirmRef = busCtx.confirmAuthorization.confirmRef;
+    const pending = pendingStore.get(confirmRef);
+    let approverStaffId = busCtx.actor.staffId;
+
+    // Creator resume path: active step-up proof (from other staff PIN) stands in for
+    // other-approver identity. Consume proof first (single-use), then pending.
+    if (
+      pending !== null &&
+      pending.requiresOtherApprover &&
+      busCtx.actor.staffId === pending.creatorStaffId
+    ) {
+      const proofStore = opts.stepUpProofStore ?? processStepUpProofStore;
+      const proof = proofStore.findActiveByPendingRef(confirmRef);
+      if (proof === null) {
+        throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
+      }
+      const verified = verifyStepUpProof(proof, pending, nowEpochSeconds);
+      if (verified.ok === false) {
+        throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
+      }
+      if (!proofStore.atomicConsume(proof.proofId, nowEpochSeconds)) {
+        throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
+      }
+      approverStaffId = proof.approverStaffId;
+    }
+
+    const consume = pendingStore.atomicConsume(confirmRef, approverStaffId, {
+      expectedArgsHash: busCtx.confirmAuthorization.argsHash,
+      nowEpochSeconds,
+    });
     if (consume.ok === false) {
       throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
     }

@@ -8,12 +8,15 @@ import { createPgIdentityStore } from "../identity/pg-store.js";
 import { createPasswordPort } from "../identity/password.js";
 import type { StaffRecord, Uuid } from "../identity/types.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
+import { processPendingActionStore } from "../pending-actions/process-store.js";
+import type { PendingActionStore } from "../pending-actions/types.js";
 import {
   createMemoryAuditQueryStore,
   createMemoryFeaturesStore,
   createMemorySettingsStore,
 } from "../platform/index.js";
 import type { PlatformHandlerDeps } from "../platform/handlers.js";
+import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
 import { createPgPool, resolvePgUrls, type PgPool, type ResolvedPgUrls } from "../db/pg-pool.js";
 import {
   DEMO_ADMIN_ID,
@@ -51,6 +54,9 @@ export type LocalRuntime = Readonly<{
   platform: PlatformHandlerDeps;
   accessTokenSecret: string;
   staffDirectory: readonly LocalStaffDirectoryEntry[];
+  /** Shared with Command Bus for confirm_ref / step-up PIN. */
+  pendingStore: PendingActionStore;
+  stepUpProofStore: StepUpProofStore;
   /** Present when mode === "pg"; close on shutdown. */
   pool: PgPool | null;
   /** Memory store when mode === "memory" (tests). */
@@ -90,6 +96,8 @@ function buildIdentityDeps(
     pinLockouts: ReturnType<typeof createMemoryIdentityStore>["pinLockouts"];
   }>,
   passwordPort: ReturnType<typeof createPasswordPort>,
+  pendingStore: PendingActionStore = processPendingActionStore,
+  proofStore: StepUpProofStore = processStepUpProofStore,
 ): IdentityHandlerDeps {
   const clock = {
     nowEpochSeconds: () => Math.floor(Date.now() / 1000),
@@ -114,13 +122,17 @@ function buildIdentityDeps(
     clock,
     sessions: sessionDeps,
   };
+  const pinStepUp = Object.freeze({
+    ...pin,
+    pending: pendingStore,
+    proofs: proofStore,
+  });
 
   return Object.freeze({
     login,
     sessions: sessionDeps,
     pin,
-    pinChallenges: ports.pinChallenges,
-    clock,
+    pinStepUp,
     resolveBinding: () =>
       Object.freeze({
         session: null,
@@ -173,10 +185,17 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
 
   return Object.freeze({
     mode: "memory" as const,
-    identity: buildIdentityDeps(store, passwordPort),
+    identity: buildIdentityDeps(
+      store,
+      passwordPort,
+      processPendingActionStore,
+      processStepUpProofStore,
+    ),
     platform: buildPlatform("memory"),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
+    pendingStore: processPendingActionStore,
+    stepUpProofStore: processStepUpProofStore,
     pool: null,
     store,
   });
@@ -210,10 +229,17 @@ export async function createPgLocalRuntime(
 
   return Object.freeze({
     mode: "pg" as const,
-    identity: buildIdentityDeps(store, passwordPort),
+    identity: buildIdentityDeps(
+      store,
+      passwordPort,
+      processPendingActionStore,
+      processStepUpProofStore,
+    ),
     platform: buildPlatform("sql"),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
+    pendingStore: processPendingActionStore,
+    stepUpProofStore: processStepUpProofStore,
     pool: appPool,
     store: null,
   });

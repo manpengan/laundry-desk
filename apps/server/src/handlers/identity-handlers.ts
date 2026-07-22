@@ -3,29 +3,22 @@
  * Uses C6 services + memory/DI ports; returns A2-shaped success payloads.
  */
 
-import {
-  ACCESS_TOKEN_TTL_SECONDS,
-  createCommandError,
-  createPinChallenge,
-  PIN_CHALLENGE_MAX_ATTEMPTS,
-} from "@laundry/contracts";
+import { ACCESS_TOKEN_TTL_SECONDS, createCommandError } from "@laundry/contracts";
 
 import type { CommandHandler, HandlerContext, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
-import { newUuid } from "../identity/crypto-util.js";
 import type { LoginResult, LoginServiceDeps } from "../identity/login.js";
 import { loginWithPassword } from "../identity/login.js";
 import type { CreatePinChallengeInput, PinServiceDeps, VerifyPinInput } from "../identity/pin.js";
 import { createQuickSwitchChallenge, verifyQuickSwitchPin } from "../identity/pin.js";
+import {
+  createStepUpChallenge,
+  verifyStepUpPin,
+  type PinStepUpDeps,
+} from "../identity/pin-step-up.js";
 import type { LogoutResult, RefreshResult, SessionServiceDeps } from "../identity/session.js";
 import { logoutSession, rotateRefresh } from "../identity/session.js";
-import {
-  IdentityError,
-  type IdentityClock,
-  type PinChallengeRepository,
-  type SessionIssueResult,
-  type SessionRecord,
-} from "../identity/types.js";
+import { IdentityError, type SessionIssueResult, type SessionRecord } from "../identity/types.js";
 
 /** Request-scoped secrets / session the HTTP/C8 layer injects (never from wire body alone). */
 export type IdentitySessionBinding = Readonly<{
@@ -37,9 +30,8 @@ export type IdentityHandlerDeps = Readonly<{
   login: LoginServiceDeps;
   sessions: SessionServiceDeps;
   pin: PinServiceDeps;
-  /** Required for step_up pin_challenge skeleton. */
-  pinChallenges?: PinChallengeRepository;
-  clock?: IdentityClock;
+  /** Required for purpose=step_up challenge/verify (pending + proof stores). */
+  pinStepUp?: PinStepUpDeps;
   resolveBinding: (ctx: HandlerContext) => IdentitySessionBinding | Promise<IdentitySessionBinding>;
 }>;
 
@@ -235,75 +227,32 @@ async function issueStepUpChallenge(
   pendingActionRef: string,
   approverStaffId: string,
 ): Promise<HandlerOutcome> {
-  if (deps.pinChallenges === undefined || deps.clock === undefined) {
+  if (deps.pinStepUp === undefined) {
     throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
   }
-  if (approverStaffId === session.staff_id) {
-    throw new HandlerCommandError(createCommandError("PERMISSION_DENIED"));
-  }
-  const now = deps.clock.nowEpochSeconds();
-  // Skeleton: bind challenge to opaque ref; full pending-card join is residual.
-  const argsHash = "0".repeat(64);
-  const raw = createPinChallenge({
+  const view = await createStepUpChallenge(deps.pinStepUp, {
     purpose: "step_up",
-    challenge_id: newUuid(),
-    session_id: session.session_id,
-    session_version: session.session_version,
-    org_id: session.org_id,
-    store_id: session.store_id,
-    device_id: session.device_id,
-    nonce: newUuid(),
-    issued_at: now,
+    session,
     pending_action_ref: pendingActionRef,
-    args_hash: argsHash,
-    entity_versions: [],
-    idempotency_key: newUuid(),
-    requester_staff_id: session.staff_id,
     approver_staff_id: approverStaffId,
   });
-  if (raw.purpose !== "step_up") {
-    throw new HandlerCommandError(createCommandError("TRANSACTION_FAILED"));
-  }
-  await deps.pinChallenges.insert(
-    Object.freeze({
-      challenge_id: raw.challenge_id,
-      purpose: "step_up" as const,
-      session_id: raw.session_id,
-      session_version: raw.session_version,
-      org_id: raw.org_id,
-      store_id: raw.store_id,
-      device_id: raw.device_id,
-      nonce: raw.nonce,
-      issued_at: raw.issued_at,
-      expires_at: raw.expires_at,
-      status: raw.status,
-      failed_attempts: raw.failed_attempts,
-      max_attempts: raw.max_attempts,
-      requester_staff_id: raw.requester_staff_id,
-      pending_action_ref: raw.pending_action_ref,
-      args_hash: raw.args_hash,
-      entity_versions: raw.entity_versions,
-      idempotency_key: raw.idempotency_key,
-      approver_staff_id: raw.approver_staff_id,
-    }),
-  );
   return Object.freeze({
     result: Object.freeze({
-      challenge_id: raw.challenge_id,
-      purpose: raw.purpose,
-      expires_at: raw.expires_at,
-      max_attempts: PIN_CHALLENGE_MAX_ATTEMPTS,
+      challenge_id: view.challenge_id,
+      purpose: view.purpose,
+      expires_at: view.expires_at,
+      max_attempts: view.max_attempts,
     }),
     audit: Object.freeze({
       entity: "pin_challenge",
-      entityId: raw.challenge_id,
+      entityId: view.challenge_id,
     }),
     events: Object.freeze([
       Object.freeze({
         type: "identity.pin_challenge_issued",
         payload: Object.freeze({
-          challenge_id: raw.challenge_id,
-          purpose: raw.purpose,
+          challenge_id: view.challenge_id,
+          purpose: view.purpose,
         }),
       }),
     ]),
@@ -345,6 +294,39 @@ function pinVerifyHandler(deps: IdentityHandlerDeps): CommandHandler {
       const input = asRecord(ctx.parsed);
       const challengeId = requireString(input.challenge_id, "challenge_id");
       const pin = requireString(input.pin, "pin");
+      const record = await deps.pin.challenges.get(challengeId);
+
+      if (record?.purpose === "step_up") {
+        if (deps.pinStepUp === undefined) {
+          throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+        }
+        const proof = await verifyStepUpPin(deps.pinStepUp, {
+          challenge_id: challengeId,
+          pin,
+          session: binding.session,
+        });
+        return Object.freeze({
+          result: Object.freeze({
+            step_up_proof_id: proof.step_up_proof_id,
+            expires_at: proof.expires_at,
+          }),
+          audit: Object.freeze({
+            entity: "step_up_proof",
+            entityId: proof.step_up_proof_id,
+          }),
+          events: Object.freeze([
+            Object.freeze({
+              type: "identity.pin_verified",
+              payload: Object.freeze({
+                challenge_id: challengeId,
+                purpose: "step_up",
+                step_up_proof_id: proof.step_up_proof_id,
+              }),
+            }),
+          ]),
+        });
+      }
+
       const verifyInput: VerifyPinInput = Object.freeze({
         challenge_id: challengeId,
         pin,
