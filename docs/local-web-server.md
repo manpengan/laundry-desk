@@ -119,7 +119,14 @@ pnpm --filter @laundry/web test
 
 ### 总线 + 真 PG 冒烟
 
-`local:server:pg` 时 `platform.settings.set` 走 laundry_app + 事务 GUC，写入 `settings` 与同事务 `audit_log`：
+`local:server:pg` 时写命令与读查询都走 laundry_app + 事务 GUC：
+
+| 路径                                           | 说明                               |
+| ---------------------------------------------- | ---------------------------------- |
+| `POST /v1/commands/platform.settings.set`      | 写 `settings` + 同事务 `audit_log` |
+| `POST /v1/queries/platform.settings.get`       | 按 key 列表读 settings             |
+| `POST /v1/queries/platform.store_features.get` | 读 store_features                  |
+| `POST /v1/queries/platform.audit.list`         | 读 audit_log（无 secret 字段）     |
 
 ```bash
 # 登录后
@@ -128,6 +135,16 @@ curl -s -X POST http://127.0.0.1:8787/v1/commands/platform.settings.set \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
   -d '{"entries":[{"key":"pricing.min_order_cents","value_json":"1500"}]}'
+
+curl -s -X POST http://127.0.0.1:8787/v1/queries/platform.settings.get \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"keys":["pricing.min_order_cents"]}'
+
+curl -s -X POST http://127.0.0.1:8787/v1/queries/platform.audit.list \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d "{\"from_epoch_s\":0,\"to_epoch_s\":$(date +%s),\"limit\":20}"
 ```
 
 集成测（opt-in）：
@@ -140,4 +157,4 @@ LAUNDRY_USE_LOCAL_PG=1 node --test apps/server/dist/__tests__/bus-pg-smoke.test.
 
 - pin_lockouts 落表
 - ADR-09 签署 → contracts@v0.1.0
-- 查询总线（settings.get / audit.list 上 HTTP）
+- R5 step-up 真拦截（当前 step_up 仍放行执行）

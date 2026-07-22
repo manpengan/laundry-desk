@@ -12,6 +12,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { createCommandError, CSRF_HEADER_NAME, type CommandErrorCode } from "@laundry/contracts";
 
 import { executeCommand } from "../bus/executor.js";
+import { executeQuery } from "../bus/execute-query.js";
 import type { ActorContext } from "../bus/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
@@ -295,6 +296,13 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     }
   });
 
+  const runWithSql = async <T>(fn: (sql: SqlClient) => Promise<T>): Promise<T> => {
+    if (runtime.mode === "pg" && runtime.pool !== null) {
+      return withPoolClient(runtime.pool, (sql) => fn(sql));
+    }
+    return fn(memorySql);
+  };
+
   app.post("/v1/commands/:name", async (request, reply) => {
     const session = await resolveSession(runtime, readBearer(request));
     if (session === null) {
@@ -314,17 +322,45 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     });
     const tenant = tenantFromSession(session);
     const actor = actorFromSession(session);
-    const run = async (sql: SqlClient) =>
+    const result = await runWithSql((sql) =>
       executeCommand(sql, tenant, name, body, {
         registry,
         actor,
         chainHooks,
-      });
+      }),
+    );
 
-    const result =
-      runtime.mode === "pg" && runtime.pool !== null
-        ? await withPoolClient(runtime.pool, (sql) => run(sql))
-        : await run(memorySql);
+    if (!result.ok) {
+      reply.code(400);
+    }
+    return result;
+  });
+
+  app.post("/v1/queries/:name", async (request, reply) => {
+    const session = await resolveSession(runtime, readBearer(request));
+    if (session === null) {
+      reply.code(401);
+      return fail("AUTHENTICATION_FAILED");
+    }
+    const params = request.params as { name?: string };
+    const name = typeof params.name === "string" ? params.name : "";
+    if (name.length === 0) {
+      reply.code(400);
+      return fail("VALIDATION_FAILED");
+    }
+    const body = isRecord(request.body) ? request.body : {};
+    const { queryRegistry } = createRegisteredM1Bus({
+      identity: runtime.identity,
+      platform: runtime.platform,
+    });
+    const tenant = tenantFromSession(session);
+    const actor = actorFromSession(session);
+    const result = await runWithSql((sql) =>
+      executeQuery(sql, tenant, name, body, {
+        registry: queryRegistry,
+        actor,
+      }),
+    );
 
     if (!result.ok) {
       reply.code(400);
