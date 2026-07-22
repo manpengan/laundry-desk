@@ -46,6 +46,12 @@ export const M2_ORDER_RLS_TABLES = Object.freeze([
   "ticket_counters",
 ] as const);
 
+/**
+ * M2 catalog tables use store-scope RLS (same predicate as orders / pin_lockouts).
+ * Policies live in 0008_catalog_items.sql.
+ */
+export const M2_CATALOG_RLS_TABLES = Object.freeze(["catalog_items"] as const);
+
 const STORE_PREDICATE = `org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
     AND store_id = NULLIF(current_setting('app.store_id', true), '')::uuid`;
 

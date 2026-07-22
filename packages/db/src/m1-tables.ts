@@ -26,10 +26,10 @@ export const M1_ALL_TABLE_NAMES = Object.freeze([
   ...M1_SESSION_TABLE_NAMES,
 ] as const);
 
-/** Tables deferred past M1 identity/platform + M2 order skeleton (catalog / payments / edge / AI). */
+/** Tables deferred past M1 identity/platform + M2 order/catalog skeleton (payments / edge / AI). */
 export const DEFERRED_V2_TABLES_NOTE = Object.freeze({
   reason:
-    "packages/db ships identity/platform + A5 session + M2 order skeleton; remaining A3 matrix tables land with later domain packages.",
+    "packages/db ships identity/platform + A5 session + M2 order/catalog skeleton; remaining A3 matrix tables land with later domain packages.",
   deferredExamples: Object.freeze([
     "customers",
     "payments",

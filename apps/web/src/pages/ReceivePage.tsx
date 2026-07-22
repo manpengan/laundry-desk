@@ -1,10 +1,12 @@
 /**
- * 开单（order.receive）— M2 counter form over command bus.
+ * 开单（order.receive）— M2 counter form over command bus + catalog picker.
  */
 
 import { Button, Input, MoneyText, StatusBadge, useToast } from "@laundry/ui";
 import { useCallback, useState } from "react";
-import type { CommandPort } from "../commands/types.js";
+import type { CatalogListItem } from "../commands/query-client.js";
+import type { CommandPort, QueryPort } from "../commands/types.js";
+import { CatalogPicker } from "./CatalogPicker.js";
 import {
   buildReceiveBody,
   newLineDraft,
@@ -15,6 +17,8 @@ import {
 
 export type ReceivePageProps = {
   commandClient: CommandPort;
+  /** Optional price-list query port (catalog.items.list). */
+  queryClient?: QueryPort;
 };
 
 function updateLine(
@@ -27,13 +31,63 @@ function updateLine(
   );
 }
 
-export function ReceivePage({ commandClient }: ReceivePageProps) {
+function isBlankLine(line: ReceiveLineDraft): boolean {
+  return (
+    line.service_code.trim() === "" &&
+    line.category_code.trim() === "" &&
+    line.unit_price_cents.trim() === ""
+  );
+}
+
+function lineFromCatalog(item: CatalogListItem, index: number): ReceiveLineDraft {
+  return Object.freeze({
+    key: `line-${index}-${Date.now()}`,
+    service_code: item.service_code,
+    category_code: item.category_code,
+    unit_price_cents: String(item.unit_price_cents),
+    qty: "1",
+  });
+}
+
+function applyCatalogPick(
+  lines: readonly ReceiveLineDraft[],
+  focusedKey: string | null,
+  item: CatalogListItem,
+): { lines: readonly ReceiveLineDraft[]; focusedKey: string } {
+  const patch = {
+    service_code: item.service_code,
+    category_code: item.category_code,
+    unit_price_cents: String(item.unit_price_cents),
+    qty: "1",
+  };
+  if (focusedKey !== null) {
+    const focused = lines.find((line) => line.key === focusedKey);
+    if (focused !== undefined && isBlankLine(focused)) {
+      return {
+        lines: updateLine(lines, focusedKey, patch),
+        focusedKey,
+      };
+    }
+  }
+  const blank = lines.find((line) => isBlankLine(line));
+  if (blank !== undefined) {
+    return {
+      lines: updateLine(lines, blank.key, patch),
+      focusedKey: blank.key,
+    };
+  }
+  const next = lineFromCatalog(item, lines.length);
+  return { lines: [...lines, next], focusedKey: next.key };
+}
+
+export function ReceivePage({ commandClient, queryClient }: ReceivePageProps) {
   const toast = useToast();
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [paidText, setPaidText] = useState("0");
   const [note, setNote] = useState("");
   const [lines, setLines] = useState<readonly ReceiveLineDraft[]>(() => [newLineDraft(0)]);
+  const [focusedLineKey, setFocusedLineKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ReceiveOrderResult | null>(null);
 
@@ -44,6 +98,17 @@ export function ReceivePage({ commandClient }: ReceivePageProps) {
   const onRemoveLine = useCallback((key: string) => {
     setLines((prev) => (prev.length <= 1 ? prev : prev.filter((line) => line.key !== key)));
   }, []);
+
+  const onPickCatalog = useCallback(
+    (item: CatalogListItem) => {
+      setLines((prev) => {
+        const applied = applyCatalogPick(prev, focusedLineKey, item);
+        setFocusedLineKey(applied.focusedKey);
+        return applied.lines;
+      });
+    },
+    [focusedLineKey],
+  );
 
   const onSubmit = useCallback(async () => {
     const built = buildReceiveBody({
@@ -82,6 +147,7 @@ export function ReceivePage({ commandClient }: ReceivePageProps) {
     setPaidText("0");
     setNote("");
     setLines([newLineDraft(0)]);
+    setFocusedLineKey(null);
     setResult(null);
   }, []);
 
@@ -113,6 +179,10 @@ export function ReceivePage({ commandClient }: ReceivePageProps) {
           />
         </div>
 
+        {queryClient !== undefined ? (
+          <CatalogPicker queryClient={queryClient} disabled={busy} onPick={onPickCatalog} />
+        ) : null}
+
         <fieldset className="ld-order-form__lines" disabled={busy}>
           <legend className="ld-order-form__legend">衣物明细</legend>
           {lines.map((line, index) => (
@@ -122,6 +192,7 @@ export function ReceivePage({ commandClient }: ReceivePageProps) {
                 name={`service-${line.key}`}
                 label="服务"
                 value={line.service_code}
+                onFocus={() => setFocusedLineKey(line.key)}
                 onChange={(event) =>
                   setLines((prev) =>
                     updateLine(prev, line.key, { service_code: event.target.value }),
@@ -132,6 +203,7 @@ export function ReceivePage({ commandClient }: ReceivePageProps) {
                 name={`category-${line.key}`}
                 label="品类"
                 value={line.category_code}
+                onFocus={() => setFocusedLineKey(line.key)}
                 onChange={(event) =>
                   setLines((prev) =>
                     updateLine(prev, line.key, { category_code: event.target.value }),
@@ -143,6 +215,7 @@ export function ReceivePage({ commandClient }: ReceivePageProps) {
                 label="单价（分）"
                 inputMode="numeric"
                 value={line.unit_price_cents}
+                onFocus={() => setFocusedLineKey(line.key)}
                 onChange={(event) =>
                   setLines((prev) =>
                     updateLine(prev, line.key, { unit_price_cents: event.target.value }),
@@ -155,6 +228,7 @@ export function ReceivePage({ commandClient }: ReceivePageProps) {
                 label="数量"
                 inputMode="numeric"
                 value={line.qty}
+                onFocus={() => setFocusedLineKey(line.key)}
                 onChange={(event) =>
                   setLines((prev) => updateLine(prev, line.key, { qty: event.target.value }))
                 }

@@ -1,6 +1,7 @@
 /**
- * In-memory demo price list (M2 skeleton). No PG tables yet.
+ * In-memory demo price list (M2 skeleton).
  * Web / receive UI can list these via catalog.items.list.
+ * CatalogStore is async so memory and Postgres backends share one interface.
  */
 
 import type { CatalogItem } from "@laundry/domain";
@@ -58,7 +59,7 @@ export const DEMO_CATALOG_ITEMS: readonly CatalogItem[] = Object.freeze([
 ]);
 
 export type CatalogStore = Readonly<{
-  listAll: () => readonly CatalogItem[];
+  listAll: () => Promise<readonly CatalogItem[]>;
 }>;
 
 /** Closed-over seed list (immutable). */
@@ -67,7 +68,7 @@ export function createMemoryCatalogStore(
 ): CatalogStore {
   const snapshot = Object.freeze(items.map((item) => Object.freeze({ ...item })));
   return Object.freeze({
-    listAll(): readonly CatalogItem[] {
+    async listAll(): Promise<readonly CatalogItem[]> {
       return snapshot;
     },
   });

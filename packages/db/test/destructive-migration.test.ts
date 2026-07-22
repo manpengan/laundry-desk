@@ -46,6 +46,7 @@ describe("destructive migration static reject", () => {
       "0005_pin_lockouts.sql",
       "0006_pin_challenge_stepup_binding.sql",
       "0007_m2_orders.sql",
+      "0008_catalog_items.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
@@ -66,6 +67,7 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS order_lines/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS garments/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS ticket_counters/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS catalog_items/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS args_hash/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS entity_versions/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS idempotency_key/iu);
@@ -79,6 +81,9 @@ describe("destructive migration static reject", () => {
     );
     expect(combined).toMatch(
       /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE garments TO laundry_app/iu,
+    );
+    expect(combined).toMatch(
+      /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE catalog_items TO laundry_app/iu,
     );
     expect(combined).not.toMatch(/GRANT[^;]*UPDATE[^;]*audit_log/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*audit_log/iu);

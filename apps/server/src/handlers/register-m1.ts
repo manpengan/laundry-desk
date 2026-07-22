@@ -21,7 +21,7 @@ export type RegisterM1Deps = Readonly<{
   platform?: PlatformHandlerDeps;
   /** M2 skeleton order receive/pickup (memory or PG store). */
   order?: OrderHandlerDeps;
-  /** M2 catalog price list (memory seed). */
+  /** M2 catalog price list (memory or PG). */
   catalog?: CatalogHandlerDeps;
 }>;
 

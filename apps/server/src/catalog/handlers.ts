@@ -1,5 +1,5 @@
 /**
- * M2 catalog query handlers (memory price list).
+ * M2 catalog query handlers (memory or PG price list).
  */
 
 import { createCommandError } from "@laundry/contracts";
@@ -39,7 +39,8 @@ function listHandler(deps: CatalogHandlerDeps): CommandHandler {
     const input = asRecord(ctx.parsed);
     const limit = requirePositiveInt(input.limit);
     const query = typeof input.query === "string" ? input.query : "";
-    const filtered = filterCatalog(deps.store.listAll(), query);
+    const all = await deps.store.listAll();
+    const filtered = filterCatalog(all, query);
     const items = filtered.slice(0, limit).map((item) => Object.freeze({ ...item }));
     return Object.freeze({
       result: Object.freeze({
@@ -54,7 +55,8 @@ function getHandler(deps: CatalogHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
     const code = requireString(input.code);
-    const item = findByCode(deps.store.listAll(), code);
+    const all = await deps.store.listAll();
+    const item = findByCode(all, code);
     return Object.freeze({
       result: Object.freeze({
         item: item === undefined ? null : Object.freeze({ ...item }),

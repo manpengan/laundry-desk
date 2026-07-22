@@ -15,6 +15,9 @@ import {
   M1_MATRIX_TABLES,
   M1_SESSION_TABLE_NAMES,
   M1_SESSION_TABLES,
+  M2_CATALOG_RLS_TABLES,
+  M2_CATALOG_TABLE_NAMES,
+  M2_CATALOG_TABLES,
   M2_ORDER_RLS_TABLES,
   M2_ORDER_TABLE_NAMES,
   M2_ORDER_TABLES,
@@ -174,15 +177,57 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(hasGarmentsTenantUnique).toBe(true);
   });
 
-  it("exposes full schema as M1 + M2 order tables", () => {
-    const expected = [...M1_ALL_TABLE_NAMES, ...M2_ORDER_TABLE_NAMES].sort();
+  it("exports M2 catalog tables with store tenant columns", () => {
+    expect(Object.keys(M2_CATALOG_TABLES).sort()).toEqual([...M2_CATALOG_TABLE_NAMES].sort());
+    expect([...M2_CATALOG_RLS_TABLES].sort()).toEqual([...M2_CATALOG_TABLE_NAMES].sort());
+
+    const columns = columnNames(M2_CATALOG_TABLES.catalog_items);
+    expect(columns).toContain("org_id");
+    expect(columns).toContain("store_id");
+    expect(columns).toContain("id");
+    expect(columns).toContain("code");
+    expect(columns).toContain("unit_price_cents");
+    expect(columns).toContain("mnemonic");
+    expect(columns).toContain("is_active");
+    expect(columns).toContain("sort_order");
+  });
+
+  it("declares M2 catalog tenant unique layouts", () => {
+    const config = getTableConfig(M2_CATALOG_TABLES.catalog_items);
+    const indexCols = (index: (typeof config.indexes)[number]): string[] =>
+      index.config.columns.map((column) => {
+        if (typeof column === "string") return column;
+        if ("name" in column && typeof column.name === "string") return column.name;
+        return "";
+      });
+
+    const hasTenantUnique = config.indexes.some((index) => {
+      const cols = indexCols(index);
+      return cols[0] === "org_id" && cols[1] === "store_id" && cols.includes("id");
+    });
+    expect(hasTenantUnique).toBe(true);
+
+    const hasCodeUnique = config.indexes.some((index) => {
+      const cols = indexCols(index);
+      return cols[0] === "org_id" && cols[1] === "store_id" && cols.includes("code");
+    });
+    expect(hasCodeUnique).toBe(true);
+  });
+
+  it("exposes full schema as M1 + M2 order + catalog tables", () => {
+    const expected = [
+      ...M1_ALL_TABLE_NAMES,
+      ...M2_ORDER_TABLE_NAMES,
+      ...M2_CATALOG_TABLE_NAMES,
+    ].sort();
     expect(Object.keys(schema).sort()).toEqual(expected);
   });
 
-  it("no longer defers orders/order_lines/garments past M2 skeleton", () => {
+  it("no longer defers orders/order_lines/garments/catalog past M2 skeleton", () => {
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("orders");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("order_lines");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("garments");
+    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("catalog_items");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).toContain("payments");
   });
 });

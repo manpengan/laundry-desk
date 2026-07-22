@@ -1,7 +1,7 @@
 import { EmptyState, MoneyText, Skeleton, StatusBadge } from "@laundry/ui";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { AccessSession } from "../auth/types.js";
-import type { CommandPort } from "../commands/types.js";
+import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { NavItemId } from "../nav.js";
 import { pageCopy } from "./page-copy.js";
 import { PickupPage } from "./PickupPage.js";
@@ -16,6 +16,8 @@ export type PageHostProps = {
   session?: AccessSession;
   authClient?: AuthClient;
   commandClient?: CommandPort;
+  /** Optional query bus (catalog price list on receive). */
+  queryClient?: QueryPort;
 };
 
 function actionTarget(from: NavItemId): NavItemId {
@@ -33,6 +35,7 @@ export function PageHost({
   session,
   authClient,
   commandClient,
+  queryClient,
 }: PageHostProps) {
   const copy = pageCopy(activeId);
 
@@ -48,7 +51,12 @@ export function PageHost({
   }
 
   if (activeId === "receive" && session !== undefined && commandClient !== undefined) {
-    return <ReceivePage commandClient={commandClient} />;
+    return (
+      <ReceivePage
+        commandClient={commandClient}
+        {...(queryClient !== undefined ? { queryClient } : {})}
+      />
+    );
   }
 
   if (activeId === "pickup" && session !== undefined && commandClient !== undefined) {
