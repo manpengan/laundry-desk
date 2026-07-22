@@ -1,7 +1,7 @@
 import { installLiquidGlass, ToastProvider } from "@laundry/ui";
 import { useEffect, useMemo, useState } from "react";
 import { createMockAuthClient, type AuthClient } from "./auth/AuthClient.js";
-import type { AccessSession } from "./auth/types.js";
+import type { AccessSession, LoginFormValues } from "./auth/types.js";
 import type { ConnectionStatus } from "./connection.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { CounterShell, type CounterShellProps } from "./shell/CounterShell.js";
@@ -16,6 +16,8 @@ export type AppProps = {
   authClient?: AuthClient;
   /** Seed session for tests / host bootstrap; memory only. */
   initialSession?: AccessSession | null;
+  /** Local host demo prefill only. */
+  loginInitialForm?: Partial<LoginFormValues>;
 };
 
 function shellPropsFrom(
@@ -45,6 +47,7 @@ export function App({
   enableLiquidGlass = true,
   authClient: authClientProp,
   initialSession = null,
+  loginInitialForm,
 }: AppProps) {
   const authClient = useMemo(() => authClientProp ?? createMockAuthClient(), [authClientProp]);
   const [session, setSession] = useState<AccessSession | null>(initialSession);
@@ -62,7 +65,11 @@ export function App({
           {...shellPropsFrom(connection, themePreference, session, authClient, setSession)}
         />
       ) : (
-        <LoginPage authClient={authClient} onSuccess={setSession} />
+        <LoginPage
+          authClient={authClient}
+          onSuccess={setSession}
+          {...(loginInitialForm !== undefined ? { initialForm: loginInitialForm } : {})}
+        />
       )}
     </ToastProvider>
   );

@@ -7,6 +7,8 @@ import { hasLoginFieldErrors, validateLoginForm } from "../auth/validate-login.j
 export type LoginPageProps = {
   authClient: AuthClient;
   onSuccess: (session: AccessSession) => void;
+  /** Optional prefill (local host demo only — never bake secrets into library defaults). */
+  initialForm?: Partial<LoginFormValues>;
 };
 
 const EMPTY_FORM: LoginFormValues = {
@@ -16,9 +18,19 @@ const EMPTY_FORM: LoginFormValues = {
   password: "",
 };
 
-export function LoginPage({ authClient, onSuccess }: LoginPageProps) {
+function mergeForm(initial?: Partial<LoginFormValues>): LoginFormValues {
+  if (initial === undefined) return EMPTY_FORM;
+  return {
+    org_code: initial.org_code ?? "",
+    store_code: initial.store_code ?? "",
+    username: initial.username ?? "",
+    password: initial.password ?? "",
+  };
+}
+
+export function LoginPage({ authClient, onSuccess, initialForm }: LoginPageProps) {
   const toast = useToast();
-  const [form, setForm] = useState<LoginFormValues>(EMPTY_FORM);
+  const [form, setForm] = useState<LoginFormValues>(() => mergeForm(initialForm));
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof LoginFormValues, string>>>(
     {},
   );
