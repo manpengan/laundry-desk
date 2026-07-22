@@ -7,6 +7,8 @@ import { createMemoryIdentityStore } from "../identity/memory-store.js";
 import { createPgIdentityStore } from "../identity/pg-store.js";
 import { createPasswordPort } from "../identity/password.js";
 import type { StaffRecord, Uuid } from "../identity/types.js";
+import type { CatalogHandlerDeps } from "../catalog/handlers.js";
+import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
@@ -57,6 +59,8 @@ export type LocalRuntime = Readonly<{
   platform: PlatformHandlerDeps;
   /** M2 order receive/pickup (memory or PG). */
   order: OrderHandlerDeps;
+  /** M2 catalog price list (memory seed until PG tables land). */
+  catalog: CatalogHandlerDeps;
   accessTokenSecret: string;
   staffDirectory: readonly LocalStaffDirectoryEntry[];
   /** Shared with Command Bus for confirm_ref / step-up PIN. */
@@ -198,6 +202,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     ),
     platform: buildPlatform("memory"),
     order: Object.freeze({ store: createMemoryOrderStore() }),
+    catalog: Object.freeze({ store: createMemoryCatalogStore() }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,
@@ -243,6 +248,8 @@ export async function createPgLocalRuntime(
     ),
     platform: buildPlatform("sql"),
     order: Object.freeze({ store: createPgOrderStore(appPool) }),
+    // Catalog tables not migrated yet — memory seed for both modes.
+    catalog: Object.freeze({ store: createMemoryCatalogStore() }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,

@@ -1,10 +1,13 @@
 /**
  * M1 handler registration — loads A6 command/query definitions and attaches handlers.
+ * Optional M2 order commands + catalog queries when deps provided.
  */
 
 import type { ChainPortHooks } from "../bus/chain-adapter.js";
 import { createM1CommandRegistry, type MutableCommandRegistry } from "../bus/registry.js";
 import { createM1QueryRegistry, type MutableQueryRegistry } from "../bus/query-registry.js";
+import type { CatalogHandlerDeps } from "../catalog/handlers.js";
+import { registerCatalogQueryHandlers } from "../catalog/handlers.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import { registerOrderCommandHandlers } from "../order/handlers.js";
 import type { IdentityHandlerDeps } from "./identity-handlers.js";
@@ -16,8 +19,10 @@ import { createDefaultChainHooks } from "./default-chain-hooks.js";
 export type RegisterM1Deps = Readonly<{
   identity?: IdentityHandlerDeps;
   platform?: PlatformHandlerDeps;
-  /** M2 skeleton order receive/pickup (memory store). */
+  /** M2 skeleton order receive/pickup (memory or PG store). */
   order?: OrderHandlerDeps;
+  /** M2 catalog price list (memory seed). */
+  catalog?: CatalogHandlerDeps;
 }>;
 
 export type RegisterM1Result = Readonly<{
@@ -66,17 +71,24 @@ export function registerM1QueryHandlers(
   queryRegistry: MutableQueryRegistry,
   deps: RegisterM1Deps,
 ): readonly string[] {
-  if (deps.platform === undefined) return Object.freeze([]);
-  registerPlatformQueryHandlers(queryRegistry, deps.platform);
-  return Object.freeze([
-    "platform.settings.get",
-    "platform.store_features.get",
-    "platform.audit.list",
-  ]);
+  const names: string[] = [];
+
+  if (deps.platform !== undefined) {
+    registerPlatformQueryHandlers(queryRegistry, deps.platform);
+    names.push("platform.settings.get", "platform.store_features.get", "platform.audit.list");
+  }
+
+  if (deps.catalog !== undefined) {
+    registerCatalogQueryHandlers(queryRegistry, deps.catalog);
+    names.push("catalog.items.list", "catalog.items.get");
+  }
+
+  return Object.freeze(names);
 }
 
 /**
  * Convenience: fresh M1 command + query registries + handlers + default chain hooks.
+ * Query registry includes M2 catalog definitions; handlers attach only when deps set.
  */
 export function createRegisteredM1Bus(deps: RegisterM1Deps): RegisterM1Result {
   const registry = createM1CommandRegistry();

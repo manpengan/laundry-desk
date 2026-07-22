@@ -39,6 +39,6 @@ createRoot(rootEl).render(
 // Helpful for manual walkthroughs in the browser console.
 if (typeof console !== "undefined") {
   console.info(
-    `[laundry local web] api=${apiBaseUrl} demo=hongfa/main admin/demo PIN=1234 — 设置页可试 R5 step-up`,
+    `[laundry local web] api=${apiBaseUrl} demo=hongfa/main admin/demo PIN=1234 — 开单/取衣走 order.receive|pickup；设置页可试 R5 step-up`,
   );
 }

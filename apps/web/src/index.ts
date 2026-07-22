@@ -29,6 +29,8 @@ export { PinSwitchDialog, type PinSwitchDialogProps } from "./shell/PinSwitchDia
 export { StepUpConfirmDialog, type StepUpConfirmDialogProps } from "./shell/StepUpConfirmDialog.js";
 export { PageHost, type PageHostProps } from "./pages/PageHost.js";
 export { SettingsPage, type SettingsPageProps } from "./pages/SettingsPage.js";
+export { ReceivePage, type ReceivePageProps } from "./pages/ReceivePage.js";
+export { PickupPage, type PickupPageProps } from "./pages/PickupPage.js";
 export { LoginPage, type LoginPageProps } from "./pages/LoginPage.js";
 export { pageCopy, type PageCopy } from "./pages/page-copy.js";
 export {

@@ -2,15 +2,17 @@
 
 UI spec §3 桌面壳：登录 → 左侧导航 + 顶栏门店/连接状态 + 主题切换 + 工作台占位。
 
-**E1 已交付（骨架）**：
+**已交付（骨架）**：
 
 - 登录页（org_code / store_code / username / password）
 - 可注入 `AuthClient` 端口（默认 mock：密码 `demo`，PIN `1234`）
 - Access session **仅内存**（React state），不写 localStorage / sessionStorage
 - 顶栏「切换员工」→ PIN quick-switch dialog（`purpose: quick_switch`）
 - 连接状态条（SyncStatusBar）在已登录壳内展示
+- **M2 开单 / 取衣**：`ReceivePage` / `PickupPage` → `order.receive` / `order.pickup`（整数分）
+- 设置页 R5 step-up PIN 复核 demo
 
-**未做**：E3 权限路由、真实 C6 JWT/argon2、A7 OpenAPI HTTP 客户端。
+**未做**：完整价目字典 UI、取件码扫码检索、A7 OpenAPI 生成客户端。
 
 ## 使用
 
