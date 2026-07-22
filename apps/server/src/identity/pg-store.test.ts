@@ -79,6 +79,41 @@ maybe("PG seed + login + PIN + refresh via laundry_app", async () => {
     });
     assert.equal(switched.session.staff_id, DEMO_STAFF_A_ID);
 
+    // pin_lockouts table is durable: upsert / get / clear under laundry_app GUC
+    const lockUntil = clock.nowEpochSeconds() + 900;
+    await store.pinLockouts.upsert({
+      org_id: session.org_id,
+      store_id: session.store_id,
+      staff_id: DEMO_STAFF_A_ID,
+      device_id: session.device_id,
+      locked_until: lockUntil,
+      failed_attempts: 5,
+    });
+    const locked = await store.pinLockouts.get(
+      session.org_id,
+      session.store_id,
+      DEMO_STAFF_A_ID,
+      session.device_id,
+    );
+    assert.ok(locked);
+    assert.equal(locked.failed_attempts, 5);
+    assert.equal(locked.locked_until, lockUntil);
+    await store.pinLockouts.clear(
+      session.org_id,
+      session.store_id,
+      DEMO_STAFF_A_ID,
+      session.device_id,
+    );
+    assert.equal(
+      await store.pinLockouts.get(
+        session.org_id,
+        session.store_id,
+        DEMO_STAFF_A_ID,
+        session.device_id,
+      ),
+      null,
+    );
+
     // PIN switch revokes prior family — old refresh must fail closed
     const oldRefresh = await rotateRefresh(sessions, issued.refresh.refresh_token).then(
       () => null,

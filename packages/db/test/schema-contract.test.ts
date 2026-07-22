@@ -103,6 +103,7 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(sql).toContain('"laundry_owner"');
     expect(sql).toContain("audit_log");
     expect(sql).toContain("sessions");
+    expect(sql).toContain("pin_lockouts");
     expect(sql).not.toContain("better-sqlite3");
   });
 

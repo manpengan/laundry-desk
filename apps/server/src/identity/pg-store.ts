@@ -312,7 +312,7 @@ export function createPgIdentityStore(pool: PgPool): PgIdentityStore {
     sessions: createSessionRepo(pool),
     refresh: createRefreshRepo(pool),
     pinChallenges: createPinChallengeRepo(pool),
-    pinLockouts: createPinLockoutRepo(),
+    pinLockouts: createPinLockoutRepo(pool),
     pool,
   });
 }

@@ -18,6 +18,7 @@ export const M1_SESSION_TABLE_NAMES = Object.freeze([
   "refresh_families",
   "refresh_tokens",
   "pin_challenges",
+  "pin_lockouts",
 ] as const);
 
 export const M1_ALL_TABLE_NAMES = Object.freeze([
