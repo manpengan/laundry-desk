@@ -16,6 +16,7 @@ export { garments } from "./garments.js";
 export { ticketCounters } from "./ticket-counters.js";
 export { catalogItems } from "./catalog-items.js";
 export { payments } from "./payments.js";
+export { printJobs } from "./print-jobs.js";
 
 import { orgs } from "./orgs.js";
 import { stores } from "./stores.js";
@@ -35,6 +36,7 @@ import { garments } from "./garments.js";
 import { ticketCounters } from "./ticket-counters.js";
 import { catalogItems } from "./catalog-items.js";
 import { payments } from "./payments.js";
+import { printJobs } from "./print-jobs.js";
 
 /** M1 tables present in the A3 tenant matrix. */
 export const M1_MATRIX_TABLES = Object.freeze({
@@ -74,6 +76,11 @@ export const M2_PAYMENT_TABLES = Object.freeze({
   payments,
 } as const);
 
+/** M2 print job queue (store-scoped status lifecycle). */
+export const M2_PRINT_TABLES = Object.freeze({
+  print_jobs: printJobs,
+} as const);
+
 /** Full M1 identity/platform + M2 schema surface for drizzle-kit and public API. */
 export const schema = Object.freeze({
   ...M1_MATRIX_TABLES,
@@ -81,6 +88,7 @@ export const schema = Object.freeze({
   ...M2_ORDER_TABLES,
   ...M2_CATALOG_TABLES,
   ...M2_PAYMENT_TABLES,
+  ...M2_PRINT_TABLES,
 } as const);
 
 export type M1MatrixTableName = keyof typeof M1_MATRIX_TABLES;
@@ -88,5 +96,6 @@ export type M1SessionTableName = keyof typeof M1_SESSION_TABLES;
 export type M2OrderTableName = keyof typeof M2_ORDER_TABLES;
 export type M2CatalogTableName = keyof typeof M2_CATALOG_TABLES;
 export type M2PaymentTableName = keyof typeof M2_PAYMENT_TABLES;
+export type M2PrintTableName = keyof typeof M2_PRINT_TABLES;
 export type M1TableName = keyof typeof M1_MATRIX_TABLES | keyof typeof M1_SESSION_TABLES;
 export type SchemaTableName = keyof typeof schema;

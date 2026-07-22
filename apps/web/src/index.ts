@@ -27,6 +27,19 @@ export { Sidebar, type SidebarProps } from "./shell/Sidebar.js";
 export { TopBar, type TopBarProps } from "./shell/TopBar.js";
 export { PinSwitchDialog, type PinSwitchDialogProps } from "./shell/PinSwitchDialog.js";
 export { StepUpConfirmDialog, type StepUpConfirmDialogProps } from "./shell/StepUpConfirmDialog.js";
+export { PrintQueuePanel, type PrintQueuePanelProps } from "./shell/PrintQueuePanel.js";
+export {
+  loadPrintJobs,
+  loadPrintJobSummary,
+  parsePrintJobsList,
+  printJobStatusLabel,
+  summarizePrintJobs,
+  PRINT_JOBS_LIST_LIMIT,
+  PRINT_JOBS_POLL_MS,
+  type PrintJobStatus,
+  type PrintJobView,
+  type PrintJobsListResult,
+} from "./shell/print-jobs.js";
 export { PageHost, type PageHostProps } from "./pages/PageHost.js";
 export { SettingsPage, type SettingsPageProps } from "./pages/SettingsPage.js";
 export { ReceivePage, type ReceivePageProps } from "./pages/ReceivePage.js";

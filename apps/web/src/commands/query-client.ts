@@ -186,9 +186,21 @@ export function createHttpQueryClient(options: HttpQueryClientOptions): QueryPor
   });
 }
 
+/** Empty queue by default so SSR/shell polls stay idle. */
+export const DEMO_PRINT_JOBS: readonly Readonly<{
+  job_id: string;
+  kind: string;
+  status: string;
+  order_id: string;
+  ticket_no: string;
+  created_at: number;
+  updated_at: number;
+  error?: string;
+}>[] = Object.freeze([]);
+
 /**
  * In-memory query port for SSR/unit tests.
- * Default handler serves DEMO catalog for catalog.items.list (no network).
+ * Default handler: DEMO catalog, empty print.jobs.list, zero stats.day.summary.
  */
 export function createMockQueryClient(handler?: QueryPort["execute"]): QueryPort {
   if (handler !== undefined) {
@@ -219,6 +231,42 @@ export function createMockQueryClient(handler?: QueryPort["execute"]): QueryPort
             code: "RESOURCE_UNAVAILABLE",
             message: "mock 未配置 order.get 数据",
           }),
+        });
+      }
+      if (name === "print.jobs.list") {
+        const input = isRecord(body) ? body : {};
+        const limit =
+          typeof input.limit === "number" && Number.isInteger(input.limit) && input.limit > 0
+            ? Math.min(input.limit, 50)
+            : 20;
+        const jobs = DEMO_PRINT_JOBS.slice(0, limit);
+        return Object.freeze({
+          ok: true as const,
+          data: Object.freeze({
+            execution: "executed",
+            result: Object.freeze({ jobs: Object.freeze(jobs) }),
+          }) as T,
+        });
+      }
+      if (name === "stats.day.summary") {
+        const input = isRecord(body) ? body : {};
+        const businessDate =
+          typeof input.business_date === "string" ? input.business_date : "1970-01-01";
+        return Object.freeze({
+          ok: true as const,
+          data: Object.freeze({
+            execution: "executed",
+            result: Object.freeze({
+              business_date: businessDate,
+              order_count: 0,
+              garment_count: 0,
+              payable_cents: 0,
+              paid_cents: 0,
+              balance_cents: 0,
+              payment_cents: 0,
+              picked_garment_count: 0,
+            }),
+          }) as T,
         });
       }
       return Object.freeze({

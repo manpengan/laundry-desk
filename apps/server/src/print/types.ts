@@ -1,7 +1,7 @@
 /**
- * Server-side print job queue types (M2 memory skeleton).
+ * Server-side print job queue types (M2).
  * Status flow: queued → printing → done | failed.
- * Status views never expose device paths or payload bytes.
+ * payload_bytes is ESC/POS length after successful process (no device paths stored).
  */
 
 export type PrintJobStatus = "queued" | "printing" | "done" | "failed";
@@ -18,9 +18,11 @@ export type PrintJobRecord = Readonly<{
   /** Epoch seconds. */
   updated_at: number;
   error?: string;
+  /** ESC/POS byte length after process (done jobs). */
+  payload_bytes?: number;
 }>;
 
-/** Status-only projection safe for API responses (no device paths / bytes). */
+/** Status projection for API responses (no device paths). */
 export type PrintJobStatusView = Readonly<{
   job_id: string;
   kind: PrintJobKind;
@@ -30,6 +32,7 @@ export type PrintJobStatusView = Readonly<{
   created_at: number;
   updated_at: number;
   error?: string;
+  payload_bytes?: number;
 }>;
 
 export type EnqueuePrintJobInput = Readonly<{
@@ -40,6 +43,13 @@ export type EnqueuePrintJobInput = Readonly<{
   now?: number;
 }>;
 
+export type TransitionPrintJobOptions = Readonly<{
+  error?: string;
+  now?: number;
+  /** Set when status becomes done after ESC/POS build. */
+  payload_bytes?: number;
+}>;
+
 export type PrintJobStore = Readonly<{
   enqueue: (input: EnqueuePrintJobInput) => Promise<PrintJobRecord>;
   list: (limit: number) => Promise<readonly PrintJobStatusView[]>;
@@ -47,6 +57,6 @@ export type PrintJobStore = Readonly<{
   transition: (
     jobId: string,
     status: PrintJobStatus,
-    options?: Readonly<{ error?: string; now?: number }>,
+    options?: TransitionPrintJobOptions,
   ) => Promise<PrintJobRecord>;
 }>;

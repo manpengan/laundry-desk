@@ -134,3 +134,21 @@ test("CounterShell wires PIN switch affordance", () => {
   assert.match(html, /切换员工/);
   assert.match(html, /data-shell="counter"/);
 });
+
+test("CounterShell print indicator idle by default (self-managed SSR first paint)", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(CounterShell, {
+        session: sampleSession,
+        authClient: createMockAuthClient(),
+        onSessionChange: () => undefined,
+        initialConnection: createMockConnection({ storeName: "宏发演示店" }),
+      }),
+    ),
+  );
+  assert.match(html, /打印空闲/);
+  assert.match(html, /data-queued="0"/);
+  assert.match(html, /data-failed="0"/);
+});

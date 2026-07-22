@@ -39,6 +39,17 @@ export class MemoryOrderStore implements OrderStore {
     return this.orders.get(key(orgId, storeId, orderId)) ?? null;
   }
 
+  async listOrders(orgId: string, storeId: string): Promise<readonly OrderRecord[]> {
+    const prefix = `${orgId}|${storeId}|`;
+    const rows: OrderRecord[] = [];
+    for (const [k, order] of this.orders) {
+      if (k.startsWith(prefix)) {
+        rows.push(order);
+      }
+    }
+    return Object.freeze(rows);
+  }
+
   async listGarments(
     orgId: string,
     storeId: string,

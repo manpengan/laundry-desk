@@ -57,6 +57,11 @@ export const M2_CATALOG_RLS_TABLES = Object.freeze(["catalog_items"] as const);
  */
 export const M2_PAYMENT_RLS_TABLES = Object.freeze(["payments"] as const);
 
+/**
+ * M2 print job queue uses store-scope RLS (SELECT/INSERT/UPDATE grants in 0010_print_jobs.sql).
+ */
+export const M2_PRINT_RLS_TABLES = Object.freeze(["print_jobs"] as const);
+
 const STORE_PREDICATE = `org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
     AND store_id = NULLIF(current_setting('app.store_id', true), '')::uuid`;
 

@@ -206,6 +206,20 @@ export function ReceivePage({
       toast.push(res.error.message ?? res.error.code, "error");
       return;
     }
+    // Best-effort XP-58 process (builds ESC/POS in server; no USB).
+    const enqueued = unwrapCommandResult<{ job_id?: string }>(res.data);
+    const jobId = enqueued !== null && typeof enqueued.job_id === "string" ? enqueued.job_id : null;
+    if (jobId !== null) {
+      const processed = await commandClient.execute<unknown>("print.ticket.process", {
+        job_id: jobId,
+      });
+      if (!processed.ok) {
+        toast.push(processed.error.message ?? processed.error.code, "error");
+        return;
+      }
+      toast.push(`小票已处理 ${result.ticket_no}`, "success");
+      return;
+    }
     toast.push(`已排队打印 ${result.ticket_no}`, "success");
   }, [commandClient, result, toast]);
 

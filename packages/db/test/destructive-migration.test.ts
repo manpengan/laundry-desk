@@ -48,6 +48,7 @@ describe("destructive migration static reject", () => {
       "0007_m2_orders.sql",
       "0008_catalog_items.sql",
       "0009_payments.sql",
+      "0010_print_jobs.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
@@ -70,12 +71,14 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS ticket_counters/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS catalog_items/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS payments/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS print_jobs/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS args_hash/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS entity_versions/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS idempotency_key/iu);
     expect(combined).toMatch(/FORCE ROW LEVEL SECURITY/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE audit_log TO laundry_app/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE payments TO laundry_app/iu);
+    expect(combined).toMatch(/GRANT SELECT, INSERT, UPDATE ON TABLE print_jobs TO laundry_app/iu);
     expect(combined).toMatch(
       /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE pin_lockouts TO laundry_app/iu,
     );
@@ -92,6 +95,7 @@ describe("destructive migration static reject", () => {
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*audit_log/iu);
     expect(combined).not.toMatch(/GRANT[^;]*UPDATE[^;]*payments/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*payments/iu);
+    expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*print_jobs/iu);
     expect(combined).not.toMatch(/dialect\s*[:=]\s*['"]sqlite['"]/iu);
     expect(combined.toLowerCase().includes("better" + "-sqlite3")).toBe(false);
   });

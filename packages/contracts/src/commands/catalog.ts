@@ -9,6 +9,7 @@ import {
   M2_PRINT_QUERY_DEFINITIONS,
   M2_PRINT_QUERY_NAMES,
 } from "./print.js";
+import { M2_STATS_QUERY_DEFINITIONS, M2_STATS_QUERY_NAMES } from "./stats.js";
 import type { z } from "zod";
 
 /** M1 first-wave registered definitions (A6). OpenAPI snapshot remains M1-only. */
@@ -67,3 +68,9 @@ export {
   M2_PRINT_COMMAND_DEFINITIONS,
   M2_PRINT_COMMAND_NAMES,
 };
+
+/**
+ * M2 daily revenue queries (stats.day.summary). Order-backed skeleton;
+ * not in OpenAPI freeze. Re-exported for registry loaders.
+ */
+export { M2_STATS_QUERY_DEFINITIONS, M2_STATS_QUERY_NAMES };

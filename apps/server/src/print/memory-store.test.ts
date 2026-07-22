@@ -58,3 +58,19 @@ test("transition to failed requires error and rejects illegal edges", async () =
   assert.equal(failed.error, "usb offline");
   await assert.rejects(() => store.transition(job.job_id, "printing"), /terminal/);
 });
+
+test("transition to done can set payload_bytes", async () => {
+  const store = createMemoryPrintJobStore();
+  const job = await store.enqueue({
+    order_id: ORDER_ID,
+    ticket_no: "T",
+    kind: "xp58",
+    now: 1,
+  });
+  await store.transition(job.job_id, "printing", { now: 2 });
+  const done = await store.transition(job.job_id, "done", { now: 3, payload_bytes: 42 });
+  assert.equal(done.status, "done");
+  assert.equal(done.payload_bytes, 42);
+  const listed = await store.list(1);
+  assert.equal(listed[0]?.payload_bytes, 42);
+});

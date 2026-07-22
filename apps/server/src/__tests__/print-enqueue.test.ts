@@ -1,5 +1,5 @@
 /**
- * M2 skeleton: print.ticket.enqueue + print.jobs.list over memory store + bus.
+ * M2 print: enqueue + process (XP-58 ESC/POS) + jobs.list over memory store + bus.
  */
 
 import assert from "node:assert/strict";
@@ -59,6 +59,7 @@ function buildBus(printStore = createMemoryPrintJobStore()) {
 test("command + query registries include print skeleton names", () => {
   const { registry, queryRegistry } = buildBus();
   assert.ok(registry.names().includes("print.ticket.enqueue"));
+  assert.ok(registry.names().includes("print.ticket.process"));
   assert.ok(queryRegistry.names().includes("print.jobs.list"));
 });
 
@@ -210,4 +211,97 @@ test("print.ticket.enqueue invalid input is VALIDATION_FAILED", async () => {
   assert.equal(result.ok, false);
   if (result.ok) return;
   assert.equal(result.error.code, "VALIDATION_FAILED");
+});
+
+test("enqueue → process → list shows done + payload_bytes", async () => {
+  const { registry, queryRegistry, chainHooks, pendingStore } = buildBus();
+
+  const enqueued = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "print.ticket.enqueue",
+    {
+      order_id: ORDER_ID,
+      ticket_no: "20260722-0001",
+      kind: "xp58",
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(enqueued.ok, true, JSON.stringify(enqueued));
+  if (!enqueued.ok) return;
+  const enq = enqueued.data.result as { job_id: string; status: string };
+  assert.equal(enq.status, "queued");
+
+  const processed = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "print.ticket.process",
+    { job_id: enq.job_id },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(processed.ok, true, JSON.stringify(processed));
+  if (!processed.ok) return;
+  const proc = processed.data.result as {
+    job_id: string;
+    status: string;
+    payload_bytes: number;
+  };
+  assert.equal(proc.status, "done");
+  assert.ok(proc.payload_bytes > 0);
+
+  const listed = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "print.jobs.list",
+    {},
+    { registry: queryRegistry, actor: CLERK },
+  );
+  assert.equal(listed.ok, true, JSON.stringify(listed));
+  if (!listed.ok) return;
+  const body = listed.data.result as {
+    jobs: readonly {
+      job_id: string;
+      status: string;
+      payload_bytes?: number;
+    }[];
+  };
+  assert.equal(body.jobs.length, 1);
+  assert.equal(body.jobs[0]?.status, "done");
+  assert.equal(body.jobs[0]?.payload_bytes, proc.payload_bytes);
+});
+
+test("print.ticket.process rejects non-xp58 kind", async () => {
+  const printStore = createMemoryPrintJobStore();
+  await printStore.enqueue({
+    order_id: ORDER_ID,
+    ticket_no: "T",
+    kind: "dl206",
+    job_id: FIXED_JOB_ID(),
+    now: FIXED_NOW(),
+  });
+  const { registry, chainHooks, pendingStore } = buildBus(printStore);
+  const result = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "print.ticket.process",
+    { job_id: FIXED_JOB_ID() },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.error.code, "VALIDATION_FAILED");
+});
+
+test("print.ticket.process missing job is RESOURCE_UNAVAILABLE", async () => {
+  const { registry, chainHooks, pendingStore } = buildBus();
+  const result = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "print.ticket.process",
+    { job_id: "00000000-0000-4000-8000-000000000099" },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.error.code, "RESOURCE_UNAVAILABLE");
 });

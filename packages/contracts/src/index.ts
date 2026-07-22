@@ -351,6 +351,8 @@ export {
   M2_PRINT_QUERY_NAMES,
   M2_SKELETON_COMMAND_NAMES,
   M2_SKELETON_DEFINITIONS,
+  M2_STATS_QUERY_DEFINITIONS,
+  M2_STATS_QUERY_NAMES,
 } from "./commands/catalog.js";
 export {
   CATALOG_SKELETON_DEFINITIONS,
@@ -382,9 +384,19 @@ export {
   PrintJobStatusSchema,
   PrintJobsListInputSchema,
   PrintTicketEnqueueInputSchema,
+  PrintTicketProcessInputSchema,
   printJobsListQuery,
   printTicketEnqueueCommand,
+  printTicketProcessCommand,
 } from "./commands/print.js";
+export {
+  BusinessDateSchema,
+  STATS_QUERY_NAMES,
+  STATS_QUERIES,
+  StatsDaySummaryInputSchema,
+  statsDaySummaryQuery,
+} from "./commands/stats.js";
+export type { StatsDaySummaryResult } from "./commands/stats.js";
 
 export {
   OPENAPI_INFO_VERSION,
