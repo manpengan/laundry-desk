@@ -1,5 +1,5 @@
 /**
- * HTTP AuthClient talking to local @laundry/server (memory identity).
+ * HTTP AuthClient talking to local @laundry/server (memory or PG).
  * Access tokens stay in memory only — never Web Storage.
  */
 
@@ -118,12 +118,18 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
   const fetchImpl = options.fetchImpl ?? fetch;
   let staffDirectory: SwitchableStaff[] = [];
   let lastDisplay: AccessSession["display"] = Object.freeze({
-    store_name: "顺科旗舰店",
+    store_name: "",
     staff_name: "",
     org_code: "",
     store_code: "",
   });
   let accessToken: string | null = null;
+
+  const storeLabel = (orgCode: string, storeCode: string): string => {
+    if (orgCode === "hongfa" && storeCode === "main") return "宏发·总店";
+    if (orgCode.length > 0 && storeCode.length > 0) return `${orgCode} / ${storeCode}`;
+    return "门店";
+  };
 
   const readCsrf = (): string | null => {
     if (typeof document === "undefined") return null;
@@ -190,7 +196,7 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
         staffDirectory.find((s) => s.staff_id === payload.session.staff_id)?.display_name ??
         values.username;
       lastDisplay = Object.freeze({
-        store_name: "顺科旗舰店",
+        store_name: storeLabel(values.org_code, values.store_code),
         staff_name: staffName,
         org_code: values.org_code,
         store_code: values.store_code,

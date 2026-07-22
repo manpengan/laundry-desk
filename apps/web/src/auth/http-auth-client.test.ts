@@ -66,6 +66,8 @@ test("login maps successful envelope to AccessSession memory_only", async () => 
     assert.equal(result.data.storage, "memory_only");
     assert.equal(result.data.role, "admin");
     assert.equal(result.data.access_token, "aaa.bbb.ccc");
+    assert.equal(result.data.display.store_name, "宏发·总店");
+    assert.equal(result.data.display.staff_name, "店长");
   }
 });
 

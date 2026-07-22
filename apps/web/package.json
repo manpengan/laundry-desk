@@ -14,7 +14,8 @@
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "lint": "eslint src --ext .ts,.tsx --max-warnings=0",
     "test": "tsc -p tsconfig.json && node --test $(find dist -name '*.test.js')",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:e2e:local": "playwright test -c playwright.local.config.ts"
   },
   "dependencies": {
     "@laundry/ui": "file:../../packages/ui",
@@ -22,6 +23,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.7.0",

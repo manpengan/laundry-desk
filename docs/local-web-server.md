@@ -52,6 +52,18 @@ pnpm local:web
 
 默认 `VITE_API_BASE_URL=http://127.0.0.1:8787`（见 `apps/web/host/main.tsx`）。
 
+本地 host **预填** demo 账号（仅 Vite host，不进库默认值）：hongfa / main / admin / demo。  
+登录后顶栏应显示 **宏发·总店** / **店长**，可点 **切换员工** 用 PIN `1234` 切到店员甲。
+
+### SPA 走查（Playwright，opt-in）
+
+先起 API + Web，再：
+
+```bash
+# 需已安装 chromium：pnpm exec playwright install chromium
+LAUNDRY_SPA_E2E=1 pnpm --filter @laundry/web test:e2e:local
+```
+
 ## 实现位置
 
 | 路径                                       | 作用                     |
