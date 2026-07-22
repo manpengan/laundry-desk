@@ -117,7 +117,27 @@ pnpm --filter @laundry/web test
 - 强制 Secure：`LAUNDRY_COOKIE_SECURE=1` 或 `NODE_ENV=production`
 - Argon2id 参数：m=19456 KiB，t=2，p=1（见 `ARGON2ID_DEFAULTS`）
 
+### 总线 + 真 PG 冒烟
+
+`local:server:pg` 时 `platform.settings.set` 走 laundry_app + 事务 GUC，写入 `settings` 与同事务 `audit_log`：
+
+```bash
+# 登录后
+TOKEN=…  # access_token
+curl -s -X POST http://127.0.0.1:8787/v1/commands/platform.settings.set \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"entries":[{"key":"pricing.min_order_cents","value_json":"1500"}]}'
+```
+
+集成测（opt-in）：
+
+```bash
+LAUNDRY_USE_LOCAL_PG=1 node --test apps/server/dist/__tests__/bus-pg-smoke.test.js
+```
+
 ## 后续
 
 - pin_lockouts 落表
 - ADR-09 签署 → contracts@v0.1.0
+- 查询总线（settings.get / audit.list 上 HTTP）

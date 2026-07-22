@@ -14,7 +14,8 @@ import { createCommandError, CSRF_HEADER_NAME, type CommandErrorCode } from "@la
 import { executeCommand } from "../bus/executor.js";
 import type { ActorContext } from "../bus/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
-import type { TenantContext } from "../db/types.js";
+import { withPoolClient } from "../db/pg-sql-client.js";
+import type { SqlClient, TenantContext } from "../db/types.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { createAccessTokenSigner } from "../identity/crypto-util.js";
 import { loginWithPassword } from "../identity/login.js";
@@ -168,7 +169,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   });
   await app.register(cookie);
 
-  const sql = new FakeSqlClient();
+  const memorySql = new FakeSqlClient();
 
   app.get("/health", async () =>
     Object.freeze({
@@ -176,6 +177,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       data: Object.freeze({
         service: "@laundry/server",
         mode: runtime.mode === "pg" ? "local-pg" : "local-memory",
+        platform: runtime.platform.persistence === "sql" ? "sql" : "memory",
         cookies: cookiePolicy.secure ? "host-secure" : "local-http",
         at: Date.now(),
       }),
@@ -310,11 +312,20 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       identity: runtime.identity,
       platform: runtime.platform,
     });
-    const result = await executeCommand(sql, tenantFromSession(session), name, body, {
-      registry,
-      actor: actorFromSession(session),
-      chainHooks,
-    });
+    const tenant = tenantFromSession(session);
+    const actor = actorFromSession(session);
+    const run = async (sql: SqlClient) =>
+      executeCommand(sql, tenant, name, body, {
+        registry,
+        actor,
+        chainHooks,
+      });
+
+    const result =
+      runtime.mode === "pg" && runtime.pool !== null
+        ? await withPoolClient(runtime.pool, (sql) => run(sql))
+        : await run(memorySql);
+
     if (!result.ok) {
       reply.code(400);
     }

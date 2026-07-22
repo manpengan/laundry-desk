@@ -1,16 +1,24 @@
 /**
  * C7 platform handlers shaped for the C1 command bus.
  * Routes / AI / workers call executeCommand after registerHandler — never raw stores.
+ *
+ * When `persistence: "sql"`, settings/features/audit use `ctx.client` inside the
+ * tenant transaction (same client as audit write). Memory mode keeps closed-over stores.
  */
 
 import type { CommandHandler, HandlerContext, HandlerOutcome } from "../bus/types.js";
 import type { AuditQueryStore } from "./audit-query.js";
-import { assertAuditPayloadSafe } from "./audit-query.js";
+import { assertAuditPayloadSafe, createSqlAuditQueryStore } from "./audit-query.js";
 import type { FeaturesStore } from "./features.js";
+import { createSqlFeaturesStore } from "./features.js";
 import type { SettingsEntry, SettingsStore } from "./settings.js";
-import { validateSettingsEntries } from "./settings.js";
+import { createSqlSettingsStore, validateSettingsEntries } from "./settings.js";
+
+export type PlatformPersistence = "memory" | "sql";
 
 export type PlatformHandlerDeps = Readonly<{
+  /** Default memory; use "sql" so handlers bind to ctx.client + tenant GUC. */
+  persistence?: PlatformPersistence;
   settings: SettingsStore;
   features: FeaturesStore;
   audit: AuditQueryStore;
@@ -60,18 +68,39 @@ function requireInt(value: unknown, field: string): number {
   return value;
 }
 
-function settingsGetHandler(settings: SettingsStore): CommandHandler {
+function resolveSettings(deps: PlatformHandlerDeps, ctx: HandlerContext): SettingsStore {
+  if (deps.persistence === "sql") {
+    return createSqlSettingsStore(ctx.client, ctx.tenant);
+  }
+  return deps.settings;
+}
+
+function resolveFeatures(deps: PlatformHandlerDeps, ctx: HandlerContext): FeaturesStore {
+  if (deps.persistence === "sql") {
+    return createSqlFeaturesStore(ctx.client, ctx.tenant);
+  }
+  return deps.features;
+}
+
+function resolveAudit(deps: PlatformHandlerDeps, ctx: HandlerContext): AuditQueryStore {
+  if (deps.persistence === "sql") {
+    return createSqlAuditQueryStore(ctx.client);
+  }
+  return deps.audit;
+}
+
+function settingsGetHandler(deps: PlatformHandlerDeps): CommandHandler {
   return async (ctx: HandlerContext): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
     const keys = requireStringArray(input.keys, "keys");
-    const values = await settings.getMany(keys);
+    const values = await resolveSettings(deps, ctx).getMany(keys);
     return Object.freeze({
       result: Object.freeze({ values }),
     });
   };
 }
 
-function settingsSetHandler(settings: SettingsStore): CommandHandler {
+function settingsSetHandler(deps: PlatformHandlerDeps): CommandHandler {
   return async (ctx: HandlerContext): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
     const rawEntries = input.entries;
@@ -89,6 +118,7 @@ function settingsSetHandler(settings: SettingsStore): CommandHandler {
       });
     });
     validateSettingsEntries(entries);
+    const settings = resolveSettings(deps, ctx);
     const before = await settings.getMany(entries.map((entry) => entry.key));
     await settings.setMany(entries);
     const after = await settings.getMany(entries.map((entry) => entry.key));
@@ -110,24 +140,24 @@ function settingsSetHandler(settings: SettingsStore): CommandHandler {
   };
 }
 
-function storeFeaturesGetHandler(features: FeaturesStore): CommandHandler {
+function storeFeaturesGetHandler(deps: PlatformHandlerDeps): CommandHandler {
   return async (ctx: HandlerContext): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
     const storeId = requireString(input.store_id, "store_id");
-    const flags = await features.get(storeId);
+    const flags = await resolveFeatures(deps, ctx).get(storeId);
     return Object.freeze({
       result: Object.freeze({ store_id: storeId, features: flags }),
     });
   };
 }
 
-function auditListHandler(audit: AuditQueryStore): CommandHandler {
+function auditListHandler(deps: PlatformHandlerDeps): CommandHandler {
   return async (ctx: HandlerContext): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
     const fromEpochS = requireInt(input.from_epoch_s, "from_epoch_s");
     const toEpochS = requireInt(input.to_epoch_s, "to_epoch_s");
     const limit = requireInt(input.limit, "limit");
-    const items = await audit.list({
+    const items = await resolveAudit(deps, ctx).list({
       orgId: ctx.tenant.orgId,
       storeId: ctx.tenant.storeId,
       fromEpochS,
@@ -148,10 +178,10 @@ function auditListHandler(audit: AuditQueryStore): CommandHandler {
  */
 export function createPlatformHandlers(deps: PlatformHandlerDeps): PlatformHandlerMap {
   return Object.freeze({
-    "platform.settings.get": settingsGetHandler(deps.settings),
-    "platform.settings.set": settingsSetHandler(deps.settings),
-    "platform.store_features.get": storeFeaturesGetHandler(deps.features),
-    "platform.audit.list": auditListHandler(deps.audit),
+    "platform.settings.get": settingsGetHandler(deps),
+    "platform.settings.set": settingsSetHandler(deps),
+    "platform.store_features.get": storeFeaturesGetHandler(deps),
+    "platform.audit.list": auditListHandler(deps),
   });
 }
 

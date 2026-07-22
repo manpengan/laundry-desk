@@ -133,6 +133,15 @@ test("authenticated command path requires bearer", async () => {
   await app.close();
 });
 
+test("health reports platform persistence mode", async () => {
+  const { app } = await buildApp();
+  const res = await app.inject({ method: "GET", url: "/health" });
+  const body = res.json() as { data: { platform: string; mode: string } };
+  assert.equal(body.data.mode, "local-memory");
+  assert.equal(body.data.platform, "memory");
+  await app.close();
+});
+
 test("PIN challenge + verify with CSRF cookies", async () => {
   const { app, runtime } = await buildApp();
   const staffA = runtime.staffDirectory.find((s) => s.username === "staff");
