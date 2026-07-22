@@ -1,5 +1,5 @@
 /**
- * M2 skeleton handlers: order.receive / order.pickup (memory store).
+ * M2 skeleton handlers: order.receive / order.pickup (async OrderStore).
  */
 
 import { createCommandError } from "@laundry/contracts";
@@ -77,7 +77,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
     const newId = deps.newId ?? randomUUID;
     const orderId = newId();
     const dayKey = dayKeyFromEpoch(now);
-    const seq = deps.store.nextTicketSeq(ctx.tenant.orgId, ctx.tenant.storeId, dayKey);
+    const seq = await deps.store.nextTicketSeq(ctx.tenant.orgId, ctx.tenant.storeId, dayKey);
     const ticketNo = formatTicket(dayKey, seq);
 
     const orderLines: OrderLineRecord[] = lines.map((line, lineIndex) =>
@@ -131,7 +131,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
       created_by_staff_id: ctx.actor.staffId,
     });
 
-    deps.store.insertOrder(order, garments);
+    await deps.store.insertOrder(order, garments);
 
     return Object.freeze({
       result: Object.freeze({
@@ -183,11 +183,11 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
     }
     const selectedIds = garmentIdsRaw.map((id) => requireString(id));
 
-    const order = deps.store.getOrder(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
+    const order = await deps.store.getOrder(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
     if (order === null) {
       throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
     }
-    const garments = deps.store.listGarments(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
+    const garments = await deps.store.listGarments(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
     const plan = planPickup({
       garments: garments.map((g) => Object.freeze({ garment_id: g.garment_id, status: g.status })),
       selected_garment_ids: selectedIds,
@@ -200,7 +200,7 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
     }
 
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
-    const applied = deps.store.applyPickup(
+    const applied = await deps.store.applyPickup(
       ctx.tenant.orgId,
       ctx.tenant.storeId,
       orderId,

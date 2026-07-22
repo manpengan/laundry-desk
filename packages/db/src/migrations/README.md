@@ -12,6 +12,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0003_rls_and_grants.sq
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0004_auth_lookup_functions.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0005_pin_lockouts.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0006_pin_challenge_stepup_binding.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0007_m2_orders.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -23,7 +24,9 @@ meaningful for the application role `laundry_app`.
 Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 `DROP CONSTRAINT`. Static tests in `test/destructive-migration.test.ts` enforce this.
 
-## M1 scope
+## Scope
 
-Identity/platform + A5 session tables only. Full order graph / edge / AI matrix
-tables are deferred (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`).
+- **M1**: identity/platform + A5 session tables
+- **M2 skeleton** (0007): `orders`, `order_lines`, `garments`, `ticket_counters`
+- Still deferred: customers, payments, catalog, edge lease, AI matrix tables
+  (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

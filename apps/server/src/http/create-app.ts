@@ -96,9 +96,10 @@ function actorFromSession(session: SessionRecord): ActorContext {
     staffId: session.staff_id,
     deviceId: session.device_id,
     via: "ui" as const,
+    // order_write: M2 counter receive/pickup (UI + local HTTP).
     permissions: isAdmin
-      ? Object.freeze(["settings_admin", "staff_read", "staff_write"])
-      : Object.freeze(["staff_read"]),
+      ? Object.freeze(["settings_admin", "staff_read", "staff_write", "order_write"])
+      : Object.freeze(["staff_read", "order_write"]),
   });
 }
 
@@ -275,6 +276,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     const { registry, chainHooks } = createRegisteredM1Bus({
       identity: runtime.identity,
       platform: runtime.platform,
+      order: runtime.order,
     });
     const tenant = tenantFromSession(session);
     const actor = actorFromSession(session);

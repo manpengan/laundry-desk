@@ -35,6 +35,17 @@ export const M1_SESSION_RLS_TABLES = Object.freeze([
   "pin_lockouts",
 ] as const);
 
+/**
+ * M2 order skeleton tables use store-scope RLS (same predicate as matrix store tables).
+ * Policies live in 0007_m2_orders.sql (expand-only, like 0005_pin_lockouts).
+ */
+export const M2_ORDER_RLS_TABLES = Object.freeze([
+  "orders",
+  "order_lines",
+  "garments",
+  "ticket_counters",
+] as const);
+
 const STORE_PREDICATE = `org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
     AND store_id = NULLIF(current_setting('app.store_id', true), '')::uuid`;
 

@@ -88,7 +88,7 @@ test("order.receive expands qty into garments and returns ticket_no", async () =
     true,
   );
 
-  const stored = orderStore.getOrder(DEMO_ORG_ID, DEMO_STORE_ID, data.order_id);
+  const stored = await orderStore.getOrder(DEMO_ORG_ID, DEMO_STORE_ID, data.order_id);
   assert.ok(stored);
   assert.equal(stored.lines[0]?.qty, 2);
 });
