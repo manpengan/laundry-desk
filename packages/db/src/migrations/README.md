@@ -9,6 +9,7 @@ export DATABASE_URL=postgresql://laundry_owner@localhost:5432/laundry_v2
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0001_roles.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0002_m1_identity_platform.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0003_rls_and_grants.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0004_auth_lookup_functions.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as

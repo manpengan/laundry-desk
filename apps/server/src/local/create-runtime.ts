@@ -14,11 +14,7 @@ import {
   createMemorySettingsStore,
 } from "../platform/index.js";
 import type { PlatformHandlerDeps } from "../platform/handlers.js";
-import {
-  createPgPool,
-  resolveIdentityDatabaseUrl,
-  type PgPool,
-} from "../db/pg-pool.js";
+import { createPgPool, resolvePgUrls, type PgPool, type ResolvedPgUrls } from "../db/pg-pool.js";
 import {
   DEMO_ADMIN_ID,
   DEMO_ORG_ID,
@@ -184,17 +180,30 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   });
 }
 
-/** Postgres identity against formal M1 tables (seed demo on boot). */
-export async function createPgLocalRuntime(connectionString: string): Promise<LocalRuntime> {
-  const pool = createPgPool({ connectionString });
+/**
+ * Postgres identity: admin pool seeds demo rows; app pool runs laundry_app + GUC.
+ * Pass a single URL string (legacy) or ResolvedPgUrls.
+ */
+export async function createPgLocalRuntime(
+  urlsOrConnectionString: string | ResolvedPgUrls,
+): Promise<LocalRuntime> {
+  const urls: ResolvedPgUrls =
+    typeof urlsOrConnectionString === "string"
+      ? Object.freeze({ app: urlsOrConnectionString, admin: urlsOrConnectionString })
+      : urlsOrConnectionString;
+
+  const adminPool = createPgPool({ connectionString: urls.admin });
+  const appPool = createPgPool({ connectionString: urls.app });
   try {
-    await seedDemoIdentity(pool);
+    await seedDemoIdentity(adminPool);
   } catch (error) {
-    await pool.end();
+    await adminPool.end();
+    await appPool.end();
     throw error;
   }
+  await adminPool.end();
 
-  const store = createPgIdentityStore(pool);
+  const store = createPgIdentityStore(appPool);
   const passwordPort = createScryptPasswordPort();
 
   return Object.freeze({
@@ -203,7 +212,7 @@ export async function createPgLocalRuntime(connectionString: string): Promise<Lo
     platform: buildPlatform(),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
-    pool,
+    pool: appPool,
     store: null,
   });
 }
@@ -214,9 +223,9 @@ export async function createPgLocalRuntime(connectionString: string): Promise<Lo
 export async function createLocalRuntime(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<LocalRuntime> {
-  const url = resolveIdentityDatabaseUrl(env);
-  if (url !== null) {
-    return createPgLocalRuntime(url);
+  const urls = resolvePgUrls(env);
+  if (urls !== null) {
+    return createPgLocalRuntime(urls);
   }
   return createMemoryLocalRuntime();
 }

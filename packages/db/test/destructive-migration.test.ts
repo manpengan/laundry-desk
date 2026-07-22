@@ -42,6 +42,7 @@ describe("destructive migration static reject", () => {
       "0001_roles.sql",
       "0002_m1_identity_platform.sql",
       "0003_rls_and_grants.sql",
+      "0004_auth_lookup_functions.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

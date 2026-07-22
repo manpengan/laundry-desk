@@ -30,6 +30,7 @@ MIGRATION_FILES=(
   "0001_roles.sql"
   "0002_m1_identity_platform.sql"
   "0003_rls_and_grants.sql"
+  "0004_auth_lookup_functions.sql"
 )
 
 die() {
@@ -129,4 +130,4 @@ Then re-run:
 
 require_migration_files
 apply_migrations
-log "OK — formal packages/db migrations applied (0001 → 0003)"
+log "OK — formal packages/db migrations applied (0001 → 0004)"

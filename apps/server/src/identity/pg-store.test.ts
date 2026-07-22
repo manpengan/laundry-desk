@@ -1,44 +1,36 @@
 /**
- * Postgres identity store integration — skipped when DATABASE_URL / LAUNDRY_USE_LOCAL_PG unset.
+ * Postgres identity store integration — skipped when PG env unset.
  * Against compose: LAUNDRY_USE_LOCAL_PG=1 node --test dist/identity/pg-store.test.js
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  createPgPool,
-  LOCAL_PG_URLS,
-  resolveIdentityDatabaseUrl,
-} from "../db/pg-pool.js";
+import { createPgPool, resolvePgUrls } from "../db/pg-pool.js";
 import { createPgIdentityStore } from "./pg-store.js";
 import { seedDemoIdentity } from "../local/pg-seed.js";
-import { DEMO_PASSWORD, DEMO_PIN } from "../local/demo-ids.js";
+import { DEMO_ADMIN_ID, DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID } from "../local/demo-ids.js";
 import { createScryptPasswordPort } from "./password.js";
 import { loginWithPassword } from "./login.js";
 import { createAccessTokenSigner } from "./crypto-util.js";
 import { createQuickSwitchChallenge, verifyQuickSwitchPin } from "./pin.js";
-import { DEMO_STAFF_A_ID } from "../local/demo-ids.js";
+import { rotateRefresh } from "./session.js";
 
-const url = resolveIdentityDatabaseUrl({
+const urls = resolvePgUrls({
   ...process.env,
   LAUNDRY_USE_LOCAL_PG: process.env.LAUNDRY_USE_LOCAL_PG ?? "1",
-  DATABASE_URL: process.env.DATABASE_URL ?? LOCAL_PG_URLS.admin,
 });
 
 const maybe =
-  process.env.LAUNDRY_SKIP_PG_TEST === "1"
-    ? test.skip
-    : url === null
-      ? test.skip
-      : test;
+  process.env.LAUNDRY_SKIP_PG_TEST === "1" ? test.skip : urls === null ? test.skip : test;
 
-maybe("PG seed + login + PIN quick-switch", async () => {
-  assert.ok(url);
-  const pool = createPgPool({ connectionString: url });
+maybe("PG seed + login + PIN + refresh via laundry_app", async () => {
+  assert.ok(urls);
+  const adminPool = createPgPool({ connectionString: urls.admin });
+  const appPool = createPgPool({ connectionString: urls.app });
   try {
-    await seedDemoIdentity(pool);
-    const store = createPgIdentityStore(pool);
+    await seedDemoIdentity(adminPool);
+    const store = createPgIdentityStore(appPool);
     const passwordPort = createScryptPasswordPort();
     const clock = { nowEpochSeconds: () => Math.floor(Date.now() / 1000) };
     const sessions = {
@@ -88,6 +80,16 @@ maybe("PG seed + login + PIN quick-switch", async () => {
     });
     assert.equal(switched.session.staff_id, DEMO_STAFF_A_ID);
 
+    // PIN switch revokes prior family — old refresh must fail closed
+    const oldRefresh = await rotateRefresh(sessions, issued.refresh.refresh_token).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    assert.ok(oldRefresh);
+
+    const switchedRefresh = await rotateRefresh(sessions, switched.refresh.refresh_token);
+    assert.equal(switchedRefresh.session.staff_id, DEMO_STAFF_A_ID);
+
     const bad = await loginWithPassword(loginDeps, {
       org_code: "hongfa",
       store_code: "main",
@@ -99,7 +101,9 @@ maybe("PG seed + login + PIN quick-switch", async () => {
       (error: unknown) => error,
     );
     assert.ok(bad);
+    void DEMO_ADMIN_ID;
   } finally {
-    await pool.end();
+    await adminPool.end();
+    await appPool.end();
   }
 });

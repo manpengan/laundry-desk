@@ -51,12 +51,11 @@ export async function seedDemoIdentity(pool: PgPool): Promise<SeedDemoResult> {
       [DEMO_STORE_ID, DEMO_ORG_ID, now],
     );
 
-    const staffRows: ReadonlyArray<Readonly<{ id: string; username: string; name: string }>> =
-      [
-        { id: DEMO_ADMIN_ID, username: "admin", name: "店长" },
-        { id: DEMO_STAFF_A_ID, username: "staff", name: "店员甲" },
-        { id: DEMO_STAFF_B_ID, username: "staffb", name: "店员乙" },
-      ];
+    const staffRows: ReadonlyArray<Readonly<{ id: string; username: string; name: string }>> = [
+      { id: DEMO_ADMIN_ID, username: "admin", name: "店长" },
+      { id: DEMO_STAFF_A_ID, username: "staff", name: "店员甲" },
+      { id: DEMO_STAFF_B_ID, username: "staffb", name: "店员乙" },
+    ];
 
     for (const row of staffRows) {
       await client.query(

@@ -2,10 +2,10 @@
 
 两条路径：
 
-| 模式 | 启动 | 依赖 |
-| --- | --- | --- |
-| **memory（默认）** | `pnpm local:server` | 无 Postgres |
-| **pg** | `pnpm local:server:pg` 或 `LAUNDRY_USE_LOCAL_PG=1` / `DATABASE_URL=…` | compose Postgres + `migrate-v2.sh` |
+| 模式               | 启动                                                                  | 依赖                               |
+| ------------------ | --------------------------------------------------------------------- | ---------------------------------- |
+| **memory（默认）** | `pnpm local:server`                                                   | 无 Postgres                        |
+| **pg**             | `pnpm local:server:pg` 或 `LAUNDRY_USE_LOCAL_PG=1` / `DATABASE_URL=…` | compose Postgres + `migrate-v2.sh` |
 
 ## 终端 A — API
 
@@ -54,28 +54,33 @@ pnpm local:web
 
 ## 实现位置
 
-| 路径 | 作用 |
-| --- | --- |
-| `apps/server/src/http/*` | Fastify app + main entry |
-| `apps/server/src/local/create-runtime.ts` | memory / PG runtime 选择 |
-| `apps/server/src/local/pg-seed.ts` | 正式表 demo 种子（幂等） |
-| `apps/server/src/identity/pg-store.ts` | identity 仓储 PG 适配 |
-| `apps/server/src/identity/memory-store.ts` | 内存仓储（测试默认） |
-| `apps/web/src/auth/HttpAuthClient.ts` | 浏览器 AuthClient |
+| 路径                                       | 作用                     |
+| ------------------------------------------ | ------------------------ |
+| `apps/server/src/http/*`                   | Fastify app + main entry |
+| `apps/server/src/local/create-runtime.ts`  | memory / PG runtime 选择 |
+| `apps/server/src/local/pg-seed.ts`         | 正式表 demo 种子（幂等） |
+| `apps/server/src/identity/pg-store.ts`     | identity 仓储 PG 适配    |
+| `apps/server/src/identity/memory-store.ts` | 内存仓储（测试默认）     |
+| `apps/web/src/auth/HttpAuthClient.ts`      | 浏览器 AuthClient        |
 
 ### PG 环境变量
 
-| 变量 | 含义 |
-| --- | --- |
-| `DATABASE_URL` | 主连接串（建议 superuser / admin 做 identity 本地联调） |
-| `DATABASE_ADMIN_URL` / `SUPERUSER_DATABASE_URL` | 备选 admin |
-| `LAUNDRY_USE_LOCAL_PG=1` | 使用 compose 默认 admin URL `127.0.0.1:8543/laundry_v2` |
+| 变量                                            | 含义                   |
+| ----------------------------------------------- | ---------------------- |
+| `LAUNDRY_USE_LOCAL_PG=1`                        | 启用 compose 双连接    |
+| `DATABASE_URL` / `LAUNDRY_PG_APP_URL`           | runtime：`laundry_app` |
+| `DATABASE_ADMIN_URL` / `SUPERUSER_DATABASE_URL` | seed superuser         |
 
-默认 admin URL（**LOCAL ONLY**）：
+默认（**LOCAL ONLY**）：
 
-`postgresql://postgres:postgres_secure_password@127.0.0.1:8543/laundry_v2`
+| 角色  | URL                                                                        |
+| ----- | -------------------------------------------------------------------------- |
+| app   | `postgresql://laundry_app:app_secure_password@127.0.0.1:8543/laundry_v2`   |
+| admin | `postgresql://postgres:postgres_secure_password@127.0.0.1:8543/laundry_v2` |
 
-说明：本地 identity 读写走 admin 连接，避免 FORCE RLS 下未设 GUC 的 refresh hash 查找为 0 行。生产路径应改为 `laundry_app` + 事务级 `SET LOCAL` GUC +（必要时）SECURITY DEFINER 查找函数。
+- **seed**：admin 幂等写入 orgs/stores/staffs
+- **runtime**：`laundry_app` + 事务内 `SET LOCAL app.org_id/store_id`
+- **盲查**（refresh hash / session / pin）：`0004_auth_lookup_functions.sql` SECURITY DEFINER
 
 ## 测试
 
@@ -83,7 +88,7 @@ pnpm local:web
 # 内存 inject（无 Docker）
 pnpm --filter @laundry/server test
 
-# 仅 PG identity（需 compose + migrate）
+# 仅 PG identity（需 compose + migrate-v2 含 0004）
 LAUNDRY_USE_LOCAL_PG=1 node --test apps/server/dist/identity/pg-store.test.js
 
 pnpm --filter @laundry/web test
@@ -91,7 +96,6 @@ pnpm --filter @laundry/web test
 
 ## 后续
 
-- `laundry_app` + 事务 GUC 全路径（登录 bootstrap / refresh hash）
 - cookie 名 / CSRF 与 contracts 描述符严格对齐
 - 生产 Argon2id 替换 scrypt
 - pin_lockouts 落表

@@ -1,6 +1,6 @@
 /**
  * node-pg Pool factory for local / compose Postgres.
- * Identity and seed use this; bus SqlClient adapter can wrap the same pool later.
+ * Seed uses admin URL; runtime identity uses laundry_app + GUC / definer.
  */
 
 import pg from "pg";
@@ -19,22 +19,42 @@ export const LOCAL_PG_URLS = Object.freeze({
   admin: "postgresql://postgres:postgres_secure_password@127.0.0.1:8543/laundry_v2",
 });
 
+export type ResolvedPgUrls = Readonly<{
+  /** laundry_app (or explicit DATABASE_URL) for runtime identity. */
+  app: string;
+  /** Superuser URL for seed bootstrap only. */
+  admin: string;
+}>;
+
 /**
- * Prefer explicit DATABASE_URL; otherwise admin URL for identity seed/store
- * (superuser bypasses FORCE RLS so login/refresh hash lookup works without GUC).
- * App-role + GUC path is layered later for bus commands.
+ * Resolve app + admin URLs when PG mode is requested.
+ * - LAUNDRY_USE_LOCAL_PG=1 → compose defaults (app + admin)
+ * - DATABASE_URL → runtime app; admin from DATABASE_ADMIN_URL or same URL
  */
-export function resolveIdentityDatabaseUrl(
-  env: NodeJS.ProcessEnv = process.env,
-): string | null {
-  const explicit = env.DATABASE_URL?.trim();
-  if (explicit !== undefined && explicit.length > 0) return explicit;
-  const admin = env.DATABASE_ADMIN_URL?.trim() ?? env.SUPERUSER_DATABASE_URL?.trim();
-  if (admin !== undefined && admin.length > 0) return admin;
-  if (env.LAUNDRY_USE_LOCAL_PG === "1" || env.LAUNDRY_USE_LOCAL_PG === "true") {
-    return LOCAL_PG_URLS.admin;
+export function resolvePgUrls(env: NodeJS.ProcessEnv = process.env): ResolvedPgUrls | null {
+  const flag = env.LAUNDRY_USE_LOCAL_PG === "1" || env.LAUNDRY_USE_LOCAL_PG === "true";
+  const databaseUrl = env.DATABASE_URL?.trim() ?? "";
+  const adminUrl = env.DATABASE_ADMIN_URL?.trim() || env.SUPERUSER_DATABASE_URL?.trim() || "";
+
+  if (!flag && databaseUrl.length === 0 && adminUrl.length === 0) {
+    return null;
   }
-  return null;
+
+  if (flag) {
+    return Object.freeze({
+      app: env.LAUNDRY_PG_APP_URL?.trim() || databaseUrl || LOCAL_PG_URLS.app,
+      admin: adminUrl || LOCAL_PG_URLS.admin,
+    });
+  }
+
+  const app = databaseUrl || adminUrl;
+  const admin = adminUrl || databaseUrl || LOCAL_PG_URLS.admin;
+  return Object.freeze({ app, admin });
+}
+
+/** App-role URL when PG mode is on (tests / legacy call sites). */
+export function resolveIdentityDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string | null {
+  return resolvePgUrls(env)?.app ?? null;
 }
 
 export function createPgPool(options: CreatePoolOptions): PgPool {
