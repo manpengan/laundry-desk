@@ -61,7 +61,8 @@ pnpm local:web
 
 ```bash
 # 需已安装 chromium：pnpm exec playwright install chromium
-LAUNDRY_SPA_E2E=1 pnpm --filter @laundry/web test:e2e:local
+# 先起 local:server(:pg) + local:web
+pnpm local:web:e2e
 ```
 
 ## 实现位置
