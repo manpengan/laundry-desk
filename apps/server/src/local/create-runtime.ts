@@ -5,7 +5,7 @@
 import { createAccessTokenSigner } from "../identity/crypto-util.js";
 import { createMemoryIdentityStore } from "../identity/memory-store.js";
 import { createPgIdentityStore } from "../identity/pg-store.js";
-import { createScryptPasswordPort } from "../identity/password.js";
+import { createPasswordPort } from "../identity/password.js";
 import type { StaffRecord, Uuid } from "../identity/types.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
 import {
@@ -89,7 +89,7 @@ function buildIdentityDeps(
     pinChallenges: ReturnType<typeof createMemoryIdentityStore>["pinChallenges"];
     pinLockouts: ReturnType<typeof createMemoryIdentityStore>["pinLockouts"];
   }>,
-  passwordPort: ReturnType<typeof createScryptPasswordPort>,
+  passwordPort: ReturnType<typeof createPasswordPort>,
 ): IdentityHandlerDeps {
   const clock = {
     nowEpochSeconds: () => Math.floor(Date.now() / 1000),
@@ -140,7 +140,7 @@ function buildPlatform(): PlatformHandlerDeps {
 /** In-memory identity (unit tests / no Docker). */
 export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const store = createMemoryIdentityStore();
-  const passwordPort = createScryptPasswordPort();
+  const passwordPort = createPasswordPort();
   const passwordHash = await passwordPort.hashPassword(DEMO_PASSWORD);
   const pinHash = await passwordPort.hashPassword(DEMO_PIN);
 
@@ -204,7 +204,7 @@ export async function createPgLocalRuntime(
   await adminPool.end();
 
   const store = createPgIdentityStore(appPool);
-  const passwordPort = createScryptPasswordPort();
+  const passwordPort = createPasswordPort();
 
   return Object.freeze({
     mode: "pg" as const,

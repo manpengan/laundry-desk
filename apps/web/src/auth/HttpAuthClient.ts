@@ -133,7 +133,8 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
 
   const readCsrf = (): string | null => {
     if (typeof document === "undefined") return null;
-    const match = /(?:^|;\s*)laundry_csrf=([^;]+)/u.exec(document.cookie);
+    // Production: __Host-laundry_csrf; local HTTP: laundry_csrf (Host prefix requires Secure).
+    const match = /(?:^|;\s*)(?:__Host-laundry_csrf|laundry_csrf)=([^;]+)/u.exec(document.cookie);
     return match?.[1] ?? null;
   };
 

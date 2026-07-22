@@ -23,11 +23,18 @@ import { logoutSession, rotateRefresh } from "../identity/session.js";
 import type { SessionIssueResult, SessionRecord } from "../identity/types.js";
 import { IdentityError } from "../identity/types.js";
 import type { LocalRuntime } from "../local/demo-seed.js";
-import { LOCAL_COOKIE_NAMES } from "./types.js";
+import {
+  csrfCookieOptions,
+  refreshCookieOptions,
+  resolveCookiePolicy,
+  type CookiePolicy,
+} from "./cookie-policy.js";
 
 export type CreateAppOptions = Readonly<{
   runtime: LocalRuntime;
   corsOrigin?: string | readonly string[];
+  /** Override cookie Secure / __Host- policy (tests force non-secure). */
+  cookiePolicy?: CookiePolicy;
 }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -48,24 +55,19 @@ function fail(code: CommandErrorCode) {
   });
 }
 
-function setAuthCookies(reply: FastifyReply, refreshSecret: string, csrfToken: string): void {
-  reply.setCookie(LOCAL_COOKIE_NAMES.refresh, refreshSecret, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    secure: false,
-  });
-  reply.setCookie(LOCAL_COOKIE_NAMES.csrf, csrfToken, {
-    httpOnly: false,
-    sameSite: "lax",
-    path: "/",
-    secure: false,
-  });
+function setAuthCookies(
+  reply: FastifyReply,
+  policy: CookiePolicy,
+  refreshSecret: string,
+  csrfToken: string,
+): void {
+  reply.setCookie(policy.refreshName, refreshSecret, { ...refreshCookieOptions(policy) });
+  reply.setCookie(policy.csrfName, csrfToken, { ...csrfCookieOptions(policy) });
 }
 
-function clearAuthCookies(reply: FastifyReply): void {
-  reply.clearCookie(LOCAL_COOKIE_NAMES.refresh, { path: "/" });
-  reply.clearCookie(LOCAL_COOKIE_NAMES.csrf, { path: "/" });
+function clearAuthCookies(reply: FastifyReply, policy: CookiePolicy): void {
+  reply.clearCookie(policy.refreshName, { path: policy.path });
+  reply.clearCookie(policy.csrfName, { path: policy.path });
 }
 
 function publicAccessBody(issued: SessionIssueResult) {
@@ -135,9 +137,13 @@ function mapIdentityHttpError(error: unknown, reply: FastifyReply) {
   return fail("TRANSACTION_FAILED");
 }
 
-function requireCsrf(request: FastifyRequest, reply: FastifyReply): true | ReturnType<typeof fail> {
+function requireCsrf(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  policy: CookiePolicy,
+): true | ReturnType<typeof fail> {
   const header = request.headers[CSRF_HEADER_NAME.toLowerCase()];
-  const cookieVal = request.cookies[LOCAL_COOKIE_NAMES.csrf];
+  const cookieVal = request.cookies[policy.csrfName];
   if (typeof header !== "string" || header.length === 0 || header !== cookieVal) {
     reply.code(403);
     return fail("CSRF_REJECTED");
@@ -148,6 +154,7 @@ function requireCsrf(request: FastifyRequest, reply: FastifyReply): true | Retur
 /** Build a fully configured Fastify instance (no listen). Prefer inject() in tests. */
 export async function createLocalApp(options: CreateAppOptions): Promise<FastifyInstance> {
   const { runtime } = options;
+  const cookiePolicy = options.cookiePolicy ?? resolveCookiePolicy();
   const corsOriginList: string[] = Array.isArray(options.corsOrigin)
     ? [...options.corsOrigin]
     : typeof options.corsOrigin === "string"
@@ -169,6 +176,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       data: Object.freeze({
         service: "@laundry/server",
         mode: runtime.mode === "pg" ? "local-pg" : "local-memory",
+        cookies: cookiePolicy.secure ? "host-secure" : "local-http",
         at: Date.now(),
       }),
     }),
@@ -181,7 +189,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   app.post("/api/v2/auth/login", async (request, reply) => {
     try {
       const issued = await loginWithPassword(runtime.identity.login, request.body);
-      setAuthCookies(reply, issued.refresh.refresh_token, issued.csrf.csrf_token);
+      setAuthCookies(reply, cookiePolicy, issued.refresh.refresh_token, issued.csrf.csrf_token);
       return Object.freeze({ ok: true as const, data: publicAccessBody(issued) });
     } catch (error) {
       return mapIdentityHttpError(error, reply);
@@ -189,17 +197,17 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   });
 
   app.post("/api/v2/auth/refresh", async (request, reply) => {
-    const refreshSecret = request.cookies[LOCAL_COOKIE_NAMES.refresh];
+    const refreshSecret = request.cookies[cookiePolicy.refreshName];
     if (typeof refreshSecret !== "string" || refreshSecret.length === 0) {
       reply.code(401);
       return fail("AUTHENTICATION_FAILED");
     }
     try {
       const issued = await rotateRefresh(runtime.identity.sessions, refreshSecret);
-      setAuthCookies(reply, issued.refresh.refresh_token, issued.csrf.csrf_token);
+      setAuthCookies(reply, cookiePolicy, issued.refresh.refresh_token, issued.csrf.csrf_token);
       return Object.freeze({ ok: true as const, data: publicAccessBody(issued) });
     } catch (error) {
-      clearAuthCookies(reply);
+      clearAuthCookies(reply, cookiePolicy);
       return mapIdentityHttpError(error, reply);
     }
   });
@@ -218,7 +226,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     } catch {
       // still clear cookies
     }
-    clearAuthCookies(reply);
+    clearAuthCookies(reply, cookiePolicy);
     return Object.freeze({ ok: true as const, data: Object.freeze({ logged_out: true as const }) });
   });
 
@@ -228,7 +236,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       reply.code(401);
       return fail("AUTHENTICATION_FAILED");
     }
-    const csrf = requireCsrf(request, reply);
+    const csrf = requireCsrf(request, reply, cookiePolicy);
     if (csrf !== true) return csrf;
     const body = isRecord(request.body) ? request.body : {};
     try {
@@ -261,7 +269,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       reply.code(401);
       return fail("AUTHENTICATION_FAILED");
     }
-    const csrf = requireCsrf(request, reply);
+    const csrf = requireCsrf(request, reply, cookiePolicy);
     if (csrf !== true) return csrf;
     const params = request.params as { challengeId?: string };
     const body = isRecord(request.body) ? request.body : {};
@@ -278,7 +286,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
         pin,
         session,
       });
-      setAuthCookies(reply, issued.refresh.refresh_token, issued.csrf.csrf_token);
+      setAuthCookies(reply, cookiePolicy, issued.refresh.refresh_token, issued.csrf.csrf_token);
       return Object.freeze({ ok: true as const, data: publicAccessBody(issued) });
     } catch (error) {
       return mapIdentityHttpError(error, reply);
