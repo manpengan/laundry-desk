@@ -94,7 +94,7 @@ test("order.receive expands qty into garments and returns ticket_no", async () =
 });
 
 test("order.pickup transitions received garments and settles balance", async () => {
-  const { registry, chainHooks, pendingStore } = buildBus();
+  const { registry, chainHooks, pendingStore, orderStore } = buildBus();
   const received = await executeCommand(
     new FakeSqlClient(),
     TENANT,
@@ -139,6 +139,55 @@ test("order.pickup transitions received garments and settles balance", async () 
   assert.equal(data.paid_cents, 2000);
   assert.equal(data.status, "closed");
   assert.equal(data.picked_garment_ids.length, 1);
+
+  const payments = await orderStore.listPayments?.(DEMO_ORG_ID, DEMO_STORE_ID, orderId);
+  assert.ok(payments);
+  assert.equal(payments.length, 1);
+  assert.equal(payments[0]?.kind, "pay");
+  assert.equal(payments[0]?.method, "cash");
+  assert.equal(payments[0]?.amount_cents, 2000);
+  assert.equal(payments[0]?.staff_id, DEMO_STAFF_A_ID);
+  assert.equal(payments[0]?.order_id, orderId);
+});
+
+test("order.pickup with collect_cents 0 does not insert a payment", async () => {
+  const orderStore = createMemoryOrderStore();
+  const { registry, chainHooks, pendingStore } = buildBus(orderStore);
+  const received = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      lines: [
+        {
+          service_code: "wash",
+          category_code: "shirt",
+          unit_price_cents: 1000,
+          qty: 1,
+        },
+      ],
+      paid_cents: 1000,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(received.ok, true);
+  if (!received.ok) return;
+  const orderId = (received.data.result as { order_id: string }).order_id;
+
+  const picked = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.pickup",
+    {
+      order_id: orderId,
+      garment_ids: [],
+      collect_cents: 0,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(picked.ok, true, JSON.stringify(picked));
+  const payments = await orderStore.listPayments(DEMO_ORG_ID, DEMO_STORE_ID, orderId);
+  assert.equal(payments.length, 0);
 });
 
 test("order.receive without order_write is PERMISSION_DENIED", async () => {

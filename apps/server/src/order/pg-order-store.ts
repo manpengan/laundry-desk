@@ -1,8 +1,9 @@
 /**
  * Postgres OrderStore: laundry_app + withStoreGuc (SET LOCAL tenant GUCs).
- * Tables (owned by packages/db migration agent): orders, order_lines, garments, ticket_counters.
+ * Tables: orders, order_lines, garments, ticket_counters, payments (append-only).
  */
 
+import { buildPayPayment } from "@laundry/domain";
 import { randomUUID } from "node:crypto";
 
 import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
@@ -17,7 +18,13 @@ import {
   type OrderLineRow,
   type OrderRow,
 } from "./pg-order-mappers.js";
-import type { GarmentRecord, OrderRecord, OrderStore, PickupApplyResult } from "./types.js";
+import type {
+  GarmentRecord,
+  OrderRecord,
+  OrderStore,
+  PickupApplyOptions,
+  PickupApplyResult,
+} from "./types.js";
 
 export type CreatePgOrderStoreOptions = Readonly<{
   /** Override UUID generation (tests). */
@@ -180,6 +187,54 @@ function nextOrderStatus(
   return allTerminal && balanceCents <= 0 ? "closed" : current;
 }
 
+async function insertPaymentIfNeeded(
+  client: PgPoolClient,
+  orgId: string,
+  storeId: string,
+  orderId: string,
+  collectCents: number,
+  nowEpoch: number,
+  options: PickupApplyOptions | undefined,
+  newId: () => string,
+): Promise<void> {
+  if (collectCents <= 0) return;
+  if (options?.staffId === undefined || options.staffId.length === 0) {
+    throw new Error("staffId is required when collectCents > 0");
+  }
+  const payment = buildPayPayment({
+    payment_id: options.paymentId ?? newId(),
+    org_id: orgId,
+    store_id: storeId,
+    order_id: orderId,
+    amount_cents: collectCents,
+    staff_id: options.staffId,
+    at: nowEpoch,
+    method: options.method ?? "cash",
+  });
+  await client.query(
+    `INSERT INTO payments (
+       id, org_id, store_id, order_id, method, amount_cents, kind,
+       ref_payment_id, staff_id, at, note
+     ) VALUES (
+       $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7,
+       $8::uuid, $9::uuid, $10, $11
+     )`,
+    [
+      payment.payment_id,
+      payment.org_id,
+      payment.store_id,
+      payment.order_id,
+      payment.method,
+      payment.amount_cents,
+      payment.kind,
+      payment.ref_payment_id,
+      payment.staff_id,
+      epochToDate(payment.at),
+      payment.note,
+    ],
+  );
+}
+
 async function applyPickupTxn(
   client: PgPoolClient,
   orgId: string,
@@ -188,6 +243,8 @@ async function applyPickupTxn(
   garmentIds: readonly string[],
   collectCents: number,
   nowEpoch: number,
+  options: PickupApplyOptions | undefined,
+  newId: () => string,
 ): Promise<PickupApplyResult | null> {
   const order = await loadOrder(client, orgId, storeId, orderId);
   if (order === null) return null;
@@ -217,6 +274,17 @@ async function applyPickupTxn(
      SET paid_cents = $4, balance_cents = $5, status = $6, updated_at = $7
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid`,
     [orgId, storeId, orderId, paid, balance, status, epochToDate(nowEpoch)],
+  );
+
+  await insertPaymentIfNeeded(
+    client,
+    orgId,
+    storeId,
+    orderId,
+    collectCents,
+    nowEpoch,
+    options,
+    newId,
   );
 
   const nextOrder = Object.freeze({
@@ -264,10 +332,25 @@ export function createPgOrderStore(
         loadGarments(client, orgId, storeId, orderId),
       ),
 
-    applyPickup: async (orgId, storeId, orderId, garmentIds, collectCents, nowEpoch) =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) =>
-        applyPickupTxn(client, orgId, storeId, orderId, garmentIds, collectCents, nowEpoch),
-      ),
+    applyPickup: async (orgId, storeId, orderId, garmentIds, collectCents, nowEpoch, options) => {
+      const scope =
+        options?.staffId !== undefined
+          ? Object.freeze({ orgId, storeId, staffId: options.staffId })
+          : Object.freeze({ orgId, storeId });
+      return withStoreGuc(pool, scope, async (client) =>
+        applyPickupTxn(
+          client,
+          orgId,
+          storeId,
+          orderId,
+          garmentIds,
+          collectCents,
+          nowEpoch,
+          options,
+          newId,
+        ),
+      );
+    },
 
     nextTicketSeq: async (orgId, storeId, dayKey) =>
       withStoreGuc(pool, { orgId, storeId }, async (client) => {

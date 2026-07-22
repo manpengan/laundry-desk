@@ -21,8 +21,10 @@ export {
   M2_ALL_TABLE_NAMES,
   M2_CATALOG_TABLE_NAMES,
   M2_ORDER_TABLE_NAMES,
+  M2_PAYMENT_TABLE_NAMES,
   type M2CatalogTableNameLiteral,
   type M2OrderTableNameLiteral,
+  type M2PaymentTableNameLiteral,
   type M2TableNameLiteral,
 } from "./m2-tables.js";
 
@@ -32,6 +34,7 @@ export {
   M1_STORE_RLS_TABLES,
   M2_CATALOG_RLS_TABLES,
   M2_ORDER_RLS_TABLES,
+  M2_PAYMENT_RLS_TABLES,
   buildM1RlsMigrationSql,
 } from "./rls.js";
 
@@ -47,12 +50,14 @@ export {
   M1_SESSION_TABLES,
   M2_CATALOG_TABLES,
   M2_ORDER_TABLES,
+  M2_PAYMENT_TABLES,
   auditLog,
   catalogItems,
   garments,
   orderLines,
   orders,
   orgs,
+  payments,
   pinChallenges,
   pinLockouts,
   refreshFamilies,
@@ -70,5 +75,6 @@ export {
   type M1TableName,
   type M2CatalogTableName,
   type M2OrderTableName,
+  type M2PaymentTableName,
   type SchemaTableName,
 } from "./schema/index.js";

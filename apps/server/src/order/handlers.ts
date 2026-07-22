@@ -1,5 +1,5 @@
 /**
- * M2 skeleton handlers: order.receive / order.pickup (async OrderStore).
+ * M2 skeleton handlers: order.receive / order.pickup / order.get (async OrderStore).
  */
 
 import { createCommandError } from "@laundry/contracts";
@@ -207,6 +207,7 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
       plan.garment_ids,
       plan.collect_cents,
       now,
+      Object.freeze({ staffId: ctx.actor.staffId, method: "cash" as const }),
     );
     if (applied === null) {
       throw new HandlerCommandError(createCommandError("TRANSACTION_FAILED"));
@@ -243,12 +244,56 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
   };
 }
 
+function getHandler(deps: OrderHandlerDeps): CommandHandler {
+  return async (ctx): Promise<HandlerOutcome> => {
+    const input = asRecord(ctx.parsed);
+    const orderId = requireString(input.order_id);
+    const order = await deps.store.getOrder(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
+    if (order === null) {
+      throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+    }
+    const garments = await deps.store.listGarments(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
+    return Object.freeze({
+      result: Object.freeze({
+        order_id: order.order_id,
+        ticket_no: order.ticket_no,
+        status: order.status,
+        customer_phone: order.customer_phone,
+        customer_name: order.customer_name,
+        payable_cents: order.payable_cents,
+        paid_cents: order.paid_cents,
+        balance_cents: order.balance_cents,
+        garments: Object.freeze(
+          garments.map((g) =>
+            Object.freeze({
+              garment_id: g.garment_id,
+              barcode: g.barcode,
+              status: g.status,
+              line_index: g.line_index,
+              seq: g.seq,
+              unit_price_cents: g.unit_price_cents,
+            }),
+          ),
+        ),
+      }),
+    });
+  };
+}
+
 export function createOrderHandlers(
   deps: OrderHandlerDeps,
 ): Readonly<Record<string, CommandHandler>> {
   return Object.freeze({
     "order.receive": receiveHandler(deps),
     "order.pickup": pickupHandler(deps),
+  });
+}
+
+export function createOrderQueryHandlers(
+  deps: OrderHandlerDeps,
+): Readonly<Record<string, CommandHandler>> {
+  return Object.freeze({
+    "order.get": getHandler(deps),
   });
 }
 
@@ -259,4 +304,12 @@ export function registerOrderCommandHandlers(
   const handlers = createOrderHandlers(deps);
   registry.registerHandler("order.receive", handlers["order.receive"]!);
   registry.registerHandler("order.pickup", handlers["order.pickup"]!);
+}
+
+export function registerOrderQueryHandlers(
+  registry: Readonly<{ registerHandler: (name: string, handler: CommandHandler) => void }>,
+  deps: OrderHandlerDeps,
+): void {
+  const handlers = createOrderQueryHandlers(deps);
+  registry.registerHandler("order.get", handlers["order.get"]!);
 }

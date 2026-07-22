@@ -1,7 +1,7 @@
 import type { CommandDefinition, QueryDefinition } from "../registry/definitions.js";
 import { IDENTITY_COMMANDS, IDENTITY_COMMAND_NAMES } from "./identity.js";
 import { CATALOG_SKELETON_DEFINITIONS, CATALOG_SKELETON_QUERY_NAMES } from "./catalog-items.js";
-import { ORDER_COMMANDS, ORDER_COMMAND_NAMES } from "./order.js";
+import { ORDER_COMMANDS, ORDER_COMMAND_NAMES, ORDER_QUERIES, ORDER_QUERY_NAMES } from "./order.js";
 import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./platform.js";
 import type { z } from "zod";
 
@@ -26,6 +26,16 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = ORDER_COMMAND_NAMES;
+
+/**
+ * M2 order read queries (order.get for partial pickup UX).
+ * Not in OpenAPI freeze; load via query registry separately from commands.
+ */
+export const M2_ORDER_QUERY_DEFINITIONS: readonly QueryDefinition<z.ZodObject>[] = Object.freeze([
+  ...ORDER_QUERIES,
+]);
+
+export const M2_ORDER_QUERY_NAMES = ORDER_QUERY_NAMES;
 
 /**
  * M2 catalog item queries (price list). Separate from order commands so
