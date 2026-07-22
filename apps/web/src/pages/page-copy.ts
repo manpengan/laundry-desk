@@ -41,7 +41,7 @@ const COPY: Record<NavItemId, PageCopy> = {
   settings: {
     title: "设置",
     emptyTitle: "设置项即将接入",
-    emptyDescription: "价目、打印、员工等在 M2 接 server 后可用。",
+    emptyDescription: "最低消费等 R5 项已接 step-up PIN 复核；其余价目/打印在 M2 扩展。",
     actionLabel: "返回工作台",
   },
 };

@@ -32,10 +32,13 @@ createRoot(rootEl).render(
     connection={createMockConnection({ mode: "online" })}
     enableLiquidGlass
     loginInitialForm={LOCAL_DEMO_LOGIN}
+    apiBaseUrl={apiBaseUrl}
   />,
 );
 
 // Helpful for manual walkthroughs in the browser console.
 if (typeof console !== "undefined") {
-  console.info(`[laundry local web] api=${apiBaseUrl} demo=hongfa/main admin/demo PIN=1234`);
+  console.info(
+    `[laundry local web] api=${apiBaseUrl} demo=hongfa/main admin/demo PIN=1234 — 设置页可试 R5 step-up`,
+  );
 }

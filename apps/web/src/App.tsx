@@ -18,6 +18,8 @@ export type AppProps = {
   initialSession?: AccessSession | null;
   /** Local host demo prefill only. */
   loginInitialForm?: Partial<LoginFormValues>;
+  /** Local server origin for command bus (settings R5 demo). */
+  apiBaseUrl?: string;
 };
 
 function shellPropsFrom(
@@ -26,6 +28,7 @@ function shellPropsFrom(
   session: AccessSession,
   authClient: AuthClient,
   onSessionChange: (session: AccessSession | null) => void,
+  apiBaseUrl: string | undefined,
 ): CounterShellProps {
   const props: CounterShellProps = {
     session,
@@ -34,6 +37,7 @@ function shellPropsFrom(
   };
   if (connection !== undefined) props.initialConnection = connection;
   if (themePreference !== undefined) props.initialTheme = themePreference;
+  if (apiBaseUrl !== undefined && apiBaseUrl.length > 0) props.apiBaseUrl = apiBaseUrl;
   return props;
 }
 
@@ -48,6 +52,7 @@ export function App({
   authClient: authClientProp,
   initialSession = null,
   loginInitialForm,
+  apiBaseUrl,
 }: AppProps) {
   const authClient = useMemo(() => authClientProp ?? createMockAuthClient(), [authClientProp]);
   const [session, setSession] = useState<AccessSession | null>(initialSession);
@@ -62,7 +67,14 @@ export function App({
     <ToastProvider>
       {session ? (
         <CounterShell
-          {...shellPropsFrom(connection, themePreference, session, authClient, setSession)}
+          {...shellPropsFrom(
+            connection,
+            themePreference,
+            session,
+            authClient,
+            setSession,
+            apiBaseUrl,
+          )}
         />
       ) : (
         <LoginPage

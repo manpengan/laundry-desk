@@ -1,11 +1,19 @@
 import { EmptyState, MoneyText, Skeleton, StatusBadge } from "@laundry/ui";
+import type { AuthClient } from "../auth/AuthClient.js";
+import type { AccessSession } from "../auth/types.js";
+import type { CommandPort } from "../commands/types.js";
 import type { NavItemId } from "../nav.js";
 import { pageCopy } from "./page-copy.js";
+import { SettingsPage } from "./SettingsPage.js";
 
 export type PageHostProps = {
   activeId: NavItemId;
   loading?: boolean;
   onNavigate: (id: NavItemId) => void;
+  /** Required for settings R5 step-up demo. */
+  session?: AccessSession;
+  authClient?: AuthClient;
+  commandClient?: CommandPort;
 };
 
 function actionTarget(from: NavItemId): NavItemId {
@@ -15,7 +23,14 @@ function actionTarget(from: NavItemId): NavItemId {
   return from;
 }
 
-export function PageHost({ activeId, loading = false, onNavigate }: PageHostProps) {
+export function PageHost({
+  activeId,
+  loading = false,
+  onNavigate,
+  session,
+  authClient,
+  commandClient,
+}: PageHostProps) {
   const copy = pageCopy(activeId);
 
   if (loading) {
@@ -27,6 +42,15 @@ export function PageHost({ activeId, loading = false, onNavigate }: PageHostProp
         </div>
       </main>
     );
+  }
+
+  if (
+    activeId === "settings" &&
+    session !== undefined &&
+    authClient !== undefined &&
+    commandClient !== undefined
+  ) {
+    return <SettingsPage session={session} authClient={authClient} commandClient={commandClient} />;
   }
 
   return (

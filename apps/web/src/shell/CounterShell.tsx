@@ -3,6 +3,8 @@ import type { PrintJobSummary } from "@laundry/ui";
 import type { AuthClient } from "../auth/AuthClient.js";
 import { filterNavItems, permissionContextFrom } from "../auth/permissions.js";
 import type { AccessSession } from "../auth/types.js";
+import { createHttpCommandClient, createMockCommandClient } from "../commands/command-client.js";
+import type { CommandPort } from "../commands/types.js";
 import { createMockConnection, type ConnectionStatus } from "../connection.js";
 import type { NavItemId } from "../nav.js";
 import { PageHost } from "../pages/PageHost.js";
@@ -29,6 +31,10 @@ export type CounterShellProps = {
   printSummary?: PrintJobSummary;
   /** Simulate first-paint skeleton once (ms). 0 = off. */
   initialLoadingMs?: number;
+  /** When set, settings R5 demo uses real HTTP command bus. */
+  apiBaseUrl?: string;
+  /** Inject command port (tests / mock). */
+  commandClient?: CommandPort;
 };
 
 function readSystemDark(): boolean {
@@ -59,6 +65,8 @@ export function CounterShell({
   documentRef = null,
   printSummary = { queued: 0, failed: 0 },
   initialLoadingMs = 0,
+  apiBaseUrl = "",
+  commandClient: commandClientProp,
 }: CounterShellProps) {
   const [expanded, setExpanded] = useState(false);
   const [activeId, setActiveId] = useState<NavItemId>(initialNav);
@@ -70,6 +78,17 @@ export function CounterShell({
     [session, initialConnection],
   );
   const dark = systemDark ?? readSystemDark();
+
+  const commandClient = useMemo(() => {
+    if (commandClientProp !== undefined) return commandClientProp;
+    if (apiBaseUrl.length > 0) {
+      return createHttpCommandClient({
+        apiBaseUrl,
+        getAccessToken: () => session.access_token,
+      });
+    }
+    return createMockCommandClient();
+  }, [apiBaseUrl, commandClientProp, session.access_token]);
 
   // UI gate only; C8 enforces.
   const permission = useMemo(
@@ -111,7 +130,14 @@ export function CounterShell({
           onSwitchStaff={() => setPinOpen(true)}
         />
         <RouteGate permission={permission} activeId={activeId} onNavigate={setActiveId}>
-          <PageHost activeId={activeId} loading={loading} onNavigate={setActiveId} />
+          <PageHost
+            activeId={activeId}
+            loading={loading}
+            onNavigate={setActiveId}
+            session={session}
+            authClient={authClient}
+            commandClient={commandClient}
+          />
         </RouteGate>
       </div>
       <PinSwitchDialog
