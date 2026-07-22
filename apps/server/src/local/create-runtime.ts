@@ -129,8 +129,10 @@ function buildIdentityDeps(
   });
 }
 
-function buildPlatform(): PlatformHandlerDeps {
+function buildPlatform(persistence: "memory" | "sql" = "memory"): PlatformHandlerDeps {
+  // Memory stores still required as typed placeholders; SQL mode rebinds per request via ctx.client.
   return Object.freeze({
+    persistence,
     settings: createMemorySettingsStore(),
     features: createMemoryFeaturesStore(),
     audit: createMemoryAuditQueryStore(),
@@ -172,7 +174,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   return Object.freeze({
     mode: "memory" as const,
     identity: buildIdentityDeps(store, passwordPort),
-    platform: buildPlatform(),
+    platform: buildPlatform("memory"),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pool: null,
@@ -209,7 +211,7 @@ export async function createPgLocalRuntime(
   return Object.freeze({
     mode: "pg" as const,
     identity: buildIdentityDeps(store, passwordPort),
-    platform: buildPlatform(),
+    platform: buildPlatform("sql"),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pool: appPool,

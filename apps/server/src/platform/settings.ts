@@ -1,10 +1,12 @@
 /**
  * C7 settings store — key/value_json map with amount-in-cents integer guard.
- * Persistence is injected (memory map for tests; SqlClient adapter later).
+ * Persistence is injected (memory map for tests; SqlClient + tenant for PG).
  * Routes must not call mutators directly — use createPlatformHandlers / bus.
  */
 
-import type { SqlClient } from "../db/types.js";
+import { randomUUID } from "node:crypto";
+
+import type { SqlClient, TenantContext } from "../db/types.js";
 
 /** Settings wire values are JSON strings (A6 value_json). */
 export type SettingsEntry = Readonly<{
@@ -84,16 +86,20 @@ export function createMemorySettingsStore(
 }
 
 /**
- * SqlClient-backed skeleton (fixed SQL literals). Returns empty until packages/db
- * lands settings table adapters; still validates amount ints on write path.
+ * SqlClient-backed settings against packages/db `settings` table (org RLS).
+ * Must run inside withTenantTransaction so app.org_id GUC is set.
+ * Unique key: (org_id, key).
  */
-export function createSqlSettingsStore(client: SqlClient): SettingsStore {
+export function createSqlSettingsStore(client: SqlClient, tenant: TenantContext): SettingsStore {
   return Object.freeze({
     async getMany(keys: readonly string[]): Promise<Readonly<Record<string, string>>> {
       if (keys.length === 0) return Object.freeze({});
       const result = await client.query<{ key: string; value_json: string }>(
-        `SELECT key, value_json FROM settings WHERE key = ANY($1::text[])`,
-        [keys],
+        `SELECT key, value_json
+           FROM settings
+          WHERE org_id = $1
+            AND key = ANY($2::text[])`,
+        [tenant.orgId, keys],
       );
       const out: Record<string, string> = {};
       for (const row of result.rows) {
@@ -105,9 +111,14 @@ export function createSqlSettingsStore(client: SqlClient): SettingsStore {
       validateSettingsEntries(entries);
       for (const entry of entries) {
         await client.query(
-          `INSERT INTO settings (key, value_json) VALUES ($1, $2)
-           ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json`,
-          [entry.key, entry.value_json],
+          `INSERT INTO settings (
+             id, org_id, key, value_json, updated_at, updated_by_staff_id
+           ) VALUES ($1, $2, $3, $4, NOW(), $5)
+           ON CONFLICT (org_id, key) DO UPDATE SET
+             value_json = EXCLUDED.value_json,
+             updated_at = EXCLUDED.updated_at,
+             updated_by_staff_id = EXCLUDED.updated_by_staff_id`,
+          [randomUUID(), tenant.orgId, entry.key, entry.value_json, tenant.staffId],
         );
       }
     },

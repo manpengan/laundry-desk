@@ -3,7 +3,7 @@
  * Read path for IA and capability gates; inject store via handlers only.
  */
 
-import type { SqlClient } from "../db/types.js";
+import type { SqlClient, TenantContext } from "../db/types.js";
 
 /** Stable M1 feature flag set (boolean only). */
 export type StoreFeatureFlags = Readonly<{
@@ -59,10 +59,17 @@ export function createMemoryFeaturesStore(
   });
 }
 
-/** SqlClient skeleton — SELECT fixed columns; empty row → defaults. */
-export function createSqlFeaturesStore(client: SqlClient): FeaturesStore {
+/**
+ * SqlClient-backed store_features (store RLS). Empty row → DEFAULT_STORE_FEATURES.
+ * Must run inside withTenantTransaction (app.org_id + app.store_id).
+ */
+export function createSqlFeaturesStore(client: SqlClient, tenant: TenantContext): FeaturesStore {
   return Object.freeze({
     async get(storeId: string): Promise<StoreFeatureFlags> {
+      // Fail closed: only return flags for the authenticated store.
+      if (storeId !== tenant.storeId) {
+        return DEFAULT_STORE_FEATURES;
+      }
       const result = await client.query<{
         fulfillment: boolean;
         membership: boolean;
@@ -72,8 +79,10 @@ export function createSqlFeaturesStore(client: SqlClient): FeaturesStore {
         ai: boolean;
       }>(
         `SELECT fulfillment, membership, shift_closing, delivery, marketing, ai
-         FROM store_features WHERE store_id = $1 LIMIT 1`,
-        [storeId],
+           FROM store_features
+          WHERE org_id = $1 AND store_id = $2
+          LIMIT 1`,
+        [tenant.orgId, tenant.storeId],
       );
       const row = result.rows[0];
       if (row === undefined) return DEFAULT_STORE_FEATURES;

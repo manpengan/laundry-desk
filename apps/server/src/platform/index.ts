@@ -10,7 +10,12 @@ export {
   platformHandlerNames,
   registerPlatformCommandHandlers,
 } from "./handlers.js";
-export type { PlatformHandlerDeps, PlatformHandlerMap, PlatformHandlerName } from "./handlers.js";
+export type {
+  PlatformHandlerDeps,
+  PlatformHandlerMap,
+  PlatformHandlerName,
+  PlatformPersistence,
+} from "./handlers.js";
 
 export {
   assertAmountInt,
