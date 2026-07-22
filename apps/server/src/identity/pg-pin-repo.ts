@@ -46,7 +46,8 @@ export function createPinChallengeRepo(pool: PgPool): PinChallengeRepository {
         `SELECT id::text, org_id::text, store_id::text, device_id::text,
                 session_id::text, session_version, purpose,
                 target_staff_id::text, approver_staff_id::text,
-                pending_action_ref, nonce, attempts, max_attempts,
+                pending_action_ref, args_hash, entity_versions,
+                idempotency_key::text, nonce, attempts, max_attempts,
                 status, issued_at, expires_at, requester_staff_id::text
          FROM laundry_auth_lookup_pin($1::uuid)`,
         [challengeId],
@@ -63,12 +64,17 @@ export function createPinChallengeRepo(pool: PgPool): PinChallengeRepository {
           staffId: challenge.requester_staff_id,
         },
         async (client) => {
+          const entityVersionsJson = JSON.stringify(challenge.entity_versions ?? []);
           await client.query(
             `INSERT INTO pin_challenges (
                id, org_id, store_id, device_id, session_id, session_version,
                purpose, target_staff_id, approver_staff_id, pending_action_ref,
+               args_hash, entity_versions, idempotency_key,
                nonce, attempts, max_attempts, status, issued_at, expires_at, consumed_at
-             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+             ) VALUES (
+               $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,
+               $14,$15,$16,$17,$18,$19,$20
+             )`,
             [
               challenge.challenge_id,
               challenge.org_id,
@@ -80,6 +86,9 @@ export function createPinChallengeRepo(pool: PgPool): PinChallengeRepository {
               challenge.target_staff_id ?? null,
               challenge.approver_staff_id ?? null,
               challenge.pending_action_ref ?? null,
+              challenge.args_hash ?? null,
+              entityVersionsJson,
+              challenge.idempotency_key ?? null,
               challenge.nonce,
               challenge.failed_attempts,
               challenge.max_attempts,
