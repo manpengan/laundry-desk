@@ -16,13 +16,12 @@ import { createAccessTokenSigner } from "./crypto-util.js";
 import { createQuickSwitchChallenge, verifyQuickSwitchPin } from "./pin.js";
 import { rotateRefresh } from "./session.js";
 
-const urls = resolvePgUrls({
-  ...process.env,
-  LAUNDRY_USE_LOCAL_PG: process.env.LAUNDRY_USE_LOCAL_PG ?? "1",
-});
+// CI has no compose Postgres — only run when explicitly opted in.
+const pgOptIn =
+  process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true";
+const urls = pgOptIn ? resolvePgUrls(process.env) : null;
 
-const maybe =
-  process.env.LAUNDRY_SKIP_PG_TEST === "1" ? test.skip : urls === null ? test.skip : test;
+const maybe = urls === null ? test.skip : test;
 
 maybe("PG seed + login + PIN + refresh via laundry_app", async () => {
   assert.ok(urls);
