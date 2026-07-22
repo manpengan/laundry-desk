@@ -106,7 +106,7 @@ async function resolveSession(
   const signer = createAccessTokenSigner(runtime.accessTokenSecret);
   const claims = signer.verify(token);
   if (claims === null) return null;
-  const session = await runtime.store.sessions.get(claims.session_id);
+  const session = await runtime.identity.sessions.sessions.get(claims.session_id);
   if (session === null || session.status !== "active") return null;
   if (session.session_version !== claims.session_version) return null;
   return session;
@@ -168,7 +168,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       ok: true as const,
       data: Object.freeze({
         service: "@laundry/server",
-        mode: "local-memory",
+        mode: runtime.mode === "pg" ? "local-pg" : "local-memory",
         at: Date.now(),
       }),
     }),

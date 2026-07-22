@@ -1,13 +1,15 @@
 /**
- * Local HTTP entry: memory identity + Fastify.
+ * Local HTTP entry: memory identity (default) or Postgres when DATABASE_URL /
+ * LAUNDRY_USE_LOCAL_PG is set.
  *
  *   pnpm local:server
- *   # or: node apps/server/dist/http/main.js
+ *   LAUNDRY_USE_LOCAL_PG=1 pnpm local:server
  *
  * Env:
  *   PORT (default 8787)
  *   HOST (default 127.0.0.1)
  *   CORS_ORIGIN (comma-separated, optional)
+ *   DATABASE_URL | DATABASE_ADMIN_URL | LAUNDRY_USE_LOCAL_PG=1
  */
 
 import { createLocalApp } from "./create-app.js";
@@ -26,10 +28,25 @@ async function main(): Promise<void> {
     ...(corsOrigin !== undefined && corsOrigin.length > 0 ? { corsOrigin } : {}),
   });
 
+  const shutdown = async (): Promise<void> => {
+    await app.close();
+    if (runtime.pool !== null) {
+      await runtime.pool.end();
+    }
+  };
+
+  process.once("SIGINT", () => {
+    void shutdown().finally(() => process.exit(0));
+  });
+  process.once("SIGTERM", () => {
+    void shutdown().finally(() => process.exit(0));
+  });
+
   await app.listen({ port, host });
   process.stdout.write(
     [
       `laundry local server listening on http://${host}:${port}`,
+      `  mode ${runtime.mode}`,
       `  GET  /health`,
       `  POST /api/v2/auth/login  (org_code=hongfa store_code=main username=admin password=${DEMO_PASSWORD})`,
       `  POST /api/v2/auth/pin/*  (PIN ${DEMO_PIN})`,
