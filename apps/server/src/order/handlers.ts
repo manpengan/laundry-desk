@@ -1,6 +1,6 @@
 /**
  * M2 skeleton handlers: order.receive / order.pickup / order.get / order.list.
- * Optional customer store: best-effort upsert on receive when phone present.
+ * Optional customer store: transaction-bound upsert on receive when phone present.
  */
 
 import { createCommandError } from "@laundry/contracts";
@@ -17,24 +17,22 @@ import type { GarmentRecord, OrderLineRecord } from "./types.js";
 export type { OrderHandlerDeps } from "./deps.js";
 
 /**
- * Best-effort customer archive on receive. Failures are swallowed so open-order
- * is never blocked by customer store/transient errors.
+ * Customer archival belongs to the same command transaction as order receipt.
+ * A failure rolls back the receipt; a PG connection cannot safely continue
+ * after a failed statement, and a visible order without its customer record
+ * makes customer history inconsistent.
  */
-async function bestEffortCustomerUpsert(
+async function upsertCustomerForReceipt(
   customer: CustomerStore,
   phone: string,
   name: string | undefined,
   now: number,
 ): Promise<void> {
-  try {
-    await customer.upsert({
-      phone,
-      ...(name !== undefined ? { name } : {}),
-      now,
-    });
-  } catch {
-    // intentional soft-skip
-  }
+  await customer.upsert({
+    phone,
+    ...(name !== undefined ? { name } : {}),
+    now,
+  });
 }
 
 function asRecord(parsed: unknown): Readonly<Record<string, unknown>> {
@@ -108,7 +106,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
         : null;
 
     if (customerPhone !== null && deps.customer !== undefined) {
-      await bestEffortCustomerUpsert(deps.customer, customerPhone, customerName ?? undefined, now);
+      await upsertCustomerForReceipt(deps.customer, customerPhone, customerName ?? undefined, now);
     }
 
     const seq = await deps.store.nextTicketSeq(ctx.tenant.orgId, ctx.tenant.storeId, dayKey);
@@ -227,6 +225,7 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
       selected_garment_ids: selectedIds,
       balance_cents: order.balance_cents,
       collect_cents: collectCents,
+      order_status: order.status,
       fulfillment_enabled: false,
     });
     if (!plan.ok) {
@@ -241,7 +240,12 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
       plan.garment_ids,
       plan.collect_cents,
       now,
-      Object.freeze({ staffId: ctx.actor.staffId, method: "cash" as const }),
+      Object.freeze({
+        staffId: ctx.actor.staffId,
+        method: "cash" as const,
+        nextOrderStatus: plan.next_order_status,
+        nextBalanceCents: plan.next_balance_cents,
+      }),
     );
     if (applied === null) {
       throw new HandlerCommandError(createCommandError("TRANSACTION_FAILED"));

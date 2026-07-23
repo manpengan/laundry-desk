@@ -24,6 +24,10 @@ export type { SetLocalGucStatement, TenantGucKey } from "./guc.js";
 
 export { withTenantTransaction } from "./tenant-transaction.js";
 export { withWorkerTenantTransaction } from "./worker-transaction.js";
+export {
+  getActiveTenantTransaction,
+  runWithActiveTenantTransaction,
+} from "./active-tenant-transaction.js";
 
 export { createSessionSqlClient, withPoolClient } from "./pg-sql-client.js";
 

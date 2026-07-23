@@ -5,8 +5,9 @@
 
 import { randomUUID } from "node:crypto";
 
-import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
-import { withOrgGuc } from "../db/tenant-guc-client.js";
+import type { PgPool } from "../db/pg-pool.js";
+import { withOrgGucOrCurrent } from "../db/tenant-guc-client.js";
+import type { SqlClient } from "../db/types.js";
 import type {
   CustomerRecord,
   CustomerSearchRow,
@@ -62,7 +63,7 @@ function mapSearchRow(row: CustomerRow): CustomerSearchRow {
 }
 
 async function searchRows(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   query: string,
   limit: number,
@@ -101,7 +102,7 @@ async function searchRows(
 }
 
 async function getByPhoneRow(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   phone: string,
 ): Promise<CustomerRecord | null> {
@@ -117,7 +118,7 @@ async function getByPhoneRow(
 }
 
 async function upsertRow(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   input: CustomerUpsertInput,
   newId: () => string,
@@ -173,14 +174,16 @@ export function createPgCustomerStore(
       query: string | undefined,
       limit: number,
     ): Promise<readonly CustomerSearchRow[]> =>
-      withOrgGuc(pool, { orgId }, async (client) =>
+      withOrgGucOrCurrent(pool, { orgId }, async (client) =>
         searchRows(client, orgId, typeof query === "string" ? query : "", limit),
       ),
 
     getByPhone: async (phone: string): Promise<CustomerRecord | null> =>
-      withOrgGuc(pool, { orgId }, async (client) => getByPhoneRow(client, orgId, phone)),
+      withOrgGucOrCurrent(pool, { orgId }, async (client) => getByPhoneRow(client, orgId, phone)),
 
     upsert: async (input: CustomerUpsertInput): Promise<CustomerUpsertOutcome> =>
-      withOrgGuc(pool, { orgId }, async (client) => upsertRow(client, orgId, input, newId)),
+      withOrgGucOrCurrent(pool, { orgId }, async (client) =>
+        upsertRow(client, orgId, input, newId),
+      ),
   });
 }

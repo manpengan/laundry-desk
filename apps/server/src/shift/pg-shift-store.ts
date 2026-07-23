@@ -5,8 +5,9 @@
 
 import { randomUUID } from "node:crypto";
 
-import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
-import { withStoreGuc } from "../db/tenant-guc-client.js";
+import type { PgPool } from "../db/pg-pool.js";
+import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
+import type { SqlClient } from "../db/types.js";
 import { ShiftAlreadyClosedError } from "./memory-store.js";
 import type { ShiftCloseInput, ShiftClosingRecord, ShiftStore } from "./types.js";
 
@@ -77,7 +78,7 @@ function assertConfiguredScope(
 }
 
 async function selectByBusinessDate(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
   businessDate: string,
@@ -96,7 +97,7 @@ async function selectByBusinessDate(
 }
 
 async function insertClose(
-  client: PgPoolClient,
+  client: SqlClient,
   input: ShiftCloseInput,
   newId: () => string,
 ): Promise<ShiftClosingRecord> {
@@ -160,14 +161,14 @@ export function createPgShiftStore(pool: PgPool, options: CreatePgShiftStoreOpti
       businessDate: string,
     ): Promise<ShiftClosingRecord | null> => {
       assertConfiguredScope(queryOrgId, queryStoreId, orgId, storeId);
-      return withStoreGuc(pool, { orgId, storeId }, async (client) =>
+      return withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) =>
         selectByBusinessDate(client, queryOrgId, queryStoreId, businessDate),
       );
     },
 
     close: async (input: ShiftCloseInput): Promise<ShiftClosingRecord> => {
       assertConfiguredScope(input.org_id, input.store_id, orgId, storeId);
-      return withStoreGuc(
+      return withStoreGucOrCurrent(
         pool,
         { orgId, storeId, staffId: input.closed_by_staff_id },
         async (client) => insertClose(client, input, newId),

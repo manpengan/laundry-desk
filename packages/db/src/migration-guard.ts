@@ -31,6 +31,10 @@ export const findDestructiveSql = (
     if (stripped.length === 0) continue;
 
     for (const rule of DESTRUCTIVE_SQL_PATTERNS) {
+      // This is a privilege revocation, not a TRUNCATE statement. Keep the
+      // expand-only guard strict for actual data-removal SQL while allowing
+      // append-only ledgers to explicitly revoke the TRUNCATE privilege.
+      if (rule.name === "TRUNCATE" && /^REVOKE\b/iu.test(stripped)) continue;
       if (rule.pattern.test(stripped)) {
         findings.push({
           file,

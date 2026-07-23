@@ -36,6 +36,12 @@ export const garments = pgTable(
   (table) => [
     primaryKey({ columns: [table.id], name: "garments_pkey" }),
     uniqueIndex("garments_tenant_id_uidx").on(table.orgId, table.storeId, table.id),
+    uniqueIndex("garments_order_garment_uidx").on(
+      table.orgId,
+      table.storeId,
+      table.orderId,
+      table.id,
+    ),
     uniqueIndex("garments_barcode_uidx").on(table.orgId, table.storeId, table.barcode),
     uniqueIndex("garments_line_seq_uidx").on(
       table.orgId,

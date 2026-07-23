@@ -6,8 +6,9 @@
 import { buildPayPayment } from "@laundry/domain";
 import { randomUUID } from "node:crypto";
 
-import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
-import { withStoreGuc } from "../db/tenant-guc-client.js";
+import type { PgPool } from "../db/pg-pool.js";
+import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
+import type { SqlClient } from "../db/types.js";
 import {
   asOrderStatus,
   buildLineIdByIndex,
@@ -77,7 +78,7 @@ function mapOrderListSummary(row: OrderListSummaryRow): OrderListSummary {
 }
 
 async function listOrderSummaries(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
   options: OrderListSummaryOptions,
@@ -119,7 +120,7 @@ async function listOrderSummaries(
 }
 
 async function insertOrderRows(
-  client: PgPoolClient,
+  client: SqlClient,
   order: OrderRecord,
   garments: readonly GarmentRecord[],
   lineIdByIndex: ReadonlyMap<number, string>,
@@ -210,7 +211,7 @@ async function insertOrderRows(
 }
 
 async function loadOrder(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
   orderId: string,
@@ -242,7 +243,7 @@ async function loadOrder(
 }
 
 async function loadGarments(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
   orderId: string,
@@ -265,17 +266,16 @@ async function loadGarments(
 
 function nextOrderStatus(
   garments: readonly GarmentRecord[],
-  current: OrderRecord["status"],
   balanceCents: number,
 ): OrderRecord["status"] {
   const allTerminal = garments.every(
     (g) => g.status === "picked_up" || g.status === "delivered" || g.status === "lost",
   );
-  return allTerminal && balanceCents <= 0 ? "closed" : current;
+  return allTerminal && balanceCents === 0 ? "closed" : "open";
 }
 
 async function insertPaymentIfNeeded(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
   orderId: string,
@@ -323,7 +323,7 @@ async function insertPaymentIfNeeded(
 }
 
 async function applyPickupTxn(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
   orderId: string,
@@ -334,9 +334,18 @@ async function applyPickupTxn(
   newId: () => string,
 ): Promise<PickupApplyResult | null> {
   const order = await loadOrder(client, orgId, storeId, orderId);
-  if (order === null) return null;
+  if (order === null || order.status !== "open") return null;
   const garments = await loadGarments(client, orgId, storeId, orderId);
   if (garments.length === 0 && garmentIds.length > 0) return null;
+
+  const idSet = new Set(garmentIds);
+  const nextGarments = garments.map((g) =>
+    idSet.has(g.garment_id) ? Object.freeze({ ...g, status: "picked_up" as const }) : g,
+  );
+  const paid = order.paid_cents + collectCents;
+  const balance = order.payable_cents - paid;
+  const status = nextOrderStatus(nextGarments, balance);
+  assertPickupPlanMatchesCurrentRows(options, balance, status);
 
   if (garmentIds.length > 0) {
     await client.query(
@@ -347,14 +356,6 @@ async function applyPickupTxn(
       [orgId, storeId, orderId, [...garmentIds]],
     );
   }
-
-  const idSet = new Set(garmentIds);
-  const nextGarments = garments.map((g) =>
-    idSet.has(g.garment_id) ? Object.freeze({ ...g, status: "picked_up" as const }) : g,
-  );
-  const paid = order.paid_cents + collectCents;
-  const balance = order.payable_cents - paid;
-  const status = nextOrderStatus(nextGarments, order.status, balance);
 
   await client.query(
     `UPDATE orders
@@ -384,6 +385,19 @@ async function applyPickupTxn(
   return Object.freeze({ order: nextOrder, garments: Object.freeze(nextGarments) });
 }
 
+function assertPickupPlanMatchesCurrentRows(
+  options: PickupApplyOptions | undefined,
+  balanceCents: number,
+  nextStatus: OrderRecord["status"],
+): void {
+  if (options?.nextBalanceCents !== undefined && options.nextBalanceCents !== balanceCents) {
+    throw new Error("Pickup plan balance no longer matches persisted order");
+  }
+  if (options?.nextOrderStatus !== undefined && options.nextOrderStatus !== nextStatus) {
+    throw new Error("Pickup plan status no longer matches persisted order");
+  }
+}
+
 /**
  * Create an OrderStore backed by Postgres under laundry_app RLS GUC scope.
  */
@@ -396,7 +410,7 @@ export function createPgOrderStore(
   return Object.freeze({
     insertOrder: async (order, garments) => {
       const lineIdByIndex = buildLineIdByIndex(order.lines, newId);
-      await withStoreGuc(
+      await withStoreGucOrCurrent(
         pool,
         {
           orgId: order.org_id,
@@ -410,12 +424,12 @@ export function createPgOrderStore(
     },
 
     getOrder: async (orgId, storeId, orderId) =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) =>
         loadOrder(client, orgId, storeId, orderId),
       ),
 
     listOrders: async (orgId, storeId) =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) => {
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
         const orderResult = await client.query<OrderRow>(
           `SELECT id::text, org_id::text, store_id::text, ticket_no, status,
                   customer_phone, customer_name, note,
@@ -443,12 +457,12 @@ export function createPgOrderStore(
       }),
 
     listOrderSummaries: async (orgId, storeId, options) =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) =>
         listOrderSummaries(client, orgId, storeId, options),
       ),
 
     listGarments: async (orgId, storeId, orderId) =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) =>
         loadGarments(client, orgId, storeId, orderId),
       ),
 
@@ -457,7 +471,7 @@ export function createPgOrderStore(
         options?.staffId !== undefined
           ? Object.freeze({ orgId, storeId, staffId: options.staffId })
           : Object.freeze({ orgId, storeId });
-      return withStoreGuc(pool, scope, async (client) =>
+      return withStoreGucOrCurrent(pool, scope, async (client) =>
         applyPickupTxn(
           client,
           orgId,
@@ -473,7 +487,7 @@ export function createPgOrderStore(
     },
 
     nextTicketSeq: async (orgId, storeId, dayKey) =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) => {
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
         const result = await client.query<{ last_seq: number }>(
           `INSERT INTO ticket_counters (org_id, store_id, day_key, last_seq)
            VALUES ($1::uuid, $2::uuid, $3, 1)
