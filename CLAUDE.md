@@ -2,7 +2,7 @@
 
 Claude（Opus 4.7）在本项目中的入场指引。
 
-> **当前状态（ADR-12，2026-07-21）**：Claude 已退出设计、冻结、实现和验收关键路径。后续由 **Grok** 统一负责设计与开发。本文其余内容保留为历史门禁参考；Claude 如参与，仅提供非阻塞可选复审，不拥有当前 spec、contracts 或 PR 放行权。
+> **当前状态（ADR-12 / ADR-13）**：Claude 已退出设计、冻结、实现和验收关键路径。后续由 **Grok** 统一负责唯一活动线 v2；宏发 v1 已冻结为迁移源与历史参考。本文其余内容保留为历史门禁参考；Claude 如参与，仅提供非阻塞可选复审，不拥有当前 spec、contracts 或 PR 放行权。
 
 ## 你在这个项目里的角色
 
@@ -12,10 +12,10 @@ Claude（Opus 4.7）在本项目中的入场指引。
 
 ## 入场必读
 
-1. [`docs/superpowers/specs/2026-04-23-laundry-desk-design.md`](docs/superpowers/specs/2026-04-23-laundry-desk-design.md) — 设计真源（v1.1）
-2. [`docs/adr/2026-07-18-liquid-glass-ui-2.md`](docs/adr/2026-07-18-liquid-glass-ui-2.md) — 液态玻璃 UI 2.0 设计系统（token / 动效 / 性能红线）
-3. `~/pro/kb/projects/laundry-desk/status.md` — 当前阶段
-4. `~/pro/kb/workflows/standard-dev-process/SKILL.md` — 10 阶段门禁流程
+1. [`docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md`](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) — V2-only 产品裁决
+2. [`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) — 当前架构真源
+3. [`GROK.md`](GROK.md) — 当前 owner 与执行入口
+4. [`docs/superpowers/specs/2026-04-23-laundry-desk-design.md`](docs/superpowers/specs/2026-04-23-laundry-desk-design.md) — 已归档 v1 历史设计
 5. `~/.claude/rules/common/coding-style.md` — 代码红线（文件 ≤ 400 行、函数 ≤ 50 行、嵌套 ≤ 4 层、金额零浮点、不可变优先）
 
 ## 门禁清单（每期 Gemini 声明完成时用）
@@ -73,7 +73,7 @@ Claude（Opus 4.7）在本项目中的入场指引。
 
 ## 不做
 
-- 不直接改 `src/` 下的实现代码（Gemini 负责）
+- 不向 `src/` 增加 v1 功能；迁移兼容问题仅作非阻塞复审
 - 不装 npm 依赖
-- 不跑 build（`npm run build` / `build:win` 由 Gemini / CI 负责）
-- 不跳阶段（收口 v0.3.0 → M4 ∥ M5 → v1.0.0；M4 与 M5 可并行，其余按序）
+- 不拥有 build、发版或 PR 放行权
+- 不恢复 ADR-13 已终止的 v1 M4/M5/GA 路线

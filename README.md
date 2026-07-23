@@ -1,69 +1,81 @@
 # laundry-desk
 
-洗衣店柜台管理系统 — 单店单机 Windows 桌面应用，液态玻璃（Liquid Glass）风格 UI。
+面向洗衣店行业的柜台与经营产品：桌面为主、Web 次之，支持多租户、离线柜台、硬件打印和 AI-first 操作。
 
-覆盖收件登记、取件、客户管理、收款、统计报表、物品拍照、58mm 热敏打印、腾讯云短信通知、多员工账号与审计全流程。
+覆盖登录/PIN、收件、取衣、客户、付款/欠款、照片、统计、交班、打印、通知、权限、审计与 v1 数据升级。
 
-## 状态
+## 当前状态
 
-| 项       | 值                                                                                                                   |
-| -------- | -------------------------------------------------------------------------------------------------------------------- |
-| 阶段     | M1–M3 已实现（`codex/hongfa-m1-release` 收口验收中）→ M4 ∥ M5 并行                                                   |
-| 设计文档 | [docs/superpowers/specs/2026-04-23-laundry-desk-design.md](docs/superpowers/specs/2026-04-23-laundry-desk-design.md) |
-| UI 设计  | [docs/adr/2026-07-18-liquid-glass-ui-2.md](docs/adr/2026-07-18-liquid-glass-ui-2.md) — 液态玻璃 UI 2.0               |
-| 目标平台 | Windows 10 / 11（NSIS `.exe`）                                                                                       |
-| 开发平台 | macOS（GitHub Actions `windows-latest` 构建为准）                                                                    |
+| 项         | 值                                                                                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 活动路线   | **仅 v2 产品化升级**（[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)）                                                          |
+| 当前阶段   | V2-M1 基座已形成，`contracts@v0.1.0` 已封版；正在完成 V2-M2 宏发升级候选版                                                                        |
+| 设计真源   | [v2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) · [Web UI](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md) |
+| 当前 owner | [Grok 单一技术负责人](GROK.md)（ADR-12）                                                                                                          |
+| 目标平台   | Windows 10/11 桌面 Edge + React SPA；云端或自托管 PostgreSQL                                                                                      |
+
+宏发 v1 单店版已经冻结，不再增加 M4/M5 功能或独立发版。根 `src/` 只作为 `tools/migrate-v1` 的只读迁移源、历史行为参考与限期只读回退；历史设计见 [v1 archived spec](docs/superpowers/specs/2026-04-23-laundry-desk-design.md)。
+
+## 架构
+
+```text
+Web / Desktop SPA / AI / Automation / Edge replay
+                       │
+              Command / Query Bus
+                       │
+Fastify + Policy + Audit + PostgreSQL 16 / FORCE RLS
+                       │
+ Local Edge Agent: offline queue · signed templates · printers
+```
+
+人工按钮、AI 工具、自动化策略与离线回放共用同一命令入口。浏览器不直连数据库、不持有设备私钥，也不保存交易/审计离线真源。
 
 ## 技术栈
 
-Electron 32 · React 19 · TypeScript 5 · Tailwind CSS 4 · shadcn/ui · Framer Motion 11 · Zustand · Drizzle ORM · better-sqlite3 · Vite · electron-builder · Recharts · Playwright · Vitest
+Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 · PostgreSQL 16 · Drizzle · React 19 · Vite · Electron 41 · Vitest · Playwright
 
 ## 路线图
 
-| 期  | Tag      | 范围                                                                       |
-| --- | -------- | -------------------------------------------------------------------------- |
-| M1  | `v0.1.0` | 骨架 + Apple UI + 收件/取件/列表/详情 + 客户去重 + 自动备份 + Windows 打包 |
-| M2  | `v0.2.0` | 价格模板 + 按件计费 + 付款/欠款 + 日/月报表 + 逾期 + Excel 导入导出        |
-| M3  | `v0.3.0` | 收件拍照 + 58mm 热敏打印登记单 / 取件条                                    |
-| M4  | `v0.4.0` | 登录 + 权限 + 审计 + 腾讯云 SMS（与 M5 并行）                              |
-| M5  | `v0.5.0` | 液态玻璃 UI 2.0（token / 动效 / 深色模式 / 性能门禁，与 M4 并行）          |
-| GA  | `v1.0.0` | M4 + M5 完成、门禁全绿后发布                                               |
+| 期        | 交付范围                                                           |
+| --------- | ------------------------------------------------------------------ |
+| V2-M0     | RLS、lease、打印、本地通道、模型 adapter 与 compose 技术验证       |
+| V2-M1     | contracts、Command Bus、RLS、Identity、Policy、Edge/Web 基座       |
+| **V2-M2** | **柜台完整工作日 + 只读 AI/BYOK + 离线闭环 + v1 数据迁移（当前）** |
+| V2-M3     | 会员储值、通知/催取、开放 R3 确认写                                |
+| V2-M4     | 账务双口径、老板端、备份还原                                       |
+| V2-M5     | AI 全矩阵、审批、限额与有边界自动化                                |
+| V2-M6     | 视觉、小程序、工厂协同、取送与营销（四个独立子期）                 |
 
-> 2026-07-18 路线修订（路线 A）：M1–M3 先走收口门禁（验收 → 合并 main → 补 tag → 清技术债，见 milestone「收口: v0.3.0」），随后 M4 / M5 双线并行。
+详细计划：
 
-> 上表为 **v1（宏发单店）** 收口路线，仍在进行。
+- [V2-M2→M6 实施计划](docs/superpowers/plans/2026-07-19-v2-m2-m6-implementation-plan.md)
+- [V2-only 升级执行计划](.hermes/plans/2026-07-23_034229-v2-only-upgrade-next-development-plan.md)
+- [ADR 索引](docs/adr/README.md)
 
-### v2 产品化（2026-07-19 立项，设计已定稿）
+## 仓库结构
 
-从单店工具升级为面向洗衣店行业的产品 + AI-first（BYOK 多厂商大模型、系统内 agent 工作）。设计真源：
+- `apps/server`：Fastify、认证、Bus、Policy、PG handlers
+- `apps/web`：柜台 SPA
+- `apps/edge-agent`：Electron、离线、打印、升级
+- `packages/contracts`：Zod/OpenAPI/命令查询真源
+- `packages/domain`：零 IO 领域函数
+- `packages/db`：v2 PostgreSQL schema/migrations/RLS
+- `packages/ui`：共享设计系统
+- `tools`：compose、seed、迁移与实机实验室
+- `src`：冻结的 v1 迁移源与历史实现
 
-- 架构：[docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
-- Web UI：[docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
-- 决策：[总 RFC + ADR-01…08](docs/adr/2026-07-19-v2-productization-and-ai.md)（全部 Accepted）
-- 实施：[V2-M0/M1 计划 + 四 AI 分工](docs/superpowers/plans/2026-07-19-v2-m0-m1-implementation-plan.md)
-- 调研：[docs/research/](docs/research/)（顺科复核 + 国内外竞品 + 技术趋势）
-
-v2 里程碑：M0 技术验证 → M1 基座（命令总线 + RLS + Edge）→ M2 柜台核心+只读 AI → M3 会员/通知 → M4 账务/老板端 → M5 AI 完整面 → M6（视觉/小程序/工厂/取送，四子期）。桌面为主、Web 次之。
-
-## 分工
-
-- **Claude** — 设计 / spec / 门禁验收 / code review / ADR — 见 [CLAUDE.md](CLAUDE.md)
-- **Codex** — 安全与基座实现 + 关键节点二审（架构 / 安全 / 并发 / 密码学）— 见 [AGENTS.md](AGENTS.md)
-- **Gemini** — 领域实现（domain/服务/迁移/工具）— 见 [GEMINI.md](GEMINI.md)
-- **Grok** — 端与硬件（edge-agent 桌面 / web 柜台 / 小程序）— 见 [GROK.md](GROK.md)
-- **manpengan** — 决策 / UI 走查 / 发版
-- v2 分工已拍板，四份任务书见 [docs/superpowers/plans/tasks/](docs/superpowers/plans/tasks/)
-
-## 开发
+## 开发与门禁
 
 ```bash
-npm install
-npm run dev         # Electron 开发态
-npm run build:win   # 打包 Windows .exe（NSIS）
-npm test            # Vitest 单测
-npm run test:e2e    # Playwright E2E
-npm run typecheck   # TS strict 检查
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run workspace:check
+pnpm run local:server:pg
+pnpm run local:web
+pnpm run local:web:e2e
 ```
+
+涉及旧根配置或 v1 迁移兼容时，再运行根 `lint/test/typecheck/build`。没有 Windows、PostgreSQL、真实模型 key 或打印机证据时，只能标记“代码侧通过/待实测”。
 
 ## License
 

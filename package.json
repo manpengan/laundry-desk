@@ -11,7 +11,7 @@
     "node": ">=22",
     "pnpm": ">=11 <12"
   },
-  "description": "单店单机 Windows 桌面洗衣店柜台管理系统",
+  "description": "laundry-desk v2 产品化升级 monorepo（含冻结的 v1 迁移资产）",
   "main": "./out/main/index.js",
   "author": "manpengan",
   "scripts": {

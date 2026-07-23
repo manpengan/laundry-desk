@@ -4,7 +4,10 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - "*.md"
+      - ".hermes/plans/**"
       - "apps/**"
+      - "docs/**"
       - "packages/**"
       - "tests/foundation/**"
       - "package.json"

@@ -491,3 +491,83 @@ test("rejects require and non-literal runtime module-load bypasses", () => {
   );
   assert.equal(computedRelativeImport.hasNonLiteralRuntimeLoad, true);
 });
+
+test("declares v2 as the only active delivery line", async () => {
+  const adr13Path = "docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md";
+  const adr13RootLink = /\(docs\/adr\/2026-07-23-adr-13-v2-only-upgrade-delivery\.md\)/u;
+  const currentEntryPaths = [
+    "README.md",
+    "AGENTS.md",
+    "GROK.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    "HERMES.md",
+  ];
+  const activeDualTrackPattern =
+    /(?:(?:v1.{0,24}v2|v2.{0,24}v1).{0,24}(?:双线|并行|同时(?:进行|开发)|均为活动)|(?:双线|并行).{0,24}(?:v1.{0,24}v2|v2.{0,24}v1))/iu;
+
+  for (const staleStatus of [
+    "v1 与 v2 均为活动交付线",
+    "v1/v2 双线并行开发",
+    "两条产品线并行：v2 与 v1",
+  ]) {
+    assert.match(staleStatus, activeDualTrackPattern);
+  }
+
+  const adr13 = await readFile(new URL(adr13Path, rootUrl), "utf8");
+  assert.match(adr13, /状态：\*\*Accepted\*\*/u);
+  assert.match(adr13, /仅保留一条活动交付线：v2/u);
+  assert.match(adr13, /v1 单店版停止后续功能开发与独立发版/u);
+  assert.match(adr13, /`tools\/migrate-v1` 的只读提取/u);
+  assert.match(adr13, /不采用.*双写观察/u);
+
+  for (const path of currentEntryPaths) {
+    const contents = await readFile(new URL(path, rootUrl), "utf8");
+    assert.match(contents, adr13RootLink, `${path} must link the v2-only decision`);
+    assert.doesNotMatch(
+      contents.split(/\r?\n/u).slice(0, 30).join("\n"),
+      activeDualTrackPattern,
+      `${path} must not declare an active v1/v2 dual track`,
+    );
+  }
+
+  const readme = await readFile(new URL("README.md", rootUrl), "utf8");
+  const changelog = await readFile(new URL("docs/CHANGELOG.md", rootUrl), "utf8");
+  const adrIndex = await readFile(new URL("docs/adr/README.md", rootUrl), "utf8");
+  const hermes = await readFile(new URL("HERMES.md", rootUrl), "utf8");
+  const v2Architecture = await readFile(
+    new URL("docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md", rootUrl),
+    "utf8",
+  );
+  const m2ToM6Plan = await readFile(
+    new URL("docs/superpowers/plans/2026-07-19-v2-m2-m6-implementation-plan.md", rootUrl),
+    "utf8",
+  );
+  const foundationWorkflow = await readFile(
+    new URL(".github/workflows/foundation.yml", rootUrl),
+    "utf8",
+  );
+  const rootManifest = JSON.parse(await readFile(new URL("package.json", rootUrl), "utf8"));
+  const legacySpec = await readFile(
+    new URL("docs/superpowers/specs/2026-04-23-laundry-desk-design.md", rootUrl),
+    "utf8",
+  );
+
+  assert.doesNotMatch(readme, /v1（宏发单店）.*仍在进行|M4\s*∥\s*M5/u);
+  assert.doesNotMatch(changelog, /两条线并行/u);
+  assert.doesNotMatch(hermes, /仓库同时保留两条线|v1.*M1[–-]M5 收口/u);
+  assert.match(changelog, /\(adr\/2026-07-23-adr-13-v2-only-upgrade-delivery\.md\)/u);
+  assert.match(adrIndex, /\(2026-07-23-adr-13-v2-only-upgrade-delivery\.md\)/u);
+  assert.match(v2Architecture.slice(0, 2_000), /\[ADR-13\].*v2 成为唯一活动交付线/u);
+  assert.doesNotMatch(m2ToM6Plan, /双写观察|\*\*Codex\*\*|\*\*Grok 协助\*\*/u);
+  assert.match(rootManifest.description, /v2.*产品化/u);
+  assert.doesNotMatch(rootManifest.description, /单店单机 Windows/u);
+  for (const governancePathFilter of ['- "*.md"', '- ".hermes/plans/**"', '- "docs/**"']) {
+    assert.ok(
+      foundationWorkflow.includes(governancePathFilter),
+      `foundation workflow must run for ${governancePathFilter}`,
+    );
+  }
+  assert.match(changelog, /v1.*(?:Archived|已归档)/iu);
+  assert.match(legacySpec.slice(0, 600), /(?:archived|superseded).*ADR-13/iu);
+});

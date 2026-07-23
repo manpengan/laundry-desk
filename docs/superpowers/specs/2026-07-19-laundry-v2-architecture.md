@@ -2,6 +2,8 @@
 
 > 版本：v2.0-**draft3.1a**　日期：2026-07-19　作者：Claude（设计与门禁）
 > **状态：定稿**——总 RFC 与 ADR-01…08 已于 2026-07-19 全部 Accepted；本文件即 v2 设计真源，后续变更走新增 ADR。
+> 路线更新（2026-07-23）：[ADR-13](../../adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 决定停止 v1 功能线，v2 成为唯一活动交付线；v1 仅保留迁移与历史参考。本文以下与 v1 并行、收口或双写观察有关的旧文案均按 ADR-13 作为历史记录读取。
+> 治理更新（2026-07-21）：[ADR-12](../../adr/2026-07-21-adr-12-grok-unified-delivery-ownership.md) 已取代本文历史 ADR-10 owner 文案；Grok 统一负责设计、实现、集成与门禁。
 > draft3.1a 修订（终审补丁）：P0-1 **Primary lease 可信时间契约**（签名 `lease_id/issued_at/ttl_ms/max_clock_skew_ms`、单调钟计时、时间连续性不可证则 fail-closed、离线命令绑定 `lease_id+epoch+per_lease_seq`，§10/§11）；P0-2 修复 §13.3 与 §13.5 的回滚表述冲突；P1 同步（Edge 兼容窗口改"当前及上一 contracts major"、§16 晋升表述、RLS 模板补 WITH CHECK、ADR 引用 01…08）。
 > draft3.1 修订（Codex 三审四项 P0 + P1 + 用户裁定）：①店级组合外键升三元 `(org_id, store_id, id)`，garments→order_lines 含 order_id（§4/§7）；②Primary lease 与 offline grant 分离、离线退款禁用、解绑改"服务端吊销原子/本地擦除 best-effort"（§10/§11）；③桌面断网冷启动（内置签名 SPA + app:// 协议）+ Electron 安全基线（§13.3）；④Edge 升级状态机（A/B 槽/快照/队列信封版本化/回滚判定/最低安全版本，§13.5）。P1：票号去"单调"改 ULID 排序、N-1 定义为 contracts 协议 major、LTS 渠道与支持矩阵、远程协助收紧。**用户裁定：桌面为主、Web 次之，前期以本地 web 服务（单机模式）做测试适配**。发布/升级体系独立为 ADR-08。
 > draft2 修订：吸收 Codex 一轮二审 P0——AI 基座前移 M1、RLS 前移 M1、免确认改有边界自动化、Edge Agent 重构、SSRF 硬化、order_lines/garments 拆分、方案 B 里程碑。

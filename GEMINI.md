@@ -2,7 +2,7 @@
 
 Gemini 在本项目中的历史入场指引。
 
-> **当前状态（ADR-12，2026-07-21）**：Gemini 已退出实现与冻结关键路径。本文其余内容保留为 v1/早期分工历史参考；未合并分支不得继续铺生产实现，只可作为 **Grok** 取用的候选输入。若参与复审，不得阻塞交付。
+> **当前状态（ADR-12 / ADR-13）**：Gemini 已退出实现与冻结关键路径；v2 是唯一活动交付线，v1 已冻结为迁移源与历史参考。本文其余内容仅保留为 v1/早期分工历史；未合并分支不得继续铺生产实现，只可作为 **Grok** 取用的候选输入。若参与复审，不得阻塞交付。
 
 ## 你在这个项目里的历史角色
 
@@ -16,11 +16,11 @@ Gemini 在本项目中的历史入场指引。
 
 ## 入场必读（按顺序）
 
-1. **设计真源**：[`docs/superpowers/specs/2026-04-23-laundry-desk-design.md`](docs/superpowers/specs/2026-04-23-laundry-desk-design.md)
-2. **当前阶段**：`~/pro/kb/projects/laundry-desk/status.md`
-3. **门禁清单**：`CLAUDE.md`（每期发版前对照逐项打勾）
-4. **代码红线**：`~/.claude/rules/common/coding-style.md`
-5. **审查侧重**：`AGENTS.md`（Codex 的关注点就是你要主动规避的坑）
+1. **产品裁决**：[`ADR-13`](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
+2. **设计真源**：[`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
+3. **当前 owner**：[`GROK.md`](GROK.md)
+4. **历史 v1 设计**：[`docs/superpowers/specs/2026-04-23-laundry-desk-design.md`](docs/superpowers/specs/2026-04-23-laundry-desk-design.md)（已归档）
+5. **代码红线**：`~/.claude/rules/common/coding-style.md`
 
 ## 代码红线（硬性）
 
@@ -49,7 +49,7 @@ tests/
   e2e/         # Playwright：覆盖本期核心路径
 ```
 
-## 分期任务
+## 历史 v1 分期任务（已归档，禁止继续执行）
 
 **按顺序做，不跳期。每期完成一轮"代码 → 测试 → CI 绿 → 实机冒烟 → 过门禁 → tag"。**
 
@@ -120,6 +120,7 @@ pnpm build:win            # electron-builder --win nsis（本地冒烟）
 
 ## 不做
 
+- 不继续任何 v1 M4/M5/GA 功能或独立发版
 - 不改 spec（有改动要求找 Claude 走 brainstorm 流程）
 - 不跳期做后面的功能
 - 不关 TS strict / 不用 `@ts-ignore` 压错

@@ -1,13 +1,15 @@
 ---
 title: laundry-desk 设计文档
 date: 2026-04-23
-updated: 2026-07-18
+updated: 2026-07-23
 version: 1.1
-status: approved (v1.1 — 收口路线 + UI 2.0 立项，详见 docs/adr/2026-07-18-liquid-glass-ui-2.md)
+status: archived / superseded for future delivery by ADR-13 (历史行为与迁移参考)
 authors: claude (brainstorm), manpengan (decision)
 ---
 
 # laundry-desk — 洗衣店柜台管理系统
+
+> **Archived（[ADR-13](../../adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)）**：本文保留 v1 历史设计与 SQLite 迁移语义，不再作为活动功能路线或发版计划。当前设计真源为 [v2 架构](2026-07-19-laundry-v2-architecture.md)。
 
 ## 1. 目标与场景
 

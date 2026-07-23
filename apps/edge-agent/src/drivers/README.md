@@ -1,7 +1,7 @@
-# Edge drivers（Grok 协助线）
+# Edge drivers
 
 **范围**：纯渲染 / 平台 I/O adapters。  
-**禁止**：自行设计 job/receipt schema、签名模板不变量、配对/lease 状态机——等 Codex ports。
+**禁止**：自行设计 job/receipt schema、签名模板不变量、配对/lease 状态机；按冻结 contracts/ports 实现，语义变更由 Grok 依 ADR-12/ADR-13 统一裁决。
 
 | 目录                | 状态                                                              |
 | ------------------- | ----------------------------------------------------------------- |
