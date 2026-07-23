@@ -122,6 +122,17 @@ function ticketForProcess(ticketNo: string | undefined) {
   });
 }
 
+/**
+ * Browser IPC is a diagnostic/mock path only. Production device writes arrive
+ * through the paired Edge transport and `SignedPrintExecutor`, never from a
+ * renderer-originated IPC message with no server capability ticket.
+ */
+function assertUnsignedRendererPrintAllowed(): void {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("renderer print execution is disabled in production; use signed Edge dispatch");
+  }
+}
+
 function lastQueuedJob(store: PrintJobStore): PrintJobRecord | undefined {
   for (let i = store.jobs.length - 1; i >= 0; i -= 1) {
     const job = store.jobs[i];
@@ -191,6 +202,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
 
   ipcMain.handle(IPC_CHANNELS.printEnqueue, (event, kindRaw: unknown = "xp58") => {
     assertAppSender(event);
+    assertUnsignedRendererPrintAllowed();
     return printMutationGate(async () => {
       const { kind, autoProcess } = parseEnqueueArgs(kindRaw);
       const now = Date.now();
@@ -219,6 +231,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
 
   ipcMain.handle(IPC_CHANNELS.printProcess, (event, raw: unknown = {}) => {
     assertAppSender(event);
+    assertUnsignedRendererPrintAllowed();
     return printMutationGate(async () => {
       const input = (raw ?? {}) as PrintProcessInput;
       if (typeof input !== "object") {

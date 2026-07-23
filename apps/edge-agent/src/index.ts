@@ -52,11 +52,23 @@ export {
 export {
   buildXp58EscPos,
   escAlign,
+  escChineseOn,
+  escCode128,
   escCut,
   escFeed,
   escInit,
   escLine,
 } from "./print/escpos-xp58.js";
+export { buildPrinterPayload } from "./print/printer-drivers.js";
+export type { PrinterFamily } from "./print/printer-drivers.js";
+export { buildDl206Tspl } from "./print/tspl-dl206.js";
+export { buildGp3120Tspl } from "./print/tspl-gp3120.js";
+export { createSignedPrintExecutor, SignedPrintExecutor } from "./print/signed-executor.js";
+export type {
+  SignedPrintExecution,
+  SignedPrintExecutorOptions,
+  SignedPrintRequest,
+} from "./print/signed-executor.js";
 export {
   renderTicketTemplate,
   type RenderedTicket,

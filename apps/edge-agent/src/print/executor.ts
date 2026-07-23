@@ -1,16 +1,15 @@
 /**
- * Print job executor (D4/M2) — render → ESC/POS → UsbPrintPort.write.
+ * Print job executor (D4/M2) — render → family driver → UsbPrintPort.write.
  * Never blocks forever; failures set error text and yield failed receipt.
  */
 import type { ExecutionReceiptPayload } from "@laundry/contracts";
 
-import { buildXp58EscPos } from "./escpos-xp58.js";
 import { advanceJob, type MockPrintJob, type MockSpool } from "./mock-spool.js";
+import { buildPrinterPayload } from "./printer-drivers.js";
 import {
   buildExecutionReceiptPayload,
   getPrintJob,
   transitionPrintJob,
-  type PrintJobKind,
   type PrintJobRecord,
   type PrintJobStore,
 } from "./print-jobs.js";
@@ -73,10 +72,6 @@ function mirrorMockStatus(
   return advanceJob(spool, mockId, status, error, now);
 }
 
-function kindSupported(kind: PrintJobKind): boolean {
-  return kind === "xp58";
-}
-
 function finishOk(
   store: PrintJobStore,
   spool: MockSpool,
@@ -130,7 +125,7 @@ function finishFailed(
 }
 
 /**
- * Execute one queued print job: render → ESC/POS → usbPort.write.
+ * Execute one queued print job: render → selected family driver → usbPort.write.
  * State: queued → printing → done | failed. Always settles (never hangs).
  */
 export async function executeJob(
@@ -164,14 +159,10 @@ export async function executeJob(
     if (options.forceError) {
       throw new Error(options.forceError);
     }
-    if (!kindSupported(queued.kind)) {
-      throw new Error(`unsupported print kind for D4 skeleton: ${queued.kind}`);
-    }
-
     rendered = renderTicketTemplate(ticket);
-    payload = buildXp58EscPos(rendered);
+    payload = buildPrinterPayload(queued.kind, rendered);
     if (payload.byteLength === 0) {
-      throw new Error("empty ESC/POS payload");
+      throw new Error("empty printer payload");
     }
 
     await usbPort.write(payload, { timeoutMs });
