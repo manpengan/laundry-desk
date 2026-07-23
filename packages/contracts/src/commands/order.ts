@@ -1,5 +1,5 @@
 /**
- * M2 skeleton order commands + order.get query (receive/pickup first wave).
+ * M2 skeleton order commands + order.get / order.list queries (receive/pickup wave).
  * Full catalog/payment/fulfillment land in later M2 increments (contracts v0.2).
  */
 
@@ -11,6 +11,7 @@ import {
   type CommandDefinition,
   type QueryDefinition,
 } from "../registry/definitions.js";
+import { BusinessDateSchema } from "./stats.js";
 
 const ServiceCodeSchema = z
   .string()
@@ -22,6 +23,8 @@ const NonNegCentsSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INT
 const PhoneSchema = z
   .string()
   .regex(/^1[3-9]\d{9}$/u, "Expected mainland mobile (seed range 13800000xxx ok)");
+
+export const OrderStatusSchema = z.enum(["open", "closed", "cancelled"]);
 
 export const OrderReceiveLineSchema = z.strictObject({
   service_code: ServiceCodeSchema,
@@ -52,9 +55,45 @@ export const OrderGetInputSchema = z.strictObject({
   order_id: z.uuid(),
 });
 
+export const OrderListInputSchema = z.strictObject({
+  /** UTC business day of created_at (YYYY-MM-DD). Omit = all days. */
+  business_date: BusinessDateSchema.optional(),
+  status: OrderStatusSchema.optional(),
+  /** Hard row cap (handler default 20; must not exceed max_result_rows 50). */
+  limit: z.number().int().positive().max(50).optional(),
+});
+
+/**
+ * List row (documented for tests / handlers; not Zod-validated on wire).
+ *
+ * ```ts
+ * {
+ *   order_id, ticket_no, status, customer_phone, customer_name,
+ *   payable_cents, paid_cents, balance_cents, created_at, garment_count?
+ * }
+ * ```
+ */
+export type OrderListRow = Readonly<{
+  order_id: string;
+  ticket_no: string;
+  status: "open" | "closed" | "cancelled";
+  customer_phone: string | null;
+  customer_name: string | null;
+  payable_cents: number;
+  paid_cents: number;
+  balance_cents: number;
+  created_at: number;
+  garment_count?: number;
+}>;
+
+export type OrderListResult = Readonly<{
+  orders: readonly OrderListRow[];
+}>;
+
 type ReceiveInput = typeof OrderReceiveInputSchema;
 type PickupInput = typeof OrderPickupInputSchema;
 type GetInput = typeof OrderGetInputSchema;
+type ListInput = typeof OrderListInputSchema;
 
 /** 开单：生成 order + order_lines 语义 + 按 qty 拆 garments（runtime）。 */
 export const orderReceiveCommand: CommandDefinition<ReceiveInput> = defineCommand({
@@ -120,14 +159,34 @@ export const orderGetQuery: QueryDefinition<GetInput> = defineQuery({
   result_redaction: [{ path: "/customer_phone", strategy: "mask" }],
   max_result_rows: 1,
 });
+
+/** 订单列表：工作台/历史浏览；按营业日与状态筛选，最新优先。 */
+export const orderListQuery: QueryDefinition<ListInput> = defineQuery({
+  name: "order.list",
+  version: "0.1.0",
+  description: "List recent store orders for workbench / history browsing.",
+  description_llm:
+    "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by UTC business_date and/or status. Default limit 20, max 50. PII phone masked in audit.",
+  input: OrderListInputSchema,
+  risk: "R2",
+  invariants: [],
+  idempotent: true,
+  sideEffects: [],
+  offline_mode: "denied",
+  data_classification: "pii",
+  input_redaction: [],
+  result_redaction: [{ path: "/orders/*/customer_phone", strategy: "mask" }],
+  max_result_rows: 50,
+});
+
 export const ORDER_COMMANDS = Object.freeze([orderReceiveCommand, orderPickupCommand] as const);
 
 export const ORDER_COMMAND_NAMES = Object.freeze(
   ORDER_COMMANDS.map((command) => command.name),
 ) as readonly ["order.receive", "order.pickup"];
 
-export const ORDER_QUERIES = Object.freeze([orderGetQuery] as const);
+export const ORDER_QUERIES = Object.freeze([orderGetQuery, orderListQuery] as const);
 
 export const ORDER_QUERY_NAMES = Object.freeze(
   ORDER_QUERIES.map((query) => query.name),
-) as readonly ["order.get"];
+) as readonly ["order.get", "order.list"];

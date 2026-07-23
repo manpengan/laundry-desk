@@ -538,6 +538,133 @@
   color: var(--lg-ink3);
 }
 
+/* Workbench order history (M2 order.list) */
+.ld-orders {
+  margin-top: 8px;
+}
+
+.ld-orders__title {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--lg-ink);
+}
+
+.ld-orders__hint {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--lg-ink2);
+}
+
+.ld-orders-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ld-orders-form__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ld-orders-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ld-orders-list__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--lg-ink2);
+}
+
+.ld-orders-list__row {
+  margin: 0;
+  padding: 0;
+}
+
+.ld-orders-list__btn {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-leaf);
+  border: 1px solid var(--lg-hair);
+  color: var(--lg-ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.ld-orders-list__btn:hover:not(:disabled) {
+  background: var(--lg-leaf-hover);
+}
+
+.ld-orders-list__btn:disabled {
+  cursor: default;
+}
+
+.ld-orders-list__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ld-orders-list__ticket {
+  font-size: 14px;
+  font-weight: 600;
+  font-family: ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--lg-ink);
+}
+
+.ld-orders-list__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 13px;
+  color: var(--lg-ink2);
+}
+
+.ld-orders-list__phone {
+  font-family: ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.ld-orders-list__count {
+  color: var(--lg-ink3);
+}
+
+.ld-orders-list__money {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.ld-orders-list__money-label {
+  font-size: 12px;
+  color: var(--lg-ink3);
+}
+
+.ld-orders-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--lg-hair);
+}
+
+
 .ld-stats-card__foot {
   font-size: 12px;
   color: var(--lg-ink2);

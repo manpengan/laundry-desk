@@ -12,6 +12,7 @@ import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
 import { createPgCatalogStore } from "../catalog/pg-catalog-store.js";
 import type { CustomerHandlerDeps } from "../customer/handlers.js";
 import { createMemoryCustomerStore } from "../customer/memory-store.js";
+import { createPgCustomerStore } from "../customer/pg-customer-store.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
@@ -73,7 +74,7 @@ export type LocalRuntime = Readonly<{
   print: PrintHandlerDeps;
   /** M2 day stats (order-backed). */
   stats: StatsHandlerDeps;
-  /** M2 customer archive (memory seed; PG later). */
+  /** M2 customer archive (memory seed or PG customers). */
   customer: CustomerHandlerDeps;
   accessTokenSecret: string;
   staffDirectory: readonly LocalStaffDirectoryEntry[];
@@ -207,6 +208,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   seedStaff(DEMO_STAFF_B_ID, "staffb", "店员乙");
 
   const orderStore = createMemoryOrderStore();
+  const customerStore = createMemoryCustomerStore();
   return Object.freeze({
     mode: "memory" as const,
     identity: buildIdentityDeps(
@@ -216,11 +218,11 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       processStepUpProofStore,
     ),
     platform: buildPlatform("memory"),
-    order: Object.freeze({ store: orderStore }),
+    order: Object.freeze({ store: orderStore, customer: customerStore }),
     catalog: Object.freeze({ store: createMemoryCatalogStore() }),
     print: Object.freeze({ store: createMemoryPrintJobStore() }),
     stats: Object.freeze({ source: createOrderBackedStatsQuery(orderStore) }),
-    customer: Object.freeze({ store: createMemoryCustomerStore() }),
+    customer: Object.freeze({ store: customerStore }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,
@@ -256,6 +258,7 @@ export async function createPgLocalRuntime(
   const store = createPgIdentityStore(appPool);
   const passwordPort = createPasswordPort();
   const orderStore = createPgOrderStore(appPool);
+  const customerStore = createPgCustomerStore(appPool, { orgId: DEMO_ORG_ID });
 
   return Object.freeze({
     mode: "pg" as const,
@@ -266,7 +269,7 @@ export async function createPgLocalRuntime(
       processStepUpProofStore,
     ),
     platform: buildPlatform("sql"),
-    order: Object.freeze({ store: orderStore }),
+    order: Object.freeze({ store: orderStore, customer: customerStore }),
     catalog: Object.freeze({
       store: createPgCatalogStore(appPool, {
         orgId: DEMO_ORG_ID,
@@ -280,8 +283,7 @@ export async function createPgLocalRuntime(
       }),
     }),
     stats: Object.freeze({ source: createOrderBackedStatsQuery(orderStore) }),
-    // Customer PG store deferred; memory seed keeps customer.search available in local PG mode.
-    customer: Object.freeze({ store: createMemoryCustomerStore() }),
+    customer: Object.freeze({ store: customerStore }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,

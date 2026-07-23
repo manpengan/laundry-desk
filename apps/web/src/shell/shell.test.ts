@@ -7,6 +7,7 @@ import { createMockAuthClient } from "../auth/AuthClient.js";
 import { FULL_STORE_FEATURES } from "../auth/permissions.js";
 import type { AccessSession } from "../auth/types.js";
 import { createMockCommandClient } from "../commands/command-client.js";
+import { createMockQueryClient } from "../commands/query-client.js";
 import { createMockConnection } from "../connection.js";
 import { App } from "../App.js";
 import { PageHost } from "../pages/PageHost.js";
@@ -95,6 +96,25 @@ test("PageHost loading exposes aria-busy skeleton", () => {
   );
   assert.match(html, /aria-busy="true"/);
   assert.match(html, /ld-skeleton/);
+});
+
+test("PageHost workbench with session+queryClient mounts OrdersList", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(PageHost, {
+        activeId: "workbench",
+        onNavigate: () => undefined,
+        session: sampleSession,
+        queryClient: createMockQueryClient(),
+      }),
+    ),
+  );
+  assert.match(html, /工作台/);
+  assert.match(html, /近期订单/);
+  assert.match(html, /data-testid="orders-list"/);
+  assert.match(html, /刷新列表/);
 });
 
 test("App shell SSR includes skip link, sync bar, print indicator when authenticated", () => {

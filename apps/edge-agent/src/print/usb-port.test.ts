@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
-import { createMockUsbPort } from "./usb-port.js";
+import { createFileUsbPort, createMockUsbPort, resolveUsbPrintPort } from "./usb-port.js";
 
-const PAYLOAD = new Uint8Array([0x1b, 0x40]);
+const PAYLOAD = new Uint8Array([0x1b, 0x40, 0x48, 0x69]);
 
 test("createMockUsbPort default succeeds", async () => {
   const port = createMockUsbPort();
@@ -27,4 +30,46 @@ test("createMockUsbPort delay beyond timeout fails", async () => {
     () => port.write(PAYLOAD, { timeoutMs: 30 }),
     /USB write timed out after 30ms/,
   );
+});
+
+test("createFileUsbPort writes bytes to temp file", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "laundry-usb-"));
+  const devicePath = join(dir, "printer.bin");
+  try {
+    const port = createFileUsbPort(devicePath);
+    assert.equal(port.kind, "usb");
+    await port.write(PAYLOAD, { timeoutMs: 2_000 });
+    const written = await readFile(devicePath);
+    assert.deepEqual(Uint8Array.from(written), PAYLOAD);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("createFileUsbPort rejects empty path", () => {
+  assert.throws(() => createFileUsbPort("  "), /non-empty devicePath/);
+});
+
+test("resolveUsbPrintPort without env returns mock", () => {
+  const port = resolveUsbPrintPort({});
+  assert.equal(port.kind, "mock");
+});
+
+test("resolveUsbPrintPort with empty LAUNDRY_PRINTER_PATH returns mock", () => {
+  const port = resolveUsbPrintPort({ LAUNDRY_PRINTER_PATH: "   " });
+  assert.equal(port.kind, "mock");
+});
+
+test("resolveUsbPrintPort with LAUNDRY_PRINTER_PATH returns usb kind", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "laundry-usb-env-"));
+  const devicePath = join(dir, "out.bin");
+  try {
+    const port = resolveUsbPrintPort({ LAUNDRY_PRINTER_PATH: devicePath });
+    assert.equal(port.kind, "usb");
+    await port.write(PAYLOAD);
+    const written = await readFile(devicePath);
+    assert.deepEqual(Uint8Array.from(written), PAYLOAD);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

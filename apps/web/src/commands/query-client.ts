@@ -233,6 +233,15 @@ export function createMockQueryClient(handler?: QueryPort["execute"]): QueryPort
           }),
         });
       }
+      if (name === "order.list") {
+        return Object.freeze({
+          ok: true as const,
+          data: Object.freeze({
+            execution: "executed",
+            result: Object.freeze({ orders: Object.freeze([]) }),
+          }) as T,
+        });
+      }
       if (name === "print.jobs.list") {
         const input = isRecord(body) ? body : {};
         const limit =

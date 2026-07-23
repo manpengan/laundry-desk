@@ -22,9 +22,10 @@ describe("M2 order.get query", () => {
   });
 
   it("exports stable names and M2 order query alias", () => {
-    expect([...ORDER_QUERY_NAMES]).toEqual(["order.get"]);
+    expect([...ORDER_QUERY_NAMES]).toEqual(["order.get", "order.list"]);
     expect([...M2_ORDER_QUERY_NAMES]).toEqual([...ORDER_QUERY_NAMES]);
-    expect(M2_ORDER_QUERY_DEFINITIONS).toHaveLength(1);
+    expect(M2_ORDER_QUERY_DEFINITIONS).toHaveLength(2);
+    expect(ORDER_QUERIES.map((q) => q.name)).toContain("order.get");
   });
 
   it("keeps OpenAPI M1 first-wave free of order.get", () => {

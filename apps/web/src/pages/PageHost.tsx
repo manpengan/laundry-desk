@@ -1,9 +1,11 @@
-import { EmptyState, MoneyText, Skeleton, StatusBadge } from "@laundry/ui";
+import { EmptyState, Skeleton } from "@laundry/ui";
+import { useState } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { AccessSession } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { NavItemId } from "../nav.js";
 import { CustomersPage } from "./CustomersPage.js";
+import { OrdersList } from "./OrdersList.js";
 import { pageCopy } from "./page-copy.js";
 import { PickupPage } from "./PickupPage.js";
 import { ReceivePage } from "./ReceivePage.js";
@@ -40,6 +42,7 @@ export function PageHost({
   queryClient,
 }: PageHostProps) {
   const copy = pageCopy(activeId);
+  const [pickupOrderId, setPickupOrderId] = useState<string | undefined>(undefined);
 
   if (loading) {
     return (
@@ -66,6 +69,7 @@ export function PageHost({
       <PickupPage
         commandClient={commandClient}
         {...(queryClient !== undefined ? { queryClient } : {})}
+        {...(pickupOrderId !== undefined ? { initialOrderId: pickupOrderId } : {})}
       />
     );
   }
@@ -92,21 +96,33 @@ export function PageHost({
     return <SettingsPage session={session} authClient={authClient} commandClient={commandClient} />;
   }
 
+  if (activeId === "workbench" && session !== undefined && queryClient !== undefined) {
+    return (
+      <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
+        <h1 className="ld-shell-main__title">{copy.title}</h1>
+        <p className="ld-shell-main__hint">{copy.emptyDescription}</p>
+        <OrdersList
+          queryClient={queryClient}
+          onOpenPickup={(orderId) => {
+            setPickupOrderId(orderId);
+            onNavigate("pickup");
+          }}
+        />
+        <div className="ld-orders-footer">
+          <EmptyState
+            title={copy.emptyTitle}
+            description="也可从侧栏进入开单或取衣。"
+            actionLabel={copy.actionLabel}
+            onAction={() => onNavigate(actionTarget(activeId))}
+          />
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">{copy.title}</h1>
-      {activeId === "workbench" ? (
-        <div className="ld-shell-demo-row" style={{ marginBottom: 20 }}>
-          <div>
-            <div className="ld-shell-demo-label">示例营业额</div>
-            <MoneyText fen={0} size="lg" />
-          </div>
-          <div>
-            <div className="ld-shell-demo-label">件状态</div>
-            <StatusBadge family="garment" status="ready" />
-          </div>
-        </div>
-      ) : null}
       <EmptyState
         title={copy.emptyTitle}
         description={copy.emptyDescription}

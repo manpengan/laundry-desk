@@ -5,6 +5,7 @@
 import { Button, Input, MoneyText, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { QueryPort } from "../commands/types.js";
+import { downloadDaySummaryCsv } from "./day-summary-csv.js";
 
 export type DaySummaryView = Readonly<{
   business_date: string;
@@ -147,6 +148,21 @@ export function StatsPage({ queryClient, defaultDate, autoLoad = true }: StatsPa
             data-testid="stats-load-btn"
           >
             {busy ? "加载中…" : "查询日结"}
+          </Button>
+          <Button
+            variant="secondary"
+            type="button"
+            onClick={() => {
+              if (summary === null) {
+                toast.push("请先查询日结", "error");
+                return;
+              }
+              downloadDaySummaryCsv(summary);
+            }}
+            disabled={busy || summary === null}
+            data-testid="stats-export-csv-btn"
+          >
+            导出 CSV
           </Button>
         </div>
       </div>
