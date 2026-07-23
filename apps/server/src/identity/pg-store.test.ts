@@ -10,7 +10,7 @@ import { createPgPool, resolvePgUrls } from "../db/pg-pool.js";
 import { createPgIdentityStore } from "./pg-store.js";
 import { seedDemoIdentity } from "../local/pg-seed.js";
 import { DEMO_ADMIN_ID, DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID } from "../local/demo-ids.js";
-import { createScryptPasswordPort } from "./password.js";
+import { createPasswordPort } from "./password.js";
 import { loginWithPassword } from "./login.js";
 import { createAccessTokenSigner } from "./crypto-util.js";
 import { createQuickSwitchChallenge, verifyQuickSwitchPin } from "./pin.js";
@@ -30,7 +30,7 @@ maybe("PG seed + login + PIN + refresh via laundry_app", async () => {
   try {
     await seedDemoIdentity(adminPool);
     const store = createPgIdentityStore(appPool);
-    const passwordPort = createScryptPasswordPort();
+    const passwordPort = createPasswordPort();
     const clock = { nowEpochSeconds: () => Math.floor(Date.now() / 1000) };
     const sessions = {
       sessions: store.sessions,
