@@ -361,6 +361,10 @@ export {
   M2_SKELETON_DEFINITIONS,
   M2_STATS_QUERY_DEFINITIONS,
   M2_STATS_QUERY_NAMES,
+  M3_PHOTO_COMMAND_DEFINITIONS,
+  M3_PHOTO_COMMAND_NAMES,
+  M3_PHOTO_QUERY_DEFINITIONS,
+  M3_PHOTO_QUERY_NAMES,
 } from "./commands/catalog.js";
 export {
   CATALOG_SKELETON_DEFINITIONS,
@@ -440,6 +444,18 @@ export {
   shiftGetQuery,
 } from "./commands/shift.js";
 export type { ShiftClosingResult } from "./commands/shift.js";
+export {
+  PHOTO_COMMAND_NAMES,
+  PHOTO_COMMANDS,
+  PHOTO_QUERY_NAMES,
+  PHOTO_QUERIES,
+  PhotoKindSchema,
+  PhotoListByOrderInputSchema,
+  PhotoRegisterInputSchema,
+  photoListByOrderQuery,
+  photoRegisterCommand,
+} from "./commands/photo.js";
+export type { PhotoListByOrderResult, PhotoRegisterResult, PhotoRow } from "./commands/photo.js";
 
 export {
   OPENAPI_INFO_VERSION,

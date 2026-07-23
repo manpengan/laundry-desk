@@ -4,6 +4,10 @@
  *   pnpm --filter @laundry/edge-agent printer-smoke
  *   LAUNDRY_PRINTER_PATH=/dev/usb/lp0 pnpm --filter @laundry/edge-agent printer-smoke
  *
+ * Windows (PowerShell):
+ *   $env:LAUNDRY_PRINTER_PATH = '\\.\COM3'
+ *   pnpm --filter @laundry/edge-agent printer-smoke
+ *
  * Exit 0 when ok; 1 when probe fails. Prints JSON status only.
  */
 

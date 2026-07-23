@@ -1,6 +1,10 @@
 /**
  * M2 skeleton shift closing / 日结签字 (command + query).
- * Memory-first; not in OpenAPI freeze snapshot.
+ * Not in OpenAPI freeze snapshot (M1 first-wave only).
+ *
+ * Risk R3: confirm card (POLICY_CONFIRMATION_REQUIRED). Self-confirm is allowed
+ * (requiresOtherApprover=false). With store feature `shift_closing` off, ops may
+ * still close — risk remains R3 for safety / WYSIWYS integrity.
  */
 
 import { z } from "zod";
@@ -59,9 +63,10 @@ export const shiftCloseCommand: CommandDefinition<CloseInput> = defineCommand({
   description_llm:
     "Append-only shift close for one business_date. Snapshots order_count and integer-fen totals. Rejects second close same day. signature_name is display text only.",
   input: ShiftCloseInputSchema,
-  risk: "R2",
+  risk: "R3",
   invariants: ["rbac.order_write"],
   // Offline grant requires idempotent; second close same day is CONFLICT, not a rewrite.
+  // R3 confirm card: first hop fails closed with confirm_ref; second hop resumes frozen args.
   idempotent: true,
   sideEffects: ["shift.closed", "audit.shift_event"],
   offline_mode: "grant",

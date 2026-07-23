@@ -115,6 +115,9 @@ test("PageHost workbench with session+queryClient mounts OrdersList", () => {
   assert.match(html, /近期订单/);
   assert.match(html, /data-testid="orders-list"/);
   assert.match(html, /刷新列表/);
+  assert.match(html, /data-testid="debt-section"/);
+  assert.match(html, /data-testid="debt-load-btn"/);
+  assert.match(html, /欠款/);
 });
 
 test("App shell SSR includes skip link, sync bar, print indicator when authenticated", () => {

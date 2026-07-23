@@ -1,6 +1,6 @@
 /**
  * M1 handler registration — loads A6 command/query definitions and attaches handlers.
- * Optional M2 order/catalog/print/stats/customer/shift when deps provided.
+ * Optional M2 order/catalog/print/stats/customer/shift + M3 photo when deps provided.
  */
 
 import type { ChainPortHooks } from "../bus/chain-adapter.js";
@@ -15,6 +15,8 @@ import {
 } from "../customer/handlers.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import { registerOrderCommandHandlers, registerOrderQueryHandlers } from "../order/handlers.js";
+import type { PhotoHandlerDeps } from "../photo/handlers.js";
+import { registerPhotoCommandHandlers, registerPhotoQueryHandlers } from "../photo/handlers.js";
 import type { PrintHandlerDeps } from "../print/handlers.js";
 import { registerPrintCommandHandlers, registerPrintQueryHandlers } from "../print/handlers.js";
 import type { ShiftHandlerDeps } from "../shift/handlers.js";
@@ -42,6 +44,8 @@ export type RegisterM1Deps = Readonly<{
   customer?: CustomerHandlerDeps;
   /** M2 shift closing / 日结签字 (memory). */
   shift?: ShiftHandlerDeps;
+  /** M3 garment photo metadata (memory). */
+  photo?: PhotoHandlerDeps;
 }>;
 
 export type RegisterM1Result = Readonly<{
@@ -103,6 +107,11 @@ export function registerM1Handlers(
     registered.push("shift.close");
   }
 
+  if (deps.photo !== undefined) {
+    registerPhotoCommandHandlers(registry, deps.photo);
+    registered.push("photo.register");
+  }
+
   return Object.freeze(registered);
 }
 
@@ -147,12 +156,17 @@ export function registerM1QueryHandlers(
     names.push("shift.get");
   }
 
+  if (deps.photo !== undefined) {
+    registerPhotoQueryHandlers(queryRegistry, deps.photo);
+    names.push("photo.list_by_order");
+  }
+
   return Object.freeze(names);
 }
 
 /**
  * Convenience: fresh M1 command + query registries + handlers + default chain hooks.
- * Query registry includes M2 catalog + order.get + print + stats + customer + shift;
+ * Query registry includes M2 catalog + order + print + stats + customer + shift + M3 photo;
  * handlers attach when deps set.
  */
 export function createRegisteredM1Bus(deps: RegisterM1Deps): RegisterM1Result {

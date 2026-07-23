@@ -72,10 +72,22 @@ export {
 export {
   createFileUsbPort,
   createMockUsbPort,
+  isPosixDevicePath,
+  isWindowsDevicePath,
+  normalizePrinterPath,
+  PRINTER_PATH_ENV,
   resolveUsbPrintPort,
   type MockUsbPortOptions,
   type UsbPrintPort,
 } from "./print/usb-port.js";
+export {
+  buildPrinterSmokePayload,
+  isAccessDeniedError,
+  isMissingDeviceError,
+  runPrinterSmoke,
+  type PrinterSmokeOptions,
+  type PrinterSmokeResult,
+} from "./print/printer-smoke.js";
 export { fenToYuanGbk, fenToYuanText, YUAN_SIGN_GBK } from "./drivers/render/money-gbk.js";
 export {
   estimateCode128Dots,

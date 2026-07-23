@@ -13,6 +13,7 @@ import {
   M2_PRINT_QUERY_DEFINITIONS,
   M2_SHIFT_QUERY_DEFINITIONS,
   M2_STATS_QUERY_DEFINITIONS,
+  M3_PHOTO_QUERY_DEFINITIONS,
 } from "@laundry/contracts";
 import type { QueryDefinition } from "@laundry/contracts";
 import type { z } from "zod";
@@ -40,7 +41,7 @@ type AnyDefinition = { kind: string; name: string };
 
 const isQueryDefinition = (def: AnyDefinition): def is BusQueryDefinition => def.kind === "query";
 
-/** M1 platform queries + M2 catalog + order + print + stats + customer + shift. */
+/** M1 platform queries + M2 catalog/order/print/stats/customer/shift + M3 photo. */
 export const DEFAULT_BUS_QUERY_DEFINITIONS: readonly AnyDefinition[] = Object.freeze([
   ...(M1_FIRST_WAVE_DEFINITIONS as readonly AnyDefinition[]),
   ...(M2_CATALOG_DEFINITIONS as readonly AnyDefinition[]),
@@ -49,11 +50,12 @@ export const DEFAULT_BUS_QUERY_DEFINITIONS: readonly AnyDefinition[] = Object.fr
   ...(M2_STATS_QUERY_DEFINITIONS as readonly AnyDefinition[]),
   ...(M2_CUSTOMER_QUERY_DEFINITIONS as readonly AnyDefinition[]),
   ...(M2_SHIFT_QUERY_DEFINITIONS as readonly AnyDefinition[]),
+  ...(M3_PHOTO_QUERY_DEFINITIONS as readonly AnyDefinition[]),
 ]);
 
 /**
  * Load frozen query definitions into a mutable handler map.
- * Default: M1 first-wave queries + M2 catalog/order/print/stats/customer.
+ * Default: M1 first-wave queries + M2 catalog/order/print/stats/customer/shift + M3 photo.
  * Commands excluded.
  */
 export function createM1QueryRegistry(

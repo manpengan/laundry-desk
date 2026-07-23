@@ -61,6 +61,11 @@ export const OrderListInputSchema = z.strictObject({
   status: OrderStatusSchema.optional(),
   /** Exact match on order.customer_phone after PhoneSchema normalize. */
   customer_phone: PhoneSchema.optional(),
+  /**
+   * Receivables filter: keep rows with balance_cents >= this value (integer fen).
+   * Debt workbench uses `1` (positive balance). Omit = no balance floor.
+   */
+  min_balance_cents: NonNegCentsSchema.optional(),
   /** Hard row cap (handler default 20; must not exceed max_result_rows 50). */
   limit: z.number().int().positive().max(50).optional(),
 });
@@ -162,13 +167,13 @@ export const orderGetQuery: QueryDefinition<GetInput> = defineQuery({
   max_result_rows: 1,
 });
 
-/** 订单列表：工作台/历史浏览；按营业日、状态、手机号筛选，最新优先。 */
+/** 订单列表：工作台/历史/欠款浏览；按营业日、状态、手机号、最低余额筛选，最新优先。 */
 export const orderListQuery: QueryDefinition<ListInput> = defineQuery({
   name: "order.list",
   version: "0.1.0",
-  description: "List recent store orders for workbench / history browsing.",
+  description: "List recent store orders for workbench / history / receivables browsing.",
   description_llm:
-    "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by UTC business_date, status, and/or exact customer_phone. Default limit 20, max 50. PII phone masked in audit.",
+    "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by UTC business_date, status, exact customer_phone, and/or min_balance_cents (integer fen floor on balance). Debt panel: min_balance_cents=1, limit<=50, omit business_date. Default limit 20, max 50. PII phone masked in audit.",
   input: OrderListInputSchema,
   risk: "R2",
   invariants: [],

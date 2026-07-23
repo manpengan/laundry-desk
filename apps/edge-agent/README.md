@@ -69,14 +69,25 @@ pnpm --filter @laundry/edge-agent printer-smoke
 # 文件 / 设备节点（Windows 可用临时 spool 文件先验写路径）
 LAUNDRY_PRINTER_PATH=/tmp/laundry-spool.bin pnpm --filter @laundry/edge-agent printer-smoke
 
-# 真机示例（Linux USB 打印机节点；Windows 常用共享/虚拟口路径）
+# Linux USB 打印机节点
 LAUNDRY_PRINTER_PATH=/dev/usb/lp0 pnpm --filter @laundry/edge-agent printer-smoke
 ```
+
+Windows（PowerShell）— `COM3` / `\\.\COM3` / `\\.\USB001` 均接受（裸 COM/USB 会规范为 `\\.\…`）：
+
+```powershell
+$env:LAUNDRY_PRINTER_PATH = '\\.\COM3'
+pnpm --filter @laundry/edge-agent printer-smoke
+```
+
+完整 Windows 指南：[`docs/printer-smoke-windows.md`](docs/printer-smoke-windows.md)。  
+Lab 勾选：`tools/lab/printers/CHECKLIST.md`（Windows 节）。
 
 可选：`LAUNDRY_PRINTER_SMOKE_TIMEOUT_MS=3000` 覆盖默认 5s 写超时。  
 退出码：`0` = ok，`1` = 失败。stdout 为 JSON status。
 
-纯函数入口（可单测）：`runPrinterSmoke(env, options?)` → `{ ok, path, kind, message, bytes_written? }`。
+纯函数入口（可单测）：`runPrinterSmoke(env, options?)` → `{ ok, path, kind, message, bytes_written? }`。  
+`normalizePrinterPath`：`COM3` → `\\.\COM3`，`USB001` → `\\.\USB001`。
 
 ## 开发
 

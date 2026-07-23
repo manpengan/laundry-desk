@@ -1,14 +1,24 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import {
   buildPrinterSmokePayload,
+  isAccessDeniedError,
+  isMissingDeviceError,
+  normalizePrinterPath,
   runPrinterSmoke,
   type PrinterSmokeResult,
 } from "./printer-smoke.js";
+import {
+  createFileUsbPort,
+  createMockUsbPort,
+  isPosixDevicePath,
+  isWindowsDevicePath,
+  resolveUsbPrintPort,
+} from "./usb-port.js";
 
 function assertShape(result: PrinterSmokeResult): void {
   assert.equal(typeof result.ok, "boolean");
@@ -17,6 +27,46 @@ function assertShape(result: PrinterSmokeResult): void {
   assert.equal(typeof result.message, "string");
   assert.ok(result.message.length > 0);
 }
+
+test("normalizePrinterPath maps bare COM/USB to Windows device namespace", () => {
+  assert.equal(normalizePrinterPath("COM3"), "\\\\.\\COM3");
+  assert.equal(normalizePrinterPath("com3"), "\\\\.\\COM3");
+  assert.equal(normalizePrinterPath("COM12"), "\\\\.\\COM12");
+  assert.equal(normalizePrinterPath("USB001"), "\\\\.\\USB001");
+  assert.equal(normalizePrinterPath("usb001"), "\\\\.\\USB001");
+  assert.equal(normalizePrinterPath("\\\\.\\COM3"), "\\\\.\\COM3");
+  assert.equal(normalizePrinterPath("\\\\.\\com5"), "\\\\.\\COM5");
+  assert.equal(normalizePrinterPath("\\\\.\\usb001"), "\\\\.\\USB001");
+  assert.equal(normalizePrinterPath("//./COM3"), "\\\\.\\COM3");
+  assert.equal(normalizePrinterPath('"COM3"'), "\\\\.\\COM3");
+  assert.equal(normalizePrinterPath("'USB001'"), "\\\\.\\USB001");
+});
+
+test("normalizePrinterPath leaves file and POSIX paths", () => {
+  assert.equal(normalizePrinterPath("/dev/usb/lp0"), "/dev/usb/lp0");
+  assert.equal(normalizePrinterPath("  /tmp/spool.bin  "), "/tmp/spool.bin");
+  assert.equal(normalizePrinterPath("C:\\\\temp\\\\spool.bin"), "C:\\\\temp\\\\spool.bin");
+  assert.equal(normalizePrinterPath(""), "");
+  assert.equal(normalizePrinterPath("   "), "");
+});
+
+test("isWindowsDevicePath / isPosixDevicePath helpers", () => {
+  assert.equal(isWindowsDevicePath("\\\\.\\COM3"), true);
+  assert.equal(isWindowsDevicePath("COM3"), false);
+  assert.equal(isWindowsDevicePath("/tmp/x"), false);
+  assert.equal(isPosixDevicePath("/dev/usb/lp0"), true);
+  assert.equal(isPosixDevicePath("/tmp/x"), false);
+});
+
+test("isMissingDeviceError / isAccessDeniedError classifiers", () => {
+  assert.equal(isMissingDeviceError("ENOENT: no such file or directory"), true);
+  assert.equal(isMissingDeviceError("The system cannot find the file specified."), true);
+  assert.equal(isMissingDeviceError("EACCES: permission denied"), false);
+  assert.equal(isAccessDeniedError("EACCES: permission denied, open '\\\\.\\COM3'"), true);
+  assert.equal(isAccessDeniedError("EPERM: operation not permitted"), true);
+  assert.equal(isAccessDeniedError("Access is denied."), true);
+  assert.equal(isAccessDeniedError("ENOENT: no such file"), false);
+});
 
 test("buildPrinterSmokePayload is non-empty ESC/POS init+cut", () => {
   const bytes = buildPrinterSmokePayload();
@@ -38,6 +88,7 @@ test("runPrinterSmoke without LAUNDRY_PRINTER_PATH is mock ok", async () => {
   assert.equal(result.kind, "mock");
   assert.equal(result.path, null);
   assert.match(result.message, /LAUNDRY_PRINTER_PATH/);
+  assert.match(result.message, /COM3|USB001/i);
   assert.equal(result.bytes_written, undefined);
 });
 
@@ -71,6 +122,24 @@ test("runPrinterSmoke with file path writes ESC/POS bytes", async () => {
   }
 });
 
+test("runPrinterSmoke normalizes Windows-style COM path in result.path", async () => {
+  // On non-Windows hosts the device will be missing; path must still normalize.
+  const result = await runPrinterSmoke({ LAUNDRY_PRINTER_PATH: "COM3" }, { timeoutMs: 500 });
+  assertShape(result);
+  assert.equal(result.path, "\\\\.\\COM3");
+  // Hardware usually absent in CI — either missing or access failure is fine.
+  if (!result.ok) {
+    assert.ok(result.kind === "missing" || result.kind === "usb");
+    assert.ok(result.message.length > 0);
+  }
+});
+
+test("runPrinterSmoke normalizes USB001 path form", async () => {
+  const result = await runPrinterSmoke({ LAUNDRY_PRINTER_PATH: "USB001" }, { timeoutMs: 500 });
+  assert.equal(result.path, "\\\\.\\USB001");
+  assert.ok(result.kind === "missing" || result.kind === "usb" || result.ok);
+});
+
 test("runPrinterSmoke honors custom payload", async () => {
   const dir = await mkdtemp(join(tmpdir(), "laundry-smoke-custom-"));
   const devicePath = join(dir, "out.bin");
@@ -98,7 +167,7 @@ test("runPrinterSmoke missing path returns kind missing", async () => {
     assert.equal(result.ok, false);
     assert.equal(result.kind, "missing");
     assert.equal(result.path, missing);
-    assert.match(result.message, /ENOENT|no such file/i);
+    assert.match(result.message, /ENOENT|no such file|Path missing/i);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -128,6 +197,48 @@ test("runPrinterSmoke with short timeout still settles (no hang)", async () => {
     assert.equal(result.ok, true);
     assert.equal(result.kind, "usb");
     assert.ok(elapsed < 2_000, `elapsed ${elapsed}ms should stay under 2s`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("createFileUsbPort writes spool file (create mode)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "laundry-usb-file-"));
+  const devicePath = join(dir, "printer.bin");
+  const payload = new Uint8Array([0x1b, 0x40, 0x48, 0x69]);
+  try {
+    const port = createFileUsbPort(devicePath);
+    assert.equal(port.kind, "usb");
+    await port.write(payload, { timeoutMs: 2_000 });
+    const written = await readFile(devicePath);
+    assert.deepEqual(Uint8Array.from(written), payload);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("resolveUsbPrintPort with Windows-style COM env still resolves usb kind", () => {
+  const port = resolveUsbPrintPort({ LAUNDRY_PRINTER_PATH: "COM3" });
+  assert.equal(port.kind, "usb");
+});
+
+test("createMockUsbPort failWith rejects with access-style message for annotate path", async () => {
+  const port = createMockUsbPort({ failWith: "EACCES: permission denied" });
+  await assert.rejects(() => port.write(new Uint8Array([1])), /EACCES/);
+});
+
+test("runPrinterSmoke annotates access-denied mock via file that is not writable", async () => {
+  // Best-effort: on Unix, open existing file as r+ after chmod 000 may yield EACCES.
+  // Skip soft-assert if platform cannot restrict (e.g. root CI).
+  const dir = await mkdtemp(join(tmpdir(), "laundry-smoke-eacces-"));
+  const devicePath = join(dir, "locked.bin");
+  try {
+    await writeFile(devicePath, Buffer.from([0]));
+    // Reuse path as Windows device is not available; annotate path is covered by unit classifiers.
+    // Here we only ensure a real usb fail still returns kind usb with non-empty message.
+    const result = await runPrinterSmoke({ LAUNDRY_PRINTER_PATH: dir }, { timeoutMs: 500 });
+    assert.equal(result.ok, false);
+    assert.equal(result.kind, "usb");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

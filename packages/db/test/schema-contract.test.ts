@@ -33,6 +33,9 @@ import {
   M2_SHIFT_RLS_TABLES,
   M2_SHIFT_TABLE_NAMES,
   M2_SHIFT_TABLES,
+  M3_PHOTO_RLS_TABLES,
+  M3_PHOTO_TABLE_NAMES,
+  M3_PHOTO_TABLES,
   buildM1RlsMigrationSql,
   schema,
 } from "../src/index.js";
@@ -367,7 +370,39 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(hasDateUnique).toBe(true);
   });
 
-  it("exposes full schema as M1 + M2 order + catalog + payments + print + customers + shift tables", () => {
+  it("exports M3 garment_photos with store tenant columns and metadata fields", () => {
+    expect(Object.keys(M3_PHOTO_TABLES).sort()).toEqual([...M3_PHOTO_TABLE_NAMES].sort());
+    expect([...M3_PHOTO_RLS_TABLES].sort()).toEqual([...M3_PHOTO_TABLE_NAMES].sort());
+
+    const columns = columnNames(M3_PHOTO_TABLES.garment_photos);
+    expect(columns).toContain("org_id");
+    expect(columns).toContain("store_id");
+    expect(columns).toContain("id");
+    expect(columns).toContain("garment_id");
+    expect(columns).toContain("order_id");
+    expect(columns).toContain("kind");
+    expect(columns).toContain("storage_key");
+    expect(columns).toContain("content_type");
+    expect(columns).toContain("byte_size");
+    expect(columns).toContain("taken_at");
+    expect(columns).toContain("created_by_staff_id");
+    expect(getTenantTableScope("garment_photos")).toBe("store");
+  });
+
+  it("declares M3 garment_photos tenant unique layout", () => {
+    const config = getTableConfig(M3_PHOTO_TABLES.garment_photos);
+    const hasTenantUnique = config.indexes.some((index) => {
+      const cols = index.config.columns.map((column) => {
+        if (typeof column === "string") return column;
+        if ("name" in column && typeof column.name === "string") return column.name;
+        return "";
+      });
+      return cols[0] === "org_id" && cols[1] === "store_id" && cols.includes("id");
+    });
+    expect(hasTenantUnique).toBe(true);
+  });
+
+  it("exposes full schema as M1 + M2 + M3 garment_photos tables", () => {
     const expected = [
       ...M1_ALL_TABLE_NAMES,
       ...M2_ORDER_TABLE_NAMES,
@@ -376,11 +411,12 @@ describe("M1 schema contract vs A3 matrix", () => {
       ...M2_PRINT_TABLE_NAMES,
       ...M2_CUSTOMER_TABLE_NAMES,
       ...M2_SHIFT_TABLE_NAMES,
+      ...M3_PHOTO_TABLE_NAMES,
     ].sort();
     expect(Object.keys(schema).sort()).toEqual(expected);
   });
 
-  it("no longer defers orders/catalog/payments/print/customers/shift past M2 skeleton", () => {
+  it("no longer defers orders/catalog/payments/print/customers/shift/photos past skeleton", () => {
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("orders");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("order_lines");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("garments");
@@ -389,5 +425,6 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("print_jobs");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("customers");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("shift_closings");
+    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("garment_photos");
   });
 });

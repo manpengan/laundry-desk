@@ -73,6 +73,11 @@ export const M2_CUSTOMER_RLS_TABLES = Object.freeze(["customers"] as const);
  */
 export const M2_SHIFT_RLS_TABLES = Object.freeze(["shift_closings"] as const);
 
+/**
+ * M3 garment_photos uses store-scope RLS (append-only grants in 0013_garment_photos.sql).
+ */
+export const M3_PHOTO_RLS_TABLES = Object.freeze(["garment_photos"] as const);
+
 const STORE_PREDICATE = `org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
     AND store_id = NULLIF(current_setting('app.store_id', true), '')::uuid`;
 

@@ -1,5 +1,5 @@
 /**
- * M2 skeleton: shift.close + shift.get over memory store + order-backed stats.
+ * M2: shift.close (R3 confirm) + shift.get over memory store + order-backed stats.
  */
 
 import assert from "node:assert/strict";
@@ -59,14 +59,69 @@ function buildBus(fixedNow = () => DAY_EPOCH) {
   return { registry, queryRegistry, chainHooks, pendingStore, orderStore, shiftStore };
 }
 
+/** R3: first hop creates confirm card; second hop with confirm_ref executes. */
+async function closeWithConfirm(
+  bus: ReturnType<typeof buildBus>,
+  input: Readonly<{ business_date: string; signature_name: string; note?: string }>,
+): Promise<Awaited<ReturnType<typeof executeCommand>>> {
+  const first = await executeCommand(new FakeSqlClient(), TENANT, "shift.close", input, {
+    registry: bus.registry,
+    actor: CLERK,
+    chainHooks: bus.chainHooks,
+    pendingStore: bus.pendingStore,
+  });
+  if (first.ok) {
+    return first;
+  }
+  assert.equal(first.error.code, "POLICY_CONFIRMATION_REQUIRED", JSON.stringify(first));
+  const detail = "detail" in first.error ? first.error.detail : undefined;
+  assert.equal(detail?.kind, "confirmation");
+  if (detail?.kind !== "confirmation") {
+    assert.fail("expected confirmation detail");
+  }
+  return executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "shift.close",
+    {},
+    {
+      registry: bus.registry,
+      actor: CLERK,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+      confirmRef: detail.confirm_ref,
+    },
+  );
+}
+
 test("command registry includes shift.close when shift deps present", () => {
   const { registry, queryRegistry } = buildBus();
   assert.ok(registry.names().includes("shift.close"));
   assert.ok(queryRegistry.names().includes("shift.get"));
   assert.ok(registry.get("shift.close")?.handler);
   assert.ok(queryRegistry.get("shift.get")?.handler);
-  assert.equal(registry.get("shift.close")?.definition.risk, "R2");
+  assert.equal(registry.get("shift.close")?.definition.risk, "R3");
   assert.equal(queryRegistry.get("shift.get")?.definition.risk, "R1");
+});
+
+test("shift.close without confirm_ref is blocked with POLICY_CONFIRMATION_REQUIRED", async () => {
+  const { registry, chainHooks, pendingStore } = buildBus();
+  const result = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "shift.close",
+    { business_date: BUSINESS_DATE, signature_name: "店员甲" },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, "POLICY_CONFIRMATION_REQUIRED");
+    const detail = "detail" in result.error ? result.error.detail : undefined;
+    assert.equal(detail?.kind, "confirmation");
+    if (detail?.kind === "confirmation") {
+      assert.match(detail.confirm_ref, /^[0-9a-f-]{36}$/i);
+    }
+  }
 });
 
 test("shift.get returns null when day not closed", async () => {
@@ -84,7 +139,7 @@ test("shift.get returns null when day not closed", async () => {
 });
 
 test("shift.close snapshots day stats and shift.get returns the row", async () => {
-  const { registry, queryRegistry, chainHooks, pendingStore } = buildBus();
+  const bus = buildBus();
 
   const received = await executeCommand(
     new FakeSqlClient(),
@@ -101,21 +156,20 @@ test("shift.close snapshots day stats and shift.get returns the row", async () =
       ],
       paid_cents: 500,
     },
-    { registry, actor: CLERK, chainHooks, pendingStore },
+    {
+      registry: bus.registry,
+      actor: CLERK,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+    },
   );
   assert.equal(received.ok, true, JSON.stringify(received));
 
-  const closed = await executeCommand(
-    new FakeSqlClient(),
-    TENANT,
-    "shift.close",
-    {
-      business_date: BUSINESS_DATE,
-      signature_name: "店员甲",
-      note: "晚班交班",
-    },
-    { registry, actor: CLERK, chainHooks, pendingStore },
-  );
+  const closed = await closeWithConfirm(bus, {
+    business_date: BUSINESS_DATE,
+    signature_name: "店员甲",
+    note: "晚班交班",
+  });
   assert.equal(closed.ok, true, JSON.stringify(closed));
   if (!closed.ok) return;
 
@@ -143,7 +197,7 @@ test("shift.close snapshots day stats and shift.get returns the row", async () =
     TENANT,
     "shift.get",
     { business_date: BUSINESS_DATE },
-    { registry: queryRegistry, actor: CLERK },
+    { registry: bus.queryRegistry, actor: CLERK },
   );
   assert.equal(got.ok, true, JSON.stringify(got));
   if (!got.ok) return;
@@ -154,52 +208,41 @@ test("shift.close snapshots day stats and shift.get returns the row", async () =
 });
 
 test("shift.close rejects second close same day", async () => {
-  const { registry, chainHooks, pendingStore } = buildBus();
+  const bus = buildBus();
 
-  const first = await executeCommand(
-    new FakeSqlClient(),
-    TENANT,
-    "shift.close",
-    { business_date: BUSINESS_DATE, signature_name: "店员甲" },
-    { registry, actor: CLERK, chainHooks, pendingStore },
-  );
+  const first = await closeWithConfirm(bus, {
+    business_date: BUSINESS_DATE,
+    signature_name: "店员甲",
+  });
   assert.equal(first.ok, true, JSON.stringify(first));
 
-  const second = await executeCommand(
-    new FakeSqlClient(),
-    TENANT,
-    "shift.close",
-    { business_date: BUSINESS_DATE, signature_name: "店员乙" },
-    { registry, actor: CLERK, chainHooks, pendingStore },
-  );
+  const second = await closeWithConfirm(bus, {
+    business_date: BUSINESS_DATE,
+    signature_name: "店员乙",
+  });
   assert.equal(second.ok, false);
   if (second.ok) return;
   assert.equal(second.error.code, "IDEMPOTENCY_CONFLICT");
 });
 
 test("shift.close rejects empty signature_name", async () => {
-  const { registry, chainHooks, pendingStore } = buildBus();
-  const closed = await executeCommand(
-    new FakeSqlClient(),
-    TENANT,
-    "shift.close",
-    { business_date: BUSINESS_DATE, signature_name: "   " },
-    { registry, actor: CLERK, chainHooks, pendingStore },
-  );
+  const bus = buildBus();
+  // Validation runs after R3 confirm card is created; resume still fails validation.
+  const closed = await closeWithConfirm(bus, {
+    business_date: BUSINESS_DATE,
+    signature_name: "   ",
+  });
   assert.equal(closed.ok, false);
   if (closed.ok) return;
   assert.equal(closed.error.code, "VALIDATION_FAILED");
 });
 
 test("shift.close zeros when no orders that day", async () => {
-  const { registry, chainHooks, pendingStore } = buildBus();
-  const closed = await executeCommand(
-    new FakeSqlClient(),
-    TENANT,
-    "shift.close",
-    { business_date: BUSINESS_DATE, signature_name: "店长" },
-    { registry, actor: CLERK, chainHooks, pendingStore },
-  );
+  const bus = buildBus();
+  const closed = await closeWithConfirm(bus, {
+    business_date: BUSINESS_DATE,
+    signature_name: "店长",
+  });
   assert.equal(closed.ok, true, JSON.stringify(closed));
   if (!closed.ok) return;
   const body = closed.data.result as {

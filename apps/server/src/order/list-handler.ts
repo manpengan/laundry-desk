@@ -42,17 +42,30 @@ function listLimit(value: unknown): number {
   return n;
 }
 
+function optionalMinBalanceCents(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  const n = requireNumber(value);
+  if (n < 0) {
+    throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+  }
+  return n;
+}
+
 function matchesListFilters(
   order: OrderRecord,
   businessDate: string | undefined,
   status: OrderStatus | undefined,
   customerPhone: string | undefined,
+  minBalanceCents: number | undefined,
 ): boolean {
   if (status !== undefined && order.status !== status) return false;
   if (businessDate !== undefined && utcDateKeyFromEpoch(order.created_at) !== businessDate) {
     return false;
   }
   if (customerPhone !== undefined && order.customer_phone !== customerPhone) {
+    return false;
+  }
+  if (minBalanceCents !== undefined && order.balance_cents < minBalanceCents) {
     return false;
   }
   return true;
@@ -67,6 +80,7 @@ export function listHandler(deps: OrderHandlerDeps): CommandHandler {
       typeof input.customer_phone === "string" && input.customer_phone.length > 0
         ? input.customer_phone
         : undefined;
+    const minBalanceCents = optionalMinBalanceCents(input.min_balance_cents);
     const limit = listLimit(input.limit);
 
     if (deps.store.listOrders === undefined) {
@@ -75,7 +89,9 @@ export function listHandler(deps: OrderHandlerDeps): CommandHandler {
 
     const all = await deps.store.listOrders(ctx.tenant.orgId, ctx.tenant.storeId);
     const filtered = all
-      .filter((order) => matchesListFilters(order, businessDate, status, customerPhone))
+      .filter((order) =>
+        matchesListFilters(order, businessDate, status, customerPhone, minBalanceCents),
+      )
       .slice()
       .sort((a, b) => b.created_at - a.created_at || b.ticket_no.localeCompare(a.ticket_no))
       .slice(0, limit);
