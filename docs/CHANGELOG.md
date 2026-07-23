@@ -17,12 +17,7 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 - **V2-M2 宏发升级候选版**：柜台完整工作日、真实 PG 集成、v1 数据迁移、Edge 离线、三类打印与只读 AI/BYOK
 - 治理：[ADR-12 Grok 统一交付所有权](adr/2026-07-21-adr-12-grok-unified-delivery-ownership.md) + [ADR-13 V2-only](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
 
-### 已完成（未发版）
-
-- **V2-M0 技术验证收口**（2026-07-19）：六项 spike，M0-1/2/3/4/6 通过、M0-5 待真实模型 key 复验；结论见 [findings](research/2026-07-19-v2-m0-findings.md)
-- **V2-M1 contracts**：A1–A7 全绿，ADR-09 Accepted，`contracts@v0.1.0` 已封版
-- **V2-M1 核心基座**：PG/RLS、Command/Query Bus、Identity/CSRF/PIN、Policy/step-up、Web/Edge 壳已进入 main；正式集成门禁仍随 M2 收口
-- **V2-M2 增量**：开单/部分取衣、payments ledger、catalog、打印队列、顾客、订单/欠款、统计/交班、照片与 Windows printer smoke 骨架
+> 当前仅有代码侧基座与增量证据，不代表用户版本已交付：`contracts@v0.1.0`、PG/RLS 与 Bus 基座及部分 M2 骨架已进入 main；真实 PG CI、v1 迁移、Edge 离线、AI/BYOK、Windows 与三类打印机验收仍在进行中。工程明细见 [当前 Grok 任务书](superpowers/plans/tasks/2026-07-21-task-grok-lead.md)。
 
 ---
 

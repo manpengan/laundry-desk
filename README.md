@@ -1,8 +1,8 @@
 # laundry-desk
 
-面向洗衣店行业的柜台与经营产品：桌面为主、Web 次之，支持多租户、离线柜台、硬件打印和 AI-first 操作。
+产品目标是面向洗衣店行业提供桌面为主、Web 次之的柜台与经营系统，规划支持多租户、离线柜台、硬件打印和 AI-first 操作。
 
-覆盖登录/PIN、收件、取衣、客户、付款/欠款、照片、统计、交班、打印、通知、权限、审计与 v1 数据升级。
+计划覆盖登录/PIN、收件、取衣、客户、付款/欠款、照片、统计、交班、打印、通知、权限、审计与 v1 数据升级。
 
 ## 当前状态
 
@@ -11,8 +11,10 @@
 | 活动路线   | **仅 v2 产品化升级**（[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)）                                                          |
 | 当前阶段   | V2-M1 基座已形成，`contracts@v0.1.0` 已封版；正在完成 V2-M2 宏发升级候选版                                                                        |
 | 设计真源   | [v2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) · [Web UI](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md) |
-| 当前 owner | [Grok 单一技术负责人](GROK.md)（ADR-12）                                                                                                          |
+| 当前 owner | [Grok 单一技术负责人](GROK.md)（ADR-12） · [活动任务书](docs/superpowers/plans/tasks/2026-07-21-task-grok-lead.md)                                |
 | 目标平台   | Windows 10/11 桌面 Edge + React SPA；云端或自托管 PostgreSQL                                                                                      |
+
+当前 main 已合入 V2-M1 基座和部分 V2-M2 代码增量；真实 PostgreSQL CI、v1 数据迁移、Edge 离线闭环、AI/BYOK 生产路径及 Windows/打印机实机验收尚未收口。
 
 宏发 v1 单店版已经冻结，不再增加 M4/M5 功能或独立发版。根 `src/` 只作为 `tools/migrate-v1` 的只读迁移源、历史行为参考与限期只读回退；历史设计见 [v1 archived spec](docs/superpowers/specs/2026-04-23-laundry-desk-design.md)。
 

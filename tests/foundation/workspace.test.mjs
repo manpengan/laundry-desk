@@ -503,15 +503,23 @@ test("declares v2 as the only active delivery line", async () => {
     "GEMINI.md",
     "HERMES.md",
   ];
-  const activeDualTrackPattern =
-    /(?:(?:v1.{0,24}v2|v2.{0,24}v1).{0,24}(?:双线|并行|同时(?:进行|开发)|均为活动)|(?:双线|并行).{0,24}(?:v1.{0,24}v2|v2.{0,24}v1))/iu;
+  const activeDualTrackPatterns = [
+    /v1\s*(?:与|、|\/)\s*v2\s*(?:均为|都是)\s*活动交付线/iu,
+    /v1\s*\/\s*v2\s*双线\s*并行开发/iu,
+    /两条产品线\s*并行\s*[：:]?\s*v2\s*(?:与|、|\/)\s*v1/iu,
+  ];
+  const declaresActiveDualTrack = (value) =>
+    activeDualTrackPatterns.some((pattern) => pattern.test(value.replace(/\s+/gu, " ")));
 
   for (const staleStatus of [
     "v1 与 v2 均为活动交付线",
     "v1/v2 双线并行开发",
     "两条产品线并行：v2 与 v1",
   ]) {
-    assert.match(staleStatus, activeDualTrackPattern);
+    assert.equal(declaresActiveDualTrack(staleStatus), true);
+  }
+  for (const historicalOrNegativeStatus of ["v1 与 v2 不再并行开发", "禁止双线并行：v2 与 v1"]) {
+    assert.equal(declaresActiveDualTrack(historicalOrNegativeStatus), false);
   }
 
   const adr13 = await readFile(new URL(adr13Path, rootUrl), "utf8");
@@ -524,10 +532,11 @@ test("declares v2 as the only active delivery line", async () => {
   for (const path of currentEntryPaths) {
     const contents = await readFile(new URL(path, rootUrl), "utf8");
     assert.match(contents, adr13RootLink, `${path} must link the v2-only decision`);
-    assert.doesNotMatch(
-      contents.split(/\r?\n/u).slice(0, 30).join("\n"),
-      activeDualTrackPattern,
-      `${path} must not declare an active v1/v2 dual track`,
+    // Current route declarations belong in the status header; historical documents are checked separately.
+    assert.equal(
+      declaresActiveDualTrack(contents.split(/\r?\n/u).slice(0, 30).join(" ")),
+      false,
+      `${path} status header must not declare an active v1/v2 dual track`,
     );
   }
 
@@ -558,7 +567,10 @@ test("declares v2 as the only active delivery line", async () => {
   );
 
   assert.doesNotMatch(readme, /v1（宏发单店）.*仍在进行|M4\s*∥\s*M5/u);
+  assert.match(readme.slice(0, 800), /产品目标.*规划支持/su);
+  assert.match(readme, /\(docs\/superpowers\/plans\/tasks\/2026-07-21-task-grok-lead\.md\)/u);
   assert.doesNotMatch(changelog, /两条线并行/u);
+  assert.doesNotMatch(changelog, /### 已完成（未发版）/u);
   assert.doesNotMatch(hermes, /仓库同时保留两条线|v1.*M1[–-]M5 收口/u);
   assert.match(changelog, /\(adr\/2026-07-23-adr-13-v2-only-upgrade-delivery\.md\)/u);
   assert.match(adrIndex, /\(2026-07-23-adr-13-v2-only-upgrade-delivery\.md\)/u);
@@ -570,10 +582,14 @@ test("declares v2 as the only active delivery line", async () => {
   assert.doesNotMatch(currentTaskBook, /双写观察|\*\*Codex\*\*|Grok 协助/u);
   assert.match(rootManifest.description, /v2.*产品化/u);
   assert.doesNotMatch(rootManifest.description, /单店单机 Windows/u);
+  const pullRequestBlock = foundationWorkflow.match(
+    /^  pull_request:\n(?:(?: {4,}.*|\s*)\n)*/mu,
+  )?.[0];
+  assert.ok(pullRequestBlock, "foundation workflow must define pull_request configuration");
   for (const governancePathFilter of ['- "*.md"', '- ".hermes/plans/**"', '- "docs/**"']) {
     assert.ok(
-      foundationWorkflow.includes(governancePathFilter),
-      `foundation workflow must run for ${governancePathFilter}`,
+      pullRequestBlock.includes(governancePathFilter),
+      `foundation pull_request paths must include ${governancePathFilter}`,
     );
   }
   assert.match(changelog, /v1.*(?:Archived|已归档)/iu);
