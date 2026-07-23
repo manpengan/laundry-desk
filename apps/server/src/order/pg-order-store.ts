@@ -35,6 +35,8 @@ export type CreatePgOrderStoreOptions = Readonly<{
   newId?: () => string;
 }>;
 
+const POSTGRES_INTEGER_MAX = 2_147_483_647;
+
 type OrderListSummaryRow = Readonly<{
   order_id: string;
   ticket_no: string;
@@ -81,6 +83,9 @@ async function listOrderSummaries(
   options: OrderListSummaryOptions,
 ): Promise<readonly OrderListSummary[]> {
   const [dayStart, dayEnd] = utcBusinessDateBounds(options.businessDate);
+  if (options.minBalanceCents !== undefined && options.minBalanceCents > POSTGRES_INTEGER_MAX) {
+    return Object.freeze([]);
+  }
   const result = await client.query<OrderListSummaryRow>(
     `SELECT o.id::text AS order_id, o.ticket_no, o.status,
             o.customer_phone, o.customer_name,

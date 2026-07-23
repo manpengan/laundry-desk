@@ -482,6 +482,24 @@ test("listOrderSummaries uses one aggregate query and preserves every order.list
   ]);
 });
 
+test("listOrderSummaries short-circuits a threshold above PostgreSQL integer before aggregate SQL", async () => {
+  const { pool, queries } = createCapturingPool();
+  const store = createPgOrderStore(pool);
+  assert.ok(store.listOrderSummaries);
+
+  const summaries = await store.listOrderSummaries(DEMO_ORG_ID, DEMO_STORE_ID, {
+    minBalanceCents: 2_147_483_648,
+    limit: 20,
+  });
+  assert.deepEqual(summaries, []);
+  assert.equal(
+    queries.some((query) => query.sql.includes("COUNT(g.id)")),
+    false,
+  );
+  assert.equal(queries[0]?.sql, "BEGIN");
+  assert.equal(queries.at(-1)?.sql, "COMMIT");
+});
+
 // Optional live PG smoke — tables may not exist until migration lands.
 const pgOptIn =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true";

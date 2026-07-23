@@ -1,7 +1,7 @@
 # Windows 打印机 path 冒烟（XP-58 / COM / USB）
 
 操作员在装机或接 XP-58 后，用 CLI 验证 `LAUNDRY_PRINTER_PATH`，**不必**打开完整柜台 SPA。  
-无 `node-usb`：只写文件节点 / Windows 设备路径 / 重定向文件。
+无 `node-usb`：产品配置只接受 Windows COM/LPT/USB 设备端点，不接受任意文件路径。
 
 相关实现：`src/print/printer-smoke.ts`、`src/print/usb-port.ts`。
 
@@ -28,8 +28,8 @@ $env:LAUNDRY_PRINTER_PATH = '\\.\USB001'
 # 或
 $env:LAUNDRY_PRINTER_PATH = 'USB001'
 
-# 先验写路径：重定向到文件（无硬件也能验证 CLI / 载荷）
-$env:LAUNDRY_PRINTER_PATH = "$env:TEMP\laundry-spool.bin"
+# 并口设备
+$env:LAUNDRY_PRINTER_PATH = 'LPT1'
 
 # 可选写超时（毫秒，默认 5000；绝不无限挂起）
 $env:LAUNDRY_PRINTER_SMOKE_TIMEOUT_MS = '3000'
@@ -45,6 +45,10 @@ pnpm --filter @laundry/edge-agent printer-smoke
 ## 3. 运行
 
 ```powershell
+# 只校验配置；不会打开设备或写出任何字节
+pnpm --filter @laundry/edge-agent printer-smoke -- --validate
+
+# 明确执行物理冒烟：init + 文本 + feed + partial cut
 pnpm --filter @laundry/edge-agent printer-smoke
 ```
 
@@ -58,7 +62,7 @@ pnpm --filter @laundry/edge-agent printer-smoke
 | `path`          | 规范化后的 path（如 `COM3` → `\\.\COM3`）；mock 时为 `null` |
 | `kind`          | `mock` / `usb` / `missing`                                  |
 | `message`       | 人读说明；失败时含 access denied / path missing 提示        |
-| `bytes_written` | 成功写入的字节数（仅 `ok` + 真写路径）                      |
+| `bytes_written` | 成功写入的字节数（仅物理冒烟成功；`--validate` 不返回）     |
 
 ### 示例
 
@@ -73,15 +77,14 @@ pnpm --filter @laundry/edge-agent printer-smoke
 }
 ```
 
-**文件重定向成功**
+**配置校验成功（零输出）**
 
 ```json
 {
   "ok": true,
-  "path": "C:\\Users\\...\\Temp\\laundry-spool.bin",
+  "path": "\\\\.\\COM3",
   "kind": "usb",
-  "message": "Wrote 42 bytes to ...",
-  "bytes_written": 42
+  "message": "Validated printer device path \\\\.\\COM3 (no bytes written)"
 }
 ```
 
@@ -124,15 +127,14 @@ pnpm --filter @laundry/edge-agent printer-smoke
 | Access denied / EACCES / EPERM | 关闭占用软件；必要时管理员 PowerShell；换口            |
 | 超时 `USB write timed out`     | 提高 `LAUNDRY_PRINTER_SMOKE_TIMEOUT_MS`；查卡死驱动    |
 | 仅 mock                        | 忘记 `$env:LAUNDRY_PRINTER_PATH`（新开会话需重设）     |
-| 文件有字节但打印机无动作       | path 指到了 spool 文件而非 COM/USB；改回设备路径       |
 
 ## 7. NSIS / 安装包（后续）
 
 正式 Windows 安装器（NSIS）可将 `LAUNDRY_PRINTER_PATH` 写入用户/机器环境或 Edge 配置。  
-**当前**冒烟以会话 env + CLI / IPC `edge:printer-smoke` 为准；安装器接线另任务，不阻塞本 checklist。
+**当前**冒烟仅以会话 env + 操作员 CLI 为准；renderer 不提供设备诊断 IPC。安装器接线另任务，不阻塞本 checklist。
 
 ## 8. 相关
 
 - Lab 勾选：`tools/lab/printers/CHECKLIST.md`（含 Windows 节）
 - Edge README：`apps/edge-agent/README.md` → 打印机 path 冒烟
-- IPC：preload `edgeBridge.printerSmoke()` → 同 JSON shape
+- 安全边界：renderer/preload 不暴露 printer-smoke；仅 CLI 可触发物理输出

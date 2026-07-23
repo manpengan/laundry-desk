@@ -99,13 +99,49 @@ test("runPrinterSmoke with empty LAUNDRY_PRINTER_PATH is mock ok", async () => {
   assert.equal(result.path, null);
 });
 
+test("runPrinterSmoke validate-only never opens or writes the device", async () => {
+  let writes = 0;
+  const result = await runPrinterSmoke(
+    { LAUNDRY_PRINTER_PATH: "COM3" },
+    {
+      validateOnly: true,
+      deviceDependencies: { platform: "win32" },
+      usbPort: {
+        kind: "usb" as const,
+        write: async () => {
+          writes += 1;
+        },
+      },
+    },
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.path, "\\\\.\\COM3");
+  assert.equal(result.bytes_written, undefined);
+  assert.match(result.message, /no bytes written/i);
+  assert.equal(writes, 0);
+});
+
+test("runPrinterSmoke rejects arbitrary product file paths before writing", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "laundry-smoke-product-"));
+  const path = join(dir, "must-not-exist.bin");
+  try {
+    const result = await runPrinterSmoke({ LAUNDRY_PRINTER_PATH: path });
+    assert.equal(result.ok, false);
+    assert.equal(result.path, path);
+    assert.match(result.message, /under \/dev|POSIX printer/i);
+    await assert.rejects(() => readFile(path));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("runPrinterSmoke with file path writes ESC/POS bytes", async () => {
   const dir = await mkdtemp(join(tmpdir(), "laundry-smoke-"));
   const devicePath = join(dir, "spool.bin");
   try {
     const result = await runPrinterSmoke(
       { LAUNDRY_PRINTER_PATH: devicePath },
-      { timeoutMs: 2_000 },
+      { timeoutMs: 2_000, usbPort: createFileUsbPort(devicePath) },
     );
     assertShape(result);
     assert.equal(result.ok, true);
@@ -124,7 +160,10 @@ test("runPrinterSmoke with file path writes ESC/POS bytes", async () => {
 
 test("runPrinterSmoke normalizes Windows-style COM path in result.path", async () => {
   // On non-Windows hosts the device will be missing; path must still normalize.
-  const result = await runPrinterSmoke({ LAUNDRY_PRINTER_PATH: "COM3" }, { timeoutMs: 500 });
+  const result = await runPrinterSmoke(
+    { LAUNDRY_PRINTER_PATH: "COM3" },
+    { timeoutMs: 500, deviceDependencies: { platform: "win32" } },
+  );
   assertShape(result);
   assert.equal(result.path, "\\\\.\\COM3");
   // Hardware usually absent in CI — either missing or access failure is fine.
@@ -135,7 +174,10 @@ test("runPrinterSmoke normalizes Windows-style COM path in result.path", async (
 });
 
 test("runPrinterSmoke normalizes USB001 path form", async () => {
-  const result = await runPrinterSmoke({ LAUNDRY_PRINTER_PATH: "USB001" }, { timeoutMs: 500 });
+  const result = await runPrinterSmoke(
+    { LAUNDRY_PRINTER_PATH: "USB001" },
+    { timeoutMs: 500, deviceDependencies: { platform: "win32" } },
+  );
   assert.equal(result.path, "\\\\.\\USB001");
   assert.ok(result.kind === "missing" || result.kind === "usb" || result.ok);
 });
@@ -147,7 +189,7 @@ test("runPrinterSmoke honors custom payload", async () => {
   try {
     const result = await runPrinterSmoke(
       { LAUNDRY_PRINTER_PATH: devicePath },
-      { payload, timeoutMs: 2_000 },
+      { payload, timeoutMs: 2_000, usbPort: createFileUsbPort(devicePath) },
     );
     assert.equal(result.ok, true);
     assert.equal(result.bytes_written, 3);
@@ -162,7 +204,10 @@ test("runPrinterSmoke missing path returns kind missing", async () => {
   const dir = await mkdtemp(join(tmpdir(), "laundry-smoke-miss-"));
   const missing = join(dir, "no-such-subdir", "printer.bin");
   try {
-    const result = await runPrinterSmoke({ LAUNDRY_PRINTER_PATH: missing }, { timeoutMs: 1_000 });
+    const result = await runPrinterSmoke(
+      { LAUNDRY_PRINTER_PATH: missing },
+      { timeoutMs: 1_000, usbPort: createFileUsbPort(missing) },
+    );
     assertShape(result);
     assert.equal(result.ok, false);
     assert.equal(result.kind, "missing");
@@ -176,7 +221,10 @@ test("runPrinterSmoke missing path returns kind missing", async () => {
 test("runPrinterSmoke write to directory fails with kind usb", async () => {
   const dir = await mkdtemp(join(tmpdir(), "laundry-smoke-dir-"));
   try {
-    const result = await runPrinterSmoke({ LAUNDRY_PRINTER_PATH: dir }, { timeoutMs: 1_000 });
+    const result = await runPrinterSmoke(
+      { LAUNDRY_PRINTER_PATH: dir },
+      { timeoutMs: 1_000, usbPort: createFileUsbPort(dir) },
+    );
     assertShape(result);
     assert.equal(result.ok, false);
     assert.equal(result.kind, "usb");
@@ -192,7 +240,10 @@ test("runPrinterSmoke with short timeout still settles (no hang)", async () => {
   const devicePath = join(dir, "fast.bin");
   const started = Date.now();
   try {
-    const result = await runPrinterSmoke({ LAUNDRY_PRINTER_PATH: devicePath }, { timeoutMs: 500 });
+    const result = await runPrinterSmoke(
+      { LAUNDRY_PRINTER_PATH: devicePath },
+      { timeoutMs: 500, usbPort: createFileUsbPort(devicePath) },
+    );
     const elapsed = Date.now() - started;
     assert.equal(result.ok, true);
     assert.equal(result.kind, "usb");
@@ -218,7 +269,7 @@ test("createFileUsbPort writes spool file (create mode)", async () => {
 });
 
 test("resolveUsbPrintPort with Windows-style COM env still resolves usb kind", () => {
-  const port = resolveUsbPrintPort({ LAUNDRY_PRINTER_PATH: "COM3" });
+  const port = resolveUsbPrintPort({ LAUNDRY_PRINTER_PATH: "COM3" }, { platform: "win32" });
   assert.equal(port.kind, "usb");
 });
 
@@ -236,7 +287,10 @@ test("runPrinterSmoke annotates access-denied mock via file that is not writable
     await writeFile(devicePath, Buffer.from([0]));
     // Reuse path as Windows device is not available; annotate path is covered by unit classifiers.
     // Here we only ensure a real usb fail still returns kind usb with non-empty message.
-    const result = await runPrinterSmoke({ LAUNDRY_PRINTER_PATH: dir }, { timeoutMs: 500 });
+    const result = await runPrinterSmoke(
+      { LAUNDRY_PRINTER_PATH: dir },
+      { timeoutMs: 500, usbPort: createFileUsbPort(dir) },
+    );
     assert.equal(result.ok, false);
     assert.equal(result.kind, "usb");
   } finally {

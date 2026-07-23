@@ -5,7 +5,7 @@ import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
 import { createMockQueryClient } from "../commands/query-client.js";
 import {
-  localYmd,
+  utcYmd,
   OrdersList,
   parseOrderListRows,
   unwrapQueryResult,
@@ -25,8 +25,23 @@ const SAMPLE_ROW: OrderListRowView = Object.freeze({
   garment_count: 2,
 });
 
-test("localYmd formats local calendar day", () => {
-  assert.equal(localYmd(new Date(2026, 6, 22, 9, 30, 0)), "2026-07-22");
+test("utcYmd keeps the UTC business date across host time zones at midnight", () => {
+  const previousTimeZone = process.env.TZ;
+  try {
+    for (const [timeZone, instant] of [
+      ["America/Los_Angeles", "2026-07-22T00:30:00.000Z"],
+      ["Asia/Shanghai", "2026-07-22T23:30:00.000Z"],
+    ] as const) {
+      process.env.TZ = timeZone;
+      assert.equal(utcYmd(new Date(instant)), "2026-07-22", `${timeZone} at ${instant}`);
+    }
+  } finally {
+    if (previousTimeZone === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = previousTimeZone;
+    }
+  }
 });
 
 test("parseOrderListRows accepts documented result shape", () => {

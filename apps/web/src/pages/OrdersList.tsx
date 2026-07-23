@@ -24,7 +24,7 @@ export type OrdersListProps = {
   queryClient: QueryPort;
   /** Optional command bus for photo.register skeleton in detail drawer. */
   commandClient?: CommandPort;
-  /** Override default date (tests / local calendar). Empty string = all days. */
+  /** Override default UTC business date (tests). Empty string = all days. */
   defaultDate?: string;
   /** Skip auto-load on mount (tests). */
   autoLoad?: boolean;
@@ -32,11 +32,11 @@ export type OrdersListProps = {
   onOpenPickup?: (orderId: string) => void;
 };
 
-/** Local calendar YYYY-MM-DD (counter default day). */
-export function localYmd(date: Date = new Date()): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+/** UTC calendar YYYY-MM-DD (server business-day contract). */
+export function utcYmd(date: Date = new Date()): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
@@ -104,7 +104,7 @@ export function OrdersList({
   onOpenPickup,
 }: OrdersListProps) {
   const toast = useToast();
-  const [dateText, setDateText] = useState(() => defaultDate ?? localYmd());
+  const [dateText, setDateText] = useState(() => defaultDate ?? utcYmd());
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState<readonly OrderListRowView[]>([]);
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
