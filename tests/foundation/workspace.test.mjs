@@ -543,6 +543,10 @@ test("declares v2 as the only active delivery line", async () => {
     new URL("docs/superpowers/plans/2026-07-19-v2-m2-m6-implementation-plan.md", rootUrl),
     "utf8",
   );
+  const currentTaskBook = await readFile(
+    new URL("docs/superpowers/plans/tasks/2026-07-21-task-grok-lead.md", rootUrl),
+    "utf8",
+  );
   const foundationWorkflow = await readFile(
     new URL(".github/workflows/foundation.yml", rootUrl),
     "utf8",
@@ -558,8 +562,12 @@ test("declares v2 as the only active delivery line", async () => {
   assert.doesNotMatch(hermes, /仓库同时保留两条线|v1.*M1[–-]M5 收口/u);
   assert.match(changelog, /\(adr\/2026-07-23-adr-13-v2-only-upgrade-delivery\.md\)/u);
   assert.match(adrIndex, /\(2026-07-23-adr-13-v2-only-upgrade-delivery\.md\)/u);
+  assert.match(adrIndex, /\[总 RFC\].*ADR-13/u);
   assert.match(v2Architecture.slice(0, 2_000), /\[ADR-13\].*v2 成为唯一活动交付线/u);
   assert.doesNotMatch(m2ToM6Plan, /双写观察|\*\*Codex\*\*|\*\*Grok 协助\*\*/u);
+  assert.match(currentTaskBook.slice(0, 1_000), /Owner：\[ADR-12\].*产品路线：\[ADR-13\]/su);
+  assert.match(currentTaskBook, /`tools\/migrate-v1` 只读迁移/u);
+  assert.doesNotMatch(currentTaskBook, /双写观察|\*\*Codex\*\*|Grok 协助/u);
   assert.match(rootManifest.description, /v2.*产品化/u);
   assert.doesNotMatch(rootManifest.description, /单店单机 Windows/u);
   for (const governancePathFilter of ['- "*.md"', '- ".hermes/plans/**"', '- "docs/**"']) {
