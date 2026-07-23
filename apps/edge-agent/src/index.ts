@@ -171,3 +171,14 @@ export type {
   QueueStore,
   WrappedDek,
 } from "./queue/index.js";
+
+// M2 offline authority core: signed grant/lease, monotonic deadlines, and queue gating.
+export { OfflineAuthorizationGuard } from "./lease/primary-lease.js";
+export type {
+  AuthorityAcceptanceResult,
+  AuthorityRequestResult,
+  MonotonicClock,
+  OfflineAuthorizationResult,
+  OfflineAuthorityGuardOptions,
+  OfflineAuthorityRequest,
+} from "./lease/primary-lease.js";
