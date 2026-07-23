@@ -11,6 +11,7 @@ on:
       - "docs/**"
       - "packages/**"
       - "tests/foundation/**"
+      - "tools/migrate-v1/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -40,6 +41,9 @@ jobs:
 
       - name: Install dependencies without native lifecycle scripts
         run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build SQLite binding for Node migration tests
+        run: pnpm --filter @laundry/migrate-v1 rebuild better-sqlite3
 
       - name: Check workspace foundation
         run: pnpm run workspace:check
