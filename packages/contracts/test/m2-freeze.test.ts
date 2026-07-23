@@ -51,7 +51,9 @@ describe("M2 contract v0.2 freeze", () => {
     expect(M2_READ_ONLY_AI_DEFINITIONS.every((definition) => definition.kind === "query")).toBe(
       true,
     );
-    expect(M2_READ_ONLY_AI_DEFINITIONS.every((definition) => definition.risk !== "R5")).toBe(true);
+    expect(new Set(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.risk))).toEqual(
+      new Set(["R0", "R1", "R2"]),
+    );
   });
 
   it("projects the frozen M2 surface into deterministic OpenAPI", () => {
