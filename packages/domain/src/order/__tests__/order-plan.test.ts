@@ -96,6 +96,7 @@ describe("planPickup", () => {
     if (!plan.ok) return;
     expect(plan.garment_ids).toEqual(["g1", "g2"]);
     expect(plan.to_status).toBe("picked_up");
+    expect(plan.next_order_status).toBe("closed");
   });
 
   it("rejects invalid transition for already picked garment", () => {
@@ -120,5 +121,38 @@ describe("planPickup", () => {
     });
     expect(plan.ok).toBe(false);
     if (!plan.ok) expect(plan.reason).toBe("COLLECT_EXCEEDS_BALANCE");
+  });
+
+  it("keeps a partially picked order open", () => {
+    const plan = planPickup({
+      garments,
+      selected_garment_ids: ["g1"],
+      balance_cents: 0,
+      collect_cents: 0,
+      fulfillment_enabled: false,
+    });
+    expect(plan).toMatchObject({ ok: true, next_order_status: "open", next_balance_cents: 0 });
+  });
+
+  it("keeps a fully terminal order open until the exact remaining balance is collected", () => {
+    const plan = planPickup({
+      garments,
+      selected_garment_ids: [],
+      balance_cents: 500,
+      collect_cents: 0,
+      fulfillment_enabled: false,
+    });
+    expect(plan).toMatchObject({ ok: true, next_order_status: "open", next_balance_cents: 500 });
+  });
+
+  it("rejects duplicate garment selections", () => {
+    const plan = planPickup({
+      garments,
+      selected_garment_ids: ["g1", "g1"],
+      balance_cents: 0,
+      collect_cents: 0,
+      fulfillment_enabled: false,
+    });
+    expect(plan).toEqual({ ok: false, reason: "DUPLICATE_GARMENT", garment_id: "g1" });
   });
 });
