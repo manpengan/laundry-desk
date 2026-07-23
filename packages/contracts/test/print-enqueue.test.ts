@@ -17,9 +17,11 @@ import {
   printJobsListQuery,
   printTicketEnqueueCommand,
   printTicketProcessCommand,
+  printTicketReprintCommand,
+  printTicketRetryCommand,
 } from "../src/index.js";
 
-describe("M2 print.ticket.enqueue / process / print.jobs.list", () => {
+describe("M2 print.ticket.enqueue / process / retry / reprint / print.jobs.list", () => {
   it("registers definitions through A1 factories", () => {
     for (const definition of PRINT_COMMANDS) {
       expect(isContractDefinition(definition)).toBe(true);
@@ -36,11 +38,16 @@ describe("M2 print.ticket.enqueue / process / print.jobs.list", () => {
   });
 
   it("exports stable names and M2 print aliases", () => {
-    expect([...PRINT_COMMAND_NAMES]).toEqual(["print.ticket.enqueue", "print.ticket.process"]);
+    expect([...PRINT_COMMAND_NAMES]).toEqual([
+      "print.ticket.enqueue",
+      "print.ticket.process",
+      "print.ticket.retry",
+      "print.ticket.reprint",
+    ]);
     expect([...PRINT_QUERY_NAMES]).toEqual(["print.jobs.list"]);
     expect([...M2_PRINT_COMMAND_NAMES]).toEqual([...PRINT_COMMAND_NAMES]);
     expect([...M2_PRINT_QUERY_NAMES]).toEqual([...PRINT_QUERY_NAMES]);
-    expect(M2_PRINT_COMMAND_DEFINITIONS).toHaveLength(2);
+    expect(M2_PRINT_COMMAND_DEFINITIONS).toHaveLength(4);
     expect(M2_PRINT_QUERY_DEFINITIONS).toHaveLength(1);
   });
 
@@ -48,15 +55,21 @@ describe("M2 print.ticket.enqueue / process / print.jobs.list", () => {
     const names = M2_SKELETON_DEFINITIONS.map((d) => d.name);
     expect(names).toContain("print.ticket.enqueue");
     expect(names).toContain("print.ticket.process");
+    expect(names).toContain("print.ticket.retry");
+    expect(names).toContain("print.ticket.reprint");
     expect(names).toContain("order.receive");
     expect([...M2_SKELETON_COMMAND_NAMES]).toContain("print.ticket.enqueue");
     expect([...M2_SKELETON_COMMAND_NAMES]).toContain("print.ticket.process");
+    expect([...M2_SKELETON_COMMAND_NAMES]).toContain("print.ticket.retry");
+    expect([...M2_SKELETON_COMMAND_NAMES]).toContain("print.ticket.reprint");
   });
 
   it("keeps OpenAPI M1 first-wave free of print contracts", () => {
     const names = M1_FIRST_WAVE_DEFINITIONS.map((d) => d.name);
     expect(names).not.toContain("print.ticket.enqueue");
     expect(names).not.toContain("print.ticket.process");
+    expect(names).not.toContain("print.ticket.retry");
+    expect(names).not.toContain("print.ticket.reprint");
     expect(names).not.toContain("print.jobs.list");
   });
 
@@ -137,7 +150,28 @@ describe("M2 print.ticket.enqueue / process / print.jobs.list", () => {
     ).rejects.toBeTruthy();
   });
 
-  it("declares metadata floors for enqueue, process, and list", () => {
+  it("parses retry / reprint input with job_id uuid", async () => {
+    const jobId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    await expect(parseContractInput(printTicketRetryCommand, { job_id: jobId })).resolves.toEqual({
+      job_id: jobId,
+    });
+    await expect(parseContractInput(printTicketReprintCommand, { job_id: jobId })).resolves.toEqual(
+      { job_id: jobId },
+    );
+  });
+
+  it("rejects invalid retry / reprint input", async () => {
+    await expect(parseContractInput(printTicketRetryCommand, {})).rejects.toBeTruthy();
+    await expect(
+      parseContractInput(printTicketRetryCommand, { job_id: "not-a-uuid" }),
+    ).rejects.toBeTruthy();
+    await expect(parseContractInput(printTicketReprintCommand, {})).rejects.toBeTruthy();
+    await expect(
+      parseContractInput(printTicketReprintCommand, { job_id: "bad" }),
+    ).rejects.toBeTruthy();
+  });
+
+  it("declares metadata floors for enqueue, process, retry, reprint, and list", () => {
     expect(printTicketEnqueueCommand.name).toBe("print.ticket.enqueue");
     expect(printTicketEnqueueCommand.risk).toBe("R1");
     expect(printTicketEnqueueCommand.offline_mode).toBe("grant");
@@ -149,6 +183,20 @@ describe("M2 print.ticket.enqueue / process / print.jobs.list", () => {
     expect(printTicketProcessCommand.idempotent).toBe(false);
     expect(printTicketProcessCommand.offline_mode).toBe("denied");
     expect(printTicketProcessCommand.sideEffects).toContain("print.job_processed");
+
+    expect(printTicketRetryCommand.name).toBe("print.ticket.retry");
+    expect(printTicketRetryCommand.risk).toBe("R1");
+    expect(printTicketRetryCommand.offline_mode).toBe("grant");
+    expect(printTicketRetryCommand.idempotent).toBe(true);
+    expect(printTicketRetryCommand.invariants).toContain("rbac.order_write");
+    expect(printTicketRetryCommand.sideEffects).toContain("print.job_queued");
+
+    expect(printTicketReprintCommand.name).toBe("print.ticket.reprint");
+    expect(printTicketReprintCommand.risk).toBe("R1");
+    expect(printTicketReprintCommand.offline_mode).toBe("grant");
+    expect(printTicketReprintCommand.idempotent).toBe(true);
+    expect(printTicketReprintCommand.invariants).toContain("rbac.order_write");
+    expect(printTicketReprintCommand.sideEffects).toContain("print.job_queued");
 
     expect(printJobsListQuery.name).toBe("print.jobs.list");
     expect(printJobsListQuery.risk).toBe("R1");

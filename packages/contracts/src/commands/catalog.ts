@@ -1,6 +1,12 @@
 import type { CommandDefinition, QueryDefinition } from "../registry/definitions.js";
 import { IDENTITY_COMMANDS, IDENTITY_COMMAND_NAMES } from "./identity.js";
 import { CATALOG_SKELETON_DEFINITIONS, CATALOG_SKELETON_QUERY_NAMES } from "./catalog-items.js";
+import {
+  M2_CUSTOMER_COMMAND_DEFINITIONS,
+  M2_CUSTOMER_COMMAND_NAMES,
+  M2_CUSTOMER_QUERY_DEFINITIONS,
+  M2_CUSTOMER_QUERY_NAMES,
+} from "./customer.js";
 import { ORDER_COMMANDS, ORDER_COMMAND_NAMES, ORDER_QUERIES, ORDER_QUERY_NAMES } from "./order.js";
 import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./platform.js";
 import {
@@ -25,17 +31,19 @@ export const M1_FIRST_WAVE_COMMAND_NAMES = Object.freeze([
 export const M1_FIRST_WAVE_QUERY_NAMES = Object.freeze(PLATFORM_QUERIES.map((query) => query.name));
 
 /**
- * M2 skeleton commands (order receive/pickup + print enqueue). Not yet in OpenAPI
- * freeze snapshot; server loads via createM1CommandRegistry([...M1, ...M2]).
+ * M2 skeleton commands (order receive/pickup + print enqueue + customer upsert).
+ * Not yet in OpenAPI freeze snapshot; server loads via createM1CommandRegistry([...M1, ...M2]).
  */
 export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] = Object.freeze([
   ...ORDER_COMMANDS,
   ...M2_PRINT_COMMAND_DEFINITIONS,
+  ...M2_CUSTOMER_COMMAND_DEFINITIONS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   ...ORDER_COMMAND_NAMES,
   ...M2_PRINT_COMMAND_NAMES,
+  ...M2_CUSTOMER_COMMAND_NAMES,
 ] as const);
 
 /**
@@ -74,3 +82,14 @@ export {
  * not in OpenAPI freeze. Re-exported for registry loaders.
  */
 export { M2_STATS_QUERY_DEFINITIONS, M2_STATS_QUERY_NAMES };
+
+/**
+ * M2 customer archive (customer.search + customer.upsert). Memory-first;
+ * not in OpenAPI freeze. Re-exported for registry loaders.
+ */
+export {
+  M2_CUSTOMER_COMMAND_DEFINITIONS,
+  M2_CUSTOMER_COMMAND_NAMES,
+  M2_CUSTOMER_QUERY_DEFINITIONS,
+  M2_CUSTOMER_QUERY_NAMES,
+};

@@ -1,5 +1,6 @@
 /**
- * M2 print handlers: print.ticket.enqueue | print.ticket.process + print.jobs.list.
+ * M2 print handlers: enqueue | process | retry | reprint + print.jobs.list.
+ * Retry/reprint create a new print_jobs row (terminal source jobs stay terminal).
  */
 
 import { createCommandError } from "@laundry/contracts";
@@ -8,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
 import { processXp58PrintJob, type ProcessXp58Result } from "./process-xp58.js";
-import type { PrintJobKind, PrintJobStore } from "./types.js";
+import type { PrintJobKind, PrintJobRecord, PrintJobStatus, PrintJobStore } from "./types.js";
 
 export type PrintHandlerDeps = Readonly<{
   store: PrintJobStore;
@@ -61,6 +62,111 @@ function mapProcessError(err: unknown): never {
   throw new HandlerCommandError(createCommandError("TRANSACTION_FAILED"));
 }
 
+type JobResultFields = Readonly<{
+  job_id: string;
+  status: PrintJobStatus;
+  kind: PrintJobKind;
+  order_id: string;
+  ticket_no: string;
+  payload_bytes?: number;
+}>;
+
+function jobResultFields(job: PrintJobRecord, payloadBytes?: number): JobResultFields {
+  return Object.freeze({
+    job_id: job.job_id,
+    status: job.status,
+    kind: job.kind,
+    order_id: job.order_id,
+    ticket_no: job.ticket_no,
+    ...(payloadBytes !== undefined
+      ? { payload_bytes: payloadBytes }
+      : job.payload_bytes !== undefined
+        ? { payload_bytes: job.payload_bytes }
+        : {}),
+  });
+}
+
+function enqueueOutcome(
+  job: PrintJobRecord,
+  options: Readonly<{
+    sourceJobId?: string;
+    action: "enqueue" | "retry" | "reprint";
+    payloadBytes?: number;
+    processed?: boolean;
+  }>,
+): HandlerOutcome {
+  const queuedEvent = Object.freeze({
+    type: "print.job_queued",
+    payload: Object.freeze({
+      job_id: job.job_id,
+      order_id: job.order_id,
+      ticket_no: job.ticket_no,
+      kind: job.kind,
+      ...(options.sourceJobId !== undefined ? { source_job_id: options.sourceJobId } : {}),
+      action: options.action,
+    }),
+  });
+  const events =
+    options.processed === true
+      ? Object.freeze([
+          queuedEvent,
+          Object.freeze({
+            type: "print.job_processed",
+            payload: Object.freeze({
+              job_id: job.job_id,
+              status: job.status,
+              ...(options.payloadBytes !== undefined
+                ? { payload_bytes: options.payloadBytes }
+                : {}),
+            }),
+          }),
+        ])
+      : Object.freeze([queuedEvent]);
+
+  return Object.freeze({
+    result: jobResultFields(job, options.payloadBytes),
+    audit: Object.freeze({
+      entity: "print_job",
+      entityId: job.job_id,
+      afterJson: JSON.stringify({
+        kind: job.kind,
+        status: job.status,
+        order_id: job.order_id,
+        ticket_no: job.ticket_no,
+        action: options.action,
+        ...(options.sourceJobId !== undefined ? { source_job_id: options.sourceJobId } : {}),
+        ...(options.payloadBytes !== undefined ? { payload_bytes: options.payloadBytes } : {}),
+      }),
+    }),
+    events,
+  });
+}
+
+/**
+ * Auto-process xp58 after enqueue (receive / retry / reprint convenience).
+ * Other kinds stay queued. Process failures surface as handler errors (job may be failed).
+ */
+async function maybeProcessXp58(
+  deps: PrintHandlerDeps,
+  job: PrintJobRecord,
+  now: number,
+): Promise<Readonly<{ job: PrintJobRecord; payloadBytes?: number; processed: boolean }>> {
+  if (job.kind !== "xp58") {
+    return Object.freeze({ job, processed: false });
+  }
+  let result: ProcessXp58Result;
+  try {
+    result = await processXp58PrintJob(deps.store, job.job_id, { now });
+  } catch (err) {
+    mapProcessError(err);
+  }
+  return Object.freeze({
+    job: result.job,
+    payloadBytes: result.payload_bytes,
+    processed: true,
+  });
+}
+
 function enqueueHandler(deps: PrintHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
@@ -78,36 +184,7 @@ function enqueueHandler(deps: PrintHandlerDeps): CommandHandler {
       now,
     });
 
-    return Object.freeze({
-      result: Object.freeze({
-        job_id: job.job_id,
-        status: job.status,
-        kind: job.kind,
-        order_id: job.order_id,
-        ticket_no: job.ticket_no,
-      }),
-      audit: Object.freeze({
-        entity: "print_job",
-        entityId: job.job_id,
-        afterJson: JSON.stringify({
-          kind: job.kind,
-          status: job.status,
-          order_id: job.order_id,
-          ticket_no: job.ticket_no,
-        }),
-      }),
-      events: Object.freeze([
-        Object.freeze({
-          type: "print.job_queued",
-          payload: Object.freeze({
-            job_id: job.job_id,
-            order_id: job.order_id,
-            ticket_no: job.ticket_no,
-            kind: job.kind,
-          }),
-        }),
-      ]),
-    });
+    return enqueueOutcome(job, { action: "enqueue" });
   };
 }
 
@@ -126,14 +203,7 @@ function processHandler(deps: PrintHandlerDeps): CommandHandler {
 
     const job = result.job;
     return Object.freeze({
-      result: Object.freeze({
-        job_id: job.job_id,
-        status: job.status,
-        kind: job.kind,
-        order_id: job.order_id,
-        ticket_no: job.ticket_no,
-        payload_bytes: result.payload_bytes,
-      }),
+      result: jobResultFields(job, result.payload_bytes),
       audit: Object.freeze({
         entity: "print_job",
         entityId: job.job_id,
@@ -157,6 +227,47 @@ function processHandler(deps: PrintHandlerDeps): CommandHandler {
   };
 }
 
+/**
+ * Clone terminal source into a new queued job, then auto-process xp58.
+ * expectedStatus: failed → retry; done → reprint.
+ */
+function requeueHandler(
+  deps: PrintHandlerDeps,
+  expectedStatus: "failed" | "done",
+  action: "retry" | "reprint",
+): CommandHandler {
+  return async (ctx): Promise<HandlerOutcome> => {
+    const input = asRecord(ctx.parsed);
+    const sourceJobId = requireString(input.job_id);
+
+    const source = await deps.store.get(sourceJobId);
+    if (source === null) {
+      throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+    }
+    if (source.status !== expectedStatus) {
+      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    }
+
+    const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
+    const newJobId = deps.newId?.() ?? randomUUID();
+    const enqueued = await deps.store.enqueue({
+      order_id: source.order_id,
+      ticket_no: source.ticket_no,
+      kind: source.kind,
+      job_id: newJobId,
+      now,
+    });
+
+    const after = await maybeProcessXp58(deps, enqueued, now);
+    return enqueueOutcome(after.job, {
+      action,
+      sourceJobId,
+      ...(after.payloadBytes !== undefined ? { payloadBytes: after.payloadBytes } : {}),
+      processed: after.processed,
+    });
+  };
+}
+
 function listHandler(deps: PrintHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
@@ -176,6 +287,8 @@ export function createPrintCommandHandlers(
   return Object.freeze({
     "print.ticket.enqueue": enqueueHandler(deps),
     "print.ticket.process": processHandler(deps),
+    "print.ticket.retry": requeueHandler(deps, "failed", "retry"),
+    "print.ticket.reprint": requeueHandler(deps, "done", "reprint"),
   });
 }
 
@@ -194,6 +307,8 @@ export function registerPrintCommandHandlers(
   const handlers = createPrintCommandHandlers(deps);
   registry.registerHandler("print.ticket.enqueue", handlers["print.ticket.enqueue"]!);
   registry.registerHandler("print.ticket.process", handlers["print.ticket.process"]!);
+  registry.registerHandler("print.ticket.retry", handlers["print.ticket.retry"]!);
+  registry.registerHandler("print.ticket.reprint", handlers["print.ticket.reprint"]!);
 }
 
 export function registerPrintQueryHandlers(

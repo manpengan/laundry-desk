@@ -69,6 +69,7 @@ export {
   type ExecuteJobOptions,
   type ExecuteJobResult,
 } from "./print/executor.js";
+export { createMockUsbPort, type MockUsbPortOptions, type UsbPrintPort } from "./print/usb-port.js";
 export { fenToYuanGbk, fenToYuanText, YUAN_SIGN_GBK } from "./drivers/render/money-gbk.js";
 export {
   estimateCode128Dots,

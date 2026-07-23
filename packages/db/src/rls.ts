@@ -62,6 +62,12 @@ export const M2_PAYMENT_RLS_TABLES = Object.freeze(["payments"] as const);
  */
 export const M2_PRINT_RLS_TABLES = Object.freeze(["print_jobs"] as const);
 
+/**
+ * M2 customers archive uses org-scope RLS (SELECT/INSERT/UPDATE grants in 0011_customers.sql).
+ * Predicate: app.org_id only (A3 matrix scope = org).
+ */
+export const M2_CUSTOMER_RLS_TABLES = Object.freeze(["customers"] as const);
+
 const STORE_PREDICATE = `org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
     AND store_id = NULLIF(current_setting('app.store_id', true), '')::uuid`;
 

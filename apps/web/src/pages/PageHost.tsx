@@ -3,6 +3,7 @@ import type { AuthClient } from "../auth/AuthClient.js";
 import type { AccessSession } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { NavItemId } from "../nav.js";
+import { CustomersPage } from "./CustomersPage.js";
 import { pageCopy } from "./page-copy.js";
 import { PickupPage } from "./PickupPage.js";
 import { ReceivePage } from "./ReceivePage.js";
@@ -71,6 +72,15 @@ export function PageHost({
 
   if (activeId === "stats" && session !== undefined && queryClient !== undefined) {
     return <StatsPage queryClient={queryClient} />;
+  }
+
+  if (
+    activeId === "customers" &&
+    session !== undefined &&
+    queryClient !== undefined &&
+    commandClient !== undefined
+  ) {
+    return <CustomersPage queryClient={queryClient} commandClient={commandClient} />;
   }
 
   if (

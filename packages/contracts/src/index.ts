@@ -343,6 +343,10 @@ export {
   M1_FIRST_WAVE_QUERY_NAMES,
   M2_CATALOG_DEFINITIONS,
   M2_CATALOG_QUERY_NAMES,
+  M2_CUSTOMER_COMMAND_DEFINITIONS,
+  M2_CUSTOMER_COMMAND_NAMES,
+  M2_CUSTOMER_QUERY_DEFINITIONS,
+  M2_CUSTOMER_QUERY_NAMES,
   M2_ORDER_QUERY_DEFINITIONS,
   M2_ORDER_QUERY_NAMES,
   M2_PRINT_COMMAND_DEFINITIONS,
@@ -385,9 +389,13 @@ export {
   PrintJobsListInputSchema,
   PrintTicketEnqueueInputSchema,
   PrintTicketProcessInputSchema,
+  PrintTicketRetryInputSchema,
+  PrintTicketReprintInputSchema,
   printJobsListQuery,
   printTicketEnqueueCommand,
   printTicketProcessCommand,
+  printTicketRetryCommand,
+  printTicketReprintCommand,
 } from "./commands/print.js";
 export {
   BusinessDateSchema,
@@ -397,6 +405,22 @@ export {
   statsDaySummaryQuery,
 } from "./commands/stats.js";
 export type { StatsDaySummaryResult } from "./commands/stats.js";
+export {
+  CUSTOMER_COMMAND_NAMES,
+  CUSTOMER_COMMANDS,
+  CUSTOMER_QUERY_NAMES,
+  CUSTOMER_QUERIES,
+  CustomerSearchInputSchema,
+  CustomerUpsertInputSchema,
+  PhoneSchema,
+  customerSearchQuery,
+  customerUpsertCommand,
+} from "./commands/customer.js";
+export type {
+  CustomerSearchResult,
+  CustomerSearchRow,
+  CustomerUpsertResult,
+} from "./commands/customer.js";
 
 export {
   OPENAPI_INFO_VERSION,

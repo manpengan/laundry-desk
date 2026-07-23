@@ -1,10 +1,11 @@
 /**
  * Small print queue dialog: recent jobs from print.jobs.list.
+ * Failed → 重试 (print.ticket.retry); done → 补打 (print.ticket.reprint).
  */
 
-import { Button, Dialog } from "@laundry/ui";
+import { Button, Dialog, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useState } from "react";
-import type { QueryPort } from "../commands/types.js";
+import type { CommandPort, QueryPort } from "../commands/types.js";
 import {
   loadPrintJobs,
   printJobStatusLabel,
@@ -16,14 +17,34 @@ export type PrintQueuePanelProps = {
   open: boolean;
   onClose: () => void;
   queryClient: QueryPort;
+  /** Used for retry / reprint commands. */
+  commandClient: CommandPort;
   /** Injected jobs skip initial fetch (tests / SSR). */
   initialJobs?: readonly PrintJobView[];
 };
 
-export function PrintQueuePanel({ open, onClose, queryClient, initialJobs }: PrintQueuePanelProps) {
+type RequeueAction = "retry" | "reprint";
+
+function commandNameFor(action: RequeueAction): string {
+  return action === "retry" ? "print.ticket.retry" : "print.ticket.reprint";
+}
+
+function successMessage(action: RequeueAction, ticketNo: string): string {
+  return action === "retry" ? `已重试 ${ticketNo}` : `已补打 ${ticketNo}`;
+}
+
+export function PrintQueuePanel({
+  open,
+  onClose,
+  queryClient,
+  commandClient,
+  initialJobs,
+}: PrintQueuePanelProps) {
+  const toast = useToast();
   const [jobs, setJobs] = useState<readonly PrintJobView[]>(initialJobs ?? []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busyJobId, setBusyJobId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -46,6 +67,26 @@ export function PrintQueuePanel({ open, onClose, queryClient, initialJobs }: Pri
     void refresh();
   }, [open, initialJobs, refresh]);
 
+  const onRequeue = useCallback(
+    async (job: PrintJobView, action: RequeueAction) => {
+      setBusyJobId(job.job_id);
+      setError(null);
+      const res = await commandClient.execute<unknown>(commandNameFor(action), {
+        job_id: job.job_id,
+      });
+      setBusyJobId(null);
+      if (!res.ok) {
+        const message = res.error.message ?? res.error.code;
+        setError(message);
+        toast.push(message, "error");
+        return;
+      }
+      toast.push(successMessage(action, job.ticket_no), "success");
+      await refresh();
+    },
+    [commandClient, refresh, toast],
+  );
+
   return (
     <Dialog
       open={open}
@@ -58,7 +99,7 @@ export function PrintQueuePanel({ open, onClose, queryClient, initialJobs }: Pri
             size="sm"
             type="button"
             onClick={() => void refresh()}
-            disabled={loading}
+            disabled={loading || busyJobId !== null}
           >
             {loading ? "刷新中…" : "刷新"}
           </Button>
@@ -92,6 +133,33 @@ export function PrintQueuePanel({ open, onClose, queryClient, initialJobs }: Pri
                   <span className="ld-print-queue__status">{printJobStatusLabel(job.status)}</span>
                 </div>
                 {job.error ? <p className="ld-print-queue__job-error">{job.error}</p> : null}
+                {job.status === "failed" || job.status === "done" ? (
+                  <div className="ld-print-queue__actions">
+                    {job.status === "failed" ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        type="button"
+                        data-action="retry"
+                        disabled={busyJobId !== null}
+                        onClick={() => void onRequeue(job, "retry")}
+                      >
+                        {busyJobId === job.job_id ? "重试中…" : "重试"}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        type="button"
+                        data-action="reprint"
+                        disabled={busyJobId !== null}
+                        onClick={() => void onRequeue(job, "reprint")}
+                      >
+                        {busyJobId === job.job_id ? "补打中…" : "补打"}
+                      </Button>
+                    )}
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>

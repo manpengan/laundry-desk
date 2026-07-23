@@ -280,6 +280,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       catalog: runtime.catalog,
       print: runtime.print,
       stats: runtime.stats,
+      customer: runtime.customer,
     });
     const tenant = tenantFromSession(session);
     const actor = actorFromSession(session);
@@ -330,6 +331,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       catalog: runtime.catalog,
       print: runtime.print,
       stats: runtime.stats,
+      customer: runtime.customer,
     });
     const tenant = tenantFromSession(session);
     const actor = actorFromSession(session);

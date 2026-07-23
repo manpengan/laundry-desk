@@ -10,6 +10,8 @@ import type { StaffRecord, Uuid } from "../identity/types.js";
 import type { CatalogHandlerDeps } from "../catalog/handlers.js";
 import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
 import { createPgCatalogStore } from "../catalog/pg-catalog-store.js";
+import type { CustomerHandlerDeps } from "../customer/handlers.js";
+import { createMemoryCustomerStore } from "../customer/memory-store.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
@@ -71,6 +73,8 @@ export type LocalRuntime = Readonly<{
   print: PrintHandlerDeps;
   /** M2 day stats (order-backed). */
   stats: StatsHandlerDeps;
+  /** M2 customer archive (memory seed; PG later). */
+  customer: CustomerHandlerDeps;
   accessTokenSecret: string;
   staffDirectory: readonly LocalStaffDirectoryEntry[];
   /** Shared with Command Bus for confirm_ref / step-up PIN. */
@@ -216,6 +220,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     catalog: Object.freeze({ store: createMemoryCatalogStore() }),
     print: Object.freeze({ store: createMemoryPrintJobStore() }),
     stats: Object.freeze({ source: createOrderBackedStatsQuery(orderStore) }),
+    customer: Object.freeze({ store: createMemoryCustomerStore() }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,
@@ -275,6 +280,8 @@ export async function createPgLocalRuntime(
       }),
     }),
     stats: Object.freeze({ source: createOrderBackedStatsQuery(orderStore) }),
+    // Customer PG store deferred; memory seed keeps customer.search available in local PG mode.
+    customer: Object.freeze({ store: createMemoryCustomerStore() }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,

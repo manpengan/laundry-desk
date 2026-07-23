@@ -27,6 +27,9 @@ import {
   M2_PRINT_RLS_TABLES,
   M2_PRINT_TABLE_NAMES,
   M2_PRINT_TABLES,
+  M2_CUSTOMER_RLS_TABLES,
+  M2_CUSTOMER_TABLE_NAMES,
+  M2_CUSTOMER_TABLES,
   buildM1RlsMigrationSql,
   schema,
 } from "../src/index.js";
@@ -281,24 +284,63 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(hasTenantUnique).toBe(true);
   });
 
-  it("exposes full schema as M1 + M2 order + catalog + payments + print tables", () => {
+  it("exports M2 customers with org tenant columns and phone unique layout", () => {
+    expect(Object.keys(M2_CUSTOMER_TABLES).sort()).toEqual([...M2_CUSTOMER_TABLE_NAMES].sort());
+    expect([...M2_CUSTOMER_RLS_TABLES].sort()).toEqual([...M2_CUSTOMER_TABLE_NAMES].sort());
+
+    const columns = columnNames(M2_CUSTOMER_TABLES.customers);
+    expect(columns).toContain("org_id");
+    expect(columns).toContain("id");
+    expect(columns).toContain("phone");
+    expect(columns).toContain("name");
+    expect(columns).toContain("note");
+    expect(columns).toContain("created_at");
+    expect(columns).toContain("updated_at");
+    expect(columns).not.toContain("store_id");
+    expect(getTenantTableScope("customers")).toBe("org");
+  });
+
+  it("declares M2 customers org+id and org+phone unique layout", () => {
+    const config = getTableConfig(M2_CUSTOMER_TABLES.customers);
+    const hasOrgIdUnique = config.indexes.some((index) => {
+      const cols = index.config.columns.map((column) => {
+        if (typeof column === "string") return column;
+        if ("name" in column && typeof column.name === "string") return column.name;
+        return "";
+      });
+      return cols[0] === "org_id" && cols[1] === "id";
+    });
+    const hasOrgPhoneUnique = config.indexes.some((index) => {
+      const cols = index.config.columns.map((column) => {
+        if (typeof column === "string") return column;
+        if ("name" in column && typeof column.name === "string") return column.name;
+        return "";
+      });
+      return cols[0] === "org_id" && cols[1] === "phone";
+    });
+    expect(hasOrgIdUnique).toBe(true);
+    expect(hasOrgPhoneUnique).toBe(true);
+  });
+
+  it("exposes full schema as M1 + M2 order + catalog + payments + print + customers tables", () => {
     const expected = [
       ...M1_ALL_TABLE_NAMES,
       ...M2_ORDER_TABLE_NAMES,
       ...M2_CATALOG_TABLE_NAMES,
       ...M2_PAYMENT_TABLE_NAMES,
       ...M2_PRINT_TABLE_NAMES,
+      ...M2_CUSTOMER_TABLE_NAMES,
     ].sort();
     expect(Object.keys(schema).sort()).toEqual(expected);
   });
 
-  it("no longer defers orders/order_lines/garments/catalog/payments/print past M2 skeleton", () => {
+  it("no longer defers orders/catalog/payments/print/customers past M2 skeleton", () => {
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("orders");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("order_lines");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("garments");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("catalog_items");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("payments");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("print_jobs");
-    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).toContain("customers");
+    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("customers");
   });
 });

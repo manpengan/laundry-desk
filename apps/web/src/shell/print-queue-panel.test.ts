@@ -6,8 +6,9 @@ import { ToastProvider } from "@laundry/ui";
 import { createMockAuthClient } from "../auth/AuthClient.js";
 import { FULL_STORE_FEATURES } from "../auth/permissions.js";
 import type { AccessSession } from "../auth/types.js";
+import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
-import type { QueryPort } from "../commands/types.js";
+import type { CommandPort, QueryPort } from "../commands/types.js";
 import { createMockConnection } from "../connection.js";
 import { CounterShell } from "./CounterShell.js";
 import { PrintQueuePanel } from "./PrintQueuePanel.js";
@@ -57,17 +58,43 @@ const SAMPLE_JOBS: readonly PrintJobView[] = Object.freeze([
     updated_at: 220,
     error: "打印机离线",
   }),
+  Object.freeze({
+    job_id: "33333333-3333-4333-8333-333333333333",
+    kind: "xp58",
+    status: "done" as const,
+    order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    ticket_no: "20260722-0003",
+    created_at: 300,
+    updated_at: 310,
+    payload_bytes: 128,
+  }),
 ]);
 
-test("PrintQueuePanel lists ticket_no, Chinese status, and error", () => {
-  const html = renderToStaticMarkup(
-    createElement(PrintQueuePanel, {
-      open: true,
-      onClose: () => undefined,
-      queryClient: createMockQueryClient(),
-      initialJobs: SAMPLE_JOBS,
-    }),
+function renderPanel(
+  props: Partial<{
+    open: boolean;
+    initialJobs: readonly PrintJobView[];
+    commandClient: CommandPort;
+    queryClient: QueryPort;
+  }> = {},
+): string {
+  return renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(PrintQueuePanel, {
+        open: props.open ?? true,
+        onClose: () => undefined,
+        queryClient: props.queryClient ?? createMockQueryClient(),
+        commandClient: props.commandClient ?? createMockCommandClient(),
+        initialJobs: props.initialJobs ?? SAMPLE_JOBS,
+      }),
+    ),
   );
+}
+
+test("PrintQueuePanel lists ticket_no, Chinese status, and error", () => {
+  const html = renderPanel();
   assert.match(html, /data-testid="print-queue-panel"/);
   assert.match(html, /20260722-0001/);
   assert.match(html, /20260722-0002/);
@@ -77,16 +104,25 @@ test("PrintQueuePanel lists ticket_no, Chinese status, and error", () => {
   assert.match(html, /刷新/);
 });
 
-test("PrintQueuePanel closed renders nothing", () => {
-  const html = renderToStaticMarkup(
-    createElement(PrintQueuePanel, {
-      open: false,
-      onClose: () => undefined,
-      queryClient: createMockQueryClient(),
-      initialJobs: SAMPLE_JOBS,
-    }),
+test("PrintQueuePanel shows 重试 for failed and 补打 for done (not for queued)", () => {
+  const html = renderPanel();
+  assert.match(html, /data-action="retry"/);
+  assert.match(html, /重试/);
+  assert.match(html, /data-action="reprint"/);
+  assert.match(html, /补打/);
+  // queued row has no action buttons
+  assert.match(html, /data-job-id="11111111-1111-4111-8111-111111111111"/);
+  const queuedSlice = html.slice(
+    html.indexOf('data-job-id="11111111-1111-4111-8111-111111111111"'),
+    html.indexOf('data-job-id="22222222-2222-4222-8222-222222222222"'),
   );
-  assert.equal(html, "");
+  assert.doesNotMatch(queuedSlice, /data-action=/);
+});
+
+test("PrintQueuePanel closed renders no queue panel (toast host may remain)", () => {
+  const html = renderPanel({ open: false });
+  assert.doesNotMatch(html, /data-testid="print-queue-panel"/);
+  assert.doesNotMatch(html, /打印队列/);
 });
 
 test("CounterShell with injected printSummary shows failed/queued counts on indicator", () => {
@@ -134,6 +170,7 @@ test("CounterShell wires print indicator open handler with mock query jobs", () 
         onSessionChange: () => undefined,
         initialConnection: createMockConnection({ storeName: "宏发演示店" }),
         queryClient,
+        commandClient: createMockCommandClient(),
         printSummary: { queued: 1, failed: 1 },
       }),
     ),
