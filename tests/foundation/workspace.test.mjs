@@ -586,9 +586,11 @@ test("declares v2 as the only active delivery line", async () => {
     /^  pull_request:\n(?:(?: {4,}.*|\s*)\n)*/mu,
   )?.[0];
   assert.ok(pullRequestBlock, "foundation workflow must define pull_request configuration");
+  const pullRequestPathsBlock = pullRequestBlock.match(/^    paths:\n(?:      - .*\n)+/mu)?.[0];
+  assert.ok(pullRequestPathsBlock, "foundation pull_request must define a paths list");
   for (const governancePathFilter of ['- "*.md"', '- ".hermes/plans/**"', '- "docs/**"']) {
     assert.ok(
-      pullRequestBlock.includes(governancePathFilter),
+      pullRequestPathsBlock.includes(governancePathFilter),
       `foundation pull_request paths must include ${governancePathFilter}`,
     );
   }
