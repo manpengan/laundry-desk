@@ -28,7 +28,7 @@ type GetInput = typeof CatalogItemsGetInputSchema;
 /** 价目列表：按关键字过滤（可选），整数分单价。 */
 export const catalogItemsListQuery: QueryDefinition<ListInput> = defineQuery({
   name: "catalog.items.list",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "List catalog price items with optional free-text filter.",
   description_llm:
     "Return store catalog rows (code, name, service, category, unit_price_cents, mnemonic). Integer cents only; never invent prices.",
@@ -47,7 +47,7 @@ export const catalogItemsListQuery: QueryDefinition<ListInput> = defineQuery({
 /** 按 code 取单条价目。 */
 export const catalogItemsGetQuery: QueryDefinition<GetInput> = defineQuery({
   name: "catalog.items.get",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Get one catalog item by stable code.",
   description_llm: "Lookup a single catalog item by code. Return empty when not found.",
   input: CatalogItemsGetInputSchema,

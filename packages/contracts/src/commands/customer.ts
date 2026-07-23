@@ -62,7 +62,7 @@ export type CustomerUpsertResult = Readonly<{
 /** 客户搜索：手机号前缀或姓名包含；PII 结果需脱敏声明。 */
 export const customerSearchQuery: QueryDefinition<SearchInput> = defineQuery({
   name: "customer.search",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Search org customer profiles by phone prefix or name contains.",
   description_llm:
     "Return org-scoped customer rows (customer_id, phone, name, note, updated_at). Match phone prefix or name substring. max 50 rows; default limit 20.",
@@ -81,7 +81,7 @@ export const customerSearchQuery: QueryDefinition<SearchInput> = defineQuery({
 /** 客户建档/更新：按 org+phone upsert；柜台可离线 grant。 */
 export const customerUpsertCommand: CommandDefinition<UpsertInput> = defineCommand({
   name: "customer.upsert",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Create or update an org customer profile by phone.",
   description_llm:
     "Upsert customer by org+phone. Optional name/note. Returns customer_id, phone, name, created flag. Integer timestamps only.",
