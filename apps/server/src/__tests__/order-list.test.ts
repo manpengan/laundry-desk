@@ -14,6 +14,7 @@ import { createDefaultChainHooks } from "../handlers/default-chain-hooks.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
+import type { OrderStore } from "../order/types.js";
 import {
   createMemoryAuditQueryStore,
   createMemoryFeaturesStore,
@@ -38,7 +39,7 @@ const CLERK: ActorContext = Object.freeze({
 const DAY_EPOCH = 1_721_606_400;
 const BUSINESS_DATE = "2024-07-22";
 
-function buildBus(orderStore = createMemoryOrderStore(), fixedNow = () => DAY_EPOCH) {
+function buildBus(orderStore: OrderStore = createMemoryOrderStore(), fixedNow = () => DAY_EPOCH) {
   const { registry, queryRegistry } = createRegisteredM1Bus({
     platform: Object.freeze({
       settings: createMemorySettingsStore(),
@@ -90,6 +91,67 @@ test("order.list returns empty array when no orders", async () => {
   if (!result.ok) return;
   const body = result.data.result as { orders: readonly ListRow[] };
   assert.deepEqual(body.orders, []);
+});
+
+test("order.list prefers the summary port and pushes all filters into the store", async () => {
+  let captured: readonly unknown[] | undefined;
+  const summaryStore = Object.freeze({
+    insertOrder: async () => undefined,
+    getOrder: async () => null,
+    listGarments: async () => {
+      throw new Error("legacy listGarments path must not run");
+    },
+    applyPickup: async () => null,
+    nextTicketSeq: async () => 1,
+    listOrders: async () => {
+      throw new Error("legacy listOrders path must not run");
+    },
+    listOrderSummaries: async (...args: readonly unknown[]) => {
+      captured = args;
+      return Object.freeze([
+        Object.freeze({
+          order_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          ticket_no: "20240722-0001",
+          status: "open" as const,
+          customer_phone: "13800000111",
+          customer_name: "甲",
+          payable_cents: 3000,
+          paid_cents: 500,
+          balance_cents: 2500,
+          created_at: DAY_EPOCH,
+          garment_count: 2,
+        }),
+      ]);
+    },
+  }) as unknown as OrderStore;
+  const { queryRegistry } = buildBus(summaryStore);
+
+  const result = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "order.list",
+    {
+      business_date: BUSINESS_DATE,
+      status: "open",
+      customer_phone: "13800000111",
+      min_balance_cents: 1,
+      limit: 7,
+    },
+    { registry: queryRegistry, actor: CLERK },
+  );
+
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.deepEqual(captured, [
+    DEMO_ORG_ID,
+    DEMO_STORE_ID,
+    Object.freeze({
+      businessDate: BUSINESS_DATE,
+      status: "open",
+      customerPhone: "13800000111",
+      minBalanceCents: 1,
+      limit: 7,
+    }),
+  ]);
 });
 
 test("receive two orders → order.list returns them newest first", async () => {

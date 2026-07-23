@@ -8,7 +8,7 @@ import { utcDateKeyFromEpoch } from "@laundry/domain";
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
 import type { OrderHandlerDeps } from "./deps.js";
-import type { OrderRecord, OrderStatus } from "./types.js";
+import type { OrderListSummaryOptions, OrderRecord, OrderStatus } from "./types.js";
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 50;
@@ -82,6 +82,22 @@ export function listHandler(deps: OrderHandlerDeps): CommandHandler {
         : undefined;
     const minBalanceCents = optionalMinBalanceCents(input.min_balance_cents);
     const limit = listLimit(input.limit);
+
+    if (deps.store.listOrderSummaries !== undefined) {
+      const options: OrderListSummaryOptions = Object.freeze({
+        ...(businessDate === undefined ? {} : { businessDate }),
+        ...(status === undefined ? {} : { status }),
+        ...(customerPhone === undefined ? {} : { customerPhone }),
+        ...(minBalanceCents === undefined ? {} : { minBalanceCents }),
+        limit,
+      });
+      const orders = await deps.store.listOrderSummaries(
+        ctx.tenant.orgId,
+        ctx.tenant.storeId,
+        options,
+      );
+      return Object.freeze({ result: Object.freeze({ orders: Object.freeze([...orders]) }) });
+    }
 
     if (deps.store.listOrders === undefined) {
       return Object.freeze({ result: Object.freeze({ orders: Object.freeze([]) }) });

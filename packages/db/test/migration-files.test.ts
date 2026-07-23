@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0013", () => {
+  it("ships formal SQL migrations ordered 0001 → 0014", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -25,6 +25,7 @@ describe("packages/db migration file inventory", () => {
       "0011_customers.sql",
       "0012_shift_closings.sql",
       "0013_garment_photos.sql",
+      "0014_order_list_summary_indexes.sql",
     ]);
   });
 
@@ -48,7 +49,16 @@ describe("packages/db migration file inventory", () => {
       "0011",
       "0012",
       "0013",
+      "0014",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
+  });
+
+  it("adds order.list indexes after the garment photos migration", () => {
+    const sql = readFileSync(join(migrationsDir, "0014_order_list_summary_indexes.sql"), "utf8");
+    expect(sql).toMatch(/ON orders \(org_id, store_id, created_at DESC, ticket_no DESC\)/iu);
+    expect(sql).toMatch(
+      /ON orders \(org_id, store_id, customer_phone, created_at DESC, ticket_no DESC\)/iu,
+    );
   });
 });

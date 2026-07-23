@@ -58,11 +58,21 @@ function mapRecord(row: ShiftClosingRow): ShiftClosingRecord {
   });
 }
 
-/** Postgres unique_violation (23505). */
-function isUniqueViolation(error: unknown): boolean {
+/** Postgres unique_violation for one close per store/business date. */
+function isBusinessDateConflict(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
-  const code = (error as { code?: unknown }).code;
-  return code === "23505";
+  const pgError = error as { code?: unknown; constraint?: unknown };
+  return pgError.code === "23505" && pgError.constraint === "shift_closings_store_date_uidx";
+}
+
+function assertConfiguredScope(
+  orgId: string,
+  storeId: string,
+  configured: CreatePgShiftStoreOptions,
+): void {
+  if (orgId !== configured.orgId || storeId !== configured.storeId) {
+    throw new Error("Shift store scope does not match configured org/store");
+  }
 }
 
 async function selectByBusinessDate(
@@ -128,7 +138,7 @@ async function insertClose(
     }
     return mapRecord(row);
   } catch (error) {
-    if (isUniqueViolation(error)) {
+    if (isBusinessDateConflict(error)) {
       throw new ShiftAlreadyClosedError(input.business_date);
     }
     throw error;
@@ -147,12 +157,20 @@ export function createPgShiftStore(pool: PgPool, options: CreatePgShiftStoreOpti
       queryOrgId: string,
       queryStoreId: string,
       businessDate: string,
-    ): Promise<ShiftClosingRecord | null> =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) =>
+    ): Promise<ShiftClosingRecord | null> => {
+      assertConfiguredScope(queryOrgId, queryStoreId, options);
+      return withStoreGuc(pool, { orgId, storeId }, async (client) =>
         selectByBusinessDate(client, queryOrgId, queryStoreId, businessDate),
-      ),
+      );
+    },
 
-    close: async (input: ShiftCloseInput): Promise<ShiftClosingRecord> =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) => insertClose(client, input, newId)),
+    close: async (input: ShiftCloseInput): Promise<ShiftClosingRecord> => {
+      assertConfiguredScope(input.org_id, input.store_id, options);
+      return withStoreGuc(
+        pool,
+        { orgId, storeId, staffId: input.closed_by_staff_id },
+        async (client) => insertClose(client, input, newId),
+      );
+    },
   });
 }

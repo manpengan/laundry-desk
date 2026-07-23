@@ -9,7 +9,9 @@ import { randomUUID } from "node:crypto";
 import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
 import { withStoreGuc } from "../db/tenant-guc-client.js";
 import {
+  asOrderStatus,
   buildLineIdByIndex,
+  dateToEpoch,
   epochToDate,
   mapGarment,
   mapOrder,
@@ -20,6 +22,8 @@ import {
 } from "./pg-order-mappers.js";
 import type {
   GarmentRecord,
+  OrderListSummary,
+  OrderListSummaryOptions,
   OrderRecord,
   OrderStore,
   PickupApplyOptions,
@@ -30,6 +34,84 @@ export type CreatePgOrderStoreOptions = Readonly<{
   /** Override UUID generation (tests). */
   newId?: () => string;
 }>;
+
+type OrderListSummaryRow = Readonly<{
+  order_id: string;
+  ticket_no: string;
+  status: string;
+  customer_phone: string | null;
+  customer_name: string | null;
+  payable_cents: number;
+  paid_cents: number;
+  balance_cents: number;
+  created_at: Date | string;
+  garment_count: number;
+}>;
+
+function utcBusinessDateBounds(
+  businessDate: string | undefined,
+): readonly [Date | null, Date | null] {
+  if (businessDate === undefined) return Object.freeze([null, null]);
+  const start = new Date(`${businessDate}T00:00:00.000Z`);
+  if (!Number.isFinite(start.getTime()) || start.toISOString().slice(0, 10) !== businessDate) {
+    throw new Error(`Invalid business date: ${businessDate}`);
+  }
+  return Object.freeze([start, new Date(start.getTime() + 86_400_000)]);
+}
+
+function mapOrderListSummary(row: OrderListSummaryRow): OrderListSummary {
+  return Object.freeze({
+    order_id: row.order_id,
+    ticket_no: row.ticket_no,
+    status: asOrderStatus(row.status),
+    customer_phone: row.customer_phone,
+    customer_name: row.customer_name,
+    payable_cents: row.payable_cents,
+    paid_cents: row.paid_cents,
+    balance_cents: row.balance_cents,
+    created_at: dateToEpoch(row.created_at),
+    garment_count: row.garment_count,
+  });
+}
+
+async function listOrderSummaries(
+  client: PgPoolClient,
+  orgId: string,
+  storeId: string,
+  options: OrderListSummaryOptions,
+): Promise<readonly OrderListSummary[]> {
+  const [dayStart, dayEnd] = utcBusinessDateBounds(options.businessDate);
+  const result = await client.query<OrderListSummaryRow>(
+    `SELECT o.id::text AS order_id, o.ticket_no, o.status,
+            o.customer_phone, o.customer_name,
+            o.payable_cents, o.paid_cents, o.balance_cents, o.created_at,
+            COUNT(g.id)::integer AS garment_count
+     FROM orders o
+     LEFT JOIN garments g
+       ON g.org_id = o.org_id AND g.store_id = o.store_id AND g.order_id = o.id
+     WHERE o.org_id = $1::uuid AND o.store_id = $2::uuid
+       AND ($3::text IS NULL OR o.status = $3)
+       AND ($4::text IS NULL OR o.customer_phone = $4)
+       AND ($5::timestamptz IS NULL OR o.created_at >= $5)
+       AND ($6::timestamptz IS NULL OR o.created_at < $6)
+       AND ($7::integer IS NULL OR o.balance_cents >= $7)
+     GROUP BY o.id, o.ticket_no, o.status, o.customer_phone, o.customer_name,
+              o.payable_cents, o.paid_cents, o.balance_cents, o.created_at
+     ORDER BY o.created_at DESC, o.ticket_no DESC
+     LIMIT $8`,
+    [
+      orgId,
+      storeId,
+      options.status ?? null,
+      options.customerPhone ?? null,
+      dayStart,
+      dayEnd,
+      options.minBalanceCents ?? null,
+      options.limit,
+    ],
+  );
+  return Object.freeze(result.rows.map(mapOrderListSummary));
+}
 
 async function insertOrderRows(
   client: PgPoolClient,
@@ -354,6 +436,11 @@ export function createPgOrderStore(
         }
         return Object.freeze(orders);
       }),
+
+    listOrderSummaries: async (orgId, storeId, options) =>
+      withStoreGuc(pool, { orgId, storeId }, async (client) =>
+        listOrderSummaries(client, orgId, storeId, options),
+      ),
 
     listGarments: async (orgId, storeId, orderId) =>
       withStoreGuc(pool, { orgId, storeId }, async (client) =>

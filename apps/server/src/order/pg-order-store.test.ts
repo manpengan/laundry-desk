@@ -427,6 +427,60 @@ test("applyPickup with collectCents 0 skips payments insert", async () => {
   );
 });
 
+test("listOrderSummaries uses one aggregate query and preserves every order.list filter", async () => {
+  const handler: MockQueryHandler = (sql) => {
+    if (sql.includes("COUNT(g.id)")) {
+      return {
+        rows: [
+          {
+            order_id: sampleOrder().order_id,
+            ticket_no: sampleOrder().ticket_no,
+            status: "open",
+            customer_phone: sampleOrder().customer_phone,
+            customer_name: "甲",
+            payable_cents: 3000,
+            paid_cents: 500,
+            balance_cents: 2500,
+            created_at: new Date("2024-07-22T12:34:56.000Z"),
+            garment_count: 2,
+          },
+        ],
+        rowCount: 1,
+      };
+    }
+    return { rows: [], rowCount: 0 };
+  };
+  const { pool, queries } = createCapturingPool(handler);
+  const store = createPgOrderStore(pool);
+  assert.ok(store.listOrderSummaries);
+
+  const summaries = await store.listOrderSummaries(DEMO_ORG_ID, DEMO_STORE_ID, {
+    businessDate: "2024-07-22",
+    status: "open",
+    customerPhone: "13800000111",
+    minBalanceCents: 1,
+    limit: 7,
+  });
+
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0]?.garment_count, 2);
+  assert.equal(summaries[0]?.created_at, Math.floor(Date.parse("2024-07-22T12:34:56.000Z") / 1000));
+  const summaryQueries = queries.filter((query) => query.sql.includes("COUNT(g.id)"));
+  assert.equal(summaryQueries.length, 1);
+  assert.match(summaryQueries[0]!.sql, /LEFT JOIN garments/u);
+  assert.match(summaryQueries[0]!.sql, /ORDER BY o\.created_at DESC, o\.ticket_no DESC/u);
+  assert.deepEqual(summaryQueries[0]!.params, [
+    DEMO_ORG_ID,
+    DEMO_STORE_ID,
+    "open",
+    "13800000111",
+    new Date("2024-07-22T00:00:00.000Z"),
+    new Date("2024-07-23T00:00:00.000Z"),
+    1,
+    7,
+  ]);
+});
+
 // Optional live PG smoke — tables may not exist until migration lands.
 const pgOptIn =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true";

@@ -64,6 +64,27 @@ export type OrderRecord = Readonly<{
   created_by_staff_id: string;
 }>;
 
+export type OrderListSummaryOptions = Readonly<{
+  businessDate?: string;
+  status?: OrderStatus;
+  customerPhone?: string;
+  minBalanceCents?: number;
+  limit: number;
+}>;
+
+export type OrderListSummary = Readonly<{
+  order_id: string;
+  ticket_no: string;
+  status: OrderStatus;
+  customer_phone: string | null;
+  customer_name: string | null;
+  payable_cents: number;
+  paid_cents: number;
+  balance_cents: number;
+  created_at: number;
+  garment_count: number;
+}>;
+
 export type PickupApplyResult = Readonly<{
   order: OrderRecord;
   garments: readonly GarmentRecord[];
@@ -92,6 +113,12 @@ export type OrderStore = Readonly<{
    * Optional so older test doubles stay valid; memory + PG implement it.
    */
   listOrders?: (orgId: string, storeId: string) => Promise<readonly OrderRecord[]>;
+  /** Optimized order.list read model; PG implements this as one aggregate query. */
+  listOrderSummaries?: (
+    orgId: string,
+    storeId: string,
+    options: OrderListSummaryOptions,
+  ) => Promise<readonly OrderListSummary[]>;
   /** Optional ledger read for tests / stats / future queries. */
   listPayments?: (
     orgId: string,
