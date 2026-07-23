@@ -136,6 +136,19 @@ test("getByBusinessDate rejects a scope different from the configured store", as
   assert.equal(queries.length, 0);
 });
 
+test("configured scope is captured when the caller later mutates its options object", async () => {
+  const { pool, queries } = createCapturingPool();
+  const options = { orgId: DEMO_ORG_ID, storeId: DEMO_STORE_ID };
+  const store = createPgShiftStore(pool, options);
+  options.orgId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+  const row = await store.getByBusinessDate(DEMO_ORG_ID, DEMO_STORE_ID, BUSINESS_DATE);
+
+  assert.equal(row, null);
+  const orgGuc = queries.find((query) => query.sql.includes("app.org_id"));
+  assert.deepEqual(orgGuc?.params, [DEMO_ORG_ID]);
+});
+
 test("close inserts shift_closings row and maps RETURNING", async () => {
   const { pool, queries } = createCapturingPool((sql) => {
     if (isControlSql(sql)) return { rows: [], rowCount: 0 };

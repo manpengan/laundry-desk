@@ -68,9 +68,10 @@ function isBusinessDateConflict(error: unknown): boolean {
 function assertConfiguredScope(
   orgId: string,
   storeId: string,
-  configured: CreatePgShiftStoreOptions,
+  configuredOrgId: string,
+  configuredStoreId: string,
 ): void {
-  if (orgId !== configured.orgId || storeId !== configured.storeId) {
+  if (orgId !== configuredOrgId || storeId !== configuredStoreId) {
     throw new Error("Shift store scope does not match configured org/store");
   }
 }
@@ -158,14 +159,14 @@ export function createPgShiftStore(pool: PgPool, options: CreatePgShiftStoreOpti
       queryStoreId: string,
       businessDate: string,
     ): Promise<ShiftClosingRecord | null> => {
-      assertConfiguredScope(queryOrgId, queryStoreId, options);
+      assertConfiguredScope(queryOrgId, queryStoreId, orgId, storeId);
       return withStoreGuc(pool, { orgId, storeId }, async (client) =>
         selectByBusinessDate(client, queryOrgId, queryStoreId, businessDate),
       );
     },
 
     close: async (input: ShiftCloseInput): Promise<ShiftClosingRecord> => {
-      assertConfiguredScope(input.org_id, input.store_id, options);
+      assertConfiguredScope(input.org_id, input.store_id, orgId, storeId);
       return withStoreGuc(
         pool,
         { orgId, storeId, staffId: input.closed_by_staff_id },
