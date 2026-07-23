@@ -52,13 +52,13 @@ pnpm --filter @laundry/edge-agent printer-smoke
 
 ## 4. 解读 JSON
 
-| 字段 | 含义 |
-| ---- | ---- |
-| `ok` | 探测是否成功 |
-| `path` | 规范化后的 path（如 `COM3` → `\\.\COM3`）；mock 时为 `null` |
-| `kind` | `mock` / `usb` / `missing` |
-| `message` | 人读说明；失败时含 access denied / path missing 提示 |
-| `bytes_written` | 成功写入的字节数（仅 `ok` + 真写路径） |
+| 字段            | 含义                                                        |
+| --------------- | ----------------------------------------------------------- |
+| `ok`            | 探测是否成功                                                |
+| `path`          | 规范化后的 path（如 `COM3` → `\\.\COM3`）；mock 时为 `null` |
+| `kind`          | `mock` / `usb` / `missing`                                  |
+| `message`       | 人读说明；失败时含 access denied / path missing 提示        |
+| `bytes_written` | 成功写入的字节数（仅 `ok` + 真写路径）                      |
 
 ### 示例
 
@@ -118,13 +118,13 @@ pnpm --filter @laundry/edge-agent printer-smoke
 
 ## 6. 常见失败
 
-| 现象 | 处理 |
-| ---- | ---- |
-| `kind=missing` / path missing | 设备管理器确认 COM/USB 号；线材 / 供电；换口后再设 env |
-| Access denied / EACCES / EPERM | 关闭占用软件；必要时管理员 PowerShell；换口 |
-| 超时 `USB write timed out` | 提高 `LAUNDRY_PRINTER_SMOKE_TIMEOUT_MS`；查卡死驱动 |
-| 仅 mock | 忘记 `$env:LAUNDRY_PRINTER_PATH`（新开会话需重设） |
-| 文件有字节但打印机无动作 | path 指到了 spool 文件而非 COM/USB；改回设备路径 |
+| 现象                           | 处理                                                   |
+| ------------------------------ | ------------------------------------------------------ |
+| `kind=missing` / path missing  | 设备管理器确认 COM/USB 号；线材 / 供电；换口后再设 env |
+| Access denied / EACCES / EPERM | 关闭占用软件；必要时管理员 PowerShell；换口            |
+| 超时 `USB write timed out`     | 提高 `LAUNDRY_PRINTER_SMOKE_TIMEOUT_MS`；查卡死驱动    |
+| 仅 mock                        | 忘记 `$env:LAUNDRY_PRINTER_PATH`（新开会话需重设）     |
+| 文件有字节但打印机无动作       | path 指到了 spool 文件而非 COM/USB；改回设备路径       |
 
 ## 7. NSIS / 安装包（后续）
 
