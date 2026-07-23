@@ -232,6 +232,8 @@ test("declares pnpm workspaces and Turborepo at the repository root", async () =
   assert.match(foundationWorkflow, /uses: actions\/setup-node@v7/);
   assert.match(foundationWorkflow, /uses: pnpm\/action-setup@v6/);
   assert.match(foundationWorkflow, /version: 11\.15\.0/);
+  assert.match(foundationWorkflow, /tools\/migrate-v1\/\*\*/);
+  assert.match(foundationWorkflow, /pnpm --filter @laundry\/migrate-v1 rebuild better-sqlite3/);
   assert.deepEqual(turboConfig.tasks.build.dependsOn, ["^build"]);
   assert.deepEqual(turboConfig.tasks.build.outputs, ["dist/**"]);
   assert.equal(turboConfig.tasks.dev.cache, false);

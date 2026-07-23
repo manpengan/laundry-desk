@@ -35,7 +35,7 @@
     "serve:lan": "LAUNDRY_HOST=0.0.0.0 npm run serve:only",
     "workspace:build": "turbo run build",
     "workspace:dev": "turbo run dev",
-    "workspace:format:check": "prettier --check apps packages tests/foundation .github/workflows/foundation.yml .prettierrc.cjs package.json pnpm-workspace.yaml turbo.json",
+    "workspace:format:check": "prettier --check apps packages tools/migrate-v1 tests/foundation .github/workflows/foundation.yml .prettierrc.cjs package.json pnpm-workspace.yaml turbo.json",
     "workspace:lint": "turbo run lint",
     "workspace:test": "node --test tests/foundation/workspace.test.mjs && turbo run test",
     "workspace:typecheck": "turbo run typecheck",
