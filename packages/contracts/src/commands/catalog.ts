@@ -8,6 +8,7 @@ import {
   M2_CUSTOMER_QUERY_NAMES,
 } from "./customer.js";
 import { ORDER_COMMANDS, ORDER_COMMAND_NAMES, ORDER_QUERIES, ORDER_QUERY_NAMES } from "./order.js";
+import { PAYMENT_COMMANDS, PAYMENT_COMMAND_NAMES } from "./payment.js";
 import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./platform.js";
 import {
   M2_PRINT_COMMAND_DEFINITIONS,
@@ -48,6 +49,7 @@ export const M1_FIRST_WAVE_QUERY_NAMES = Object.freeze(PLATFORM_QUERIES.map((que
  */
 export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] = Object.freeze([
   ...ORDER_COMMANDS,
+  ...PAYMENT_COMMANDS,
   ...M2_PRINT_COMMAND_DEFINITIONS,
   ...M2_CUSTOMER_COMMAND_DEFINITIONS,
   ...M2_SHIFT_COMMAND_DEFINITIONS,
@@ -55,12 +57,28 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
-  ...ORDER_COMMAND_NAMES,
-  ...M2_PRINT_COMMAND_NAMES,
   ...M2_CUSTOMER_COMMAND_NAMES,
+  ...ORDER_COMMAND_NAMES,
+  ...PAYMENT_COMMAND_NAMES,
+  ...M2_PRINT_COMMAND_NAMES,
   ...M2_SHIFT_COMMAND_NAMES,
   ...M3_PHOTO_COMMAND_NAMES,
-] as const);
+] as const) as readonly [
+  "customer.upsert",
+  "order.receive",
+  "order.hold",
+  "order.cancel",
+  "order.pickup",
+  "payment.collect",
+  "payment.repay",
+  "payment.refund",
+  "print.ticket.enqueue",
+  "print.ticket.process",
+  "print.ticket.retry",
+  "print.ticket.reprint",
+  "shift.close",
+  "photo.register",
+];
 
 /**
  * M2 order read queries (order.get + order.list for counter UX).
@@ -81,6 +99,43 @@ export const M2_CATALOG_DEFINITIONS: readonly QueryDefinition<z.ZodObject>[] = O
 ]);
 
 export const M2_CATALOG_QUERY_NAMES = CATALOG_SKELETON_QUERY_NAMES;
+
+/** Frozen v0.2 M2 contract surface consumed by server, Web and Edge. */
+export const M2_CONTRACT_COMMAND_NAMES = M2_SKELETON_COMMAND_NAMES;
+
+export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
+  ...CATALOG_SKELETON_QUERY_NAMES,
+  ...M2_CUSTOMER_QUERY_NAMES,
+  ...ORDER_QUERY_NAMES,
+  ...M2_PRINT_QUERY_NAMES,
+  ...M2_STATS_QUERY_NAMES,
+  ...M2_SHIFT_QUERY_NAMES,
+  ...M3_PHOTO_QUERY_NAMES,
+] as const);
+
+export const M2_CONTRACT_DEFINITIONS: readonly (
+  CommandDefinition<z.ZodObject> | QueryDefinition<z.ZodObject>
+)[] = Object.freeze([
+  ...M2_SKELETON_DEFINITIONS,
+  ...CATALOG_SKELETON_DEFINITIONS,
+  ...M2_CUSTOMER_QUERY_DEFINITIONS,
+  ...ORDER_QUERIES,
+  ...M2_PRINT_QUERY_DEFINITIONS,
+  ...M2_STATS_QUERY_DEFINITIONS,
+  ...M2_SHIFT_QUERY_DEFINITIONS,
+  ...M3_PHOTO_QUERY_DEFINITIONS,
+]);
+
+/** M2 AI presets are read-only: no command is exposed to the tool projection. */
+export const M2_READ_ONLY_AI_DEFINITIONS: readonly QueryDefinition<z.ZodObject>[] = Object.freeze([
+  ...CATALOG_SKELETON_DEFINITIONS,
+  ...M2_CUSTOMER_QUERY_DEFINITIONS,
+  ...ORDER_QUERIES,
+  ...M2_PRINT_QUERY_DEFINITIONS,
+  ...M2_STATS_QUERY_DEFINITIONS,
+  ...M2_SHIFT_QUERY_DEFINITIONS,
+  ...M3_PHOTO_QUERY_DEFINITIONS,
+]);
 
 /**
  * M2 print job status queries (print.jobs.list). Memory-first skeleton;

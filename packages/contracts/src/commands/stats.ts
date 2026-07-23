@@ -48,7 +48,7 @@ type DaySummaryInput = typeof StatsDaySummaryInputSchema;
 /** 日结汇总：按营业日聚合订单 / 衣物 / 收款（整数分）。 */
 export const statsDaySummaryQuery: QueryDefinition<DaySummaryInput> = defineQuery({
   name: "stats.day.summary",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Daily revenue summary for one business date (order and payment aggregates).",
   description_llm:
     "Return day-level counters and integer-fen sums for orders created on business_date (UTC). max 1 row.",

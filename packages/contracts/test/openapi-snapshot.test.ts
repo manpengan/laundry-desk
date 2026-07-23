@@ -36,7 +36,9 @@ describe("A7 OpenAPI 3.1 snapshot", () => {
     expect(document.info.version).toBe(OPENAPI_INFO_VERSION);
     expect(document.info.title.length).toBeGreaterThan(0);
     expect(JSON.stringify(document)).not.toMatch(/T\d{2}:\d{2}:\d{2}/);
-    expect(JSON.stringify(document)).not.toMatch(/generatedAt|timestamp|created_at/i);
+    // Contract fields such as order `created_at` are legitimate API names;
+    // reject only host-generated document metadata that would make snapshots drift.
+    expect(JSON.stringify(document.info)).not.toMatch(/generatedAt|timestamp/i);
   });
 
   it("projects AUTH_OPERATION_MATRIX paths and schema ids only", () => {

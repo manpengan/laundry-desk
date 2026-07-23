@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { CSRF_HEADER_NAME } from "../auth/csrf.js";
 import { AUTH_OPERATION_MATRIX, type AuthOperationDescriptor } from "../auth/operations.js";
-import { M1_FIRST_WAVE_DEFINITIONS } from "../commands/catalog.js";
+import { M1_FIRST_WAVE_DEFINITIONS, M2_CONTRACT_DEFINITIONS } from "../commands/catalog.js";
 import {
   CommandErrorSchema,
   CommandResponseSchema,
@@ -14,7 +14,7 @@ import type { CommandDefinition, QueryDefinition } from "../registry/definitions
 export const OPENAPI_VERSION = "3.1.0" as const;
 
 /** Contract package API surface version projected into info.version (no timestamps). */
-export const OPENAPI_INFO_VERSION = "0.1.0" as const;
+export const OPENAPI_INFO_VERSION = "0.2.0" as const;
 
 /** Path of the committed snapshot relative to packages/contracts. */
 export const OPENAPI_SNAPSHOT_RELATIVE_PATH = "openapi/laundry-v2.openapi.json" as const;
@@ -313,7 +313,7 @@ const collectPathsAndSchemas = (): {
     paths[row.path] = Object.freeze({ post: buildAuthOperation(row) });
   }
 
-  for (const definition of M1_FIRST_WAVE_DEFINITIONS) {
+  for (const definition of [...M1_FIRST_WAVE_DEFINITIONS, ...M2_CONTRACT_DEFINITIONS]) {
     const schemaId = definitionInputSchemaId(definition.kind, definition.name);
     schemas[schemaId] = zodToOpenApiSchema(definition.input);
     const path = busPathFor(definition.kind, definition.name);
@@ -329,7 +329,7 @@ const sortRecord = <T>(record: Readonly<Record<string, T>>): Readonly<Record<str
 };
 
 /**
- * Build the Laundry Desk v2 OpenAPI 3.1 document from A6 definitions + A5 auth matrix.
+ * Build the Laundry Desk v2 OpenAPI 3.1 document from frozen M1/M2 definitions + A5 auth matrix.
  * Deterministic: sorted paths/component keys; no timestamps or host-local data.
  */
 export const buildLaundryOpenApiDocument = (): OpenApiDocument => {
@@ -340,9 +340,9 @@ export const buildLaundryOpenApiDocument = (): OpenApiDocument => {
       title: "Laundry Desk v2 API",
       version: OPENAPI_INFO_VERSION,
       description: [
-        "Contract-first OpenAPI 3.1 projection for M1.",
+        "Contract-first OpenAPI 3.1 projection for frozen M1 and M2 counter contracts.",
         "Auth paths come solely from AUTH_OPERATION_MATRIX.",
-        "Bus commands/queries come from M1_FIRST_WAVE_DEFINITIONS.",
+        "Bus commands/queries come from M1_FIRST_WAVE_DEFINITIONS and M2_CONTRACT_DEFINITIONS.",
         "Errors use the A2 CommandResponse / CommandFailureResponse envelope.",
       ].join(" "),
     }),

@@ -58,7 +58,7 @@ type GetInput = typeof ShiftGetInputSchema;
 /** 交班日结：快照当日 stats 并写入签字记录；同日仅一次。 */
 export const shiftCloseCommand: CommandDefinition<CloseInput> = defineCommand({
   name: "shift.close",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Close a store business day with signature name and day-summary snapshot.",
   description_llm:
     "Append-only shift close for one business_date. Snapshots order_count and integer-fen totals. Rejects second close same day. signature_name is display text only.",
@@ -78,7 +78,7 @@ export const shiftCloseCommand: CommandDefinition<CloseInput> = defineCommand({
 /** 查询某营业日是否已交班；无记录时 result 为 null。 */
 export const shiftGetQuery: QueryDefinition<GetInput> = defineQuery({
   name: "shift.get",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Load shift closing record for one business date, or null if not closed.",
   description_llm:
     "Return shift row for business_date (shift_id, closed_at, fen totals, signature_name) or null. max 1 row.",

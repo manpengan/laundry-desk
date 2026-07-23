@@ -343,6 +343,9 @@ export {
   M1_FIRST_WAVE_QUERY_NAMES,
   M2_CATALOG_DEFINITIONS,
   M2_CATALOG_QUERY_NAMES,
+  M2_CONTRACT_COMMAND_NAMES,
+  M2_CONTRACT_DEFINITIONS,
+  M2_CONTRACT_QUERY_NAMES,
   M2_CUSTOMER_COMMAND_DEFINITIONS,
   M2_CUSTOMER_COMMAND_NAMES,
   M2_CUSTOMER_QUERY_DEFINITIONS,
@@ -359,6 +362,7 @@ export {
   M2_SHIFT_QUERY_NAMES,
   M2_SKELETON_COMMAND_NAMES,
   M2_SKELETON_DEFINITIONS,
+  M2_READ_ONLY_AI_DEFINITIONS,
   M2_STATS_QUERY_DEFINITIONS,
   M2_STATS_QUERY_NAMES,
   M3_PHOTO_COMMAND_DEFINITIONS,
@@ -390,6 +394,17 @@ export {
   orderPickupCommand,
   orderReceiveCommand,
 } from "./commands/order.js";
+export {
+  PAYMENT_COMMAND_NAMES,
+  PAYMENT_COMMANDS,
+  PaymentCollectInputSchema,
+  PaymentMethodSchema,
+  PaymentRepayInputSchema,
+  PaymentRefundInputSchema,
+  paymentCollectCommand,
+  paymentRepayCommand,
+  paymentRefundCommand,
+} from "./commands/payment.js";
 export type { OrderListResult, OrderListRow } from "./commands/order.js";
 export {
   PRINT_COMMAND_NAMES,

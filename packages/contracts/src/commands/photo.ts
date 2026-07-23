@@ -67,7 +67,7 @@ type ListInput = typeof PhotoListByOrderInputSchema;
 /** 登记衣物照片元数据：仅 storage_key，不传 blob。 */
 export const photoRegisterCommand: CommandDefinition<RegisterInput> = defineCommand({
   name: "photo.register",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Register garment photo metadata (opaque storage_key; no blob upload).",
   description_llm:
     "Append photo metadata for a garment on an order. kind in receive|defect|ready|other. byte_size positive integer. storage_key opaque path/key. Returns photo_id and row fields. Integer timestamps only.",
@@ -85,7 +85,7 @@ export const photoRegisterCommand: CommandDefinition<RegisterInput> = defineComm
 /** 按订单列出衣物照片元数据（无 blob）。 */
 export const photoListByOrderQuery: QueryDefinition<ListInput> = defineQuery({
   name: "photo.list_by_order",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "List garment photo metadata rows for one order (no blobs).",
   description_llm:
     "Return photos for order_id (photo_id, garment_id, kind, storage_key, content_type, byte_size, taken_at). max 100 rows. Metadata only.",

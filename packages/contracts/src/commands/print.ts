@@ -52,7 +52,7 @@ type ListInput = typeof PrintJobsListInputSchema;
 /** 排队打印小票：绑定 order_id / ticket_no，返回 job_id（status=queued）。 */
 export const printTicketEnqueueCommand: CommandDefinition<EnqueueInput> = defineCommand({
   name: "print.ticket.enqueue",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Enqueue a ticket print job bound to an order and ticket number.",
   description_llm:
     "Queue a counter ticket print job (kind xp58|dl206|gp3120). Returns job_id with status queued. No device I/O.",
@@ -73,7 +73,7 @@ export const printTicketEnqueueCommand: CommandDefinition<EnqueueInput> = define
  */
 export const printTicketProcessCommand: CommandDefinition<ProcessInput> = defineCommand({
   name: "print.ticket.process",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Process a queued XP-58 print job: build ESC/POS bytes and mark done or failed.",
   description_llm:
     "Load print job by job_id. kind must be xp58. Transition queued→printing, build ESC/POS payload, set payload_bytes and status done. On error mark failed with error text. No USB/device I/O.",
@@ -95,7 +95,7 @@ export const printTicketProcessCommand: CommandDefinition<ProcessInput> = define
  */
 export const printTicketRetryCommand: CommandDefinition<RetryInput> = defineCommand({
   name: "print.ticket.retry",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Retry a failed print job by enqueueing a new job with the same order/ticket/kind.",
   description_llm:
     "Load print job by job_id. Source status must be failed. Enqueue a NEW print_jobs row with same order_id, ticket_no, kind. Do not mutate the failed row. Returns new job (may auto-process xp58 to done). No device I/O paths stored.",
@@ -117,7 +117,7 @@ export const printTicketRetryCommand: CommandDefinition<RetryInput> = defineComm
  */
 export const printTicketReprintCommand: CommandDefinition<ReprintInput> = defineCommand({
   name: "print.ticket.reprint",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Reprint a done print job by enqueueing a new job with the same order/ticket/kind.",
   description_llm:
     "Load print job by job_id. Source status must be done. Enqueue a NEW print_jobs row with same order_id, ticket_no, kind. Do not mutate the done row. Returns new job (may auto-process xp58 to done). No device I/O paths stored.",
@@ -136,7 +136,7 @@ export const printTicketReprintCommand: CommandDefinition<ReprintInput> = define
 /** 打印任务状态列表：最近 N 条（可含 payload_bytes，无设备路径）。 */
 export const printJobsListQuery: QueryDefinition<ListInput> = defineQuery({
   name: "print.jobs.list",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "List recent print job status views (no device paths).",
   description_llm:
     "Return newest-first print job status rows (job_id, kind, status, order_id, ticket_no, timestamps, optional error/payload_bytes).",
