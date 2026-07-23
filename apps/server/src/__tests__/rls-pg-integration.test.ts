@@ -241,8 +241,10 @@ test(
       for (const statement of [
         "UPDATE payments SET note = 'forbidden' WHERE false",
         "DELETE FROM payments WHERE false",
+        "TRUNCATE TABLE payments",
         "UPDATE audit_log SET entity = 'forbidden' WHERE false",
         "DELETE FROM audit_log WHERE false",
+        "TRUNCATE TABLE audit_log",
       ]) {
         await assert.rejects(
           () =>

@@ -5,8 +5,8 @@
 -- 2) Bind photo metadata to the exact garment and order tenant tuple; this
 --    prevents cross-order/cross-tenant attachment through opaque UUIDs.
 
-REVOKE UPDATE, DELETE ON TABLE audit_log FROM laundry_app;
-REVOKE UPDATE, DELETE ON TABLE payments FROM laundry_app;
+REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_log FROM laundry_app;
+REVOKE UPDATE, DELETE, TRUNCATE ON TABLE payments FROM laundry_app;
 GRANT SELECT, INSERT ON TABLE audit_log TO laundry_app;
 GRANT SELECT, INSERT ON TABLE payments TO laundry_app;
 

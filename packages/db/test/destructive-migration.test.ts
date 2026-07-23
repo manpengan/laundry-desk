@@ -25,6 +25,12 @@ describe("destructive migration static reject", () => {
   it("flags DROP TABLE / TRUNCATE / DROP COLUMN snippets", () => {
     expect(findDestructiveSql("x.sql", "DROP TABLE orgs;")).toHaveLength(1);
     expect(findDestructiveSql("x.sql", "TRUNCATE audit_log;")).toHaveLength(1);
+    expect(
+      findDestructiveSql(
+        "x.sql",
+        "REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_log FROM laundry_app;",
+      ),
+    ).toHaveLength(0);
     expect(findDestructiveSql("x.sql", "ALTER TABLE t DROP COLUMN c;")).toHaveLength(1);
     expect(isExpandFriendlyMigration("CREATE TABLE t (id uuid PRIMARY KEY);")).toBe(true);
   });
@@ -106,8 +112,12 @@ describe("destructive migration static reject", () => {
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*audit_log/iu);
     expect(combined).not.toMatch(/GRANT[^;]*UPDATE[^;]*payments/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*payments/iu);
-    expect(combined).toMatch(/REVOKE UPDATE, DELETE ON TABLE audit_log FROM laundry_app/iu);
-    expect(combined).toMatch(/REVOKE UPDATE, DELETE ON TABLE payments FROM laundry_app/iu);
+    expect(combined).toMatch(
+      /REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_log FROM laundry_app/iu,
+    );
+    expect(combined).toMatch(
+      /REVOKE UPDATE, DELETE, TRUNCATE ON TABLE payments FROM laundry_app/iu,
+    );
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*print_jobs/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*customers/iu);
     expect(combined).not.toMatch(/dialect\s*[:=]\s*['"]sqlite['"]/iu);

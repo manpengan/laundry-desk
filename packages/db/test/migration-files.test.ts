@@ -69,8 +69,8 @@ describe("packages/db migration file inventory", () => {
       join(migrationsDir, "0015_m2_counter_production_hardening.sql"),
       "utf8",
     );
-    expect(sql).toMatch(/REVOKE UPDATE, DELETE ON TABLE audit_log FROM laundry_app/iu);
-    expect(sql).toMatch(/REVOKE UPDATE, DELETE ON TABLE payments FROM laundry_app/iu);
+    expect(sql).toMatch(/REVOKE UPDATE, DELETE, TRUNCATE ON TABLE audit_log FROM laundry_app/iu);
+    expect(sql).toMatch(/REVOKE UPDATE, DELETE, TRUNCATE ON TABLE payments FROM laundry_app/iu);
     expect(sql).toMatch(/garment_photos_garment_order_fk/iu);
     expect(sql).toMatch(/FOREIGN KEY \(org_id, store_id, order_id, garment_id\)/iu);
   });
