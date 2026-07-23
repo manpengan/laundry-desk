@@ -181,6 +181,7 @@ export function CounterShell({
         open={printQueueOpen}
         onClose={() => setPrintQueueOpen(false)}
         queryClient={queryClient}
+        commandClient={commandClient}
       />
     </div>
   );

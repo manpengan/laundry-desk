@@ -22,6 +22,8 @@ export const IPC_CHANNELS = {
   connection: "edge:connection",
   /** D4 print:enqueue — status only (no device paths / raw bytes). */
   printEnqueue: "edge:print-enqueue",
+  /** M2 print:process — run job via mock/USB port; status + receipt fields only. */
+  printProcess: "edge:print-process",
   /** D4 print:list — status only. */
   printList: "edge:print-list",
   /** D2: issue 60s single-use pairing code + ensure device pubkey (never private key). */

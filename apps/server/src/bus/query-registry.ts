@@ -8,6 +8,7 @@
 import {
   M1_FIRST_WAVE_DEFINITIONS,
   M2_CATALOG_DEFINITIONS,
+  M2_CUSTOMER_QUERY_DEFINITIONS,
   M2_ORDER_QUERY_DEFINITIONS,
   M2_PRINT_QUERY_DEFINITIONS,
   M2_STATS_QUERY_DEFINITIONS,
@@ -38,18 +39,19 @@ type AnyDefinition = { kind: string; name: string };
 
 const isQueryDefinition = (def: AnyDefinition): def is BusQueryDefinition => def.kind === "query";
 
-/** M1 platform queries + M2 catalog + order.get + print.jobs.list + stats.day.summary. */
+/** M1 platform queries + M2 catalog + order + print + stats + customer.search. */
 export const DEFAULT_BUS_QUERY_DEFINITIONS: readonly AnyDefinition[] = Object.freeze([
   ...(M1_FIRST_WAVE_DEFINITIONS as readonly AnyDefinition[]),
   ...(M2_CATALOG_DEFINITIONS as readonly AnyDefinition[]),
   ...(M2_ORDER_QUERY_DEFINITIONS as readonly AnyDefinition[]),
   ...(M2_PRINT_QUERY_DEFINITIONS as readonly AnyDefinition[]),
   ...(M2_STATS_QUERY_DEFINITIONS as readonly AnyDefinition[]),
+  ...(M2_CUSTOMER_QUERY_DEFINITIONS as readonly AnyDefinition[]),
 ]);
 
 /**
  * Load frozen query definitions into a mutable handler map.
- * Default: M1 first-wave queries + M2 catalog + order.get + print.jobs.list + stats.
+ * Default: M1 first-wave queries + M2 catalog/order/print/stats/customer.
  * Commands excluded.
  */
 export function createM1QueryRegistry(

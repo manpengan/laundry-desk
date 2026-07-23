@@ -1,5 +1,5 @@
 /**
- * Print job executor (D4) — render → ESC/POS → mock spool write.
+ * Print job executor (D4/M2) — render → ESC/POS → UsbPrintPort.write.
  * Never blocks forever; failures set error text and yield failed receipt.
  */
 import type { ExecutionReceiptPayload } from "@laundry/contracts";
@@ -19,6 +19,7 @@ import {
   type RenderedTicket,
   type TicketTemplateInput,
 } from "./template-render.js";
+import { createMockUsbPort, type UsbPrintPort } from "./usb-port.js";
 
 export type ExecuteJobResult = Readonly<{
   store: PrintJobStore;
@@ -35,11 +36,13 @@ export type ExecuteJobOptions = Readonly<{
   /** Inject failure for tests / fault drills (never blocks). */
   forceError?: string;
   /**
-   * Soft deadline for the mock write path. Exceeding it fails the job.
+   * Soft deadline for the write path. Exceeding it fails the job.
    * Default 5s — real USB adapters must honor the same bound.
    */
   timeoutMs?: number;
   at?: Date;
+  /** USB/mock port; defaults to createMockUsbPort(). */
+  usbPort?: UsbPrintPort;
 }>;
 
 /** Minimal default ticket for enqueue-only XP-58 smoke (no real PII). */
@@ -74,21 +77,74 @@ function kindSupported(kind: PrintJobKind): boolean {
   return kind === "xp58";
 }
 
+function finishOk(
+  store: PrintJobStore,
+  spool: MockSpool,
+  jobId: string,
+  mockJobId: string | undefined,
+  payload: Uint8Array<ArrayBufferLike>,
+  rendered: RenderedTicket | undefined,
+  now: number,
+  at: Date,
+): ExecuteJobResult {
+  const next = transitionPrintJob(store, jobId, "done", { now: now + 1 });
+  const nextSpool = mirrorMockStatus(spool, mockJobId, "done", undefined, now + 1);
+  const job = getPrintJob(next, jobId);
+  if (!job) throw new Error("job missing after done transition");
+  return Object.freeze({
+    store: next,
+    spool: nextSpool,
+    job,
+    bytes: payload,
+    rendered,
+    receiptPayload: buildExecutionReceiptPayload(job, at),
+  });
+}
+
+function finishFailed(
+  store: PrintJobStore,
+  spool: MockSpool,
+  jobId: string,
+  mockJobId: string | undefined,
+  payload: Uint8Array<ArrayBufferLike>,
+  rendered: RenderedTicket | undefined,
+  message: string,
+  now: number,
+  at: Date,
+): ExecuteJobResult {
+  const next = transitionPrintJob(store, jobId, "failed", {
+    error: message,
+    now: now + 1,
+  });
+  const nextSpool = mirrorMockStatus(spool, mockJobId, "failed", message, now + 1);
+  const job = getPrintJob(next, jobId);
+  if (!job) throw new Error("job missing after failed transition");
+  return Object.freeze({
+    store: next,
+    spool: nextSpool,
+    job,
+    bytes: payload,
+    rendered,
+    receiptPayload: buildExecutionReceiptPayload(job, at),
+  });
+}
+
 /**
- * Execute one queued print job via mock spool (no real USB).
- * State: queued → printing → done | failed. Always returns (never hangs).
+ * Execute one queued print job: render → ESC/POS → usbPort.write.
+ * State: queued → printing → done | failed. Always settles (never hangs).
  */
-export function executeJob(
+export async function executeJob(
   store: PrintJobStore,
   spool: MockSpool,
   jobId: string,
   ticket: TicketTemplateInput = DEFAULT_SAMPLE_TICKET,
   options: ExecuteJobOptions = {},
   mockJobId?: string,
-): ExecuteJobResult {
+): Promise<ExecuteJobResult> {
   const now = options.now ?? Date.now();
   const at = options.at ?? new Date(now);
   const timeoutMs = options.timeoutMs ?? 5_000;
+  const usbPort = options.usbPort ?? createMockUsbPort();
 
   const queued = getPrintJob(store, jobId);
   if (!queued) {
@@ -98,12 +154,11 @@ export function executeJob(
     throw new Error(`executeJob requires queued status, got ${queued.status}`);
   }
 
-  let next = transitionPrintJob(store, jobId, "printing", { now });
-  let nextSpool = mirrorMockStatus(spool, mockJobId, "printing", undefined, now);
+  const next = transitionPrintJob(store, jobId, "printing", { now });
+  const nextSpool = mirrorMockStatus(spool, mockJobId, "printing", undefined, now);
 
   let rendered: RenderedTicket | undefined;
   let payload: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
-  const started = Date.now();
 
   try {
     if (options.forceError) {
@@ -114,42 +169,16 @@ export function executeJob(
     }
 
     rendered = renderTicketTemplate(ticket);
-    const built = buildXp58EscPos(rendered);
-    payload = built;
-
-    // Mock write is sync; soft deadline keeps adapters from hanging forever.
-    if (Date.now() - started > timeoutMs) {
-      throw new Error(`print timed out after ${timeoutMs}ms`);
-    }
+    payload = buildXp58EscPos(rendered);
     if (payload.byteLength === 0) {
       throw new Error("empty ESC/POS payload");
     }
 
-    next = transitionPrintJob(next, jobId, "done", { now: now + 1 });
-    nextSpool = mirrorMockStatus(nextSpool, mockJobId, "done", undefined, now + 1);
-    const job = getPrintJob(next, jobId);
-    if (!job) throw new Error("job missing after done transition");
-    return Object.freeze({
-      store: next,
-      spool: nextSpool,
-      job,
-      bytes: payload,
-      rendered,
-      receiptPayload: buildExecutionReceiptPayload(job, at),
-    });
+    await usbPort.write(payload, { timeoutMs });
+
+    return finishOk(next, nextSpool, jobId, mockJobId, payload, rendered, now, at);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    next = transitionPrintJob(next, jobId, "failed", { error: message, now: now + 1 });
-    nextSpool = mirrorMockStatus(nextSpool, mockJobId, "failed", message, now + 1);
-    const job = getPrintJob(next, jobId);
-    if (!job) throw new Error("job missing after failed transition");
-    return Object.freeze({
-      store: next,
-      spool: nextSpool,
-      job,
-      bytes: payload,
-      rendered,
-      receiptPayload: buildExecutionReceiptPayload(job, at),
-    });
+    return finishFailed(next, nextSpool, jobId, mockJobId, payload, rendered, message, now, at);
   }
 }

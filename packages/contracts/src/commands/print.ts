@@ -1,7 +1,8 @@
 /**
- * M2 print ticket job queue (enqueue + process + status list).
+ * M2 print ticket job queue (enqueue + process + retry/reprint + status list).
  * Memory default; PG print_jobs when runtime is pg. Not in OpenAPI freeze snapshot.
- * Status flow: queued → printing → done | failed.
+ * Status flow: queued → printing → done | failed (terminal).
+ * Retry/reprint create a **new** print_jobs row (do not resurrect terminal jobs).
  * process builds XP-58 ESC/POS bytes in-process (no USB / device I/O).
  */
 
@@ -28,6 +29,15 @@ export const PrintTicketProcessInputSchema = z.strictObject({
   job_id: z.uuid(),
 });
 
+/** Shared job_id input for retry / reprint (same shape as process). */
+export const PrintTicketRetryInputSchema = z.strictObject({
+  job_id: z.uuid(),
+});
+
+export const PrintTicketReprintInputSchema = z.strictObject({
+  job_id: z.uuid(),
+});
+
 export const PrintJobsListInputSchema = z.strictObject({
   /** Newest-first row cap (max 50). Omit for handler default 20. */
   limit: z.number().int().positive().max(50).optional(),
@@ -35,6 +45,8 @@ export const PrintJobsListInputSchema = z.strictObject({
 
 type EnqueueInput = typeof PrintTicketEnqueueInputSchema;
 type ProcessInput = typeof PrintTicketProcessInputSchema;
+type RetryInput = typeof PrintTicketRetryInputSchema;
+type ReprintInput = typeof PrintTicketReprintInputSchema;
 type ListInput = typeof PrintJobsListInputSchema;
 
 /** 排队打印小票：绑定 order_id / ticket_no，返回 job_id（status=queued）。 */
@@ -77,6 +89,50 @@ export const printTicketProcessCommand: CommandDefinition<ProcessInput> = define
   result_redaction: [],
 });
 
+/**
+ * 失败任务重试：source 必须 status=failed；新建 print_jobs 行（同 order_id/ticket_no/kind）。
+ * 不复活原 terminal 行。服务端可对 xp58 自动 process。
+ */
+export const printTicketRetryCommand: CommandDefinition<RetryInput> = defineCommand({
+  name: "print.ticket.retry",
+  version: "0.1.0",
+  description: "Retry a failed print job by enqueueing a new job with the same order/ticket/kind.",
+  description_llm:
+    "Load print job by job_id. Source status must be failed. Enqueue a NEW print_jobs row with same order_id, ticket_no, kind. Do not mutate the failed row. Returns new job (may auto-process xp58 to done). No device I/O paths stored.",
+  input: PrintTicketRetryInputSchema,
+  risk: "R1",
+  invariants: ["rbac.order_write"],
+  // offline grant requires idempotent floor (same as enqueue; bus may still allocate a new job_id).
+  idempotent: true,
+  sideEffects: ["print.job_queued", "print.job_processed", "audit.print_job"],
+  offline_mode: "grant",
+  data_classification: "internal",
+  input_redaction: [],
+  result_redaction: [],
+});
+
+/**
+ * 已完成任务补打：source 必须 status=done；新建 print_jobs 行（同 order_id/ticket_no/kind）。
+ * 不复活原 terminal 行。服务端可对 xp58 自动 process。
+ */
+export const printTicketReprintCommand: CommandDefinition<ReprintInput> = defineCommand({
+  name: "print.ticket.reprint",
+  version: "0.1.0",
+  description: "Reprint a done print job by enqueueing a new job with the same order/ticket/kind.",
+  description_llm:
+    "Load print job by job_id. Source status must be done. Enqueue a NEW print_jobs row with same order_id, ticket_no, kind. Do not mutate the done row. Returns new job (may auto-process xp58 to done). No device I/O paths stored.",
+  input: PrintTicketReprintInputSchema,
+  risk: "R1",
+  invariants: ["rbac.order_write"],
+  // offline grant requires idempotent floor (same as enqueue; bus may still allocate a new job_id).
+  idempotent: true,
+  sideEffects: ["print.job_queued", "print.job_processed", "audit.print_job"],
+  offline_mode: "grant",
+  data_classification: "internal",
+  input_redaction: [],
+  result_redaction: [],
+});
+
 /** 打印任务状态列表：最近 N 条（可含 payload_bytes，无设备路径）。 */
 export const printJobsListQuery: QueryDefinition<ListInput> = defineQuery({
   name: "print.jobs.list",
@@ -99,11 +155,18 @@ export const printJobsListQuery: QueryDefinition<ListInput> = defineQuery({
 export const PRINT_COMMANDS = Object.freeze([
   printTicketEnqueueCommand,
   printTicketProcessCommand,
+  printTicketRetryCommand,
+  printTicketReprintCommand,
 ] as const);
 
 export const PRINT_COMMAND_NAMES = Object.freeze(
   PRINT_COMMANDS.map((command) => command.name),
-) as readonly ["print.ticket.enqueue", "print.ticket.process"];
+) as readonly [
+  "print.ticket.enqueue",
+  "print.ticket.process",
+  "print.ticket.retry",
+  "print.ticket.reprint",
+];
 
 export const PRINT_QUERIES = Object.freeze([printJobsListQuery] as const);
 
