@@ -70,6 +70,9 @@ const sampleOrder = (): OrderRecord =>
     customer_phone: "13800000111",
     customer_name: null,
     note: null,
+    hold_reason: null,
+    held_at: null,
+    held_by_staff_id: null,
     lines: Object.freeze([
       Object.freeze({
         line_index: 0,
@@ -315,7 +318,7 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
     garments.map((g) => g.garment_id),
     2500,
     1_700_000_100,
-    Object.freeze({ staffId: DEMO_STAFF_A_ID, method: "cash" as const }),
+    Object.freeze({ staffId: DEMO_STAFF_A_ID }),
   );
   assert.ok(applied);
   assert.equal(applied.order.paid_cents, 3000);
@@ -328,12 +331,11 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
 
   assert.ok(queries.some((q) => q.sql.includes("UPDATE garments") && q.sql.includes("picked_up")));
   assert.ok(queries.some((q) => q.sql.includes("UPDATE orders")));
-  const paymentInsert = queries.find((q) => q.sql.includes("INTO payments"));
-  assert.ok(paymentInsert, "expected INSERT INTO payments when collectCents > 0");
-  assert.equal(paymentInsert.params?.[4], "cash");
-  assert.equal(paymentInsert.params?.[5], 2500);
-  assert.equal(paymentInsert.params?.[6], "pay");
-  assert.equal(paymentInsert.params?.[8], DEMO_STAFF_A_ID);
+  assert.equal(
+    queries.some((query) => query.sql.includes("INTO payments")),
+    false,
+    "payment insertion belongs to the shared payment repository in the Bus transaction",
+  );
 });
 
 test("applyPickup with collectCents 0 skips payments insert", async () => {

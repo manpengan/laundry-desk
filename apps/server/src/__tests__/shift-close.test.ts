@@ -14,6 +14,7 @@ import { createDefaultChainHooks } from "../handlers/default-chain-hooks.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
+import { createMemoryPaymentStore } from "../payment/memory-store.js";
 import {
   createMemoryAuditQueryStore,
   createMemoryFeaturesStore,
@@ -42,7 +43,8 @@ const BUSINESS_DATE = "2024-07-22";
 
 function buildBus(fixedNow = () => DAY_EPOCH) {
   const orderStore = createMemoryOrderStore();
-  const statsSource = createOrderBackedStatsQuery(orderStore);
+  const paymentStore = createMemoryPaymentStore();
+  const statsSource = createOrderBackedStatsQuery(orderStore, paymentStore);
   const shiftStore = createMemoryShiftStore();
   const { registry, queryRegistry } = createRegisteredM1Bus({
     platform: Object.freeze({
@@ -50,7 +52,7 @@ function buildBus(fixedNow = () => DAY_EPOCH) {
       features: createMemoryFeaturesStore(),
       audit: createMemoryAuditQueryStore(),
     }),
-    order: Object.freeze({ store: orderStore, now: fixedNow }),
+    order: Object.freeze({ store: orderStore, payments: paymentStore, now: fixedNow }),
     stats: Object.freeze({ source: statsSource }),
     shift: Object.freeze({ store: shiftStore, stats: statsSource, now: fixedNow }),
   });
@@ -188,7 +190,7 @@ test("shift.close snapshots day stats and shift.get returns the row", async () =
   assert.equal(body.order_count, 1);
   assert.equal(body.payable_cents, 3000);
   assert.equal(body.paid_cents, 500);
-  assert.equal(body.payment_cents, 0);
+  assert.equal(body.payment_cents, 500);
   assert.equal(body.signature_name, "店员甲");
   assert.ok(typeof body.shift_id === "string" && body.shift_id.length > 0);
 

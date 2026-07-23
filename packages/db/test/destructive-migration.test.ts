@@ -60,6 +60,7 @@ describe("destructive migration static reject", () => {
       "0013_garment_photos.sql",
       "0014_order_list_summary_indexes.sql",
       "0015_m2_counter_production_hardening.sql",
+      "0016_order_hold_lifecycle.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

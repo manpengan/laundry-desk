@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0015", () => {
+  it("ships formal SQL migrations ordered 0001 → 0016", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -27,6 +27,7 @@ describe("packages/db migration file inventory", () => {
       "0013_garment_photos.sql",
       "0014_order_list_summary_indexes.sql",
       "0015_m2_counter_production_hardening.sql",
+      "0016_order_hold_lifecycle.sql",
     ]);
   });
 
@@ -52,6 +53,7 @@ describe("packages/db migration file inventory", () => {
       "0013",
       "0014",
       "0015",
+      "0016",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -73,5 +75,12 @@ describe("packages/db migration file inventory", () => {
     expect(sql).toMatch(/REVOKE UPDATE, DELETE, TRUNCATE ON TABLE payments FROM laundry_app/iu);
     expect(sql).toMatch(/garment_photos_garment_order_fk/iu);
     expect(sql).toMatch(/FOREIGN KEY \(org_id, store_id, order_id, garment_id\)/iu);
+  });
+
+  it("persists the frozen open-status order hold marker after production hardening", () => {
+    const sql = readFileSync(join(migrationsDir, "0016_order_hold_lifecycle.sql"), "utf8");
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS hold_reason text/iu);
+    expect(sql).toMatch(/orders_hold_reason_length_chk/iu);
+    expect(sql).toMatch(/orders_held_by_staff_fk/iu);
   });
 });

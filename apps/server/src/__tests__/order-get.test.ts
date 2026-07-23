@@ -14,6 +14,7 @@ import { createDefaultChainHooks } from "../handlers/default-chain-hooks.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
+import { createMemoryPaymentStore } from "../payment/memory-store.js";
 import {
   createMemoryAuditQueryStore,
   createMemoryFeaturesStore,
@@ -35,17 +36,18 @@ const CLERK: ActorContext = Object.freeze({
 });
 
 function buildBus(orderStore = createMemoryOrderStore()) {
+  const paymentStore = createMemoryPaymentStore();
   const { registry, queryRegistry } = createRegisteredM1Bus({
     platform: Object.freeze({
       settings: createMemorySettingsStore(),
       features: createMemoryFeaturesStore(),
       audit: createMemoryAuditQueryStore(),
     }),
-    order: Object.freeze({ store: orderStore }),
+    order: Object.freeze({ store: orderStore, payments: paymentStore }),
   });
   const pendingStore = new MemoryPendingActionStore();
   const chainHooks = createDefaultChainHooks({}, pendingStore);
-  return { registry, queryRegistry, chainHooks, pendingStore, orderStore };
+  return { registry, queryRegistry, chainHooks, pendingStore, orderStore, paymentStore };
 }
 
 test("query registry includes order.get when order deps present", () => {

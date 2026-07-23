@@ -98,7 +98,13 @@ function actorFromSession(session: SessionRecord): ActorContext {
     via: "ui" as const,
     // order_write: M2 counter receive/pickup (UI + local HTTP).
     permissions: isAdmin
-      ? Object.freeze(["settings_admin", "staff_read", "staff_write", "order_write"])
+      ? Object.freeze([
+          "settings_admin",
+          "staff_read",
+          "staff_write",
+          "order_write",
+          "payment_refund",
+        ])
       : Object.freeze(["staff_read", "order_write"]),
   });
 }

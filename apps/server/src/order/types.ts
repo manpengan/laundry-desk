@@ -3,21 +3,19 @@
  * OrderStore is async so memory and Postgres backends share one interface.
  */
 
-import type { GarmentStatus, PaymentMethod, PaymentRow } from "@laundry/domain";
+import type { GarmentStatus, PaymentRow } from "@laundry/domain";
 
 export type OrderStatus = "open" | "closed" | "cancelled";
 
-export type { PaymentMethod, PaymentRow };
+export type { PaymentRow };
 
 export type PickupApplyOptions = Readonly<{
+  /** Authenticated actor used for direct repository calls outside the Bus. */
   staffId: string;
-  method?: PaymentMethod;
   /** Domain pickup plan result; verified against the transaction's current rows. */
   nextOrderStatus?: OrderStatus;
   /** Domain pickup plan result; prevents applying a stale payment balance. */
   nextBalanceCents?: number;
-  /** Override UUID generation for the payment row (tests). */
-  paymentId?: string;
 }>;
 
 export type OrderLineRecord = Readonly<{
@@ -58,6 +56,9 @@ export type OrderRecord = Readonly<{
   customer_phone: string | null;
   customer_name: string | null;
   note: string | null;
+  hold_reason: string | null;
+  held_at: number | null;
+  held_by_staff_id: string | null;
   lines: readonly OrderLineRecord[];
   subtotal_cents: number;
   payable_cents: number;
@@ -94,6 +95,33 @@ export type PickupApplyResult = Readonly<{
   garments: readonly GarmentRecord[];
 }>;
 
+export type ApplyPaymentSummaryInput = Readonly<{
+  orgId: string;
+  storeId: string;
+  orderId: string;
+  staffId: string;
+  expectedPaidCents: number;
+  expectedBalanceCents: number;
+  paidCents: number;
+  balanceCents: number;
+  nextStatus: OrderStatus;
+  nowEpoch: number;
+}>;
+
+export type HoldOrderInput = Readonly<{
+  orgId: string;
+  storeId: string;
+  orderId: string;
+  staffId: string;
+  reason: string;
+  nowEpoch: number;
+}>;
+
+export type CancelOrderInput = ApplyPaymentSummaryInput &
+  Readonly<{
+    reason: string;
+  }>;
+
 export type OrderStore = Readonly<{
   insertOrder: (order: OrderRecord, garments: readonly GarmentRecord[]) => Promise<void>;
   getOrder: (orgId: string, storeId: string, orderId: string) => Promise<OrderRecord | null>;
@@ -129,4 +157,10 @@ export type OrderStore = Readonly<{
     storeId: string,
     orderId?: string,
   ) => Promise<readonly PaymentRow[]>;
+  /** CAS update of the materialized ledger projection; false means stale state. */
+  applyPaymentSummary?: (input: ApplyPaymentSummaryInput) => Promise<boolean>;
+  /** Hold remains frozen-contract status=open and records its mandatory reason. */
+  holdOrder?: (input: HoldOrderInput) => Promise<boolean>;
+  /** Cancel only an unchanged open order; payment reversals are written separately. */
+  cancelOrder?: (input: CancelOrderInput) => Promise<boolean>;
 }>;

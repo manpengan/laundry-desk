@@ -2,14 +2,13 @@
  * Process-local order/garment/payment store for M2 skeleton (async OrderStore).
  */
 
-import { buildPayPayment } from "@laundry/domain";
-import { randomUUID } from "node:crypto";
-
 import type {
+  ApplyPaymentSummaryInput,
+  CancelOrderInput,
   GarmentRecord,
+  HoldOrderInput,
   OrderRecord,
   OrderStore,
-  PaymentRow,
   PickupApplyOptions,
   PickupApplyResult,
 } from "./types.js";
@@ -20,7 +19,6 @@ const key = (orgId: string, storeId: string, orderId: string): string =>
 export class MemoryOrderStore implements OrderStore {
   private readonly orders = new Map<string, OrderRecord>();
   private readonly garments = new Map<string, GarmentRecord[]>();
-  private readonly payments: PaymentRow[] = [];
   private readonly ticketSeq = new Map<string, number>();
 
   async insertOrder(order: OrderRecord, garments: readonly GarmentRecord[]): Promise<void> {
@@ -93,39 +91,75 @@ export class MemoryOrderStore implements OrderStore {
     this.orders.set(k, nextOrder);
     this.garments.set(k, nextGarments);
 
-    if (collectCents > 0) {
-      if (options?.staffId === undefined || options.staffId.length === 0) {
-        throw new Error("staffId is required when collectCents > 0");
-      }
-      const payment = buildPayPayment({
-        payment_id: options.paymentId ?? randomUUID(),
-        org_id: orgId,
-        store_id: storeId,
-        order_id: orderId,
-        amount_cents: collectCents,
-        staff_id: options.staffId,
-        at: nowEpoch,
-        method: options.method ?? "cash",
-      });
-      this.payments.push(payment);
-    }
-
     return Object.freeze({ order: nextOrder, garments: Object.freeze(nextGarments) });
   }
 
-  async listPayments(
-    orgId: string,
-    storeId: string,
-    orderId?: string,
-  ): Promise<readonly PaymentRow[]> {
-    return Object.freeze(
-      this.payments.filter(
-        (p) =>
-          p.org_id === orgId &&
-          p.store_id === storeId &&
-          (orderId === undefined || p.order_id === orderId),
-      ),
+  async applyPaymentSummary(input: ApplyPaymentSummaryInput): Promise<boolean> {
+    const k = key(input.orgId, input.storeId, input.orderId);
+    const order = this.orders.get(k);
+    if (
+      order === undefined ||
+      order.status !== "open" ||
+      order.paid_cents !== input.expectedPaidCents ||
+      order.balance_cents !== input.expectedBalanceCents
+    ) {
+      return false;
+    }
+    this.orders.set(
+      k,
+      Object.freeze({
+        ...order,
+        paid_cents: input.paidCents,
+        balance_cents: input.balanceCents,
+        status: input.nextStatus,
+        updated_at: input.nowEpoch,
+      }),
     );
+    return true;
+  }
+
+  async holdOrder(input: HoldOrderInput): Promise<boolean> {
+    const k = key(input.orgId, input.storeId, input.orderId);
+    const order = this.orders.get(k);
+    if (order === undefined || order.status !== "open") return false;
+    this.orders.set(
+      k,
+      Object.freeze({
+        ...order,
+        hold_reason: input.reason,
+        held_at: input.nowEpoch,
+        held_by_staff_id: input.staffId,
+        updated_at: input.nowEpoch,
+      }),
+    );
+    return true;
+  }
+
+  async cancelOrder(input: CancelOrderInput): Promise<boolean> {
+    const k = key(input.orgId, input.storeId, input.orderId);
+    const order = this.orders.get(k);
+    if (
+      order === undefined ||
+      order.status !== "open" ||
+      order.paid_cents !== input.expectedPaidCents ||
+      order.balance_cents !== input.expectedBalanceCents
+    ) {
+      return false;
+    }
+    this.orders.set(
+      k,
+      Object.freeze({
+        ...order,
+        status: "cancelled",
+        paid_cents: input.paidCents,
+        balance_cents: input.balanceCents,
+        hold_reason: null,
+        held_at: null,
+        held_by_staff_id: null,
+        updated_at: input.nowEpoch,
+      }),
+    );
+    return true;
   }
 
   async nextTicketSeq(orgId: string, storeId: string, dayKey: string): Promise<number> {
@@ -140,7 +174,6 @@ export class MemoryOrderStore implements OrderStore {
   clear(): void {
     this.orders.clear();
     this.garments.clear();
-    this.payments.length = 0;
     this.ticketSeq.clear();
   }
 }

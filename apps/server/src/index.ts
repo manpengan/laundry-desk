@@ -189,6 +189,15 @@ export {
   DEMO_CATALOG_ITEMS,
   registerCatalogQueryHandlers,
 } from "./catalog/index.js";
+
+/** M2 append-only payment ledger and Bus command handlers. */
+export {
+  createMemoryPaymentStore,
+  createPaymentHandlers,
+  createPgPaymentStore,
+  registerPaymentCommandHandlers,
+} from "./payment/index.js";
+export type { PaymentStore } from "./payment/index.js";
 export type {
   CatalogHandlerDeps,
   CatalogStore,

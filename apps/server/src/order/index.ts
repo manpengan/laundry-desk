@@ -10,11 +10,13 @@ export { createPgOrderStore } from "./pg-order-store.js";
 export type { CreatePgOrderStoreOptions } from "./pg-order-store.js";
 export type {
   GarmentRecord,
+  ApplyPaymentSummaryInput,
+  CancelOrderInput,
+  HoldOrderInput,
   OrderLineRecord,
   OrderRecord,
   OrderStatus,
   OrderStore,
-  PaymentMethod,
   PaymentRow,
   PickupApplyOptions,
   PickupApplyResult,

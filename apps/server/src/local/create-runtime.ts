@@ -20,6 +20,8 @@ import { createMemoryPrintJobStore } from "../print/memory-store.js";
 import type { PrintHandlerDeps } from "../print/handlers.js";
 import { createPgPrintJobStore } from "../print/pg-print-store.js";
 import { createPgOrderStore } from "../order/pg-order-store.js";
+import { createMemoryPaymentStore } from "../payment/memory-store.js";
+import { createPgPaymentStore } from "../payment/pg-payment-store.js";
 import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
 import type { StatsHandlerDeps } from "../stats/handlers.js";
@@ -219,8 +221,9 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   seedStaff(DEMO_STAFF_B_ID, "staffb", "店员乙");
 
   const orderStore = createMemoryOrderStore();
+  const paymentStore = createMemoryPaymentStore();
   const customerStore = createMemoryCustomerStore();
-  const statsSource = createOrderBackedStatsQuery(orderStore);
+  const statsSource = createOrderBackedStatsQuery(orderStore, paymentStore);
   const shiftStore = createMemoryShiftStore();
   const photoStore = createMemoryPhotoStore();
   return Object.freeze({
@@ -232,7 +235,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       processStepUpProofStore,
     ),
     platform: buildPlatform("memory"),
-    order: Object.freeze({ store: orderStore, customer: customerStore }),
+    order: Object.freeze({ store: orderStore, customer: customerStore, payments: paymentStore }),
     catalog: Object.freeze({ store: createMemoryCatalogStore() }),
     print: Object.freeze({ store: createMemoryPrintJobStore() }),
     stats: Object.freeze({ source: statsSource }),
@@ -274,6 +277,7 @@ export async function createPgLocalRuntime(
   const store = createPgIdentityStore(appPool);
   const passwordPort = createPasswordPort();
   const orderStore = createPgOrderStore(appPool);
+  const paymentStore = createPgPaymentStore(appPool);
   const customerStore = createPgCustomerStore(appPool, { orgId: DEMO_ORG_ID });
   const statsSource = createPgStatsQuery(appPool);
   const shiftStore = createPgShiftStore(appPool, {
@@ -294,7 +298,7 @@ export async function createPgLocalRuntime(
       processStepUpProofStore,
     ),
     platform: buildPlatform("sql"),
-    order: Object.freeze({ store: orderStore, customer: customerStore }),
+    order: Object.freeze({ store: orderStore, customer: customerStore, payments: paymentStore }),
     catalog: Object.freeze({
       store: createPgCatalogStore(appPool, {
         orgId: DEMO_ORG_ID,

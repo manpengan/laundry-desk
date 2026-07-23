@@ -9,6 +9,7 @@ import {
   uuid,
   index,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import { staffs } from "./staffs.js";
 import { stores } from "./stores.js";
@@ -29,6 +30,9 @@ export const orders = pgTable(
     customerPhone: text("customer_phone"),
     customerName: text("customer_name"),
     note: text("note"),
+    holdReason: text("hold_reason"),
+    heldAt: timestamp("held_at", { withTimezone: true, mode: "date" }),
+    heldByStaffId: uuid("held_by_staff_id"),
     subtotalCents: integer("subtotal_cents").notNull(),
     payableCents: integer("payable_cents").notNull(),
     paidCents: integer("paid_cents").notNull(),
@@ -47,6 +51,9 @@ export const orders = pgTable(
       table.status,
       table.createdAt,
     ),
+    index("orders_store_hold_created_idx")
+      .on(table.orgId, table.storeId, table.createdAt)
+      .where(sql`${table.holdReason} IS NOT NULL`),
     foreignKey({
       columns: [table.orgId, table.storeId],
       foreignColumns: [stores.orgId, stores.id],
@@ -56,6 +63,11 @@ export const orders = pgTable(
       columns: [table.orgId, table.createdByStaffId],
       foreignColumns: [staffs.orgId, staffs.id],
       name: "orders_created_by_staff_fk",
+    }),
+    foreignKey({
+      columns: [table.orgId, table.heldByStaffId],
+      foreignColumns: [staffs.orgId, staffs.id],
+      name: "orders_held_by_staff_fk",
     }),
   ],
 );

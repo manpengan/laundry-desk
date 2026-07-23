@@ -14,6 +14,7 @@ import { createDefaultChainHooks } from "../handlers/default-chain-hooks.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
+import { createMemoryPaymentStore } from "../payment/memory-store.js";
 import {
   createMemoryAuditQueryStore,
   createMemoryFeaturesStore,
@@ -40,19 +41,20 @@ const DAY_EPOCH = 1_721_606_400;
 const BUSINESS_DATE = "2024-07-22";
 
 function buildBus(orderStore = createMemoryOrderStore(), fixedNow = () => DAY_EPOCH) {
-  const statsSource = createOrderBackedStatsQuery(orderStore);
+  const paymentStore = createMemoryPaymentStore();
+  const statsSource = createOrderBackedStatsQuery(orderStore, paymentStore);
   const { registry, queryRegistry } = createRegisteredM1Bus({
     platform: Object.freeze({
       settings: createMemorySettingsStore(),
       features: createMemoryFeaturesStore(),
       audit: createMemoryAuditQueryStore(),
     }),
-    order: Object.freeze({ store: orderStore, now: fixedNow }),
+    order: Object.freeze({ store: orderStore, payments: paymentStore, now: fixedNow }),
     stats: Object.freeze({ source: statsSource }),
   });
   const pendingStore = new MemoryPendingActionStore();
   const chainHooks = createDefaultChainHooks({}, pendingStore);
-  return { registry, queryRegistry, chainHooks, pendingStore, orderStore };
+  return { registry, queryRegistry, chainHooks, pendingStore, orderStore, paymentStore };
 }
 
 test("query registry includes stats.day.summary when stats deps present", () => {
@@ -161,8 +163,7 @@ test("stats.day.summary aggregates receive orders for the UTC day", async () => 
   assert.equal(body.payable_cents, 7500);
   assert.equal(body.paid_cents, 500);
   assert.equal(body.balance_cents, 7000);
-  // receive does not write payment ledger rows in skeleton
-  assert.equal(body.payment_cents, 0);
+  assert.equal(body.payment_cents, 500);
   assert.equal(body.picked_garment_count, 0);
 });
 

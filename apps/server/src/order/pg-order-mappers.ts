@@ -22,6 +22,9 @@ export type OrderRow = {
   customer_phone: string | null;
   customer_name: string | null;
   note: string | null;
+  hold_reason?: string | null;
+  held_at?: Date | string | null;
+  held_by_staff_id?: string | null;
   subtotal_cents: number;
   payable_cents: number;
   paid_cents: number;
@@ -113,6 +116,9 @@ export function mapOrder(row: OrderRow, lines: readonly OrderLineRecord[]): Orde
     customer_phone: row.customer_phone,
     customer_name: row.customer_name,
     note: row.note,
+    hold_reason: row.hold_reason ?? null,
+    held_at: row.held_at === null || row.held_at === undefined ? null : dateToEpoch(row.held_at),
+    held_by_staff_id: row.held_by_staff_id ?? null,
     lines: Object.freeze([...lines]),
     subtotal_cents: row.subtotal_cents,
     payable_cents: row.payable_cents,

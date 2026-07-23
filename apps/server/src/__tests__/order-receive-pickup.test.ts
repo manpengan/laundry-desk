@@ -18,6 +18,7 @@ import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
 import type { OrderStore } from "../order/types.js";
+import { createMemoryPaymentStore } from "../payment/memory-store.js";
 import {
   createMemoryAuditQueryStore,
   createMemoryFeaturesStore,
@@ -42,6 +43,7 @@ function buildBus(
   orderStore: OrderStore = createMemoryOrderStore(),
   customerStore?: CustomerStore,
 ) {
+  const paymentStore = createMemoryPaymentStore();
   const { registry, queryRegistry } = createRegisteredM1Bus({
     platform: Object.freeze({
       settings: createMemorySettingsStore(),
@@ -50,13 +52,22 @@ function buildBus(
     }),
     order: Object.freeze({
       store: orderStore,
+      payments: paymentStore,
       ...(customerStore !== undefined ? { customer: customerStore } : {}),
     }),
     ...(customerStore !== undefined ? { customer: Object.freeze({ store: customerStore }) } : {}),
   });
   const pendingStore = new MemoryPendingActionStore();
   const chainHooks = createDefaultChainHooks({}, pendingStore);
-  return { registry, queryRegistry, chainHooks, pendingStore, orderStore, customerStore };
+  return {
+    registry,
+    queryRegistry,
+    chainHooks,
+    pendingStore,
+    orderStore,
+    paymentStore,
+    customerStore,
+  };
 }
 
 test("order.receive expands qty into garments and returns ticket_no", async () => {
@@ -106,7 +117,7 @@ test("order.receive expands qty into garments and returns ticket_no", async () =
 });
 
 test("order.pickup transitions received garments and settles balance", async () => {
-  const { registry, chainHooks, pendingStore, orderStore } = buildBus();
+  const { registry, chainHooks, pendingStore, paymentStore } = buildBus();
   const received = await executeCommand(
     new FakeSqlClient(),
     TENANT,
@@ -152,8 +163,7 @@ test("order.pickup transitions received garments and settles balance", async () 
   assert.equal(data.status, "closed");
   assert.equal(data.picked_garment_ids.length, 1);
 
-  const payments = await orderStore.listPayments?.(DEMO_ORG_ID, DEMO_STORE_ID, orderId);
-  assert.ok(payments);
+  const payments = await paymentStore.listPayments(DEMO_ORG_ID, DEMO_STORE_ID, orderId);
   assert.equal(payments.length, 1);
   assert.equal(payments[0]?.kind, "pay");
   assert.equal(payments[0]?.method, "cash");
@@ -162,9 +172,9 @@ test("order.pickup transitions received garments and settles balance", async () 
   assert.equal(payments[0]?.order_id, orderId);
 });
 
-test("order.pickup with collect_cents 0 does not insert a payment", async () => {
+test("order.pickup with collect_cents 0 adds no second payment after a receipt deposit", async () => {
   const orderStore = createMemoryOrderStore();
-  const { registry, chainHooks, pendingStore } = buildBus(orderStore);
+  const { registry, chainHooks, pendingStore, paymentStore } = buildBus(orderStore);
   const received = await executeCommand(
     new FakeSqlClient(),
     TENANT,
@@ -198,8 +208,10 @@ test("order.pickup with collect_cents 0 does not insert a payment", async () => 
     { registry, actor: CLERK, chainHooks, pendingStore },
   );
   assert.equal(picked.ok, true, JSON.stringify(picked));
-  const payments = await orderStore.listPayments(DEMO_ORG_ID, DEMO_STORE_ID, orderId);
-  assert.equal(payments.length, 0);
+  const payments = await paymentStore.listPayments(DEMO_ORG_ID, DEMO_STORE_ID, orderId);
+  assert.equal(payments.length, 1);
+  assert.equal(payments[0]?.kind, "pay");
+  assert.equal(payments[0]?.amount_cents, 1_000);
 });
 
 test("order.pickup rejects a closed order instead of planning it as open", async () => {

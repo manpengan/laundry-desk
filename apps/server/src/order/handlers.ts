@@ -4,15 +4,16 @@
  */
 
 import { createCommandError } from "@laundry/contracts";
-import { lineTotalCents, planPickup, planReceive } from "@laundry/domain";
+import { buildPayPayment, lineTotalCents, planPickup, planReceive } from "@laundry/domain";
 import { randomUUID } from "node:crypto";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
 import type { CustomerStore } from "../customer/types.js";
 import type { OrderHandlerDeps } from "./deps.js";
+import { createOrderLifecycleHandlers } from "./lifecycle-handlers.js";
 import { listHandler } from "./list-handler.js";
-import type { GarmentRecord, OrderLineRecord } from "./types.js";
+import type { GarmentRecord, OrderLineRecord, OrderRecord } from "./types.js";
 
 export type { OrderHandlerDeps } from "./deps.js";
 
@@ -66,6 +67,32 @@ function dayKeyFromEpoch(epoch: number): string {
 
 function formatTicket(dayKey: string, seq: number): string {
   return `${dayKey}-${String(seq).padStart(4, "0")}`;
+}
+
+async function appendOrderPayment(
+  deps: OrderHandlerDeps,
+  order: OrderRecord,
+  amountCents: number,
+  staffId: string,
+  now: number,
+  newId: () => string,
+): Promise<void> {
+  if (amountCents === 0) return;
+  if (deps.payments === undefined) {
+    throw new Error("Counter payment store is required for a non-zero collection");
+  }
+  await deps.payments.appendPayment(
+    buildPayPayment({
+      payment_id: newId(),
+      org_id: order.org_id,
+      store_id: order.store_id,
+      order_id: order.order_id,
+      amount_cents: amountCents,
+      staff_id: staffId,
+      at: now,
+      method: "cash",
+    }),
+  );
 }
 
 function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
@@ -153,6 +180,9 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
       customer_phone: customerPhone,
       customer_name: customerName,
       note: typeof input.note === "string" ? input.note : null,
+      hold_reason: null,
+      held_at: null,
+      held_by_staff_id: null,
       lines: Object.freeze(orderLines),
       subtotal_cents: plan.totals.subtotal_cents,
       payable_cents: plan.totals.payable_cents,
@@ -164,6 +194,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
     });
 
     await deps.store.insertOrder(order, garments);
+    await appendOrderPayment(deps, order, plan.totals.paid_cents, ctx.actor.staffId, now, newId);
 
     return Object.freeze({
       result: Object.freeze({
@@ -233,6 +264,7 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
     }
 
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
+    const newId = deps.newId ?? randomUUID;
     const applied = await deps.store.applyPickup(
       ctx.tenant.orgId,
       ctx.tenant.storeId,
@@ -242,7 +274,6 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
       now,
       Object.freeze({
         staffId: ctx.actor.staffId,
-        method: "cash" as const,
         nextOrderStatus: plan.next_order_status,
         nextBalanceCents: plan.next_balance_cents,
       }),
@@ -250,6 +281,14 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
     if (applied === null) {
       throw new HandlerCommandError(createCommandError("TRANSACTION_FAILED"));
     }
+    await appendOrderPayment(
+      deps,
+      applied.order,
+      plan.collect_cents,
+      ctx.actor.staffId,
+      now,
+      newId,
+    );
 
     return Object.freeze({
       result: Object.freeze({
@@ -321,9 +360,12 @@ function getHandler(deps: OrderHandlerDeps): CommandHandler {
 export function createOrderHandlers(
   deps: OrderHandlerDeps,
 ): Readonly<Record<string, CommandHandler>> {
+  const lifecycle = createOrderLifecycleHandlers(deps);
   return Object.freeze({
     "order.receive": receiveHandler(deps),
     "order.pickup": pickupHandler(deps),
+    "order.hold": lifecycle["order.hold"],
+    "order.cancel": lifecycle["order.cancel"],
   });
 }
 
@@ -342,6 +384,8 @@ export function registerOrderCommandHandlers(
 ): void {
   const handlers = createOrderHandlers(deps);
   registry.registerHandler("order.receive", handlers["order.receive"]!);
+  registry.registerHandler("order.hold", handlers["order.hold"]!);
+  registry.registerHandler("order.cancel", handlers["order.cancel"]!);
   registry.registerHandler("order.pickup", handlers["order.pickup"]!);
 }
 
