@@ -22,11 +22,13 @@ export type PickupPageProps = {
   commandClient: CommandPort;
   /** Required for 加载订单 (order.get). Optional only for SSR shell smoke. */
   queryClient?: QueryPort;
+  /** Prefill order id (e.g. from workbench order.list row click). */
+  initialOrderId?: string;
 };
 
-export function PickupPage({ commandClient, queryClient }: PickupPageProps) {
+export function PickupPage({ commandClient, queryClient, initialOrderId }: PickupPageProps) {
   const toast = useToast();
-  const [orderId, setOrderId] = useState("");
+  const [orderId, setOrderId] = useState(() => initialOrderId ?? "");
   const [collectText, setCollectText] = useState("0");
   const [busy, setBusy] = useState(false);
   const [loadingOrder, setLoadingOrder] = useState(false);

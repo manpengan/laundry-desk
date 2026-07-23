@@ -1,18 +1,23 @@
 /**
  * M2 skeleton: order.receive + order.pickup over memory store + bus.
+ * Receive with phone best-effort upserts customer archive when store wired.
  */
 
 import assert from "node:assert/strict";
 import test from "node:test";
 
 import { executeCommand } from "../bus/executor.js";
+import { executeQuery } from "../bus/execute-query.js";
 import type { ActorContext } from "../bus/types.js";
+import { createMemoryCustomerStore } from "../customer/memory-store.js";
+import type { CustomerStore } from "../customer/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
 import type { TenantContext } from "../db/types.js";
 import { createDefaultChainHooks } from "../handlers/default-chain-hooks.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
+import type { OrderStore } from "../order/types.js";
 import {
   createMemoryAuditQueryStore,
   createMemoryFeaturesStore,
@@ -33,18 +38,25 @@ const CLERK: ActorContext = Object.freeze({
   permissions: Object.freeze(["order_write", "staff_read"]),
 });
 
-function buildBus(orderStore = createMemoryOrderStore()) {
-  const { registry } = createRegisteredM1Bus({
+function buildBus(
+  orderStore: OrderStore = createMemoryOrderStore(),
+  customerStore?: CustomerStore,
+) {
+  const { registry, queryRegistry } = createRegisteredM1Bus({
     platform: Object.freeze({
       settings: createMemorySettingsStore(),
       features: createMemoryFeaturesStore(),
       audit: createMemoryAuditQueryStore(),
     }),
-    order: Object.freeze({ store: orderStore }),
+    order: Object.freeze({
+      store: orderStore,
+      ...(customerStore !== undefined ? { customer: customerStore } : {}),
+    }),
+    ...(customerStore !== undefined ? { customer: Object.freeze({ store: customerStore }) } : {}),
   });
   const pendingStore = new MemoryPendingActionStore();
   const chainHooks = createDefaultChainHooks({}, pendingStore);
-  return { registry, chainHooks, pendingStore, orderStore };
+  return { registry, queryRegistry, chainHooks, pendingStore, orderStore, customerStore };
 }
 
 test("order.receive expands qty into garments and returns ticket_no", async () => {
@@ -219,4 +231,114 @@ test("order.receive without order_write is PERMISSION_DENIED", async () => {
   );
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.error.code, "PERMISSION_DENIED");
+});
+
+test("order.receive with phone upserts searchable customer (best-effort)", async () => {
+  const customerStore = createMemoryCustomerStore([]);
+  const { registry, queryRegistry, chainHooks, pendingStore } = buildBus(
+    createMemoryOrderStore(),
+    customerStore,
+  );
+
+  const result = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      customer_phone: "13800000444",
+      customer_name: "赵六",
+      lines: [
+        {
+          service_code: "wash",
+          category_code: "shirt",
+          unit_price_cents: 1500,
+          qty: 1,
+        },
+      ],
+      paid_cents: 1500,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+
+  assert.equal(result.ok, true, JSON.stringify(result));
+
+  const byPhone = await customerStore.getByPhone("13800000444");
+  assert.equal(byPhone?.name, "赵六");
+  assert.equal(byPhone?.phone, "13800000444");
+
+  const search = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "customer.search",
+    { query: "138000004" },
+    { registry: queryRegistry, actor: CLERK },
+  );
+  assert.equal(search.ok, true, JSON.stringify(search));
+  if (!search.ok) return;
+  const customers = (
+    search.data.result as { customers: readonly { phone: string; name: string | null }[] }
+  ).customers;
+  assert.equal(customers.length, 1);
+  assert.equal(customers[0]?.phone, "13800000444");
+  assert.equal(customers[0]?.name, "赵六");
+});
+
+test("order.receive succeeds when customer upsert throws (best-effort soft-skip)", async () => {
+  const brokenCustomer: CustomerStore = Object.freeze({
+    search: async () => Object.freeze([]),
+    getByPhone: async () => null,
+    upsert: async () => {
+      throw new Error("simulated customer store failure");
+    },
+  });
+  const { registry, chainHooks, pendingStore } = buildBus(createMemoryOrderStore(), brokenCustomer);
+
+  const result = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      customer_phone: "13800000555",
+      customer_name: "钱七",
+      lines: [
+        {
+          service_code: "wash",
+          category_code: "coat",
+          unit_price_cents: 2000,
+          qty: 1,
+        },
+      ],
+      paid_cents: 0,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+
+  assert.equal(result.ok, true, JSON.stringify(result));
+  if (!result.ok) return;
+  const data = result.data.result as { garment_count: number; ticket_no: string };
+  assert.equal(data.garment_count, 1);
+  assert.match(data.ticket_no, /^\d{8}-\d{4}$/u);
+});
+
+test("order.receive without customer store still works with phone", async () => {
+  const { registry, chainHooks, pendingStore } = buildBus();
+  const result = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      customer_phone: "13800000666",
+      lines: [
+        {
+          service_code: "wash",
+          category_code: "shirt",
+          unit_price_cents: 1000,
+          qty: 1,
+        },
+      ],
+      paid_cents: 1000,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
 });

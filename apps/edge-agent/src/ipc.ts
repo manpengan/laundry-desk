@@ -18,7 +18,7 @@ import {
   type PrintJobStatusView,
   type PrintJobStore,
 } from "./print/print-jobs.js";
-import { createMockUsbPort } from "./print/usb-port.js";
+import { resolveUsbPrintPort } from "./print/usb-port.js";
 import { MemoryEncryptedQueue, MemoryKekStore } from "./queue/index.js";
 import { mockConnection } from "./shell/connection-mock.js";
 import { checkShellHealth, type ShellHealth } from "./shell/health.js";
@@ -140,7 +140,7 @@ async function runExecute(
     spool,
     jobId,
     ticketForProcess(ticketNo),
-    { now, usbPort: createMockUsbPort() },
+    { now, usbPort: resolveUsbPrintPort(process.env) },
     mockJobId,
   );
 }

@@ -372,13 +372,17 @@ export {
   ORDER_QUERY_NAMES,
   ORDER_QUERIES,
   OrderGetInputSchema,
+  OrderListInputSchema,
   OrderPickupInputSchema,
   OrderReceiveInputSchema,
   OrderReceiveLineSchema,
+  OrderStatusSchema,
   orderGetQuery,
+  orderListQuery,
   orderPickupCommand,
   orderReceiveCommand,
 } from "./commands/order.js";
+export type { OrderListResult, OrderListRow } from "./commands/order.js";
 export {
   PRINT_COMMAND_NAMES,
   PRINT_COMMANDS,

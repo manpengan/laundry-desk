@@ -47,7 +47,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
 ] as const);
 
 /**
- * M2 order read queries (order.get for partial pickup UX).
+ * M2 order read queries (order.get + order.list for counter UX).
  * Not in OpenAPI freeze; load via query registry separately from commands.
  */
 export const M2_ORDER_QUERY_DEFINITIONS: readonly QueryDefinition<z.ZodObject>[] = Object.freeze([

@@ -1,5 +1,6 @@
 /**
- * M2 skeleton handlers: order.receive / order.pickup / order.get (async OrderStore).
+ * M2 skeleton handlers: order.receive / order.pickup / order.get / order.list.
+ * Optional customer store: best-effort upsert on receive when phone present.
  */
 
 import { createCommandError } from "@laundry/contracts";
@@ -8,13 +9,33 @@ import { randomUUID } from "node:crypto";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
-import type { GarmentRecord, OrderLineRecord, OrderStore } from "./types.js";
+import type { CustomerStore } from "../customer/types.js";
+import type { OrderHandlerDeps } from "./deps.js";
+import { listHandler } from "./list-handler.js";
+import type { GarmentRecord, OrderLineRecord } from "./types.js";
 
-export type OrderHandlerDeps = Readonly<{
-  store: OrderStore;
-  now?: () => number;
-  newId?: () => string;
-}>;
+export type { OrderHandlerDeps } from "./deps.js";
+
+/**
+ * Best-effort customer archive on receive. Failures are swallowed so open-order
+ * is never blocked by customer store/transient errors.
+ */
+async function bestEffortCustomerUpsert(
+  customer: CustomerStore,
+  phone: string,
+  name: string | undefined,
+  now: number,
+): Promise<void> {
+  try {
+    await customer.upsert({
+      phone,
+      ...(name !== undefined ? { name } : {}),
+      now,
+    });
+  } catch {
+    // intentional soft-skip
+  }
+}
 
 function asRecord(parsed: unknown): Readonly<Record<string, unknown>> {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -77,6 +98,19 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
     const newId = deps.newId ?? randomUUID;
     const orderId = newId();
     const dayKey = dayKeyFromEpoch(now);
+    const customerPhone =
+      typeof input.customer_phone === "string" && input.customer_phone.length > 0
+        ? input.customer_phone
+        : null;
+    const customerName =
+      typeof input.customer_name === "string" && input.customer_name.length > 0
+        ? input.customer_name
+        : null;
+
+    if (customerPhone !== null && deps.customer !== undefined) {
+      await bestEffortCustomerUpsert(deps.customer, customerPhone, customerName ?? undefined, now);
+    }
+
     const seq = await deps.store.nextTicketSeq(ctx.tenant.orgId, ctx.tenant.storeId, dayKey);
     const ticketNo = formatTicket(dayKey, seq);
 
@@ -118,8 +152,8 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
       store_id: ctx.tenant.storeId,
       ticket_no: ticketNo,
       status: "open" as const,
-      customer_phone: typeof input.customer_phone === "string" ? input.customer_phone : null,
-      customer_name: typeof input.customer_name === "string" ? input.customer_name : null,
+      customer_phone: customerPhone,
+      customer_name: customerName,
       note: typeof input.note === "string" ? input.note : null,
       lines: Object.freeze(orderLines),
       subtotal_cents: plan.totals.subtotal_cents,
@@ -294,6 +328,7 @@ export function createOrderQueryHandlers(
 ): Readonly<Record<string, CommandHandler>> {
   return Object.freeze({
     "order.get": getHandler(deps),
+    "order.list": listHandler(deps),
   });
 }
 
@@ -312,4 +347,5 @@ export function registerOrderQueryHandlers(
 ): void {
   const handlers = createOrderQueryHandlers(deps);
   registry.registerHandler("order.get", handlers["order.get"]!);
+  registry.registerHandler("order.list", handlers["order.list"]!);
 }

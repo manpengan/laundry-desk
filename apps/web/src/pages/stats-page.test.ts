@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
 import { createMockQueryClient } from "../commands/query-client.js";
+import { daySummaryCsvFilename, formatDaySummaryCsv } from "./day-summary-csv.js";
 import {
   localYmd,
   parseDaySummary,
@@ -38,6 +39,47 @@ test("unwrapQueryResult peels bus envelope", () => {
   assert.deepEqual(unwrapQueryResult(SAMPLE), SAMPLE);
 });
 
+test("formatDaySummaryCsv emits header + integer fen columns (no float)", () => {
+  const csv = formatDaySummaryCsv(SAMPLE);
+  const lines = csv.trimEnd().split("\n");
+  assert.equal(lines.length, 2);
+  assert.equal(
+    lines[0],
+    "business_date,order_count,garment_count,payable_cents,paid_cents,balance_cents,payment_cents,picked_garment_count",
+  );
+  assert.equal(lines[1], "2026-07-22,3,5,12000,4000,8000,2000,1");
+  assert.doesNotMatch(csv, /\./u);
+  assert.equal(daySummaryCsvFilename(SAMPLE.business_date), "stats-2026-07-22.csv");
+});
+
+test("formatDaySummaryCsv keeps zero and large fen as integers", () => {
+  const zero = formatDaySummaryCsv(
+    Object.freeze({
+      business_date: "2026-01-01",
+      order_count: 0,
+      garment_count: 0,
+      payable_cents: 0,
+      paid_cents: 0,
+      balance_cents: 0,
+      payment_cents: 0,
+      picked_garment_count: 0,
+    }),
+  );
+  assert.match(zero, /2026-01-01,0,0,0,0,0,0,0/u);
+  assert.doesNotMatch(zero, /0\.0/u);
+
+  const large = formatDaySummaryCsv(
+    Object.freeze({
+      ...SAMPLE,
+      payable_cents: 1_234_567,
+      paid_cents: 999,
+    }),
+  );
+  assert.match(large, /1234567/u);
+  assert.match(large, /,999,/u);
+  assert.doesNotMatch(large, /12345\.67|9\.99/u);
+});
+
 test("StatsPage SSR shell shows date control and load button", () => {
   const queryClient = createMockQueryClient();
   const html = renderToStaticMarkup(
@@ -55,8 +97,10 @@ test("StatsPage SSR shell shows date control and load button", () => {
   assert.match(html, /统计/);
   assert.match(html, /营业日/);
   assert.match(html, /查询日结/);
+  assert.match(html, /导出 CSV/);
   assert.match(html, /data-testid="stats-date-input"/);
   assert.match(html, /data-testid="stats-load-btn"/);
+  assert.match(html, /data-testid="stats-export-csv-btn"/);
   // useEffect does not run under SSR — cards only after client load
   assert.doesNotMatch(html, /data-testid="stats-summary"/);
 });

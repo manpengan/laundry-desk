@@ -36,7 +36,7 @@ export type RegisterM1Deps = Readonly<{
   print?: PrintHandlerDeps;
   /** M2 day stats (order-backed or seeded). */
   stats?: StatsHandlerDeps;
-  /** M2 customer archive (memory). */
+  /** M2 customer archive (memory or PG). */
   customer?: CustomerHandlerDeps;
 }>;
 
