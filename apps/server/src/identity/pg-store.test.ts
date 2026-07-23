@@ -1,5 +1,5 @@
 /**
- * Postgres identity store integration — skipped when PG env unset.
+ * Postgres identity store integration — enabled by the real-PG integration job.
  * Against compose: LAUNDRY_USE_LOCAL_PG=1 node --test dist/identity/pg-store.test.js
  */
 
@@ -16,7 +16,7 @@ import { createAccessTokenSigner } from "./crypto-util.js";
 import { createQuickSwitchChallenge, verifyQuickSwitchPin } from "./pin.js";
 import { rotateRefresh } from "./session.js";
 
-// CI has no compose Postgres — only run when explicitly opted in.
+// Ordinary unit runs stay database-free; v2-integration sets this flag.
 const pgOptIn =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true";
 const urls = pgOptIn ? resolvePgUrls(process.env) : null;

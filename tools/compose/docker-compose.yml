@@ -1,71 +1,70 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: laundry-postgres-spike
+    container_name: laundry-postgres-v2
     environment:
       POSTGRES_DB: laundry_v2
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_secure_password # 仅限本地 / LOCAL ONLY: mock credential for local development spike
+      POSTGRES_PASSWORD: postgres_secure_password # LOCAL ONLY
     ports:
       - "8543:5432"
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-      - pgdata-spike:/var/lib/postgresql/data
+      - ./bootstrap.sql:/docker-entrypoint-initdb.d/00-bootstrap.sql:ro
+      - pgdata-v2:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d laundry_v2"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 12
 
-  # Edge 本地终端微服务网关 (Edge 占位)
-  mock-edge-server:
-    build:
-      context: ./mock-server
-      dockerfile: Dockerfile
-    container_name: laundry-mock-edge-server-spike
+  migrate:
+    image: laundry-v2-server-integration
+    command: ["bash", "tools/compose/migrate-v2.sh"]
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_USER: laundry_app
-      DB_PASSWORD: app_secure_password # 仅限本地 / LOCAL ONLY: mock app role credential
-      DB_NAME: laundry_v2
-      PORT: "3000"
-      SERVER_ROLE: "edge"
-    ports:
-      - "8080:3000"
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: laundry_v2
+      SUPERUSER_DATABASE_URL: postgresql://postgres:postgres_secure_password@postgres:5432/laundry_v2
     depends_on:
       postgres:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+    restart: "no"
 
-  # 中央云端 Agent / API 控制台 (Server 占位)
-  mock-cloud-server:
-    build:
-      context: ./mock-server
-      dockerfile: Dockerfile
-    container_name: laundry-mock-cloud-server-spike
+  seed:
+    image: laundry-v2-server-integration
+    command: ["node", "tools/compose/seed-v2.mjs"]
     environment:
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_USER: laundry_app
-      DB_PASSWORD: app_secure_password # 仅限本地 / LOCAL ONLY: mock app role credential
-      DB_NAME: laundry_v2
-      PORT: "3001"
-      SERVER_ROLE: "cloud"
-    ports:
-      - "8081:3001"
+      DATABASE_ADMIN_URL: postgresql://postgres:postgres_secure_password@postgres:5432/laundry_v2
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  server:
+    image: laundry-v2-server-integration
+    build:
+      context: ../..
+      dockerfile: apps/server/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://laundry_app:app_secure_password@postgres:5432/laundry_v2
+      DATABASE_ADMIN_URL: postgresql://postgres:postgres_secure_password@postgres:5432/laundry_v2
+      HOST: 0.0.0.0
+      PORT: "8787"
+      CORS_ORIGIN: http://127.0.0.1:5173,http://localhost:5173
+    ports:
+      - "8787:8787"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "fetch(''http://127.0.0.1:8787/health'').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"',
+        ]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 12
 
 volumes:
-  pgdata-spike:
+  pgdata-v2:

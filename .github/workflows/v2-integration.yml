@@ -1,0 +1,100 @@
+name: V2 PostgreSQL Integration
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/server/**"
+      - "apps/web/**"
+      - "packages/contracts/**"
+      - "packages/db/**"
+      - "packages/domain/**"
+      - "tools/compose/**"
+      - ".github/workflows/v2-integration.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+  push:
+    branches: [main]
+
+jobs:
+  real-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.0
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Check workspace foundation
+        run: pnpm run workspace:check
+
+      - name: Start real Postgres, migrations, seed and server
+        run: docker compose -f tools/compose/docker-compose.yml up -d --build
+
+      - name: Verify repeatable migrations and seed
+        run: |
+          bash tools/compose/migrate-v2.sh
+          bash tools/compose/migrate-v2.sh
+          bash tools/compose/seed-v2.sh
+          bash tools/compose/seed-v2.sh
+
+      - name: Assert RLS and real server HTTP smoke
+        run: |
+          bash tools/compose/smoke-rls.sh
+          bash tools/compose/smoke-test.sh
+
+      - name: Run server tests against real PostgreSQL with no skips
+        run: |
+          set -o pipefail
+          LAUNDRY_USE_LOCAL_PG=1 pnpm --filter @laundry/server test | tee /tmp/laundry-server-pg-tests.log
+          ! rg -q '^# skipped [1-9][0-9]*$' /tmp/laundry-server-pg-tests.log
+
+      - name: Install Chromium for local Web smoke
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Start local Vite Web host
+        run: |
+          pnpm local:web > /tmp/laundry-web.log 2>&1 &
+          echo $! > /tmp/laundry-web.pid
+
+      - name: Run Playwright against real server and PostgreSQL
+        run: pnpm run local:web:e2e
+
+      - name: Capture integration diagnostics
+        if: failure()
+        run: |
+          docker compose -f tools/compose/docker-compose.yml logs --no-color > /tmp/laundry-compose.log || true
+          if [ -f /tmp/laundry-web.log ]; then cat /tmp/laundry-web.log; fi
+
+      - name: Upload integration diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v2-integration-diagnostics
+          path: |
+            /tmp/laundry-compose.log
+            /tmp/laundry-web.log
+            /tmp/laundry-server-pg-tests.log
+          if-no-files-found: ignore
+
+      - name: Stop compose and local Web host
+        if: always()
+        run: |
+          if [ -f /tmp/laundry-web.pid ]; then kill "$(cat /tmp/laundry-web.pid)" || true; fi
+          docker compose -f tools/compose/docker-compose.yml down -v
