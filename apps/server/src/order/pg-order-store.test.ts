@@ -468,6 +468,7 @@ test("listOrderSummaries uses one aggregate query and preserves every order.list
   const summaryQueries = queries.filter((query) => query.sql.includes("COUNT(g.id)"));
   assert.equal(summaryQueries.length, 1);
   assert.match(summaryQueries[0]!.sql, /LEFT JOIN garments/u);
+  assert.match(summaryQueries[0]!.sql, /o\.balance_cents >= \$7/u);
   assert.match(summaryQueries[0]!.sql, /ORDER BY o\.created_at DESC, o\.ticket_no DESC/u);
   assert.deepEqual(summaryQueries[0]!.params, [
     DEMO_ORG_ID,
