@@ -2,7 +2,7 @@
  * C4 pure listTools — filter projected tool descriptors (no I/O, no model calls).
  */
 
-import { M1_FIRST_WAVE_DEFINITIONS } from "@laundry/contracts";
+import { M2_READ_ONLY_AI_DEFINITIONS } from "@laundry/contracts";
 
 import { projectCatalogToTools, type LlmToolDescriptor } from "./registry.js";
 
@@ -21,21 +21,27 @@ const RISK_RANK: Readonly<Record<string, number>> = Object.freeze({
  * Unknown presets fall back to empty (fail-closed).
  */
 export const AI_PRESET_WHITELISTS: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  /** M2 read-only counter assistant: queries + low-risk session hygiene. */
+  /** M2 counter assistant: frozen order/customer/print read queries only. */
   counter_readonly: Object.freeze([
-    "identity.logout",
-    "identity.refresh",
-    "identity.pin_challenge",
-    "platform.settings.get",
-    "platform.store_features.get",
+    "catalog.items.list",
+    "catalog.items.get",
+    "customer.search",
+    "order.get",
+    "order.list",
+    "print.jobs.list",
+    "stats.day.summary",
+    "shift.get",
+    "photo.list_by_order",
   ]),
-  /** Ops assist may also read audit windows (R2 PII — still non-secret). */
-  ops_audit_readonly: Object.freeze([
-    "identity.logout",
-    "platform.settings.get",
-    "platform.store_features.get",
-    "platform.audit.list",
+  /** M2 business Q&A needs only aggregate and read models. */
+  business_readonly: Object.freeze([
+    "stats.day.summary",
+    "order.list",
+    "customer.search",
+    "shift.get",
   ]),
+  /** Grounded procedure help is static text and intentionally has no data tools. */
+  procedure_help: Object.freeze([] as string[]),
   /** Empty preset for red-team / deny-all smoke. */
   deny_all: Object.freeze([] as string[]),
 });
@@ -70,7 +76,7 @@ function passesRiskCeiling(tool: LlmToolDescriptor, maxRisk: string | undefined)
  * Always excludes R5 and secret-classified definitions (via projectCatalogToTools).
  */
 export function listTools(filter?: ListToolsFilter): readonly LlmToolDescriptor[] {
-  const projected = projectCatalogToTools(M1_FIRST_WAVE_DEFINITIONS);
+  const projected = projectCatalogToTools(M2_READ_ONLY_AI_DEFINITIONS);
   const nameAllow = filter?.names === undefined ? null : new Set(filter.names);
   const presetAllow = whitelistForPreset(filter?.preset);
 

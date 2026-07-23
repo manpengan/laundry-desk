@@ -18,6 +18,9 @@ import {
   M2_CATALOG_RLS_TABLES,
   M2_CATALOG_TABLE_NAMES,
   M2_CATALOG_TABLES,
+  M2_AI_RLS_TABLES,
+  M2_AI_TABLE_NAMES,
+  M2_AI_TABLES,
   M2_ORDER_RLS_TABLES,
   M2_ORDER_TABLE_NAMES,
   M2_ORDER_TABLES,
@@ -389,6 +392,16 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(getTenantTableScope("garment_photos")).toBe("store");
   });
 
+  it("exports M2 AI credential and append-only setup-audit tables", () => {
+    expect(Object.keys(M2_AI_TABLES).sort()).toEqual([...M2_AI_TABLE_NAMES].sort());
+    expect([...M2_AI_RLS_TABLES].sort()).toEqual([...M2_AI_TABLE_NAMES].sort());
+    expect(columnNames(M2_AI_TABLES.ai_credentials)).toContain("key_ciphertext");
+    expect(columnNames(M2_AI_TABLES.ai_credentials)).toContain("wrapped_dek");
+    expect(columnNames(M2_AI_TABLES.ai_credentials)).not.toContain("api_key");
+    expect(columnNames(M2_AI_TABLES.ai_credential_events)).toContain("credential_id");
+    expect(columnNames(M2_AI_TABLES.ai_credential_events)).toContain("store_id");
+  });
+
   it("declares M3 garment_photos tenant unique layout", () => {
     const config = getTableConfig(M3_PHOTO_TABLES.garment_photos);
     const hasTenantUnique = config.indexes.some((index) => {
@@ -432,6 +445,7 @@ describe("M1 schema contract vs A3 matrix", () => {
       ...M2_CUSTOMER_TABLE_NAMES,
       ...M2_SHIFT_TABLE_NAMES,
       ...M3_PHOTO_TABLE_NAMES,
+      ...M2_AI_TABLE_NAMES,
     ].sort();
     expect(Object.keys(schema).sort()).toEqual(expected);
   });

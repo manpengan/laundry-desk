@@ -20,6 +20,8 @@ export { printJobs } from "./print-jobs.js";
 export { customers } from "./customers.js";
 export { shiftClosings } from "./shift-closings.js";
 export { garmentPhotos } from "./garment-photos.js";
+export { aiCredentialEvents } from "./ai-credential-events.js";
+export { aiCredentials } from "./ai-credentials.js";
 
 import { orgs } from "./orgs.js";
 import { stores } from "./stores.js";
@@ -43,6 +45,8 @@ import { printJobs } from "./print-jobs.js";
 import { customers } from "./customers.js";
 import { shiftClosings } from "./shift-closings.js";
 import { garmentPhotos } from "./garment-photos.js";
+import { aiCredentialEvents } from "./ai-credential-events.js";
+import { aiCredentials } from "./ai-credentials.js";
 
 /** M1 tables present in the A3 tenant matrix. */
 export const M1_MATRIX_TABLES = Object.freeze({
@@ -102,6 +106,12 @@ export const M3_PHOTO_TABLES = Object.freeze({
   garment_photos: garmentPhotos,
 } as const);
 
+/** M2 BYOK encrypted credentials and append-only setup audit. */
+export const M2_AI_TABLES = Object.freeze({
+  ai_credentials: aiCredentials,
+  ai_credential_events: aiCredentialEvents,
+} as const);
+
 /** Full M1 identity/platform + M2 + M3 schema surface for drizzle-kit and public API. */
 export const schema = Object.freeze({
   ...M1_MATRIX_TABLES,
@@ -113,6 +123,7 @@ export const schema = Object.freeze({
   ...M2_CUSTOMER_TABLES,
   ...M2_SHIFT_TABLES,
   ...M3_PHOTO_TABLES,
+  ...M2_AI_TABLES,
 } as const);
 
 export type M1MatrixTableName = keyof typeof M1_MATRIX_TABLES;
@@ -124,5 +135,6 @@ export type M2PrintTableName = keyof typeof M2_PRINT_TABLES;
 export type M2CustomerTableName = keyof typeof M2_CUSTOMER_TABLES;
 export type M2ShiftTableName = keyof typeof M2_SHIFT_TABLES;
 export type M3PhotoTableName = keyof typeof M3_PHOTO_TABLES;
+export type M2AiTableName = keyof typeof M2_AI_TABLES;
 export type M1TableName = keyof typeof M1_MATRIX_TABLES | keyof typeof M1_SESSION_TABLES;
 export type SchemaTableName = keyof typeof schema;

@@ -21,6 +21,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0012_shift_closings.sq
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0013_garment_photos.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0014_order_list_summary_indexes.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0015_m2_counter_production_hardening.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0016_ai_credentials.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -44,5 +45,6 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **M2 garment photos** (0013): `garment_photos` append-only metadata (`SELECT, INSERT` only)
 - **M2 order list** (0014): newest-first and customer-history indexes for the aggregate `order.list` read path
 - **M2 production hardening** (0015): explicit append-only audit/payment grants and composite garment-photo ownership FK
-- Still deferred: edge lease, AI matrix tables
+- **M2 BYOK** (0016): envelope-encrypted credentials and append-only credential setup/verification audit
+- Still deferred: edge lease, AI model matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

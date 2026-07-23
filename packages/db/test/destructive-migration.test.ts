@@ -60,6 +60,7 @@ describe("destructive migration static reject", () => {
       "0013_garment_photos.sql",
       "0014_order_list_summary_indexes.sql",
       "0015_m2_counter_production_hardening.sql",
+      "0016_ai_credentials.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
@@ -86,6 +87,8 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS customers/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS shift_closings/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS garment_photos/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS ai_credentials/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS ai_credential_events/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS args_hash/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS entity_versions/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS idempotency_key/iu);
@@ -120,6 +123,10 @@ describe("destructive migration static reject", () => {
     );
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*print_jobs/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*customers/iu);
+    expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE ai_credential_events TO laundry_app/iu);
+    expect(combined).toMatch(
+      /REVOKE UPDATE, DELETE, TRUNCATE ON TABLE ai_credential_events FROM laundry_app/iu,
+    );
     expect(combined).not.toMatch(/dialect\s*[:=]\s*['"]sqlite['"]/iu);
     expect(combined.toLowerCase().includes("better" + "-sqlite3")).toBe(false);
   });

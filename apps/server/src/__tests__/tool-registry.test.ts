@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  M1_FIRST_WAVE_COMMAND_NAMES,
   M1_FIRST_WAVE_DEFINITIONS,
-  M1_FIRST_WAVE_QUERY_NAMES,
+  M2_READ_ONLY_AI_DEFINITIONS,
   isAiProjectableDefinition,
   platformSettingsSetCommand,
 } from "@laundry/contracts";
@@ -38,25 +37,20 @@ test("projection excludes secret-classified commands (login / pin_verify)", () =
   );
 });
 
-test("projected names are a subset of the M1 first-wave catalog", () => {
-  const catalogNames = new Set<string>([
-    ...M1_FIRST_WAVE_COMMAND_NAMES,
-    ...M1_FIRST_WAVE_QUERY_NAMES,
-  ]);
+test("default projected names are a subset of the frozen M2 read-only catalog", () => {
+  const catalogNames = new Set(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name));
   const tools = listTools();
   assert.ok(tools.length > 0);
   for (const tool of tools) {
     assert.ok(catalogNames.has(tool.name), `unexpected tool ${tool.name}`);
   }
 
-  // Known projectable subset from A6 first wave.
+  // M2 projection never makes commands or platform settings available to the model.
   const names = new Set(listToolNames());
-  assert.ok(names.has("identity.logout"));
-  assert.ok(names.has("identity.refresh"));
-  assert.ok(names.has("identity.pin_challenge"));
-  assert.ok(names.has("platform.settings.get"));
-  assert.ok(names.has("platform.store_features.get"));
-  assert.ok(names.has("platform.audit.list"));
+  assert.ok(names.has("order.list"));
+  assert.ok(names.has("stats.day.summary"));
+  assert.equal(names.has("identity.logout"), false);
+  assert.equal(names.has("platform.settings.get"), false);
 });
 
 test("secrets never appear in projected example args", () => {
@@ -78,20 +72,20 @@ test("secrets never appear in projected example args", () => {
 });
 
 test("descriptors carry redaction and limits fields", () => {
-  const audit = listTools().find((tool) => tool.name === "platform.audit.list");
-  assert.ok(audit);
-  assert.equal(audit.kind, "query");
-  assert.ok(audit.result_redaction.length > 0);
-  assert.equal(typeof audit.max_result_rows, "number");
-  assert.ok(audit.input_json_schema !== undefined);
-  assert.equal(typeof audit.description, "string");
-  assert.ok(audit.description.length > 0);
+  const order = listTools().find((tool) => tool.name === "order.list");
+  assert.ok(order);
+  assert.equal(order.kind, "query");
+  assert.ok(order.result_redaction.length > 0);
+  assert.equal(typeof order.max_result_rows, "number");
+  assert.ok(order.input_json_schema !== undefined);
+  assert.equal(typeof order.description, "string");
+  assert.ok(order.description.length > 0);
 });
 
 test("listTools supports preset whitelist and maxRisk filter", () => {
   const readonlyNames = listToolNames({ preset: "counter_readonly" });
-  assert.ok(readonlyNames.includes("platform.settings.get"));
-  assert.equal(readonlyNames.includes("platform.audit.list"), false);
+  assert.ok(readonlyNames.includes("order.list"));
+  assert.equal(readonlyNames.includes("platform.settings.get"), false);
 
   const deny = listToolNames({ preset: "deny_all" });
   assert.deepEqual(deny, []);

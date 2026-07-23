@@ -78,6 +78,9 @@ export const M2_SHIFT_RLS_TABLES = Object.freeze(["shift_closings"] as const);
  */
 export const M3_PHOTO_RLS_TABLES = Object.freeze(["garment_photos"] as const);
 
+/** M2 BYOK credentials are org-scoped; their setup audit is store-scoped. */
+export const M2_AI_RLS_TABLES = Object.freeze(["ai_credentials", "ai_credential_events"] as const);
+
 const STORE_PREDICATE = `org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
     AND store_id = NULLIF(current_setting('app.store_id', true), '')::uuid`;
 

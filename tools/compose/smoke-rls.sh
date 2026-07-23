@@ -49,6 +49,7 @@ require_tables() {
     laundry_schema_migrations orgs stores staffs staff_store_roles settings store_features audit_log
     sessions refresh_families refresh_tokens pin_challenges pin_lockouts orders order_lines garments
     ticket_counters catalog_items payments print_jobs customers shift_closings garment_photos
+    ai_credentials ai_credential_events
   )
   local table
   for table in "${expected[@]}"; do
@@ -56,11 +57,11 @@ require_tables() {
     found="$(psql_app -c "SELECT to_regclass('public.${table}')::text")"
     [[ "${found}" == "${table}" ]] || die "missing formal table: ${table}"
   done
-  pass "all formal migrations (0001–0014) are present"
+  pass "all formal migrations (0001–0016) are present"
 }
 
 assert_default_closed() {
-  local no_guc empty_guc
+  local no_guc empty_guc ai_credentials_no_guc ai_events_no_guc
   no_guc="$(psql_app -c 'SELECT count(*)::text FROM staffs')"
   [[ "${no_guc}" == '0' ]] || die "unset GUC exposed ${no_guc} staff rows"
 
@@ -74,7 +75,16 @@ SQL
   )"
   empty_guc="$(printf '%s\n' "${empty_guc}" | tail -n 1)"
   [[ "${empty_guc}" == '0' ]] || die "empty GUC exposed ${empty_guc} staff rows"
-  pass "unset and empty GUCs default closed"
+
+  ai_credentials_no_guc="$(psql_app -c 'SELECT count(*)::text FROM ai_credentials')"
+  [[ "${ai_credentials_no_guc}" == '0' ]] \
+    || die "unset GUC exposed ${ai_credentials_no_guc} AI credential rows"
+
+  ai_events_no_guc="$(psql_app -c 'SELECT count(*)::text FROM ai_credential_events')"
+  [[ "${ai_events_no_guc}" == '0' ]] \
+    || die "unset GUC exposed ${ai_events_no_guc} AI credential event rows"
+
+  pass "unset and empty GUCs default closed, including AI credentials"
 }
 
 seed_second_tenant() {

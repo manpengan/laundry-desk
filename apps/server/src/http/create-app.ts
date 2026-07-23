@@ -10,12 +10,24 @@ import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 
 import { createCommandError, CSRF_HEADER_NAME, type CommandErrorCode } from "@laundry/contracts";
+import { z } from "zod";
 
+import {
+  createAiService,
+  createMemoryAiCredentialStore,
+  createOpenAiCompatibleProvider,
+  createPgAiCredentialStore,
+  type AiProvider,
+  type AiService,
+  type KekProvider,
+  writeAiEventStream,
+} from "../ai/index.js";
 import { executeCommand } from "../bus/executor.js";
 import { executeQuery } from "../bus/execute-query.js";
 import type { ActorContext } from "../bus/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
+import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { createAccessTokenSigner } from "../identity/crypto-util.js";
@@ -37,7 +49,24 @@ export type CreateAppOptions = Readonly<{
   corsOrigin?: string | readonly string[];
   /** Override cookie Secure / __Host- policy (tests force non-secure). */
   cookiePolicy?: CookiePolicy;
+  /** Optional BYOK runtime; absent means hard fail-closed until KMS/secret-store wiring exists. */
+  aiService?: AiService;
+  /** KMS/OS-secret backed KEK injected by the trusted server bootstrap; never an HTTP value. */
+  aiKekProvider?: KekProvider;
+  /** Injectable official-provider adapter (tests/bootstrap). */
+  aiProvider?: AiProvider;
 }>;
+
+const AiCredentialCreateSchema = z.strictObject({
+  provider: z.literal("openai"),
+  api_key: z.string().min(1).max(8_192),
+});
+const AiChatSchema = z.strictObject({
+  credential_id: z.uuid(),
+  preset: z.enum(["business_readonly", "counter_readonly", "procedure_help"]),
+  message: z.string().min(1).max(4_000),
+});
+const AiCredentialParamsSchema = z.strictObject({ credentialId: z.uuid() });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -103,6 +132,14 @@ function actorFromSession(session: SessionRecord): ActorContext {
   });
 }
 
+function aiActorFromSession(session: SessionRecord): ActorContext {
+  return Object.freeze({
+    ...actorFromSession(session),
+    via: "ai" as const,
+    riskCap: "R2" as const,
+  });
+}
+
 async function resolveSession(
   runtime: LocalRuntime,
   token: string | null,
@@ -154,6 +191,15 @@ function requireCsrf(
   return true;
 }
 
+function parseBody<T>(schema: z.ZodType<T>, body: unknown): T | null {
+  const parsed = schema.safeParse(body);
+  return parsed.success ? parsed.data : null;
+}
+
+function canManageAiCredentials(actor: ActorContext): boolean {
+  return actor.permissions?.includes("settings_admin") ?? false;
+}
+
 /** Build a fully configured Fastify instance (no listen). Prefer inject() in tests. */
 export async function createLocalApp(options: CreateAppOptions): Promise<FastifyInstance> {
   const { runtime } = options;
@@ -172,6 +218,26 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   await app.register(cookie);
 
   const memorySql = new FakeSqlClient();
+  const runWithSql = async <T>(fn: (sql: SqlClient) => Promise<T>): Promise<T> => {
+    if (runtime.mode === "pg") {
+      if (runtime.pool === null) throw new Error("PostgreSQL runtime pool is required");
+      return withPoolClient(runtime.pool, (sql) => fn(sql));
+    }
+    return fn(memorySql);
+  };
+  const aiCredentialStore =
+    runtime.mode === "pg"
+      ? createPgAiCredentialStore((tenant, operation) =>
+          runWithSql((sql) => withTenantTransaction(sql, tenant, operation)),
+        )
+      : createMemoryAiCredentialStore();
+  const aiService =
+    options.aiService ??
+    createAiService({
+      credentialStore: aiCredentialStore,
+      kekProvider: options.aiKekProvider ?? null,
+      provider: options.aiProvider ?? createOpenAiCompatibleProvider(),
+    });
 
   app.get("/health", async () =>
     Object.freeze({
@@ -246,13 +312,6 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     isRecord,
     fail,
   });
-
-  const runWithSql = async <T>(fn: (sql: SqlClient) => Promise<T>): Promise<T> => {
-    if (runtime.mode === "pg" && runtime.pool !== null) {
-      return withPoolClient(runtime.pool, (sql) => fn(sql));
-    }
-    return fn(memorySql);
-  };
 
   app.post("/v1/commands/:name", async (request, reply) => {
     const session = await resolveSession(runtime, readBearer(request));
@@ -350,6 +409,118 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       reply.code(400);
     }
     return result;
+  });
+
+  app.get("/api/v2/ai/credentials", async (request, reply) => {
+    const session = await resolveSession(runtime, readBearer(request));
+    if (session === null) {
+      reply.code(401);
+      return fail("AUTHENTICATION_FAILED");
+    }
+    const actor = actorFromSession(session);
+    if (!canManageAiCredentials(actor)) {
+      reply.code(403);
+      return fail("PERMISSION_DENIED");
+    }
+    return Object.freeze({
+      ok: true as const,
+      data: await aiService.listCredentials(tenantFromSession(session)),
+    });
+  });
+
+  app.post("/api/v2/ai/credentials", async (request, reply) => {
+    const session = await resolveSession(runtime, readBearer(request));
+    if (session === null) {
+      reply.code(401);
+      return fail("AUTHENTICATION_FAILED");
+    }
+    const actor = actorFromSession(session);
+    if (!canManageAiCredentials(actor)) {
+      reply.code(403);
+      return fail("PERMISSION_DENIED");
+    }
+    if (requireCsrf(request, reply, cookiePolicy) !== true) return fail("CSRF_REJECTED");
+    const body = parseBody(AiCredentialCreateSchema, request.body);
+    if (body === null || !aiService.isConfigured()) {
+      reply.code(body === null ? 400 : 503);
+      return fail(body === null ? "VALIDATION_FAILED" : "RESOURCE_UNAVAILABLE");
+    }
+    const credential = await aiService.saveCredential(tenantFromSession(session), body);
+    if (credential === null) {
+      reply.code(503);
+      return fail("RESOURCE_UNAVAILABLE");
+    }
+    return Object.freeze({ ok: true as const, data: credential });
+  });
+
+  app.post("/api/v2/ai/credentials/:credentialId/verify", async (request, reply) => {
+    const session = await resolveSession(runtime, readBearer(request));
+    if (session === null) {
+      reply.code(401);
+      return fail("AUTHENTICATION_FAILED");
+    }
+    const actor = actorFromSession(session);
+    if (!canManageAiCredentials(actor)) {
+      reply.code(403);
+      return fail("PERMISSION_DENIED");
+    }
+    if (requireCsrf(request, reply, cookiePolicy) !== true) return fail("CSRF_REJECTED");
+    const params = parseBody(AiCredentialParamsSchema, request.params);
+    if (params === null || !aiService.isConfigured()) {
+      reply.code(params === null ? 400 : 503);
+      return fail(params === null ? "VALIDATION_FAILED" : "RESOURCE_UNAVAILABLE");
+    }
+    const result = await aiService.verifyCredential(
+      tenantFromSession(session),
+      params.credentialId,
+    );
+    if (!result.found) {
+      reply.code(404);
+      return fail("RESOURCE_UNAVAILABLE");
+    }
+    return Object.freeze({ ok: true as const, data: Object.freeze({ verified: result.verified }) });
+  });
+
+  app.post("/api/v2/ai/chat", async (request, reply) => {
+    const session = await resolveSession(runtime, readBearer(request));
+    if (session === null) {
+      reply.code(401);
+      return fail("AUTHENTICATION_FAILED");
+    }
+    const body = parseBody(AiChatSchema, request.body);
+    if (body === null || !aiService.isConfigured()) {
+      reply.code(body === null ? 400 : 503);
+      return fail(body === null ? "VALIDATION_FAILED" : "RESOURCE_UNAVAILABLE");
+    }
+    const tenant = tenantFromSession(session);
+    const actor = aiActorFromSession(session);
+    const { queryRegistry } = createRegisteredM1Bus({
+      identity: runtime.identity,
+      platform: runtime.platform,
+      order: runtime.order,
+      catalog: runtime.catalog,
+      print: runtime.print,
+      stats: runtime.stats,
+      customer: runtime.customer,
+      shift: runtime.shift,
+      photo: runtime.photo,
+    });
+    const events = aiService.stream({
+      tenant,
+      actor,
+      credential_id: body.credential_id,
+      preset: body.preset,
+      message: body.message,
+      executeQuery: async ({ name, input }) => {
+        const result = await runWithSql((sql) =>
+          executeQuery(sql, tenant, name, input, { registry: queryRegistry, actor }),
+        );
+        if (!result.ok) throw new Error("AI query unavailable");
+        return result.data.result;
+      },
+    });
+    await writeAiEventStream(reply, events);
+    return reply;
   });
 
   return app;

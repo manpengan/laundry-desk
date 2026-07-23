@@ -5,9 +5,10 @@
  */
 
 import {
-  M1_FIRST_WAVE_DEFINITIONS,
-  isAiProjectableDefinition,
+  M2_READ_ONLY_AI_DEFINITIONS,
+  type ContractDefinition,
   type AiProjectableDefinition,
+  isAiProjectableDefinition,
   type RedactionRule,
 } from "@laundry/contracts";
 import { z } from "zod";
@@ -152,7 +153,10 @@ export function projectDefinitionToTool(definition: AiProjectableDefinition): Ll
  * into LLM tool descriptors. Mechanically excludes R5 and secret.
  */
 export function projectCatalogToTools(
-  definitions: readonly (typeof M1_FIRST_WAVE_DEFINITIONS)[number][] = M1_FIRST_WAVE_DEFINITIONS,
+  definitions: readonly ContractDefinition<
+    "command" | "query",
+    z.ZodObject
+  >[] = M2_READ_ONLY_AI_DEFINITIONS,
 ): readonly LlmToolDescriptor[] {
   const tools: LlmToolDescriptor[] = [];
   for (const definition of definitions) {

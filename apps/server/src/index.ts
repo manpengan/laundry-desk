@@ -172,6 +172,35 @@ export {
   projectCatalogToTools,
   projectDefinitionToTool,
 } from "./tools/index.js";
+
+/** M2 secure BYOK + read-only AI runtime. */
+export {
+  createAiService,
+  createMemoryAiCredentialStore,
+  createOpenAiCompatibleProvider,
+  createPgAiCredentialStore,
+  createReadonlyAiGateway,
+  createStaticKekProvider,
+  decryptApiKey,
+  encryptApiKey,
+  OPENAI_OFFICIAL_ORIGIN,
+} from "./ai/index.js";
+export type {
+  AiCredentialMetadata,
+  AiCredentialStatus,
+  AiCredentialStore,
+  AiGatewayEvent,
+  AiPreset,
+  AiProvider,
+  AiProviderEvent,
+  AiProviderName,
+  AiQueryExecutor,
+  AiService,
+  EncryptedAiCredential,
+  KekProvider,
+  ReadonlyAiGateway,
+  TenantSqlRunner,
+} from "./ai/index.js";
 export type {
   JsonSchemaProjection,
   ListToolsFilter,
