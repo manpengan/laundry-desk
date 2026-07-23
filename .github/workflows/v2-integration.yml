@@ -1,6 +1,7 @@
 name: V2 PostgreSQL Integration
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
     paths:
