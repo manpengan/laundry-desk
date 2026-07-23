@@ -1,4 +1,5 @@
-import { buildSetLocalGucStatements } from "./guc.js";
+import { buildSetLocalGucStatements, parseTenantContext } from "./guc.js";
+import { runWithActiveTenantTransaction } from "./active-tenant-transaction.js";
 import type { SqlClient, TenantContext, TenantTransactionFn } from "./types.js";
 
 /**
@@ -17,14 +18,17 @@ export async function withTenantTransaction<TResult>(
   ctx: TenantContext | unknown,
   fn: TenantTransactionFn<TResult>,
 ): Promise<TResult> {
-  const statements = buildSetLocalGucStatements(ctx);
+  const tenant = parseTenantContext(ctx);
+  const statements = buildSetLocalGucStatements(tenant);
 
   await client.query("BEGIN");
   try {
     for (const statement of statements) {
       await client.query(statement.sql, statement.values);
     }
-    const result = await fn(client);
+    const result = await runWithActiveTenantTransaction(Object.freeze({ client, tenant }), () =>
+      fn(client),
+    );
     await client.query("COMMIT");
     return result;
   } catch (error) {

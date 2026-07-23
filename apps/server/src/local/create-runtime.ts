@@ -21,12 +21,14 @@ import type { PrintHandlerDeps } from "../print/handlers.js";
 import { createPgPrintJobStore } from "../print/pg-print-store.js";
 import { createPgOrderStore } from "../order/pg-order-store.js";
 import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
+import { createPgStatsQuery } from "../stats/pg-source.js";
 import type { StatsHandlerDeps } from "../stats/handlers.js";
 import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import type { PhotoHandlerDeps } from "../photo/handlers.js";
 import { createMemoryPhotoStore } from "../photo/memory-store.js";
+import { createPgPhotoStore } from "../photo/pg-photo-store.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import {
@@ -273,13 +275,15 @@ export async function createPgLocalRuntime(
   const passwordPort = createPasswordPort();
   const orderStore = createPgOrderStore(appPool);
   const customerStore = createPgCustomerStore(appPool, { orgId: DEMO_ORG_ID });
-  const statsSource = createOrderBackedStatsQuery(orderStore);
+  const statsSource = createPgStatsQuery(appPool);
   const shiftStore = createPgShiftStore(appPool, {
     orgId: DEMO_ORG_ID,
     storeId: DEMO_STORE_ID,
   });
-  // Photo PG store later; memory photo store in PG runtime for skeleton.
-  const photoStore = createMemoryPhotoStore();
+  const photoStore = createPgPhotoStore(appPool, {
+    orgId: DEMO_ORG_ID,
+    storeId: DEMO_STORE_ID,
+  });
 
   return Object.freeze({
     mode: "pg" as const,
@@ -317,14 +321,24 @@ export async function createPgLocalRuntime(
 }
 
 /**
- * Auto-select: DATABASE_URL / LAUNDRY_USE_LOCAL_PG → PG; else memory.
+ * Auto-select: DATABASE_URL / LAUNDRY_USE_LOCAL_PG → PG; else explicit local demo memory.
+ * Production must provide a dedicated laundry_app DATABASE_URL and never silently
+ * start a counter runtime backed by process memory.
  */
 export async function createLocalRuntime(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<LocalRuntime> {
   const urls = resolvePgUrls(env);
+  const isProduction = env.NODE_ENV === "production";
+  const databaseUrl = env.DATABASE_URL?.trim() ?? "";
+  if (isProduction && databaseUrl.length === 0) {
+    throw new Error("Production runtime requires DATABASE_URL for the laundry_app role");
+  }
   if (urls !== null) {
     return createPgLocalRuntime(urls);
+  }
+  if (isProduction) {
+    throw new Error("Production runtime cannot fall back to memory mode");
   }
   return createMemoryLocalRuntime();
 }

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0014", () => {
+  it("ships formal SQL migrations ordered 0001 → 0015", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -26,6 +26,7 @@ describe("packages/db migration file inventory", () => {
       "0012_shift_closings.sql",
       "0013_garment_photos.sql",
       "0014_order_list_summary_indexes.sql",
+      "0015_m2_counter_production_hardening.sql",
     ]);
   });
 
@@ -50,6 +51,7 @@ describe("packages/db migration file inventory", () => {
       "0012",
       "0013",
       "0014",
+      "0015",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -60,5 +62,16 @@ describe("packages/db migration file inventory", () => {
     expect(sql).toMatch(
       /ON orders \(org_id, store_id, customer_phone, created_at DESC, ticket_no DESC\)/iu,
     );
+  });
+
+  it("hardens append-only grants and photo ownership after the list indexes", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "0015_m2_counter_production_hardening.sql"),
+      "utf8",
+    );
+    expect(sql).toMatch(/REVOKE UPDATE, DELETE ON TABLE audit_log FROM laundry_app/iu);
+    expect(sql).toMatch(/REVOKE UPDATE, DELETE ON TABLE payments FROM laundry_app/iu);
+    expect(sql).toMatch(/garment_photos_garment_order_fk/iu);
+    expect(sql).toMatch(/FOREIGN KEY \(org_id, store_id, order_id, garment_id\)/iu);
   });
 });

@@ -402,6 +402,26 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(hasTenantUnique).toBe(true);
   });
 
+  it("binds each photo to a garment in the same tenant and order", () => {
+    const garmentConfig = getTableConfig(M2_ORDER_TABLES.garments);
+    const hasOrderGarmentUnique = garmentConfig.indexes.some((index) => {
+      const cols = index.config.columns.map((column) => {
+        if (typeof column === "string") return column;
+        if ("name" in column && typeof column.name === "string") return column.name;
+        return "";
+      });
+      return (
+        cols[0] === "org_id" && cols[1] === "store_id" && cols[2] === "order_id" && cols[3] === "id"
+      );
+    });
+    expect(hasOrderGarmentUnique).toBe(true);
+
+    const photoConfig = getTableConfig(M3_PHOTO_TABLES.garment_photos);
+    expect(
+      photoConfig.foreignKeys.some((fk) => fk.getName() === "garment_photos_garment_order_fk"),
+    ).toBe(true);
+  });
+
   it("exposes full schema as M1 + M2 + M3 garment_photos tables", () => {
     const expected = [
       ...M1_ALL_TABLE_NAMES,

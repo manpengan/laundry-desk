@@ -6,8 +6,9 @@
 import { buildPayPayment } from "@laundry/domain";
 import { randomUUID } from "node:crypto";
 
-import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
-import { withStoreGuc } from "../db/tenant-guc-client.js";
+import type { PgPool } from "../db/pg-pool.js";
+import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
+import type { SqlClient } from "../db/types.js";
 import {
   asOrderStatus,
   buildLineIdByIndex,
@@ -77,7 +78,7 @@ function mapOrderListSummary(row: OrderListSummaryRow): OrderListSummary {
 }
 
 async function listOrderSummaries(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
   options: OrderListSummaryOptions,
@@ -119,7 +120,7 @@ async function listOrderSummaries(
 }
 
 async function insertOrderRows(
-  client: PgPoolClient,
+  client: SqlClient,
   order: OrderRecord,
   garments: readonly GarmentRecord[],
   lineIdByIndex: ReadonlyMap<number, string>,
@@ -210,7 +211,7 @@ async function insertOrderRows(
 }
 
 async function loadOrder(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
   orderId: string,
@@ -242,7 +243,7 @@ async function loadOrder(
 }
 
 async function loadGarments(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
   orderId: string,
@@ -275,7 +276,7 @@ function nextOrderStatus(
 }
 
 async function insertPaymentIfNeeded(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
   orderId: string,
@@ -323,7 +324,7 @@ async function insertPaymentIfNeeded(
 }
 
 async function applyPickupTxn(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
   orderId: string,
@@ -396,7 +397,7 @@ export function createPgOrderStore(
   return Object.freeze({
     insertOrder: async (order, garments) => {
       const lineIdByIndex = buildLineIdByIndex(order.lines, newId);
-      await withStoreGuc(
+      await withStoreGucOrCurrent(
         pool,
         {
           orgId: order.org_id,
@@ -410,12 +411,12 @@ export function createPgOrderStore(
     },
 
     getOrder: async (orgId, storeId, orderId) =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) =>
         loadOrder(client, orgId, storeId, orderId),
       ),
 
     listOrders: async (orgId, storeId) =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) => {
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
         const orderResult = await client.query<OrderRow>(
           `SELECT id::text, org_id::text, store_id::text, ticket_no, status,
                   customer_phone, customer_name, note,
@@ -443,12 +444,12 @@ export function createPgOrderStore(
       }),
 
     listOrderSummaries: async (orgId, storeId, options) =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) =>
         listOrderSummaries(client, orgId, storeId, options),
       ),
 
     listGarments: async (orgId, storeId, orderId) =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) =>
         loadGarments(client, orgId, storeId, orderId),
       ),
 
@@ -457,7 +458,7 @@ export function createPgOrderStore(
         options?.staffId !== undefined
           ? Object.freeze({ orgId, storeId, staffId: options.staffId })
           : Object.freeze({ orgId, storeId });
-      return withStoreGuc(pool, scope, async (client) =>
+      return withStoreGucOrCurrent(pool, scope, async (client) =>
         applyPickupTxn(
           client,
           orgId,
@@ -473,7 +474,7 @@ export function createPgOrderStore(
     },
 
     nextTicketSeq: async (orgId, storeId, dayKey) =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) => {
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
         const result = await client.query<{ last_seq: number }>(
           `INSERT INTO ticket_counters (org_id, store_id, day_key, last_seq)
            VALUES ($1::uuid, $2::uuid, $3, 1)

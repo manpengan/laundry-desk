@@ -4,5 +4,6 @@ export {
   createMemoryStatsSource,
   createOrderBackedStatsQuery,
 } from "./memory-source.js";
+export { createPgStatsQuery } from "./pg-source.js";
 export type { StatsHandlerDeps } from "./handlers.js";
 export { createStatsQueryHandlers, registerStatsQueryHandlers } from "./handlers.js";

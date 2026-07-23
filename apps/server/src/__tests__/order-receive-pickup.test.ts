@@ -1,6 +1,6 @@
 /**
  * M2 skeleton: order.receive + order.pickup over memory store + bus.
- * Receive with phone best-effort upserts customer archive when store wired.
+ * Receive with phone atomically upserts customer archive when store wired.
  */
 
 import assert from "node:assert/strict";
@@ -233,7 +233,7 @@ test("order.receive without order_write is PERMISSION_DENIED", async () => {
   if (!result.ok) assert.equal(result.error.code, "PERMISSION_DENIED");
 });
 
-test("order.receive with phone upserts searchable customer (best-effort)", async () => {
+test("order.receive with phone upserts searchable customer", async () => {
   const customerStore = createMemoryCustomerStore([]);
   const { registry, queryRegistry, chainHooks, pendingStore } = buildBus(
     createMemoryOrderStore(),
@@ -283,7 +283,7 @@ test("order.receive with phone upserts searchable customer (best-effort)", async
   assert.equal(customers[0]?.name, "赵六");
 });
 
-test("order.receive succeeds when customer upsert throws (best-effort soft-skip)", async () => {
+test("order.receive rolls back when its customer upsert fails", async () => {
   const brokenCustomer: CustomerStore = Object.freeze({
     search: async () => Object.freeze([]),
     getByPhone: async () => null,
@@ -291,7 +291,8 @@ test("order.receive succeeds when customer upsert throws (best-effort soft-skip)
       throw new Error("simulated customer store failure");
     },
   });
-  const { registry, chainHooks, pendingStore } = buildBus(createMemoryOrderStore(), brokenCustomer);
+  const orderStore = createMemoryOrderStore();
+  const { registry, chainHooks, pendingStore } = buildBus(orderStore, brokenCustomer);
 
   const result = await executeCommand(
     new FakeSqlClient(),
@@ -313,11 +314,9 @@ test("order.receive succeeds when customer upsert throws (best-effort soft-skip)
     { registry, actor: CLERK, chainHooks, pendingStore },
   );
 
-  assert.equal(result.ok, true, JSON.stringify(result));
-  if (!result.ok) return;
-  const data = result.data.result as { garment_count: number; ticket_no: string };
-  assert.equal(data.garment_count, 1);
-  assert.match(data.ticket_no, /^\d{8}-\d{4}$/u);
+  assert.equal(result.ok, false, JSON.stringify(result));
+  if (!result.ok) assert.equal(result.error.code, "TRANSACTION_FAILED");
+  assert.deepEqual(await orderStore.listOrders?.(DEMO_ORG_ID, DEMO_STORE_ID), []);
 });
 
 test("order.receive without customer store still works with phone", async () => {

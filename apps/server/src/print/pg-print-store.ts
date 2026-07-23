@@ -5,8 +5,9 @@
 
 import { randomUUID } from "node:crypto";
 
-import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
-import { withStoreGuc } from "../db/tenant-guc-client.js";
+import type { PgPool } from "../db/pg-pool.js";
+import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
+import type { SqlClient } from "../db/types.js";
 import type {
   EnqueuePrintJobInput,
   PrintJobKind,
@@ -89,7 +90,7 @@ function assertLegalTransition(current: PrintJobStatus, next: PrintJobStatus, jo
 }
 
 async function selectJob(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
   jobId: string,
@@ -115,7 +116,7 @@ export function createPgPrintJobStore(
 
   return Object.freeze({
     enqueue: async (input: EnqueuePrintJobInput): Promise<PrintJobRecord> =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) => {
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
         const now = input.now ?? Math.floor(Date.now() / 1000);
         const jobId = input.job_id ?? newId();
         const at = epochToDate(now);
@@ -141,7 +142,7 @@ export function createPgPrintJobStore(
       }),
 
     list: async (limit: number): Promise<readonly PrintJobStatusView[]> =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) => {
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
         const capped = Math.max(0, Math.min(limit, 50));
         const result = await client.query<PrintJobRow>(
           `SELECT id, kind, status, order_id, ticket_no, created_at, updated_at, error, payload_bytes
@@ -155,7 +156,7 @@ export function createPgPrintJobStore(
       }),
 
     get: async (jobId: string): Promise<PrintJobRecord | null> =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) => {
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
         const row = await selectJob(client, orgId, storeId, jobId);
         return row === null ? null : mapRow(row);
       }),
@@ -165,7 +166,7 @@ export function createPgPrintJobStore(
       status: PrintJobStatus,
       transitionOptions: TransitionPrintJobOptions = {},
     ): Promise<PrintJobRecord> =>
-      withStoreGuc(pool, { orgId, storeId }, async (client) => {
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
         const row = await selectJob(client, orgId, storeId, jobId);
         if (row === null) {
           throw new Error(`print job not found: ${jobId}`);

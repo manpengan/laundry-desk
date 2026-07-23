@@ -228,3 +228,33 @@ test(
     }
   },
 );
+
+test(
+  "real PG grants keep payment and audit ledgers append-only for laundry_app",
+  { skip: urls === null },
+  async () => {
+    assert.ok(urls);
+    const adminPool = createPgPool({ connectionString: urls.admin });
+    const appPool = createPgPool({ connectionString: urls.app });
+    try {
+      await seedDemoIdentity(adminPool);
+      for (const statement of [
+        "UPDATE payments SET note = 'forbidden' WHERE false",
+        "DELETE FROM payments WHERE false",
+        "UPDATE audit_log SET entity = 'forbidden' WHERE false",
+        "DELETE FROM audit_log WHERE false",
+      ]) {
+        await assert.rejects(
+          () =>
+            withPoolClient(appPool, (sql) =>
+              withTenantTransaction(sql, TENANT, (tx) => tx.query(statement)),
+            ),
+          /permission denied/u,
+        );
+      }
+    } finally {
+      await appPool.end();
+      await adminPool.end();
+    }
+  },
+);

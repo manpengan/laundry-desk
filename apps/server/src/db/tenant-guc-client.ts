@@ -5,8 +5,9 @@
 
 import type { PgPool, PgPoolClient } from "./pg-pool.js";
 import { withTransaction } from "./pg-pool.js";
+import { getActiveTenantTransaction } from "./active-tenant-transaction.js";
 import { TENANT_GUC_KEYS } from "./guc.js";
-import type { Uuid } from "./types.js";
+import type { SqlClient, Uuid } from "./types.js";
 
 export type OrgScope = Readonly<{
   orgId: Uuid;
@@ -61,4 +62,45 @@ export async function withStoreGuc<T>(
     await applyStoreGuc(client, scope.orgId, scope.storeId, staffId);
     return fn(client);
   });
+}
+
+/**
+ * Reuse the command bus transaction when one is active for exactly this org.
+ * Direct repository calls still get their own transaction and SET LOCAL GUCs.
+ */
+export async function withOrgGucOrCurrent<T>(
+  pool: PgPool,
+  scope: OrgScope,
+  fn: (client: SqlClient) => Promise<T>,
+): Promise<T> {
+  const current = getActiveTenantTransaction();
+  if (current === undefined) {
+    return withOrgGuc(pool, scope, fn);
+  }
+  if (current.tenant.orgId !== scope.orgId) {
+    throw new Error("Repository org scope does not match authenticated tenant");
+  }
+  return fn(current.client);
+}
+
+/**
+ * Reuse the command bus transaction only for its authenticated store scope.
+ * A repository cannot switch org/store while a request transaction is active.
+ */
+export async function withStoreGucOrCurrent<T>(
+  pool: PgPool,
+  scope: StoreScope,
+  fn: (client: SqlClient) => Promise<T>,
+): Promise<T> {
+  const current = getActiveTenantTransaction();
+  if (current === undefined) {
+    return withStoreGuc(pool, scope, fn);
+  }
+  if (current.tenant.orgId !== scope.orgId || current.tenant.storeId !== scope.storeId) {
+    throw new Error("Repository store scope does not match authenticated tenant");
+  }
+  if (scope.staffId !== undefined && current.tenant.staffId !== scope.staffId) {
+    throw new Error("Repository staff scope does not match authenticated actor");
+  }
+  return fn(current.client);
 }

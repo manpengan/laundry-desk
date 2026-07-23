@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { FakeSqlClient } from "./fake-client.js";
+import { getActiveTenantTransaction } from "./active-tenant-transaction.js";
 import { TENANT_GUC_KEYS, TenantGucError } from "./guc.js";
+import type { PgPool } from "./pg-pool.js";
+import { withStoreGucOrCurrent } from "./tenant-guc-client.js";
 import { withTenantTransaction } from "./tenant-transaction.js";
 import { withWorkerTenantTransaction } from "./worker-transaction.js";
 
@@ -31,6 +34,56 @@ test("withTenantTransaction applies GUCs then commits on success", async () => {
   assert.deepEqual(client.queries[1]?.params, [VALID_CTX.orgId]);
   assert.deepEqual(client.queries[2]?.params, [VALID_CTX.storeId]);
   assert.deepEqual(client.queries[3]?.params, [VALID_CTX.staffId]);
+});
+
+test("withTenantTransaction exposes only its authenticated tenant to repositories", async () => {
+  const client = new FakeSqlClient();
+  await withTenantTransaction(client, VALID_CTX, async () => {
+    const current = getActiveTenantTransaction();
+    assert.ok(current);
+    assert.equal(current.client, client);
+    assert.deepEqual(current.tenant, VALID_CTX);
+  });
+  assert.equal(getActiveTenantTransaction(), undefined);
+});
+
+test("repository GUC helper reuses the command transaction instead of opening a second connection", async () => {
+  const client = new FakeSqlClient();
+  let poolConnects = 0;
+  const pool = {
+    connect: async () => {
+      poolConnects += 1;
+      throw new Error("must not open a nested pool connection");
+    },
+  } as unknown as PgPool;
+
+  await withTenantTransaction(client, VALID_CTX, async () =>
+    withStoreGucOrCurrent(pool, VALID_CTX, async (tx) => {
+      assert.equal(tx, client);
+      await tx.query("INSERT INTO orders (id) VALUES ($1)", ["order-id"]);
+    }),
+  );
+
+  assert.equal(poolConnects, 0);
+  assert.equal(client.sqlSequence().filter((sql) => sql === "BEGIN").length, 1);
+  assert.equal(client.sqlSequence().at(-1), "COMMIT");
+});
+
+test("repository GUC helper rejects a store that differs from the authenticated session", async () => {
+  const client = new FakeSqlClient();
+  const pool = {} as PgPool;
+  await assert.rejects(
+    () =>
+      withTenantTransaction(client, VALID_CTX, async () =>
+        withStoreGucOrCurrent(
+          pool,
+          { ...VALID_CTX, storeId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" },
+          async () => undefined,
+        ),
+      ),
+    /does not match authenticated tenant/u,
+  );
+  assert.equal(client.sqlSequence().at(-1), "ROLLBACK");
 });
 
 test("withTenantTransaction rolls back when fn throws", async () => {

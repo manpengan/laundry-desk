@@ -53,6 +53,7 @@ describe("destructive migration static reject", () => {
       "0012_shift_closings.sql",
       "0013_garment_photos.sql",
       "0014_order_list_summary_indexes.sql",
+      "0015_m2_counter_production_hardening.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
@@ -105,6 +106,8 @@ describe("destructive migration static reject", () => {
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*audit_log/iu);
     expect(combined).not.toMatch(/GRANT[^;]*UPDATE[^;]*payments/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*payments/iu);
+    expect(combined).toMatch(/REVOKE UPDATE, DELETE ON TABLE audit_log FROM laundry_app/iu);
+    expect(combined).toMatch(/REVOKE UPDATE, DELETE ON TABLE payments FROM laundry_app/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*print_jobs/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*customers/iu);
     expect(combined).not.toMatch(/dialect\s*[:=]\s*['"]sqlite['"]/iu);

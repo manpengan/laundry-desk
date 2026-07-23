@@ -12,11 +12,12 @@ import {
 
 import { staffs } from "./staffs.js";
 import { stores } from "./stores.js";
+import { garments } from "./garments.js";
 
 /**
  * Store-scope garment photo metadata (M3 skeleton).
  * storage_key is opaque (client upload target later); no blob columns.
- * Soft-binds garment_id / order_id (no garments/orders FK).
+ * Composite garment/order FK prevents cross-order and cross-tenant photo links.
  * laundry_app is granted SELECT, INSERT only — no UPDATE/DELETE.
  */
 export const garmentPhotos = pgTable(
@@ -53,6 +54,11 @@ export const garmentPhotos = pgTable(
       columns: [table.orgId, table.createdByStaffId],
       foreignColumns: [staffs.orgId, staffs.id],
       name: "garment_photos_staff_fk",
+    }),
+    foreignKey({
+      columns: [table.orgId, table.storeId, table.orderId, table.garmentId],
+      foreignColumns: [garments.orgId, garments.storeId, garments.orderId, garments.id],
+      name: "garment_photos_garment_order_fk",
     }),
   ],
 );
