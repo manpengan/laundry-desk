@@ -1,6 +1,6 @@
 /**
  * Bus + real Postgres smoke: platform.settings.set under laundry_app + GUC.
- * Opt-in: LAUNDRY_USE_LOCAL_PG=1 (CI skips — no compose).
+ * Opt-in locally; mandatory in the v2-integration workflow.
  */
 
 import assert from "node:assert/strict";

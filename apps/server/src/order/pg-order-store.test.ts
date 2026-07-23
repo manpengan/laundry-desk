@@ -1,6 +1,6 @@
 /**
  * Unit tests for createPgOrderStore with a capturing mock pool.
- * Real PG integration is skipped unless LAUNDRY_USE_LOCAL_PG=1 (tables may not exist yet).
+ * Real PG integration is enabled by LAUNDRY_USE_LOCAL_PG=1 in v2-integration.
  */
 
 import assert from "node:assert/strict";
@@ -500,13 +500,13 @@ test("listOrderSummaries short-circuits a threshold above PostgreSQL integer bef
   assert.equal(queries.at(-1)?.sql, "COMMIT");
 });
 
-// Optional live PG smoke — tables may not exist until migration lands.
+// Live PG smoke; ordinary unit runs remain database-free.
 const pgOptIn =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true";
 const urls = pgOptIn ? resolvePgUrls(process.env) : null;
 const maybePg = urls === null ? test.skip : test;
 
-maybePg("PG order store smoke (requires order tables + LAUNDRY_USE_LOCAL_PG)", async () => {
+maybePg("PG order store smoke", async () => {
   assert.ok(urls);
   const pool = createPgPool({ connectionString: urls.app });
   try {
