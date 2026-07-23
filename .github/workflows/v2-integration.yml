@@ -72,6 +72,18 @@ jobs:
         run: |
           pnpm local:web > /tmp/laundry-web.log 2>&1 &
           echo $! > /tmp/laundry-web.pid
+          for _ in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:5173/ > /dev/null; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat /tmp/laundry-web.pid)" 2>/dev/null; then
+              cat /tmp/laundry-web.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/laundry-web.log
+          exit 1
 
       - name: Run Playwright against real server and PostgreSQL
         run: pnpm run local:web:e2e
