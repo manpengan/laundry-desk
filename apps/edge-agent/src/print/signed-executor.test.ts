@@ -86,7 +86,7 @@ test("signed print verifies its ticket and signs the terminal receipt", async ()
 test("signed print rejects wrong job, altered tickets and one-time ticket replay", async () => {
   const nonce = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
   const jobId = "11111111-1111-4111-8111-111111111111";
-  const { store, job } = enqueuePrintJob(createPrintJobStore(), "gp3120", NOW, nonce, jobId);
+  const { store } = enqueuePrintJob(createPrintJobStore(), "gp3120", NOW, nonce, jobId);
   const signedExecutor = executor();
   const valid = ticket(jobId, nonce) as Readonly<{ sig: string }>;
 

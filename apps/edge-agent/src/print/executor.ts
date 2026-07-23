@@ -10,7 +10,6 @@ import {
   buildExecutionReceiptPayload,
   getPrintJob,
   transitionPrintJob,
-  type PrintJobKind,
   type PrintJobRecord,
   type PrintJobStore,
 } from "./print-jobs.js";
