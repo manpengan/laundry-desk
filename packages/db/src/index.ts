@@ -24,11 +24,13 @@ export {
   M2_ORDER_TABLE_NAMES,
   M2_PAYMENT_TABLE_NAMES,
   M2_PRINT_TABLE_NAMES,
+  M2_SHIFT_TABLE_NAMES,
   type M2CatalogTableNameLiteral,
   type M2CustomerTableNameLiteral,
   type M2OrderTableNameLiteral,
   type M2PaymentTableNameLiteral,
   type M2PrintTableNameLiteral,
+  type M2ShiftTableNameLiteral,
   type M2TableNameLiteral,
 } from "./m2-tables.js";
 
@@ -41,6 +43,7 @@ export {
   M2_ORDER_RLS_TABLES,
   M2_PAYMENT_RLS_TABLES,
   M2_PRINT_RLS_TABLES,
+  M2_SHIFT_RLS_TABLES,
   buildM1RlsMigrationSql,
 } from "./rls.js";
 
@@ -59,6 +62,7 @@ export {
   M2_ORDER_TABLES,
   M2_PAYMENT_TABLES,
   M2_PRINT_TABLES,
+  M2_SHIFT_TABLES,
   auditLog,
   catalogItems,
   customers,
@@ -75,6 +79,7 @@ export {
   schema,
   sessions,
   settings,
+  shiftClosings,
   staffStoreRoles,
   staffs,
   storeFeatures,
@@ -88,5 +93,6 @@ export {
   type M2OrderTableName,
   type M2PaymentTableName,
   type M2PrintTableName,
+  type M2ShiftTableName,
   type SchemaTableName,
 } from "./schema/index.js";

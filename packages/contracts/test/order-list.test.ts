@@ -37,25 +37,39 @@ describe("M2 order.list query", () => {
     await expect(parseContractInput(orderListQuery, {})).resolves.toEqual({});
   });
 
-  it("parses optional business_date, status, limit", async () => {
+  it("parses optional business_date, status, customer_phone, limit", async () => {
     await expect(
       parseContractInput(orderListQuery, {
         business_date: "2026-07-22",
         status: "open",
+        customer_phone: "13800000111",
         limit: 10,
       }),
     ).resolves.toEqual({
       business_date: "2026-07-22",
       status: "open",
+      customer_phone: "13800000111",
       limit: 10,
     });
   });
 
-  it("rejects invalid business_date / status / limit", async () => {
+  it("parses customer_phone filter alone (customer detail history)", async () => {
+    await expect(
+      parseContractInput(orderListQuery, { customer_phone: "13800000222", limit: 20 }),
+    ).resolves.toEqual({ customer_phone: "13800000222", limit: 20 });
+  });
+
+  it("rejects invalid business_date / status / phone / limit", async () => {
     await expect(
       parseContractInput(orderListQuery, { business_date: "20260722" }),
     ).rejects.toBeTruthy();
     await expect(parseContractInput(orderListQuery, { status: "pending" })).rejects.toBeTruthy();
+    await expect(
+      parseContractInput(orderListQuery, { customer_phone: "12345" }),
+    ).rejects.toBeTruthy();
+    await expect(
+      parseContractInput(orderListQuery, { customer_phone: "23800000111" }),
+    ).rejects.toBeTruthy();
     await expect(parseContractInput(orderListQuery, { limit: 0 })).rejects.toBeTruthy();
     await expect(parseContractInput(orderListQuery, { limit: 51 })).rejects.toBeTruthy();
   });
@@ -66,6 +80,7 @@ describe("M2 order.list query", () => {
     expect(orderListQuery.offline_mode).toBe("denied");
     expect(orderListQuery.data_classification).toBe("pii");
     expect(orderListQuery.max_result_rows).toBe(50);
+    expect(orderListQuery.input_redaction).toEqual([{ path: "/customer_phone", strategy: "mask" }]);
     expect(orderListQuery.result_redaction).toEqual([
       { path: "/orders/*/customer_phone", strategy: "mask" },
     ]);

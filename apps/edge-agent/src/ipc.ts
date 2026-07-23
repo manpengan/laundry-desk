@@ -18,6 +18,7 @@ import {
   type PrintJobStatusView,
   type PrintJobStore,
 } from "./print/print-jobs.js";
+import { runPrinterSmoke, type PrinterSmokeResult } from "./print/printer-smoke.js";
 import { resolveUsbPrintPort } from "./print/usb-port.js";
 import { MemoryEncryptedQueue, MemoryKekStore } from "./queue/index.js";
 import { mockConnection } from "./shell/connection-mock.js";
@@ -269,6 +270,16 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     assertAppSender(event);
     return { ok: true as const, data: listPrintJobStatus(ctx.getPrintJobs()) };
   });
+
+  /** Status-only printer path smoke — never raw ESC/POS payload. */
+  ipcMain.handle(
+    IPC_CHANNELS.printerSmoke,
+    async (event): Promise<{ ok: true; data: PrinterSmokeResult }> => {
+      assertAppSender(event);
+      const data = await runPrinterSmoke(process.env);
+      return { ok: true as const, data };
+    },
+  );
 
   ipcMain.handle(IPC_CHANNELS.pairingCreateCode, (event) => {
     assertAppSender(event);

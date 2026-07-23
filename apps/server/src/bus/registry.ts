@@ -20,7 +20,7 @@ type AnyDefinition = ContractsCommandDefinition<z.ZodObject> | QueryDefinition<z
 const isCommandDefinition = (def: AnyDefinition): def is ContractsCommandDefinition<z.ZodObject> =>
   def.kind === "command";
 
-/** M1 A6 catalog + M2 order/print skeleton command definitions. */
+/** M1 A6 catalog + M2 order/print/customer/shift skeleton command definitions. */
 export const DEFAULT_BUS_COMMAND_DEFINITIONS: readonly AnyDefinition[] = Object.freeze([
   ...M1_FIRST_WAVE_DEFINITIONS,
   ...M2_SKELETON_DEFINITIONS,

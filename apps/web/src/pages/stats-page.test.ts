@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
+import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
 import { daySummaryCsvFilename, formatDaySummaryCsv } from "./day-summary-csv.js";
 import {
@@ -103,6 +104,27 @@ test("StatsPage SSR shell shows date control and load button", () => {
   assert.match(html, /data-testid="stats-export-csv-btn"/);
   // useEffect does not run under SSR — cards only after client load
   assert.doesNotMatch(html, /data-testid="stats-summary"/);
+  // shift panel only when commandClient provided
+  assert.doesNotMatch(html, /data-testid="shift-close-panel"/);
+});
+
+test("StatsPage SSR with commandClient shows shift close panel", () => {
+  const queryClient = createMockQueryClient();
+  const commandClient = createMockCommandClient();
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(StatsPage, {
+        queryClient,
+        commandClient,
+        defaultDate: "2026-07-22",
+        autoLoad: false,
+      }),
+    ),
+  );
+  assert.match(html, /data-testid="shift-close-panel"/);
+  assert.match(html, /交班确认/);
 });
 
 test("StatsPage SSR with pre-resolved summary cards via parse path", () => {

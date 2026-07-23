@@ -53,9 +53,12 @@ test("main/window/preload sources wire baseline and guards", () => {
   assert.equal(IPC_CHANNELS.printEnqueue, "edge:print-enqueue");
   assert.equal(IPC_CHANNELS.printProcess, "edge:print-process");
   assert.equal(IPC_CHANNELS.printList, "edge:print-list");
+  assert.equal(IPC_CHANNELS.printerSmoke, "edge:printer-smoke");
   assert.match(preload, /printProcess/);
+  assert.match(preload, /printerSmoke/);
   assert.match(ipc, /IPC_CHANNELS\.printProcess/);
   assert.match(ipc, /IPC_CHANNELS\.printEnqueue/);
+  assert.match(ipc, /IPC_CHANNELS\.printerSmoke/);
   // Process path returns receipt fields only — never payload bytes to renderer.
   assert.doesNotMatch(ipc, /bytes:\s*result\.bytes|rawBytes|payload\.byteLength/);
 });

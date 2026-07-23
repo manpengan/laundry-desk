@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0011", () => {
+  it("ships formal SQL migrations ordered 0001 → 0012", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -23,6 +23,7 @@ describe("packages/db migration file inventory", () => {
       "0009_payments.sql",
       "0010_print_jobs.sql",
       "0011_customers.sql",
+      "0012_shift_closings.sql",
     ]);
   });
 
@@ -44,6 +45,7 @@ describe("packages/db migration file inventory", () => {
       "0009",
       "0010",
       "0011",
+      "0012",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
