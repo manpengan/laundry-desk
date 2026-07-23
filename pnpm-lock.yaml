@@ -215,6 +215,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@laundry/contracts':
+        specifier: file:../../packages/contracts
+        version: link:../../packages/contracts
       '@laundry/domain':
         specifier: file:../../packages/domain
         version: link:../../packages/domain

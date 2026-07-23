@@ -17,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@laundry/contracts": "file:../../packages/contracts",
     "@laundry/domain": "file:../../packages/domain",
     "@laundry/ui": "file:../../packages/ui",
     "react": "^19.0.0",
