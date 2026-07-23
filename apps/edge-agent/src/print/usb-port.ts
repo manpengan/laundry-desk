@@ -13,6 +13,8 @@ export type UsbPrintPort = Readonly<{
   /** Write ESC/POS bytes to device (or mock). Never hang forever. */
   write(bytes: Uint8Array, options?: { timeoutMs?: number }): Promise<void>;
   readonly kind: "mock" | "usb";
+  /** Edge-local serialization key; never include this in renderer IPC. */
+  readonly serialKey?: string;
 }>;
 
 export type MockUsbPortOptions = Readonly<{
@@ -235,6 +237,7 @@ export function createMockUsbPort(options: MockUsbPortOptions = {}): UsbPrintPor
 
   return Object.freeze({
     kind: "mock" as const,
+    serialKey: "mock:default",
     async write(_bytes: Uint8Array, writeOptions?: { timeoutMs?: number }): Promise<void> {
       const timeoutMs = writeOptions?.timeoutMs ?? DEFAULT_WRITE_TIMEOUT_MS;
       if (delayMs > timeoutMs) {
@@ -275,6 +278,7 @@ function createUsbPort(
 ): UsbPrintPort {
   return Object.freeze({
     kind: "usb" as const,
+    serialKey: path,
     async write(bytes: Uint8Array, writeOptions?: { timeoutMs?: number }): Promise<void> {
       if (quarantinedWrite !== null) {
         throw new Error("Previous timed-out printer write is still pending");

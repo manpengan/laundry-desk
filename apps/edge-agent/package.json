@@ -19,7 +19,8 @@
     "printer-smoke": "tsc -p tsconfig.json && node dist/print/printer-smoke-cli.js"
   },
   "dependencies": {
-    "@laundry/contracts": "file:../../packages/contracts"
+    "@laundry/contracts": "file:../../packages/contracts",
+    "iconv-lite": "0.6.3"
   },
   "devDependencies": {
     "electron": "^41.3.0"

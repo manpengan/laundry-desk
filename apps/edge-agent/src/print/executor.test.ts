@@ -98,3 +98,16 @@ test("executeJob USB timeout fail", async () => {
   assert.match(result.job.error ?? "", /timed out after 30ms/);
   assert.equal(result.receiptPayload.result, "failed");
 });
+
+for (const kind of ["dl206", "gp3120"] as const) {
+  test(`executeJob dispatches ${kind} through its family driver`, async () => {
+    const { store, job } = enqueuePrintJob(createPrintJobStore(), kind, 40, NONCE);
+    const result = await executeJob(store, createMockSpool(), job.id, DEFAULT_SAMPLE_TICKET, {
+      now: 40,
+      usbPort: createMockUsbPort(),
+    });
+    assert.equal(result.job.status, "done");
+    assert.ok(result.bytes.byteLength > 0);
+    assert.equal(result.receiptPayload.result, "succeeded");
+  });
+}

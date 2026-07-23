@@ -171,6 +171,9 @@ importers:
       '@laundry/contracts':
         specifier: file:../../packages/contracts
         version: link:../../packages/contracts
+      iconv-lite:
+        specifier: 0.6.3
+        version: 0.6.3
     devDependencies:
       electron:
         specifier: ^41.3.0

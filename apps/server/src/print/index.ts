@@ -21,6 +21,20 @@ export {
 export type { Xp58TicketLines } from "./escpos-xp58.js";
 export { processXp58PrintJob } from "./process-xp58.js";
 export type { ProcessXp58Options, ProcessXp58Result } from "./process-xp58.js";
+export { signPrintCapabilityTicket } from "./capability-ticket.js";
+export type { SignedPrintCapabilityTicket } from "./capability-ticket.js";
+export {
+  reconcilePrintReceipt,
+  PrintReceiptReconciliationError,
+} from "./receipt-reconciliation.js";
+export type {
+  DevicePublicKeyRegistry,
+  PrintReceiptIngress,
+  PrintReceiptReconciliationDeps,
+  PrintReceiptReconciliationResult,
+  PrintReceiptStore,
+  ReceiptBoundPrintJob,
+} from "./receipt-reconciliation.js";
 export type { PrintHandlerDeps } from "./handlers.js";
 export {
   createPrintCommandHandlers,

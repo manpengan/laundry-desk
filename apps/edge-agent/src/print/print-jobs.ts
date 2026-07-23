@@ -49,13 +49,14 @@ export function enqueuePrintJob(
   kind: PrintJobKind,
   now = Date.now(),
   ticketNonce: string = randomUUID(),
+  jobId?: string,
 ): { store: PrintJobStore; job: PrintJobRecord } {
   if (store.nextSeq < 1) {
     throw new Error("nextSeq must be a positive integer");
   }
   idSeq += 1;
   const job: PrintJobRecord = Object.freeze({
-    id: `print-${idSeq}`,
+    id: jobId ?? `print-${idSeq}`,
     kind,
     status: "queued" as const,
     createdAt: now,
