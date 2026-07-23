@@ -3,7 +3,12 @@
  * No IO; callers allocate UUIDs / ticket numbers.
  */
 
-import { computeOrderTotals, type OrderTotals, type PricingRejectReason } from "./pricing.js";
+import {
+  computeOrderTotals,
+  type OrderPricingAdjustments,
+  type OrderTotals,
+  type PricingRejectReason,
+} from "./pricing.js";
 
 export type ReceiveLineDraft = Readonly<{
   service_code: string;
@@ -48,6 +53,7 @@ export const MAX_RECEIVE_GARMENTS = 200;
 export function planReceive(
   lines: readonly ReceiveLineDraft[],
   paidCents: number,
+  adjustments?: OrderPricingAdjustments,
 ): ReceivePlanResult {
   for (const line of lines) {
     if (!CODE_RE.test(line.service_code) || !CODE_RE.test(line.category_code)) {
@@ -61,7 +67,7 @@ export function planReceive(
       qty: line.qty,
     }),
   );
-  const totalsResult = computeOrderTotals(priced, paidCents);
+  const totalsResult = computeOrderTotals(priced, paidCents, adjustments);
   if (!totalsResult.ok) {
     return Object.freeze({ ok: false as const, reason: totalsResult.reason });
   }

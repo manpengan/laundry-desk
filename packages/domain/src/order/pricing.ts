@@ -1,85 +1,187 @@
 /**
- * Order pricing pure helpers — integer cents only (M2 skeleton).
+ * Order pricing pure helpers. All monetary values are non-negative safe-integer cents.
  */
-
-import { addCents, validateCents } from "../money.js";
 
 export type PricedLine = Readonly<{
   unit_price_cents: number;
   qty: number;
 }>;
 
+export type FivePartPricingInput = Readonly<{
+  original_cents: number;
+  discount_cents: number;
+  addon_cents: number;
+  urgent_cents: number;
+  freight_cents: number;
+}>;
+
+/** The four adjustments applied after the line-derived original amount. */
+export type OrderPricingAdjustments = Readonly<{
+  discount_cents?: number;
+  addon_cents?: number;
+  urgent_cents?: number;
+  freight_cents?: number;
+}>;
+
 export type OrderTotals = Readonly<{
-  /** Sum of unit_price_cents * qty across lines. */
+  original_cents: number;
   subtotal_cents: number;
-  /** Payable after discounts (skeleton: equals subtotal). */
+  discount_cents: number;
+  addon_cents: number;
+  urgent_cents: number;
+  freight_cents: number;
   payable_cents: number;
   paid_cents: number;
-  /** payable - paid (may be zero when fully paid). */
   balance_cents: number;
   garment_count: number;
 }>;
 
 export type PricingRejectReason =
-  "EMPTY_LINES" | "INVALID_QTY" | "INVALID_UNIT_PRICE" | "PAID_EXCEEDS_PAYABLE" | "NEGATIVE_PAID";
+  | "EMPTY_LINES"
+  | "INVALID_QTY"
+  | "INVALID_UNIT_PRICE"
+  | "PAID_EXCEEDS_PAYABLE"
+  | "NEGATIVE_PAID"
+  | "DISCOUNT_EXCEEDS_ORIGINAL"
+  | "UNSAFE_CENTS";
 
 export type PricingResult =
   | Readonly<{ ok: true; totals: OrderTotals }>
   | Readonly<{ ok: false; reason: PricingRejectReason }>;
 
-/** Line total = unit_price_cents * qty (both non-negative integers; qty ≥ 1). */
+export type FivePartPricingResult =
+  | Readonly<{ ok: true; payable_cents: number }>
+  | Readonly<{ ok: false; reason: "DISCOUNT_EXCEEDS_ORIGINAL" | "UNSAFE_CENTS" }>;
+
+const isNonNegativeSafeCents = (value: number): boolean =>
+  Number.isSafeInteger(value) && value >= 0;
+
+const defaultAdjustments = (): Required<OrderPricingAdjustments> =>
+  Object.freeze({
+    discount_cents: 0,
+    addon_cents: 0,
+    urgent_cents: 0,
+    freight_cents: 0,
+  });
+
+function addSafe(left: number, right: number): number | null {
+  const total = left + right;
+  return Number.isSafeInteger(total) ? total : null;
+}
+
+/** M2 payable = original − discount + addon + urgent + freight. */
+export function computeFivePartPricing(input: FivePartPricingInput): FivePartPricingResult {
+  const values = [
+    input.original_cents,
+    input.discount_cents,
+    input.addon_cents,
+    input.urgent_cents,
+    input.freight_cents,
+  ];
+  if (!values.every(isNonNegativeSafeCents)) {
+    return Object.freeze({ ok: false, reason: "UNSAFE_CENTS" });
+  }
+  if (input.discount_cents > input.original_cents) {
+    return Object.freeze({ ok: false, reason: "DISCOUNT_EXCEEDS_ORIGINAL" });
+  }
+
+  const afterDiscount = input.original_cents - input.discount_cents;
+  const withAddon = addSafe(afterDiscount, input.addon_cents);
+  const withUrgent = withAddon === null ? null : addSafe(withAddon, input.urgent_cents);
+  const payable = withUrgent === null ? null : addSafe(withUrgent, input.freight_cents);
+  return payable === null
+    ? Object.freeze({ ok: false, reason: "UNSAFE_CENTS" })
+    : Object.freeze({ ok: true, payable_cents: payable });
+}
+
+/** Line total = unit price × quantity. Throws only for a direct invalid helper call. */
 export function lineTotalCents(unitPriceCents: number, qty: number): number {
-  validateCents(unitPriceCents);
-  if (!Number.isInteger(qty) || qty < 1) {
-    throw new TypeError(`qty must be a positive integer, got: ${qty}`);
+  if (!isNonNegativeSafeCents(unitPriceCents)) {
+    throw new TypeError(
+      `unit_price_cents must be non-negative safe integer, got: ${unitPriceCents}`,
+    );
   }
-  if (unitPriceCents < 0) {
-    throw new TypeError(`unit_price_cents must be non-negative, got: ${unitPriceCents}`);
+  if (!Number.isSafeInteger(qty) || qty < 1) {
+    throw new TypeError(`qty must be a positive safe integer, got: ${qty}`);
   }
-  return unitPriceCents * qty;
+  const total = unitPriceCents * qty;
+  if (!Number.isSafeInteger(total)) {
+    throw new RangeError("line total exceeds Number.MAX_SAFE_INTEGER cents");
+  }
+  return total;
+}
+
+function normalizeAdjustments(
+  adjustments: OrderPricingAdjustments | undefined,
+): Required<OrderPricingAdjustments> | null {
+  const normalized = Object.freeze({ ...defaultAdjustments(), ...adjustments });
+  return Object.values(normalized).every(isNonNegativeSafeCents) ? normalized : null;
+}
+
+function sumLines(
+  lines: readonly PricedLine[],
+): Readonly<{ subtotal: number; garments: number }> | null {
+  let subtotal = 0;
+  let garments = 0;
+  for (const line of lines) {
+    if (!Number.isSafeInteger(line.qty) || line.qty < 1) return null;
+    if (!isNonNegativeSafeCents(line.unit_price_cents)) return null;
+    const lineTotal = line.unit_price_cents * line.qty;
+    const nextSubtotal = addSafe(subtotal, lineTotal);
+    const nextGarments = addSafe(garments, line.qty);
+    if (!Number.isSafeInteger(lineTotal) || nextSubtotal === null || nextGarments === null)
+      return null;
+    subtotal = nextSubtotal;
+    garments = nextGarments;
+  }
+  return Object.freeze({ subtotal, garments });
+}
+
+function pricingFailure(reason: PricingRejectReason): PricingResult {
+  return Object.freeze({ ok: false, reason });
 }
 
 /**
- * Compute order totals for receive. Discounts/addons land in later M2 slices.
- * `paid_cents` must be ≤ payable and ≥ 0.
+ * Compute the line-derived original amount and the complete M2 five-part price.
+ * The optional adjustments let later command slices use the same calculation without
+ * duplicating it; an omitted adjustment is exactly zero.
  */
-export function computeOrderTotals(lines: readonly PricedLine[], paidCents: number): PricingResult {
-  if (lines.length === 0) {
-    return Object.freeze({ ok: false as const, reason: "EMPTY_LINES" as const });
-  }
-  if (!Number.isInteger(paidCents)) {
-    return Object.freeze({ ok: false as const, reason: "NEGATIVE_PAID" as const });
-  }
-  if (paidCents < 0) {
-    return Object.freeze({ ok: false as const, reason: "NEGATIVE_PAID" as const });
-  }
+export function computeOrderTotals(
+  lines: readonly PricedLine[],
+  paidCents: number,
+  adjustments?: OrderPricingAdjustments,
+): PricingResult {
+  if (lines.length === 0) return pricingFailure("EMPTY_LINES");
+  if (!Number.isSafeInteger(paidCents)) return pricingFailure("UNSAFE_CENTS");
+  if (paidCents < 0) return pricingFailure("NEGATIVE_PAID");
 
-  let subtotal = 0;
-  let garmentCount = 0;
-  for (const line of lines) {
-    if (!Number.isInteger(line.qty) || line.qty < 1) {
-      return Object.freeze({ ok: false as const, reason: "INVALID_QTY" as const });
-    }
-    if (!Number.isInteger(line.unit_price_cents) || line.unit_price_cents < 0) {
-      return Object.freeze({ ok: false as const, reason: "INVALID_UNIT_PRICE" as const });
-    }
-    subtotal = addCents(subtotal, lineTotalCents(line.unit_price_cents, line.qty));
-    garmentCount += line.qty;
+  const sums = sumLines(lines);
+  if (sums === null) {
+    const hasBadQty = lines.some((line) => !Number.isSafeInteger(line.qty) || line.qty < 1);
+    const hasBadUnitPrice = lines.some(
+      (line) => !Number.isInteger(line.unit_price_cents) || line.unit_price_cents < 0,
+    );
+    return pricingFailure(
+      hasBadQty ? "INVALID_QTY" : hasBadUnitPrice ? "INVALID_UNIT_PRICE" : "UNSAFE_CENTS",
+    );
   }
+  const normalized = normalizeAdjustments(adjustments);
+  if (normalized === null) return pricingFailure("UNSAFE_CENTS");
 
-  const payable = subtotal;
-  if (paidCents > payable) {
-    return Object.freeze({ ok: false as const, reason: "PAID_EXCEEDS_PAYABLE" as const });
-  }
+  const fivePart = computeFivePartPricing({ original_cents: sums.subtotal, ...normalized });
+  if (!fivePart.ok) return pricingFailure(fivePart.reason);
+  if (paidCents > fivePart.payable_cents) return pricingFailure("PAID_EXCEEDS_PAYABLE");
 
   return Object.freeze({
-    ok: true as const,
+    ok: true,
     totals: Object.freeze({
-      subtotal_cents: subtotal,
-      payable_cents: payable,
+      original_cents: sums.subtotal,
+      subtotal_cents: sums.subtotal,
+      ...normalized,
+      payable_cents: fivePart.payable_cents,
       paid_cents: paidCents,
-      balance_cents: payable - paidCents,
-      garment_count: garmentCount,
+      balance_cents: fivePart.payable_cents - paidCents,
+      garment_count: sums.garments,
     }),
   });
 }
