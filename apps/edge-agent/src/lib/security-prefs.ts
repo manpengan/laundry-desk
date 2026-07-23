@@ -26,11 +26,6 @@ export const IPC_CHANNELS = {
   printProcess: "edge:print-process",
   /** D4 print:list — status only. */
   printList: "edge:print-list",
-  /**
-   * M2 Edge: printer path smoke (LAUNDRY_PRINTER_PATH).
-   * Status-only JSON — never raw ESC/POS bytes.
-   */
-  printerSmoke: "edge:printer-smoke",
   /** D2: issue 60s single-use pairing code + ensure device pubkey (never private key). */
   pairingCreateCode: "pairing:createCode",
   /** D2: public pairing status only (has key / code active window). */

@@ -46,7 +46,8 @@ export { ReceivePage, type ReceivePageProps } from "./pages/ReceivePage.js";
 export { PickupPage, type PickupPageProps } from "./pages/PickupPage.js";
 export {
   OrdersList,
-  localYmd as ordersLocalYmd,
+  utcYmd as ordersLocalYmd,
+  utcYmd as ordersUtcYmd,
   parseOrderListRows,
   type OrderListRowView,
   type OrdersListProps,

@@ -1,11 +1,13 @@
 /**
  * USB print port adapter (M2 Edge).
- * Mock by default; optional file/device path via LAUNDRY_PRINTER_PATH (no node-usb).
- * Accepts POSIX nodes, spool files, and Windows COM/USB device paths.
+ * Mock by default; product LAUNDRY_PRINTER_PATH accepts validated device endpoints only.
+ * Low-level spool files remain available solely through explicit test/diagnostic injection.
  * Writes never hang forever — timeoutMs is honored via race.
  */
 
+import { constants, lstatSync } from "node:fs";
 import { open } from "node:fs/promises";
+import { posix } from "node:path";
 
 export type UsbPrintPort = Readonly<{
   /** Write ESC/POS bytes to device (or mock). Never hang forever. */
@@ -25,14 +27,42 @@ const DEFAULT_WRITE_TIMEOUT_MS = 5_000;
 /** Env key used by resolveUsbPrintPort / runPrinterSmoke. */
 export const PRINTER_PATH_ENV = "LAUNDRY_PRINTER_PATH";
 
-/** `\\.\COM3`, `\\.\USB001` (Windows device namespace). */
-const WIN_DEVICE_NS = /^\\\\\.\\/i;
+/** Windows device namespace prefix (`\\\\.\`). */
+const WIN_DEVICE_NS_PREFIX = /^\\\\\.\\/i;
 /** Bare `COM3` / `com12` (Windows serial). */
-const BARE_COM = /^com(\d+)$/i;
+const BARE_COM = /^com([1-9]\d*)$/i;
+/** Bare `LPT1` / `lpt2` (Windows parallel printer port). */
+const BARE_LPT = /^lpt([1-9]\d*)$/i;
 /** Bare `USB001` (Windows USB printing support virtual port). */
 const BARE_USB = /^usb(\d+)$/i;
+/** Canonical Windows printer endpoints accepted by production configuration. */
+const WIN_PRINTER_DEVICE = /^\\\\\.\\(?:com[1-9]\d*|lpt[1-9]\d*|usb\d+)$/i;
 /** POSIX character device under /dev (lp / usb / tty). */
 const POSIX_DEV = /^\/dev\//i;
+
+export type PrinterPathStat = Readonly<{
+  isCharacterDevice(): boolean;
+  isSymbolicLink?(): boolean;
+}>;
+
+export type PrinterDeviceHandle = Readonly<{
+  stat(): Promise<PrinterPathStat>;
+  write(bytes: Uint8Array): Promise<unknown>;
+  close(): Promise<void>;
+}>;
+
+export type PrinterDeviceDependencies = Readonly<{
+  platform?: NodeJS.Platform;
+  stat?: (path: string) => PrinterPathStat;
+  openDevice?: (path: string, flags: string | number) => Promise<PrinterDeviceHandle>;
+}>;
+
+export type FileUsbPortDependencies = Readonly<{
+  /** Explicit low-level write injection for timeout/quarantine tests. */
+  writeBytes?: (path: string, bytes: Uint8Array) => Promise<void>;
+}>;
+
+let quarantinedWrite: Promise<void> | null = null;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -49,15 +79,31 @@ function timeoutError(timeoutMs: number): Error {
  */
 async function withTimeout(work: Promise<void>, timeoutMs: number): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let didTimeout = false;
   try {
     await Promise.race([
       work,
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
+          didTimeout = true;
           reject(timeoutError(timeoutMs));
         }, timeoutMs);
       }),
     ]);
+  } catch (error) {
+    if (didTimeout) {
+      const settlement = work.then(
+        () => undefined,
+        () => undefined,
+      );
+      quarantinedWrite = settlement;
+      void settlement.finally(() => {
+        if (quarantinedWrite === settlement) {
+          quarantinedWrite = null;
+        }
+      });
+    }
+    throw error;
   } finally {
     if (timer !== undefined) {
       clearTimeout(timer);
@@ -80,7 +126,7 @@ function stripSurroundingQuotes(value: string): string {
  * True when path is a Windows device namespace path (`\\.\…`).
  */
 export function isWindowsDevicePath(devicePath: string): boolean {
-  return WIN_DEVICE_NS.test(devicePath.trim());
+  return WIN_PRINTER_DEVICE.test(devicePath.trim());
 }
 
 /**
@@ -109,11 +155,15 @@ export function normalizePrinterPath(raw: string): string {
   // Accept forward-slash device form sometimes pasted from docs: //./COM3
   const unified = trimmed.replace(/^\/\/\.\//, "\\\\.\\");
 
-  if (WIN_DEVICE_NS.test(unified)) {
+  if (WIN_DEVICE_NS_PREFIX.test(unified)) {
     const rest = unified.slice(4);
     const com = rest.match(BARE_COM);
     if (com) {
       return `\\\\.\\COM${com[1]}`;
+    }
+    const lpt = rest.match(BARE_LPT);
+    if (lpt) {
+      return `\\\\.\\LPT${lpt[1]}`;
     }
     const usb = rest.match(BARE_USB);
     if (usb) {
@@ -126,12 +176,53 @@ export function normalizePrinterPath(raw: string): string {
   if (bareCom) {
     return `\\\\.\\COM${bareCom[1]}`;
   }
+  const bareLpt = unified.match(BARE_LPT);
+  if (bareLpt) {
+    return `\\\\.\\LPT${bareLpt[1]}`;
+  }
   const bareUsb = unified.match(BARE_USB);
   if (bareUsb) {
     return `\\\\.\\USB${bareUsb[1]}`;
   }
 
   return unified;
+}
+
+/** Validate and normalize a production printer endpoint for the target platform. */
+export function validatePrinterDevicePath(
+  raw: string,
+  dependencies: PrinterDeviceDependencies = {},
+): string {
+  const path = normalizePrinterPath(raw);
+  if (path.length === 0) {
+    throw new Error("Printer path must not be empty");
+  }
+
+  const platform = dependencies.platform ?? process.platform;
+  if (platform === "win32") {
+    if (!isWindowsDevicePath(path)) {
+      throw new Error("Windows printer path must be a COM, LPT, or USB device endpoint");
+    }
+    return path;
+  }
+
+  if (path.split("/").includes("..")) {
+    throw new Error("POSIX printer path must not contain traversal segments");
+  }
+  const normalized = posix.normalize(path);
+  if (!isPosixDevicePath(normalized)) {
+    throw new Error("POSIX printer path must be a character device under /dev");
+  }
+
+  const inspect = dependencies.stat ?? lstatSync;
+  const inspected = inspect(normalized);
+  if (inspected.isSymbolicLink?.() === true) {
+    throw new Error("POSIX printer path must not be a symlink");
+  }
+  if (!inspected.isCharacterDevice()) {
+    throw new Error("POSIX printer path must be a character device under /dev");
+  }
+  return normalized;
 }
 
 /**
@@ -161,21 +252,35 @@ export function createMockUsbPort(options: MockUsbPortOptions = {}): UsbPrintPor
 }
 
 /**
- * File-backed USB port: open path, write bytes, close.
- * Use for device nodes / Windows COM / spool files without node-usb.
+ * Low-level file/device adapter: open path, write bytes, close.
+ * Product env must go through resolveUsbPrintPort validation. Arbitrary spool files
+ * are supported only for explicitly injected tests/diagnostics.
  * Device paths open `r+` (no truncate); spool files open `w` (create).
  */
-export function createFileUsbPort(devicePath: string): UsbPrintPort {
+export function createFileUsbPort(
+  devicePath: string,
+  dependencies: FileUsbPortDependencies = {},
+): UsbPrintPort {
   const path = normalizePrinterPath(devicePath);
   if (path.length === 0) {
     throw new Error("createFileUsbPort requires a non-empty devicePath");
   }
 
+  return createUsbPort(path, dependencies.writeBytes ?? writeBytesToFile);
+}
+
+function createUsbPort(
+  path: string,
+  writeBytes: (path: string, bytes: Uint8Array) => Promise<void>,
+): UsbPrintPort {
   return Object.freeze({
     kind: "usb" as const,
     async write(bytes: Uint8Array, writeOptions?: { timeoutMs?: number }): Promise<void> {
+      if (quarantinedWrite !== null) {
+        throw new Error("Previous timed-out printer write is still pending");
+      }
       const timeoutMs = writeOptions?.timeoutMs ?? DEFAULT_WRITE_TIMEOUT_MS;
-      await withTimeout(writeBytesToFile(path, bytes), timeoutMs);
+      await withTimeout(writeBytes(path, bytes), timeoutMs);
     },
   });
 }
@@ -198,15 +303,46 @@ async function writeBytesToFile(devicePath: string, bytes: Uint8Array): Promise<
   }
 }
 
+async function writeBytesToValidatedDevice(
+  devicePath: string,
+  bytes: Uint8Array,
+  dependencies: PrinterDeviceDependencies,
+): Promise<void> {
+  const validatedPath = validatePrinterDevicePath(devicePath, dependencies);
+  const platform = dependencies.platform ?? process.platform;
+  const flags = platform === "win32" ? "r+" : constants.O_WRONLY | constants.O_NOFOLLOW;
+  const handle =
+    dependencies.openDevice !== undefined
+      ? await dependencies.openDevice(validatedPath, flags)
+      : await open(validatedPath, flags);
+  try {
+    if (platform !== "win32") {
+      const openedTarget = await handle.stat();
+      if (!openedTarget.isCharacterDevice()) {
+        throw new Error("Opened POSIX printer target must remain a character device");
+      }
+    }
+    await handle.write(bytes);
+  } finally {
+    await handle.close();
+  }
+}
+
 /**
- * Resolve the active USB print port from process env.
- * Non-empty LAUNDRY_PRINTER_PATH → file/device port (kind "usb"); else mock.
- * Path is normalized (COM3 → \\.\COM3, etc.).
+ * Resolve the active USB print port from product env.
+ * Non-empty LAUNDRY_PRINTER_PATH must be a validated platform device endpoint;
+ * arbitrary files, symlinks, traversal and cross-platform endpoint forms fail closed.
  */
-export function resolveUsbPrintPort(env: NodeJS.ProcessEnv): UsbPrintPort {
+export function resolveUsbPrintPort(
+  env: NodeJS.ProcessEnv,
+  dependencies: PrinterDeviceDependencies = {},
+): UsbPrintPort {
   const raw = env[PRINTER_PATH_ENV];
   if (typeof raw === "string" && raw.trim().length > 0) {
-    return createFileUsbPort(raw);
+    const validatedPath = validatePrinterDevicePath(raw, dependencies);
+    return createUsbPort(validatedPath, (path, bytes) =>
+      writeBytesToValidatedDevice(path, bytes, dependencies),
+    );
   }
   return createMockUsbPort();
 }

@@ -22,6 +22,13 @@ test("main/window/preload sources wire baseline and guards", () => {
   const windowSrc = readFileSync(join(srcRoot, "window.ts"), "utf8");
   const preload = readFileSync(join(srcRoot, "preload.ts"), "utf8");
   const ipc = readFileSync(join(srcRoot, "ipc.ts"), "utf8");
+  const printerSmokeCli = readFileSync(join(srcRoot, "print/printer-smoke-cli.ts"), "utf8");
+  const enqueueStart = ipc.indexOf("ipcMain.handle(IPC_CHANNELS.printEnqueue");
+  const processStart = ipc.indexOf("ipcMain.handle(IPC_CHANNELS.printProcess");
+  const listStart = ipc.indexOf("ipcMain.handle(IPC_CHANNELS.printList");
+  assert.ok(enqueueStart >= 0 && processStart > enqueueStart && listStart > processStart);
+  const enqueueHandler = ipc.slice(enqueueStart, processStart);
+  const processHandler = ipc.slice(processStart, listStart);
 
   assert.match(windowSrc, /SECURITY_WEB_PREFERENCES/);
   assert.match(windowSrc, /setWindowOpenHandler/);
@@ -53,12 +60,16 @@ test("main/window/preload sources wire baseline and guards", () => {
   assert.equal(IPC_CHANNELS.printEnqueue, "edge:print-enqueue");
   assert.equal(IPC_CHANNELS.printProcess, "edge:print-process");
   assert.equal(IPC_CHANNELS.printList, "edge:print-list");
-  assert.equal(IPC_CHANNELS.printerSmoke, "edge:printer-smoke");
   assert.match(preload, /printProcess/);
-  assert.match(preload, /printerSmoke/);
+  // Printer smoke trigger stays CLI-only; neither renderer nor IPC may invoke it.
+  assert.equal("printerSmoke" in IPC_CHANNELS, false);
+  assert.doesNotMatch(preload, /printerSmoke/);
   assert.match(ipc, /IPC_CHANNELS\.printProcess/);
   assert.match(ipc, /IPC_CHANNELS\.printEnqueue/);
-  assert.match(ipc, /IPC_CHANNELS\.printerSmoke/);
+  assert.doesNotMatch(ipc, /IPC_CHANNELS\.printerSmoke/);
+  assert.match(printerSmokeCli, /--validate/);
+  assert.match(enqueueHandler, /return printMutationGate/u);
+  assert.match(processHandler, /return printMutationGate/u);
   // Process path returns receipt fields only — never payload bytes to renderer.
   assert.doesNotMatch(ipc, /bytes:\s*result\.bytes|rawBytes|payload\.byteLength/);
 });

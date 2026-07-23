@@ -6,6 +6,7 @@ import {
   MemoryDeviceKeyStore,
   type PairingSession,
 } from "./pairing/index.js";
+import { createExecutionGate } from "./print/execution-gate.js";
 import { DEFAULT_SAMPLE_TICKET, executeJob } from "./print/executor.js";
 import { createMockSpool, enqueue, type MockSpool } from "./print/mock-spool.js";
 import {
@@ -18,7 +19,6 @@ import {
   type PrintJobStatusView,
   type PrintJobStore,
 } from "./print/print-jobs.js";
-import { runPrinterSmoke, type PrinterSmokeResult } from "./print/printer-smoke.js";
 import { resolveUsbPrintPort } from "./print/usb-port.js";
 import { MemoryEncryptedQueue, MemoryKekStore } from "./queue/index.js";
 import { mockConnection } from "./shell/connection-mock.js";
@@ -26,6 +26,8 @@ import { checkShellHealth, type ShellHealth } from "./shell/health.js";
 import { createInitialState, type UpgradeState } from "./upgrade/index.js";
 
 const PRINT_KINDS: ReadonlySet<string> = new Set(["xp58", "dl206", "gp3120"]);
+/** Process-wide FIFO for every mutating print IPC, including state selection and write-back. */
+const printMutationGate = createExecutionGate();
 
 export type IpcContext = {
   spaRoot: string;
@@ -187,99 +189,93 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     return { ok: true as const, data: mockConnection() };
   });
 
-  ipcMain.handle(IPC_CHANNELS.printEnqueue, async (event, kindRaw: unknown = "xp58") => {
+  ipcMain.handle(IPC_CHANNELS.printEnqueue, (event, kindRaw: unknown = "xp58") => {
     assertAppSender(event);
-    const { kind, autoProcess } = parseEnqueueArgs(kindRaw);
-    const now = Date.now();
-    const enq = enqueuePrintJob(ctx.getPrintJobs(), kind, now);
-    const mock = enqueue(ctx.getSpool(), kind, now);
-    if (autoProcess && kind === "xp58") {
+    return printMutationGate(async () => {
+      const { kind, autoProcess } = parseEnqueueArgs(kindRaw);
+      const now = Date.now();
+      const enq = enqueuePrintJob(ctx.getPrintJobs(), kind, now);
+      const mock = enqueue(ctx.getSpool(), kind, now);
+      if (autoProcess && kind === "xp58") {
+        const result = await runExecute(
+          enq.store,
+          mock.spool,
+          enq.job.id,
+          mock.job.id,
+          undefined,
+          now,
+        );
+        ctx.setPrintJobs(result.store);
+        ctx.setSpool(result.spool);
+        const status = listPrintJobStatus(result.store).find((j) => j.id === enq.job.id);
+        return { ok: true as const, data: status ?? null };
+      }
+      ctx.setPrintJobs(enq.store);
+      ctx.setSpool(mock.spool);
+      const status = listPrintJobStatus(enq.store).find((j) => j.id === enq.job.id);
+      return { ok: true as const, data: status ?? null };
+    });
+  });
+
+  ipcMain.handle(IPC_CHANNELS.printProcess, (event, raw: unknown = {}) => {
+    assertAppSender(event);
+    return printMutationGate(async () => {
+      const input = (raw ?? {}) as PrintProcessInput;
+      if (typeof input !== "object") {
+        throw new Error("invalid print process input");
+      }
+      const now = Date.now();
+      let store = ctx.getPrintJobs();
+      let spool = ctx.getSpool();
+      let jobId = typeof input.jobId === "string" ? input.jobId : undefined;
+      let mockJobId: string | undefined;
+
+      if (jobId) {
+        const existing = getPrintJob(store, jobId);
+        if (!existing) throw new Error(`print job not found: ${jobId}`);
+      } else {
+        const queued = lastQueuedJob(store);
+        if (queued) {
+          jobId = queued.id;
+        } else {
+          const kind = parsePrintKind(input.kind);
+          const enq = enqueuePrintJob(store, kind, now);
+          const mock = enqueue(spool, kind, now);
+          store = enq.store;
+          spool = mock.spool;
+          jobId = enq.job.id;
+          mockJobId = mock.job.id;
+        }
+      }
+
       const result = await runExecute(
-        enq.store,
-        mock.spool,
-        enq.job.id,
-        mock.job.id,
-        undefined,
+        store,
+        spool,
+        jobId,
+        mockJobId,
+        typeof input.ticketNo === "string" ? input.ticketNo : undefined,
         now,
       );
       ctx.setPrintJobs(result.store);
       ctx.setSpool(result.spool);
-      const status = listPrintJobStatus(result.store).find((j) => j.id === enq.job.id);
-      return { ok: true as const, data: status ?? null };
-    }
-    ctx.setPrintJobs(enq.store);
-    ctx.setSpool(mock.spool);
-    const status = listPrintJobStatus(enq.store).find((j) => j.id === enq.job.id);
-    return { ok: true as const, data: status ?? null };
-  });
 
-  ipcMain.handle(IPC_CHANNELS.printProcess, async (event, raw: unknown = {}) => {
-    assertAppSender(event);
-    const input = (raw ?? {}) as PrintProcessInput;
-    if (typeof input !== "object") {
-      throw new Error("invalid print process input");
-    }
-    const now = Date.now();
-    let store = ctx.getPrintJobs();
-    let spool = ctx.getSpool();
-    let jobId = typeof input.jobId === "string" ? input.jobId : undefined;
-    let mockJobId: string | undefined;
-
-    if (jobId) {
-      const existing = getPrintJob(store, jobId);
-      if (!existing) throw new Error(`print job not found: ${jobId}`);
-    } else {
-      const queued = lastQueuedJob(store);
-      if (queued) {
-        jobId = queued.id;
-      } else {
-        const kind = parsePrintKind(input.kind);
-        const enq = enqueuePrintJob(store, kind, now);
-        const mock = enqueue(spool, kind, now);
-        store = enq.store;
-        spool = mock.spool;
-        jobId = enq.job.id;
-        mockJobId = mock.job.id;
-      }
-    }
-
-    const result = await runExecute(
-      store,
-      spool,
-      jobId,
-      mockJobId,
-      typeof input.ticketNo === "string" ? input.ticketNo : undefined,
-      now,
-    );
-    ctx.setPrintJobs(result.store);
-    ctx.setSpool(result.spool);
-
-    const data: PrintProcessResult = Object.freeze({
-      status: statusViewOf(result.job),
-      receipt: Object.freeze({
-        ticket_nonce: result.receiptPayload.ticket_nonce,
-        result: result.receiptPayload.result,
-        seq: result.receiptPayload.seq,
-        at: result.receiptPayload.at,
-      }),
+      const data: PrintProcessResult = Object.freeze({
+        status: statusViewOf(result.job),
+        receipt: Object.freeze({
+          ticket_nonce: result.receiptPayload.ticket_nonce,
+          result: result.receiptPayload.result,
+          seq: result.receiptPayload.seq,
+          at: result.receiptPayload.at,
+        }),
+      });
+      return { ok: true as const, data };
     });
-    return { ok: true as const, data };
   });
 
   ipcMain.handle(IPC_CHANNELS.printList, (event) => {
     assertAppSender(event);
     return { ok: true as const, data: listPrintJobStatus(ctx.getPrintJobs()) };
   });
-
-  /** Status-only printer path smoke — never raw ESC/POS payload. */
-  ipcMain.handle(
-    IPC_CHANNELS.printerSmoke,
-    async (event): Promise<{ ok: true; data: PrinterSmokeResult }> => {
-      assertAppSender(event);
-      const data = await runPrinterSmoke(process.env);
-      return { ok: true as const, data };
-    },
-  );
 
   ipcMain.handle(IPC_CHANNELS.pairingCreateCode, (event) => {
     assertAppSender(event);

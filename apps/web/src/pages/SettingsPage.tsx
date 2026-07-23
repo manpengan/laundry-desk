@@ -1,10 +1,10 @@
 /**
  * Settings surface — M1 demo: R5 platform.settings.set with step-up PIN resume.
- * M2: 打印机冒烟 section when Edge preload exposes edgeBridge.printerSmoke.
+ * M2: printer smoke remains an operator CLI boundary; renderer has no device probe IPC.
  */
 
 import { Button, Input, useToast } from "@laundry/ui";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { AccessSession } from "../auth/types.js";
 import { isStepUpRequired } from "../commands/command-client.js";
@@ -15,11 +15,6 @@ export type SettingsPageProps = {
   session: AccessSession;
   authClient: AuthClient;
   commandClient: CommandPort;
-  /**
-   * Optional override for Edge bridge probe (tests / non-window hosts).
-   * When omitted, reads `window.edgeBridge?.printerSmoke` if present.
-   */
-  edgePrinterSmoke?: (() => Promise<unknown>) | null | undefined;
 };
 
 const SETTINGS_KEY = "pricing.min_order_cents";
@@ -27,74 +22,13 @@ const SETTINGS_KEY = "pricing.min_order_cents";
 /** Env var operators set for CLI / Edge USB path (documented name). */
 export const PRINTER_PATH_ENV_NAME = "LAUNDRY_PRINTER_PATH";
 
-export type PrinterSmokeView = Readonly<{
-  ok: boolean;
-  path: string | null;
-  kind: string;
-  message: string;
-  bytes_written?: number;
-}>;
-
-/** Parse IPC / CLI JSON shape without trusting extra fields. */
-export function parsePrinterSmokeResult(raw: unknown): PrinterSmokeView | null {
-  if (raw === null || typeof raw !== "object") return null;
-  const obj = raw as Record<string, unknown>;
-  if (typeof obj.ok !== "boolean") return null;
-  if (!(obj.path === null || typeof obj.path === "string")) return null;
-  if (typeof obj.kind !== "string" || obj.kind.length === 0) return null;
-  if (typeof obj.message !== "string" || obj.message.length === 0) return null;
-  const bytes =
-    typeof obj.bytes_written === "number" && Number.isFinite(obj.bytes_written)
-      ? obj.bytes_written
-      : undefined;
-  return Object.freeze({
-    ok: obj.ok,
-    path: obj.path,
-    kind: obj.kind,
-    message: obj.message,
-    ...(bytes !== undefined ? { bytes_written: bytes } : {}),
-  });
-}
-
-type EdgeBridgeWindow = {
-  edgeBridge?: {
-    printerSmoke?: () => Promise<unknown>;
-  };
-};
-
-/** Resolve Edge preload printerSmoke when running inside edge-agent shell. */
-export function resolveEdgePrinterSmoke(
-  override?: (() => Promise<unknown>) | null | undefined,
-  win: EdgeBridgeWindow | undefined = typeof globalThis !== "undefined"
-    ? (globalThis as EdgeBridgeWindow)
-    : undefined,
-): (() => Promise<unknown>) | null {
-  if (override === null) return null;
-  if (typeof override === "function") return override;
-  const fn = win?.edgeBridge?.printerSmoke;
-  return typeof fn === "function" ? fn.bind(win?.edgeBridge) : null;
-}
-
-export function SettingsPage({
-  session,
-  authClient,
-  commandClient,
-  edgePrinterSmoke: edgePrinterSmokeProp,
-}: SettingsPageProps) {
+export function SettingsPage({ session, authClient, commandClient }: SettingsPageProps) {
   const toast = useToast();
   const [centsText, setCentsText] = useState("1200");
   const [busy, setBusy] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [pendingRef, setPendingRef] = useState<string | null>(null);
   const [pendingValue, setPendingValue] = useState<string | null>(null);
-  const [smokeBusy, setSmokeBusy] = useState(false);
-  const [smokeResult, setSmokeResult] = useState<PrinterSmokeView | null>(null);
-
-  const printerSmokeFn = useMemo(
-    () => resolveEdgePrinterSmoke(edgePrinterSmokeProp),
-    [edgePrinterSmokeProp],
-  );
-  const hasPrinterSmoke = printerSmokeFn !== null;
 
   const finishConfirm = useCallback(
     async (confirmRef: string, valueJson: string) => {
@@ -136,30 +70,6 @@ export function SettingsPage({
     }
   }, [centsText, commandClient, toast]);
 
-  const onPrinterSmoke = useCallback(async () => {
-    if (printerSmokeFn === null) return;
-    setSmokeBusy(true);
-    try {
-      const raw = await printerSmokeFn();
-      const parsed = parsePrinterSmokeResult(raw);
-      if (parsed === null) {
-        toast.push("打印机冒烟返回格式无效", "error");
-        setSmokeResult(null);
-        return;
-      }
-      setSmokeResult(parsed);
-      toast.push(
-        parsed.ok ? `冒烟 ok · ${parsed.kind}` : `冒烟失败 · ${parsed.kind}`,
-        parsed.ok ? "success" : "error",
-      );
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.push(message || "打印机冒烟失败", "error");
-    } finally {
-      setSmokeBusy(false);
-    }
-  }, [printerSmokeFn, toast]);
-
   return (
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">设置</h1>
@@ -197,69 +107,27 @@ export function SettingsPage({
         <p className="ld-settings-printer-smoke__hint">
           验证 Edge 打印机 path（env{" "}
           <code className="ld-settings-printer-smoke__code">{PRINTER_PATH_ENV_NAME}</code>
-          ）。接受 <code className="ld-settings-printer-smoke__code">\\.\COM3</code>、
-          <code className="ld-settings-printer-smoke__code">\\.\USB001</code>、文件重定向；无硬件时
-          mock 亦返回 ok。
+          ）。Windows 接受 <code className="ld-settings-printer-smoke__code">\\.\COM3</code>、
+          <code className="ld-settings-printer-smoke__code">\\.\LPT1</code>、
+          <code className="ld-settings-printer-smoke__code">\\.\USB001</code>；POSIX 仅接受
+          <code className="ld-settings-printer-smoke__code"> /dev</code> 下真实字符设备。
         </p>
-        {hasPrinterSmoke ? (
-          <div className="ld-settings-printer-smoke__actions">
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => void onPrinterSmoke()}
-              disabled={smokeBusy}
-              data-testid="printer-smoke-run"
-            >
-              {smokeBusy ? "探测中…" : "运行 path 冒烟"}
-            </Button>
-          </div>
-        ) : (
-          <div className="ld-settings-printer-smoke__static" data-testid="printer-smoke-static">
-            <p className="ld-settings-printer-smoke__static-lead">
-              当前不在 Edge 壳内（无{" "}
-              <code className="ld-settings-printer-smoke__code">edgeBridge.printerSmoke</code>
-              ）。请在装机机 PowerShell / 终端执行：
-            </p>
-            <pre className="ld-settings-printer-smoke__cmd" data-testid="printer-smoke-cli-hint">
-              {`$env:${PRINTER_PATH_ENV_NAME} = '\\\\.\\COM3'\npnpm --filter @laundry/edge-agent printer-smoke`}
-            </pre>
-            <p className="ld-settings-printer-smoke__static-foot">
-              详见{" "}
-              <code className="ld-settings-printer-smoke__code">
-                apps/edge-agent/docs/printer-smoke-windows.md
-              </code>
-              。
-            </p>
-          </div>
-        )}
-        {smokeResult !== null ? (
-          <dl className="ld-settings-printer-smoke__result" data-testid="printer-smoke-result">
-            <div>
-              <dt>kind</dt>
-              <dd data-testid="printer-smoke-kind">{smokeResult.kind}</dd>
-            </div>
-            <div>
-              <dt>message</dt>
-              <dd data-testid="printer-smoke-message">{smokeResult.message}</dd>
-            </div>
-            <div>
-              <dt>bytes_written</dt>
-              <dd data-testid="printer-smoke-bytes">
-                {smokeResult.bytes_written !== undefined ? String(smokeResult.bytes_written) : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt>path</dt>
-              <dd data-testid="printer-smoke-path">
-                {smokeResult.path !== null ? smokeResult.path : "—"}
-              </dd>
-            </div>
-            <div>
-              <dt>ok</dt>
-              <dd data-testid="printer-smoke-ok">{smokeResult.ok ? "true" : "false"}</dd>
-            </div>
-          </dl>
-        ) : null}
+        <div className="ld-settings-printer-smoke__static" data-testid="printer-smoke-static">
+          <p className="ld-settings-printer-smoke__static-lead">
+            renderer 不提供打印机 smoke IPC。请在装机机 PowerShell /
+            终端先验证配置，再显式执行物理冒烟：
+          </p>
+          <pre className="ld-settings-printer-smoke__cmd" data-testid="printer-smoke-cli-hint">
+            {`$env:${PRINTER_PATH_ENV_NAME} = '\\\\.\\COM3'\npnpm --filter @laundry/edge-agent printer-smoke -- --validate\npnpm --filter @laundry/edge-agent printer-smoke`}
+          </pre>
+          <p className="ld-settings-printer-smoke__static-foot">
+            详见{" "}
+            <code className="ld-settings-printer-smoke__code">
+              apps/edge-agent/docs/printer-smoke-windows.md
+            </code>
+            。
+          </p>
+        </div>
       </section>
 
       <StepUpConfirmDialog

@@ -1,12 +1,19 @@
 /**
  * Operator printer-path smoke (M2 Edge).
  * Verifies LAUNDRY_PRINTER_PATH without full app UI.
- * Accepts POSIX nodes, spool files, and Windows COM/USB paths (COM3 → \\.\COM3).
+ * Product configuration accepts POSIX character devices and Windows COM/LPT/USB endpoints.
  * Never hangs — write path always races a timeout.
  */
 
 import { escCut, escFeed, escInit, escLine } from "./escpos-xp58.js";
-import { normalizePrinterPath, PRINTER_PATH_ENV, resolveUsbPrintPort } from "./usb-port.js";
+import {
+  normalizePrinterPath,
+  PRINTER_PATH_ENV,
+  resolveUsbPrintPort,
+  validatePrinterDevicePath,
+  type PrinterDeviceDependencies,
+  type UsbPrintPort,
+} from "./usb-port.js";
 
 export type PrinterSmokeResult = Readonly<{
   ok: boolean;
@@ -20,6 +27,12 @@ export type PrinterSmokeResult = Readonly<{
 export type PrinterSmokeOptions = Readonly<{
   payload?: Uint8Array;
   timeoutMs?: number;
+  /** Validate product configuration without opening or writing the device. */
+  validateOnly?: boolean;
+  /** Explicit test/diagnostic injection; bypasses product env path resolution. */
+  usbPort?: UsbPrintPort;
+  /** Platform/stat injection for deterministic validation tests. */
+  deviceDependencies?: PrinterDeviceDependencies;
 }>;
 
 export { PRINTER_PATH_ENV, normalizePrinterPath };
@@ -96,8 +109,17 @@ function mockResult(): PrinterSmokeResult {
     kind: "mock" as const,
     message:
       "Mock print port active (no hardware write). " +
-      `Set ${PRINTER_PATH_ENV} to a device or spool file to probe USB — ` +
-      "e.g. /dev/usb/lp0, \\\\.\\COM3, \\\\.\\USB001, COM3, or a temp file.",
+      `Set ${PRINTER_PATH_ENV} to a printer device to probe output — ` +
+      "e.g. /dev/usb/lp0, \\\\.\\COM3, \\\\.\\LPT1, \\\\.\\USB001, or COM3.",
+  });
+}
+
+function validatedResult(path: string): PrinterSmokeResult {
+  return Object.freeze({
+    ok: true,
+    path,
+    kind: "usb" as const,
+    message: `Validated printer device path ${path} (no bytes written)`,
   });
 }
 
@@ -123,16 +145,31 @@ function failResult(path: string, kind: "usb" | "missing", message: string): Pri
 /**
  * Probe the resolved USB print port with a tiny ESC/POS self-test payload.
  * Mock → ok without writing. USB → write with timeout; never hangs.
- * Windows operators may set COM3 / \\.\COM3 / \\.\USB001 or a file redirect.
+ * Windows operators may set COM3 / \\.\COM3 / \\.\LPT1 / \\.\USB001.
+ * Tests that need spool files must inject options.usbPort explicitly.
  */
 export async function runPrinterSmoke(
   env: NodeJS.ProcessEnv,
   options: PrinterSmokeOptions = {},
 ): Promise<PrinterSmokeResult> {
   const path = resolveConfiguredPath(env);
-  const port = resolveUsbPrintPort(env);
+  if (path === null) {
+    return mockResult();
+  }
 
-  if (port.kind === "mock" || path === null) {
+  let port: UsbPrintPort;
+  try {
+    if (options.validateOnly === true) {
+      return validatedResult(validatePrinterDevicePath(path, options.deviceDependencies));
+    }
+    port = options.usbPort ?? resolveUsbPrintPort(env, options.deviceDependencies);
+  } catch (err) {
+    const raw = errorMessage(err);
+    const message = annotateError(path, raw);
+    return failResult(path, isMissingDeviceError(raw) ? "missing" : "usb", message);
+  }
+
+  if (port.kind === "mock") {
     return mockResult();
   }
 

@@ -121,6 +121,34 @@ test("getByBusinessDate returns null when missing", async () => {
   assert.equal(row, null);
 });
 
+test("getByBusinessDate rejects a scope different from the configured store", async () => {
+  const { pool, queries } = createCapturingPool();
+  const store = createPgShiftStore(pool, {
+    orgId: DEMO_ORG_ID,
+    storeId: DEMO_STORE_ID,
+  });
+
+  await assert.rejects(
+    () =>
+      store.getByBusinessDate("cccccccc-cccc-4ccc-8ccc-cccccccccccc", DEMO_STORE_ID, BUSINESS_DATE),
+    /scope does not match configured org\/store/u,
+  );
+  assert.equal(queries.length, 0);
+});
+
+test("configured scope is captured when the caller later mutates its options object", async () => {
+  const { pool, queries } = createCapturingPool();
+  const options = { orgId: DEMO_ORG_ID, storeId: DEMO_STORE_ID };
+  const store = createPgShiftStore(pool, options);
+  options.orgId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+  const row = await store.getByBusinessDate(DEMO_ORG_ID, DEMO_STORE_ID, BUSINESS_DATE);
+
+  assert.equal(row, null);
+  const orgGuc = queries.find((query) => query.sql.includes("app.org_id"));
+  assert.deepEqual(orgGuc?.params, [DEMO_ORG_ID]);
+});
+
 test("close inserts shift_closings row and maps RETURNING", async () => {
   const { pool, queries } = createCapturingPool((sql) => {
     if (isControlSql(sql)) return { rows: [], rowCount: 0 };
@@ -184,16 +212,20 @@ test("close inserts shift_closings row and maps RETURNING", async () => {
   assert.equal(insert?.params?.[6], 1);
   assert.equal(insert?.params?.[7], 3000);
   assert.equal(insert?.params?.[10], "店员甲");
+  const staffGuc = queries.find((q) => q.sql.includes("app.staff_id"));
+  assert.deepEqual(staffGuc?.params, [DEMO_STAFF_A_ID]);
 });
 
-test("close unique violation maps to ShiftAlreadyClosedError", async () => {
+test("close business-date conflict maps to ShiftAlreadyClosedError", async () => {
   const { pool } = createCapturingPool((sql) => {
     if (isControlSql(sql)) return { rows: [], rowCount: 0 };
     if (sql.includes("INSERT INTO shift_closings")) {
       const err = new Error("duplicate key value violates unique constraint") as Error & {
         code: string;
+        constraint: string;
       };
       err.code = "23505";
+      err.constraint = "shift_closings_store_date_uidx";
       throw err;
     }
     return { rows: [], rowCount: 0 };
@@ -225,5 +257,40 @@ test("close unique violation maps to ShiftAlreadyClosedError", async () => {
       assert.equal(error.businessDate, BUSINESS_DATE);
       return true;
     },
+  );
+});
+
+test("close preserves an unrelated unique violation", async () => {
+  const primaryKeyError = Object.assign(new Error("duplicate shift id"), {
+    code: "23505",
+    constraint: "shift_closings_pkey",
+  });
+  const { pool } = createCapturingPool((sql) => {
+    if (isControlSql(sql)) return { rows: [], rowCount: 0 };
+    if (sql.includes("INSERT INTO shift_closings")) throw primaryKeyError;
+    return { rows: [], rowCount: 0 };
+  });
+  const store = createPgShiftStore(pool, {
+    orgId: DEMO_ORG_ID,
+    storeId: DEMO_STORE_ID,
+  });
+
+  await assert.rejects(
+    () =>
+      store.close({
+        org_id: DEMO_ORG_ID,
+        store_id: DEMO_STORE_ID,
+        business_date: BUSINESS_DATE,
+        closed_by_staff_id: DEMO_STAFF_A_ID,
+        signature_name: "店员丙",
+        snapshot: Object.freeze({
+          order_count: 0,
+          payable_cents: 0,
+          paid_cents: 0,
+          payment_cents: 0,
+        }),
+        closed_at: CLOSED_EPOCH,
+      }),
+    (error: unknown) => error === primaryKeyError,
   );
 });
