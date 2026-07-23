@@ -410,6 +410,126 @@ test("order.list filters by exact customer_phone", async () => {
   assert.deepEqual((other.data.result as { orders: readonly ListRow[] }).orders, []);
 });
 
+test("order.list filters by min_balance_cents (receivables / debt)", async () => {
+  let tick = DAY_EPOCH;
+  const { registry, queryRegistry, chainHooks, pendingStore } = buildBus(
+    createMemoryOrderStore(),
+    () => tick,
+  );
+
+  // Full paid → balance 0
+  const paid = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      customer_phone: "13800000111",
+      customer_name: "已付",
+      lines: [
+        {
+          service_code: "wash",
+          category_code: "shirt",
+          unit_price_cents: 1000,
+          qty: 1,
+        },
+      ],
+      paid_cents: 1000,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(paid.ok, true, JSON.stringify(paid));
+
+  tick = DAY_EPOCH + 30;
+  // Partial → balance 2500
+  const partial = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      customer_phone: "13800000222",
+      customer_name: "欠款甲",
+      lines: [
+        {
+          service_code: "wash",
+          category_code: "shirt",
+          unit_price_cents: 1500,
+          qty: 2,
+        },
+      ],
+      paid_cents: 500,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(partial.ok, true, JSON.stringify(partial));
+  if (!partial.ok) return;
+  const partialId = (partial.data.result as { order_id: string }).order_id;
+
+  tick = DAY_EPOCH + 60;
+  // Unpaid → balance 4500
+  const unpaid = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      customer_phone: "13800000333",
+      customer_name: "欠款乙",
+      lines: [
+        {
+          service_code: "dry",
+          category_code: "coat",
+          unit_price_cents: 4500,
+          qty: 1,
+        },
+      ],
+      paid_cents: 0,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(unpaid.ok, true, JSON.stringify(unpaid));
+  if (!unpaid.ok) return;
+  const unpaidId = (unpaid.data.result as { order_id: string }).order_id;
+
+  const debt = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "order.list",
+    { min_balance_cents: 1, limit: 50 },
+    { registry: queryRegistry, actor: CLERK },
+  );
+  assert.equal(debt.ok, true, JSON.stringify(debt));
+  if (!debt.ok) return;
+
+  const debtRows = (debt.data.result as { orders: readonly ListRow[] }).orders;
+  assert.equal(debtRows.length, 2);
+  assert.equal(debtRows[0]?.order_id, unpaidId);
+  assert.equal(debtRows[1]?.order_id, partialId);
+  assert.ok(debtRows.every((r) => r.balance_cents >= 1));
+
+  const high = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "order.list",
+    { min_balance_cents: 3000 },
+    { registry: queryRegistry, actor: CLERK },
+  );
+  assert.equal(high.ok, true);
+  if (!high.ok) return;
+  const highRows = (high.data.result as { orders: readonly ListRow[] }).orders;
+  assert.equal(highRows.length, 1);
+  assert.equal(highRows[0]?.order_id, unpaidId);
+  assert.equal(highRows[0]?.balance_cents, 4500);
+
+  const bad = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "order.list",
+    { min_balance_cents: -1 },
+    { registry: queryRegistry, actor: CLERK },
+  );
+  assert.equal(bad.ok, false);
+  if (!bad.ok) assert.equal(bad.error.code, "VALIDATION_FAILED");
+});
+
 test("order.list respects limit and rejects invalid limit via schema", async () => {
   const { registry, queryRegistry, chainHooks, pendingStore } = buildBus();
 

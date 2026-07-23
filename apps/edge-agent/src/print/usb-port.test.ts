@@ -4,7 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { createFileUsbPort, createMockUsbPort, resolveUsbPrintPort } from "./usb-port.js";
+import {
+  createFileUsbPort,
+  createMockUsbPort,
+  isPosixDevicePath,
+  isWindowsDevicePath,
+  normalizePrinterPath,
+  resolveUsbPrintPort,
+} from "./usb-port.js";
 
 const PAYLOAD = new Uint8Array([0x1b, 0x40, 0x48, 0x69]);
 
@@ -50,6 +57,19 @@ test("createFileUsbPort rejects empty path", () => {
   assert.throws(() => createFileUsbPort("  "), /non-empty devicePath/);
 });
 
+test("createFileUsbPort accepts bare COM form (normalizes for open)", () => {
+  // Must not throw on construction; write may fail without hardware.
+  const port = createFileUsbPort("COM3");
+  assert.equal(port.kind, "usb");
+});
+
+test("normalizePrinterPath Windows COM/USB forms", () => {
+  assert.equal(normalizePrinterPath("COM3"), "\\\\.\\COM3");
+  assert.equal(normalizePrinterPath("\\\\.\\USB001"), "\\\\.\\USB001");
+  assert.equal(isWindowsDevicePath("\\\\.\\COM3"), true);
+  assert.equal(isPosixDevicePath("/dev/usb/lp0"), true);
+});
+
 test("resolveUsbPrintPort without env returns mock", () => {
   const port = resolveUsbPrintPort({});
   assert.equal(port.kind, "mock");
@@ -72,4 +92,9 @@ test("resolveUsbPrintPort with LAUNDRY_PRINTER_PATH returns usb kind", async () 
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("resolveUsbPrintPort accepts Windows COM env form", () => {
+  const port = resolveUsbPrintPort({ LAUNDRY_PRINTER_PATH: "\\\\.\\COM3" });
+  assert.equal(port.kind, "usb");
 });

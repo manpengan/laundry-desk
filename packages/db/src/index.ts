@@ -25,6 +25,7 @@ export {
   M2_PAYMENT_TABLE_NAMES,
   M2_PRINT_TABLE_NAMES,
   M2_SHIFT_TABLE_NAMES,
+  M3_PHOTO_TABLE_NAMES,
   type M2CatalogTableNameLiteral,
   type M2CustomerTableNameLiteral,
   type M2OrderTableNameLiteral,
@@ -32,6 +33,7 @@ export {
   type M2PrintTableNameLiteral,
   type M2ShiftTableNameLiteral,
   type M2TableNameLiteral,
+  type M3PhotoTableNameLiteral,
 } from "./m2-tables.js";
 
 export {
@@ -44,6 +46,7 @@ export {
   M2_PAYMENT_RLS_TABLES,
   M2_PRINT_RLS_TABLES,
   M2_SHIFT_RLS_TABLES,
+  M3_PHOTO_RLS_TABLES,
   buildM1RlsMigrationSql,
 } from "./rls.js";
 
@@ -63,9 +66,11 @@ export {
   M2_PAYMENT_TABLES,
   M2_PRINT_TABLES,
   M2_SHIFT_TABLES,
+  M3_PHOTO_TABLES,
   auditLog,
   catalogItems,
   customers,
+  garmentPhotos,
   garments,
   orderLines,
   orders,
@@ -94,5 +99,6 @@ export {
   type M2PaymentTableName,
   type M2PrintTableName,
   type M2ShiftTableName,
+  type M3PhotoTableName,
   type SchemaTableName,
 } from "./schema/index.js";

@@ -4,6 +4,8 @@
 
 import { Button, Input, MoneyText, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import type { AuthClient } from "../auth/AuthClient.js";
+import type { AccessSession } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { downloadDaySummaryCsv } from "./day-summary-csv.js";
 import { ShiftClosePanel } from "./ShiftClosePanel.js";
@@ -23,6 +25,9 @@ export type StatsPageProps = {
   queryClient: QueryPort;
   /** Optional command bus for shift.close 交班. */
   commandClient?: CommandPort;
+  /** Optional: manager step-up for POLICY_STEP_UP_REQUIRED on shift.close. */
+  session?: AccessSession;
+  authClient?: AuthClient;
   /** Override default date (tests). */
   defaultDate?: string;
   /** Skip auto-load on mount (tests). */
@@ -88,6 +93,8 @@ export function parseDaySummary(value: unknown): DaySummaryView | null {
 export function StatsPage({
   queryClient,
   commandClient,
+  session,
+  authClient,
   defaultDate,
   autoLoad = true,
 }: StatsPageProps) {
@@ -228,6 +235,8 @@ export function StatsPage({
           commandClient={commandClient}
           businessDate={dateText}
           autoLoad={autoLoad}
+          {...(session !== undefined ? { session } : {})}
+          {...(authClient !== undefined ? { authClient } : {})}
         />
       ) : null}
     </main>

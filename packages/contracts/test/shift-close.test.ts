@@ -23,7 +23,7 @@ describe("M2 shift.close / shift.get skeleton", () => {
     for (const definition of SHIFT_COMMANDS) {
       expect(isContractDefinition(definition)).toBe(true);
       expect(definition.kind).toBe("command");
-      expect(definition.risk).toBe("R2");
+      expect(definition.risk).toBe("R3");
       expect(definition.offline_mode).toBe("grant");
       expect(definition.data_classification).toBe("internal");
     }
@@ -106,7 +106,7 @@ describe("M2 shift.close / shift.get skeleton", () => {
 
   it("declares metadata floors", () => {
     expect(shiftCloseCommand.name).toBe("shift.close");
-    expect(shiftCloseCommand.risk).toBe("R2");
+    expect(shiftCloseCommand.risk).toBe("R3");
     expect(shiftCloseCommand.invariants).toContain("rbac.order_write");
     expect(shiftCloseCommand.offline_mode).toBe("grant");
     expect(shiftCloseCommand.idempotent).toBe(true);

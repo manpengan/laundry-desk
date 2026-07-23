@@ -24,6 +24,9 @@ import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
 import type { StatsHandlerDeps } from "../stats/handlers.js";
 import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
+import { createPgShiftStore } from "../shift/pg-shift-store.js";
+import type { PhotoHandlerDeps } from "../photo/handlers.js";
+import { createMemoryPhotoStore } from "../photo/memory-store.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import {
@@ -80,6 +83,8 @@ export type LocalRuntime = Readonly<{
   customer: CustomerHandlerDeps;
   /** M2 shift closing (memory; both runtime modes for skeleton). */
   shift: ShiftHandlerDeps;
+  /** M3 garment photo metadata (memory; both runtime modes for skeleton). */
+  photo: PhotoHandlerDeps;
   accessTokenSecret: string;
   staffDirectory: readonly LocalStaffDirectoryEntry[];
   /** Shared with Command Bus for confirm_ref / step-up PIN. */
@@ -215,6 +220,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const customerStore = createMemoryCustomerStore();
   const statsSource = createOrderBackedStatsQuery(orderStore);
   const shiftStore = createMemoryShiftStore();
+  const photoStore = createMemoryPhotoStore();
   return Object.freeze({
     mode: "memory" as const,
     identity: buildIdentityDeps(
@@ -230,6 +236,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     stats: Object.freeze({ source: statsSource }),
     customer: Object.freeze({ store: customerStore }),
     shift: Object.freeze({ store: shiftStore, stats: statsSource }),
+    photo: Object.freeze({ store: photoStore }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,
@@ -267,8 +274,12 @@ export async function createPgLocalRuntime(
   const orderStore = createPgOrderStore(appPool);
   const customerStore = createPgCustomerStore(appPool, { orgId: DEMO_ORG_ID });
   const statsSource = createOrderBackedStatsQuery(orderStore);
-  // Shift PG store lands later; memory shift store is shared for both modes in skeleton.
-  const shiftStore = createMemoryShiftStore();
+  const shiftStore = createPgShiftStore(appPool, {
+    orgId: DEMO_ORG_ID,
+    storeId: DEMO_STORE_ID,
+  });
+  // Photo PG store later; memory photo store in PG runtime for skeleton.
+  const photoStore = createMemoryPhotoStore();
 
   return Object.freeze({
     mode: "pg" as const,
@@ -295,6 +306,7 @@ export async function createPgLocalRuntime(
     stats: Object.freeze({ source: statsSource }),
     customer: Object.freeze({ store: customerStore }),
     shift: Object.freeze({ store: shiftStore, stats: statsSource }),
+    photo: Object.freeze({ store: photoStore }),
     accessTokenSecret: FIXED_SECRET,
     staffDirectory,
     pendingStore: processPendingActionStore,

@@ -10,6 +10,7 @@ import { pageCopy } from "./page-copy.js";
 import { PickupPage } from "./PickupPage.js";
 import { ReceivePage } from "./ReceivePage.js";
 import { SettingsPage } from "./SettingsPage.js";
+import { DebtPage } from "./DebtPage.js";
 import { StatsPage } from "./StatsPage.js";
 
 export type PageHostProps = {
@@ -78,7 +79,9 @@ export function PageHost({
     return (
       <StatsPage
         queryClient={queryClient}
+        session={session}
         {...(commandClient !== undefined ? { commandClient } : {})}
+        {...(authClient !== undefined ? { authClient } : {})}
       />
     );
   }
@@ -116,6 +119,14 @@ export function PageHost({
         <h1 className="ld-shell-main__title">{copy.title}</h1>
         <p className="ld-shell-main__hint">{copy.emptyDescription}</p>
         <OrdersList
+          queryClient={queryClient}
+          {...(commandClient !== undefined ? { commandClient } : {})}
+          onOpenPickup={(orderId) => {
+            setPickupOrderId(orderId);
+            onNavigate("pickup");
+          }}
+        />
+        <DebtPage
           queryClient={queryClient}
           onOpenPickup={(orderId) => {
             setPickupOrderId(orderId);

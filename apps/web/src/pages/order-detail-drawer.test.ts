@@ -4,9 +4,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
 import { createMockQueryClient } from "../commands/query-client.js";
+import { createMockCommandClient } from "../commands/command-client.js";
 import type { CommandResult } from "../commands/types.js";
 import { parseOrderGetResult, unwrapCommandResult, type OrderGetResult } from "./order-form.js";
-import { OrderDetailContent, OrderDetailDrawer } from "./OrderDetailDrawer.js";
+import {
+  OrderDetailContent,
+  OrderDetailDrawer,
+  parsePhotoList,
+  unwrapPhotoResult,
+  type PhotoMetaRow,
+} from "./OrderDetailDrawer.js";
 import { OrdersList } from "./OrdersList.js";
 
 const SAMPLE_ORDER: OrderGetResult = Object.freeze({
@@ -38,6 +45,19 @@ const SAMPLE_ORDER: OrderGetResult = Object.freeze({
   ]),
 });
 
+const SAMPLE_PHOTOS: readonly PhotoMetaRow[] = Object.freeze([
+  Object.freeze({
+    photo_id: "p1111111-2222-4333-8444-555555555555",
+    garment_id: "11111111-2222-4333-8444-555555555555",
+    order_id: SAMPLE_ORDER.order_id,
+    kind: "receive",
+    storage_key: "skeleton/demo.jpg",
+    content_type: "image/jpeg",
+    byte_size: 1024,
+    taken_at: 1_721_606_400,
+  }),
+]);
+
 function mockOrderGetClient(order: OrderGetResult = SAMPLE_ORDER) {
   return createMockQueryClient(async <T = unknown>(name: string): Promise<CommandResult<T>> => {
     if (name === "order.get") {
@@ -55,6 +75,15 @@ function mockOrderGetClient(order: OrderGetResult = SAMPLE_ORDER) {
         data: Object.freeze({
           execution: "executed",
           result: Object.freeze({ orders: Object.freeze([]) }),
+        }) as T,
+      });
+    }
+    if (name === "photo.list_by_order") {
+      return Object.freeze({
+        ok: true as const,
+        data: Object.freeze({
+          execution: "executed",
+          result: Object.freeze({ photos: SAMPLE_PHOTOS }),
         }) as T,
       });
     }
@@ -94,6 +123,19 @@ test("parseOrderGetResult peels mock order.get payload fields", () => {
   assert.equal(parseOrderGetResult({ ticket_no: "x" }), null);
 });
 
+test("parsePhotoList peels photo.list_by_order payload", () => {
+  const envelope = {
+    execution: "executed",
+    result: { photos: SAMPLE_PHOTOS },
+  };
+  const parsed = parsePhotoList(unwrapPhotoResult(envelope));
+  assert.ok(parsed);
+  assert.equal(parsed?.length, 1);
+  assert.equal(parsed?.[0]?.kind, "receive");
+  assert.equal(parsed?.[0]?.byte_size, 1024);
+  assert.equal(parsePhotoList({ photos: [{ photo_id: "x" }] }), null);
+});
+
 test("mock query client returns seeded order.get", async () => {
   const queryClient = mockOrderGetClient();
   const res = await queryClient.execute("order.get", {
@@ -106,8 +148,14 @@ test("mock query client returns seeded order.get", async () => {
   assert.equal(parsed?.garments[1]?.status, "picked_up");
 });
 
-test("OrderDetailContent SSR shows ticket, money, garments, photo placeholder", () => {
-  const html = renderToStaticMarkup(createElement(OrderDetailContent, { order: SAMPLE_ORDER }));
+test("OrderDetailContent SSR shows ticket, money, garments, photo count and thumbs", () => {
+  const html = renderToStaticMarkup(
+    createElement(OrderDetailContent, {
+      order: SAMPLE_ORDER,
+      photos: SAMPLE_PHOTOS,
+      onRegisterPhoto: () => undefined,
+    }),
+  );
 
   assert.match(html, /20260722-0001/);
   assert.match(html, /data-testid="order-detail-ticket"/);
@@ -122,15 +170,27 @@ test("OrderDetailContent SSR shows ticket, money, garments, photo placeholder", 
   assert.match(html, /data-fen="2500"/);
   assert.match(html, /TK-001/);
   assert.match(html, /TK-002/);
-  assert.match(html, /照片 M3/);
+  assert.match(html, /1 张/);
+  assert.match(html, /data-testid="order-detail-photo-count"/);
   assert.match(html, /data-testid="order-detail-photos"/);
+  assert.match(html, /data-testid="order-detail-photo-thumb"/);
+  assert.match(html, /登记照片\(骨架\)/);
+  assert.match(html, /data-testid="order-detail-register-photo-btn"/);
   assert.match(html, /data-testid="order-detail-garments"/);
   assert.doesNotMatch(html, /#ff0000/i);
   assert.doesNotMatch(html, /rgb\(/i);
 });
 
+test("OrderDetailContent SSR empty photos shows skeleton empty copy", () => {
+  const html = renderToStaticMarkup(createElement(OrderDetailContent, { order: SAMPLE_ORDER }));
+  assert.match(html, /0 张/);
+  assert.match(html, /暂无照片（元数据骨架）/);
+  assert.doesNotMatch(html, /登记照片/);
+});
+
 test("OrderDetailDrawer SSR open shell shows actions with mock order.get client", () => {
   const queryClient = mockOrderGetClient();
+  const commandClient = createMockCommandClient();
   const html = renderToStaticMarkup(
     createElement(
       ToastProvider,
@@ -139,6 +199,7 @@ test("OrderDetailDrawer SSR open shell shows actions with mock order.get client"
         open: true,
         orderId: SAMPLE_ORDER.order_id,
         queryClient,
+        commandClient,
         onClose: () => undefined,
         onPickup: () => undefined,
       }),

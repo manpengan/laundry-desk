@@ -37,18 +37,20 @@ describe("M2 order.list query", () => {
     await expect(parseContractInput(orderListQuery, {})).resolves.toEqual({});
   });
 
-  it("parses optional business_date, status, customer_phone, limit", async () => {
+  it("parses optional business_date, status, customer_phone, min_balance_cents, limit", async () => {
     await expect(
       parseContractInput(orderListQuery, {
         business_date: "2026-07-22",
         status: "open",
         customer_phone: "13800000111",
+        min_balance_cents: 1,
         limit: 10,
       }),
     ).resolves.toEqual({
       business_date: "2026-07-22",
       status: "open",
       customer_phone: "13800000111",
+      min_balance_cents: 1,
       limit: 10,
     });
   });
@@ -59,7 +61,16 @@ describe("M2 order.list query", () => {
     ).resolves.toEqual({ customer_phone: "13800000222", limit: 20 });
   });
 
-  it("rejects invalid business_date / status / phone / limit", async () => {
+  it("parses min_balance_cents for debt / receivables list", async () => {
+    await expect(
+      parseContractInput(orderListQuery, { min_balance_cents: 1, limit: 50 }),
+    ).resolves.toEqual({ min_balance_cents: 1, limit: 50 });
+    await expect(parseContractInput(orderListQuery, { min_balance_cents: 0 })).resolves.toEqual({
+      min_balance_cents: 0,
+    });
+  });
+
+  it("rejects invalid business_date / status / phone / min_balance / limit", async () => {
     await expect(
       parseContractInput(orderListQuery, { business_date: "20260722" }),
     ).rejects.toBeTruthy();
@@ -69,6 +80,12 @@ describe("M2 order.list query", () => {
     ).rejects.toBeTruthy();
     await expect(
       parseContractInput(orderListQuery, { customer_phone: "23800000111" }),
+    ).rejects.toBeTruthy();
+    await expect(
+      parseContractInput(orderListQuery, { min_balance_cents: -1 }),
+    ).rejects.toBeTruthy();
+    await expect(
+      parseContractInput(orderListQuery, { min_balance_cents: 1.5 }),
     ).rejects.toBeTruthy();
     await expect(parseContractInput(orderListQuery, { limit: 0 })).rejects.toBeTruthy();
     await expect(parseContractInput(orderListQuery, { limit: 51 })).rejects.toBeTruthy();

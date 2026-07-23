@@ -1,14 +1,16 @@
 /**
  * Operator printer-path smoke (M2 Edge).
  * Verifies LAUNDRY_PRINTER_PATH without full app UI.
+ * Accepts POSIX nodes, spool files, and Windows COM/USB paths (COM3 → \\.\COM3).
  * Never hangs — write path always races a timeout.
  */
 
 import { escCut, escFeed, escInit, escLine } from "./escpos-xp58.js";
-import { resolveUsbPrintPort } from "./usb-port.js";
+import { normalizePrinterPath, PRINTER_PATH_ENV, resolveUsbPrintPort } from "./usb-port.js";
 
 export type PrinterSmokeResult = Readonly<{
   ok: boolean;
+  /** Normalized path used for the probe; null when mock. */
   path: string | null;
   kind: "mock" | "usb" | "missing";
   message: string;
@@ -20,14 +22,16 @@ export type PrinterSmokeOptions = Readonly<{
   timeoutMs?: number;
 }>;
 
-const PRINTER_PATH_ENV = "LAUNDRY_PRINTER_PATH";
+export { PRINTER_PATH_ENV, normalizePrinterPath };
+
 const DEFAULT_TIMEOUT_MS = 5_000;
 const SMOKE_LINE = "LAUNDRY printer smoke OK";
 
 function resolveConfiguredPath(env: NodeJS.ProcessEnv): string | null {
   const raw = env[PRINTER_PATH_ENV];
   if (typeof raw === "string" && raw.trim().length > 0) {
-    return raw.trim();
+    const normalized = normalizePrinterPath(raw);
+    return normalized.length > 0 ? normalized : null;
   }
   return null;
 }
@@ -53,8 +57,36 @@ function errorMessage(err: unknown): string {
   return String(err);
 }
 
-function isMissingDeviceError(message: string): boolean {
-  return /ENOENT|no such file|not found|cannot find/i.test(message);
+/** Path / device does not exist (ENOENT or Windows equivalent). */
+export function isMissingDeviceError(message: string): boolean {
+  return (
+    /ENOENT|no such file|not found|cannot find|the system cannot find/i.test(message) ||
+    /unknown device|invalid name/i.test(message)
+  );
+}
+
+/** Permission / sharing failure (EACCES, EPERM, Windows access denied). */
+export function isAccessDeniedError(message: string): boolean {
+  return /EACCES|EPERM|access is denied|access denied|permission denied|EBUSY|resource busy|sharing violation/i.test(
+    message,
+  );
+}
+
+function annotateError(path: string, message: string): string {
+  if (isAccessDeniedError(message)) {
+    return (
+      `Access denied writing ${path}: ${message}. ` +
+      "Close other apps using the port, run elevated if needed, " +
+      "or pick another COM/USB share (Device Manager → Ports)."
+    );
+  }
+  if (isMissingDeviceError(message)) {
+    return (
+      `Path missing: ${path} (${message}). ` +
+      "Check Device Manager for COM/USB###, or use a file redirect path first."
+    );
+  }
+  return message;
 }
 
 function mockResult(): PrinterSmokeResult {
@@ -64,8 +96,8 @@ function mockResult(): PrinterSmokeResult {
     kind: "mock" as const,
     message:
       "Mock print port active (no hardware write). " +
-      `Set ${PRINTER_PATH_ENV} to a device node or spool file ` +
-      "(e.g. /dev/usb/lp0 or a temp file) to probe USB.",
+      `Set ${PRINTER_PATH_ENV} to a device or spool file to probe USB — ` +
+      "e.g. /dev/usb/lp0, \\\\.\\COM3, \\\\.\\USB001, COM3, or a temp file.",
   });
 }
 
@@ -91,6 +123,7 @@ function failResult(path: string, kind: "usb" | "missing", message: string): Pri
 /**
  * Probe the resolved USB print port with a tiny ESC/POS self-test payload.
  * Mock → ok without writing. USB → write with timeout; never hangs.
+ * Windows operators may set COM3 / \\.\COM3 / \\.\USB001 or a file redirect.
  */
 export async function runPrinterSmoke(
   env: NodeJS.ProcessEnv,
@@ -110,8 +143,9 @@ export async function runPrinterSmoke(
     await port.write(payload, { timeoutMs });
     return okUsbResult(path, payload.byteLength);
   } catch (err) {
-    const message = errorMessage(err);
-    if (isMissingDeviceError(message)) {
+    const raw = errorMessage(err);
+    const message = annotateError(path, raw);
+    if (isMissingDeviceError(raw)) {
       return failResult(path, "missing", message);
     }
     return failResult(path, "usb", message);

@@ -103,6 +103,7 @@ const STORE_TABLES = describeTables(
     "orders",
     "order_lines",
     "garments",
+    "garment_photos",
     "garment_status_log",
     "payments",
     "batch_garments",

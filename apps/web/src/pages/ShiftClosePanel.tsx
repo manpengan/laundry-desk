@@ -1,10 +1,18 @@
 /**
- * 交班 / 日结签字 — shift.close + shift.get (M2 skeleton).
+ * 交班 / 日结签字 — shift.close (R3 confirm) + shift.get.
+ *
+ * R3: first hop returns POLICY_CONFIRMATION_REQUIRED; UI auto-resumes with confirm_ref
+ * (self-confirm allowed). POLICY_STEP_UP_REQUIRED (optional manager path) uses
+ * StepUpConfirmDialog when authClient + session are provided.
  */
 
 import { Button, Input, MoneyText, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AuthClient } from "../auth/AuthClient.js";
+import type { AccessSession } from "../auth/types.js";
+import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
+import { StepUpConfirmDialog } from "../shell/StepUpConfirmDialog.js";
 
 export type ShiftClosingView = Readonly<{
   shift_id: string;
@@ -25,6 +33,9 @@ export type ShiftClosePanelProps = {
   businessDate: string;
   /** Skip auto-load on mount (tests). */
   autoLoad?: boolean;
+  /** Optional: enable manager step-up dialog for POLICY_STEP_UP_REQUIRED. */
+  session?: AccessSession;
+  authClient?: AuthClient;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -74,11 +85,34 @@ export function parseShiftClosing(value: unknown): ShiftClosingView | null {
   });
 }
 
+function applyCloseResult(
+  res: Awaited<ReturnType<CommandPort["execute"]>>,
+  setClosing: (v: ShiftClosingView | null) => void,
+  setLoaded: (v: boolean) => void,
+  toast: ReturnType<typeof useToast>,
+): boolean {
+  if (!res.ok) {
+    toast.push(res.error.message ?? res.error.code, "error");
+    return false;
+  }
+  const parsed = parseShiftClosing(unwrapShiftResult(res.data));
+  if (parsed === null) {
+    toast.push("交班成功但结果无法解析", "error");
+    return false;
+  }
+  setClosing(parsed);
+  setLoaded(true);
+  toast.push("交班已确认", "success");
+  return true;
+}
+
 export function ShiftClosePanel({
   queryClient,
   commandClient,
   businessDate,
   autoLoad = true,
+  session,
+  authClient,
 }: ShiftClosePanelProps) {
   const toast = useToast();
   const [signatureName, setSignatureName] = useState("");
@@ -86,6 +120,7 @@ export function ShiftClosePanel({
   const [busy, setBusy] = useState(false);
   const [closing, setClosing] = useState<ShiftClosingView | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [pendingRef, setPendingRef] = useState<string | null>(null);
   const loadRef = useRef<() => Promise<void>>(async () => undefined);
 
   const load = useCallback(async () => {
@@ -131,6 +166,19 @@ export function ShiftClosePanel({
     void loadRef.current();
   }, [autoLoad, businessDate]);
 
+  const finishConfirm = useCallback(
+    async (confirmRef: string) => {
+      setBusy(true);
+      try {
+        const second = await commandClient.execute<unknown>("shift.close", {}, { confirmRef });
+        applyCloseResult(second, setClosing, setLoaded, toast);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [commandClient, toast],
+  );
+
   const onClose = useCallback(async () => {
     const day = businessDate.trim();
     if (!/^\d{4}-\d{2}-\d{2}$/u.test(day)) {
@@ -152,29 +200,47 @@ export function ShiftClosePanel({
       if (noteText.length > 0) {
         body.note = noteText;
       }
-      const res = await commandClient.execute<unknown>("shift.close", body);
-      if (!res.ok) {
-        toast.push(res.error.message ?? res.error.code, "error");
+      const first = await commandClient.execute<unknown>("shift.close", body);
+      if (first.ok) {
+        applyCloseResult(first, setClosing, setLoaded, toast);
         return;
       }
-      const parsed = parseShiftClosing(unwrapShiftResult(res.data));
-      if (parsed === null) {
-        toast.push("交班成功但结果无法解析", "error");
+      if (isStepUpRequired(first)) {
+        const code = first.error.code;
+        const ref = first.error.detail.confirm_ref;
+        // R3 confirm card: self-confirm resume (button click is the confirmation).
+        if (code === "POLICY_CONFIRMATION_REQUIRED") {
+          const second = await commandClient.execute<unknown>(
+            "shift.close",
+            {},
+            { confirmRef: ref },
+          );
+          applyCloseResult(second, setClosing, setLoaded, toast);
+          return;
+        }
+        // Optional manager step-up path when auth is wired.
+        if (
+          code === "POLICY_STEP_UP_REQUIRED" &&
+          authClient !== undefined &&
+          session !== undefined
+        ) {
+          setPendingRef(ref);
+          return;
+        }
+        toast.push(first.error.message ?? first.error.code, "error");
         return;
       }
-      setClosing(parsed);
-      setLoaded(true);
-      toast.push("交班已确认", "success");
+      toast.push(first.error.message ?? first.error.code, "error");
     } finally {
       setBusy(false);
     }
-  }, [businessDate, commandClient, note, signatureName, toast]);
+  }, [authClient, businessDate, commandClient, note, session, signatureName, toast]);
 
   return (
     <section className="ld-shift-panel" data-testid="shift-close-panel" aria-label="交班日结">
       <h2 className="ld-shift-panel__title">交班 / 日结签字</h2>
       <p className="ld-shift-panel__hint">
-        对营业日 {businessDate} 快照当日汇总并签字确认。同日仅可交班一次。
+        对营业日 {businessDate} 快照当日汇总并签字确认（R3 确认卡）。同日仅可交班一次。
       </p>
 
       {loaded && closing !== null ? (
@@ -248,6 +314,24 @@ export function ShiftClosePanel({
           </div>
         </div>
       )}
+
+      {authClient !== undefined && session !== undefined ? (
+        <StepUpConfirmDialog
+          open={pendingRef !== null}
+          onClose={() => setPendingRef(null)}
+          authClient={authClient}
+          confirmRef={pendingRef ?? ""}
+          currentStaffId={session.session.staff_id}
+          commandLabel="交班日结"
+          onApproved={() => {
+            const ref = pendingRef;
+            setPendingRef(null);
+            if (ref !== null) {
+              void finishConfirm(ref);
+            }
+          }}
+        />
+      ) : null}
     </section>
   );
 }
