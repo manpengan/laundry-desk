@@ -225,6 +225,7 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
       selected_garment_ids: selectedIds,
       balance_cents: order.balance_cents,
       collect_cents: collectCents,
+      order_status: order.status,
       fulfillment_enabled: false,
     });
     if (!plan.ok) {
@@ -239,7 +240,12 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
       plan.garment_ids,
       plan.collect_cents,
       now,
-      Object.freeze({ staffId: ctx.actor.staffId, method: "cash" as const }),
+      Object.freeze({
+        staffId: ctx.actor.staffId,
+        method: "cash" as const,
+        nextOrderStatus: plan.next_order_status,
+        nextBalanceCents: plan.next_balance_cents,
+      }),
     );
     if (applied === null) {
       throw new HandlerCommandError(createCommandError("TRANSACTION_FAILED"));

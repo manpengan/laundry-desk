@@ -202,6 +202,53 @@ test("order.pickup with collect_cents 0 does not insert a payment", async () => 
   assert.equal(payments.length, 0);
 });
 
+test("order.pickup rejects a closed order instead of planning it as open", async () => {
+  const { registry, chainHooks, pendingStore, orderStore } = buildBus();
+  const received = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      lines: [
+        {
+          service_code: "wash",
+          category_code: "shirt",
+          unit_price_cents: 1000,
+          qty: 1,
+        },
+      ],
+      paid_cents: 1000,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(received.ok, true, JSON.stringify(received));
+  if (!received.ok) return;
+  const orderId = (received.data.result as { order_id: string }).order_id;
+
+  const closed = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.pickup",
+    { order_id: orderId, garment_ids: [], collect_cents: 0 },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(closed.ok, true, JSON.stringify(closed));
+
+  const replay = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.pickup",
+    { order_id: orderId, garment_ids: [], collect_cents: 0 },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(replay.ok, false);
+  if (!replay.ok) assert.equal(replay.error.code, "VALIDATION_FAILED");
+  assert.equal(
+    (await orderStore.getOrder(TENANT.orgId, TENANT.storeId, orderId))?.status,
+    "closed",
+  );
+});
+
 test("order.receive without order_write is PERMISSION_DENIED", async () => {
   const { registry, chainHooks, pendingStore } = buildBus();
   const result = await executeCommand(

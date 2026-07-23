@@ -12,6 +12,10 @@ export type { PaymentMethod, PaymentRow };
 export type PickupApplyOptions = Readonly<{
   staffId: string;
   method?: PaymentMethod;
+  /** Domain pickup plan result; verified against the transaction's current rows. */
+  nextOrderStatus?: OrderStatus;
+  /** Domain pickup plan result; prevents applying a stale payment balance. */
+  nextBalanceCents?: number;
   /** Override UUID generation for the payment row (tests). */
   paymentId?: string;
 }>;

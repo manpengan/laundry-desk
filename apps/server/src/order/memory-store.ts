@@ -70,7 +70,7 @@ export class MemoryOrderStore implements OrderStore {
     const k = key(orgId, storeId, orderId);
     const order = this.orders.get(k);
     const list = this.garments.get(k);
-    if (order === undefined || list === undefined) return null;
+    if (order === undefined || list === undefined || order.status !== "open") return null;
 
     const idSet = new Set(garmentIds);
     const nextGarments = list.map((g) =>
@@ -81,11 +81,13 @@ export class MemoryOrderStore implements OrderStore {
     );
     const paid = order.paid_cents + collectCents;
     const balance = order.payable_cents - paid;
+    const derivedStatus = allPicked && balance === 0 ? ("closed" as const) : ("open" as const);
+    assertPickupPlanMatchesCurrentRows(options, balance, derivedStatus);
     const nextOrder = Object.freeze({
       ...order,
       paid_cents: paid,
       balance_cents: balance,
-      status: allPicked && balance <= 0 ? ("closed" as const) : order.status,
+      status: derivedStatus,
       updated_at: nowEpoch,
     });
     this.orders.set(k, nextOrder);
@@ -140,6 +142,19 @@ export class MemoryOrderStore implements OrderStore {
     this.garments.clear();
     this.payments.length = 0;
     this.ticketSeq.clear();
+  }
+}
+
+function assertPickupPlanMatchesCurrentRows(
+  options: PickupApplyOptions | undefined,
+  balanceCents: number,
+  nextOrderStatus: OrderRecord["status"],
+): void {
+  if (options?.nextBalanceCents !== undefined && options.nextBalanceCents !== balanceCents) {
+    throw new Error("Pickup plan balance no longer matches persisted order");
+  }
+  if (options?.nextOrderStatus !== undefined && options.nextOrderStatus !== nextOrderStatus) {
+    throw new Error("Pickup plan status no longer matches persisted order");
   }
 }
 

@@ -266,13 +266,12 @@ async function loadGarments(
 
 function nextOrderStatus(
   garments: readonly GarmentRecord[],
-  current: OrderRecord["status"],
   balanceCents: number,
 ): OrderRecord["status"] {
   const allTerminal = garments.every(
     (g) => g.status === "picked_up" || g.status === "delivered" || g.status === "lost",
   );
-  return allTerminal && balanceCents <= 0 ? "closed" : current;
+  return allTerminal && balanceCents === 0 ? "closed" : "open";
 }
 
 async function insertPaymentIfNeeded(
@@ -335,9 +334,18 @@ async function applyPickupTxn(
   newId: () => string,
 ): Promise<PickupApplyResult | null> {
   const order = await loadOrder(client, orgId, storeId, orderId);
-  if (order === null) return null;
+  if (order === null || order.status !== "open") return null;
   const garments = await loadGarments(client, orgId, storeId, orderId);
   if (garments.length === 0 && garmentIds.length > 0) return null;
+
+  const idSet = new Set(garmentIds);
+  const nextGarments = garments.map((g) =>
+    idSet.has(g.garment_id) ? Object.freeze({ ...g, status: "picked_up" as const }) : g,
+  );
+  const paid = order.paid_cents + collectCents;
+  const balance = order.payable_cents - paid;
+  const status = nextOrderStatus(nextGarments, balance);
+  assertPickupPlanMatchesCurrentRows(options, balance, status);
 
   if (garmentIds.length > 0) {
     await client.query(
@@ -348,14 +356,6 @@ async function applyPickupTxn(
       [orgId, storeId, orderId, [...garmentIds]],
     );
   }
-
-  const idSet = new Set(garmentIds);
-  const nextGarments = garments.map((g) =>
-    idSet.has(g.garment_id) ? Object.freeze({ ...g, status: "picked_up" as const }) : g,
-  );
-  const paid = order.paid_cents + collectCents;
-  const balance = order.payable_cents - paid;
-  const status = nextOrderStatus(nextGarments, order.status, balance);
 
   await client.query(
     `UPDATE orders
@@ -383,6 +383,19 @@ async function applyPickupTxn(
     updated_at: nowEpoch,
   });
   return Object.freeze({ order: nextOrder, garments: Object.freeze(nextGarments) });
+}
+
+function assertPickupPlanMatchesCurrentRows(
+  options: PickupApplyOptions | undefined,
+  balanceCents: number,
+  nextStatus: OrderRecord["status"],
+): void {
+  if (options?.nextBalanceCents !== undefined && options.nextBalanceCents !== balanceCents) {
+    throw new Error("Pickup plan balance no longer matches persisted order");
+  }
+  if (options?.nextOrderStatus !== undefined && options.nextOrderStatus !== nextStatus) {
+    throw new Error("Pickup plan status no longer matches persisted order");
+  }
 }
 
 /**
