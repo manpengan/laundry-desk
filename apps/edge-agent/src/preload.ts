@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld("edgeBridge", {
   printProcess: (input?: { jobId?: string; kind?: string; ticketNo?: string }) =>
     ipcRenderer.invoke(IPC_CHANNELS.printProcess, input),
   printList: () => ipcRenderer.invoke(IPC_CHANNELS.printList),
+  /** M2: LAUNDRY_PRINTER_PATH smoke — status only (no raw bytes). */
+  printerSmoke: () => ipcRenderer.invoke(IPC_CHANNELS.printerSmoke),
   // D2: pairing code + public status only — never private keys.
   pairingCreateCode: () => ipcRenderer.invoke(IPC_CHANNELS.pairingCreateCode),
   pairingStatus: () => ipcRenderer.invoke(IPC_CHANNELS.pairingStatus),

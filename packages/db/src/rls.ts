@@ -68,6 +68,11 @@ export const M2_PRINT_RLS_TABLES = Object.freeze(["print_jobs"] as const);
  */
 export const M2_CUSTOMER_RLS_TABLES = Object.freeze(["customers"] as const);
 
+/**
+ * M2 shift closings uses store-scope RLS (append-only grants in 0012_shift_closings.sql).
+ */
+export const M2_SHIFT_RLS_TABLES = Object.freeze(["shift_closings"] as const);
+
 const STORE_PREDICATE = `org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
     AND store_id = NULLIF(current_setting('app.store_id', true), '')::uuid`;
 

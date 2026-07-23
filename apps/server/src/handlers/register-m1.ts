@@ -1,6 +1,6 @@
 /**
  * M1 handler registration — loads A6 command/query definitions and attaches handlers.
- * Optional M2 order/catalog/print/stats/customer when deps provided.
+ * Optional M2 order/catalog/print/stats/customer/shift when deps provided.
  */
 
 import type { ChainPortHooks } from "../bus/chain-adapter.js";
@@ -17,6 +17,8 @@ import type { OrderHandlerDeps } from "../order/handlers.js";
 import { registerOrderCommandHandlers, registerOrderQueryHandlers } from "../order/handlers.js";
 import type { PrintHandlerDeps } from "../print/handlers.js";
 import { registerPrintCommandHandlers, registerPrintQueryHandlers } from "../print/handlers.js";
+import type { ShiftHandlerDeps } from "../shift/handlers.js";
+import { registerShiftCommandHandlers, registerShiftQueryHandlers } from "../shift/handlers.js";
 import type { StatsHandlerDeps } from "../stats/handlers.js";
 import { registerStatsQueryHandlers } from "../stats/handlers.js";
 import type { IdentityHandlerDeps } from "./identity-handlers.js";
@@ -38,6 +40,8 @@ export type RegisterM1Deps = Readonly<{
   stats?: StatsHandlerDeps;
   /** M2 customer archive (memory or PG). */
   customer?: CustomerHandlerDeps;
+  /** M2 shift closing / 日结签字 (memory). */
+  shift?: ShiftHandlerDeps;
 }>;
 
 export type RegisterM1Result = Readonly<{
@@ -94,6 +98,11 @@ export function registerM1Handlers(
     registered.push("customer.upsert");
   }
 
+  if (deps.shift !== undefined) {
+    registerShiftCommandHandlers(registry, deps.shift);
+    registered.push("shift.close");
+  }
+
   return Object.freeze(registered);
 }
 
@@ -133,12 +142,17 @@ export function registerM1QueryHandlers(
     names.push("customer.search");
   }
 
+  if (deps.shift !== undefined) {
+    registerShiftQueryHandlers(queryRegistry, deps.shift);
+    names.push("shift.get");
+  }
+
   return Object.freeze(names);
 }
 
 /**
  * Convenience: fresh M1 command + query registries + handlers + default chain hooks.
- * Query registry includes M2 catalog + order.get + print + stats + customer.search;
+ * Query registry includes M2 catalog + order.get + print + stats + customer + shift;
  * handlers attach when deps set.
  */
 export function createRegisteredM1Bus(deps: RegisterM1Deps): RegisterM1Result {

@@ -59,6 +59,8 @@ export const OrderListInputSchema = z.strictObject({
   /** UTC business day of created_at (YYYY-MM-DD). Omit = all days. */
   business_date: BusinessDateSchema.optional(),
   status: OrderStatusSchema.optional(),
+  /** Exact match on order.customer_phone after PhoneSchema normalize. */
+  customer_phone: PhoneSchema.optional(),
   /** Hard row cap (handler default 20; must not exceed max_result_rows 50). */
   limit: z.number().int().positive().max(50).optional(),
 });
@@ -160,13 +162,13 @@ export const orderGetQuery: QueryDefinition<GetInput> = defineQuery({
   max_result_rows: 1,
 });
 
-/** 订单列表：工作台/历史浏览；按营业日与状态筛选，最新优先。 */
+/** 订单列表：工作台/历史浏览；按营业日、状态、手机号筛选，最新优先。 */
 export const orderListQuery: QueryDefinition<ListInput> = defineQuery({
   name: "order.list",
   version: "0.1.0",
   description: "List recent store orders for workbench / history browsing.",
   description_llm:
-    "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by UTC business_date and/or status. Default limit 20, max 50. PII phone masked in audit.",
+    "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by UTC business_date, status, and/or exact customer_phone. Default limit 20, max 50. PII phone masked in audit.",
   input: OrderListInputSchema,
   risk: "R2",
   invariants: [],
@@ -174,7 +176,7 @@ export const orderListQuery: QueryDefinition<ListInput> = defineQuery({
   sideEffects: [],
   offline_mode: "denied",
   data_classification: "pii",
-  input_redaction: [],
+  input_redaction: [{ path: "/customer_phone", strategy: "mask" }],
   result_redaction: [{ path: "/orders/*/customer_phone", strategy: "mask" }],
   max_result_rows: 50,
 });

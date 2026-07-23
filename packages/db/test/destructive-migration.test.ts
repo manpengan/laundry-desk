@@ -50,6 +50,7 @@ describe("destructive migration static reject", () => {
       "0009_payments.sql",
       "0010_print_jobs.sql",
       "0011_customers.sql",
+      "0012_shift_closings.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
@@ -74,12 +75,14 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS payments/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS print_jobs/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS customers/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS shift_closings/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS args_hash/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS entity_versions/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS idempotency_key/iu);
     expect(combined).toMatch(/FORCE ROW LEVEL SECURITY/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE audit_log TO laundry_app/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE payments TO laundry_app/iu);
+    expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE shift_closings TO laundry_app/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT, UPDATE ON TABLE print_jobs TO laundry_app/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT, UPDATE ON TABLE customers TO laundry_app/iu);
     expect(combined).toMatch(

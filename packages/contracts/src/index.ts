@@ -353,6 +353,10 @@ export {
   M2_PRINT_COMMAND_NAMES,
   M2_PRINT_QUERY_DEFINITIONS,
   M2_PRINT_QUERY_NAMES,
+  M2_SHIFT_COMMAND_DEFINITIONS,
+  M2_SHIFT_COMMAND_NAMES,
+  M2_SHIFT_QUERY_DEFINITIONS,
+  M2_SHIFT_QUERY_NAMES,
   M2_SKELETON_COMMAND_NAMES,
   M2_SKELETON_DEFINITIONS,
   M2_STATS_QUERY_DEFINITIONS,
@@ -425,6 +429,17 @@ export type {
   CustomerSearchRow,
   CustomerUpsertResult,
 } from "./commands/customer.js";
+export {
+  SHIFT_COMMAND_NAMES,
+  SHIFT_COMMANDS,
+  SHIFT_QUERY_NAMES,
+  SHIFT_QUERIES,
+  ShiftCloseInputSchema,
+  ShiftGetInputSchema,
+  shiftCloseCommand,
+  shiftGetQuery,
+} from "./commands/shift.js";
+export type { ShiftClosingResult } from "./commands/shift.js";
 
 export {
   OPENAPI_INFO_VERSION,

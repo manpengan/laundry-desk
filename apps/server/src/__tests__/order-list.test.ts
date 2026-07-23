@@ -305,6 +305,111 @@ test("order.list filters by business_date and status", async () => {
   assert.equal(closedRows[0]?.order_id, closeId);
 });
 
+test("order.list filters by exact customer_phone", async () => {
+  let tick = DAY_EPOCH;
+  const { registry, queryRegistry, chainHooks, pendingStore } = buildBus(
+    createMemoryOrderStore(),
+    () => tick,
+  );
+
+  const first = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      customer_phone: "13800000111",
+      customer_name: "甲",
+      lines: [
+        {
+          service_code: "wash",
+          category_code: "shirt",
+          unit_price_cents: 1000,
+          qty: 1,
+        },
+      ],
+      paid_cents: 0,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(first.ok, true, JSON.stringify(first));
+  if (!first.ok) return;
+  const firstId = (first.data.result as { order_id: string }).order_id;
+
+  tick = DAY_EPOCH + 30;
+  const second = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      customer_phone: "13800000222",
+      customer_name: "乙",
+      lines: [
+        {
+          service_code: "dry",
+          category_code: "coat",
+          unit_price_cents: 2000,
+          qty: 1,
+        },
+      ],
+      paid_cents: 0,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(second.ok, true, JSON.stringify(second));
+  if (!second.ok) return;
+
+  tick = DAY_EPOCH + 60;
+  const third = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      customer_phone: "13800000111",
+      customer_name: "甲",
+      lines: [
+        {
+          service_code: "iron",
+          category_code: "pants",
+          unit_price_cents: 800,
+          qty: 1,
+        },
+      ],
+      paid_cents: 0,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(third.ok, true, JSON.stringify(third));
+  if (!third.ok) return;
+  const thirdId = (third.data.result as { order_id: string }).order_id;
+
+  const byPhone = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "order.list",
+    { customer_phone: "13800000111", limit: 20 },
+    { registry: queryRegistry, actor: CLERK },
+  );
+  assert.equal(byPhone.ok, true, JSON.stringify(byPhone));
+  if (!byPhone.ok) return;
+
+  const body = byPhone.data.result as { orders: readonly ListRow[] };
+  assert.equal(body.orders.length, 2);
+  assert.equal(body.orders[0]?.order_id, thirdId);
+  assert.equal(body.orders[1]?.order_id, firstId);
+  assert.ok(body.orders.every((r) => r.customer_phone === "13800000111"));
+
+  const other = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "order.list",
+    { customer_phone: "13800000999" },
+    { registry: queryRegistry, actor: CLERK },
+  );
+  assert.equal(other.ok, true);
+  if (!other.ok) return;
+  assert.deepEqual((other.data.result as { orders: readonly ListRow[] }).orders, []);
+});
+
 test("order.list respects limit and rejects invalid limit via schema", async () => {
   const { registry, queryRegistry, chainHooks, pendingStore } = buildBus();
 

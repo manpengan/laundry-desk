@@ -15,6 +15,12 @@ import {
   M2_PRINT_QUERY_DEFINITIONS,
   M2_PRINT_QUERY_NAMES,
 } from "./print.js";
+import {
+  M2_SHIFT_COMMAND_DEFINITIONS,
+  M2_SHIFT_COMMAND_NAMES,
+  M2_SHIFT_QUERY_DEFINITIONS,
+  M2_SHIFT_QUERY_NAMES,
+} from "./shift.js";
 import { M2_STATS_QUERY_DEFINITIONS, M2_STATS_QUERY_NAMES } from "./stats.js";
 import type { z } from "zod";
 
@@ -31,19 +37,21 @@ export const M1_FIRST_WAVE_COMMAND_NAMES = Object.freeze([
 export const M1_FIRST_WAVE_QUERY_NAMES = Object.freeze(PLATFORM_QUERIES.map((query) => query.name));
 
 /**
- * M2 skeleton commands (order receive/pickup + print enqueue + customer upsert).
+ * M2 skeleton commands (order receive/pickup + print enqueue + customer upsert + shift close).
  * Not yet in OpenAPI freeze snapshot; server loads via createM1CommandRegistry([...M1, ...M2]).
  */
 export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] = Object.freeze([
   ...ORDER_COMMANDS,
   ...M2_PRINT_COMMAND_DEFINITIONS,
   ...M2_CUSTOMER_COMMAND_DEFINITIONS,
+  ...M2_SHIFT_COMMAND_DEFINITIONS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   ...ORDER_COMMAND_NAMES,
   ...M2_PRINT_COMMAND_NAMES,
   ...M2_CUSTOMER_COMMAND_NAMES,
+  ...M2_SHIFT_COMMAND_NAMES,
 ] as const);
 
 /**
@@ -92,4 +100,15 @@ export {
   M2_CUSTOMER_COMMAND_NAMES,
   M2_CUSTOMER_QUERY_DEFINITIONS,
   M2_CUSTOMER_QUERY_NAMES,
+};
+
+/**
+ * M2 shift closing (shift.close + shift.get). Memory-first 日结签字;
+ * not in OpenAPI freeze. Re-exported for registry loaders.
+ */
+export {
+  M2_SHIFT_COMMAND_DEFINITIONS,
+  M2_SHIFT_COMMAND_NAMES,
+  M2_SHIFT_QUERY_DEFINITIONS,
+  M2_SHIFT_QUERY_NAMES,
 };

@@ -1,10 +1,11 @@
 /**
- * 客户档案 — customer.search + customer.upsert (M2 skeleton).
+ * 客户档案 — customer.search + customer.upsert + 详情/历史订单 (M2).
  */
 
-import { Button, Input, useToast } from "@laundry/ui";
+import { Button, Input, MoneyText, StatusBadge, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CommandPort, QueryPort } from "../commands/types.js";
+import { parseOrderListRows, type OrderListRowView } from "./OrdersList.js";
 
 export type CustomerRowView = Readonly<{
   customer_id: string;
@@ -19,6 +20,12 @@ export type CustomersPageProps = {
   commandClient: CommandPort;
   /** Skip auto-search on mount (tests). */
   autoLoad?: boolean;
+  /** Prefill selected customer (SSR detail shell / tests). */
+  initialSelected?: CustomerRowView;
+  /** Prefill history rows for SSR when initialSelected is set. */
+  initialOrders?: readonly OrderListRowView[];
+  /** Navigate to pickup with order id prefilled. */
+  onOpenPickup?: (orderId: string) => void;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -58,13 +65,37 @@ export function parseCustomerRows(value: unknown): readonly CustomerRowView[] | 
 
 const PHONE_RE = /^1[3-9]\d{9}$/u;
 
-export function CustomersPage({ queryClient, commandClient, autoLoad = true }: CustomersPageProps) {
+/** Format unix seconds for detail shell (local, compact). */
+export function formatCustomerUpdatedAt(epochSec: number): string {
+  const d = new Date(epochSec * 1000);
+  if (Number.isNaN(d.getTime())) return "—";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day} ${hh}:${mm}`;
+}
+
+export function CustomersPage({
+  queryClient,
+  commandClient,
+  autoLoad = true,
+  initialSelected,
+  initialOrders,
+  onOpenPickup,
+}: CustomersPageProps) {
   const toast = useToast();
   const [queryText, setQueryText] = useState("");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState<readonly CustomerRowView[]>([]);
+  const [selected, setSelected] = useState<CustomerRowView | null>(() => initialSelected ?? null);
+  const [orderRows, setOrderRows] = useState<readonly OrderListRowView[]>(
+    () => initialOrders ?? Object.freeze([]),
+  );
+  const [ordersBusy, setOrdersBusy] = useState(false);
   const searchRef = useRef<() => Promise<void>>(async () => undefined);
 
   const search = useCallback(async () => {
@@ -98,6 +129,46 @@ export function CustomersPage({ queryClient, commandClient, autoLoad = true }: C
     void searchRef.current();
   }, [autoLoad]);
 
+  const loadOrdersForPhone = useCallback(
+    async (customerPhone: string) => {
+      setOrdersBusy(true);
+      try {
+        const res = await queryClient.execute<unknown>("order.list", {
+          customer_phone: customerPhone,
+          limit: 20,
+        });
+        if (!res.ok) {
+          toast.push(res.error.message ?? res.error.code, "error");
+          setOrderRows([]);
+          return;
+        }
+        const parsed = parseOrderListRows(unwrapQueryResult(res.data));
+        if (parsed === null) {
+          toast.push("历史订单无法解析", "error");
+          setOrderRows([]);
+          return;
+        }
+        setOrderRows(parsed);
+      } finally {
+        setOrdersBusy(false);
+      }
+    },
+    [queryClient, toast],
+  );
+
+  const selectCustomer = useCallback(
+    (row: CustomerRowView) => {
+      setSelected(row);
+      void loadOrdersForPhone(row.phone);
+    },
+    [loadOrdersForPhone],
+  );
+
+  const closeDetail = useCallback(() => {
+    setSelected(null);
+    setOrderRows([]);
+  }, []);
+
   const onUpsert = useCallback(async () => {
     const p = phone.trim();
     if (!PHONE_RE.test(p)) {
@@ -127,7 +198,7 @@ export function CustomersPage({ queryClient, commandClient, autoLoad = true }: C
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">客户</h1>
       <p className="ld-shell-main__hint">
-        组织级客户档案：按手机号前缀或姓名搜索；建档手机号使用种子段 13800000xxx。
+        组织级客户档案：按手机号前缀或姓名搜索；点击行查看详情与历史订单。
       </p>
 
       <div className="ld-customers-search">
@@ -193,24 +264,97 @@ export function CustomersPage({ queryClient, commandClient, autoLoad = true }: C
           <li className="ld-customers-list__empty">暂无匹配客户</li>
         ) : (
           rows.map((row) => (
-            <li
-              key={row.customer_id}
-              className="ld-customers-list__row"
-              data-testid="customers-row"
-            >
-              <div className="ld-customers-list__main">
-                <span className="ld-customers-list__phone ld-customers-phone-internal">
-                  {row.phone}
-                </span>
-                <span className="ld-customers-list__name">{row.name ?? "—"}</span>
-              </div>
-              {row.note !== null && row.note.length > 0 ? (
-                <div className="ld-customers-list__note">{row.note}</div>
-              ) : null}
+            <li key={row.customer_id} className="ld-customers-list__row">
+              <button
+                type="button"
+                className="ld-customers-list__btn"
+                onClick={() => selectCustomer(row)}
+                data-testid="customers-row"
+                aria-pressed={selected?.customer_id === row.customer_id}
+              >
+                <div className="ld-customers-list__main">
+                  <span className="ld-customers-list__phone ld-customers-phone-internal">
+                    {row.phone}
+                  </span>
+                  <span className="ld-customers-list__name">{row.name ?? "—"}</span>
+                </div>
+                {row.note !== null && row.note.length > 0 ? (
+                  <div className="ld-customers-list__note">{row.note}</div>
+                ) : null}
+              </button>
             </li>
           ))
         )}
       </ul>
+
+      {selected !== null ? (
+        <section className="ld-customer-detail" data-testid="customer-detail" aria-label="客户详情">
+          <div className="ld-customer-detail__head">
+            <h2 className="ld-customer-detail__title">客户详情</h2>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={closeDetail}
+              data-testid="customer-detail-close"
+            >
+              关闭
+            </Button>
+          </div>
+          <dl className="ld-customer-detail__profile" data-testid="customer-detail-profile">
+            <div className="ld-customer-detail__field">
+              <dt>手机号</dt>
+              <dd className="ld-customers-phone-internal">{selected.phone}</dd>
+            </div>
+            <div className="ld-customer-detail__field">
+              <dt>姓名</dt>
+              <dd>{selected.name ?? "—"}</dd>
+            </div>
+            <div className="ld-customer-detail__field">
+              <dt>备注</dt>
+              <dd>{selected.note !== null && selected.note.length > 0 ? selected.note : "—"}</dd>
+            </div>
+            <div className="ld-customer-detail__field">
+              <dt>更新时间</dt>
+              <dd data-testid="customer-detail-updated-at">
+                {formatCustomerUpdatedAt(selected.updated_at)}
+              </dd>
+            </div>
+          </dl>
+
+          <h3 className="ld-customer-detail__orders-title">历史订单</h3>
+          <p className="ld-customer-detail__orders-hint">
+            {ordersBusy ? "加载中…" : `按手机号匹配，最多 20 单（最新优先）。`}
+          </p>
+          <ul className="ld-customer-detail__orders" data-testid="customer-detail-orders">
+            {orderRows.length === 0 ? (
+              <li className="ld-customer-detail__orders-empty">
+                {ordersBusy ? "…" : "暂无历史订单"}
+              </li>
+            ) : (
+              orderRows.map((order) => (
+                <li key={order.order_id} className="ld-customer-detail__order-row">
+                  <button
+                    type="button"
+                    className="ld-customer-detail__order-btn"
+                    disabled={onOpenPickup === undefined}
+                    onClick={() => onOpenPickup?.(order.order_id)}
+                    data-testid="customer-detail-order-btn"
+                  >
+                    <div className="ld-customer-detail__order-main">
+                      <span className="ld-customer-detail__ticket">{order.ticket_no}</span>
+                      <StatusBadge family="order" status={order.status} />
+                    </div>
+                    <div className="ld-customer-detail__order-money">
+                      <span className="ld-customer-detail__money-label">余额</span>
+                      <MoneyText fen={order.balance_cents} size="sm" />
+                    </div>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </section>
+      ) : null}
     </main>
   );
 }

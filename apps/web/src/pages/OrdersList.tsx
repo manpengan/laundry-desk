@@ -5,6 +5,7 @@
 import { Button, Input, MoneyText, StatusBadge, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { QueryPort } from "../commands/types.js";
+import { OrderDetailDrawer } from "./OrderDetailDrawer.js";
 
 export type OrderListRowView = Readonly<{
   order_id: string;
@@ -25,7 +26,7 @@ export type OrdersListProps = {
   defaultDate?: string;
   /** Skip auto-load on mount (tests). */
   autoLoad?: boolean;
-  /** Navigate to pickup with order id prefilled. */
+  /** Navigate to pickup with order id prefilled (drawer 去取衣). */
   onOpenPickup?: (orderId: string) => void;
 };
 
@@ -103,6 +104,7 @@ export function OrdersList({
   const [dateText, setDateText] = useState(() => defaultDate ?? localYmd());
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState<readonly OrderListRowView[]>([]);
+  const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
   const loadRef = useRef<() => Promise<void>>(async () => undefined);
 
   const load = useCallback(async () => {
@@ -145,7 +147,7 @@ export function OrdersList({
   return (
     <section className="ld-orders" data-testid="orders-list-section" aria-label="近期订单">
       <h2 className="ld-orders__title">近期订单</h2>
-      <p className="ld-orders__hint">按营业日筛选；点击行可跳转取衣并预填订单 ID。</p>
+      <p className="ld-orders__hint">按营业日筛选；点击行打开订单详情。</p>
 
       <div className="ld-orders-form">
         <Input
@@ -190,8 +192,7 @@ export function OrdersList({
               <button
                 type="button"
                 className="ld-orders-list__btn"
-                disabled={onOpenPickup === undefined}
-                onClick={() => onOpenPickup?.(row.order_id)}
+                onClick={() => setDetailOrderId(row.order_id)}
                 data-testid="orders-row-btn"
               >
                 <div className="ld-orders-list__main">
@@ -216,6 +217,21 @@ export function OrdersList({
           ))
         )}
       </ul>
+
+      <OrderDetailDrawer
+        open={detailOrderId !== null}
+        orderId={detailOrderId}
+        queryClient={queryClient}
+        onClose={() => setDetailOrderId(null)}
+        {...(onOpenPickup !== undefined
+          ? {
+              onPickup: (id: string) => {
+                setDetailOrderId(null);
+                onOpenPickup(id);
+              },
+            }
+          : {})}
+      />
     </section>
   );
 }

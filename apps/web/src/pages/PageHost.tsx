@@ -75,7 +75,12 @@ export function PageHost({
   }
 
   if (activeId === "stats" && session !== undefined && queryClient !== undefined) {
-    return <StatsPage queryClient={queryClient} />;
+    return (
+      <StatsPage
+        queryClient={queryClient}
+        {...(commandClient !== undefined ? { commandClient } : {})}
+      />
+    );
   }
 
   if (
@@ -84,7 +89,16 @@ export function PageHost({
     queryClient !== undefined &&
     commandClient !== undefined
   ) {
-    return <CustomersPage queryClient={queryClient} commandClient={commandClient} />;
+    return (
+      <CustomersPage
+        queryClient={queryClient}
+        commandClient={commandClient}
+        onOpenPickup={(orderId) => {
+          setPickupOrderId(orderId);
+          onNavigate("pickup");
+        }}
+      />
+    );
   }
 
   if (

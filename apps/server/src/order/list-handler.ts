@@ -46,9 +46,13 @@ function matchesListFilters(
   order: OrderRecord,
   businessDate: string | undefined,
   status: OrderStatus | undefined,
+  customerPhone: string | undefined,
 ): boolean {
   if (status !== undefined && order.status !== status) return false;
   if (businessDate !== undefined && utcDateKeyFromEpoch(order.created_at) !== businessDate) {
+    return false;
+  }
+  if (customerPhone !== undefined && order.customer_phone !== customerPhone) {
     return false;
   }
   return true;
@@ -59,6 +63,10 @@ export function listHandler(deps: OrderHandlerDeps): CommandHandler {
     const input = asRecord(ctx.parsed);
     const businessDate = typeof input.business_date === "string" ? input.business_date : undefined;
     const status = optionalStatus(input.status);
+    const customerPhone =
+      typeof input.customer_phone === "string" && input.customer_phone.length > 0
+        ? input.customer_phone
+        : undefined;
     const limit = listLimit(input.limit);
 
     if (deps.store.listOrders === undefined) {
@@ -67,7 +75,7 @@ export function listHandler(deps: OrderHandlerDeps): CommandHandler {
 
     const all = await deps.store.listOrders(ctx.tenant.orgId, ctx.tenant.storeId);
     const filtered = all
-      .filter((order) => matchesListFilters(order, businessDate, status))
+      .filter((order) => matchesListFilters(order, businessDate, status, customerPhone))
       .slice()
       .sort((a, b) => b.created_at - a.created_at || b.ticket_no.localeCompare(a.ticket_no))
       .slice(0, limit);
