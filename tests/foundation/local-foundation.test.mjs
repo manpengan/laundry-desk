@@ -45,13 +45,15 @@ test("keeps Gemini legacy v1 execution guidance inside one forbidden archive blo
 
   assert.notEqual(archiveStart, -1, "Gemini must open an explicit legacy v1 archive block");
 
-  const archiveEnd = gemini.indexOf("\n## 不做", archiveStart);
-  assert.ok(archiveEnd > archiveStart, "Gemini archive block must end before current restrictions");
-
-  const archiveBlock = gemini.slice(archiveStart, archiveEnd);
+  const archiveBlock = gemini.slice(archiveStart);
+  assert.doesNotMatch(
+    archiveBlock.slice(archiveHeading.length),
+    /^## /mu,
+    "Gemini legacy guidance must remain inside the archive block through EOF",
+  );
   assert.match(
     archiveBlock,
-    /以下.*目录骨架.*开发与提交流程.*构建与发布命令.*问题处理.*禁止执行/su,
+    /以下.*目录骨架.*开发与提交流程.*构建与发布命令.*问题处理.*“不做”规则.*禁止执行/su,
   );
   for (const section of [
     "### 目录骨架（历史）",
@@ -59,6 +61,7 @@ test("keeps Gemini legacy v1 execution guidance inside one forbidden archive blo
     "### 开发与提交流程（历史，禁止执行）",
     "### 构建与发布命令（历史，禁止执行）",
     "### 问题处理（历史，禁止执行）",
+    "### 不做（历史，禁止执行）",
   ]) {
     assert.ok(archiveBlock.includes(section), `${section} must stay inside the archive block`);
   }
