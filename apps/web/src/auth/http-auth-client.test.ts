@@ -110,15 +110,17 @@ async function assertSecondLoginRejectsStaleDirectory(
 ): Promise<void> {
   let directoryCalls = 0;
   let loginCalls = 0;
+  const directoryAuthorizations: Array<string | null> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
-    if (url.endsWith("/api/v2/local/staff")) {
-      directoryCalls += 1;
-      return directoryCalls === 1 ? staffDirectoryResponse() : secondDirectory();
-    }
     if (url.endsWith("/api/v2/auth/login") && init?.method === "POST") {
       loginCalls += 1;
-      return loginResponse();
+      return loginResponse(`login-token-${loginCalls}`, `session-${loginCalls}`);
+    }
+    if (url.endsWith("/api/v2/local/staff")) {
+      directoryCalls += 1;
+      directoryAuthorizations.push(new Headers(init?.headers).get("authorization"));
+      return directoryCalls === 1 ? staffDirectoryResponse() : secondDirectory();
     }
     return new Response("not found", { status: 404 });
   };
@@ -141,49 +143,31 @@ async function assertSecondLoginRejectsStaleDirectory(
   if (!second.ok) {
     assert.match(second.error.message, /员工目录/u);
   }
-  assert.equal(loginCalls, 1, "a stale directory must stop the second login request");
+  assert.equal(loginCalls, 2);
+  assert.deepEqual(directoryAuthorizations, ["Bearer login-token-1", "Bearer login-token-2"]);
 }
 
 test("login uses the server staff projection without client-side product mapping", async () => {
+  const requests: Array<Readonly<{ path: "login" | "staff"; authorization: string | null }>> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
-    if (url.endsWith("/api/v2/local/staff")) {
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          data: [
-            {
-              staff_id: "11111111-1111-4111-8111-111111111103",
-              display_name: "店长",
-              role: "admin",
-            },
-          ],
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
-    }
     if (url.endsWith("/api/v2/auth/login") && init?.method === "POST") {
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          data: {
-            access_token: "aaa.bbb.ccc",
-            token_type: "Bearer",
-            expires_in: 900,
-            storage: "memory_only",
-            session: {
-              session_id: "s1",
-              session_version: 1,
-              org_id: "o1",
-              store_id: "st1",
-              staff_id: "11111111-1111-4111-8111-111111111103",
-              device_id: "d1",
-              permission_version: 1,
-            },
-          },
+      requests.push(
+        Object.freeze({
+          path: "login",
+          authorization: new Headers(init.headers).get("authorization"),
         }),
-        { status: 200, headers: { "content-type": "application/json" } },
       );
+      return loginResponse();
+    }
+    if (url.endsWith("/api/v2/local/staff")) {
+      requests.push(
+        Object.freeze({
+          path: "staff",
+          authorization: new Headers(init?.headers).get("authorization"),
+        }),
+      );
+      return staffDirectoryResponse();
     }
     return new Response("not found", { status: 404 });
   };
@@ -206,6 +190,10 @@ test("login uses the server staff projection without client-side product mapping
     assert.equal(result.data.display.store_name, "");
     assert.equal(result.data.display.staff_name, "店长");
   }
+  assert.deepEqual(requests, [
+    { path: "login", authorization: null },
+    { path: "staff", authorization: "Bearer aaa.bbb.ccc" },
+  ]);
 });
 
 test("second login rejects a network failure instead of reusing the prior staff directory", async () => {
@@ -353,15 +341,29 @@ test("failed relogin clears the prior token before a later PIN request", async (
 
 test("a delayed stale failure cannot clear a newer successful login", async () => {
   const staleDirectory = createDeferred<Response>();
+  const staleDirectoryStarted = createDeferred<void>();
   let directoryCalls = 0;
+  let loginCalls = 0;
+  const directoryAuthorizations: Array<string | null> = [];
   const pinAuthorizations: Array<string | null> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
+    if (url.endsWith("/api/v2/auth/login")) {
+      loginCalls += 1;
+      return loginResponse(
+        loginCalls === 1 ? "old-token" : "new-token",
+        loginCalls === 1 ? "old-session" : "new-session",
+      );
+    }
     if (url.endsWith("/api/v2/local/staff")) {
       directoryCalls += 1;
-      return directoryCalls === 1 ? staleDirectory.promise : staffDirectoryResponse("新店长");
+      directoryAuthorizations.push(new Headers(init?.headers).get("authorization"));
+      if (directoryCalls === 1) {
+        staleDirectoryStarted.resolve();
+        return staleDirectory.promise;
+      }
+      return staffDirectoryResponse("新店长");
     }
-    if (url.endsWith("/api/v2/auth/login")) return loginResponse("new-token", "new-session");
     if (url.endsWith("/api/v2/auth/pin/challenges/challenge-1/verify")) {
       pinAuthorizations.push(new Headers(init?.headers).get("authorization"));
       return loginResponse("rotated-token", "rotated-session");
@@ -371,6 +373,7 @@ test("a delayed stale failure cannot clear a newer successful login", async () =
   const client = createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787", fetchImpl });
 
   const staleAttempt = client.login(loginValues("old-org"));
+  await staleDirectoryStarted.promise;
   const currentResult = await client.login(loginValues("new-org"));
   assert.equal(currentResult.ok, true);
   staleDirectory.reject(new Error("stale directory failed"));
@@ -387,21 +390,18 @@ test("a delayed stale failure cannot clear a newer successful login", async () =
       assert.equal(pin.data.display.org_code, "new-org");
     }
   });
+  assert.deepEqual(directoryAuthorizations, ["Bearer old-token", "Bearer new-token"]);
   assert.deepEqual(pinAuthorizations, ["Bearer new-token"]);
 });
 
 test("a delayed stale success cannot replace a newer successful login", async () => {
   const staleLogin = createDeferred<Response>();
   const staleLoginStarted = createDeferred<void>();
-  let directoryCalls = 0;
   let loginCalls = 0;
+  const directoryAuthorizations: Array<string | null> = [];
   const pinAuthorizations: Array<string | null> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
-    if (url.endsWith("/api/v2/local/staff")) {
-      directoryCalls += 1;
-      return staffDirectoryResponse(directoryCalls === 1 ? "旧店长" : "新店长");
-    }
     if (url.endsWith("/api/v2/auth/login")) {
       loginCalls += 1;
       if (loginCalls === 1) {
@@ -409,6 +409,11 @@ test("a delayed stale success cannot replace a newer successful login", async ()
         return staleLogin.promise;
       }
       return loginResponse("new-token", "new-session");
+    }
+    if (url.endsWith("/api/v2/local/staff")) {
+      const authorization = new Headers(init?.headers).get("authorization");
+      directoryAuthorizations.push(authorization);
+      return staffDirectoryResponse(authorization === "Bearer new-token" ? "新店长" : "旧店长");
     }
     if (url.endsWith("/api/v2/auth/pin/challenges/challenge-1/verify")) {
       pinAuthorizations.push(new Headers(init?.headers).get("authorization"));
@@ -436,5 +441,6 @@ test("a delayed stale success cannot replace a newer successful login", async ()
       assert.equal(pin.data.display.org_code, "new-org");
     }
   });
+  assert.deepEqual(directoryAuthorizations, ["Bearer new-token"]);
   assert.deepEqual(pinAuthorizations, ["Bearer new-token"]);
 });

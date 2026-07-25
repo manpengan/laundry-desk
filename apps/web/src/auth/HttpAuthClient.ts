@@ -148,9 +148,12 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
     return match?.[1] ?? null;
   };
 
-  const loadStaff = async (): Promise<readonly SwitchableStaff[] | null> => {
+  const loadStaff = async (accessToken: string): Promise<readonly SwitchableStaff[] | null> => {
     try {
-      const res = await fetchImpl(`${base}/api/v2/local/staff`, { credentials: "include" });
+      const res = await fetchImpl(`${base}/api/v2/local/staff`, {
+        credentials: "include",
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
       if (!res.ok) return null;
       const body: unknown = await res.json();
       if (!isRecord(body) || body.ok !== true || !Array.isArray(body.data)) return null;
@@ -188,11 +191,6 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
       return asError(message);
     };
 
-    const currentDirectory = await loadStaff();
-    if (attempt !== latestLoginAttempt) return superseded();
-    if (currentDirectory === null) {
-      return failLatest("无法从本地服务器加载员工目录");
-    }
     try {
       const res = await fetchImpl(`${base}/api/v2/auth/login`, {
         method: "POST",
@@ -218,6 +216,11 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
       }
       const payload = readAccessPayload(body.data);
       if (payload === null) return failLatest("登录响应格式错误");
+      const currentDirectory = await loadStaff(payload.access_token);
+      if (attempt !== latestLoginAttempt) return superseded();
+      if (currentDirectory === null) {
+        return failLatest("无法从本地服务器加载员工目录");
+      }
       const staff = currentDirectory.find((entry) => entry.staff_id === payload.session.staff_id);
       if (staff === undefined) return failLatest("登录响应缺少员工权限");
       const display: AccessSession["display"] = Object.freeze({

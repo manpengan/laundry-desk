@@ -11,6 +11,8 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 
 import { createCommandError, CSRF_HEADER_NAME, type CommandErrorCode } from "@laundry/contracts";
 
+import { AuthError } from "../auth/context.js";
+import { resolveSessionFromBearer } from "../auth/resolve-session.js";
 import { executeCommand } from "../bus/executor.js";
 import { executeQuery } from "../bus/execute-query.js";
 import type { ActorContext } from "../bus/types.js";
@@ -24,6 +26,7 @@ import { logoutSession, rotateRefresh } from "../identity/session.js";
 import type { SessionIssueResult, SessionRecord } from "../identity/types.js";
 import { IdentityError } from "../identity/types.js";
 import type { LocalRuntime } from "../local/demo-seed.js";
+import { LOCAL_PROFILE } from "../local/profile.js";
 import {
   csrfCookieOptions,
   refreshCookieOptions,
@@ -186,9 +189,29 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     }),
   );
 
-  app.get("/api/v2/local/staff", async () =>
-    Object.freeze({ ok: true as const, data: runtime.staffDirectory }),
-  );
+  app.get("/api/v2/local/staff", async (request, reply) => {
+    try {
+      const authContext = await resolveSessionFromBearer(runtime.identity.sessions, {
+        authorizationHeader: request.headers.authorization,
+        via: "ui",
+      });
+      if (
+        authContext.tenant.org_id !== LOCAL_PROFILE.orgId ||
+        authContext.tenant.store_id !== LOCAL_PROFILE.storeId
+      ) {
+        reply.code(401);
+        return fail("AUTHENTICATION_FAILED");
+      }
+      return Object.freeze({ ok: true as const, data: runtime.staffDirectory });
+    } catch (error) {
+      if (error instanceof AuthError) {
+        reply.code(401);
+        return fail("AUTHENTICATION_FAILED");
+      }
+      reply.code(500);
+      return fail("TRANSACTION_FAILED");
+    }
+  });
 
   app.post("/api/v2/auth/login", async (request, reply) => {
     try {

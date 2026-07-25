@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { FastifyInstance } from "fastify";
 
 import { CSRF_HEADER_NAME } from "@laundry/contracts";
 
@@ -13,6 +14,12 @@ import { resolveCookiePolicy } from "./cookie-policy.js";
 import { LOCAL_COOKIE_NAMES } from "./types.js";
 
 const DEVICE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const OTHER_ORG_ID = "77777777-7777-4777-8777-777777777777";
+const OTHER_STORE_ID = "88888888-8888-4888-8888-888888888888";
+const OTHER_STAFF_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const OTHER_DEVICE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const OTHER_SESSION_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+const OTHER_FAMILY_ID = "99999999-9999-4999-8999-999999999999";
 const localCookies = resolveCookiePolicy({ secure: false });
 
 async function buildApp() {
@@ -36,6 +43,46 @@ function parseSetCookie(headers: Record<string, unknown>): Record<string, string
   return out;
 }
 
+async function loginAdmin(app: FastifyInstance): Promise<string> {
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    payload: {
+      org_code: "local",
+      store_code: "main",
+      username: "admin",
+      password: DEMO_PASSWORD,
+      device_id: DEVICE,
+    },
+  });
+  assert.equal(response.statusCode, 200);
+  const body = response.json() as { data: { access_token: string } };
+  return body.data.access_token;
+}
+
+async function assertStaffDirectoryDenied(
+  app: FastifyInstance,
+  accessToken?: string,
+): Promise<void> {
+  const response =
+    accessToken === undefined
+      ? await app.inject({ method: "GET", url: "/api/v2/local/staff" })
+      : await app.inject({
+          method: "GET",
+          url: "/api/v2/local/staff",
+          headers: { authorization: `Bearer ${accessToken}` },
+        });
+  assert.equal(response.statusCode, 401);
+  const body = response.json() as {
+    ok: boolean;
+    error: { code: string };
+    data?: unknown;
+  };
+  assert.equal(body.ok, false);
+  assert.equal(body.error.code, "AUTHENTICATION_FAILED");
+  assert.equal(body.data, undefined);
+}
+
 test("GET /health returns ok local-memory", async () => {
   const { app } = await buildApp();
   const res = await app.inject({ method: "GET", url: "/health" });
@@ -52,6 +99,121 @@ test("does not expose bootstrap or reset over HTTP", async () => {
     const response = await app.inject({ method: "POST", url, payload: {} });
     assert.equal(response.statusCode, 404, `${url} must not be routable`);
   }
+  await app.close();
+});
+
+test("GET /api/v2/local/staff requires a valid bearer session", async (t) => {
+  const { app, runtime } = await buildApp();
+  const accessToken = await loginAdmin(app);
+  const signer = runtime.identity.sessions.accessTokenSigner;
+  const claims = signer.verify(accessToken);
+  assert.ok(claims);
+  const session = await runtime.identity.sessions.sessions.get(claims.session_id);
+  assert.ok(session);
+
+  await t.test("anonymous request", async () => {
+    await assertStaffDirectoryDenied(app);
+  });
+
+  await t.test("invalid bearer", async () => {
+    await assertStaffDirectoryDenied(app, "invalid-token");
+  });
+
+  await t.test("session lookup failure does not leak internal details", async () => {
+    const sentinel = "sentinel-session-store-detail";
+    const failingRuntime = Object.freeze({
+      ...runtime,
+      identity: Object.freeze({
+        ...runtime.identity,
+        sessions: Object.freeze({
+          ...runtime.identity.sessions,
+          sessions: Object.freeze({
+            ...runtime.identity.sessions.sessions,
+            get: async () => {
+              throw new Error(sentinel);
+            },
+          }),
+        }),
+      }),
+    });
+    const failingApp = await createLocalApp({
+      runtime: failingRuntime,
+      cookiePolicy: localCookies,
+    });
+    const failingAccessToken = await loginAdmin(failingApp);
+    const response = await failingApp.inject({
+      method: "GET",
+      url: "/api/v2/local/staff",
+      headers: { authorization: `Bearer ${failingAccessToken}` },
+    });
+    assert.equal(response.statusCode, 500);
+    const body = response.json() as { ok?: boolean; error?: { code?: string } };
+    assert.equal(body.ok, false);
+    assert.equal(body.error?.code, "TRANSACTION_FAILED");
+    assert.doesNotMatch(response.body, new RegExp(sentinel, "u"));
+    await failingApp.close();
+  });
+
+  await t.test("expired signed bearer", async () => {
+    const now = runtime.identity.sessions.clock.nowEpochSeconds();
+    const expiredAt = now - 1;
+    const expiredToken = signer.sign({
+      ...claims,
+      iat: expiredAt - (claims.exp - claims.iat),
+      exp: expiredAt,
+    });
+    await assertStaffDirectoryDenied(app, expiredToken);
+  });
+
+  await t.test("signed claims must match the stored session", async () => {
+    const mismatches = [
+      { label: "org", claims: { ...claims, org_id: OTHER_ORG_ID } },
+      { label: "store", claims: { ...claims, store_id: OTHER_STORE_ID } },
+      { label: "staff", claims: { ...claims, staff_id: OTHER_STAFF_ID } },
+      { label: "device", claims: { ...claims, device_id: OTHER_DEVICE_ID } },
+      {
+        label: "permission version",
+        claims: { ...claims, permission_version: claims.permission_version + 1 },
+      },
+    ] as const;
+    for (const mismatch of mismatches) {
+      await assertStaffDirectoryDenied(app, signer.sign(mismatch.claims)).catch((error) => {
+        assert.fail(`${mismatch.label} mismatch was not rejected: ${String(error)}`);
+      });
+    }
+  });
+
+  await t.test("valid session for another tenant", async () => {
+    await runtime.identity.sessions.sessions.insert(
+      Object.freeze({
+        ...session,
+        session_id: OTHER_SESSION_ID,
+        family_id: OTHER_FAMILY_ID,
+        org_id: OTHER_ORG_ID,
+        store_id: OTHER_STORE_ID,
+        staff_id: OTHER_STAFF_ID,
+      }),
+    );
+    const otherTenantToken = signer.sign({
+      ...claims,
+      session_id: OTHER_SESSION_ID,
+      org_id: OTHER_ORG_ID,
+      store_id: OTHER_STORE_ID,
+      staff_id: OTHER_STAFF_ID,
+    });
+    await assertStaffDirectoryDenied(app, otherTenantToken);
+  });
+
+  await t.test("active local session bearer", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v2/local/staff",
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), { ok: true, data: runtime.staffDirectory });
+  });
+
   await app.close();
 });
 
