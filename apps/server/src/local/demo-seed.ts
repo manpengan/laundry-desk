@@ -1,7 +1,4 @@
-/**
- * Local-dev demo seed re-exports (memory default + PG via createLocalRuntime).
- * Credentials are LOCAL ONLY — password `demo`, PIN `1234`.
- */
+/** Compatibility exports for the local runtime while explicit bootstrap is introduced. */
 
 export {
   createLocalRuntime,
@@ -18,3 +15,5 @@ export {
   type LocalRuntimeMode,
   type LocalStaffDirectoryEntry,
 } from "./create-runtime.js";
+export { parseLocalServerConfig, type LocalServerConfig } from "./config.js";
+export { LOCAL_PROFILE, type LocalProfile } from "./profile.js";

@@ -99,7 +99,7 @@ test("POST /v1/queries/platform.settings.get over HTTP (memory)", async () => {
     method: "POST",
     url: "/api/v2/auth/login",
     payload: {
-      org_code: "hongfa",
+      org_code: "local",
       store_code: "main",
       username: "admin",
       password: DEMO_PASSWORD,

@@ -47,7 +47,7 @@
   },
   "build": {
     "appId": "com.laundry-desk",
-    "productName": "Hongfa Laundry",
+    "productName": "laundry-desk V2",
     "directories": {
       "output": "dist"
     },
@@ -70,7 +70,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Hongfa Laundry"
+      "shortcutName": "laundry-desk V2"
     },
     "publish": [
       {

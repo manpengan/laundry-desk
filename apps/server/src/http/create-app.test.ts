@@ -52,7 +52,7 @@ test("POST /api/v2/auth/login succeeds with demo credentials and sets cookies", 
     method: "POST",
     url: "/api/v2/auth/login",
     payload: {
-      org_code: "hongfa",
+      org_code: "local",
       store_code: "main",
       username: "admin",
       password: DEMO_PASSWORD,
@@ -85,7 +85,7 @@ test("POST /api/v2/auth/login rejects bad password", async () => {
     method: "POST",
     url: "/api/v2/auth/login",
     payload: {
-      org_code: "hongfa",
+      org_code: "local",
       store_code: "main",
       username: "admin",
       password: "wrong",
@@ -111,7 +111,7 @@ test("authenticated command path requires bearer", async () => {
     method: "POST",
     url: "/api/v2/auth/login",
     payload: {
-      org_code: "hongfa",
+      org_code: "local",
       store_code: "main",
       username: "admin",
       password: DEMO_PASSWORD,
@@ -158,7 +158,7 @@ test("PIN challenge + verify with CSRF cookies", async () => {
     method: "POST",
     url: "/api/v2/auth/login",
     payload: {
-      org_code: "hongfa",
+      org_code: "local",
       store_code: "main",
       username: "admin",
       password: DEMO_PASSWORD,

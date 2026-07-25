@@ -2,6 +2,8 @@
  * Build LocalRuntime for memory (default) or Postgres (DATABASE_URL / LAUNDRY_USE_LOCAL_PG).
  */
 
+import { randomBytes } from "node:crypto";
+
 import { createAccessTokenSigner } from "../identity/crypto-util.js";
 import { createMemoryIdentityStore } from "../identity/memory-store.js";
 import { createPgIdentityStore } from "../identity/pg-store.js";
@@ -39,16 +41,10 @@ import {
 import type { PlatformHandlerDeps } from "../platform/handlers.js";
 import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
 import { createPgPool, resolvePgUrls, type PgPool, type ResolvedPgUrls } from "../db/pg-pool.js";
-import {
-  DEMO_ADMIN_ID,
-  DEMO_ORG_ID,
-  DEMO_PASSWORD,
-  DEMO_PIN,
-  DEMO_STAFF_A_ID,
-  DEMO_STAFF_B_ID,
-  DEMO_STORE_ID,
-} from "./demo-ids.js";
+import { DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./demo-ids.js";
 import { seedDemoIdentity } from "./pg-seed.js";
+import { parseLocalServerConfig, type LocalServerConfig } from "./config.js";
+import { LOCAL_PROFILE } from "./profile.js";
 
 export {
   DEMO_ADMIN_ID,
@@ -88,6 +84,7 @@ export type LocalRuntime = Readonly<{
   /** M3 garment photo metadata (memory; both runtime modes for skeleton). */
   photo: PhotoHandlerDeps;
   accessTokenSecret: string;
+  csrfProofSecret: string;
   staffDirectory: readonly LocalStaffDirectoryEntry[];
   /** Shared with Command Bus for confirm_ref / step-up PIN. */
   pendingStore: PendingActionStore;
@@ -97,8 +94,6 @@ export type LocalRuntime = Readonly<{
   /** Memory store when mode === "memory" (tests). */
   store: ReturnType<typeof createMemoryIdentityStore> | null;
 }>;
-
-const FIXED_SECRET = "local-dev-access-secret-do-not-use-in-prod";
 
 const staffDirectory = Object.freeze([
   Object.freeze({
@@ -114,7 +109,7 @@ const staffDirectory = Object.freeze([
     username: "staffb",
   }),
   Object.freeze({
-    staff_id: DEMO_ADMIN_ID,
+    staff_id: LOCAL_PROFILE.adminStaffId,
     display_name: "店长",
     role: "admin" as const,
     username: "admin",
@@ -131,6 +126,7 @@ function buildIdentityDeps(
     pinLockouts: ReturnType<typeof createMemoryIdentityStore>["pinLockouts"];
   }>,
   passwordPort: ReturnType<typeof createPasswordPort>,
+  accessTokenSecret: string,
   pendingStore: PendingActionStore = processPendingActionStore,
   proofStore: StepUpProofStore = processStepUpProofStore,
 ): IdentityHandlerDeps {
@@ -141,7 +137,7 @@ function buildIdentityDeps(
     sessions: ports.sessions,
     refresh: ports.refresh,
     clock,
-    accessTokenSigner: createAccessTokenSigner(FIXED_SECRET),
+    accessTokenSigner: createAccessTokenSigner(accessTokenSecret),
   };
   const login = {
     staff: ports.staff,
@@ -186,24 +182,30 @@ function buildPlatform(persistence: "memory" | "sql" = "memory"): PlatformHandle
   });
 }
 
+function mintRuntimeSecret(): string {
+  return randomBytes(32).toString("base64url");
+}
+
 /** In-memory identity (unit tests / no Docker). */
 export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const store = createMemoryIdentityStore();
   const passwordPort = createPasswordPort();
   const passwordHash = await passwordPort.hashPassword(DEMO_PASSWORD);
   const pinHash = await passwordPort.hashPassword(DEMO_PIN);
+  const accessTokenSecret = mintRuntimeSecret();
+  const csrfProofSecret = mintRuntimeSecret();
 
   store.seedOrgStore({
-    org_id: DEMO_ORG_ID,
-    org_code: "hongfa",
-    store_id: DEMO_STORE_ID,
-    store_code: "main",
+    org_id: LOCAL_PROFILE.orgId,
+    org_code: LOCAL_PROFILE.orgCode,
+    store_id: LOCAL_PROFILE.storeId,
+    store_code: LOCAL_PROFILE.storeCode,
   });
 
   const seedStaff = (staffId: Uuid, username: string, displayName: string): void => {
     const staff: StaffRecord = Object.freeze({
       staff_id: staffId,
-      org_id: DEMO_ORG_ID,
+      org_id: LOCAL_PROFILE.orgId,
       username,
       password_hash: passwordHash,
       pin_hash: pinHash,
@@ -214,7 +216,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     store.seedStaff(staff);
   };
 
-  seedStaff(DEMO_ADMIN_ID, "admin", "店长");
+  seedStaff(LOCAL_PROFILE.adminStaffId, "admin", "店长");
   seedStaff(DEMO_STAFF_A_ID, "staff", "店员甲");
   seedStaff(DEMO_STAFF_B_ID, "staffb", "店员乙");
 
@@ -228,6 +230,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     identity: buildIdentityDeps(
       store,
       passwordPort,
+      accessTokenSecret,
       processPendingActionStore,
       processStepUpProofStore,
     ),
@@ -239,7 +242,8 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     customer: Object.freeze({ store: customerStore }),
     shift: Object.freeze({ store: shiftStore, stats: statsSource }),
     photo: Object.freeze({ store: photoStore }),
-    accessTokenSecret: FIXED_SECRET,
+    accessTokenSecret,
+    csrfProofSecret,
     staffDirectory,
     pendingStore: processPendingActionStore,
     stepUpProofStore: processStepUpProofStore,
@@ -254,6 +258,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
  */
 export async function createPgLocalRuntime(
   urlsOrConnectionString: string | ResolvedPgUrls,
+  config: LocalServerConfig = parseLocalServerConfig(process.env),
 ): Promise<LocalRuntime> {
   const urls: ResolvedPgUrls =
     typeof urlsOrConnectionString === "string"
@@ -274,15 +279,15 @@ export async function createPgLocalRuntime(
   const store = createPgIdentityStore(appPool);
   const passwordPort = createPasswordPort();
   const orderStore = createPgOrderStore(appPool);
-  const customerStore = createPgCustomerStore(appPool, { orgId: DEMO_ORG_ID });
+  const customerStore = createPgCustomerStore(appPool, { orgId: LOCAL_PROFILE.orgId });
   const statsSource = createPgStatsQuery(appPool);
   const shiftStore = createPgShiftStore(appPool, {
-    orgId: DEMO_ORG_ID,
-    storeId: DEMO_STORE_ID,
+    orgId: LOCAL_PROFILE.orgId,
+    storeId: LOCAL_PROFILE.storeId,
   });
   const photoStore = createPgPhotoStore(appPool, {
-    orgId: DEMO_ORG_ID,
-    storeId: DEMO_STORE_ID,
+    orgId: LOCAL_PROFILE.orgId,
+    storeId: LOCAL_PROFILE.storeId,
   });
 
   return Object.freeze({
@@ -290,6 +295,7 @@ export async function createPgLocalRuntime(
     identity: buildIdentityDeps(
       store,
       passwordPort,
+      config.accessTokenSecret,
       processPendingActionStore,
       processStepUpProofStore,
     ),
@@ -297,21 +303,22 @@ export async function createPgLocalRuntime(
     order: Object.freeze({ store: orderStore, customer: customerStore }),
     catalog: Object.freeze({
       store: createPgCatalogStore(appPool, {
-        orgId: DEMO_ORG_ID,
-        storeId: DEMO_STORE_ID,
+        orgId: LOCAL_PROFILE.orgId,
+        storeId: LOCAL_PROFILE.storeId,
       }),
     }),
     print: Object.freeze({
       store: createPgPrintJobStore(appPool, {
-        orgId: DEMO_ORG_ID,
-        storeId: DEMO_STORE_ID,
+        orgId: LOCAL_PROFILE.orgId,
+        storeId: LOCAL_PROFILE.storeId,
       }),
     }),
     stats: Object.freeze({ source: statsSource }),
     customer: Object.freeze({ store: customerStore }),
     shift: Object.freeze({ store: shiftStore, stats: statsSource }),
     photo: Object.freeze({ store: photoStore }),
-    accessTokenSecret: FIXED_SECRET,
+    accessTokenSecret: config.accessTokenSecret,
+    csrfProofSecret: config.csrfProofSecret,
     staffDirectory,
     pendingStore: processPendingActionStore,
     stepUpProofStore: processStepUpProofStore,
@@ -327,6 +334,7 @@ export async function createPgLocalRuntime(
  */
 export async function createLocalRuntime(
   env: NodeJS.ProcessEnv = process.env,
+  config?: LocalServerConfig,
 ): Promise<LocalRuntime> {
   const urls = resolvePgUrls(env);
   const isProduction = env.NODE_ENV === "production";
@@ -335,7 +343,7 @@ export async function createLocalRuntime(
     throw new Error("Production runtime requires DATABASE_URL for the laundry_app role");
   }
   if (urls !== null) {
-    return createPgLocalRuntime(urls);
+    return createPgLocalRuntime(urls, config ?? parseLocalServerConfig(env));
   }
   if (isProduction) {
     throw new Error("Production runtime cannot fall back to memory mode");

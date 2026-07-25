@@ -75,3 +75,62 @@ test("runs every foundation test from the default workspace test gate", async ()
     "node --test tests/foundation/*.test.mjs && turbo run test",
   );
 });
+
+test("uses the generic V2 display name in active packaging metadata", async () => {
+  const rootPackage = JSON.parse(await readRepositoryFile("package.json"));
+
+  assert.equal(rootPackage.build.productName, "laundry-desk V2");
+  assert.equal(rootPackage.build.nsis.shortcutName, "laundry-desk V2");
+});
+
+test("keeps product and credential defaults out of active V2 entry points", async () => {
+  const activeEntries = [
+    "apps/server/src/local/create-runtime.ts",
+    "apps/server/src/http/main.ts",
+    "apps/web/host/main.tsx",
+    "apps/web/src/auth/HttpAuthClient.ts",
+  ];
+  const contents = await Promise.all(activeEntries.map(readRepositoryFile));
+
+  for (const [index, content] of contents.entries()) {
+    assert.doesNotMatch(
+      content,
+      /Hongfa Laundry|hongfa|宏发|password=demo/iu,
+      `${activeEntries[index]} must stay generic`,
+    );
+  }
+
+  for (const path of ["apps/server/src/http/main.ts", "apps/web/host/main.tsx"]) {
+    const content = await readRepositoryFile(path);
+    assert.doesNotMatch(
+      content,
+      /(?:password|PIN).*(?:DEMO_|demo|1234)/iu,
+      `${path} must not print local credentials`,
+    );
+  }
+});
+
+test("centralizes generic local identity in the server profile module", async () => {
+  const profile = await readRepositoryFile("apps/server/src/local/profile.ts");
+  const consumers = await Promise.all(
+    [
+      "apps/server/src/local/create-runtime.ts",
+      "apps/server/src/http/main.ts",
+      "apps/web/host/main.tsx",
+    ].map(readRepositoryFile),
+  );
+
+  assert.match(profile, /orgCode:\s*"local"/u);
+  assert.match(profile, /storeCode:\s*"main"/u);
+  assert.match(profile, /orgName:\s*"laundry-desk V2"/u);
+  assert.match(profile, /storeName:\s*"本地门店"/u);
+  assert.match(profile, /timezone:\s*"Asia\/Taipei"/u);
+
+  for (const content of consumers) {
+    assert.doesNotMatch(content, /org_code:\s*"local"|store_code:\s*"main"/u);
+    assert.doesNotMatch(
+      content,
+      /aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa|bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/u,
+    );
+  }
+});

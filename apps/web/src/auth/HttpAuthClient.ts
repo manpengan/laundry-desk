@@ -48,12 +48,6 @@ function asStepUpError(message: string): AuthResult<StepUpProofResult> {
   });
 }
 
-function roleFromStaffId(staffId: string, directory: readonly SwitchableStaff[]): StaffRole {
-  const hit = directory.find((s) => s.staff_id === staffId);
-  if (hit !== undefined) return hit.role;
-  return staffId.endsWith("103") ? "admin" : "staff";
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -100,10 +94,9 @@ function projectSession(
     expires_in: number;
     session: AccessSession["session"];
   },
-  directory: readonly SwitchableStaff[],
+  role: StaffRole,
   display: AccessSession["display"],
 ): AccessSession {
-  const role = roleFromStaffId(payload.session.staff_id, directory);
   const features = role === "admin" ? FULL_STORE_FEATURES : STAFF_STORE_FEATURES;
   return Object.freeze({
     access_token: payload.access_token,
@@ -132,12 +125,6 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
     store_code: "",
   });
   let accessToken: string | null = null;
-
-  const storeLabel = (orgCode: string, storeCode: string): string => {
-    if (orgCode === "hongfa" && storeCode === "main") return "宏发·总店";
-    if (orgCode.length > 0 && storeCode.length > 0) return `${orgCode} / ${storeCode}`;
-    return "门店";
-  };
 
   const readCsrf = (): string | null => {
     if (typeof document === "undefined") return null;
@@ -200,19 +187,18 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
       }
       const payload = readAccessPayload(body.data);
       if (payload === null) return asError("登录响应格式错误");
+      const staff = staffDirectory.find((entry) => entry.staff_id === payload.session.staff_id);
+      if (staff === undefined) return asError("登录响应缺少员工权限");
       accessToken = payload.access_token;
-      const staffName =
-        staffDirectory.find((s) => s.staff_id === payload.session.staff_id)?.display_name ??
-        values.username;
       lastDisplay = Object.freeze({
-        store_name: storeLabel(values.org_code, values.store_code),
-        staff_name: staffName,
+        store_name: "",
+        staff_name: staff.display_name,
         org_code: values.org_code,
         store_code: values.store_code,
       });
       return Object.freeze({
         ok: true as const,
-        data: projectSession(payload, staffDirectory, lastDisplay),
+        data: projectSession(payload, staff.role, lastDisplay),
       });
     } catch {
       return asError("无法连接本地服务器");
@@ -291,14 +277,13 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
       }
       const payload = readAccessPayload(body.data);
       if (payload === null) return asError("PIN 验证响应格式错误");
+      const staff = staffDirectory.find((entry) => entry.staff_id === payload.session.staff_id);
+      if (staff === undefined) return asError("PIN 验证响应缺少员工权限");
       accessToken = payload.access_token;
-      const staffName =
-        staffDirectory.find((s) => s.staff_id === payload.session.staff_id)?.display_name ??
-        lastDisplay.staff_name;
-      lastDisplay = Object.freeze({ ...lastDisplay, staff_name: staffName });
+      lastDisplay = Object.freeze({ ...lastDisplay, staff_name: staff.display_name });
       return Object.freeze({
         ok: true as const,
-        data: projectSession(payload, staffDirectory, lastDisplay),
+        data: projectSession(payload, staff.role, lastDisplay),
       });
     } catch {
       return asError("无法连接本地服务器");

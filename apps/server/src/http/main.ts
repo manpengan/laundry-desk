@@ -5,27 +5,19 @@
  *   pnpm local:server
  *   LAUNDRY_USE_LOCAL_PG=1 pnpm local:server
  *
- * Env:
- *   PORT (default 8787)
- *   HOST (default 127.0.0.1)
- *   CORS_ORIGIN (comma-separated, optional)
- *   DATABASE_URL | DATABASE_ADMIN_URL | LAUNDRY_USE_LOCAL_PG=1
+ * Env is parsed by the strict local server configuration boundary.
  */
 
 import { createLocalApp } from "./create-app.js";
-import { createLocalRuntime, DEMO_PASSWORD, DEMO_PIN } from "../local/demo-seed.js";
-
-const port = Number(process.env.PORT ?? "8787");
-const host = process.env.HOST ?? "127.0.0.1";
-const corsOrigin = process.env.CORS_ORIGIN?.split(",")
-  .map((s) => s.trim())
-  .filter((s) => s.length > 0);
+import { parseLocalServerConfig } from "../local/config.js";
+import { createLocalRuntime } from "../local/create-runtime.js";
 
 async function main(): Promise<void> {
-  const runtime = await createLocalRuntime();
+  const config = parseLocalServerConfig(process.env);
+  const runtime = await createLocalRuntime(process.env, config);
   const app = await createLocalApp({
     runtime,
-    ...(corsOrigin !== undefined && corsOrigin.length > 0 ? { corsOrigin } : {}),
+    corsOrigin: config.browserOrigin,
   });
 
   const shutdown = async (): Promise<void> => {
@@ -42,14 +34,14 @@ async function main(): Promise<void> {
     void shutdown().finally(() => process.exit(0));
   });
 
-  await app.listen({ port, host });
+  await app.listen({ port: config.port, host: config.listenHost });
   process.stdout.write(
     [
-      `laundry local server listening on http://${host}:${port}`,
+      `laundry-desk V2 local server listening on http://${config.listenHost}:${config.port}`,
       `  mode ${runtime.mode}`,
       `  GET  /health`,
-      `  POST /api/v2/auth/login  (org_code=hongfa store_code=main username=admin password=${DEMO_PASSWORD})`,
-      `  POST /api/v2/auth/pin/*  (PIN ${DEMO_PIN})`,
+      `  POST /api/v2/auth/login`,
+      `  POST /api/v2/auth/pin/*`,
       `  POST /v1/commands/:name`,
       `  GET  /api/v2/local/staff`,
       "",
