@@ -41,7 +41,12 @@ Gemini 在本项目中的入场指引。
 | Electron   | `contextIsolation: true` / `nodeIntegration: false` / `sandbox: true` / 严格 CSP |
 | 不可变     | 数据操作返回新对象，避免就地修改                                                 |
 
-## 目录骨架（M1 一次落盘）
+## 历史 v1 资料（已归档，禁止执行）
+
+> 以下目录骨架、分期任务、开发与提交流程、构建与发布命令和问题处理全部属于已冻结的
+> v1/Windows-first 历史资料，仅供查阅，禁止执行；当前工作只能遵循 ADR-14 的本地优先路线。
+
+### 目录骨架（历史）
 
 ```
 src/
@@ -54,11 +59,11 @@ tests/
   e2e/         # Playwright：覆盖本期核心路径
 ```
 
-## 历史 v1 分期任务（已归档，禁止继续执行）
+### 分期任务（历史，禁止执行）
 
-**按顺序做，不跳期。每期完成一轮"代码 → 测试 → CI 绿 → 实机冒烟 → 过门禁 → tag"。**
+**历史原文：按顺序做，不跳期。每期完成一轮"代码 → 测试 → CI 绿 → 实机冒烟 → 过门禁 → tag"。**
 
-### M1（v0.1.0）— 基础
+#### M1（v0.1.0）— 基础
 
 1. 脚手架：Electron + Vite + electron-vite + TS + Tailwind 4 + shadcn/ui + Framer Motion + Zustand + React Router 7
 2. Apple HIG 设计系统：字体、色彩 token、全局 CSS、基础组件（Button / Card / Input / Dialog / Sheet / Toast）
@@ -72,21 +77,21 @@ tests/
 10. 单测：`pickupCodeService` / `orderService.create` / `customerService.upsertByPhone`
 11. E2E：收件→取件的完整流程
 
-### M2（v0.2.0）— 收款 & 统计
+#### M2（v0.2.0）— 收款 & 统计
 
 - `settings.price_templates` + 价格 autocomplete
 - 付款方式、折扣、欠款
 - 日/月报表（Recharts）、逾期未取列表
 - Excel 导入导出（exceljs）：客户 / 订单 / 明细
 
-### M3（v0.3.0）— 照片 & 打印
+#### M3（v0.3.0）— 照片 & 打印
 
 - 收件页：调用摄像头 or 选本地文件，存 `userData/photos/YYYY-MM/<order>_<n>.jpg`
 - `PrinterDriver` 抽象 + 58mm ESC/POS 实现（`electron-pos-printer`）
 - 登记单模板：店名 / 单号 / 取件码 / 电话尾 4 位 / 明细表 / 总价
 - 取件条模板：取件码 / 单号 / 取件人 / 金额结清
 
-### M4（v0.4.0 → v1.0.0）— 员工 & 短信
+#### M4（v0.4.0 → v1.0.0）— 员工 & 短信
 
 - Argon2 密码哈希，Login 页
 - 权限中间件（IPC handler 包装层）：admin 可进 Settings / Customers，staff 仅收件 / 取件
@@ -94,7 +99,7 @@ tests/
 - 腾讯云 SMS Provider + settings 配置页 + `sms_log` + 订单详情"通知客户"按钮
 - **SecretKey 用 `keytar` 存 OS keychain，不入库**
 
-## 开发与提交流程
+### 开发与提交流程（历史，禁止执行）
 
 1. 每期建一个分支：`feat/m1-base` / `feat/m2-payment-stats` / ...
 2. 小步提交，每个 commit 聚焦一件事
@@ -103,7 +108,7 @@ tests/
 5. PR 描述里附 CLAUDE.md 的门禁清单勾选状态
 6. Claude 审 → Codex 关键点复审 → manpengan 走查 Windows 实机 → 合并 → tag release
 
-## 构建 & 发布命令
+### 构建与发布命令（历史，禁止执行）
 
 ```bash
 pnpm install              # 装依赖
@@ -116,7 +121,7 @@ pnpm build:win            # electron-builder --win nsis（本地冒烟）
 # 正式包走 GH Actions windows-latest workflow
 ```
 
-## 遇到问题
+### 问题处理（历史，禁止执行）
 
 1. **better-sqlite3 native 模块**：`pnpm rebuild` + `electron-builder` 的 `buildDependenciesFromSource: false`
 2. **Apple 风样式在 Windows 下的降级**：`titleBarStyle` 和 vibrancy 在 Windows 下回退为实心圆角卡片，不强求毛玻璃

@@ -38,6 +38,32 @@ test("does not advertise stale Hongfa or Grok delivery ownership in the README l
   assert.doesNotMatch(readmeLead, /宏发升级候选版|Grok 单一技术负责人/u);
 });
 
+test("keeps Gemini legacy v1 execution guidance inside one forbidden archive block", async () => {
+  const gemini = await readRepositoryFile("GEMINI.md");
+  const archiveHeading = "## 历史 v1 资料（已归档，禁止执行）";
+  const archiveStart = gemini.indexOf(archiveHeading);
+
+  assert.notEqual(archiveStart, -1, "Gemini must open an explicit legacy v1 archive block");
+
+  const archiveEnd = gemini.indexOf("\n## 不做", archiveStart);
+  assert.ok(archiveEnd > archiveStart, "Gemini archive block must end before current restrictions");
+
+  const archiveBlock = gemini.slice(archiveStart, archiveEnd);
+  assert.match(
+    archiveBlock,
+    /以下.*目录骨架.*开发与提交流程.*构建与发布命令.*问题处理.*禁止执行/su,
+  );
+  for (const section of [
+    "### 目录骨架（历史）",
+    "### 分期任务（历史，禁止执行）",
+    "### 开发与提交流程（历史，禁止执行）",
+    "### 构建与发布命令（历史，禁止执行）",
+    "### 问题处理（历史，禁止执行）",
+  ]) {
+    assert.ok(archiveBlock.includes(section), `${section} must stay inside the archive block`);
+  }
+});
+
 test("runs every foundation test from the default workspace test gate", async () => {
   const rootPackage = JSON.parse(await readRepositoryFile("package.json"));
 
