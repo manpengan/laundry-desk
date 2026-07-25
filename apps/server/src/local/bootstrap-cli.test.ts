@@ -132,6 +132,64 @@ test("allows demo bootstrap only with flag, exact demo confirmation, and loopbac
   assert.equal(JSON.parse(harness.stdout.join("")).demo_only, true);
 });
 
+test("rejects every demo database query string without echoing the URL", async (t) => {
+  const urls = [
+    `${DATABASE_URL}?host=query-secret.example`,
+    `${DATABASE_URL}?%68ost=query-secret.example`,
+    `${DATABASE_URL}?host=127.0.0.1&host=query-secret.example`,
+  ] as const;
+
+  for (const databaseAdminUrl of urls) {
+    await t.test(new URL(databaseAdminUrl).search, async () => {
+      const harness = createHarness();
+      let called = false;
+      const code = await harness.run({
+        argv: ["--confirm", "laundry-desk-v2-demo"],
+        env: Object.freeze({
+          ...baseEnv,
+          DATABASE_ADMIN_URL: databaseAdminUrl,
+          LAUNDRY_LOCAL_DEMO: "1",
+        }),
+        dependencies: Object.freeze({
+          bootstrap: async (): Promise<BootstrapResult> => {
+            called = true;
+            return Object.freeze({ ...successResult(), demoOnly: true });
+          },
+        }),
+      });
+      const output = `${harness.stdout.join("")}${harness.stderr.join("")}`;
+
+      assert.equal(code, 1);
+      assert.equal(called, false);
+      assert.equal(harness.stdout.length, 0);
+      assert.equal(harness.stderr.join(""), "DEMO_DATABASE_QUERY_FORBIDDEN\n");
+      assert.equal(output.includes(databaseAdminUrl), false);
+      assert.equal(output.includes("query-secret"), false);
+      assert.equal(output.includes("url-secret"), false);
+    });
+  }
+});
+
+test("preserves query strings for non-demo bootstrap", async () => {
+  const databaseAdminUrl = `${DATABASE_URL}?host=query-secret.example`;
+  const harness = createHarness();
+  let capturedUrl: string | undefined;
+  const code = await harness.run({
+    env: Object.freeze({ ...baseEnv, DATABASE_ADMIN_URL: databaseAdminUrl }),
+    dependencies: Object.freeze({
+      bootstrap: async (url: string): Promise<BootstrapResult> => {
+        capturedUrl = url;
+        return successResult();
+      },
+    }),
+  });
+
+  assert.equal(code, 0);
+  assert.equal(capturedUrl, databaseAdminUrl);
+  assert.equal(harness.stderr.length, 0);
+  assert.equal(harness.stdout.join("").includes(databaseAdminUrl), false);
+});
+
 test("rejects unknown argv, missing env, wrong confirmation, and remote demo database", async (t) => {
   const cases: ReadonlyArray<
     Readonly<{

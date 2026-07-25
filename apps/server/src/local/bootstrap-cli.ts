@@ -30,9 +30,19 @@ export type BootstrapCliDependencies = Readonly<{
 }>;
 
 class CliInputError extends Error {
-  readonly code: "ARGS_INVALID" | "CONFIRMATION_REQUIRED" | "DEMO_DATABASE_NOT_LOOPBACK";
+  readonly code:
+    | "ARGS_INVALID"
+    | "CONFIRMATION_REQUIRED"
+    | "DEMO_DATABASE_NOT_LOOPBACK"
+    | "DEMO_DATABASE_QUERY_FORBIDDEN";
 
-  constructor(code: "ARGS_INVALID" | "CONFIRMATION_REQUIRED" | "DEMO_DATABASE_NOT_LOOPBACK") {
+  constructor(
+    code:
+      | "ARGS_INVALID"
+      | "CONFIRMATION_REQUIRED"
+      | "DEMO_DATABASE_NOT_LOOPBACK"
+      | "DEMO_DATABASE_QUERY_FORBIDDEN",
+  ) {
     super(code);
     this.name = "CliInputError";
     this.code = code;
@@ -88,7 +98,14 @@ const assertConfirmation = (
   if (confirmation !== expected) {
     throw new CliInputError("CONFIRMATION_REQUIRED");
   }
-  if (demoOnly && !isLoopbackHostname(new URL(databaseAdminUrl).hostname)) {
+  if (!demoOnly) {
+    return;
+  }
+  const parsedUrl = new URL(databaseAdminUrl);
+  if (parsedUrl.search.length > 0) {
+    throw new CliInputError("DEMO_DATABASE_QUERY_FORBIDDEN");
+  }
+  if (!isLoopbackHostname(parsedUrl.hostname)) {
     throw new CliInputError("DEMO_DATABASE_NOT_LOOPBACK");
   }
 };
