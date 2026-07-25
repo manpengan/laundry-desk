@@ -7,21 +7,12 @@ umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${LAUNDRY_COMPOSE_FILE:-${SCRIPT_DIR}/docker-compose.yml}"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-laundry-desk}"
 PGHOST="${PGHOST:-127.0.0.1}"
 PGPORT="${PGPORT:-8543}"
 PGDATABASE="${PGDATABASE:-laundry_v2}"
 LAUNDRY_APP_USER="${LAUNDRY_APP_USER:-laundry_app}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
-APP_PASSWORD_VALUE="${LAUNDRY_APP_PASSWORD:-app_secure_password}"
-ADMIN_PASSWORD_VALUE="${POSTGRES_PASSWORD:-postgres_secure_password}"
-export -n APP_PASSWORD_VALUE ADMIN_PASSWORD_VALUE 2>/dev/null || true
-unset LAUNDRY_APP_PASSWORD POSTGRES_PASSWORD DATABASE_URL SUPERUSER_DATABASE_URL PGPASSWORD
-
-ORG_A="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-STAFF_A="11111111-1111-4111-8111-111111111103"
-ORG_B="cccccccc-cccc-4ccc-8ccc-cccccccccccc"
-STORE_B="dddddddd-dddd-4ddd-8ddd-dddddddddddd"
-STAFF_B="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
 
 die() {
   echo "❌ [smoke-rls] $*" >&2
@@ -32,8 +23,79 @@ pass() {
   echo "✔ [smoke-rls] $*"
 }
 
+validate_local_target() {
+  [[ "${COMPOSE_FILE}" == "${SCRIPT_DIR}/docker-compose.yml" ]] ||
+    die "compose file must be the local lifecycle definition"
+  [[ ${#COMPOSE_PROJECT_NAME} -le 63 ]] &&
+    [[ "${COMPOSE_PROJECT_NAME}" =~ ^laundry-[a-z0-9]([a-z0-9_-]*[a-z0-9])?$ ]] ||
+    die "invalid local Compose project"
+  [[ "${PGHOST}" == "127.0.0.1" ]] || die "PGHOST must be local loopback"
+  [[ -z "${PGHOSTADDR-}" ]] || die "PGHOSTADDR must not override local loopback"
+  [[ -z "${PGSERVICE-}" ]] || die "PGSERVICE must not override the local connection"
+  [[ -z "${PGSERVICEFILE-}" ]] || die "PGSERVICEFILE must not override the local connection"
+  [[ "${PGPORT}" == "8543" ]] || die "PGPORT must be the local published port"
+  [[ "${PGDATABASE}" == "laundry_v2" ]] || die "PGDATABASE must be the local database"
+  [[ "${LAUNDRY_APP_USER}" == "laundry_app" ]] || die "application role must be local"
+  [[ "${POSTGRES_USER}" == "postgres" ]] || die "administrator role must be local"
+}
+
+validate_local_target
+
+APP_PASSWORD_VALUE="${LAUNDRY_APP_PASSWORD-}"
+ADMIN_PASSWORD_VALUE="${POSTGRES_PASSWORD-}"
+CONFIG_PASSWORDS=""
+export -n APP_PASSWORD_VALUE ADMIN_PASSWORD_VALUE CONFIG_PASSWORDS 2>/dev/null || true
+unset \
+  LAUNDRY_APP_PASSWORD \
+  POSTGRES_PASSWORD \
+  DATABASE_URL \
+  DATABASE_ADMIN_URL \
+  SUPERUSER_DATABASE_URL \
+  LAUNDRY_PG_APP_URL \
+  PGPASSWORD \
+  PGPASSFILE \
+  PGHOSTADDR \
+  PGSERVICE \
+  PGSERVICEFILE \
+  LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD \
+  LAUNDRY_BOOTSTRAP_ADMIN_PIN \
+  LAUNDRY_ACCESS_TOKEN_SECRET \
+  LAUNDRY_CSRF_PROOF_SECRET
+
+if [[ -z "${APP_PASSWORD_VALUE}" && -z "${ADMIN_PASSWORD_VALUE}" ]]; then
+  CONFIG_PASSWORDS="$(
+    node --input-type=module - "${SCRIPT_DIR}/../local/config.mjs" <<'NODE'
+import { pathToFileURL } from "node:url";
+
+const modulePath = process.argv.at(-1);
+const { loadLocalConfig } = await import(pathToFileURL(modulePath).href);
+const config = await loadLocalConfig({ env: process.env });
+process.stdout.write(`${config.postgresAppPassword}\n${config.postgresSuperuserPassword}`);
+NODE
+  )" || {
+    echo "❌ [smoke-rls] generated local database config is required" >&2
+    exit 1
+  }
+  if [[ "${CONFIG_PASSWORDS}" != *$'\n'* ]]; then
+    echo "❌ [smoke-rls] generated local database config is invalid" >&2
+    exit 1
+  fi
+  APP_PASSWORD_VALUE="${CONFIG_PASSWORDS%%$'\n'*}"
+  ADMIN_PASSWORD_VALUE="${CONFIG_PASSWORDS#*$'\n'}"
+  unset CONFIG_PASSWORDS
+elif [[ -z "${APP_PASSWORD_VALUE}" || -z "${ADMIN_PASSWORD_VALUE}" ]]; then
+  echo "❌ [smoke-rls] both app and superuser database passwords are required" >&2
+  exit 1
+fi
+
+ORG_A="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+STAFF_A="11111111-1111-4111-8111-111111111103"
+ORG_B="cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+STORE_B="dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+STAFF_B="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+
 compose_postgres_container() {
-  docker compose -f "${COMPOSE_FILE}" ps -q postgres 2>/dev/null
+  docker compose -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE}" ps -q postgres 2>/dev/null
 }
 
 container_running() {
@@ -202,7 +264,7 @@ COMMIT;
 BEGIN;
 SET LOCAL app.org_id = '${ORG_B}';
 INSERT INTO stores (id, org_id, code, name, timezone, created_at, updated_at)
-VALUES ('${STORE_B}'::uuid, '${ORG_B}'::uuid, 'rls-b', 'RLS Smoke B', 'Asia/Shanghai', now(), now())
+VALUES ('${STORE_B}'::uuid, '${ORG_B}'::uuid, 'rls-b', 'RLS Smoke B', 'Asia/Taipei', now(), now())
 ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, name = EXCLUDED.name, updated_at = EXCLUDED.updated_at;
 INSERT INTO staffs (id, org_id, username, password_hash, display_name, is_active, permission_version, created_at, updated_at)
 VALUES ('${STAFF_B}'::uuid, '${ORG_B}'::uuid, 'rls-smoke-b', 'not-a-real-hash', 'RLS Smoke B', true, 1, now(), now())

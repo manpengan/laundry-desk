@@ -162,7 +162,7 @@ test("runs every foundation test from the default workspace test gate", async ()
 
   assert.equal(
     rootPackage.scripts["workspace:test"],
-    "node --test tests/foundation/*.test.mjs && turbo run test",
+    "node --test tools/local/*.test.mjs tests/foundation/*.test.mjs && turbo run test",
   );
 });
 
@@ -269,22 +269,96 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   const compose = await readRepositoryFile("tools/compose/docker-compose.yml");
   const workflow = await readRepositoryFile(".github/workflows/v2-integration.yml");
 
+  for (const name of ["LAUNDRY_ACCESS_TOKEN_SECRET", "LAUNDRY_CSRF_PROOF_SECRET"]) {
+    assert.match(compose, new RegExp(`${name}:\\s*["']?\\$\\{${name}-\\}`, "u"));
+  }
+  assert.match(workflow, /ensureLocalConfig/u);
+  for (const field of [
+    "postgresSuperuserPassword",
+    "postgresAppPassword",
+    "accessTokenSecret",
+    "csrfProofSecret",
+  ]) {
+    assert.match(workflow, new RegExp(field, "u"));
+  }
   for (const name of [
-    "LAUNDRY_ACCESS_TOKEN_SECRET",
-    "LAUNDRY_CSRF_PROOF_SECRET",
+    "LAUNDRY_BOOTSTRAP_ADMIN_USERNAME",
+    "LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME",
     "LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD",
     "LAUNDRY_BOOTSTRAP_ADMIN_PIN",
   ]) {
-    assert.match(compose, new RegExp(`${name}:\\s*["']?\\$\\{${name}:\\?`, "u"));
+    assert.doesNotMatch(compose, new RegExp(`${name}:`, "u"));
     assert.match(workflow, new RegExp(`${name}=`, "u"));
   }
   assert.match(compose, /LAUNDRY_CONTAINER_RUNTIME:\s*["']?1["']?/u);
-  assert.match(workflow, /GITHUB_ENV/u);
-  assert.match(workflow, /docker compose[^\n]*build/u);
-  assert.equal((workflow.match(/run --rm migrate/gu) ?? []).length, 2);
-  assert.equal((workflow.match(/run --rm bootstrap/gu) ?? []).length, 2);
-  assert.match(workflow, /up -d server/u);
+  assert.equal([...workflow.matchAll(/pnpm local:up -- --bootstrap/gu)].length, 2);
+  assert.match(workflow, /::add-mask::/u);
+  assert.match(workflow, /POSTGRES_PASSWORD:\s*config\.postgresSuperuserPassword/u);
+  assert.match(workflow, /LAUNDRY_APP_PASSWORD:\s*config\.postgresAppPassword/u);
+  assert.doesNotMatch(workflow, /docker compose[^\n]*run[^\n]*(?:migrate|bootstrap)/u);
   assert.doesNotMatch(workflow, /set -x|echo\s+["']?\$\{?LAUNDRY_(?:ACCESS|CSRF|BOOTSTRAP)/u);
+});
+
+test("uses generated local database secrets and loopback-only Compose ports", async () => {
+  const compose = await readRepositoryFile("tools/compose/docker-compose.yml");
+  const bootstrapRoles = await readRepositoryFile("tools/compose/bootstrap-roles.sh");
+  const migrate = await readRepositoryFile("tools/compose/migrate-v2.sh");
+  const smoke = await readRepositoryFile("tools/compose/smoke-rls.sh");
+  const pgPool = await readRepositoryFile("apps/server/src/db/pg-pool.ts");
+  const composeEntries = await readdir(new URL("tools/compose/", rootUrl), {
+    withFileTypes: true,
+  });
+
+  assert.match(compose, /["']127\.0\.0\.1:8543:5432["']/u);
+  assert.match(compose, /["']127\.0\.0\.1:8787:8787["']/u);
+  assert.match(compose, /com\.laundry-desk\.managed:\s*["']true["']/u);
+  assert.match(compose, /com\.laundry-desk\.project:/u);
+  assert.match(compose, /com\.laundry-desk\.instance:\s*["']\$\{LAUNDRY_LOCAL_INSTANCE_ID-\}["']/u);
+  assert.match(compose, /bootstrap-roles\.sh/u);
+  assert.doesNotMatch(compose, /bootstrap\.sql|init\.sql/u);
+  assert.doesNotMatch(compose, /\b(?:sh|bash)\s+-c\b/u);
+  assert.deepEqual(
+    composeEntries
+      .filter((entry) => entry.name === "bootstrap.sql" || entry.name === "init.sql")
+      .map((entry) => entry.name),
+    [],
+  );
+  assert.equal(
+    composeEntries.some((entry) => entry.isDirectory() && entry.name === "mock-server"),
+    false,
+  );
+
+  const activeSources = [compose, bootstrapRoles, migrate, smoke, pgPool].join("\n");
+  assert.doesNotMatch(activeSources, /app_secure_password|postgres_secure_password/u);
+  assert.doesNotMatch(
+    activeSources,
+    /postgres(?:ql)?:\/\/[^$\s]+:[^${}\s@]+@(?:postgres|127\.0\.0\.1)/u,
+  );
+
+  assert.match(bootstrapRoles, /\\prompt\s+['"]{2}\s+app_password/u);
+  assert.match(bootstrapRoles, /\\prompt[\s\S]*?\bBEGIN;[\s\S]*?\bCOMMIT;/u);
+  assert.match(bootstrapRoles, /format\([\s\S]*?%L[\s\S]*?:'app_password'/u);
+  assert.doesNotMatch(bootstrapRoles, /(?:--set|-v)\s+app_password=/u);
+  assert.match(migrate, /\bPGPASSFILE\b/u);
+  assert.match(migrate, /\bchmod\s+600\b/u);
+  assert.match(migrate, /pg_advisory_xact_lock/u);
+  assert.match(migrate, /\\if\s+:migration_exists/u);
+  assert.match(migrate, /SELECT\s+1\s*\/\s*0\s+AS\s+checksum_mismatch/u);
+  assert.doesNotMatch(migrate, /\\quit\b/u);
+  assert.doesNotMatch(migrate, /\bpsql\s+["']?\$\{SUPERUSER_DATABASE_URL\}/u);
+  assert.doesNotMatch(migrate, /docker\s+exec[\s\S]{0,160}-e\s+PGPASSWORD/u);
+});
+
+test("registers the guarded local lifecycle in default workspace gates", async () => {
+  const rootPackage = JSON.parse(await readRepositoryFile("package.json"));
+
+  assert.equal(rootPackage.scripts["local:up"], "node tools/local/up.mjs");
+  assert.equal(rootPackage.scripts["local:down"], "node tools/local/down.mjs");
+  assert.equal(rootPackage.scripts["local:reset"], "node tools/local/reset.mjs");
+  assert.match(rootPackage.scripts["workspace:test"], /tools\/local\/\*\.test\.mjs/u);
+  assert.match(rootPackage.scripts["workspace:format:check"], /tools\/local/u);
+  assert.match(rootPackage.scripts["workspace:format:check"], /tools\/compose/u);
+  assert.match(rootPackage.scripts["workspace:lint"], /eslint tools\/local --ext \.mjs/u);
 });
 
 test("serializes server test files that mutate shared PostgreSQL roles", async () => {
@@ -328,11 +402,75 @@ test("keeps RLS smoke database passwords out of process arguments", async () => 
   assert.match(smoke, /\bchmod\s+600\b/u);
   assert.match(
     smoke,
-    /unset\s+LAUNDRY_APP_PASSWORD\s+POSTGRES_PASSWORD\s+DATABASE_URL\s+SUPERUSER_DATABASE_URL\s+PGPASSWORD/u,
+    /unset[\s\S]*?LAUNDRY_APP_PASSWORD[\s\S]*?POSTGRES_PASSWORD[\s\S]*?DATABASE_URL[\s\S]*?DATABASE_ADMIN_URL[\s\S]*?SUPERUSER_DATABASE_URL[\s\S]*?LAUNDRY_PG_APP_URL[\s\S]*?PGPASSWORD[\s\S]*?PGPASSFILE/u,
   );
   assert.doesNotMatch(smoke, /\bpsql\s+["']?\$\{(?:APP|ADMIN)_DATABASE_URL\}/u);
   assert.doesNotMatch(smoke, /docker\s+exec[\s\S]{0,160}-e\s+PGPASSWORD/u);
   assert.match(smoke, /CREATE\s+TEMP(?:ORARY)?\s+TABLE/u);
+});
+
+test("rejects non-loopback smoke targets before loading or sending credentials", async () => {
+  const rlsSmokePath = fileURLToPath(new URL("tools/compose/smoke-rls.sh", rootUrl));
+  const httpSmokePath = fileURLToPath(new URL("tools/compose/smoke-test.sh", rootUrl));
+  const rlsSmoke = await readFile(rlsSmokePath, "utf8");
+  const httpSmoke = await readFile(httpSmokePath, "utf8");
+  const playwrightConfig = await readRepositoryFile("apps/web/playwright.local.config.ts");
+  const playwrightSmoke = await readRepositoryFile("apps/web/e2e/local-login.spec.ts");
+
+  assert.ok(rlsSmoke.indexOf("validate_local_target\n\nAPP_PASSWORD_VALUE=") > 0);
+  assert.match(rlsSmoke, /\[\[ "\$\{PGHOST\}" == "127\.0\.0\.1" \]\]/u);
+  assert.match(rlsSmoke, /\[\[ "\$\{PGPORT\}" == "8543" \]\]/u);
+  assert.ok(
+    httpSmoke.indexOf('[[ "${SERVER_URL}" == "http://127.0.0.1:8787" ]]') <
+      httpSmoke.indexOf('LAUNDRY_SMOKE_ADMIN_PASSWORD="${LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD}"'),
+  );
+  assert.equal([...httpSmoke.matchAll(/--noproxy '\*'/gu)].length, 3);
+  assert.match(playwrightConfig, /configuredWebUrl !== LOCAL_WEB_URL/u);
+  assert.match(playwrightSmoke, /exactLocalUrl\("LAUNDRY_API_URL"/u);
+
+  for (const [environment, expectedError] of [
+    [{ PGHOST: "database.example.invalid" }, /PGHOST must be local loopback/u],
+    [{ PGHOST: "127.0.0.1", PGHOSTADDR: "203.0.113.40" }, /PGHOSTADDR must not override/u],
+    [{ PGHOST: "127.0.0.1", PGSERVICE: "redirected" }, /PGSERVICE must not override/u],
+    [
+      { PGHOST: "127.0.0.1", PGSERVICEFILE: "/tmp/redirect.conf" },
+      /PGSERVICEFILE must not override/u,
+    ],
+  ]) {
+    await assert.rejects(
+      execFileAsync("/bin/bash", [rlsSmokePath], {
+        env: {
+          ...process.env,
+          ...environment,
+          LAUNDRY_APP_PASSWORD: "must-not-be-sent",
+          POSTGRES_PASSWORD: "must-not-be-sent",
+        },
+      }),
+      (error) => {
+        assert.match(error.stderr, expectedError);
+        assert.doesNotMatch(`${error.stdout}\n${error.stderr}`, /must-not-be-sent/u);
+        return true;
+      },
+    );
+  }
+
+  await assert.rejects(
+    execFileAsync("/bin/bash", [httpSmokePath], {
+      env: {
+        ...process.env,
+        LAUNDRY_SERVER_URL: "https://server.example.invalid",
+        LAUNDRY_LOCAL_ORG_CODE: "local",
+        LAUNDRY_LOCAL_STORE_CODE: "main",
+        LAUNDRY_BOOTSTRAP_ADMIN_USERNAME: "admin",
+        LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD: "must-not-be-sent",
+      },
+    }),
+    (error) => {
+      assert.match(error.stderr, /server URL must be the local loopback endpoint/u);
+      assert.doesNotMatch(`${error.stdout}\n${error.stderr}`, /must-not-be-sent/u);
+      return true;
+    },
+  );
 });
 
 test("scrubs inherited database secrets before invoking RLS smoke subprocesses", async () => {
@@ -346,7 +484,7 @@ test("scrubs inherited database secrets before invoking RLS smoke subprocesses",
       fakePsql,
       `#!/usr/bin/env bash
 set -euo pipefail
-if env | grep -Eq '^(LAUNDRY_APP_PASSWORD|POSTGRES_PASSWORD|DATABASE_URL|SUPERUSER_DATABASE_URL|PGPASSWORD|APP_PASSWORD_VALUE|ADMIN_PASSWORD_VALUE)='; then
+if env | grep -Eq '^(LAUNDRY_APP_PASSWORD|POSTGRES_PASSWORD|DATABASE_URL|SUPERUSER_DATABASE_URL|PGPASSWORD|PGHOSTADDR|PGSERVICE|PGSERVICEFILE|LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD|LAUNDRY_BOOTSTRAP_ADMIN_PIN|LAUNDRY_ACCESS_TOKEN_SECRET|LAUNDRY_CSRF_PROOF_SECRET|APP_PASSWORD_VALUE|ADMIN_PASSWORD_VALUE)='; then
   exit 91
 fi
 if env | grep -Fq 'exported-app-secret'; then
@@ -387,6 +525,13 @@ exec /bin/chmod "$@"
           DATABASE_URL: "postgres://exported-app-url",
           SUPERUSER_DATABASE_URL: "postgres://exported-admin-url",
           PGPASSWORD: "exported-libpq-secret",
+          PGHOSTADDR: "",
+          PGSERVICE: "",
+          PGSERVICEFILE: "",
+          LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD: "exported-bootstrap-secret",
+          LAUNDRY_BOOTSTRAP_ADMIN_PIN: "482915",
+          LAUNDRY_ACCESS_TOKEN_SECRET: "exported-access-secret",
+          LAUNDRY_CSRF_PROOF_SECRET: "exported-csrf-secret",
           password: "preexisting-exported-password",
           escaped_password: "preexisting-exported-escaped-password",
         },
@@ -453,4 +598,187 @@ test("seed boundary gate catches legacy production paths and fixture imports", (
     "apps/server/src/local/pg-seed.ts: seedDemoIdentity production reference",
     "apps/server/src/local/runtime.ts: test fixture imported outside *.test.ts",
   ]);
+});
+
+async function createHttpSmokeFakes(fixtureDirectory, sentinel) {
+  const fakeNode = join(fixtureDirectory, "node");
+  const fakeCurl = join(fixtureDirectory, "curl");
+  const fakeSleep = join(fixtureDirectory, "sleep");
+  const tracePath = join(fixtureDirectory, "subprocess.trace");
+
+  await writeFile(
+    fakeNode,
+    `#!/usr/bin/env bash
+set -euo pipefail
+sentinel='${sentinel}'
+if env | grep -Fq "\${sentinel}" ||
+   env | grep -Eq '^(LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD|LAUNDRY_BOOTSTRAP_ADMIN_PIN|LAUNDRY_SMOKE_ADMIN_PASSWORD|POSTGRES_PASSWORD|LAUNDRY_APP_PASSWORD|DATABASE_URL|DATABASE_ADMIN_URL|SUPERUSER_DATABASE_URL|LAUNDRY_PG_APP_URL|PGPASSWORD|PGPASSFILE|LAUNDRY_ACCESS_TOKEN_SECRET|LAUNDRY_CSRF_PROOF_SECRET)='; then
+  exit 91
+fi
+for argument in "$@"; do
+  [[ "\${argument}" != *"\${sentinel}"* ]] || exit 92
+done
+printf 'node' >> "\${FAKE_TRACE}"
+for argument in "$@"; do printf ' <%s>' "\${argument}" >> "\${FAKE_TRACE}"; done
+printf '\\n' >> "\${FAKE_TRACE}"
+case "\${2:-}" in
+  *expectedMode*)
+    exit 0
+    ;;
+  *org_code:*)
+    password="$(cat)"
+    [[ "\${password}" == "\${sentinel}" ]] || exit 93
+    printf '{"org_code":"local","store_code":"main","username":"admin","password":"%s","device_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd"}' "\${password}"
+    ;;
+  *access_token*)
+    printf 'Authorization: Bearer safe-access-token\\n' > "\${4}"
+    /bin/chmod 600 "\${4}"
+    ;;
+  *expectedUsername*)
+    exit 0
+    ;;
+  *)
+    exit 94
+    ;;
+esac
+`,
+  );
+  await writeFile(
+    fakeCurl,
+    `#!/usr/bin/env bash
+set -euo pipefail
+sentinel='${sentinel}'
+if env | grep -Fq "\${sentinel}" ||
+   env | grep -Eq '^(LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD|LAUNDRY_BOOTSTRAP_ADMIN_PIN|LAUNDRY_SMOKE_ADMIN_PASSWORD|POSTGRES_PASSWORD|LAUNDRY_APP_PASSWORD|DATABASE_URL|DATABASE_ADMIN_URL|SUPERUSER_DATABASE_URL|LAUNDRY_PG_APP_URL|PGPASSWORD|PGPASSFILE|LAUNDRY_ACCESS_TOKEN_SECRET|LAUNDRY_CSRF_PROOF_SECRET)='; then
+  exit 95
+fi
+for argument in "$@"; do
+  [[ "\${argument}" != *"\${sentinel}"* ]] || exit 96
+done
+printf 'curl' >> "\${FAKE_TRACE}"
+for argument in "$@"; do printf ' <%s>' "\${argument}" >> "\${FAKE_TRACE}"; done
+printf '\\n' >> "\${FAKE_TRACE}"
+output=''
+cookie_jar=''
+request_file=''
+url=''
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --output) output="$2"; shift 2 ;;
+    --cookie-jar) cookie_jar="$2"; shift 2 ;;
+    --data-binary) request_file="\${2#@}"; shift 2 ;;
+    --header) shift 2 ;;
+    --*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+case "\${url}" in
+  */health)
+    printf '{"ok":true,"data":{"mode":"local-pg","platform":"sql"}}'
+    ;;
+  */api/v2/auth/login)
+    [[ "$(cat "\${request_file}")" == *"\${sentinel}"* ]] || exit 97
+    if [[ "\${FAKE_CURL_FAIL_LOGIN:-0}" == 1 ]]; then
+      printf '%s\\n' "\${sentinel} request response safe-access-token"
+      printf '%s\\n' "\${sentinel} request response safe-access-token" >&2
+      exit 22
+    fi
+    printf '#HttpOnly_127.0.0.1\\tFALSE\\t/\\tFALSE\\t0\\tlaundry_refresh\\tsafe-refresh-token\\n' > "\${cookie_jar}"
+    printf '{"ok":true,"data":{"access_token":"safe-access-token"}}' > "\${output}"
+    ;;
+  */api/v2/local/staff)
+    printf '{"ok":true,"data":[{"role":"admin","username":"admin"}]}' > "\${output}"
+    ;;
+  *)
+    exit 98
+    ;;
+esac
+`,
+  );
+  await chmod(fakeNode, 0o700);
+  await chmod(fakeCurl, 0o700);
+  await writeFile(fakeSleep, "#!/usr/bin/env bash\nexit 0\n");
+  await chmod(fakeSleep, 0o700);
+  return tracePath;
+}
+
+function httpSmokeSecretEnvironment(sentinel) {
+  return {
+    LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD: sentinel,
+    LAUNDRY_BOOTSTRAP_ADMIN_PIN: "482915",
+    LAUNDRY_SMOKE_ADMIN_PASSWORD: "preexisting-exported-alias",
+    POSTGRES_PASSWORD: "postgres-secret",
+    LAUNDRY_APP_PASSWORD: "app-secret",
+    DATABASE_URL: "postgresql://laundry_app:app-secret@postgres/laundry_v2",
+    DATABASE_ADMIN_URL: "postgresql://postgres:postgres-secret@postgres/laundry_v2",
+    SUPERUSER_DATABASE_URL: "postgresql://postgres:postgres-secret@postgres/laundry_v2",
+    LAUNDRY_PG_APP_URL: "postgresql://laundry_app:app-secret@postgres/laundry_v2",
+    PGPASSWORD: "libpq-secret",
+    PGPASSFILE: "/private/pgpass-sentinel",
+    LAUNDRY_ACCESS_TOKEN_SECRET: "access-signing-secret",
+    LAUNDRY_CSRF_PROOF_SECRET: "csrf-signing-secret",
+  };
+}
+
+test("keeps the HTTP smoke administrator password out of child argv and environments", async () => {
+  const fixtureDirectory = await mkdtemp(join(tmpdir(), "laundry-http-smoke-env-"));
+  const smokeScript = fileURLToPath(new URL("tools/compose/smoke-test.sh", rootUrl));
+  const sentinel = "SMOKE-ADMIN-PASSWORD-SENTINEL";
+
+  try {
+    const tracePath = await createHttpSmokeFakes(fixtureDirectory, sentinel);
+    const result = await execFileAsync("/bin/bash", [smokeScript], {
+      env: {
+        ...process.env,
+        PATH: `${fixtureDirectory}:${process.env.PATH ?? ""}`,
+        TMPDIR: fixtureDirectory,
+        FAKE_TRACE: tracePath,
+        LAUNDRY_LOCAL_ORG_CODE: "local",
+        LAUNDRY_LOCAL_STORE_CODE: "main",
+        LAUNDRY_BOOTSTRAP_ADMIN_USERNAME: "admin",
+        ...httpSmokeSecretEnvironment(sentinel),
+      },
+    });
+
+    const trace = await readFile(tracePath, "utf8");
+    assert.doesNotMatch(trace, new RegExp(sentinel, "u"));
+    assert.doesNotMatch(trace, /LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD=/u);
+    assert.match(result.stdout, /fresh bootstrap exposes only the real administrator/u);
+    assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, new RegExp(sentinel, "u"));
+  } finally {
+    await rm(fixtureDirectory, { force: true, recursive: true });
+  }
+});
+
+test("redacts HTTP smoke request, response, and token material on login failure", async () => {
+  const fixtureDirectory = await mkdtemp(join(tmpdir(), "laundry-http-smoke-failure-"));
+  const smokeScript = fileURLToPath(new URL("tools/compose/smoke-test.sh", rootUrl));
+  const sentinel = "SMOKE-ADMIN-PASSWORD-SENTINEL";
+
+  try {
+    const tracePath = await createHttpSmokeFakes(fixtureDirectory, sentinel);
+    await assert.rejects(
+      execFileAsync("/bin/bash", [smokeScript], {
+        env: {
+          ...process.env,
+          PATH: `${fixtureDirectory}:${process.env.PATH ?? ""}`,
+          TMPDIR: fixtureDirectory,
+          FAKE_TRACE: tracePath,
+          FAKE_CURL_FAIL_LOGIN: "1",
+          LAUNDRY_LOCAL_ORG_CODE: "local",
+          LAUNDRY_LOCAL_STORE_CODE: "main",
+          LAUNDRY_BOOTSTRAP_ADMIN_USERNAME: "admin",
+          ...httpSmokeSecretEnvironment(sentinel),
+        },
+      }),
+      (error) => {
+        assert.match(error.stderr, /administrator login failed/u);
+        assert.doesNotMatch(`${error.stdout}\n${error.stderr}`, new RegExp(sentinel, "u"));
+        assert.doesNotMatch(`${error.stdout}\n${error.stderr}`, /safe-access-token/u);
+        return true;
+      },
+    );
+  } finally {
+    await rm(fixtureDirectory, { force: true, recursive: true });
+  }
 });

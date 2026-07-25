@@ -13,12 +13,6 @@ export type CreatePoolOptions = Readonly<{
   max?: number;
 }>;
 
-/** Default local compose URLs (LOCAL ONLY — weak credentials). */
-export const LOCAL_PG_URLS = Object.freeze({
-  app: "postgresql://laundry_app:app_secure_password@127.0.0.1:8543/laundry_v2",
-  admin: "postgresql://postgres:postgres_secure_password@127.0.0.1:8543/laundry_v2",
-});
-
 export type ResolvedPgUrls = Readonly<{
   /** laundry_app (or explicit DATABASE_URL) for opt-in PG tests. */
   app: string;
@@ -29,33 +23,29 @@ export type ResolvedPgUrls = Readonly<{
 /**
  * Resolve app + admin URLs for explicit real-PG integration tests.
  * Runtime code must use resolveRuntimeDatabaseUrl instead.
- * - LAUNDRY_USE_LOCAL_PG=1 → compose defaults (app + admin)
- * - DATABASE_URL → runtime app; admin from DATABASE_ADMIN_URL or same URL
+ * Both role-specific URLs must be explicit. Local integration credentials are generated
+ * outside the repository, so this helper never supplies a source default or role fallback.
  */
 export function resolvePgUrls(env: NodeJS.ProcessEnv = process.env): ResolvedPgUrls | null {
   const flag = env.LAUNDRY_USE_LOCAL_PG === "1" || env.LAUNDRY_USE_LOCAL_PG === "true";
-  const databaseUrl = env.DATABASE_URL?.trim() ?? "";
+  const appUrl = env.LAUNDRY_PG_APP_URL?.trim() || env.DATABASE_URL?.trim() || "";
   const adminUrl = env.DATABASE_ADMIN_URL?.trim() || env.SUPERUSER_DATABASE_URL?.trim() || "";
 
-  if (!flag && databaseUrl.length === 0 && adminUrl.length === 0) {
+  if (!flag && appUrl.length === 0 && adminUrl.length === 0) {
     return null;
   }
-
-  if (flag) {
-    return Object.freeze({
-      app: env.LAUNDRY_PG_APP_URL?.trim() || databaseUrl || LOCAL_PG_URLS.app,
-      admin: adminUrl || LOCAL_PG_URLS.admin,
-    });
+  if (appUrl.length === 0 || adminUrl.length === 0) {
+    throw new Error("PG integration requires explicit app and admin database URLs");
   }
-
-  const app = databaseUrl || adminUrl;
-  const admin = adminUrl || databaseUrl || LOCAL_PG_URLS.admin;
-  return Object.freeze({ app, admin });
+  if (appUrl === adminUrl) {
+    throw new Error("PG integration must use distinct app and admin database URLs");
+  }
+  return Object.freeze({ app: appUrl, admin: adminUrl });
 }
 
 /**
  * Resolve the runtime app-role URL without ever consulting an owner/admin variable.
- * The local PG opt-in may use its dedicated app URL or the known local app-role URL.
+ * The local PG opt-in may use its dedicated app URL, but never a source credential default.
  */
 export function resolveRuntimeDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string | null {
   const databaseUrl = env.DATABASE_URL?.trim() ?? "";
@@ -66,7 +56,11 @@ export function resolveRuntimeDatabaseUrl(env: NodeJS.ProcessEnv = process.env):
   if (!localPg) {
     return null;
   }
-  return env.LAUNDRY_PG_APP_URL?.trim() || LOCAL_PG_URLS.app;
+  const localAppUrl = env.LAUNDRY_PG_APP_URL?.trim() || "";
+  if (localAppUrl.length === 0) {
+    throw new Error("Local PG runtime requires an explicit app-role database URL");
+  }
+  return localAppUrl;
 }
 
 /** Backward-compatible name for the fail-closed runtime resolver. */

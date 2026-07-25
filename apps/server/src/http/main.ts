@@ -1,9 +1,9 @@
 /**
- * Local HTTP entry: memory identity (default) or Postgres when DATABASE_URL /
- * LAUNDRY_USE_LOCAL_PG is set.
+ * Local HTTP entry: memory identity (default) or PostgreSQL when the lifecycle
+ * command supplies an explicit DATABASE_URL.
  *
  *   pnpm local:server
- *   LAUNDRY_USE_LOCAL_PG=1 pnpm local:server
+ *   pnpm local:up
  *
  * Env is parsed by the strict local server configuration boundary.
  */

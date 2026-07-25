@@ -11,6 +11,7 @@ on:
       - "packages/db/**"
       - "packages/domain/**"
       - "tools/compose/**"
+      - "tools/local/**"
       - "tools/migrate-v1/**"
       - ".github/workflows/v2-integration.yml"
       - "package.json"
@@ -49,17 +50,19 @@ jobs:
       - name: Check workspace foundation
         run: pnpm run workspace:check
 
-      - name: Generate ephemeral integration credentials
+      - name: Prepare isolated integration environment
         shell: bash
         run: |
           set -euo pipefail
-          access_secret="$(openssl rand -hex 32)"
-          csrf_secret="$(openssl rand -hex 32)"
           admin_password="$(openssl rand -hex 36)"
           admin_pin="$(node -e 'console.log(require("node:crypto").randomInt(100000, 1000000))')"
+          printf '::add-mask::%s\n' "${admin_password}"
+          printf '::add-mask::%s\n' "${admin_pin}"
           {
-            printf 'LAUNDRY_ACCESS_TOKEN_SECRET=%s\n' "${access_secret}"
-            printf 'LAUNDRY_CSRF_PROOF_SECRET=%s\n' "${csrf_secret}"
+            printf 'COMPOSE_PROJECT_NAME=laundry-ci-%s-%s\n' \
+              "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}"
+            printf 'LAUNDRY_LOCAL_CONFIG_DIR=%s/laundry-v2-%s-%s\n' \
+              "${RUNNER_TEMP}" "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}"
             printf 'LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD=%s\n' "${admin_password}"
             printf 'LAUNDRY_BOOTSTRAP_ADMIN_PIN=%s\n' "${admin_pin}"
             printf 'LAUNDRY_BOOTSTRAP_ADMIN_USERNAME=%s\n' 'admin'
@@ -68,24 +71,26 @@ jobs:
             printf 'LAUNDRY_LOCAL_STORE_CODE=%s\n' 'main'
           } >> "${GITHUB_ENV}"
 
-      - name: Build integration image
-        run: docker compose -f tools/compose/docker-compose.yml build server
-
-      - name: Start real PostgreSQL
-        run: docker compose -f tools/compose/docker-compose.yml up -d postgres
-
-      - name: Verify repeatable migrations
+      - name: Generate and mask external local secrets
         run: |
-          docker compose -f tools/compose/docker-compose.yml run --rm migrate
-          docker compose -f tools/compose/docker-compose.yml run --rm migrate
+          node --input-type=module <<'NODE'
+          import { ensureLocalConfig } from "./tools/local/config.mjs";
 
-      - name: Verify repeatable explicit bootstrap
+          const config = await ensureLocalConfig({ env: process.env });
+          for (const secret of [
+            config.postgresSuperuserPassword,
+            config.postgresAppPassword,
+            config.accessTokenSecret,
+            config.csrfProofSecret,
+          ]) {
+            process.stdout.write(`::add-mask::${secret}\n`);
+          }
+          NODE
+
+      - name: Verify repeatable lifecycle, migrations, and explicit bootstrap
         run: |
-          docker compose -f tools/compose/docker-compose.yml run --rm bootstrap
-          docker compose -f tools/compose/docker-compose.yml run --rm bootstrap
-
-      - name: Start real Fastify server
-        run: docker compose -f tools/compose/docker-compose.yml up -d server
+          pnpm local:up -- --bootstrap
+          pnpm local:up -- --bootstrap
 
       - name: Assert RLS and real server HTTP smoke
         run: |
@@ -93,9 +98,40 @@ jobs:
           bash tools/compose/smoke-test.sh
 
       - name: Run server tests against real PostgreSQL with no skips
+        shell: bash
         run: |
+          set -euo pipefail
           set -o pipefail
-          LAUNDRY_USE_LOCAL_PG=1 pnpm --filter @laundry/server test | tee /tmp/laundry-server-pg-tests.log
+          node --input-type=module <<'NODE' | tee /tmp/laundry-server-pg-tests.log
+          import { spawn } from "node:child_process";
+          import { ensureLocalConfig } from "./tools/local/config.mjs";
+
+          const config = await ensureLocalConfig({ env: process.env });
+          const databaseUrl = (username, password) => {
+            const url = new URL("postgresql://127.0.0.1:8543/laundry_v2");
+            url.username = username;
+            url.password = password;
+            return url.toString();
+          };
+          const child = spawn("pnpm", ["--filter", "@laundry/server", "test"], {
+            env: {
+              ...process.env,
+              LAUNDRY_USE_LOCAL_PG: "1",
+              POSTGRES_PASSWORD: config.postgresSuperuserPassword,
+              LAUNDRY_APP_PASSWORD: config.postgresAppPassword,
+              LAUNDRY_PG_APP_URL: databaseUrl("laundry_app", config.postgresAppPassword),
+              DATABASE_ADMIN_URL: databaseUrl("postgres", config.postgresSuperuserPassword),
+            },
+            shell: false,
+            stdio: "inherit",
+          });
+          child.once("error", () => {
+            process.exitCode = 1;
+          });
+          child.once("exit", (code) => {
+            process.exitCode = code ?? 1;
+          });
+          NODE
           ! rg -q '^# skipped [1-9][0-9]*$' /tmp/laundry-server-pg-tests.log
 
       - name: Install Chromium for local Web smoke
@@ -124,7 +160,9 @@ jobs:
       - name: Capture integration diagnostics
         if: failure()
         run: |
-          docker compose -f tools/compose/docker-compose.yml logs --no-color > /tmp/laundry-compose.log || true
+          docker compose -p "${COMPOSE_PROJECT_NAME}" \
+            -f tools/compose/docker-compose.yml logs --no-color \
+            > /tmp/laundry-compose.log || true
           if [ -f /tmp/laundry-web.log ]; then cat /tmp/laundry-web.log; fi
 
       - name: Upload integration diagnostics
@@ -142,4 +180,5 @@ jobs:
         if: always()
         run: |
           if [ -f /tmp/laundry-web.pid ]; then kill "$(cat /tmp/laundry-web.pid)" || true; fi
-          docker compose -f tools/compose/docker-compose.yml down -v
+          pnpm local:down || true
+          docker volume rm "${COMPOSE_PROJECT_NAME}_pgdata-v2" >/dev/null 2>&1 || true

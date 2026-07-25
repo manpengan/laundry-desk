@@ -60,12 +60,15 @@ Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 ·
 corepack enable
 pnpm install --frozen-lockfile
 pnpm run workspace:check
-pnpm run local:server:pg
+pnpm run local:up -- --bootstrap
 pnpm run local:web
 pnpm run local:web:e2e
+pnpm run local:down
 ```
 
-涉及旧根配置或 v1 迁移兼容时，再运行根 `lint/test/typecheck/build`。没有 Windows、PostgreSQL、真实模型 key 或打印机证据时，只能标记“代码侧通过/待实测”。
+首次启动前按[本地联调指南](docs/local-web-server.md)提供四个临时管理员输入。涉及旧根配置或 v1
+迁移兼容时，再运行根 `lint/test/typecheck/build`。没有 Windows、PostgreSQL、真实模型 key
+或打印机证据时，只能标记“代码侧通过/待实测”。
 
 ## License
 

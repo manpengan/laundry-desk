@@ -1,6 +1,6 @@
 /**
- * Postgres identity store integration — enabled by the real-PG integration job.
- * Against compose: LAUNDRY_USE_LOCAL_PG=1 node --test dist/identity/pg-store.test.js
+ * PostgreSQL identity-store integration. The v2-integration workflow supplies
+ * both explicit application and administrator database URLs.
  */
 
 import assert from "node:assert/strict";
@@ -17,7 +17,7 @@ import { createAccessTokenSigner } from "./crypto-util.js";
 import { createQuickSwitchChallenge, verifyQuickSwitchPin } from "./pin.js";
 import { rotateRefresh } from "./session.js";
 
-// Ordinary unit runs stay database-free; v2-integration sets this flag.
+// Ordinary unit runs stay database-free; v2-integration also supplies explicit URLs.
 const pgOptIn =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true";
 const urls = pgOptIn ? resolvePgUrls(process.env) : null;

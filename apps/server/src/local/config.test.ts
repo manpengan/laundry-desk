@@ -114,7 +114,11 @@ test("measures signing secret strength in UTF-8 bytes", () => {
 
 test("PG selection fails closed before opening a pool when secrets are absent", async () => {
   await assert.rejects(
-    () => createLocalRuntime({ LAUNDRY_USE_LOCAL_PG: "1" }),
+    () =>
+      createLocalRuntime({
+        LAUNDRY_USE_LOCAL_PG: "1",
+        LAUNDRY_PG_APP_URL: "postgresql://laundry_app:test@127.0.0.1:8543/laundry_v2",
+      }),
     /LAUNDRY_ACCESS_TOKEN_SECRET/u,
   );
 });

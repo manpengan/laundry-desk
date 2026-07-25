@@ -1,13 +1,20 @@
 /**
- * SPA walkthrough against local:server(:pg) + local:web.
+ * SPA walkthrough against local:up + local:web.
  * Opt-in locally; integration CI starts Compose and Vite explicitly.
  *
  *   LAUNDRY_SPA_E2E=1 pnpm --filter @laundry/web test:e2e:local
  */
 import { expect, test } from "@playwright/test";
 
-const WEB = process.env.LAUNDRY_WEB_URL ?? "http://127.0.0.1:5173";
-const API = process.env.LAUNDRY_API_URL ?? "http://127.0.0.1:8787";
+const exactLocalUrl = (name: "LAUNDRY_WEB_URL" | "LAUNDRY_API_URL", expected: string): string => {
+  const configured = process.env[name];
+  if (configured !== undefined && configured !== expected) {
+    throw new Error(`${name} must equal its local loopback endpoint`);
+  }
+  return expected;
+};
+const WEB = exactLocalUrl("LAUNDRY_WEB_URL", "http://127.0.0.1:5173");
+const API = exactLocalUrl("LAUNDRY_API_URL", "http://127.0.0.1:8787");
 const requiredEnvironment = (name: string): string => {
   const value = process.env[name]?.trim();
   if (value === undefined || value.length === 0) {

@@ -4,11 +4,12 @@ services:
     environment:
       POSTGRES_DB: laundry_v2
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_secure_password # LOCAL ONLY
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD-}"
+      LAUNDRY_APP_PASSWORD: "${LAUNDRY_APP_PASSWORD-}"
     ports:
-      - "8543:5432"
+      - "127.0.0.1:8543:5432"
     volumes:
-      - ./bootstrap.sql:/docker-entrypoint-initdb.d/00-bootstrap.sql:ro
+      - ./bootstrap-roles.sh:/docker-entrypoint-initdb.d/00-bootstrap-roles.sh:ro
       - pgdata-v2:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d laundry_v2"]
@@ -23,7 +24,8 @@ services:
       PGHOST: postgres
       PGPORT: "5432"
       PGDATABASE: laundry_v2
-      SUPERUSER_DATABASE_URL: postgresql://postgres:postgres_secure_password@postgres:5432/laundry_v2
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD-}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,11 +37,7 @@ services:
     command:
       ["node", "apps/server/dist/local/bootstrap-cli.js", "--confirm", "laundry-desk-v2-local"]
     environment:
-      DATABASE_ADMIN_URL: postgresql://postgres:postgres_secure_password@postgres:5432/laundry_v2
-      LAUNDRY_BOOTSTRAP_ADMIN_USERNAME: "${LAUNDRY_BOOTSTRAP_ADMIN_USERNAME:?set bootstrap administrator username}"
-      LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME: "${LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME:?set bootstrap administrator display name}"
-      LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD: "${LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD:?set bootstrap administrator password}"
-      LAUNDRY_BOOTSTRAP_ADMIN_PIN: "${LAUNDRY_BOOTSTRAP_ADMIN_PIN:?set bootstrap administrator PIN}"
+      DATABASE_ADMIN_URL: "postgresql://postgres:${POSTGRES_PASSWORD-}@postgres:5432/laundry_v2"
     depends_on:
       postgres:
         condition: service_healthy
@@ -51,13 +49,13 @@ services:
       context: ../..
       dockerfile: apps/server/Dockerfile
     environment:
-      DATABASE_URL: postgresql://laundry_app:app_secure_password@postgres:5432/laundry_v2
-      LAUNDRY_ACCESS_TOKEN_SECRET: "${LAUNDRY_ACCESS_TOKEN_SECRET:?set access-token signing secret}"
-      LAUNDRY_CSRF_PROOF_SECRET: "${LAUNDRY_CSRF_PROOF_SECRET:?set CSRF proof signing secret}"
+      DATABASE_URL: "postgresql://laundry_app:${LAUNDRY_APP_PASSWORD-}@postgres:5432/laundry_v2"
+      LAUNDRY_ACCESS_TOKEN_SECRET: "${LAUNDRY_ACCESS_TOKEN_SECRET-}"
+      LAUNDRY_CSRF_PROOF_SECRET: "${LAUNDRY_CSRF_PROOF_SECRET-}"
       LAUNDRY_CONTAINER_RUNTIME: "1"
       LAUNDRY_USE_LOCAL_PG: "1"
     ports:
-      - "8787:8787"
+      - "127.0.0.1:8787:8787"
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,3 +71,7 @@ services:
 
 volumes:
   pgdata-v2:
+    labels:
+      com.laundry-desk.managed: "true"
+      com.laundry-desk.project: "${COMPOSE_PROJECT_NAME-laundry-desk}"
+      com.laundry-desk.instance: "${LAUNDRY_LOCAL_INSTANCE_ID-}"

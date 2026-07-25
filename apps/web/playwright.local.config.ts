@@ -1,8 +1,14 @@
 import { defineConfig } from "@playwright/test";
 
+const LOCAL_WEB_URL = "http://127.0.0.1:5173";
+const configuredWebUrl = process.env.LAUNDRY_WEB_URL;
+if (configuredWebUrl !== undefined && configuredWebUrl !== LOCAL_WEB_URL) {
+  throw new Error("LAUNDRY_WEB_URL must equal the local loopback Web endpoint");
+}
+
 /**
  * Opt-in local SPA config. Does not start webServer — caller must run:
- *   pnpm local:server:pg   # or local:server
+ *   pnpm local:up
  *   pnpm local:web
  */
 export default defineConfig({
@@ -12,7 +18,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   use: {
-    baseURL: process.env.LAUNDRY_WEB_URL ?? "http://127.0.0.1:5173",
+    baseURL: LOCAL_WEB_URL,
     trace: "on-first-retry",
     headless: true,
   },
