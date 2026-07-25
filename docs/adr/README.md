@@ -1,6 +1,6 @@
 # ADR 索引
 
-> 维护：Grok（ADR-12 起）　建立：2026-07-20
+> 维护：当前交付 owner（见最新 Accepted 治理 ADR）　建立：2026-07-20
 > **为何独立成文**：总 RFC 的子 ADR 表是 Accepted 正文，按签署记录第 3 条不回改；新增 ADR（09 起）需要一个可持续维护的入口，故本索引附加而非改表。
 
 ## v2 产品化线
@@ -19,8 +19,9 @@
 | [ADR-09](2026-07-20-adr-09-command-metadata-precision.md)          | 命令元数据字段精确化（离线档位 / 风险升级阈值） | **Accepted** 2026-07-22                            |
 | [ADR-10](2026-07-21-adr-10-single-owner-delivery-governance.md)    | 单一技术负责人 + 受约束协助线（Codex lead）     | **Superseded by ADR-12**                           |
 | [ADR-11](2026-07-21-adr-11-auth-lifecycle-envelope.md)             | 身份生命周期信封与认证来源                      | **Accepted**                                       |
-| [ADR-12](2026-07-21-adr-12-grok-unified-delivery-ownership.md)     | Grok 统一交付所有权（设计 + 实现）              | **Accepted** 2026-07-21                            |
-| [ADR-13](2026-07-23-adr-13-v2-only-upgrade-delivery.md)            | 停止 v1 功能线，统一交付 v2 升级版本            | **Accepted** 2026-07-23                            |
+| [ADR-12](2026-07-21-adr-12-grok-unified-delivery-ownership.md)     | Grok 统一交付所有权（设计 + 实现）              | **Superseded by ADR-14**                           |
+| [ADR-13](2026-07-23-adr-13-v2-only-upgrade-delivery.md)            | 停止 v1 功能线，统一交付 v2 升级版本            | **Accepted**；宏发目标与迁移顺序由 ADR-14 覆盖     |
+| [ADR-14](2026-07-25-adr-14-generic-local-first-v2-delivery.md)     | 通用 V2 本地优先交付与 Codex 接管               | **Accepted** 2026-07-25                            |
 
 ## v1 线
 

@@ -2,21 +2,25 @@
 
 Claude（Opus 4.7）在本项目中的入场指引。
 
-> **当前状态（ADR-12 / ADR-13）**：Claude 已退出设计、冻结、实现和验收关键路径。后续由 **Grok** 统一负责唯一活动线 v2；宏发 v1 已冻结为迁移源与历史参考。本文其余内容保留为历史门禁参考；Claude 如参与，仅提供非阻塞可选复审，不拥有当前 spec、contracts 或 PR 放行权。
+> **当前状态（ADR-14）**：Claude draft3.1a 是通用 V2 的架构与 UI 基线；当前由
+> **Codex** 负责本地优先活动线的设计、实现与验收。本文其余内容保留为历史门禁
+> 参考；Claude 如参与，仅提供非阻塞可选复审，不拥有当前 spec、contracts 或 PR
+> 放行权。
 
 ## 你在这个项目里的角色
 
 **历史角色：设计与门禁**。当前不在关键路径，不写实现代码，不 scaffold，不装依赖。
 
-当前实现与设计由 Grok 负责，见 `GROK.md` / `AGENTS.md`。
+当前实现与设计由 Codex 负责，见 `AGENTS.md` 与 ADR-14。
 
 ## 入场必读
 
-1. [`docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md`](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) — V2-only 产品裁决
-2. [`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) — 当前架构真源
-3. [`GROK.md`](GROK.md) — 当前 owner 与执行入口
-4. [`docs/superpowers/specs/2026-04-23-laundry-desk-design.md`](docs/superpowers/specs/2026-04-23-laundry-desk-design.md) — 已归档 v1 历史设计
-5. `~/.claude/rules/common/coding-style.md` — 代码红线（文件 ≤ 400 行、函数 ≤ 50 行、嵌套 ≤ 4 层、金额零浮点、不可变优先）
+1. [`docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md`](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md) — 当前产品与交付裁决
+2. [`docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md`](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) — 当前本地优先设计
+3. [`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) — Claude 架构基线
+4. [`docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md`](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md) — Claude UI 基线
+5. [`docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md`](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) — V2-only 基础裁决
+6. [`AGENTS.md`](AGENTS.md) — 当前 owner 与执行入口
 
 ## 门禁清单（每期 Gemini 声明完成时用）
 
@@ -68,7 +72,7 @@ Claude（Opus 4.7）在本项目中的入场指引。
 ## 变更流程
 
 - 设计变更 → 追加 `docs/adr/YYYY-MM-DD-<topic>.md` + 更新 spec 版本
-- 路线图变更 → 更新本文件 & `README.md` 路线表
+- 路线图变更 → 更新本文件、`AGENTS.md` 与对应 ADR
 - 新风险 → 补 spec §10
 
 ## 不做

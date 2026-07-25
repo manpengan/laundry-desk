@@ -4,30 +4,28 @@ Grok 在本项目中的入场指引。
 
 ## 你的角色
 
-**单一技术负责人**（[ADR-12](docs/adr/2026-07-21-adr-12-grok-unified-delivery-ownership.md)）。
+[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md) 已覆盖
+ADR-12 的 owner 分配。Codex 是当前通用 V2 本地优先交付负责人；Grok 退出关键
+路径，可提供非阻塞复审或候选输入，但不拥有当前 spec、实现、门禁或合并权。
 
-负责 v2 后续 **设计真源、核心实现、集成、门禁与安全**；不再限于端侧协助。按 [ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)，v2 是唯一活动交付线，v1 `src/` 冻结为迁移源与历史参考。
-
-当期任务书：[docs/superpowers/plans/tasks/2026-07-21-task-grok-lead.md](docs/superpowers/plans/tasks/2026-07-21-task-grok-lead.md)
+历史任务书
+[2026-07-21-task-grok-lead.md](docs/superpowers/plans/tasks/2026-07-21-task-grok-lead.md)
+不再是当前执行入口。
 
 ## 入场必读
 
-1. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
-2. [交付治理](docs/superpowers/specs/2026-07-21-laundry-v2-delivery-governance.md)
-3. [v2 架构 spec](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
-4. [ADR-12](docs/adr/2026-07-21-adr-12-grok-unified-delivery-ownership.md)
-5. [V2-M2→M6 计划](docs/superpowers/plans/2026-07-19-v2-m2-m6-implementation-plan.md)
-6. [V2-only 执行计划](.hermes/plans/2026-07-23_034229-v2-only-upgrade-next-development-plan.md)
-7. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
-8. 若当前环境存在：`~/.claude/rules/common/coding-style.md`
+1. [ADR-14：通用 V2 本地优先交付](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
+2. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
+3. [Claude V2 架构 spec](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
+4. [Claude V2 Web UI spec](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
+5. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
+6. [AGENTS.md](AGENTS.md)
 
-## 职责
+## 可选复审范围
 
-1. **设计真源**：spec、ADR、contracts、里程碑计划
-2. **全栈实现**：contracts / domain / server / db / web / edge-agent
-3. **安全与并发**：RLS、审计、lease、签名、密钥、幂等、事务
-4. **门禁**：CI、跨租户/红队/WYSIWYS/E2E；checks 绿后可合并 PR 并复核 main
-5. **硬件与实机**：组织 Windows/打印机证据（无设备只标待实测）
+- contracts / domain / server / db / web / edge-agent 的非阻塞复审；
+- 安全、并发、RLS、审计、幂等和事务风险提示；
+- 未合分支中的可复用候选输入说明。
 
 ## 红线
 
@@ -42,7 +40,6 @@ Grok 在本项目中的入场指引。
 
 ## 协作流程
 
-- 契约按组冻结、逐组解闸；改契约走新增 ADR
-- PR 小步、可复现；合并后看 main 双 CI
-- 不向 v1 `src/` 增加功能；仅在迁移/数据可读性被阻塞时做最小兼容修复
-- commit 尾行 `Co-Authored-By: Grok <grok@x.ai>`（或会话约定署名）
+- 不直接实施或合并，除非 manpengan 另行明确授权；
+- 候选建议必须对照 ADR-14 与当前本地优先设计；
+- 不向 v1 `src/` 增加功能，不恢复宏发、迁移、云或 Windows 的当前优先级。

@@ -2,27 +2,29 @@
 
 仓库通用 agent 入口。
 
-## 当前 owner 与路线（ADR-12 / ADR-13）
+## 当前 owner 与路线（ADR-14）
 
-**Grok 为单一技术负责人**（设计 + 实现 + 门禁）。详见 [GROK.md](GROK.md) 与 [ADR-12](docs/adr/2026-07-21-adr-12-grok-unified-delivery-ownership.md)。
+**Codex 为当前交付负责人**（设计、实现、集成与门禁）。详见
+[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)。
 
-**仅 v2 是活动交付线**（[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)）：宏发 v1 停止功能开发，根 `src/` 只保留为迁移源、历史行为参考与限期只读回退。
+**仅通用 V2 是活动交付线**：宏发版本停止，根 `src/` 只保留为历史行为参考；
+当前优先交付本地 Web Server 与 macOS App，云部署和 Windows 适配后置。
 
-| 角色      | 状态                                               |
-| --------- | -------------------------------------------------- |
-| Grok      | **Lead** — 全栈与设计真源                          |
-| Codex     | 退出关键路径；已合入代码按正常维护；可选非阻塞复审 |
-| Claude    | 退出关键路径；历史门禁文档参考                     |
-| Gemini    | 退出关键路径；未合分支仅候选输入                   |
-| manpengan | 产品裁决、外部依赖、ADR 签署、最终仲裁             |
+| 角色      | 状态                                         |
+| --------- | -------------------------------------------- |
+| Codex     | **Lead** — 设计、实现、集成与门禁            |
+| Grok      | 退出关键路径；未合分支仅作候选输入           |
+| Claude    | draft3.1a 为框架基线；当前仅作可选非阻塞复审 |
+| Gemini    | 退出关键路径；未合分支仅作候选输入           |
+| manpengan | 产品裁决、外部依赖、ADR 签署、最终仲裁       |
 
 ## 入场必读
 
-1. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
-2. [交付治理](docs/superpowers/specs/2026-07-21-laundry-v2-delivery-governance.md)
-3. [v2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
-4. [GROK.md](GROK.md)
-5. [V2-M2→M6 计划](docs/superpowers/plans/2026-07-19-v2-m2-m6-implementation-plan.md)
+1. [ADR-14：通用 V2 本地优先交付](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
+2. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
+3. [Claude V2 架构 draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
+4. [Claude V2 Web UI draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
+5. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
 6. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
 
 ## 审查侧重点（任何实现者）
