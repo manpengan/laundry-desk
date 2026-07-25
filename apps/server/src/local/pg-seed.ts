@@ -40,7 +40,7 @@ export async function seedDemoIdentity(pool: PgPool): Promise<SeedDemoResult> {
       `INSERT INTO stores (id, org_id, code, name, timezone, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $6)
        ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, name = EXCLUDED.name,
-         updated_at = EXCLUDED.updated_at`,
+         timezone = EXCLUDED.timezone, updated_at = EXCLUDED.updated_at`,
       [
         LOCAL_PROFILE.storeId,
         LOCAL_PROFILE.orgId,

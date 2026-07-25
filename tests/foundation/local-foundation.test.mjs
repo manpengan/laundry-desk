@@ -14,6 +14,7 @@ const governanceFiles = [
 const currentDeliveryAdr = "(docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)";
 const activeV2ProductEntries = [
   "apps/server/src/local/create-runtime.ts",
+  "apps/server/src/local/pg-seed.ts",
   "apps/server/src/http/main.ts",
   "apps/web/host/main.tsx",
   "apps/web/src/auth/HttpAuthClient.ts",
@@ -24,6 +25,7 @@ const activeV2ProfileConsumers = [
   "apps/server/src/local/pg-seed.ts",
   "apps/server/src/http/main.ts",
   "apps/web/host/main.tsx",
+  "apps/web/src/auth/HttpAuthClient.ts",
 ];
 const demoCredentialMarkers = [
   ["DEMO_PASSWORD", /\bDEMO_PASSWORD\b/u],
@@ -37,6 +39,7 @@ const localProfileCopyMarkers = [
   ["org name", /laundry-desk V2/u],
   ["store name", /本地门店/u],
   ["timezone", /Asia\/Taipei/u],
+  ["admin staff id", /11111111-1111-4111-8111-111111111103/u],
 ];
 const outputCallPattern =
   /\b(?:console\.(?:log|info|warn|error)|process\.(?:stdout|stderr)\.write)\s*\([\s\S]*?\)\s*;?/gu;
@@ -197,6 +200,7 @@ test("profile copy gate catches camelCase, snake_case, and exact literals", () =
     'const org_name = "laundry-desk V2";',
     'const storeName = "本地门店";',
     'const timezone = "Asia/Taipei";',
+    'const adminStaffId = "11111111-1111-4111-8111-111111111103";',
   ].join("\n");
 
   assert.deepEqual(findLocalProfileCopies(copiedConstants), [
@@ -205,5 +209,6 @@ test("profile copy gate catches camelCase, snake_case, and exact literals", () =
     "org name",
     "store name",
     "timezone",
+    "admin staff id",
   ]);
 });
