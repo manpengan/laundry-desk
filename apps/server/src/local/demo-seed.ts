@@ -15,5 +15,12 @@ export {
   type LocalRuntimeMode,
   type LocalStaffDirectoryEntry,
 } from "./create-runtime.js";
-export { parseLocalServerConfig, type LocalServerConfig } from "./config.js";
+export {
+  parseLocalHostConfig,
+  parseLocalServerConfig,
+  parseLocalSigningSecrets,
+  type LocalHostConfig,
+  type LocalServerConfig,
+  type LocalSigningSecrets,
+} from "./config.js";
 export { LOCAL_PROFILE, type LocalProfile } from "./profile.js";

@@ -12,9 +12,38 @@ const governanceFiles = [
   "HERMES.md",
 ];
 const currentDeliveryAdr = "(docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)";
+const activeV2ProductEntries = [
+  "apps/server/src/local/create-runtime.ts",
+  "apps/server/src/http/main.ts",
+  "apps/web/host/main.tsx",
+  "apps/web/src/auth/HttpAuthClient.ts",
+];
+const activeV2CredentialOutputEntries = ["apps/server/src/http/main.ts", "apps/web/host/main.tsx"];
+const demoCredentialMarkers = [
+  ["DEMO_PASSWORD", /\bDEMO_PASSWORD\b/u],
+  ["DEMO_PIN", /\bDEMO_PIN\b/u],
+  ["demo literal", /(["'`])demo\1/iu],
+  ["1234 literal", /\b1234\b/u],
+];
+const outputCallPattern =
+  /\b(?:console\.(?:log|info|warn|error)|process\.(?:stdout|stderr)\.write)\s*\([\s\S]*?\)\s*;?/gu;
+const credentialOutputLabelPattern = /\b(?:password|credential|secret)\b/iu;
+const pinOutputLabelPattern = /\bPIN\b/u;
 
 async function readRepositoryFile(path) {
   return readFile(new URL(path, rootUrl), "utf8");
+}
+
+function findDemoCredentialMarkers(source) {
+  return demoCredentialMarkers
+    .filter(([, pattern]) => pattern.test(source))
+    .map(([label]) => label);
+}
+
+function findCredentialOutputCalls(source) {
+  return [...source.matchAll(outputCallPattern)]
+    .map(([call]) => call)
+    .filter((call) => credentialOutputLabelPattern.test(call) || pinOutputLabelPattern.test(call));
 }
 
 test("routes every governance entry point to ADR-14", async () => {
@@ -83,31 +112,40 @@ test("uses the generic V2 display name in active packaging metadata", async () =
   assert.equal(rootPackage.build.nsis.shortcutName, "laundry-desk V2");
 });
 
+test("keeps the default memory server entry independent from PG signing secrets", async () => {
+  const serverEntry = await readRepositoryFile("apps/server/src/http/main.ts");
+
+  assert.match(serverEntry, /parseLocalHostConfig/u);
+  assert.doesNotMatch(serverEntry, /parseLocalServerConfig/u);
+});
+
 test("keeps product and credential defaults out of active V2 entry points", async () => {
-  const activeEntries = [
-    "apps/server/src/local/create-runtime.ts",
-    "apps/server/src/http/main.ts",
-    "apps/web/host/main.tsx",
-    "apps/web/src/auth/HttpAuthClient.ts",
-  ];
-  const contents = await Promise.all(activeEntries.map(readRepositoryFile));
+  const contents = await Promise.all(activeV2ProductEntries.map(readRepositoryFile));
 
   for (const [index, content] of contents.entries()) {
     assert.doesNotMatch(
       content,
-      /Hongfa Laundry|hongfa|宏发|password=demo/iu,
-      `${activeEntries[index]} must stay generic`,
+      /Hongfa Laundry|hongfa|宏发/iu,
+      `${activeV2ProductEntries[index]} must stay generic`,
     );
   }
 
-  for (const path of ["apps/server/src/http/main.ts", "apps/web/host/main.tsx"]) {
+  for (const path of activeV2CredentialOutputEntries) {
     const content = await readRepositoryFile(path);
-    assert.doesNotMatch(
-      content,
-      /(?:password|PIN).*(?:DEMO_|demo|1234)/iu,
-      `${path} must not print local credentials`,
-    );
+    assert.deepEqual(findDemoCredentialMarkers(content), [], `${path} must not embed demo creds`);
+    assert.deepEqual(findCredentialOutputCalls(content), [], `${path} must not print credentials`);
   }
+});
+
+test("credential output gate rejects multiline and indirect demo credential references", () => {
+  const multiline = "process.stdout.write(`password=\\n${DEMO_PASSWORD}`);";
+  const indirect = "const value = DEMO_PIN;\nconsole.info(value);";
+  const unlabeledSource = 'const value = getSecret();\nconsole.info("PIN", value);';
+
+  assert.deepEqual(findDemoCredentialMarkers(multiline), ["DEMO_PASSWORD"]);
+  assert.equal(findCredentialOutputCalls(multiline).length, 1);
+  assert.deepEqual(findDemoCredentialMarkers(indirect), ["DEMO_PIN"]);
+  assert.equal(findCredentialOutputCalls(unlabeledSource).length, 1);
 });
 
 test("centralizes generic local identity in the server profile module", async () => {

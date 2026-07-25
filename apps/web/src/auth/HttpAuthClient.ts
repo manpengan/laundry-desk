@@ -117,7 +117,7 @@ function projectSession(
 export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient {
   const base = options.apiBaseUrl.replace(/\/$/u, "");
   const fetchImpl = options.fetchImpl ?? fetch;
-  let staffDirectory: SwitchableStaff[] = [];
+  let staffDirectory: readonly SwitchableStaff[] = Object.freeze([]);
   let lastDisplay: AccessSession["display"] = Object.freeze({
     store_name: "",
     staff_name: "",
@@ -133,37 +133,45 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
     return match?.[1] ?? null;
   };
 
-  const loadStaff = async (): Promise<void> => {
+  const loadStaff = async (): Promise<readonly SwitchableStaff[] | null> => {
+    staffDirectory = Object.freeze([]);
     try {
       const res = await fetchImpl(`${base}/api/v2/local/staff`, { credentials: "include" });
-      if (!res.ok) return;
+      if (!res.ok) return null;
       const body: unknown = await res.json();
-      if (!isRecord(body) || body.ok !== true || !Array.isArray(body.data)) return;
+      if (!isRecord(body) || body.ok !== true || !Array.isArray(body.data)) return null;
       const next: SwitchableStaff[] = [];
       for (const row of body.data) {
-        if (!isRecord(row)) continue;
         if (
-          typeof row.staff_id === "string" &&
-          typeof row.display_name === "string" &&
-          (row.role === "admin" || row.role === "staff")
+          !isRecord(row) ||
+          typeof row.staff_id !== "string" ||
+          typeof row.display_name !== "string" ||
+          (row.role !== "admin" && row.role !== "staff")
         ) {
-          next.push(
-            Object.freeze({
-              staff_id: row.staff_id,
-              display_name: row.display_name,
-              role: row.role,
-            }),
-          );
+          return null;
         }
+        next.push(
+          Object.freeze({
+            staff_id: row.staff_id,
+            display_name: row.display_name,
+            role: row.role,
+          }),
+        );
       }
-      staffDirectory = next;
+      const directory = Object.freeze(next);
+      staffDirectory = directory;
+      return directory;
     } catch {
-      // optional
+      return null;
     }
   };
 
   const login = async (values: LoginFormValues): Promise<AuthResult<AccessSession>> => {
-    await loadStaff();
+    const currentDirectory = await loadStaff();
+    if (currentDirectory === null) {
+      accessToken = null;
+      return asError("无法从本地服务器加载员工目录");
+    }
     try {
       const res = await fetchImpl(`${base}/api/v2/auth/login`, {
         method: "POST",
@@ -187,7 +195,7 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
       }
       const payload = readAccessPayload(body.data);
       if (payload === null) return asError("登录响应格式错误");
-      const staff = staffDirectory.find((entry) => entry.staff_id === payload.session.staff_id);
+      const staff = currentDirectory.find((entry) => entry.staff_id === payload.session.staff_id);
       if (staff === undefined) return asError("登录响应缺少员工权限");
       accessToken = payload.access_token;
       lastDisplay = Object.freeze({

@@ -43,7 +43,12 @@ import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-u
 import { createPgPool, resolvePgUrls, type PgPool, type ResolvedPgUrls } from "../db/pg-pool.js";
 import { DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./demo-ids.js";
 import { seedDemoIdentity } from "./pg-seed.js";
-import { parseLocalServerConfig, type LocalServerConfig } from "./config.js";
+import {
+  parseLocalHostConfig,
+  parseLocalServerConfig,
+  parseLocalSigningSecrets,
+  type LocalServerConfig,
+} from "./config.js";
 import { LOCAL_PROFILE } from "./profile.js";
 
 export {
@@ -334,8 +339,8 @@ export async function createPgLocalRuntime(
  */
 export async function createLocalRuntime(
   env: NodeJS.ProcessEnv = process.env,
-  config?: LocalServerConfig,
 ): Promise<LocalRuntime> {
+  const hostConfig = parseLocalHostConfig(env);
   const urls = resolvePgUrls(env);
   const isProduction = env.NODE_ENV === "production";
   const databaseUrl = env.DATABASE_URL?.trim() ?? "";
@@ -343,7 +348,13 @@ export async function createLocalRuntime(
     throw new Error("Production runtime requires DATABASE_URL for the laundry_app role");
   }
   if (urls !== null) {
-    return createPgLocalRuntime(urls, config ?? parseLocalServerConfig(env));
+    return createPgLocalRuntime(
+      urls,
+      Object.freeze({
+        ...hostConfig,
+        ...parseLocalSigningSecrets(env),
+      }),
+    );
   }
   if (isProduction) {
     throw new Error("Production runtime cannot fall back to memory mode");

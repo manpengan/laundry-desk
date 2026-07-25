@@ -2,10 +2,32 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createLocalRuntime, createMemoryLocalRuntime } from "./create-runtime.js";
-import { parseLocalServerConfig } from "./config.js";
+import { parseLocalHostConfig, parseLocalServerConfig } from "./config.js";
 
 const ACCESS_SECRET = "access-secret-is-at-least-32-bytes";
 const CSRF_SECRET = "csrf-proof-secret-is-at-least-32-bytes";
+
+test("default memory runtime needs only the strict host configuration", async () => {
+  const hostConfig = parseLocalHostConfig({});
+  const runtime = await createLocalRuntime({});
+
+  assert.deepEqual(hostConfig, {
+    listenHost: "127.0.0.1",
+    port: 8787,
+    browserOrigin: "http://127.0.0.1:5173",
+    hostAuthorities: ["127.0.0.1:8787"],
+  });
+  assert.equal(runtime.mode, "memory");
+  assert.ok(Buffer.byteLength(runtime.accessTokenSecret, "utf8") >= 32);
+  assert.ok(Buffer.byteLength(runtime.csrfProofSecret, "utf8") >= 32);
+});
+
+test("memory runtime still rejects an invalid host boundary", async () => {
+  await assert.rejects(
+    () => createLocalRuntime({ LAUNDRY_CONTAINER_RUNTIME: "true" }),
+    /LAUNDRY_CONTAINER_RUNTIME/u,
+  );
+});
 
 test("parses the fixed loopback local server boundary", () => {
   const config = parseLocalServerConfig({

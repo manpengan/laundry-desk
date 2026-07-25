@@ -12,14 +12,19 @@ const SecretSchema = z
     `must contain at least ${MINIMUM_SECRET_BYTES} UTF-8 bytes`,
   );
 
-const LocalServerEnvironmentSchema = z
+const ContainerRuntimeSchema = z
+  .string()
+  .refine((value) => value === "1", "must equal 1 when set")
+  .optional();
+
+const LocalHostEnvironmentSchema = z.object({
+  LAUNDRY_CONTAINER_RUNTIME: ContainerRuntimeSchema,
+});
+
+const LocalSigningEnvironmentSchema = z
   .object({
     LAUNDRY_ACCESS_TOKEN_SECRET: SecretSchema,
     LAUNDRY_CSRF_PROOF_SECRET: SecretSchema,
-    LAUNDRY_CONTAINER_RUNTIME: z
-      .string()
-      .refine((value) => value === "1", "must equal 1 when set")
-      .optional(),
   })
   .superRefine((value, context) => {
     if (value.LAUNDRY_ACCESS_TOKEN_SECRET === value.LAUNDRY_CSRF_PROOF_SECRET) {
@@ -31,14 +36,19 @@ const LocalServerEnvironmentSchema = z
     }
   });
 
-export type LocalServerConfig = Readonly<{
+export type LocalHostConfig = Readonly<{
   listenHost: "127.0.0.1" | "0.0.0.0";
   port: typeof LOCAL_PORT;
   browserOrigin: typeof LOCAL_BROWSER_ORIGIN;
   hostAuthorities: readonly ["127.0.0.1:8787"];
+}>;
+
+export type LocalSigningSecrets = Readonly<{
   accessTokenSecret: string;
   csrfProofSecret: string;
 }>;
+
+export type LocalServerConfig = Readonly<LocalHostConfig & LocalSigningSecrets>;
 
 function configError(error: z.ZodError): Error {
   const details = error.issues
@@ -50,8 +60,8 @@ function configError(error: z.ZodError): Error {
   return new Error(`Invalid local server configuration: ${details}`);
 }
 
-export function parseLocalServerConfig(env: NodeJS.ProcessEnv): LocalServerConfig {
-  const result = LocalServerEnvironmentSchema.safeParse(env);
+export function parseLocalHostConfig(env: NodeJS.ProcessEnv): LocalHostConfig {
+  const result = LocalHostEnvironmentSchema.safeParse(env);
   if (!result.success) {
     throw configError(result.error);
   }
@@ -61,7 +71,24 @@ export function parseLocalServerConfig(env: NodeJS.ProcessEnv): LocalServerConfi
     port: LOCAL_PORT,
     browserOrigin: LOCAL_BROWSER_ORIGIN,
     hostAuthorities: LOCAL_HOST_AUTHORITIES,
+  });
+}
+
+export function parseLocalSigningSecrets(env: NodeJS.ProcessEnv): LocalSigningSecrets {
+  const result = LocalSigningEnvironmentSchema.safeParse(env);
+  if (!result.success) {
+    throw configError(result.error);
+  }
+
+  return Object.freeze({
     accessTokenSecret: result.data.LAUNDRY_ACCESS_TOKEN_SECRET,
     csrfProofSecret: result.data.LAUNDRY_CSRF_PROOF_SECRET,
+  });
+}
+
+export function parseLocalServerConfig(env: NodeJS.ProcessEnv): LocalServerConfig {
+  return Object.freeze({
+    ...parseLocalHostConfig(env),
+    ...parseLocalSigningSecrets(env),
   });
 }

@@ -9,12 +9,12 @@
  */
 
 import { createLocalApp } from "./create-app.js";
-import { parseLocalServerConfig } from "../local/config.js";
+import { parseLocalHostConfig } from "../local/config.js";
 import { createLocalRuntime } from "../local/create-runtime.js";
 
 async function main(): Promise<void> {
-  const config = parseLocalServerConfig(process.env);
-  const runtime = await createLocalRuntime(process.env, config);
+  const config = parseLocalHostConfig(process.env);
+  const runtime = await createLocalRuntime(process.env);
   const app = await createLocalApp({
     runtime,
     corsOrigin: config.browserOrigin,
