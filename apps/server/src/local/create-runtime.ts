@@ -4,6 +4,8 @@
 
 import { randomBytes } from "node:crypto";
 
+import { z } from "zod";
+
 import { createAccessTokenSigner } from "../identity/crypto-util.js";
 import { createMemoryIdentityStore } from "../identity/memory-store.js";
 import { createPgIdentityStore } from "../identity/pg-store.js";
@@ -46,6 +48,7 @@ import {
   type CreatePoolOptions,
   type PgPool,
 } from "../db/pg-pool.js";
+import { withStoreGuc } from "../db/tenant-guc-client.js";
 import { DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./demo-ids.js";
 import { assertLocalBootstrapReady } from "./bootstrap.js";
 import {
@@ -107,15 +110,17 @@ export type LocalRuntime = Readonly<{
 
 export type CreatePgLocalRuntimeDependencies = Readonly<{
   createPool: (options: CreatePoolOptions) => PgPool;
-  assertReady: (pool: PgPool) => Promise<void>;
+  assertReady: (pool: PgPool, expectedDemoOnly: boolean) => Promise<void>;
+  loadStaffDirectory: (pool: PgPool) => Promise<readonly LocalStaffDirectoryEntry[]>;
 }>;
 
 const defaultPgRuntimeDependencies: CreatePgLocalRuntimeDependencies = Object.freeze({
   createPool: createPgPool,
   assertReady: assertLocalBootstrapReady,
+  loadStaffDirectory: loadPgStaffDirectory,
 });
 
-const staffDirectory = Object.freeze([
+const memoryStaffDirectory = Object.freeze([
   Object.freeze({
     staff_id: DEMO_STAFF_A_ID,
     display_name: "店员甲",
@@ -135,6 +140,65 @@ const staffDirectory = Object.freeze([
     username: "admin",
   }),
 ]);
+
+function freezeStaffDirectory(
+  entries: readonly LocalStaffDirectoryEntry[],
+): readonly LocalStaffDirectoryEntry[] {
+  return Object.freeze(
+    entries.map((entry) => (Object.isFrozen(entry) ? entry : Object.freeze({ ...entry }))),
+  );
+}
+
+type PgStaffDirectoryRow = Readonly<{
+  staff_id: string;
+  display_name: string;
+  role: string;
+  username: string;
+}>;
+
+const PgStaffDirectoryRowSchema = z
+  .object({
+    staff_id: z.uuid(),
+    display_name: z.string().trim().min(1),
+    role: z.enum(["admin", "staff"]),
+    username: z.string().trim().min(1),
+  })
+  .strict()
+  .readonly();
+
+function mapPgStaffDirectoryRow(row: PgStaffDirectoryRow): LocalStaffDirectoryEntry {
+  return PgStaffDirectoryRowSchema.parse(row);
+}
+
+export async function loadPgStaffDirectory(
+  pool: PgPool,
+): Promise<readonly LocalStaffDirectoryEntry[]> {
+  const rows = await withStoreGuc(
+    pool,
+    {
+      orgId: LOCAL_PROFILE.orgId,
+      storeId: LOCAL_PROFILE.storeId,
+      staffId: LOCAL_PROFILE.adminStaffId,
+    },
+    async (client) => {
+      const result = await client.query<PgStaffDirectoryRow>(
+        `SELECT staff.id::text AS staff_id, staff.display_name, role.role, staff.username
+           FROM staffs staff
+           JOIN staff_store_roles role
+             ON role.org_id = staff.org_id
+            AND role.staff_id = staff.id
+          WHERE staff.org_id = $1::uuid
+            AND role.store_id = $2::uuid
+            AND staff.is_active = true
+            AND role.is_active = true
+          ORDER BY staff.username, staff.id`,
+        [LOCAL_PROFILE.orgId, LOCAL_PROFILE.storeId],
+      );
+      return result.rows.map(mapPgStaffDirectoryRow);
+    },
+  );
+  return rows;
+}
 
 function buildIdentityDeps(
   ports: Readonly<{
@@ -206,6 +270,19 @@ function mintRuntimeSecret(): string {
   return randomBytes(32).toString("base64url");
 }
 
+async function closeFailedPgPool(pool: PgPool, initializationError: unknown): Promise<never> {
+  try {
+    await pool.end();
+  } catch (cleanupError) {
+    throw new AggregateError(
+      [initializationError, cleanupError],
+      "PostgreSQL runtime initialization and pool cleanup both failed",
+      { cause: initializationError },
+    );
+  }
+  throw initializationError;
+}
+
 /** In-memory identity (unit tests / no Docker). */
 export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const store = createMemoryIdentityStore();
@@ -264,7 +341,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     photo: Object.freeze({ store: photoStore }),
     accessTokenSecret,
     csrfProofSecret,
-    staffDirectory,
+    staffDirectory: memoryStaffDirectory,
     pendingStore: processPendingActionStore,
     stepUpProofStore: processStepUpProofStore,
     pool: null,
@@ -275,15 +352,17 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
 /** Postgres runtime: one verified laundry_app pool, with no owner connection or seed path. */
 export async function createPgLocalRuntime(
   connectionString: string,
+  expectedDemoOnly: boolean,
   config: LocalServerConfig = parseLocalServerConfig(process.env),
   dependencies: CreatePgLocalRuntimeDependencies = defaultPgRuntimeDependencies,
 ): Promise<LocalRuntime> {
   const appPool = dependencies.createPool({ connectionString });
+  let pgStaffDirectory: readonly LocalStaffDirectoryEntry[];
   try {
-    await dependencies.assertReady(appPool);
+    await dependencies.assertReady(appPool, expectedDemoOnly);
+    pgStaffDirectory = freezeStaffDirectory(await dependencies.loadStaffDirectory(appPool));
   } catch (error) {
-    await appPool.end();
-    throw error;
+    return closeFailedPgPool(appPool, error);
   }
 
   const store = createPgIdentityStore(appPool);
@@ -329,7 +408,7 @@ export async function createPgLocalRuntime(
     photo: Object.freeze({ store: photoStore }),
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSecret: config.csrfProofSecret,
-    staffDirectory,
+    staffDirectory: pgStaffDirectory,
     pendingStore: processPendingActionStore,
     stepUpProofStore: processStepUpProofStore,
     pool: appPool,
@@ -345,15 +424,17 @@ export async function createPgLocalRuntime(
 export async function createLocalRuntime(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<LocalRuntime> {
-  const hostConfig = parseLocalHostConfig(env);
-  const databaseUrl = resolveRuntimeDatabaseUrl(env);
   const isProduction = env.NODE_ENV === "production";
-  if (isProduction && databaseUrl === null) {
+  const explicitDatabaseUrl = env.DATABASE_URL?.trim() ?? "";
+  if (isProduction && explicitDatabaseUrl.length === 0) {
     throw new Error("Production runtime requires DATABASE_URL for the laundry_app role");
   }
+  const hostConfig = parseLocalHostConfig(env);
+  const databaseUrl = resolveRuntimeDatabaseUrl(env);
   if (databaseUrl !== null) {
     return createPgLocalRuntime(
       databaseUrl,
+      env.LAUNDRY_LOCAL_DEMO === "1",
       Object.freeze({
         ...hostConfig,
         ...parseLocalSigningSecrets(env),
