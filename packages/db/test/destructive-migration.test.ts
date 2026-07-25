@@ -61,6 +61,7 @@ describe("destructive migration static reject", () => {
       "0014_order_list_summary_indexes.sql",
       "0015_m2_counter_production_hardening.sql",
       "0016_local_bootstrap.sql",
+      "0017_local_runtime_readiness.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

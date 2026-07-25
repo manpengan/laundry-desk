@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
-import { readFile, readdir } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 const rootUrl = new URL("../../", import.meta.url);
+const execFileAsync = promisify(execFile);
 const governanceFiles = [
   "README.md",
   "AGENTS.md",
@@ -281,6 +287,11 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   assert.doesNotMatch(workflow, /set -x|echo\s+["']?\$\{?LAUNDRY_(?:ACCESS|CSRF|BOOTSTRAP)/u);
 });
 
+test("serializes server test files that mutate shared PostgreSQL roles", async () => {
+  const serverPackage = JSON.parse(await readRepositoryFile("apps/server/package.json"));
+  assert.match(serverPackage.scripts?.test ?? "", /--test-concurrency=1/u);
+});
+
 test("shares generic local login inputs across HTTP and browser smokes", async () => {
   const smoke = await readRepositoryFile("tools/compose/smoke-test.sh");
   const e2e = await readRepositoryFile("apps/web/e2e/local-login.spec.ts");
@@ -307,6 +318,114 @@ test("discovers the compose Postgres service instead of a fixed container name",
     assert.match(source, /docker compose/u, `${path} must use compose service discovery`);
     assert.match(source, /\bps\b[^\n]*-q[^\n]*postgres/u);
     assert.doesNotMatch(source, /laundry-postgres-v2/u);
+  }
+});
+
+test("keeps RLS smoke database passwords out of process arguments", async () => {
+  const smoke = await readRepositoryFile("tools/compose/smoke-rls.sh");
+
+  assert.match(smoke, /\bPGPASSFILE\b/u);
+  assert.match(smoke, /\bchmod\s+600\b/u);
+  assert.match(
+    smoke,
+    /unset\s+LAUNDRY_APP_PASSWORD\s+POSTGRES_PASSWORD\s+DATABASE_URL\s+SUPERUSER_DATABASE_URL\s+PGPASSWORD/u,
+  );
+  assert.doesNotMatch(smoke, /\bpsql\s+["']?\$\{(?:APP|ADMIN)_DATABASE_URL\}/u);
+  assert.doesNotMatch(smoke, /docker\s+exec[\s\S]{0,160}-e\s+PGPASSWORD/u);
+  assert.match(smoke, /CREATE\s+TEMP(?:ORARY)?\s+TABLE/u);
+});
+
+test("scrubs inherited database secrets before invoking RLS smoke subprocesses", async () => {
+  const fixtureDirectory = await mkdtemp(join(tmpdir(), "laundry-smoke-env-"));
+  const fakePsql = join(fixtureDirectory, "psql");
+  const fakeChmod = join(fixtureDirectory, "chmod");
+  const smokeScript = fileURLToPath(new URL("tools/compose/smoke-rls.sh", rootUrl));
+
+  try {
+    await writeFile(
+      fakePsql,
+      `#!/usr/bin/env bash
+set -euo pipefail
+if env | grep -Eq '^(LAUNDRY_APP_PASSWORD|POSTGRES_PASSWORD|DATABASE_URL|SUPERUSER_DATABASE_URL|PGPASSWORD|APP_PASSWORD_VALUE|ADMIN_PASSWORD_VALUE)='; then
+  exit 91
+fi
+if env | grep -Fq 'exported-app-secret'; then
+  exit 92
+fi
+[[ -n "\${PGPASSFILE:-}" && -f "\${PGPASSFILE}" ]]
+printf 'sanitized-subprocess\\n'
+`,
+    );
+    await writeFile(
+      fakeChmod,
+      `#!/usr/bin/env bash
+set -euo pipefail
+if env | grep -Fq 'exported-app-secret'; then
+  exit 93
+fi
+exec /bin/chmod "$@"
+`,
+    );
+    await chmod(fakePsql, 0o700);
+    await chmod(fakeChmod, 0o700);
+
+    const result = await execFileAsync(
+      "/bin/bash",
+      [
+        "-c",
+        'source "$1"; run_host_psql "$LAUNDRY_APP_USER" "$APP_PASSWORD_VALUE" -c "SELECT 1"',
+        "_",
+        smokeScript,
+      ],
+      {
+        env: {
+          ...process.env,
+          PATH: `${fixtureDirectory}:${process.env.PATH ?? ""}`,
+          TMPDIR: fixtureDirectory,
+          LAUNDRY_APP_PASSWORD: "exported-app-secret",
+          POSTGRES_PASSWORD: "exported-admin-secret",
+          DATABASE_URL: "postgres://exported-app-url",
+          SUPERUSER_DATABASE_URL: "postgres://exported-admin-url",
+          PGPASSWORD: "exported-libpq-secret",
+          password: "preexisting-exported-password",
+          escaped_password: "preexisting-exported-escaped-password",
+        },
+      },
+    );
+
+    assert.equal(result.stdout.trim(), "sanitized-subprocess");
+    assert.deepEqual((await readdir(fixtureDirectory)).sort(), ["chmod", "psql"]);
+  } finally {
+    await rm(fixtureDirectory, { force: true, recursive: true });
+  }
+});
+
+test("rejects multiline pgpass fields before creating a credential file", async () => {
+  const fixtureDirectory = await mkdtemp(join(tmpdir(), "laundry-smoke-pgpass-"));
+  const smokeScript = fileURLToPath(new URL("tools/compose/smoke-rls.sh", rootUrl));
+
+  try {
+    await assert.rejects(
+      execFileAsync(
+        "/bin/bash",
+        [
+          "-c",
+          'source "$1"; create_pgpass_file "$2" 5432 laundry_app app_secret',
+          "_",
+          smokeScript,
+          "host\ninjection",
+        ],
+        {
+          env: {
+            ...process.env,
+            TMPDIR: fixtureDirectory,
+          },
+        },
+      ),
+    );
+    assert.deepEqual(await readdir(fixtureDirectory), []);
+  } finally {
+    await rm(fixtureDirectory, { force: true, recursive: true });
   }
 });
 

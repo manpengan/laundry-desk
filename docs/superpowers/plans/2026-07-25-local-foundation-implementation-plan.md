@@ -471,7 +471,6 @@ export LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD="$(openssl rand -base64 36 | tr -d '\n')
 export LAUNDRY_BOOTSTRAP_ADMIN_PIN="$(
   node -e 'console.log(require("node:crypto").randomInt(100000,1000000))'
 )"
-export LAUNDRY_LOCAL_DEMO=1
 compose_file="tools/compose/docker-compose.yml"
 web_pid=""
 cleanup() {

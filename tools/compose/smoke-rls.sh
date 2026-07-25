@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Real PostgreSQL RLS smoke. Uses laundry_app only; superuser is never used for
-# the assertions so a passing result cannot be a BYPASSRLS false positive.
+# Real PostgreSQL RLS smoke. A superuser creates the second global organization,
+# while every isolation and permission assertion runs as laundry_app so a passing
+# result cannot be a BYPASSRLS false positive.
 set -euo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${LAUNDRY_COMPOSE_FILE:-${SCRIPT_DIR}/docker-compose.yml}"
@@ -9,8 +11,11 @@ PGHOST="${PGHOST:-127.0.0.1}"
 PGPORT="${PGPORT:-8543}"
 PGDATABASE="${PGDATABASE:-laundry_v2}"
 LAUNDRY_APP_USER="${LAUNDRY_APP_USER:-laundry_app}"
-LAUNDRY_APP_PASSWORD="${LAUNDRY_APP_PASSWORD:-app_secure_password}"
-APP_DATABASE_URL="${DATABASE_URL:-postgresql://${LAUNDRY_APP_USER}:${LAUNDRY_APP_PASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}}"
+POSTGRES_USER="${POSTGRES_USER:-postgres}"
+APP_PASSWORD_VALUE="${LAUNDRY_APP_PASSWORD:-app_secure_password}"
+ADMIN_PASSWORD_VALUE="${POSTGRES_PASSWORD:-postgres_secure_password}"
+export -n APP_PASSWORD_VALUE ADMIN_PASSWORD_VALUE 2>/dev/null || true
+unset LAUNDRY_APP_PASSWORD POSTGRES_PASSWORD DATABASE_URL SUPERUSER_DATABASE_URL PGPASSWORD
 
 ORG_A="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 STAFF_A="11111111-1111-4111-8111-111111111103"
@@ -38,16 +43,109 @@ container_running() {
     docker inspect -f '{{.State.Running}}' "${container}" 2>/dev/null | grep -qx true
 }
 
+pgpass_escape() {
+  local value
+  export -n value 2>/dev/null || true
+  value="$1"
+  [[ "${value}" != *$'\n'* && "${value}" != *$'\r'* ]] ||
+    die "PostgreSQL connection fields cannot contain line breaks"
+  value="${value//\\/\\\\}"
+  value="${value//:/\\:}"
+  printf '%s' "${value}"
+}
+
+create_pgpass_file() {
+  local host="$1"
+  local port="$2"
+  local user="$3"
+  local password
+  local escaped_host escaped_port escaped_database escaped_user escaped_password
+  local passfile=""
+  export -n password escaped_password 2>/dev/null || true
+  password="$4"
+  escaped_host="$(pgpass_escape "${host}")" || return 1
+  escaped_port="$(pgpass_escape "${port}")" || return 1
+  escaped_database="$(pgpass_escape "${PGDATABASE}")" || return 1
+  escaped_user="$(pgpass_escape "${user}")" || return 1
+  escaped_password="$(pgpass_escape "${password}")" || return 1
+  passfile="$(mktemp "${TMPDIR:-/tmp}/laundry-smoke-pgpass.XXXXXX")"
+  if ! chmod 600 "${passfile}" ||
+    ! printf '%s:%s:%s:%s:%s\n' \
+      "${escaped_host}" \
+      "${escaped_port}" \
+      "${escaped_database}" \
+      "${escaped_user}" \
+      "${escaped_password}" >"${passfile}"; then
+    rm -f -- "${passfile}"
+    return 1
+  fi
+  printf '%s\n' "${passfile}"
+}
+
+run_host_psql() (
+  local user="$1"
+  local password
+  export -n password 2>/dev/null || true
+  password="$2"
+  shift 2
+  local passfile=""
+  passfile="$(create_pgpass_file "${PGHOST}" "${PGPORT}" "${user}" "${password}")" || exit 1
+  cleanup_host_pgpass() {
+    rm -f -- "${passfile}"
+  }
+  trap cleanup_host_pgpass EXIT
+  PGPASSFILE="${passfile}" psql --no-password \
+    -h "${PGHOST}" -p "${PGPORT}" -U "${user}" -d "${PGDATABASE}" "$@"
+)
+
+run_container_psql() (
+  local container="$1"
+  local user="$2"
+  local password
+  export -n password 2>/dev/null || true
+  password="$3"
+  shift 3
+  local host_passfile="" container_passfile=""
+  host_passfile="$(create_pgpass_file "127.0.0.1" "5432" "${user}" "${password}")" || exit 1
+  container_passfile="/tmp/$(basename "${host_passfile}")"
+  cleanup_container_pgpass() {
+    docker exec "${container}" sh -c 'rm -f -- "$1"' sh "${container_passfile}" \
+      >/dev/null 2>&1 || true
+    rm -f -- "${host_passfile}"
+  }
+  trap cleanup_container_pgpass EXIT
+  docker cp "${host_passfile}" "${container}:${container_passfile}" >/dev/null
+  docker exec "${container}" chmod 600 "${container_passfile}"
+  docker exec -i -e PGPASSFILE="${container_passfile}" "${container}" \
+    psql --no-password -h 127.0.0.1 -p 5432 -U "${user}" -d "${PGDATABASE}" "$@"
+)
+
 psql_app() {
   if command -v psql >/dev/null 2>&1; then
-    psql "${APP_DATABASE_URL}" -v ON_ERROR_STOP=1 -X -q -At "$@"
+    run_host_psql "${LAUNDRY_APP_USER}" "${APP_PASSWORD_VALUE}" \
+      -v ON_ERROR_STOP=1 -X -q -At "$@"
     return
   fi
   if container_running; then
     local container
     container="$(compose_postgres_container)"
-    docker exec -i -e PGPASSWORD="${LAUNDRY_APP_PASSWORD}" "${container}" \
-      psql -U "${LAUNDRY_APP_USER}" -d "${PGDATABASE}" -v ON_ERROR_STOP=1 -X -q -At "$@"
+    run_container_psql "${container}" "${LAUNDRY_APP_USER}" "${APP_PASSWORD_VALUE}" \
+      -v ON_ERROR_STOP=1 -X -q -At "$@"
+    return
+  fi
+  die "need host psql or a running compose postgres service"
+}
+
+psql_admin() {
+  if command -v psql >/dev/null 2>&1; then
+    run_host_psql "${POSTGRES_USER}" "${ADMIN_PASSWORD_VALUE}" -v ON_ERROR_STOP=1 -X -q -At "$@"
+    return
+  fi
+  if container_running; then
+    local container
+    container="$(compose_postgres_container)"
+    run_container_psql "${container}" "${POSTGRES_USER}" "${ADMIN_PASSWORD_VALUE}" \
+      -v ON_ERROR_STOP=1 -X -q -At "$@"
     return
   fi
   die "need host psql or a running compose postgres service"
@@ -65,7 +163,7 @@ require_tables() {
     found="$(psql_app -c "SELECT to_regclass('public.${table}')::text")"
     [[ "${found}" == "${table}" ]] || die "missing formal table: ${table}"
   done
-  pass "all formal migrations (0001–0014) are present"
+  pass "all formal migrations (0001–0017) are present"
 }
 
 assert_default_closed() {
@@ -87,6 +185,12 @@ SQL
 }
 
 seed_second_tenant() {
+  psql_admin <<SQL
+INSERT INTO orgs (id, code, name, created_at, updated_at)
+VALUES ('${ORG_B}'::uuid, 'rls-smoke-b', 'RLS Smoke B', now(), now())
+ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, name = EXCLUDED.name, updated_at = EXCLUDED.updated_at;
+SQL
+
   psql_app <<SQL
 BEGIN;
 SET LOCAL app.org_id = '${ORG_B}';
@@ -94,10 +198,6 @@ DELETE FROM staff_store_roles WHERE store_id = '${STORE_B}'::uuid;
 DELETE FROM staffs WHERE id = '${STAFF_B}'::uuid;
 DELETE FROM stores WHERE id = '${STORE_B}'::uuid;
 COMMIT;
-
-INSERT INTO orgs (id, code, name, created_at, updated_at)
-VALUES ('${ORG_B}'::uuid, 'rls-smoke-b', 'RLS Smoke B', now(), now())
-ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, name = EXCLUDED.name, updated_at = EXCLUDED.updated_at;
 
 BEGIN;
 SET LOCAL app.org_id = '${ORG_B}';
@@ -135,6 +235,48 @@ SQL
   pass "tenant A/B isolation holds under laundry_app"
 }
 
+assert_org_writes_denied() {
+  local output
+  if output="$(psql_app -c "UPDATE orgs SET name = name WHERE id = '${ORG_A}'::uuid" 2>&1)"; then
+    die "laundry_app retained UPDATE on global organizations"
+  fi
+  printf '%s\n' "${output}" | grep -Eq 'permission denied.*orgs' \
+    || die "unexpected organization write failure: ${output}"
+
+  if output="$(
+    psql_app -c \
+      "INSERT INTO orgs (id, code, name) VALUES ('cccccccc-cccc-4ccc-8ccc-cccccccccccc'::uuid, 'forbidden', 'Forbidden')" \
+      2>&1
+  )"; then
+    die "laundry_app retained INSERT on global organizations"
+  fi
+  printf '%s\n' "${output}" | grep -Eq 'permission denied.*orgs' \
+    || die "unexpected organization insert failure: ${output}"
+  pass "laundry_app cannot insert or update global organizations"
+}
+
+assert_runtime_ddl_denied() {
+  local output
+  if output="$(psql_app -c "CREATE TEMPORARY TABLE forbidden_runtime_temp (id integer)" 2>&1)"; then
+    die "laundry_app retained database TEMPORARY privilege"
+  fi
+  printf '%s\n' "${output}" | grep -Eq 'permission denied.*temporary.*database' \
+    || die "unexpected database TEMPORARY failure: ${output}"
+
+  if output="$(psql_app -c "CREATE SCHEMA forbidden_runtime_schema" 2>&1)"; then
+    die "laundry_app retained database CREATE privilege"
+  fi
+  printf '%s\n' "${output}" | grep -Eq 'permission denied.*database' \
+    || die "unexpected database CREATE failure: ${output}"
+
+  if output="$(psql_app -c "CREATE TABLE public.forbidden_runtime_table (id integer)" 2>&1)"; then
+    die "laundry_app retained public schema CREATE privilege"
+  fi
+  printf '%s\n' "${output}" | grep -Eq 'permission denied.*schema' \
+    || die "unexpected public schema CREATE failure: ${output}"
+  pass "laundry_app cannot create temporary, database, or public-schema objects"
+}
+
 assert_no_bypass() {
   local output
   if output="$(psql_app <<'SQL' 2>&1
@@ -155,8 +297,12 @@ main() {
   assert_default_closed
   seed_second_tenant
   assert_tenant_isolation
+  assert_org_writes_denied
+  assert_runtime_ddl_denied
   assert_no_bypass
   pass "real PostgreSQL RLS smoke passed"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

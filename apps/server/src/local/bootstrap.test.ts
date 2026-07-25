@@ -11,7 +11,6 @@ import {
   BootstrapError,
   BootstrapInputSchema,
   LOCAL_BOOTSTRAP_ADVISORY_LOCK_ID,
-  assertLocalBootstrapReady,
   bootstrapLocalIdentity,
   computeBootstrapProfileHash,
   type BootstrapInput,
@@ -21,7 +20,6 @@ import { LOCAL_PROFILE } from "./profile.js";
 const PASSWORD_PHC = "$argon2id$v=19$m=19456,t=2,p=1$password$hash";
 const PIN_PHC = "$argon2id$v=19$m=19456,t=2,p=1$pin$hash";
 const serverPackagePath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json");
-
 type QueryRecord = Readonly<{
   sql: string;
   params: readonly unknown[] | undefined;
@@ -689,109 +687,4 @@ test("serializes two different calls into one creation and one safe conflict", a
   }
   assert.equal(database.events.filter((event) => event === "commit").length, 1);
   assert.equal(database.events.filter((event) => event === "rollback").length, 1);
-});
-
-function createReadinessPool(
-  row: ReturnType<typeof readyProfileRow> | undefined,
-): Readonly<{ pool: PgPool; queries: QueryRecord[]; released: () => boolean }> {
-  const queries: QueryRecord[] = [];
-  let didRelease = false;
-  const client = {
-    async query(
-      sql: string,
-      params?: readonly unknown[],
-    ): Promise<{ rows: readonly unknown[]; rowCount: number }> {
-      queries.push(Object.freeze({ sql, params }));
-      if (sql.includes("current_user")) {
-        return { rows: row === undefined ? [] : [row], rowCount: row === undefined ? 0 : 1 };
-      }
-      return { rows: [], rowCount: 0 };
-    },
-    release(): void {
-      didRelease = true;
-    },
-  } as unknown as PgPoolClient;
-  return Object.freeze({
-    pool: { connect: async () => client } as unknown as PgPool,
-    queries,
-    released: () => didRelease,
-  });
-}
-
-function readyProfileRow(
-  overrides: Partial<
-    Readonly<{
-      current_role: string;
-      current_role_is_superuser: boolean;
-      current_role_bypasses_rls: boolean;
-    }>
-  > = {},
-) {
-  return Object.freeze({
-    current_role: "laundry_app",
-    current_role_is_superuser: false,
-    current_role_bypasses_rls: false,
-    org_id: LOCAL_PROFILE.orgId,
-    org_code: LOCAL_PROFILE.orgCode,
-    org_name: LOCAL_PROFILE.orgName,
-    store_id: LOCAL_PROFILE.storeId,
-    store_code: LOCAL_PROFILE.storeCode,
-    store_name: LOCAL_PROFILE.storeName,
-    store_timezone: LOCAL_PROFILE.timezone,
-    admin_staff_id: LOCAL_PROFILE.adminStaffId,
-    admin_is_active: true,
-    role_id: BOOTSTRAP_ADMIN_ROLE_ID,
-    role_name: "admin",
-    role_is_active: true,
-    ...overrides,
-  });
-}
-
-test("app-role readiness verifies the complete fixed local profile", async () => {
-  const database = createReadinessPool(readyProfileRow());
-
-  await assertLocalBootstrapReady(database.pool);
-
-  assert.equal(database.released(), true);
-  assert.ok(database.queries.some((query) => query.sql.includes("app.org_id")));
-  assert.ok(database.queries.some((query) => query.sql.includes("app.store_id")));
-  assert.ok(database.queries.some((query) => query.sql.includes("current_user")));
-  assert.equal(database.queries.at(-1)?.sql, "COMMIT");
-});
-
-test("app-role readiness rejects admin connections and missing bootstrap state", async (t) => {
-  await t.test("admin connection", async () => {
-    const database = createReadinessPool(readyProfileRow({ current_role: "postgres" }));
-    await assert.rejects(
-      () => assertLocalBootstrapReady(database.pool),
-      /LOCAL_RUNTIME_NOT_READY/u,
-    );
-    assert.equal(database.queries.at(-1)?.sql, "ROLLBACK");
-    assert.equal(database.released(), true);
-  });
-
-  await t.test("missing profile", async () => {
-    const database = createReadinessPool(undefined);
-    await assert.rejects(
-      () => assertLocalBootstrapReady(database.pool),
-      /LOCAL_RUNTIME_NOT_READY/u,
-    );
-    assert.equal(database.queries.at(-1)?.sql, "ROLLBACK");
-    assert.equal(database.released(), true);
-  });
-
-  for (const [name, overrides] of [
-    ["superuser app role", { current_role_is_superuser: true }],
-    ["BYPASSRLS app role", { current_role_bypasses_rls: true }],
-  ] as const) {
-    await t.test(name, async () => {
-      const database = createReadinessPool(readyProfileRow(overrides));
-      await assert.rejects(
-        () => assertLocalBootstrapReady(database.pool),
-        /LOCAL_RUNTIME_NOT_READY/u,
-      );
-      assert.equal(database.queries.at(-1)?.sql, "ROLLBACK");
-      assert.equal(database.released(), true);
-    });
-  }
 });

@@ -99,6 +99,39 @@ export const BootstrapInputSchema: z.ZodType<BootstrapInput> = z
   .strict()
   .readonly();
 
+type BootstrapProfileHashInput = Pick<
+  BootstrapInput,
+  "profile" | "adminUsername" | "adminDisplayName" | "demoOnly"
+>;
+
+const canonicalProfile = (input: BootstrapProfileHashInput): string =>
+  JSON.stringify({
+    version: PROFILE_HASH_VERSION,
+    profile: {
+      orgId: input.profile.orgId,
+      storeId: input.profile.storeId,
+      adminStaffId: input.profile.adminStaffId,
+      orgCode: input.profile.orgCode,
+      storeCode: input.profile.storeCode,
+      orgName: input.profile.orgName,
+      storeName: input.profile.storeName,
+      timezone: input.profile.timezone,
+    },
+    admin: {
+      username: input.adminUsername,
+      displayName: input.adminDisplayName,
+    },
+    demoOnly: input.demoOnly,
+  });
+
+const computeParsedProfileHash = (input: BootstrapProfileHashInput): string =>
+  createHash("sha256").update(canonicalProfile(input), "utf8").digest("hex");
+
+export const computeBootstrapProfileHash = (rawInput: BootstrapInput): string => {
+  const input = BootstrapInputSchema.parse(rawInput);
+  return computeParsedProfileHash(input);
+};
+
 type BootstrapDependencies = Readonly<{
   pool: PgPool;
   passwordPort: PasswordPort;
@@ -162,21 +195,42 @@ type CollisionRow = Readonly<{
 }>;
 
 type RuntimeProfileRow = Readonly<{
+  authenticated_role: string;
+  authenticated_role_has_memberships: boolean;
+  authenticated_role_can_login: boolean;
+  authenticated_role_inherits: boolean;
+  authenticated_role_can_create_db: boolean;
+  authenticated_role_can_create_role: boolean;
+  authenticated_role_can_replicate: boolean;
+  authenticated_role_owns_database: boolean;
+  authenticated_role_owns_public_schema: boolean;
+  authenticated_role_owns_public_objects: boolean;
+  authenticated_role_can_create_database_objects: boolean;
+  authenticated_role_can_create_temporary_objects: boolean;
+  authenticated_role_can_create_public_objects: boolean;
+  effective_search_path: readonly string[];
   current_role: string;
   current_role_is_superuser: boolean;
   current_role_bypasses_rls: boolean;
   org_id: string;
   org_code: string;
   org_name: string;
+  org_demo_only: boolean;
   store_id: string;
   store_code: string;
   store_name: string;
   store_timezone: string;
   admin_staff_id: string;
+  admin_username: string;
+  admin_display_name: string;
   admin_is_active: boolean;
   role_id: string;
   role_name: string;
   role_is_active: boolean;
+}>;
+
+type ExplicitBootstrapReadyRow = Readonly<{
+  explicit_bootstrap_ready: boolean;
 }>;
 
 const LOCK_METADATA_SQL = `
@@ -256,31 +310,83 @@ const COLLISION_PREFLIGHT_SQL = `
 
 const READ_RUNTIME_PROFILE_SQL = `
   SELECT
+    session_user AS authenticated_role,
+    EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_roles granted_role
+      WHERE granted_role.oid <> runtime_role.oid
+        AND pg_catalog.pg_has_role(session_user, granted_role.oid, 'MEMBER')
+    ) AS authenticated_role_has_memberships,
+    runtime_role.rolcanlogin AS authenticated_role_can_login,
+    runtime_role.rolinherit AS authenticated_role_inherits,
+    runtime_role.rolcreatedb AS authenticated_role_can_create_db,
+    runtime_role.rolcreaterole AS authenticated_role_can_create_role,
+    runtime_role.rolreplication AS authenticated_role_can_replicate,
+    EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_database owned_database
+      WHERE owned_database.datname = pg_catalog.current_database()
+        AND owned_database.datdba = runtime_role.oid
+    ) AS authenticated_role_owns_database,
+    EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_namespace owned_schema
+      WHERE owned_schema.nspname = 'public'
+        AND owned_schema.nspowner = runtime_role.oid
+    ) AS authenticated_role_owns_public_schema,
+    (
+      EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_class owned_class
+        JOIN pg_catalog.pg_namespace owned_namespace
+          ON owned_namespace.oid = owned_class.relnamespace
+        WHERE owned_class.relowner = runtime_role.oid
+          AND owned_namespace.nspname = 'public'
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_proc owned_function
+        JOIN pg_catalog.pg_namespace owned_function_namespace
+          ON owned_function_namespace.oid = owned_function.pronamespace
+        WHERE owned_function.proowner = runtime_role.oid
+          AND owned_function_namespace.nspname = 'public'
+      )
+    ) AS authenticated_role_owns_public_objects,
+    pg_catalog.has_database_privilege(session_user, pg_catalog.current_database(), 'CREATE')
+      AS authenticated_role_can_create_database_objects,
+    pg_catalog.has_database_privilege(session_user, pg_catalog.current_database(), 'TEMPORARY')
+      AS authenticated_role_can_create_temporary_objects,
+    pg_catalog.has_schema_privilege(session_user, 'public', 'CREATE')
+      AS authenticated_role_can_create_public_objects,
+    pg_catalog.current_schemas(false)::text[] AS effective_search_path,
     current_user AS current_role,
     runtime_role.rolsuper AS current_role_is_superuser,
     runtime_role.rolbypassrls AS current_role_bypasses_rls,
     org.id::text AS org_id,
     org.code AS org_code,
     org.name AS org_name,
+    org.demo_only AS org_demo_only,
     store.id::text AS store_id,
     store.code AS store_code,
     store.name AS store_name,
     store.timezone AS store_timezone,
     admin.id::text AS admin_staff_id,
+    admin.username AS admin_username,
+    admin.display_name AS admin_display_name,
     admin.is_active AS admin_is_active,
     role.id::text AS role_id,
     role.role AS role_name,
     role.is_active AS role_is_active
-  FROM pg_roles runtime_role
-  JOIN orgs org
-    ON runtime_role.rolname = current_user
-  JOIN stores store
+  FROM pg_catalog.pg_roles runtime_role
+  JOIN public.orgs org
+    ON runtime_role.rolname = session_user
+  JOIN public.stores store
     ON store.org_id = org.id
    AND store.id = $2::uuid
-  JOIN staffs admin
+  JOIN public.staffs admin
     ON admin.org_id = org.id
    AND admin.id = $3::uuid
-  JOIN staff_store_roles role
+  JOIN public.staff_store_roles role
     ON role.id = $4::uuid
    AND role.org_id = org.id
    AND role.store_id = store.id
@@ -289,13 +395,39 @@ const READ_RUNTIME_PROFILE_SQL = `
   LIMIT 1
 `;
 
-const runtimeProfileMatches = (row: RuntimeProfileRow): boolean =>
+const READ_EXPLICIT_BOOTSTRAP_READY_SQL = `
+  SELECT public.laundry_local_bootstrap_ready(
+    $1::uuid,
+    $2::uuid,
+    $3::uuid,
+    $4::text,
+    $5::boolean
+  ) AS explicit_bootstrap_ready
+`;
+
+const runtimeProfileMatches = (row: RuntimeProfileRow, expectedDemoOnly: boolean): boolean =>
+  row.authenticated_role === "laundry_app" &&
+  !row.authenticated_role_has_memberships &&
+  row.authenticated_role_can_login &&
+  !row.authenticated_role_inherits &&
+  !row.authenticated_role_can_create_db &&
+  !row.authenticated_role_can_create_role &&
+  !row.authenticated_role_can_replicate &&
+  !row.authenticated_role_owns_database &&
+  !row.authenticated_role_owns_public_schema &&
+  !row.authenticated_role_owns_public_objects &&
+  !row.authenticated_role_can_create_database_objects &&
+  !row.authenticated_role_can_create_temporary_objects &&
+  !row.authenticated_role_can_create_public_objects &&
+  row.effective_search_path.length === 1 &&
+  row.effective_search_path[0] === "public" &&
   row.current_role === "laundry_app" &&
   !row.current_role_is_superuser &&
   !row.current_role_bypasses_rls &&
   row.org_id === LOCAL_PROFILE.orgId &&
   row.org_code === LOCAL_PROFILE.orgCode &&
   row.org_name === LOCAL_PROFILE.orgName &&
+  row.org_demo_only === expectedDemoOnly &&
   row.store_id === LOCAL_PROFILE.storeId &&
   row.store_code === LOCAL_PROFILE.storeCode &&
   row.store_name === LOCAL_PROFILE.storeName &&
@@ -308,9 +440,13 @@ const runtimeProfileMatches = (row: RuntimeProfileRow): boolean =>
 
 /**
  * Verify runtime connectivity and the fixed local profile entirely through laundry_app.
- * Owner-only bootstrap metadata is deliberately outside this readiness boundary.
+ * An owner-owned boolean function proves the explicit bootstrap marker without granting
+ * laundry_app direct access to the metadata table.
  */
-export async function assertLocalBootstrapReady(pool: PgPool): Promise<void> {
+export async function assertLocalBootstrapReady(
+  pool: PgPool,
+  expectedDemoOnly = false,
+): Promise<void> {
   try {
     await withStoreGuc(
       pool,
@@ -327,7 +463,26 @@ export async function assertLocalBootstrapReady(pool: PgPool): Promise<void> {
           BOOTSTRAP_ADMIN_ROLE_ID,
         ]);
         const row = result.rows[0];
-        if (row === undefined || !runtimeProfileMatches(row)) {
+        if (row === undefined || !runtimeProfileMatches(row, expectedDemoOnly)) {
+          throw new LocalRuntimeReadinessError();
+        }
+        const profileHash = computeParsedProfileHash({
+          profile: LOCAL_PROFILE,
+          adminUsername: row.admin_username,
+          adminDisplayName: row.admin_display_name,
+          demoOnly: expectedDemoOnly,
+        });
+        const marker = await client.query<ExplicitBootstrapReadyRow>(
+          READ_EXPLICIT_BOOTSTRAP_READY_SQL,
+          [
+            LOCAL_PROFILE.orgId,
+            LOCAL_PROFILE.storeId,
+            LOCAL_PROFILE.adminStaffId,
+            profileHash,
+            expectedDemoOnly,
+          ],
+        );
+        if (marker.rows[0]?.explicit_bootstrap_ready !== true) {
           throw new LocalRuntimeReadinessError();
         }
       },
@@ -339,34 +494,6 @@ export async function assertLocalBootstrapReady(pool: PgPool): Promise<void> {
     throw new LocalRuntimeReadinessError({ cause: error });
   }
 }
-
-const canonicalProfile = (input: BootstrapInput): string =>
-  JSON.stringify({
-    version: PROFILE_HASH_VERSION,
-    profile: {
-      orgId: input.profile.orgId,
-      storeId: input.profile.storeId,
-      adminStaffId: input.profile.adminStaffId,
-      orgCode: input.profile.orgCode,
-      storeCode: input.profile.storeCode,
-      orgName: input.profile.orgName,
-      storeName: input.profile.storeName,
-      timezone: input.profile.timezone,
-    },
-    admin: {
-      username: input.adminUsername,
-      displayName: input.adminDisplayName,
-    },
-    demoOnly: input.demoOnly,
-  });
-
-const computeParsedProfileHash = (input: BootstrapInput): string =>
-  createHash("sha256").update(canonicalProfile(input), "utf8").digest("hex");
-
-export const computeBootstrapProfileHash = (rawInput: BootstrapInput): string => {
-  const input = BootstrapInputSchema.parse(rawInput);
-  return computeParsedProfileHash(input);
-};
 
 const resultFor = (input: BootstrapInput, status: BootstrapResult["status"]): BootstrapResult =>
   Object.freeze({
