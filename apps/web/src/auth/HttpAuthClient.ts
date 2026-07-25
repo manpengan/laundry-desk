@@ -19,6 +19,27 @@ import type { AuthClient } from "./AuthClient.js";
 
 /** Matches packages/contracts CSRF_HEADER_NAME (avoid web→contracts dep for host). */
 const CSRF_HEADER_NAME = "x-csrf-token";
+const SUPERSEDED_LOGIN_MESSAGE = "登录请求已被新的登录操作取代";
+
+const EMPTY_STAFF_DIRECTORY: readonly SwitchableStaff[] = Object.freeze([]);
+const EMPTY_DISPLAY: AccessSession["display"] = Object.freeze({
+  store_name: "",
+  staff_name: "",
+  org_code: "",
+  store_code: "",
+});
+
+type HttpAuthState = Readonly<{
+  staffDirectory: readonly SwitchableStaff[];
+  display: AccessSession["display"];
+  accessToken: string | null;
+}>;
+
+const EMPTY_AUTH_STATE: HttpAuthState = Object.freeze({
+  staffDirectory: EMPTY_STAFF_DIRECTORY,
+  display: EMPTY_DISPLAY,
+  accessToken: null,
+});
 
 export type HttpAuthClientOptions = Readonly<{
   /** API origin, e.g. http://127.0.0.1:8787 */
@@ -117,14 +138,8 @@ function projectSession(
 export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient {
   const base = options.apiBaseUrl.replace(/\/$/u, "");
   const fetchImpl = options.fetchImpl ?? fetch;
-  let staffDirectory: readonly SwitchableStaff[] = Object.freeze([]);
-  let lastDisplay: AccessSession["display"] = Object.freeze({
-    store_name: "",
-    staff_name: "",
-    org_code: "",
-    store_code: "",
-  });
-  let accessToken: string | null = null;
+  let authState = EMPTY_AUTH_STATE;
+  let latestLoginAttempt = 0;
 
   const readCsrf = (): string | null => {
     if (typeof document === "undefined") return null;
@@ -134,7 +149,6 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
   };
 
   const loadStaff = async (): Promise<readonly SwitchableStaff[] | null> => {
-    staffDirectory = Object.freeze([]);
     try {
       const res = await fetchImpl(`${base}/api/v2/local/staff`, { credentials: "include" });
       if (!res.ok) return null;
@@ -158,19 +172,26 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
           }),
         );
       }
-      const directory = Object.freeze(next);
-      staffDirectory = directory;
-      return directory;
+      return Object.freeze(next);
     } catch {
       return null;
     }
   };
 
   const login = async (values: LoginFormValues): Promise<AuthResult<AccessSession>> => {
+    const attempt = ++latestLoginAttempt;
+    authState = EMPTY_AUTH_STATE;
+    const superseded = (): AuthResult<AccessSession> => asError(SUPERSEDED_LOGIN_MESSAGE);
+    const failLatest = (message: string): AuthResult<AccessSession> => {
+      if (attempt !== latestLoginAttempt) return superseded();
+      authState = EMPTY_AUTH_STATE;
+      return asError(message);
+    };
+
     const currentDirectory = await loadStaff();
+    if (attempt !== latestLoginAttempt) return superseded();
     if (currentDirectory === null) {
-      accessToken = null;
-      return asError("无法从本地服务器加载员工目录");
+      return failLatest("无法从本地服务器加载员工目录");
     }
     try {
       const res = await fetchImpl(`${base}/api/v2/auth/login`, {
@@ -185,37 +206,45 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
           device_id: getDeviceId(),
         }),
       });
+      if (attempt !== latestLoginAttempt) return superseded();
       const body: unknown = await res.json();
+      if (attempt !== latestLoginAttempt) return superseded();
       if (!isRecord(body) || body.ok !== true) {
         const message =
           isRecord(body) && isRecord(body.error) && typeof body.error.message === "string"
             ? body.error.message
             : "登录失败";
-        return asError(message);
+        return failLatest(message);
       }
       const payload = readAccessPayload(body.data);
-      if (payload === null) return asError("登录响应格式错误");
+      if (payload === null) return failLatest("登录响应格式错误");
       const staff = currentDirectory.find((entry) => entry.staff_id === payload.session.staff_id);
-      if (staff === undefined) return asError("登录响应缺少员工权限");
-      accessToken = payload.access_token;
-      lastDisplay = Object.freeze({
+      if (staff === undefined) return failLatest("登录响应缺少员工权限");
+      const display: AccessSession["display"] = Object.freeze({
         store_name: "",
         staff_name: staff.display_name,
         org_code: values.org_code,
         store_code: values.store_code,
       });
+      if (attempt !== latestLoginAttempt) return superseded();
+      authState = Object.freeze({
+        staffDirectory: currentDirectory,
+        display,
+        accessToken: payload.access_token,
+      });
       return Object.freeze({
         ok: true as const,
-        data: projectSession(payload, staff.role, lastDisplay),
+        data: projectSession(payload, staff.role, display),
       });
     } catch {
-      return asError("无法连接本地服务器");
+      return failLatest("无法连接本地服务器");
     }
   };
 
   const createPinChallenge = async (
     request: PinChallengeRequest,
   ): Promise<AuthResult<PinChallengeResponse>> => {
+    const accessToken = authState.accessToken;
     if (accessToken === null) return asPinError("未登录");
     const csrf = readCsrf();
     if (csrf === null) return asPinError("缺少 CSRF cookie");
@@ -258,6 +287,8 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
   };
 
   const verifyPin = async (request: PinVerifyRequest): Promise<AuthResult<AccessSession>> => {
+    const stateAtStart = authState;
+    const accessToken = stateAtStart.accessToken;
     if (accessToken === null) return asError("未登录");
     const csrf = readCsrf();
     if (csrf === null) return asError("缺少 CSRF cookie");
@@ -285,13 +316,23 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
       }
       const payload = readAccessPayload(body.data);
       if (payload === null) return asError("PIN 验证响应格式错误");
-      const staff = staffDirectory.find((entry) => entry.staff_id === payload.session.staff_id);
+      const staff = stateAtStart.staffDirectory.find(
+        (entry) => entry.staff_id === payload.session.staff_id,
+      );
       if (staff === undefined) return asError("PIN 验证响应缺少员工权限");
-      accessToken = payload.access_token;
-      lastDisplay = Object.freeze({ ...lastDisplay, staff_name: staff.display_name });
+      if (authState !== stateAtStart) return asError("认证状态已变更，请重试");
+      const display: AccessSession["display"] = Object.freeze({
+        ...stateAtStart.display,
+        staff_name: staff.display_name,
+      });
+      authState = Object.freeze({
+        staffDirectory: stateAtStart.staffDirectory,
+        display,
+        accessToken: payload.access_token,
+      });
       return Object.freeze({
         ok: true as const,
-        data: projectSession(payload, staff.role, lastDisplay),
+        data: projectSession(payload, staff.role, display),
       });
     } catch {
       return asError("无法连接本地服务器");
@@ -301,6 +342,7 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
   const verifyStepUpPin = async (
     request: PinVerifyRequest,
   ): Promise<AuthResult<StepUpProofResult>> => {
+    const accessToken = authState.accessToken;
     if (accessToken === null) return asStepUpError("未登录");
     const csrf = readCsrf();
     if (csrf === null) return asStepUpError("缺少 CSRF cookie");
@@ -341,7 +383,7 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
   };
 
   const listSwitchableStaff = (): readonly SwitchableStaff[] =>
-    Object.freeze(staffDirectory.map((s) => Object.freeze({ ...s })));
+    Object.freeze(authState.staffDirectory.map((s) => Object.freeze({ ...s })));
 
   return Object.freeze({
     login,

@@ -9,14 +9,14 @@ import { createHttpAuthClient } from "./HttpAuthClient.js";
 
 const ADMIN_STAFF_ID = "11111111-1111-4111-8111-111111111103";
 
-function staffDirectoryResponse(): Response {
+function staffDirectoryResponse(displayName = "店长"): Response {
   return new Response(
     JSON.stringify({
       ok: true,
       data: [
         {
           staff_id: ADMIN_STAFF_ID,
-          display_name: "店长",
+          display_name: displayName,
           role: "admin",
         },
       ],
@@ -25,17 +25,17 @@ function staffDirectoryResponse(): Response {
   );
 }
 
-function loginResponse(): Response {
+function loginResponse(accessToken = "aaa.bbb.ccc", sessionId = "s1"): Response {
   return new Response(
     JSON.stringify({
       ok: true,
       data: {
-        access_token: "aaa.bbb.ccc",
+        access_token: accessToken,
         token_type: "Bearer",
         expires_in: 900,
         storage: "memory_only",
         session: {
-          session_id: "s1",
+          session_id: sessionId,
           session_version: 1,
           org_id: "o1",
           store_id: "st1",
@@ -47,6 +47,62 @@ function loginResponse(): Response {
     }),
     { status: 200, headers: { "content-type": "application/json" } },
   );
+}
+
+function loginFailureResponse(message = "用户名或密码错误"): Response {
+  return new Response(
+    JSON.stringify({
+      ok: false,
+      error: { code: "AUTHENTICATION_FAILED", message },
+    }),
+    { status: 401, headers: { "content-type": "application/json" } },
+  );
+}
+
+type Deferred<T> = Readonly<{
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+}>;
+
+function createDeferred<T>(): Deferred<T> {
+  let resolvePromise!: (value: T) => void;
+  let rejectPromise!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+  return Object.freeze({
+    promise,
+    resolve: resolvePromise,
+    reject: rejectPromise,
+  });
+}
+
+async function withCsrfCookie<T>(run: () => Promise<T>): Promise<T> {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: Object.freeze({ cookie: "laundry_csrf=csrf-token" }),
+  });
+  try {
+    return await run();
+  } finally {
+    if (previous === undefined) {
+      Reflect.deleteProperty(globalThis, "document");
+    } else {
+      Object.defineProperty(globalThis, "document", previous);
+    }
+  }
+}
+
+function loginValues(orgCode = "local") {
+  return Object.freeze({
+    org_code: orgCode,
+    store_code: "main",
+    username: "admin",
+    password: "fixture-password",
+  });
 }
 
 async function assertSecondLoginRejectsStaleDirectory(
@@ -249,4 +305,136 @@ test("login surfaces network failure message", async () => {
   if (!result.ok) {
     assert.match(result.error.message, /本地服务器/);
   }
+});
+
+test("failed relogin clears the prior token before a later PIN request", async () => {
+  let loginCalls = 0;
+  const pinAuthorizations: Array<string | null> = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/v2/local/staff")) return staffDirectoryResponse();
+    if (url.endsWith("/api/v2/auth/login") && init?.method === "POST") {
+      loginCalls += 1;
+      return loginCalls === 1 ? loginResponse("old-token") : loginFailureResponse();
+    }
+    if (url.endsWith("/api/v2/auth/pin/challenges")) {
+      pinAuthorizations.push(new Headers(init?.headers).get("authorization"));
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          data: {
+            challenge_id: "challenge-1",
+            purpose: "quick_switch",
+            expires_at: 1_800_000_000,
+            max_attempts: 5,
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const client = createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787", fetchImpl });
+
+  assert.equal((await client.login(loginValues())).ok, true);
+  assert.equal((await client.login(loginValues())).ok, false);
+  assert.deepEqual(client.listSwitchableStaff(), []);
+
+  await withCsrfCookie(async () => {
+    const pin = await client.createPinChallenge({
+      purpose: "quick_switch",
+      target_staff_id: ADMIN_STAFF_ID,
+    });
+    assert.equal(pin.ok, false);
+    if (!pin.ok) assert.match(pin.error.message, /未登录/u);
+  });
+  assert.deepEqual(pinAuthorizations, []);
+});
+
+test("a delayed stale failure cannot clear a newer successful login", async () => {
+  const staleDirectory = createDeferred<Response>();
+  let directoryCalls = 0;
+  const pinAuthorizations: Array<string | null> = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/v2/local/staff")) {
+      directoryCalls += 1;
+      return directoryCalls === 1 ? staleDirectory.promise : staffDirectoryResponse("新店长");
+    }
+    if (url.endsWith("/api/v2/auth/login")) return loginResponse("new-token", "new-session");
+    if (url.endsWith("/api/v2/auth/pin/challenges/challenge-1/verify")) {
+      pinAuthorizations.push(new Headers(init?.headers).get("authorization"));
+      return loginResponse("rotated-token", "rotated-session");
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const client = createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787", fetchImpl });
+
+  const staleAttempt = client.login(loginValues("old-org"));
+  const currentResult = await client.login(loginValues("new-org"));
+  assert.equal(currentResult.ok, true);
+  staleDirectory.reject(new Error("stale directory failed"));
+  const staleResult = await staleAttempt;
+  assert.equal(staleResult.ok, false);
+  if (!staleResult.ok) assert.match(staleResult.error.message, /取代|取消/u);
+  assert.equal(client.listSwitchableStaff()[0]?.display_name, "新店长");
+
+  await withCsrfCookie(async () => {
+    const pin = await client.verifyPin({ challenge_id: "challenge-1", pin: "1234" });
+    assert.equal(pin.ok, true);
+    if (pin.ok) {
+      assert.equal(pin.data.display.staff_name, "新店长");
+      assert.equal(pin.data.display.org_code, "new-org");
+    }
+  });
+  assert.deepEqual(pinAuthorizations, ["Bearer new-token"]);
+});
+
+test("a delayed stale success cannot replace a newer successful login", async () => {
+  const staleLogin = createDeferred<Response>();
+  const staleLoginStarted = createDeferred<void>();
+  let directoryCalls = 0;
+  let loginCalls = 0;
+  const pinAuthorizations: Array<string | null> = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/v2/local/staff")) {
+      directoryCalls += 1;
+      return staffDirectoryResponse(directoryCalls === 1 ? "旧店长" : "新店长");
+    }
+    if (url.endsWith("/api/v2/auth/login")) {
+      loginCalls += 1;
+      if (loginCalls === 1) {
+        staleLoginStarted.resolve();
+        return staleLogin.promise;
+      }
+      return loginResponse("new-token", "new-session");
+    }
+    if (url.endsWith("/api/v2/auth/pin/challenges/challenge-1/verify")) {
+      pinAuthorizations.push(new Headers(init?.headers).get("authorization"));
+      return loginResponse("rotated-token", "rotated-session");
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const client = createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787", fetchImpl });
+
+  const staleAttempt = client.login(loginValues("old-org"));
+  await staleLoginStarted.promise;
+  const currentResult = await client.login(loginValues("new-org"));
+  assert.equal(currentResult.ok, true);
+  staleLogin.resolve(loginResponse("old-token", "old-session"));
+  const staleResult = await staleAttempt;
+  assert.equal(staleResult.ok, false);
+  if (!staleResult.ok) assert.match(staleResult.error.message, /取代|取消/u);
+  assert.equal(client.listSwitchableStaff()[0]?.display_name, "新店长");
+
+  await withCsrfCookie(async () => {
+    const pin = await client.verifyPin({ challenge_id: "challenge-1", pin: "1234" });
+    assert.equal(pin.ok, true);
+    if (pin.ok) {
+      assert.equal(pin.data.display.staff_name, "新店长");
+      assert.equal(pin.data.display.org_code, "new-org");
+    }
+  });
+  assert.deepEqual(pinAuthorizations, ["Bearer new-token"]);
 });
