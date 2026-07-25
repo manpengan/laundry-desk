@@ -1,7 +1,7 @@
 # laundry-desk 通用 V2 本地优先产品设计
 
 > 日期：2026-07-25
-> 状态：**Review**
+> 状态：**Approved**
 > Owner：Codex
 > 决策记录：[ADR-14](../../adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
 
@@ -69,8 +69,10 @@ PostgreSQL 16 127.0.0.1:8543
 - 浏览器开发地址固定为 `127.0.0.1`，不混用 `localhost`，避免 cookie、Origin
   和测试基线漂移。
 - Compose 端口只绑定 loopback；PG 与 API 不发布到 LAN。
-- Fastify 固定监听 `127.0.0.1`、`trustProxy:false`，只接受配置中的精确 `Host`
-  authority，并拒绝 forwarded host/proto。loopback 来源不豁免认证或授权。
+- Fastify 在宿主机运行时固定监听 `127.0.0.1`；Compose 容器内可监听
+  `0.0.0.0`，但端口只能发布到宿主 `127.0.0.1`。两种模式都使用
+  `trustProxy:false`，只接受配置中的精确 `Host` authority，并拒绝 forwarded
+  host/proto。loopback 来源不豁免认证或授权。
 - 未认证 `/health` 只返回最小存活状态；其他本地辅助接口全部鉴权。
 - `memory` runtime 仅用于单元测试。手工验收、Playwright 与 macOS smoke 均必须
   使用 `local-pg`。
