@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MIGRATIONS_DIR="${REPO_ROOT}/packages/db/src/migrations"
-POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-laundry-postgres-v2}"
+COMPOSE_FILE="${LAUNDRY_COMPOSE_FILE:-${SCRIPT_DIR}/docker-compose.yml}"
 
 PGHOST="${PGHOST:-127.0.0.1}"
 PGPORT="${PGPORT:-8543}"
@@ -28,8 +28,15 @@ log() {
   echo "=== [migrate-v2] $* ==="
 }
 
+compose_postgres_container() {
+  docker compose -f "${COMPOSE_FILE}" ps -q postgres 2>/dev/null
+}
+
 container_running() {
-  docker inspect -f '{{.State.Running}}' "${POSTGRES_CONTAINER}" 2>/dev/null | grep -qx true
+  local container
+  container="$(compose_postgres_container)"
+  [[ -n "${container}" ]] &&
+    docker inspect -f '{{.State.Running}}' "${container}" 2>/dev/null | grep -qx true
 }
 
 migration_files() {
@@ -50,7 +57,10 @@ run_psql_url() {
 }
 
 run_psql_docker() {
-  docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD}" "${POSTGRES_CONTAINER}" \
+  local container
+  container="$(compose_postgres_container)"
+  [[ -n "${container}" ]] || die "compose postgres service is not running"
+  docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD}" "${container}" \
     psql -U "${POSTGRES_USER}" -d "${PGDATABASE}" -v ON_ERROR_STOP=1 -X -q "$@"
 }
 
@@ -63,7 +73,7 @@ with_psql() {
     run_psql_docker "$@"
     return
   fi
-  die "need host psql or running container '${POSTGRES_CONTAINER}'. Start compose first."
+  die "need host psql or a running compose postgres service. Start compose first."
 }
 
 ensure_ledger() {

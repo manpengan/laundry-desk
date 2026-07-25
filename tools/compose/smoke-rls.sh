@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-laundry-postgres-v2}"
+COMPOSE_FILE="${LAUNDRY_COMPOSE_FILE:-${SCRIPT_DIR}/docker-compose.yml}"
 PGHOST="${PGHOST:-127.0.0.1}"
 PGPORT="${PGPORT:-8543}"
 PGDATABASE="${PGDATABASE:-laundry_v2}"
@@ -13,7 +13,7 @@ LAUNDRY_APP_PASSWORD="${LAUNDRY_APP_PASSWORD:-app_secure_password}"
 APP_DATABASE_URL="${DATABASE_URL:-postgresql://${LAUNDRY_APP_USER}:${LAUNDRY_APP_PASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}}"
 
 ORG_A="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-STAFF_A="11111111-1111-4111-8111-111111111101"
+STAFF_A="11111111-1111-4111-8111-111111111103"
 ORG_B="cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 STORE_B="dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 STAFF_B="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
@@ -27,8 +27,15 @@ pass() {
   echo "✔ [smoke-rls] $*"
 }
 
+compose_postgres_container() {
+  docker compose -f "${COMPOSE_FILE}" ps -q postgres 2>/dev/null
+}
+
 container_running() {
-  docker inspect -f '{{.State.Running}}' "${POSTGRES_CONTAINER}" 2>/dev/null | grep -qx true
+  local container
+  container="$(compose_postgres_container)"
+  [[ -n "${container}" ]] &&
+    docker inspect -f '{{.State.Running}}' "${container}" 2>/dev/null | grep -qx true
 }
 
 psql_app() {
@@ -37,11 +44,13 @@ psql_app() {
     return
   fi
   if container_running; then
-    docker exec -i -e PGPASSWORD="${LAUNDRY_APP_PASSWORD}" "${POSTGRES_CONTAINER}" \
+    local container
+    container="$(compose_postgres_container)"
+    docker exec -i -e PGPASSWORD="${LAUNDRY_APP_PASSWORD}" "${container}" \
       psql -U "${LAUNDRY_APP_USER}" -d "${PGDATABASE}" -v ON_ERROR_STOP=1 -X -q -At "$@"
     return
   fi
-  die "need host psql or running container '${POSTGRES_CONTAINER}'"
+  die "need host psql or a running compose postgres service"
 }
 
 require_tables() {

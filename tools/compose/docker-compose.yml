@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: laundry-postgres-v2
     environment:
       POSTGRES_DB: laundry_v2
       POSTGRES_USER: postgres
@@ -30,14 +29,20 @@ services:
         condition: service_healthy
     restart: "no"
 
-  seed:
+  bootstrap:
     image: laundry-v2-server-integration
-    command: ["node", "tools/compose/seed-v2.mjs"]
+    profiles: ["bootstrap"]
+    command:
+      ["node", "apps/server/dist/local/bootstrap-cli.js", "--confirm", "laundry-desk-v2-local"]
     environment:
       DATABASE_ADMIN_URL: postgresql://postgres:postgres_secure_password@postgres:5432/laundry_v2
+      LAUNDRY_BOOTSTRAP_ADMIN_USERNAME: "${LAUNDRY_BOOTSTRAP_ADMIN_USERNAME:?set bootstrap administrator username}"
+      LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME: "${LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME:?set bootstrap administrator display name}"
+      LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD: "${LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD:?set bootstrap administrator password}"
+      LAUNDRY_BOOTSTRAP_ADMIN_PIN: "${LAUNDRY_BOOTSTRAP_ADMIN_PIN:?set bootstrap administrator PIN}"
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     restart: "no"
 
   server:
@@ -47,15 +52,15 @@ services:
       dockerfile: apps/server/Dockerfile
     environment:
       DATABASE_URL: postgresql://laundry_app:app_secure_password@postgres:5432/laundry_v2
-      DATABASE_ADMIN_URL: postgresql://postgres:postgres_secure_password@postgres:5432/laundry_v2
-      HOST: 0.0.0.0
-      PORT: "8787"
-      CORS_ORIGIN: http://127.0.0.1:5173,http://localhost:5173
+      LAUNDRY_ACCESS_TOKEN_SECRET: "${LAUNDRY_ACCESS_TOKEN_SECRET:?set access-token signing secret}"
+      LAUNDRY_CSRF_PROOF_SECRET: "${LAUNDRY_CSRF_PROOF_SECRET:?set CSRF proof signing secret}"
+      LAUNDRY_CONTAINER_RUNTIME: "1"
+      LAUNDRY_USE_LOCAL_PG: "1"
     ports:
       - "8787:8787"
     depends_on:
-      seed:
-        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     healthcheck:
       test:
         [

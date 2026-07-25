@@ -4,8 +4,14 @@
 set -euo pipefail
 
 SERVER_URL="${LAUNDRY_SERVER_URL:-http://127.0.0.1:8787}"
+: "${LAUNDRY_LOCAL_ORG_CODE:?set generic local organization code}"
+: "${LAUNDRY_LOCAL_STORE_CODE:?set generic local store code}"
+: "${LAUNDRY_BOOTSTRAP_ADMIN_USERNAME:?set bootstrap administrator username}"
+: "${LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD:?set bootstrap administrator password}"
 COOKIE_JAR="$(mktemp)"
-trap 'rm -f "${COOKIE_JAR}"' EXIT
+LOGIN_REQUEST="$(mktemp)"
+LOGIN_RESPONSE="$(mktemp)"
+trap 'rm -f "${COOKIE_JAR}" "${LOGIN_REQUEST}" "${LOGIN_RESPONSE}"' EXIT
 
 die() {
   echo "❌ [smoke-server] $*" >&2
@@ -34,18 +40,29 @@ done
 assert_json 'local-pg' "${health}"
 echo '✔ [smoke-server] real @laundry/server reports local-pg/sql'
 
-login="$(curl --fail --silent --show-error \
+node -e '
+  process.stdout.write(JSON.stringify({
+    org_code: process.env.LAUNDRY_LOCAL_ORG_CODE,
+    store_code: process.env.LAUNDRY_LOCAL_STORE_CODE,
+    username: process.env.LAUNDRY_BOOTSTRAP_ADMIN_USERNAME,
+    password: process.env.LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD,
+    device_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  }));
+' > "${LOGIN_REQUEST}"
+
+curl --fail --silent --show-error \
   --cookie-jar "${COOKIE_JAR}" \
   --header 'content-type: application/json' \
-  --data '{"org_code":"hongfa","store_code":"main","username":"admin","password":"demo","device_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd"}' \
-  "${SERVER_URL}/api/v2/auth/login")" || die 'demo identity login failed'
+  --data-binary "@${LOGIN_REQUEST}" \
+  --output "${LOGIN_RESPONSE}" \
+  "${SERVER_URL}/api/v2/auth/login" || die 'administrator login failed'
 
 node -e '
-  const body = JSON.parse(process.argv[1]);
+  const body = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
   if (body.ok !== true || typeof body.data?.access_token !== "string" || body.data.access_token.length < 10) {
     process.exitCode = 1;
   }
-' "${login}" || die "unexpected login response: ${login}"
+' "${LOGIN_RESPONSE}" || die "login response did not contain a valid access token"
 
 grep -q 'laundry_refresh' "${COOKIE_JAR}" || die 'login did not set refresh cookie'
-echo '✔ [smoke-server] demo identity login uses the real PG runtime'
+echo '✔ [smoke-server] generic local administrator login uses the real PG runtime'

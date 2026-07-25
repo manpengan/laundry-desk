@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 const rootUrl = new URL("../../", import.meta.url);
@@ -14,15 +14,21 @@ const governanceFiles = [
 const currentDeliveryAdr = "(docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)";
 const activeV2ProductEntries = [
   "apps/server/src/local/create-runtime.ts",
-  "apps/server/src/local/pg-seed.ts",
   "apps/server/src/http/main.ts",
   "apps/web/host/main.tsx",
   "apps/web/src/auth/HttpAuthClient.ts",
 ];
 const activeV2CredentialOutputEntries = ["apps/server/src/http/main.ts", "apps/web/host/main.tsx"];
+const task3bIntegrationFiles = [
+  "tools/compose/docker-compose.yml",
+  "tools/compose/migrate-v2.sh",
+  "tools/compose/smoke-rls.sh",
+  "tools/compose/smoke-test.sh",
+  ".github/workflows/v2-integration.yml",
+  "apps/web/e2e/local-login.spec.ts",
+];
 const activeV2ProfileConsumers = [
   "apps/server/src/local/create-runtime.ts",
-  "apps/server/src/local/pg-seed.ts",
   "apps/server/src/http/main.ts",
   "apps/web/host/main.tsx",
   "apps/web/src/auth/HttpAuthClient.ts",
@@ -48,6 +54,33 @@ const pinOutputLabelPattern = /\bPIN\b/u;
 
 async function readRepositoryFile(path) {
   return readFile(new URL(path, rootUrl), "utf8");
+}
+
+async function listRepositoryFiles(directory) {
+  const entries = await readdir(new URL(`${directory}/`, rootUrl), { withFileTypes: true });
+  const nested = await Promise.all(
+    entries.map((entry) => {
+      const path = `${directory}/${entry.name}`;
+      return entry.isDirectory() ? listRepositoryFiles(path) : [path];
+    }),
+  );
+  return nested.flat();
+}
+
+function findServerSeedBoundaryViolations(sources) {
+  const violations = [];
+  for (const [path, source] of sources) {
+    if (path.endsWith("/pg-seed.ts")) {
+      violations.push(`${path}: legacy production seed module`);
+    }
+    if (/\bseedDemoIdentity\b/u.test(source)) {
+      violations.push(`${path}: seedDemoIdentity production reference`);
+    }
+    if (/pg-test-fixture/u.test(source) && !path.endsWith(".test.ts")) {
+      violations.push(`${path}: test fixture imported outside *.test.ts`);
+    }
+  }
+  return violations;
 }
 
 function findDemoCredentialMarkers(source) {
@@ -210,5 +243,95 @@ test("profile copy gate catches camelCase, snake_case, and exact literals", () =
     "store name",
     "timezone",
     "admin staff id",
+  ]);
+});
+
+test("keeps local integration free of automatic seeds and fixed container names", async () => {
+  const contents = await Promise.all(task3bIntegrationFiles.map(readRepositoryFile));
+  const combined = contents.join("\n");
+  const compose = contents[0];
+
+  assert.doesNotMatch(combined, /seed-v2|seedDemoIdentity/u);
+  assert.doesNotMatch(compose, /^\s*seed:\s*$/mu);
+  assert.doesNotMatch(compose, /\bcontainer_name\s*:/u);
+  assert.match(compose, /^\s*bootstrap:\s*$/mu);
+  assert.match(compose, /^\s*profiles:\s*\[\s*"bootstrap"\s*\]\s*$/mu);
+  assert.doesNotMatch(compose, /server:[\s\S]*?depends_on:[\s\S]*?\bbootstrap:/u);
+});
+
+test("makes Task 3B integration explicit and secret-driven", async () => {
+  const compose = await readRepositoryFile("tools/compose/docker-compose.yml");
+  const workflow = await readRepositoryFile(".github/workflows/v2-integration.yml");
+
+  for (const name of [
+    "LAUNDRY_ACCESS_TOKEN_SECRET",
+    "LAUNDRY_CSRF_PROOF_SECRET",
+    "LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD",
+    "LAUNDRY_BOOTSTRAP_ADMIN_PIN",
+  ]) {
+    assert.match(compose, new RegExp(`${name}:\\s*["']?\\$\\{${name}:\\?`, "u"));
+    assert.match(workflow, new RegExp(`${name}=`, "u"));
+  }
+  assert.match(compose, /LAUNDRY_CONTAINER_RUNTIME:\s*["']?1["']?/u);
+  assert.match(workflow, /GITHUB_ENV/u);
+  assert.match(workflow, /docker compose[^\n]*build/u);
+  assert.equal((workflow.match(/run --rm migrate/gu) ?? []).length, 2);
+  assert.equal((workflow.match(/run --rm bootstrap/gu) ?? []).length, 2);
+  assert.match(workflow, /up -d server/u);
+  assert.doesNotMatch(workflow, /set -x|echo\s+["']?\$\{?LAUNDRY_(?:ACCESS|CSRF|BOOTSTRAP)/u);
+});
+
+test("shares generic local login inputs across HTTP and browser smokes", async () => {
+  const smoke = await readRepositoryFile("tools/compose/smoke-test.sh");
+  const e2e = await readRepositoryFile("apps/web/e2e/local-login.spec.ts");
+  const combined = `${smoke}\n${e2e}`;
+
+  for (const name of [
+    "LAUNDRY_LOCAL_ORG_CODE",
+    "LAUNDRY_LOCAL_STORE_CODE",
+    "LAUNDRY_BOOTSTRAP_ADMIN_USERNAME",
+    "LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD",
+  ]) {
+    assert.match(smoke, new RegExp(name, "u"));
+    assert.match(e2e, new RegExp(name, "u"));
+  }
+  assert.match(e2e, /\.fill\(/u);
+  assert.doesNotMatch(combined, /hongfa|宏发|["']demo["']|店员甲|["']1234["']/iu);
+  assert.doesNotMatch(smoke, /unexpected login response|login\s*=\s*["']?\$\(curl/u);
+});
+
+test("discovers the compose Postgres service instead of a fixed container name", async () => {
+  for (const path of ["tools/compose/migrate-v2.sh", "tools/compose/smoke-rls.sh"]) {
+    const source = await readRepositoryFile(path);
+
+    assert.match(source, /docker compose/u, `${path} must use compose service discovery`);
+    assert.match(source, /\bps\b[^\n]*-q[^\n]*postgres/u);
+    assert.doesNotMatch(source, /laundry-postgres-v2/u);
+  }
+});
+
+test("rejects production seed modules and non-test fixture importers", async () => {
+  const files = await listRepositoryFiles("apps/server/src");
+  const sources = new Map(
+    await Promise.all(
+      files
+        .filter((path) => path.endsWith(".ts"))
+        .map(async (path) => [path, await readRepositoryFile(path)]),
+    ),
+  );
+
+  assert.deepEqual(findServerSeedBoundaryViolations(sources), []);
+});
+
+test("seed boundary gate catches legacy production paths and fixture imports", () => {
+  const sample = new Map([
+    ["apps/server/src/local/pg-seed.ts", "export const seedDemoIdentity = () => {};"],
+    ["apps/server/src/local/runtime.ts", 'import "./pg-test-fixture.js";'],
+  ]);
+
+  assert.deepEqual(findServerSeedBoundaryViolations(sample), [
+    "apps/server/src/local/pg-seed.ts: legacy production seed module",
+    "apps/server/src/local/pg-seed.ts: seedDemoIdentity production reference",
+    "apps/server/src/local/runtime.ts: test fixture imported outside *.test.ts",
   ]);
 });

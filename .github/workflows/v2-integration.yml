@@ -49,15 +49,43 @@ jobs:
       - name: Check workspace foundation
         run: pnpm run workspace:check
 
-      - name: Start real Postgres, migrations, seed and server
-        run: docker compose -f tools/compose/docker-compose.yml up -d --build
-
-      - name: Verify repeatable migrations and seed
+      - name: Generate ephemeral integration credentials
+        shell: bash
         run: |
-          bash tools/compose/migrate-v2.sh
-          bash tools/compose/migrate-v2.sh
-          bash tools/compose/seed-v2.sh
-          bash tools/compose/seed-v2.sh
+          set -euo pipefail
+          access_secret="$(openssl rand -hex 32)"
+          csrf_secret="$(openssl rand -hex 32)"
+          admin_password="$(openssl rand -hex 36)"
+          admin_pin="$(node -e 'console.log(require("node:crypto").randomInt(100000, 1000000))')"
+          {
+            printf 'LAUNDRY_ACCESS_TOKEN_SECRET=%s\n' "${access_secret}"
+            printf 'LAUNDRY_CSRF_PROOF_SECRET=%s\n' "${csrf_secret}"
+            printf 'LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD=%s\n' "${admin_password}"
+            printf 'LAUNDRY_BOOTSTRAP_ADMIN_PIN=%s\n' "${admin_pin}"
+            printf 'LAUNDRY_BOOTSTRAP_ADMIN_USERNAME=%s\n' 'admin'
+            printf 'LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME=%s\n' 'Local Administrator'
+            printf 'LAUNDRY_LOCAL_ORG_CODE=%s\n' 'local'
+            printf 'LAUNDRY_LOCAL_STORE_CODE=%s\n' 'main'
+          } >> "${GITHUB_ENV}"
+
+      - name: Build integration image
+        run: docker compose -f tools/compose/docker-compose.yml build server
+
+      - name: Start real PostgreSQL
+        run: docker compose -f tools/compose/docker-compose.yml up -d postgres
+
+      - name: Verify repeatable migrations
+        run: |
+          docker compose -f tools/compose/docker-compose.yml run --rm migrate
+          docker compose -f tools/compose/docker-compose.yml run --rm migrate
+
+      - name: Verify repeatable explicit bootstrap
+        run: |
+          docker compose -f tools/compose/docker-compose.yml run --rm bootstrap
+          docker compose -f tools/compose/docker-compose.yml run --rm bootstrap
+
+      - name: Start real Fastify server
+        run: docker compose -f tools/compose/docker-compose.yml up -d server
 
       - name: Assert RLS and real server HTTP smoke
         run: |
