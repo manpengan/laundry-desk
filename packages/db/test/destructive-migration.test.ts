@@ -60,6 +60,7 @@ describe("destructive migration static reject", () => {
       "0013_garment_photos.sql",
       "0014_order_list_summary_indexes.sql",
       "0015_m2_counter_production_hardening.sql",
+      "0016_local_bootstrap.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
@@ -89,6 +90,8 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS args_hash/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS entity_versions/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS idempotency_key/iu);
+    expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS demo_only boolean NOT NULL DEFAULT false/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS local_bootstrap_metadata/iu);
     expect(combined).toMatch(/FORCE ROW LEVEL SECURITY/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE audit_log TO laundry_app/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE payments TO laundry_app/iu);
@@ -120,6 +123,10 @@ describe("destructive migration static reject", () => {
     );
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*print_jobs/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*customers/iu);
+    expect(combined).toMatch(
+      /REVOKE ALL ON TABLE local_bootstrap_metadata FROM PUBLIC, laundry_app/iu,
+    );
+    expect(combined).not.toMatch(/GRANT[^;]*local_bootstrap_metadata/iu);
     expect(combined).not.toMatch(/dialect\s*[:=]\s*['"]sqlite['"]/iu);
     expect(combined.toLowerCase().includes("better" + "-sqlite3")).toBe(false);
   });

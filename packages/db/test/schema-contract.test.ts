@@ -62,6 +62,10 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(getTenantTableScope("audit_log")).toBe("store");
   });
 
+  it("tracks whether the root organization is demo-only", () => {
+    expect(columnNames(M1_MATRIX_TABLES.orgs)).toContain("demo_only");
+  });
+
   it("uses uuid primary keys and tenant key columns per scope", () => {
     for (const name of M1_MATRIX_TABLE_NAMES) {
       const table = M1_MATRIX_TABLES[name];

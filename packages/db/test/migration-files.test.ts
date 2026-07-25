@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0015", () => {
+  it("ships formal SQL migrations ordered 0001 → 0016", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -27,15 +27,18 @@ describe("packages/db migration file inventory", () => {
       "0013_garment_photos.sql",
       "0014_order_list_summary_indexes.sql",
       "0015_m2_counter_production_hardening.sql",
+      "0016_local_bootstrap.sql",
     ]);
   });
 
-  it("prefixes are zero-padded four-digit sequence numbers", () => {
+  it("prefixes are unique zero-padded four-digit sequence numbers", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
 
     const prefixes = sqlFiles.map((name) => name.slice(0, 4));
+    expect(prefixes.every((prefix) => /^\d{4}$/u.test(prefix))).toBe(true);
+    expect(new Set(prefixes).size).toBe(prefixes.length);
     expect(prefixes).toEqual([
       "0001",
       "0002",
@@ -52,6 +55,7 @@ describe("packages/db migration file inventory", () => {
       "0013",
       "0014",
       "0015",
+      "0016",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -73,5 +77,23 @@ describe("packages/db migration file inventory", () => {
     expect(sql).toMatch(/REVOKE UPDATE, DELETE, TRUNCATE ON TABLE payments FROM laundry_app/iu);
     expect(sql).toMatch(/garment_photos_garment_order_fk/iu);
     expect(sql).toMatch(/FOREIGN KEY \(org_id, store_id, order_id, garment_id\)/iu);
+  });
+
+  it("adds owner-only local bootstrap metadata after production hardening", () => {
+    const sql = readFileSync(join(migrationsDir, "0016_local_bootstrap.sql"), "utf8");
+
+    expect(sql).toMatch(
+      /ALTER TABLE orgs\s+ADD COLUMN IF NOT EXISTS demo_only boolean NOT NULL DEFAULT false/iu,
+    );
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS local_bootstrap_metadata/iu);
+    expect(sql).toMatch(/singleton boolean PRIMARY KEY DEFAULT true/iu);
+    expect(sql).toMatch(/CHECK \(singleton\)/iu);
+    expect(sql).toMatch(/profile_hash char\(64\) NOT NULL/iu);
+    expect(sql).toMatch(/profile_hash ~ '\^\[0-9a-f\]\{64\}\$'/iu);
+    expect(sql).toMatch(/FOREIGN KEY \(org_id, store_id\) REFERENCES stores \(org_id, id\)/iu);
+    expect(sql).toMatch(
+      /FOREIGN KEY \(org_id, admin_staff_id\) REFERENCES staffs \(org_id, id\)/iu,
+    );
+    expect(sql).toMatch(/REVOKE ALL ON TABLE local_bootstrap_metadata FROM PUBLIC, laundry_app/iu);
   });
 });

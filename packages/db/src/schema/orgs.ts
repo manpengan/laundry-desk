@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
 
 /** Global-scope root tenant identity (A3 matrix: global). */
 export const orgs = pgTable(
@@ -7,6 +7,7 @@ export const orgs = pgTable(
     id: uuid("id").primaryKey().notNull(),
     code: text("code").notNull(),
     name: text("name").notNull(),
+    demoOnly: boolean("demo_only").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull(),
   },
