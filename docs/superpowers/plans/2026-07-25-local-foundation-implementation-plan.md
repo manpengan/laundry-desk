@@ -14,17 +14,18 @@
 
 Tasks run in order. Each task starts RED, reaches GREEN, and commits before the next task.
 
-1. Current-route governance gate
-2. Generic local profile and secret loading
-3. Explicit PostgreSQL bootstrap
-4. Loopback Compose lifecycle
-5. Strict access-token and session authority
-6. Local HTTP security boundary
-7. Token-free shared Web host ports
-8. Pinned Electron installation boundary
-9. Vite bundle and manifest-bound `app://`
-10. Electron main-process desktop transport
-11. macOS package and foundation acceptance
+- Task 1: Current-route governance gate
+- Task 2: Generic local profile and secret loading
+- Task 3A: Explicit PostgreSQL bootstrap transaction
+- Task 3B: Automatic seed removal and executable integration
+- Task 4: Loopback Compose lifecycle
+- Task 5: Strict access-token and session authority
+- Task 6: Local HTTP security boundary
+- Task 7: Token-free shared Web host ports
+- Task 8: Pinned Electron installation boundary
+- Task 9: Vite bundle and manifest-bound `app://`
+- Task 10: Electron main-process desktop transport
+- Task 11: macOS package and foundation acceptance
 
 Do not implement pricing, payment/idempotency repair, business-day commands, the Claude
 three-column UI, file-spool printing, cloud deployment, Windows packaging, AI, offline queue
@@ -225,7 +226,7 @@ git add apps/server/src/local apps/server/src/http/main.ts apps/web/host/main.ts
 git commit -m "[LAUNDRY_DESK][LOCAL] 建立通用本地配置"
 ```
 
-### Task 3: Replace automatic demo seed with explicit PostgreSQL bootstrap
+### Task 3A: Add the explicit PostgreSQL bootstrap transaction
 
 **Files:**
 
@@ -233,17 +234,20 @@ git commit -m "[LAUNDRY_DESK][LOCAL] 建立通用本地配置"
 - Modify: `packages/db/src/schema/orgs.ts`
 - Modify: `packages/db/src/migrations/README.md`
 - Modify: `packages/db/test/migration-files.test.ts`
+- Modify: `packages/db/test/destructive-migration.test.ts`
+- Modify: `packages/db/test/schema-contract.test.ts`
 - Create: `apps/server/src/local/bootstrap.ts`
 - Create: `apps/server/src/local/bootstrap.test.ts`
 - Create: `apps/server/src/local/bootstrap-cli.ts`
-- Modify: `apps/server/src/local/create-runtime.ts`
-- Delete: `apps/server/src/local/pg-seed.ts`
-- Delete: `tools/compose/seed-v2.mjs`
-- Delete: `tools/compose/seed-v2.sh`
-- Modify: `apps/server/src/catalog/pg-catalog-store.ts`
-- Modify: `apps/server/src/catalog/pg-catalog-store.test.ts`
+- Create: `apps/server/src/local/bootstrap-cli.test.ts`
+- Modify: `apps/server/package.json`
+- Modify: `package.json`
 
 - [ ] **Step 1: Write failing bootstrap/migration tests**
+
+`0016` is free on the current `main` baseline. Add a migration-list test that rejects
+duplicate four-digit prefixes so the two unmerged candidate branches that also use `0016`
+must be renumbered before future integration; do not reserve speculative gaps.
 
 The migration adds `orgs.demo_only boolean NOT NULL DEFAULT false` plus this owner-only
 singleton:
@@ -265,14 +269,21 @@ Tests cover:
 
 - empty database creates exactly the configured org/store/admin and role;
 - re-running identical input is a no-op;
-- matching codes with different fixed IDs or an existing non-matching bootstrap fail;
+- matching IDs/codes with different profile data or an existing non-matching bootstrap fail
+  before any write;
+- the transaction takes a fixed transaction-scoped PostgreSQL advisory lock before reading
+  metadata, uses `SET LOCAL ROLE laundry_owner`, writes metadata last, commits once, and
+  rolls back every partial failure;
+- two concurrent identical bootstraps both succeed with one creation and one no-op; two
+  different concurrent inputs serialize, then one fails with a safe conflict;
 - password and PIN are required external inputs and only Argon2id hashes reach SQL;
+- `profile_hash` is a stable SHA-256 over versioned non-secret profile/admin metadata only;
 - demo mode requires loopback DB, `LAUNDRY_LOCAL_DEMO=1` and
   `--confirm laundry-desk-v2-demo`;
 - non-demo requires `--confirm laundry-desk-v2-local`;
 - non-demo preflight rejects `demo_only=true`;
-- no HTTP route exposes bootstrap/reset.
-- reading an empty catalog returns empty and performs no implicit demo write.
+- missing/unknown CLI inputs fail with safe error codes;
+- stdout/stderr never contain password, PIN, PHC hash or database URL.
 
 The command input is strict:
 
@@ -294,18 +305,34 @@ Run:
 ```bash
 pnpm --filter @laundry/db test
 pnpm --filter @laundry/server build
-node --test apps/server/dist/local/bootstrap.test.js
+node --test apps/server/dist/local/bootstrap.test.js \
+  apps/server/dist/local/bootstrap-cli.test.js
 ```
 
 Expected: FAIL because migration `0016` and bootstrap code are absent.
 
-- [ ] **Step 3: Implement one transaction and remove auto-seeding**
+- [ ] **Step 3: Implement one owner-only transaction and CLI**
 
-Use parameterized SQL and `BEGIN/COMMIT`; rollback on every error. The CLI owns input
-validation and never logs password, PIN, hashes or database URLs. `createPgLocalRuntime`
-must only open the runtime pool and verify that the fixed generic profile exists; it must
-not seed or use the admin pool. Remove the catalog read-path seed; optional fictional
-catalog rows belong only to the explicit demo bootstrap.
+Hash credentials before acquiring the transaction client. Inside one parameterized
+transaction: acquire a documented fixed `pg_advisory_xact_lock`, set the owner role,
+read/lock singleton metadata when it exists, verify the complete existing profile for an
+idempotent no-op, perform collision preflight, insert org/store/admin/admin role, then insert
+metadata last. Never use `ON CONFLICT DO UPDATE` for bootstrap identity.
+
+The CLI accepts only `--confirm <exact-value>`, reads these values from the process
+environment, and never exposes an HTTP route:
+
+```text
+LAUNDRY_BOOTSTRAP_ADMIN_USERNAME
+LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME
+LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD
+LAUNDRY_BOOTSTRAP_ADMIN_PIN
+DATABASE_ADMIN_URL
+```
+
+Add explicit `bootstrap:local`/`local:bootstrap` scripts. This task is additive; removal of
+automatic runtime/Compose seed paths happens in Task 3B so every intermediate commit stays
+green.
 
 - [ ] **Step 4: Run GREEN checks**
 
@@ -314,18 +341,190 @@ Run:
 ```bash
 pnpm --filter @laundry/db test
 pnpm --filter @laundry/server test
-rg -n "seedDemoIdentity|seed-v2|postgres_secure_password|app_secure_password" \
-  apps/server/src/local tools/compose
+pnpm --filter @laundry/server lint
+pnpm --filter @laundry/server typecheck
 ```
 
-Expected: tests PASS and `rg` returns no active bootstrap/default-secret implementation.
+Expected: tests PASS. Default server tests may still skip real PostgreSQL and are not runtime
+evidence.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/db apps/server/src/local apps/server/src/catalog/pg-catalog-store.ts \
-  apps/server/src/catalog/pg-catalog-store.test.ts tools/compose
+git add packages/db apps/server/src/local/bootstrap.ts \
+  apps/server/src/local/bootstrap.test.ts apps/server/src/local/bootstrap-cli.ts \
+  apps/server/src/local/bootstrap-cli.test.ts apps/server/package.json package.json
 git commit -m "[LAUNDRY_DESK][DB] 增加显式本地初始化"
+```
+
+### Task 3B: Remove every automatic seed path and keep integration executable
+
+**Files:**
+
+- Modify: `apps/server/src/db/pg-pool.ts`
+- Create: `apps/server/src/db/pg-pool.test.ts`
+- Modify: `apps/server/src/local/create-runtime.ts`
+- Modify: `apps/server/src/local/create-runtime.test.ts`
+- Modify: `apps/server/src/local/bootstrap.ts`
+- Modify: `apps/server/src/local/bootstrap.test.ts`
+- Delete: `apps/server/src/local/pg-seed.ts`
+- Delete: `apps/server/src/local/pg-seed.test.ts`
+- Create: `apps/server/src/local/pg-test-fixture.ts`
+- Create: `apps/server/src/local/pg-test-fixture.test.ts`
+- Modify: `apps/server/src/identity/pg-store.test.ts`
+- Modify: `apps/server/src/photo/pg-photo-store.test.ts`
+- Modify: `apps/server/src/__tests__/rls-pg-integration.test.ts`
+- Modify: `apps/server/src/__tests__/bus-pg-smoke.test.ts`
+- Modify: `apps/server/src/catalog/pg-catalog-store.ts`
+- Modify: `apps/server/src/catalog/pg-catalog-store.test.ts`
+- Modify: `apps/server/src/http/create-app.test.ts`
+- Delete: `tools/compose/seed-v2.mjs`
+- Delete: `tools/compose/seed-v2.sh`
+- Modify: `tools/compose/docker-compose.yml`
+- Modify: `tools/compose/smoke-test.sh`
+- Modify: `tools/compose/README.md`
+- Modify: `.github/workflows/v2-integration.yml`
+- Modify: `apps/web/e2e/local-login.spec.ts`
+- Modify: `tests/foundation/local-foundation.test.mjs`
+
+- [ ] **Step 1: Write failing runtime/catalog/integration tests**
+
+Tests prove:
+
+- the PG runtime accepts only an app-role URL, opens one app pool, verifies the fixed profile,
+  and closes the pool on readiness failure;
+- an admin-only URL can never fall back into the runtime app connection;
+- `createPgLocalRuntime` never imports/calls a seed or creates an admin pool;
+- an empty catalog returns `[]` and executes no `INSERT`;
+- the test-only PG fixture is imported only by `*.test.ts` and receives credentials from the
+  ephemeral test environment; its unit test rejects missing values and proves no source
+  default credential reaches SQL;
+- no HTTP route exposes bootstrap or reset;
+- Compose has no default seed service and server does not depend on one;
+- CI generates ephemeral bootstrap/access/CSRF values, runs migration and bootstrap
+  explicitly, repeats both to prove idempotency, then starts the server;
+- server smoke and browser E2E read the same generic `local/main` username/password from
+  environment and contain no fixed demo credential or Hongfa assertion.
+
+- [ ] **Step 2: Run tests and verify RED**
+
+Run:
+
+```bash
+pnpm --filter @laundry/server build
+node --test apps/server/dist/db/pg-pool.test.js \
+  apps/server/dist/local/create-runtime.test.js \
+  apps/server/dist/local/pg-test-fixture.test.js \
+  apps/server/dist/catalog/pg-catalog-store.test.js
+node --test tests/foundation/local-foundation.test.mjs
+```
+
+Expected: FAIL because runtime and Compose still seed automatically, admin URL fallback
+exists, and catalog reads write demo rows.
+
+- [ ] **Step 3: Remove seed paths and wire explicit integration bootstrap**
+
+Keep `resolvePgUrls` only for opt-in PG tests that need app and admin connections; add a
+fail-closed runtime resolver that never falls back to admin. `createPgLocalRuntime` opens
+only the app pool and calls an app-role readiness check from `bootstrap.ts`.
+
+Replace production `pg-seed.ts` with a test-only fixture used by the four real-PG tests.
+The helper may create extra fictional staff for tests, but no production module may import
+it. Remove catalog write-on-read.
+
+Compose keeps its current local credential topology only until Task 4, but bootstrap becomes
+an explicit profile/service and is never a default dependency. The integration workflow
+must start PG/migrations, invoke bootstrap with generated ephemeral inputs, then start
+Fastify. Update HTTP/Web smoke to fill the generic login form from that same environment.
+Foundation E2E only needs admin login/shell; do not depend on an automatically created
+second staff member. Remove the fixed Compose `container_name` so tests can use an isolated
+project/volume and clean up only what they created.
+
+- [ ] **Step 4: Run GREEN and integration checks**
+
+Run:
+
+```bash
+pnpm --filter @laundry/server test
+pnpm --filter @laundry/web test
+node --test tests/foundation/*.test.mjs
+LAUNDRY_ACCESS_TOKEN_SECRET="$(openssl rand -hex 32)" \
+LAUNDRY_CSRF_PROOF_SECRET="$(openssl rand -hex 32)" \
+LAUNDRY_BOOTSTRAP_ADMIN_USERNAME=admin \
+LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME="Local Administrator" \
+LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD="${LAUNDRY_TEST_ADMIN_PASSWORD:?set test password}" \
+LAUNDRY_BOOTSTRAP_ADMIN_PIN="${LAUNDRY_TEST_ADMIN_PIN:?set test PIN}" \
+  docker compose -f tools/compose/docker-compose.yml config --quiet
+```
+
+Expected: tests and Compose config PASS; `rg` returns no production/Compose/CI seed path.
+Run this reproducible real-PostgreSQL sequence when Docker is available:
+
+```bash
+set -euo pipefail
+export COMPOSE_PROJECT_NAME="laundry-task3b-${PPID}"
+export LAUNDRY_ACCESS_TOKEN_SECRET="$(openssl rand -hex 32)"
+export LAUNDRY_CSRF_PROOF_SECRET="$(openssl rand -hex 32)"
+export LAUNDRY_BOOTSTRAP_ADMIN_USERNAME=admin
+export LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME="Local Administrator"
+export LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD="$(openssl rand -base64 36 | tr -d '\n')"
+export LAUNDRY_BOOTSTRAP_ADMIN_PIN="$(
+  node -e 'console.log(require("node:crypto").randomInt(100000,1000000))'
+)"
+export LAUNDRY_LOCAL_DEMO=1
+compose_file="tools/compose/docker-compose.yml"
+web_pid=""
+cleanup() {
+  if [ -n "${web_pid}" ]; then kill "${web_pid}" 2>/dev/null || true; fi
+  docker compose -f "${compose_file}" down --volumes --remove-orphans || true
+}
+trap cleanup EXIT
+
+docker compose -f "${compose_file}" up -d --build postgres
+docker compose -f "${compose_file}" run --rm migrate
+docker compose -f "${compose_file}" run --rm migrate
+docker compose -f "${compose_file}" run --rm bootstrap
+docker compose -f "${compose_file}" run --rm bootstrap
+docker compose -f "${compose_file}" up -d server
+bash tools/compose/smoke-rls.sh
+bash tools/compose/smoke-test.sh
+set -o pipefail
+LAUNDRY_USE_LOCAL_PG=1 pnpm --filter @laundry/server test |
+  tee /tmp/laundry-task3b-pg-tests.log
+! rg -q '^# skipped [1-9][0-9]*$' /tmp/laundry-task3b-pg-tests.log
+pnpm local:web >/tmp/laundry-task3b-web.log 2>&1 &
+web_pid=$!
+for _ in $(seq 1 30); do
+  curl --fail --silent http://127.0.0.1:5173/ >/dev/null && break
+  kill -0 "${web_pid}" 2>/dev/null || {
+    cat /tmp/laundry-task3b-web.log
+    exit 1
+  }
+  sleep 1
+done
+curl --fail http://127.0.0.1:5173/ >/dev/null
+pnpm local:web:e2e
+```
+
+The trap removes only the unique Task 3B Compose project and volume. If Docker Desktop is
+unavailable or either fixed port is already occupied, report that external evidence as
+blocked instead of stopping an unrelated process or substituting memory tests.
+
+Check removal with an explicit negative assertion:
+
+```bash
+if rg -n "seedDemoIdentity|seed-v2" apps/server/src tools/compose .github/workflows; then
+  echo "automatic seed path remains" >&2
+  exit 1
+fi
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/server/src apps/web/e2e/local-login.spec.ts tools/compose \
+  .github/workflows/v2-integration.yml tests/foundation/local-foundation.test.mjs
+git commit -m "[LAUNDRY_DESK][DB] 移除自动初始化路径"
 ```
 
 ### Task 4: Add safe `local:up`, `local:down` and guarded reset
@@ -805,7 +1004,6 @@ git commit -m "[LAUNDRY_DESK][ELECTRON] 固定本地运行版本"
 - Modify: `apps/web/package.json`
 - Modify: `apps/web/index.html`
 - Modify: `apps/web/playwright.local.config.ts`
-- Modify: `apps/web/e2e/local-login.spec.ts`
 - Modify: `apps/edge-agent/package.json`
 - Create: `apps/edge-agent/scripts/sync-spa.mjs`
 - Create: `apps/edge-agent/scripts/sync-spa.test.mjs`
@@ -843,10 +1041,9 @@ No `unsafe-inline`, `unsafe-eval`, arbitrary filesystem fallback or placeholder 
 The pure handler remains session-agnostic; registration moves to the dedicated Electron
 session in Task 10.
 
-Update the browser E2E to use the generic `local`/`main` profile and read username,
-password and PIN from the same ephemeral `LAUNDRY_BOOTSTRAP_ADMIN_*` environment used by
-bootstrap. Assert the login form is not prefilled and fail before navigation when required
-test credentials are absent.
+Keep the generic environment-driven login E2E established in Task 3B. It must continue to
+assert that the login form is not prefilled and fail before navigation when required test
+credentials are absent.
 
 - [ ] **Step 2: Run tests and verify RED**
 
