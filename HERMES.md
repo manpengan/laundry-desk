@@ -2,7 +2,10 @@
 
 Hermes Agent 在本仓库中的入场与执行指引。
 
-> **治理边界（ADR-12 / ADR-13）**：Grok 是当前单一技术负责人，负责设计真源、实现、门禁与交付；v2 是唯一活动交付线。Hermes 作为结对工程与验证代理参与，不拥有 spec、contracts、冻结、放行或合并决策权；本文件不覆盖 `AGENTS.md`、`GROK.md`、Accepted ADR 或 manpengan 的裁决。
+> **治理边界（ADR-14）**：[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
+> 已覆盖历史 owner 分配，Codex 是通用 V2 本地优先交付 owner。ADR-13 保留为
+> V2-only 基础裁决。Hermes 作为结对工程与验证代理参与，不拥有 spec、contracts、
+> 放行或合并决策权。
 
 ## 1. 项目是什么
 
@@ -10,19 +13,22 @@ laundry-desk 是洗衣店柜台管理系统，覆盖开单、取衣、顾客、�
 
 仓库只保留一条活动开发线：
 
-- **v2 产品化升级线**：`apps/` + `packages/`，桌面为主、Web 次之；Node/Fastify + PostgreSQL/RLS + Local Edge Agent + AI-first Command Bus，支持多租户与后续 SaaS/自托管。
-- **v1 冻结资产**：根目录 `src/` 不再开发功能，只用于 `tools/migrate-v1` 的只读迁移、历史行为对照与限期只读回退。详见 [ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)。
+- **通用 V2 本地优先线**：`apps/` + `packages/`，先交付本地 Web Server 与 macOS App；Node/Fastify + PostgreSQL/RLS + Local Edge Agent + AI-first Command Bus，支持多租户。
+- **历史资产**：根目录 `src/` 不再开发功能，只用于历史行为参考。[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 继续作为 V2-only 基础裁决。
 
 v2 的核心原则是：人工 UI、AI、自动化和 Edge 离线回放共用同一 Command/Query Bus；浏览器不直连数据库、不持有设备私钥，也不承担交易离线真源。
+
+当前只按此顺序交付：
+`Local Foundation → Money Integrity → Workday Commands → Counter UI → Mock Print → Acceptance → later cloud/Windows`。
 
 ## 2. 真源优先级
 
 发生冲突时按以下顺序处理：
 
 1. manpengan 的当前书面/会话裁决；
-2. Accepted ADR 与交付治理；
-3. 当前 v2 架构 spec；
-4. `GROK.md`、当前任务书与里程碑计划；
+2. ADR-14 与 Accepted ADR；
+3. 当前本地优先产品设计及 Claude V2 架构/UI 基线；
+4. `AGENTS.md` 与当前实施计划；
 5. contracts 代码、测试、tag 与 `origin/main`；
 6. README、CHANGELOG、历史任务书和未合并分支。
 
@@ -30,17 +36,15 @@ v2 的核心原则是：人工 UI、AI、自动化和 Edge 离线回放共用同
 
 ## 3. 入场必读
 
-1. [`AGENTS.md`](AGENTS.md)
-2. [`GROK.md`](GROK.md)
-3. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
-4. [ADR-12](docs/adr/2026-07-21-adr-12-grok-unified-delivery-ownership.md)
-5. [交付治理](docs/superpowers/specs/2026-07-21-laundry-v2-delivery-governance.md)
-6. [v2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
-7. [M2–M6 实施计划](docs/superpowers/plans/2026-07-19-v2-m2-m6-implementation-plan.md)
-8. [V2-only 执行计划](.hermes/plans/2026-07-23_034229-v2-only-upgrade-next-development-plan.md)
-9. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
+1. [ADR-14：通用 V2 本地优先交付](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
+2. [`AGENTS.md`](AGENTS.md)
+3. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
+4. [Claude V2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
+5. [Claude V2 Web UI](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
+6. [ADR-13：V2-only 基础裁决](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
+7. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
 
-只读与本次任务有关的 ADR、验收单、代码和测试；不要用历史 owner 文案覆盖 ADR-12。
+只读与本次任务有关的 ADR、验收单、代码和测试；不要用历史 owner 文案覆盖 ADR-14。
 
 ## 4. 代码地图
 

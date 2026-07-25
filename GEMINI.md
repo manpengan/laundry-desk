@@ -1,12 +1,17 @@
 # GEMINI.md — laundry-desk
 
-Gemini 在本项目中的历史入场指引。
+Gemini 在本项目中的入场指引。
 
-> **当前状态（ADR-12 / ADR-13）**：Gemini 已退出实现与冻结关键路径；v2 是唯一活动交付线，v1 已冻结为迁移源与历史参考。本文其余内容仅保留为 v1/早期分工历史；未合并分支不得继续铺生产实现，只可作为 **Grok** 取用的候选输入。若参与复审，不得阻塞交付。
+> **当前状态（ADR-14）**：[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
+> 已覆盖历史 owner 分配，Codex 是通用 V2 本地优先交付 owner。ADR-13 保留为
+> V2-only 基础裁决。Gemini 退出关键路径；未合并分支仅可作为 Codex 的候选输入。
 
-## 你在这个项目里的历史角色
+当前只按此顺序交付：
+`Local Foundation → Money Integrity → Workday Commands → Counter UI → Mock Print → Acceptance → later cloud/Windows`。
 
-把 Claude 的 spec 落成能在 Windows 10/11 上跑的 exe。包括：
+## 你在这个项目里的角色
+
+当前仅提供非阻塞复审。以下早期 Windows 实现职责已归档：
 
 - 代码实现（main / preload / renderer / shared / services）
 - 测试编写（Vitest + Playwright）
@@ -16,11 +21,11 @@ Gemini 在本项目中的历史入场指引。
 
 ## 入场必读（按顺序）
 
-1. **产品裁决**：[`ADR-13`](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
-2. **设计真源**：[`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
-3. **当前 owner**：[`GROK.md`](GROK.md)
-4. **历史 v1 设计**：[`docs/superpowers/specs/2026-04-23-laundry-desk-design.md`](docs/superpowers/specs/2026-04-23-laundry-desk-design.md)（已归档）
-5. **代码红线**：`~/.claude/rules/common/coding-style.md`
+1. **当前产品裁决**：[`ADR-14`](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
+2. **本地优先设计**：[`docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md`](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
+3. **Claude 架构基线**：[`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
+4. **V2-only 基础**：[`ADR-13`](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
+5. **当前 owner**：[`AGENTS.md`](AGENTS.md)
 
 ## 代码红线（硬性）
 

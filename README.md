@@ -1,22 +1,22 @@
 # laundry-desk
 
-产品目标是面向洗衣店行业提供桌面为主、Web 次之的柜台与经营系统，规划支持多租户、离线柜台、硬件打印和 AI-first 操作。
+产品目标是面向洗衣店行业提供通用 V2 柜台与经营系统，规划支持多租户、离线柜台、硬件打印和 AI-first 操作。
 
-计划覆盖登录/PIN、收件、取衣、客户、付款/欠款、照片、统计、交班、打印、通知、权限、审计与 v1 数据升级。
+当前优先完成本地 Web Server 与 macOS App，覆盖登录/PIN、收件、取衣、客户、付款/欠款、照片、统计、交班、打印、通知、权限与审计。
 
 ## 当前状态
 
-| 项         | 值                                                                                                                                                |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 活动路线   | **仅 v2 产品化升级**（[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)）                                                          |
-| 当前阶段   | V2-M1 基座已形成，`contracts@v0.1.0` 已封版；正在完成 V2-M2 宏发升级候选版                                                                        |
-| 设计真源   | [v2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) · [Web UI](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md) |
-| 当前 owner | [Grok 单一技术负责人](GROK.md)（ADR-12） · [活动任务书](docs/superpowers/plans/tasks/2026-07-21-task-grok-lead.md)                                |
-| 目标平台   | Windows 10/11 桌面 Edge + React SPA；云端或自托管 PostgreSQL                                                                                      |
+| 项         | 值                                                                                                                                                                                            |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 活动路线   | **通用 V2 本地优先交付**（[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)）；[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 保留为 V2-only 基础裁决 |
+| 当前阶段   | Local Foundation：先收口可重复启动、安全会话、本地 Web 与 macOS 壳                                                                                                                            |
+| 设计真源   | [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) · [Claude V2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)                       |
+| 当前 owner | **Codex** — 设计、实现、集成与门禁                                                                                                                                                            |
+| 目标平台   | 本地 Web Server + macOS App 优先；云服务器部署与 Windows 适配后置                                                                                                                             |
 
-当前 main 已合入 V2-M1 基座和部分 V2-M2 代码增量；真实 PostgreSQL CI、v1 数据迁移、Edge 离线闭环、AI/BYOK 生产路径及 Windows/打印机实机验收尚未收口。
+当前只按此顺序交付：`Local Foundation → Money Integrity → Workday Commands → Counter UI → Mock Print → Acceptance → later cloud/Windows`。
 
-宏发 v1 单店版已经冻结，不再增加 M4/M5 功能或独立发版。根 `src/` 只作为 `tools/migrate-v1` 的只读迁移源、历史行为参考与限期只读回退；历史设计见 [v1 archived spec](docs/superpowers/specs/2026-04-23-laundry-desk-design.md)。
+宏发版本停止开发；根 `src/` 只作为历史行为参考，不作为当前产品入口。
 
 ## 架构
 
@@ -36,23 +36,11 @@ Fastify + Policy + Audit + PostgreSQL 16 / FORCE RLS
 
 Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 · PostgreSQL 16 · Drizzle · React 19 · Vite · Electron 41 · Vitest · Playwright
 
-## 路线图
+## 当前交付顺序
 
-| 期        | 交付范围                                                           |
-| --------- | ------------------------------------------------------------------ |
-| V2-M0     | RLS、lease、打印、本地通道、模型 adapter 与 compose 技术验证       |
-| V2-M1     | contracts、Command Bus、RLS、Identity、Policy、Edge/Web 基座       |
-| **V2-M2** | **柜台完整工作日 + 只读 AI/BYOK + 离线闭环 + v1 数据迁移（当前）** |
-| V2-M3     | 会员储值、通知/催取、开放 R3 确认写                                |
-| V2-M4     | 账务双口径、老板端、备份还原                                       |
-| V2-M5     | AI 全矩阵、审批、限额与有边界自动化                                |
-| V2-M6     | 视觉、小程序、工厂协同、取送与营销（四个独立子期）                 |
+`Local Foundation → Money Integrity → Workday Commands → Counter UI → Mock Print → Acceptance → later cloud/Windows`
 
-详细计划：
-
-- [V2-M2→M6 实施计划](docs/superpowers/plans/2026-07-19-v2-m2-m6-implementation-plan.md)
-- [V2-only 升级执行计划](.hermes/plans/2026-07-23_034229-v2-only-upgrade-next-development-plan.md)
-- [ADR 索引](docs/adr/README.md)
+历史 [Grok owner 任务书](docs/superpowers/plans/tasks/2026-07-21-task-grok-lead.md) 仅作治理记录，不是当前执行入口。
 
 ## 仓库结构
 
