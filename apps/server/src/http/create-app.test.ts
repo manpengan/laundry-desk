@@ -20,6 +20,9 @@ const OTHER_STAFF_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OTHER_DEVICE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const OTHER_SESSION_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const OTHER_FAMILY_ID = "99999999-9999-4999-8999-999999999999";
+const ROLE_LOOKALIKE_STAFF_ID = "10300000-0000-4000-8000-000000000000";
+const ROLE_LOOKALIKE_SESSION_ID = "10300000-0000-4000-8000-000000000001";
+const ROLE_LOOKALIKE_FAMILY_ID = "10300000-0000-4000-8000-000000000002";
 const localCookies = resolveCookiePolicy({ secure: false });
 
 async function buildApp() {
@@ -81,6 +84,50 @@ async function assertStaffDirectoryDenied(
   assert.equal(body.ok, false);
   assert.equal(body.error.code, "AUTHENTICATION_FAILED");
   assert.equal(body.data, undefined);
+}
+
+async function assertBearerDeniedAcrossProtectedRoutes(
+  app: FastifyInstance,
+  accessToken: string,
+): Promise<void> {
+  const protectedRequests = [
+    { label: "staff directory", method: "GET" as const, url: "/api/v2/local/staff" },
+    {
+      label: "command",
+      method: "POST" as const,
+      url: "/v1/commands/platform.settings.set",
+      payload: {},
+    },
+    {
+      label: "query",
+      method: "POST" as const,
+      url: "/v1/queries/platform.audit.list",
+      payload: {},
+    },
+    {
+      label: "PIN challenge",
+      method: "POST" as const,
+      url: "/api/v2/auth/pin/challenges",
+      payload: {},
+    },
+    {
+      label: "PIN verify",
+      method: "POST" as const,
+      url: `/api/v2/auth/pin/challenges/${OTHER_SESSION_ID}/verify`,
+      payload: {},
+    },
+  ] as const;
+
+  for (const protectedRequest of protectedRequests) {
+    const response = await app.inject({
+      ...protectedRequest,
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    assert.equal(response.statusCode, 401, `${protectedRequest.label}: ${response.body}`);
+    const body = response.json() as { ok?: boolean; error?: { code?: string } };
+    assert.equal(body.ok, false, protectedRequest.label);
+    assert.equal(body.error?.code, "AUTHENTICATION_FAILED", protectedRequest.label);
+  }
 }
 
 test("GET /health returns ok local-memory", async () => {
@@ -214,6 +261,152 @@ test("GET /api/v2/local/staff requires a valid bearer session", async (t) => {
     assert.deepEqual(response.json(), { ok: true, data: runtime.staffDirectory });
   });
 
+  await app.close();
+});
+
+test("all bearer-protected routes reject stale or mismatched signed tokens", async (t) => {
+  const { app, runtime } = await buildApp();
+  const accessToken = await loginAdmin(app);
+  const signer = runtime.identity.sessions.accessTokenSigner;
+  const claims = signer.verify(accessToken);
+  assert.ok(claims);
+  const now = runtime.identity.sessions.clock.nowEpochSeconds();
+
+  await t.test("expired token", async () => {
+    const expiredAt = now - 1;
+    const expiredToken = signer.sign({
+      ...claims,
+      iat: expiredAt - (claims.exp - claims.iat),
+      exp: expiredAt,
+    });
+    await assertBearerDeniedAcrossProtectedRoutes(app, expiredToken);
+  });
+
+  await t.test("future-issued token", async () => {
+    const issuedAt = now + 60;
+    const futureToken = signer.sign({
+      ...claims,
+      iat: issuedAt,
+      exp: issuedAt + (claims.exp - claims.iat),
+    });
+    await assertBearerDeniedAcrossProtectedRoutes(app, futureToken);
+  });
+
+  await t.test("claims/session mismatch", async () => {
+    const mismatchedToken = signer.sign({
+      ...claims,
+      permission_version: claims.permission_version + 1,
+    });
+    await assertBearerDeniedAcrossProtectedRoutes(app, mismatchedToken);
+  });
+
+  await app.close();
+});
+
+test("all bearer-protected routes reject sessions absent from the staff authority", async () => {
+  const { app, runtime } = await buildApp();
+  const adminToken = await loginAdmin(app);
+  const signer = runtime.identity.sessions.accessTokenSigner;
+  const adminClaims = signer.verify(adminToken);
+  assert.ok(adminClaims);
+  const adminSession = await runtime.identity.sessions.sessions.get(adminClaims.session_id);
+  assert.ok(adminSession);
+
+  await runtime.identity.sessions.sessions.insert(
+    Object.freeze({
+      ...adminSession,
+      session_id: OTHER_SESSION_ID,
+      family_id: OTHER_FAMILY_ID,
+      staff_id: OTHER_STAFF_ID,
+    }),
+  );
+  const unknownStaffToken = signer.sign({
+    ...adminClaims,
+    session_id: OTHER_SESSION_ID,
+    staff_id: OTHER_STAFF_ID,
+  });
+
+  await assertBearerDeniedAcrossProtectedRoutes(app, unknownStaffToken);
+  await app.close();
+});
+
+test("all bearer-protected routes reject a local staff session bound to another store", async () => {
+  const { app, runtime } = await buildApp();
+  const adminToken = await loginAdmin(app);
+  const signer = runtime.identity.sessions.accessTokenSigner;
+  const adminClaims = signer.verify(adminToken);
+  assert.ok(adminClaims);
+  const adminSession = await runtime.identity.sessions.sessions.get(adminClaims.session_id);
+  assert.ok(adminSession);
+
+  await runtime.identity.sessions.sessions.insert(
+    Object.freeze({
+      ...adminSession,
+      session_id: OTHER_SESSION_ID,
+      family_id: OTHER_FAMILY_ID,
+      store_id: OTHER_STORE_ID,
+    }),
+  );
+  const otherStoreToken = signer.sign({
+    ...adminClaims,
+    session_id: OTHER_SESSION_ID,
+    store_id: OTHER_STORE_ID,
+  });
+
+  await assertBearerDeniedAcrossProtectedRoutes(app, otherStoreToken);
+  await app.close();
+});
+
+test("staff role authority cannot be inferred from a UUID containing 103", async () => {
+  const { app: seedApp, runtime } = await buildApp();
+  const adminToken = await loginAdmin(seedApp);
+  const signer = runtime.identity.sessions.accessTokenSigner;
+  const adminClaims = signer.verify(adminToken);
+  assert.ok(adminClaims);
+  const adminSession = await runtime.identity.sessions.sessions.get(adminClaims.session_id);
+  assert.ok(adminSession);
+
+  await runtime.identity.sessions.sessions.insert(
+    Object.freeze({
+      ...adminSession,
+      session_id: ROLE_LOOKALIKE_SESSION_ID,
+      family_id: ROLE_LOOKALIKE_FAMILY_ID,
+      staff_id: ROLE_LOOKALIKE_STAFF_ID,
+    }),
+  );
+  await seedApp.close();
+
+  const staffRuntime = Object.freeze({
+    ...runtime,
+    staffDirectory: Object.freeze([
+      ...runtime.staffDirectory,
+      Object.freeze({
+        staff_id: ROLE_LOOKALIKE_STAFF_ID,
+        display_name: "普通店员",
+        role: "staff" as const,
+        username: "ordinary-103",
+      }),
+    ]),
+  });
+  const app = await createLocalApp({ runtime: staffRuntime, cookiePolicy: localCookies });
+  const staffToken = signer.sign({
+    ...adminClaims,
+    session_id: ROLE_LOOKALIKE_SESSION_ID,
+    staff_id: ROLE_LOOKALIKE_STAFF_ID,
+  });
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/commands/platform.settings.set",
+    headers: { authorization: `Bearer ${staffToken}` },
+    payload: {
+      entries: [{ key: "pricing.min_order_cents", value_json: "100" }],
+    },
+  });
+
+  assert.equal(response.statusCode, 403, response.body);
+  const body = response.json() as { ok?: boolean; error?: { code?: string } };
+  assert.equal(body.ok, false);
+  assert.equal(body.error?.code, "PERMISSION_DENIED");
   await app.close();
 });
 

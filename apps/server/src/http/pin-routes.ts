@@ -20,8 +20,10 @@ type FailFn = (code: CommandErrorCode) => Readonly<{
 export type PinRouteHelpers = Readonly<{
   runtime: LocalRuntime;
   cookiePolicy: CookiePolicy;
-  readBearer: (request: FastifyRequest) => string | null;
-  resolveSession: (runtime: LocalRuntime, token: string | null) => Promise<SessionRecord | null>;
+  resolveSession: (
+    runtime: LocalRuntime,
+    authorizationHeader: string | null | undefined,
+  ) => Promise<SessionRecord | null>;
   requireCsrf: (
     request: FastifyRequest,
     reply: FastifyReply,
@@ -41,7 +43,7 @@ export type PinRouteHelpers = Readonly<{
 
 export function registerPinRoutes(app: FastifyInstance, h: PinRouteHelpers): void {
   app.post("/api/v2/auth/pin/challenges", async (request, reply) => {
-    const session = await h.resolveSession(h.runtime, h.readBearer(request));
+    const session = await h.resolveSession(h.runtime, request.headers.authorization);
     if (session === null) {
       reply.code(401);
       return h.fail("AUTHENTICATION_FAILED");
@@ -96,7 +98,7 @@ export function registerPinRoutes(app: FastifyInstance, h: PinRouteHelpers): voi
   });
 
   app.post("/api/v2/auth/pin/challenges/:challengeId/verify", async (request, reply) => {
-    const session = await h.resolveSession(h.runtime, h.readBearer(request));
+    const session = await h.resolveSession(h.runtime, request.headers.authorization);
     if (session === null) {
       reply.code(401);
       return h.fail("AUTHENTICATION_FAILED");

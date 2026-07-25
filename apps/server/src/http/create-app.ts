@@ -11,7 +11,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 
 import { createCommandError, CSRF_HEADER_NAME, type CommandErrorCode } from "@laundry/contracts";
 
-import { AuthError } from "../auth/context.js";
+import { AuthError, type AuthContext } from "../auth/context.js";
 import { resolveSessionFromBearer } from "../auth/resolve-session.js";
 import { executeCommand } from "../bus/executor.js";
 import { executeQuery } from "../bus/execute-query.js";
@@ -20,7 +20,6 @@ import { FakeSqlClient } from "../db/fake-client.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
-import { createAccessTokenSigner } from "../identity/crypto-util.js";
 import { loginWithPassword } from "../identity/login.js";
 import { logoutSession, rotateRefresh } from "../identity/session.js";
 import type { SessionIssueResult, SessionRecord } from "../identity/types.js";
@@ -44,13 +43,6 @@ export type CreateAppOptions = Readonly<{
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readBearer(request: FastifyRequest): string | null {
-  const header = request.headers.authorization;
-  if (typeof header !== "string") return null;
-  const match = /^Bearer\s+(\S+)$/iu.exec(header.trim());
-  return match?.[1] ?? null;
 }
 
 function fail(code: CommandErrorCode) {
@@ -93,30 +85,66 @@ function tenantFromSession(session: SessionRecord): TenantContext {
   });
 }
 
-function actorFromSession(session: SessionRecord): ActorContext {
-  const isAdmin = session.staff_id.endsWith("111103") || session.staff_id.includes("103");
+const ADMIN_PERMISSIONS = Object.freeze([
+  "settings_admin",
+  "staff_read",
+  "staff_write",
+  "order_write",
+]);
+const STAFF_PERMISSIONS = Object.freeze(["staff_read", "order_write"]);
+const NO_PERMISSIONS = Object.freeze([] as string[]);
+function actorFromSession(runtime: LocalRuntime, session: SessionRecord): ActorContext {
+  const staff = runtime.staffDirectory.find((entry) => entry.staff_id === session.staff_id);
   return Object.freeze({
     staffId: session.staff_id,
     deviceId: session.device_id,
     via: "ui" as const,
     // order_write: M2 counter receive/pickup (UI + local HTTP).
-    permissions: isAdmin
-      ? Object.freeze(["settings_admin", "staff_read", "staff_write", "order_write"])
-      : Object.freeze(["staff_read", "order_write"]),
+    permissions:
+      staff?.role === "admin"
+        ? ADMIN_PERMISSIONS
+        : staff?.role === "staff"
+          ? STAFF_PERMISSIONS
+          : NO_PERMISSIONS,
   });
+}
+
+function sessionMatchesAuthContext(session: SessionRecord, context: AuthContext): boolean {
+  return (
+    session.status === "active" &&
+    session.session_id === context.session_id &&
+    session.session_version === context.session_version &&
+    session.family_id === context.family_id &&
+    session.permission_version === context.permission_version &&
+    session.authentication_method === context.authentication_method &&
+    session.org_id === context.tenant.org_id &&
+    session.store_id === context.tenant.store_id &&
+    session.staff_id === context.actor.staff_id &&
+    session.device_id === context.actor.device_id
+  );
 }
 
 async function resolveSession(
   runtime: LocalRuntime,
-  token: string | null,
+  authorizationHeader: string | null | undefined,
 ): Promise<SessionRecord | null> {
-  if (token === null || token.length === 0) return null;
-  const signer = createAccessTokenSigner(runtime.accessTokenSecret);
-  const claims = signer.verify(token);
-  if (claims === null) return null;
-  const session = await runtime.identity.sessions.sessions.get(claims.session_id);
-  if (session === null || session.status !== "active") return null;
-  if (session.session_version !== claims.session_version) return null;
+  let context: AuthContext;
+  try {
+    context = await resolveSessionFromBearer(runtime.identity.sessions, {
+      authorizationHeader,
+      via: "ui",
+    });
+  } catch (error) {
+    if (error instanceof AuthError) return null;
+    throw error;
+  }
+
+  const session = await runtime.identity.sessions.sessions.get(context.session_id);
+  if (session === null || !sessionMatchesAuthContext(session, context)) return null;
+  if (session.org_id !== LOCAL_PROFILE.orgId || session.store_id !== LOCAL_PROFILE.storeId) {
+    return null;
+  }
+  if (!runtime.staffDirectory.some((entry) => entry.staff_id === session.staff_id)) return null;
   return session;
 }
 
@@ -191,13 +219,11 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
 
   app.get("/api/v2/local/staff", async (request, reply) => {
     try {
-      const authContext = await resolveSessionFromBearer(runtime.identity.sessions, {
-        authorizationHeader: request.headers.authorization,
-        via: "ui",
-      });
+      const session = await resolveSession(runtime, request.headers.authorization);
       if (
-        authContext.tenant.org_id !== LOCAL_PROFILE.orgId ||
-        authContext.tenant.store_id !== LOCAL_PROFILE.storeId
+        session === null ||
+        session.org_id !== LOCAL_PROFILE.orgId ||
+        session.store_id !== LOCAL_PROFILE.storeId
       ) {
         reply.code(401);
         return fail("AUTHENTICATION_FAILED");
@@ -240,8 +266,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   });
 
   app.post("/api/v2/auth/logout", async (request, reply) => {
-    const accessToken = readBearer(request);
-    const session = await resolveSession(runtime, accessToken);
+    const session = await resolveSession(runtime, request.headers.authorization);
     try {
       if (session !== null) {
         await logoutSession(runtime.identity.sessions, {
@@ -260,7 +285,6 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   registerPinRoutes(app, {
     runtime,
     cookiePolicy,
-    readBearer,
     resolveSession,
     requireCsrf,
     mapIdentityHttpError,
@@ -278,7 +302,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   };
 
   app.post("/v1/commands/:name", async (request, reply) => {
-    const session = await resolveSession(runtime, readBearer(request));
+    const session = await resolveSession(runtime, request.headers.authorization);
     if (session === null) {
       reply.code(401);
       return fail("AUTHENTICATION_FAILED");
@@ -308,7 +332,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       photo: runtime.photo,
     });
     const tenant = tenantFromSession(session);
-    const actor = actorFromSession(session);
+    const actor = actorFromSession(runtime, session);
     const result = await runWithSql((sql) =>
       executeCommand(sql, tenant, name, input, {
         registry,
@@ -337,7 +361,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   });
 
   app.post("/v1/queries/:name", async (request, reply) => {
-    const session = await resolveSession(runtime, readBearer(request));
+    const session = await resolveSession(runtime, request.headers.authorization);
     if (session === null) {
       reply.code(401);
       return fail("AUTHENTICATION_FAILED");
@@ -361,7 +385,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       photo: runtime.photo,
     });
     const tenant = tenantFromSession(session);
-    const actor = actorFromSession(session);
+    const actor = actorFromSession(runtime, session);
     const result = await runWithSql((sql) =>
       executeQuery(sql, tenant, name, body, {
         registry: queryRegistry,
