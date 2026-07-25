@@ -8,8 +8,9 @@ import test from "node:test";
 
 import { createPgPool, resolvePgUrls } from "../db/pg-pool.js";
 import { createPgIdentityStore } from "./pg-store.js";
-import { seedDemoIdentity } from "../local/pg-seed.js";
-import { DEMO_ADMIN_ID, DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID } from "../local/demo-ids.js";
+import { DEMO_STAFF_A_ID } from "../local/demo-ids.js";
+import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
+import { LOCAL_PROFILE } from "../local/profile.js";
 import { createPasswordPort } from "./password.js";
 import { loginWithPassword } from "./login.js";
 import { createAccessTokenSigner } from "./crypto-util.js";
@@ -23,12 +24,12 @@ const urls = pgOptIn ? resolvePgUrls(process.env) : null;
 
 const maybe = urls === null ? test.skip : test;
 
-maybe("PG seed + login + PIN + refresh via laundry_app", async () => {
+maybe("PG fixture supports login + PIN + refresh via laundry_app", async () => {
   assert.ok(urls);
   const adminPool = createPgPool({ connectionString: urls.admin });
   const appPool = createPgPool({ connectionString: urls.app });
   try {
-    await seedDemoIdentity(adminPool);
+    const fixture = await seedPgTestIdentityFixture(adminPool);
     const store = createPgIdentityStore(appPool);
     const passwordPort = createPasswordPort();
     const clock = { nowEpochSeconds: () => Math.floor(Date.now() / 1000) };
@@ -45,10 +46,10 @@ maybe("PG seed + login + PIN + refresh via laundry_app", async () => {
       sessions,
     };
     const issued = await loginWithPassword(loginDeps, {
-      org_code: "hongfa",
-      store_code: "main",
-      username: "admin",
-      password: DEMO_PASSWORD,
+      org_code: LOCAL_PROFILE.orgCode,
+      store_code: LOCAL_PROFILE.storeCode,
+      username: fixture.adminUsername,
+      password: fixture.adminPassword,
       device_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
     });
     assert.equal(issued.storage, "memory_only");
@@ -74,7 +75,7 @@ maybe("PG seed + login + PIN + refresh via laundry_app", async () => {
     });
     const switched = await verifyQuickSwitchPin(pinDeps, {
       challenge_id: challenge.challenge_id,
-      pin: DEMO_PIN,
+      pin: fixture.adminPin,
       session,
     });
     assert.equal(switched.session.staff_id, DEMO_STAFF_A_ID);
@@ -125,9 +126,9 @@ maybe("PG seed + login + PIN + refresh via laundry_app", async () => {
     assert.equal(switchedRefresh.session.staff_id, DEMO_STAFF_A_ID);
 
     const bad = await loginWithPassword(loginDeps, {
-      org_code: "hongfa",
-      store_code: "main",
-      username: "admin",
+      org_code: LOCAL_PROFILE.orgCode,
+      store_code: LOCAL_PROFILE.storeCode,
+      username: fixture.adminUsername,
       password: "wrong",
       device_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
     }).then(
@@ -135,7 +136,6 @@ maybe("PG seed + login + PIN + refresh via laundry_app", async () => {
       (error: unknown) => error,
     );
     assert.ok(bad);
-    void DEMO_ADMIN_ID;
   } finally {
     await adminPool.end();
     await appPool.end();

@@ -46,6 +46,15 @@ test("GET /health returns ok local-memory", async () => {
   await app.close();
 });
 
+test("does not expose bootstrap or reset over HTTP", async () => {
+  const { app } = await buildApp();
+  for (const url of ["/api/v2/local/bootstrap", "/api/v2/local/reset", "/bootstrap", "/reset"]) {
+    const response = await app.inject({ method: "POST", url, payload: {} });
+    assert.equal(response.statusCode, 404, `${url} must not be routable`);
+  }
+  await app.close();
+});
+
 test("POST /api/v2/auth/login succeeds with demo credentials and sets cookies", async () => {
   const { app } = await buildApp();
   const res = await app.inject({

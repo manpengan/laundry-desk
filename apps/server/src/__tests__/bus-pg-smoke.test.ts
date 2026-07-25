@@ -13,8 +13,8 @@ import { createPgPool, resolvePgUrls } from "../db/pg-pool.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
 import type { TenantContext } from "../db/types.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
-import { seedDemoIdentity } from "../local/pg-seed.js";
 import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
+import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
 
 const urls =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true"
@@ -48,7 +48,7 @@ maybe("platform.settings.set persists settings + audit_log under laundry_app", a
   const adminPool = createPgPool({ connectionString: urls.admin });
   const appPool = createPgPool({ connectionString: urls.app });
   try {
-    await seedDemoIdentity(adminPool);
+    await seedPgTestIdentityFixture(adminPool);
 
     const platform = Object.freeze({
       persistence: "sql" as const,

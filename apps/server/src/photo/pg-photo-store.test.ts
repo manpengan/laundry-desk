@@ -9,8 +9,8 @@ import { createPgPool, resolvePgUrls, type PgPool, type PgPoolClient } from "../
 import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { TenantContext } from "../db/types.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
-import { seedDemoIdentity } from "../local/pg-seed.js";
 import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
+import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
 import { createPgPhotoStore } from "./pg-photo-store.js";
 
 const ORDER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -135,7 +135,7 @@ maybe("PG photo command persists metadata and audit through the command transact
   const garmentId = randomUUID();
   const storageKey = `photos/${randomUUID()}.jpg`;
   try {
-    await seedDemoIdentity(adminPool);
+    await seedPgTestIdentityFixture(adminPool);
     await adminPool.query(
       `INSERT INTO orders (
          id, org_id, store_id, ticket_no, status, customer_phone, customer_name, note,

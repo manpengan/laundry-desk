@@ -12,8 +12,8 @@ import { TenantGucError } from "../db/guc.js";
 import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { TenantContext } from "../db/types.js";
 import { withWorkerTenantTransaction } from "../db/worker-transaction.js";
-import { seedDemoIdentity } from "../local/pg-seed.js";
 import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
+import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
 
 const urls =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true"
@@ -119,7 +119,7 @@ test(
     const adminPool = createPgPool({ connectionString: urls.admin });
     const appPool = createPgPool({ connectionString: urls.app, max: 1 });
     try {
-      await seedDemoIdentity(adminPool);
+      await seedPgTestIdentityFixture(adminPool);
       await seedOtherTenant(adminPool);
 
       assert.equal(await countWithoutGuc(appPool), 0);
@@ -187,7 +187,7 @@ test(
     const adminPool = createPgPool({ connectionString: urls.admin });
     const appPool = createPgPool({ connectionString: urls.app, max: 1 });
     try {
-      await seedDemoIdentity(adminPool);
+      await seedPgTestIdentityFixture(adminPool);
       await installAuditFailureTrigger(adminPool);
 
       const registry = createM1CommandRegistry();
@@ -237,7 +237,7 @@ test(
     const adminPool = createPgPool({ connectionString: urls.admin });
     const appPool = createPgPool({ connectionString: urls.app });
     try {
-      await seedDemoIdentity(adminPool);
+      await seedPgTestIdentityFixture(adminPool);
       for (const statement of [
         "UPDATE payments SET note = 'forbidden' WHERE false",
         "DELETE FROM payments WHERE false",

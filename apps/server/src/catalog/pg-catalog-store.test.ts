@@ -7,7 +7,6 @@ import test from "node:test";
 
 import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
 import { DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
-import { DEMO_CATALOG_ITEMS } from "./memory-catalog.js";
 import { createPgCatalogStore } from "./pg-catalog-store.js";
 
 type RecordedQuery = Readonly<{
@@ -51,34 +50,13 @@ function createCapturingPool(handler?: MockQueryHandler): {
   return { pool, queries };
 }
 
-test("listAll seeds when empty then returns active rows", async () => {
-  let countCalls = 0;
+test("listAll returns an empty catalog without executing an INSERT", async () => {
   const { pool, queries } = createCapturingPool((sql) => {
     if (sql.includes("set_config") || sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
       return { rows: [], rowCount: 0 };
     }
-    if (sql.includes("COUNT(*)")) {
-      countCalls += 1;
-      // First count empty → seed; subsequent counts unused in this path after seed inserts.
-      return { rows: [{ n: "0" }], rowCount: 1 };
-    }
-    if (sql.includes("INSERT INTO catalog_items")) {
-      return { rows: [], rowCount: 1 };
-    }
     if (sql.includes("FROM catalog_items") && sql.includes("is_active")) {
-      return {
-        rows: [
-          {
-            code: "wash_shirt",
-            name: "水洗衬衫",
-            service_code: "wash",
-            category_code: "shirt",
-            unit_price_cents: 1500,
-            mnemonic: "xs",
-          },
-        ],
-        rowCount: 1,
-      };
+      return { rows: [], rowCount: 0 };
     }
     return { rows: [], rowCount: 0 };
   });
@@ -86,28 +64,18 @@ test("listAll seeds when empty then returns active rows", async () => {
   const store = createPgCatalogStore(pool, {
     orgId: DEMO_ORG_ID,
     storeId: DEMO_STORE_ID,
-    newId: () => "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
   });
 
   const items = await store.listAll();
-  assert.equal(items.length, 1);
-  assert.equal(items[0]?.code, "wash_shirt");
-  assert.equal(items[0]?.unit_price_cents, 1500);
-  assert.equal(items[0]?.mnemonic, "xs");
-  assert.equal(countCalls, 1);
-
-  const inserts = queries.filter((q) => q.sql.includes("INSERT INTO catalog_items"));
-  assert.equal(inserts.length, DEMO_CATALOG_ITEMS.length);
+  assert.deepEqual(items, []);
+  assert.equal(queries.filter((query) => /\bINSERT\b/iu.test(query.sql)).length, 0);
   assert.ok(queries.some((q) => q.sql.includes("set_config")));
 });
 
-test("listAll skips seed when store already has rows", async () => {
+test("listAll returns existing active rows without executing an INSERT", async () => {
   const { pool, queries } = createCapturingPool((sql) => {
     if (sql.includes("set_config") || sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
       return { rows: [], rowCount: 0 };
-    }
-    if (sql.includes("COUNT(*)")) {
-      return { rows: [{ n: "3" }], rowCount: 1 };
     }
     if (sql.includes("FROM catalog_items") && sql.includes("is_active")) {
       return {
@@ -136,16 +104,13 @@ test("listAll skips seed when store already has rows", async () => {
   assert.equal(items.length, 1);
   assert.equal(items[0]?.code, "custom_item");
   assert.equal(items[0]?.mnemonic, undefined);
-  assert.equal(queries.filter((q) => q.sql.includes("INSERT INTO catalog_items")).length, 0);
+  assert.equal(queries.filter((query) => /\bINSERT\b/iu.test(query.sql)).length, 0);
 });
 
 test("mapRow omits empty mnemonic", async () => {
   const { pool } = createCapturingPool((sql) => {
     if (sql.includes("set_config") || sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
       return { rows: [], rowCount: 0 };
-    }
-    if (sql.includes("COUNT(*)")) {
-      return { rows: [{ n: "1" }], rowCount: 1 };
     }
     if (sql.includes("FROM catalog_items")) {
       return {

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 
 import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
+import { withStoreGuc } from "../db/tenant-guc-client.js";
 import type { PasswordPort } from "../identity/password.js";
 import { LOCAL_PROFILE, type LocalProfile } from "./profile.js";
 
@@ -49,6 +50,15 @@ export class BootstrapError extends Error {
     super(code, options);
     this.name = "BootstrapError";
     this.code = code;
+  }
+}
+
+export class LocalRuntimeReadinessError extends Error {
+  readonly code = "LOCAL_RUNTIME_NOT_READY";
+
+  constructor(options?: ErrorOptions) {
+    super("LOCAL_RUNTIME_NOT_READY", options);
+    this.name = "LocalRuntimeReadinessError";
   }
 }
 
@@ -151,6 +161,24 @@ type CollisionRow = Readonly<{
   demo_only_conflict: boolean;
 }>;
 
+type RuntimeProfileRow = Readonly<{
+  current_role: string;
+  current_role_is_superuser: boolean;
+  current_role_bypasses_rls: boolean;
+  org_id: string;
+  org_code: string;
+  org_name: string;
+  store_id: string;
+  store_code: string;
+  store_name: string;
+  store_timezone: string;
+  admin_staff_id: string;
+  admin_is_active: boolean;
+  role_id: string;
+  role_name: string;
+  role_is_active: boolean;
+}>;
+
 const LOCK_METADATA_SQL = `
   SELECT singleton, org_id, store_id, admin_staff_id, profile_hash, demo_only
     FROM local_bootstrap_metadata
@@ -225,6 +253,92 @@ const COLLISION_PREFLIGHT_SQL = `
          AND $8::boolean = false
     ) AS demo_only_conflict
 `;
+
+const READ_RUNTIME_PROFILE_SQL = `
+  SELECT
+    current_user AS current_role,
+    runtime_role.rolsuper AS current_role_is_superuser,
+    runtime_role.rolbypassrls AS current_role_bypasses_rls,
+    org.id::text AS org_id,
+    org.code AS org_code,
+    org.name AS org_name,
+    store.id::text AS store_id,
+    store.code AS store_code,
+    store.name AS store_name,
+    store.timezone AS store_timezone,
+    admin.id::text AS admin_staff_id,
+    admin.is_active AS admin_is_active,
+    role.id::text AS role_id,
+    role.role AS role_name,
+    role.is_active AS role_is_active
+  FROM pg_roles runtime_role
+  JOIN orgs org
+    ON runtime_role.rolname = current_user
+  JOIN stores store
+    ON store.org_id = org.id
+   AND store.id = $2::uuid
+  JOIN staffs admin
+    ON admin.org_id = org.id
+   AND admin.id = $3::uuid
+  JOIN staff_store_roles role
+    ON role.id = $4::uuid
+   AND role.org_id = org.id
+   AND role.store_id = store.id
+   AND role.staff_id = admin.id
+  WHERE org.id = $1::uuid
+  LIMIT 1
+`;
+
+const runtimeProfileMatches = (row: RuntimeProfileRow): boolean =>
+  row.current_role === "laundry_app" &&
+  !row.current_role_is_superuser &&
+  !row.current_role_bypasses_rls &&
+  row.org_id === LOCAL_PROFILE.orgId &&
+  row.org_code === LOCAL_PROFILE.orgCode &&
+  row.org_name === LOCAL_PROFILE.orgName &&
+  row.store_id === LOCAL_PROFILE.storeId &&
+  row.store_code === LOCAL_PROFILE.storeCode &&
+  row.store_name === LOCAL_PROFILE.storeName &&
+  row.store_timezone === LOCAL_PROFILE.timezone &&
+  row.admin_staff_id === LOCAL_PROFILE.adminStaffId &&
+  row.admin_is_active &&
+  row.role_id === BOOTSTRAP_ADMIN_ROLE_ID &&
+  row.role_name === ADMIN_ROLE &&
+  row.role_is_active;
+
+/**
+ * Verify runtime connectivity and the fixed local profile entirely through laundry_app.
+ * Owner-only bootstrap metadata is deliberately outside this readiness boundary.
+ */
+export async function assertLocalBootstrapReady(pool: PgPool): Promise<void> {
+  try {
+    await withStoreGuc(
+      pool,
+      {
+        orgId: LOCAL_PROFILE.orgId,
+        storeId: LOCAL_PROFILE.storeId,
+        staffId: LOCAL_PROFILE.adminStaffId,
+      },
+      async (client) => {
+        const result = await client.query<RuntimeProfileRow>(READ_RUNTIME_PROFILE_SQL, [
+          LOCAL_PROFILE.orgId,
+          LOCAL_PROFILE.storeId,
+          LOCAL_PROFILE.adminStaffId,
+          BOOTSTRAP_ADMIN_ROLE_ID,
+        ]);
+        const row = result.rows[0];
+        if (row === undefined || !runtimeProfileMatches(row)) {
+          throw new LocalRuntimeReadinessError();
+        }
+      },
+    );
+  } catch (error) {
+    if (error instanceof LocalRuntimeReadinessError) {
+      throw error;
+    }
+    throw new LocalRuntimeReadinessError({ cause: error });
+  }
+}
 
 const canonicalProfile = (input: BootstrapInput): string =>
   JSON.stringify({

@@ -40,9 +40,14 @@ import {
 } from "../platform/index.js";
 import type { PlatformHandlerDeps } from "../platform/handlers.js";
 import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
-import { createPgPool, resolvePgUrls, type PgPool, type ResolvedPgUrls } from "../db/pg-pool.js";
+import {
+  createPgPool,
+  resolveRuntimeDatabaseUrl,
+  type CreatePoolOptions,
+  type PgPool,
+} from "../db/pg-pool.js";
 import { DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./demo-ids.js";
-import { seedDemoIdentity } from "./pg-seed.js";
+import { assertLocalBootstrapReady } from "./bootstrap.js";
 import {
   parseLocalHostConfig,
   parseLocalServerConfig,
@@ -99,6 +104,16 @@ export type LocalRuntime = Readonly<{
   /** Memory store when mode === "memory" (tests). */
   store: ReturnType<typeof createMemoryIdentityStore> | null;
 }>;
+
+export type CreatePgLocalRuntimeDependencies = Readonly<{
+  createPool: (options: CreatePoolOptions) => PgPool;
+  assertReady: (pool: PgPool) => Promise<void>;
+}>;
+
+const defaultPgRuntimeDependencies: CreatePgLocalRuntimeDependencies = Object.freeze({
+  createPool: createPgPool,
+  assertReady: assertLocalBootstrapReady,
+});
 
 const staffDirectory = Object.freeze([
   Object.freeze({
@@ -257,29 +272,19 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   });
 }
 
-/**
- * Postgres identity: admin pool seeds demo rows; app pool runs laundry_app + GUC.
- * Pass a single URL string (legacy) or ResolvedPgUrls.
- */
+/** Postgres runtime: one verified laundry_app pool, with no owner connection or seed path. */
 export async function createPgLocalRuntime(
-  urlsOrConnectionString: string | ResolvedPgUrls,
+  connectionString: string,
   config: LocalServerConfig = parseLocalServerConfig(process.env),
+  dependencies: CreatePgLocalRuntimeDependencies = defaultPgRuntimeDependencies,
 ): Promise<LocalRuntime> {
-  const urls: ResolvedPgUrls =
-    typeof urlsOrConnectionString === "string"
-      ? Object.freeze({ app: urlsOrConnectionString, admin: urlsOrConnectionString })
-      : urlsOrConnectionString;
-
-  const adminPool = createPgPool({ connectionString: urls.admin });
-  const appPool = createPgPool({ connectionString: urls.app });
+  const appPool = dependencies.createPool({ connectionString });
   try {
-    await seedDemoIdentity(adminPool);
+    await dependencies.assertReady(appPool);
   } catch (error) {
-    await adminPool.end();
     await appPool.end();
     throw error;
   }
-  await adminPool.end();
 
   const store = createPgIdentityStore(appPool);
   const passwordPort = createPasswordPort();
@@ -341,15 +346,14 @@ export async function createLocalRuntime(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<LocalRuntime> {
   const hostConfig = parseLocalHostConfig(env);
-  const urls = resolvePgUrls(env);
+  const databaseUrl = resolveRuntimeDatabaseUrl(env);
   const isProduction = env.NODE_ENV === "production";
-  const databaseUrl = env.DATABASE_URL?.trim() ?? "";
-  if (isProduction && databaseUrl.length === 0) {
+  if (isProduction && databaseUrl === null) {
     throw new Error("Production runtime requires DATABASE_URL for the laundry_app role");
   }
-  if (urls !== null) {
+  if (databaseUrl !== null) {
     return createPgLocalRuntime(
-      urls,
+      databaseUrl,
       Object.freeze({
         ...hostConfig,
         ...parseLocalSigningSecrets(env),

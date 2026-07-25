@@ -1,6 +1,6 @@
 /**
  * node-pg Pool factory for local / compose Postgres.
- * Seed uses admin URL; runtime identity uses laundry_app + GUC / definer.
+ * Tests may use both URLs; runtime identity accepts only laundry_app + GUC / definer.
  */
 
 import pg from "pg";
@@ -20,14 +20,15 @@ export const LOCAL_PG_URLS = Object.freeze({
 });
 
 export type ResolvedPgUrls = Readonly<{
-  /** laundry_app (or explicit DATABASE_URL) for runtime identity. */
+  /** laundry_app (or explicit DATABASE_URL) for opt-in PG tests. */
   app: string;
-  /** Superuser URL for seed bootstrap only. */
+  /** Superuser URL for migrations and test fixtures. */
   admin: string;
 }>;
 
 /**
- * Resolve app + admin URLs when PG mode is requested.
+ * Resolve app + admin URLs for explicit real-PG integration tests.
+ * Runtime code must use resolveRuntimeDatabaseUrl instead.
  * - LAUNDRY_USE_LOCAL_PG=1 → compose defaults (app + admin)
  * - DATABASE_URL → runtime app; admin from DATABASE_ADMIN_URL or same URL
  */
@@ -52,9 +53,25 @@ export function resolvePgUrls(env: NodeJS.ProcessEnv = process.env): ResolvedPgU
   return Object.freeze({ app, admin });
 }
 
-/** App-role URL when PG mode is on (tests / legacy call sites). */
+/**
+ * Resolve the runtime app-role URL without ever consulting an owner/admin variable.
+ * The local PG opt-in may use its dedicated app URL or the known local app-role URL.
+ */
+export function resolveRuntimeDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string | null {
+  const databaseUrl = env.DATABASE_URL?.trim() ?? "";
+  if (databaseUrl.length > 0) {
+    return databaseUrl;
+  }
+  const localPg = env.LAUNDRY_USE_LOCAL_PG === "1" || env.LAUNDRY_USE_LOCAL_PG === "true";
+  if (!localPg) {
+    return null;
+  }
+  return env.LAUNDRY_PG_APP_URL?.trim() || LOCAL_PG_URLS.app;
+}
+
+/** Backward-compatible name for the fail-closed runtime resolver. */
 export function resolveIdentityDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  return resolvePgUrls(env)?.app ?? null;
+  return resolveRuntimeDatabaseUrl(env);
 }
 
 export function createPgPool(options: CreatePoolOptions): PgPool {
