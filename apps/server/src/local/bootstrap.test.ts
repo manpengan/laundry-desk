@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
 import type { PasswordPort } from "../identity/password.js";
@@ -16,6 +19,7 @@ import { LOCAL_PROFILE } from "./profile.js";
 
 const PASSWORD_PHC = "$argon2id$v=19$m=19456,t=2,p=1$password$hash";
 const PIN_PHC = "$argon2id$v=19$m=19456,t=2,p=1$pin$hash";
+const serverPackagePath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json");
 
 type QueryRecord = Readonly<{
   sql: string;
@@ -386,6 +390,19 @@ function input(overrides: Partial<BootstrapInput> = {}): BootstrapInput {
   });
 }
 
+test("builds workspace dependencies before the package-local bootstrap CLI", () => {
+  const serverPackage = JSON.parse(readFileSync(serverPackagePath, "utf8")) as Readonly<{
+    scripts?: Readonly<Record<string, string>>;
+  }>;
+
+  assert.deepEqual(serverPackage.scripts?.["bootstrap:local"]?.split(" && "), [
+    "pnpm --filter @laundry/contracts build",
+    "pnpm --filter @laundry/domain build",
+    "pnpm run build",
+    "node dist/local/bootstrap-cli.js",
+  ]);
+});
+
 test("validates the fixed local profile and every external admin boundary", () => {
   assert.throws(
     () => BootstrapInputSchema.parse(input({ adminUsername: "not visible" })),
@@ -635,6 +652,18 @@ test("serializes two identical calls into one creation and one unchanged result"
   assert.deepEqual(results.map((result) => result.status).sort(), ["created", "unchanged"]);
   assert.equal(database.events.filter((event) => event === "locked").length, 2);
   assert.equal(database.events.filter((event) => event === "commit").length, 2);
+  const insertTables = database.queries
+    .map((query) => query.sql.replace(/\s+/gu, " ").trim())
+    .filter((sql) => sql.startsWith("INSERT INTO"))
+    .map((sql) => sql.match(/^INSERT INTO ([a-z_]+)/u)?.[1]);
+  assert.equal(insertTables.length, 5);
+  assert.deepEqual(insertTables, [
+    "orgs",
+    "stores",
+    "staffs",
+    "staff_store_roles",
+    "local_bootstrap_metadata",
+  ]);
 });
 
 test("serializes two different calls into one creation and one safe conflict", async () => {

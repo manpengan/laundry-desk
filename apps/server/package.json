@@ -10,7 +10,7 @@
     }
   },
   "scripts": {
-    "bootstrap:local": "pnpm run build && node dist/local/bootstrap-cli.js",
+    "bootstrap:local": "pnpm --filter @laundry/contracts build && pnpm --filter @laundry/domain build && pnpm run build && node dist/local/bootstrap-cli.js",
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "lint": "eslint src --ext .ts,.tsx --max-warnings=0",
