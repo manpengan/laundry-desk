@@ -4,16 +4,9 @@
  */
 
 import type { PgPool } from "../db/pg-pool.js";
-import {
-  DEMO_ADMIN_ID,
-  DEMO_ORG_ID,
-  DEMO_PASSWORD,
-  DEMO_PIN,
-  DEMO_STAFF_A_ID,
-  DEMO_STAFF_B_ID,
-  DEMO_STORE_ID,
-} from "./demo-ids.js";
+import { DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./demo-ids.js";
 import { createPasswordPort } from "../identity/password.js";
+import { LOCAL_PROFILE } from "./profile.js";
 
 export type SeedDemoResult = Readonly<{
   org_id: string;
@@ -22,7 +15,7 @@ export type SeedDemoResult = Readonly<{
 }>;
 
 /**
- * Upsert hongfa/main + admin/staff/staffb with demo password/PIN hashes.
+ * Upsert the local profile + admin/staff/staffb with demo password/PIN hashes.
  * Call with admin/superuser URL so FORCE RLS does not block bootstrap.
  */
 export async function seedDemoIdentity(pool: PgPool): Promise<SeedDemoResult> {
@@ -37,22 +30,29 @@ export async function seedDemoIdentity(pool: PgPool): Promise<SeedDemoResult> {
 
     await client.query(
       `INSERT INTO orgs (id, code, name, created_at, updated_at)
-       VALUES ($1, 'hongfa', '宏发洗衣', $2, $2)
+       VALUES ($1, $2, $3, $4, $4)
        ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, name = EXCLUDED.name,
          updated_at = EXCLUDED.updated_at`,
-      [DEMO_ORG_ID, now],
+      [LOCAL_PROFILE.orgId, LOCAL_PROFILE.orgCode, LOCAL_PROFILE.orgName, now],
     );
 
     await client.query(
       `INSERT INTO stores (id, org_id, code, name, timezone, created_at, updated_at)
-       VALUES ($1, $2, 'main', '总店', 'Asia/Shanghai', $3, $3)
+       VALUES ($1, $2, $3, $4, $5, $6, $6)
        ON CONFLICT (id) DO UPDATE SET code = EXCLUDED.code, name = EXCLUDED.name,
          updated_at = EXCLUDED.updated_at`,
-      [DEMO_STORE_ID, DEMO_ORG_ID, now],
+      [
+        LOCAL_PROFILE.storeId,
+        LOCAL_PROFILE.orgId,
+        LOCAL_PROFILE.storeCode,
+        LOCAL_PROFILE.storeName,
+        LOCAL_PROFILE.timezone,
+        now,
+      ],
     );
 
     const staffRows: ReadonlyArray<Readonly<{ id: string; username: string; name: string }>> = [
-      { id: DEMO_ADMIN_ID, username: "admin", name: "店长" },
+      { id: LOCAL_PROFILE.adminStaffId, username: "admin", name: "店长" },
       { id: DEMO_STAFF_A_ID, username: "staff", name: "店员甲" },
       { id: DEMO_STAFF_B_ID, username: "staffb", name: "店员乙" },
     ];
@@ -70,7 +70,7 @@ export async function seedDemoIdentity(pool: PgPool): Promise<SeedDemoResult> {
            display_name = EXCLUDED.display_name,
            is_active = true,
            updated_at = EXCLUDED.updated_at`,
-        [row.id, DEMO_ORG_ID, row.username, passwordHash, pinHash, row.name, now],
+        [row.id, LOCAL_PROFILE.orgId, row.username, passwordHash, pinHash, row.name, now],
       );
 
       // Deterministic role row id derived from staff id last segment
@@ -83,8 +83,8 @@ export async function seedDemoIdentity(pool: PgPool): Promise<SeedDemoResult> {
            updated_at = EXCLUDED.updated_at`,
         [
           roleUuid,
-          DEMO_ORG_ID,
-          DEMO_STORE_ID,
+          LOCAL_PROFILE.orgId,
+          LOCAL_PROFILE.storeId,
           row.id,
           row.username === "admin" ? "admin" : "staff",
           now,
@@ -105,8 +105,8 @@ export async function seedDemoIdentity(pool: PgPool): Promise<SeedDemoResult> {
   }
 
   return Object.freeze({
-    org_id: DEMO_ORG_ID,
-    store_id: DEMO_STORE_ID,
-    staff_ids: Object.freeze([DEMO_ADMIN_ID, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID]),
+    org_id: LOCAL_PROFILE.orgId,
+    store_id: LOCAL_PROFILE.storeId,
+    staff_ids: Object.freeze([LOCAL_PROFILE.adminStaffId, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID]),
   });
 }

@@ -19,11 +19,24 @@ const activeV2ProductEntries = [
   "apps/web/src/auth/HttpAuthClient.ts",
 ];
 const activeV2CredentialOutputEntries = ["apps/server/src/http/main.ts", "apps/web/host/main.tsx"];
+const activeV2ProfileConsumers = [
+  "apps/server/src/local/create-runtime.ts",
+  "apps/server/src/local/pg-seed.ts",
+  "apps/server/src/http/main.ts",
+  "apps/web/host/main.tsx",
+];
 const demoCredentialMarkers = [
   ["DEMO_PASSWORD", /\bDEMO_PASSWORD\b/u],
   ["DEMO_PIN", /\bDEMO_PIN\b/u],
   ["demo literal", /(["'`])demo\1/iu],
   ["1234 literal", /\b1234\b/u],
+];
+const localProfileCopyMarkers = [
+  ["org code", /(["'`])local\1/u],
+  ["store code", /(["'`])main\1/u],
+  ["org name", /laundry-desk V2/u],
+  ["store name", /本地门店/u],
+  ["timezone", /Asia\/Taipei/u],
 ];
 const outputCallPattern =
   /\b(?:console\.(?:log|info|warn|error)|process\.(?:stdout|stderr)\.write)\s*\([\s\S]*?\)\s*;?/gu;
@@ -44,6 +57,12 @@ function findCredentialOutputCalls(source) {
   return [...source.matchAll(outputCallPattern)]
     .map(([call]) => call)
     .filter((call) => credentialOutputLabelPattern.test(call) || pinOutputLabelPattern.test(call));
+}
+
+function findLocalProfileCopies(source) {
+  return localProfileCopyMarkers
+    .filter(([, pattern]) => pattern.test(source))
+    .map(([label]) => label);
 }
 
 test("routes every governance entry point to ADR-14", async () => {
@@ -150,13 +169,7 @@ test("credential output gate rejects multiline and indirect demo credential refe
 
 test("centralizes generic local identity in the server profile module", async () => {
   const profile = await readRepositoryFile("apps/server/src/local/profile.ts");
-  const consumers = await Promise.all(
-    [
-      "apps/server/src/local/create-runtime.ts",
-      "apps/server/src/http/main.ts",
-      "apps/web/host/main.tsx",
-    ].map(readRepositoryFile),
-  );
+  const consumers = await Promise.all(activeV2ProfileConsumers.map(readRepositoryFile));
 
   assert.match(profile, /orgCode:\s*"local"/u);
   assert.match(profile, /storeCode:\s*"main"/u);
@@ -164,11 +177,33 @@ test("centralizes generic local identity in the server profile module", async ()
   assert.match(profile, /storeName:\s*"本地门店"/u);
   assert.match(profile, /timezone:\s*"Asia\/Taipei"/u);
 
-  for (const content of consumers) {
-    assert.doesNotMatch(content, /org_code:\s*"local"|store_code:\s*"main"/u);
+  for (const [index, content] of consumers.entries()) {
+    assert.deepEqual(
+      findLocalProfileCopies(content),
+      [],
+      `${activeV2ProfileConsumers[index]} must read identity values from LOCAL_PROFILE`,
+    );
     assert.doesNotMatch(
       content,
       /aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa|bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/u,
     );
   }
+});
+
+test("profile copy gate catches camelCase, snake_case, and exact literals", () => {
+  const copiedConstants = [
+    'const orgCode = "local";',
+    'const store_code = "main";',
+    'const org_name = "laundry-desk V2";',
+    'const storeName = "本地门店";',
+    'const timezone = "Asia/Taipei";',
+  ].join("\n");
+
+  assert.deepEqual(findLocalProfileCopies(copiedConstants), [
+    "org code",
+    "store code",
+    "org name",
+    "store name",
+    "timezone",
+  ]);
 });

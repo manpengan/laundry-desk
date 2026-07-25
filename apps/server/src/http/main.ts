@@ -11,6 +11,7 @@
 import { createLocalApp } from "./create-app.js";
 import { parseLocalHostConfig } from "../local/config.js";
 import { createLocalRuntime } from "../local/create-runtime.js";
+import { LOCAL_PROFILE } from "../local/profile.js";
 
 async function main(): Promise<void> {
   const config = parseLocalHostConfig(process.env);
@@ -37,7 +38,7 @@ async function main(): Promise<void> {
   await app.listen({ port: config.port, host: config.listenHost });
   process.stdout.write(
     [
-      `laundry-desk V2 local server listening on http://${config.listenHost}:${config.port}`,
+      `${LOCAL_PROFILE.orgName} local server listening on http://${config.listenHost}:${config.port}`,
       `  mode ${runtime.mode}`,
       `  GET  /health`,
       `  POST /api/v2/auth/login`,
