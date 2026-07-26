@@ -20,6 +20,7 @@ import type {
   StaffRepository,
   Uuid,
 } from "./types.js";
+import { advancePinLockoutWindow } from "./pin-lockout-window.js";
 
 export type MemoryIdentityStore = Readonly<{
   staff: StaffRepository;
@@ -91,6 +92,12 @@ export const createMemoryIdentityStore = (): MemoryIdentityStore => {
       const tokenId = tokenHashIndex.get(tokenHash);
       if (tokenId === undefined) return Object.freeze({ status: "unknown" as const });
       return tokensById.get(tokenId) ?? Object.freeze({ status: "unknown" as const });
+    },
+    getActiveTokenForSession: async (sessionId) => {
+      const matches = [...tokensById.values()].filter(
+        (token) => token.status === "active" && token.session_id === sessionId,
+      );
+      return matches.length === 1 && matches[0]?.status === "active" ? matches[0] : null;
     },
     insertFamily: async (family) => {
       families.set(family.family_id, family);
@@ -379,6 +386,8 @@ export const createMemoryIdentityStore = (): MemoryIdentityStore => {
     },
     recordFailure: async (input) => {
       const current = challenges.get(input.challenge_id);
+      const key = lockoutKey(input.org_id, input.store_id, input.staff_id, input.device_id);
+      const currentLockout = lockouts.get(key);
       if (
         current === undefined ||
         current.status !== "active" ||
@@ -389,8 +398,7 @@ export const createMemoryIdentityStore = (): MemoryIdentityStore => {
         input.next_failed_attempts !== input.expected_failed_attempts + 1 ||
         current.failed_attempts >= current.max_attempts ||
         current.expires_at <= input.attempted_at ||
-        (lockouts.get(lockoutKey(input.org_id, input.store_id, input.staff_id, input.device_id))
-          ?.locked_until ?? 0) > input.attempted_at ||
+        (currentLockout?.locked_until ?? 0) > input.attempted_at ||
         (current.target_staff_id !== input.staff_id && current.approver_staff_id !== input.staff_id)
       ) {
         return 0;
@@ -404,19 +412,10 @@ export const createMemoryIdentityStore = (): MemoryIdentityStore => {
           status: exhausted ? ("consumed" as const) : ("active" as const),
         }),
       );
-      if (exhausted) {
-        lockouts.set(
-          lockoutKey(input.org_id, input.store_id, input.staff_id, input.device_id),
-          Object.freeze({
-            org_id: input.org_id,
-            store_id: input.store_id,
-            staff_id: input.staff_id,
-            device_id: input.device_id,
-            locked_until: input.locked_until,
-            failed_attempts: input.next_failed_attempts,
-          }),
-        );
-      }
+      lockouts.set(
+        key,
+        advancePinLockoutWindow(currentLockout ?? null, input, current.max_attempts),
+      );
       return 1;
     },
     consumeSuccess: async (input) => {

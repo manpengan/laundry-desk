@@ -89,11 +89,44 @@ export function csrfCookieOptions(policy: CookiePolicy): Readonly<{
   sameSite: "strict" | "lax";
   path: "/";
   secure: boolean;
+  maxAge: number;
 }> {
   return Object.freeze({
     httpOnly: false as const,
     sameSite: policy.sameSite,
     path: policy.path,
     secure: policy.secure,
+    maxAge: policy.refreshMaxAgeSeconds,
   });
+}
+
+type CookieClearOptions<HttpOnly extends boolean> = Readonly<{
+  httpOnly: HttpOnly;
+  sameSite: "strict" | "lax";
+  path: "/";
+  secure: boolean;
+  maxAge: 0;
+}>;
+
+function cookieClearOptions<HttpOnly extends boolean>(
+  policy: CookiePolicy,
+  httpOnly: HttpOnly,
+): CookieClearOptions<HttpOnly> {
+  return Object.freeze({
+    httpOnly,
+    sameSite: policy.sameSite,
+    path: policy.path,
+    secure: policy.secure,
+    maxAge: 0 as const,
+  });
+}
+
+/** Clear refresh with the same host/path/security attributes used at issuance. */
+export function refreshCookieClearOptions(policy: CookiePolicy): CookieClearOptions<true> {
+  return cookieClearOptions(policy, true);
+}
+
+/** Clear CSRF with the same host/path/security attributes used at issuance. */
+export function csrfCookieClearOptions(policy: CookiePolicy): CookieClearOptions<false> {
+  return cookieClearOptions(policy, false);
 }

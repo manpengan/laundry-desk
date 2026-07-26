@@ -7,6 +7,7 @@ import test from "node:test";
 
 import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@laundry/contracts";
 
+import { createCsrfProofSigner } from "../auth/csrf.js";
 import { executeCommand } from "../bus/executor.js";
 import type { ActorContext } from "../bus/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
@@ -86,6 +87,7 @@ async function seedIdentity() {
       issuer: ACCESS_TOKEN_ISSUER,
       audience: ACCESS_TOKEN_AUDIENCE,
     }),
+    csrfProofMinter: createCsrfProofSigner("test-step-up-csrf-secret-32-byte-value"),
   };
 
   const pendingStore = new MemoryPendingActionStore();
@@ -331,6 +333,7 @@ test("step-up challenge rejects self-approver and non-creator session", async ()
         issuer: ACCESS_TOKEN_ISSUER,
         audience: ACCESS_TOKEN_AUDIENCE,
       }),
+      csrfProofMinter: createCsrfProofSigner("test-step-up-csrf-secret-32-byte-value"),
     },
     {
       org_id: DEMO_ORG_ID,

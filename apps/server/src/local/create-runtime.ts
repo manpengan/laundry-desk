@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@laundry/contracts";
 
+import { createCsrfProofSigner, type CsrfProofSigner } from "../auth/csrf.js";
 import { createAccessTokenSigner } from "../identity/crypto-util.js";
 import { createMemoryIdentityStore } from "../identity/memory-store.js";
 import { createPgIdentityStore } from "../identity/pg-store.js";
@@ -99,7 +100,8 @@ export type LocalRuntime = Readonly<{
   /** M3 garment photo metadata (memory; both runtime modes for skeleton). */
   photo: PhotoHandlerDeps;
   accessTokenSecret: string;
-  csrfProofSecret: string;
+  /** Single runtime-owned capability shared by session issuance and HTTP verification. */
+  csrfProofSigner: CsrfProofSigner;
   staffDirectory: readonly LocalStaffDirectoryEntry[];
   /** Shared with Command Bus for confirm_ref / step-up PIN. */
   pendingStore: PendingActionStore;
@@ -214,6 +216,7 @@ function buildIdentityDeps(
   }>,
   passwordPort: ReturnType<typeof createPasswordPort>,
   accessTokenSecret: string,
+  csrfProofSigner: CsrfProofSigner,
   pendingStore: PendingActionStore = processPendingActionStore,
   proofStore: StepUpProofStore = processStepUpProofStore,
 ): IdentityHandlerDeps {
@@ -230,6 +233,7 @@ function buildIdentityDeps(
       issuer: ACCESS_TOKEN_ISSUER,
       audience: ACCESS_TOKEN_AUDIENCE,
     }),
+    csrfProofMinter: csrfProofSigner,
   };
   const login = {
     staff: ports.staff,
@@ -298,7 +302,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const passwordHash = await passwordPort.hashPassword(DEMO_PASSWORD);
   const pinHash = await passwordPort.hashPassword(DEMO_PIN);
   const accessTokenSecret = mintRuntimeSecret();
-  const csrfProofSecret = mintRuntimeSecret();
+  const csrfProofSigner = createCsrfProofSigner(mintRuntimeSecret());
 
   store.seedOrgStore({
     org_id: LOCAL_PROFILE.orgId,
@@ -336,6 +340,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       store,
       passwordPort,
       accessTokenSecret,
+      csrfProofSigner,
       processPendingActionStore,
       processStepUpProofStore,
     ),
@@ -348,7 +353,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     shift: Object.freeze({ store: shiftStore, stats: statsSource }),
     photo: Object.freeze({ store: photoStore }),
     accessTokenSecret,
-    csrfProofSecret,
+    csrfProofSigner,
     staffDirectory: memoryStaffDirectory,
     pendingStore: processPendingActionStore,
     stepUpProofStore: processStepUpProofStore,
@@ -364,6 +369,7 @@ export async function createPgLocalRuntime(
   config: LocalServerConfig = parseLocalServerConfig(process.env),
   dependencies: CreatePgLocalRuntimeDependencies = defaultPgRuntimeDependencies,
 ): Promise<LocalRuntime> {
+  const csrfProofSigner = createCsrfProofSigner(config.csrfProofSecret);
   const appPool = dependencies.createPool({ connectionString });
   let pgStaffDirectory: readonly LocalStaffDirectoryEntry[];
   try {
@@ -393,6 +399,7 @@ export async function createPgLocalRuntime(
       store,
       passwordPort,
       config.accessTokenSecret,
+      csrfProofSigner,
       processPendingActionStore,
       processStepUpProofStore,
     ),
@@ -415,7 +422,7 @@ export async function createPgLocalRuntime(
     shift: Object.freeze({ store: shiftStore, stats: statsSource }),
     photo: Object.freeze({ store: photoStore }),
     accessTokenSecret: config.accessTokenSecret,
-    csrfProofSecret: config.csrfProofSecret,
+    csrfProofSigner,
     staffDirectory: pgStaffDirectory,
     pendingStore: processPendingActionStore,
     stepUpProofStore: processStepUpProofStore,

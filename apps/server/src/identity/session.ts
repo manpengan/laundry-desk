@@ -14,11 +14,11 @@ import {
   planRefreshRevocation,
 } from "@laundry/contracts";
 
+import type { CsrfProofSigner } from "../auth/csrf.js";
 import {
   buildAccessClaims,
   createAccessTokenSigner,
   hashOpaqueSecret,
-  mintCsrfProof,
   newUuid,
   randomToken,
   type AccessTokenSigner,
@@ -47,6 +47,7 @@ export type SessionServiceDeps = Readonly<{
   lifecycle: SessionLifecycleRepository;
   clock: IdentityClock;
   accessTokenSigner: AccessTokenSigner;
+  csrfProofMinter: Readonly<Pick<CsrfProofSigner, "mint">>;
 }>;
 
 export type IssueSessionInput = Readonly<{
@@ -102,8 +103,16 @@ const mintRefreshMaterial = (refreshSecret: string): SessionIssueResult["refresh
     cookie: Object.freeze({ ...REFRESH_COOKIE_DESCRIPTOR }),
   });
 
-const mintCsrfMaterial = (): SessionIssueResult["csrf"] => {
-  const csrf_token = mintCsrfProof();
+const mintCsrfMaterial = (
+  deps: SessionServiceDeps,
+  session: SessionRecord,
+  rotationNonce: Uuid,
+): SessionIssueResult["csrf"] => {
+  const csrf_token = deps.csrfProofMinter.mint({
+    session_id: session.session_id,
+    session_version: session.session_version,
+    rotation_nonce: rotationNonce,
+  });
   return Object.freeze({
     csrf_token,
     cookie: Object.freeze({ ...CSRF_COOKIE_DESCRIPTOR }),
@@ -147,7 +156,7 @@ export const issueSession = async (
     input.authentication_method,
   );
   const refresh = mintRefreshMaterial(refreshSecret);
-  const csrf = mintCsrfMaterial();
+  const csrf = mintCsrfMaterial(deps, session, tokenId);
   const family = Object.freeze({
     family_id: familyId,
     session_id: sessionId,
@@ -300,7 +309,7 @@ export const rotateRefresh = async (
     session.authentication_method,
   );
   const refresh = mintRefreshMaterial(newSecret);
-  const csrf = mintCsrfMaterial();
+  const csrf = mintCsrfMaterial(deps, session, replacementTokenId);
   const disposition = await deps.lifecycle.commitRefreshUse({
     session,
     family,

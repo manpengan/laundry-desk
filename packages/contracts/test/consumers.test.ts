@@ -153,15 +153,13 @@ describe("C6/C8 auth contract consumer", () => {
     expect(
       evaluateLoginPreAuthOrigin({
         method: "POST",
-        origin_allowed: true,
-        fetch_site: "same-origin",
+        surface: { kind: "browser", fetch_site: "same-origin" },
       }),
     ).toEqual({ allowed: true });
     expect(
       evaluateCsrfRequest({
         method: "POST",
-        origin_allowed: false,
-        fetch_site: "cross-site",
+        surface: { kind: "untrusted" },
         cookie_present: false,
         header_present: false,
         tokens_match: false,

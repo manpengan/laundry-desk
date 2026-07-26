@@ -111,6 +111,8 @@ export type PinLockoutRecord = Readonly<{
   device_id: Uuid;
   locked_until: EpochSeconds;
   failed_attempts: number;
+  /** Backed by pin_lockouts.updated_at; starts a new window after 15 idle minutes. */
+  last_failed_at: EpochSeconds;
 }>;
 
 export type PinFailureMutation = Readonly<{
@@ -171,6 +173,10 @@ export type SessionRepository = Readonly<{
 export type RefreshRepository = Readonly<{
   getFamily: (familyId: Uuid) => Promise<RefreshFamilyRecord | null>;
   getTokenByHash: (tokenHash: string) => Promise<RefreshTokenRecord>;
+  /** Resolve the sole current proof-rotation nonce for an active session. */
+  getActiveTokenForSession: (
+    sessionId: Uuid,
+  ) => Promise<Extract<RefreshTokenRecord, { status: "active" }> | null>;
   insertFamily: (family: RefreshFamilyRecord) => Promise<void>;
   insertToken: (token: Exclude<RefreshTokenRecord, { status: "unknown" }>) => Promise<void>;
   /** CAS: mark active token rotated only if still active; returns matched row count. */
@@ -245,7 +251,7 @@ export type PinChallengeRepository = Readonly<{
     expectedFailed: number,
     next: Readonly<{ failed_attempts: number; status: "active" | "consumed" }>,
   ) => Promise<0 | 1>;
-  /** Atomically increments a failed attempt and creates the lockout when exhausted. */
+  /** Atomically increments challenge and staff/device window counters. */
   recordFailure: (input: PinFailureMutation) => Promise<0 | 1>;
   /** Atomically consumes a successful challenge and clears its staff/device lockout. */
   consumeSuccess: (input: PinSuccessMutation) => Promise<0 | 1>;

@@ -11,6 +11,7 @@ import {
   M1_FIRST_WAVE_COMMAND_NAMES,
 } from "@laundry/contracts";
 
+import { createCsrfProofSigner } from "../auth/csrf.js";
 import type { ActorContext } from "../bus/types.js";
 import { executeCommand } from "../bus/executor.js";
 import { FakeSqlClient } from "../db/fake-client.js";
@@ -94,6 +95,7 @@ async function buildIdentityDeps() {
       issuer: ACCESS_TOKEN_ISSUER,
       audience: ACCESS_TOKEN_AUDIENCE,
     }),
+    csrfProofMinter: createCsrfProofSigner("test-handler-csrf-secret-32-byte-value"),
   };
   const login = {
     staff: store.staff,

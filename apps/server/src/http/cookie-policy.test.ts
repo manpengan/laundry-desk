@@ -8,7 +8,9 @@ import test from "node:test";
 import { CSRF_COOKIE_NAME, REFRESH_COOKIE_DESCRIPTOR } from "@laundry/contracts";
 
 import {
+  csrfCookieClearOptions,
   csrfCookieOptions,
+  refreshCookieClearOptions,
   refreshCookieOptions,
   resolveCookiePolicy,
   resolveCookieSecure,
@@ -32,6 +34,23 @@ test("secure policy uses __Host- contract names and Secure flags", () => {
   const csrf = csrfCookieOptions(policy);
   assert.equal(csrf.secure, true);
   assert.equal(csrf.httpOnly, false);
+  assert.equal(csrf.maxAge, REFRESH_COOKIE_DESCRIPTOR.max_age_seconds);
+  assert.equal("domain" in csrf, false);
+
+  assert.deepEqual(refreshCookieClearOptions(policy), {
+    httpOnly: true,
+    sameSite: "strict",
+    path: "/",
+    secure: true,
+    maxAge: 0,
+  });
+  assert.deepEqual(csrfCookieClearOptions(policy), {
+    httpOnly: false,
+    sameSite: "strict",
+    path: "/",
+    secure: true,
+    maxAge: 0,
+  });
 });
 
 test("local HTTP policy strips __Host- and disables Secure", () => {
@@ -40,6 +59,8 @@ test("local HTTP policy strips __Host- and disables Secure", () => {
   assert.equal(policy.csrfName, "laundry_csrf");
   assert.equal(policy.secure, false);
   assert.equal(policy.sameSite, "strict");
+  assert.equal(refreshCookieClearOptions(policy).secure, false);
+  assert.equal(csrfCookieClearOptions(policy).secure, false);
 });
 
 test("LOCAL_COOKIE_NAMES and SECURE_COOKIE_NAMES stay aligned", () => {

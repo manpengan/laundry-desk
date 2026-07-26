@@ -223,8 +223,7 @@ it("keeps every public browser auth schema aligned with its root type", () => {
   });
   const csrf: CsrfDecision = evaluateCsrfRequest({
     method: "GET",
-    origin_allowed: false,
-    fetch_site: "cross-site",
+    surface: { kind: "untrusted" },
     cookie_present: false,
     header_present: false,
     tokens_match: false,

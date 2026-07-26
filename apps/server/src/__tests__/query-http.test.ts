@@ -22,6 +22,11 @@ import { createMemoryLocalRuntime, DEMO_PASSWORD } from "../local/demo-seed.js";
 import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 
 const DEVICE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const browserMutationHeaders = Object.freeze({
+  host: "127.0.0.1:8787",
+  origin: "http://127.0.0.1:5173",
+  "sec-fetch-site": "same-site",
+});
 const TENANT: TenantContext = Object.freeze({
   orgId: DEMO_ORG_ID,
   storeId: DEMO_STORE_ID,
@@ -93,11 +98,13 @@ test("POST /v1/queries/platform.settings.get over HTTP (memory)", async () => {
   const app = await createLocalApp({
     runtime,
     cookiePolicy: resolveCookiePolicy({ secure: false }),
+    logger: false,
   });
 
   const login = await app.inject({
     method: "POST",
     url: "/api/v2/auth/login",
+    headers: browserMutationHeaders,
     payload: {
       org_code: "local",
       store_code: "main",
@@ -113,7 +120,10 @@ test("POST /v1/queries/platform.settings.get over HTTP (memory)", async () => {
   const getRes = await app.inject({
     method: "POST",
     url: "/v1/queries/platform.settings.get",
-    headers: { authorization: `Bearer ${token}` },
+    headers: {
+      ...browserMutationHeaders,
+      authorization: `Bearer ${token}`,
+    },
     payload: { keys: ["store.name"] },
   });
   assert.equal(getRes.statusCode, 200, getRes.body);

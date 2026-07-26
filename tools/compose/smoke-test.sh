@@ -5,6 +5,8 @@ set -euo pipefail
 umask 077
 
 SERVER_URL="${LAUNDRY_SERVER_URL:-http://127.0.0.1:8787}"
+BROWSER_ORIGIN_HEADER='Origin: http://127.0.0.1:5173'
+BROWSER_FETCH_SITE_HEADER='Sec-Fetch-Site: same-site'
 
 die() {
   echo "❌ [smoke-server] $*" >&2
@@ -40,23 +42,28 @@ AUTH_HEADER="$(mktemp)"
 DIRECTORY_RESPONSE="$(mktemp)"
 trap 'rm -f "${COOKIE_JAR}" "${LOGIN_REQUEST}" "${LOGIN_RESPONSE}" "${AUTH_HEADER}" "${DIRECTORY_RESPONSE}"' EXIT
 
-assert_json() {
-  local expected_mode="$1"
+assert_health_response() {
   node -e '
     try {
-      const [payload, expectedMode] = process.argv.slice(1);
+      const [payload] = process.argv.slice(1);
       const body = JSON.parse(payload);
+      const rootKeys = Object.keys(body).sort().join(",");
+      const dataKeys =
+        typeof body.data === "object" && body.data !== null
+          ? Object.keys(body.data).sort().join(",")
+          : "";
       if (
         body.ok !== true ||
-        body.data?.mode !== expectedMode ||
-        body.data?.platform !== "sql"
+        body.data?.status !== "ready" ||
+        rootKeys !== "data,ok" ||
+        dataKeys !== "status"
       ) {
         process.exitCode = 1;
       }
     } catch {
       process.exitCode = 1;
     }
-  ' "$2" "${expected_mode}" 2>/dev/null || die "unexpected health response"
+  ' "$1" 2>/dev/null || die "unexpected health response"
 }
 
 health=''
@@ -67,8 +74,8 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 [[ -n "${health}" ]] || die "server did not become healthy at ${SERVER_URL}"
-assert_json 'local-pg' "${health}"
-echo '✔ [smoke-server] real @laundry/server reports local-pg/sql'
+assert_health_response "${health}"
+echo '✔ [smoke-server] real @laundry/server reports ready'
 
 if ! printf '%s' "${LAUNDRY_SMOKE_ADMIN_PASSWORD}" | node -e '
   try {
@@ -95,6 +102,8 @@ unset LAUNDRY_SMOKE_ADMIN_PASSWORD
 
 curl --noproxy '*' --fail --silent --show-error \
   --cookie-jar "${COOKIE_JAR}" \
+  --header "${BROWSER_ORIGIN_HEADER}" \
+  --header "${BROWSER_FETCH_SITE_HEADER}" \
   --header 'content-type: application/json' \
   --data-binary "@${LOGIN_REQUEST}" \
   --output "${LOGIN_RESPONSE}" \
@@ -125,6 +134,8 @@ echo '✔ [smoke-server] generic local administrator login uses the real PG runt
 
 curl --noproxy '*' --fail --silent --show-error \
   --header "@${AUTH_HEADER}" \
+  --header "${BROWSER_ORIGIN_HEADER}" \
+  --header "${BROWSER_FETCH_SITE_HEADER}" \
   --output "${DIRECTORY_RESPONSE}" \
   "${SERVER_URL}/api/v2/local/staff" >/dev/null 2>&1 || die 'staff directory request failed'
 

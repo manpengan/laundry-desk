@@ -174,10 +174,14 @@ test("uses the generic V2 display name in active packaging metadata", async () =
 });
 
 test("keeps the default memory server entry independent from PG signing secrets", async () => {
-  const serverEntry = await readRepositoryFile("apps/server/src/http/main.ts");
+  const [serverEntry, lifecycle] = await Promise.all([
+    readRepositoryFile("apps/server/src/http/main.ts"),
+    readRepositoryFile("apps/server/src/http/server-lifecycle.ts"),
+  ]);
 
-  assert.match(serverEntry, /parseLocalHostConfig/u);
-  assert.doesNotMatch(serverEntry, /parseLocalServerConfig/u);
+  assert.match(serverEntry, /startLocalHttpServer/u);
+  assert.match(lifecycle, /parseLocalHostConfig/u);
+  assert.doesNotMatch(`${serverEntry}\n${lifecycle}`, /parseLocalServerConfig/u);
 });
 
 test("keeps product and credential defaults out of active V2 entry points", async () => {
@@ -622,7 +626,8 @@ printf 'node' >> "\${FAKE_TRACE}"
 for argument in "$@"; do printf ' <%s>' "\${argument}" >> "\${FAKE_TRACE}"; done
 printf '\\n' >> "\${FAKE_TRACE}"
 case "\${2:-}" in
-  *expectedMode*)
+  *'body.data?.status !== "ready"'*)
+    [[ "\${3:-}" == '{"ok":true,"data":{"status":"ready"}}' ]] || exit 95
     exit 0
     ;;
   *org_code:*)
@@ -662,21 +667,36 @@ output=''
 cookie_jar=''
 request_file=''
 url=''
+has_browser_origin=0
+has_same_site_fetch=0
+has_json_content_type=0
+auth_header_file=''
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --output) output="$2"; shift 2 ;;
     --cookie-jar) cookie_jar="$2"; shift 2 ;;
     --data-binary) request_file="\${2#@}"; shift 2 ;;
-    --header) shift 2 ;;
+    --header)
+      case "$2" in
+        'Origin: http://127.0.0.1:5173') has_browser_origin=1 ;;
+        'Sec-Fetch-Site: same-site') has_same_site_fetch=1 ;;
+        'content-type: application/json') has_json_content_type=1 ;;
+        @*) auth_header_file="\${2#@}" ;;
+      esac
+      shift 2
+      ;;
     --*) shift ;;
     *) url="$1"; shift ;;
   esac
 done
 case "\${url}" in
   */health)
-    printf '{"ok":true,"data":{"mode":"local-pg","platform":"sql"}}'
+    printf '{"ok":true,"data":{"status":"ready"}}'
     ;;
   */api/v2/auth/login)
+    [[ "\${has_browser_origin}" == 1 ]] || exit 99
+    [[ "\${has_same_site_fetch}" == 1 ]] || exit 100
+    [[ "\${has_json_content_type}" == 1 ]] || exit 101
     [[ "$(cat "\${request_file}")" == *"\${sentinel}"* ]] || exit 97
     if [[ "\${FAKE_CURL_FAIL_LOGIN:-0}" == 1 ]]; then
       printf '%s\\n' "\${sentinel} request response safe-access-token"
@@ -687,6 +707,11 @@ case "\${url}" in
     printf '{"ok":true,"data":{"access_token":"safe-access-token"}}' > "\${output}"
     ;;
   */api/v2/local/staff)
+    [[ "\${has_browser_origin}" == 1 ]] || exit 102
+    [[ "\${has_same_site_fetch}" == 1 ]] || exit 103
+    [[ -f "\${auth_header_file}" ]] || exit 104
+    [[ "$(/bin/cat "\${auth_header_file}")" == 'Authorization: Bearer safe-access-token' ]] ||
+      exit 105
     printf '{"ok":true,"data":[{"role":"admin","username":"admin"}]}' > "\${output}"
     ;;
   *)
@@ -741,6 +766,15 @@ test("keeps the HTTP smoke administrator password out of child argv and environm
     });
 
     const trace = await readFile(tracePath, "utf8");
+    const curlCalls = trace.split("\n").filter((line) => line.startsWith("curl "));
+    assert.equal(curlCalls.length, 3);
+    assert.match(curlCalls[0], /<http:\/\/127\.0\.0\.1:8787\/health>/u);
+    assert.match(curlCalls[1], /<Origin: http:\/\/127\.0\.0\.1:5173>/u);
+    assert.match(curlCalls[1], /<Sec-Fetch-Site: same-site>/u);
+    assert.match(curlCalls[1], /<content-type: application\/json>/u);
+    assert.match(curlCalls[2], /<Origin: http:\/\/127\.0\.0\.1:5173>/u);
+    assert.match(curlCalls[2], /<Sec-Fetch-Site: same-site>/u);
+    assert.match(curlCalls[2], /<@[^>]+>/u);
     assert.doesNotMatch(trace, new RegExp(sentinel, "u"));
     assert.doesNotMatch(trace, /LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD=/u);
     assert.match(result.stdout, /fresh bootstrap exposes only the real administrator/u);

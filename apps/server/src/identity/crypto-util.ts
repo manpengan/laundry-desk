@@ -129,12 +129,6 @@ export const buildAccessClaims = (input: {
   });
 };
 
-/** CSRF proof format: v1.<43–128 base64url chars> (contracts CsrfProofSchema). */
-export const mintCsrfProof = (): string => {
-  const body = randomBytes(32).toString("base64url");
-  return `v1.${body}`;
-};
-
 export const newUuid = (): Uuid => {
   // crypto.randomUUID is available on Node 22+
   return globalThis.crypto.randomUUID();

@@ -18,8 +18,10 @@ const headerProof = proof("B");
 
 const requestFacts = (overrides: Readonly<Record<string, unknown>> = {}) => ({
   method: "POST",
-  origin_allowed: true,
-  fetch_site: "same-origin",
+  surface: {
+    kind: "browser",
+    fetch_site: "same-origin",
+  },
   cookie_present: true,
   header_present: true,
   tokens_match: true,
@@ -174,8 +176,7 @@ describe("A5 CSRF request evaluator", () => {
       const decision = evaluateCsrfRequest(
         requestFacts({
           method,
-          origin_allowed: false,
-          fetch_site: "cross-site",
+          surface: { kind: "untrusted" },
           cookie_present: false,
           header_present: false,
           tokens_match: false,
@@ -198,15 +199,26 @@ describe("A5 CSRF request evaluator", () => {
   );
 
   it("accepts an allowlisted same-site unsafe request", () => {
-    expect(evaluateCsrfRequest(requestFacts({ fetch_site: "same-site" }))).toEqual({
-      allowed: true,
-    });
+    expect(
+      evaluateCsrfRequest(requestFacts({ surface: { kind: "browser", fetch_site: "same-site" } })),
+    ).toEqual({ allowed: true });
+  });
+
+  it("accepts Fetch-Site none only through the request-security-verified desktop surface", () => {
+    expect(
+      evaluateCsrfRequest(
+        requestFacts({ surface: { kind: "trusted-desktop", fetch_site: "none" } }),
+      ),
+    ).toEqual({ allowed: true });
+    expect(
+      evaluateCsrfRequest(requestFacts({ surface: { kind: "browser", fetch_site: "none" } })),
+    ).toEqual({ allowed: false, reason: "FETCH_METADATA_REJECTED" });
   });
 
   it.each([
-    [{ origin_allowed: false }, "ORIGIN_NOT_ALLOWED"],
-    [{ fetch_site: "cross-site" }, "FETCH_METADATA_REJECTED"],
-    [{ fetch_site: "none" }, "FETCH_METADATA_REJECTED"],
+    [{ surface: { kind: "untrusted" } }, "ORIGIN_NOT_ALLOWED"],
+    [{ surface: { kind: "browser", fetch_site: "cross-site" } }, "FETCH_METADATA_REJECTED"],
+    [{ surface: { kind: "browser", fetch_site: "none" } }, "FETCH_METADATA_REJECTED"],
     [{ cookie_present: false }, "TOKEN_MISSING"],
     [{ header_present: false }, "TOKEN_MISSING"],
     [{ tokens_match: false }, "TOKEN_MISMATCH"],
@@ -239,18 +251,32 @@ describe("A5 login-only pre-auth Origin evaluator", () => {
     (fetchSite) => {
       const decision = evaluateLoginPreAuthOrigin({
         method: "POST",
-        origin_allowed: true,
-        fetch_site: fetchSite,
+        surface: { kind: "browser", fetch_site: fetchSite },
       });
       expect(decision).toEqual({ allowed: true });
       expectDeepFrozen(decision);
     },
   );
 
+  it("allows login from the request-security-verified desktop surface", () => {
+    expect(
+      evaluateLoginPreAuthOrigin({
+        method: "POST",
+        surface: { kind: "trusted-desktop", fetch_site: "none" },
+      }),
+    ).toEqual({ allowed: true });
+  });
+
   it.each([
-    [{ method: "POST", origin_allowed: false, fetch_site: "same-origin" }, "ORIGIN_NOT_ALLOWED"],
-    [{ method: "POST", origin_allowed: true, fetch_site: "cross-site" }, "FETCH_METADATA_REJECTED"],
-    [{ method: "POST", origin_allowed: true, fetch_site: "none" }, "FETCH_METADATA_REJECTED"],
+    [{ method: "POST", surface: { kind: "untrusted" } }, "ORIGIN_NOT_ALLOWED"],
+    [
+      { method: "POST", surface: { kind: "browser", fetch_site: "cross-site" } },
+      "FETCH_METADATA_REJECTED",
+    ],
+    [
+      { method: "POST", surface: { kind: "browser", fetch_site: "none" } },
+      "FETCH_METADATA_REJECTED",
+    ],
   ] as const)("fails login pre-auth closed with %s", (facts, reason) => {
     const decision = evaluateLoginPreAuthOrigin(facts);
     expect(decision).toEqual({ allowed: false, reason });
@@ -277,8 +303,7 @@ describe("A5 CSRF plain-data security boundary", () => {
   it("rejects class, boxed, extra, missing and unstable request facts", () => {
     class RequestFacts {
       method = "POST";
-      origin_allowed = true;
-      fetch_site = "same-origin";
+      surface = { kind: "browser", fetch_site: "same-origin" };
       cookie_present = true;
       header_present = true;
       tokens_match = true;
@@ -293,15 +318,24 @@ describe("A5 CSRF plain-data security boundary", () => {
       { ...valid, proof_valid: undefined },
       unstableProxy(valid, "method"),
     ].forEach((input) => expect(() => evaluateCsrfRequest(input)).toThrow());
+
+    [
+      requestFacts({ surface: { kind: "trusted-desktop", fetch_site: "same-site" } }),
+      requestFacts({ surface: { kind: "trusted-desktop" } }),
+      requestFacts({ surface: { kind: "untrusted", fetch_site: "none" } }),
+    ].forEach((input) => expect(() => evaluateCsrfRequest(input)).toThrow());
   });
 
   it("enforces exact plain login pre-auth facts", () => {
-    const valid = { method: "POST", origin_allowed: true, fetch_site: "same-origin" };
+    const valid = {
+      method: "POST",
+      surface: { kind: "browser", fetch_site: "same-origin" },
+    };
     [
       { ...valid, extra: true },
-      { method: "POST", origin_allowed: true },
+      { method: "POST" },
       { ...valid, method: "GET" },
-      unstableProxy(valid, "fetch_site"),
+      unstableProxy(valid, "surface"),
     ].forEach((input) => expect(() => evaluateLoginPreAuthOrigin(input)).toThrow());
   });
 
@@ -312,8 +346,7 @@ describe("A5 CSRF plain-data security boundary", () => {
       evaluateCsrfRequest(requestFacts({ tokens_match: false })),
       evaluateLoginPreAuthOrigin({
         method: "POST",
-        origin_allowed: false,
-        fetch_site: "same-origin",
+        surface: { kind: "untrusted" },
       }),
     ];
 

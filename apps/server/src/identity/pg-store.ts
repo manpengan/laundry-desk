@@ -8,6 +8,13 @@ import { withOrgGuc, withStoreGuc } from "../db/tenant-guc-client.js";
 import { createPinChallengeRepo, createPinLockoutRepo } from "./pg-pin-repo.js";
 import { lockDeviceLifecycle } from "./pg-device-lifecycle-lock.js";
 import {
+  lookupFamilyTenant,
+  lookupSessionTenant,
+  lookupTokenTenant,
+  storeScopeOf,
+} from "./pg-identity-tenant.js";
+import { writeLifecycleAudit } from "./pg-lifecycle-audit.js";
+import {
   epochToDate,
   mapSession,
   mapStaff,
@@ -27,7 +34,6 @@ import type {
   SessionLifecycleRepository,
   SessionRepository,
   StaffRepository,
-  Uuid,
 } from "./types.js";
 
 export type PgIdentityStore = Readonly<{
@@ -40,59 +46,6 @@ export type PgIdentityStore = Readonly<{
   pinLockouts: PinLockoutRepository;
   pool: PgPool;
 }>;
-
-type TenantIds = Readonly<{ org_id: Uuid; store_id: Uuid; staff_id: Uuid }>;
-
-function storeScopeOf(tenant: TenantIds): Readonly<{
-  orgId: Uuid;
-  storeId: Uuid;
-  staffId: Uuid;
-}> {
-  return Object.freeze({
-    orgId: tenant.org_id,
-    storeId: tenant.store_id,
-    staffId: tenant.staff_id,
-  });
-}
-
-async function lookupSessionTenant(pool: PgPool, sessionId: Uuid): Promise<TenantIds | null> {
-  const result = await pool.query<{ org_id: string; store_id: string; staff_id: string }>(
-    `SELECT org_id::text, store_id::text, staff_id::text
-     FROM laundry_auth_lookup_session($1::uuid)`,
-    [sessionId],
-  );
-  const row = result.rows[0];
-  if (row === undefined) return null;
-  return { org_id: row.org_id, store_id: row.store_id, staff_id: row.staff_id };
-}
-
-async function lookupFamilyTenant(pool: PgPool, familyId: Uuid): Promise<TenantIds | null> {
-  const result = await pool.query<{ org_id: string; store_id: string }>(
-    `SELECT org_id::text, store_id::text FROM laundry_auth_lookup_family($1::uuid)`,
-    [familyId],
-  );
-  const row = result.rows[0];
-  if (row === undefined) return null;
-  return {
-    org_id: row.org_id,
-    store_id: row.store_id,
-    staff_id: "00000000-0000-4000-8000-000000000000",
-  };
-}
-
-async function lookupTokenTenant(pool: PgPool, tokenId: Uuid): Promise<TenantIds | null> {
-  const result = await pool.query<{ org_id: string; store_id: string }>(
-    `SELECT org_id::text, store_id::text FROM laundry_auth_lookup_refresh_by_id($1::uuid)`,
-    [tokenId],
-  );
-  const row = result.rows[0];
-  if (row === undefined) return null;
-  return {
-    org_id: row.org_id,
-    store_id: row.store_id,
-    staff_id: "00000000-0000-4000-8000-000000000000",
-  };
-}
 
 function createStaffRepo(pool: PgPool): StaffRepository {
   return Object.freeze({
@@ -234,6 +187,29 @@ function createRefreshRepo(pool: PgPool): RefreshRepository {
       const row = result.rows[0];
       if (row === undefined) return Object.freeze({ status: "unknown" as const });
       return mapToken(row) ?? Object.freeze({ status: "unknown" as const });
+    },
+    getActiveTokenForSession: async (sessionId) => {
+      const tenant = await lookupSessionTenant(pool, sessionId);
+      if (tenant === null) return null;
+      return withStoreGuc(pool, storeScopeOf(tenant), async (client) => {
+        const result = await client.query<TokenRow>(
+          `SELECT id::text, family_id::text, session_id::text, token_hash, status,
+                  replacement_token_id::text, expires_at
+             FROM refresh_tokens
+            WHERE org_id = $1::uuid
+              AND store_id = $2::uuid
+              AND session_id = $3::uuid
+              AND status = 'active'
+            ORDER BY id
+            LIMIT 2`,
+          [tenant.org_id, tenant.store_id, sessionId],
+        );
+        if (result.rows.length !== 1) return null;
+        const row = result.rows[0];
+        if (row === undefined) return null;
+        const token = mapToken(row);
+        return token?.status === "active" ? token : null;
+      });
     },
     insertFamily: async (family) => {
       const tenant = await lookupSessionTenant(pool, family.session_id);
@@ -670,6 +646,15 @@ function createLifecycleRepo(pool: PgPool): SessionLifecycleRepository {
                   AND status = 'active'`,
               [input.family.family_id, epochToDate(input.now)],
             );
+            await writeLifecycleAudit(client, {
+              command: "identity.refresh.reuse_revoked",
+              org_id: input.session.org_id,
+              store_id: input.session.store_id,
+              staff_id: input.session.staff_id,
+              session_id: input.session.session_id,
+              device_id: input.session.device_id,
+              at: input.now,
+            });
             return "reuse_revoked" as const;
           }
           if (
@@ -756,6 +741,15 @@ function createLifecycleRepo(pool: PgPool): SessionLifecycleRepository {
               WHERE family_id = $1 AND status = 'active'`,
             [input.family_id, epochToDate(input.revoked_at)],
           );
+          await writeLifecycleAudit(client, {
+            command: "identity.logout",
+            org_id: input.org_id,
+            store_id: input.store_id,
+            staff_id: input.staff_id,
+            session_id: input.session_id,
+            device_id: input.device_id,
+            at: input.revoked_at,
+          });
           return 1 as const;
         },
       ).catch((error: unknown) => {

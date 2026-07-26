@@ -10,7 +10,8 @@ import {
   type AccessTokenClaims,
 } from "@laundry/contracts";
 
-import { buildAccessClaims, createAccessTokenSigner, mintCsrfProof } from "./crypto-util.js";
+import { createCsrfProofSigner } from "../auth/csrf.js";
+import { buildAccessClaims, createAccessTokenSigner } from "./crypto-util.js";
 import { createLoginService } from "./login.js";
 import { createMemoryIdentityStore } from "./memory-store.js";
 import { createTestPasswordPort } from "./password.js";
@@ -24,6 +25,7 @@ const STAFF_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const STAFF_B_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const DEVICE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const ACCESS_TOKEN_SECRET = "test-access-secret-32-byte-minimum-value";
+const CSRF_PROOF_SECRET = "test-csrf-proof-secret-32-byte-minimum";
 
 const encodeJson = (value: unknown): string =>
   Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
@@ -100,6 +102,7 @@ const seedStore = async () => {
     lifecycle: store.lifecycle,
     clock,
     accessTokenSigner: signer,
+    csrfProofMinter: createCsrfProofSigner(CSRF_PROOF_SECRET),
   };
   const sessions = createSessionService(sessionDeps);
   const login = createLoginService({
@@ -470,7 +473,7 @@ test("concurrent final PIN failures create one lockout without double-consuming"
     .filter((error): error is IdentityError => error instanceof IdentityError)
     .map((error) => error.code)
     .sort();
-  assert.deepEqual(codes, ["AUTHENTICATION_FAILED", "PIN_CHALLENGE_INVALID"]);
+  assert.deepEqual(codes, ["AUTHENTICATION_FAILED", "PIN_LOCKED"]);
   const lockout = await store.pinLockouts.get(ORG_ID, STORE_ID, STAFF_B_ID, DEVICE_ID);
   assert.equal(lockout?.failed_attempts, PIN_CHALLENGE_MAX_ATTEMPTS);
   assert.equal(store.listChallenges()[0]?.failed_attempts, PIN_CHALLENGE_MAX_ATTEMPTS);
@@ -722,7 +725,11 @@ test("quick switch rejects authority drift before consuming the challenge", asyn
   assert.equal((await store.sessions.get(session.session_id))?.status, "active");
 });
 
-test("mintCsrfProof matches contracts format", () => {
-  const proof = mintCsrfProof();
+test("session-bound CSRF signer matches contracts format", () => {
+  const proof = createCsrfProofSigner(CSRF_PROOF_SECRET).mint({
+    session_id: ORG_ID,
+    session_version: 1,
+    rotation_nonce: DEVICE_ID,
+  });
   assert.match(proof, /^v1\.[A-Za-z0-9_-]{43,128}$/u);
 });

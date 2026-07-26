@@ -6,6 +6,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import {
   createCommandError,
+  PinChallengeRequestSchema,
+  PinVerifyRequestSchema,
   type AccessSessionResponse,
   type CommandErrorCode,
 } from "@laundry/contracts";
@@ -21,6 +23,7 @@ import type { SessionIssueResult } from "../identity/types.js";
 import { IdentityError } from "../identity/types.js";
 import type { LocalRuntime } from "../local/demo-seed.js";
 import type { CookiePolicy } from "./cookie-policy.js";
+import type { SecurityEventSink } from "./security-events.js";
 
 type FailFn = (code: CommandErrorCode) => Readonly<{
   ok: false;
@@ -30,6 +33,7 @@ type FailFn = (code: CommandErrorCode) => Readonly<{
 export type PinRouteHelpers = Readonly<{
   runtime: LocalRuntime;
   cookiePolicy: CookiePolicy;
+  securityEvents: SecurityEventSink;
   resolveSession: (
     runtime: LocalRuntime,
     request: FastifyRequest,
@@ -38,7 +42,8 @@ export type PinRouteHelpers = Readonly<{
     request: FastifyRequest,
     reply: FastifyReply,
     policy: CookiePolicy,
-  ) => true | ReturnType<FailFn>;
+    session: AuthorizedSession["session"],
+  ) => Promise<true | ReturnType<FailFn>>;
   mapIdentityHttpError: (
     error: unknown,
     reply: FastifyReply,
@@ -57,22 +62,60 @@ export type PinRouteHelpers = Readonly<{
     issued: SessionIssueResult,
     projection: AccessSessionProjection,
   ) => AccessSessionResponse;
-  isRecord: (value: unknown) => value is Record<string, unknown>;
   fail: FailFn;
 }>;
 
+type PinSecurityBinding = Readonly<{
+  session_id: string;
+  staff_id: string;
+}>;
+
+function recordPinSecurityError(
+  h: PinRouteHelpers,
+  request: FastifyRequest,
+  error: unknown,
+  binding: PinSecurityBinding | null,
+): void {
+  if (binding === null || !(error instanceof IdentityError)) return;
+  const reason =
+    error.code === "AUTHENTICATION_FAILED"
+      ? "PIN_FAILED"
+      : error.code === "PIN_LOCKED"
+        ? "PIN_LOCKED"
+        : null;
+  if (reason === null) return;
+  h.securityEvents.record(request, {
+    reason,
+    ip: request.ip,
+    session_id: binding.session_id,
+    staff_id: binding.staff_id,
+  });
+}
+
 export function registerPinRoutes(app: FastifyInstance, h: PinRouteHelpers): void {
   app.post("/api/v2/auth/pin/challenges", async (request, reply) => {
+    let securityBinding: PinSecurityBinding | null = null;
     try {
       const resolved = await h.resolveSession(h.runtime, request);
       if (resolved === null) {
         reply.code(401);
         return h.fail("AUTHENTICATION_FAILED");
       }
-      const csrf = h.requireCsrf(request, reply, h.cookiePolicy);
+      const csrf = await h.requireCsrf(request, reply, h.cookiePolicy, resolved.session);
       if (csrf !== true) return csrf;
-      const body = h.isRecord(request.body) ? request.body : {};
-      if (body.purpose === "quick_switch" && typeof body.target_staff_id === "string") {
+      const parsed = PinChallengeRequestSchema.safeParse(request.body);
+      if (!parsed.success) {
+        reply.code(400);
+        return h.fail("VALIDATION_FAILED");
+      }
+      const body = parsed.data;
+      const targetStaffId =
+        body.purpose === "quick_switch" ? body.target_staff_id : body.approver_staff_id;
+      securityBinding = Object.freeze({
+        session_id: resolved.session.session_id,
+        staff_id: targetStaffId,
+      });
+      if (body.purpose === "quick_switch") {
         const challenge = await createQuickSwitchChallenge(h.runtime.identity.pin, {
           purpose: "quick_switch",
           session: resolved.session,
@@ -88,12 +131,7 @@ export function registerPinRoutes(app: FastifyInstance, h: PinRouteHelpers): voi
           }),
         });
       }
-      if (
-        body.purpose === "step_up" &&
-        typeof body.pending_action_ref === "string" &&
-        typeof body.approver_staff_id === "string" &&
-        h.runtime.identity.pinStepUp !== undefined
-      ) {
+      if (h.runtime.identity.pinStepUp !== undefined) {
         const challenge = await createStepUpChallenge(h.runtime.identity.pinStepUp, {
           purpose: "step_up",
           session: resolved.session,
@@ -113,29 +151,36 @@ export function registerPinRoutes(app: FastifyInstance, h: PinRouteHelpers): voi
       reply.code(400);
       return h.fail("VALIDATION_FAILED");
     } catch (error) {
+      recordPinSecurityError(h, request, error, securityBinding);
       return h.mapIdentityHttpError(error, reply, request);
     }
   });
 
   app.post("/api/v2/auth/pin/challenges/:challengeId/verify", async (request, reply) => {
+    let securityBinding: PinSecurityBinding | null = null;
     try {
       const resolved = await h.resolveSession(h.runtime, request);
       if (resolved === null) {
         reply.code(401);
         return h.fail("AUTHENTICATION_FAILED");
       }
-      const csrf = h.requireCsrf(request, reply, h.cookiePolicy);
+      const csrf = await h.requireCsrf(request, reply, h.cookiePolicy, resolved.session);
       if (csrf !== true) return csrf;
       const params = request.params as { challengeId?: string };
-      const body = h.isRecord(request.body) ? request.body : {};
-      const challengeId =
-        typeof body.challenge_id === "string"
-          ? body.challenge_id
-          : typeof params.challengeId === "string"
-            ? params.challengeId
-            : "";
-      const pin = typeof body.pin === "string" ? body.pin : "";
+      const parsed = PinVerifyRequestSchema.safeParse(request.body);
+      if (!parsed.success || params.challengeId !== parsed.data.challenge_id) {
+        reply.code(400);
+        return h.fail("VALIDATION_FAILED");
+      }
+      const { challenge_id: challengeId, pin } = parsed.data;
       const record = await h.runtime.identity.pin.challenges.get(challengeId);
+      const targetStaffId = record?.target_staff_id ?? record?.approver_staff_id;
+      if (targetStaffId !== undefined) {
+        securityBinding = Object.freeze({
+          session_id: resolved.session.session_id,
+          staff_id: targetStaffId,
+        });
+      }
       if (record?.purpose === "step_up") {
         if (h.runtime.identity.pinStepUp === undefined) {
           reply.code(503);
@@ -177,6 +222,7 @@ export function registerPinRoutes(app: FastifyInstance, h: PinRouteHelpers): voi
       h.setAuthCookies(reply, h.cookiePolicy, issued.refresh.refresh_token, issued.csrf.csrf_token);
       return Object.freeze({ ok: true as const, data: accessSession });
     } catch (error) {
+      recordPinSecurityError(h, request, error, securityBinding);
       return h.mapIdentityHttpError(error, reply, request);
     }
   });

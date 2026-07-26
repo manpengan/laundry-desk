@@ -30,10 +30,37 @@ const CsrfTransportProofsSchema = z.strictObject({
 const FetchSiteSchema = z.enum(["same-origin", "same-site", "cross-site", "none"]);
 const CsrfMethodSchema = z.enum(["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]);
 
+const BrowserCsrfSurfaceSchema = z.strictObject({
+  kind: z.literal("browser"),
+  fetch_site: FetchSiteSchema,
+});
+
+const TrustedDesktopCsrfSurfaceSchema = z.strictObject({
+  kind: z.literal("trusted-desktop"),
+  fetch_site: z.literal("none"),
+});
+
+const UntrustedCsrfSurfaceSchema = z.strictObject({
+  kind: z.literal("untrusted"),
+});
+
+/**
+ * Server-owned surface classification. The trusted-desktop variant may be constructed only
+ * after the local request-security boundary matched the exact desktop Origin + Fetch-Site pair.
+ */
+export const CsrfRequestSurfaceSchema = z
+  .discriminatedUnion("kind", [
+    BrowserCsrfSurfaceSchema,
+    TrustedDesktopCsrfSurfaceSchema,
+    UntrustedCsrfSurfaceSchema,
+  ])
+  .readonly();
+
+export type CsrfRequestSurface = z.output<typeof CsrfRequestSurfaceSchema>;
+
 const CsrfRequestFactsSchema = z.strictObject({
   method: CsrfMethodSchema,
-  origin_allowed: z.boolean(),
-  fetch_site: FetchSiteSchema,
+  surface: CsrfRequestSurfaceSchema,
   cookie_present: z.boolean(),
   header_present: z.boolean(),
   tokens_match: z.boolean(),
@@ -42,8 +69,7 @@ const CsrfRequestFactsSchema = z.strictObject({
 
 const LoginPreAuthOriginFactsSchema = z.strictObject({
   method: z.literal("POST"),
-  origin_allowed: z.boolean(),
-  fetch_site: FetchSiteSchema,
+  surface: CsrfRequestSurfaceSchema,
 });
 
 export const CsrfRejectionReasonSchema = z.enum([
@@ -74,8 +100,17 @@ const reject = (reason: CsrfRejectionReason): CsrfDecision =>
 const isSafeMethod = (method: z.output<typeof CsrfMethodSchema>): boolean =>
   method === "GET" || method === "HEAD" || method === "OPTIONS";
 
-const isFetchMetadataAllowed = (fetchSite: z.output<typeof FetchSiteSchema>): boolean =>
-  fetchSite === "same-origin" || fetchSite === "same-site";
+const rejectSurface = (surface: CsrfRequestSurface): CsrfDecision | null => {
+  if (surface.kind === "untrusted") return reject("ORIGIN_NOT_ALLOWED");
+  if (
+    surface.kind === "browser" &&
+    surface.fetch_site !== "same-origin" &&
+    surface.fetch_site !== "same-site"
+  ) {
+    return reject("FETCH_METADATA_REJECTED");
+  }
+  return null;
+};
 
 /**
  * Validates cookie and header proof syntax independently. It neither compares the values nor
@@ -90,8 +125,8 @@ export const validateCsrfTransportProofs = (input: unknown): Readonly<{ valid: t
 export const evaluateCsrfRequest = (input: unknown): CsrfDecision => {
   const facts = parseSnapshot(CsrfRequestFactsSchema, input, "CSRF request facts");
   if (isSafeMethod(facts.method)) return ALLOWED;
-  if (!facts.origin_allowed) return reject("ORIGIN_NOT_ALLOWED");
-  if (!isFetchMetadataAllowed(facts.fetch_site)) return reject("FETCH_METADATA_REJECTED");
+  const surfaceRejection = rejectSurface(facts.surface);
+  if (surfaceRejection !== null) return surfaceRejection;
   if (!facts.cookie_present || !facts.header_present) return reject("TOKEN_MISSING");
   if (!facts.tokens_match) return reject("TOKEN_MISMATCH");
   if (!facts.proof_valid) return reject("PROOF_INVALID");
@@ -104,7 +139,7 @@ export const evaluateCsrfRequest = (input: unknown): CsrfDecision => {
  */
 export const evaluateLoginPreAuthOrigin = (input: unknown): CsrfDecision => {
   const facts = parseSnapshot(LoginPreAuthOriginFactsSchema, input, "login pre-auth origin facts");
-  if (!facts.origin_allowed) return reject("ORIGIN_NOT_ALLOWED");
-  if (!isFetchMetadataAllowed(facts.fetch_site)) return reject("FETCH_METADATA_REJECTED");
+  const surfaceRejection = rejectSurface(facts.surface);
+  if (surfaceRejection !== null) return surfaceRejection;
   return ALLOWED;
 };

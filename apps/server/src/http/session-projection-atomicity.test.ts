@@ -17,6 +17,11 @@ import { LOCAL_COOKIE_NAMES } from "./types.js";
 
 const DEVICE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const cookies = resolveCookiePolicy({ secure: false });
+const browserMutationHeaders = Object.freeze({
+  host: "127.0.0.1:8787",
+  origin: "http://127.0.0.1:5173",
+  "sec-fetch-site": "same-site",
+});
 
 function parseSetCookie(headers: Record<string, unknown>): Readonly<Record<string, string>> {
   const raw = headers["set-cookie"];
@@ -53,10 +58,27 @@ function withFailingProjection(runtime: LocalRuntime, message: string): LocalRun
   });
 }
 
+function withInvalidAccessTokenSigner(runtime: LocalRuntime): LocalRuntime {
+  return Object.freeze({
+    ...runtime,
+    identity: Object.freeze({
+      ...runtime.identity,
+      sessions: Object.freeze({
+        ...runtime.identity.sessions,
+        accessTokenSigner: Object.freeze({
+          ...runtime.identity.sessions.accessTokenSigner,
+          sign: () => "invalid-access-token",
+        }),
+      }),
+    }),
+  });
+}
+
 async function login(app: FastifyInstance) {
   return app.inject({
     method: "POST",
     url: "/api/v2/auth/login",
+    headers: browserMutationHeaders,
     payload: {
       org_code: "local",
       store_code: "main",
@@ -74,6 +96,7 @@ test("login projection failure creates no identity state or cookies", async () =
   const app = await createLocalApp({
     runtime: withFailingProjection(runtime, sentinel),
     cookiePolicy: cookies,
+    logger: false,
   });
 
   const response = await login(app);
@@ -87,22 +110,58 @@ test("login projection failure creates no identity state or cookies", async () =
   await app.close();
 });
 
+test("login response validation precedes cookies and settles its limiter reservation once", async () => {
+  const runtime = await createMemoryLocalRuntime();
+  const settlements: string[] = [];
+  const app = await createLocalApp({
+    runtime: withInvalidAccessTokenSigner(runtime),
+    cookiePolicy: cookies,
+    loginRateLimiter: Object.freeze({
+      beginAttempt: () =>
+        Object.freeze({
+          allowed: true as const,
+          reservation: Object.freeze({
+            succeed: () => settlements.push("succeed"),
+            fail: () => {
+              settlements.push("fail");
+              return Object.freeze({ allowed: true as const });
+            },
+            release: () => settlements.push("release"),
+          }),
+        }),
+    }),
+    logger: false,
+  });
+
+  const response = await login(app);
+
+  assert.equal(response.statusCode, 500, response.body);
+  assert.equal(response.headers["set-cookie"], undefined);
+  assert.deepEqual(settlements, ["release"]);
+  await app.close();
+});
+
 test("refresh projection failure leaves the active secret retryable", async () => {
   const runtime = await createMemoryLocalRuntime();
   assert.ok(runtime.store);
-  const healthyApp = await createLocalApp({ runtime, cookiePolicy: cookies });
+  const healthyApp = await createLocalApp({ runtime, cookiePolicy: cookies, logger: false });
   const loginResponse = await login(healthyApp);
   assert.equal(loginResponse.statusCode, 200, loginResponse.body);
   const authCookies = parseSetCookie(loginResponse.headers as Record<string, unknown>);
   const failingApp = await createLocalApp({
     runtime: withFailingProjection(runtime, "projection-refresh-secret"),
     cookiePolicy: cookies,
+    logger: false,
   });
 
   const failed = await failingApp.inject({
     method: "POST",
     url: "/api/v2/auth/refresh",
-    headers: { cookie: cookieHeader(authCookies) },
+    headers: {
+      ...browserMutationHeaders,
+      cookie: cookieHeader(authCookies),
+      [CSRF_HEADER_NAME]: authCookies[LOCAL_COOKIE_NAMES.csrf] ?? "",
+    },
     payload: {},
   });
 
@@ -118,7 +177,11 @@ test("refresh projection failure leaves the active secret retryable", async () =
   const retry = await healthyApp.inject({
     method: "POST",
     url: "/api/v2/auth/refresh",
-    headers: { cookie: cookieHeader(authCookies) },
+    headers: {
+      ...browserMutationHeaders,
+      cookie: cookieHeader(authCookies),
+      [CSRF_HEADER_NAME]: authCookies[LOCAL_COOKIE_NAMES.csrf] ?? "",
+    },
     payload: {},
   });
   assert.equal(retry.statusCode, 200, retry.body);
@@ -126,10 +189,39 @@ test("refresh projection failure leaves the active secret retryable", async () =
   await healthyApp.close();
 });
 
+test("refresh response validation precedes replacement cookies", async () => {
+  const runtime = await createMemoryLocalRuntime();
+  const healthyApp = await createLocalApp({ runtime, cookiePolicy: cookies, logger: false });
+  const loginResponse = await login(healthyApp);
+  assert.equal(loginResponse.statusCode, 200, loginResponse.body);
+  const authCookies = parseSetCookie(loginResponse.headers as Record<string, unknown>);
+  const failingApp = await createLocalApp({
+    runtime: withInvalidAccessTokenSigner(runtime),
+    cookiePolicy: cookies,
+    logger: false,
+  });
+
+  const failed = await failingApp.inject({
+    method: "POST",
+    url: "/api/v2/auth/refresh",
+    headers: {
+      ...browserMutationHeaders,
+      cookie: cookieHeader(authCookies),
+      [CSRF_HEADER_NAME]: authCookies[LOCAL_COOKIE_NAMES.csrf] ?? "",
+    },
+    payload: {},
+  });
+
+  assert.equal(failed.statusCode, 500, failed.body);
+  assert.equal(failed.headers["set-cookie"], undefined);
+  await failingApp.close();
+  await healthyApp.close();
+});
+
 test("quick-switch projection failure does not consume its challenge or session", async () => {
   const runtime = await createMemoryLocalRuntime();
   assert.ok(runtime.store);
-  const healthyApp = await createLocalApp({ runtime, cookiePolicy: cookies });
+  const healthyApp = await createLocalApp({ runtime, cookiePolicy: cookies, logger: false });
   const loginResponse = await login(healthyApp);
   assert.equal(loginResponse.statusCode, 200, loginResponse.body);
   const body = loginResponse.json() as { data: { access_token: string } };
@@ -139,6 +231,7 @@ test("quick-switch projection failure does not consume its challenge or session"
   const target = runtime.staffDirectory.find((entry) => entry.username === "staff");
   assert.ok(target);
   const headers = {
+    ...browserMutationHeaders,
     authorization: `Bearer ${body.data.access_token}`,
     [CSRF_HEADER_NAME]: csrf,
     cookie: cookieHeader(authCookies),
@@ -154,6 +247,7 @@ test("quick-switch projection failure does not consume its challenge or session"
   const failingApp = await createLocalApp({
     runtime: withFailingProjection(runtime, "projection-pin-secret"),
     cookiePolicy: cookies,
+    logger: false,
   });
 
   const failed = await failingApp.inject({

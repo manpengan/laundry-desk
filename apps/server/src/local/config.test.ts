@@ -10,6 +10,7 @@ const CSRF_SECRET = "csrf-proof-secret-is-at-least-32-bytes";
 test("default memory runtime needs only the strict host configuration", async () => {
   const hostConfig = parseLocalHostConfig({});
   const runtime = await createLocalRuntime({});
+  const csrfCapability = runtime.csrfProofSigner;
 
   assert.deepEqual(hostConfig, {
     listenHost: "127.0.0.1",
@@ -19,7 +20,9 @@ test("default memory runtime needs only the strict host configuration", async ()
   });
   assert.equal(runtime.mode, "memory");
   assert.ok(Buffer.byteLength(runtime.accessTokenSecret, "utf8") >= 32);
-  assert.ok(Buffer.byteLength(runtime.csrfProofSecret, "utf8") >= 32);
+  assert.equal(typeof csrfCapability.mint, "function");
+  assert.equal("csrfProofSecret" in runtime, false);
+  assert.equal(runtime.identity.sessions.csrfProofMinter, csrfCapability);
 });
 
 test("memory runtime still rejects an invalid host boundary", async () => {
@@ -123,13 +126,27 @@ test("PG selection fails closed before opening a pool when secrets are absent", 
   );
 });
 
-test("memory runtimes receive independent random access and CSRF secrets", async () => {
+test("memory runtimes receive independent access secrets and isolated CSRF signer capabilities", async () => {
   const first = await createMemoryLocalRuntime();
   const second = await createMemoryLocalRuntime();
+  const binding = Object.freeze({
+    session_id: "11111111-1111-4111-8111-111111111111",
+    session_version: 1,
+    rotation_nonce: "22222222-2222-4222-8222-222222222222",
+  });
+  const firstSigner = first.csrfProofSigner;
+  const secondSigner = second.csrfProofSigner;
+  const firstProof = firstSigner.mint(binding);
+  const secondProof = secondSigner.mint(binding);
 
-  assert.notEqual(first.accessTokenSecret, first.csrfProofSecret);
   assert.notEqual(first.accessTokenSecret, second.accessTokenSecret);
-  assert.notEqual(first.csrfProofSecret, second.csrfProofSecret);
+  assert.notEqual(firstProof, secondProof);
+  assert.equal(firstSigner.verify(firstProof, binding), true);
+  assert.equal(firstSigner.verify(secondProof, binding), false);
+  assert.equal(secondSigner.verify(secondProof, binding), true);
+  assert.equal(first.identity.sessions.csrfProofMinter, firstSigner);
+  assert.equal(second.identity.sessions.csrfProofMinter, secondSigner);
+  assert.equal("csrfProofSecret" in first, false);
+  assert.equal("csrfProofSecret" in second, false);
   assert.ok(Buffer.byteLength(first.accessTokenSecret, "utf8") >= 32);
-  assert.ok(Buffer.byteLength(first.csrfProofSecret, "utf8") >= 32);
 });

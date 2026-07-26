@@ -1,6 +1,5 @@
 /**
- * Local HTTP entry: memory identity (default) or PostgreSQL when the lifecycle
- * command supplies an explicit DATABASE_URL.
+ * Local HTTP entry: PostgreSQL through an explicit laundry_app DATABASE_URL.
  *
  *   pnpm local:server
  *   pnpm local:up
@@ -8,34 +7,22 @@
  * Env is parsed by the strict local server configuration boundary.
  */
 
-import { createLocalApp } from "./create-app.js";
-import { parseLocalHostConfig } from "../local/config.js";
-import { createLocalRuntime } from "../local/create-runtime.js";
+import { safeErrorContext } from "./local-logger.js";
+import { startLocalHttpServer } from "./server-lifecycle.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
 
 async function main(): Promise<void> {
-  const config = parseLocalHostConfig(process.env);
-  const runtime = await createLocalRuntime(process.env);
-  const app = await createLocalApp({
-    runtime,
-    corsOrigin: config.browserOrigin,
-  });
-
-  const shutdown = async (): Promise<void> => {
-    await app.close();
-    if (runtime.pool !== null) {
-      await runtime.pool.end();
-    }
+  const { runtime, config, shutdown } = await startLocalHttpServer(process.env);
+  const exitAfterShutdown = (): void => {
+    void shutdown().then(
+      () => process.exit(0),
+      () => process.exit(1),
+    );
   };
 
-  process.once("SIGINT", () => {
-    void shutdown().finally(() => process.exit(0));
-  });
-  process.once("SIGTERM", () => {
-    void shutdown().finally(() => process.exit(0));
-  });
+  process.once("SIGINT", exitAfterShutdown);
+  process.once("SIGTERM", exitAfterShutdown);
 
-  await app.listen({ port: config.port, host: config.listenHost });
   process.stdout.write(
     [
       `${LOCAL_PROFILE.orgName} local server listening on http://${config.listenHost}:${config.port}`,
@@ -51,7 +38,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`local server failed: ${message}\n`);
+  const context = safeErrorContext(error);
+  process.stderr.write(`local server failed: ${context.error_type}\n`);
   process.exitCode = 1;
 });

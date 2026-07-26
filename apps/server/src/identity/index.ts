@@ -60,7 +60,6 @@ export {
   buildAccessClaims,
   constantTimeEqual,
   hashOpaqueSecret,
-  mintCsrfProof,
   newUuid,
   randomToken,
   sha256Hex,

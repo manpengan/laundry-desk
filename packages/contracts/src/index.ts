@@ -140,12 +140,13 @@ export {
   CSRF_COOKIE_NAME,
   CSRF_HEADER_NAME,
   CsrfProofSchema,
+  CsrfRequestSurfaceSchema,
   CsrfRejectionReasonSchema,
   evaluateCsrfRequest,
   evaluateLoginPreAuthOrigin,
   validateCsrfTransportProofs,
 } from "./auth/csrf.js";
-export type { CsrfDecision, CsrfRejectionReason } from "./auth/csrf.js";
+export type { CsrfDecision, CsrfRejectionReason, CsrfRequestSurface } from "./auth/csrf.js";
 
 export {
   PIN_CHALLENGE_MAX_ATTEMPTS,

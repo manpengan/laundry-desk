@@ -17,6 +17,7 @@ export {
   CSRF_HEADER_NAME,
   assertCsrf,
   checkCsrfDoubleSubmit,
+  createCsrfProofSigner,
   readCsrfHeader,
 } from "./csrf.js";
-export type { CsrfCheckInput, CsrfCheckResult } from "./csrf.js";
+export type { CsrfCheckInput, CsrfCheckResult, CsrfProofBinding, CsrfProofSigner } from "./csrf.js";

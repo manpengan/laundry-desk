@@ -218,6 +218,8 @@ test("PG runtime opens one app pool and verifies readiness without an admin conn
   assert.deepEqual(lifecycle, ["ready", "directory"]);
   assert.equal(runtime.pool, poolDouble.pool);
   assert.deepEqual(runtime.staffDirectory, loadedDirectory);
+  assert.equal(runtime.identity.sessions.csrfProofMinter, runtime.csrfProofSigner);
+  assert.equal("csrfProofSecret" in runtime, false);
   assert.notEqual(runtime.staffDirectory, loadedDirectory);
   assert.equal(Object.isFrozen(runtime.staffDirectory), true);
   assert.equal(Object.isFrozen(runtime.staffDirectory[0]), true);

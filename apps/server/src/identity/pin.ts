@@ -189,9 +189,18 @@ export const recordPinFailure = async (
     attempted_at: now,
     locked_until: now + PIN_LOCKOUT_SECONDS,
   });
-  if (committed !== 1) {
-    throw new IdentityError("PIN_CHALLENGE_INVALID", "Challenge already consumed");
+  if (committed === 1) return;
+
+  const lockout = await deps.lockouts.get(
+    record.org_id,
+    record.store_id,
+    targetStaffId,
+    record.device_id,
+  );
+  if (lockout !== null && lockout.locked_until > now) {
+    throw new IdentityError("PIN_LOCKED", "PIN is locked out");
   }
+  throw new IdentityError("PIN_CHALLENGE_INVALID", "Challenge already consumed");
 };
 
 /**
