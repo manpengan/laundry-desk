@@ -173,6 +173,25 @@ test("uses the generic V2 display name in active packaging metadata", async () =
   assert.equal(rootPackage.build.nsis.shortcutName, "laundry-desk V2");
 });
 
+test("pins Electron and keeps its install lifecycle explicit", async () => {
+  const [rootPackageSource, edgePackageSource, workspaceSource] = await Promise.all([
+    readRepositoryFile("package.json"),
+    readRepositoryFile("apps/edge-agent/package.json"),
+    readRepositoryFile("pnpm-workspace.yaml"),
+  ]);
+  const rootPackage = JSON.parse(rootPackageSource);
+  const edgePackage = JSON.parse(edgePackageSource);
+
+  assert.equal(rootPackage.devDependencies.electron, "41.10.2");
+  assert.equal(edgePackage.devDependencies.electron, "41.10.2");
+  assert.equal(rootPackage.devDependencies["electron-builder"], "26.15.3");
+  assert.match(workspaceSource, /^\s{2}"?@google\/genai"?: false$/mu);
+  assert.match(workspaceSource, /^\s{2}electron: true$/mu);
+  assert.match(workspaceSource, /^\s{2}electron-winstaller: false$/mu);
+  assert.equal(rootPackage.scripts.postinstall, undefined);
+  assert.equal(rootPackage.scripts["rebuild:app-deps"], "electron-builder install-app-deps");
+});
+
 test("keeps the default memory server entry independent from PG signing secrets", async () => {
   const [serverEntry, lifecycle] = await Promise.all([
     readRepositoryFile("apps/server/src/http/main.ts"),
