@@ -13,7 +13,7 @@ import {
 } from "./request-security.js";
 
 const BROWSER_ORIGIN = "http://127.0.0.1:5173";
-const DESKTOP_ORIGIN = "app://local";
+const DESKTOP_ORIGIN = "http://127.0.0.1:8787";
 const ALLOWED_HOST = "127.0.0.1:8787";
 const OPTIONS = Object.freeze({
   allowedHosts: Object.freeze([ALLOWED_HOST]),
@@ -114,7 +114,7 @@ test("accepts only the browser and desktop Origin/Fetch Metadata pairings", () =
         "POST",
         Object.freeze({
           origin: DESKTOP_ORIGIN,
-          "sec-fetch-site": "none",
+          "sec-fetch-site": "same-origin",
           "content-type": "application/json",
         }),
       ),
@@ -134,6 +134,7 @@ test("accepts only the browser and desktop Origin/Fetch Metadata pairings", () =
     [BROWSER_ORIGIN, "cross-site"],
     [DESKTOP_ORIGIN, undefined],
     [DESKTOP_ORIGIN, "same-site"],
+    [DESKTOP_ORIGIN, "none"],
     [DESKTOP_ORIGIN, "cross-site"],
   ] as const;
 
@@ -190,6 +191,9 @@ test("policy exposes one static browser CORS origin and rejects unsafe configura
     { ...OPTIONS, browserOrigin: "*" },
     { ...OPTIONS, browserOrigin: "null" },
     { ...OPTIONS, desktopOrigin: "*" },
+    { ...OPTIONS, desktopOrigin: "app://local" },
+    { ...OPTIONS, desktopOrigin: "http://127.0.0.1:8788" },
+    { ...OPTIONS, desktopOrigin: "https://attacker.invalid" },
     { ...OPTIONS, desktopOrigin: BROWSER_ORIGIN },
   ] as const;
   for (const options of invalidOptions) {
@@ -238,7 +242,7 @@ test("Fastify hook protects health and unsafe routes without leaking rejected va
     headers: {
       host: ALLOWED_HOST,
       origin: DESKTOP_ORIGIN,
-      "sec-fetch-site": "none",
+      "sec-fetch-site": "same-origin",
       "content-type": "application/json",
     },
     payload: {},

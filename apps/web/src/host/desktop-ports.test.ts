@@ -57,10 +57,22 @@ function loginSuccess(
   };
 }
 
+function createPlannedAuthBridge(
+  auth: Pick<LaundryDesktopBridge["auth"], "login" | "pinChallenge" | "pinVerify">,
+): LaundryDesktopBridge["auth"] {
+  return Object.freeze({
+    login: auth.login,
+    refresh: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
+    pinChallenge: auth.pinChallenge,
+    pinVerify: auth.pinVerify,
+    logout: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
+  });
+}
+
 test("desktop ports forward only named business operations and token-free views", async () => {
   const captured: unknown[] = [];
   const bridge: LaundryDesktopBridge = Object.freeze({
-    auth: Object.freeze({
+    auth: createPlannedAuthBridge({
       login: async (input: LoginInput) => {
         captured.push(input);
         return loginSuccess();
@@ -106,12 +118,15 @@ test("desktop ports forward only named business operations and token-free views"
     username: "admin",
     password: "secret",
   });
+  await ports.command.execute("order.receive", { customer_id: "customer-1" });
   await ports.command.execute(
     "order.receive",
-    { customer_id: "customer-1" },
-    { confirmRef: CONFIRM_REF },
+    { ignored_on_confirm: true },
+    {
+      confirmRef: CONFIRM_REF,
+    },
   );
-  await ports.query.execute("order.list", { limit: 20 });
+  await ports.query.execute("order.list");
 
   assert.equal(login.ok, true);
   if (!login.ok) return;
@@ -132,11 +147,14 @@ test("desktop ports forward only named business operations and token-free views"
     {
       name: "order.receive",
       body: { customer_id: "customer-1" },
+    },
+    {
+      name: "order.receive",
       confirm_ref: CONFIRM_REF,
     },
     {
       name: "order.list",
-      body: { limit: 20 },
+      body: {},
     },
   ]);
   assert.equal("fetch" in bridge, false);
@@ -146,7 +164,7 @@ test("desktop ports forward only named business operations and token-free views"
 test("desktop auth inputs fail closed before transport metadata can reach the bridge", async () => {
   const captured: unknown[] = [];
   const bridge: LaundryDesktopBridge = Object.freeze({
-    auth: Object.freeze({
+    auth: createPlannedAuthBridge({
       login: async (input: LoginInput) => {
         captured.push(input);
         return loginSuccess();
@@ -190,7 +208,7 @@ test("desktop auth inputs fail closed before transport metadata can reach the br
 
 test("desktop auth adapter rejects a step-up proof as a quick-switch session", async () => {
   const bridge: LaundryDesktopBridge = Object.freeze({
-    auth: Object.freeze({
+    auth: createPlannedAuthBridge({
       login: async () => loginSuccess(),
       pinChallenge: async () => ({
         ok: true,
@@ -262,7 +280,7 @@ test("desktop auth adapter fails closed on credential-bearing or unknown session
 
   for (const unsafeResult of unsafeResults) {
     const bridge: LaundryDesktopBridge = Object.freeze({
-      auth: Object.freeze({
+      auth: createPlannedAuthBridge({
         login: async () => unsafeResult,
         pinChallenge: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
         pinVerify: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
@@ -303,7 +321,7 @@ test("desktop auth adapter freezes its directory copy and clears it after login 
   ];
   let nextLogin: unknown = loginSuccess(SESSION_VIEW, sourceDirectory);
   const bridge: LaundryDesktopBridge = Object.freeze({
-    auth: Object.freeze({
+    auth: createPlannedAuthBridge({
       login: async () => nextLogin,
       pinChallenge: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
       pinVerify: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
@@ -353,7 +371,7 @@ test("desktop auth adapter separates step-up proof from quick-switch session", a
     },
   };
   const bridge: LaundryDesktopBridge = Object.freeze({
-    auth: Object.freeze({
+    auth: createPlannedAuthBridge({
       login: async () => loginSuccess(),
       pinChallenge: async (input: PinChallengeInput) => {
         captured.push(input);
@@ -425,7 +443,7 @@ test("desktop auth adapter separates step-up proof from quick-switch session", a
 
 test("desktop command adapter preserves a strict business failure envelope", async () => {
   const bridge: LaundryDesktopBridge = Object.freeze({
-    auth: Object.freeze({
+    auth: createPlannedAuthBridge({
       login: async () => loginSuccess(),
       pinChallenge: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
       pinVerify: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
@@ -466,11 +484,48 @@ test("desktop command adapter preserves a strict business failure envelope", asy
   });
 });
 
+test("desktop business values preserve contract fields named method", async () => {
+  const captured: CommandInput[] = [];
+  const bridge: LaundryDesktopBridge = Object.freeze({
+    auth: createPlannedAuthBridge({
+      login: async () => loginSuccess(),
+      pinChallenge: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
+      pinVerify: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
+    }),
+    command: Object.freeze({
+      execute: async (input: CommandInput) => {
+        captured.push(input);
+        const method =
+          "body" in input && typeof input.body === "object" && input.body !== null
+            ? Reflect.get(input.body, "method")
+            : undefined;
+        return { ok: true, data: { method } };
+      },
+    }),
+    query: Object.freeze({
+      execute: async () => ({ ok: true, data: null }),
+    }),
+    health: Object.freeze({
+      get: async () => ({ ok: true, data: { status: "ready" } }),
+    }),
+  });
+  const body = Object.freeze({
+    order_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    amount_cents: 1_200,
+    method: "cash",
+  });
+
+  const result = await createDesktopPorts(bridge).command.execute("payment.collect", body);
+
+  assert.deepEqual(captured, [{ name: "payment.collect", body }]);
+  assert.deepEqual(result, { ok: true, data: { method: "cash" } });
+});
+
 test("desktop command and query adapters reject malformed names and transport metadata", async () => {
   let commandCalls = 0;
   let queryCalls = 0;
   const bridge: LaundryDesktopBridge = Object.freeze({
-    auth: Object.freeze({
+    auth: createPlannedAuthBridge({
       login: async () => loginSuccess(),
       pinChallenge: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
       pinVerify: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
@@ -553,7 +608,7 @@ test("desktop command and query adapters reject malformed names and transport me
 
 test("desktop adapters reject credential-bearing successful business data", async () => {
   const bridge: LaundryDesktopBridge = Object.freeze({
-    auth: Object.freeze({
+    auth: createPlannedAuthBridge({
       login: async () => loginSuccess(),
       pinChallenge: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
       pinVerify: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
@@ -586,7 +641,7 @@ test("desktop adapters reject credential-bearing successful business data", asyn
 
 test("desktop health adapter never renders a main-process failure message", async () => {
   const bridge: LaundryDesktopBridge = Object.freeze({
-    auth: Object.freeze({
+    auth: createPlannedAuthBridge({
       login: async () => loginSuccess(),
       pinChallenge: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
       pinVerify: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),

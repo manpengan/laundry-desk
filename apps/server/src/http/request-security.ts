@@ -95,12 +95,19 @@ function isExactOrigin(origin: string, protocols: readonly string[]): boolean {
 
 function hasValidOptions(options: LocalRequestSecurityOptions): boolean {
   const hosts = [...options.allowedHosts];
+  let desktopHost: string;
+  try {
+    desktopHost = new URL(options.desktopOrigin).host;
+  } catch {
+    return false;
+  }
   return (
     hosts.length > 0 &&
     new Set(hosts).size === hosts.length &&
     hosts.every(isExactAuthority) &&
     isExactOrigin(options.browserOrigin, ["http:", "https:"]) &&
-    isExactOrigin(options.desktopOrigin, ["app:"]) &&
+    isExactOrigin(options.desktopOrigin, ["http:", "https:"]) &&
+    hosts.includes(desktopHost) &&
     options.browserOrigin !== options.desktopOrigin
   );
 }
@@ -139,7 +146,7 @@ function hasAllowedOriginPair(
 
   return (
     (origins[0] === policy.browserOrigin && fetchSites[0] === "same-site") ||
-    (origins[0] === policy.desktopOrigin && fetchSites[0] === "none")
+    (origins[0] === policy.desktopOrigin && fetchSites[0] === "same-origin")
   );
 }
 

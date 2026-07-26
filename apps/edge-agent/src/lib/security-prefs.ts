@@ -14,7 +14,27 @@ export const APP_SCHEME = "app";
 export const APP_HOST = "local";
 export const APP_ENTRY_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
 
-/** IPC channel whitelist (preload may only expose these). */
+/** Renderer-facing IPC capability map. Keep this exact and deeply frozen. */
+export const DESKTOP_IPC_CHANNELS = Object.freeze({
+  auth: Object.freeze({
+    login: "desktop:auth:login",
+    refresh: "desktop:auth:refresh",
+    pinChallenge: "desktop:auth:pin-challenge",
+    pinVerify: "desktop:auth:pin-verify",
+    logout: "desktop:auth:logout",
+  }),
+  command: Object.freeze({
+    execute: "desktop:command:execute",
+  }),
+  query: Object.freeze({
+    execute: "desktop:query:execute",
+  }),
+  health: Object.freeze({
+    get: "desktop:health:get",
+  }),
+});
+
+/** Legacy main-process IPC channels. The renderer preload must not expose these. */
 export const IPC_CHANNELS = {
   ping: "edge:ping",
   health: "edge:health",

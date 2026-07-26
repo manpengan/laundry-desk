@@ -431,12 +431,12 @@ test("CSRF not required for safe GET", () => {
   assert.equal(result.allowed, true);
 });
 
-test("CSRF permits Fetch-Site none only for a request-security-verified desktop surface", () => {
+test("CSRF permits same-origin only for a request-security-verified desktop surface", () => {
   const signer = createCsrfProofSigner(CSRF_PROOF_SECRET);
   const token = signer.mint(CSRF_BINDING);
   const trustedDesktop = checkCsrfDoubleSubmit({
     method: "POST",
-    surface: { kind: "trusted-desktop", fetch_site: "none" },
+    surface: { kind: "trusted-desktop", fetch_site: "same-origin" },
     cookie_token: token,
     header_token: token,
     proof_signer: signer,

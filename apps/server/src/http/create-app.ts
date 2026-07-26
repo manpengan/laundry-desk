@@ -39,7 +39,7 @@ export type CreateAppOptions = Readonly<{
 
 const DEFAULT_HOST_AUTHORITIES = Object.freeze(["127.0.0.1:8787"]);
 const DEFAULT_BROWSER_ORIGIN = "http://127.0.0.1:5173";
-const DEFAULT_DESKTOP_ORIGIN = "app://local";
+const DEFAULT_DESKTOP_ORIGIN = "http://127.0.0.1:8787";
 
 function createFastifyApp(options: CreateAppOptions): FastifyInstance {
   return Fastify({

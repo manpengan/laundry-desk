@@ -1,20 +1,28 @@
-import { BrowserWindow } from "electron";
+import { BrowserWindow, type Session } from "electron";
 import { APP_ENTRY_URL, APP_SCHEME, SECURITY_WEB_PREFERENCES } from "./lib/security-prefs.js";
 
-export function createMainWindow(preloadPath: string): BrowserWindow {
+export type MainWindowHandle = Readonly<{
+  window: BrowserWindow;
+  ready: Promise<void>;
+}>;
+
+export function createMainWindow(preloadPath: string, desktopSession: Session): MainWindowHandle {
   const win = new BrowserWindow({
     width: 960,
     height: 720,
-    show: true,
+    show: false,
     webPreferences: {
       preload: preloadPath,
+      session: desktopSession,
       ...SECURITY_WEB_PREFERENCES,
     },
   });
 
   applyNavigationGuards(win);
-  void win.loadURL(APP_ENTRY_URL);
-  return win;
+  return Object.freeze({
+    window: win,
+    ready: win.loadURL(APP_ENTRY_URL),
+  });
 }
 
 export function applyNavigationGuards(win: BrowserWindow): void {

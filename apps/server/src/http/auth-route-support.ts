@@ -218,8 +218,11 @@ function csrfRequestSurface(
   if (origin === policy.browserOrigin && fetchSite === "same-site") {
     return Object.freeze({ kind: "browser" as const, fetch_site: "same-site" as const });
   }
-  if (origin === policy.desktopOrigin && fetchSite === "none") {
-    return Object.freeze({ kind: "trusted-desktop" as const, fetch_site: "none" as const });
+  if (origin === policy.desktopOrigin && fetchSite === "same-origin") {
+    return Object.freeze({
+      kind: "trusted-desktop" as const,
+      fetch_site: "same-origin" as const,
+    });
   }
   return Object.freeze({ kind: "untrusted" as const });
 }

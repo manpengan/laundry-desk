@@ -11,7 +11,7 @@ import { LOCAL_COOKIE_NAMES } from "./types.js";
 
 const HOST = "127.0.0.1:8787";
 const BROWSER_ORIGIN = "http://127.0.0.1:5173";
-const DESKTOP_ORIGIN = "app://local";
+const DESKTOP_ORIGIN = "http://127.0.0.1:8787";
 const DEVICE_A = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const DEVICE_B = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const localCookies = resolveCookiePolicy({ secure: false });
@@ -25,7 +25,7 @@ const browserMutationHeaders = Object.freeze({
 const desktopMutationHeaders = Object.freeze({
   ...hostHeaders,
   origin: DESKTOP_ORIGIN,
-  "sec-fetch-site": "none",
+  "sec-fetch-site": "same-origin",
 });
 
 function deferred() {
@@ -111,6 +111,7 @@ test("login requires an exact surface Origin, matching Fetch Metadata, and JSON"
     { ...browserMutationHeaders, origin: "https://attacker.invalid" },
     { ...browserMutationHeaders, "sec-fetch-site": "cross-site" },
     { ...browserMutationHeaders, "sec-fetch-site": "none" },
+    { ...desktopMutationHeaders, "sec-fetch-site": "none" },
     { ...desktopMutationHeaders, "sec-fetch-site": "same-site" },
   ]) {
     const rejected = await app.inject({

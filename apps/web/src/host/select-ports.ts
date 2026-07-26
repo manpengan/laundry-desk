@@ -59,7 +59,7 @@ function isDesktopBridge(value: unknown): value is LaundryDesktopBridge {
     command !== null &&
     query !== null &&
     health !== null &&
-    hasExactFunctionSurface(auth, ["login", "pinChallenge", "pinVerify"]) &&
+    hasExactFunctionSurface(auth, ["login", "refresh", "pinChallenge", "pinVerify", "logout"]) &&
     hasExactFunctionSurface(command, ["execute"]) &&
     hasExactFunctionSurface(query, ["execute"]) &&
     hasExactFunctionSurface(health, ["get"])

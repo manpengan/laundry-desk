@@ -12,15 +12,21 @@ import type {
 import type { CommandPort, CommandResult, QueryPort } from "../commands/types.js";
 import type { AppPorts, HealthPort, HealthResult } from "./types.js";
 
-type DesktopCommandInput = Readonly<{
-  name: string;
-  body?: unknown;
-  confirm_ref?: string;
-}>;
+type DesktopCommandInput =
+  | Readonly<{
+      name: string;
+      body: unknown;
+      confirm_ref?: never;
+    }>
+  | Readonly<{
+      name: string;
+      confirm_ref: string;
+      body?: never;
+    }>;
 
 type DesktopQueryInput = Readonly<{
   name: string;
-  body?: unknown;
+  body: unknown;
 }>;
 
 /**
@@ -33,8 +39,10 @@ type DesktopQueryInput = Readonly<{
 export type LaundryDesktopBridge = Readonly<{
   auth: Readonly<{
     login: (input: LoginFormValues) => Promise<unknown>;
+    refresh: () => Promise<unknown>;
     pinChallenge: (input: PinChallengeRequest) => Promise<unknown>;
     pinVerify: (input: PinVerifyRequest) => Promise<unknown>;
+    logout: () => Promise<unknown>;
   }>;
   command: Readonly<{
     execute: (input: DesktopCommandInput) => Promise<unknown>;
@@ -48,6 +56,7 @@ export type LaundryDesktopBridge = Readonly<{
 }>;
 
 const EMPTY_STAFF_DIRECTORY: readonly SwitchableStaff[] = Object.freeze([]);
+const EMPTY_BUSINESS_BODY: Readonly<Record<string, never>> = Object.freeze({});
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const PIN = /^\d{4,8}$/u;
 const OPERATION_NAME = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/u;
@@ -55,20 +64,13 @@ const MAX_OPERATION_NAME_LENGTH = 128;
 const MAX_BUSINESS_VALUE_NODES = 10_000;
 const MAX_STAFF_DIRECTORY_SIZE = 500;
 const HEALTH_FAILURE_MESSAGE = "桌面本地服务不可用，请确认服务已启动后重试";
-const FORBIDDEN_BOUNDARY_KEYS = new Set([
-  "url",
-  "method",
-  "header",
-  "headers",
-  "origin",
+const FORBIDDEN_CREDENTIAL_KEYS = new Set([
   "cookie",
   "cookies",
   "authorization",
   "accesstoken",
   "refreshtoken",
   "token",
-  "fetch",
-  "invoke",
 ]);
 const SESSION_KEYS = Object.freeze([
   "session_id",
@@ -130,15 +132,16 @@ function readCommandOptions(value: unknown): Readonly<{ confirmRef?: string }> |
   return Object.freeze({ confirmRef: descriptor.value });
 }
 
-function isForbiddenBoundaryKey(key: string): boolean {
+function isCredentialBoundaryKey(key: string): boolean {
   const normalized = key.replace(/[^a-z0-9]/giu, "").toLowerCase();
-  return FORBIDDEN_BOUNDARY_KEYS.has(normalized) || normalized.endsWith("token");
+  return FORBIDDEN_CREDENTIAL_KEYS.has(normalized) || normalized.endsWith("token");
 }
 
 /**
  * Phase boundary: Task 10 owns authoritative contract-name and Zod validation.
- * This adapter only rejects non-JSON values and transport/credential-shaped
- * keys so the interim renderer bridge cannot become a generic IPC tunnel.
+ * This adapter rejects non-JSON values and credential-shaped keys. Legitimate business
+ * fields such as payment.method remain intact; fixed main-process schemas prevent
+ * renderer data from selecting transport controls.
  */
 function isSafeBusinessValue(value: unknown): boolean {
   const pending: unknown[] = [value];
@@ -162,7 +165,7 @@ function isSafeBusinessValue(value: unknown): boolean {
       if (prototype !== Object.prototype && prototype !== null) return false;
     }
     for (const key of Reflect.ownKeys(current)) {
-      if (typeof key !== "string" || isForbiddenBoundaryKey(key)) return false;
+      if (typeof key !== "string" || isCredentialBoundaryKey(key)) return false;
       if (Array.isArray(current) && key === "length") continue;
       const descriptor = Object.getOwnPropertyDescriptor(current, key);
       if (descriptor === undefined || !("value" in descriptor)) return false;
@@ -178,7 +181,7 @@ function readFeatures(value: unknown): Readonly<Record<string, boolean>> | null 
   if (
     !entries.every(
       (entry): entry is [string, boolean] =>
-        !isForbiddenBoundaryKey(entry[0]) && typeof entry[1] === "boolean",
+        !isCredentialBoundaryKey(entry[0]) && typeof entry[1] === "boolean",
     )
   ) {
     return null;
@@ -608,13 +611,16 @@ function createCommandPort(bridge: LaundryDesktopBridge): CommandPort {
       ) {
         return desktopBridgeError("桌面命令参数格式错误");
       }
-      const input: DesktopCommandInput = Object.freeze({
-        name,
-        ...(body === undefined ? {} : { body }),
-        ...(parsedOptions.confirmRef === undefined
-          ? {}
-          : { confirm_ref: parsedOptions.confirmRef }),
-      });
+      const input: DesktopCommandInput =
+        parsedOptions.confirmRef === undefined
+          ? Object.freeze({
+              name,
+              body: body === undefined ? EMPTY_BUSINESS_BODY : body,
+            })
+          : Object.freeze({
+              name,
+              confirm_ref: parsedOptions.confirmRef,
+            });
       try {
         return readCommandResult<T>(await bridge.command.execute(input));
       } catch {
@@ -632,7 +638,7 @@ function createQueryPort(bridge: LaundryDesktopBridge): QueryPort {
       }
       const input: DesktopQueryInput = Object.freeze({
         name,
-        ...(body === undefined ? {} : { body }),
+        body: body === undefined ? EMPTY_BUSINESS_BODY : body,
       });
       try {
         return readCommandResult<T>(await bridge.query.execute(input));

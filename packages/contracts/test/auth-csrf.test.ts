@@ -204,10 +204,10 @@ describe("A5 CSRF request evaluator", () => {
     ).toEqual({ allowed: true });
   });
 
-  it("accepts Fetch-Site none only through the request-security-verified desktop surface", () => {
+  it("accepts same-origin through the request-security-verified desktop surface", () => {
     expect(
       evaluateCsrfRequest(
-        requestFacts({ surface: { kind: "trusted-desktop", fetch_site: "none" } }),
+        requestFacts({ surface: { kind: "trusted-desktop", fetch_site: "same-origin" } }),
       ),
     ).toEqual({ allowed: true });
     expect(
@@ -262,7 +262,7 @@ describe("A5 login-only pre-auth Origin evaluator", () => {
     expect(
       evaluateLoginPreAuthOrigin({
         method: "POST",
-        surface: { kind: "trusted-desktop", fetch_site: "none" },
+        surface: { kind: "trusted-desktop", fetch_site: "same-origin" },
       }),
     ).toEqual({ allowed: true });
   });

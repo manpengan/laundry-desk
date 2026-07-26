@@ -37,7 +37,7 @@ const BrowserCsrfSurfaceSchema = z.strictObject({
 
 const TrustedDesktopCsrfSurfaceSchema = z.strictObject({
   kind: z.literal("trusted-desktop"),
-  fetch_site: z.literal("none"),
+  fetch_site: z.literal("same-origin"),
 });
 
 const UntrustedCsrfSurfaceSchema = z.strictObject({

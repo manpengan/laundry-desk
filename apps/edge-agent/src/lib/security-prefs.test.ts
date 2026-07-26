@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { IPC_CHANNELS, SECURITY_WEB_PREFERENCES } from "./security-prefs.js";
+import * as securityPrefs from "./security-prefs.js";
+
+const { IPC_CHANNELS, SECURITY_WEB_PREFERENCES } = securityPrefs;
 
 // Compiled tests live in dist/lib/; package sources stay under src/.
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -15,6 +17,70 @@ test("SECURITY_WEB_PREFERENCES hard baseline values", () => {
   assert.equal(SECURITY_WEB_PREFERENCES.sandbox, true);
   assert.equal(SECURITY_WEB_PREFERENCES.webSecurity, true);
   assert.equal(SECURITY_WEB_PREFERENCES.allowRunningInsecureContent, false);
+});
+
+test("DESKTOP_IPC_CHANNELS is the exact deeply frozen renderer capability map", () => {
+  const channels = Reflect.get(securityPrefs, "DESKTOP_IPC_CHANNELS") as unknown;
+
+  assert.deepEqual(channels, {
+    auth: {
+      login: "desktop:auth:login",
+      refresh: "desktop:auth:refresh",
+      pinChallenge: "desktop:auth:pin-challenge",
+      pinVerify: "desktop:auth:pin-verify",
+      logout: "desktop:auth:logout",
+    },
+    command: { execute: "desktop:command:execute" },
+    query: { execute: "desktop:query:execute" },
+    health: { get: "desktop:health:get" },
+  });
+  assert.equal(typeof channels, "object");
+  assert.notEqual(channels, null);
+  assert.equal(Object.isFrozen(channels), true);
+
+  for (const namespace of ["auth", "command", "query", "health"]) {
+    assert.equal(Object.isFrozen(Reflect.get(channels, namespace)), true);
+  }
+});
+
+test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
+  const preload = readFileSync(join(srcRoot, "preload.ts"), "utf8");
+  const exposedWorldKeys = Array.from(
+    preload.matchAll(/contextBridge\.exposeInMainWorld\(\s*"([^"]+)"/gu),
+    (match) => match[1],
+  );
+  const invokedDesktopChannels = Array.from(
+    preload.matchAll(
+      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:login|refresh|pinChallenge|pinVerify|logout)|command\.execute|query\.execute|health\.get)/gu,
+    ),
+    (match) => match[1],
+  );
+  const emptyInputChannels = Array.from(
+    preload.matchAll(
+      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:refresh|logout)|health\.get),\s*EMPTY_DESKTOP_INPUT\s*\)/gu,
+    ),
+    (match) => match[1],
+  );
+
+  assert.deepEqual(exposedWorldKeys, ["laundryDesktop"]);
+  assert.deepEqual(invokedDesktopChannels, [
+    "auth.login",
+    "auth.refresh",
+    "auth.pinChallenge",
+    "auth.pinVerify",
+    "auth.logout",
+    "command.execute",
+    "query.execute",
+    "health.get",
+  ]);
+  assert.deepEqual(emptyInputChannels, ["auth.refresh", "auth.logout", "health.get"]);
+  assert.equal(preload.match(/ipcRenderer\.invoke\(/gu)?.length, 8);
+  assert.doesNotMatch(preload, /edgeBridge/);
+  assert.doesNotMatch(preload, /import\s*\{\s*IPC_CHANNELS\s*\}/u);
+  assert.doesNotMatch(
+    preload,
+    /\b(?:fetch|url|method|headers?|cookies?|tokens?)\b|require\(|\bBuffer\b|\bprocess\./iu,
+  );
 });
 
 test("main/window/preload sources wire baseline and guards", () => {
@@ -33,12 +99,16 @@ test("main/window/preload sources wire baseline and guards", () => {
   assert.match(windowSrc, /SECURITY_WEB_PREFERENCES/);
   assert.match(windowSrc, /setWindowOpenHandler/);
   assert.match(windowSrc, /will-navigate/);
+  assert.doesNotMatch(windowSrc, /void\s+win\.loadURL/u);
+  assert.match(windowSrc, /ready:\s*win\.loadURL\(APP_ENTRY_URL\)/u);
+  assert.match(main, /await\s+showMainWindow\(\)/u);
   // Task 9 keeps protocol construction session-agnostic. Task 10 owns the
   // dedicated Electron session and its deny-all permission handler.
   assert.doesNotMatch(main, /session\.defaultSession/);
   assert.match(main, /verifySpaIntegrity/);
   assert.match(preload, /contextBridge\.exposeInMainWorld/);
-  assert.match(preload, /edgeBridge/);
+  assert.match(preload, /laundryDesktop/);
+  assert.doesNotMatch(preload, /edgeBridge/);
   assert.doesNotMatch(preload, /require\(/);
   assert.match(ipc, /isValidAppSender/);
   assert.match(ipc, /IPC_CHANNELS\.ping/);
@@ -47,8 +117,8 @@ test("main/window/preload sources wire baseline and guards", () => {
   assert.match(ipc, /IPC_CHANNELS\.pairingCreateCode/);
   assert.match(ipc, /IPC_CHANNELS\.pairingStatus/);
   assert.match(ipc, /isValidAppSender/);
-  assert.match(preload, /pairingCreateCode/);
-  assert.match(preload, /pairingStatus/);
+  assert.doesNotMatch(preload, /pairingCreateCode/);
+  assert.doesNotMatch(preload, /pairingStatus/);
   assert.doesNotMatch(preload, /privateKey/i);
   assert.doesNotMatch(ipc, /privateKey/i);
   assert.match(main, /claimPrimaryInstance|requestSingleInstanceLock/);
@@ -61,7 +131,7 @@ test("main/window/preload sources wire baseline and guards", () => {
   assert.equal(IPC_CHANNELS.printEnqueue, "edge:print-enqueue");
   assert.equal(IPC_CHANNELS.printProcess, "edge:print-process");
   assert.equal(IPC_CHANNELS.printList, "edge:print-list");
-  assert.match(preload, /printProcess/);
+  assert.doesNotMatch(preload, /printProcess/);
   // Printer smoke trigger stays CLI-only; neither renderer nor IPC may invoke it.
   assert.equal("printerSmoke" in IPC_CHANNELS, false);
   assert.doesNotMatch(preload, /printerSmoke/);

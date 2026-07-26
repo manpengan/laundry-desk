@@ -8,8 +8,10 @@ function createBridge(): LaundryDesktopBridge {
   return {
     auth: {
       login: async () => ({ ok: false }),
+      refresh: async () => ({ ok: false }),
       pinChallenge: async () => ({ ok: false }),
       pinVerify: async () => ({ ok: false }),
+      logout: async () => ({ ok: false }),
     },
     command: {
       execute: async () => ({ ok: false }),
@@ -79,9 +81,34 @@ test("selectHost fails closed when app://local has no valid desktop bridge", () 
   }
 });
 
-test("selectHost rejects accessor-backed bridge namespaces without evaluating them", () => {
+test("selectHost requires the exact five-method desktop auth surface", () => {
+  const valid = createBridge();
+  const missingRefresh = {
+    login: valid.auth.login,
+    pinChallenge: valid.auth.pinChallenge,
+    pinVerify: valid.auth.pinVerify,
+    logout: valid.auth.logout,
+  };
+  const invalidBridges: readonly unknown[] = [
+    { ...valid, auth: missingRefresh },
+    {
+      ...valid,
+      auth: {
+        ...valid.auth,
+        fetch: async () => ({ ok: false }),
+      },
+    },
+  ];
+
+  for (const bridge of invalidBridges) {
+    assert.throws(() => selectHost("app://local/index.html", bridge), /桌面安全桥未就绪/u);
+  }
+});
+
+test("selectHost rejects accessor-backed bridge namespaces and methods without evaluating them", () => {
   const valid = createBridge();
   let authGetterCalls = 0;
+  let refreshGetterCalls = 0;
   const accessorBridge = Object.defineProperties(
     {},
     {
@@ -100,6 +127,29 @@ test("selectHost rejects accessor-backed bridge namespaces without evaluating th
 
   assert.throws(() => selectHost("app://local/index.html", accessorBridge), /桌面安全桥未就绪/u);
   assert.equal(authGetterCalls, 0);
+
+  const accessorAuth = Object.defineProperties(
+    {},
+    {
+      login: { enumerable: true, value: valid.auth.login },
+      refresh: {
+        enumerable: true,
+        get: () => {
+          refreshGetterCalls += 1;
+          return valid.auth.refresh;
+        },
+      },
+      pinChallenge: { enumerable: true, value: valid.auth.pinChallenge },
+      pinVerify: { enumerable: true, value: valid.auth.pinVerify },
+      logout: { enumerable: true, value: valid.auth.logout },
+    },
+  );
+
+  assert.throws(
+    () => selectHost("app://local/index.html", { ...valid, auth: accessorAuth }),
+    /桌面安全桥未就绪/u,
+  );
+  assert.equal(refreshGetterCalls, 0);
 });
 
 test("selectHost fails closed for malformed URLs and unsupported protocols", () => {
