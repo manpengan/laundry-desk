@@ -6,11 +6,7 @@ if (configuredWebUrl !== undefined && configuredWebUrl !== LOCAL_WEB_URL) {
   throw new Error("LAUNDRY_WEB_URL must equal the local loopback Web endpoint");
 }
 
-/**
- * Opt-in local SPA config. Does not start webServer — caller must run:
- *   pnpm local:up
- *   pnpm local:web
- */
+/** Opt-in local SPA config. Fastify remains caller-owned; Playwright owns Vite. */
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
@@ -21,6 +17,12 @@ export default defineConfig({
     baseURL: LOCAL_WEB_URL,
     trace: "on-first-retry",
     headless: true,
+  },
+  webServer: {
+    command: "pnpm --filter @laundry/web exec vite --config vite.config.ts",
+    url: LOCAL_WEB_URL,
+    reuseExistingServer: false,
+    timeout: 120_000,
   },
   projects: [{ name: "chromium", use: { browserName: "chromium" } }],
 });

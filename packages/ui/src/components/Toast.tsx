@@ -64,14 +64,7 @@ export function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss?: ()
         <button
           type="button"
           onClick={onDismiss}
-          style={{
-            marginLeft: 12,
-            border: 0,
-            background: "transparent",
-            cursor: "pointer",
-            color: "inherit",
-            fontWeight: 700,
-          }}
+          className="ld-toast__dismiss"
           aria-label="关闭通知"
         >
           ×

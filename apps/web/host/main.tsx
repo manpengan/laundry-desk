@@ -30,6 +30,10 @@ const ports =
 
 createRoot(rootEl).render(
   <ServiceGate health={ports.health}>
-    <App ports={ports} connection={createMockConnection({ mode: "online" })} enableLiquidGlass />
+    <App
+      ports={ports}
+      connection={createMockConnection({ mode: "online" })}
+      enableLiquidGlass={host.kind === "browser"}
+    />
   </ServiceGate>,
 );

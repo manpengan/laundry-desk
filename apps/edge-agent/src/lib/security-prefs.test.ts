@@ -33,8 +33,9 @@ test("main/window/preload sources wire baseline and guards", () => {
   assert.match(windowSrc, /SECURITY_WEB_PREFERENCES/);
   assert.match(windowSrc, /setWindowOpenHandler/);
   assert.match(windowSrc, /will-navigate/);
-  assert.match(main, /setPermissionRequestHandler/);
-  assert.match(main, /registerSchemesAsPrivileged/);
+  // Task 9 keeps protocol construction session-agnostic. Task 10 owns the
+  // dedicated Electron session and its deny-all permission handler.
+  assert.doesNotMatch(main, /session\.defaultSession/);
   assert.match(main, /verifySpaIntegrity/);
   assert.match(preload, /contextBridge\.exposeInMainWorld/);
   assert.match(preload, /edgeBridge/);

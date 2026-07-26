@@ -1059,9 +1059,15 @@ Expected: FAIL because Web has no deployable `dist-spa` and integrity covers onl
 
 - [ ] **Step 3: Implement deterministic SPA sync**
 
-Vite writes `apps/web/dist-spa` with relative asset URLs. The sync script uses a temporary
-directory, copies the complete bundle, generates sorted manifest entries, verifies them,
-then atomically replaces `resources/spa`. Do not hand-maintain generated assets.
+Vite writes `apps/web/dist-spa` with relative asset URLs. The sync script copies and
+durably verifies the complete bundle under the immutable
+`resources/spa/bundles/<manifest-sha256>/` path. It then commits the canonical root
+`manifest.json` with one same-directory atomic rename, so an interrupted publisher leaves
+either the complete previous bundle or the complete new bundle active. Publishers are
+cross-process serialized. Valid immutable bundle history is not automatically garbage
+collected in this phase: this keeps the active and immediately previous versions available
+across concurrent readers and crash recovery until reader-aware pruning exists. Do not
+hand-maintain generated assets.
 
 Add explicit Edge scripts `spa:sync` and `spa:check`. Packaging must call `spa:sync`;
 `spa:check` is only a verification step and never repairs stale output.
@@ -1082,8 +1088,8 @@ pnpm --filter @laundry/edge-agent test
 pnpm --filter @laundry/edge-agent spa:check
 ```
 
-Expected: PASS and `resources/spa/index.html` references hashed Vite assets from the real
-Web app.
+Expected: PASS and the root manifest selects a content-addressed bundle whose `index.html`
+references hashed Vite assets from the real Web app.
 
 - [ ] **Step 5: Commit**
 

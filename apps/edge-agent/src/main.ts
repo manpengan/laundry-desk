@@ -2,44 +2,34 @@
  * D1 Electron shell — app:// SPA + security baseline + tray / single-instance.
  * No business validation; Edge hosts UI/shell and execution adapters only.
  */
-import { app, BrowserWindow, protocol, session } from "electron";
+import { app, BrowserWindow } from "electron";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadManifest, verifySpaIntegrity } from "./lib/integrity.js";
+import {
+  activeBundleRootFromSpaRoot,
+  loadCanonicalManifest,
+  verifySpaIntegrity,
+} from "./lib/integrity.js";
 import {
   manifestPathFromSpaRoot,
   packageRootFromModuleUrl,
   preloadPathFromDistDir,
   spaRootFromPackageRoot,
 } from "./lib/paths.js";
-import { APP_SCHEME } from "./lib/security-prefs.js";
 import { createRuntimeState, registerIpcHandlers } from "./ipc.js";
-import { createAppProtocolHandler } from "./protocol.js";
 import { claimPrimaryInstance, onSecondInstance } from "./shell/single-instance.js";
 import { createAppTray } from "./shell/tray.js";
 import { createMainWindow } from "./window.js";
 
 const distDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = packageRootFromModuleUrl(import.meta.url);
-const spaRoot = spaRootFromPackageRoot(packageRoot);
-const manifestPath = manifestPathFromSpaRoot(spaRoot);
+const spaResourceRoot = spaRootFromPackageRoot(packageRoot);
+const manifestPath = manifestPathFromSpaRoot(spaResourceRoot);
 const preloadPath = preloadPathFromDistDir(distDir);
 
 let mainWindow: BrowserWindow | null = null;
 let disposeTray: (() => void) | null = null;
 const runtime = createRuntimeState();
-
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: APP_SCHEME,
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      corsEnabled: true,
-    },
-  },
-]);
 
 function showMainWindow(): void {
   if (!mainWindow) {
@@ -54,21 +44,14 @@ function showMainWindow(): void {
   mainWindow.focus();
 }
 
-function denyAllPermissions(): void {
-  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
-    callback(false);
-  });
-}
-
 function boot(): void {
-  const manifest = loadManifest(manifestPath);
-  const hash = verifySpaIntegrity(spaRoot, manifest);
-  console.log("[edge-agent] SPA integrity ok", hash.slice(0, 12));
+  const { manifest, bundleId } = loadCanonicalManifest(manifestPath);
+  const activeSpaRoot = activeBundleRootFromSpaRoot(spaResourceRoot, bundleId);
+  const verified = verifySpaIntegrity(activeSpaRoot, manifest);
+  console.log("[edge-agent] SPA integrity ok", bundleId, Object.keys(verified.entries).length);
 
-  protocol.handle(APP_SCHEME, createAppProtocolHandler(spaRoot));
-  denyAllPermissions();
   registerIpcHandlers({
-    spaRoot,
+    spaRoot: activeSpaRoot,
     manifestPath,
     getUpgradeState: () => runtime.upgrade,
     getSpool: () => runtime.spool,

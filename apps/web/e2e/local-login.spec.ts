@@ -38,6 +38,11 @@ test("generic local administrator login reaches the counter shell", async ({ pag
   await page.goto(WEB);
   await expect(page.locator('[data-page="login"]')).toBeVisible();
 
+  await expect(page.locator('input[name="org_code"]')).toHaveValue("");
+  await expect(page.locator('input[name="store_code"]')).toHaveValue("");
+  await expect(page.locator('input[name="username"]')).toHaveValue("");
+  await expect(page.locator('input[name="password"]')).toHaveValue("");
+
   await page.locator('input[name="org_code"]').fill(LOGIN.orgCode);
   await page.locator('input[name="store_code"]').fill(LOGIN.storeCode);
   await page.locator('input[name="username"]').fill(LOGIN.username);

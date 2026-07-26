@@ -48,8 +48,8 @@ export function PageHost({
   if (loading) {
     return (
       <main className="ld-shell-main lg-card" aria-busy="true" aria-label="加载中">
-        <Skeleton height={28} width="40%" />
-        <div style={{ marginTop: 16 }}>
+        <Skeleton className="ld-skeleton--page-title" />
+        <div className="ld-page-loading__body">
           <Skeleton lines={4} />
         </div>
       </main>

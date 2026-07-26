@@ -4,6 +4,7 @@ node_modules/
 
 # build output
 dist/
+/apps/web/dist-spa/
 out/
 release/
 # 注意：build/ 不在此列——它存放打包源资产（icon.ico / installer.nsh），

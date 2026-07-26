@@ -86,6 +86,24 @@
   border-color: var(--lg-late-ink);
 }
 
+.ld-field {
+  display: block;
+}
+
+.ld-field__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lg-ink2);
+}
+
+.ld-field__hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--lg-ink3);
+}
+
 .ld-field-error {
   margin-top: 4px;
   font-size: 12px;
@@ -98,6 +116,10 @@
   border-radius: var(--lg-radius-lg);
   border: 1px solid var(--lg-hair);
   background: var(--lg-surface);
+}
+
+.ld-table-wrap--empty {
+  padding: 24px;
 }
 
 .ld-table {
@@ -229,6 +251,15 @@
   color: var(--lg-warn-ink);
 }
 
+.ld-toast__dismiss {
+  margin-left: 12px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  font-weight: 700;
+}
+
 .ld-money {
   font-family: var(--lg-font-mono);
   font-variant-numeric: tabular-nums;
@@ -325,6 +356,7 @@
 /* Skeleton / empty / sync / print indicator */
 .ld-skeleton {
   display: block;
+  width: 100%;
   min-height: 12px;
   background: linear-gradient(
     90deg,
@@ -334,6 +366,11 @@
   );
   background-size: 200% 100%;
   animation: ld-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.ld-skeleton--page-title {
+  width: 40%;
+  min-height: 28px;
 }
 
 .ld-skeleton--sm {
@@ -353,6 +390,18 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.ld-skeleton-stack .ld-skeleton {
+  min-height: 12px;
+}
+
+.ld-skeleton-stack .ld-skeleton:last-child {
+  width: 72%;
+}
+
+.ld-page-loading__body {
+  margin-top: 16px;
 }
 
 @keyframes ld-skeleton-shimmer {

@@ -11,11 +11,13 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "pnpm run spa:sync && tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
-    "lint": "eslint src --ext .ts,.tsx --max-warnings=0",
-    "test": "tsc -p tsconfig.json && node --test $(find dist -name '*.test.js')",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src scripts --ext .ts,.tsx,.mjs --max-warnings=0",
+    "test": "node --test scripts/*.test.mjs && tsc -p tsconfig.json && node --test $(find dist -name '*.test.js')",
+    "typecheck": "node --check scripts/sync-spa.mjs && node --check scripts/sync-spa.test.mjs && tsc -p tsconfig.json --noEmit",
+    "spa:sync": "node scripts/sync-spa.mjs sync",
+    "spa:check": "node scripts/sync-spa.mjs check",
     "printer-smoke": "tsc -p tsconfig.json && node dist/print/printer-smoke-cli.js"
   },
   "dependencies": {
@@ -23,6 +25,7 @@
     "iconv-lite": "0.6.3"
   },
   "devDependencies": {
-    "electron": "41.10.2"
+    "electron": "41.10.2",
+    "proper-lockfile": "4.1.2"
   }
 }

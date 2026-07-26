@@ -14,7 +14,7 @@ export type TableProps<T> = {
   rowKey: (row: T) => string;
   empty?: ReactNode;
   className?: string;
-} & Omit<TableHTMLAttributes<HTMLTableElement>, "children">;
+} & Omit<TableHTMLAttributes<HTMLTableElement>, "children" | "style">;
 
 export function Table<T>({
   columns,
@@ -25,22 +25,21 @@ export function Table<T>({
   ...rest
 }: TableProps<T>) {
   if (rows.length === 0) {
-    return (
-      <div className={cn("ld-table-wrap", className)} style={{ padding: 24 }}>
-        {empty}
-      </div>
-    );
+    return <div className={cn("ld-table-wrap", "ld-table-wrap--empty", className)}>{empty}</div>;
   }
 
   return (
     <div className={cn("ld-table-wrap", className)}>
       <table className="ld-table" {...rest}>
+        <colgroup>
+          {columns.map((col) => (
+            <col key={col.key} {...(col.width !== undefined ? { width: col.width } : {})} />
+          ))}
+        </colgroup>
         <thead>
           <tr>
             {columns.map((col) => (
-              <th key={col.key} style={col.width ? { width: col.width } : undefined}>
-                {col.header}
-              </th>
+              <th key={col.key}>{col.header}</th>
             ))}
           </tr>
         </thead>

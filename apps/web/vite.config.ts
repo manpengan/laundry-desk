@@ -1,13 +1,15 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-/**
- * Local SPA host for M1 testing.
- * Library build remains `tsc` (package scripts); this config is for `pnpm local:web` only.
- */
+/** Shared SPA build for the local browser and the Electron app:// host. */
 export default defineConfig({
+  base: "./",
   plugins: [react()],
   root: ".",
+  build: {
+    outDir: "dist-spa",
+    emptyOutDir: true,
+  },
   server: {
     host: "127.0.0.1",
     port: 5173,
