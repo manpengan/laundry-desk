@@ -52,4 +52,58 @@ test("generic local administrator login reaches the counter shell", async ({ pag
 
   await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: "切换员工" })).toBeVisible();
+
+  const cookieCycle = await page.evaluate(async (apiBase) => {
+    const csrfCookie = (): string | null => {
+      const prefix = "laundry_csrf=";
+      const match = document.cookie.split("; ").find((cookie) => cookie.startsWith(prefix));
+      return match === undefined ? null : match.slice(prefix.length);
+    };
+    const initialCsrf = csrfCookie();
+    if (initialCsrf === null) {
+      return { refreshStatus: 0, rotated: false, logoutStatus: 0, cleared: false };
+    }
+
+    const refresh = await fetch(`${apiBase}/api/v2/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": initialCsrf,
+      },
+      body: "{}",
+    });
+    const rotatedCsrf = csrfCookie();
+    if (!refresh.ok || rotatedCsrf === null) {
+      return {
+        refreshStatus: refresh.status,
+        rotated: false,
+        logoutStatus: 0,
+        cleared: false,
+      };
+    }
+
+    const logout = await fetch(`${apiBase}/api/v2/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": rotatedCsrf,
+      },
+      body: "{}",
+    });
+    return {
+      refreshStatus: refresh.status,
+      rotated: rotatedCsrf !== initialCsrf,
+      logoutStatus: logout.status,
+      cleared: csrfCookie() === null,
+    };
+  }, API);
+
+  expect(cookieCycle).toEqual({
+    refreshStatus: 200,
+    rotated: true,
+    logoutStatus: 200,
+    cleared: true,
+  });
 });

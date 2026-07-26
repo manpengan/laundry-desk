@@ -192,7 +192,7 @@ test("pins Electron and keeps its install lifecycle explicit", async () => {
   assert.equal(rootPackage.scripts["rebuild:app-deps"], "electron-builder install-app-deps");
 });
 
-test("keeps the default memory server entry independent from PG signing secrets", async () => {
+test("keeps HTTP server composition independent from ambient PG signing aliases", async () => {
   const [serverEntry, lifecycle] = await Promise.all([
     readRepositoryFile("apps/server/src/http/main.ts"),
     readRepositoryFile("apps/server/src/http/server-lifecycle.ts"),
@@ -382,6 +382,23 @@ test("registers the guarded local lifecycle in default workspace gates", async (
   assert.match(rootPackage.scripts["workspace:format:check"], /tools\/local/u);
   assert.match(rootPackage.scripts["workspace:format:check"], /tools\/compose/u);
   assert.match(rootPackage.scripts["workspace:lint"], /eslint tools\/local --ext \.mjs/u);
+});
+
+test("keeps browser and Electron acceptance sources inside canonical quality gates", async () => {
+  const edgePackage = JSON.parse(await readRepositoryFile("apps/edge-agent/package.json"));
+  const webPackage = JSON.parse(await readRepositoryFile("apps/web/package.json"));
+  const edgeE2eConfig = JSON.parse(await readRepositoryFile("apps/edge-agent/tsconfig.e2e.json"));
+  const webE2eConfig = JSON.parse(await readRepositoryFile("apps/web/tsconfig.e2e.json"));
+
+  assert.match(edgePackage.scripts.lint, /\be2e\b/u);
+  assert.match(edgePackage.scripts.lint, /playwright\.electron\.config\.ts/u);
+  assert.match(edgePackage.scripts.typecheck, /tsconfig\.e2e\.json/u);
+  assert.deepEqual(edgeE2eConfig.include, ["e2e/**/*.ts", "playwright.electron.config.ts"]);
+
+  assert.match(webPackage.scripts.lint, /\be2e\b/u);
+  assert.match(webPackage.scripts.lint, /playwright\.local\.config\.ts/u);
+  assert.match(webPackage.scripts.typecheck, /tsconfig\.e2e\.json/u);
+  assert.deepEqual(webE2eConfig.include, ["e2e/**/*.ts", "playwright.local.config.ts"]);
 });
 
 test("serializes server test files that mutate shared PostgreSQL roles", async () => {

@@ -44,6 +44,9 @@
     "local:server": "pnpm --filter @laundry/contracts build && pnpm --filter @laundry/domain build && pnpm --filter @laundry/server build && node apps/server/dist/http/main.js",
     "local:web": "pnpm --filter @laundry/ui build && pnpm --filter @laundry/web exec vite --config vite.config.ts",
     "local:web:e2e": "pnpm exec playwright test -c apps/web/playwright.local.config.ts",
+    "local:mac:build": "pnpm --filter @laundry/edge-agent package:mac",
+    "local:mac:e2e": "pnpm exec playwright test -c apps/edge-agent/playwright.electron.config.ts",
+    "local:acceptance": "node tools/local/acceptance.mjs",
     "local:up": "node tools/local/up.mjs",
     "local:down": "node tools/local/down.mjs",
     "local:reset": "node tools/local/reset.mjs"

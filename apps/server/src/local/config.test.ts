@@ -7,9 +7,9 @@ import { parseLocalHostConfig, parseLocalServerConfig } from "./config.js";
 const ACCESS_SECRET = "access-secret-is-at-least-32-bytes";
 const CSRF_SECRET = "csrf-proof-secret-is-at-least-32-bytes";
 
-test("default memory runtime needs only the strict host configuration", async () => {
+test("explicit memory runtime stays isolated from the strict host configuration", async () => {
   const hostConfig = parseLocalHostConfig({});
-  const runtime = await createLocalRuntime({});
+  const runtime = await createMemoryLocalRuntime();
   const csrfCapability = runtime.csrfProofSigner;
 
   assert.deepEqual(hostConfig, {
@@ -25,9 +25,9 @@ test("default memory runtime needs only the strict host configuration", async ()
   assert.equal(runtime.identity.sessions.csrfProofMinter, csrfCapability);
 });
 
-test("memory runtime still rejects an invalid host boundary", async () => {
-  await assert.rejects(
-    () => createLocalRuntime({ LAUNDRY_CONTAINER_RUNTIME: "true" }),
+test("strict host configuration rejects an invalid container boundary", () => {
+  assert.throws(
+    () => parseLocalHostConfig({ LAUNDRY_CONTAINER_RUNTIME: "true" }),
     /LAUNDRY_CONTAINER_RUNTIME/u,
   );
 });

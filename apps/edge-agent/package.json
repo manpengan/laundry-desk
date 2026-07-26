@@ -13,9 +13,12 @@
   "scripts": {
     "build": "pnpm run spa:sync && tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
-    "lint": "eslint src scripts --ext .ts,.tsx,.mjs --max-warnings=0",
+    "lint": "eslint src scripts e2e playwright.electron.config.ts --ext .ts,.tsx,.mjs --max-warnings=0",
+    "preload:bundle": "node scripts/build-preload.mjs",
+    "package:mac": "pnpm exec turbo run build --filter=@laundry/edge-agent && pnpm run preload:bundle && pnpm exec electron-builder --config electron-builder.yml --mac dir",
+    "hash:app": "node scripts/hash-app.mjs",
     "test": "node --test scripts/*.test.mjs && tsc -p tsconfig.json && node --test $(find dist -name '*.test.js')",
-    "typecheck": "node --check scripts/sync-spa.mjs && node --check scripts/sync-spa.test.mjs && tsc -p tsconfig.json --noEmit",
+    "typecheck": "node --check scripts/build-preload.mjs && node --check scripts/build-preload.test.mjs && node --check scripts/hash-app.mjs && node --check scripts/hash-app.test.mjs && node --check scripts/prune-packaged-spa.mjs && node --check scripts/prune-packaged-spa.test.mjs && node --check scripts/sync-spa.mjs && node --check scripts/sync-spa.test.mjs && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.e2e.json",
     "spa:sync": "node scripts/sync-spa.mjs sync",
     "spa:check": "node scripts/sync-spa.mjs check",
     "printer-smoke": "tsc -p tsconfig.json && node dist/print/printer-smoke-cli.js"

@@ -25,8 +25,9 @@ export type CookiePolicy = Readonly<{
 
 export type CookiePolicyInput = Readonly<{
   /**
-   * Force Secure + __Host- names. When omitted: true if NODE_ENV=production or
-   * LAUNDRY_COOKIE_SECURE=1/true; false for local HTTP walkthroughs.
+   * Force Secure + __Host- names. Runtime composition roots should pass this
+   * directly; environment parsing remains available only for explicit deployment
+   * configuration.
    */
   secure?: boolean;
   env?: NodeJS.ProcessEnv;
@@ -40,7 +41,10 @@ export function resolveCookieSecure(env: NodeJS.ProcessEnv = process.env): boole
   const flag = env.LAUNDRY_COOKIE_SECURE?.trim().toLowerCase();
   if (flag === "1" || flag === "true") return true;
   if (flag === "0" || flag === "false") return false;
-  return env.NODE_ENV === "production";
+  if (flag === undefined || flag.length === 0) {
+    throw new Error("LAUNDRY_COOKIE_SECURE must be explicitly configured");
+  }
+  throw new Error("LAUNDRY_COOKIE_SECURE must be 0, 1, false, or true");
 }
 
 /**

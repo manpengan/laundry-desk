@@ -69,9 +69,17 @@ test("LOCAL_COOKIE_NAMES and SECURE_COOKIE_NAMES stay aligned", () => {
   assert.equal(SECURE_COOKIE_NAMES.refresh, REFRESH_COOKIE_DESCRIPTOR.name);
 });
 
-test("resolveCookieSecure respects LAUNDRY_COOKIE_SECURE and NODE_ENV", () => {
+test("resolveCookieSecure requires an explicit transport flag and never trusts NODE_ENV", () => {
   assert.equal(resolveCookieSecure({ LAUNDRY_COOKIE_SECURE: "1" }), true);
+  assert.equal(resolveCookieSecure({ LAUNDRY_COOKIE_SECURE: "true" }), true);
   assert.equal(resolveCookieSecure({ LAUNDRY_COOKIE_SECURE: "0" }), false);
-  assert.equal(resolveCookieSecure({ NODE_ENV: "production" }), true);
-  assert.equal(resolveCookieSecure({ NODE_ENV: "development" }), false);
+  assert.equal(resolveCookieSecure({ LAUNDRY_COOKIE_SECURE: "false" }), false);
+  assert.throws(
+    () => resolveCookieSecure({ NODE_ENV: "production" }),
+    /LAUNDRY_COOKIE_SECURE must be explicitly configured/u,
+  );
+  assert.throws(
+    () => resolveCookieSecure({ LAUNDRY_COOKIE_SECURE: "sometimes" }),
+    /LAUNDRY_COOKIE_SECURE must be 0, 1, false, or true/u,
+  );
 });

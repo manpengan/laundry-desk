@@ -50,7 +50,7 @@
     },
     "@laundry/edge-agent#build": {
       "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/web#build"],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", "resources/spa/**"]
     },
     "@laundry/server#typecheck": {
       "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/domain#build"]

@@ -141,6 +141,9 @@ test("main/window/preload sources wire baseline and guards", () => {
   assert.match(printerSmokeCli, /--validate/);
   assert.match(enqueueHandler, /return printMutationGate/u);
   assert.match(processHandler, /return printMutationGate/u);
+  assert.doesNotMatch(main, /NODE_ENV|registerIpcHandlers|createRuntimeState/u);
+  assert.doesNotMatch(ipc, /NODE_ENV/u);
+  assert.match(ipc, /allowUnsignedRendererPrint/u);
   // Process path returns receipt fields only — never payload bytes to renderer.
   assert.doesNotMatch(ipc, /bytes:\s*result\.bytes|rawBytes|payload\.byteLength/);
 });

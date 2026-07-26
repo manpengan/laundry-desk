@@ -15,10 +15,9 @@ import {
   manifestPathFromSpaRoot,
   packageRootFromModuleUrl,
   preloadPathFromDistDir,
-  spaRootFromPackageRoot,
+  spaRootForRuntime,
 } from "./lib/paths.js";
 import { APP_SCHEME } from "./lib/security-prefs.js";
-import { createRuntimeState, registerIpcHandlers } from "./ipc.js";
 import { createAppProtocolHandler } from "./protocol.js";
 import { claimPrimaryInstance, onSecondInstance } from "./shell/single-instance.js";
 import { createAppTray } from "./shell/tray.js";
@@ -40,7 +39,11 @@ import { createMainWindow } from "./window.js";
 
 const distDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = packageRootFromModuleUrl(import.meta.url);
-const spaResourceRoot = spaRootFromPackageRoot(packageRoot);
+const spaResourceRoot = spaRootForRuntime({
+  isPackaged: app.isPackaged,
+  packageRoot,
+  resourcesPath: process.resourcesPath,
+});
 const manifestPath = manifestPathFromSpaRoot(spaResourceRoot);
 const preloadPath = preloadPathFromDistDir(distDir);
 
@@ -48,7 +51,6 @@ let mainWindow: BrowserWindow | null = null;
 let mainWindowReady: Promise<void> | null = null;
 let activeDesktopSession: Session | null = null;
 let disposeTray: (() => void) | null = null;
-const runtime = createRuntimeState();
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -120,22 +122,6 @@ async function boot(): Promise<void> {
     ipcMain: ipcMain as unknown as DesktopIpcMainSurface,
     service: desktopTransport,
     expectedWebContentsId: () => mainWindow?.webContents.id ?? null,
-  });
-
-  registerIpcHandlers({
-    spaRoot: activeSpaRoot,
-    manifestPath,
-    getUpgradeState: () => runtime.upgrade,
-    getSpool: () => runtime.spool,
-    setSpool: (spool) => {
-      runtime.spool = spool;
-    },
-    getPrintJobs: () => runtime.printJobs,
-    setPrintJobs: (store) => {
-      runtime.printJobs = store;
-    },
-    getPairing: () => runtime.pairing,
-    getQueue: () => runtime.queue,
   });
 
   await showMainWindow();

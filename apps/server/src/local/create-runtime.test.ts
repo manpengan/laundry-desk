@@ -154,32 +154,30 @@ test("PG staff directory rejects unexpected database fields", async () => {
   assert.equal(database.released(), true);
 });
 
-test("production runtime refuses the process-memory fallback without laundry_app DATABASE_URL", async () => {
+test("runtime refuses the process-memory fallback without laundry_app DATABASE_URL", async () => {
   await assert.rejects(
-    () => createLocalRuntime({ NODE_ENV: "production" }),
-    /Production runtime requires DATABASE_URL for the laundry_app role/u,
+    () => createLocalRuntime({}),
+    /Runtime requires DATABASE_URL for the laundry_app role/u,
   );
 });
 
-test("production runtime rejects local-PG defaults without an explicit DATABASE_URL", async () => {
+test("runtime rejects local-PG defaults without an explicit DATABASE_URL", async () => {
   await assert.rejects(
     () =>
       createLocalRuntime({
-        NODE_ENV: "production",
         LAUNDRY_USE_LOCAL_PG: "1",
       }),
-    /Production runtime requires DATABASE_URL for the laundry_app role/u,
+    /Runtime requires DATABASE_URL for the laundry_app role/u,
   );
 });
 
-test("production runtime rejects an admin-only URL instead of using it as the app role", async () => {
+test("runtime rejects an admin-only URL instead of using it as the app role", async () => {
   await assert.rejects(
     () =>
       createLocalRuntime({
-        NODE_ENV: "production",
         DATABASE_ADMIN_URL: "postgresql://owner:owner@localhost:5432/laundry_v2",
       }),
-    /Production runtime requires DATABASE_URL for the laundry_app role/u,
+    /Runtime requires DATABASE_URL for the laundry_app role/u,
   );
 });
 

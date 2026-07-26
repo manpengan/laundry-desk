@@ -30,6 +30,8 @@ const PRINT_KINDS: ReadonlySet<string> = new Set(["xp58", "dl206", "gp3120"]);
 const printMutationGate = createExecutionGate();
 
 export type IpcContext = {
+  /** Test-only legacy mock path. Product main never registers these handlers. */
+  allowUnsignedRendererPrint: boolean;
   spaRoot: string;
   manifestPath: string;
   getUpgradeState: () => UpgradeState;
@@ -127,9 +129,9 @@ function ticketForProcess(ticketNo: string | undefined) {
  * through the paired Edge transport and `SignedPrintExecutor`, never from a
  * renderer-originated IPC message with no server capability ticket.
  */
-function assertUnsignedRendererPrintAllowed(): void {
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("renderer print execution is disabled in production; use signed Edge dispatch");
+function assertUnsignedRendererPrintAllowed(allowed: boolean): void {
+  if (!allowed) {
+    throw new Error("renderer print execution is disabled; use signed Edge dispatch");
   }
 }
 
@@ -202,7 +204,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
 
   ipcMain.handle(IPC_CHANNELS.printEnqueue, (event, kindRaw: unknown = "xp58") => {
     assertAppSender(event);
-    assertUnsignedRendererPrintAllowed();
+    assertUnsignedRendererPrintAllowed(ctx.allowUnsignedRendererPrint);
     return printMutationGate(async () => {
       const { kind, autoProcess } = parseEnqueueArgs(kindRaw);
       const now = Date.now();
@@ -231,7 +233,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
 
   ipcMain.handle(IPC_CHANNELS.printProcess, (event, raw: unknown = {}) => {
     assertAppSender(event);
-    assertUnsignedRendererPrintAllowed();
+    assertUnsignedRendererPrintAllowed(ctx.allowUnsignedRendererPrint);
     return printMutationGate(async () => {
       const input = (raw ?? {}) as PrintProcessInput;
       if (typeof input !== "object") {

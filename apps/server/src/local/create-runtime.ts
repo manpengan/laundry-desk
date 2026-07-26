@@ -1,6 +1,4 @@
-/**
- * Build LocalRuntime for memory (default) or Postgres (DATABASE_URL / LAUNDRY_USE_LOCAL_PG).
- */
+/** Build an explicit memory test runtime or the durable PostgreSQL local runtime. */
 
 import { randomBytes } from "node:crypto";
 
@@ -432,32 +430,28 @@ export async function createPgLocalRuntime(
 }
 
 /**
- * Auto-select: DATABASE_URL / LAUNDRY_USE_LOCAL_PG → PG; else explicit local demo memory.
- * Production must provide a dedicated laundry_app DATABASE_URL and never silently
- * start a counter runtime backed by process memory.
+ * Select only an explicitly configured app-role PostgreSQL runtime.
+ * Tests that need process memory must call createMemoryLocalRuntime directly.
  */
 export async function createLocalRuntime(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<LocalRuntime> {
-  const isProduction = env.NODE_ENV === "production";
   const explicitDatabaseUrl = env.DATABASE_URL?.trim() ?? "";
-  if (isProduction && explicitDatabaseUrl.length === 0) {
-    throw new Error("Production runtime requires DATABASE_URL for the laundry_app role");
+  const explicitLocalAppUrl = env.LAUNDRY_PG_APP_URL?.trim() ?? "";
+  if (explicitDatabaseUrl.length === 0 && explicitLocalAppUrl.length === 0) {
+    throw new Error("Runtime requires DATABASE_URL for the laundry_app role");
   }
   const hostConfig = parseLocalHostConfig(env);
   const databaseUrl = resolveRuntimeDatabaseUrl(env);
-  if (databaseUrl !== null) {
-    return createPgLocalRuntime(
-      databaseUrl,
-      env.LAUNDRY_LOCAL_DEMO === "1",
-      Object.freeze({
-        ...hostConfig,
-        ...parseLocalSigningSecrets(env),
-      }),
-    );
+  if (databaseUrl === null) {
+    throw new Error("Runtime requires DATABASE_URL for the laundry_app role");
   }
-  if (isProduction) {
-    throw new Error("Production runtime cannot fall back to memory mode");
-  }
-  return createMemoryLocalRuntime();
+  return createPgLocalRuntime(
+    databaseUrl,
+    env.LAUNDRY_LOCAL_DEMO === "1",
+    Object.freeze({
+      ...hostConfig,
+      ...parseLocalSigningSecrets(env),
+    }),
+  );
 }

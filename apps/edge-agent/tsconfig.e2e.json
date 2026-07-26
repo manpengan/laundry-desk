@@ -1,0 +1,9 @@
+{
+  "extends": "../../packages/config/tsconfig/node.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["e2e/**/*.ts", "playwright.electron.config.ts"]
+}

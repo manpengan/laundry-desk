@@ -1,0 +1,58 @@
+appId: com.laundry-desk.v2
+productName: laundry-desk V2
+asar: true
+afterPack: ./scripts/prune-packaged-spa.mjs
+
+directories:
+  output: release
+
+files:
+  - dist/main.js
+  - dist/window.js
+  - dist/protocol.js
+  - dist/lib/integrity.js
+  - dist/lib/mime.js
+  - dist/lib/paths.js
+  - dist/lib/security-prefs.js
+  - dist/lib/sender.js
+  - dist/shell/single-instance.js
+  - dist/shell/tray.js
+  - dist/transport/electron-session.js
+  - dist/transport/handlers.js
+  - dist/desktop/auth-intent.js
+  - dist/desktop/device-identity.js
+  - dist/desktop/electron-adapter.js
+  - dist/desktop/http-transport.js
+  - dist/preload.cjs
+  - package.json
+  - "!**/*.test.*"
+  - "!**/*.spec.*"
+  - "!**/*.d.*"
+  - "!**/*.map"
+  - "!**/*.ts"
+  - "!**/*.tsx"
+  - "!**/*.mts"
+  - "!**/*.cts"
+  - "!**/src/**"
+  - "!**/test/**"
+  - "!**/tests/**"
+  - "!**/.turbo/**"
+  - "!**/*.log"
+  - "!**/.env*"
+  - "!**/*credential*"
+  - "!**/node_modules/**/*.md"
+  - "!**/node_modules/**/.eslintrc*"
+  - "!**/node_modules/**/tsconfig*.json"
+  - "!**/node_modules/**/docs/**"
+  - "!**/node_modules/**/tests.js"
+  - "!**/node_modules/@laundry/contracts/openapi/**"
+
+extraResources:
+  - from: resources/spa
+    to: spa
+    filter:
+      - "**/*"
+
+mac:
+  target: dir
+  identity: null

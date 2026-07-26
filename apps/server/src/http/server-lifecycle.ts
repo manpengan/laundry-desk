@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { LocalRuntime } from "../local/demo-seed.js";
 import { parseLocalHostConfig, type LocalHostConfig } from "../local/config.js";
 import { createLocalApp, type CreateAppOptions } from "./create-app.js";
+import { resolveCookiePolicy } from "./cookie-policy.js";
 import { createHttpRuntime } from "./http-runtime.js";
 import { safeErrorContext } from "./local-logger.js";
 
@@ -121,6 +122,7 @@ export async function startLocalHttpServer(
     runtime = await dependencies.createRuntime(env);
     app = await dependencies.createApp({
       runtime,
+      cookiePolicy: resolveCookiePolicy({ secure: false }),
       hostAuthorities: config.hostAuthorities,
       browserOrigin: config.browserOrigin,
     });

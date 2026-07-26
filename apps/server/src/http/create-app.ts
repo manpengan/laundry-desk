@@ -12,7 +12,7 @@ import type { LocalRuntime } from "../local/demo-seed.js";
 import { registerAuthRoutes } from "./auth-routes.js";
 import type { AuthRouteContext, RouteSecurityContext } from "./auth-route-support.js";
 import { registerBusRoutes } from "./bus-routes.js";
-import { resolveCookiePolicy, type CookiePolicy } from "./cookie-policy.js";
+import type { CookiePolicy } from "./cookie-policy.js";
 import { installPublicErrorHandlers } from "./error-policy.js";
 import { createLocalLoggerOptions } from "./local-logger.js";
 import { createLoginRateLimiter, type LoginRateLimiter } from "./login-rate-limit.js";
@@ -24,11 +24,11 @@ import { createSecurityEventSink, type SecurityEventSink } from "./security-even
 
 export type CreateAppOptions = Readonly<{
   runtime: LocalRuntime;
+  /** Required at the composition root; never inferred from NODE_ENV. */
+  cookiePolicy: CookiePolicy;
   hostAuthorities?: readonly string[];
   browserOrigin?: string;
   desktopOrigin?: string;
-  /** Override cookie Secure / __Host- policy (tests force non-secure). */
-  cookiePolicy?: CookiePolicy;
   /** Deterministic limiter injection for focused tests. */
   loginRateLimiter?: LoginRateLimiter;
   /** Structured redacted auth-security events (tests may capture). */
@@ -84,7 +84,7 @@ function createRouteContext(
 ): AuthRouteContext {
   const base = Object.freeze({
     runtime: options.runtime,
-    cookiePolicy: options.cookiePolicy ?? resolveCookiePolicy(),
+    cookiePolicy: options.cookiePolicy,
     requestSecurity,
     securityEvents: options.securityEventSink ?? createSecurityEventSink(randomBytes(32)),
   }) satisfies RouteSecurityContext;

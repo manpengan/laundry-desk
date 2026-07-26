@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 
 import { createMemoryLocalRuntime, type LocalRuntime } from "../local/demo-seed.js";
 import type { PgPool } from "../db/pg-pool.js";
+import type { CreateAppOptions } from "./create-app.js";
 import {
   startLocalHttpServer,
   type ResourceCleanupFailure,
@@ -117,6 +118,28 @@ test("successful startup returns an explicit shutdown that closes app and pool",
   assert.equal(started.app, app);
   assert.equal(started.runtime, runtime);
   assert.deepEqual(calls, ["app.close", "pool.end"]);
+});
+
+test("local listener injects loopback HTTP cookies independent of NODE_ENV", async () => {
+  const runtime = await runtimeWithPool(async () => undefined);
+  const captured: CreateAppOptions[] = [];
+  const started = await startLocalHttpServer(
+    Object.freeze({ ...ENV, NODE_ENV: "production" }),
+    dependencies(runtime, async (options) => {
+      captured.push(options);
+      return fakeApp({});
+    }),
+  );
+
+  try {
+    const options = captured[0];
+    assert.ok(options);
+    assert.equal(options.cookiePolicy?.secure, false);
+    assert.equal(options.cookiePolicy?.refreshName, "laundry_refresh");
+    assert.equal(options.cookiePolicy?.csrfName, "laundry_csrf");
+  } finally {
+    await started.shutdown();
+  }
 });
 
 test("shutdown drains Fastify before ending the PostgreSQL pool", async () => {

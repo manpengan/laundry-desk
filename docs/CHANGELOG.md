@@ -2,22 +2,23 @@
 
 本项目版本记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 SemVer。
 
-> **当前路线（2026-07-23）**：按 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)，v2 是唯一活动交付线。宏发 v1 停止功能开发与独立发版，只保留为迁移源、历史行为参考和限期只读回退。
+> **当前路线（2026-07-25）**：按 [ADR-14](adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)，v2 是唯一活动交付线，并优先交付通用本地 Web Server 与 macOS 测试应用；V2-only 基础裁决沿用 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)。宏发 v1 停止功能开发与独立发版，只保留为迁移源和历史行为参考。
 
 ---
 
-# v2 线（产品化 + AI 能力层）
+# v2 线（通用本地优先产品）
 
 ## [Unreleased · v2]
 
 _本节记录**面向用户的变化**；纯内部重构与验证性工作不入 CHANGELOG，去向见 `docs/research/` 与 `docs/superpowers/plans/`。_
 
-### 进行中
+### 新增
 
-- **V2-M2 宏发升级候选版**：柜台完整工作日、真实 PG 集成、v1 数据迁移、Edge 离线、三类打印与只读 AI/BYOK
-- 治理：[ADR-12 Grok 统一交付所有权](adr/2026-07-21-adr-12-grok-unified-delivery-ownership.md) + [ADR-13 V2-only](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
+- 独立 loopback PostgreSQL 16 与 Fastify 生命周期，包含迁移、一次性 bootstrap、持久卷保护和真实数据库就绪门禁。
+- 浏览器与 Electron 共用同一 React SPA；桌面端只暴露固定的认证、命令、查询与健康能力，令牌和 cookie 留在主进程。
+- 通用 `laundry-desk V2` macOS 未签名本地测试包与隔离验收链；不包含 DMG、签名、公证、自动更新、云部署或 Windows 适配。
 
-> 当前仅有代码侧基座与增量证据，不代表用户版本已交付：`contracts@v0.1.0`、PG/RLS 与 Bus 基座及部分 M2 骨架已进入 main；真实 PG CI、v1 迁移、Edge 离线、AI/BYOK、Windows 与三类打印机验收仍在进行中。工程明细见 [当前 Grok 任务书](superpowers/plans/tasks/2026-07-21-task-grok-lead.md)。
+> 上述为 Local Foundation 的工程能力，不等于完整柜台工作日已经交付。账本、取衣、补款、统计与交班仍按后续产品切片推进；云部署和 Windows 适配继续延后。
 
 ---
 
