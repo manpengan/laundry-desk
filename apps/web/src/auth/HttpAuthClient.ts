@@ -4,7 +4,6 @@
  */
 
 import { getDeviceId } from "./device-id.js";
-import { FULL_STORE_FEATURES, STAFF_STORE_FEATURES, type StaffRole } from "./permissions.js";
 import type {
   AccessSession,
   AuthResult,
@@ -20,24 +19,19 @@ import type { AuthClient } from "./AuthClient.js";
 /** Matches packages/contracts CSRF_HEADER_NAME (avoid web→contracts dep for host). */
 const CSRF_HEADER_NAME = "x-csrf-token";
 const SUPERSEDED_LOGIN_MESSAGE = "登录请求已被新的登录操作取代";
+const ACCESS_TOKEN_TTL_SECONDS = 900;
+const COMPACT_ACCESS_TOKEN = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2}$/u;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 const EMPTY_STAFF_DIRECTORY: readonly SwitchableStaff[] = Object.freeze([]);
-const EMPTY_DISPLAY: AccessSession["display"] = Object.freeze({
-  store_name: "",
-  staff_name: "",
-  org_code: "",
-  store_code: "",
-});
 
 type HttpAuthState = Readonly<{
   staffDirectory: readonly SwitchableStaff[];
-  display: AccessSession["display"];
   accessToken: string | null;
 }>;
 
 const EMPTY_AUTH_STATE: HttpAuthState = Object.freeze({
   staffDirectory: EMPTY_STAFF_DIRECTORY,
-  display: EMPTY_DISPLAY,
   accessToken: null,
 });
 
@@ -73,59 +67,115 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function readAccessPayload(data: unknown): {
-  access_token: string;
-  expires_in: number;
-  session: AccessSession["session"];
-} | null {
-  if (!isRecord(data)) return null;
-  if (typeof data.access_token !== "string") return null;
-  if (typeof data.expires_in !== "number") return null;
-  if (!isRecord(data.session)) return null;
-  const s = data.session;
+const ACCESS_SESSION_KEYS = Object.freeze([
+  "access_token",
+  "token_type",
+  "expires_in",
+  "storage",
+  "session",
+  "role",
+  "features",
+  "display",
+] as const);
+const BROWSER_SESSION_KEYS = Object.freeze([
+  "session_id",
+  "session_version",
+  "org_id",
+  "store_id",
+  "staff_id",
+  "device_id",
+  "permission_version",
+] as const);
+const DISPLAY_KEYS = Object.freeze(["store_name", "staff_name", "org_code", "store_code"] as const);
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const keys = Object.keys(value);
+  return keys.length === expected.length && expected.every((key) => keys.includes(key));
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && typeof value === "number" && value > 0;
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID.test(value);
+}
+
+function readBrowserSession(data: unknown): AccessSession["session"] | null {
+  if (!isRecord(data) || !hasExactKeys(data, BROWSER_SESSION_KEYS)) return null;
   if (
-    typeof s.session_id !== "string" ||
-    typeof s.session_version !== "number" ||
-    typeof s.org_id !== "string" ||
-    typeof s.store_id !== "string" ||
-    typeof s.staff_id !== "string" ||
-    typeof s.device_id !== "string" ||
-    typeof s.permission_version !== "number"
+    !isUuid(data.session_id) ||
+    !isPositiveSafeInteger(data.session_version) ||
+    !isUuid(data.org_id) ||
+    !isUuid(data.store_id) ||
+    !isUuid(data.staff_id) ||
+    !isUuid(data.device_id) ||
+    !isPositiveSafeInteger(data.permission_version)
   ) {
     return null;
   }
-  return {
-    access_token: data.access_token,
-    expires_in: data.expires_in,
-    session: Object.freeze({
-      session_id: s.session_id,
-      session_version: s.session_version,
-      org_id: s.org_id,
-      store_id: s.store_id,
-      staff_id: s.staff_id,
-      device_id: s.device_id,
-      permission_version: s.permission_version,
-    }),
-  };
+  return Object.freeze({
+    session_id: data.session_id,
+    session_version: data.session_version,
+    org_id: data.org_id,
+    store_id: data.store_id,
+    staff_id: data.staff_id,
+    device_id: data.device_id,
+    permission_version: data.permission_version,
+  });
 }
 
-function projectSession(
-  payload: {
-    access_token: string;
-    expires_in: number;
-    session: AccessSession["session"];
-  },
-  role: StaffRole,
-  display: AccessSession["display"],
-): AccessSession {
-  const features = role === "admin" ? FULL_STORE_FEATURES : STAFF_STORE_FEATURES;
+function readFeatures(data: unknown): AccessSession["features"] | null {
+  if (!isRecord(data)) return null;
+  const entries = Object.entries(data);
+  if (!entries.every((entry): entry is [string, boolean] => typeof entry[1] === "boolean")) {
+    return null;
+  }
+  return Object.freeze(Object.fromEntries(entries));
+}
+
+function readDisplay(data: unknown): AccessSession["display"] | null {
+  if (!isRecord(data) || !hasExactKeys(data, DISPLAY_KEYS)) return null;
+  if (
+    typeof data.store_name !== "string" ||
+    typeof data.staff_name !== "string" ||
+    typeof data.org_code !== "string" ||
+    typeof data.store_code !== "string"
+  ) {
+    return null;
+  }
   return Object.freeze({
-    access_token: payload.access_token,
-    token_type: "Bearer" as const,
-    expires_in: payload.expires_in,
-    storage: "memory_only" as const,
-    session: payload.session,
-    role,
+    store_name: data.store_name,
+    staff_name: data.staff_name,
+    org_code: data.org_code,
+    store_code: data.store_code,
+  });
+}
+
+/** Strictly consume the complete server-owned access-session projection. */
+function readAccessSession(data: unknown): AccessSession | null {
+  if (!isRecord(data) || !hasExactKeys(data, ACCESS_SESSION_KEYS)) return null;
+  if (
+    typeof data.access_token !== "string" ||
+    !COMPACT_ACCESS_TOKEN.test(data.access_token) ||
+    data.token_type !== "Bearer" ||
+    data.expires_in !== ACCESS_TOKEN_TTL_SECONDS ||
+    data.storage !== "memory_only" ||
+    (data.role !== "admin" && data.role !== "staff")
+  ) {
+    return null;
+  }
+  const session = readBrowserSession(data.session);
+  const features = readFeatures(data.features);
+  const display = readDisplay(data.display);
+  if (session === null || features === null || display === null) return null;
+  return Object.freeze({
+    access_token: data.access_token,
+    token_type: "Bearer",
+    expires_in: ACCESS_TOKEN_TTL_SECONDS,
+    storage: "memory_only",
+    session,
+    role: data.role,
     features,
     display,
   });
@@ -140,6 +190,7 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
   const fetchImpl = options.fetchImpl ?? fetch;
   let authState = EMPTY_AUTH_STATE;
   let latestLoginAttempt = 0;
+  let cookieMutationTail: Promise<void> = Promise.resolve();
 
   const readCsrf = (): string | null => {
     if (typeof document === "undefined") return null;
@@ -181,7 +232,17 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
     }
   };
 
-  const login = async (values: LoginFormValues): Promise<AuthResult<AccessSession>> => {
+  /** Serialize the complete handling of every response that may replace auth cookies. */
+  const enqueueCookieMutation = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = cookieMutationTail.then(operation);
+    cookieMutationTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  };
+
+  const login = (values: LoginFormValues): Promise<AuthResult<AccessSession>> => {
     const attempt = ++latestLoginAttempt;
     authState = EMPTY_AUTH_STATE;
     const superseded = (): AuthResult<AccessSession> => asError(SUPERSEDED_LOGIN_MESSAGE);
@@ -191,63 +252,57 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
       return asError(message);
     };
 
-    try {
-      const res = await fetchImpl(`${base}/api/v2/auth/login`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          org_code: values.org_code,
-          store_code: values.store_code,
-          username: values.username,
-          password: values.password,
-          device_id: getDeviceId(),
-        }),
-      });
-      if (attempt !== latestLoginAttempt) return superseded();
-      const body: unknown = await res.json();
-      if (attempt !== latestLoginAttempt) return superseded();
-      if (!isRecord(body) || body.ok !== true) {
-        const message =
-          isRecord(body) && isRecord(body.error) && typeof body.error.message === "string"
-            ? body.error.message
-            : "登录失败";
-        return failLatest(message);
+    return enqueueCookieMutation(async () => {
+      try {
+        const res = await fetchImpl(`${base}/api/v2/auth/login`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            org_code: values.org_code,
+            store_code: values.store_code,
+            username: values.username,
+            password: values.password,
+            device_id: getDeviceId(),
+          }),
+        });
+        if (attempt !== latestLoginAttempt) return superseded();
+        const body: unknown = await res.json();
+        if (attempt !== latestLoginAttempt) return superseded();
+        if (!isRecord(body) || body.ok !== true) {
+          const message =
+            isRecord(body) && isRecord(body.error) && typeof body.error.message === "string"
+              ? body.error.message
+              : "登录失败";
+          return failLatest(message);
+        }
+        const session = readAccessSession(body.data);
+        if (session === null) return failLatest("登录响应格式错误");
+        const currentDirectory = await loadStaff(session.access_token);
+        if (attempt !== latestLoginAttempt) return superseded();
+        if (currentDirectory === null) {
+          return failLatest("无法从本地服务器加载员工目录");
+        }
+        if (attempt !== latestLoginAttempt) return superseded();
+        authState = Object.freeze({
+          staffDirectory: currentDirectory,
+          accessToken: session.access_token,
+        });
+        return Object.freeze({
+          ok: true as const,
+          data: session,
+        });
+      } catch {
+        return failLatest("无法连接本地服务器");
       }
-      const payload = readAccessPayload(body.data);
-      if (payload === null) return failLatest("登录响应格式错误");
-      const currentDirectory = await loadStaff(payload.access_token);
-      if (attempt !== latestLoginAttempt) return superseded();
-      if (currentDirectory === null) {
-        return failLatest("无法从本地服务器加载员工目录");
-      }
-      const staff = currentDirectory.find((entry) => entry.staff_id === payload.session.staff_id);
-      if (staff === undefined) return failLatest("登录响应缺少员工权限");
-      const display: AccessSession["display"] = Object.freeze({
-        store_name: "",
-        staff_name: staff.display_name,
-        org_code: values.org_code,
-        store_code: values.store_code,
-      });
-      if (attempt !== latestLoginAttempt) return superseded();
-      authState = Object.freeze({
-        staffDirectory: currentDirectory,
-        display,
-        accessToken: payload.access_token,
-      });
-      return Object.freeze({
-        ok: true as const,
-        data: projectSession(payload, staff.role, display),
-      });
-    } catch {
-      return failLatest("无法连接本地服务器");
-    }
+    });
   };
 
   const createPinChallenge = async (
     request: PinChallengeRequest,
   ): Promise<AuthResult<PinChallengeResponse>> => {
-    const accessToken = authState.accessToken;
+    const stateAtStart = authState;
+    const accessToken = stateAtStart.accessToken;
     if (accessToken === null) return asPinError("未登录");
     const csrf = readCsrf();
     if (csrf === null) return asPinError("缺少 CSRF cookie");
@@ -275,6 +330,7 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
       ) {
         return asPinError("PIN challenge 响应格式错误");
       }
+      if (authState !== stateAtStart) return asPinError("认证状态已变更，请重试");
       return Object.freeze({
         ok: true as const,
         data: Object.freeze({
@@ -293,53 +349,47 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
     const stateAtStart = authState;
     const accessToken = stateAtStart.accessToken;
     if (accessToken === null) return asError("未登录");
-    const csrf = readCsrf();
-    if (csrf === null) return asError("缺少 CSRF cookie");
-    try {
-      const res = await fetchImpl(
-        `${base}/api/v2/auth/pin/challenges/${encodeURIComponent(request.challenge_id)}/verify`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${accessToken}`,
-            [CSRF_HEADER_NAME]: csrf,
-          },
-          body: JSON.stringify(request),
-        },
-      );
-      const body: unknown = await res.json();
-      if (!isRecord(body) || body.ok !== true) {
-        return asError("PIN 验证失败");
-      }
-      // step_up responses must not be parsed as session switches.
-      if (isRecord(body.data) && typeof body.data.step_up_proof_id === "string") {
-        return asError("当前挑战为 step-up，请使用现场复核流程");
-      }
-      const payload = readAccessPayload(body.data);
-      if (payload === null) return asError("PIN 验证响应格式错误");
-      const staff = stateAtStart.staffDirectory.find(
-        (entry) => entry.staff_id === payload.session.staff_id,
-      );
-      if (staff === undefined) return asError("PIN 验证响应缺少员工权限");
+    return enqueueCookieMutation(async () => {
       if (authState !== stateAtStart) return asError("认证状态已变更，请重试");
-      const display: AccessSession["display"] = Object.freeze({
-        ...stateAtStart.display,
-        staff_name: staff.display_name,
-      });
-      authState = Object.freeze({
-        staffDirectory: stateAtStart.staffDirectory,
-        display,
-        accessToken: payload.access_token,
-      });
-      return Object.freeze({
-        ok: true as const,
-        data: projectSession(payload, staff.role, display),
-      });
-    } catch {
-      return asError("无法连接本地服务器");
-    }
+      const csrf = readCsrf();
+      if (csrf === null) return asError("缺少 CSRF cookie");
+      try {
+        const res = await fetchImpl(
+          `${base}/api/v2/auth/pin/challenges/${encodeURIComponent(request.challenge_id)}/verify`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "content-type": "application/json",
+              authorization: `Bearer ${accessToken}`,
+              [CSRF_HEADER_NAME]: csrf,
+            },
+            body: JSON.stringify(request),
+          },
+        );
+        const body: unknown = await res.json();
+        if (!isRecord(body) || body.ok !== true) {
+          return asError("PIN 验证失败");
+        }
+        // step_up responses must not be parsed as session switches.
+        if (isRecord(body.data) && typeof body.data.step_up_proof_id === "string") {
+          return asError("当前挑战为 step-up，请使用现场复核流程");
+        }
+        const session = readAccessSession(body.data);
+        if (session === null) return asError("PIN 验证响应格式错误");
+        if (authState !== stateAtStart) return asError("认证状态已变更，请重试");
+        authState = Object.freeze({
+          staffDirectory: stateAtStart.staffDirectory,
+          accessToken: session.access_token,
+        });
+        return Object.freeze({
+          ok: true as const,
+          data: session,
+        });
+      } catch {
+        return asError("无法连接本地服务器");
+      }
+    });
   };
 
   const verifyStepUpPin = async (
@@ -347,42 +397,47 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
   ): Promise<AuthResult<StepUpProofResult>> => {
     const accessToken = authState.accessToken;
     if (accessToken === null) return asStepUpError("未登录");
-    const csrf = readCsrf();
-    if (csrf === null) return asStepUpError("缺少 CSRF cookie");
-    try {
-      const res = await fetchImpl(
-        `${base}/api/v2/auth/pin/challenges/${encodeURIComponent(request.challenge_id)}/verify`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${accessToken}`,
-            [CSRF_HEADER_NAME]: csrf,
+    const stateAtStart = authState;
+    return enqueueCookieMutation(async () => {
+      if (authState !== stateAtStart) return asStepUpError("认证状态已变更，请重试");
+      const csrf = readCsrf();
+      if (csrf === null) return asStepUpError("缺少 CSRF cookie");
+      try {
+        const res = await fetchImpl(
+          `${base}/api/v2/auth/pin/challenges/${encodeURIComponent(request.challenge_id)}/verify`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "content-type": "application/json",
+              authorization: `Bearer ${accessToken}`,
+              [CSRF_HEADER_NAME]: csrf,
+            },
+            body: JSON.stringify(request),
           },
-          body: JSON.stringify(request),
-        },
-      );
-      const body: unknown = await res.json();
-      if (!isRecord(body) || body.ok !== true || !isRecord(body.data)) {
-        return asStepUpError("现场复核 PIN 失败");
+        );
+        const body: unknown = await res.json();
+        if (!isRecord(body) || body.ok !== true || !isRecord(body.data)) {
+          return asStepUpError("现场复核 PIN 失败");
+        }
+        const proofId = body.data.step_up_proof_id;
+        const expiresAt = body.data.expires_at;
+        if (typeof proofId !== "string" || typeof expiresAt !== "number") {
+          return asStepUpError("step-up 响应格式错误");
+        }
+        if (authState !== stateAtStart) return asStepUpError("认证状态已变更，请重试");
+        // A5: do not rotate cookies or access token.
+        return Object.freeze({
+          ok: true as const,
+          data: Object.freeze({
+            step_up_proof_id: proofId,
+            expires_at: expiresAt,
+          }),
+        });
+      } catch {
+        return asStepUpError("无法连接本地服务器");
       }
-      const proofId = body.data.step_up_proof_id;
-      const expiresAt = body.data.expires_at;
-      if (typeof proofId !== "string" || typeof expiresAt !== "number") {
-        return asStepUpError("step-up 响应格式错误");
-      }
-      // A5: do not rotate cookies or access token.
-      return Object.freeze({
-        ok: true as const,
-        data: Object.freeze({
-          step_up_proof_id: proofId,
-          expires_at: expiresAt,
-        }),
-      });
-    } catch {
-      return asStepUpError("无法连接本地服务器");
-    }
+    });
   };
 
   const listSwitchableStaff = (): readonly SwitchableStaff[] =>

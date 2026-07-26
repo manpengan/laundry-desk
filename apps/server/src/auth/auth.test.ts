@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@laundry/contracts";
+
 import {
   CSRF_HEADER_NAME,
   assertCsrf,
@@ -19,6 +21,7 @@ const ORG_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const STORE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const STAFF_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const DEVICE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const ACCESS_TOKEN_SECRET = "auth-test-secret-32-byte-minimum-value";
 
 const setup = async () => {
   const store = createMemoryIdentityStore();
@@ -43,10 +46,15 @@ const setup = async () => {
   store.seedStaff(staff);
 
   const clock = { nowEpochSeconds: () => 1_700_000_000 };
-  const signer = createAccessTokenSigner("auth-test-secret");
+  const signer = createAccessTokenSigner({
+    secret: ACCESS_TOKEN_SECRET,
+    issuer: ACCESS_TOKEN_ISSUER,
+    audience: ACCESS_TOKEN_AUDIENCE,
+  });
   const sessionDeps = {
     sessions: store.sessions,
     refresh: store.refresh,
+    lifecycle: store.lifecycle,
     clock,
     accessTokenSigner: signer,
   };
@@ -150,6 +158,50 @@ test("revoked session rejects even if token not expired", async () => {
         authorizationHeader: `Bearer ${issued.access_token}`,
       }),
     AuthError,
+  );
+});
+
+test("authentication method in access claims must match the server session", async () => {
+  const { login, resolver, signer } = await setup();
+  const issued = await login.login({
+    org_code: "hongfa",
+    store_code: "main",
+    username: "alice",
+    password: "secret",
+    device_id: DEVICE_ID,
+  });
+  const claims = signer.verify(issued.access_token);
+  assert.ok(claims);
+
+  const mismatchedToken = signer.sign({
+    ...claims,
+    authentication_method: "pin",
+  });
+
+  await assert.rejects(
+    () =>
+      resolver.resolve({
+        authorizationHeader: `Bearer ${mismatchedToken}`,
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AuthError);
+      assert.equal(error.code, "AUTHENTICATION_FAILED");
+      return true;
+    },
+  );
+});
+
+test("tenant authority headers are rejected by presence, including empty values", () => {
+  assert.throws(
+    () =>
+      assertNoTenantAuthorityHeaders({
+        "x-org-id": "",
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AuthError);
+      assert.equal(error.code, "TENANT_SPOOF_REJECTED");
+      return true;
+    },
   );
 });
 

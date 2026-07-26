@@ -10,7 +10,6 @@ import {
   REFRESH_COOKIE_DESCRIPTOR,
   REFRESH_TOKEN_TTL_SECONDS,
   classifyLogoutStorageMutation,
-  classifyRefreshCasCommit,
   planRefreshMutation,
   planRefreshRevocation,
 } from "@laundry/contracts";
@@ -28,8 +27,12 @@ import type {
   AuthenticationMethod,
   IdentityClock,
   IdentityError,
+  RefreshFamilyRecord,
   RefreshRepository,
+  RefreshTokenRecord,
+  SessionIssueReplacement,
   SessionIssueResult,
+  SessionLifecycleRepository,
   SessionRecord,
   SessionRepository,
   Uuid,
@@ -41,6 +44,7 @@ export type { SessionIssueResult };
 export type SessionServiceDeps = Readonly<{
   sessions: SessionRepository;
   refresh: RefreshRepository;
+  lifecycle: SessionLifecycleRepository;
   clock: IdentityClock;
   accessTokenSigner: AccessTokenSigner;
 }>;
@@ -52,12 +56,10 @@ export type IssueSessionInput = Readonly<{
   device_id: Uuid;
   permission_version: number;
   authentication_method: AuthenticationMethod;
-  /** When replacing a prior session (login re-auth / pin switch). */
-  previous?: Readonly<{
-    session_id: Uuid;
-    family_id: Uuid;
-    session_version: number;
-  }>;
+  /** Atomic replacement policy for password login or PIN quick-switch. */
+  replacement?: SessionIssueReplacement;
+  /** Server-owned role observed while preparing the response projection. */
+  expected_role?: "admin" | "staff";
 }>;
 
 const authFailed = (): IdentityError =>
@@ -123,11 +125,6 @@ export const issueSession = async (
   const refreshSecret = randomToken();
   const tokenHash = hashOpaqueSecret(refreshSecret);
 
-  if (input.previous !== undefined) {
-    await deps.sessions.revoke(input.previous.session_id, input.previous.session_version + 1, now);
-    await deps.refresh.revokeFamily(input.previous.family_id);
-  }
-
   const session: SessionRecord = Object.freeze({
     session_id: sessionId,
     session_version: 1,
@@ -143,27 +140,35 @@ export const issueSession = async (
     revoked_at: null,
   });
 
-  await deps.sessions.insert(session);
-  await deps.refresh.insertFamily(
-    Object.freeze({ family_id: familyId, session_id: sessionId, status: "active" }),
-  );
-  await deps.refresh.insertToken(
-    Object.freeze({
-      status: "active" as const,
-      token_id: tokenId,
-      family_id: familyId,
-      session_id: sessionId,
-      token_hash: tokenHash,
-      expires_at: now + REFRESH_TOKEN_TTL_SECONDS,
-    }),
-  );
-
   const access_token = buildAccessToken(
     deps.accessTokenSigner,
     session,
     now,
     input.authentication_method,
   );
+  const refresh = mintRefreshMaterial(refreshSecret);
+  const csrf = mintCsrfMaterial();
+  const family = Object.freeze({
+    family_id: familyId,
+    session_id: sessionId,
+    status: "active" as const,
+  });
+  const token = Object.freeze({
+    status: "active" as const,
+    token_id: tokenId,
+    family_id: familyId,
+    session_id: sessionId,
+    token_hash: tokenHash,
+    expires_at: now + REFRESH_TOKEN_TTL_SECONDS,
+  });
+  const committed = await deps.lifecycle.commitIssue({
+    session,
+    family,
+    token,
+    ...(input.replacement === undefined ? {} : { replacement: input.replacement }),
+    ...(input.expected_role === undefined ? {} : { expected_role: input.expected_role }),
+  });
+  if (committed !== 1) throw authFailed();
 
   return Object.freeze({
     access_token,
@@ -171,28 +176,37 @@ export const issueSession = async (
     expires_in: ACCESS_TOKEN_TTL_SECONDS,
     storage: "memory_only" as const,
     session: toSessionView(session),
-    refresh: mintRefreshMaterial(refreshSecret),
-    csrf: mintCsrfMaterial(),
+    refresh,
+    csrf,
   });
 };
 
 export type RefreshResult = SessionIssueResult;
 
-/**
- * Rotate refresh token. Reuse of a rotated token invalidates the whole family.
- */
-export const rotateRefresh = async (
-  deps: SessionServiceDeps,
-  refreshSecret: string,
-): Promise<RefreshResult> => {
-  const now = deps.clock.nowEpochSeconds();
-  const tokenHash = hashOpaqueSecret(refreshSecret);
-  const token = await deps.refresh.getTokenByHash(tokenHash);
-  const family = token.status === "unknown" ? null : await deps.refresh.getFamily(token.family_id);
-  const session = token.status === "unknown" ? null : await deps.sessions.get(token.session_id);
+type RefreshSnapshot = Readonly<{
+  token: RefreshTokenRecord;
+  family: RefreshFamilyRecord | null;
+  session: SessionRecord | null;
+}>;
 
-  const replacementTokenId = newUuid();
-  const plan = planRefreshMutation({
+async function loadRefreshSnapshot(
+  deps: SessionServiceDeps,
+  tokenHash: string,
+): Promise<RefreshSnapshot> {
+  const token = await deps.refresh.getTokenByHash(tokenHash);
+  const [family, session] =
+    token.status === "unknown"
+      ? [null, null]
+      : await Promise.all([
+          deps.refresh.getFamily(token.family_id),
+          deps.sessions.get(token.session_id),
+        ]);
+  return Object.freeze({ token, family, session });
+}
+
+function planRefreshSnapshot(snapshot: RefreshSnapshot, now: number, replacementTokenId: Uuid) {
+  const { token, family, session } = snapshot;
+  return planRefreshMutation({
     token:
       token.status === "unknown"
         ? { status: "unknown" }
@@ -218,40 +232,87 @@ export const rotateRefresh = async (
     now_epoch_seconds: now,
     replacement_token_id: replacementTokenId,
   });
+}
+
+/**
+ * Resolve the currently active refresh binding without mutating rotation state.
+ * HTTP uses this only to prepare server-owned response authority before the CAS mutation.
+ * A null preview must still flow through rotateRefresh so reuse detection can revoke the family.
+ */
+export const previewRefreshSession = async (
+  deps: SessionServiceDeps,
+  refreshSecret: string,
+): Promise<SessionRecord | null> => {
+  const token = await deps.refresh.getTokenByHash(hashOpaqueSecret(refreshSecret));
+  if (token.status !== "active" || token.expires_at <= deps.clock.nowEpochSeconds()) return null;
+  const [family, session] = await Promise.all([
+    deps.refresh.getFamily(token.family_id),
+    deps.sessions.get(token.session_id),
+  ]);
+  if (
+    family === null ||
+    family.status !== "active" ||
+    family.family_id !== token.family_id ||
+    family.session_id !== token.session_id ||
+    session === null ||
+    session.status !== "active" ||
+    session.session_id !== token.session_id ||
+    session.family_id !== token.family_id
+  ) {
+    return null;
+  }
+  return session;
+};
+
+/**
+ * Rotate refresh token. Reuse of a rotated token invalidates the whole family.
+ */
+export const rotateRefresh = async (
+  deps: SessionServiceDeps,
+  refreshSecret: string,
+  expectation: Readonly<{ expected_role?: "admin" | "staff" }> = Object.freeze({}),
+): Promise<RefreshResult> => {
+  const now = deps.clock.nowEpochSeconds();
+  const tokenHash = hashOpaqueSecret(refreshSecret);
+  const snapshot = await loadRefreshSnapshot(deps, tokenHash);
+  const replacementTokenId = newUuid();
+  const plan = planRefreshSnapshot(snapshot, now, replacementTokenId);
 
   if (plan.kind === "reject") throw authFailed();
-
-  if (plan.kind === "revoke") {
-    if (session !== null) {
-      await deps.sessions.revoke(session.session_id, plan.next_session_version, now);
-    }
-    if (family !== null) {
-      await deps.refresh.revokeFamily(family.family_id);
-    }
-    throw authFailed();
-  }
-
-  // plan.kind === "rotate"
-  const matched = await deps.refresh.rotateToken(plan.compare.token_id, replacementTokenId);
-  const disposition = classifyRefreshCasCommit({ matched_rows: matched });
-  if (disposition.kind !== "committed" || session === null || family === null) {
+  const { session, family } = snapshot;
+  if (snapshot.token.status === "unknown" || session === null || family === null) {
     throw authFailed();
   }
 
   const newSecret = randomToken();
-  const newHash = hashOpaqueSecret(newSecret);
-  await deps.refresh.insertToken(
-    Object.freeze({
-      status: "active" as const,
-      token_id: replacementTokenId,
-      family_id: family.family_id,
-      session_id: session.session_id,
-      token_hash: newHash,
-      expires_at: now + REFRESH_TOKEN_TTL_SECONDS,
-    }),
+  const replacementToken = Object.freeze({
+    status: "active" as const,
+    token_id: replacementTokenId,
+    family_id: family.family_id,
+    session_id: session.session_id,
+    token_hash: hashOpaqueSecret(newSecret),
+    expires_at: now + REFRESH_TOKEN_TTL_SECONDS,
+  });
+  const access_token = buildAccessToken(
+    deps.accessTokenSigner,
+    session,
+    now,
+    session.authentication_method,
   );
-
-  const access_token = buildAccessToken(deps.accessTokenSigner, session, now, "refresh");
+  const refresh = mintRefreshMaterial(newSecret);
+  const csrf = mintCsrfMaterial();
+  const disposition = await deps.lifecycle.commitRefreshUse({
+    session,
+    family,
+    presented_token_id: snapshot.token.token_id,
+    presented_token_hash: tokenHash,
+    replacement_token: replacementToken,
+    ...(expectation.expected_role === undefined
+      ? {}
+      : { expected_role: expectation.expected_role }),
+    now,
+  });
+  if (disposition !== "rotated") throw authFailed();
 
   return Object.freeze({
     access_token,
@@ -259,8 +320,8 @@ export const rotateRefresh = async (
     expires_in: ACCESS_TOKEN_TTL_SECONDS,
     storage: "memory_only" as const,
     session: toSessionView(session),
-    refresh: mintRefreshMaterial(newSecret),
-    csrf: mintCsrfMaterial(),
+    refresh,
+    csrf,
   });
 };
 
@@ -289,7 +350,15 @@ const csrfClear = (): Readonly<{
 /** Revoke session + family; returns cookie clear descriptors only. */
 export const logoutSession = async (
   deps: SessionServiceDeps,
-  input: Readonly<{ session_id: Uuid; family_id: Uuid; session_version: number }>,
+  input: Readonly<{
+    org_id: Uuid;
+    store_id: Uuid;
+    staff_id: Uuid;
+    device_id: Uuid;
+    session_id: Uuid;
+    family_id: Uuid;
+    session_version: number;
+  }>,
 ): Promise<LogoutResult> => {
   const now = deps.clock.nowEpochSeconds();
   const plan = planRefreshRevocation({
@@ -298,17 +367,13 @@ export const logoutSession = async (
   });
   if (plan.kind !== "revoke") throw authFailed();
 
-  const sessionMatched = (await deps.sessions.revoke(
-    input.session_id,
-    plan.next_session_version,
-    now,
-  ))
-    ? 1
-    : 0;
-  const familyMatched = (await deps.refresh.revokeFamily(input.family_id)) ? 1 : 0;
+  const matched = await deps.lifecycle.revokeSessionFamily({
+    ...input,
+    revoked_at: now,
+  });
   classifyLogoutStorageMutation({
-    matched_session_rows: sessionMatched as 0 | 1,
-    matched_family_rows: familyMatched as 0 | 1,
+    matched_session_rows: matched,
+    matched_family_rows: matched,
   });
 
   return Object.freeze({
@@ -323,9 +388,16 @@ export const logoutSession = async (
 export const createSessionService = (deps: SessionServiceDeps) =>
   Object.freeze({
     issueSession: (input: IssueSessionInput) => issueSession(deps, input),
-    rotateRefresh: (secret: string) => rotateRefresh(deps, secret),
+    rotateRefresh: (
+      secret: string,
+      expectation?: Readonly<{ expected_role?: "admin" | "staff" }>,
+    ) => rotateRefresh(deps, secret, expectation),
     logoutSession: (
       input: Readonly<{
+        org_id: Uuid;
+        store_id: Uuid;
+        staff_id: Uuid;
+        device_id: Uuid;
         session_id: Uuid;
         family_id: Uuid;
         session_version: number;

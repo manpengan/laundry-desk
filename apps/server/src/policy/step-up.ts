@@ -11,6 +11,10 @@ import type { EntityVersion, PendingAction } from "../pending-actions/types.js";
 export const STEP_UP_PROOF_TTL_SECONDS = 300;
 
 export type StepUpProofStatus = "active" | "consumed";
+export type StepUpSessionBinding = Readonly<{
+  sessionId: string;
+  sessionVersion: number;
+}>;
 
 /**
  * Server-side proof issued after a successful PIN challenge for a pending action.
@@ -27,6 +31,8 @@ export type StepUpProof = Readonly<{
   approverStaffId: string;
   orgId: string;
   storeId: string;
+  sessionId: string;
+  sessionVersion: number;
   issuedAt: number;
   expiresAt: number;
 }>;
@@ -42,7 +48,8 @@ export type StepUpVerifyRejectReason =
   | "PENDING_EXPIRED"
   | "ARGS_HASH_MISMATCH"
   | "ENTITY_VERSION_MISMATCH"
-  | "REQUESTER_MISMATCH";
+  | "REQUESTER_MISMATCH"
+  | "SESSION_BINDING_MISMATCH";
 
 export type StepUpVerifyResult =
   Readonly<{ ok: true }> | Readonly<{ ok: false; reason: StepUpVerifyRejectReason }>;
@@ -74,10 +81,18 @@ export function verifyStepUpProof(
   proof: StepUpProof,
   pending: PendingAction | null,
   nowEpochSeconds: number,
+  currentSession: StepUpSessionBinding | null,
 ): StepUpVerifyResult {
   if (proof.status === "consumed") return reject("PROOF_CONSUMED");
   if (nowEpochSeconds < proof.issuedAt) return reject("PROOF_NOT_ACTIVE");
   if (nowEpochSeconds >= proof.expiresAt) return reject("PROOF_EXPIRED");
+  if (
+    currentSession === null ||
+    proof.sessionId !== currentSession.sessionId ||
+    proof.sessionVersion !== currentSession.sessionVersion
+  ) {
+    return reject("SESSION_BINDING_MISMATCH");
+  }
 
   if (proof.approverStaffId === proof.requesterStaffId) {
     return reject("SELF_APPROVE_FORBIDDEN");
@@ -110,6 +125,7 @@ export function createStepUpProof(input: {
   readonly approverStaffId: string;
   readonly issuedAt: number;
   readonly ttlSeconds?: number;
+  readonly sessionBinding: StepUpSessionBinding;
 }): StepUpProof {
   const ttl = input.ttlSeconds ?? STEP_UP_PROOF_TTL_SECONDS;
   if (input.approverStaffId === input.pending.creatorStaffId) {
@@ -126,6 +142,8 @@ export function createStepUpProof(input: {
     approverStaffId: input.approverStaffId,
     orgId: input.pending.orgId,
     storeId: input.pending.storeId,
+    sessionId: input.sessionBinding.sessionId,
+    sessionVersion: input.sessionBinding.sessionVersion,
     issuedAt: input.issuedAt,
     expiresAt: input.issuedAt + ttl,
   });

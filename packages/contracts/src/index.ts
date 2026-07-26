@@ -92,6 +92,8 @@ export {
 export type { ServerCommandEnvelope } from "./envelope/server-envelope.js";
 
 export {
+  ACCESS_TOKEN_AUDIENCE,
+  ACCESS_TOKEN_ISSUER,
   ACCESS_TOKEN_TTL_SECONDS,
   AccessTokenClaimsSchema,
   AuthenticationMethodSchema,

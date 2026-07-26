@@ -6,14 +6,19 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import {
+  ACCESS_TOKEN_AUDIENCE,
+  ACCESS_TOKEN_ISSUER,
   ACCESS_TOKEN_TTL_SECONDS,
   type AccessTokenClaims,
   parseAccessTokenClaims,
 } from "@laundry/contracts";
+import { z } from "zod";
 
 import type { EpochSeconds, Uuid } from "./types.js";
 
 const TOKEN_BYTES = 32;
+const ACCESS_TOKEN_SECRET_MINIMUM_BYTES = 32;
+const ACCESS_TOKEN_PROTECTED_HEADER = Object.freeze({ alg: "HS256", typ: "AT" });
 
 export const randomToken = (bytes = TOKEN_BYTES): string =>
   randomBytes(bytes).toString("base64url");
@@ -33,6 +38,7 @@ export const constantTimeEqual = (left: string, right: string): boolean => {
 
 const b64urlJson = (value: unknown): string =>
   Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+const ACCESS_TOKEN_PROTECTED_HEADER_SEGMENT = b64urlJson(ACCESS_TOKEN_PROTECTED_HEADER);
 
 const fromB64urlJson = (segment: string): unknown => {
   const json = Buffer.from(segment, "base64url").toString("utf8");
@@ -44,18 +50,33 @@ export type AccessTokenSigner = Readonly<{
   verify: (token: string) => AccessTokenClaims | null;
 }>;
 
+const AccessTokenSignerConfigSchema = z.strictObject({
+  secret: z
+    .string()
+    .refine(
+      (value) => Buffer.byteLength(value, "utf8") >= ACCESS_TOKEN_SECRET_MINIMUM_BYTES,
+      `access-token secret must contain at least ${ACCESS_TOKEN_SECRET_MINIMUM_BYTES} UTF-8 bytes`,
+    ),
+  issuer: z.literal(ACCESS_TOKEN_ISSUER),
+  audience: z.literal(ACCESS_TOKEN_AUDIENCE),
+});
+
+export type AccessTokenSignerConfig = Readonly<z.output<typeof AccessTokenSignerConfigSchema>>;
+
 /**
  * Compact JWT-like access token: header.payload.hmac (HS256).
  * Aligns with contracts CompactAccessTokenSchema (three base64url segments).
  */
-export const createAccessTokenSigner = (secret: string): AccessTokenSigner => {
+export const createAccessTokenSigner = (input: AccessTokenSignerConfig): AccessTokenSigner => {
+  const config = Object.freeze(AccessTokenSignerConfigSchema.parse(input));
+
   const sign = (claims: AccessTokenClaims): string => {
-    const header = b64urlJson({ alg: "HS256", typ: "AT" });
-    const payload = b64urlJson(claims);
-    const sig = createHmac("sha256", secret)
-      .update(`${header}.${payload}`, "utf8")
+    const parsedClaims = parseAccessTokenClaims(claims);
+    const payload = b64urlJson(parsedClaims);
+    const sig = createHmac("sha256", config.secret)
+      .update(`${ACCESS_TOKEN_PROTECTED_HEADER_SEGMENT}.${payload}`, "utf8")
       .digest("base64url");
-    return `${header}.${payload}.${sig}`;
+    return `${ACCESS_TOKEN_PROTECTED_HEADER_SEGMENT}.${payload}.${sig}`;
   };
 
   const verify = (token: string): AccessTokenClaims | null => {
@@ -63,7 +84,8 @@ export const createAccessTokenSigner = (secret: string): AccessTokenSigner => {
     if (parts.length !== 3) return null;
     const [header, payload, sig] = parts;
     if (header === undefined || payload === undefined || sig === undefined) return null;
-    const expected = createHmac("sha256", secret)
+    if (header !== ACCESS_TOKEN_PROTECTED_HEADER_SEGMENT) return null;
+    const expected = createHmac("sha256", config.secret)
       .update(`${header}.${payload}`, "utf8")
       .digest("base64url");
     if (!constantTimeEqual(sig, expected)) return null;
@@ -92,6 +114,8 @@ export const buildAccessClaims = (input: {
   const iat = input.now;
   const exp = iat + ACCESS_TOKEN_TTL_SECONDS;
   return parseAccessTokenClaims({
+    iss: ACCESS_TOKEN_ISSUER,
+    aud: ACCESS_TOKEN_AUDIENCE,
     session_id: input.session_id,
     session_version: input.session_version,
     org_id: input.org_id,

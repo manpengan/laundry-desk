@@ -34,6 +34,8 @@ const browserSource = (): BrowserSessionSource =>
   issueBrowserSessionSource({
     via: "ui",
     claims: {
+      iss: "laundry-desk-v2-local",
+      aud: "laundry-desk-v2-api",
       session_id: "1131e8c3-b7e3-4633-8af8-a5e3286570e1",
       session_version: 4,
       org_id: "692e7b46-2c52-4b77-b790-c2cb4037b9ef",
@@ -207,6 +209,17 @@ it("keeps every public browser auth schema aligned with its root type", () => {
       device_id: "10000000-0000-4000-8000-000000000001",
       permission_version: 1,
     },
+    role: "admin",
+    features: {
+      ai_enabled: false,
+      member_enabled: true,
+    },
+    display: {
+      store_name: "Local Main",
+      staff_name: "Local Admin",
+      org_code: "local",
+      store_code: "main",
+    },
   });
   const csrf: CsrfDecision = evaluateCsrfRequest({
     method: "GET",
@@ -224,9 +237,21 @@ it("keeps every public browser auth schema aligned with its root type", () => {
   expectTypeOf(challenge).toMatchTypeOf<PinChallengeRequest>();
   expectTypeOf(verification).toMatchTypeOf<PinVerifyRequest>();
   expectTypeOf(response).toMatchTypeOf<AccessSessionResponse>();
+  expectTypeOf(response.role).toEqualTypeOf<"admin" | "staff">();
+  expectTypeOf(response.features).toMatchTypeOf<Readonly<Record<string, boolean>>>();
+  expectTypeOf(response.display.staff_name).toEqualTypeOf<string>();
   expectTypeOf(csrf).toMatchTypeOf<CsrfDecision>();
   expectTypeOf(refresh).toMatchTypeOf<RefreshCasCommitDisposition>();
   expectTypeOf(firstOperation).toMatchTypeOf<AuthOperationDescriptor>();
+
+  if (Math.random() < 0) {
+    // @ts-expect-error The server-owned role projection is immutable.
+    response.role = "staff";
+    // @ts-expect-error Feature flags remain immutable after parsing.
+    response.features.ai_enabled = true;
+    // @ts-expect-error Display labels remain immutable after parsing.
+    response.display.staff_name = "Changed";
+  }
 });
 
 it("narrows lifecycle envelopes with the public guard but keeps all authority off root types", () => {

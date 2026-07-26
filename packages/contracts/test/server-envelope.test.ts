@@ -20,6 +20,8 @@ const wirePayload = CommandWirePayloadSchema.parse({
 });
 
 const claims = {
+  iss: "laundry-desk-v2-local" as const,
+  aud: "laundry-desk-v2-api" as const,
   session_id: "1131e8c3-b7e3-4633-8af8-a5e3286570e1",
   session_version: 4,
   org_id: "692e7b46-2c52-4b77-b790-c2cb4037b9ef",

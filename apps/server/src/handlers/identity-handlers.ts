@@ -167,6 +167,10 @@ function logoutHandler(deps: IdentityHandlerDeps): CommandHandler {
       }
       const session = binding.session;
       const result: LogoutResult = await logoutSession(deps.sessions, {
+        org_id: session.org_id,
+        store_id: session.store_id,
+        staff_id: session.staff_id,
+        device_id: session.device_id,
         session_id: session.session_id,
         family_id: session.family_id,
         session_version: session.session_version,

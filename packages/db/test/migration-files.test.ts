@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0017", () => {
+  it("ships formal SQL migrations ordered 0001 → 0018", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -29,6 +29,7 @@ describe("packages/db migration file inventory", () => {
       "0015_m2_counter_production_hardening.sql",
       "0016_local_bootstrap.sql",
       "0017_local_runtime_readiness.sql",
+      "0018_identity_lifecycle_indexes.sql",
     ]);
   });
 
@@ -58,6 +59,7 @@ describe("packages/db migration file inventory", () => {
       "0015",
       "0016",
       "0017",
+      "0018",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -141,5 +143,16 @@ describe("packages/db migration file inventory", () => {
         expect(definition).toContain(relation);
       }
     }
+  });
+
+  it("indexes the exact active identity lifecycle predicates", () => {
+    const sql = readFileSync(join(migrationsDir, "0018_identity_lifecycle_indexes.sql"), "utf8");
+    expect(sql).toMatch(/ON sessions \(org_id, store_id, device_id\)\s+WHERE status = 'active'/iu);
+    expect(sql).toMatch(
+      /ON refresh_families \(org_id, store_id, session_id\)\s+WHERE status = 'active'/iu,
+    );
+    expect(sql).toMatch(
+      /ON refresh_tokens \(org_id, store_id, family_id\)\s+WHERE status = 'active'/iu,
+    );
   });
 });

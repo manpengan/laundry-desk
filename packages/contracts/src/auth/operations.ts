@@ -56,12 +56,24 @@ const BrowserSessionViewSchema = z.strictObject({
   permission_version: PositiveSafeIntegerSchema,
 });
 
+const BrowserSessionRoleSchema = z.enum(["admin", "staff"]);
+const BrowserSessionFeaturesSchema = z.record(z.string(), z.boolean());
+const BrowserSessionDisplaySchema = z.strictObject({
+  store_name: z.string(),
+  staff_name: z.string(),
+  org_code: z.string(),
+  store_code: z.string(),
+});
+
 export const AccessSessionResponseSchema = z.strictObject({
   access_token: CompactAccessTokenSchema,
   token_type: z.literal("Bearer"),
   expires_in: z.literal(ACCESS_TOKEN_TTL_SECONDS),
   storage: z.literal("memory_only"),
   session: BrowserSessionViewSchema,
+  role: BrowserSessionRoleSchema,
+  features: BrowserSessionFeaturesSchema,
+  display: BrowserSessionDisplaySchema,
 });
 
 export const LogoutResponseSchema = z.strictObject({ logged_out: z.literal(true) });

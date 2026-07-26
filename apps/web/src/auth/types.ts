@@ -36,16 +36,15 @@ export type AccessSession = Readonly<{
   storage: "memory_only";
   session: BrowserSessionView;
   /**
-   * Client IA projection only — UI gate only; C8 enforces.
-   * Not a security claim; server remains the authority.
+   * Server-owned IA projection consumed by the UI gate; C8 still enforces.
    */
   role: StaffRole;
   /**
-   * store_features-like flags (e.g. ai_enabled, member_enabled).
-   * UI gate only; C8 enforces.
+   * Server-owned store feature flags (e.g. ai_enabled, member_enabled).
+   * They shape UI only; C8 still enforces.
    */
   features: Readonly<Record<string, boolean>>;
-  /** UI labels not part of JWT claims; filled by AuthClient mock / future API. */
+  /** Server-owned UI labels adjacent to the access-token response. */
   display: Readonly<{
     store_name: string;
     staff_name: string;
@@ -86,7 +85,7 @@ export type StepUpProofResult = Readonly<{
 export type SwitchableStaff = Readonly<{
   staff_id: string;
   display_name: string;
-  /** Client projection role for this staff (mock / future list API). */
+  /** Directory projection for switch/step-up choices, not current-session authority. */
   role: StaffRole;
 }>;
 

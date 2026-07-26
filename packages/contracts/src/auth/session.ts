@@ -8,6 +8,8 @@ import {
 } from "./source-registry.js";
 
 export const ACCESS_TOKEN_TTL_SECONDS = 900;
+export const ACCESS_TOKEN_ISSUER = "laundry-desk-v2-local";
+export const ACCESS_TOKEN_AUDIENCE = "laundry-desk-v2-api";
 
 const PositiveSafeIntegerSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const EpochSecondsSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -17,6 +19,8 @@ export const BrowserCommandViaSchema = z.enum(["ui", "ai", "automation"]);
 
 export const AccessTokenClaimsSchema = z
   .strictObject({
+    iss: z.literal(ACCESS_TOKEN_ISSUER),
+    aud: z.literal(ACCESS_TOKEN_AUDIENCE),
     session_id: z.uuid(),
     session_version: PositiveSafeIntegerSchema,
     org_id: z.uuid(),

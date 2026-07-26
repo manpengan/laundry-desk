@@ -23,6 +23,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0014_order_list_summar
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0015_m2_counter_production_hardening.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0016_local_bootstrap.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0017_local_runtime_readiness.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0018_identity_lifecycle_indexes.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -48,5 +49,6 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **M2 production hardening** (0015): explicit append-only audit/payment grants and composite garment-photo ownership FK
 - **Local bootstrap** (0016): `orgs.demo_only` plus owner-only singleton metadata for explicit local identity creation
 - **Local runtime readiness** (0017): owner-defined boolean bootstrap proof plus removal of runtime organization and DDL writes
+- **Identity lifecycle indexes** (0018): active device/session/family indexes for bounded auth transaction scans
 - Still deferred: edge lease, AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

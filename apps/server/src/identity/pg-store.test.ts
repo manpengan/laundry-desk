@@ -6,6 +6,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@laundry/contracts";
+
 import { createPgPool, resolvePgUrls } from "../db/pg-pool.js";
 import { createPgIdentityStore } from "./pg-store.js";
 import { DEMO_STAFF_A_ID } from "../local/demo-ids.js";
@@ -13,7 +15,7 @@ import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
 import { createPasswordPort } from "./password.js";
 import { loginWithPassword } from "./login.js";
-import { createAccessTokenSigner } from "./crypto-util.js";
+import { createAccessTokenSigner, hashOpaqueSecret } from "./crypto-util.js";
 import { createQuickSwitchChallenge, verifyQuickSwitchPin } from "./pin.js";
 import { rotateRefresh } from "./session.js";
 
@@ -36,8 +38,13 @@ maybe("PG fixture supports login + PIN + refresh via laundry_app", async () => {
     const sessions = {
       sessions: store.sessions,
       refresh: store.refresh,
+      lifecycle: store.lifecycle,
       clock,
-      accessTokenSigner: createAccessTokenSigner("pg-test-secret"),
+      accessTokenSigner: createAccessTokenSigner({
+        secret: "pg-test-secret-32-byte-minimum-value",
+        issuer: ACCESS_TOKEN_ISSUER,
+        audience: ACCESS_TOKEN_AUDIENCE,
+      }),
     };
     const loginDeps = {
       staff: store.staff,
@@ -122,8 +129,107 @@ maybe("PG fixture supports login + PIN + refresh via laundry_app", async () => {
     );
     assert.ok(oldRefresh);
 
-    const switchedRefresh = await rotateRefresh(sessions, switched.refresh.refresh_token);
-    assert.equal(switchedRefresh.session.staff_id, DEMO_STAFF_A_ID);
+    const refreshedSwitch = await rotateRefresh(sessions, switched.refresh.refresh_token);
+    assert.equal(refreshedSwitch.session.session_id, switched.session.session_id);
+
+    const relogin = await loginWithPassword(loginDeps, {
+      org_code: LOCAL_PROFILE.orgCode,
+      store_code: LOCAL_PROFILE.storeCode,
+      username: fixture.adminUsername,
+      password: fixture.adminPassword,
+      device_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    });
+    assert.notEqual(relogin.session.session_id, switched.session.session_id);
+    assert.equal((await store.sessions.get(switched.session.session_id))?.status, "revoked");
+    await assert.rejects(
+      () => rotateRefresh(sessions, refreshedSwitch.refresh.refresh_token),
+      /Authentication failed/u,
+    );
+
+    // Two application-pool connections serialize one active refresh use. The loser
+    // observes reuse and revokes the session/family in the same transaction.
+    const concurrent = await loginWithPassword(loginDeps, {
+      org_code: LOCAL_PROFILE.orgCode,
+      store_code: LOCAL_PROFILE.storeCode,
+      username: fixture.adminUsername,
+      password: fixture.adminPassword,
+      device_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    });
+    const concurrentResults = await Promise.allSettled([
+      rotateRefresh(sessions, concurrent.refresh.refresh_token),
+      rotateRefresh(sessions, concurrent.refresh.refresh_token),
+    ]);
+    assert.equal(concurrentResults.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(concurrentResults.filter((result) => result.status === "rejected").length, 1);
+    const concurrentSession = await store.sessions.get(concurrent.session.session_id);
+    assert.ok(concurrentSession);
+    assert.equal(concurrentSession.status, "revoked");
+    assert.equal((await store.refresh.getFamily(concurrentSession.family_id))?.status, "revoked");
+
+    // An INSERT failure after the token CAS must roll the whole rotation back.
+    const rollbackIssued = await loginWithPassword(loginDeps, {
+      org_code: LOCAL_PROFILE.orgCode,
+      store_code: LOCAL_PROFILE.storeCode,
+      username: fixture.adminUsername,
+      password: fixture.adminPassword,
+      device_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    });
+    const rollbackSession = await store.sessions.get(rollbackIssued.session.session_id);
+    assert.ok(rollbackSession);
+    const rollbackFamily = await store.refresh.getFamily(rollbackSession.family_id);
+    const rollbackToken = await store.refresh.getTokenByHash(
+      hashOpaqueSecret(rollbackIssued.refresh.refresh_token),
+    );
+    assert.ok(rollbackFamily);
+    assert.notEqual(rollbackToken.status, "unknown");
+    if (rollbackToken.status === "unknown") assert.fail("expected active refresh token");
+    await assert.rejects(() =>
+      store.lifecycle.commitRefreshUse({
+        session: rollbackSession,
+        family: rollbackFamily,
+        presented_token_id: rollbackToken.token_id,
+        presented_token_hash: rollbackToken.token_hash,
+        replacement_token: Object.freeze({
+          status: "active" as const,
+          token_id: rollbackToken.token_id,
+          family_id: rollbackToken.family_id,
+          session_id: rollbackToken.session_id,
+          token_hash: hashOpaqueSecret(`rollback-${rollbackToken.token_id}`),
+          expires_at: rollbackToken.expires_at,
+        }),
+        now: clock.nowEpochSeconds(),
+      }),
+    );
+    assert.equal(
+      (await store.refresh.getTokenByHash(hashOpaqueSecret(rollbackIssued.refresh.refresh_token)))
+        .status,
+      "active",
+    );
+    await rotateRefresh(sessions, rollbackIssued.refresh.refresh_token);
+
+    // Reuse remains a credential-compromise signal even when staff authority drifts.
+    const authorityIssued = await loginWithPassword(loginDeps, {
+      org_code: LOCAL_PROFILE.orgCode,
+      store_code: LOCAL_PROFILE.storeCode,
+      username: fixture.adminUsername,
+      password: fixture.adminPassword,
+      device_id: "99999999-9999-4999-8999-999999999999",
+    });
+    await rotateRefresh(sessions, authorityIssued.refresh.refresh_token);
+    await adminPool.query("UPDATE staffs SET is_active = false WHERE id = $1", [
+      LOCAL_PROFILE.adminStaffId,
+    ]);
+    try {
+      await assert.rejects(() => rotateRefresh(sessions, authorityIssued.refresh.refresh_token));
+    } finally {
+      await adminPool.query("UPDATE staffs SET is_active = true WHERE id = $1", [
+        LOCAL_PROFILE.adminStaffId,
+      ]);
+    }
+    const authoritySession = await store.sessions.get(authorityIssued.session.session_id);
+    assert.ok(authoritySession);
+    assert.equal(authoritySession.status, "revoked");
+    assert.equal((await store.refresh.getFamily(authoritySession.family_id))?.status, "revoked");
 
     const bad = await loginWithPassword(loginDeps, {
       org_code: LOCAL_PROFILE.orgCode,

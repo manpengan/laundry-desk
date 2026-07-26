@@ -16,7 +16,7 @@ import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingAction, PendingActionStore } from "../pending-actions/types.js";
-import { verifyStepUpProof } from "../policy/step-up.js";
+import { verifyStepUpProof, type StepUpSessionBinding } from "../policy/step-up.js";
 import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
 import {
   chainFailureToResult,
@@ -55,6 +55,8 @@ export type ExecuteCommandOptions = Readonly<{
   pendingStore?: PendingActionStore;
   /** Defaults to process-local MemoryStepUpProofStore. */
   stepUpProofStore?: StepUpProofStore;
+  /** Current authenticated session; required when consuming a step-up proof. */
+  sessionBinding?: StepUpSessionBinding;
   now?: () => Date;
   newId?: () => string;
 }>;
@@ -281,7 +283,12 @@ async function runInsideTransaction(
       if (proof === null) {
         throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
       }
-      const verified = verifyStepUpProof(proof, pending, nowEpochSeconds);
+      const verified = verifyStepUpProof(
+        proof,
+        pending,
+        nowEpochSeconds,
+        opts.sessionBinding ?? null,
+      );
       if (verified.ok === false) {
         throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
       }

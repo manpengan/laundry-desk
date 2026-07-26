@@ -113,6 +113,28 @@ export type PinLockoutRecord = Readonly<{
   failed_attempts: number;
 }>;
 
+export type PinFailureMutation = Readonly<{
+  challenge_id: Uuid;
+  org_id: Uuid;
+  store_id: Uuid;
+  staff_id: Uuid;
+  device_id: Uuid;
+  expected_failed_attempts: number;
+  next_failed_attempts: number;
+  attempted_at: EpochSeconds;
+  locked_until: EpochSeconds;
+}>;
+
+export type PinSuccessMutation = Readonly<{
+  challenge_id: Uuid;
+  org_id: Uuid;
+  store_id: Uuid;
+  staff_id: Uuid;
+  device_id: Uuid;
+  expected_failed_attempts: number;
+  attempted_at: EpochSeconds;
+}>;
+
 export type IdentityErrorCode =
   | "AUTHENTICATION_FAILED"
   | "CSRF_REJECTED"
@@ -156,6 +178,64 @@ export type RefreshRepository = Readonly<{
   revokeFamily: (familyId: Uuid) => Promise<boolean>;
 }>;
 
+export type SessionPredecessor = Readonly<{
+  session_id: Uuid;
+  session_version: number;
+  family_id: Uuid;
+}>;
+
+export type SessionIssueReplacement =
+  | Readonly<{ kind: "login" }>
+  | Readonly<{
+      kind: "pin_switch";
+      predecessor: SessionPredecessor;
+      challenge_id: Uuid;
+      challenge_failed_attempts: number;
+    }>;
+
+export type SessionLifecycleIssue = Readonly<{
+  session: SessionRecord;
+  family: RefreshFamilyRecord;
+  token: Extract<RefreshTokenRecord, { status: "active" }>;
+  replacement?: SessionIssueReplacement;
+  expected_role?: "admin" | "staff";
+}>;
+
+export type SessionLifecycleRefreshUse = Readonly<{
+  session: SessionRecord;
+  family: RefreshFamilyRecord;
+  presented_token_id: Uuid;
+  presented_token_hash: string;
+  replacement_token: Extract<RefreshTokenRecord, { status: "active" }>;
+  expected_role?: "admin" | "staff";
+  now: EpochSeconds;
+}>;
+
+export type SessionLifecycleRefreshDisposition = "rotated" | "reuse_revoked" | "rejected";
+
+export type SessionLifecycleRevocation = Readonly<{
+  org_id: Uuid;
+  store_id: Uuid;
+  staff_id: Uuid;
+  device_id: Uuid;
+  session_id: Uuid;
+  session_version: number;
+  family_id: Uuid;
+  revoked_at: EpochSeconds;
+}>;
+
+/**
+ * Atomic storage boundary for session/family/token lifecycle mutations.
+ * A zero result is a stale compare-and-set; no partial writes may remain.
+ */
+export type SessionLifecycleRepository = Readonly<{
+  commitIssue: (input: SessionLifecycleIssue) => Promise<0 | 1>;
+  commitRefreshUse: (
+    input: SessionLifecycleRefreshUse,
+  ) => Promise<SessionLifecycleRefreshDisposition>;
+  revokeSessionFamily: (input: SessionLifecycleRevocation) => Promise<0 | 1>;
+}>;
+
 export type PinChallengeRepository = Readonly<{
   get: (challengeId: Uuid) => Promise<PinChallengeRecord | null>;
   insert: (challenge: PinChallengeRecord) => Promise<void>;
@@ -165,6 +245,10 @@ export type PinChallengeRepository = Readonly<{
     expectedFailed: number,
     next: Readonly<{ failed_attempts: number; status: "active" | "consumed" }>,
   ) => Promise<0 | 1>;
+  /** Atomically increments a failed attempt and creates the lockout when exhausted. */
+  recordFailure: (input: PinFailureMutation) => Promise<0 | 1>;
+  /** Atomically consumes a successful challenge and clears its staff/device lockout. */
+  consumeSuccess: (input: PinSuccessMutation) => Promise<0 | 1>;
 }>;
 
 export type PinLockoutRepository = Readonly<{

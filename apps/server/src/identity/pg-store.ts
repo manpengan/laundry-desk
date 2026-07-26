@@ -6,6 +6,7 @@
 import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
 import { withOrgGuc, withStoreGuc } from "../db/tenant-guc-client.js";
 import { createPinChallengeRepo, createPinLockoutRepo } from "./pg-pin-repo.js";
+import { lockDeviceLifecycle } from "./pg-device-lifecycle-lock.js";
 import {
   epochToDate,
   mapSession,
@@ -22,6 +23,8 @@ import type {
   PinLockoutRepository,
   RefreshFamilyRecord,
   RefreshRepository,
+  SessionLifecycleIssue,
+  SessionLifecycleRepository,
   SessionRepository,
   StaffRepository,
   Uuid,
@@ -32,6 +35,7 @@ export type PgIdentityStore = Readonly<{
   orgStore: OrgStoreRepository;
   sessions: SessionRepository;
   refresh: RefreshRepository;
+  lifecycle: SessionLifecycleRepository;
   pinChallenges: PinChallengeRepository;
   pinLockouts: PinLockoutRepository;
   pool: PgPool;
@@ -305,12 +309,469 @@ function createRefreshRepo(pool: PgPool): RefreshRepository {
   });
 }
 
+class LifecycleStaleError extends Error {}
+
+async function hasCurrentStaffAuthority(
+  client: PgPoolClient,
+  input: Readonly<{
+    session: SessionLifecycleIssue["session"];
+    expected_role?: "admin" | "staff";
+  }>,
+): Promise<boolean> {
+  const result = await client.query<{ permission_version: number; role: string }>(
+    `SELECT staff.permission_version, staff_role.role
+       FROM staffs AS staff
+       JOIN staff_store_roles AS staff_role
+         ON staff_role.org_id = staff.org_id
+        AND staff_role.staff_id = staff.id
+      WHERE staff.org_id = $1
+        AND staff_role.store_id = $2
+        AND staff.id = $3
+        AND staff.is_active = true
+        AND staff_role.is_active = true
+        AND staff.permission_version = $4
+        AND ($5::text IS NULL OR staff_role.role = $5)
+      LIMIT 2
+      FOR SHARE OF staff, staff_role`,
+    [
+      input.session.org_id,
+      input.session.store_id,
+      input.session.staff_id,
+      input.session.permission_version,
+      input.expected_role ?? null,
+    ],
+  );
+  return result.rows.length === 1;
+}
+
+async function insertSessionIssue(
+  client: PgPoolClient,
+  input: SessionLifecycleIssue,
+): Promise<void> {
+  const { session, family, token } = input;
+  await client.query(
+    `INSERT INTO sessions (
+       id, org_id, store_id, staff_id, device_id, session_version,
+       permission_version, authentication_method, status, created_at, revoked_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [
+      session.session_id,
+      session.org_id,
+      session.store_id,
+      session.staff_id,
+      session.device_id,
+      session.session_version,
+      session.permission_version,
+      session.authentication_method,
+      session.status,
+      epochToDate(session.created_at),
+      session.revoked_at === null ? null : epochToDate(session.revoked_at),
+    ],
+  );
+  await client.query(
+    `INSERT INTO refresh_families (
+       id, session_id, org_id, store_id, status, created_at, revoked_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,NULL)`,
+    [
+      family.family_id,
+      family.session_id,
+      session.org_id,
+      session.store_id,
+      family.status,
+      epochToDate(session.created_at),
+    ],
+  );
+  await client.query(
+    `INSERT INTO refresh_tokens (
+       id, family_id, session_id, org_id, store_id, token_hash, status,
+       replacement_token_id, expires_at, created_at, rotated_at, revoked_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,NULL,$8,$9,NULL,NULL)`,
+    [
+      token.token_id,
+      token.family_id,
+      token.session_id,
+      session.org_id,
+      session.store_id,
+      token.token_hash,
+      token.status,
+      epochToDate(token.expires_at),
+      epochToDate(session.created_at),
+    ],
+  );
+}
+
+async function replaceLoginSessions(
+  client: PgPoolClient,
+  input: SessionLifecycleIssue,
+): Promise<void> {
+  await client.query(
+    `WITH revoked_sessions AS (
+       UPDATE sessions
+          SET status = 'revoked',
+              session_version = session_version + 1,
+              revoked_at = $4
+        WHERE org_id = $1
+          AND store_id = $2
+          AND device_id = $3
+          AND status = 'active'
+       RETURNING id
+     ), revoked_families AS (
+       UPDATE refresh_families
+          SET status = 'revoked', revoked_at = $4
+        WHERE status = 'active'
+          AND session_id IN (SELECT id FROM revoked_sessions)
+       RETURNING id
+     )
+     UPDATE refresh_tokens
+        SET status = 'revoked', revoked_at = $4
+      WHERE status = 'active'
+        AND family_id IN (SELECT id FROM revoked_families)`,
+    [
+      input.session.org_id,
+      input.session.store_id,
+      input.session.device_id,
+      epochToDate(input.session.created_at),
+    ],
+  );
+}
+
+async function replacePinSession(
+  client: PgPoolClient,
+  input: SessionLifecycleIssue,
+): Promise<void> {
+  const replacement = input.replacement;
+  if (replacement?.kind !== "pin_switch") throw new LifecycleStaleError();
+  const activeLockout = await client.query(
+    `SELECT 1
+       FROM pin_lockouts
+      WHERE org_id = $1
+        AND store_id = $2
+        AND staff_id = $3
+        AND device_id = $4
+        AND locked_until > $5
+      FOR UPDATE`,
+    [
+      input.session.org_id,
+      input.session.store_id,
+      input.session.staff_id,
+      input.session.device_id,
+      epochToDate(input.session.created_at),
+    ],
+  );
+  if ((activeLockout.rowCount ?? 0) > 0) throw new LifecycleStaleError();
+  const challenge = await client.query(
+    `UPDATE pin_challenges
+        SET status = 'consumed', consumed_at = $9
+      WHERE id = $1
+        AND org_id = $2
+        AND store_id = $3
+        AND device_id = $4
+        AND session_id = $5
+        AND session_version = $6
+        AND target_staff_id = $7
+        AND attempts = $8
+        AND attempts < max_attempts
+        AND purpose = 'quick_switch'
+        AND status = 'open'
+        AND expires_at > $9`,
+    [
+      replacement.challenge_id,
+      input.session.org_id,
+      input.session.store_id,
+      input.session.device_id,
+      replacement.predecessor.session_id,
+      replacement.predecessor.session_version,
+      input.session.staff_id,
+      replacement.challenge_failed_attempts,
+      epochToDate(input.session.created_at),
+    ],
+  );
+  if ((challenge.rowCount ?? 0) !== 1) throw new LifecycleStaleError();
+
+  const session = await client.query(
+    `UPDATE sessions
+        SET status = 'revoked', session_version = session_version + 1, revoked_at = $5
+      WHERE id = $1
+        AND org_id = $2
+        AND store_id = $3
+        AND session_version = $4
+        AND status = 'active'`,
+    [
+      replacement.predecessor.session_id,
+      input.session.org_id,
+      input.session.store_id,
+      replacement.predecessor.session_version,
+      epochToDate(input.session.created_at),
+    ],
+  );
+  if ((session.rowCount ?? 0) !== 1) throw new LifecycleStaleError();
+
+  const family = await client.query(
+    `UPDATE refresh_families
+        SET status = 'revoked', revoked_at = $3
+      WHERE id = $1 AND session_id = $2 AND status = 'active'`,
+    [
+      replacement.predecessor.family_id,
+      replacement.predecessor.session_id,
+      epochToDate(input.session.created_at),
+    ],
+  );
+  if ((family.rowCount ?? 0) !== 1) throw new LifecycleStaleError();
+  await client.query(
+    `UPDATE refresh_tokens
+        SET status = 'revoked', revoked_at = $2
+      WHERE family_id = $1 AND status = 'active'`,
+    [replacement.predecessor.family_id, epochToDate(input.session.created_at)],
+  );
+  await client.query(
+    `DELETE FROM pin_lockouts
+      WHERE org_id = $1
+        AND store_id = $2
+        AND staff_id = $3
+        AND device_id = $4`,
+    [input.session.org_id, input.session.store_id, input.session.staff_id, input.session.device_id],
+  );
+}
+
+function createLifecycleRepo(pool: PgPool): SessionLifecycleRepository {
+  return Object.freeze({
+    commitIssue: async (input) => {
+      try {
+        return await withStoreGuc(
+          pool,
+          {
+            orgId: input.session.org_id,
+            storeId: input.session.store_id,
+            staffId: input.session.staff_id,
+          },
+          async (client) => {
+            await lockDeviceLifecycle(
+              client,
+              input.session.org_id,
+              input.session.store_id,
+              input.session.device_id,
+            );
+            if (!(await hasCurrentStaffAuthority(client, input))) return 0 as const;
+            if (input.replacement?.kind === "login") {
+              await replaceLoginSessions(client, input);
+            } else if (input.replacement?.kind === "pin_switch") {
+              await replacePinSession(client, input);
+            }
+            await insertSessionIssue(client, input);
+            return 1 as const;
+          },
+        );
+      } catch (error) {
+        if (error instanceof LifecycleStaleError) return 0;
+        throw error;
+      }
+    },
+    commitRefreshUse: async (input) =>
+      withStoreGuc(
+        pool,
+        {
+          orgId: input.session.org_id,
+          storeId: input.session.store_id,
+          staffId: input.session.staff_id,
+        },
+        async (client) => {
+          await lockDeviceLifecycle(
+            client,
+            input.session.org_id,
+            input.session.store_id,
+            input.session.device_id,
+          );
+          const current = await client.query<{
+            status: string;
+            token_hash: string;
+            expires_at: Date;
+            session_status: string;
+            session_version: number;
+            family_status: string;
+          }>(
+            `SELECT token.status,
+                    token.token_hash,
+                    token.expires_at,
+                    session.status AS session_status,
+                    session.session_version,
+                    family.status AS family_status
+               FROM refresh_tokens AS token
+               JOIN sessions AS session
+                 ON session.id = token.session_id
+                AND session.org_id = token.org_id
+                AND session.store_id = token.store_id
+               JOIN refresh_families AS family
+                 ON family.id = token.family_id
+                AND family.session_id = token.session_id
+                AND family.org_id = token.org_id
+                AND family.store_id = token.store_id
+              WHERE token.id = $1
+                AND token.family_id = $2
+                AND token.session_id = $3
+                AND token.token_hash = $4
+                AND session.org_id = $5
+                AND session.store_id = $6
+                AND session.staff_id = $7
+                AND session.device_id = $8
+              FOR UPDATE OF token, session, family`,
+            [
+              input.presented_token_id,
+              input.family.family_id,
+              input.session.session_id,
+              input.presented_token_hash,
+              input.session.org_id,
+              input.session.store_id,
+              input.session.staff_id,
+              input.session.device_id,
+            ],
+          );
+          const row = current.rows[0];
+          if (
+            current.rows.length !== 1 ||
+            row === undefined ||
+            row.session_status !== "active" ||
+            row.session_version !== input.session.session_version ||
+            row.family_status !== "active" ||
+            row.expires_at.getTime() <= input.now * 1_000
+          ) {
+            return "rejected" as const;
+          }
+          if (row.status === "rotated") {
+            const revokedSession = await client.query(
+              `UPDATE sessions
+                  SET status = 'revoked',
+                      session_version = session_version + 1,
+                      revoked_at = $4
+                WHERE id = $1
+                  AND session_version = $2
+                  AND status = 'active'
+                  AND org_id = $3`,
+              [
+                input.session.session_id,
+                input.session.session_version,
+                input.session.org_id,
+                epochToDate(input.now),
+              ],
+            );
+            if ((revokedSession.rowCount ?? 0) !== 1) return "rejected" as const;
+            const revokedFamily = await client.query(
+              `UPDATE refresh_families
+                  SET status = 'revoked', revoked_at = $3
+                WHERE id = $1
+                  AND session_id = $2
+                  AND status = 'active'`,
+              [input.family.family_id, input.session.session_id, epochToDate(input.now)],
+            );
+            if ((revokedFamily.rowCount ?? 0) !== 1) throw new LifecycleStaleError();
+            await client.query(
+              `UPDATE refresh_tokens
+                  SET status = 'revoked', revoked_at = $2
+                WHERE family_id = $1
+                  AND status = 'active'`,
+              [input.family.family_id, epochToDate(input.now)],
+            );
+            return "reuse_revoked" as const;
+          }
+          if (
+            row.status !== "active" ||
+            !(await hasCurrentStaffAuthority(client, input)) ||
+            input.replacement_token.family_id !== input.family.family_id ||
+            input.replacement_token.session_id !== input.session.session_id
+          ) {
+            return "rejected" as const;
+          }
+          const rotated = await client.query(
+            `UPDATE refresh_tokens
+                SET status = 'rotated', replacement_token_id = $2, rotated_at = NOW()
+              WHERE id = $1
+                AND family_id = $3
+                AND session_id = $4
+                AND status = 'active'`,
+            [
+              input.presented_token_id,
+              input.replacement_token.token_id,
+              input.family.family_id,
+              input.session.session_id,
+            ],
+          );
+          if ((rotated.rowCount ?? 0) !== 1) return "rejected" as const;
+          await client.query(
+            `INSERT INTO refresh_tokens (
+               id, family_id, session_id, org_id, store_id, token_hash, status,
+               replacement_token_id, expires_at, created_at, rotated_at, revoked_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,'active',NULL,$7,NOW(),NULL,NULL)`,
+            [
+              input.replacement_token.token_id,
+              input.replacement_token.family_id,
+              input.replacement_token.session_id,
+              input.session.org_id,
+              input.session.store_id,
+              input.replacement_token.token_hash,
+              epochToDate(input.replacement_token.expires_at),
+            ],
+          );
+          return "rotated" as const;
+        },
+      ).catch((error: unknown) => {
+        if (error instanceof LifecycleStaleError) return "rejected" as const;
+        throw error;
+      }),
+    revokeSessionFamily: async (input) =>
+      withStoreGuc(
+        pool,
+        { orgId: input.org_id, storeId: input.store_id, staffId: input.staff_id },
+        async (client) => {
+          await lockDeviceLifecycle(client, input.org_id, input.store_id, input.device_id);
+          const session = await client.query(
+            `UPDATE sessions
+                SET status = 'revoked', session_version = session_version + 1, revoked_at = $7
+              WHERE id = $1
+                AND org_id = $2
+                AND store_id = $3
+                AND staff_id = $4
+                AND device_id = $5
+                AND session_version = $6
+                AND status = 'active'`,
+            [
+              input.session_id,
+              input.org_id,
+              input.store_id,
+              input.staff_id,
+              input.device_id,
+              input.session_version,
+              epochToDate(input.revoked_at),
+            ],
+          );
+          if ((session.rowCount ?? 0) !== 1) return 0 as const;
+          const family = await client.query(
+            `UPDATE refresh_families
+                SET status = 'revoked', revoked_at = $3
+              WHERE id = $1 AND session_id = $2 AND status = 'active'`,
+            [input.family_id, input.session_id, epochToDate(input.revoked_at)],
+          );
+          if ((family.rowCount ?? 0) !== 1) throw new LifecycleStaleError();
+          await client.query(
+            `UPDATE refresh_tokens
+                SET status = 'revoked', revoked_at = $2
+              WHERE family_id = $1 AND status = 'active'`,
+            [input.family_id, epochToDate(input.revoked_at)],
+          );
+          return 1 as const;
+        },
+      ).catch((error: unknown) => {
+        if (error instanceof LifecycleStaleError) return 0 as const;
+        throw error;
+      }),
+  });
+}
+
 export function createPgIdentityStore(pool: PgPool): PgIdentityStore {
   return Object.freeze({
     staff: createStaffRepo(pool),
     orgStore: createOrgStoreRepo(pool),
     sessions: createSessionRepo(pool),
     refresh: createRefreshRepo(pool),
+    lifecycle: createLifecycleRepo(pool),
     pinChallenges: createPinChallengeRepo(pool),
     pinLockouts: createPinLockoutRepo(pool),
     pool,

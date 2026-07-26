@@ -8,9 +8,46 @@
             "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+){2}$",
             "type": "string"
           },
+          "display": {
+            "additionalProperties": false,
+            "properties": {
+              "org_code": {
+                "type": "string"
+              },
+              "staff_name": {
+                "type": "string"
+              },
+              "store_code": {
+                "type": "string"
+              },
+              "store_name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "store_name",
+              "staff_name",
+              "org_code",
+              "store_code"
+            ],
+            "type": "object"
+          },
           "expires_in": {
             "const": 900,
             "type": "number"
+          },
+          "features": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object"
+          },
+          "role": {
+            "enum": [
+              "admin",
+              "staff"
+            ],
+            "type": "string"
           },
           "session": {
             "additionalProperties": false,
@@ -76,7 +113,10 @@
           "token_type",
           "expires_in",
           "storage",
-          "session"
+          "session",
+          "role",
+          "features",
+          "display"
         ],
         "type": "object"
       },
@@ -241,9 +281,46 @@
                 "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+){2}$",
                 "type": "string"
               },
+              "display": {
+                "additionalProperties": false,
+                "properties": {
+                  "org_code": {
+                    "type": "string"
+                  },
+                  "staff_name": {
+                    "type": "string"
+                  },
+                  "store_code": {
+                    "type": "string"
+                  },
+                  "store_name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "store_name",
+                  "staff_name",
+                  "org_code",
+                  "store_code"
+                ],
+                "type": "object"
+              },
               "expires_in": {
                 "const": 900,
                 "type": "number"
+              },
+              "features": {
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "type": "object"
+              },
+              "role": {
+                "enum": [
+                  "admin",
+                  "staff"
+                ],
+                "type": "string"
               },
               "session": {
                 "additionalProperties": false,
@@ -309,7 +386,10 @@
               "token_type",
               "expires_in",
               "storage",
-              "session"
+              "session",
+              "role",
+              "features",
+              "display"
             ],
             "type": "object"
           },

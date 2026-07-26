@@ -6,6 +6,8 @@ import { randomBytes } from "node:crypto";
 
 import { z } from "zod";
 
+import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@laundry/contracts";
+
 import { createAccessTokenSigner } from "../identity/crypto-util.js";
 import { createMemoryIdentityStore } from "../identity/memory-store.js";
 import { createPgIdentityStore } from "../identity/pg-store.js";
@@ -206,6 +208,7 @@ function buildIdentityDeps(
     orgStore: ReturnType<typeof createMemoryIdentityStore>["orgStore"];
     sessions: ReturnType<typeof createMemoryIdentityStore>["sessions"];
     refresh: ReturnType<typeof createMemoryIdentityStore>["refresh"];
+    lifecycle: ReturnType<typeof createMemoryIdentityStore>["lifecycle"];
     pinChallenges: ReturnType<typeof createMemoryIdentityStore>["pinChallenges"];
     pinLockouts: ReturnType<typeof createMemoryIdentityStore>["pinLockouts"];
   }>,
@@ -220,8 +223,13 @@ function buildIdentityDeps(
   const sessionDeps = {
     sessions: ports.sessions,
     refresh: ports.refresh,
+    lifecycle: ports.lifecycle,
     clock,
-    accessTokenSigner: createAccessTokenSigner(accessTokenSecret),
+    accessTokenSigner: createAccessTokenSigner({
+      secret: accessTokenSecret,
+      issuer: ACCESS_TOKEN_ISSUER,
+      audience: ACCESS_TOKEN_AUDIENCE,
+    }),
   };
   const login = {
     staff: ports.staff,

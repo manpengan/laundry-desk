@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { issueBrowserSessionSource } from "../src/auth/browser-ingress.js";
 import { issueEdgeReplaySource } from "../src/auth/edge-ingress.js";
+import * as PublicContracts from "../src/index.js";
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   isAuthenticatedExecutionSource,
@@ -24,6 +25,8 @@ const ids = {
 } as const;
 
 const accessClaims = {
+  iss: "laundry-desk-v2-local" as const,
+  aud: "laundry-desk-v2-api" as const,
   session_id: ids.session,
   session_version: 4,
   org_id: ids.org,
@@ -122,15 +125,33 @@ const unstableProxy = <T extends object>(input: T, unstableKey: keyof T): T => {
 };
 
 describe("A5 access claims and active session binding", () => {
-  it("freezes exact 900-second access claims", () => {
+  it("freezes exact issuer, audience and 900-second access claims", () => {
     const claims = parseAccessTokenClaims(accessClaims);
+    const publicContracts = PublicContracts as unknown as Readonly<Record<string, unknown>>;
 
     expect(ACCESS_TOKEN_TTL_SECONDS).toBe(900);
+    expect(publicContracts.ACCESS_TOKEN_ISSUER).toBe("laundry-desk-v2-local");
+    expect(publicContracts.ACCESS_TOKEN_AUDIENCE).toBe("laundry-desk-v2-api");
     expect(claims).toEqual(accessClaims);
     expect(Object.isFrozen(claims)).toBe(true);
     expect(() => parseAccessTokenClaims({ ...accessClaims, exp: accessClaims.exp + 1 })).toThrow(
       /900/u,
     );
+  });
+
+  it.each([
+    ["wrong issuer", { ...accessClaims, iss: "laundry-desk-v2-other" }],
+    [
+      "missing issuer",
+      Object.fromEntries(Object.entries(accessClaims).filter(([key]) => key !== "iss")),
+    ],
+    ["wrong audience", { ...accessClaims, aud: "laundry-desk-v2-other" }],
+    [
+      "missing audience",
+      Object.fromEntries(Object.entries(accessClaims).filter(([key]) => key !== "aud")),
+    ],
+  ] as readonly (readonly [string, unknown])[])("rejects %s", (_caseName, input) => {
+    expect(() => parseAccessTokenClaims(input)).toThrow();
   });
 
   it.each([

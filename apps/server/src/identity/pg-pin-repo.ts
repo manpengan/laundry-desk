@@ -4,8 +4,9 @@
 
 import { randomUUID } from "node:crypto";
 
-import type { PgPool } from "../db/pg-pool.js";
+import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
 import { withStoreGuc } from "../db/tenant-guc-client.js";
+import { lockDeviceLifecycle } from "./pg-device-lifecycle-lock.js";
 import {
   dateToEpoch,
   epochToDate,
@@ -38,6 +39,36 @@ const mapLockout = (row: LockoutRow): PinLockoutRecord =>
     locked_until: dateToEpoch(row.locked_until),
     failed_attempts: row.failed_attempts,
   });
+
+async function hasActiveLockout(
+  client: PgPoolClient,
+  input: Readonly<{
+    org_id: Uuid;
+    store_id: Uuid;
+    staff_id: Uuid;
+    device_id: Uuid;
+    attempted_at: number;
+  }>,
+): Promise<boolean> {
+  const result = await client.query(
+    `SELECT 1
+       FROM pin_lockouts
+      WHERE org_id = $1
+        AND store_id = $2
+        AND staff_id = $3
+        AND device_id = $4
+        AND locked_until > $5
+      FOR UPDATE`,
+    [
+      input.org_id,
+      input.store_id,
+      input.staff_id,
+      input.device_id,
+      epochToDate(input.attempted_at),
+    ],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
 
 export function createPinChallengeRepo(pool: PgPool): PinChallengeRepository {
   return Object.freeze({
@@ -127,6 +158,124 @@ export function createPinChallengeRepo(pool: PgPool): PinChallengeRepository {
         },
       );
     },
+    recordFailure: async (input) =>
+      withStoreGuc(
+        pool,
+        {
+          orgId: input.org_id,
+          storeId: input.store_id,
+          staffId: input.staff_id,
+        },
+        async (client) => {
+          await lockDeviceLifecycle(client, input.org_id, input.store_id, input.device_id);
+          if (await hasActiveLockout(client, input)) return 0 as const;
+          const result = await client.query<{ exhausted: boolean }>(
+            `UPDATE pin_challenges
+                SET attempts = $7,
+                    status = CASE WHEN $7 >= max_attempts THEN 'exhausted' ELSE 'open' END,
+                    consumed_at = CASE
+                      WHEN $7 >= max_attempts THEN NOW()
+                      ELSE consumed_at
+                    END
+              WHERE id = $1
+                AND org_id = $2
+                AND store_id = $3
+                AND device_id = $4
+                AND (
+                  (purpose = 'quick_switch' AND target_staff_id = $5)
+                  OR (purpose = 'step_up' AND approver_staff_id = $5)
+                )
+                AND status = 'open'
+                AND attempts = $6
+                AND attempts < max_attempts
+                AND $7 = $6 + 1
+                AND expires_at > $8
+              RETURNING attempts >= max_attempts AS exhausted`,
+            [
+              input.challenge_id,
+              input.org_id,
+              input.store_id,
+              input.device_id,
+              input.staff_id,
+              input.expected_failed_attempts,
+              input.next_failed_attempts,
+              epochToDate(input.attempted_at),
+            ],
+          );
+          const row = result.rows[0];
+          if (result.rows.length !== 1 || row === undefined) return 0 as const;
+          if (row.exhausted) {
+            await client.query(
+              `INSERT INTO pin_lockouts (
+                 id, org_id, store_id, staff_id, device_id,
+                 locked_until, failed_attempts, updated_at
+               ) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+               ON CONFLICT (org_id, store_id, staff_id, device_id) DO UPDATE
+               SET locked_until = EXCLUDED.locked_until,
+                   failed_attempts = EXCLUDED.failed_attempts,
+                   updated_at = NOW()`,
+              [
+                randomUUID(),
+                input.org_id,
+                input.store_id,
+                input.staff_id,
+                input.device_id,
+                epochToDate(input.locked_until),
+                input.next_failed_attempts,
+              ],
+            );
+          }
+          return 1 as const;
+        },
+      ),
+    consumeSuccess: async (input) =>
+      withStoreGuc(
+        pool,
+        {
+          orgId: input.org_id,
+          storeId: input.store_id,
+          staffId: input.staff_id,
+        },
+        async (client) => {
+          await lockDeviceLifecycle(client, input.org_id, input.store_id, input.device_id);
+          if (await hasActiveLockout(client, input)) return 0 as const;
+          const consumed = await client.query(
+            `UPDATE pin_challenges
+                SET status = 'consumed', consumed_at = NOW()
+              WHERE id = $1
+                AND org_id = $2
+                AND store_id = $3
+                AND device_id = $4
+                AND (
+                  (purpose = 'quick_switch' AND target_staff_id = $5)
+                  OR (purpose = 'step_up' AND approver_staff_id = $5)
+                )
+                AND status = 'open'
+                AND attempts = $6
+                AND attempts < max_attempts
+                AND expires_at > $7`,
+            [
+              input.challenge_id,
+              input.org_id,
+              input.store_id,
+              input.device_id,
+              input.staff_id,
+              input.expected_failed_attempts,
+              epochToDate(input.attempted_at),
+            ],
+          );
+          if ((consumed.rowCount ?? 0) !== 1) return 0 as const;
+          await client.query(
+            `DELETE FROM pin_lockouts
+              WHERE org_id = $1
+                AND store_id = $2
+                AND staff_id = $3
+                AND device_id = $4`,
+            [input.org_id, input.store_id, input.staff_id, input.device_id],
+          );
+          return 1 as const;
+        },
+      ),
   });
 }
 

@@ -6,7 +6,7 @@
 import { LoginRequestSchema, type LoginRequest } from "@laundry/contracts";
 
 import type { PasswordPort } from "./password.js";
-import { issueSession, type SessionServiceDeps } from "./session.js";
+import { issueSession, type IssueSessionInput, type SessionServiceDeps } from "./session.js";
 import type { OrgStoreRepository, SessionIssueResult, StaffRepository } from "./types.js";
 import { IdentityError } from "./types.js";
 
@@ -18,6 +18,7 @@ export type LoginServiceDeps = Readonly<{
 }>;
 
 export type LoginResult = SessionIssueResult;
+export type PreparedPasswordLogin = IssueSessionInput;
 
 const authFailed = (): IdentityError =>
   new IdentityError("AUTHENTICATION_FAILED", "Authentication failed");
@@ -26,10 +27,10 @@ const authFailed = (): IdentityError =>
  * Authenticate staff and open a browser session.
  * Client-reported org_id/store_id headers must never be used here — only codes + credentials.
  */
-export const loginWithPassword = async (
+export const preparePasswordLogin = async (
   deps: LoginServiceDeps,
   rawRequest: unknown,
-): Promise<LoginResult> => {
+): Promise<PreparedPasswordLogin> => {
   let request: LoginRequest;
   try {
     request = LoginRequestSchema.parse(rawRequest);
@@ -46,15 +47,22 @@ export const loginWithPassword = async (
   const ok = await deps.passwordPort.verifyPassword(request.password, staff.password_hash);
   if (!ok) throw authFailed();
 
-  return issueSession(deps.sessions, {
+  return Object.freeze({
     org_id: orgStore.org_id,
     store_id: orgStore.store_id,
     staff_id: staff.staff_id,
     device_id: request.device_id,
     permission_version: staff.permission_version,
     authentication_method: "password",
+    replacement: Object.freeze({ kind: "login" as const }),
   });
 };
+
+export const loginWithPassword = async (
+  deps: LoginServiceDeps,
+  rawRequest: unknown,
+): Promise<LoginResult> =>
+  issueSession(deps.sessions, await preparePasswordLogin(deps, rawRequest));
 
 export const createLoginService = (deps: LoginServiceDeps) =>
   Object.freeze({

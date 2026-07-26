@@ -165,32 +165,32 @@ export type VerifyPinInput = Readonly<{
   pin: string;
   /** Current session bound to the challenge (from AuthContext). */
   session: SessionRecord;
+  /** Optional authority snapshot prepared before any session/challenge mutation. */
+  expected_target_permission_version?: number;
+  /** Optional server-owned role snapshot prepared with the target authority. */
+  expected_target_role?: "admin" | "staff";
 }>;
 
-const recordFailure = async (
+export const recordPinFailure = async (
   deps: PinServiceDeps,
   record: PinChallengeRecord,
   targetStaffId: Uuid,
 ): Promise<void> => {
   const nextFailed = record.failed_attempts + 1;
-  const exhausted = nextFailed >= PIN_CHALLENGE_MAX_ATTEMPTS;
-  await deps.challenges.casUpdate(record.challenge_id, record.failed_attempts, {
-    failed_attempts: nextFailed,
-    status: exhausted ? "consumed" : "active",
+  const now = deps.clock.nowEpochSeconds();
+  const committed = await deps.challenges.recordFailure({
+    challenge_id: record.challenge_id,
+    org_id: record.org_id,
+    store_id: record.store_id,
+    staff_id: targetStaffId,
+    device_id: record.device_id,
+    expected_failed_attempts: record.failed_attempts,
+    next_failed_attempts: nextFailed,
+    attempted_at: now,
+    locked_until: now + PIN_LOCKOUT_SECONDS,
   });
-
-  if (exhausted) {
-    const now = deps.clock.nowEpochSeconds();
-    await deps.lockouts.upsert(
-      Object.freeze({
-        org_id: record.org_id,
-        store_id: record.store_id,
-        staff_id: targetStaffId,
-        device_id: record.device_id,
-        locked_until: now + PIN_LOCKOUT_SECONDS,
-        failed_attempts: nextFailed,
-      }),
-    );
+  if (committed !== 1) {
+    throw new IdentityError("PIN_CHALLENGE_INVALID", "Challenge already consumed");
   }
 };
 
@@ -225,6 +225,12 @@ export const verifyQuickSwitchPin = async (
   const target = await deps.staff.findById(record.org_id, record.target_staff_id);
   if (target === null || !target.is_active || target.pin_hash === null) {
     throw new IdentityError("AUTHENTICATION_FAILED", "Authentication failed");
+  }
+  if (
+    input.expected_target_permission_version !== undefined &&
+    input.expected_target_permission_version !== target.permission_version
+  ) {
+    throw new IdentityError("SESSION_INVALID", "Authentication failed");
   }
 
   const pinOk = await deps.pinPort.verifyPassword(input.pin, target.pin_hash);
@@ -264,25 +270,9 @@ export const verifyQuickSwitchPin = async (
   }
 
   if (plan.kind === "record_failure") {
-    await recordFailure(deps, record, record.target_staff_id);
+    await recordPinFailure(deps, record, record.target_staff_id);
     throw new IdentityError("AUTHENTICATION_FAILED", "Authentication failed");
   }
-
-  // success
-  const cas = await deps.challenges.casUpdate(record.challenge_id, record.failed_attempts, {
-    failed_attempts: record.failed_attempts,
-    status: "consumed",
-  });
-  if (cas !== 1) {
-    throw new IdentityError("PIN_CHALLENGE_INVALID", "Challenge already consumed");
-  }
-
-  await deps.lockouts.clear(
-    record.org_id,
-    record.store_id,
-    record.target_staff_id,
-    record.device_id,
-  );
 
   return issueSession(deps.sessions, {
     org_id: record.org_id,
@@ -291,11 +281,19 @@ export const verifyQuickSwitchPin = async (
     device_id: record.device_id,
     permission_version: target.permission_version,
     authentication_method: "pin",
-    previous: {
-      session_id: input.session.session_id,
-      family_id: input.session.family_id,
-      session_version: input.session.session_version,
-    },
+    replacement: Object.freeze({
+      kind: "pin_switch" as const,
+      predecessor: Object.freeze({
+        session_id: input.session.session_id,
+        family_id: input.session.family_id,
+        session_version: input.session.session_version,
+      }),
+      challenge_id: record.challenge_id,
+      challenge_failed_attempts: record.failed_attempts,
+    }),
+    ...(input.expected_target_role === undefined
+      ? {}
+      : { expected_role: input.expected_target_role }),
   });
 };
 

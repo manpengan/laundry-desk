@@ -15,7 +15,7 @@ export type ResolveSessionInput = Readonly<{
    * Raw request headers (lower-case keys recommended).
    * Presence of spoof headers for tenant authority is rejected — never used as source of truth.
    */
-  headers?: Readonly<Record<string, string | undefined>>;
+  headers?: Readonly<Record<string, string | readonly string[] | undefined>>;
   via?: AuthContext["actor"]["via"];
 }>;
 
@@ -38,17 +38,13 @@ const extractBearer = (header: string | null | undefined): string | null => {
  * Tenant always comes from the verified server session, never from these headers.
  */
 export const assertNoTenantAuthorityHeaders = (
-  headers: Readonly<Record<string, string | undefined>> | undefined,
+  headers: Readonly<Record<string, string | readonly string[] | undefined>> | undefined,
 ): void => {
   if (headers === undefined) return;
   const keys = Object.keys(headers);
   for (const key of keys) {
     const lower = key.toLowerCase();
-    if (
-      (FORBIDDEN_TENANT_AUTHORITY_HEADERS as readonly string[]).includes(lower) &&
-      headers[key] !== undefined &&
-      headers[key] !== ""
-    ) {
+    if ((FORBIDDEN_TENANT_AUTHORITY_HEADERS as readonly string[]).includes(lower)) {
       throw new AuthError(
         "TENANT_SPOOF_REJECTED",
         "Client tenant authority headers are not accepted",
@@ -65,7 +61,8 @@ const claimsMatchSession = (claims: AccessTokenClaims, session: SessionRecord): 
   claims.store_id === session.store_id &&
   claims.staff_id === session.staff_id &&
   claims.device_id === session.device_id &&
-  claims.permission_version === session.permission_version;
+  claims.permission_version === session.permission_version &&
+  claims.authentication_method === session.authentication_method;
 
 /**
  * Resolve AuthContext from Bearer access token + server session record.

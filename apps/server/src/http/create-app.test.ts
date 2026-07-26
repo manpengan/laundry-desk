@@ -6,9 +6,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { FastifyInstance } from "fastify";
 
-import { CSRF_HEADER_NAME } from "@laundry/contracts";
+import {
+  AccessSessionResponseSchema,
+  CSRF_HEADER_NAME,
+  type AccessSessionResponse,
+} from "@laundry/contracts";
 
 import { createLocalApp } from "./create-app.js";
+import type { StaffRecord } from "../identity/types.js";
 import { createMemoryLocalRuntime, DEMO_PASSWORD, DEMO_PIN } from "../local/demo-seed.js";
 import { resolveCookiePolicy } from "./cookie-policy.js";
 import { LOCAL_COOKIE_NAMES } from "./types.js";
@@ -89,6 +94,7 @@ async function assertStaffDirectoryDenied(
 async function assertBearerDeniedAcrossProtectedRoutes(
   app: FastifyInstance,
   accessToken: string,
+  extraHeaders: Readonly<Record<string, string>> = Object.freeze({}),
 ): Promise<void> {
   const protectedRequests = [
     { label: "staff directory", method: "GET" as const, url: "/api/v2/local/staff" },
@@ -121,7 +127,7 @@ async function assertBearerDeniedAcrossProtectedRoutes(
   for (const protectedRequest of protectedRequests) {
     const response = await app.inject({
       ...protectedRequest,
-      headers: { authorization: `Bearer ${accessToken}` },
+      headers: { ...extraHeaders, authorization: `Bearer ${accessToken}` },
     });
     assert.equal(response.statusCode, 401, `${protectedRequest.label}: ${response.body}`);
     const body = response.json() as { ok?: boolean; error?: { code?: string } };
@@ -129,6 +135,102 @@ async function assertBearerDeniedAcrossProtectedRoutes(
     assert.equal(body.error?.code, "AUTHENTICATION_FAILED", protectedRequest.label);
   }
 }
+
+test("all bearer-protected routes reject tenant authority headers from the real request", async () => {
+  const { app } = await buildApp();
+  const accessToken = await loginAdmin(app);
+
+  await assertBearerDeniedAcrossProtectedRoutes(
+    app,
+    accessToken,
+    Object.freeze({ "x-org-id": OTHER_ORG_ID }),
+  );
+
+  await app.close();
+});
+
+test("protected routes sanitize live-authority failures and logout still clears cookies", async () => {
+  const { app: healthyApp, runtime } = await buildApp();
+  const login = await healthyApp.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    payload: {
+      org_code: "local",
+      store_code: "main",
+      username: "admin",
+      password: DEMO_PASSWORD,
+      device_id: DEVICE,
+    },
+  });
+  assert.equal(login.statusCode, 200, login.body);
+  const access = AccessSessionResponseSchema.parse((login.json() as { data: unknown }).data);
+  const sentinel = "authority-db-password=TOPSECRET";
+  const failingRuntime = Object.freeze({
+    ...runtime,
+    identity: Object.freeze({
+      ...runtime.identity,
+      login: Object.freeze({
+        ...runtime.identity.login,
+        staff: Object.freeze({
+          ...runtime.identity.login.staff,
+          async findById(): Promise<StaffRecord | null> {
+            throw new Error(sentinel);
+          },
+        }),
+      }),
+    }),
+  });
+  const failingApp = await createLocalApp({
+    runtime: failingRuntime,
+    cookiePolicy: localCookies,
+  });
+  const requests = [
+    {
+      label: "PIN challenge",
+      method: "POST" as const,
+      url: "/api/v2/auth/pin/challenges",
+      payload: {},
+    },
+    {
+      label: "command",
+      method: "POST" as const,
+      url: "/v1/commands/platform.settings.set",
+      payload: {},
+    },
+    {
+      label: "query",
+      method: "POST" as const,
+      url: "/v1/queries/platform.audit.list",
+      payload: {},
+    },
+  ];
+  for (const request of requests) {
+    const response = await failingApp.inject({
+      ...request,
+      headers: { authorization: `Bearer ${access.access_token}` },
+    });
+    assert.equal(response.statusCode, 500, `${request.label}: ${response.body}`);
+    assert.equal(
+      (response.json() as { error?: { code?: string } }).error?.code,
+      "TRANSACTION_FAILED",
+    );
+    assert.doesNotMatch(response.body, new RegExp(sentinel, "u"));
+  }
+
+  const logout = await failingApp.inject({
+    method: "POST",
+    url: "/api/v2/auth/logout",
+    headers: { authorization: `Bearer ${access.access_token}` },
+    payload: {},
+  });
+  assert.equal(logout.statusCode, 500, logout.body);
+  assert.equal((logout.json() as { error?: { code?: string } }).error?.code, "TRANSACTION_FAILED");
+  assert.doesNotMatch(logout.body, new RegExp(sentinel, "u"));
+  assert.ok(logout.headers["set-cookie"], "logout must clear browser cookies on failure");
+
+  await failingApp.close();
+  await healthyApp.close();
+});
 
 test("GET /health returns ok local-memory", async () => {
   const { app } = await buildApp();
@@ -187,11 +289,10 @@ test("GET /api/v2/local/staff requires a valid bearer session", async (t) => {
       runtime: failingRuntime,
       cookiePolicy: localCookies,
     });
-    const failingAccessToken = await loginAdmin(failingApp);
     const response = await failingApp.inject({
       method: "GET",
       url: "/api/v2/local/staff",
-      headers: { authorization: `Bearer ${failingAccessToken}` },
+      headers: { authorization: `Bearer ${accessToken}` },
     });
     assert.equal(response.statusCode, 500);
     const body = response.json() as { ok?: boolean; error?: { code?: string } };
@@ -330,6 +431,36 @@ test("all bearer-protected routes reject sessions absent from the staff authorit
   await app.close();
 });
 
+test("all bearer-protected routes revalidate current staff status and permission version", async () => {
+  const mutations = [
+    {
+      label: "disabled staff",
+      mutate: (staff: StaffRecord): StaffRecord => Object.freeze({ ...staff, is_active: false }),
+    },
+    {
+      label: "permission version drift",
+      mutate: (staff: StaffRecord): StaffRecord =>
+        Object.freeze({ ...staff, permission_version: staff.permission_version + 1 }),
+    },
+  ] as const;
+
+  for (const mutation of mutations) {
+    const { app, runtime } = await buildApp();
+    const accessToken = await loginAdmin(app);
+    const claims = runtime.identity.sessions.accessTokenSigner.verify(accessToken);
+    assert.ok(claims);
+    assert.ok(runtime.store);
+    const staff = await runtime.identity.login.staff.findById(claims.org_id, claims.staff_id);
+    assert.ok(staff);
+    runtime.store.seedStaff(mutation.mutate(staff));
+
+    await assertBearerDeniedAcrossProtectedRoutes(app, accessToken).catch((error) => {
+      assert.fail(`${mutation.label} did not invalidate the bearer: ${String(error)}`);
+    });
+    await app.close();
+  }
+});
+
 test("all bearer-protected routes reject a local staff session bound to another store", async () => {
   const { app, runtime } = await buildApp();
   const adminToken = await loginAdmin(app);
@@ -365,6 +496,20 @@ test("staff role authority cannot be inferred from a UUID containing 103", async
   assert.ok(adminClaims);
   const adminSession = await runtime.identity.sessions.sessions.get(adminClaims.session_id);
   assert.ok(adminSession);
+  const adminStaff = await runtime.identity.login.staff.findById(
+    adminClaims.org_id,
+    adminClaims.staff_id,
+  );
+  assert.ok(adminStaff);
+  assert.ok(runtime.store);
+  runtime.store.seedStaff(
+    Object.freeze({
+      ...adminStaff,
+      staff_id: ROLE_LOOKALIKE_STAFF_ID,
+      username: "ordinary-103",
+      display_name: "普通店员",
+    }),
+  );
 
   await runtime.identity.sessions.sessions.insert(
     Object.freeze({
@@ -424,13 +569,15 @@ test("POST /api/v2/auth/login succeeds with demo credentials and sets cookies", 
     },
   });
   assert.equal(res.statusCode, 200);
-  const body = res.json() as {
-    ok: boolean;
-    data: { access_token: string; storage: string; session: { staff_id: string } };
-  };
+  const body = res.json() as { ok: boolean; data: unknown };
   assert.equal(body.ok, true);
-  assert.equal(body.data.storage, "memory_only");
-  assert.ok(body.data.access_token.length > 10);
+  const data = AccessSessionResponseSchema.parse(body.data);
+  assert.equal(data.storage, "memory_only");
+  assert.ok(data.access_token.length > 10);
+  assert.equal(data.role, "admin");
+  assert.equal(data.display.staff_name, "店长");
+  assert.equal(data.display.store_name, "本地门店");
+  assert.equal(data.features.fulfillment_enabled, true);
   const cookies = parseSetCookie(res.headers as Record<string, unknown>);
   assert.ok(cookies[LOCAL_COOKIE_NAMES.refresh]);
   assert.ok(cookies[LOCAL_COOKIE_NAMES.csrf]);
@@ -440,6 +587,113 @@ test("POST /api/v2/auth/login succeeds with demo credentials and sets cookies", 
   const raw = res.headers["set-cookie"];
   const lines = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
   assert.ok(lines.some((line) => /SameSite=Strict/i.test(line)));
+  await app.close();
+});
+
+test("login and refresh return the same server-owned role, feature, and display projection", async () => {
+  const { app } = await buildApp();
+  const login = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    payload: {
+      org_code: "local",
+      store_code: "main",
+      username: "admin",
+      password: DEMO_PASSWORD,
+      device_id: DEVICE,
+    },
+  });
+  assert.equal(login.statusCode, 200, login.body);
+  const loginData = AccessSessionResponseSchema.parse((login.json() as { data: unknown }).data);
+  const cookies = parseSetCookie(login.headers as Record<string, unknown>);
+  const cookieHeader = Object.entries(cookies)
+    .map(([name, value]) => `${name}=${value}`)
+    .join("; ");
+
+  const refresh = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/refresh",
+    headers: { cookie: cookieHeader },
+    payload: {},
+  });
+  assert.equal(refresh.statusCode, 200, refresh.body);
+  const refreshData = AccessSessionResponseSchema.parse((refresh.json() as { data: unknown }).data);
+
+  assert.deepEqual(
+    {
+      role: refreshData.role,
+      features: refreshData.features,
+      display: refreshData.display,
+    },
+    {
+      role: loginData.role,
+      features: loginData.features,
+      display: loginData.display,
+    },
+  );
+
+  const protectedResponse = await app.inject({
+    method: "GET",
+    url: "/api/v2/local/staff",
+    headers: { authorization: `Bearer ${refreshData.access_token}` },
+  });
+  assert.equal(
+    protectedResponse.statusCode,
+    200,
+    `refreshed bearer must remain bound to its active server session: ${protectedResponse.body}`,
+  );
+  await app.close();
+});
+
+test("password relogin replaces every prior session on the same browser device", async () => {
+  const { app } = await buildApp();
+  const first = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    payload: {
+      org_code: "local",
+      store_code: "main",
+      username: "admin",
+      password: DEMO_PASSWORD,
+      device_id: DEVICE,
+    },
+  });
+  assert.equal(first.statusCode, 200, first.body);
+  const firstData = AccessSessionResponseSchema.parse((first.json() as { data: unknown }).data);
+  const firstCookies = parseSetCookie(first.headers as Record<string, unknown>);
+
+  const second = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    payload: {
+      org_code: "local",
+      store_code: "main",
+      username: "admin",
+      password: DEMO_PASSWORD,
+      device_id: DEVICE,
+    },
+  });
+  assert.equal(second.statusCode, 200, second.body);
+  const secondData = AccessSessionResponseSchema.parse((second.json() as { data: unknown }).data);
+
+  await assertStaffDirectoryDenied(app, firstData.access_token);
+  const staleRefresh = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/refresh",
+    headers: {
+      cookie: Object.entries(firstCookies)
+        .map(([name, value]) => `${name}=${value}`)
+        .join("; "),
+    },
+    payload: {},
+  });
+  assert.equal(staleRefresh.statusCode, 401, staleRefresh.body);
+  const current = await app.inject({
+    method: "GET",
+    url: "/api/v2/local/staff",
+    headers: { authorization: `Bearer ${secondData.access_token}` },
+  });
+  assert.equal(current.statusCode, 200, current.body);
   await app.close();
 });
 
@@ -565,8 +819,12 @@ test("PIN challenge + verify with CSRF cookies", async () => {
     payload: { challenge_id: challengeBody.data.challenge_id, pin: DEMO_PIN },
   });
   assert.equal(verify.statusCode, 200, verify.body);
-  const verifyBody = verify.json() as { ok: boolean; data: { access_token: string } };
+  const verifyBody = verify.json() as { ok: boolean; data: unknown };
   assert.equal(verifyBody.ok, true);
-  assert.ok(verifyBody.data.access_token.length > 10);
+  const switched: AccessSessionResponse = AccessSessionResponseSchema.parse(verifyBody.data);
+  assert.ok(switched.access_token.length > 10);
+  assert.equal(switched.role, "staff");
+  assert.equal(switched.display.staff_name, staffA.display_name);
+  assert.equal(switched.features.fulfillment_enabled, true);
   await app.close();
 });

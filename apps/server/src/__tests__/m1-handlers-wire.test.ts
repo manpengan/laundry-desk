@@ -5,7 +5,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { M1_FIRST_WAVE_COMMAND_NAMES } from "@laundry/contracts";
+import {
+  ACCESS_TOKEN_AUDIENCE,
+  ACCESS_TOKEN_ISSUER,
+  M1_FIRST_WAVE_COMMAND_NAMES,
+} from "@laundry/contracts";
 
 import type { ActorContext } from "../bus/types.js";
 import { executeCommand } from "../bus/executor.js";
@@ -83,8 +87,13 @@ async function buildIdentityDeps() {
   const sessionDeps = {
     sessions: store.sessions,
     refresh: store.refresh,
+    lifecycle: store.lifecycle,
     clock,
-    accessTokenSigner: createAccessTokenSigner("test-access-secret"),
+    accessTokenSigner: createAccessTokenSigner({
+      secret: "test-access-secret-32-byte-minimum-value",
+      issuer: ACCESS_TOKEN_ISSUER,
+      audience: ACCESS_TOKEN_AUDIENCE,
+    }),
   };
   const login = {
     staff: store.staff,

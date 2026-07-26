@@ -5,6 +5,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@laundry/contracts";
+
 import { executeCommand } from "../bus/executor.js";
 import type { ActorContext } from "../bus/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
@@ -77,8 +79,13 @@ async function seedIdentity() {
   const sessionDeps = {
     sessions: store.sessions,
     refresh: store.refresh,
+    lifecycle: store.lifecycle,
     clock,
-    accessTokenSigner: createAccessTokenSigner("test-secret"),
+    accessTokenSigner: createAccessTokenSigner({
+      secret: "test-step-up-secret-32-byte-minimum-value",
+      issuer: ACCESS_TOKEN_ISSUER,
+      audience: ACCESS_TOKEN_AUDIENCE,
+    }),
   };
 
   const pendingStore = new MemoryPendingActionStore();
@@ -125,7 +132,7 @@ function buildBus(pendingStore: MemoryPendingActionStore) {
 }
 
 test("step-up PIN binds real pending args_hash then creator confirm_ref resumes", async () => {
-  const { pinStepUp, pendingStore, proofStore, session } = await seedIdentity();
+  const { store, pinStepUp, pendingStore, proofStore, session } = await seedIdentity();
   const { registry, chainHooks, settings } = buildBus(pendingStore);
 
   // Staff triggers R5 → blocked with confirm_ref
@@ -199,10 +206,45 @@ test("step-up PIN binds real pending args_hash then creator confirm_ref resumes"
     session,
   });
   assert.match(proof.step_up_proof_id, /^[0-9a-f-]{36}$/i);
-  assert.ok(proofStore.get(proof.step_up_proof_id));
+  const storedProof = proofStore.get(proof.step_up_proof_id);
+  assert.ok(storedProof);
+  assert.equal(storedProof.sessionId, session.session_id);
+  assert.equal(storedProof.sessionVersion, session.session_version);
   assert.equal(session.staff_id, DEMO_STAFF_A_ID);
 
-  // Self confirm without proof would still fail — but we have proof
+  // A fresh login for the same creator must not inherit the older session's proof.
+  const newIssued = await issueSession(pinStepUp.sessions, {
+    org_id: DEMO_ORG_ID,
+    store_id: DEMO_STORE_ID,
+    staff_id: DEMO_STAFF_A_ID,
+    device_id: DEVICE_ID,
+    permission_version: 1,
+    authentication_method: "password",
+  });
+  const newSession = await store.sessions.get(newIssued.session.session_id);
+  assert.ok(newSession);
+  const reusedFromNewSession = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "platform.settings.set",
+    {},
+    {
+      registry,
+      actor: STAFF,
+      chainHooks,
+      pendingStore,
+      stepUpProofStore: proofStore,
+      confirmRef,
+      sessionBinding: {
+        sessionId: newSession.session_id,
+        sessionVersion: newSession.session_version,
+      },
+    },
+  );
+  assert.equal(reusedFromNewSession.ok, false);
+  assert.equal(proofStore.get(proof.step_up_proof_id)?.status, "active");
+
+  // The original creator session can resume with its own proof.
   const resumed = await executeCommand(
     new FakeSqlClient(),
     TENANT,
@@ -215,6 +257,10 @@ test("step-up PIN binds real pending args_hash then creator confirm_ref resumes"
       pendingStore,
       stepUpProofStore: proofStore,
       confirmRef,
+      sessionBinding: {
+        sessionId: session.session_id,
+        sessionVersion: session.session_version,
+      },
     },
   );
   assert.equal(resumed.ok, true, JSON.stringify(resumed));
@@ -237,6 +283,10 @@ test("step-up PIN binds real pending args_hash then creator confirm_ref resumes"
       pendingStore,
       stepUpProofStore: proofStore,
       confirmRef,
+      sessionBinding: {
+        sessionId: session.session_id,
+        sessionVersion: session.session_version,
+      },
     },
   );
   assert.equal(again.ok, false);
@@ -274,8 +324,13 @@ test("step-up challenge rejects self-approver and non-creator session", async ()
     {
       sessions: store.sessions,
       refresh: store.refresh,
+      lifecycle: store.lifecycle,
       clock: pinStepUp.clock,
-      accessTokenSigner: createAccessTokenSigner("test-secret"),
+      accessTokenSigner: createAccessTokenSigner({
+        secret: "test-step-up-secret-32-byte-minimum-value",
+        issuer: ACCESS_TOKEN_ISSUER,
+        audience: ACCESS_TOKEN_AUDIENCE,
+      }),
     },
     {
       org_id: DEMO_ORG_ID,

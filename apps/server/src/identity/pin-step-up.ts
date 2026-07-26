@@ -17,7 +17,7 @@ import { createStepUpProof, type StepUpProof } from "../policy/step-up.js";
 import type { StepUpProofStore } from "../policy/step-up-proof-store.js";
 import { newUuid } from "./crypto-util.js";
 import type { PinServiceDeps, PinChallengeView } from "./pin.js";
-import { PIN_LOCKOUT_SECONDS } from "./pin.js";
+import { recordPinFailure } from "./pin.js";
 import type { PinChallengeRecord, SessionRecord, Uuid } from "./types.js";
 import { IdentityError } from "./types.js";
 
@@ -87,32 +87,6 @@ const requireStepUpRecord = (record: PinChallengeRecord | null): PinChallengeRec
     throw new IdentityError("PIN_CHALLENGE_INVALID", "Challenge not found");
   }
   return record;
-};
-
-const recordFailure = async (
-  deps: PinStepUpDeps,
-  record: PinChallengeRecord,
-  approverStaffId: Uuid,
-): Promise<void> => {
-  const nextFailed = record.failed_attempts + 1;
-  const exhausted = nextFailed >= PIN_CHALLENGE_MAX_ATTEMPTS;
-  await deps.challenges.casUpdate(record.challenge_id, record.failed_attempts, {
-    failed_attempts: nextFailed,
-    status: exhausted ? "consumed" : "active",
-  });
-  if (exhausted) {
-    const now = deps.clock.nowEpochSeconds();
-    await deps.lockouts.upsert(
-      Object.freeze({
-        org_id: record.org_id,
-        store_id: record.store_id,
-        staff_id: approverStaffId,
-        device_id: record.device_id,
-        locked_until: now + PIN_LOCKOUT_SECONDS,
-        failed_attempts: nextFailed,
-      }),
-    );
-  }
 };
 
 /**
@@ -281,26 +255,35 @@ export const verifyStepUpPin = async (
     throw new IdentityError("PIN_CHALLENGE_INVALID", plan.reason);
   }
   if (plan.kind === "record_failure") {
-    await recordFailure(deps, record, approverStaffId);
+    await recordPinFailure(deps, record, approverStaffId);
     throw new IdentityError("AUTHENTICATION_FAILED", "Authentication failed");
   }
-
-  const cas = await deps.challenges.casUpdate(record.challenge_id, record.failed_attempts, {
-    failed_attempts: record.failed_attempts,
-    status: "consumed",
-  });
-  if (cas !== 1) {
-    throw new IdentityError("PIN_CHALLENGE_INVALID", "Challenge already consumed");
-  }
-
-  await deps.lockouts.clear(record.org_id, record.store_id, approverStaffId, record.device_id);
 
   const proof: StepUpProof = createStepUpProof({
     proofId,
     pending,
     approverStaffId,
     issuedAt: now,
+    sessionBinding: Object.freeze({
+      sessionId: record.session_id,
+      sessionVersion: record.session_version,
+    }),
   });
+  if (deps.proofs.get(proof.proofId) !== null) {
+    throw new IdentityError("PIN_CHALLENGE_INVALID", "Proof identifier collision");
+  }
+  const committed = await deps.challenges.consumeSuccess({
+    challenge_id: record.challenge_id,
+    org_id: record.org_id,
+    store_id: record.store_id,
+    staff_id: approverStaffId,
+    device_id: record.device_id,
+    expected_failed_attempts: record.failed_attempts,
+    attempted_at: deps.clock.nowEpochSeconds(),
+  });
+  if (committed !== 1) {
+    throw new IdentityError("PIN_CHALLENGE_INVALID", "Challenge already consumed");
+  }
   deps.proofs.insert(proof);
 
   return Object.freeze({

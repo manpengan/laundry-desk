@@ -206,6 +206,17 @@ describe("A7 auth projection consumer", () => {
       device_id: "10000000-0000-4000-8000-000000000015",
       permission_version: 1,
     },
+    role: "admin",
+    features: {
+      ai_enabled: false,
+      member_enabled: true,
+    },
+    display: {
+      store_name: "Local Main",
+      staff_name: "Local Admin",
+      org_code: "local",
+      store_code: "main",
+    },
   } as const;
 
   it("projects exactly the five matrix-owned browser request/response pairs", () => {
@@ -292,6 +303,8 @@ describe("A7 auth projection consumer", () => {
       ],
     ] as const;
 
+    expect(AccessSessionResponseSchema.parse(accessResponse)).toEqual(accessResponse);
+    expect(PinVerifyResponseSchema.parse(accessResponse)).toEqual(accessResponse);
     resultCandidates.forEach(([schema, candidate]) => {
       forbiddenResultFields.forEach(([field, value]) => {
         expect(schema.safeParse({ ...candidate, [field]: value }).success).toBe(false);
@@ -300,5 +313,22 @@ describe("A7 auth projection consumer", () => {
     expect(JSON.stringify(AUTH_OPERATION_MATRIX)).not.toMatch(
       /password-secret|1234|refresh-secret|csrf-secret|hash-secret/u,
     );
+  });
+
+  it("requires the complete server-owned projection without unknown display fields", () => {
+    const missingRole = Object.fromEntries(
+      Object.entries(accessResponse).filter(([key]) => key !== "role"),
+    );
+
+    expect(AccessSessionResponseSchema.safeParse(missingRole).success).toBe(false);
+    expect(
+      AccessSessionResponseSchema.safeParse({
+        ...accessResponse,
+        display: { ...accessResponse.display, authority_source: "browser" },
+      }).success,
+    ).toBe(false);
+    expect(
+      AccessSessionResponseSchema.safeParse({ ...accessResponse, role: "owner" }).success,
+    ).toBe(false);
   });
 });

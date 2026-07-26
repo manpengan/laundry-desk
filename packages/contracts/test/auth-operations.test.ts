@@ -63,6 +63,17 @@ const accessSessionResponse = {
     device_id: ids.device,
     permission_version: 1,
   },
+  role: "admin",
+  features: {
+    ai_enabled: false,
+    member_enabled: true,
+  },
+  display: {
+    store_name: "Local Main",
+    staff_name: "Local Admin",
+    org_code: "local",
+    store_code: "main",
+  },
 } as const;
 
 const expectedAuthErrors = [
@@ -326,6 +337,31 @@ describe("A5 browser auth schemas", () => {
     expect(
       PinVerifyResponseSchema.parse({ step_up_proof_id: ids.proof, expires_at: 2_000 }),
     ).toEqual({ step_up_proof_id: ids.proof, expires_at: 2_000 });
+  });
+
+  it.each(["role", "features", "display"] as const)(
+    "rejects an access-session response missing %s",
+    (field) => {
+      const missingProjection = Object.fromEntries(
+        Object.entries(accessSessionResponse).filter(([key]) => key !== field),
+      );
+
+      expect(AccessSessionResponseSchema.safeParse(missingProjection).success).toBe(false);
+      expect(PinVerifyResponseSchema.safeParse(missingProjection).success).toBe(false);
+    },
+  );
+
+  it.each([
+    { ...accessSessionResponse, role: "owner" },
+    { ...accessSessionResponse, features: { ai_enabled: "yes" } },
+    {
+      ...accessSessionResponse,
+      display: { ...accessSessionResponse.display, internal_staff_code: "admin-001" },
+    },
+    { ...accessSessionResponse, projection_source: "client" },
+  ])("rejects invalid or unknown access-session projection fields", (candidate) => {
+    expect(AccessSessionResponseSchema.safeParse(candidate).success).toBe(false);
+    expect(PinVerifyResponseSchema.safeParse(candidate).success).toBe(false);
   });
 
   it("does not expose request secrets or server bindings in examples or responses", () => {

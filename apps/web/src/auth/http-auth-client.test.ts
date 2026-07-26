@@ -8,8 +8,12 @@ import test from "node:test";
 import { createHttpAuthClient } from "./HttpAuthClient.js";
 
 const ADMIN_STAFF_ID = "11111111-1111-4111-8111-111111111103";
+const SESSION_ID = "22222222-2222-4222-8222-222222222222";
+const ORG_ID = "33333333-3333-4333-8333-333333333333";
+const STORE_ID = "44444444-4444-4444-8444-444444444444";
+const DEVICE_ID = "55555555-5555-4555-8555-555555555555";
 
-function staffDirectoryResponse(displayName = "店长"): Response {
+function staffDirectoryResponse(displayName = "店长", role: "admin" | "staff" = "admin"): Response {
   return new Response(
     JSON.stringify({
       ok: true,
@@ -17,7 +21,7 @@ function staffDirectoryResponse(displayName = "店长"): Response {
         {
           staff_id: ADMIN_STAFF_ID,
           display_name: displayName,
-          role: "admin",
+          role,
         },
       ],
     }),
@@ -25,28 +29,65 @@ function staffDirectoryResponse(displayName = "店长"): Response {
   );
 }
 
-function loginResponse(accessToken = "aaa.bbb.ccc", sessionId = "s1"): Response {
+function serverProjection(
+  role: "admin" | "staff" = "admin",
+  display = {
+    store_name: "服务端门店",
+    staff_name: "服务端店长",
+    org_code: "server-org",
+    store_code: "server-store",
+  },
+  features: Readonly<Record<string, boolean>> = {
+    ai_enabled: false,
+    member_enabled: true,
+  },
+) {
+  return {
+    role,
+    features,
+    display,
+  };
+}
+
+function accessSessionData(
+  accessToken = "aaa.bbb.ccc",
+  sessionId = SESSION_ID,
+  projection: ReturnType<typeof serverProjection> | null = serverProjection(),
+) {
+  const base = {
+    access_token: accessToken,
+    token_type: "Bearer",
+    expires_in: 900,
+    storage: "memory_only",
+    session: {
+      session_id: sessionId,
+      session_version: 1,
+      org_id: ORG_ID,
+      store_id: STORE_ID,
+      staff_id: ADMIN_STAFF_ID,
+      device_id: DEVICE_ID,
+      permission_version: 1,
+    },
+  };
+  return projection === null ? base : { ...base, ...projection };
+}
+
+function successResponse(data: unknown): Response {
   return new Response(
     JSON.stringify({
       ok: true,
-      data: {
-        access_token: accessToken,
-        token_type: "Bearer",
-        expires_in: 900,
-        storage: "memory_only",
-        session: {
-          session_id: sessionId,
-          session_version: 1,
-          org_id: "o1",
-          store_id: "st1",
-          staff_id: ADMIN_STAFF_ID,
-          device_id: "d1",
-          permission_version: 1,
-        },
-      },
+      data,
     }),
     { status: 200, headers: { "content-type": "application/json" } },
   );
+}
+
+function loginResponse(
+  accessToken = "aaa.bbb.ccc",
+  sessionId = SESSION_ID,
+  projection: ReturnType<typeof serverProjection> = serverProjection(),
+): Response {
+  return successResponse(accessSessionData(accessToken, sessionId, projection));
 }
 
 function loginFailureResponse(message = "用户名或密码错误"): Response {
@@ -58,6 +99,200 @@ function loginFailureResponse(message = "用户名或密码错误"): Response {
     { status: 401, headers: { "content-type": "application/json" } },
   );
 }
+
+test("login rejects an access response that omits the server session projection", async () => {
+  let directoryCalls = 0;
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/v2/auth/login") && init?.method === "POST") {
+      return successResponse(accessSessionData("aaa.bbb.ccc", SESSION_ID, null));
+    }
+    if (url.endsWith("/api/v2/local/staff")) {
+      directoryCalls += 1;
+      return staffDirectoryResponse();
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const client = createHttpAuthClient({
+    apiBaseUrl: "http://127.0.0.1:8787",
+    fetchImpl,
+  });
+
+  const result = await client.login(loginValues());
+
+  assert.equal(result.ok, false);
+  assert.equal(directoryCalls, 0);
+  assert.deepEqual(client.listSwitchableStaff(), []);
+  if (!result.ok) {
+    assert.match(result.error.message, /响应格式错误/u);
+  }
+});
+
+test("login uses the access response projection even when the staff directory disagrees", async () => {
+  const authoritativeProjection = serverProjection(
+    "staff",
+    {
+      store_name: "权威门店",
+      staff_name: "权威员工",
+      org_code: "authoritative-org",
+      store_code: "authoritative-store",
+    },
+    {
+      ai_enabled: true,
+      member_enabled: false,
+      custom_server_feature: true,
+    },
+  );
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/v2/auth/login") && init?.method === "POST") {
+      return loginResponse("server.token.sig", SESSION_ID, authoritativeProjection);
+    }
+    if (url.endsWith("/api/v2/local/staff")) {
+      return staffDirectoryResponse("目录店长", "admin");
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const client = createHttpAuthClient({
+    apiBaseUrl: "http://127.0.0.1:8787",
+    fetchImpl,
+  });
+
+  const result = await client.login(loginValues("form-org"));
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.data.role, "staff");
+  assert.deepEqual(result.data.features, authoritativeProjection.features);
+  assert.deepEqual(result.data.display, authoritativeProjection.display);
+  assert.deepEqual(client.listSwitchableStaff(), [
+    {
+      staff_id: ADMIN_STAFF_ID,
+      display_name: "目录店长",
+      role: "admin",
+    },
+  ]);
+});
+
+test("login rejects malformed or non-strict access response projections", async (t) => {
+  const valid = {
+    ...accessSessionData("aaa.bbb.ccc", SESSION_ID, null),
+    ...serverProjection(),
+  };
+  const cases: ReadonlyArray<Readonly<{ name: string; data: unknown }>> = [
+    {
+      name: "unknown root field",
+      data: { ...valid, unexpected: true },
+    },
+    {
+      name: "unknown session field",
+      data: { ...valid, session: { ...valid.session, unexpected: true } },
+    },
+    {
+      name: "invalid session UUID",
+      data: { ...valid, session: { ...valid.session, session_id: "not-a-uuid" } },
+    },
+    {
+      name: "unknown display field",
+      data: { ...valid, display: { ...valid.display, unexpected: true } },
+    },
+    {
+      name: "invalid role",
+      data: { ...valid, role: "owner" },
+    },
+    {
+      name: "non-boolean feature",
+      data: { ...valid, features: { ai_enabled: "yes" } },
+    },
+    {
+      name: "wrong token type",
+      data: { ...valid, token_type: "Basic" },
+    },
+    {
+      name: "wrong storage",
+      data: { ...valid, storage: "local_storage" },
+    },
+    {
+      name: "wrong expiry",
+      data: { ...valid, expires_in: 901 },
+    },
+  ];
+
+  for (const entry of cases) {
+    await t.test(entry.name, async () => {
+      let directoryCalls = 0;
+      const fetchImpl: typeof fetch = async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/api/v2/auth/login") && init?.method === "POST") {
+          return successResponse(entry.data);
+        }
+        if (url.endsWith("/api/v2/local/staff")) {
+          directoryCalls += 1;
+          return staffDirectoryResponse();
+        }
+        return new Response("not found", { status: 404 });
+      };
+      const client = createHttpAuthClient({
+        apiBaseUrl: "http://127.0.0.1:8787",
+        fetchImpl,
+      });
+
+      const result = await client.login(loginValues());
+
+      assert.equal(result.ok, false);
+      assert.equal(directoryCalls, 0);
+      assert.deepEqual(client.listSwitchableStaff(), []);
+      if (!result.ok) {
+        assert.match(result.error.message, /响应格式错误/u);
+      }
+    });
+  }
+});
+
+test("quick switch replaces role features and display from the access response", async () => {
+  const switchedProjection = serverProjection(
+    "staff",
+    {
+      store_name: "切换后门店",
+      staff_name: "切换后员工",
+      org_code: "switched-org",
+      store_code: "switched-store",
+    },
+    {
+      ai_enabled: false,
+      member_enabled: false,
+      shift_closing_enabled: true,
+    },
+  );
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/v2/auth/login") && init?.method === "POST") {
+      return loginResponse("login.token.sig");
+    }
+    if (url.endsWith("/api/v2/local/staff")) {
+      return staffDirectoryResponse("缓存店长", "admin");
+    }
+    if (url.endsWith("/api/v2/auth/pin/challenges/challenge-1/verify")) {
+      return loginResponse("switched.token.sig", SESSION_ID, switchedProjection);
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const client = createHttpAuthClient({
+    apiBaseUrl: "http://127.0.0.1:8787",
+    fetchImpl,
+  });
+  assert.equal((await client.login(loginValues())).ok, true);
+
+  await withCsrfCookie(async () => {
+    const result = await client.verifyPin({ challenge_id: "challenge-1", pin: "1234" });
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.data.role, "staff");
+    assert.deepEqual(result.data.features, switchedProjection.features);
+    assert.deepEqual(result.data.display, switchedProjection.display);
+  });
+});
 
 type Deferred<T> = Readonly<{
   promise: Promise<T>;
@@ -115,7 +350,7 @@ async function assertSecondLoginRejectsStaleDirectory(
     const url = String(input);
     if (url.endsWith("/api/v2/auth/login") && init?.method === "POST") {
       loginCalls += 1;
-      return loginResponse(`login-token-${loginCalls}`, `session-${loginCalls}`);
+      return loginResponse(`login.token-${loginCalls}.sig`);
     }
     if (url.endsWith("/api/v2/local/staff")) {
       directoryCalls += 1;
@@ -144,10 +379,13 @@ async function assertSecondLoginRejectsStaleDirectory(
     assert.match(second.error.message, /员工目录/u);
   }
   assert.equal(loginCalls, 2);
-  assert.deepEqual(directoryAuthorizations, ["Bearer login-token-1", "Bearer login-token-2"]);
+  assert.deepEqual(directoryAuthorizations, [
+    "Bearer login.token-1.sig",
+    "Bearer login.token-2.sig",
+  ]);
 }
 
-test("login uses the server staff projection without client-side product mapping", async () => {
+test("login returns the server access projection and separately loads the switch directory", async () => {
   const requests: Array<Readonly<{ path: "login" | "staff"; authorization: string | null }>> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
@@ -187,8 +425,9 @@ test("login uses the server staff projection without client-side product mapping
     assert.equal(result.data.storage, "memory_only");
     assert.equal(result.data.role, "admin");
     assert.equal(result.data.access_token, "aaa.bbb.ccc");
-    assert.equal(result.data.display.store_name, "");
-    assert.equal(result.data.display.staff_name, "店长");
+    assert.equal(result.data.features.ai_enabled, false);
+    assert.equal(result.data.display.store_name, "服务端门店");
+    assert.equal(result.data.display.staff_name, "服务端店长");
   }
   assert.deepEqual(requests, [
     { path: "login", authorization: null },
@@ -225,7 +464,7 @@ test("second login rejects a non-2xx staff directory instead of reusing prior ro
   );
 });
 
-test("login rejects a missing server staff projection instead of inferring a role", async () => {
+test("an empty switch directory does not replace the access response projection", async () => {
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
     if (url.endsWith("/api/v2/local/staff")) {
@@ -235,25 +474,7 @@ test("login rejects a missing server staff projection instead of inferring a rol
       });
     }
     if (url.endsWith("/api/v2/auth/login") && init?.method === "POST") {
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          data: {
-            access_token: "aaa.bbb.ccc",
-            expires_in: 900,
-            session: {
-              session_id: "s1",
-              session_version: 1,
-              org_id: "o1",
-              store_id: "st1",
-              staff_id: "11111111-1111-4111-8111-111111111103",
-              device_id: "d1",
-              permission_version: 1,
-            },
-          },
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
+      return loginResponse();
     }
     return new Response("not found", { status: 404 });
   };
@@ -269,10 +490,11 @@ test("login rejects a missing server staff projection instead of inferring a rol
     password: "fixture-password",
   });
 
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.match(result.error.message, /员工权限/u);
-  }
+  assert.equal(result.ok, true);
+  assert.deepEqual(client.listSwitchableStaff(), []);
+  if (!result.ok) return;
+  assert.equal(result.data.role, "admin");
+  assert.equal(result.data.display.store_name, "服务端门店");
 });
 
 test("login surfaces network failure message", async () => {
@@ -303,7 +525,7 @@ test("failed relogin clears the prior token before a later PIN request", async (
     if (url.endsWith("/api/v2/local/staff")) return staffDirectoryResponse();
     if (url.endsWith("/api/v2/auth/login") && init?.method === "POST") {
       loginCalls += 1;
-      return loginCalls === 1 ? loginResponse("old-token") : loginFailureResponse();
+      return loginCalls === 1 ? loginResponse("old.token.sig") : loginFailureResponse();
     }
     if (url.endsWith("/api/v2/auth/pin/challenges")) {
       pinAuthorizations.push(new Headers(init?.headers).get("authorization"));
@@ -350,10 +572,7 @@ test("a delayed stale failure cannot clear a newer successful login", async () =
     const url = String(input);
     if (url.endsWith("/api/v2/auth/login")) {
       loginCalls += 1;
-      return loginResponse(
-        loginCalls === 1 ? "old-token" : "new-token",
-        loginCalls === 1 ? "old-session" : "new-session",
-      );
+      return loginResponse(loginCalls === 1 ? "old.token.sig" : "new.token.sig");
     }
     if (url.endsWith("/api/v2/local/staff")) {
       directoryCalls += 1;
@@ -366,7 +585,7 @@ test("a delayed stale failure cannot clear a newer successful login", async () =
     }
     if (url.endsWith("/api/v2/auth/pin/challenges/challenge-1/verify")) {
       pinAuthorizations.push(new Headers(init?.headers).get("authorization"));
-      return loginResponse("rotated-token", "rotated-session");
+      return loginResponse("rotated.token.sig");
     }
     return new Response("not found", { status: 404 });
   };
@@ -374,10 +593,11 @@ test("a delayed stale failure cannot clear a newer successful login", async () =
 
   const staleAttempt = client.login(loginValues("old-org"));
   await staleDirectoryStarted.promise;
-  const currentResult = await client.login(loginValues("new-org"));
-  assert.equal(currentResult.ok, true);
+  const currentAttempt = client.login(loginValues("new-org"));
+  assert.equal(loginCalls, 1);
   staleDirectory.reject(new Error("stale directory failed"));
-  const staleResult = await staleAttempt;
+  const [staleResult, currentResult] = await Promise.all([staleAttempt, currentAttempt]);
+  assert.equal(currentResult.ok, true);
   assert.equal(staleResult.ok, false);
   if (!staleResult.ok) assert.match(staleResult.error.message, /取代|取消/u);
   assert.equal(client.listSwitchableStaff()[0]?.display_name, "新店长");
@@ -386,15 +606,15 @@ test("a delayed stale failure cannot clear a newer successful login", async () =
     const pin = await client.verifyPin({ challenge_id: "challenge-1", pin: "1234" });
     assert.equal(pin.ok, true);
     if (pin.ok) {
-      assert.equal(pin.data.display.staff_name, "新店长");
-      assert.equal(pin.data.display.org_code, "new-org");
+      assert.equal(pin.data.display.staff_name, "服务端店长");
+      assert.equal(pin.data.display.org_code, "server-org");
     }
   });
-  assert.deepEqual(directoryAuthorizations, ["Bearer old-token", "Bearer new-token"]);
-  assert.deepEqual(pinAuthorizations, ["Bearer new-token"]);
+  assert.deepEqual(directoryAuthorizations, ["Bearer old.token.sig", "Bearer new.token.sig"]);
+  assert.deepEqual(pinAuthorizations, ["Bearer new.token.sig"]);
 });
 
-test("a delayed stale success cannot replace a newer successful login", async () => {
+test("login POSTs are serialized so the later request owns cookies and client state", async () => {
   const staleLogin = createDeferred<Response>();
   const staleLoginStarted = createDeferred<void>();
   let loginCalls = 0;
@@ -408,16 +628,16 @@ test("a delayed stale success cannot replace a newer successful login", async ()
         staleLoginStarted.resolve();
         return staleLogin.promise;
       }
-      return loginResponse("new-token", "new-session");
+      return loginResponse("new.token.sig");
     }
     if (url.endsWith("/api/v2/local/staff")) {
       const authorization = new Headers(init?.headers).get("authorization");
       directoryAuthorizations.push(authorization);
-      return staffDirectoryResponse(authorization === "Bearer new-token" ? "新店长" : "旧店长");
+      return staffDirectoryResponse(authorization === "Bearer new.token.sig" ? "新店长" : "旧店长");
     }
     if (url.endsWith("/api/v2/auth/pin/challenges/challenge-1/verify")) {
       pinAuthorizations.push(new Headers(init?.headers).get("authorization"));
-      return loginResponse("rotated-token", "rotated-session");
+      return loginResponse("rotated.token.sig");
     }
     return new Response("not found", { status: 404 });
   };
@@ -425,10 +645,14 @@ test("a delayed stale success cannot replace a newer successful login", async ()
 
   const staleAttempt = client.login(loginValues("old-org"));
   await staleLoginStarted.promise;
-  const currentResult = await client.login(loginValues("new-org"));
+  const currentAttempt = client.login(loginValues("new-org"));
+  const loginCallsBeforeFirstResponse = loginCalls;
+  staleLogin.resolve(loginResponse("old.token.sig"));
+  const [staleResult, currentResult] = await Promise.all([staleAttempt, currentAttempt]);
+
+  assert.equal(loginCallsBeforeFirstResponse, 1);
+  assert.equal(loginCalls, 2);
   assert.equal(currentResult.ok, true);
-  staleLogin.resolve(loginResponse("old-token", "old-session"));
-  const staleResult = await staleAttempt;
   assert.equal(staleResult.ok, false);
   if (!staleResult.ok) assert.match(staleResult.error.message, /取代|取消/u);
   assert.equal(client.listSwitchableStaff()[0]?.display_name, "新店长");
@@ -437,10 +661,110 @@ test("a delayed stale success cannot replace a newer successful login", async ()
     const pin = await client.verifyPin({ challenge_id: "challenge-1", pin: "1234" });
     assert.equal(pin.ok, true);
     if (pin.ok) {
-      assert.equal(pin.data.display.staff_name, "新店长");
-      assert.equal(pin.data.display.org_code, "new-org");
+      assert.equal(pin.data.display.staff_name, "服务端店长");
+      assert.equal(pin.data.display.org_code, "server-org");
     }
   });
-  assert.deepEqual(directoryAuthorizations, ["Bearer new-token"]);
-  assert.deepEqual(pinAuthorizations, ["Bearer new-token"]);
+  assert.deepEqual(directoryAuthorizations, ["Bearer new.token.sig"]);
+  assert.deepEqual(pinAuthorizations, ["Bearer new.token.sig"]);
+});
+
+test("quick-switch and relogin share one complete cookie-mutation queue", async () => {
+  const delayedPin = createDeferred<Response>();
+  const pinStarted = createDeferred<void>();
+  let loginCalls = 0;
+  let pinCalls = 0;
+  const challengeAuthorizations: Array<string | null> = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/v2/auth/login")) {
+      loginCalls += 1;
+      return loginResponse(loginCalls === 1 ? "initial.token.sig" : "latest.login.sig");
+    }
+    if (url.endsWith("/api/v2/local/staff")) return staffDirectoryResponse();
+    if (url.endsWith("/api/v2/auth/pin/challenges/delayed/verify")) {
+      pinCalls += 1;
+      pinStarted.resolve();
+      return delayedPin.promise;
+    }
+    if (url.endsWith("/api/v2/auth/pin/challenges")) {
+      challengeAuthorizations.push(new Headers(init?.headers).get("authorization"));
+      return successResponse({
+        challenge_id: "next-challenge",
+        purpose: "quick_switch",
+        expires_at: 1_800_000_000,
+        max_attempts: 5,
+      });
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const client = createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787", fetchImpl });
+  assert.equal((await client.login(loginValues())).ok, true);
+
+  await withCsrfCookie(async () => {
+    const stalePin = client.verifyPin({ challenge_id: "delayed", pin: "1234" });
+    await pinStarted.promise;
+    const latestLogin = client.login(loginValues("latest-org"));
+    assert.equal(loginCalls, 1);
+    delayedPin.resolve(loginResponse("stale.switch.sig"));
+    const [pinResult, loginResult] = await Promise.all([stalePin, latestLogin]);
+
+    assert.equal(pinResult.ok, false);
+    assert.equal(loginResult.ok, true);
+    assert.equal(loginCalls, 2);
+    assert.equal(pinCalls, 1);
+    const challenge = await client.createPinChallenge({
+      purpose: "quick_switch",
+      target_staff_id: ADMIN_STAFF_ID,
+    });
+    assert.equal(challenge.ok, true);
+  });
+  assert.deepEqual(challengeAuthorizations, ["Bearer latest.login.sig"]);
+});
+
+test("a second queued quick-switch is discarded before it can replace cookies", async () => {
+  const firstPin = createDeferred<Response>();
+  const firstPinStarted = createDeferred<void>();
+  let pinCalls = 0;
+  const challengeAuthorizations: Array<string | null> = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith("/api/v2/auth/login")) return loginResponse("initial.token.sig");
+    if (url.endsWith("/api/v2/local/staff")) return staffDirectoryResponse();
+    if (url.includes("/api/v2/auth/pin/challenges/") && url.endsWith("/verify")) {
+      pinCalls += 1;
+      firstPinStarted.resolve();
+      return firstPin.promise;
+    }
+    if (url.endsWith("/api/v2/auth/pin/challenges")) {
+      challengeAuthorizations.push(new Headers(init?.headers).get("authorization"));
+      return successResponse({
+        challenge_id: "next-challenge",
+        purpose: "quick_switch",
+        expires_at: 1_800_000_000,
+        max_attempts: 5,
+      });
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const client = createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787", fetchImpl });
+  assert.equal((await client.login(loginValues())).ok, true);
+
+  await withCsrfCookie(async () => {
+    const first = client.verifyPin({ challenge_id: "first", pin: "1234" });
+    await firstPinStarted.promise;
+    const staleSecond = client.verifyPin({ challenge_id: "second", pin: "1234" });
+    firstPin.resolve(loginResponse("first.switch.sig"));
+    const [firstResult, secondResult] = await Promise.all([first, staleSecond]);
+
+    assert.equal(firstResult.ok, true);
+    assert.equal(secondResult.ok, false);
+    assert.equal(pinCalls, 1);
+    const challenge = await client.createPinChallenge({
+      purpose: "quick_switch",
+      target_staff_id: ADMIN_STAFF_ID,
+    });
+    assert.equal(challenge.ok, true);
+  });
+  assert.deepEqual(challengeAuthorizations, ["Bearer first.switch.sig"]);
 });
