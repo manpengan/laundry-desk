@@ -5,19 +5,16 @@ import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
 import { createMockAuthClient } from "../auth/AuthClient.js";
 import { FULL_STORE_FEATURES } from "../auth/permissions.js";
-import type { AccessSession } from "../auth/types.js";
+import type { SessionView } from "../auth/types.js";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
 import { createMockConnection } from "../connection.js";
-import { App } from "../App.js";
+import type { AppPorts } from "../host/types.js";
+import { App, shellPropsFrom } from "../App.js";
 import { PageHost } from "../pages/PageHost.js";
 import { CounterShell } from "./CounterShell.js";
 
-const sampleSession: AccessSession = Object.freeze({
-  access_token: "eyJhbGciOiJub25lIn0.e30.mocksig",
-  token_type: "Bearer" as const,
-  expires_in: 900,
-  storage: "memory_only" as const,
+const sampleSession: SessionView = Object.freeze({
   session: Object.freeze({
     session_id: "aaaaaaaa-bbbb-4ccc-8ddd-111111111111",
     session_version: 1,
@@ -35,6 +32,28 @@ const sampleSession: AccessSession = Object.freeze({
     org_code: "ORG",
     store_code: "S1",
   }),
+});
+
+function appPorts(): AppPorts {
+  return Object.freeze({
+    auth: createMockAuthClient(),
+    command: createMockCommandClient(),
+    query: createMockQueryClient(),
+    health: Object.freeze({
+      get: async () => ({ ok: true as const, data: { status: "ready" as const } }),
+    }),
+  });
+}
+
+test("App shell mapping preserves the exact injected auth, command, and query ports", () => {
+  const ports = appPorts();
+  const onSessionChange = () => undefined;
+  const props = shellPropsFrom(undefined, undefined, sampleSession, ports, onSessionChange);
+
+  assert.equal(props.authClient, ports.auth);
+  assert.equal(props.commandClient, ports.command);
+  assert.equal(props.queryClient, ports.query);
+  assert.equal(props.onSessionChange, onSessionChange);
 });
 
 test("PageHost empty state for receive without session uses fallback copy", () => {
@@ -123,6 +142,7 @@ test("PageHost workbench with session+queryClient mounts OrdersList", () => {
 test("App shell SSR includes skip link, sync bar, print indicator when authenticated", () => {
   const html = renderToStaticMarkup(
     createElement(App, {
+      ports: appPorts(),
       enableLiquidGlass: false,
       initialSession: sampleSession,
       connection: createMockConnection({
@@ -149,6 +169,8 @@ test("CounterShell wires PIN switch affordance", () => {
       createElement(CounterShell, {
         session: sampleSession,
         authClient: createMockAuthClient(),
+        commandClient: createMockCommandClient(),
+        queryClient: createMockQueryClient(),
         onSessionChange: () => undefined,
         initialConnection: createMockConnection({ storeName: "宏发演示店" }),
       }),
@@ -166,6 +188,8 @@ test("CounterShell print indicator idle by default (self-managed SSR first paint
       createElement(CounterShell, {
         session: sampleSession,
         authClient: createMockAuthClient(),
+        commandClient: createMockCommandClient(),
+        queryClient: createMockQueryClient(),
         onSessionChange: () => undefined,
         initialConnection: createMockConnection({ storeName: "宏发演示店" }),
       }),

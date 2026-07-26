@@ -5,8 +5,16 @@ import { setDeviceIdForTests } from "./device-id.js";
 import { assertNoAuthSecretsInWebStorage, webStorageHasAuthSecrets } from "./storage-guard.js";
 import { hasLoginFieldErrors, validateLoginForm } from "./validate-login.js";
 import { validatePin } from "./validate-pin.js";
+import type { SessionView } from "./types.js";
 
 const DEVICE = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+type TokenBearingCandidate = Omit<SessionView, "access_token"> & Readonly<{ access_token: string }>;
+type TokenBearingViewAssignable = TokenBearingCandidate extends SessionView ? true : false;
+const TOKEN_BEARING_VIEW_ASSIGNABLE: TokenBearingViewAssignable = false;
+
+test("SessionView type rejects a credential-bearing structural subtype", () => {
+  assert.equal(TOKEN_BEARING_VIEW_ASSIGNABLE, false);
+});
 
 test("validateLoginForm rejects empty fields", () => {
   const errors = validateLoginForm({
@@ -40,7 +48,7 @@ test("validatePin enforces 4-8 digits", () => {
   assert.equal(validatePin("12345678"), null);
 });
 
-test("mock login success returns memory_only session and no web storage write", async () => {
+test("mock login success returns a token-free session view and no web storage write", async () => {
   setDeviceIdForTests(DEVICE);
   const client = createMockAuthClient({ validPassword: "demo" });
   const result = await client.login({
@@ -51,9 +59,11 @@ test("mock login success returns memory_only session and no web storage write", 
   });
   assert.equal(result.ok, true);
   if (!result.ok) return;
-  assert.equal(result.data.storage, "memory_only");
-  assert.equal(result.data.token_type, "Bearer");
-  assert.ok(result.data.access_token.includes("."));
+  assert.deepEqual(Object.keys(result.data).sort(), ["display", "features", "role", "session"]);
+  assert.doesNotMatch(
+    JSON.stringify(result.data),
+    /access_token|refresh_token|authorization|cookie|header/iu,
+  );
   assert.equal(result.data.session.device_id, DEVICE);
   assert.equal(result.data.role, "admin");
   assert.equal(result.data.features.ai_enabled, true);
@@ -76,7 +86,7 @@ test("mock login as staff returns subset features", async () => {
   assert.equal(result.data.role, "staff");
   assert.equal(result.data.features.ai_enabled, false);
   assert.equal(result.data.features.member_enabled, true);
-  assert.equal(result.data.storage, "memory_only");
+  assert.doesNotMatch(JSON.stringify(result.data), /access_token|refresh_token|storage/iu);
   assertNoAuthSecretsInWebStorage();
 });
 test("mock login failure does not return a token", async () => {
@@ -126,7 +136,7 @@ test("PIN challenge + verify switches staff without web storage", async () => {
   if (!verified.ok) return;
   assert.equal(verified.data.session.staff_id, target.staff_id);
   assert.equal(verified.data.display.staff_name, target.display_name);
-  assert.equal(verified.data.storage, "memory_only");
+  assert.doesNotMatch(JSON.stringify(verified.data), /access_token|refresh_token|storage/iu);
   assert.equal(verified.data.role, target.role);
   assert.equal(typeof verified.data.features.ai_enabled, "boolean");
   assertNoAuthSecretsInWebStorage();

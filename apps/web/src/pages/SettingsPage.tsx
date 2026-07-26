@@ -6,13 +6,13 @@
 import { Button, Input, useToast } from "@laundry/ui";
 import { useCallback, useState } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
-import type { AccessSession } from "../auth/types.js";
+import type { SessionView } from "../auth/types.js";
 import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort } from "../commands/types.js";
 import { StepUpConfirmDialog } from "../shell/StepUpConfirmDialog.js";
 
 export type SettingsPageProps = {
-  session: AccessSession;
+  session: SessionView;
   authClient: AuthClient;
   commandClient: CommandPort;
 };

@@ -1,10 +1,25 @@
 /**
  * Browser-facing auth shapes aligned with A5 contracts
  * (`packages/contracts/src/auth/operations.ts`).
- * Access tokens stay memory-only — never Web Storage / cookies from SPA code.
+ * Transport credentials are deliberately absent from every exported UI view.
  */
 
 import type { StaffRole } from "./permissions.js";
+
+type CredentialFreeView = Readonly<{
+  access_token?: never;
+  refresh_token?: never;
+  token_type?: never;
+  expires_in?: never;
+  storage?: never;
+  authorization?: never;
+  cookie?: never;
+  cookies?: never;
+  header?: never;
+  headers?: never;
+  csrf?: never;
+  csrf_token?: never;
+}>;
 
 export type LoginFormValues = Readonly<{
   org_code: string;
@@ -26,14 +41,11 @@ export type BrowserSessionView = Readonly<{
   staff_id: string;
   device_id: string;
   permission_version: number;
-}>;
+}> &
+  CredentialFreeView;
 
-/** Memory-held access session (A5: storage = memory_only). */
-export type AccessSession = Readonly<{
-  access_token: string;
-  token_type: "Bearer";
-  expires_in: number;
-  storage: "memory_only";
+/** Token-free session projection safe for React state and renderer bridges. */
+export type SessionView = Readonly<{
   session: BrowserSessionView;
   /**
    * Server-owned IA projection consumed by the UI gate; C8 still enforces.
@@ -44,14 +56,16 @@ export type AccessSession = Readonly<{
    * They shape UI only; C8 still enforces.
    */
   features: Readonly<Record<string, boolean>>;
-  /** Server-owned UI labels adjacent to the access-token response. */
+  /** Server-owned UI labels returned beside the private transport credentials. */
   display: Readonly<{
     store_name: string;
     staff_name: string;
     org_code: string;
     store_code: string;
-  }>;
-}>;
+  }> &
+    CredentialFreeView;
+}> &
+  CredentialFreeView;
 
 export type PinChallengeRequest =
   | Readonly<{

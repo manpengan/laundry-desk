@@ -1,0 +1,8 @@
+{
+  "extends": "../../packages/config/tsconfig/web.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["host/**/*.ts", "host/**/*.tsx", "src/**/*.ts", "src/**/*.tsx"]
+}

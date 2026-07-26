@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { PrintJobSummary } from "@laundry/ui";
 import type { AuthClient } from "../auth/AuthClient.js";
 import { filterNavItems, permissionContextFrom } from "../auth/permissions.js";
-import type { AccessSession } from "../auth/types.js";
-import { createHttpCommandClient, createMockCommandClient } from "../commands/command-client.js";
-import { createHttpQueryClient, createMockQueryClient } from "../commands/query-client.js";
+import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { createMockConnection, type ConnectionStatus } from "../connection.js";
 import type { NavItemId } from "../nav.js";
@@ -23,9 +21,11 @@ import { TopBar } from "./TopBar.js";
 import { usePrintJobSummary } from "./use-print-job-summary.js";
 
 export type CounterShellProps = {
-  session: AccessSession;
+  session: SessionView;
   authClient: AuthClient;
-  onSessionChange: (session: AccessSession | null) => void;
+  commandClient: CommandPort;
+  queryClient: QueryPort;
+  onSessionChange: (session: SessionView | null) => void;
   initialConnection?: ConnectionStatus;
   initialTheme?: ThemePreference;
   initialNav?: NavItemId;
@@ -38,12 +38,6 @@ export type CounterShellProps = {
   printSummary?: PrintJobSummary;
   /** Simulate first-paint skeleton once (ms). 0 = off. */
   initialLoadingMs?: number;
-  /** When set, settings R5 demo uses real HTTP command bus. */
-  apiBaseUrl?: string;
-  /** Inject command port (tests / mock). */
-  commandClient?: CommandPort;
-  /** Inject query port (tests / mock). */
-  queryClient?: QueryPort;
 };
 
 function readSystemDark(): boolean {
@@ -52,7 +46,7 @@ function readSystemDark(): boolean {
 }
 
 function connectionFromSession(
-  session: AccessSession,
+  session: SessionView,
   initial: ConnectionStatus | undefined,
 ): ConnectionStatus {
   const base = initial ?? createMockConnection();
@@ -74,9 +68,8 @@ export function CounterShell({
   documentRef = null,
   printSummary: printSummaryProp,
   initialLoadingMs = 0,
-  apiBaseUrl = "",
-  commandClient: commandClientProp,
-  queryClient: queryClientProp,
+  commandClient,
+  queryClient,
 }: CounterShellProps) {
   const [expanded, setExpanded] = useState(false);
   const [activeId, setActiveId] = useState<NavItemId>(initialNav);
@@ -90,28 +83,6 @@ export function CounterShell({
     [session, initialConnection],
   );
   const dark = systemDark ?? readSystemDark();
-
-  const commandClient = useMemo(() => {
-    if (commandClientProp !== undefined) return commandClientProp;
-    if (apiBaseUrl.length > 0) {
-      return createHttpCommandClient({
-        apiBaseUrl,
-        getAccessToken: () => session.access_token,
-      });
-    }
-    return createMockCommandClient();
-  }, [apiBaseUrl, commandClientProp, session.access_token]);
-
-  const queryClient = useMemo(() => {
-    if (queryClientProp !== undefined) return queryClientProp;
-    if (apiBaseUrl.length > 0) {
-      return createHttpQueryClient({
-        apiBaseUrl,
-        getAccessToken: () => session.access_token,
-      });
-    }
-    return createMockQueryClient();
-  }, [apiBaseUrl, queryClientProp, session.access_token]);
 
   const printSummary = usePrintJobSummary(queryClient, printSummaryProp);
 

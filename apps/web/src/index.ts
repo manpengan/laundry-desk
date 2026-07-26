@@ -63,6 +63,7 @@ export { LoginPage, type LoginPageProps } from "./pages/LoginPage.js";
 export { pageCopy, type PageCopy } from "./pages/page-copy.js";
 export {
   createMockAuthClient,
+  type AuthPort,
   type AuthClient,
   type MockAuthClientOptions,
 } from "./auth/AuthClient.js";
@@ -83,17 +84,30 @@ export {
 } from "./commands/query-client.js";
 export type { CommandFailure, CommandPort, CommandResult, QueryPort } from "./commands/types.js";
 export type {
-  AccessSession,
   AuthError,
   AuthResult,
+  BrowserSessionView,
   LoginFormValues,
   LoginRequest,
   PinChallengeRequest,
   PinChallengeResponse,
   PinVerifyRequest,
+  SessionView,
   StepUpProofResult,
   SwitchableStaff,
 } from "./auth/types.js";
+export type { AppPorts, HealthError, HealthPort, HealthReady, HealthResult } from "./host/types.js";
+export { createBrowserPorts, type BrowserPortsOptions } from "./host/browser-ports.js";
+export { createDesktopPorts, type LaundryDesktopBridge } from "./host/desktop-ports.js";
+export {
+  createServiceGateController,
+  ServiceGate,
+  ServiceGateView,
+  type ServiceGateController,
+  type ServiceGateProps,
+  type ServiceGateState,
+  type ServiceGateViewProps,
+} from "./host/ServiceGate.js";
 export {
   FULL_STORE_FEATURES,
   STAFF_STORE_FEATURES,

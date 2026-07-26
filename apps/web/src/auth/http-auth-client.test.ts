@@ -100,6 +100,10 @@ function loginFailureResponse(message = "用户名或密码错误"): Response {
   );
 }
 
+function createTestClient(fetchImpl: typeof fetch) {
+  return createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787", fetchImpl });
+}
+
 test("login rejects an access response that omits the server session projection", async () => {
   let directoryCalls = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -113,10 +117,7 @@ test("login rejects an access response that omits the server session projection"
     }
     return new Response("not found", { status: 404 });
   };
-  const client = createHttpAuthClient({
-    apiBaseUrl: "http://127.0.0.1:8787",
-    fetchImpl,
-  });
+  const client = createTestClient(fetchImpl);
 
   const result = await client.login(loginValues());
 
@@ -153,10 +154,7 @@ test("login uses the access response projection even when the staff directory di
     }
     return new Response("not found", { status: 404 });
   };
-  const client = createHttpAuthClient({
-    apiBaseUrl: "http://127.0.0.1:8787",
-    fetchImpl,
-  });
+  const client = createTestClient(fetchImpl);
 
   const result = await client.login(loginValues("form-org"));
 
@@ -232,10 +230,7 @@ test("login rejects malformed or non-strict access response projections", async 
         }
         return new Response("not found", { status: 404 });
       };
-      const client = createHttpAuthClient({
-        apiBaseUrl: "http://127.0.0.1:8787",
-        fetchImpl,
-      });
+      const client = createTestClient(fetchImpl);
 
       const result = await client.login(loginValues());
 
@@ -277,10 +272,7 @@ test("quick switch replaces role features and display from the access response",
     }
     return new Response("not found", { status: 404 });
   };
-  const client = createHttpAuthClient({
-    apiBaseUrl: "http://127.0.0.1:8787",
-    fetchImpl,
-  });
+  const client = createTestClient(fetchImpl);
   assert.equal((await client.login(loginValues())).ok, true);
 
   await withCsrfCookie(async () => {
@@ -359,19 +351,10 @@ async function assertSecondLoginRejectsStaleDirectory(
     }
     return new Response("not found", { status: 404 });
   };
-  const client = createHttpAuthClient({
-    apiBaseUrl: "http://127.0.0.1:8787",
-    fetchImpl,
-  });
-  const credentials = {
-    org_code: "local",
-    store_code: "main",
-    username: "admin",
-    password: "fixture-password",
-  };
+  const client = createTestClient(fetchImpl);
 
-  const first = await client.login(credentials);
-  const second = await client.login(credentials);
+  const first = await client.login(loginValues());
+  const second = await client.login(loginValues());
 
   assert.equal(first.ok, true);
   assert.equal(second.ok, false);
@@ -385,7 +368,7 @@ async function assertSecondLoginRejectsStaleDirectory(
   ]);
 }
 
-test("login returns the server access projection and separately loads the switch directory", async () => {
+test("login returns a token-free view and privately uses the token to load the switch directory", async () => {
   const requests: Array<Readonly<{ path: "login" | "staff"; authorization: string | null }>> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
@@ -410,24 +393,19 @@ test("login returns the server access projection and separately loads the switch
     return new Response("not found", { status: 404 });
   };
 
-  const client = createHttpAuthClient({
-    apiBaseUrl: "http://127.0.0.1:8787",
-    fetchImpl,
-  });
-  const result = await client.login({
-    org_code: "local",
-    store_code: "main",
-    username: "admin",
-    password: "fixture-password",
-  });
+  const client = createTestClient(fetchImpl);
+  const result = await client.login(loginValues());
   assert.equal(result.ok, true);
   if (result.ok) {
-    assert.equal(result.data.storage, "memory_only");
     assert.equal(result.data.role, "admin");
-    assert.equal(result.data.access_token, "aaa.bbb.ccc");
     assert.equal(result.data.features.ai_enabled, false);
     assert.equal(result.data.display.store_name, "服务端门店");
     assert.equal(result.data.display.staff_name, "服务端店长");
+    assert.deepEqual(Object.keys(result.data).sort(), ["display", "features", "role", "session"]);
+    assert.doesNotMatch(
+      JSON.stringify(result.data),
+      /access_token|refresh_token|authorization|cookie|header|aaa\.bbb\.ccc/iu,
+    );
   }
   assert.deepEqual(requests, [
     { path: "login", authorization: null },
@@ -479,16 +457,8 @@ test("an empty switch directory does not replace the access response projection"
     return new Response("not found", { status: 404 });
   };
 
-  const client = createHttpAuthClient({
-    apiBaseUrl: "http://127.0.0.1:8787",
-    fetchImpl,
-  });
-  const result = await client.login({
-    org_code: "local",
-    store_code: "main",
-    username: "admin",
-    password: "fixture-password",
-  });
+  const client = createTestClient(fetchImpl);
+  const result = await client.login(loginValues());
 
   assert.equal(result.ok, true);
   assert.deepEqual(client.listSwitchableStaff(), []);
@@ -501,16 +471,8 @@ test("login surfaces network failure message", async () => {
   const fetchImpl: typeof fetch = async () => {
     throw new Error("offline");
   };
-  const client = createHttpAuthClient({
-    apiBaseUrl: "http://127.0.0.1:8787",
-    fetchImpl,
-  });
-  const result = await client.login({
-    org_code: "local",
-    store_code: "main",
-    username: "admin",
-    password: "fixture-password",
-  });
+  const client = createTestClient(fetchImpl);
+  const result = await client.login(loginValues());
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.match(result.error.message, /本地服务器/);
@@ -519,6 +481,7 @@ test("login surfaces network failure message", async () => {
 
 test("failed relogin clears the prior token before a later PIN request", async () => {
   let loginCalls = 0;
+  let logoutCalls = 0;
   const pinAuthorizations: Array<string | null> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
@@ -526,6 +489,10 @@ test("failed relogin clears the prior token before a later PIN request", async (
     if (url.endsWith("/api/v2/auth/login") && init?.method === "POST") {
       loginCalls += 1;
       return loginCalls === 1 ? loginResponse("old.token.sig") : loginFailureResponse();
+    }
+    if (url.endsWith("/api/v2/auth/logout")) {
+      logoutCalls += 1;
+      return successResponse({ logged_out: true });
     }
     if (url.endsWith("/api/v2/auth/pin/challenges")) {
       pinAuthorizations.push(new Headers(init?.headers).get("authorization"));
@@ -544,7 +511,7 @@ test("failed relogin clears the prior token before a later PIN request", async (
     }
     return new Response("not found", { status: 404 });
   };
-  const client = createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787", fetchImpl });
+  const client = createTestClient(fetchImpl);
 
   assert.equal((await client.login(loginValues())).ok, true);
   assert.equal((await client.login(loginValues())).ok, false);
@@ -559,6 +526,7 @@ test("failed relogin clears the prior token before a later PIN request", async (
     if (!pin.ok) assert.match(pin.error.message, /未登录/u);
   });
   assert.deepEqual(pinAuthorizations, []);
+  assert.equal(logoutCalls, 0, "an ordinary 401 must not log out an established cookie session");
 });
 
 test("a delayed stale failure cannot clear a newer successful login", async () => {
@@ -589,7 +557,7 @@ test("a delayed stale failure cannot clear a newer successful login", async () =
     }
     return new Response("not found", { status: 404 });
   };
-  const client = createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787", fetchImpl });
+  const client = createTestClient(fetchImpl);
 
   const staleAttempt = client.login(loginValues("old-org"));
   await staleDirectoryStarted.promise;
@@ -614,59 +582,119 @@ test("a delayed stale failure cannot clear a newer successful login", async () =
   assert.deepEqual(pinAuthorizations, ["Bearer new.token.sig"]);
 });
 
-test("login POSTs are serialized so the later request owns cookies and client state", async () => {
+test("a superseded successful login is logged out before a queued login failure", async () => {
   const staleLogin = createDeferred<Response>();
   const staleLoginStarted = createDeferred<void>();
   let loginCalls = 0;
-  const directoryAuthorizations: Array<string | null> = [];
-  const pinAuthorizations: Array<string | null> = [];
+  const requestOrder: string[] = [];
+  const cleanupRequests: Array<Readonly<Record<string, unknown>>> = [];
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
     if (url.endsWith("/api/v2/auth/login")) {
       loginCalls += 1;
+      requestOrder.push(`login:${loginCalls}`);
       if (loginCalls === 1) {
         staleLoginStarted.resolve();
         return staleLogin.promise;
       }
-      return loginResponse("new.token.sig");
+      return loginFailureResponse("new login rejected");
     }
-    if (url.endsWith("/api/v2/local/staff")) {
-      const authorization = new Headers(init?.headers).get("authorization");
-      directoryAuthorizations.push(authorization);
-      return staffDirectoryResponse(authorization === "Bearer new.token.sig" ? "新店长" : "旧店长");
-    }
-    if (url.endsWith("/api/v2/auth/pin/challenges/challenge-1/verify")) {
-      pinAuthorizations.push(new Headers(init?.headers).get("authorization"));
-      return loginResponse("rotated.token.sig");
+    if (url.endsWith("/api/v2/auth/logout")) {
+      requestOrder.push("logout");
+      const headers = new Headers(init?.headers);
+      cleanupRequests.push({
+        url,
+        method: init?.method,
+        credentials: init?.credentials,
+        authorization: headers.get("authorization"),
+        csrf: headers.get("x-csrf-token"),
+      });
+      throw new Error("cleanup-private-sentinel");
     }
     return new Response("not found", { status: 404 });
   };
-  const client = createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787", fetchImpl });
-
-  const staleAttempt = client.login(loginValues("old-org"));
-  await staleLoginStarted.promise;
-  const currentAttempt = client.login(loginValues("new-org"));
-  const loginCallsBeforeFirstResponse = loginCalls;
-  staleLogin.resolve(loginResponse("old.token.sig"));
-  const [staleResult, currentResult] = await Promise.all([staleAttempt, currentAttempt]);
-
-  assert.equal(loginCallsBeforeFirstResponse, 1);
-  assert.equal(loginCalls, 2);
-  assert.equal(currentResult.ok, true);
-  assert.equal(staleResult.ok, false);
-  if (!staleResult.ok) assert.match(staleResult.error.message, /取代|取消/u);
-  assert.equal(client.listSwitchableStaff()[0]?.display_name, "新店长");
+  const client = createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787/", fetchImpl });
 
   await withCsrfCookie(async () => {
-    const pin = await client.verifyPin({ challenge_id: "challenge-1", pin: "1234" });
-    assert.equal(pin.ok, true);
-    if (pin.ok) {
-      assert.equal(pin.data.display.staff_name, "服务端店长");
-      assert.equal(pin.data.display.org_code, "server-org");
-    }
+    const staleAttempt = client.login(loginValues("old-org"));
+    await staleLoginStarted.promise;
+    const currentAttempt = client.login(loginValues("new-org"));
+    assert.equal(loginCalls, 1);
+    staleLogin.resolve(loginResponse("old.token.sig"));
+    const [staleResult, currentResult] = await Promise.all([staleAttempt, currentAttempt]);
+
+    assert.equal(staleResult.ok, false);
+    if (!staleResult.ok) assert.equal(staleResult.error.message, "登录请求已被新的登录操作取代");
+    assert.equal(currentResult.ok, false);
+    if (!currentResult.ok) assert.equal(currentResult.error.message, "new login rejected");
   });
-  assert.deepEqual(directoryAuthorizations, ["Bearer new.token.sig"]);
-  assert.deepEqual(pinAuthorizations, ["Bearer new.token.sig"]);
+
+  assert.equal(loginCalls, 2);
+  assert.deepEqual(requestOrder, ["login:1", "logout", "login:2"]);
+  assert.deepEqual(cleanupRequests, [
+    {
+      url: "http://127.0.0.1:8787/api/v2/auth/logout",
+      method: "POST",
+      credentials: "include",
+      authorization: null,
+      csrf: "csrf-token",
+    },
+  ]);
+  assert.deepEqual(client.listSwitchableStaff(), []);
+});
+
+test("401 and step-up preserve auth while malformed quick-switch logs out", async () => {
+  let logoutCalls = 0;
+  let accessToken: string | null = null;
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/api/v2/auth/login")) return loginResponse("initial.token.sig");
+    if (url.endsWith("/api/v2/local/staff")) return staffDirectoryResponse();
+    if (url.endsWith("/api/v2/auth/pin/challenges/step-up/verify")) {
+      return successResponse({ unexpected: true });
+    }
+    if (url.endsWith("/api/v2/auth/pin/challenges/rejected/verify")) {
+      return loginFailureResponse();
+    }
+    if (url.endsWith("/api/v2/auth/pin/challenges/quick-switch/verify")) {
+      return successResponse({ malformed: true });
+    }
+    if (url.endsWith("/api/v2/auth/logout")) {
+      logoutCalls += 1;
+      return successResponse({ logged_out: true });
+    }
+    return new Response("not found", { status: 404 });
+  };
+  const client = createHttpAuthClient({
+    apiBaseUrl: "http://127.0.0.1:8787",
+    fetchImpl,
+    credentialStore: {
+      getAccessToken: () => accessToken,
+      replaceAccessToken: (next) => {
+        accessToken = next;
+      },
+      readCsrf: () => "csrf-token",
+    },
+  });
+  assert.equal((await client.login(loginValues())).ok, true);
+  assert.equal(accessToken, "initial.token.sig");
+
+  const stepUp = await client.verifyStepUpPin({ challenge_id: "step-up", pin: "1234" });
+  assert.equal(stepUp.ok, false);
+  assert.equal(logoutCalls, 0);
+  assert.equal(accessToken, "initial.token.sig");
+  assert.equal(client.listSwitchableStaff().length, 1);
+
+  const rejected = await client.verifyPin({ challenge_id: "rejected", pin: "0000" });
+  assert.equal(rejected.ok, false);
+  assert.equal(logoutCalls, 0);
+  assert.equal(accessToken, "initial.token.sig");
+
+  const switched = await client.verifyPin({ challenge_id: "quick-switch", pin: "1234" });
+  assert.equal(switched.ok, false);
+  assert.equal(logoutCalls, 1);
+  assert.equal(accessToken, null);
+  assert.deepEqual(client.listSwitchableStaff(), []);
 });
 
 test("quick-switch and relogin share one complete cookie-mutation queue", async () => {
@@ -698,7 +726,7 @@ test("quick-switch and relogin share one complete cookie-mutation queue", async 
     }
     return new Response("not found", { status: 404 });
   };
-  const client = createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787", fetchImpl });
+  const client = createTestClient(fetchImpl);
   assert.equal((await client.login(loginValues())).ok, true);
 
   await withCsrfCookie(async () => {
@@ -747,7 +775,7 @@ test("a second queued quick-switch is discarded before it can replace cookies", 
     }
     return new Response("not found", { status: 404 });
   };
-  const client = createHttpAuthClient({ apiBaseUrl: "http://127.0.0.1:8787", fetchImpl });
+  const client = createTestClient(fetchImpl);
   assert.equal((await client.login(loginValues())).ok, true);
 
   await withCsrfCookie(async () => {

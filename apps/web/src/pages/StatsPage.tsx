@@ -5,7 +5,7 @@
 import { Button, Input, MoneyText, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
-import type { AccessSession } from "../auth/types.js";
+import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { downloadDaySummaryCsv } from "./day-summary-csv.js";
 import { ShiftClosePanel } from "./ShiftClosePanel.js";
@@ -26,7 +26,7 @@ export type StatsPageProps = {
   /** Optional command bus for shift.close 交班. */
   commandClient?: CommandPort;
   /** Optional: manager step-up for POLICY_STEP_UP_REQUIRED on shift.close. */
-  session?: AccessSession;
+  session?: SessionView;
   authClient?: AuthClient;
   /** Override default UTC business date (tests). */
   defaultDate?: string;

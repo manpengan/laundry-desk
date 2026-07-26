@@ -5,22 +5,21 @@ import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
 import { App } from "../App.js";
 import { createMockConnection } from "../connection.js";
+import { createMockCommandClient } from "../commands/command-client.js";
+import { createMockQueryClient } from "../commands/query-client.js";
+import type { AppPorts } from "../host/types.js";
 import { LoginPage } from "../pages/LoginPage.js";
 import { PinSwitchDialog } from "../shell/PinSwitchDialog.js";
 import { createMockAuthClient } from "./AuthClient.js";
 import { setDeviceIdForTests } from "./device-id.js";
 import { FULL_STORE_FEATURES } from "./permissions.js";
-import type { AccessSession } from "./types.js";
+import type { SessionView } from "./types.js";
 import { assertNoAuthSecretsInWebStorage } from "./storage-guard.js";
 
 const DEVICE = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 
-function sampleSession(): AccessSession {
+function sampleSession(): SessionView {
   return Object.freeze({
-    access_token: "eyJhbGciOiJub25lIn0.e30.mocksig",
-    token_type: "Bearer" as const,
-    expires_in: 900,
-    storage: "memory_only" as const,
     session: Object.freeze({
       session_id: "aaaaaaaa-bbbb-4ccc-8ddd-111111111111",
       session_version: 1,
@@ -37,6 +36,17 @@ function sampleSession(): AccessSession {
       staff_name: "店员甲",
       org_code: "ORG",
       store_code: "S1",
+    }),
+  });
+}
+
+function appPorts(auth = createMockAuthClient()): AppPorts {
+  return Object.freeze({
+    auth,
+    command: createMockCommandClient(),
+    query: createMockQueryClient(),
+    health: Object.freeze({
+      get: async () => ({ ok: true as const, data: { status: "ready" as const } }),
     }),
   });
 }
@@ -63,7 +73,11 @@ test("LoginPage SSR renders required fields", () => {
 
 test("App unauthenticated renders login, not counter shell", () => {
   const html = renderToStaticMarkup(
-    createElement(App, { enableLiquidGlass: false, initialSession: null }),
+    createElement(App, {
+      ports: appPorts(),
+      enableLiquidGlass: false,
+      initialSession: null,
+    }),
   );
   assert.match(html, /data-page="login"/);
   assert.doesNotMatch(html, /data-shell="counter"/);
@@ -72,6 +86,7 @@ test("App unauthenticated renders login, not counter shell", () => {
 test("App with session renders counter shell and switch affordance", () => {
   const html = renderToStaticMarkup(
     createElement(App, {
+      ports: appPorts(),
       enableLiquidGlass: false,
       initialSession: sampleSession(),
       connection: createMockConnection({ mode: "online", pendingSyncCount: 0 }),
@@ -99,8 +114,8 @@ test("successful mock login yields session usable as App initialSession", async 
   if (!result.ok) return;
   const html = renderToStaticMarkup(
     createElement(App, {
+      ports: appPorts(client),
       enableLiquidGlass: false,
-      authClient: client,
       initialSession: result.data,
     }),
   );
@@ -121,8 +136,8 @@ test("failed mock login leaves App on login route shape", async () => {
   assert.equal(result.ok, false);
   const html = renderToStaticMarkup(
     createElement(App, {
+      ports: appPorts(client),
       enableLiquidGlass: false,
-      authClient: client,
       initialSession: null,
     }),
   );

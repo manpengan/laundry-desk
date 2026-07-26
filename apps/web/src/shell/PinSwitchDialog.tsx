@@ -1,7 +1,7 @@
 import { Button, Dialog, Input, useToast } from "@laundry/ui";
 import { useCallback, useState } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
-import type { AccessSession, SwitchableStaff } from "../auth/types.js";
+import type { SessionView, SwitchableStaff } from "../auth/types.js";
 import { validatePin } from "../auth/validate-pin.js";
 
 export type PinSwitchDialogProps = {
@@ -9,7 +9,7 @@ export type PinSwitchDialogProps = {
   onClose: () => void;
   authClient: AuthClient;
   currentStaffId: string;
-  onSwitched: (session: AccessSession) => void;
+  onSwitched: (session: SessionView) => void;
 };
 
 export function PinSwitchDialog({

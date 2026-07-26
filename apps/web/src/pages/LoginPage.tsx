@@ -1,12 +1,12 @@
 import { Button, Input, useToast } from "@laundry/ui";
 import { useCallback, useState, type FormEvent } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
-import type { AccessSession, LoginFormValues } from "../auth/types.js";
+import type { LoginFormValues, SessionView } from "../auth/types.js";
 import { hasLoginFieldErrors, validateLoginForm } from "../auth/validate-login.js";
 
 export type LoginPageProps = {
   authClient: AuthClient;
-  onSuccess: (session: AccessSession) => void;
+  onSuccess: (session: SessionView) => void;
   /** Optional prefill (local host demo only — never bake secrets into library defaults). */
   initialForm?: Partial<LoginFormValues>;
 };

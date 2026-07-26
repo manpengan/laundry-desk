@@ -6,13 +6,13 @@ import {
 } from "./permissions.js";
 import { getDeviceId } from "./device-id.js";
 import type {
-  AccessSession,
   AuthResult,
   LoginFormValues,
   LoginRequest,
   PinChallengeRequest,
   PinChallengeResponse,
   PinVerifyRequest,
+  SessionView,
   StepUpProofResult,
   SwitchableStaff,
 } from "./types.js";
@@ -21,17 +21,19 @@ import type {
  * Injectable auth port (E1). Real HTTP client lands with C6 + A7 OpenAPI.
  * Implementations must not write access tokens to cookies or Web Storage.
  */
-export type AuthClient = Readonly<{
-  login: (values: LoginFormValues) => Promise<AuthResult<AccessSession>>;
+export type AuthPort = Readonly<{
+  login: (values: LoginFormValues) => Promise<AuthResult<SessionView>>;
   createPinChallenge: (request: PinChallengeRequest) => Promise<AuthResult<PinChallengeResponse>>;
   /** quick_switch: issues replacement session. */
-  verifyPin: (request: PinVerifyRequest) => Promise<AuthResult<AccessSession>>;
+  verifyPin: (request: PinVerifyRequest) => Promise<AuthResult<SessionView>>;
   /** step_up: issues proof without switching actor. */
   verifyStepUpPin: (request: PinVerifyRequest) => Promise<AuthResult<StepUpProofResult>>;
   listSwitchableStaff: () => readonly SwitchableStaff[];
 }>;
 
-const ACCESS_TTL = 900;
+/** Compatibility alias while callers migrate to the host-port terminology. */
+export type AuthClient = AuthPort;
+
 const PIN_MAX_ATTEMPTS = 5;
 
 const DEMO_STAFF: readonly SwitchableStaff[] = Object.freeze([
@@ -68,29 +70,6 @@ export type MockAuthClientOptions = Readonly<{
   staffFeatures?: StoreFeatureFlags;
 }>;
 
-function toBase64Url(text: string): string {
-  const bytes = new TextEncoder().encode(text);
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  let b64: string;
-  if (typeof btoa === "function") {
-    b64 = btoa(binary);
-  } else {
-    // Node unit-test path (no DOM btoa). Keep pure hex fallback — still three segments.
-    b64 = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-  }
-  return b64.replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
-}
-
-function compactToken(subject: string): string {
-  // Shape-compatible compact JWT (not cryptographically real).
-  const h = "eyJhbGciOiJub25lIn0";
-  const p = toBase64Url(JSON.stringify({ sub: subject }));
-  return `${h}.${p}.mocksig`;
-}
-
 function uuidFromSeed(seed: string): string {
   const hex = seed
     .replace(/[^a-f0-9]/giu, "")
@@ -124,13 +103,9 @@ function buildSession(
   role: StaffRole,
   features: Readonly<Record<string, boolean>>,
   sessionVersion = 1,
-): AccessSession {
+): SessionView {
   const sessionId = uuidFromSeed(`sess${values.username}${sessionVersion}`);
   return Object.freeze({
-    access_token: compactToken(staff.staff_id),
-    token_type: "Bearer" as const,
-    expires_in: ACCESS_TTL,
-    storage: "memory_only" as const,
     session: Object.freeze({
       session_id: sessionId,
       session_version: sessionVersion,
@@ -158,7 +133,7 @@ function buildSession(
  * PIN switch applies target staff.role + matching feature pack.
  * UI gate only; C8 enforces.
  */
-export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthClient {
+export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthPort {
   const validPassword = options.validPassword ?? "demo";
   const validPin = options.validPin ?? "1234";
   const staffList = options.staff ?? DEMO_STAFF;
@@ -179,7 +154,7 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthC
   return {
     listSwitchableStaff: () => staffList,
 
-    async login(values: LoginFormValues): Promise<AuthResult<AccessSession>> {
+    async login(values: LoginFormValues): Promise<AuthResult<SessionView>> {
       // Intentionally do not log values.password
       if (options.failLoginWith) {
         return {
@@ -278,7 +253,7 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthC
       };
     },
 
-    async verifyPin(request: PinVerifyRequest): Promise<AuthResult<AccessSession>> {
+    async verifyPin(request: PinVerifyRequest): Promise<AuthResult<SessionView>> {
       if (options.failPinWith) {
         return {
           ok: false,

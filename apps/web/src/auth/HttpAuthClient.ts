@@ -5,16 +5,16 @@
 
 import { getDeviceId } from "./device-id.js";
 import type {
-  AccessSession,
   AuthResult,
   LoginFormValues,
   PinChallengeRequest,
   PinChallengeResponse,
   PinVerifyRequest,
+  SessionView,
   StepUpProofResult,
   SwitchableStaff,
 } from "./types.js";
-import type { AuthClient } from "./AuthClient.js";
+import type { AuthPort } from "./AuthClient.js";
 
 /** Matches packages/contracts CSRF_HEADER_NAME (avoid web→contracts dep for host). */
 const CSRF_HEADER_NAME = "x-csrf-token";
@@ -27,22 +27,37 @@ const EMPTY_STAFF_DIRECTORY: readonly SwitchableStaff[] = Object.freeze([]);
 
 type HttpAuthState = Readonly<{
   staffDirectory: readonly SwitchableStaff[];
-  accessToken: string | null;
 }>;
 
 const EMPTY_AUTH_STATE: HttpAuthState = Object.freeze({
   staffDirectory: EMPTY_STAFF_DIRECTORY,
-  accessToken: null,
 });
+
+/**
+ * Private transport capability shared by browser adapters.
+ * It must never be included in AppPorts or passed into React.
+ */
+export type HttpAuthCredentialStore = Readonly<{
+  getAccessToken: () => string | null;
+  replaceAccessToken: (accessToken: string | null) => void;
+  readCsrf: () => string | null;
+}>;
 
 export type HttpAuthClientOptions = Readonly<{
   /** API origin, e.g. http://127.0.0.1:8787 */
   apiBaseUrl: string;
   /** Optional override for fetch (tests). */
   fetchImpl?: typeof fetch;
+  /** Browser host-owned credential closure. A private fallback is used in isolated tests. */
+  credentialStore?: HttpAuthCredentialStore;
 }>;
 
-function asError(message: string): AuthResult<AccessSession> {
+type ParsedAccessSession = Readonly<{
+  accessToken: string;
+  view: SessionView;
+}>;
+
+function asError(message: string): AuthResult<SessionView> {
   return Object.freeze({
     ok: false as const,
     error: Object.freeze({ code: "AUTH_CLIENT", message }),
@@ -101,7 +116,7 @@ function isUuid(value: unknown): value is string {
   return typeof value === "string" && UUID.test(value);
 }
 
-function readBrowserSession(data: unknown): AccessSession["session"] | null {
+function readBrowserSession(data: unknown): SessionView["session"] | null {
   if (!isRecord(data) || !hasExactKeys(data, BROWSER_SESSION_KEYS)) return null;
   if (
     !isUuid(data.session_id) ||
@@ -125,7 +140,7 @@ function readBrowserSession(data: unknown): AccessSession["session"] | null {
   });
 }
 
-function readFeatures(data: unknown): AccessSession["features"] | null {
+function readFeatures(data: unknown): SessionView["features"] | null {
   if (!isRecord(data)) return null;
   const entries = Object.entries(data);
   if (!entries.every((entry): entry is [string, boolean] => typeof entry[1] === "boolean")) {
@@ -134,7 +149,7 @@ function readFeatures(data: unknown): AccessSession["features"] | null {
   return Object.freeze(Object.fromEntries(entries));
 }
 
-function readDisplay(data: unknown): AccessSession["display"] | null {
+function readDisplay(data: unknown): SessionView["display"] | null {
   if (!isRecord(data) || !hasExactKeys(data, DISPLAY_KEYS)) return null;
   if (
     typeof data.store_name !== "string" ||
@@ -153,7 +168,7 @@ function readDisplay(data: unknown): AccessSession["display"] | null {
 }
 
 /** Strictly consume the complete server-owned access-session projection. */
-function readAccessSession(data: unknown): AccessSession | null {
+function readAccessSession(data: unknown): ParsedAccessSession | null {
   if (!isRecord(data) || !hasExactKeys(data, ACCESS_SESSION_KEYS)) return null;
   if (
     typeof data.access_token !== "string" ||
@@ -170,14 +185,31 @@ function readAccessSession(data: unknown): AccessSession | null {
   const display = readDisplay(data.display);
   if (session === null || features === null || display === null) return null;
   return Object.freeze({
-    access_token: data.access_token,
-    token_type: "Bearer",
-    expires_in: ACCESS_TOKEN_TTL_SECONDS,
-    storage: "memory_only",
-    session,
-    role: data.role,
-    features,
-    display,
+    accessToken: data.access_token,
+    view: Object.freeze({
+      session,
+      role: data.role,
+      features,
+      display,
+    }),
+  });
+}
+
+function defaultReadCsrf(): string | null {
+  if (typeof document === "undefined") return null;
+  // Production: __Host-laundry_csrf; local HTTP: laundry_csrf (Host prefix requires Secure).
+  const match = /(?:^|;\s*)(?:__Host-laundry_csrf|laundry_csrf)=([^;]+)/u.exec(document.cookie);
+  return match?.[1] ?? null;
+}
+
+function createPrivateCredentialStore(): HttpAuthCredentialStore {
+  let accessToken: string | null = null;
+  return Object.freeze({
+    getAccessToken: () => accessToken,
+    replaceAccessToken: (next: string | null) => {
+      accessToken = next;
+    },
+    readCsrf: defaultReadCsrf,
   });
 }
 
@@ -185,18 +217,39 @@ function readAccessSession(data: unknown): AccessSession | null {
  * Create an AuthClient that calls the local Fastify server.
  * Cookie jar is browser-native (`credentials: "include"`).
  */
-export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient {
+export function createHttpAuthClient(options: HttpAuthClientOptions): AuthPort {
   const base = options.apiBaseUrl.replace(/\/$/u, "");
   const fetchImpl = options.fetchImpl ?? fetch;
+  const credentials = options.credentialStore ?? createPrivateCredentialStore();
   let authState = EMPTY_AUTH_STATE;
   let latestLoginAttempt = 0;
   let cookieMutationTail: Promise<void> = Promise.resolve();
 
-  const readCsrf = (): string | null => {
-    if (typeof document === "undefined") return null;
-    // Production: __Host-laundry_csrf; local HTTP: laundry_csrf (Host prefix requires Secure).
-    const match = /(?:^|;\s*)(?:__Host-laundry_csrf|laundry_csrf)=([^;]+)/u.exec(document.cookie);
-    return match?.[1] ?? null;
+  const clearLocalAuth = (): void => {
+    authState = EMPTY_AUTH_STATE;
+    credentials.replaceAccessToken(null);
+  };
+
+  /**
+   * A successful lifecycle response may already have changed browser cookies.
+   * Keep this revocation inside cookieMutationTail; cleanup never replaces the primary auth error.
+   */
+  const failClosedCookieMutation = async (): Promise<void> => {
+    clearLocalAuth();
+    try {
+      const csrf = credentials.readCsrf();
+      const init: RequestInit =
+        csrf === null
+          ? { method: "POST", credentials: "include" }
+          : {
+              method: "POST",
+              credentials: "include",
+              headers: { [CSRF_HEADER_NAME]: csrf },
+            };
+      await fetchImpl(`${base}/api/v2/auth/logout`, init);
+    } catch {
+      // Best effort: local credentials are already gone and the caller retains its primary error.
+    }
   };
 
   const loadStaff = async (accessToken: string): Promise<readonly SwitchableStaff[] | null> => {
@@ -242,17 +295,26 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
     return result;
   };
 
-  const login = (values: LoginFormValues): Promise<AuthResult<AccessSession>> => {
+  const login = (values: LoginFormValues): Promise<AuthResult<SessionView>> => {
     const attempt = ++latestLoginAttempt;
-    authState = EMPTY_AUTH_STATE;
-    const superseded = (): AuthResult<AccessSession> => asError(SUPERSEDED_LOGIN_MESSAGE);
-    const failLatest = (message: string): AuthResult<AccessSession> => {
+    clearLocalAuth();
+    const superseded = (): AuthResult<SessionView> => asError(SUPERSEDED_LOGIN_MESSAGE);
+    const failLatest = (message: string): AuthResult<SessionView> => {
       if (attempt !== latestLoginAttempt) return superseded();
-      authState = EMPTY_AUTH_STATE;
+      clearLocalAuth();
       return asError(message);
+    };
+    const failAfterResponse = async (
+      message: string,
+      cookiesMayHaveChanged: boolean,
+    ): Promise<AuthResult<SessionView>> => {
+      if (!cookiesMayHaveChanged) return failLatest(message);
+      await failClosedCookieMutation();
+      return attempt === latestLoginAttempt ? asError(message) : superseded();
     };
 
     return enqueueCookieMutation(async () => {
+      let cookiesMayHaveChanged = false;
       try {
         const res = await fetchImpl(`${base}/api/v2/auth/login`, {
           method: "POST",
@@ -266,34 +328,45 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
             device_id: getDeviceId(),
           }),
         });
-        if (attempt !== latestLoginAttempt) return superseded();
+        cookiesMayHaveChanged = res.ok;
+        if (attempt !== latestLoginAttempt) {
+          return failAfterResponse(SUPERSEDED_LOGIN_MESSAGE, cookiesMayHaveChanged);
+        }
         const body: unknown = await res.json();
-        if (attempt !== latestLoginAttempt) return superseded();
-        if (!isRecord(body) || body.ok !== true) {
+        if (attempt !== latestLoginAttempt) {
+          return failAfterResponse(SUPERSEDED_LOGIN_MESSAGE, cookiesMayHaveChanged);
+        }
+        if (!res.ok || !isRecord(body) || body.ok !== true) {
           const message =
             isRecord(body) && isRecord(body.error) && typeof body.error.message === "string"
               ? body.error.message
               : "登录失败";
-          return failLatest(message);
+          return failAfterResponse(message, cookiesMayHaveChanged);
         }
-        const session = readAccessSession(body.data);
-        if (session === null) return failLatest("登录响应格式错误");
-        const currentDirectory = await loadStaff(session.access_token);
-        if (attempt !== latestLoginAttempt) return superseded();
+        const parsed = readAccessSession(body.data);
+        if (parsed === null) {
+          return failAfterResponse("登录响应格式错误", cookiesMayHaveChanged);
+        }
+        const currentDirectory = await loadStaff(parsed.accessToken);
+        if (attempt !== latestLoginAttempt) {
+          return failAfterResponse(SUPERSEDED_LOGIN_MESSAGE, cookiesMayHaveChanged);
+        }
         if (currentDirectory === null) {
-          return failLatest("无法从本地服务器加载员工目录");
+          return failAfterResponse("无法从本地服务器加载员工目录", cookiesMayHaveChanged);
         }
-        if (attempt !== latestLoginAttempt) return superseded();
+        if (attempt !== latestLoginAttempt) {
+          return failAfterResponse(SUPERSEDED_LOGIN_MESSAGE, cookiesMayHaveChanged);
+        }
         authState = Object.freeze({
           staffDirectory: currentDirectory,
-          accessToken: session.access_token,
         });
+        credentials.replaceAccessToken(parsed.accessToken);
         return Object.freeze({
           ok: true as const,
-          data: session,
+          data: parsed.view,
         });
       } catch {
-        return failLatest("无法连接本地服务器");
+        return failAfterResponse("无法连接本地服务器", cookiesMayHaveChanged);
       }
     });
   };
@@ -302,9 +375,9 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
     request: PinChallengeRequest,
   ): Promise<AuthResult<PinChallengeResponse>> => {
     const stateAtStart = authState;
-    const accessToken = stateAtStart.accessToken;
+    const accessToken = credentials.getAccessToken();
     if (accessToken === null) return asPinError("未登录");
-    const csrf = readCsrf();
+    const csrf = credentials.readCsrf();
     if (csrf === null) return asPinError("缺少 CSRF cookie");
     try {
       const res = await fetchImpl(`${base}/api/v2/auth/pin/challenges`, {
@@ -345,14 +418,19 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
     }
   };
 
-  const verifyPin = async (request: PinVerifyRequest): Promise<AuthResult<AccessSession>> => {
+  const verifyPin = async (request: PinVerifyRequest): Promise<AuthResult<SessionView>> => {
     const stateAtStart = authState;
-    const accessToken = stateAtStart.accessToken;
+    const accessToken = credentials.getAccessToken();
     if (accessToken === null) return asError("未登录");
     return enqueueCookieMutation(async () => {
       if (authState !== stateAtStart) return asError("认证状态已变更，请重试");
-      const csrf = readCsrf();
+      const csrf = credentials.readCsrf();
       if (csrf === null) return asError("缺少 CSRF cookie");
+      let cookiesMayHaveChanged = false;
+      const failAfterResponse = async (message: string): Promise<AuthResult<SessionView>> => {
+        if (cookiesMayHaveChanged) await failClosedCookieMutation();
+        return asError(message);
+      };
       try {
         const res = await fetchImpl(
           `${base}/api/v2/auth/pin/challenges/${encodeURIComponent(request.challenge_id)}/verify`,
@@ -367,27 +445,30 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
             body: JSON.stringify(request),
           },
         );
+        cookiesMayHaveChanged = res.ok;
         const body: unknown = await res.json();
-        if (!isRecord(body) || body.ok !== true) {
-          return asError("PIN 验证失败");
+        if (!res.ok || !isRecord(body) || body.ok !== true) {
+          return failAfterResponse("PIN 验证失败");
         }
         // step_up responses must not be parsed as session switches.
         if (isRecord(body.data) && typeof body.data.step_up_proof_id === "string") {
           return asError("当前挑战为 step-up，请使用现场复核流程");
         }
-        const session = readAccessSession(body.data);
-        if (session === null) return asError("PIN 验证响应格式错误");
-        if (authState !== stateAtStart) return asError("认证状态已变更，请重试");
+        const parsed = readAccessSession(body.data);
+        if (parsed === null) return failAfterResponse("PIN 验证响应格式错误");
+        if (authState !== stateAtStart) {
+          return failAfterResponse("认证状态已变更，请重试");
+        }
         authState = Object.freeze({
           staffDirectory: stateAtStart.staffDirectory,
-          accessToken: session.access_token,
         });
+        credentials.replaceAccessToken(parsed.accessToken);
         return Object.freeze({
           ok: true as const,
-          data: session,
+          data: parsed.view,
         });
       } catch {
-        return asError("无法连接本地服务器");
+        return failAfterResponse("无法连接本地服务器");
       }
     });
   };
@@ -395,12 +476,12 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthClient
   const verifyStepUpPin = async (
     request: PinVerifyRequest,
   ): Promise<AuthResult<StepUpProofResult>> => {
-    const accessToken = authState.accessToken;
+    const accessToken = credentials.getAccessToken();
     if (accessToken === null) return asStepUpError("未登录");
     const stateAtStart = authState;
     return enqueueCookieMutation(async () => {
       if (authState !== stateAtStart) return asStepUpError("认证状态已变更，请重试");
-      const csrf = readCsrf();
+      const csrf = credentials.readCsrf();
       if (csrf === null) return asStepUpError("缺少 CSRF cookie");
       try {
         const res = await fetchImpl(

@@ -9,7 +9,7 @@
 import { Button, Input, MoneyText, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
-import type { AccessSession } from "../auth/types.js";
+import type { SessionView } from "../auth/types.js";
 import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { StepUpConfirmDialog } from "../shell/StepUpConfirmDialog.js";
@@ -34,7 +34,7 @@ export type ShiftClosePanelProps = {
   /** Skip auto-load on mount (tests). */
   autoLoad?: boolean;
   /** Optional: enable manager step-up dialog for POLICY_STEP_UP_REQUIRED. */
-  session?: AccessSession;
+  session?: SessionView;
   authClient?: AuthClient;
 };
 

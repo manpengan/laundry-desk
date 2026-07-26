@@ -9,25 +9,22 @@ import {
   permissionContextFrom,
 } from "../auth/permissions.js";
 import { createMockAuthClient } from "../auth/AuthClient.js";
-import type { AccessSession } from "../auth/types.js";
+import type { SessionView } from "../auth/types.js";
 import { assertNoAuthSecretsInWebStorage } from "../auth/storage-guard.js";
+import { createMockCommandClient } from "../commands/command-client.js";
+import { createMockQueryClient } from "../commands/query-client.js";
 import { createMockConnection } from "../connection.js";
+import type { AppPorts } from "../host/types.js";
 import { CounterShell } from "../shell/CounterShell.js";
 import { App } from "../App.js";
 import { DENIED_PAGE_COPY, resolveRouteGate, visibleNavItems } from "./route-gate.js";
 import { RouteGate } from "./RouteGate.js";
 
 function sessionOf(
-  role: AccessSession["role"],
-  features: AccessSession["features"] = role === "admin"
-    ? FULL_STORE_FEATURES
-    : STAFF_STORE_FEATURES,
-): AccessSession {
+  role: SessionView["role"],
+  features: SessionView["features"] = role === "admin" ? FULL_STORE_FEATURES : STAFF_STORE_FEATURES,
+): SessionView {
   return Object.freeze({
-    access_token: "eyJhbGciOiJub25lIn0.e30.mocksig",
-    token_type: "Bearer" as const,
-    expires_in: 900,
-    storage: "memory_only" as const,
     session: Object.freeze({
       session_id: "aaaaaaaa-bbbb-4ccc-8ddd-111111111111",
       session_version: 1,
@@ -44,6 +41,17 @@ function sessionOf(
       staff_name: role === "admin" ? "店长" : "店员甲",
       org_code: "ORG",
       store_code: "S1",
+    }),
+  });
+}
+
+function appPorts(): AppPorts {
+  return Object.freeze({
+    auth: createMockAuthClient(),
+    command: createMockCommandClient(),
+    query: createMockQueryClient(),
+    health: Object.freeze({
+      get: async () => ({ ok: true as const, data: { status: "ready" as const } }),
     }),
   });
 }
@@ -97,6 +105,8 @@ test("direct navigation to denied route in CounterShell shows empty/denied state
       createElement(CounterShell, {
         session: sessionOf("staff"),
         authClient: createMockAuthClient(),
+        commandClient: createMockCommandClient(),
+        queryClient: createMockQueryClient(),
         onSessionChange: () => undefined,
         initialNav: "settings",
         initialConnection: createMockConnection({ storeName: "宏发演示店" }),
@@ -122,6 +132,8 @@ test("admin CounterShell sidebar includes all nav ids", () => {
       createElement(CounterShell, {
         session: sessionOf("admin"),
         authClient: createMockAuthClient(),
+        commandClient: createMockCommandClient(),
+        queryClient: createMockQueryClient(),
         onSessionChange: () => undefined,
         initialConnection: createMockConnection(),
       }),
@@ -137,6 +149,7 @@ test("admin CounterShell sidebar includes all nav ids", () => {
 test("App with staff session still memory-only (no tokens in localStorage)", () => {
   const html = renderToStaticMarkup(
     createElement(App, {
+      ports: appPorts(),
       enableLiquidGlass: false,
       initialSession: sessionOf("staff"),
     }),

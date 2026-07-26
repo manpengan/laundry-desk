@@ -1,7 +1,7 @@
 import { EmptyState, Skeleton } from "@laundry/ui";
 import { useState } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
-import type { AccessSession } from "../auth/types.js";
+import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { NavItemId } from "../nav.js";
 import { CustomersPage } from "./CustomersPage.js";
@@ -18,7 +18,7 @@ export type PageHostProps = {
   loading?: boolean;
   onNavigate: (id: NavItemId) => void;
   /** Required for settings R5 step-up demo and M2 order forms. */
-  session?: AccessSession;
+  session?: SessionView;
   authClient?: AuthClient;
   commandClient?: CommandPort;
   /** Optional query bus (catalog price list on receive). */

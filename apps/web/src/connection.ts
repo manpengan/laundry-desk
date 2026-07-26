@@ -1,6 +1,6 @@
 /**
  * Connection strip model for SyncStatusBar.
- * Store/staff labels come from memory AccessSession after E1 login;
+ * Store/staff labels come from the token-free SessionView after E1 login;
  * mode/pending still mock until Edge bridge heartbeat lands.
  */
 

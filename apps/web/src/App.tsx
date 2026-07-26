@@ -1,61 +1,56 @@
 import { installLiquidGlass, ToastProvider } from "@laundry/ui";
-import { useEffect, useMemo, useState } from "react";
-import { createMockAuthClient, type AuthClient } from "./auth/AuthClient.js";
-import type { AccessSession, LoginFormValues } from "./auth/types.js";
+import { useEffect, useState } from "react";
+import type { SessionView, LoginFormValues } from "./auth/types.js";
 import type { ConnectionStatus } from "./connection.js";
+import type { AppPorts } from "./host/types.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { CounterShell, type CounterShellProps } from "./shell/CounterShell.js";
 import type { ThemePreference } from "./theme.js";
 
 export type AppProps = {
+  ports: AppPorts;
   connection?: ConnectionStatus;
   themePreference?: ThemePreference;
   /** Skip liquid-glass install in pure SSR unit tests. */
   enableLiquidGlass?: boolean;
-  /** Injectable auth port (defaults to mock). */
-  authClient?: AuthClient;
-  /** Seed session for tests / host bootstrap; memory only. */
-  initialSession?: AccessSession | null;
+  /** Seed token-free session view for tests only. Production hosts start logged out. */
+  initialSession?: SessionView | null;
   /** Local host demo prefill only. */
   loginInitialForm?: Partial<LoginFormValues>;
-  /** Local server origin for command bus (settings R5 demo). */
-  apiBaseUrl?: string;
 };
 
-function shellPropsFrom(
+export function shellPropsFrom(
   connection: ConnectionStatus | undefined,
   themePreference: ThemePreference | undefined,
-  session: AccessSession,
-  authClient: AuthClient,
-  onSessionChange: (session: AccessSession | null) => void,
-  apiBaseUrl: string | undefined,
+  session: SessionView,
+  ports: AppPorts,
+  onSessionChange: (session: SessionView | null) => void,
 ): CounterShellProps {
   const props: CounterShellProps = {
     session,
-    authClient,
+    authClient: ports.auth,
+    commandClient: ports.command,
+    queryClient: ports.query,
     onSessionChange,
   };
   if (connection !== undefined) props.initialConnection = connection;
   if (themePreference !== undefined) props.initialTheme = themePreference;
-  if (apiBaseUrl !== undefined && apiBaseUrl.length > 0) props.apiBaseUrl = apiBaseUrl;
   return props;
 }
 
 /**
  * Web app root: unauthenticated → LoginPage; authenticated → CounterShell.
- * Access session is React state only (never localStorage/sessionStorage).
+ * React state contains only SessionView; host adapters retain transport credentials.
  */
 export function App({
+  ports,
   connection,
   themePreference,
   enableLiquidGlass = true,
-  authClient: authClientProp,
   initialSession = null,
   loginInitialForm,
-  apiBaseUrl,
 }: AppProps) {
-  const authClient = useMemo(() => authClientProp ?? createMockAuthClient(), [authClientProp]);
-  const [session, setSession] = useState<AccessSession | null>(initialSession);
+  const [session, setSession] = useState<SessionView | null>(initialSession);
 
   useEffect(() => {
     if (enableLiquidGlass && typeof document !== "undefined") {
@@ -67,18 +62,11 @@ export function App({
     <ToastProvider>
       {session ? (
         <CounterShell
-          {...shellPropsFrom(
-            connection,
-            themePreference,
-            session,
-            authClient,
-            setSession,
-            apiBaseUrl,
-          )}
+          {...shellPropsFrom(connection, themePreference, session, ports, setSession)}
         />
       ) : (
         <LoginPage
-          authClient={authClient}
+          authClient={ports.auth}
           onSuccess={setSession}
           {...(loginInitialForm !== undefined ? { initialForm: loginInitialForm } : {})}
         />

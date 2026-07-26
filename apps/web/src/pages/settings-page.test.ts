@@ -8,17 +8,13 @@ import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
 import { createMockAuthClient } from "../auth/AuthClient.js";
 import { FULL_STORE_FEATURES } from "../auth/permissions.js";
-import type { AccessSession } from "../auth/types.js";
+import type { SessionView } from "../auth/types.js";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { PRINTER_PATH_ENV_NAME, SettingsPage } from "./SettingsPage.js";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
-const SESSION: AccessSession = Object.freeze({
-  access_token: "eyJhbGciOiJub25lIn0.e30.mocksig",
-  token_type: "Bearer" as const,
-  expires_in: 900,
-  storage: "memory_only" as const,
+const SESSION: SessionView = Object.freeze({
   session: Object.freeze({
     session_id: "aaaaaaaa-bbbb-4ccc-8ddd-111111111111",
     session_version: 1,

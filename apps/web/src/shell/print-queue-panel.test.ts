@@ -5,7 +5,7 @@ import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
 import { createMockAuthClient } from "../auth/AuthClient.js";
 import { FULL_STORE_FEATURES } from "../auth/permissions.js";
-import type { AccessSession } from "../auth/types.js";
+import type { SessionView } from "../auth/types.js";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
@@ -14,11 +14,7 @@ import { CounterShell } from "./CounterShell.js";
 import { PrintQueuePanel } from "./PrintQueuePanel.js";
 import type { PrintJobView } from "./print-jobs.js";
 
-const sampleSession: AccessSession = Object.freeze({
-  access_token: "eyJhbGciOiJub25lIn0.e30.mocksig",
-  token_type: "Bearer" as const,
-  expires_in: 900,
-  storage: "memory_only" as const,
+const sampleSession: SessionView = Object.freeze({
   session: Object.freeze({
     session_id: "aaaaaaaa-bbbb-4ccc-8ddd-111111111111",
     session_version: 1,
@@ -133,6 +129,8 @@ test("CounterShell with injected printSummary shows failed/queued counts on indi
       createElement(CounterShell, {
         session: sampleSession,
         authClient: createMockAuthClient(),
+        commandClient: createMockCommandClient(),
+        queryClient: createMockQueryClient(),
         onSessionChange: () => undefined,
         initialConnection: createMockConnection({ storeName: "宏发演示店" }),
         printSummary: { queued: 3, failed: 2 },
