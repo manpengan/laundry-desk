@@ -139,6 +139,14 @@ test("records the active V2 file size policy", async () => {
   );
 });
 
+test("keeps the deferred Windows release workflow manual", async () => {
+  const workflow = await readRepositoryFile(".github/workflows/build.yml");
+
+  assert.match(workflow, /^name: Build\/Release$/mu);
+  assert.match(workflow, /^  workflow_dispatch:$/mu);
+  assert.doesNotMatch(workflow, /^  (?:push|pull_request):/mu);
+});
+
 test("keeps Gemini legacy v1 execution guidance inside one forbidden archive block", async () => {
   const gemini = await readRepositoryFile("GEMINI.md");
   const archiveHeading = "## 历史 v1 资料（已归档，禁止执行）";
