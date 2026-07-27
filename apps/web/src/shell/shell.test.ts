@@ -117,7 +117,7 @@ test("PageHost loading exposes aria-busy skeleton", () => {
   assert.match(html, /ld-skeleton/);
 });
 
-test("PageHost workbench with session+queryClient mounts OrdersList", () => {
+test("PageHost workbench with session+queryClient mounts three-pane counter workbench", () => {
   const html = renderToStaticMarkup(
     createElement(
       ToastProvider,
@@ -131,11 +131,11 @@ test("PageHost workbench with session+queryClient mounts OrdersList", () => {
     ),
   );
   assert.match(html, /工作台/);
-  assert.match(html, /近期订单/);
-  assert.match(html, /data-testid="orders-list"/);
-  assert.match(html, /刷新列表/);
-  assert.match(html, /data-testid="debt-section"/);
-  assert.match(html, /data-testid="debt-load-btn"/);
+  assert.match(html, /快捷取衣/);
+  assert.match(html, /今日看板/);
+  assert.match(html, /顾客速查/);
+  assert.match(html, /data-testid="counter-workbench-orders"/);
+  assert.match(html, />刷新</);
   assert.match(html, /欠款/);
 });
 

@@ -3,6 +3,7 @@
  */
 
 import { createCommandError } from "@laundry/contracts";
+import { businessDayAt } from "@laundry/domain";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
@@ -10,6 +11,10 @@ import type { StatsQueryPort } from "./types.js";
 
 export type StatsHandlerDeps = Readonly<{
   source: StatsQueryPort;
+  /** Store calendar settings; omitted only in older isolated tests. */
+  timeZone?: string;
+  rolloverHour?: number;
+  now?: () => Date;
 }>;
 
 const BUSINESS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/u;
@@ -21,7 +26,11 @@ function asRecord(parsed: unknown): Readonly<Record<string, unknown>> {
   return parsed as Readonly<Record<string, unknown>>;
 }
 
-function requireBusinessDate(value: unknown): string {
+function resolveBusinessDate(value: unknown, deps: StatsHandlerDeps): string {
+  if (value === undefined) {
+    return businessDayAt(deps.now?.() ?? new Date(), deps.timeZone ?? "UTC", deps.rolloverHour ?? 0)
+      .business_date;
+  }
   if (typeof value !== "string" || !BUSINESS_DATE_RE.test(value)) {
     throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
   }
@@ -31,7 +40,7 @@ function requireBusinessDate(value: unknown): string {
 function daySummaryHandler(deps: StatsHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
-    const businessDate = requireBusinessDate(input.business_date);
+    const businessDate = resolveBusinessDate(input.business_date, deps);
     const summary = await deps.source.daySummary({
       orgId: ctx.tenant.orgId,
       storeId: ctx.tenant.storeId,

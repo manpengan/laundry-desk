@@ -6483,9 +6483,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "business_date"
-        ],
         "type": "object"
       }
     },
@@ -8209,7 +8206,7 @@
     },
     "/v1/queries/order.list": {
       "post": {
-        "description": "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by UTC business_date, status, exact customer_phone, and/or min_balance_cents (integer fen floor on balance). Debt panel: min_balance_cents=1, limit<=50, omit business_date. Default limit 20, max 50. PII phone masked in audit. Stable query name: `order.list` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by store business_date, status, exact customer_phone, and/or min_balance_cents (integer fen floor on balance). Debt panel: min_balance_cents=1, limit<=50, omit business_date. Default limit 20, max 50. PII phone masked in audit. Stable query name: `order.list` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "query_order_list",
         "requestBody": {
           "content": {
@@ -8573,7 +8570,7 @@
     },
     "/v1/queries/stats.day.summary": {
       "post": {
-        "description": "Return day-level counters and integer-fen sums for orders created on business_date (UTC). max 1 row. Stable query name: `stats.day.summary` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Return day-level counters and integer-fen sums for a store business day. Omit business_date to use the server-derived current day; no client calendar is trusted. max 1 row. Stable query name: `stats.day.summary` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "query_stats_day_summary",
         "requestBody": {
           "content": {
@@ -8612,7 +8609,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "Daily revenue summary for one business date (order and payment aggregates).",
+        "summary": "Daily revenue summary for one business date; omit business_date for the server-derived current store business day.",
         "tags": [
           "queries"
         ],
@@ -8620,7 +8617,7 @@
         "x-laundry-kind": "query",
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R1",
-        "x-laundry-version": "0.2.0"
+        "x-laundry-version": "0.3.0"
       }
     }
   }

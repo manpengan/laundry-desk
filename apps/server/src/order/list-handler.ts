@@ -3,7 +3,6 @@
  */
 
 import { createCommandError } from "@laundry/contracts";
-import { utcDateKeyFromEpoch } from "@laundry/domain";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
@@ -29,7 +28,9 @@ function requireNumber(value: unknown): number {
 
 function optionalStatus(value: unknown): OrderStatus | undefined {
   if (value === undefined) return undefined;
-  if (value === "open" || value === "closed" || value === "cancelled") return value;
+  if (value === "draft" || value === "open" || value === "closed" || value === "cancelled") {
+    return value;
+  }
   throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
 }
 
@@ -59,7 +60,7 @@ function matchesListFilters(
   minBalanceCents: number | undefined,
 ): boolean {
   if (status !== undefined && order.status !== status) return false;
-  if (businessDate !== undefined && utcDateKeyFromEpoch(order.created_at) !== businessDate) {
+  if (businessDate !== undefined && order.business_date !== businessDate) {
     return false;
   }
   if (customerPhone !== undefined && order.customer_phone !== customerPhone) {

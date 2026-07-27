@@ -34,7 +34,12 @@ test("buildReceiveBody rejects float money and empty lines", () => {
   const bad = buildReceiveBody({
     customer_phone: "",
     customer_name: "",
-    paid_cents: "10.5",
+    initial_payment_cents: "10.5",
+    initial_payment_method: "cash",
+    discount_cents: "0",
+    addon_cents: "0",
+    urgent_cents: "0",
+    freight_cents: "0",
     note: "",
     lines: [line],
   });
@@ -43,17 +48,26 @@ test("buildReceiveBody rejects float money and empty lines", () => {
   const ok = buildReceiveBody({
     customer_phone: "13800000111",
     customer_name: "测试",
-    paid_cents: "500",
+    initial_payment_cents: "500",
+    initial_payment_method: "wechat",
+    discount_cents: "100",
+    addon_cents: "0",
+    urgent_cents: "0",
+    freight_cents: "0",
     note: "急",
-    lines: [{ ...line, unit_price_cents: "1500", qty: "2" }],
+    lines: [
+      { ...line, service_code: "wash", category_code: "shirt", unit_price_cents: 1500, qty: "2" },
+    ],
   });
   assert.equal(ok.ok, true);
   if (!ok.ok) return;
-  assert.equal(ok.body.paid_cents, 500);
+  assert.deepEqual(ok.body.initial_payment, { amount_cents: 500, method: "wechat" });
   assert.deepEqual(ok.body.customer_phone, "13800000111");
-  const lines = ok.body.lines as readonly { qty: number; unit_price_cents: number }[];
+  assert.equal(ok.body.discount_cents, 100);
+  const lines = ok.body.lines as readonly { qty: number; unit_price_cents?: number }[];
   assert.equal(lines[0]?.qty, 2);
-  assert.equal(lines[0]?.unit_price_cents, 1500);
+  assert.equal(lines[0]?.unit_price_cents, undefined);
+  assert.equal(ok.previewLines[0]?.unit_price_cents, 1500);
 });
 
 test("buildPickupBody empty garment_ids_text means all pickable (legacy)", () => {

@@ -94,7 +94,7 @@ export const OrderGetInputSchema = z.strictObject({
 });
 
 export const OrderListInputSchema = z.strictObject({
-  /** UTC business day of created_at (YYYY-MM-DD). Omit = all days. */
+  /** Store business day (YYYY-MM-DD). Omit = all days. */
   business_date: BusinessDateSchema.optional(),
   status: OrderStatusSchema.optional(),
   /** Exact match on order.customer_phone after PhoneSchema normalize. */
@@ -250,7 +250,7 @@ export const orderListQuery: QueryDefinition<ListInput> = defineQuery({
   version: "0.2.0",
   description: "List recent store orders for workbench / history / receivables browsing.",
   description_llm:
-    "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by UTC business_date, status, exact customer_phone, and/or min_balance_cents (integer fen floor on balance). Debt panel: min_balance_cents=1, limit<=50, omit business_date. Default limit 20, max 50. PII phone masked in audit.",
+    "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by store business_date, status, exact customer_phone, and/or min_balance_cents (integer fen floor on balance). Debt panel: min_balance_cents=1, limit<=50, omit business_date. Default limit 20, max 50. PII phone masked in audit.",
   input: OrderListInputSchema,
   risk: "R2",
   invariants: [],

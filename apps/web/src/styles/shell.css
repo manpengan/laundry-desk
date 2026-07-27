@@ -1,4 +1,5 @@
 @import "./order-form.css";
+@import "./counter-ui.css";
 
 /* Counter shell layout (UI spec §3). Uses --lg-* tokens from @laundry/ui. */
 

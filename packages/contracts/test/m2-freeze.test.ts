@@ -47,6 +47,10 @@ describe("M2 contract surface", () => {
     expect(
       M2_CONTRACT_DEFINITIONS.find((definition) => definition.name === "shift.close")?.version,
     ).toBe("0.3.0");
+    expect(
+      M2_CONTRACT_DEFINITIONS.find((definition) => definition.name === "stats.day.summary")
+        ?.version,
+    ).toBe("0.3.0");
   });
 
   it("enforces the M2 offline and AI risk matrix", () => {

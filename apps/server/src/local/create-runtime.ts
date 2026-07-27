@@ -305,7 +305,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     }),
     catalog: Object.freeze({ store: createMemoryCatalogStore() }),
     print: Object.freeze({ store: createMemoryPrintJobStore() }),
-    stats: Object.freeze({ source: statsSource }),
+    stats: Object.freeze({ source: statsSource, timeZone: LOCAL_PROFILE.timezone }),
     customer: Object.freeze({ store: customerStore }),
     shift: Object.freeze({
       store: shiftStore,
@@ -393,7 +393,7 @@ export async function createPgLocalRuntime(
         storeId: LOCAL_PROFILE.storeId,
       }),
     }),
-    stats: Object.freeze({ source: statsSource }),
+    stats: Object.freeze({ source: statsSource, timeZone: LOCAL_PROFILE.timezone }),
     customer: Object.freeze({ store: customerStore }),
     shift: Object.freeze({
       store: shiftStore,

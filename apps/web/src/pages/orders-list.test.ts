@@ -7,6 +7,7 @@ import { createMockQueryClient } from "../commands/query-client.js";
 import {
   utcYmd,
   OrdersList,
+  findOrderByCounterKey,
   parseOrderListRows,
   unwrapQueryResult,
   type OrderListRowView,
@@ -50,6 +51,18 @@ test("parseOrderListRows accepts documented result shape", () => {
   assert.equal(parseOrderListRows({ orders: [{ order_id: "x" }] }), null);
   assert.equal(parseOrderListRows(null), null);
   assert.deepEqual(parseOrderListRows({ orders: [] }), []);
+});
+
+test("findOrderByCounterKey matches ticket or exact phone and skips draft ticket", () => {
+  const draft = Object.freeze({
+    ...SAMPLE_ROW,
+    order_id: "draft-1",
+    ticket_no: null,
+    status: "draft",
+  });
+  assert.equal(findOrderByCounterKey([SAMPLE_ROW, draft], "20260722-0001"), SAMPLE_ROW);
+  assert.equal(findOrderByCounterKey([draft, SAMPLE_ROW], "13800000111"), SAMPLE_ROW);
+  assert.equal(findOrderByCounterKey([draft], "20260722-0001"), null);
 });
 
 test("unwrapQueryResult peels bus envelope", () => {

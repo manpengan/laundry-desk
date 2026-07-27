@@ -35,14 +35,14 @@ describe("M2 stats.day.summary skeleton", () => {
     expect(names).not.toContain("stats.day.summary");
   });
 
-  it("parses business_date YYYY-MM-DD", async () => {
+  it("parses an explicit business_date or a server-derived current day request", async () => {
     await expect(
       parseContractInput(statsDaySummaryQuery, { business_date: "2026-07-22" }),
     ).resolves.toEqual({ business_date: "2026-07-22" });
+    await expect(parseContractInput(statsDaySummaryQuery, {})).resolves.toEqual({});
   });
 
   it("rejects invalid business_date", async () => {
-    await expect(parseContractInput(statsDaySummaryQuery, {})).rejects.toBeTruthy();
     await expect(
       parseContractInput(statsDaySummaryQuery, { business_date: "20260722" }),
     ).rejects.toBeTruthy();

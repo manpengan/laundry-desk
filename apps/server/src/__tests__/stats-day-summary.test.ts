@@ -49,7 +49,7 @@ function buildBus(orderStore = createMemoryOrderStore(), fixedNow = () => DAY_EP
       audit: createMemoryAuditQueryStore(),
     }),
     order: Object.freeze({ store: orderStore, catalog: createMemoryCatalogStore(), now: fixedNow }),
-    stats: Object.freeze({ source: statsSource }),
+    stats: Object.freeze({ source: statsSource, now: () => new Date(DAY_EPOCH * 1000) }),
   });
   const pendingStore = new MemoryPendingActionStore();
   const chainHooks = createDefaultChainHooks({}, pendingStore);
@@ -96,6 +96,20 @@ test("stats.day.summary is empty zeros when no orders", async () => {
     payment_cents: 0,
     picked_garment_count: 0,
   });
+});
+
+test("stats.day.summary derives the current business day on the server when omitted", async () => {
+  const { queryRegistry } = buildBus();
+  const listed = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "stats.day.summary",
+    {},
+    { registry: queryRegistry, actor: CLERK },
+  );
+  assert.equal(listed.ok, true, JSON.stringify(listed));
+  if (!listed.ok) return;
+  assert.equal((listed.data.result as { business_date: string }).business_date, BUSINESS_DATE);
 });
 
 test("stats.day.summary aggregates receive orders for the UTC day", async () => {

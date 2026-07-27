@@ -3,15 +3,15 @@
  * Photo section is M3 metadata skeleton (count + placeholder thumbs; no blobs).
  */
 
-import { Button, Drawer, MoneyText, StatusBadge, useToast } from "@laundry/ui";
+import { Button, Drawer, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
-import {
-  parseOrderGetResult,
-  unwrapCommandResult,
-  type OrderGetGarment,
-  type OrderGetResult,
-} from "./order-form.js";
+import { DangerConfirmDialog } from "./DangerConfirmDialog.js";
+import { OrderDetailContent } from "./OrderDetailContent.js";
+import { parseOrderGetResult, unwrapCommandResult, type OrderGetResult } from "./order-form.js";
+
+export { OrderDetailContent, type OrderDetailContentProps } from "./OrderDetailContent.js";
 
 export type OrderDetailDrawerProps = {
   open: boolean;
@@ -40,6 +40,9 @@ export type PhotoMetaRow = Readonly<{
   byte_size: number;
   taken_at: number;
 }>;
+
+type CancelState =
+  Readonly<{ status: "idle" }> | Readonly<{ status: "server_confirmation"; confirmRef: string }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -99,6 +102,9 @@ export function OrderDetailDrawer({
   const [load, setLoad] = useState<OrderDetailLoadState>({ status: "idle" });
   const [photos, setPhotos] = useState<readonly PhotoMetaRow[]>([]);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelState, setCancelState] = useState<CancelState>({ status: "idle" });
   const requestRef = useRef(0);
 
   const loadPhotos = useCallback(
@@ -161,7 +167,7 @@ export function OrderDetailDrawer({
     void loadOrder(orderId);
   }, [open, orderId, loadOrder]);
 
-  const title = load.status === "ready" ? `订单 ${load.order.ticket_no}` : "订单详情";
+  const title = load.status === "ready" ? `订单 ${load.order.ticket_no ?? "挂单"}` : "订单详情";
 
   const handlePickup = useCallback(() => {
     if (orderId === null || orderId.length === 0) return;
@@ -207,6 +213,52 @@ export function OrderDetailDrawer({
       setPhotoBusy(false);
     }
   }, [commandClient, load, loadPhotos, orderId, toast]);
+
+  const closeCancel = useCallback(() => {
+    if (cancelBusy) return;
+    setCancelOpen(false);
+    setCancelState({ status: "idle" });
+  }, [cancelBusy]);
+
+  const handleCancel = useCallback(
+    async (reason: string) => {
+      if (commandClient === undefined || orderId === null || load.status !== "ready") return;
+      setCancelBusy(true);
+      try {
+        const res =
+          cancelState.status === "server_confirmation"
+            ? await commandClient.execute<unknown>(
+                "order.cancel",
+                {},
+                { confirmRef: cancelState.confirmRef },
+              )
+            : await commandClient.execute<unknown>("order.cancel", { order_id: orderId, reason });
+        if (res.ok) {
+          toast.push("订单已撤销，相关流水已按规则反向记账", "success");
+          setCancelOpen(false);
+          setCancelState({ status: "idle" });
+          await loadOrder(orderId);
+          return;
+        }
+        if (cancelState.status === "idle" && isStepUpRequired(res)) {
+          if (res.error.code !== "POLICY_CONFIRMATION_REQUIRED") {
+            toast.push("此撤销需要主管二次授权，请由主管在授权入口完成", "error");
+            return;
+          }
+          setCancelState({
+            status: "server_confirmation",
+            confirmRef: res.error.detail.confirm_ref,
+          });
+          toast.push("服务端要求再次确认", "info");
+          return;
+        }
+        toast.push(res.error.message ?? res.error.code, "error");
+      } finally {
+        setCancelBusy(false);
+      }
+    },
+    [cancelState, commandClient, load.status, loadOrder, orderId, toast],
+  );
 
   return (
     <Drawer open={open} title={title} onClose={onClose} className="ld-order-detail-drawer">
@@ -254,135 +306,31 @@ export function OrderDetailDrawer({
           >
             关闭
           </Button>
+          {commandClient !== undefined &&
+          load.status === "ready" &&
+          load.order.status === "open" ? (
+            <Button
+              variant="danger"
+              type="button"
+              onClick={() => setCancelOpen(true)}
+              disabled={cancelBusy}
+              data-testid="order-detail-cancel-btn"
+            >
+              撤销订单
+            </Button>
+          ) : null}
         </div>
       </div>
+      <DangerConfirmDialog
+        open={cancelOpen}
+        title="撤销订单"
+        description="撤销会关闭订单，并按服务端规则生成可审计的反向流水。此操作不能撤回。"
+        confirmLabel={cancelState.status === "server_confirmation" ? "再次确认撤销" : "确认撤销"}
+        busy={cancelBusy}
+        serverConfirmation={cancelState.status === "server_confirmation"}
+        onClose={closeCancel}
+        onConfirm={(reason) => void handleCancel(reason)}
+      />
     </Drawer>
-  );
-}
-
-export type OrderDetailContentProps = {
-  order: OrderGetResult;
-  photos?: readonly PhotoMetaRow[];
-  onRegisterPhoto?: () => void;
-  registerBusy?: boolean;
-};
-
-/** Pure detail body (exported for SSR tests with seeded order.get payload). */
-export function OrderDetailContent({
-  order,
-  photos = [],
-  onRegisterPhoto,
-  registerBusy = false,
-}: OrderDetailContentProps) {
-  return (
-    <>
-      <section className="ld-order-detail__summary" aria-label="订单摘要">
-        <dl className="ld-order-detail__meta">
-          <div>
-            <dt>票号</dt>
-            <dd data-testid="order-detail-ticket">{order.ticket_no}</dd>
-          </div>
-          <div>
-            <dt>状态</dt>
-            <dd data-testid="order-detail-status">
-              <StatusBadge family="order" status={order.status} />
-            </dd>
-          </div>
-          <div>
-            <dt>客户</dt>
-            <dd data-testid="order-detail-name">{order.customer_name ?? "—"}</dd>
-          </div>
-          <div>
-            <dt>手机</dt>
-            <dd
-              className="ld-order-detail__phone ld-orders-phone-internal"
-              data-testid="order-detail-phone"
-            >
-              {order.customer_phone ?? "—"}
-            </dd>
-          </div>
-          <div>
-            <dt>应付</dt>
-            <dd data-testid="order-detail-payable">
-              <MoneyText fen={order.payable_cents} />
-            </dd>
-          </div>
-          <div>
-            <dt>已付</dt>
-            <dd data-testid="order-detail-paid">
-              <MoneyText fen={order.paid_cents} />
-            </dd>
-          </div>
-          <div>
-            <dt>余额</dt>
-            <dd data-testid="order-detail-balance">
-              <MoneyText fen={order.balance_cents} />
-            </dd>
-          </div>
-        </dl>
-      </section>
-
-      <section className="ld-order-detail__photos" aria-label="照片">
-        <div className="ld-order-detail__section-head">
-          <h3 className="ld-order-detail__section-title">照片</h3>
-          <span className="ld-order-detail__photo-count" data-testid="order-detail-photo-count">
-            {photos.length} 张
-          </span>
-        </div>
-        <div className="ld-order-detail__photo-strip" data-testid="order-detail-photos">
-          {photos.length === 0 ? (
-            <p className="ld-order-detail__photo-empty">暂无照片（元数据骨架）</p>
-          ) : (
-            <ul className="ld-order-detail__photo-list">
-              {photos.map((photo) => (
-                <li
-                  key={photo.photo_id}
-                  className="ld-order-detail__photo-thumb"
-                  data-testid="order-detail-photo-thumb"
-                  title={`${photo.kind} · ${photo.storage_key}`}
-                >
-                  <span className="ld-order-detail__photo-kind">{photo.kind}</span>
-                  <span className="ld-order-detail__photo-bytes">{photo.byte_size} B</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        {onRegisterPhoto !== undefined ? (
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={onRegisterPhoto}
-            disabled={registerBusy || order.garments.length === 0}
-            data-testid="order-detail-register-photo-btn"
-          >
-            {registerBusy ? "登记中…" : "登记照片(骨架)"}
-          </Button>
-        ) : null}
-      </section>
-
-      <section className="ld-order-detail__garments" aria-label="衣物列表">
-        <h3 className="ld-order-detail__section-title">衣物</h3>
-        {order.garments.length === 0 ? (
-          <p className="ld-order-detail__empty">暂无衣物</p>
-        ) : (
-          <ul className="ld-order-detail__garment-list" data-testid="order-detail-garments">
-            {order.garments.map((g) => (
-              <GarmentRow key={g.garment_id} garment={g} />
-            ))}
-          </ul>
-        )}
-      </section>
-    </>
-  );
-}
-
-function GarmentRow({ garment }: { garment: OrderGetGarment }) {
-  return (
-    <li className="ld-order-detail__garment" data-testid="order-detail-garment">
-      <span className="ld-order-detail__barcode">{garment.barcode}</span>
-      <StatusBadge family="garment" status={garment.status} />
-      <MoneyText fen={garment.unit_price_cents} size="sm" />
-    </li>
   );
 }

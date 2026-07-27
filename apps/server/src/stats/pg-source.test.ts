@@ -10,7 +10,7 @@ test("PG stats source uses one aggregate query under store RLS scope", async () 
   const client = {
     async query<TRow>(sql: string): Promise<{ rows: TRow[]; rowCount: number }> {
       queries.push(sql);
-      if (sql.includes("WITH bounds AS")) {
+      if (sql.includes("WITH orders_day AS")) {
         return {
           rows: [
             {
@@ -51,7 +51,7 @@ test("PG stats source uses one aggregate query under store RLS scope", async () 
     payment_cents: 1000,
     picked_garment_count: 1,
   });
-  const aggregate = queries.find((sql) => sql.includes("WITH bounds AS"));
+  const aggregate = queries.find((sql) => sql.includes("WITH orders_day AS"));
   assert.ok(aggregate);
   assert.match(aggregate, /FROM payments p/u);
   assert.match(aggregate, /g\.status = 'picked_up'/u);

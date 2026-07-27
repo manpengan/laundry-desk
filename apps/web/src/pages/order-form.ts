@@ -3,6 +3,8 @@
  * Integer cents only; mirrors packages/contracts Order*InputSchema without a hard dep.
  */
 
+import { parsePricingAdjustments } from "./receive-pricing.js";
+
 const PHONE_RE = /^1[3-9]\d{9}$/u;
 const CODE_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/u;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -11,9 +13,12 @@ export type ReceiveLineDraft = Readonly<{
   key: string;
   service_code: string;
   category_code: string;
-  unit_price_cents: string;
+  /** Catalog display price only. Never sent back as an order.receive input. */
+  unit_price_cents: number | null;
   qty: string;
 }>;
+
+export type PaymentMethod = "cash" | "wechat" | "alipay" | "other";
 
 export type ReceiveGarmentResult = Readonly<{
   garment_id: string;
@@ -54,7 +59,7 @@ export type OrderGetGarment = Readonly<{
 
 export type OrderGetResult = Readonly<{
   order_id: string;
-  ticket_no: string;
+  ticket_no: string | null;
   status: string;
   customer_phone: string | null;
   customer_name: string | null;
@@ -119,7 +124,9 @@ function parseOrderGetGarment(row: unknown): OrderGetGarment | null {
 export function parseOrderGetResult(raw: unknown): OrderGetResult | null {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
   const r = raw as Record<string, unknown>;
-  if (typeof r.order_id !== "string" || typeof r.ticket_no !== "string") return null;
+  if (typeof r.order_id !== "string" || (typeof r.ticket_no !== "string" && r.ticket_no !== null)) {
+    return null;
+  }
   if (typeof r.status !== "string") return null;
   if (typeof r.payable_cents !== "number" || !Number.isInteger(r.payable_cents)) return null;
   if (typeof r.paid_cents !== "number" || !Number.isInteger(r.paid_cents)) return null;
@@ -183,9 +190,9 @@ export function unwrapCommandResult<T>(data: unknown): T | null {
 export function newLineDraft(index: number): ReceiveLineDraft {
   return Object.freeze({
     key: `line-${index}-${Date.now()}`,
-    service_code: "wash",
-    category_code: "shirt",
-    unit_price_cents: "1500",
+    service_code: "",
+    category_code: "",
+    unit_price_cents: null,
     qty: "1",
   });
 }
@@ -198,15 +205,25 @@ export type BuiltReceiveLine = Readonly<{
 }>;
 
 export type BuildReceiveBodyResult =
-  | Readonly<{ ok: true; body: Readonly<Record<string, unknown>> }>
+  | Readonly<{
+      ok: true;
+      body: Readonly<Record<string, unknown>>;
+      previewLines: readonly BuiltReceiveLine[];
+    }>
   | Readonly<{ ok: false; message: string }>;
 
 export function buildReceiveBody(input: {
   customer_phone: string;
   customer_name: string;
-  paid_cents: string;
+  initial_payment_cents: string;
+  initial_payment_method: PaymentMethod;
+  discount_cents: string;
+  addon_cents: string;
+  urgent_cents: string;
+  freight_cents: string;
   note: string;
   lines: readonly ReceiveLineDraft[];
+  draft_id?: string;
 }): BuildReceiveBodyResult {
   if (input.lines.length < 1) {
     return Object.freeze({ ok: false as const, message: "至少添加一行衣物" });
@@ -222,12 +239,11 @@ export function buildReceiveBody(input: {
         message: `第 ${i + 1} 行服务/品类代码无效`,
       });
     }
-    const unit = parseNonNegCents(line.unit_price_cents);
     const qty = parsePositiveInt(line.qty, 50);
-    if (unit === null) {
+    if (line.unit_price_cents === null) {
       return Object.freeze({
         ok: false as const,
-        message: `第 ${i + 1} 行单价须为整数分`,
+        message: `第 ${i + 1} 行请从价目表选择服务`,
       });
     }
     if (qty === null) {
@@ -240,21 +256,47 @@ export function buildReceiveBody(input: {
       Object.freeze({
         service_code: service,
         category_code: category,
-        unit_price_cents: unit,
+        unit_price_cents: line.unit_price_cents,
         qty,
       }),
     );
   }
 
-  const paid = parseNonNegCents(input.paid_cents);
-  if (paid === null) {
-    return Object.freeze({ ok: false as const, message: "已付金额须为整数分（如 0）" });
+  const pricing = parsePricingAdjustments(input);
+  if (pricing.ok === false) return pricing;
+  const originalCents = lines.reduce((total, line) => total + line.unit_price_cents * line.qty, 0);
+  if (!Number.isSafeInteger(originalCents) || pricing.values.discount_cents > originalCents) {
+    return Object.freeze({ ok: false as const, message: "折扣不能超过原价" });
+  }
+  const payableCents =
+    originalCents -
+    pricing.values.discount_cents +
+    pricing.values.addon_cents +
+    pricing.values.urgent_cents +
+    pricing.values.freight_cents;
+  const initialPayment = parseNonNegCents(input.initial_payment_cents);
+  if (initialPayment === null || initialPayment > payableCents) {
+    return Object.freeze({ ok: false as const, message: "首笔收款须为不超过应收的整数分" });
   }
 
   const body: Record<string, unknown> = {
-    lines,
-    paid_cents: paid,
+    lines: lines.map(({ service_code, category_code, qty }) =>
+      Object.freeze({ service_code, category_code, qty }),
+    ),
+    ...pricing.values,
   };
+  if (initialPayment > 0) {
+    body.initial_payment = Object.freeze({
+      amount_cents: initialPayment,
+      method: input.initial_payment_method,
+    });
+  }
+  if (input.draft_id !== undefined) {
+    if (!isValidUuid(input.draft_id)) {
+      return Object.freeze({ ok: false as const, message: "挂单标识无效，请重新暂存" });
+    }
+    body.draft_id = input.draft_id;
+  }
 
   const phone = input.customer_phone.trim();
   if (phone.length > 0) {
@@ -283,7 +325,11 @@ export function buildReceiveBody(input: {
     body.note = note;
   }
 
-  return Object.freeze({ ok: true as const, body: Object.freeze(body) });
+  return Object.freeze({
+    ok: true as const,
+    body: Object.freeze(body),
+    previewLines: Object.freeze(lines),
+  });
 }
 
 export type BuildPickupBodyResult =
@@ -313,7 +359,6 @@ export function buildPickupBody(input: {
   if (collect === null) {
     return Object.freeze({ ok: false as const, message: "收款金额须为整数分" });
   }
-
   let garmentIds: string[] = [];
   if (input.garment_ids !== undefined) {
     garmentIds = [...input.garment_ids];

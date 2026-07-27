@@ -7,13 +7,14 @@ import { z } from "zod";
 
 import { defineQuery, type QueryDefinition } from "../registry/definitions.js";
 
-/** Business calendar day as YYYY-MM-DD (UTC day key when derived from epoch). */
+/** Business calendar day as YYYY-MM-DD. */
 export const BusinessDateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/u, "Expected business_date YYYY-MM-DD");
 
 export const StatsDaySummaryInputSchema = z.strictObject({
-  business_date: BusinessDateSchema,
+  /** Omit to let the server derive the store's current business day. */
+  business_date: BusinessDateSchema.optional(),
 });
 
 /**
@@ -48,10 +49,11 @@ type DaySummaryInput = typeof StatsDaySummaryInputSchema;
 /** 日结汇总：按营业日聚合订单 / 衣物 / 收款（整数分）。 */
 export const statsDaySummaryQuery: QueryDefinition<DaySummaryInput> = defineQuery({
   name: "stats.day.summary",
-  version: "0.2.0",
-  description: "Daily revenue summary for one business date (order and payment aggregates).",
+  version: "0.3.0",
+  description:
+    "Daily revenue summary for one business date; omit business_date for the server-derived current store business day.",
   description_llm:
-    "Return day-level counters and integer-fen sums for orders created on business_date (UTC). max 1 row.",
+    "Return day-level counters and integer-fen sums for a store business day. Omit business_date to use the server-derived current day; no client calendar is trusted. max 1 row.",
   input: StatsDaySummaryInputSchema,
   risk: "R1",
   invariants: [],

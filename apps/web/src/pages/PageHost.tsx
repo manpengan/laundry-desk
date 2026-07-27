@@ -5,12 +5,11 @@ import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { NavItemId } from "../nav.js";
 import { CustomersPage } from "./CustomersPage.js";
-import { OrdersList } from "./OrdersList.js";
+import { CounterWorkbench } from "./CounterWorkbench.js";
 import { pageCopy } from "./page-copy.js";
 import { PickupPage } from "./PickupPage.js";
 import { ReceivePage } from "./ReceivePage.js";
 import { SettingsPage } from "./SettingsPage.js";
-import { DebtPage } from "./DebtPage.js";
 import { StatsPage } from "./StatsPage.js";
 
 export type PageHostProps = {
@@ -115,33 +114,14 @@ export function PageHost({
 
   if (activeId === "workbench" && session !== undefined && queryClient !== undefined) {
     return (
-      <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
-        <h1 className="ld-shell-main__title">{copy.title}</h1>
-        <p className="ld-shell-main__hint">{copy.emptyDescription}</p>
-        <OrdersList
-          queryClient={queryClient}
-          {...(commandClient !== undefined ? { commandClient } : {})}
-          onOpenPickup={(orderId) => {
-            setPickupOrderId(orderId);
-            onNavigate("pickup");
-          }}
-        />
-        <DebtPage
-          queryClient={queryClient}
-          onOpenPickup={(orderId) => {
-            setPickupOrderId(orderId);
-            onNavigate("pickup");
-          }}
-        />
-        <div className="ld-orders-footer">
-          <EmptyState
-            title={copy.emptyTitle}
-            description="也可从侧栏进入开单或取衣。"
-            actionLabel={copy.actionLabel}
-            onAction={() => onNavigate(actionTarget(activeId))}
-          />
-        </div>
-      </main>
+      <CounterWorkbench
+        queryClient={queryClient}
+        onNavigate={onNavigate}
+        onOpenPickup={(orderId) => {
+          setPickupOrderId(orderId);
+          onNavigate("pickup");
+        }}
+      />
     );
   }
 

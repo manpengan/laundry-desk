@@ -9,7 +9,8 @@ import { OrderDetailDrawer } from "./OrderDetailDrawer.js";
 
 export type OrderListRowView = Readonly<{
   order_id: string;
-  ticket_no: string;
+  /** Null only for an unconfirmed draft/hold. */
+  ticket_no: string | null;
   status: string;
   customer_phone: string | null;
   customer_name: string | null;
@@ -62,7 +63,7 @@ export function parseOrderListRows(value: unknown): readonly OrderListRowView[] 
   for (const item of value.orders) {
     if (!isRecord(item)) return null;
     if (typeof item.order_id !== "string") return null;
-    if (typeof item.ticket_no !== "string") return null;
+    if (typeof item.ticket_no !== "string" && item.ticket_no !== null) return null;
     if (typeof item.status !== "string") return null;
     const payable = asInt(item.payable_cents);
     const paid = asInt(item.paid_cents);
@@ -94,6 +95,21 @@ export function parseOrderListRows(value: unknown): readonly OrderListRowView[] 
     );
   }
   return Object.freeze(rows);
+}
+
+/** Resolve a counter lookup key against a list already scoped by the server. */
+export function findOrderByCounterKey(
+  orders: readonly OrderListRowView[],
+  key: string,
+): OrderListRowView | null {
+  const normalized = key.trim().toLowerCase();
+  if (normalized.length === 0) return null;
+  const matches = orders.filter(
+    (order) =>
+      order.ticket_no?.toLowerCase() === normalized ||
+      order.customer_phone?.toLowerCase() === normalized,
+  );
+  return matches.find((order) => order.status === "open") ?? matches[0] ?? null;
 }
 
 export function OrdersList({
@@ -199,7 +215,7 @@ export function OrdersList({
                 data-testid="orders-row-btn"
               >
                 <div className="ld-orders-list__main">
-                  <span className="ld-orders-list__ticket">{row.ticket_no}</span>
+                  <span className="ld-orders-list__ticket">{row.ticket_no ?? "挂单"}</span>
                   <StatusBadge family="order" status={row.status} />
                 </div>
                 <div className="ld-orders-list__meta">

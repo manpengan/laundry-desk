@@ -44,10 +44,12 @@ export { PageHost, type PageHostProps } from "./pages/PageHost.js";
 export { SettingsPage, type SettingsPageProps } from "./pages/SettingsPage.js";
 export { ReceivePage, type ReceivePageProps } from "./pages/ReceivePage.js";
 export { PickupPage, type PickupPageProps } from "./pages/PickupPage.js";
+export { CounterWorkbench, type CounterWorkbenchProps } from "./pages/CounterWorkbench.js";
 export {
   OrdersList,
   utcYmd as ordersLocalYmd,
   utcYmd as ordersUtcYmd,
+  findOrderByCounterKey,
   parseOrderListRows,
   type OrderListRowView,
   type OrdersListProps,

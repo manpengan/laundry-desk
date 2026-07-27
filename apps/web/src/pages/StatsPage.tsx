@@ -28,13 +28,13 @@ export type StatsPageProps = {
   /** Optional: manager step-up for POLICY_STEP_UP_REQUIRED on shift.close. */
   session?: SessionView;
   authClient?: AuthClient;
-  /** Override default UTC business date (tests). */
+  /** Explicit business date override (tests or historic lookup). */
   defaultDate?: string;
   /** Skip auto-load on mount (tests). */
   autoLoad?: boolean;
 };
 
-/** UTC calendar YYYY-MM-DD (server business-day contract). */
+/** Retained for historic-date entry tests; current day always comes from the server. */
 export function utcYmd(date: Date = new Date()): string {
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -99,22 +99,23 @@ export function StatsPage({
   autoLoad = true,
 }: StatsPageProps) {
   const toast = useToast();
-  const [dateText, setDateText] = useState(() => defaultDate ?? utcYmd());
+  const [dateText, setDateText] = useState(() => defaultDate ?? "");
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<DaySummaryView | null>(null);
   const loadRef = useRef<() => Promise<void>>(async () => undefined);
 
   const load = useCallback(async () => {
     const businessDate = dateText.trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/u.test(businessDate)) {
+    if (businessDate.length > 0 && !/^\d{4}-\d{2}-\d{2}$/u.test(businessDate)) {
       toast.push("请输入日期 YYYY-MM-DD", "error");
       return;
     }
     setBusy(true);
     try {
-      const res = await queryClient.execute<unknown>("stats.day.summary", {
-        business_date: businessDate,
-      });
+      const res = await queryClient.execute<unknown>(
+        "stats.day.summary",
+        businessDate.length === 0 ? {} : { business_date: businessDate },
+      );
       if (!res.ok) {
         toast.push(res.error.message ?? res.error.code, "error");
         setSummary(null);
@@ -127,6 +128,7 @@ export function StatsPage({
         return;
       }
       setSummary(parsed);
+      setDateText(parsed.business_date);
     } finally {
       setBusy(false);
     }
@@ -142,7 +144,9 @@ export function StatsPage({
   return (
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">统计</h1>
-      <p className="ld-shell-main__hint">日结汇总：按营业日聚合开单、衣物件数与整数分金额。</p>
+      <p className="ld-shell-main__hint">
+        日结汇总：默认由服务端确定当前营业日，也可查询历史营业日。
+      </p>
 
       <div className="ld-stats-form">
         <Input
@@ -153,6 +157,7 @@ export function StatsPage({
           onChange={(event) => setDateText(event.target.value)}
           disabled={busy}
           data-testid="stats-date-input"
+          hint="留空时由服务端按门店时区和切日时间确定"
         />
         <div className="ld-stats-form__actions">
           <Button
@@ -233,7 +238,7 @@ export function StatsPage({
         <ShiftClosePanel
           queryClient={queryClient}
           commandClient={commandClient}
-          businessDate={dateText}
+          businessDate={summary?.business_date ?? dateText}
           autoLoad={autoLoad}
           {...(session !== undefined ? { session } : {})}
           {...(authClient !== undefined ? { authClient } : {})}

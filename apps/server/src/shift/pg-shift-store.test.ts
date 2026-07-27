@@ -211,7 +211,7 @@ test("close inserts shift_closings row and maps RETURNING", async () => {
   assert.equal(insert?.params?.[4], DEMO_STAFF_A_ID);
   assert.equal(insert?.params?.[6], 1);
   assert.equal(insert?.params?.[7], 3000);
-  assert.equal(insert?.params?.[10], "店员甲");
+  assert.equal(insert?.params?.[15], "店员甲");
   const staffGuc = queries.find((q) => q.sql.includes("app.staff_id"));
   assert.deepEqual(staffGuc?.params, [DEMO_STAFF_A_ID]);
 });

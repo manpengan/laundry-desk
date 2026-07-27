@@ -7,6 +7,8 @@ import { useCallback, useMemo, useState } from "react";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import {
   buildPickupBody,
+  isValidPhone,
+  isValidUuid,
   isPickableGarmentStatus,
   listPickableGarments,
   parseOrderGetResult,
@@ -17,6 +19,11 @@ import {
   type OrderGetResult,
   type PickupOrderResult,
 } from "./order-form.js";
+import {
+  findOrderByCounterKey,
+  parseOrderListRows,
+  unwrapQueryResult as unwrapOrderList,
+} from "./OrdersList.js";
 
 export type PickupPageProps = {
   commandClient: CommandPort;
@@ -41,19 +48,9 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
     [loaded],
   );
 
-  const onLoadOrder = useCallback(async () => {
-    if (queryClient === undefined) {
-      toast.push("查询通道不可用", "error");
-      return;
-    }
-    const id = orderId.trim();
-    if (id.length === 0) {
-      toast.push("请输入订单 ID", "error");
-      return;
-    }
-    setLoadingOrder(true);
-    setResult(null);
-    try {
+  const loadOrderById = useCallback(
+    async (id: string) => {
+      if (queryClient === undefined) return;
       const res = await queryClient.execute<unknown>("order.get", { order_id: id });
       if (!res.ok) {
         toast.push(res.error.message ?? res.error.code, "error");
@@ -76,12 +73,51 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
       if (pickableIds.size === 0) {
         toast.push("订单已加载，但没有可取衣物", "info");
       } else {
-        toast.push(`已加载 ${parsed.ticket_no}，${pickableIds.size} 件可取`, "success");
+        toast.push(`已加载 ${parsed.ticket_no ?? "挂单"}，${pickableIds.size} 件可取`, "success");
       }
+    },
+    [queryClient, toast],
+  );
+
+  const onLoadOrder = useCallback(async () => {
+    if (queryClient === undefined) {
+      toast.push("查询通道不可用", "error");
+      return;
+    }
+    const key = orderId.trim();
+    if (key.length === 0) {
+      toast.push("请输入票号、手机号或订单 ID", "error");
+      return;
+    }
+    setLoadingOrder(true);
+    setResult(null);
+    try {
+      if (isValidUuid(key)) {
+        await loadOrderById(key);
+        return;
+      }
+      const res = await queryClient.execute<unknown>("order.list", {
+        limit: 50,
+        ...(isValidPhone(key) ? { customer_phone: key } : {}),
+      });
+      if (!res.ok) {
+        toast.push(res.error.message ?? res.error.code, "error");
+        setLoaded(null);
+        setSelected(new Set());
+        return;
+      }
+      const match = findOrderByCounterKey(parseOrderListRows(unwrapOrderList(res.data)) ?? [], key);
+      if (match === null) {
+        toast.push("未找到匹配订单；请核对票号或手机号", "error");
+        setLoaded(null);
+        setSelected(new Set());
+        return;
+      }
+      await loadOrderById(match.order_id);
     } finally {
       setLoadingOrder(false);
     }
-  }, [orderId, queryClient, toast]);
+  }, [loadOrderById, orderId, queryClient, toast]);
 
   const onToggle = useCallback((garmentId: string) => {
     setSelected((prev) => toggleGarmentSelection(prev, garmentId));
@@ -143,17 +179,17 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">取衣</h1>
       <p className="ld-shell-main__hint">
-        输入订单 UUID 后加载件列表，勾选要取的衣物（可部分取）。收款为整数分，结算余额。
+        输入票号、手机号或订单 ID 后加载件列表，勾选要取的衣物（可部分取）。收款为整数分，结算余额。
       </p>
 
       <div className="ld-order-form">
         <div className="ld-order-form__load-row">
           <Input
-            name="order-id"
-            label="订单 ID"
+            name="pickup-key"
+            label="票号 / 手机号 / 订单 ID"
             value={orderId}
             onChange={(event) => setOrderId(event.target.value)}
-            hint="UUID，可从开单结果复制"
+            hint="票号与手机号支持快速匹配；订单 ID 用于内部跳转"
             disabled={disabled}
           />
           <div className="ld-order-form__load-action">
@@ -173,7 +209,7 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
             <dl className="ld-order-result__meta">
               <div>
                 <dt>票号</dt>
-                <dd data-testid="pickup-loaded-ticket">{loaded.ticket_no}</dd>
+                <dd data-testid="pickup-loaded-ticket">{loaded.ticket_no ?? "挂单"}</dd>
               </div>
               <div>
                 <dt>余额</dt>

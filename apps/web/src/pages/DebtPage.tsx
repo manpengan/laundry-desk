@@ -18,7 +18,7 @@ export type DebtPageProps = {
 };
 
 export type DebtReminderFields = Readonly<{
-  ticket_no: string;
+  ticket_no: string | null;
   customer_name: string | null;
   customer_phone: string | null;
   balance_cents: number;
@@ -33,7 +33,7 @@ export function buildDebtReminderText(row: DebtReminderFields): string {
       ? row.customer_phone
       : "（无手机号）";
   const money = formatMoneyFromFen(row.balance_cents);
-  return `【洗衣店催付】您好，${name}（${phone}），订单 ${row.ticket_no} 尚欠 ${money}，请尽快到店结清，谢谢！`;
+  return `【洗衣店催付】您好，${name}（${phone}），订单 ${row.ticket_no ?? "挂单"} 尚欠 ${money}，请尽快到店结清，谢谢！`;
 }
 
 /** Clipboard write; no-op / false when navigator.clipboard unavailable (SSR). */

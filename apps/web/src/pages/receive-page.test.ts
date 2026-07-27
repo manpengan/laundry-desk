@@ -21,10 +21,11 @@ test("ReceivePage SSR shows form fields and submit", () => {
   assert.match(html, /开单/);
   assert.match(html, /手机号/);
   assert.match(html, /衣物明细/);
-  assert.match(html, /单价（分）/);
-  assert.match(html, /已付（分）/);
+  assert.match(html, /价目单价/);
+  assert.match(html, /首笔收款（分）/);
   assert.match(html, /确认开单/);
-  assert.match(html, /整数分/);
+  assert.match(html, /服务端重新定价/);
+  assert.match(html, /暂存挂单/);
   assert.doesNotMatch(html, /还没有价目/);
   assert.doesNotMatch(html, /价目表/);
   assert.doesNotMatch(html, /data-testid="ticket-preview"/);
