@@ -311,6 +311,8 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   const compose = await readRepositoryFile("tools/compose/docker-compose.yml");
   const workflow = await readRepositoryFile(".github/workflows/v2-integration.yml");
 
+  assert.doesNotMatch(workflow, /^\s*-\s+name:\s+Start local Vite Web host\s*$/mu);
+  assert.match(workflow, /^\s*-\s+name:\s+Run Playwright against real server and PostgreSQL\s*$/mu);
   for (const name of ["LAUNDRY_ACCESS_TOKEN_SECRET", "LAUNDRY_CSRF_PROOF_SECRET"]) {
     assert.match(compose, new RegExp(`${name}:\\s*["']?\\$\\{${name}-\\}`, "u"));
   }

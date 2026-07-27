@@ -137,23 +137,6 @@ jobs:
       - name: Install Chromium for local Web smoke
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Start local Vite Web host
-        run: |
-          pnpm local:web > /tmp/laundry-web.log 2>&1 &
-          echo $! > /tmp/laundry-web.pid
-          for _ in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:5173/ > /dev/null; then
-              exit 0
-            fi
-            if ! kill -0 "$(cat /tmp/laundry-web.pid)" 2>/dev/null; then
-              cat /tmp/laundry-web.log
-              exit 1
-            fi
-            sleep 1
-          done
-          cat /tmp/laundry-web.log
-          exit 1
-
       - name: Run Playwright against real server and PostgreSQL
         run: pnpm run local:web:e2e
 
@@ -163,7 +146,6 @@ jobs:
           docker compose -p "${COMPOSE_PROJECT_NAME}" \
             -f tools/compose/docker-compose.yml logs --no-color \
             > /tmp/laundry-compose.log || true
-          if [ -f /tmp/laundry-web.log ]; then cat /tmp/laundry-web.log; fi
 
       - name: Upload integration diagnostics
         if: failure()
@@ -172,13 +154,11 @@ jobs:
           name: v2-integration-diagnostics
           path: |
             /tmp/laundry-compose.log
-            /tmp/laundry-web.log
             /tmp/laundry-server-pg-tests.log
           if-no-files-found: ignore
 
-      - name: Stop compose and local Web host
+      - name: Stop compose
         if: always()
         run: |
-          if [ -f /tmp/laundry-web.pid ]; then kill "$(cat /tmp/laundry-web.pid)" || true; fi
           pnpm local:down || true
           docker volume rm "${COMPOSE_PROJECT_NAME}_pgdata-v2" >/dev/null 2>&1 || true
