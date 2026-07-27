@@ -404,13 +404,11 @@ test("keeps browser and Electron acceptance sources inside canonical quality gat
   const edgeE2eConfig = JSON.parse(await readRepositoryFile("apps/edge-agent/tsconfig.e2e.json"));
   const webE2eConfig = JSON.parse(await readRepositoryFile("apps/web/tsconfig.e2e.json"));
 
-  assert.match(edgePackage.scripts.lint, /\be2e\b/u);
-  assert.match(edgePackage.scripts.lint, /playwright\.electron\.config\.ts/u);
+  assert.equal(edgePackage.scripts.lint, "eslint . --ext .ts,.tsx,.mjs --max-warnings=0");
   assert.match(edgePackage.scripts.typecheck, /tsconfig\.e2e\.json/u);
   assert.deepEqual(edgeE2eConfig.include, ["e2e/**/*.ts", "playwright.electron.config.ts"]);
 
-  assert.match(webPackage.scripts.lint, /\be2e\b/u);
-  assert.match(webPackage.scripts.lint, /playwright\.local\.config\.ts/u);
+  assert.equal(webPackage.scripts.lint, "eslint . --ext .ts,.tsx --max-warnings=0");
   assert.match(webPackage.scripts.typecheck, /tsconfig\.e2e\.json/u);
   assert.deepEqual(webE2eConfig.include, ["e2e/**/*.ts", "playwright.local.config.ts"]);
 });

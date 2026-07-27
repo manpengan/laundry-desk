@@ -261,6 +261,29 @@ test("provides compileable shells for every assigned workspace", async () => {
   }
 });
 
+test("lints each active workspace from its package root", async () => {
+  const lintScripts = [
+    ["apps/edge-agent/package.json", ".ts,.tsx,.mjs"],
+    ["apps/server/package.json", ".ts,.tsx"],
+    ["apps/web/package.json", ".ts,.tsx"],
+    ["packages/config/package.json", ".ts,.tsx"],
+    ["packages/contracts/package.json", ".ts,.tsx"],
+    ["packages/db/package.json", ".ts"],
+    ["packages/domain/package.json", ".ts,.tsx"],
+    ["packages/ui/package.json", ".ts,.tsx"],
+    ["tools/migrate-v1/package.json", ".ts"],
+  ];
+
+  for (const [manifestPath, extensions] of lintScripts) {
+    const manifest = await readJson(manifestPath);
+    assert.equal(
+      manifest.scripts.lint,
+      `eslint . --ext ${extensions} --max-warnings=0`,
+      `${manifestPath} must lint its complete package root`,
+    );
+  }
+});
+
 test("builds file-linked workspace dependencies before their consumers test", async () => {
   const turboConfig = await readJson("turbo.json");
   const webPackage = await readJson("apps/web/package.json");

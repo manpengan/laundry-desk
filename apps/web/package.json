@@ -12,7 +12,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.host.json && vite build --config vite.config.ts",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
-    "lint": "eslint src host e2e playwright.local.config.ts --ext .ts,.tsx --max-warnings=0",
+    "lint": "eslint . --ext .ts,.tsx --max-warnings=0",
     "test": "pnpm run build && node --test $(find dist -name '*.test.js')",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.host.json && tsc -p tsconfig.e2e.json"
   },

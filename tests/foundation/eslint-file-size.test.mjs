@@ -28,9 +28,21 @@ function sourceWithPhysicalLines(lineCount) {
   return Array.from({ length: lineCount }, (_, index) => `// line ${index + 1}`).join("\n");
 }
 
-async function maxLineMessages(filePath, lineCount) {
-  const [result] = await eslint.lintText(sourceWithPhysicalLines(lineCount), { filePath });
+function blankOnlySourceWithPhysicalLines(lineCount) {
+  return "\n".repeat(lineCount);
+}
+
+async function maxLineMessages(filePath, lineCount, sourceFactory = sourceWithPhysicalLines) {
+  const [result] = await eslint.lintText(sourceFactory(lineCount), { filePath });
   return result.messages.filter(({ ruleId }) => ruleId === "max-lines");
+}
+
+function maxLineOptionsFrom(config) {
+  const normalizedRule = config?.rules?.["max-lines"];
+  if (!Array.isArray(normalizedRule)) return undefined;
+
+  const options = normalizedRule[1];
+  return options !== null && typeof options === "object" ? options : undefined;
 }
 
 function maxLinesFrom(config) {
@@ -45,6 +57,15 @@ function maxLinesFrom(config) {
   return undefined;
 }
 
+async function assertResolvedPhysicalLineOptions(filePath, expectedMaxLines) {
+  const config = await eslint.calculateConfigForFile(filePath);
+  const options = maxLineOptionsFrom(config);
+
+  assert.equal(maxLinesFrom(config), expectedMaxLines, `${filePath} max-lines budget`);
+  assert.equal(options?.skipBlankLines, false, `${filePath} must count blank lines`);
+  assert.equal(options?.skipComments, false, `${filePath} must count comment lines`);
+}
+
 test("enforces 400 production lines and 800 test lines", async () => {
   assert.equal((await maxLineMessages("apps/server/src/file-size-probe.ts", 400)).length, 0);
   assert.equal((await maxLineMessages("apps/server/src/file-size-probe.ts", 401)).length, 1);
@@ -52,12 +73,26 @@ test("enforces 400 production lines and 800 test lines", async () => {
   assert.equal((await maxLineMessages("apps/server/src/file-size-probe.test.ts", 801)).length, 1);
 });
 
+test("counts blank-only physical lines at production and test boundaries", async () => {
+  const blankMessages = (filePath, lineCount) =>
+    maxLineMessages(filePath, lineCount, blankOnlySourceWithPhysicalLines);
+
+  assert.equal((await blankMessages("apps/server/src/file-size-probe.ts", 400)).length, 0);
+  assert.equal((await blankMessages("apps/server/src/file-size-probe.ts", 401)).length, 1);
+  assert.equal((await blankMessages("apps/server/src/file-size-probe.test.ts", 800)).length, 0);
+  assert.equal((await blankMessages("apps/server/src/file-size-probe.test.ts", 801)).length, 1);
+});
+
+test("resolves physical-line options for default production and test budgets", async () => {
+  await assertResolvedPhysicalLineOptions("apps/server/src/file-size-probe.ts", 400);
+  await assertResolvedPhysicalLineOptions("apps/server/src/file-size-probe.test.ts", 800);
+});
+
 test("resolves exact frozen production budgets", async () => {
   assert.equal(frozenProductionBudgets.length, 16);
 
   for (const [filePath, expectedMaxLines] of frozenProductionBudgets) {
-    const config = await eslint.calculateConfigForFile(filePath);
-    assert.equal(maxLinesFrom(config), expectedMaxLines, filePath);
+    await assertResolvedPhysicalLineOptions(filePath, expectedMaxLines);
   }
 });
 

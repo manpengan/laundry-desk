@@ -13,7 +13,7 @@
   "scripts": {
     "build": "pnpm run spa:sync && tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
-    "lint": "eslint src scripts e2e playwright.electron.config.ts --ext .ts,.tsx,.mjs --max-warnings=0",
+    "lint": "eslint . --ext .ts,.tsx,.mjs --max-warnings=0",
     "preload:bundle": "node scripts/build-preload.mjs",
     "package:mac": "pnpm exec turbo run build --filter=@laundry/edge-agent && pnpm run preload:bundle && pnpm exec electron-builder --config electron-builder.yml --mac dir",
     "hash:app": "node scripts/hash-app.mjs",
