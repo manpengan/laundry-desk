@@ -128,6 +128,17 @@ test("does not advertise stale Hongfa or Grok delivery ownership in the README l
   assert.doesNotMatch(readmeLead, /宏发升级候选版|Grok 单一技术负责人/u);
 });
 
+test("records the active V2 file size policy", async () => {
+  const agentGuidance = await readRepositoryFile("AGENTS.md");
+
+  assert.match(agentGuidance, /活动 V2 生产 JS\/TS 文件[^。\n]*默认[^。\n]*400 physical lines/u);
+  assert.match(agentGuidance, /测试文件[^。\n]*800 physical lines[^。\n]*硬上限/u);
+  assert.match(agentGuidance, /16 个命名冻结预算[^。\n]*不得增长/u);
+  assert.ok(
+    agentGuidance.includes("(docs/superpowers/specs/2026-07-27-file-size-quality-gate-design.md)"),
+  );
+});
+
 test("keeps Gemini legacy v1 execution guidance inside one forbidden archive block", async () => {
   const gemini = await readRepositoryFile("GEMINI.md");
   const archiveHeading = "## 历史 v1 资料（已归档，禁止执行）";

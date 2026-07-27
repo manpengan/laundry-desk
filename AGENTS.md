@@ -27,6 +27,14 @@
 5. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
 6. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
 
+## 活动 V2 文件规模政策
+
+- 活动 V2 生产 JS/TS 文件默认 400 physical lines；后续触及该默认值时，应拆分职责或缩小变更范围。
+- 测试文件 800 physical lines 为硬上限；后续触及该上限前必须拆分。
+- 规格列出的 16 个命名冻结预算不得增长；后续触及时，应拆分文件或缩小变更范围。
+
+详见[文件规模质量门禁设计](docs/superpowers/specs/2026-07-27-file-size-quality-gate-design.md)。
+
 ## 审查侧重点（任何实现者）
 
 - Zod 覆盖所有 IPC/HTTP 边界；统一信封
