@@ -60,6 +60,7 @@ In the same file, declare the approved 16-entry frozen inventory and assert that
 ```js
 assert.equal((await eslint.calculateConfigForFile("src/main.ts")).rules["max-lines"], undefined);
 assert.equal(maxLinesFrom(await eslint.calculateConfigForFile("tools/local/probe.mjs")), 400);
+assert.equal(maxLinesFrom(await eslint.calculateConfigForFile("tools/local/probe.test.mjs")), 800);
 assert.equal(
   maxLinesFrom(await eslint.calculateConfigForFile("tests/foundation/probe.test.mjs")),
   800,
@@ -137,6 +138,7 @@ Add an `overrides` entry setting the same rule to 800 for all of:
 Keep root-level `rules` free of `max-lines`. Add `overrides` that:
 
 - apply 400 only to `tools/local/**/*.mjs`;
+- then override `tools/local/**/*.test.mjs` and `tools/local/**/*.spec.mjs` to 800;
 - apply 800 only to `tests/foundation/**/*.mjs`;
 - apply 474 only to `tools/local/config.mjs`.
 
@@ -328,9 +330,11 @@ pnpm exec prettier --write \
   tests/foundation/local-foundation.test.mjs \
   tests/foundation/local-foundation-http-smoke.test.mjs
 git diff --check
+git status --short
 ```
 
-Expected: clean formatting and no whitespace errors.
+Expected: clean formatting, no whitespace errors, and an empty `git status --short`. If Prettier
+changes an intended file, commit that formatting change and repeat this step before continuing.
 
 - [ ] **Step 2: Run the complete repository gate**
 
