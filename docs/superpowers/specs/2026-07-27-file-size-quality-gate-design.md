@@ -90,7 +90,10 @@
 `__tests__/**` 与 `e2e/**`；这些路径使用 800 行上限，不得错误继承生产 400 行
 上限。
 
-不增加自定义扫描器或新的 lint 依赖；使用当前 ESLint 内建 `max-lines` 规则。
+不增加自定义扫描器或新的 lint 包；使用当前 ESLint 内建 `max-lines` 规则。
+ESLint Node API 不经过 pnpm CLI shim，需把当前已传递安装的
+`eslint-plugin-prettier` 提升为根级显式开发依赖，保证真实共享配置可由测试直接
+解析。
 
 ## 4. 验证
 

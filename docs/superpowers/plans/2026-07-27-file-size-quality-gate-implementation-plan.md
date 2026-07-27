@@ -18,6 +18,8 @@ the delivery history, so Task 5 begins from a tracked, clean planning baseline.
 **Files:**
 
 - Create: `tests/foundation/eslint-file-size.test.mjs`
+- Modify: `package.json`
+- Modify: `pnpm-lock.yaml`
 - Modify later: `.eslintrc.cjs`
 - Modify later: `packages/config/eslint/base.cjs`
 - Modify later: package `.eslintrc.cjs` files
@@ -81,6 +83,14 @@ assert.equal(
 
 - [ ] **Step 3: Run the focused test and verify RED**
 
+Before running the Node API test, promote the already transitively installed
+`eslint-plugin-prettier` package to an explicit root development dependency. Direct Node API
+execution does not receive the plugin search path injected by pnpm's ESLint CLI shim:
+
+```bash
+pnpm add -D eslint-plugin-prettier@^5.5.6
+```
+
 Run:
 
 ```bash
@@ -88,12 +98,12 @@ node --test tests/foundation/eslint-file-size.test.mjs
 ```
 
 Expected: FAIL because `max-lines` is not configured, so the 401-line production probe is
-not rejected and the frozen budgets are absent.
+not rejected and the frozen budgets are absent. A plugin-resolution error is not a valid RED.
 
 - [ ] **Step 4: Commit the RED test**
 
 ```bash
-git add tests/foundation/eslint-file-size.test.mjs
+git add package.json pnpm-lock.yaml tests/foundation/eslint-file-size.test.mjs
 git commit -m "[LAUNDRY_DESK][QUALITY] 增加文件规模门禁回归测试"
 ```
 
