@@ -36,7 +36,7 @@
     "workspace:build": "turbo run build",
     "workspace:dev": "turbo run dev",
     "workspace:format:check": "prettier --check apps packages tools/local tools/compose tools/migrate-v1 tests/foundation docs/local-web-server.md .github/workflows/foundation.yml .github/workflows/v2-integration.yml .prettierrc.cjs package.json pnpm-workspace.yaml turbo.json",
-    "workspace:lint": "eslint tools/local --ext .mjs --max-warnings=0 && turbo run lint",
+    "workspace:lint": "eslint tools/local tests/foundation --ext .mjs --max-warnings=0 && turbo run lint",
     "workspace:test": "node --test tools/local/*.test.mjs tests/foundation/*.test.mjs && turbo run test",
     "workspace:typecheck": "turbo run typecheck",
     "workspace:check": "pnpm run workspace:format:check && pnpm run workspace:lint && pnpm run workspace:typecheck && pnpm run workspace:test && pnpm run workspace:build",
