@@ -85,6 +85,8 @@
   `rules`；同时为 `tools/local/config.mjs` 声明冻结预算；
 - `workspace:lint` 显式覆盖 `tests/foundation`，避免测试硬上限只写在配置中却
   从未执行。
+- 各活动 workspace 的 `lint` 从 package 根目录 `eslint .`，结合扩展名与既有
+  ignore 扫描，不能只列 `src`、`test` 等目录而遗漏构建配置或生成脚本。
 
 测试 override 必须完整匹配 `*.test.*`、`*.spec.*`、`test/**`、`tests/**`、
 `__tests__/**` 与 `e2e/**`；这些路径使用 800 行上限，不得错误继承生产 400 行
@@ -102,6 +104,8 @@ ESLint Node API 不经过 pnpm CLI shim，需把当前已传递安装的
    - 401 行生产文件命中 `max-lines`；
    - 800 行测试通过；
    - 801 行测试命中 `max-lines`。
+   - 注释行与纯空行都计入上述物理行边界；
+   - 解析配置中的 `skipBlankLines` 与 `skipComments` 都固定为 `false`。
 2. 先运行该测试并观察现有配置下的 RED，再增加规则和冻结预算达到 GREEN。
 3. 拆分 foundation 测试后运行全部 `tests/foundation/*.test.mjs`。
 4. 运行 `workspace:lint`，确认活动真实文件全部满足默认上限或各自冻结预算。

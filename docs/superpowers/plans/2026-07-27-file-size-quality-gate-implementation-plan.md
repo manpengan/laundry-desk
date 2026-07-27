@@ -334,7 +334,66 @@ git add AGENTS.md tests/foundation/local-foundation.test.mjs
 git commit -m "[LAUNDRY_DESK][QUALITY] 记录活动代码规模政策"
 ```
 
-### Task 5: Verify, integrate to GitHub main, and clean the temporary lane
+### Task 5: Close final review coverage gaps
+
+**Files:**
+
+- Modify: `tests/foundation/eslint-file-size.test.mjs`
+- Modify: `tests/foundation/workspace.test.mjs`
+- Modify: each active workspace `package.json`
+
+- [ ] **Step 1: Add a failing workspace lint-entry test**
+
+Add a foundation test requiring every active workspace `lint` script to invoke `eslint .` with
+that package's existing TypeScript/JavaScript extensions and `--max-warnings=0`.
+
+- [ ] **Step 2: Run the workspace test and verify RED**
+
+Run:
+
+```bash
+node --test tests/foundation/workspace.test.mjs
+```
+
+Expected: FAIL because current scripts enumerate selected directories and omit active config or
+generator files.
+
+- [ ] **Step 3: Lint each active workspace from its package root**
+
+Change the nine workspace lint scripts to use `eslint .`, preserving their current extension
+sets and `--max-warnings=0`. Existing package ignore rules remain responsible for generated
+outputs.
+
+- [ ] **Step 4: Verify workspace lint coverage GREEN**
+
+Run:
+
+```bash
+node --test tests/foundation/workspace.test.mjs
+pnpm exec turbo run lint
+```
+
+Expected: PASS, including package-root config and generator files.
+
+- [ ] **Step 5: Lock physical blank-line semantics**
+
+Extend `eslint-file-size.test.mjs` with comment-only and blank-only virtual sources at the
+400/401 and 800/801 boundaries. Assert resolved `max-lines` options have
+`skipBlankLines: false` and `skipComments: false`.
+
+Because the implementation already uses both false values, verify the new regression by
+temporarily changing `skipBlankLines` to true, observing the blank-line test fail, restoring
+false, and observing it pass.
+
+- [ ] **Step 6: Commit the final review fixes**
+
+```bash
+git add apps/*/package.json packages/*/package.json tools/migrate-v1/package.json \
+  tests/foundation/eslint-file-size.test.mjs tests/foundation/workspace.test.mjs
+git commit -m "[LAUNDRY_DESK][QUALITY] 补齐活动文件规模门禁覆盖"
+```
+
+### Task 6: Verify, integrate to GitHub main, and clean the temporary lane
 
 **Files:**
 
