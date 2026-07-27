@@ -10,9 +10,11 @@ UI spec §3 桌面壳：登录 → 左侧导航 + 顶栏门店/连接状态 + �
 - 顶栏「切换员工」→ PIN quick-switch dialog（`purpose: quick_switch`）
 - 连接状态条（SyncStatusBar）在已登录壳内展示
 - **M2 开单 / 取衣**：`ReceivePage` / `PickupPage` → `order.receive` / `order.pickup`（整数分）
+- **统一取衣检索**：票号、取件码、衣物条码、手机号或姓名前缀 → 受限的 `order.lookup` 候选集
+- **独立收款 / 补缴**：付款方式与备注 → `payment.collect` / `payment.repay` 的只追加账本流水
 - 设置页 R5 step-up PIN 复核 demo
 
-**未做**：完整价目字典 UI、取件码扫码检索、A7 OpenAPI 生成客户端。
+**未做**：完整价目字典 UI、A7 OpenAPI 生成客户端。
 
 ## 使用
 

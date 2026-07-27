@@ -7,7 +7,6 @@ import { useCallback, useMemo, useState } from "react";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import {
   buildPickupBody,
-  isValidPhone,
   isValidUuid,
   isPickableGarmentStatus,
   listPickableGarments,
@@ -15,15 +14,12 @@ import {
   selectAllPickableIds,
   toggleGarmentSelection,
   unwrapCommandResult,
-  type OrderGetGarment,
   type OrderGetResult,
   type PickupOrderResult,
 } from "./order-form.js";
-import {
-  findOrderByCounterKey,
-  parseOrderListRows,
-  unwrapQueryResult as unwrapOrderList,
-} from "./OrdersList.js";
+import { OrderLookupCandidates, parseOrderLookupRows } from "./OrderLookupCandidates.js";
+import { PaymentCollectionDialog } from "./PaymentCollectionDialog.js";
+import { PickupGarmentCheckRow, PickupResult } from "./PickupDetails.js";
 
 export type PickupPageProps = {
   commandClient: CommandPort;
@@ -31,10 +27,18 @@ export type PickupPageProps = {
   queryClient?: QueryPort;
   /** Prefill order id (e.g. from workbench order.list row click). */
   initialOrderId?: string;
+  /** Prefill a customer-facing lookup key from the workbench scanner input. */
+  initialLookupKey?: string;
 };
 
-export function PickupPage({ commandClient, queryClient, initialOrderId }: PickupPageProps) {
+export function PickupPage({
+  commandClient,
+  queryClient,
+  initialOrderId,
+  initialLookupKey,
+}: PickupPageProps) {
   const toast = useToast();
+  const [lookupKey, setLookupKey] = useState(() => initialLookupKey ?? initialOrderId ?? "");
   const [orderId, setOrderId] = useState(() => initialOrderId ?? "");
   const [collectText, setCollectText] = useState("0");
   const [busy, setBusy] = useState(false);
@@ -42,6 +46,8 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
   const [loaded, setLoaded] = useState<OrderGetResult | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [result, setResult] = useState<PickupOrderResult | null>(null);
+  const [matches, setMatches] = useState<ReturnType<typeof parseOrderLookupRows>>([]);
+  const [paymentOpen, setPaymentOpen] = useState(false);
 
   const pickable = useMemo(
     () => (loaded === null ? Object.freeze([]) : listPickableGarments(loaded.garments)),
@@ -68,6 +74,7 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
       }
       setLoaded(parsed);
       setOrderId(parsed.order_id);
+      setMatches([]);
       const pickableIds = selectAllPickableIds(parsed.garments);
       setSelected(pickableIds);
       if (pickableIds.size === 0) {
@@ -84,9 +91,9 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
       toast.push("查询通道不可用", "error");
       return;
     }
-    const key = orderId.trim();
+    const key = lookupKey.trim();
     if (key.length === 0) {
-      toast.push("请输入票号、手机号或订单 ID", "error");
+      toast.push("请输入票号、取件码、衣物条码、手机号或姓名", "error");
       return;
     }
     setLoadingOrder(true);
@@ -96,9 +103,10 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
         await loadOrderById(key);
         return;
       }
-      const res = await queryClient.execute<unknown>("order.list", {
-        limit: 50,
-        ...(isValidPhone(key) ? { customer_phone: key } : {}),
+      const res = await queryClient.execute<unknown>("order.lookup", {
+        key,
+        status: "open",
+        limit: 20,
       });
       if (!res.ok) {
         toast.push(res.error.message ?? res.error.code, "error");
@@ -106,18 +114,24 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
         setSelected(new Set());
         return;
       }
-      const match = findOrderByCounterKey(parseOrderListRows(unwrapOrderList(res.data)) ?? [], key);
-      if (match === null) {
-        toast.push("未找到匹配订单；请核对票号或手机号", "error");
+      const found = parseOrderLookupRows(unwrapCommandResult(res.data));
+      if (found === null) {
+        toast.push("订单查询结果无法解析", "error");
+        return;
+      }
+      setMatches(found);
+      if (found.length === 0) {
+        toast.push("未找到匹配订单；请核对输入", "error");
         setLoaded(null);
         setSelected(new Set());
         return;
       }
-      await loadOrderById(match.order_id);
+      if (found.length === 1) await loadOrderById(found[0]!.order_id);
+      else toast.push(`找到 ${found.length} 张订单，请选择`, "info");
     } finally {
       setLoadingOrder(false);
     }
-  }, [loadOrderById, orderId, queryClient, toast]);
+  }, [loadOrderById, lookupKey, queryClient, toast]);
 
   const onToggle = useCallback((garmentId: string) => {
     setSelected((prev) => toggleGarmentSelection(prev, garmentId));
@@ -166,11 +180,14 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
   }, [collectText, commandClient, orderId, selected, toast]);
 
   const onReset = useCallback(() => {
+    setLookupKey("");
     setOrderId("");
     setCollectText("0");
     setLoaded(null);
     setSelected(new Set());
     setResult(null);
+    setMatches([]);
+    setPaymentOpen(false);
   }, []);
 
   const disabled = busy || loadingOrder;
@@ -179,17 +196,17 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">取衣</h1>
       <p className="ld-shell-main__hint">
-        输入票号、手机号或订单 ID 后加载件列表，勾选要取的衣物（可部分取）。收款为整数分，结算余额。
+        输入票号、取件码、衣物条码、手机号或姓名后加载件列表，勾选要取的衣物（可部分取）。
       </p>
 
       <div className="ld-order-form">
         <div className="ld-order-form__load-row">
           <Input
             name="pickup-key"
-            label="票号 / 手机号 / 订单 ID"
-            value={orderId}
-            onChange={(event) => setOrderId(event.target.value)}
-            hint="票号与手机号支持快速匹配；订单 ID 用于内部跳转"
+            label="票号 / 取件码 / 条码 / 手机号 / 姓名"
+            value={lookupKey}
+            onChange={(event) => setLookupKey(event.target.value)}
+            hint="匹配多张订单时须显式选择；订单 ID 仅用于内部跳转"
             disabled={disabled}
           />
           <div className="ld-order-form__load-action">
@@ -204,12 +221,24 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
           </div>
         </div>
 
+        {matches === null ? null : (
+          <OrderLookupCandidates
+            orders={matches}
+            disabled={disabled}
+            onSelect={(id) => void loadOrderById(id)}
+          />
+        )}
+
         {loaded !== null ? (
           <section className="ld-pickup-order" aria-label="订单摘要">
             <dl className="ld-order-result__meta">
               <div>
                 <dt>票号</dt>
                 <dd data-testid="pickup-loaded-ticket">{loaded.ticket_no ?? "挂单"}</dd>
+              </div>
+              <div>
+                <dt>取件码</dt>
+                <dd>{loaded.pickup_code ?? "—"}</dd>
               </div>
               <div>
                 <dt>余额</dt>
@@ -258,7 +287,7 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
               ) : (
                 <ul className="ld-pickup-garments__list" data-testid="pickup-garment-list">
                   {loaded.garments.map((g) => (
-                    <GarmentCheckRow
+                    <PickupGarmentCheckRow
                       key={g.garment_id}
                       garment={g}
                       checked={selected.has(g.garment_id)}
@@ -294,93 +323,32 @@ export function PickupPage({ commandClient, queryClient, initialOrderId }: Picku
           >
             {busy ? "提交中…" : "确认取衣"}
           </Button>
+          {loaded !== null && loaded.status === "open" && loaded.balance_cents > 0 ? (
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => setPaymentOpen(true)}
+              disabled={disabled}
+            >
+              独立收款 / 补缴
+            </Button>
+          ) : null}
           <Button variant="ghost" type="button" onClick={onReset} disabled={disabled}>
             清空
           </Button>
         </div>
       </div>
 
-      {result !== null ? (
-        <section className="ld-order-result" aria-live="polite">
-          <h2 className="ld-order-result__title">取衣结果</h2>
-          <dl className="ld-order-result__meta">
-            <div>
-              <dt>票号</dt>
-              <dd data-testid="pickup-ticket">{result.ticket_no}</dd>
-            </div>
-            <div>
-              <dt>订单状态</dt>
-              <dd>
-                <StatusBadge family="order" status={result.status} />
-              </dd>
-            </div>
-            <div>
-              <dt>已付累计</dt>
-              <dd>
-                <MoneyText fen={result.paid_cents} />
-              </dd>
-            </div>
-            <div>
-              <dt>余额</dt>
-              <dd>
-                <MoneyText fen={result.balance_cents} />
-              </dd>
-            </div>
-            <div>
-              <dt>本次取件数</dt>
-              <dd>{result.picked_garment_ids.length}</dd>
-            </div>
-          </dl>
-          <ul className="ld-order-result__garments">
-            {result.picked_garment_ids.map((id) => (
-              <li key={id} className="ld-order-result__garment">
-                <span className="ld-order-result__mono">{id}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-    </main>
-  );
-}
-
-type GarmentCheckRowProps = {
-  garment: OrderGetGarment;
-  checked: boolean;
-  disabled: boolean;
-  onToggle: () => void;
-};
-
-function GarmentCheckRow({ garment, checked, disabled, onToggle }: GarmentCheckRowProps) {
-  const pickable = isPickableGarmentStatus(garment.status);
-  const inputId = `pickup-g-${garment.garment_id}`;
-  return (
-    <li
-      className={
-        pickable
-          ? "ld-pickup-garments__item"
-          : "ld-pickup-garments__item ld-pickup-garments__item--disabled"
-      }
-    >
-      <label className="ld-pickup-garments__label" htmlFor={inputId}>
-        <input
-          id={inputId}
-          type="checkbox"
-          className="ld-pickup-garments__checkbox"
-          checked={checked}
-          disabled={disabled}
-          onChange={onToggle}
-          data-testid={`pickup-garment-${garment.garment_id}`}
+      {result === null ? null : <PickupResult result={result} />}
+      {loaded === null ? null : (
+        <PaymentCollectionDialog
+          open={paymentOpen}
+          order={loaded}
+          commandClient={commandClient}
+          onClose={() => setPaymentOpen(false)}
+          onCompleted={() => void loadOrderById(loaded.order_id)}
         />
-        <span className="ld-pickup-garments__body">
-          <span className="ld-pickup-garments__barcode">{garment.barcode}</span>
-          <span className="ld-pickup-garments__meta-line">
-            L{garment.line_index + 1}·#{garment.seq}
-          </span>
-          <StatusBadge family="garment" status={garment.status} />
-          <MoneyText fen={garment.unit_price_cents} />
-        </span>
-      </label>
-    </li>
+      )}
+    </main>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * M2 skeleton order commands + order.get / order.list queries (receive/pickup wave).
+ * M2 counter order commands and read queries (receive, pickup, lookup).
  * Full catalog/payment/fulfillment land in later M2 increments (contracts v0.2).
  */
 
@@ -108,6 +108,24 @@ export const OrderListInputSchema = z.strictObject({
   limit: z.number().int().positive().max(50).optional(),
 });
 
+/** Counter lookup is intentionally bounded and server-side: never fetch a whole order list to scan. */
+export const OrderLookupInputSchema = z.strictObject({
+  /** Ticket number, customer pickup code, garment barcode, mobile number, or customer-name prefix. */
+  key: z.string().trim().min(1).max(128),
+  /** Pickup defaults to open orders; history callers may explicitly widen the status. */
+  status: OrderStatusSchema.optional(),
+  /** A small candidate set forces an explicit UI choice when a customer has several orders. */
+  limit: z.number().int().positive().max(20).optional(),
+});
+
+export const OrderLookupMatchKindSchema = z.enum([
+  "ticket_no",
+  "pickup_code",
+  "garment_barcode",
+  "customer_phone",
+  "customer_name",
+]);
+
 /**
  * List row (documented for tests / handlers; not Zod-validated on wire).
  *
@@ -135,12 +153,25 @@ export type OrderListResult = Readonly<{
   orders: readonly OrderListRow[];
 }>;
 
+export type OrderLookupMatchKind = z.infer<typeof OrderLookupMatchKindSchema>;
+
+export type OrderLookupRow = OrderListRow &
+  Readonly<{
+    pickup_code: string | null;
+    matched_by: OrderLookupMatchKind;
+  }>;
+
+export type OrderLookupResult = Readonly<{
+  orders: readonly OrderLookupRow[];
+}>;
+
 type ReceiveInput = typeof OrderReceiveInputSchema;
 type PickupInput = typeof OrderPickupInputSchema;
 type HoldInput = typeof OrderHoldInputSchema;
 type CancelInput = typeof OrderCancelInputSchema;
 type GetInput = typeof OrderGetInputSchema;
 type ListInput = typeof OrderListInputSchema;
+type LookupInput = typeof OrderLookupInputSchema;
 
 /** 开单：生成 order + order_lines 语义 + 按 qty 拆 garments（runtime）。 */
 export const orderReceiveCommand: CommandDefinition<ReceiveInput> = defineCommand({
@@ -263,6 +294,25 @@ export const orderListQuery: QueryDefinition<ListInput> = defineQuery({
   max_result_rows: 50,
 });
 
+/** Bounded counter lookup for ticket, pickup code, garment barcode, phone, or customer name. */
+export const orderLookupQuery: QueryDefinition<LookupInput> = defineQuery({
+  name: "order.lookup",
+  version: "0.1.0",
+  description: "Find a bounded set of counter pickup candidates by a customer-facing identifier.",
+  description_llm:
+    "Lookup ticket number, pickup code, garment barcode, exact mobile number, or customer-name prefix. Return no more than 20 store-scoped candidates; show a choice when more than one order matches.",
+  input: OrderLookupInputSchema,
+  risk: "R2",
+  invariants: [],
+  idempotent: true,
+  sideEffects: [],
+  offline_mode: "denied",
+  data_classification: "pii",
+  input_redaction: [{ path: "/key", strategy: "mask" }],
+  result_redaction: [{ path: "/orders/*/customer_phone", strategy: "mask" }],
+  max_result_rows: 20,
+});
+
 export const ORDER_COMMANDS = Object.freeze([
   orderReceiveCommand,
   orderHoldCommand,
@@ -274,8 +324,12 @@ export const ORDER_COMMAND_NAMES = Object.freeze(
   ORDER_COMMANDS.map((command) => command.name),
 ) as readonly ["order.receive", "order.hold", "order.cancel", "order.pickup"];
 
-export const ORDER_QUERIES = Object.freeze([orderGetQuery, orderListQuery] as const);
+export const ORDER_QUERIES = Object.freeze([
+  orderGetQuery,
+  orderListQuery,
+  orderLookupQuery,
+] as const);
 
 export const ORDER_QUERY_NAMES = Object.freeze(
   ORDER_QUERIES.map((query) => query.name),
-) as readonly ["order.get", "order.list"];
+) as readonly ["order.get", "order.list", "order.lookup"];

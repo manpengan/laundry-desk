@@ -7,11 +7,11 @@ import type { QueryPort } from "../commands/types.js";
 import type { NavItemId } from "../nav.js";
 import { parseCustomerRows, unwrapQueryResult as unwrapCustomers } from "./CustomersPage.js";
 import {
-  findOrderByCounterKey,
   parseOrderListRows,
   unwrapQueryResult as unwrapOrders,
   type OrderListRowView,
 } from "./OrdersList.js";
+import { parseOrderLookupRows } from "./OrderLookupCandidates.js";
 import {
   parseDaySummary,
   unwrapQueryResult as unwrapStats,
@@ -22,11 +22,15 @@ export type CounterWorkbenchProps = Readonly<{
   queryClient: QueryPort;
   onNavigate: (id: NavItemId) => void;
   onOpenPickup: (orderId: string) => void;
+  onOpenPickupLookup: (key: string) => void;
 }>;
 
-export { findOrderByCounterKey } from "./OrdersList.js";
-
-export function CounterWorkbench({ queryClient, onNavigate, onOpenPickup }: CounterWorkbenchProps) {
+export function CounterWorkbench({
+  queryClient,
+  onNavigate,
+  onOpenPickup,
+  onOpenPickupLookup,
+}: CounterWorkbenchProps) {
   const toast = useToast();
   const [pickupKey, setPickupKey] = useState("");
   const [customerKey, setCustomerKey] = useState("");
@@ -75,31 +79,35 @@ export function CounterWorkbench({ queryClient, onNavigate, onOpenPickup }: Coun
   const onPickupSearch = useCallback(async () => {
     const key = pickupKey.trim();
     if (key.length === 0) {
-      toast.push("请输入票号、手机号或订单标识", "error");
-      return;
-    }
-    const existing = findOrderByCounterKey(orders, key);
-    if (existing !== null) {
-      onOpenPickup(existing.order_id);
+      toast.push("请输入票号、取件码、衣物条码、手机号或姓名", "error");
       return;
     }
     setBusy(true);
     try {
-      const res = await queryClient.execute<unknown>("order.list", { limit: 50 });
+      const res = await queryClient.execute<unknown>("order.lookup", {
+        key,
+        status: "open",
+        limit: 20,
+      });
       if (!res.ok) {
         toast.push(res.error.message ?? res.error.code, "error");
         return;
       }
-      const match = findOrderByCounterKey(parseOrderListRows(unwrapOrders(res.data)) ?? [], key);
-      if (match === null) {
+      const found = parseOrderLookupRows(unwrapOrders(res.data));
+      if (found === null) {
+        toast.push("订单查询结果无法解析", "error");
+        return;
+      }
+      if (found.length === 0) {
         toast.push("未找到匹配订单；可按客户继续查找", "error");
         return;
       }
-      onOpenPickup(match.order_id);
+      if (found.length === 1) onOpenPickup(found[0]!.order_id);
+      else onOpenPickupLookup(key);
     } finally {
       setBusy(false);
     }
-  }, [onOpenPickup, orders, pickupKey, queryClient, toast]);
+  }, [onOpenPickup, onOpenPickupLookup, pickupKey, queryClient, toast]);
 
   const onCustomerSearch = useCallback(async () => {
     const key = customerKey.trim();
@@ -127,7 +135,7 @@ export function CounterWorkbench({ queryClient, onNavigate, onOpenPickup }: Coun
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">工作台</h1>
       <p className="ld-shell-main__hint">
-        扫描或输入票号即可进入取衣；今日数据按服务端营业日计算。
+        扫描或输入票号、取件码或衣物条码即可进入取衣；今日数据按服务端营业日计算。
       </p>
       <div className="ld-counter-grid ld-counter-grid--workbench">
         <section className="ld-counter-panel" aria-label="快捷取衣">
@@ -135,7 +143,7 @@ export function CounterWorkbench({ queryClient, onNavigate, onOpenPickup }: Coun
           <div className="ld-workbench-search">
             <Input
               name="quick-pickup"
-              label="票号 / 手机号"
+              label="票号 / 取件码 / 条码 / 手机号 / 姓名"
               value={pickupKey}
               onChange={(event) => setPickupKey(event.target.value)}
               autoFocus

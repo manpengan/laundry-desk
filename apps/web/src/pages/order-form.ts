@@ -31,6 +31,7 @@ export type ReceiveGarmentResult = Readonly<{
 export type ReceiveOrderResult = Readonly<{
   order_id: string;
   ticket_no: string;
+  pickup_code: string;
   payable_cents: number;
   paid_cents: number;
   balance_cents: number;
@@ -47,7 +48,6 @@ export type PickupOrderResult = Readonly<{
   picked_garment_ids: readonly string[];
 }>;
 
-/** Garment row from order.get (partial pickup multi-select). */
 export type OrderGetGarment = Readonly<{
   garment_id: string;
   barcode: string;
@@ -60,6 +60,7 @@ export type OrderGetGarment = Readonly<{
 export type OrderGetResult = Readonly<{
   order_id: string;
   ticket_no: string | null;
+  pickup_code: string | null;
   status: string;
   customer_phone: string | null;
   customer_name: string | null;
@@ -69,10 +70,7 @@ export type OrderGetResult = Readonly<{
   garments: readonly OrderGetGarment[];
 }>;
 
-/**
- * Collapsed fulfillment (fulfillment_enabled=false): only `received` may → picked_up.
- * Keep client-side so web does not depend on @laundry/domain.
- */
+/** Collapsed fulfillment: only `received` may transition to picked_up. */
 export function isPickableGarmentStatus(status: string): boolean {
   return status === "received";
 }
@@ -120,13 +118,13 @@ function parseOrderGetGarment(row: unknown): OrderGetGarment | null {
   });
 }
 
-/** Parse order.get result envelope for the pickup form. */
 export function parseOrderGetResult(raw: unknown): OrderGetResult | null {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
   const r = raw as Record<string, unknown>;
   if (typeof r.order_id !== "string" || (typeof r.ticket_no !== "string" && r.ticket_no !== null)) {
     return null;
   }
+  if (typeof r.pickup_code !== "string" && r.pickup_code !== null) return null;
   if (typeof r.status !== "string") return null;
   if (typeof r.payable_cents !== "number" || !Number.isInteger(r.payable_cents)) return null;
   if (typeof r.paid_cents !== "number" || !Number.isInteger(r.paid_cents)) return null;
@@ -141,6 +139,7 @@ export function parseOrderGetResult(raw: unknown): OrderGetResult | null {
   return Object.freeze({
     order_id: r.order_id,
     ticket_no: r.ticket_no,
+    pickup_code: r.pickup_code,
     status: r.status,
     customer_phone: typeof r.customer_phone === "string" ? r.customer_phone : null,
     customer_name: typeof r.customer_name === "string" ? r.customer_name : null,

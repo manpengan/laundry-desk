@@ -85,6 +85,8 @@ export type OrderRecord = Readonly<{
   org_id: string;
   store_id: string;
   ticket_no: string | null;
+  /** Customer-facing receipt code; absent only on an unreceived draft. */
+  pickup_code: string | null;
   status: OrderStatus;
   customer_phone: string | null;
   customer_name: string | null;
@@ -125,6 +127,21 @@ export type OrderListSummary = Readonly<{
   created_at: number;
   garment_count: number;
 }>;
+
+export type OrderLookupMatchKind =
+  "ticket_no" | "pickup_code" | "garment_barcode" | "customer_phone" | "customer_name";
+
+export type OrderLookupOptions = Readonly<{
+  key: string;
+  status?: OrderStatus;
+  limit: number;
+}>;
+
+export type OrderLookupSummary = OrderListSummary &
+  Readonly<{
+    pickup_code: string | null;
+    matched_by: OrderLookupMatchKind;
+  }>;
 
 export type PickupApplyResult = Readonly<{
   order: OrderRecord;
@@ -180,6 +197,12 @@ export type OrderStore = Readonly<{
     storeId: string,
     options: OrderListSummaryOptions,
   ) => Promise<readonly OrderListSummary[]>;
+  /** Indexed, bounded identifier lookup for the counter pickup flow. */
+  lookupOrderSummaries?: (
+    orgId: string,
+    storeId: string,
+    options: OrderLookupOptions,
+  ) => Promise<readonly OrderLookupSummary[]>;
   /** Optional ledger read for tests / stats / future queries. */
   listPayments?: (
     orgId: string,

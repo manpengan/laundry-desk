@@ -12,6 +12,10 @@ export function ReceiveResult({ result }: { result: ReceiveOrderResult }) {
           <dd data-testid="receive-ticket">{result.ticket_no}</dd>
         </div>
         <div>
+          <dt>取件码</dt>
+          <dd data-testid="receive-pickup-code">{result.pickup_code}</dd>
+        </div>
+        <div>
           <dt>应付</dt>
           <dd>
             <MoneyText fen={result.payable_cents} />

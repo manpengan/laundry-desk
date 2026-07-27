@@ -24,6 +24,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0015_m2_counter_produc
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0016_local_bootstrap.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0017_local_runtime_readiness.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0018_identity_lifecycle_indexes.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0019_money_integrity_workday.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0020_counter_lookup_codes.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -50,5 +52,7 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Local bootstrap** (0016): `orgs.demo_only` plus owner-only singleton metadata for explicit local identity creation
 - **Local runtime readiness** (0017): owner-defined boolean bootstrap proof plus removal of runtime organization and DDL writes
 - **Identity lifecycle indexes** (0018): active device/session/family indexes for bounded auth transaction scans
+- **Money integrity + workday** (0019): immutable price components, business-day ledger rows, and durable command replay
+- **Counter lookup codes** (0020): customer-facing pickup codes plus store-scoped pickup/name-prefix indexes
 - Still deferred: edge lease, AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

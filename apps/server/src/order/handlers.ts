@@ -1,5 +1,5 @@
 /**
- * M2 skeleton handlers: order.receive / order.pickup / order.get / order.list.
+ * M2 counter handlers: order.receive / order.pickup / order.get / order.list / order.lookup.
  * Optional customer store: transaction-bound upsert on receive when phone present.
  */
 
@@ -12,6 +12,7 @@ import { HandlerCommandError } from "../bus/types.js";
 import type { CustomerStore } from "../customer/types.js";
 import type { OrderHandlerDeps } from "./deps.js";
 import { listHandler } from "./list-handler.js";
+import { lookupHandler } from "./lookup-handler.js";
 import {
   assertBusinessDayOpen,
   deriveBusinessDate,
@@ -68,6 +69,11 @@ function formatTicket(dayKey: string, seq: number): string {
   return `${dayKey}-${String(seq).padStart(4, "0")}`;
 }
 
+/** Ticket numbers are store-unique; derive a compact customer-facing code without a second counter. */
+function formatPickupCode(ticketNo: string): string {
+  return `P${ticketNo.replace("-", "")}`;
+}
+
 function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
@@ -101,6 +107,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
 
     const seq = await deps.store.nextTicketSeq(ctx.tenant.orgId, ctx.tenant.storeId, dayKey);
     const ticketNo = formatTicket(dayKey, seq);
+    const pickupCode = formatPickupCode(ticketNo);
 
     const orderLines: OrderLineRecord[] = lines.map((line, lineIndex) =>
       Object.freeze({
@@ -139,6 +146,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
       org_id: ctx.tenant.orgId,
       store_id: ctx.tenant.storeId,
       ticket_no: ticketNo,
+      pickup_code: pickupCode,
       status: "open" as const,
       customer_phone: customerPhone,
       customer_name: customerName,
@@ -186,6 +194,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
       result: Object.freeze({
         order_id: order.order_id,
         ticket_no: order.ticket_no,
+        pickup_code: order.pickup_code,
         payable_cents: order.payable_cents,
         paid_cents: order.paid_cents,
         balance_cents: order.balance_cents,
@@ -207,6 +216,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
         entityId: order.order_id,
         afterJson: JSON.stringify({
           ticket_no: order.ticket_no,
+          pickup_code: order.pickup_code,
           payable_cents: order.payable_cents,
           garment_count: garments.length,
         }),
@@ -318,6 +328,7 @@ function getHandler(deps: OrderHandlerDeps): CommandHandler {
       result: Object.freeze({
         order_id: order.order_id,
         ticket_no: order.ticket_no,
+        pickup_code: order.pickup_code,
         status: order.status,
         customer_phone: order.customer_phone,
         customer_name: order.customer_name,
@@ -356,6 +367,7 @@ export function createOrderQueryHandlers(
   return Object.freeze({
     "order.get": getHandler(deps),
     "order.list": listHandler(deps),
+    "order.lookup": lookupHandler(deps),
   });
 }
 
@@ -375,4 +387,5 @@ export function registerOrderQueryHandlers(
   const handlers = createOrderQueryHandlers(deps);
   registry.registerHandler("order.get", handlers["order.get"]!);
   registry.registerHandler("order.list", handlers["order.list"]!);
+  registry.registerHandler("order.lookup", handlers["order.lookup"]!);
 }

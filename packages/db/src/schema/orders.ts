@@ -25,6 +25,7 @@ export const orders = pgTable(
     orgId: uuid("org_id").notNull(),
     storeId: uuid("store_id").notNull(),
     ticketNo: text("ticket_no"),
+    pickupCode: text("pickup_code"),
     status: text("status").notNull(),
     customerPhone: text("customer_phone"),
     customerName: text("customer_name"),
@@ -47,6 +48,7 @@ export const orders = pgTable(
     primaryKey({ columns: [table.id], name: "orders_pkey" }),
     uniqueIndex("orders_tenant_id_uidx").on(table.orgId, table.storeId, table.id),
     uniqueIndex("orders_ticket_no_uidx").on(table.orgId, table.storeId, table.ticketNo),
+    uniqueIndex("orders_pickup_code_uidx").on(table.orgId, table.storeId, table.pickupCode),
     index("orders_store_status_created_idx").on(
       table.orgId,
       table.storeId,

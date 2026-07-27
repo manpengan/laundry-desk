@@ -43,6 +43,7 @@ export function PageHost({
 }: PageHostProps) {
   const copy = pageCopy(activeId);
   const [pickupOrderId, setPickupOrderId] = useState<string | undefined>(undefined);
+  const [pickupLookupKey, setPickupLookupKey] = useState<string | undefined>(undefined);
 
   if (loading) {
     return (
@@ -70,6 +71,7 @@ export function PageHost({
         commandClient={commandClient}
         {...(queryClient !== undefined ? { queryClient } : {})}
         {...(pickupOrderId !== undefined ? { initialOrderId: pickupOrderId } : {})}
+        {...(pickupLookupKey !== undefined ? { initialLookupKey: pickupLookupKey } : {})}
       />
     );
   }
@@ -97,6 +99,7 @@ export function PageHost({
         commandClient={commandClient}
         onOpenPickup={(orderId) => {
           setPickupOrderId(orderId);
+          setPickupLookupKey(undefined);
           onNavigate("pickup");
         }}
       />
@@ -119,6 +122,12 @@ export function PageHost({
         onNavigate={onNavigate}
         onOpenPickup={(orderId) => {
           setPickupOrderId(orderId);
+          setPickupLookupKey(undefined);
+          onNavigate("pickup");
+        }}
+        onOpenPickupLookup={(key) => {
+          setPickupOrderId(undefined);
+          setPickupLookupKey(key);
           onNavigate("pickup");
         }}
       />

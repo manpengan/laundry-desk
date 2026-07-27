@@ -8,6 +8,7 @@ import {
   ORDER_QUERIES,
   isContractDefinition,
   orderListQuery,
+  orderLookupQuery,
   parseContractInput,
 } from "../src/index.js";
 
@@ -22,9 +23,9 @@ describe("M2 order.list query", () => {
   });
 
   it("exports stable names and M2 order query alias", () => {
-    expect([...ORDER_QUERY_NAMES]).toEqual(["order.get", "order.list"]);
+    expect([...ORDER_QUERY_NAMES]).toEqual(["order.get", "order.list", "order.lookup"]);
     expect([...M2_ORDER_QUERY_NAMES]).toEqual([...ORDER_QUERY_NAMES]);
-    expect(M2_ORDER_QUERY_DEFINITIONS).toHaveLength(2);
+    expect(M2_ORDER_QUERY_DEFINITIONS).toHaveLength(3);
   });
 
   it("keeps OpenAPI M1 first-wave free of order.list", () => {
@@ -101,5 +102,22 @@ describe("M2 order.list query", () => {
     expect(orderListQuery.result_redaction).toEqual([
       { path: "/orders/*/customer_phone", strategy: "mask" },
     ]);
+  });
+
+  it("bounds and redacts the unified counter lookup key", async () => {
+    await expect(
+      parseContractInput(orderLookupQuery, { key: "  P202607220001  ", status: "open", limit: 20 }),
+    ).resolves.toEqual({ key: "P202607220001", status: "open", limit: 20 });
+    await expect(parseContractInput(orderLookupQuery, { key: "" })).rejects.toBeTruthy();
+    await expect(
+      parseContractInput(orderLookupQuery, { key: "张三", limit: 21 }),
+    ).rejects.toBeTruthy();
+    expect(orderLookupQuery).toMatchObject({
+      name: "order.lookup",
+      risk: "R2",
+      offline_mode: "denied",
+      max_result_rows: 20,
+      input_redaction: [{ path: "/key", strategy: "mask" }],
+    });
   });
 });

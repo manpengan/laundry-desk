@@ -9,6 +9,7 @@ import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { DangerConfirmDialog } from "./DangerConfirmDialog.js";
 import { OrderDetailContent } from "./OrderDetailContent.js";
+import { PaymentCollectionDialog } from "./PaymentCollectionDialog.js";
 import { parseOrderGetResult, unwrapCommandResult, type OrderGetResult } from "./order-form.js";
 
 export { OrderDetailContent, type OrderDetailContentProps } from "./OrderDetailContent.js";
@@ -105,6 +106,7 @@ export function OrderDetailDrawer({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelState, setCancelState] = useState<CancelState>({ status: "idle" });
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const requestRef = useRef(0);
 
   const loadPhotos = useCallback(
@@ -308,6 +310,19 @@ export function OrderDetailDrawer({
           </Button>
           {commandClient !== undefined &&
           load.status === "ready" &&
+          load.order.status === "open" &&
+          load.order.balance_cents > 0 ? (
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => setPaymentOpen(true)}
+              data-testid="order-detail-payment-btn"
+            >
+              补缴 / 收款
+            </Button>
+          ) : null}
+          {commandClient !== undefined &&
+          load.status === "ready" &&
           load.order.status === "open" ? (
             <Button
               variant="danger"
@@ -331,6 +346,17 @@ export function OrderDetailDrawer({
         onClose={closeCancel}
         onConfirm={(reason) => void handleCancel(reason)}
       />
+      {commandClient !== undefined && load.status === "ready" ? (
+        <PaymentCollectionDialog
+          open={paymentOpen}
+          order={load.order}
+          commandClient={commandClient}
+          onClose={() => setPaymentOpen(false)}
+          onCompleted={() => {
+            if (orderId !== null) void loadOrder(orderId);
+          }}
+        />
+      ) : null}
     </Drawer>
   );
 }

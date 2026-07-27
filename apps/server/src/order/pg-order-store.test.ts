@@ -66,6 +66,7 @@ const sampleOrder = (): OrderRecord =>
     org_id: DEMO_ORG_ID,
     store_id: DEMO_STORE_ID,
     ticket_no: "20260722-0001",
+    pickup_code: "P202607220001",
     status: "open" as const,
     customer_phone: "13800000111",
     customer_name: null,
@@ -165,6 +166,7 @@ test("mapOrder + mapOrderLine preserve cents and line_index", () => {
       org_id: DEMO_ORG_ID,
       store_id: DEMO_STORE_ID,
       ticket_no: "20260722-0009",
+      pickup_code: "P202607220009",
       status: "open",
       customer_phone: null,
       customer_name: null,
@@ -509,6 +511,51 @@ test("listOrderSummaries short-circuits a threshold above PostgreSQL integer bef
   );
   assert.equal(queries[0]?.sql, "BEGIN");
   assert.equal(queries.at(-1)?.sql, "COMMIT");
+});
+
+test("lookupOrderSummaries keeps ticket, pickup code, barcode, phone and name matching in one bounded query", async () => {
+  const handler: MockQueryHandler = (sql) => {
+    if (sql.includes("AS matched_by")) {
+      return {
+        rows: [
+          {
+            order_id: sampleOrder().order_id,
+            ticket_no: sampleOrder().ticket_no,
+            pickup_code: sampleOrder().pickup_code,
+            status: "open",
+            customer_phone: sampleOrder().customer_phone,
+            customer_name: "甲",
+            payable_cents: 3000,
+            paid_cents: 500,
+            balance_cents: 2500,
+            created_at: new Date("2024-07-22T12:34:56.000Z"),
+            garment_count: 2,
+            matched_by: "garment_barcode",
+          },
+        ],
+        rowCount: 1,
+      };
+    }
+    return { rows: [], rowCount: 0 };
+  };
+  const { pool, queries } = createCapturingPool(handler);
+  const store = createPgOrderStore(pool);
+  assert.ok(store.lookupOrderSummaries);
+
+  const summaries = await store.lookupOrderSummaries(DEMO_ORG_ID, DEMO_STORE_ID, {
+    key: "BBBBBBBBBBBBBBBB",
+    status: "open",
+    limit: 20,
+  });
+
+  assert.equal(summaries[0]?.matched_by, "garment_barcode");
+  assert.equal(summaries[0]?.pickup_code, "P202607220001");
+  const lookup = queries.find((query) => query.sql.includes("AS matched_by"));
+  assert.ok(lookup);
+  assert.match(lookup.sql, /o\.pickup_code = \$3/u);
+  assert.match(lookup.sql, /matched_g\.barcode = \$3/u);
+  assert.match(lookup.sql, /lower\(o\.customer_name\) LIKE lower\(\$3\)/u);
+  assert.deepEqual(lookup.params, [DEMO_ORG_ID, DEMO_STORE_ID, "BBBBBBBBBBBBBBBB", "open", 20]);
 });
 
 // Live PG smoke; ordinary unit runs remain database-free.

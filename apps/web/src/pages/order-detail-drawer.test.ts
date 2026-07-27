@@ -19,6 +19,7 @@ import { OrdersList } from "./OrdersList.js";
 const SAMPLE_ORDER: OrderGetResult = Object.freeze({
   order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
   ticket_no: "20260722-0001",
+  pickup_code: "P202607220001",
   status: "open",
   customer_phone: "13800000111",
   customer_name: "甲",
@@ -100,6 +101,7 @@ test("parseOrderGetResult peels mock order.get payload fields", () => {
     result: {
       order_id: SAMPLE_ORDER.order_id,
       ticket_no: SAMPLE_ORDER.ticket_no,
+      pickup_code: SAMPLE_ORDER.pickup_code,
       status: SAMPLE_ORDER.status,
       customer_phone: SAMPLE_ORDER.customer_phone,
       customer_name: SAMPLE_ORDER.customer_name,

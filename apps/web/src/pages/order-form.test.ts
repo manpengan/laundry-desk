@@ -169,6 +169,7 @@ test("parseOrderGetResult accepts summary + garments", () => {
   const parsed = parseOrderGetResult({
     order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
     ticket_no: "20260722-0001",
+    pickup_code: "P202607220001",
     status: "open",
     customer_phone: "13800000111",
     customer_name: "张三",

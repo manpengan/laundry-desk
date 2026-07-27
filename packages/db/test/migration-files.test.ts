@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0019", () => {
+  it("ships formal SQL migrations ordered 0001 → 0020", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -31,6 +31,7 @@ describe("packages/db migration file inventory", () => {
       "0017_local_runtime_readiness.sql",
       "0018_identity_lifecycle_indexes.sql",
       "0019_money_integrity_workday.sql",
+      "0020_counter_lookup_codes.sql",
     ]);
   });
 
@@ -62,6 +63,7 @@ describe("packages/db migration file inventory", () => {
       "0017",
       "0018",
       "0019",
+      "0020",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -167,5 +169,12 @@ describe("packages/db migration file inventory", () => {
     expect(sql).toMatch(
       /GRANT SELECT, INSERT, UPDATE ON TABLE command_idempotency TO laundry_app/iu,
     );
+  });
+
+  it("adds customer pickup codes and bounded name-prefix lookup indexes", () => {
+    const sql = readFileSync(join(migrationsDir, "0020_counter_lookup_codes.sql"), "utf8");
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS pickup_code text/iu);
+    expect(sql).toMatch(/orders_pickup_code_uidx/iu);
+    expect(sql).toMatch(/lower\(customer_name\) text_pattern_ops/iu);
   });
 });

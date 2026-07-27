@@ -434,12 +434,15 @@ export {
   ORDER_QUERIES,
   OrderGetInputSchema,
   OrderListInputSchema,
+  OrderLookupInputSchema,
+  OrderLookupMatchKindSchema,
   OrderPickupInputSchema,
   OrderReceiveInputSchema,
   OrderReceiveLineSchema,
   OrderStatusSchema,
   orderGetQuery,
   orderListQuery,
+  orderLookupQuery,
   orderPickupCommand,
   orderReceiveCommand,
 } from "./commands/order.js";
@@ -454,7 +457,13 @@ export {
   paymentRepayCommand,
   paymentRefundCommand,
 } from "./commands/payment.js";
-export type { OrderListResult, OrderListRow } from "./commands/order.js";
+export type {
+  OrderListResult,
+  OrderListRow,
+  OrderLookupMatchKind,
+  OrderLookupResult,
+  OrderLookupRow,
+} from "./commands/order.js";
 export {
   PRINT_COMMAND_NAMES,
   PRINT_COMMANDS,

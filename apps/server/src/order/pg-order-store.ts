@@ -6,6 +6,7 @@ import type { PgPool } from "../db/pg-pool.js";
 import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
 import { buildLineIdByIndex } from "./pg-order-mappers.js";
 import { insertOrderRows, listOrderSummaries, loadGarments, loadOrder } from "./pg-order-data.js";
+import { lookupOrderSummaries } from "./pg-order-lookup.js";
 import {
   appendPaymentTxn,
   applyPickupTxn,
@@ -80,6 +81,11 @@ export function createPgOrderStore(
     listOrderSummaries: async (orgId, storeId, options) =>
       withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) =>
         listOrderSummaries(client, orgId, storeId, options),
+      ),
+
+    lookupOrderSummaries: async (orgId, storeId, options) =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) =>
+        lookupOrderSummaries(client, orgId, storeId, options),
       ),
 
     listGarments: async (orgId, storeId, orderId) =>

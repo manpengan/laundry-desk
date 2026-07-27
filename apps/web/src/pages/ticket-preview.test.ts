@@ -13,6 +13,7 @@ import type { ReceiveOrderResult } from "./order-form.js";
 const result: ReceiveOrderResult = Object.freeze({
   order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
   ticket_no: "20260722-0001",
+  pickup_code: "P202607220001",
   payable_cents: 3000,
   paid_cents: 1000,
   balance_cents: 2000,

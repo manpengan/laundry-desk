@@ -95,19 +95,20 @@ export async function insertOrderRows(
 ): Promise<void> {
   await client.query(
     `INSERT INTO orders (
-      id, org_id, store_id, ticket_no, status,
+      id, org_id, store_id, ticket_no, pickup_code, status,
       customer_phone, customer_name, note,
       subtotal_cents, original_cents, discount_cents, addon_cents, urgent_cents, freight_cents,
       payable_cents, paid_cents, balance_cents, business_date,
       created_at, updated_at, created_by_staff_id
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
      )`,
     [
       order.order_id,
       order.org_id,
       order.store_id,
       order.ticket_no,
+      order.pickup_code,
       order.status,
       order.customer_phone,
       order.customer_name,
@@ -199,7 +200,7 @@ export async function loadOrder(
   forUpdate = false,
 ): Promise<OrderRecord | null> {
   const orderResult = await client.query<OrderRow>(
-    `SELECT id::text, org_id::text, store_id::text, ticket_no, status,
+    `SELECT id::text, org_id::text, store_id::text, ticket_no, pickup_code, status,
             customer_phone, customer_name, note,
             subtotal_cents, original_cents, discount_cents, addon_cents, urgent_cents, freight_cents,
             payable_cents, paid_cents, balance_cents, business_date,

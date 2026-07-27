@@ -18,6 +18,7 @@ export type OrderRow = {
   org_id: string;
   store_id: string;
   ticket_no: string | null;
+  pickup_code: string | null;
   status: string;
   customer_phone: string | null;
   customer_name: string | null;
@@ -115,6 +116,7 @@ export function mapOrder(row: OrderRow, lines: readonly OrderLineRecord[]): Orde
     org_id: row.org_id,
     store_id: row.store_id,
     ticket_no: row.ticket_no,
+    pickup_code: row.pickup_code,
     status: asOrderStatus(row.status),
     customer_phone: row.customer_phone,
     customer_name: row.customer_name,

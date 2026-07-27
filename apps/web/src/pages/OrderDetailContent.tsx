@@ -26,6 +26,10 @@ export function OrderDetailContent({
             <dd data-testid="order-detail-ticket">{order.ticket_no ?? "挂单"}</dd>
           </div>
           <div>
+            <dt>取件码</dt>
+            <dd>{order.pickup_code ?? "—"}</dd>
+          </div>
+          <div>
             <dt>状态</dt>
             <dd data-testid="order-detail-status">
               <StatusBadge family="order" status={order.status} />

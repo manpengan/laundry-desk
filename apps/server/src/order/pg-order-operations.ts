@@ -117,16 +117,17 @@ export async function replaceDraftTxn(
   );
   await client.query(
     `UPDATE orders
-     SET ticket_no = $4, status = $5, customer_phone = $6, customer_name = $7, note = $8,
-         subtotal_cents = $9, original_cents = $10, discount_cents = $11, addon_cents = $12,
-         urgent_cents = $13, freight_cents = $14, payable_cents = $15, paid_cents = $16,
-         balance_cents = $17, business_date = $18, updated_at = $19
+     SET ticket_no = $4, pickup_code = $5, status = $6, customer_phone = $7, customer_name = $8, note = $9,
+         subtotal_cents = $10, original_cents = $11, discount_cents = $12, addon_cents = $13,
+         urgent_cents = $14, freight_cents = $15, payable_cents = $16, paid_cents = $17,
+         balance_cents = $18, business_date = $19, updated_at = $20
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid`,
     [
       order.org_id,
       order.store_id,
       order.order_id,
       order.ticket_no,
+      order.pickup_code,
       order.status,
       order.customer_phone,
       order.customer_name,

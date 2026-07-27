@@ -54,6 +54,7 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
       org_id: ctx.tenant.orgId,
       store_id: ctx.tenant.storeId,
       ticket_no: null,
+      pickup_code: null,
       status: "draft",
       customer_phone: phone,
       customer_name: name,

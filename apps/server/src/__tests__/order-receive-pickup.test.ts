@@ -61,14 +61,15 @@ function buildBus(
   return { registry, queryRegistry, chainHooks, pendingStore, orderStore, customerStore };
 }
 
-test("order.receive expands qty into garments and returns ticket_no", async () => {
-  const { registry, chainHooks, pendingStore, orderStore } = buildBus();
+test("order.receive expands qty into garments and issues lookup identifiers", async () => {
+  const { registry, queryRegistry, chainHooks, pendingStore, orderStore } = buildBus();
   const result = await executeCommand(
     new FakeSqlClient(),
     TENANT,
     "order.receive",
     {
       customer_phone: "13800000111",
+      customer_name: "张三",
       lines: [
         {
           service_code: "wash",
@@ -88,12 +89,14 @@ test("order.receive expands qty into garments and returns ticket_no", async () =
   const data = result.data.result as {
     order_id: string;
     ticket_no: string;
+    pickup_code: string;
     payable_cents: number;
     balance_cents: number;
     garment_count: number;
-    garments: readonly { status: string }[];
+    garments: readonly { status: string; barcode: string }[];
   };
   assert.match(data.ticket_no, /^\d{8}-\d{4}$/u);
+  assert.equal(data.pickup_code, `P${data.ticket_no.replace("-", "")}`);
   assert.equal(data.payable_cents, 3000);
   assert.equal(data.balance_cents, 2500);
   assert.equal(data.garment_count, 2);
@@ -105,6 +108,38 @@ test("order.receive expands qty into garments and returns ticket_no", async () =
   const stored = await orderStore.getOrder(DEMO_ORG_ID, DEMO_STORE_ID, data.order_id);
   assert.ok(stored);
   assert.equal(stored.lines[0]?.qty, 2);
+
+  for (const [key, expected] of [
+    [data.ticket_no, "ticket_no"],
+    [data.pickup_code, "pickup_code"],
+    [data.garments[0]!.barcode, "garment_barcode"],
+    ["13800000111", "customer_phone"],
+  ] as const) {
+    const lookup = await executeQuery(
+      new FakeSqlClient(),
+      TENANT,
+      "order.lookup",
+      { key, status: "open" },
+      { registry: queryRegistry, actor: CLERK },
+    );
+    assert.equal(lookup.ok, true, JSON.stringify(lookup));
+    if (!lookup.ok) return;
+    const orders = (lookup.data.result as { orders: readonly { matched_by: string }[] }).orders;
+    assert.equal(orders.length, 1);
+    assert.equal(orders[0]?.matched_by, expected);
+  }
+
+  const byName = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "order.lookup",
+    { key: "张", status: "open" },
+    { registry: queryRegistry, actor: CLERK },
+  );
+  assert.equal(byName.ok, true, JSON.stringify(byName));
+  if (!byName.ok) return;
+  const orders = (byName.data.result as { orders: readonly { matched_by: string }[] }).orders;
+  assert.equal(orders[0]?.matched_by, "customer_name");
 });
 
 test("order.pickup transitions received garments and settles balance", async () => {

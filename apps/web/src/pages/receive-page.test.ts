@@ -52,6 +52,7 @@ test("after successful receive, ticket-preview shows ticket_no", () => {
   const result: ReceiveOrderResult = Object.freeze({
     order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
     ticket_no: "20260722-0042",
+    pickup_code: "P202607220042",
     payable_cents: 1500,
     paid_cents: 0,
     balance_cents: 1500,
