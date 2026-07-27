@@ -2,12 +2,7 @@
  * Process-local stats seed map + order-backed day summary builder.
  */
 
-import {
-  aggregateDaySummary,
-  emptyDaySummary,
-  utcDateKeyFromEpoch,
-  type DaySummary,
-} from "@laundry/domain";
+import { aggregateDaySummary, emptyDaySummary, type DaySummary } from "@laundry/domain";
 
 import type { OrderStore } from "../order/types.js";
 import type { StatsDaySummaryInput, StatsQueryPort } from "./types.js";
@@ -44,6 +39,10 @@ export class MemoryStatsSource implements StatsQueryPort {
     }
     return summarizeOrdersForDay(this.orderStore, input);
   }
+
+  async cashSummary(input: StatsDaySummaryInput): Promise<Readonly<{ cash_cents: number }>> {
+    return summarizeCashForDay(this.orderStore, input);
+  }
 }
 
 export function createMemoryStatsSource(orderStore: OrderStore | null = null): MemoryStatsSource {
@@ -54,6 +53,7 @@ export function createMemoryStatsSource(orderStore: OrderStore | null = null): M
 export function createOrderBackedStatsQuery(orderStore: OrderStore): StatsQueryPort {
   return Object.freeze({
     daySummary: (input: StatsDaySummaryInput) => summarizeOrdersForDay(orderStore, input),
+    cashSummary: (input: StatsDaySummaryInput) => summarizeCashForDay(orderStore, input),
   });
 }
 
@@ -70,9 +70,7 @@ async function summarizeOrdersForDay(
   }
 
   const allOrders = await store.listOrders(input.orgId, input.storeId);
-  const dayOrders = allOrders.filter(
-    (order) => utcDateKeyFromEpoch(order.created_at) === input.businessDate,
-  );
+  const dayOrders = allOrders.filter((order) => order.business_date === input.businessDate);
 
   const garments: Array<Readonly<{ status: string }>> = [];
   for (const order of dayOrders) {
@@ -88,7 +86,7 @@ async function summarizeOrdersForDay(
       : await store.listPayments(input.orgId, input.storeId);
 
   const dayPayments = paymentRows
-    .filter((p) => p.kind === "pay" && utcDateKeyFromEpoch(p.at) === input.businessDate)
+    .filter((p) => p.kind === "pay" && p.business_date === input.businessDate)
     .map((p) => Object.freeze({ amount_cents: p.amount_cents, kind: p.kind }));
 
   return aggregateDaySummary({
@@ -105,4 +103,22 @@ async function summarizeOrdersForDay(
     garments: Object.freeze(garments),
     payments: Object.freeze(dayPayments),
   });
+}
+
+async function summarizeCashForDay(
+  store: OrderStore | null,
+  input: StatsDaySummaryInput,
+): Promise<Readonly<{ cash_cents: number }>> {
+  if (store?.listPayments === undefined) return Object.freeze({ cash_cents: 0 });
+  const rows = await store.listPayments(input.orgId, input.storeId);
+  let total = 0;
+  for (const payment of rows) {
+    if (payment.method !== "cash" || payment.business_date !== input.businessDate) continue;
+    const contribution =
+      payment.kind === "refund" || payment.kind === "reversal"
+        ? -payment.amount_cents
+        : payment.amount_cents;
+    total += contribution;
+  }
+  return Object.freeze({ cash_cents: total });
 }

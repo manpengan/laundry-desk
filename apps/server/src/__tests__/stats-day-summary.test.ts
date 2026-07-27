@@ -8,6 +8,7 @@ import test from "node:test";
 import { executeCommand } from "../bus/executor.js";
 import { executeQuery } from "../bus/execute-query.js";
 import type { ActorContext } from "../bus/types.js";
+import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
 import { FakeSqlClient } from "../db/fake-client.js";
 import type { TenantContext } from "../db/types.js";
 import { createDefaultChainHooks } from "../handlers/default-chain-hooks.js";
@@ -47,7 +48,7 @@ function buildBus(orderStore = createMemoryOrderStore(), fixedNow = () => DAY_EP
       features: createMemoryFeaturesStore(),
       audit: createMemoryAuditQueryStore(),
     }),
-    order: Object.freeze({ store: orderStore, now: fixedNow }),
+    order: Object.freeze({ store: orderStore, catalog: createMemoryCatalogStore(), now: fixedNow }),
     stats: Object.freeze({ source: statsSource }),
   });
   const pendingStore = new MemoryPendingActionStore();
@@ -161,8 +162,7 @@ test("stats.day.summary aggregates receive orders for the UTC day", async () => 
   assert.equal(body.payable_cents, 7500);
   assert.equal(body.paid_cents, 500);
   assert.equal(body.balance_cents, 7000);
-  // receive does not write payment ledger rows in skeleton
-  assert.equal(body.payment_cents, 0);
+  assert.equal(body.payment_cents, 500);
   assert.equal(body.picked_garment_count, 0);
 });
 
@@ -197,7 +197,7 @@ test("stats.day.summary counts picked garments and pay ledger after pickup", asy
     {
       order_id: orderId,
       garment_ids: [],
-      collect_cents: 2000,
+      collect_cents: 1800,
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
   );
@@ -223,10 +223,10 @@ test("stats.day.summary counts picked garments and pay ledger after pickup", asy
   };
   assert.equal(body.order_count, 1);
   assert.equal(body.garment_count, 1);
-  assert.equal(body.payable_cents, 2000);
-  assert.equal(body.paid_cents, 2000);
+  assert.equal(body.payable_cents, 1800);
+  assert.equal(body.paid_cents, 1800);
   assert.equal(body.balance_cents, 0);
-  assert.equal(body.payment_cents, 2000);
+  assert.equal(body.payment_cents, 1800);
   assert.equal(body.picked_garment_count, 1);
 });
 

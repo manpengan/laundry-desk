@@ -3,6 +3,7 @@
  */
 
 import { createCommandError } from "@laundry/contracts";
+import { businessDayStart } from "@laundry/domain";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
@@ -14,6 +15,8 @@ export type ShiftHandlerDeps = Readonly<{
   store: ShiftStore;
   stats: StatsQueryPort;
   now?: () => number;
+  timeZone?: string;
+  rolloverHour?: number;
 }>;
 
 const BUSINESS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/u;
@@ -43,6 +46,13 @@ function requireSignatureName(value: unknown): string {
   return trimmed;
 }
 
+function requireNonNegativeCents(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+  }
+  return value;
+}
+
 function toCloseResult(row: ShiftClosingRecord): Readonly<Record<string, unknown>> {
   return Object.freeze({
     shift_id: row.shift_id,
@@ -52,6 +62,13 @@ function toCloseResult(row: ShiftClosingRecord): Readonly<Record<string, unknown
     payable_cents: row.payable_cents,
     paid_cents: row.paid_cents,
     payment_cents: row.payment_cents,
+    opening_float_cents: row.opening_float_cents,
+    counted_cash_cents: row.counted_cash_cents,
+    retained_float_cents: row.retained_float_cents,
+    expected_cash_cents: row.expected_cash_cents,
+    cash_difference_cents: row.cash_difference_cents,
+    period_started_at: row.period_started_at,
+    period_ended_at: row.period_ended_at,
     signature_name: row.signature_name,
     closed_by_staff_id: row.closed_by_staff_id,
     note: row.note,
@@ -62,6 +79,8 @@ function closeHandler(deps: ShiftHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
     const businessDate = requireBusinessDate(input.business_date);
+    const countedCashCents = requireNonNegativeCents(input.counted_cash_cents);
+    const retainedFloatCents = requireNonNegativeCents(input.retained_float_cents);
     const signatureName = requireSignatureName(input.signature_name);
     const note = typeof input.note === "string" ? input.note : undefined;
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
@@ -71,6 +90,18 @@ function closeHandler(deps: ShiftHandlerDeps): CommandHandler {
       storeId: ctx.tenant.storeId,
       businessDate,
     });
+    const cash = await deps.stats.cashSummary({
+      orgId: ctx.tenant.orgId,
+      storeId: ctx.tenant.storeId,
+      businessDate,
+    });
+    const previous = await deps.store.getMostRecent(ctx.tenant.orgId, ctx.tenant.storeId);
+    const openingFloatCents = previous?.retained_float_cents ?? 0;
+    const expectedCashCents = openingFloatCents + cash.cash_cents;
+    if (!Number.isSafeInteger(expectedCashCents) || expectedCashCents < 0) {
+      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    }
+    const cashDifferenceCents = countedCashCents - expectedCashCents;
 
     let record: ShiftClosingRecord;
     try {
@@ -86,6 +117,21 @@ function closeHandler(deps: ShiftHandlerDeps): CommandHandler {
           payable_cents: summary.payable_cents,
           paid_cents: summary.paid_cents,
           payment_cents: summary.payment_cents,
+          opening_float_cents: openingFloatCents,
+          counted_cash_cents: countedCashCents,
+          retained_float_cents: retainedFloatCents,
+          expected_cash_cents: expectedCashCents,
+          cash_difference_cents: cashDifferenceCents,
+          period_started_at:
+            previous?.closed_at ??
+            Math.floor(
+              businessDayStart(
+                businessDate,
+                deps.timeZone ?? "UTC",
+                deps.rolloverHour ?? 0,
+              ).getTime() / 1000,
+            ),
+          period_ended_at: now,
         }),
         closed_at: now,
       });
@@ -113,6 +159,9 @@ function closeHandler(deps: ShiftHandlerDeps): CommandHandler {
           payable_cents: record.payable_cents,
           paid_cents: record.paid_cents,
           payment_cents: record.payment_cents,
+          expected_cash_cents: record.expected_cash_cents,
+          counted_cash_cents: record.counted_cash_cents,
+          cash_difference_cents: record.cash_difference_cents,
         }),
       }),
       events: Object.freeze([

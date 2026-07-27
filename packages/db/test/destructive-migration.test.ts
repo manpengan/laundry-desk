@@ -32,6 +32,13 @@ describe("destructive migration static reject", () => {
       ),
     ).toHaveLength(0);
     expect(findDestructiveSql("x.sql", "ALTER TABLE t DROP COLUMN c;")).toHaveLength(1);
+    expect(findDestructiveSql("x.sql", "ALTER TABLE t DROP CONSTRAINT t_chk;")).toHaveLength(1);
+    expect(
+      findDestructiveSql(
+        "0019_money_integrity_workday.sql",
+        "ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_chk;",
+      ),
+    ).toHaveLength(0);
     expect(isExpandFriendlyMigration("CREATE TABLE t (id uuid PRIMARY KEY);")).toBe(true);
   });
 
@@ -63,6 +70,7 @@ describe("destructive migration static reject", () => {
       "0016_local_bootstrap.sql",
       "0017_local_runtime_readiness.sql",
       "0018_identity_lifecycle_indexes.sql",
+      "0019_money_integrity_workday.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
@@ -89,6 +97,7 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS customers/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS shift_closings/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS garment_photos/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS command_idempotency/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS args_hash/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS entity_versions/iu);
     expect(combined).toMatch(/ADD COLUMN IF NOT EXISTS idempotency_key/iu);
@@ -99,6 +108,9 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE payments TO laundry_app/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE shift_closings TO laundry_app/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE garment_photos TO laundry_app/iu);
+    expect(combined).toMatch(
+      /GRANT SELECT, INSERT, UPDATE ON TABLE command_idempotency TO laundry_app/iu,
+    );
     expect(combined).toMatch(/GRANT SELECT, INSERT, UPDATE ON TABLE print_jobs TO laundry_app/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT, UPDATE ON TABLE customers TO laundry_app/iu);
     expect(combined).toMatch(

@@ -21,6 +21,9 @@ export const M2_CUSTOMER_TABLE_NAMES = Object.freeze(["customers"] as const);
 
 export const M2_SHIFT_TABLE_NAMES = Object.freeze(["shift_closings"] as const);
 
+/** Durable command replay records (store-scoped). */
+export const M2_COMMAND_IDEMPOTENCY_TABLE_NAMES = Object.freeze(["command_idempotency"] as const);
+
 export const M3_PHOTO_TABLE_NAMES = Object.freeze(["garment_photos"] as const);
 
 export const M2_ALL_TABLE_NAMES = Object.freeze([
@@ -30,6 +33,7 @@ export const M2_ALL_TABLE_NAMES = Object.freeze([
   ...M2_PRINT_TABLE_NAMES,
   ...M2_CUSTOMER_TABLE_NAMES,
   ...M2_SHIFT_TABLE_NAMES,
+  ...M2_COMMAND_IDEMPOTENCY_TABLE_NAMES,
   ...M3_PHOTO_TABLE_NAMES,
 ] as const);
 
@@ -39,5 +43,7 @@ export type M2PaymentTableNameLiteral = (typeof M2_PAYMENT_TABLE_NAMES)[number];
 export type M2PrintTableNameLiteral = (typeof M2_PRINT_TABLE_NAMES)[number];
 export type M2CustomerTableNameLiteral = (typeof M2_CUSTOMER_TABLE_NAMES)[number];
 export type M2ShiftTableNameLiteral = (typeof M2_SHIFT_TABLE_NAMES)[number];
+export type M2CommandIdempotencyTableNameLiteral =
+  (typeof M2_COMMAND_IDEMPOTENCY_TABLE_NAMES)[number];
 export type M3PhotoTableNameLiteral = (typeof M3_PHOTO_TABLE_NAMES)[number];
 export type M2TableNameLiteral = (typeof M2_ALL_TABLE_NAMES)[number];

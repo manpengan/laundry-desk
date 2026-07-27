@@ -6,6 +6,7 @@ import { ConfirmReferenceSchema } from "./wire-payload.js";
 /** Architecture §6.5: externally safe outcomes for each C1 validation-chain stage. */
 export const CommandErrorCodeSchema = z.enum([
   "VALIDATION_FAILED",
+  "SHIFT_CLOSED",
   "PERMISSION_DENIED",
   "RESOURCE_UNAVAILABLE",
   "POLICY_CONFIRMATION_REQUIRED",
@@ -26,6 +27,7 @@ export type CommandErrorCode = z.infer<typeof CommandErrorCodeSchema>;
 
 const PublicErrorMessages = {
   VALIDATION_FAILED: "Request validation failed",
+  SHIFT_CLOSED: "Business day is already closed",
   PERMISSION_DENIED: "Permission denied",
   RESOURCE_UNAVAILABLE: "Resource is unavailable",
   POLICY_CONFIRMATION_REQUIRED: "Confirmation is required",
@@ -109,6 +111,7 @@ const createFixedAuthErrorSchema = <TCode extends AuthPublicErrorCode, TMessage 
  */
 export const CommandErrorSchema = z.discriminatedUnion("code", [
   createErrorSchema("VALIDATION_FAILED", PublicErrorMessages.VALIDATION_FAILED),
+  createErrorSchema("SHIFT_CLOSED", PublicErrorMessages.SHIFT_CLOSED),
   createErrorSchema("PERMISSION_DENIED", PublicErrorMessages.PERMISSION_DENIED),
   createErrorSchema("RESOURCE_UNAVAILABLE", PublicErrorMessages.RESOURCE_UNAVAILABLE),
   createErrorSchema(

@@ -109,7 +109,10 @@ export function listHandler(deps: OrderHandlerDeps): CommandHandler {
         matchesListFilters(order, businessDate, status, customerPhone, minBalanceCents),
       )
       .slice()
-      .sort((a, b) => b.created_at - a.created_at || b.ticket_no.localeCompare(a.ticket_no))
+      .sort(
+        (a, b) =>
+          b.created_at - a.created_at || (b.ticket_no ?? "").localeCompare(a.ticket_no ?? ""),
+      )
       .slice(0, limit);
 
     const rows = [];

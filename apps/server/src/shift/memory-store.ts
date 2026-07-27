@@ -39,11 +39,28 @@ export class MemoryShiftStore implements ShiftStore {
       payable_cents: input.snapshot.payable_cents,
       paid_cents: input.snapshot.paid_cents,
       payment_cents: input.snapshot.payment_cents,
+      opening_float_cents: input.snapshot.opening_float_cents ?? 0,
+      counted_cash_cents: input.snapshot.counted_cash_cents ?? 0,
+      retained_float_cents: input.snapshot.retained_float_cents ?? 0,
+      expected_cash_cents: input.snapshot.expected_cash_cents ?? 0,
+      cash_difference_cents: input.snapshot.cash_difference_cents ?? 0,
       signature_name: input.signature_name,
+      period_started_at: input.snapshot.period_started_at ?? input.closed_at,
+      period_ended_at: input.snapshot.period_ended_at ?? input.closed_at,
       closed_at: input.closed_at,
     });
     this.byDate.set(key, record);
     return record;
+  }
+
+  async getMostRecent(orgId: string, storeId: string): Promise<ShiftClosingRecord | null> {
+    const prefix = `${orgId}|${storeId}|`;
+    let current: ShiftClosingRecord | null = null;
+    for (const [key, row] of this.byDate) {
+      if (!key.startsWith(prefix)) continue;
+      if (current === null || row.closed_at > current.closed_at) current = row;
+    }
+    return current;
   }
 
   clear(): void {

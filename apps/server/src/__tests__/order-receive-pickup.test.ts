@@ -9,6 +9,7 @@ import test from "node:test";
 import { executeCommand } from "../bus/executor.js";
 import { executeQuery } from "../bus/execute-query.js";
 import type { ActorContext } from "../bus/types.js";
+import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
 import { createMemoryCustomerStore } from "../customer/memory-store.js";
 import type { CustomerStore } from "../customer/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
@@ -50,6 +51,7 @@ function buildBus(
     }),
     order: Object.freeze({
       store: orderStore,
+      catalog: createMemoryCatalogStore(),
       ...(customerStore !== undefined ? { customer: customerStore } : {}),
     }),
     ...(customerStore !== undefined ? { customer: Object.freeze({ store: customerStore }) } : {}),
@@ -135,7 +137,7 @@ test("order.pickup transitions received garments and settles balance", async () 
     {
       order_id: orderId,
       garment_ids: [],
-      collect_cents: 2000,
+      collect_cents: 1800,
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
   );
@@ -148,7 +150,7 @@ test("order.pickup transitions received garments and settles balance", async () 
     picked_garment_ids: readonly string[];
   };
   assert.equal(data.balance_cents, 0);
-  assert.equal(data.paid_cents, 2000);
+  assert.equal(data.paid_cents, 1800);
   assert.equal(data.status, "closed");
   assert.equal(data.picked_garment_ids.length, 1);
 
@@ -157,12 +159,12 @@ test("order.pickup transitions received garments and settles balance", async () 
   assert.equal(payments.length, 1);
   assert.equal(payments[0]?.kind, "pay");
   assert.equal(payments[0]?.method, "cash");
-  assert.equal(payments[0]?.amount_cents, 2000);
+  assert.equal(payments[0]?.amount_cents, 1800);
   assert.equal(payments[0]?.staff_id, DEMO_STAFF_A_ID);
   assert.equal(payments[0]?.order_id, orderId);
 });
 
-test("order.pickup with collect_cents 0 does not insert a payment", async () => {
+test("order.pickup with collect_cents 0 preserves the initial payment without appending another", async () => {
   const orderStore = createMemoryOrderStore();
   const { registry, chainHooks, pendingStore } = buildBus(orderStore);
   const received = await executeCommand(
@@ -178,7 +180,7 @@ test("order.pickup with collect_cents 0 does not insert a payment", async () => 
           qty: 1,
         },
       ],
-      paid_cents: 1000,
+      paid_cents: 1500,
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
   );
@@ -199,7 +201,8 @@ test("order.pickup with collect_cents 0 does not insert a payment", async () => 
   );
   assert.equal(picked.ok, true, JSON.stringify(picked));
   const payments = await orderStore.listPayments(DEMO_ORG_ID, DEMO_STORE_ID, orderId);
-  assert.equal(payments.length, 0);
+  assert.equal(payments.length, 1);
+  assert.equal(payments[0]?.amount_cents, 1500);
 });
 
 test("order.pickup rejects a closed order instead of planning it as open", async () => {
@@ -217,7 +220,7 @@ test("order.pickup rejects a closed order instead of planning it as open", async
           qty: 1,
         },
       ],
-      paid_cents: 1000,
+      paid_cents: 1500,
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
   );
@@ -350,9 +353,9 @@ test("order.receive rolls back when its customer upsert fails", async () => {
       customer_name: "钱七",
       lines: [
         {
-          service_code: "wash",
+          service_code: "dry",
           category_code: "coat",
-          unit_price_cents: 2000,
+          unit_price_cents: 4500,
           qty: 1,
         },
       ],
@@ -382,7 +385,7 @@ test("order.receive without customer store still works with phone", async () => 
           qty: 1,
         },
       ],
-      paid_cents: 1000,
+      paid_cents: 1500,
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
   );

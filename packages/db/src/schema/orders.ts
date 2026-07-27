@@ -15,7 +15,7 @@ import { stores } from "./stores.js";
 
 /**
  * Store-scope counter orders (M2 skeleton).
- * Status: open|closed|cancelled (no draft in skeleton).
+ * Status: draft|open|closed|cancelled.
  * Money columns are integer cents; domain computes payable.
  */
 export const orders = pgTable(
@@ -24,15 +24,21 @@ export const orders = pgTable(
     id: uuid("id").notNull(),
     orgId: uuid("org_id").notNull(),
     storeId: uuid("store_id").notNull(),
-    ticketNo: text("ticket_no").notNull(),
+    ticketNo: text("ticket_no"),
     status: text("status").notNull(),
     customerPhone: text("customer_phone"),
     customerName: text("customer_name"),
     note: text("note"),
     subtotalCents: integer("subtotal_cents").notNull(),
+    originalCents: integer("original_cents").notNull().default(0),
+    discountCents: integer("discount_cents").notNull().default(0),
+    addonCents: integer("addon_cents").notNull().default(0),
+    urgentCents: integer("urgent_cents").notNull().default(0),
+    freightCents: integer("freight_cents").notNull().default(0),
     payableCents: integer("payable_cents").notNull(),
     paidCents: integer("paid_cents").notNull(),
     balanceCents: integer("balance_cents").notNull(),
+    businessDate: text("business_date").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull(),
     createdByStaffId: uuid("created_by_staff_id").notNull(),

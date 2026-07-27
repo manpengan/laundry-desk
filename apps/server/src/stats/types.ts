@@ -13,7 +13,13 @@ export type StatsDaySummaryInput = Readonly<{
   businessDate: string;
 }>;
 
+export type StatsCashSummary = Readonly<{
+  /** Net cash movement for the store business day, including reversals/refunds. */
+  cash_cents: number;
+}>;
+
 /** Read port used by stats.day.summary handler. */
 export type StatsQueryPort = Readonly<{
   daySummary: (input: StatsDaySummaryInput) => Promise<DaySummaryResult>;
+  cashSummary: (input: StatsDaySummaryInput) => Promise<StatsCashSummary>;
 }>;

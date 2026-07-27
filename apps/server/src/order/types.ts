@@ -5,7 +5,13 @@
 
 import type { GarmentStatus, PaymentMethod, PaymentRow } from "@laundry/domain";
 
-export type OrderStatus = "open" | "closed" | "cancelled";
+export type OrderStatus = "draft" | "open" | "closed" | "cancelled";
+
+export type LedgerPaymentRow = PaymentRow &
+  Readonly<{
+    /** Server-derived store business day of the immutable payment ledger row. */
+    business_date?: string;
+  }>;
 
 export type { PaymentMethod, PaymentRow };
 
@@ -18,6 +24,31 @@ export type PickupApplyOptions = Readonly<{
   nextBalanceCents?: number;
   /** Override UUID generation for the payment row (tests). */
   paymentId?: string;
+  /** Server-derived store business date for the appended collection row. */
+  businessDate?: string;
+}>;
+
+export type InitialPayment = Readonly<{
+  payment: LedgerPaymentRow;
+  business_date: string;
+}>;
+
+export type PaymentAppendInput = Readonly<{
+  org_id: string;
+  store_id: string;
+  order_id: string;
+  amount_cents: number;
+  method: PaymentMethod;
+  note: string | null;
+  kind: "pay" | "repay";
+  staff_id: string;
+  at: number;
+  business_date: string;
+}>;
+
+export type PaymentAppendResult = Readonly<{
+  order: OrderRecord;
+  payment: LedgerPaymentRow;
 }>;
 
 export type OrderLineRecord = Readonly<{
@@ -53,18 +84,24 @@ export type OrderRecord = Readonly<{
   order_id: string;
   org_id: string;
   store_id: string;
-  ticket_no: string;
+  ticket_no: string | null;
   status: OrderStatus;
   customer_phone: string | null;
   customer_name: string | null;
   note: string | null;
   lines: readonly OrderLineRecord[];
   subtotal_cents: number;
+  original_cents: number;
+  discount_cents: number;
+  addon_cents: number;
+  urgent_cents: number;
+  freight_cents: number;
   payable_cents: number;
   paid_cents: number;
   balance_cents: number;
   created_at: number;
   updated_at: number;
+  business_date: string;
   created_by_staff_id: string;
 }>;
 
@@ -78,7 +115,7 @@ export type OrderListSummaryOptions = Readonly<{
 
 export type OrderListSummary = Readonly<{
   order_id: string;
-  ticket_no: string;
+  ticket_no: string | null;
   status: OrderStatus;
   customer_phone: string | null;
   customer_name: string | null;
@@ -95,7 +132,17 @@ export type PickupApplyResult = Readonly<{
 }>;
 
 export type OrderStore = Readonly<{
-  insertOrder: (order: OrderRecord, garments: readonly GarmentRecord[]) => Promise<void>;
+  insertOrder: (
+    order: OrderRecord,
+    garments: readonly GarmentRecord[],
+    initialPayment?: InitialPayment,
+  ) => Promise<void>;
+  /** Create a draft or atomically replace the same existing draft. */
+  replaceDraft?: (
+    order: OrderRecord,
+    garments: readonly GarmentRecord[],
+    initialPayment?: InitialPayment,
+  ) => Promise<boolean>;
   getOrder: (orgId: string, storeId: string, orderId: string) => Promise<OrderRecord | null>;
   listGarments: (
     orgId: string,
@@ -111,6 +158,16 @@ export type OrderStore = Readonly<{
     nowEpoch: number,
     options?: PickupApplyOptions,
   ) => Promise<PickupApplyResult | null>;
+  appendPayment?: (input: PaymentAppendInput) => Promise<PaymentAppendResult | null>;
+  cancelOpenOrder?: (
+    orgId: string,
+    storeId: string,
+    orderId: string,
+    reason: string,
+    staffId: string,
+    at: number,
+    businessDate: string,
+  ) => Promise<OrderRecord | null>;
   nextTicketSeq: (orgId: string, storeId: string, dayKey: string) => Promise<number>;
   /**
    * List all orders for an org/store (day stats / reports).
@@ -128,5 +185,5 @@ export type OrderStore = Readonly<{
     orgId: string,
     storeId: string,
     orderId?: string,
-  ) => Promise<readonly PaymentRow[]>;
+  ) => Promise<readonly LedgerPaymentRow[]>;
 }>;

@@ -8,6 +8,7 @@ import test from "node:test";
 import { executeCommand } from "../bus/executor.js";
 import { executeQuery } from "../bus/execute-query.js";
 import type { ActorContext } from "../bus/types.js";
+import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
 import { FakeSqlClient } from "../db/fake-client.js";
 import type { TenantContext } from "../db/types.js";
 import { createDefaultChainHooks } from "../handlers/default-chain-hooks.js";
@@ -50,7 +51,7 @@ function buildBus(fixedNow = () => DAY_EPOCH) {
       features: createMemoryFeaturesStore(),
       audit: createMemoryAuditQueryStore(),
     }),
-    order: Object.freeze({ store: orderStore, now: fixedNow }),
+    order: Object.freeze({ store: orderStore, catalog: createMemoryCatalogStore(), now: fixedNow }),
     stats: Object.freeze({ source: statsSource }),
     shift: Object.freeze({ store: shiftStore, stats: statsSource, now: fixedNow }),
   });
@@ -62,9 +63,20 @@ function buildBus(fixedNow = () => DAY_EPOCH) {
 /** R3: first hop creates confirm card; second hop with confirm_ref executes. */
 async function closeWithConfirm(
   bus: ReturnType<typeof buildBus>,
-  input: Readonly<{ business_date: string; signature_name: string; note?: string }>,
+  input: Readonly<{
+    business_date: string;
+    signature_name: string;
+    counted_cash_cents?: number;
+    retained_float_cents?: number;
+    note?: string;
+  }>,
 ): Promise<Awaited<ReturnType<typeof executeCommand>>> {
-  const first = await executeCommand(new FakeSqlClient(), TENANT, "shift.close", input, {
+  const closeInput = Object.freeze({
+    counted_cash_cents: 0,
+    retained_float_cents: 0,
+    ...input,
+  });
+  const first = await executeCommand(new FakeSqlClient(), TENANT, "shift.close", closeInput, {
     registry: bus.registry,
     actor: CLERK,
     chainHooks: bus.chainHooks,
@@ -110,7 +122,12 @@ test("shift.close without confirm_ref is blocked with POLICY_CONFIRMATION_REQUIR
     new FakeSqlClient(),
     TENANT,
     "shift.close",
-    { business_date: BUSINESS_DATE, signature_name: "店员甲" },
+    {
+      business_date: BUSINESS_DATE,
+      counted_cash_cents: 0,
+      retained_float_cents: 0,
+      signature_name: "店员甲",
+    },
     { registry, actor: CLERK, chainHooks, pendingStore },
   );
   assert.equal(result.ok, false);
@@ -188,7 +205,7 @@ test("shift.close snapshots day stats and shift.get returns the row", async () =
   assert.equal(body.order_count, 1);
   assert.equal(body.payable_cents, 3000);
   assert.equal(body.paid_cents, 500);
-  assert.equal(body.payment_cents, 0);
+  assert.equal(body.payment_cents, 500);
   assert.equal(body.signature_name, "店员甲");
   assert.ok(typeof body.shift_id === "string" && body.shift_id.length > 0);
 

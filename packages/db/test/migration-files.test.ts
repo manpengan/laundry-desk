@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0018", () => {
+  it("ships formal SQL migrations ordered 0001 → 0019", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -30,6 +30,7 @@ describe("packages/db migration file inventory", () => {
       "0016_local_bootstrap.sql",
       "0017_local_runtime_readiness.sql",
       "0018_identity_lifecycle_indexes.sql",
+      "0019_money_integrity_workday.sql",
     ]);
   });
 
@@ -60,6 +61,7 @@ describe("packages/db migration file inventory", () => {
       "0016",
       "0017",
       "0018",
+      "0019",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -153,6 +155,17 @@ describe("packages/db migration file inventory", () => {
     );
     expect(sql).toMatch(
       /ON refresh_tokens \(org_id, store_id, family_id\)\s+WHERE status = 'active'/iu,
+    );
+  });
+
+  it("adds money snapshots, business dates, and durable command replay state", () => {
+    const sql = readFileSync(join(migrationsDir, "0019_money_integrity_workday.sql"), "utf8");
+
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS original_cents integer NOT NULL DEFAULT 0/iu);
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS business_date text/iu);
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS command_idempotency/iu);
+    expect(sql).toMatch(
+      /GRANT SELECT, INSERT, UPDATE ON TABLE command_idempotency TO laundry_app/iu,
     );
   });
 });

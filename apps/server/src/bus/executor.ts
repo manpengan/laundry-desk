@@ -15,7 +15,7 @@ import { writeAudit, type AuditWriteRecord } from "../audit/write-audit.js";
 import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
-import type { PendingAction, PendingActionStore } from "../pending-actions/types.js";
+import type { PendingActionStore } from "../pending-actions/types.js";
 import { verifyStepUpProof, type StepUpSessionBinding } from "../policy/step-up.js";
 import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
 import {
@@ -25,11 +25,19 @@ import {
   type BusChainData,
   type ChainPortHooks,
 } from "./chain-adapter.js";
+import { resolveConfirmInput } from "./confirm-input.js";
+import {
+  asTransactionalIdempotencyStore,
+  durableLookupResult,
+  hashIdempotencyRequest,
+  readIdempotentReplay,
+} from "./durable-idempotency.js";
 import type {
   ActorContext,
   AuditWriteInput,
   BusContext,
   CommandHandler,
+  CommandIdempotencyStore,
   CommandRegistry,
   CommandRequest,
   CommandResult,
@@ -37,6 +45,7 @@ import type {
   EventBus,
   HandlerOutcome,
   IdempotencyStore,
+  TransactionalIdempotencyStore,
 } from "./types.js";
 import { HandlerCommandError } from "./types.js";
 
@@ -50,7 +59,7 @@ export type ExecuteCommandOptions = Readonly<{
   chainHooks?: ChainPortHooks;
   handler?: CommandHandler;
   eventBus?: EventBus;
-  idempotencyStore?: IdempotencyStore;
+  idempotencyStore?: CommandIdempotencyStore;
   /** Defaults to process-local MemoryPendingActionStore. */
   pendingStore?: PendingActionStore;
   /** Defaults to process-local MemoryStepUpProofStore. */
@@ -90,8 +99,32 @@ export async function executeCommand(
   }
 
   const request = buildRequest(name, resolved.input, opts);
-  const cached = await readIdempotentReplay(tenantCtx, request, opts.idempotencyStore);
-  if (cached !== null) return cached;
+  const durableIdempotency = asTransactionalIdempotencyStore(opts.idempotencyStore);
+  const requestHash =
+    durableIdempotency !== null && request.idempotencyKey !== undefined
+      ? hashIdempotencyRequest(request)
+      : undefined;
+  if (
+    durableIdempotency !== null &&
+    request.idempotencyKey !== undefined &&
+    requestHash !== undefined
+  ) {
+    const lookup = await durableIdempotency.lookup(
+      tenantCtx,
+      name,
+      request.idempotencyKey,
+      requestHash,
+    );
+    const replay = durableLookupResult(lookup);
+    if (replay !== null) return replay;
+  } else {
+    const cached = await readIdempotentReplay(
+      tenantCtx,
+      request,
+      opts.idempotencyStore as IdempotencyStore | undefined,
+    );
+    if (cached !== null) return cached;
+  }
 
   const handler = opts.handler ?? registered.handler;
   const ports = createChainPorts(registered.definition, opts.chainHooks);
@@ -114,7 +147,16 @@ export async function executeCommand(
   let txnOutcome: TxnBody;
   try {
     txnOutcome = await withTenantTransaction(client, tenantCtx, async (tx) =>
-      runInsideTransaction(tx, busCtx, ports, handler, opts, pendingStore),
+      runInsideTransaction(
+        tx,
+        busCtx,
+        ports,
+        handler,
+        opts,
+        pendingStore,
+        durableIdempotency,
+        requestHash,
+      ),
     );
   } catch (error) {
     if (error instanceof CommandBusTxnError) return fail(error.commandError);
@@ -124,92 +166,21 @@ export async function executeCommand(
 
   await publishAfterCommit(opts.eventBus, txnOutcome.events);
 
-  if (txnOutcome.cacheable && request.idempotencyKey !== undefined && opts.idempotencyStore) {
-    await opts.idempotencyStore.put(tenantCtx, name, request.idempotencyKey, txnOutcome.result);
+  if (
+    durableIdempotency === null &&
+    txnOutcome.cacheable &&
+    request.idempotencyKey !== undefined &&
+    opts.idempotencyStore
+  ) {
+    await (opts.idempotencyStore as IdempotencyStore).put(
+      tenantCtx,
+      name,
+      request.idempotencyKey,
+      txnOutcome.result,
+    );
   }
 
   return txnOutcome.result;
-}
-
-type ConfirmResolve =
-  | Readonly<{
-      ok: true;
-      input: unknown;
-      confirmAuthorized: false;
-    }>
-  | Readonly<{
-      ok: true;
-      input: unknown;
-      confirmAuthorized: true;
-      confirmRef: string;
-      argsHash: string;
-    }>
-  | Readonly<{ ok: false; error: CommandError }>;
-
-function resolveConfirmInput(
-  name: string,
-  input: unknown,
-  tenant: TenantContext,
-  opts: ExecuteCommandOptions,
-  pendingStore: PendingActionStore,
-): ConfirmResolve {
-  if (opts.confirmRef === undefined) {
-    return Object.freeze({ ok: true as const, input, confirmAuthorized: false as const });
-  }
-
-  const pending = pendingStore.get(opts.confirmRef);
-  const now = Math.floor((opts.now?.() ?? new Date()).getTime() / 1000);
-  const gate = validatePendingCard(pending, name, tenant, now);
-  if (gate.ok === false) {
-    return Object.freeze({ ok: false as const, error: gate.error });
-  }
-
-  return Object.freeze({
-    ok: true as const,
-    input: gate.pending.args,
-    confirmAuthorized: true as const,
-    confirmRef: opts.confirmRef,
-    argsHash: gate.pending.argsHash,
-  });
-}
-
-function validatePendingCard(
-  pending: PendingAction | null,
-  commandName: string,
-  tenant: TenantContext,
-  nowEpochSeconds: number,
-): Readonly<{ ok: true; pending: PendingAction }> | Readonly<{ ok: false; error: CommandError }> {
-  if (pending === null) {
-    return Object.freeze({
-      ok: false as const,
-      error: createCommandError("POLICY_DENIED"),
-    });
-  }
-  if (pending.status !== "pending") {
-    return Object.freeze({
-      ok: false as const,
-      error: createCommandError("POLICY_DENIED"),
-    });
-  }
-  if (nowEpochSeconds >= pending.expiresAt) {
-    return Object.freeze({
-      ok: false as const,
-      error: createCommandError("POLICY_DENIED"),
-    });
-  }
-  if (pending.command !== commandName) {
-    return Object.freeze({
-      ok: false as const,
-      error: createCommandError("POLICY_DENIED"),
-    });
-  }
-  if (pending.orgId !== tenant.orgId || pending.storeId !== tenant.storeId) {
-    return Object.freeze({
-      ok: false as const,
-      error: createCommandError("POLICY_DENIED"),
-    });
-  }
-  return Object.freeze({ ok: true as const, pending });
 }
 
 function buildRequest(name: string, input: unknown, opts: ExecuteCommandOptions): CommandRequest {
@@ -226,15 +197,6 @@ function buildRequest(name: string, input: unknown, opts: ExecuteCommandOptions)
   });
 }
 
-async function readIdempotentReplay(
-  tenant: TenantContext,
-  request: CommandRequest,
-  store: IdempotencyStore | undefined,
-): Promise<CommandResult | null> {
-  if (store === undefined || request.idempotencyKey === undefined) return null;
-  return store.get(tenant, request.name, request.idempotencyKey);
-}
-
 async function runInsideTransaction(
   tx: SqlClient,
   busCtx: BusContext,
@@ -242,6 +204,8 @@ async function runInsideTransaction(
   handler: CommandHandler | undefined,
   opts: ExecuteCommandOptions,
   pendingStore: PendingActionStore,
+  durableIdempotency: TransactionalIdempotencyStore | null,
+  requestHash: string | undefined,
 ): Promise<TxnBody> {
   const chain = await runCommandChain(busCtx, busCtx.request.input, ports);
   if (chain.ok === false) {
@@ -262,6 +226,24 @@ async function runInsideTransaction(
 
   if (handler === undefined) {
     throw new CommandBusTxnError(createCommandError("RESOURCE_UNAVAILABLE"));
+  }
+
+  if (
+    durableIdempotency !== null &&
+    busCtx.request.idempotencyKey !== undefined &&
+    requestHash !== undefined
+  ) {
+    const claim = await durableIdempotency.claim(
+      tx,
+      busCtx.tenant,
+      busCtx.request.name,
+      busCtx.request.idempotencyKey,
+      requestHash,
+    );
+    const replay = durableLookupResult(claim);
+    if (replay !== null) {
+      return { result: replay, events: Object.freeze([]), cacheable: false };
+    }
   }
 
   // Consume pending card after chain pass, before mutation (CAS fail-closed).
@@ -316,9 +298,24 @@ async function runInsideTransaction(
   });
 
   await writeAuditForOutcome(tx, busCtx, outcome.audit, opts);
+  const result = executed(outcome.result);
+  if (
+    durableIdempotency !== null &&
+    busCtx.request.idempotencyKey !== undefined &&
+    requestHash !== undefined
+  ) {
+    await durableIdempotency.complete(
+      tx,
+      busCtx.tenant,
+      busCtx.request.name,
+      busCtx.request.idempotencyKey,
+      requestHash,
+      result,
+    );
+  }
 
   return {
-    result: executed(outcome.result),
+    result,
     events: Object.freeze([...(outcome.events ?? [])]),
     cacheable: true,
   };

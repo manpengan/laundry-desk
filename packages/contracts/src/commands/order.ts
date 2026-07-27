@@ -12,6 +12,7 @@ import {
   type QueryDefinition,
 } from "../registry/definitions.js";
 import { BusinessDateSchema } from "./stats.js";
+import { PaymentMethodSchema } from "./payment.js";
 
 const ServiceCodeSchema = z
   .string()
@@ -24,23 +25,45 @@ const PhoneSchema = z
   .string()
   .regex(/^1[3-9]\d{9}$/u, "Expected mainland mobile (seed range 13800000xxx ok)");
 
-export const OrderStatusSchema = z.enum(["open", "closed", "cancelled"]);
+export const OrderStatusSchema = z.enum(["draft", "open", "closed", "cancelled"]);
 
 export const OrderReceiveLineSchema = z.strictObject({
   service_code: ServiceCodeSchema,
   category_code: CategoryCodeSchema,
-  unit_price_cents: NonNegCentsSchema,
   qty: z.number().int().positive().max(50),
   color: z.string().max(32).optional(),
   brand: z.string().max(32).optional(),
+  /**
+   * Compatibility-only field for queued M2 clients. It is validated then
+   * discarded; handlers always resolve the price from the active catalog.
+   */
+  unit_price_cents: NonNegCentsSchema.optional(),
+});
+
+export const OrderPricingAdjustmentsSchema = z.strictObject({
+  discount_cents: NonNegCentsSchema.optional(),
+  addon_cents: NonNegCentsSchema.optional(),
+  urgent_cents: NonNegCentsSchema.optional(),
+  freight_cents: NonNegCentsSchema.optional(),
+});
+
+export const OrderInitialPaymentSchema = z.strictObject({
+  amount_cents: NonNegCentsSchema,
+  method: PaymentMethodSchema,
+  note: z.string().max(256).optional(),
 });
 
 export const OrderReceiveInputSchema = z.strictObject({
+  /** Optional existing draft to atomically convert into an open order. */
+  draft_id: z.uuid().optional(),
   customer_phone: PhoneSchema.optional(),
   customer_name: z.string().min(1).max(64).optional(),
   lines: z.array(OrderReceiveLineSchema).min(1).max(40),
-  /** Deposit / partial pay at receive; must be ≤ payable (domain enforces). */
-  paid_cents: NonNegCentsSchema,
+  /** Omitted means debt order; a zero amount never creates a ledger row. */
+  initial_payment: OrderInitialPaymentSchema.optional(),
+  /** @deprecated Use initial_payment. Interpreted as a cash initial payment. */
+  paid_cents: NonNegCentsSchema.optional(),
+  ...OrderPricingAdjustmentsSchema.shape,
   note: z.string().max(256).optional(),
 });
 
@@ -52,8 +75,13 @@ export const OrderPickupInputSchema = z.strictObject({
 });
 
 export const OrderHoldInputSchema = z.strictObject({
-  order_id: z.uuid(),
-  reason: z.string().min(1).max(256),
+  /** Omit for a new draft; supply to replace the same unreceived draft. */
+  draft_id: z.uuid().optional(),
+  customer_phone: PhoneSchema.optional(),
+  customer_name: z.string().min(1).max(64).optional(),
+  lines: z.array(OrderReceiveLineSchema).min(1).max(40),
+  ...OrderPricingAdjustmentsSchema.shape,
+  note: z.string().max(256).optional(),
 });
 
 export const OrderCancelInputSchema = z.strictObject({
@@ -92,8 +120,8 @@ export const OrderListInputSchema = z.strictObject({
  */
 export type OrderListRow = Readonly<{
   order_id: string;
-  ticket_no: string;
-  status: "open" | "closed" | "cancelled";
+  ticket_no: string | null;
+  status: "draft" | "open" | "closed" | "cancelled";
   customer_phone: string | null;
   customer_name: string | null;
   payable_cents: number;
@@ -117,10 +145,11 @@ type ListInput = typeof OrderListInputSchema;
 /** 开单：生成 order + order_lines 语义 + 按 qty 拆 garments（runtime）。 */
 export const orderReceiveCommand: CommandDefinition<ReceiveInput> = defineCommand({
   name: "order.receive",
-  version: "0.2.0",
-  description: "Create an open order with line items expanded into garments (receive).",
+  version: "0.3.0",
+  description:
+    "Create an open order from the server catalog, atomically append its first payment, and expand line quantities into garments.",
   description_llm:
-    "Open a counter order: expand each line qty into garments at received status. Integer cents only.",
+    "Open a counter order using the active server catalog price; clients cannot submit a unit price. Expand each line qty into garments at received status. Integer cents only.",
   input: OrderReceiveInputSchema,
   risk: "R1",
   invariants: ["rbac.order_write", "order.lines_nonempty"],
@@ -162,13 +191,13 @@ export const orderPickupCommand: CommandDefinition<PickupInput> = defineCommand(
 /** 挂单：保留当前订单与计价快照，恢复开单不生成第二张票。 */
 export const orderHoldCommand: CommandDefinition<HoldInput> = defineCommand({
   name: "order.hold",
-  version: "0.2.0",
-  description: "Hold an open order with a required operator reason.",
+  version: "0.3.0",
+  description: "Create or replace an unreceived priced order draft without a ticket or payment.",
   description_llm:
-    "Hold one open counter order. A reason is required; no payment ledger is written.",
+    "Save an unreceived counter draft. It has a server price snapshot but no ticket, garments, payment or revenue until order.receive opens it.",
   input: OrderHoldInputSchema,
   risk: "R2",
-  invariants: ["rbac.order_write", "order.hold_allowed"],
+  invariants: ["rbac.order_write", "order.hold_allowed", "order.server_pricing"],
   idempotent: true,
   sideEffects: ["order.held", "audit.order_event"],
   offline_mode: "grant",
@@ -180,7 +209,7 @@ export const orderHoldCommand: CommandDefinition<HoldInput> = defineCommand({
 /** 撤销：必须带原因，运行时以反向分录和状态记录保持可审计。 */
 export const orderCancelCommand: CommandDefinition<CancelInput> = defineCommand({
   name: "order.cancel",
-  version: "0.2.0",
+  version: "0.3.0",
   description: "Cancel an open order with a mandatory reason and auditable reversal plan.",
   description_llm:
     "Cancel one open order only with a non-empty reason. Runtime writes auditable reversals; it never deletes ledger rows.",

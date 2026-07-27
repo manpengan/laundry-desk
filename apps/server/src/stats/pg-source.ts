@@ -44,14 +44,11 @@ async function queryDaySummary(
   input: StatsDaySummaryInput,
 ): Promise<DaySummary> {
   const result = await client.query<DaySummaryRow>(
-    `WITH bounds AS (
-       SELECT $3::date::timestamp AT TIME ZONE 'UTC' AS starts_at,
-              ($3::date::timestamp AT TIME ZONE 'UTC') + INTERVAL '1 day' AS ends_at
-     ), orders_day AS (
+    `WITH orders_day AS (
        SELECT o.id, o.org_id, o.store_id, o.payable_cents, o.paid_cents, o.balance_cents
-       FROM orders o CROSS JOIN bounds b
+       FROM orders o
        WHERE o.org_id = $1::uuid AND o.store_id = $2::uuid
-         AND o.created_at >= b.starts_at AND o.created_at < b.ends_at
+         AND o.business_date = $3
      )
      SELECT
        (SELECT COUNT(*)::integer FROM orders_day) AS order_count,
@@ -63,9 +60,9 @@ async function queryDaySummary(
        (SELECT COALESCE(SUM(paid_cents), 0)::bigint FROM orders_day) AS paid_cents,
        (SELECT COALESCE(SUM(balance_cents), 0)::bigint FROM orders_day) AS balance_cents,
        (SELECT COALESCE(SUM(p.amount_cents), 0)::bigint
-          FROM payments p CROSS JOIN bounds b
+          FROM payments p
          WHERE p.org_id = $1::uuid AND p.store_id = $2::uuid AND p.kind = 'pay'
-           AND p.at >= b.starts_at AND p.at < b.ends_at
+           AND p.business_date = $3
        ) AS payment_cents,
        (SELECT COUNT(*)::integer
           FROM garments g INNER JOIN orders_day o
@@ -77,6 +74,28 @@ async function queryDaySummary(
   return mapSummary(input, result.rows[0]);
 }
 
+async function queryCashSummary(
+  client: SqlClient,
+  input: StatsDaySummaryInput,
+): Promise<Readonly<{ cash_cents: number }>> {
+  const result = await client.query<Readonly<{ cash_cents: number | string }>>(
+    `SELECT COALESCE(SUM(
+        CASE
+          WHEN kind IN ('refund', 'reversal') THEN -amount_cents
+          ELSE amount_cents
+        END
+      ), 0)::bigint AS cash_cents
+     FROM payments
+     WHERE org_id = $1::uuid AND store_id = $2::uuid
+       AND business_date = $3 AND method = 'cash'`,
+    [input.orgId, input.storeId, input.businessDate],
+  );
+  const value = result.rows[0]?.cash_cents ?? 0;
+  const cashCents = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(cashCents)) throw new Error("Invalid cash aggregate from PostgreSQL");
+  return Object.freeze({ cash_cents: cashCents });
+}
+
 /**
  * Read stats in SQL, reusing an active command transaction for shift closing.
  * No PG runtime stats path enumerates process-local or in-memory order rows.
@@ -86,6 +105,10 @@ export function createPgStatsQuery(pool: PgPool): StatsQueryPort {
     daySummary: async (input: StatsDaySummaryInput): Promise<DaySummary> =>
       withStoreGucOrCurrent(pool, { orgId: input.orgId, storeId: input.storeId }, (client) =>
         queryDaySummary(client, input),
+      ),
+    cashSummary: async (input: StatsDaySummaryInput) =>
+      withStoreGucOrCurrent(pool, { orgId: input.orgId, storeId: input.storeId }, (client) =>
+        queryCashSummary(client, input),
       ),
   });
 }

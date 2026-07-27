@@ -1,9 +1,11 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 
+import { parseCommandWirePayload } from "@laundry/contracts";
+
 import type { AuthorizedSession } from "../auth/session-view.js";
 import { executeCommand } from "../bus/executor.js";
 import { executeQuery } from "../bus/execute-query.js";
-import type { ActorContext } from "../bus/types.js";
+import type { ActorContext, CommandResult } from "../bus/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
@@ -90,6 +92,55 @@ function createSqlRunner(runtime: LocalRuntime) {
 
 type SqlRunner = ReturnType<typeof createSqlRunner>;
 
+type RouteCommandPayload = Readonly<{
+  input: Readonly<Record<string, unknown>>;
+  version?: string;
+  dryRun?: boolean;
+  idempotencyKey?: string;
+  confirmRef?: string;
+}>;
+
+/**
+ * New callers use the branded A2 wire envelope. The direct-args fallback is
+ * intentionally retained for already-installed local shells, but it cannot
+ * opt into idempotency without the canonical envelope.
+ */
+function parseRouteCommandPayload(
+  name: string,
+  body: Record<string, unknown>,
+): RouteCommandPayload | null {
+  if (
+    "command" in body ||
+    "version" in body ||
+    "idempotency_key" in body ||
+    "mode" in body ||
+    "dry_run" in body
+  ) {
+    try {
+      const payload = parseCommandWirePayload(body);
+      if (payload.command !== name) return null;
+      if (payload.mode === "confirm") {
+        return Object.freeze({
+          input: Object.freeze({}),
+          version: payload.version,
+          dryRun: payload.dry_run,
+          idempotencyKey: payload.idempotency_key,
+          confirmRef: payload.confirm_ref,
+        });
+      }
+      return Object.freeze({
+        input: payload.args,
+        version: payload.version,
+        dryRun: payload.dry_run,
+        idempotencyKey: payload.idempotency_key,
+      });
+    } catch {
+      return null;
+    }
+  }
+  return Object.freeze({ input: body });
+}
+
 async function executeCommandRoute(
   context: RouteSecurityContext,
   runWithSql: SqlRunner,
@@ -97,24 +148,30 @@ async function executeCommandRoute(
   name: string,
   body: Record<string, unknown>,
 ) {
-  const confirmRef =
-    typeof body.confirm_ref === "string" && body.confirm_ref.length > 0
-      ? body.confirm_ref
-      : undefined;
-  const input = confirmRef === undefined ? body : Object.freeze({});
+  const payload = parseRouteCommandPayload(name, body);
+  if (payload === null) {
+    return Object.freeze({
+      ok: false,
+      error: { code: "VALIDATION_FAILED", message: "Request validation failed" },
+    }) as CommandResult;
+  }
   const { registry, chainHooks } = createBus(context.runtime);
   return runWithSql((sql) =>
-    executeCommand(sql, tenantFromSession(resolved), name, input, {
+    executeCommand(sql, tenantFromSession(resolved), name, payload.input, {
       registry,
       actor: actorFromSession(resolved),
       chainHooks,
       pendingStore: context.runtime.pendingStore,
       stepUpProofStore: context.runtime.stepUpProofStore,
+      idempotencyStore: context.runtime.idempotencyStore,
       sessionBinding: Object.freeze({
         sessionId: resolved.session.session_id,
         sessionVersion: resolved.session.session_version,
       }),
-      ...(confirmRef === undefined ? {} : { confirmRef }),
+      ...(payload.version === undefined ? {} : { version: payload.version }),
+      ...(payload.dryRun === undefined ? {} : { dryRun: payload.dryRun }),
+      ...(payload.idempotencyKey === undefined ? {} : { idempotencyKey: payload.idempotencyKey }),
+      ...(payload.confirmRef === undefined ? {} : { confirmRef: payload.confirmRef }),
     }),
   );
 }

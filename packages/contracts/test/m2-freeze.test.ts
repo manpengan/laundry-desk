@@ -11,7 +11,7 @@ import {
   serializeOpenApiDocument,
 } from "../src/openapi/build-document.js";
 
-describe("M2 contract v0.2 freeze", () => {
+describe("M2 contract surface", () => {
   it("freezes the counter command and query surface", () => {
     expect(M2_CONTRACT_COMMAND_NAMES).toEqual([
       "customer.upsert",
@@ -35,9 +35,18 @@ describe("M2 contract v0.2 freeze", () => {
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
-    expect(M2_CONTRACT_DEFINITIONS.every((definition) => definition.version === "0.2.0")).toBe(
-      true,
-    );
+    expect(
+      M2_CONTRACT_DEFINITIONS.find((definition) => definition.name === "order.receive")?.version,
+    ).toBe("0.3.0");
+    expect(
+      M2_CONTRACT_DEFINITIONS.find((definition) => definition.name === "order.hold")?.version,
+    ).toBe("0.3.0");
+    expect(
+      M2_CONTRACT_DEFINITIONS.find((definition) => definition.name === "order.cancel")?.version,
+    ).toBe("0.3.0");
+    expect(
+      M2_CONTRACT_DEFINITIONS.find((definition) => definition.name === "shift.close")?.version,
+    ).toBe("0.3.0");
   });
 
   it("enforces the M2 offline and AI risk matrix", () => {

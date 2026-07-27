@@ -2,14 +2,23 @@
  * Process-local order/garment/payment store for M2 skeleton (async OrderStore).
  */
 
-import { buildPayPayment } from "@laundry/domain";
+import {
+  buildPayPayment,
+  buildReversalPayment,
+  planCancel,
+  planCollectPayment,
+  planRepayPayment,
+} from "@laundry/domain";
 import { randomUUID } from "node:crypto";
 
 import type {
   GarmentRecord,
+  InitialPayment,
+  LedgerPaymentRow,
   OrderRecord,
   OrderStore,
-  PaymentRow,
+  PaymentAppendInput,
+  PaymentAppendResult,
   PickupApplyOptions,
   PickupApplyResult,
 } from "./types.js";
@@ -20,10 +29,14 @@ const key = (orgId: string, storeId: string, orderId: string): string =>
 export class MemoryOrderStore implements OrderStore {
   private readonly orders = new Map<string, OrderRecord>();
   private readonly garments = new Map<string, GarmentRecord[]>();
-  private readonly payments: PaymentRow[] = [];
+  private readonly payments: LedgerPaymentRow[] = [];
   private readonly ticketSeq = new Map<string, number>();
 
-  async insertOrder(order: OrderRecord, garments: readonly GarmentRecord[]): Promise<void> {
+  async insertOrder(
+    order: OrderRecord,
+    garments: readonly GarmentRecord[],
+    initialPayment?: InitialPayment,
+  ): Promise<void> {
     const k = key(order.org_id, order.store_id, order.order_id);
     if (this.orders.has(k)) {
       throw new Error(`Order already exists: ${order.order_id}`);
@@ -33,6 +46,32 @@ export class MemoryOrderStore implements OrderStore {
       k,
       garments.map((g) => Object.freeze({ ...g })),
     );
+    if (initialPayment !== undefined) {
+      this.payments.push(
+        Object.freeze({ ...initialPayment.payment, business_date: initialPayment.business_date }),
+      );
+    }
+  }
+
+  async replaceDraft(
+    order: OrderRecord,
+    garments: readonly GarmentRecord[],
+    initialPayment?: InitialPayment,
+  ): Promise<boolean> {
+    const k = key(order.org_id, order.store_id, order.order_id);
+    const existing = this.orders.get(k);
+    if (existing !== undefined && existing.status !== "draft") return false;
+    this.orders.set(k, Object.freeze({ ...order, lines: Object.freeze([...order.lines]) }));
+    this.garments.set(
+      k,
+      garments.map((garment) => Object.freeze({ ...garment })),
+    );
+    if (initialPayment !== undefined) {
+      this.payments.push(
+        Object.freeze({ ...initialPayment.payment, business_date: initialPayment.business_date }),
+      );
+    }
+    return true;
   }
 
   async getOrder(orgId: string, storeId: string, orderId: string): Promise<OrderRecord | null> {
@@ -107,7 +146,9 @@ export class MemoryOrderStore implements OrderStore {
         at: nowEpoch,
         method: options.method ?? "cash",
       });
-      this.payments.push(payment);
+      this.payments.push(
+        Object.freeze({ ...payment, business_date: options.businessDate ?? order.business_date }),
+      );
     }
 
     return Object.freeze({ order: nextOrder, garments: Object.freeze(nextGarments) });
@@ -117,7 +158,7 @@ export class MemoryOrderStore implements OrderStore {
     orgId: string,
     storeId: string,
     orderId?: string,
-  ): Promise<readonly PaymentRow[]> {
+  ): Promise<readonly LedgerPaymentRow[]> {
     return Object.freeze(
       this.payments.filter(
         (p) =>
@@ -126,6 +167,104 @@ export class MemoryOrderStore implements OrderStore {
           (orderId === undefined || p.order_id === orderId),
       ),
     );
+  }
+
+  async appendPayment(input: PaymentAppendInput): Promise<PaymentAppendResult | null> {
+    const k = key(input.org_id, input.store_id, input.order_id);
+    const order = this.orders.get(k);
+    if (order === undefined || order.status !== "open") return null;
+    const existing = await this.listPayments(input.org_id, input.store_id, input.order_id);
+    const base = {
+      payment_id: randomUUID(),
+      org_id: input.org_id,
+      store_id: input.store_id,
+      order_id: input.order_id,
+      amount_cents: input.amount_cents,
+      staff_id: input.staff_id,
+      at: input.at,
+      method: input.method,
+      note: input.note,
+      payable_cents: order.payable_cents,
+      existing_payments: existing,
+    } as const;
+    const plan = input.kind === "pay" ? planCollectPayment(base) : planRepayPayment(base);
+    if (!plan.ok) return null;
+    const garments = this.garments.get(k) ?? [];
+    const allTerminal = garments.every(
+      (garment) =>
+        garment.status === "picked_up" ||
+        garment.status === "delivered" ||
+        garment.status === "lost",
+    );
+    const next = Object.freeze({
+      ...order,
+      paid_cents: plan.paid_cents,
+      balance_cents: plan.balance_cents,
+      status: allTerminal && plan.balance_cents === 0 ? ("closed" as const) : ("open" as const),
+      updated_at: input.at,
+    });
+    this.orders.set(k, next);
+    const payment = Object.freeze({ ...plan.payment, business_date: input.business_date });
+    this.payments.push(payment);
+    return Object.freeze({ order: next, payment });
+  }
+
+  async cancelOpenOrder(
+    orgId: string,
+    storeId: string,
+    orderId: string,
+    reason: string,
+    staffId: string,
+    at: number,
+    _businessDate: string,
+  ): Promise<OrderRecord | null> {
+    const k = key(orgId, storeId, orderId);
+    const order = this.orders.get(k);
+    const garments = this.garments.get(k);
+    if (order === undefined || garments === undefined || order.status !== "open") return null;
+    if (
+      garments.some((garment) => garment.status === "picked_up" || garment.status === "delivered")
+    ) {
+      return null;
+    }
+    const existing = await this.listPayments(orgId, storeId, orderId);
+    const plan = planCancel({
+      status: order.status,
+      reason,
+      payable_cents: order.payable_cents,
+      payments: existing,
+    });
+    if (!plan.ok) return null;
+    for (const target of plan.reversal_targets) {
+      const source = existing.find((payment) => payment.payment_id === target.payment_id);
+      if (source === undefined) return null;
+      this.payments.push(
+        Object.freeze({
+          ...buildReversalPayment({
+            payment_id: randomUUID(),
+            org_id: orgId,
+            store_id: storeId,
+            order_id: orderId,
+            amount_cents: target.amount_cents,
+            staff_id: staffId,
+            at,
+            method: source.method,
+            ref_payment_id: source.payment_id,
+            reason: plan.reason,
+          }),
+          business_date: _businessDate,
+        }),
+      );
+    }
+    const cancelled = Object.freeze({
+      ...order,
+      status: "cancelled" as const,
+      paid_cents: 0,
+      balance_cents: 0,
+      updated_at: at,
+    });
+    this.orders.set(k, cancelled);
+    return cancelled;
   }
 
   async nextTicketSeq(orgId: string, storeId: string, dayKey: string): Promise<number> {

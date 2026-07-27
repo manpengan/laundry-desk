@@ -32,6 +32,7 @@ export const payments = pgTable(
     refPaymentId: uuid("ref_payment_id"),
     staffId: uuid("staff_id").notNull(),
     at: timestamp("at", { withTimezone: true, mode: "date" }).notNull(),
+    businessDate: text("business_date").notNull(),
     note: text("note"),
   },
   (table) => [
@@ -39,6 +40,7 @@ export const payments = pgTable(
     uniqueIndex("payments_tenant_id_uidx").on(table.orgId, table.storeId, table.id),
     index("payments_order_at_idx").on(table.orgId, table.storeId, table.orderId, table.at),
     index("payments_store_at_idx").on(table.orgId, table.storeId, table.at),
+    index("payments_store_business_date_idx").on(table.orgId, table.storeId, table.businessDate),
     foreignKey({
       columns: [table.orgId, table.storeId],
       foreignColumns: [stores.orgId, stores.id],

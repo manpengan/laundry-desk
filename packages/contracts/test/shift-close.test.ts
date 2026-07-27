@@ -60,16 +60,22 @@ describe("M2 shift.close / shift.get skeleton", () => {
     await expect(
       parseContractInput(shiftCloseCommand, {
         business_date: "2026-07-22",
+        counted_cash_cents: 1200,
+        retained_float_cents: 300,
         signature_name: "店员甲",
       }),
     ).resolves.toEqual({
       business_date: "2026-07-22",
+      counted_cash_cents: 1200,
+      retained_float_cents: 300,
       signature_name: "店员甲",
     });
 
     await expect(
       parseContractInput(shiftCloseCommand, {
         business_date: "2026-07-22",
+        counted_cash_cents: 1200,
+        retained_float_cents: 300,
         signature_name: "店员甲",
         note: "晚班",
       }),
@@ -81,18 +87,24 @@ describe("M2 shift.close / shift.get skeleton", () => {
     await expect(
       parseContractInput(shiftCloseCommand, {
         business_date: "20260722",
+        counted_cash_cents: 0,
+        retained_float_cents: 0,
         signature_name: "甲",
       }),
     ).rejects.toBeTruthy();
     await expect(
       parseContractInput(shiftCloseCommand, {
         business_date: "2026-07-22",
+        counted_cash_cents: 0,
+        retained_float_cents: 0,
         signature_name: "",
       }),
     ).rejects.toBeTruthy();
     await expect(
       parseContractInput(shiftCloseCommand, {
         business_date: "2026-07-22",
+        counted_cash_cents: 0,
+        retained_float_cents: 0,
         signature_name: "x".repeat(65),
       }),
     ).rejects.toBeTruthy();

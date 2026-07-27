@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { businessDayAt } from "../business-day.js";
+import { businessDayAt, businessDayStart } from "../business-day.js";
 
 describe("store-local business day", () => {
   it("uses the configured IANA timezone rather than the host timezone", () => {
@@ -15,6 +15,17 @@ describe("store-local business day", () => {
     const instant = new Date("2026-07-23T17:30:00.000Z"); // 01:30 Asia/Shanghai next day
     expect(businessDayAt(instant, "Asia/Shanghai", 3)).toEqual({ business_date: "2026-07-23" });
     expect(businessDayAt(instant, "Asia/Shanghai", 1)).toEqual({ business_date: "2026-07-24" });
+  });
+
+  it("derives the first instant of a business day in the store timezone", () => {
+    expect(businessDayStart("2026-07-24", "Asia/Shanghai", 3).toISOString()).toBe(
+      "2026-07-23T19:00:00.000Z",
+    );
+    expect(
+      businessDayAt(businessDayStart("2026-07-24", "Asia/Shanghai", 3), "Asia/Shanghai", 3),
+    ).toEqual({
+      business_date: "2026-07-24",
+    });
   });
 
   it("rejects invalid clocks, timezones, and cutovers", () => {

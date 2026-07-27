@@ -4,7 +4,7 @@
  */
 
 import { createCommandError } from "@laundry/contracts";
-import { lineTotalCents, planPickup, planReceive } from "@laundry/domain";
+import { buildPayPayment, lineTotalCents, planPickup, planReceive } from "@laundry/domain";
 import { randomUUID } from "node:crypto";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
@@ -12,6 +12,14 @@ import { HandlerCommandError } from "../bus/types.js";
 import type { CustomerStore } from "../customer/types.js";
 import type { OrderHandlerDeps } from "./deps.js";
 import { listHandler } from "./list-handler.js";
+import {
+  assertBusinessDayOpen,
+  deriveBusinessDate,
+  initialPayment,
+  pricingAdjustments,
+  requireLines,
+  resolveServerPrices,
+} from "./server-pricing.js";
 import type { GarmentRecord, OrderLineRecord } from "./types.js";
 
 export type { OrderHandlerDeps } from "./deps.js";
@@ -56,14 +64,6 @@ function requireNumber(value: unknown): number {
   return value;
 }
 
-function dayKeyFromEpoch(epoch: number): string {
-  const d = new Date(epoch * 1000);
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}${m}${day}`;
-}
-
 function formatTicket(dayKey: string, seq: number): string {
   return `${dayKey}-${String(seq).padStart(4, "0")}`;
 }
@@ -71,31 +71,21 @@ function formatTicket(dayKey: string, seq: number): string {
 function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
-    const linesRaw = input.lines;
-    if (!Array.isArray(linesRaw) || linesRaw.length === 0) {
-      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-    }
-    const lines = linesRaw.map((row) => {
-      const r = asRecord(row);
-      return Object.freeze({
-        service_code: requireString(r.service_code),
-        category_code: requireString(r.category_code),
-        unit_price_cents: requireNumber(r.unit_price_cents),
-        qty: requireNumber(r.qty),
-        ...(typeof r.color === "string" ? { color: r.color } : {}),
-        ...(typeof r.brand === "string" ? { brand: r.brand } : {}),
-      });
-    });
-    const paidCents = requireNumber(input.paid_cents);
-    const plan = planReceive(lines, paidCents);
+    const lines = await resolveServerPrices(deps.catalog, requireLines(input.lines));
+    const paymentInput = initialPayment(input);
+    const paidCents = paymentInput?.amount_cents ?? 0;
+    const plan = planReceive(lines, paidCents, pricingAdjustments(input));
     if (!plan.ok) {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
 
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
     const newId = deps.newId ?? randomUUID;
-    const orderId = newId();
-    const dayKey = dayKeyFromEpoch(now);
+    const draftId = typeof input.draft_id === "string" ? input.draft_id : undefined;
+    const orderId = draftId ?? newId();
+    const businessDate = deriveBusinessDate(now, deps.timeZone, deps.rolloverHour);
+    await assertBusinessDayOpen(deps.isBusinessDayClosed, businessDate);
+    const dayKey = businessDate.replaceAll("-", "");
     const customerPhone =
       typeof input.customer_phone === "string" && input.customer_phone.length > 0
         ? input.customer_phone
@@ -155,15 +145,42 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
       note: typeof input.note === "string" ? input.note : null,
       lines: Object.freeze(orderLines),
       subtotal_cents: plan.totals.subtotal_cents,
+      original_cents: plan.totals.original_cents,
+      discount_cents: plan.totals.discount_cents,
+      addon_cents: plan.totals.addon_cents,
+      urgent_cents: plan.totals.urgent_cents,
+      freight_cents: plan.totals.freight_cents,
       payable_cents: plan.totals.payable_cents,
       paid_cents: plan.totals.paid_cents,
       balance_cents: plan.totals.balance_cents,
       created_at: now,
       updated_at: now,
+      business_date: businessDate,
       created_by_staff_id: ctx.actor.staffId,
     });
 
-    await deps.store.insertOrder(order, garments);
+    const initialLedger =
+      paymentInput === null || paymentInput.amount_cents === 0
+        ? undefined
+        : Object.freeze({
+            payment: buildPayPayment({
+              payment_id: newId(),
+              org_id: ctx.tenant.orgId,
+              store_id: ctx.tenant.storeId,
+              order_id: orderId,
+              amount_cents: paymentInput.amount_cents,
+              staff_id: ctx.actor.staffId,
+              at: now,
+              method: paymentInput.method,
+              note: paymentInput.note ?? null,
+            }),
+            business_date: businessDate,
+          });
+    if (draftId === undefined || deps.store.replaceDraft === undefined) {
+      await deps.store.insertOrder(order, garments, initialLedger);
+    } else if (!(await deps.store.replaceDraft(order, garments, initialLedger))) {
+      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    }
 
     return Object.freeze({
       result: Object.freeze({
@@ -220,12 +237,15 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
       throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
     }
     const garments = await deps.store.listGarments(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
+    if (order.status !== "open") {
+      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    }
     const plan = planPickup({
       garments: garments.map((g) => Object.freeze({ garment_id: g.garment_id, status: g.status })),
       selected_garment_ids: selectedIds,
       balance_cents: order.balance_cents,
       collect_cents: collectCents,
-      order_status: order.status,
+      order_status: "open",
       fulfillment_enabled: false,
     });
     if (!plan.ok) {
@@ -233,6 +253,8 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
     }
 
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
+    const businessDate = deriveBusinessDate(now, deps.timeZone, deps.rolloverHour);
+    await assertBusinessDayOpen(deps.isBusinessDayClosed, businessDate);
     const applied = await deps.store.applyPickup(
       ctx.tenant.orgId,
       ctx.tenant.storeId,
@@ -243,6 +265,7 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
       Object.freeze({
         staffId: ctx.actor.staffId,
         method: "cash" as const,
+        businessDate,
         nextOrderStatus: plan.next_order_status,
         nextBalanceCents: plan.next_balance_cents,
       }),

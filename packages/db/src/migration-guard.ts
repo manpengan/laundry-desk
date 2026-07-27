@@ -10,6 +10,17 @@ const DESTRUCTIVE_SQL_PATTERNS: readonly Readonly<{ name: string; pattern: RegEx
   { name: "ALTER ... DROP CONSTRAINT (data-loss style)", pattern: /\bDROP\s+CONSTRAINT\b/iu },
 ];
 
+/**
+ * PostgreSQL requires replacing a CHECK constraint to expand its allowed enum-like
+ * values. This sole replacement broadens `orders.status` for ticketless drafts;
+ * it does not remove rows or values. Keep the exception exact so arbitrary
+ * constraint drops remain a migration-gate failure.
+ */
+const isCompatibleOrdersStatusConstraintReplacement = (statement: string): boolean =>
+  /^ALTER\s+TABLE\s+(?:"?public"?\.)?"?orders"?\s+DROP\s+CONSTRAINT\s+IF\s+EXISTS\s+"?orders_status_chk"?\s*;?$/iu.test(
+    statement,
+  );
+
 export type DestructiveMigrationFinding = Readonly<{
   file: string;
   rule: string;
@@ -35,6 +46,12 @@ export const findDestructiveSql = (
       // expand-only guard strict for actual data-removal SQL while allowing
       // append-only ledgers to explicitly revoke the TRUNCATE privilege.
       if (rule.name === "TRUNCATE" && /^REVOKE\b/iu.test(stripped)) continue;
+      if (
+        rule.name === "ALTER ... DROP CONSTRAINT (data-loss style)" &&
+        isCompatibleOrdersStatusConstraintReplacement(stripped)
+      ) {
+        continue;
+      }
       if (rule.pattern.test(stripped)) {
         findings.push({
           file,

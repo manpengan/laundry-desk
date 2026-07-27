@@ -18,6 +18,9 @@ import {
   M2_CATALOG_RLS_TABLES,
   M2_CATALOG_TABLE_NAMES,
   M2_CATALOG_TABLES,
+  M2_COMMAND_IDEMPOTENCY_RLS_TABLES,
+  M2_COMMAND_IDEMPOTENCY_TABLE_NAMES,
+  M2_COMMAND_IDEMPOTENCY_TABLES,
   M2_ORDER_RLS_TABLES,
   M2_ORDER_TABLE_NAMES,
   M2_ORDER_TABLES,
@@ -352,6 +355,29 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(getTenantTableScope("shift_closings")).toBe("store");
   });
 
+  it("exports durable command replay state with store tenant columns", () => {
+    expect(Object.keys(M2_COMMAND_IDEMPOTENCY_TABLES).sort()).toEqual(
+      [...M2_COMMAND_IDEMPOTENCY_TABLE_NAMES].sort(),
+    );
+    expect([...M2_COMMAND_IDEMPOTENCY_RLS_TABLES].sort()).toEqual(
+      [...M2_COMMAND_IDEMPOTENCY_TABLE_NAMES].sort(),
+    );
+
+    const columns = columnNames(M2_COMMAND_IDEMPOTENCY_TABLES.command_idempotency);
+    expect(columns).toEqual(
+      expect.arrayContaining([
+        "org_id",
+        "store_id",
+        "command",
+        "idempotency_key",
+        "request_hash",
+        "status",
+        "result_json",
+        "completed_at",
+      ]),
+    );
+  });
+
   it("declares M2 shift_closings tenant unique and business_date unique layout", () => {
     const config = getTableConfig(M2_SHIFT_TABLES.shift_closings);
     const hasTenantUnique = config.indexes.some((index) => {
@@ -435,6 +461,7 @@ describe("M1 schema contract vs A3 matrix", () => {
       ...M2_PRINT_TABLE_NAMES,
       ...M2_CUSTOMER_TABLE_NAMES,
       ...M2_SHIFT_TABLE_NAMES,
+      ...M2_COMMAND_IDEMPOTENCY_TABLE_NAMES,
       ...M3_PHOTO_TABLE_NAMES,
     ].sort();
     expect(Object.keys(schema).sort()).toEqual(expected);

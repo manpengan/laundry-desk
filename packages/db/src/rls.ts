@@ -73,6 +73,9 @@ export const M2_CUSTOMER_RLS_TABLES = Object.freeze(["customers"] as const);
  */
 export const M2_SHIFT_RLS_TABLES = Object.freeze(["shift_closings"] as const);
 
+/** Durable command replay records use store-scope RLS (0019_money_integrity_workday.sql). */
+export const M2_COMMAND_IDEMPOTENCY_RLS_TABLES = Object.freeze(["command_idempotency"] as const);
+
 /**
  * M3 garment_photos uses store-scope RLS (append-only grants in 0013_garment_photos.sql).
  */

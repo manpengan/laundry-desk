@@ -8,6 +8,7 @@ import test from "node:test";
 import { executeCommand } from "../bus/executor.js";
 import { executeQuery } from "../bus/execute-query.js";
 import type { ActorContext } from "../bus/types.js";
+import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
 import { FakeSqlClient } from "../db/fake-client.js";
 import type { TenantContext } from "../db/types.js";
 import { createDefaultChainHooks } from "../handlers/default-chain-hooks.js";
@@ -41,7 +42,7 @@ function buildBus(orderStore = createMemoryOrderStore()) {
       features: createMemoryFeaturesStore(),
       audit: createMemoryAuditQueryStore(),
     }),
-    order: Object.freeze({ store: orderStore }),
+    order: Object.freeze({ store: orderStore, catalog: createMemoryCatalogStore() }),
   });
   const pendingStore = new MemoryPendingActionStore();
   const chainHooks = createDefaultChainHooks({}, pendingStore);

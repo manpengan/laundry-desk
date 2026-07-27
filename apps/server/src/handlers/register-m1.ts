@@ -15,6 +15,8 @@ import {
 } from "../customer/handlers.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import { registerOrderCommandHandlers, registerOrderQueryHandlers } from "../order/handlers.js";
+import { registerOrderWorkdayCommandHandlers } from "../order/workday-handlers.js";
+import { registerPaymentCommandHandlers } from "../payment/handlers.js";
 import type { PhotoHandlerDeps } from "../photo/handlers.js";
 import { registerPhotoCommandHandlers, registerPhotoQueryHandlers } from "../photo/handlers.js";
 import type { PrintHandlerDeps } from "../print/handlers.js";
@@ -84,7 +86,16 @@ export function registerM1Handlers(
 
   if (deps.order !== undefined) {
     registerOrderCommandHandlers(registry, deps.order);
-    registered.push("order.receive", "order.pickup");
+    registerOrderWorkdayCommandHandlers(registry, deps.order);
+    registerPaymentCommandHandlers(registry, deps.order);
+    registered.push(
+      "order.receive",
+      "order.hold",
+      "order.cancel",
+      "order.pickup",
+      "payment.collect",
+      "payment.repay",
+    );
   }
 
   if (deps.print !== undefined) {

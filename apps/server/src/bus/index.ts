@@ -2,6 +2,7 @@ export type {
   ActorContext,
   AuditWriteInput,
   BusCommandDefinition,
+  CommandIdempotencyStore,
   BusContext,
   CommandError,
   CommandHandler,
@@ -14,6 +15,7 @@ export type {
   HandlerContext,
   HandlerOutcome,
   IdempotencyStore,
+  TransactionalIdempotencyStore,
   RegisteredCommand,
   SqlClient,
   TenantContext,
@@ -50,3 +52,4 @@ export { executeQuery } from "./execute-query.js";
 export type { ExecuteQueryOptions } from "./execute-query.js";
 
 export { MemoryIdempotencyStore } from "./idempotency.js";
+export { createPgIdempotencyStore } from "./pg-idempotency.js";

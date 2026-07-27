@@ -40,6 +40,7 @@ export {
   executeCommand,
   HandlerCommandError,
   MemoryIdempotencyStore,
+  createPgIdempotencyStore,
   runCommandChain,
 } from "./bus/index.js";
 
@@ -48,6 +49,7 @@ export type {
   BusContext,
   ChainPortHooks,
   CommandHandler,
+  CommandIdempotencyStore,
   CommandRegistry,
   CommandRequest,
   CommandResult,
@@ -58,6 +60,7 @@ export type {
   HandlerContext,
   HandlerOutcome,
   IdempotencyStore,
+  TransactionalIdempotencyStore,
   MutableCommandRegistry,
   RegisteredCommand,
 } from "./bus/index.js";

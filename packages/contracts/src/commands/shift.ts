@@ -19,7 +19,9 @@ import { BusinessDateSchema } from "./stats.js";
 
 export const ShiftCloseInputSchema = z.strictObject({
   business_date: BusinessDateSchema,
-  /** Display name of the signer (skeleton — not a crypto signature). */
+  counted_cash_cents: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  retained_float_cents: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  /** Display name of the signer; the command audit is the authoritative record. */
   signature_name: z.string().min(1).max(64),
   note: z.string().max(256).optional(),
 });
@@ -34,7 +36,9 @@ export const ShiftGetInputSchema = z.strictObject({
  * ```ts
  * {
  *   shift_id, business_date, closed_at, order_count,
- *   payable_cents, paid_cents, payment_cents,
+ *   payable_cents, paid_cents, payment_cents, opening_float_cents,
+ *   counted_cash_cents, retained_float_cents, expected_cash_cents,
+ *   cash_difference_cents, period_started_at, period_ended_at,
  *   signature_name?, closed_by_staff_id?, note?
  * }
  * ```
@@ -47,6 +51,13 @@ export type ShiftClosingResult = Readonly<{
   payable_cents: number;
   paid_cents: number;
   payment_cents: number;
+  opening_float_cents: number;
+  counted_cash_cents: number;
+  retained_float_cents: number;
+  expected_cash_cents: number;
+  cash_difference_cents: number;
+  period_started_at: number;
+  period_ended_at: number;
   signature_name?: string;
   closed_by_staff_id?: string;
   note?: string | null;
@@ -58,10 +69,11 @@ type GetInput = typeof ShiftGetInputSchema;
 /** 交班日结：快照当日 stats 并写入签字记录；同日仅一次。 */
 export const shiftCloseCommand: CommandDefinition<CloseInput> = defineCommand({
   name: "shift.close",
-  version: "0.2.0",
-  description: "Close a store business day with signature name and day-summary snapshot.",
+  version: "0.3.0",
+  description:
+    "Close a store business day once with a frozen ledger snapshot and cash reconciliation.",
   description_llm:
-    "Append-only shift close for one business_date. Snapshots order_count and integer-fen totals. Rejects second close same day. signature_name is display text only.",
+    "Append-only shift close for one business_date. It freezes integer-fen ledger totals, opening float, counted cash, retained float and the resulting cash difference. Reject a second close for the same store day.",
   input: ShiftCloseInputSchema,
   risk: "R3",
   invariants: ["rbac.order_write"],

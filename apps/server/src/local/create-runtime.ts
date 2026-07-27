@@ -2,11 +2,12 @@
 
 import { randomBytes } from "node:crypto";
 
-import { z } from "zod";
-
 import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@laundry/contracts";
 
 import { createCsrfProofSigner, type CsrfProofSigner } from "../auth/csrf.js";
+import { MemoryIdempotencyStore } from "../bus/idempotency.js";
+import { createPgIdempotencyStore } from "../bus/pg-idempotency.js";
+import type { CommandIdempotencyStore } from "../bus/types.js";
 import { createAccessTokenSigner } from "../identity/crypto-util.js";
 import { createMemoryIdentityStore } from "../identity/memory-store.js";
 import { createPgIdentityStore } from "../identity/pg-store.js";
@@ -49,7 +50,6 @@ import {
   type CreatePoolOptions,
   type PgPool,
 } from "../db/pg-pool.js";
-import { withStoreGuc } from "../db/tenant-guc-client.js";
 import { DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./demo-ids.js";
 import { assertLocalBootstrapReady } from "./bootstrap.js";
 import {
@@ -59,6 +59,7 @@ import {
   type LocalServerConfig,
 } from "./config.js";
 import { LOCAL_PROFILE } from "./profile.js";
+import { loadPgStaffDirectory, type LocalStaffDirectoryEntry } from "./staff-directory.js";
 
 export {
   DEMO_ADMIN_ID,
@@ -70,12 +71,8 @@ export {
   DEMO_STORE_ID,
 } from "./demo-ids.js";
 
-export type LocalStaffDirectoryEntry = Readonly<{
-  staff_id: string;
-  display_name: string;
-  role: "admin" | "staff";
-  username: string;
-}>;
+export type { LocalStaffDirectoryEntry } from "./staff-directory.js";
+export { loadPgStaffDirectory } from "./staff-directory.js";
 
 export type LocalRuntimeMode = "memory" | "pg";
 
@@ -104,6 +101,8 @@ export type LocalRuntime = Readonly<{
   /** Shared with Command Bus for confirm_ref / step-up PIN. */
   pendingStore: PendingActionStore;
   stepUpProofStore: StepUpProofStore;
+  /** Command replay state; durable in PostgreSQL mode. */
+  idempotencyStore: CommandIdempotencyStore;
   /** Present when mode === "pg"; close on shutdown. */
   pool: PgPool | null;
   /** Memory store when mode === "memory" (tests). */
@@ -149,57 +148,6 @@ function freezeStaffDirectory(
   return Object.freeze(
     entries.map((entry) => (Object.isFrozen(entry) ? entry : Object.freeze({ ...entry }))),
   );
-}
-
-type PgStaffDirectoryRow = Readonly<{
-  staff_id: string;
-  display_name: string;
-  role: string;
-  username: string;
-}>;
-
-const PgStaffDirectoryRowSchema = z
-  .object({
-    staff_id: z.uuid(),
-    display_name: z.string().trim().min(1),
-    role: z.enum(["admin", "staff"]),
-    username: z.string().trim().min(1),
-  })
-  .strict()
-  .readonly();
-
-function mapPgStaffDirectoryRow(row: PgStaffDirectoryRow): LocalStaffDirectoryEntry {
-  return PgStaffDirectoryRowSchema.parse(row);
-}
-
-export async function loadPgStaffDirectory(
-  pool: PgPool,
-): Promise<readonly LocalStaffDirectoryEntry[]> {
-  const rows = await withStoreGuc(
-    pool,
-    {
-      orgId: LOCAL_PROFILE.orgId,
-      storeId: LOCAL_PROFILE.storeId,
-      staffId: LOCAL_PROFILE.adminStaffId,
-    },
-    async (client) => {
-      const result = await client.query<PgStaffDirectoryRow>(
-        `SELECT staff.id::text AS staff_id, staff.display_name, role.role, staff.username
-           FROM staffs staff
-           JOIN staff_store_roles role
-             ON role.org_id = staff.org_id
-            AND role.staff_id = staff.id
-          WHERE staff.org_id = $1::uuid
-            AND role.store_id = $2::uuid
-            AND staff.is_active = true
-            AND role.is_active = true
-          ORDER BY staff.username, staff.id`,
-        [LOCAL_PROFILE.orgId, LOCAL_PROFILE.storeId],
-      );
-      return result.rows.map(mapPgStaffDirectoryRow);
-    },
-  );
-  return rows;
 }
 
 function buildIdentityDeps(
@@ -343,18 +291,34 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       processStepUpProofStore,
     ),
     platform: buildPlatform("memory"),
-    order: Object.freeze({ store: orderStore, customer: customerStore }),
+    order: Object.freeze({
+      store: orderStore,
+      customer: customerStore,
+      catalog: createMemoryCatalogStore(),
+      timeZone: LOCAL_PROFILE.timezone,
+      isBusinessDayClosed: async (businessDate: string) =>
+        (await shiftStore.getByBusinessDate(
+          LOCAL_PROFILE.orgId,
+          LOCAL_PROFILE.storeId,
+          businessDate,
+        )) !== null,
+    }),
     catalog: Object.freeze({ store: createMemoryCatalogStore() }),
     print: Object.freeze({ store: createMemoryPrintJobStore() }),
     stats: Object.freeze({ source: statsSource }),
     customer: Object.freeze({ store: customerStore }),
-    shift: Object.freeze({ store: shiftStore, stats: statsSource }),
+    shift: Object.freeze({
+      store: shiftStore,
+      stats: statsSource,
+      timeZone: LOCAL_PROFILE.timezone,
+    }),
     photo: Object.freeze({ store: photoStore }),
     accessTokenSecret,
     csrfProofSigner,
     staffDirectory: memoryStaffDirectory,
     pendingStore: processPendingActionStore,
     stepUpProofStore: processStepUpProofStore,
+    idempotencyStore: new MemoryIdempotencyStore(),
     pool: null,
     store,
   });
@@ -402,7 +366,21 @@ export async function createPgLocalRuntime(
       processStepUpProofStore,
     ),
     platform: buildPlatform("sql"),
-    order: Object.freeze({ store: orderStore, customer: customerStore }),
+    order: Object.freeze({
+      store: orderStore,
+      customer: customerStore,
+      catalog: createPgCatalogStore(appPool, {
+        orgId: LOCAL_PROFILE.orgId,
+        storeId: LOCAL_PROFILE.storeId,
+      }),
+      timeZone: LOCAL_PROFILE.timezone,
+      isBusinessDayClosed: async (businessDate: string) =>
+        (await shiftStore.getByBusinessDate(
+          LOCAL_PROFILE.orgId,
+          LOCAL_PROFILE.storeId,
+          businessDate,
+        )) !== null,
+    }),
     catalog: Object.freeze({
       store: createPgCatalogStore(appPool, {
         orgId: LOCAL_PROFILE.orgId,
@@ -417,13 +395,18 @@ export async function createPgLocalRuntime(
     }),
     stats: Object.freeze({ source: statsSource }),
     customer: Object.freeze({ store: customerStore }),
-    shift: Object.freeze({ store: shiftStore, stats: statsSource }),
+    shift: Object.freeze({
+      store: shiftStore,
+      stats: statsSource,
+      timeZone: LOCAL_PROFILE.timezone,
+    }),
     photo: Object.freeze({ store: photoStore }),
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSigner,
     staffDirectory: pgStaffDirectory,
     pendingStore: processPendingActionStore,
     stepUpProofStore: processStepUpProofStore,
+    idempotencyStore: createPgIdempotencyStore(appPool),
     pool: appPool,
     store: null,
   });

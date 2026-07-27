@@ -29,7 +29,14 @@ type ShiftClosingRow = Readonly<{
   payable_cents: number;
   paid_cents: number;
   payment_cents: number;
+  opening_float_cents: number;
+  counted_cash_cents: number;
+  retained_float_cents: number;
+  expected_cash_cents: number;
+  cash_difference_cents: number;
   signature_name: string;
+  period_started_at: Date | string;
+  period_ended_at: Date | string;
   closed_at: Date | string;
 }>;
 
@@ -54,7 +61,14 @@ function mapRecord(row: ShiftClosingRow): ShiftClosingRecord {
     payable_cents: row.payable_cents,
     paid_cents: row.paid_cents,
     payment_cents: row.payment_cents,
+    opening_float_cents: row.opening_float_cents,
+    counted_cash_cents: row.counted_cash_cents,
+    retained_float_cents: row.retained_float_cents,
+    expected_cash_cents: row.expected_cash_cents,
+    cash_difference_cents: row.cash_difference_cents,
     signature_name: row.signature_name,
+    period_started_at: dateToEpoch(row.period_started_at),
+    period_ended_at: dateToEpoch(row.period_ended_at),
     closed_at: dateToEpoch(row.closed_at),
   });
 }
@@ -86,11 +100,34 @@ async function selectByBusinessDate(
   const result = await client.query<ShiftClosingRow>(
     `SELECT id, org_id, store_id, business_date, closed_by_staff_id, note,
             order_count, payable_cents, paid_cents, payment_cents,
-            signature_name, closed_at
+            opening_float_cents, counted_cash_cents, retained_float_cents,
+            expected_cash_cents, cash_difference_cents, signature_name,
+            period_started_at, period_ended_at, closed_at
      FROM shift_closings
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3
      LIMIT 1`,
     [orgId, storeId, businessDate],
+  );
+  const row = result.rows[0];
+  return row === undefined ? null : mapRecord(row);
+}
+
+async function selectMostRecent(
+  client: SqlClient,
+  orgId: string,
+  storeId: string,
+): Promise<ShiftClosingRecord | null> {
+  const result = await client.query<ShiftClosingRow>(
+    `SELECT id, org_id, store_id, business_date, closed_by_staff_id, note,
+            order_count, payable_cents, paid_cents, payment_cents,
+            opening_float_cents, counted_cash_cents, retained_float_cents,
+            expected_cash_cents, cash_difference_cents, signature_name,
+            period_started_at, period_ended_at, closed_at
+     FROM shift_closings
+     WHERE org_id = $1::uuid AND store_id = $2::uuid
+     ORDER BY closed_at DESC, id DESC
+     LIMIT 1`,
+    [orgId, storeId],
   );
   const row = result.rows[0];
   return row === undefined ? null : mapRecord(row);
@@ -110,15 +147,19 @@ async function insertClose(
       `INSERT INTO shift_closings (
          id, org_id, store_id, business_date, closed_by_staff_id, note,
          order_count, payable_cents, paid_cents, payment_cents,
-         signature_name, closed_at
+         opening_float_cents, counted_cash_cents, retained_float_cents,
+         expected_cash_cents, cash_difference_cents, signature_name,
+         period_started_at, period_ended_at, closed_at
        ) VALUES (
          $1::uuid, $2::uuid, $3::uuid, $4, $5::uuid, $6,
          $7, $8, $9, $10,
-         $11, $12
+         $11, $12, $13, $14, $15, $16, $17, $18, $19
        )
        RETURNING id, org_id, store_id, business_date, closed_by_staff_id, note,
-                 order_count, payable_cents, paid_cents, payment_cents,
-                 signature_name, closed_at`,
+              order_count, payable_cents, paid_cents, payment_cents,
+              opening_float_cents, counted_cash_cents, retained_float_cents,
+              expected_cash_cents, cash_difference_cents, signature_name,
+              period_started_at, period_ended_at, closed_at`,
       [
         shiftId,
         input.org_id,
@@ -130,7 +171,14 @@ async function insertClose(
         input.snapshot.payable_cents,
         input.snapshot.paid_cents,
         input.snapshot.payment_cents,
+        input.snapshot.opening_float_cents ?? 0,
+        input.snapshot.counted_cash_cents ?? 0,
+        input.snapshot.retained_float_cents ?? 0,
+        input.snapshot.expected_cash_cents ?? 0,
+        input.snapshot.cash_difference_cents ?? 0,
         input.signature_name,
+        epochToDate(input.snapshot.period_started_at ?? input.closed_at),
+        epochToDate(input.snapshot.period_ended_at ?? input.closed_at),
         closedAt,
       ],
     );
@@ -172,6 +220,13 @@ export function createPgShiftStore(pool: PgPool, options: CreatePgShiftStoreOpti
         pool,
         { orgId, storeId, staffId: input.closed_by_staff_id },
         async (client) => insertClose(client, input, newId),
+      );
+    },
+
+    getMostRecent: async (queryOrgId: string, queryStoreId: string) => {
+      assertConfiguredScope(queryOrgId, queryStoreId, orgId, storeId);
+      return withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) =>
+        selectMostRecent(client, orgId, storeId),
       );
     },
   });

@@ -6,9 +6,16 @@ import { createCommandError, M1_FIRST_WAVE_COMMAND_NAMES } from "@laundry/contra
 import { createM1CommandRegistry } from "../bus/registry.js";
 import { executeCommand } from "../bus/executor.js";
 import { MemoryIdempotencyStore } from "../bus/idempotency.js";
-import type { ActorContext, CommandHandler, DomainEvent } from "../bus/types.js";
+import type {
+  ActorContext,
+  CommandHandler,
+  CommandResult,
+  DomainEvent,
+  DurableIdempotencyLookup,
+  TransactionalIdempotencyStore,
+} from "../bus/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
-import type { TenantContext } from "../db/types.js";
+import type { SqlClient, TenantContext } from "../db/types.js";
 import { INSERT_AUDIT_LOG_SQL } from "../audit/write-audit.js";
 
 const TENANT: TenantContext = Object.freeze({
@@ -37,6 +44,55 @@ function setupRegistry(handler: CommandHandler = logoutHandler) {
   const registry = createM1CommandRegistry();
   registry.registerHandler("identity.logout", handler);
   return registry;
+}
+
+class TestTransactionalIdempotencyStore implements TransactionalIdempotencyStore {
+  private readonly rows = new Map<
+    string,
+    Readonly<{ hash: string; result: CommandResult | null }>
+  >();
+
+  async lookup(
+    _tenant: TenantContext,
+    command: string,
+    key: string,
+    requestHash: string,
+  ): Promise<DurableIdempotencyLookup> {
+    return this.read(command, key, requestHash);
+  }
+
+  async claim(
+    _client: SqlClient,
+    _tenant: TenantContext,
+    command: string,
+    key: string,
+    requestHash: string,
+  ): Promise<DurableIdempotencyLookup> {
+    const current = this.read(command, key, requestHash);
+    if (current.kind !== "miss") return current;
+    this.rows.set(`${command}:${key}`, Object.freeze({ hash: requestHash, result: null }));
+    return Object.freeze({ kind: "miss" });
+  }
+
+  async complete(
+    _client: SqlClient,
+    _tenant: TenantContext,
+    command: string,
+    key: string,
+    requestHash: string,
+    result: CommandResult,
+  ): Promise<void> {
+    this.rows.set(`${command}:${key}`, Object.freeze({ hash: requestHash, result }));
+  }
+
+  private read(command: string, key: string, requestHash: string): DurableIdempotencyLookup {
+    const row = this.rows.get(`${command}:${key}`);
+    if (row === undefined) return Object.freeze({ kind: "miss" });
+    if (row.hash !== requestHash) return Object.freeze({ kind: "conflict" });
+    return row.result === null
+      ? Object.freeze({ kind: "in_progress" })
+      : Object.freeze({ kind: "replay", result: row.result });
+  }
 }
 
 test("registry loads M1 first-wave command names", () => {
@@ -266,6 +322,62 @@ test("idempotent replay returns cached result without re-exec", async () => {
   // Second call must not open a new transaction.
   const begins = client.sqlSequence().filter((s) => s === "BEGIN");
   assert.equal(begins.length, 1);
+});
+
+test("durable idempotency replays the committed result and rejects changed requests", async () => {
+  const client = new FakeSqlClient();
+  let runs = 0;
+  const registry = setupRegistry(async () => {
+    runs += 1;
+    return { result: { n: runs } };
+  });
+  const key = "abababab-abab-4bab-8bab-abababababab";
+  const store = new TestTransactionalIdempotencyStore();
+
+  const first = await executeCommand(
+    client,
+    TENANT,
+    "identity.logout",
+    {},
+    {
+      actor: ACTOR,
+      registry,
+      idempotencyKey: key,
+      idempotencyStore: store,
+      now: FIXED_NOW,
+      newId: FIXED_ID,
+    },
+  );
+  const replay = await executeCommand(
+    client,
+    TENANT,
+    "identity.logout",
+    {},
+    {
+      actor: ACTOR,
+      registry,
+      idempotencyKey: key,
+      idempotencyStore: store,
+    },
+  );
+  const conflict = await executeCommand(
+    client,
+    TENANT,
+    "identity.logout",
+    { changed: true },
+    {
+      actor: ACTOR,
+      registry,
+      idempotencyKey: key,
+      idempotencyStore: store,
+    },
+  );
+
+  assert.equal(runs, 1);
+  assert.deepEqual(replay, first);
+  assert.equal(conflict.ok, false);
+  if (!conflict.ok) assert.equal(conflict.error.code, "IDEMPOTENCY_CONFLICT");
+  assert.equal(client.sqlSequence().filter((sql) => sql === "BEGIN").length, 1);
 });
 
 test("domain events publish only after successful commit", async () => {

@@ -13,7 +13,14 @@ export type ShiftClosingRecord = Readonly<{
   payable_cents: number;
   paid_cents: number;
   payment_cents: number;
+  opening_float_cents: number;
+  counted_cash_cents: number;
+  retained_float_cents: number;
+  expected_cash_cents: number;
+  cash_difference_cents: number;
   signature_name: string;
+  period_started_at: number;
+  period_ended_at: number;
   /** Epoch seconds. */
   closed_at: number;
 }>;
@@ -23,6 +30,13 @@ export type ShiftCloseSnapshot = Readonly<{
   payable_cents: number;
   paid_cents: number;
   payment_cents: number;
+  opening_float_cents?: number;
+  counted_cash_cents?: number;
+  retained_float_cents?: number;
+  expected_cash_cents?: number;
+  cash_difference_cents?: number;
+  period_started_at?: number;
+  period_ended_at?: number;
 }>;
 
 export type ShiftCloseInput = Readonly<{
@@ -45,4 +59,5 @@ export type ShiftStore = Readonly<{
     businessDate: string,
   ) => Promise<ShiftClosingRecord | null>;
   close: (input: ShiftCloseInput) => Promise<ShiftClosingRecord>;
+  getMostRecent: (orgId: string, storeId: string) => Promise<ShiftClosingRecord | null>;
 }>;

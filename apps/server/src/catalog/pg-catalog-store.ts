@@ -5,8 +5,9 @@
 
 import type { CatalogItem } from "@laundry/domain";
 
-import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
-import { withStoreGuc } from "../db/tenant-guc-client.js";
+import type { PgPool } from "../db/pg-pool.js";
+import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
+import type { SqlClient } from "../db/types.js";
 import type { CatalogStore } from "./memory-catalog.js";
 
 export type CreatePgCatalogStoreOptions = Readonly<{
@@ -36,7 +37,7 @@ function mapRow(row: CatalogItemRow): CatalogItem {
 }
 
 async function loadActiveItems(
-  client: PgPoolClient,
+  client: SqlClient,
   orgId: string,
   storeId: string,
 ): Promise<readonly CatalogItem[]> {
@@ -62,6 +63,8 @@ export function createPgCatalogStore(
 
   return Object.freeze({
     listAll: async (): Promise<readonly CatalogItem[]> =>
-      withStoreGuc(pool, { orgId, storeId }, (client) => loadActiveItems(client, orgId, storeId)),
+      withStoreGucOrCurrent(pool, { orgId, storeId }, (client) =>
+        loadActiveItems(client, orgId, storeId),
+      ),
   });
 }

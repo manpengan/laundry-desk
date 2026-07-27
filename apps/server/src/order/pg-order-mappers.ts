@@ -17,17 +17,23 @@ export type OrderRow = {
   id: string;
   org_id: string;
   store_id: string;
-  ticket_no: string;
+  ticket_no: string | null;
   status: string;
   customer_phone: string | null;
   customer_name: string | null;
   note: string | null;
   subtotal_cents: number;
+  original_cents: number;
+  discount_cents: number;
+  addon_cents: number;
+  urgent_cents: number;
+  freight_cents: number;
   payable_cents: number;
   paid_cents: number;
   balance_cents: number;
   created_at: Date | string;
   updated_at: Date | string;
+  business_date: string;
   created_by_staff_id: string;
 };
 
@@ -63,7 +69,7 @@ export type GarmentRow = {
   status: string;
 };
 
-const ORDER_STATUSES = new Set<OrderStatus>(["open", "closed", "cancelled"]);
+const ORDER_STATUSES = new Set<OrderStatus>(["draft", "open", "closed", "cancelled"]);
 
 const GARMENT_STATUSES = new Set<GarmentStatus>([
   "received",
@@ -115,11 +121,17 @@ export function mapOrder(row: OrderRow, lines: readonly OrderLineRecord[]): Orde
     note: row.note,
     lines: Object.freeze([...lines]),
     subtotal_cents: row.subtotal_cents,
+    original_cents: row.original_cents,
+    discount_cents: row.discount_cents,
+    addon_cents: row.addon_cents,
+    urgent_cents: row.urgent_cents,
+    freight_cents: row.freight_cents,
     payable_cents: row.payable_cents,
     paid_cents: row.paid_cents,
     balance_cents: row.balance_cents,
     created_at: dateToEpoch(row.created_at),
     updated_at: dateToEpoch(row.updated_at),
+    business_date: row.business_date,
     created_by_staff_id: row.created_by_staff_id,
   });
 }

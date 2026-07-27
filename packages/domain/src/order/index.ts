@@ -61,7 +61,7 @@ export {
   type RefundPaymentPlanInput,
   type ReversalPaymentPlanInput,
 } from "./payment.js";
-export { businessDayAt, type BusinessDayResult } from "./business-day.js";
+export { businessDayAt, businessDayStart, type BusinessDayResult } from "./business-day.js";
 export { planHold, planResume, type HoldPlan, type ResumePlan } from "./hold-plan.js";
 export {
   planCancel,

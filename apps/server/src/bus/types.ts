@@ -122,6 +122,45 @@ export type IdempotencyStore = Readonly<{
   ) => Promise<void>;
 }>;
 
+/** Durable idempotency decision, including same-key/different-request protection. */
+export type DurableIdempotencyLookup =
+  | Readonly<{ kind: "miss" }>
+  | Readonly<{ kind: "replay"; result: CommandResult }>
+  | Readonly<{ kind: "conflict" }>
+  | Readonly<{ kind: "in_progress" }>;
+
+/**
+ * A durable store participates in the command's existing tenant transaction.
+ * Its claim and completed result therefore commit together with business rows
+ * and audit_log, rather than after the HTTP response path.
+ */
+export type TransactionalIdempotencyStore = Readonly<{
+  lookup: (
+    tenant: TenantContext,
+    command: string,
+    key: string,
+    requestHash: string,
+  ) => Promise<DurableIdempotencyLookup>;
+  claim: (
+    client: SqlClient,
+    tenant: TenantContext,
+    command: string,
+    key: string,
+    requestHash: string,
+  ) => Promise<DurableIdempotencyLookup>;
+  complete: (
+    client: SqlClient,
+    tenant: TenantContext,
+    command: string,
+    key: string,
+    requestHash: string,
+    result: CommandResult,
+  ) => Promise<void>;
+}>;
+
+/** Either the legacy process store or the transaction-bound durable store. */
+export type CommandIdempotencyStore = IdempotencyStore | TransactionalIdempotencyStore;
+
 /**
  * When set, executeCommand already validated a confirm_ref pending card and
  * rewrote request.input to frozen args. Policy must allow; executor consumes card.

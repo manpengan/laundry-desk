@@ -58,3 +58,53 @@ export function businessDayAt(
       parts.hour >= rolloverHour ? date : priorCalendarDate(parts.year, parts.month, parts.day),
   });
 }
+
+/**
+ * Resolve the instant at which a named store business day starts. This keeps
+ * day-close periods in the store's IANA timezone rather than UTC or host time.
+ */
+export function businessDayStart(businessDate: string, timeZone: string, rolloverHour = 0): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(businessDate)) {
+    throw new TypeError("businessDate must be YYYY-MM-DD");
+  }
+  if (timeZone.trim().length === 0) throw new TypeError("timeZone must be a non-empty IANA name");
+  if (!Number.isInteger(rolloverHour) || rolloverHour < 0 || rolloverHour > 23) {
+    throw new TypeError("rolloverHour must be an integer from 0 to 23");
+  }
+
+  const [year, month, day] = businessDate.split("-").map(Number);
+  if (year === undefined || month === undefined || day === undefined) {
+    throw new TypeError("businessDate must be YYYY-MM-DD");
+  }
+  const targetUtc = Date.UTC(year, month - 1, day, rolloverHour);
+  let epoch = targetUtc;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(epoch));
+    const valueFor = (type: Intl.DateTimeFormatPartTypes): number => {
+      const value = parts.find((part) => part.type === type)?.value;
+      if (value === undefined) throw new RangeError(`timezone did not provide ${type}`);
+      return Number(value);
+    };
+    const localAsUtc = Date.UTC(
+      valueFor("year"),
+      valueFor("month") - 1,
+      valueFor("day"),
+      valueFor("hour"),
+      valueFor("minute"),
+      valueFor("second"),
+    );
+    const next = targetUtc - (localAsUtc - epoch);
+    if (next === epoch) return new Date(next);
+    epoch = next;
+  }
+  return new Date(epoch);
+}

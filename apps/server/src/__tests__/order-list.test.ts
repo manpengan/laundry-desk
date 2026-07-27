@@ -8,6 +8,7 @@ import test from "node:test";
 import { executeCommand } from "../bus/executor.js";
 import { executeQuery } from "../bus/execute-query.js";
 import type { ActorContext } from "../bus/types.js";
+import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
 import { FakeSqlClient } from "../db/fake-client.js";
 import type { TenantContext } from "../db/types.js";
 import { createDefaultChainHooks } from "../handlers/default-chain-hooks.js";
@@ -46,7 +47,7 @@ function buildBus(orderStore: OrderStore = createMemoryOrderStore(), fixedNow = 
       features: createMemoryFeaturesStore(),
       audit: createMemoryAuditQueryStore(),
     }),
-    order: Object.freeze({ store: orderStore, now: fixedNow }),
+    order: Object.freeze({ store: orderStore, catalog: createMemoryCatalogStore(), now: fixedNow }),
   });
   const pendingStore = new MemoryPendingActionStore();
   const chainHooks = createDefaultChainHooks({}, pendingStore);
@@ -299,7 +300,7 @@ test("order.list filters by business_date and status", async () => {
     {
       order_id: closeId,
       garment_ids: [],
-      collect_cents: 1000,
+      collect_cents: 1500,
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
   );
@@ -430,9 +431,9 @@ test("order.list filters by exact customer_phone", async () => {
       customer_name: "甲",
       lines: [
         {
-          service_code: "iron",
-          category_code: "pants",
-          unit_price_cents: 800,
+          service_code: "dry",
+          category_code: "suit",
+          unit_price_cents: 3800,
           qty: 1,
         },
       ],
@@ -495,7 +496,7 @@ test("order.list filters by min_balance_cents (receivables / debt)", async () =>
           qty: 1,
         },
       ],
-      paid_cents: 1000,
+      paid_cents: 1500,
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
   );
