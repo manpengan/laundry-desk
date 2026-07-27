@@ -60,7 +60,16 @@ In the same file, declare the approved 16-entry frozen inventory and assert that
 ```js
 assert.equal((await eslint.calculateConfigForFile("src/main.ts")).rules["max-lines"], undefined);
 assert.equal(maxLinesFrom(await eslint.calculateConfigForFile("tools/local/probe.mjs")), 400);
-assert.equal(maxLinesFrom(await eslint.calculateConfigForFile("tools/local/probe.test.mjs")), 800);
+for (const testPath of [
+  "tools/local/probe.test.mjs",
+  "tools/local/probe.spec.mjs",
+  "tools/local/test/probe.mjs",
+  "tools/local/tests/probe.mjs",
+  "tools/local/__tests__/probe.mjs",
+  "tools/local/e2e/probe.mjs",
+]) {
+  assert.equal(maxLinesFrom(await eslint.calculateConfigForFile(testPath)), 800);
+}
 assert.equal(
   maxLinesFrom(await eslint.calculateConfigForFile("tests/foundation/probe.test.mjs")),
   800,
@@ -138,7 +147,9 @@ Add an `overrides` entry setting the same rule to 800 for all of:
 Keep root-level `rules` free of `max-lines`. Add `overrides` that:
 
 - apply 400 only to `tools/local/**/*.mjs`;
-- then override `tools/local/**/*.test.mjs` and `tools/local/**/*.spec.mjs` to 800;
+- then override `tools/local/**/*.test.mjs`, `tools/local/**/*.spec.mjs`,
+  `tools/local/{test,tests,__tests__,e2e}/**/*.mjs`, and
+  `tools/local/**/{test,tests,__tests__,e2e}/**/*.mjs` to 800;
 - apply 800 only to `tests/foundation/**/*.mjs`;
 - apply 474 only to `tools/local/config.mjs`.
 
