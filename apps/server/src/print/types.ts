@@ -102,6 +102,8 @@ export type PrintJobStore = Readonly<{
    * already been attempted `max_attempts` times is failed instead of returned.
    */
   claimNext?: (input: ClaimPrintJobInput) => Promise<PrintJobClaim | null>;
+  /** Recorded artifact for a finished job, or null when it has none. */
+  findArtifact?: (jobId: string) => Promise<PrintArtifactRef | null>;
   transition: (
     jobId: string,
     status: PrintJobStatus,

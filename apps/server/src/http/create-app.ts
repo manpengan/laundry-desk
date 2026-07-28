@@ -12,6 +12,8 @@ import type { LocalRuntime } from "../local/demo-seed.js";
 import { registerAuthRoutes } from "./auth-routes.js";
 import type { AuthRouteContext, RouteSecurityContext } from "./auth-route-support.js";
 import { registerBusRoutes } from "./bus-routes.js";
+import { registerPrintArtifactRoutes } from "./print-artifact-routes.js";
+import type { FileSpool } from "../print/file-spool.js";
 import type { CookiePolicy } from "./cookie-policy.js";
 import { installPublicErrorHandlers } from "./error-policy.js";
 import { createLocalLoggerOptions } from "./local-logger.js";
@@ -31,6 +33,8 @@ export type CreateAppOptions = Readonly<{
   desktopOrigin?: string;
   /** Deterministic limiter injection for focused tests. */
   loginRateLimiter?: LoginRateLimiter;
+  /** Mock print spool; when absent the artifact download route is not mounted. */
+  printSpool?: FileSpool;
   /** Structured redacted auth-security events (tests may capture). */
   securityEventSink?: SecurityEventSink;
   /** Tests may silence request logs; runtime defaults to the redacted structured logger. */
@@ -101,5 +105,25 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   const context = createRouteContext(options, requestSecurity);
   registerAuthRoutes(app, context);
   registerBusRoutes(app, context);
+
+  // Artifact download only exists when a spool is configured; the memory
+  // runtime has nothing on disk to serve.
+  const spool = options.printSpool;
+  const findArtifact = options.runtime.print.store.findArtifact;
+  if (spool !== undefined && findArtifact !== undefined) {
+    registerPrintArtifactRoutes(app, context, {
+      spool,
+      lookup: Object.freeze({
+        // The store is already tenant-scoped; the route passes the session
+        // tenant so a future multi-store store cannot be addressed cross-tenant.
+        find: async (_orgId: string, _storeId: string, jobId: string) => {
+          const artifact = await findArtifact(jobId);
+          return artifact === null
+            ? null
+            : Object.freeze({ artifact_path: artifact.path, artifact_sha256: artifact.sha256 });
+        },
+      }),
+    });
+  }
   return app;
 }
