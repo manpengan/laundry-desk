@@ -52,6 +52,16 @@ const ACTOR: ActorContext = Object.freeze({
 
 const UNIT_PRICE_CENTS = 1_000;
 
+/**
+ * Pin this acceptance to its own business day. shift.close is terminal and
+ * append-only, so closing "today" would freeze the shared integration database
+ * for everything that runs afterwards — the browser workday E2E runs later in
+ * the same CI job and could no longer take an order. Epoch seconds, matching
+ * `deps.now`.
+ */
+const FIXED_CLOCK_EPOCH_SECONDS = Math.floor(Date.parse("2026-01-15T03:00:00Z") / 1000);
+const fixedNow = (): number => FIXED_CLOCK_EPOCH_SECONDS;
+
 maybe("PG counter workday: receive, repay, pickup and close settle on real ledgers", async () => {
   assert.ok(urls);
   const adminPool = createPgPool({ connectionString: urls.admin });
@@ -93,11 +103,13 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
           storeId: DEMO_STORE_ID,
         }),
         timeZone: LOCAL_PROFILE.timezone,
+        now: fixedNow,
       }),
       shift: Object.freeze({
         store: shiftStore,
         stats: statsSource,
         timeZone: LOCAL_PROFILE.timezone,
+        now: fixedNow,
       }),
       stats: Object.freeze({ source: statsSource, timeZone: LOCAL_PROFILE.timezone }),
     });
@@ -144,10 +156,13 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     ).data as { order_id: string; business_date: string; balance_cents?: number };
 
     const afterReceive = await readOrder(appPool, received.order_id);
-    assert.match(
+    // 2026-01-15T03:00Z is 11:00 in Asia/Taipei, so the pinned business day is
+    // that same date. Asserting it exactly also proves the clock injection took
+    // effect, which is what keeps today's shift open for the browser E2E.
+    assert.equal(
       afterReceive.business_date,
-      /^\d{4}-\d{2}-\d{2}$/u,
-      "receive must persist an ISO business_date",
+      "2026-01-15",
+      "receive must persist the pinned ISO business_date",
     );
     assert.equal(afterReceive.payable_cents, 2 * UNIT_PRICE_CENTS, "authoritative catalog pricing");
     assert.equal(afterReceive.paid_cents, 600);
