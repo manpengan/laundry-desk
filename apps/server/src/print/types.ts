@@ -43,11 +43,21 @@ export type EnqueuePrintJobInput = Readonly<{
   now?: number;
 }>;
 
+/** What the spool actually wrote; recorded as one unit on a successful print. */
+export type PrintArtifactRef = Readonly<{
+  /** Spool-relative artifact name. Never absolute, never traversing. */
+  path: string;
+  sha256: string;
+  bytes: number;
+}>;
+
 export type TransitionPrintJobOptions = Readonly<{
   error?: string;
   now?: number;
   /** Set when status becomes done after ESC/POS build. */
   payload_bytes?: number;
+  /** Set when status becomes done after the spool installed the artifact. */
+  artifact?: PrintArtifactRef;
 }>;
 
 /** Default lease window; a worker must finish or renew before it expires. */

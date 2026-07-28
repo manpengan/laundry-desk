@@ -73,6 +73,7 @@ describe("destructive migration static reject", () => {
       "0019_money_integrity_workday.sql",
       "0020_counter_lookup_codes.sql",
       "0021_print_job_lease.sql",
+      "0022_print_job_artifact.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

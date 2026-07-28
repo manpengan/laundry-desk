@@ -34,6 +34,11 @@ export const printJobs = pgTable(
     claimedAt: timestamp("claimed_at", { withTimezone: true, mode: "date" }),
     leaseUntil: timestamp("lease_until", { withTimezone: true, mode: "date" }),
     workerId: text("worker_id"),
+    /** Spool artifact metadata (0022). Written as one unit or not at all. */
+    artifactPath: text("artifact_path"),
+    artifactSha256: text("artifact_sha256"),
+    artifactBytes: integer("artifact_bytes"),
+    completedAt: timestamp("completed_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull(),
   },
