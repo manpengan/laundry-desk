@@ -34,8 +34,17 @@ const LOGIN = Object.freeze({
   password: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD"),
 });
 
-/** Seeded by global-setup.mjs: 水洗衬衫 at ¥15.00. */
-const CATALOG_ITEM_NAME = "水洗衬衫";
+/**
+ * Created through the settings UI by this spec — ADR-15. A fresh install ships
+ * an empty price list, and order.receive refuses a line that does not match
+ * exactly one active item, so bootstrapping the catalog IS part of the workday.
+ * The code is stable because catalog.item.upsert is idempotent by code.
+ */
+const CATALOG_CODE = "e2e_wash_shirt";
+const CATALOG_ITEM_NAME = "E2E 水洗衬衫";
+const CATALOG_SERVICE = "wash";
+const CATALOG_CATEGORY = "e2eshirt";
+const CATALOG_PRICE_CENTS = "1500";
 const QTY = 2;
 const PAYABLE_TEXT = "¥30.00";
 const INITIAL_PAYMENT_CENTS = "1000";
@@ -60,6 +69,24 @@ test.beforeAll(async ({ request }) => {
 
 test("counter takes an order with a partial payment and settles it at pickup", async ({ page }) => {
   await signIn(page);
+
+  // --- 价目维护（ADR-15）：没有价目就开不了单 ------------------------------
+  await page.locator('[data-nav-id="settings"]').click();
+  const catalogPanel = page.locator('[data-testid="catalog-admin"]');
+  await expect(catalogPanel).toBeVisible();
+
+  await page.locator('input[name="catalog-code"]').fill(CATALOG_CODE);
+  await page.locator('input[name="catalog-name"]').fill(CATALOG_ITEM_NAME);
+  await page.locator('input[name="catalog-service"]').fill(CATALOG_SERVICE);
+  await page.locator('input[name="catalog-category"]').fill(CATALOG_CATEGORY);
+  await page.locator('input[name="catalog-price"]').fill(CATALOG_PRICE_CENTS);
+  await page.locator('[data-testid="catalog-save-btn"]').click();
+
+  // The saved row appearing proves the write reached PostgreSQL and came back
+  // through catalog.items.list.
+  await expect(
+    catalogPanel.locator('[data-testid="catalog-admin-row"]', { hasText: CATALOG_ITEM_NAME }),
+  ).toBeVisible({ timeout: 15_000 });
 
   // --- 开单 ---------------------------------------------------------------
   await page.locator('[data-nav-id="receive"]').click();

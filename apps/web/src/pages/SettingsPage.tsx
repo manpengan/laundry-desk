@@ -8,13 +8,15 @@ import { useCallback, useState } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
 import { isStepUpRequired } from "../commands/command-client.js";
-import type { CommandPort } from "../commands/types.js";
+import type { CommandPort, QueryPort } from "../commands/types.js";
 import { StepUpConfirmDialog } from "../shell/StepUpConfirmDialog.js";
+import { CatalogMaintenancePanel } from "./CatalogMaintenancePanel.js";
 
 export type SettingsPageProps = {
   session: SessionView;
   authClient: AuthClient;
   commandClient: CommandPort;
+  queryClient?: QueryPort;
 };
 
 const SETTINGS_KEY = "pricing.min_order_cents";
@@ -22,7 +24,12 @@ const SETTINGS_KEY = "pricing.min_order_cents";
 /** Env var operators set for CLI / Edge USB path (documented name). */
 export const PRINTER_PATH_ENV_NAME = "LAUNDRY_PRINTER_PATH";
 
-export function SettingsPage({ session, authClient, commandClient }: SettingsPageProps) {
+export function SettingsPage({
+  session,
+  authClient,
+  commandClient,
+  queryClient,
+}: SettingsPageProps) {
   const toast = useToast();
   const [centsText, setCentsText] = useState("1200");
   const [busy, setBusy] = useState(false);
@@ -97,6 +104,11 @@ export function SettingsPage({ session, authClient, commandClient }: SettingsPag
           </p>
         ) : null}
       </div>
+
+      <CatalogMaintenancePanel
+        commandClient={commandClient}
+        {...(queryClient !== undefined ? { queryClient } : {})}
+      />
 
       <section
         className="ld-settings-printer-smoke"

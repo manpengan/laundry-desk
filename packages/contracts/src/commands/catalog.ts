@@ -1,6 +1,11 @@
 import type { CommandDefinition, QueryDefinition } from "../registry/definitions.js";
 import { IDENTITY_COMMANDS, IDENTITY_COMMAND_NAMES } from "./identity.js";
-import { CATALOG_SKELETON_DEFINITIONS, CATALOG_SKELETON_QUERY_NAMES } from "./catalog-items.js";
+import {
+  CATALOG_COMMAND_DEFINITIONS,
+  CATALOG_COMMAND_NAMES,
+  CATALOG_SKELETON_DEFINITIONS,
+  CATALOG_SKELETON_QUERY_NAMES,
+} from "./catalog-items.js";
 import {
   M2_CUSTOMER_COMMAND_DEFINITIONS,
   M2_CUSTOMER_COMMAND_NAMES,
@@ -54,6 +59,7 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
   ...M2_CUSTOMER_COMMAND_DEFINITIONS,
   ...M2_SHIFT_COMMAND_DEFINITIONS,
   ...M3_PHOTO_COMMAND_DEFINITIONS,
+  ...CATALOG_COMMAND_DEFINITIONS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
@@ -63,6 +69,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   ...M2_PRINT_COMMAND_NAMES,
   ...M2_SHIFT_COMMAND_NAMES,
   ...M3_PHOTO_COMMAND_NAMES,
+  ...CATALOG_COMMAND_NAMES,
 ] as const) as readonly [
   "customer.upsert",
   "order.receive",
@@ -78,6 +85,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "print.ticket.reprint",
   "shift.close",
   "photo.register",
+  "catalog.item.upsert",
 ];
 
 /**
@@ -97,6 +105,10 @@ export const M2_ORDER_QUERY_NAMES = ORDER_QUERY_NAMES;
 export const M2_CATALOG_DEFINITIONS: readonly QueryDefinition<z.ZodObject>[] = Object.freeze([
   ...CATALOG_SKELETON_DEFINITIONS,
 ]);
+
+/** ADR-15: the single unfrozen catalog write command. Never in the AI projection. */
+export const M2_CATALOG_COMMAND_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] =
+  Object.freeze([...CATALOG_COMMAND_DEFINITIONS]);
 
 export const M2_CATALOG_QUERY_NAMES = CATALOG_SKELETON_QUERY_NAMES;
 

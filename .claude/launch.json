@@ -24,6 +24,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "v2-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@laundry/web", "exec", "vite", "--config", "vite.config.ts"],
+      "port": 5173
     }
   ]
 }

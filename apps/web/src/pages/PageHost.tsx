@@ -112,7 +112,14 @@ export function PageHost({
     authClient !== undefined &&
     commandClient !== undefined
   ) {
-    return <SettingsPage session={session} authClient={authClient} commandClient={commandClient} />;
+    return (
+      <SettingsPage
+        session={session}
+        authClient={authClient}
+        commandClient={commandClient}
+        {...(queryClient !== undefined ? { queryClient } : {})}
+      />
+    );
   }
 
   if (activeId === "workbench" && session !== undefined && queryClient !== undefined) {
