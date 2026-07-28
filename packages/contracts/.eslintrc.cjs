@@ -17,11 +17,5 @@ module.exports = {
         "max-lines": maxLines(549),
       },
     },
-    {
-      files: ["src/index.ts"],
-      rules: {
-        "max-lines": maxLines(533),
-      },
-    },
   ],
 };

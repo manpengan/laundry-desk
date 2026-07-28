@@ -20,7 +20,6 @@ const frozenProductionBudgets = Object.freeze([
   Object.freeze(["apps/web/src/auth/HttpAuthClient.ts", 534]),
   Object.freeze(["apps/web/src/pages/ReceivePage.tsx", 411]),
   Object.freeze(["packages/contracts/src/auth/pin.ts", 549]),
-  Object.freeze(["packages/contracts/src/index.ts", 533]),
   Object.freeze(["tools/local/config.mjs", 474]),
 ]);
 
@@ -89,7 +88,7 @@ test("resolves physical-line options for default production and test budgets", a
 });
 
 test("resolves exact frozen production budgets", async () => {
-  assert.equal(frozenProductionBudgets.length, 16);
+  assert.equal(frozenProductionBudgets.length, 15);
 
   for (const [filePath, expectedMaxLines] of frozenProductionBudgets) {
     await assertResolvedPhysicalLineOptions(filePath, expectedMaxLines);

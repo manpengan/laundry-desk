@@ -42,7 +42,7 @@ ALTER TABLE orders ADD CONSTRAINT orders_addon_cents_chk CHECK (addon_cents >= 0
 ALTER TABLE orders ADD CONSTRAINT orders_urgent_cents_chk CHECK (urgent_cents >= 0);
 ALTER TABLE orders ADD CONSTRAINT orders_freight_cents_chk CHECK (freight_cents >= 0);
 ALTER TABLE orders ADD CONSTRAINT orders_business_date_chk
-  CHECK (business_date ~ '^\\d{4}-\\d{2}-\\d{2}$');
+  CHECK (business_date ~ '^\d{4}-\d{2}-\d{2}$');
 
 CREATE INDEX IF NOT EXISTS orders_store_business_date_idx
   ON orders (org_id, store_id, business_date, created_at DESC);
@@ -62,7 +62,7 @@ WHERE payment.business_date IS NULL
 
 ALTER TABLE payments ALTER COLUMN business_date SET NOT NULL;
 ALTER TABLE payments ADD CONSTRAINT payments_business_date_chk
-  CHECK (business_date ~ '^\\d{4}-\\d{2}-\\d{2}$');
+  CHECK (business_date ~ '^\d{4}-\d{2}-\d{2}$');
 CREATE INDEX IF NOT EXISTS payments_store_business_date_idx
   ON payments (org_id, store_id, business_date, at DESC);
 

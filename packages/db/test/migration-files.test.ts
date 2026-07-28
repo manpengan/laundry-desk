@@ -171,6 +171,32 @@ describe("packages/db migration file inventory", () => {
     );
   });
 
+  // `standard_conforming_strings` is on, so a `\\d` inside a SQL string literal is
+  // a literal backslash followed by `d` — a CHECK written that way rejects every
+  // value it is meant to accept. 0019 shipped exactly that bug on
+  // orders.business_date and payments.business_date.
+  it("writes regex CHECK literals with single-escaped classes", () => {
+    const offenders = readdirSync(migrationsDir)
+      .filter((name) => name.endsWith(".sql"))
+      .flatMap((name) => {
+        const sql = readFileSync(join(migrationsDir, name), "utf8");
+        return sql.includes("\\\\d") || sql.includes("\\\\w") || sql.includes("\\\\s")
+          ? [name]
+          : [];
+      });
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("constrains business_date to a regex that accepts a real ISO date", () => {
+    for (const name of ["0012_shift_closings.sql", "0019_money_integrity_workday.sql"]) {
+      const sql = readFileSync(join(migrationsDir, name), "utf8");
+      for (const [, pattern] of sql.matchAll(/business_date\s*~\s*'([^']+)'/gu)) {
+        expect(new RegExp(pattern ?? "").test("2026-07-28"), `${name}: ${pattern}`).toBe(true);
+      }
+    }
+  });
+
   it("adds customer pickup codes and bounded name-prefix lookup indexes", () => {
     const sql = readFileSync(join(migrationsDir, "0020_counter_lookup_codes.sql"), "utf8");
     expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS pickup_code text/iu);

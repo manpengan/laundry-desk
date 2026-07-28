@@ -140,8 +140,11 @@ maybe("PG photo command persists metadata and audit through the command transact
       `INSERT INTO orders (
          id, org_id, store_id, ticket_no, status, customer_phone, customer_name, note,
          subtotal_cents, payable_cents, paid_cents, balance_cents,
-         created_at, updated_at, created_by_staff_id
-       ) VALUES ($1, $2, $3, $4, 'open', NULL, NULL, NULL, 1000, 1000, 0, 1000, now(), now(), $5)`,
+         created_at, updated_at, created_by_staff_id, business_date
+       ) VALUES ($1, $2, $3, $4, 'open', NULL, NULL, NULL, 1000, 1000, 0, 1000, now(), now(), $5,
+         (SELECT to_char(now() AT TIME ZONE store.timezone, 'YYYY-MM-DD')
+            FROM stores AS store
+           WHERE store.org_id = $2 AND store.id = $3))`,
       [orderId, DEMO_ORG_ID, DEMO_STORE_ID, `photo-${orderId}`, DEMO_STAFF_A_ID],
     );
     await adminPool.query(

@@ -133,7 +133,7 @@ test("records the active V2 file size policy", async () => {
 
   assert.match(agentGuidance, /活动 V2 生产 JS\/TS 文件[^。\n]*默认[^。\n]*400 physical lines/u);
   assert.match(agentGuidance, /测试文件[^。\n]*800 physical lines[^。\n]*硬上限/u);
-  assert.match(agentGuidance, /16 个命名冻结预算[^。\n]*不得增长/u);
+  assert.match(agentGuidance, /15 个命名冻结预算[^。\n]*不得增长/u);
   assert.ok(
     agentGuidance.includes("(docs/superpowers/specs/2026-07-27-file-size-quality-gate-design.md)"),
   );

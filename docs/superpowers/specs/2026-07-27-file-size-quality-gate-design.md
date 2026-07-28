@@ -53,7 +53,6 @@
 |      632 | `apps/server/src/http/login-rate-limit.ts`      |
 |      549 | `packages/contracts/src/auth/pin.ts`            |
 |      534 | `apps/web/src/auth/HttpAuthClient.ts`           |
-|      533 | `packages/contracts/src/index.ts`               |
 |      506 | `apps/server/src/order/pg-order-store.ts`       |
 |      481 | `apps/server/src/identity/memory-store.ts`      |
 |      474 | `tools/local/config.mjs`                        |
@@ -62,10 +61,18 @@
 |      418 | `apps/server/src/identity/session.ts`           |
 |      411 | `apps/web/src/pages/ReceivePage.tsx`            |
 
-其中 `packages/contracts/src/auth/pin.ts`、`packages/contracts/src/index.ts`、
-`apps/server/src/order/pg-order-store.ts` 与 `apps/web/src/pages/ReceivePage.tsx`
-在 `main` 已超过 400 行，其余 12 个是当前分支新跨过推荐范围的文件。预算是技术
-债上限，不是长期豁免。
+其中 `packages/contracts/src/auth/pin.ts`、`apps/server/src/order/pg-order-store.ts`
+与 `apps/web/src/pages/ReceivePage.tsx` 在 `main` 已超过 400 行，其余是当前分支新
+跨过推荐范围的文件。预算是技术债上限，不是长期豁免。
+
+#### 预算变更记录
+
+| 日期       | 文件                             | 变更                                                                   |
+| ---------- | -------------------------------- | ---------------------------------------------------------------------- |
+| 2026-07-28 | `packages/contracts/src/index.ts` | 冻结预算 533 **退役**：拆为八个按域 curated 子 barrel，根入口降至 11 行 |
+
+退役后该文件回落到 400 行默认上限，冻结预算总数由 16 降至 15；
+`tests/foundation/eslint-file-size.test.mjs` 的计数断言同步更新。
 
 ### 2.3 拆分唯一硬超限测试
 
