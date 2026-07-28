@@ -232,7 +232,6 @@ test("declares pnpm workspaces and Turborepo at the repository root", async () =
   assert.match(foundationWorkflow, /uses: actions\/setup-node@v7/);
   assert.match(foundationWorkflow, /uses: pnpm\/action-setup@v6/);
   assert.match(foundationWorkflow, /version: 11\.15\.0/);
-  assert.match(foundationWorkflow, /tools\/migrate-v1\/\*\*/);
   assert.match(foundationWorkflow, /pnpm --filter @laundry\/migrate-v1 rebuild better-sqlite3/);
   assert.deepEqual(turboConfig.tasks.build.dependsOn, ["^build"]);
   assert.deepEqual(turboConfig.tasks.build.outputs, ["dist/**"]);
@@ -611,14 +610,16 @@ test("declares v2 as the only active delivery line", async () => {
     /^  pull_request:\n(?:(?: {4,}.*|\s*)\n)*/mu,
   )?.[0];
   assert.ok(pullRequestBlock, "foundation workflow must define pull_request configuration");
-  const pullRequestPathsBlock = pullRequestBlock.match(/^    paths:\n(?:      - .*\n)+/mu)?.[0];
-  assert.ok(pullRequestPathsBlock, "foundation pull_request must define a paths list");
-  for (const governancePathFilter of ['- "*.md"', '- ".hermes/plans/**"', '- "docs/**"']) {
-    assert.ok(
-      pullRequestPathsBlock.includes(governancePathFilter),
-      `foundation pull_request paths must include ${governancePathFilter}`,
-    );
-  }
+  // This job is a required status check on main. A required check that is
+  // skipped never reports and blocks the pull request forever, so it must run
+  // for every pull request. Enumerating governance paths was the weaker way of
+  // guaranteeing docs changes stayed covered; no filter at all covers them and
+  // everything else unconditionally.
+  assert.doesNotMatch(
+    pullRequestBlock,
+    /^ {4}paths(?:-ignore)?:/mu,
+    "foundation pull_request must not filter paths while it is a required check",
+  );
   assert.match(changelog, /v1.*(?:Archived|已归档)/iu);
   assert.match(legacySpec.slice(0, 600), /(?:archived|superseded).*ADR-13/iu);
 });

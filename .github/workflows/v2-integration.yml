@@ -2,22 +2,12 @@ name: V2 PostgreSQL Integration
 
 on:
   workflow_dispatch:
+  # No paths filter: this job is a required status check on main. A required
+  # check that is skipped never reports, which blocks the pull request forever.
+  # Costs a full run on every PR; that is cheaper than a stuck merge queue or a
+  # red main.
   pull_request:
     branches: [main]
-    paths:
-      - "apps/server/**"
-      - "apps/web/**"
-      - "packages/contracts/**"
-      - "packages/db/**"
-      - "packages/domain/**"
-      - "tools/compose/**"
-      - "tools/local/**"
-      - "tools/migrate-v1/**"
-      - ".github/workflows/v2-integration.yml"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "turbo.json"
   push:
     branches: [main]
 

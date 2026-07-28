@@ -2,21 +2,11 @@ name: V2 Foundation
 
 on:
   workflow_dispatch:
+  # No paths filter: this job is a required status check on main. A required
+  # check that is skipped never reports, which blocks the pull request forever
+  # (a docs-only or .claude-only change used to match nothing here).
   pull_request:
     branches: [main]
-    paths:
-      - "*.md"
-      - ".hermes/plans/**"
-      - "apps/**"
-      - "docs/**"
-      - "packages/**"
-      - "tests/foundation/**"
-      - "tools/migrate-v1/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "turbo.json"
-      - ".github/workflows/foundation.yml"
   push:
     branches: [main]
 
