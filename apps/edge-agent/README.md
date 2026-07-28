@@ -4,6 +4,10 @@ Electron 壳：`app://` 内置 SPA、断网冷启动、ADR-01 安全基线、单
 
 **本包边界**：无业务校验；校验语义全在 server 命令总线。
 
+**SPA bundle 只增不减是有意的**，不是漏接剪枝：打包侧由 `afterPack` 的
+`prune-packaged-spa.mjs` 收敛，仓库侧为崩溃安全刻意保留。动手前先读
+[`docs/spa-bundle-retention.md`](docs/spa-bundle-retention.md)。
+
 ## 安全基线（九项）
 
 | 项                       | 位置                                      |
