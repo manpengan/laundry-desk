@@ -50,10 +50,48 @@ export type TransitionPrintJobOptions = Readonly<{
   payload_bytes?: number;
 }>;
 
+/** Default lease window; a worker must finish or renew before it expires. */
+export const DEFAULT_LEASE_SECONDS = 30;
+
+/**
+ * Give up after this many claims of the same job. Guards a poison payload that
+ * kills its worker every time, which would otherwise be re-claimed forever.
+ */
+export const DEFAULT_MAX_ATTEMPTS = 3;
+
+export type ClaimPrintJobInput = Readonly<{
+  /** Identifies the claiming worker; stored so a stuck lease is attributable. */
+  worker_id: string;
+  lease_seconds?: number;
+  max_attempts?: number;
+  now?: number;
+}>;
+
+/** A held lease. `attempt_count` includes the claim that produced this record. */
+export type PrintJobClaim = Readonly<{
+  job_id: string;
+  kind: PrintJobKind;
+  order_id: string;
+  ticket_no: string;
+  attempt_count: number;
+  /** Epoch seconds; the claim is void once passed. */
+  lease_until: number;
+  worker_id: string;
+}>;
+
 export type PrintJobStore = Readonly<{
   enqueue: (input: EnqueuePrintJobInput) => Promise<PrintJobRecord>;
   list: (limit: number) => Promise<readonly PrintJobStatusView[]>;
   get: (jobId: string) => Promise<PrintJobRecord | null>;
+  /**
+   * Atomically take the oldest claimable job, or null when there is none.
+   *
+   * Claimable means queued, or printing with an expired lease — a worker that
+   * died mid-print leaves the row in `printing`, and the status machine forbids
+   * moving back to `queued`, so recovery re-claims in place. A job that has
+   * already been attempted `max_attempts` times is failed instead of returned.
+   */
+  claimNext?: (input: ClaimPrintJobInput) => Promise<PrintJobClaim | null>;
   transition: (
     jobId: string,
     status: PrintJobStatus,
