@@ -12,6 +12,7 @@ import { DEFAULT_LEASE_SECONDS, DEFAULT_MAX_ATTEMPTS } from "./types.js";
 import type {
   ClaimPrintJobInput,
   EnqueuePrintJobInput,
+  PrintArtifactRef,
   PrintJobClaim,
   PrintJobKind,
   PrintJobRecord,
@@ -250,6 +251,34 @@ export function createPgPrintJobStore(
           attempt_count: claimed.attempt_count,
           lease_until: epochSeconds(claimed.lease_until),
           worker_id: claimed.worker_id,
+        });
+      }),
+
+    findArtifact: async (jobId: string): Promise<PrintArtifactRef | null> =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
+        const result = await client.query<{
+          artifact_path: string | null;
+          artifact_sha256: string | null;
+          artifact_bytes: number | null;
+        }>(
+          `SELECT artifact_path, artifact_sha256, artifact_bytes
+           FROM print_jobs
+           WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid`,
+          [orgId, storeId, jobId],
+        );
+        const row = result.rows[0];
+        if (
+          row === undefined ||
+          row.artifact_path === null ||
+          row.artifact_sha256 === null ||
+          row.artifact_bytes === null
+        ) {
+          return null;
+        }
+        return Object.freeze({
+          path: row.artifact_path,
+          sha256: row.artifact_sha256,
+          bytes: row.artifact_bytes,
         });
       }),
 
