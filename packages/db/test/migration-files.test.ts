@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0020", () => {
+  it("ships formal SQL migrations ordered 0001 → 0021", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -32,6 +32,7 @@ describe("packages/db migration file inventory", () => {
       "0018_identity_lifecycle_indexes.sql",
       "0019_money_integrity_workday.sql",
       "0020_counter_lookup_codes.sql",
+      "0021_print_job_lease.sql",
     ]);
   });
 
@@ -64,6 +65,7 @@ describe("packages/db migration file inventory", () => {
       "0018",
       "0019",
       "0020",
+      "0021",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -195,6 +197,14 @@ describe("packages/db migration file inventory", () => {
         expect(new RegExp(pattern ?? "").test("2026-07-28"), `${name}: ${pattern}`).toBe(true);
       }
     }
+  });
+
+  it("adds print worker lease state without allowing a partial claim", () => {
+    const sql = readFileSync(join(migrationsDir, "0021_print_job_lease.sql"), "utf8");
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0/iu);
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS lease_until timestamptz/iu);
+    expect(sql).toMatch(/print_jobs_lease_shape_chk/iu);
+    expect(sql).toMatch(/print_jobs_store_claimable_idx/iu);
   });
 
   it("adds customer pickup codes and bounded name-prefix lookup indexes", () => {

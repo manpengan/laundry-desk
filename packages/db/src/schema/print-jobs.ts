@@ -29,6 +29,11 @@ export const printJobs = pgTable(
     status: text("status").notNull(),
     error: text("error"),
     payloadBytes: integer("payload_bytes"),
+    /** Worker lease state (0021). Null lease fields mean the job is unclaimed. */
+    attemptCount: integer("attempt_count").notNull().default(0),
+    claimedAt: timestamp("claimed_at", { withTimezone: true, mode: "date" }),
+    leaseUntil: timestamp("lease_until", { withTimezone: true, mode: "date" }),
+    workerId: text("worker_id"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull(),
   },
@@ -37,6 +42,13 @@ export const printJobs = pgTable(
     uniqueIndex("print_jobs_tenant_id_uidx").on(table.orgId, table.storeId, table.id),
     index("print_jobs_store_created_idx").on(table.orgId, table.storeId, table.createdAt),
     index("print_jobs_store_status_idx").on(table.orgId, table.storeId, table.status),
+    index("print_jobs_store_claimable_idx").on(
+      table.orgId,
+      table.storeId,
+      table.status,
+      table.leaseUntil,
+      table.createdAt,
+    ),
     foreignKey({
       columns: [table.orgId, table.storeId],
       foreignColumns: [stores.orgId, stores.id],

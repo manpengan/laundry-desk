@@ -8,8 +8,11 @@ import { randomUUID } from "node:crypto";
 import type { PgPool } from "../db/pg-pool.js";
 import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
 import type { SqlClient } from "../db/types.js";
+import { DEFAULT_LEASE_SECONDS, DEFAULT_MAX_ATTEMPTS } from "./types.js";
 import type {
+  ClaimPrintJobInput,
   EnqueuePrintJobInput,
+  PrintJobClaim,
   PrintJobKind,
   PrintJobRecord,
   PrintJobStatus,
@@ -89,6 +92,85 @@ function assertLegalTransition(current: PrintJobStatus, next: PrintJobStatus, jo
   }
 }
 
+type ClaimRow = Readonly<{
+  id: string;
+  kind: PrintJobKind;
+  order_id: string;
+  ticket_no: string;
+  attempt_count: number;
+  lease_until: Date;
+  worker_id: string;
+}>;
+
+/**
+ * Retire jobs whose lease expired after the final allowed attempt.
+ *
+ * Runs before every claim so an exhausted job leaves the claimable set instead
+ * of being re-claimed forever by a payload that kills its worker.
+ */
+async function failExhausted(
+  client: SqlClient,
+  orgId: string,
+  storeId: string,
+  maxAttempts: number,
+  at: Date,
+): Promise<void> {
+  await client.query(
+    `UPDATE print_jobs
+     SET status = 'failed',
+         error = 'print worker gave up after ' || attempt_count || ' attempts',
+         claimed_at = NULL, lease_until = NULL, worker_id = NULL,
+         updated_at = $4
+     WHERE org_id = $1::uuid AND store_id = $2::uuid
+       AND status = 'printing'
+       AND lease_until IS NOT NULL AND lease_until <= $4
+       AND attempt_count >= $3`,
+    [orgId, storeId, maxAttempts, at],
+  );
+}
+
+/**
+ * Take the oldest claimable job in one statement.
+ *
+ * SKIP LOCKED lets concurrent workers pass over rows another worker is already
+ * taking rather than serialising behind them, and the single UPDATE keeps
+ * select-then-claim from racing.
+ */
+async function claimOne(
+  client: SqlClient,
+  orgId: string,
+  storeId: string,
+  workerId: string,
+  maxAttempts: number,
+  at: Date,
+  leaseUntil: Date,
+): Promise<ClaimRow | null> {
+  const result = await client.query<ClaimRow>(
+    `UPDATE print_jobs
+     SET status = 'printing',
+         attempt_count = attempt_count + 1,
+         claimed_at = $5,
+         lease_until = $6,
+         worker_id = $4,
+         updated_at = $5
+     WHERE id = (
+       SELECT id FROM print_jobs
+       WHERE org_id = $1::uuid AND store_id = $2::uuid
+         AND attempt_count < $3
+         AND (
+           status = 'queued'
+           OR (status = 'printing' AND lease_until IS NOT NULL AND lease_until <= $5)
+         )
+       ORDER BY created_at ASC, id ASC
+       FOR UPDATE SKIP LOCKED
+       LIMIT 1
+     )
+     RETURNING id, kind, order_id, ticket_no, attempt_count, lease_until, worker_id`,
+    [orgId, storeId, maxAttempts, workerId, at, leaseUntil],
+  );
+  return result.rows[0] ?? null;
+}
+
 async function selectJob(
   client: SqlClient,
   orgId: string,
@@ -138,6 +220,36 @@ export function createPgPrintJobStore(
           ticket_no: input.ticket_no,
           created_at: now,
           updated_at: now,
+        });
+      }),
+
+    claimNext: async (input: ClaimPrintJobInput): Promise<PrintJobClaim | null> =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
+        const now = input.now ?? Math.floor(Date.now() / 1000);
+        const leaseSeconds = input.lease_seconds ?? DEFAULT_LEASE_SECONDS;
+        const maxAttempts = input.max_attempts ?? DEFAULT_MAX_ATTEMPTS;
+        const at = epochToDate(now);
+
+        await failExhausted(client, orgId, storeId, maxAttempts, at);
+        const claimed = await claimOne(
+          client,
+          orgId,
+          storeId,
+          input.worker_id,
+          maxAttempts,
+          at,
+          epochToDate(now + leaseSeconds),
+        );
+        if (claimed === null) return null;
+
+        return Object.freeze({
+          job_id: claimed.id,
+          kind: claimed.kind,
+          order_id: claimed.order_id,
+          ticket_no: claimed.ticket_no,
+          attempt_count: claimed.attempt_count,
+          lease_until: epochSeconds(claimed.lease_until),
+          worker_id: claimed.worker_id,
         });
       }),
 
