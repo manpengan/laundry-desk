@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CATALOG_COMMAND_NAMES,
   CATALOG_SKELETON_DEFINITIONS,
   CATALOG_SKELETON_QUERY_NAMES,
+  M2_READ_ONLY_AI_DEFINITIONS,
+  catalogItemUpsertCommand,
   M1_FIRST_WAVE_DEFINITIONS,
   M2_CATALOG_DEFINITIONS,
   M2_CATALOG_QUERY_NAMES,
@@ -59,5 +62,48 @@ describe("M2 catalog items skeleton queries", () => {
     expect(catalogItemsListQuery.max_result_rows).toBe(200);
     expect(catalogItemsGetQuery.risk).toBe("R0");
     expect(catalogItemsGetQuery.max_result_rows).toBe(1);
+  });
+});
+
+describe("ADR-15 catalog maintenance command", () => {
+  it("exposes exactly one idempotent upsert command guarded by settings_admin", () => {
+    expect([...CATALOG_COMMAND_NAMES]).toEqual(["catalog.item.upsert"]);
+    expect(catalogItemUpsertCommand.kind).toBe("command");
+    expect(catalogItemUpsertCommand.risk).toBe("R2");
+    expect(catalogItemUpsertCommand.idempotent).toBe(true);
+    expect(catalogItemUpsertCommand.offline_mode).toBe("denied");
+    expect(catalogItemUpsertCommand.invariants).toContain("rbac.settings_admin");
+  });
+
+  // ADR-15 §2: the AI projection spreads CATALOG_SKELETON_DEFINITIONS and must
+  // stay read-only, so the write command must never land in that set.
+  it("keeps the write command out of the read-only skeleton", () => {
+    for (const definition of CATALOG_SKELETON_DEFINITIONS) {
+      expect(definition.kind).toBe("query");
+    }
+    expect(CATALOG_SKELETON_DEFINITIONS).not.toContain(catalogItemUpsertCommand);
+    expect(M2_READ_ONLY_AI_DEFINITIONS).not.toContain(catalogItemUpsertCommand);
+  });
+
+  it("accepts a valid item and rejects float or negative prices", async () => {
+    const valid = {
+      code: "wash_shirt",
+      name: "水洗衬衫",
+      service_code: "wash",
+      category_code: "shirt",
+      unit_price_cents: 1500,
+      is_active: true,
+    };
+    await expect(parseContractInput(catalogItemUpsertCommand, valid)).resolves.toMatchObject({
+      code: "wash_shirt",
+    });
+    for (const badPrice of [15.5, -1]) {
+      await expect(
+        parseContractInput(catalogItemUpsertCommand, { ...valid, unit_price_cents: badPrice }),
+      ).rejects.toThrow();
+    }
+    await expect(
+      parseContractInput(catalogItemUpsertCommand, { ...valid, code: "bad code!" }),
+    ).rejects.toThrow();
   });
 });

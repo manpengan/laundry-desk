@@ -5606,6 +5606,54 @@
           }
         ]
       },
+      "input.command.catalog.item.upsert": {
+        "additionalProperties": false,
+        "properties": {
+          "category_code": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+            "type": "string"
+          },
+          "code": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "mnemonic": {
+            "maxLength": 16,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "service_code": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+            "type": "string"
+          },
+          "sort_order": {
+            "maximum": 9999,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unit_price_cents": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "service_code",
+          "category_code",
+          "unit_price_cents",
+          "is_active"
+        ],
+        "type": "object"
+      },
       "input.command.customer.upsert": {
         "additionalProperties": false,
         "properties": {
@@ -6982,6 +7030,58 @@
           "auth"
         ],
         "x-laundry-kind": "auth"
+      }
+    },
+    "/v1/commands/catalog.item.upsert": {
+      "post": {
+        "description": "Not exposed to AI. Counter price maintenance is operator-only under settings_admin. Stable command name: `catalog.item.upsert` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_catalog_item_upsert",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.catalog.item.upsert"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create or update one catalog price item by stable code.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "0.2.0"
       }
     },
     "/v1/commands/customer.upsert": {

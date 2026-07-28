@@ -28,6 +28,9 @@ describe("M2 contract surface", () => {
       "print.ticket.reprint",
       "shift.close",
       "photo.register",
+      // ADR-15: deliberate unfreeze so a fresh install can maintain its price
+      // list. Further additions still require their own ADR.
+      "catalog.item.upsert",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("stats.day.summary");

@@ -7,7 +7,10 @@ import type { ChainPortHooks } from "../bus/chain-adapter.js";
 import { createM1CommandRegistry, type MutableCommandRegistry } from "../bus/registry.js";
 import { createM1QueryRegistry, type MutableQueryRegistry } from "../bus/query-registry.js";
 import type { CatalogHandlerDeps } from "../catalog/handlers.js";
-import { registerCatalogQueryHandlers } from "../catalog/handlers.js";
+import {
+  registerCatalogCommandHandlers,
+  registerCatalogQueryHandlers,
+} from "../catalog/handlers.js";
 import type { CustomerHandlerDeps } from "../customer/handlers.js";
 import {
   registerCustomerCommandHandlers,
@@ -82,6 +85,12 @@ export function registerM1Handlers(
   if (deps.platform !== undefined) {
     registerPlatformHandlers(registry, deps.platform);
     registered.push("platform.settings.set");
+  }
+
+  // ADR-15: price maintenance is a command; the query side stays read-only.
+  if (deps.catalog !== undefined) {
+    registerCatalogCommandHandlers(registry, deps.catalog);
+    registered.push("catalog.item.upsert");
   }
 
   if (deps.order !== undefined) {

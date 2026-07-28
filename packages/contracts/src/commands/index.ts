@@ -25,6 +25,7 @@ export {
   M1_FIRST_WAVE_COMMAND_NAMES,
   M1_FIRST_WAVE_DEFINITIONS,
   M1_FIRST_WAVE_QUERY_NAMES,
+  M2_CATALOG_COMMAND_DEFINITIONS,
   M2_CATALOG_DEFINITIONS,
   M2_CATALOG_QUERY_NAMES,
   M2_CONTRACT_COMMAND_NAMES,
@@ -55,10 +56,14 @@ export {
   M3_PHOTO_QUERY_NAMES,
 } from "./catalog.js";
 export {
+  CATALOG_COMMAND_DEFINITIONS,
+  CATALOG_COMMAND_NAMES,
   CATALOG_SKELETON_DEFINITIONS,
   CATALOG_SKELETON_QUERY_NAMES,
+  CatalogItemUpsertInputSchema,
   CatalogItemsGetInputSchema,
   CatalogItemsListInputSchema,
+  catalogItemUpsertCommand,
   catalogItemsGetQuery,
   catalogItemsListQuery,
 } from "./catalog-items.js";

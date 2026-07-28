@@ -9,8 +9,6 @@ if (configuredWebUrl !== undefined && configuredWebUrl !== LOCAL_WEB_URL) {
 /** Opt-in local SPA config. Fastify remains caller-owned; Playwright owns Vite. */
 export default defineConfig({
   testDir: "./e2e",
-  /** Seeds the price list the counter workday needs; Compose stays caller-owned. */
-  globalSetup: "./e2e/global-setup.mjs",
   timeout: 30_000,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
