@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 import { createPgPool, resolvePgUrls, type PgPool } from "../db/pg-pool.js";
+import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
 import { DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { createPgPrintJobStore } from "./pg-print-store.js";
 
@@ -107,6 +108,55 @@ maybe("an expired lease is re-claimed in place and counts a second attempt", asy
     assert.equal(recovered?.attempt_count, 2);
     assert.equal(recovered?.worker_id, "worker-b");
     assert.equal((await store.get(job.job_id))?.status, "printing");
+  } finally {
+    await pool.end();
+  }
+});
+
+maybe("finishing a job records its artifact and releases the lease", async () => {
+  assert.ok(urls);
+  const pool = createPgPool({ connectionString: urls.app });
+  try {
+    const store = createStore(pool);
+    const now = 1_800_300_000;
+    await drainQueue(store, now);
+    const job = await enqueueTicket(store, now);
+    const claim = await store.claimNext?.({ worker_id: "w-artifact", now });
+    assert.equal(claim?.job_id, job.job_id);
+
+    const artifact = Object.freeze({
+      path: `${job.job_id}-xp58-0001.txt`,
+      sha256: "a".repeat(64),
+      bytes: 128,
+    });
+    await store.transition(job.job_id, "done", { now: now + 1, artifact });
+
+    // RLS needs the tenant GUCs; a raw pool query returns nothing.
+    const rows = await withStoreGucOrCurrent(pool, TENANT, (client) =>
+      client.query<{
+        artifact_path: string | null;
+        artifact_sha256: string | null;
+        artifact_bytes: number | null;
+        completed_at: Date | null;
+        worker_id: string | null;
+        lease_until: Date | null;
+      }>(
+        `SELECT artifact_path, artifact_sha256, artifact_bytes, completed_at, worker_id, lease_until
+         FROM print_jobs WHERE id = $1::uuid`,
+        [job.job_id],
+      ),
+    );
+    const row = rows.rows[0];
+    assert.ok(row);
+    assert.equal(row.artifact_path, artifact.path);
+    assert.equal(row.artifact_sha256, artifact.sha256);
+    assert.equal(row.artifact_bytes, 128);
+    assert.notEqual(row.completed_at, null, "a done job must record when it completed");
+    assert.equal(row.worker_id, null, "a terminal job must not keep holding a lease");
+    assert.equal(row.lease_until, null);
+
+    // The finished job must not come back around to another worker.
+    assert.equal(await store.claimNext?.({ worker_id: "w-after", now: now + 999 }), null);
   } finally {
     await pool.end();
   }

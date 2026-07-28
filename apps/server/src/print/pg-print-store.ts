@@ -299,12 +299,32 @@ export function createPgPrintJobStore(
             ? transitionOptions.payload_bytes
             : (current.payload_bytes ?? null);
 
+        const artifact = transitionOptions.artifact ?? null;
+        const at = epochToDate(now);
+        // Reaching a terminal status releases the lease: a done or failed job is
+        // no longer claimable, and a stale worker_id would misattribute it.
         const result = await client.query<PrintJobRow>(
           `UPDATE print_jobs
-           SET status = $4, error = $5, payload_bytes = $6, updated_at = $7
+           SET status = $4, error = $5, payload_bytes = $6, updated_at = $7,
+               claimed_at = NULL, lease_until = NULL, worker_id = NULL,
+               artifact_path = COALESCE($8, artifact_path),
+               artifact_sha256 = COALESCE($9, artifact_sha256),
+               artifact_bytes = COALESCE($10, artifact_bytes),
+               completed_at = CASE WHEN $4 = 'done' THEN $7 ELSE completed_at END
            WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid
            RETURNING id, kind, status, order_id, ticket_no, created_at, updated_at, error, payload_bytes`,
-          [orgId, storeId, jobId, status, error, payloadBytes, epochToDate(now)],
+          [
+            orgId,
+            storeId,
+            jobId,
+            status,
+            error,
+            payloadBytes,
+            at,
+            artifact?.path ?? null,
+            artifact?.sha256 ?? null,
+            artifact?.bytes ?? null,
+          ],
         );
         const updated = result.rows[0];
         if (updated === undefined) {

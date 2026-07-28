@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0021", () => {
+  it("ships formal SQL migrations ordered 0001 → 0022", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -33,6 +33,7 @@ describe("packages/db migration file inventory", () => {
       "0019_money_integrity_workday.sql",
       "0020_counter_lookup_codes.sql",
       "0021_print_job_lease.sql",
+      "0022_print_job_artifact.sql",
     ]);
   });
 
@@ -66,6 +67,7 @@ describe("packages/db migration file inventory", () => {
       "0019",
       "0020",
       "0021",
+      "0022",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -205,6 +207,14 @@ describe("packages/db migration file inventory", () => {
     expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS lease_until timestamptz/iu);
     expect(sql).toMatch(/print_jobs_lease_shape_chk/iu);
     expect(sql).toMatch(/print_jobs_store_claimable_idx/iu);
+  });
+
+  it("records print artifact metadata as one verifiable unit", () => {
+    const sql = readFileSync(join(migrationsDir, "0022_print_job_artifact.sql"), "utf8");
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS artifact_sha256 text/iu);
+    expect(sql).toMatch(/print_jobs_artifact_shape_chk/iu);
+    expect(sql).toMatch(/print_jobs_artifact_path_chk/iu);
+    expect(sql).toMatch(/print_jobs_artifact_path_uidx/iu);
   });
 
   it("adds customer pickup codes and bounded name-prefix lookup indexes", () => {
