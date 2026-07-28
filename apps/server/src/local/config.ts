@@ -92,3 +92,16 @@ export function parseLocalServerConfig(env: NodeJS.ProcessEnv): LocalServerConfi
     ...parseLocalSigningSecrets(env),
   });
 }
+
+/**
+ * Mock print spool root (product design §7: an explicitly configured directory).
+ * Unset means no spool, and print.ticket.process keeps its ESC/POS behaviour.
+ */
+export function parseLocalPrintSpoolDir(env: NodeJS.ProcessEnv): string | null {
+  const raw = env.LAUNDRY_PRINT_SPOOL_DIR?.trim();
+  if (raw === undefined || raw.length === 0) return null;
+  if (!raw.startsWith("/")) {
+    throw new Error("Invalid local server configuration: LAUNDRY_PRINT_SPOOL_DIR must be absolute");
+  }
+  return raw;
+}
