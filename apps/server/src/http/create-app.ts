@@ -108,7 +108,8 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
 
   // Artifact download only exists when a spool is configured; the memory
   // runtime has nothing on disk to serve.
-  const spool = options.printSpool;
+  // main.ts does not pass a spool; the runtime carries the configured one.
+  const spool = options.printSpool ?? options.runtime.print.spool;
   const findArtifact = options.runtime.print.store.findArtifact;
   if (spool !== undefined && findArtifact !== undefined) {
     registerPrintArtifactRoutes(app, context, {

@@ -102,6 +102,13 @@ export type PrintJobStore = Readonly<{
    * already been attempted `max_attempts` times is failed instead of returned.
    */
   claimNext?: (input: ClaimPrintJobInput) => Promise<PrintJobClaim | null>;
+  /**
+   * Claim one specific job. `print.ticket.process` names the job it wants, so
+   * the queue-order claim above cannot serve it. Returns null when that job is
+   * not claimable — already terminal, out of attempts, or leased by someone
+   * else whose lease has not expired.
+   */
+  claimJob?: (jobId: string, input: ClaimPrintJobInput) => Promise<PrintJobClaim | null>;
   /** Recorded artifact for a finished job, or null when it has none. */
   findArtifact?: (jobId: string) => Promise<PrintArtifactRef | null>;
   transition: (

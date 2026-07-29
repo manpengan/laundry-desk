@@ -25,6 +25,7 @@ import { createMemoryOrderStore } from "../order/memory-store.js";
 import { createMemoryPrintJobStore } from "../print/memory-store.js";
 import type { PrintHandlerDeps } from "../print/handlers.js";
 import { createPgPrintJobStore } from "../print/pg-print-store.js";
+import { createFileSpool } from "../print/file-spool.js";
 import { createPgOrderStore } from "../order/pg-order-store.js";
 import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
@@ -54,6 +55,7 @@ import { DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./dem
 import { assertLocalBootstrapReady } from "./bootstrap.js";
 import {
   parseLocalHostConfig,
+  parseLocalPrintSpoolDir,
   parseLocalServerConfig,
   parseLocalSigningSecrets,
   type LocalServerConfig,
@@ -332,6 +334,8 @@ export async function createPgLocalRuntime(
   dependencies: CreatePgLocalRuntimeDependencies = defaultPgRuntimeDependencies,
 ): Promise<LocalRuntime> {
   const csrfProofSigner = createCsrfProofSigner(config.csrfProofSecret);
+  const spoolDir = parseLocalPrintSpoolDir(process.env);
+  const printSpool = spoolDir === null ? null : await createFileSpool({ rootPath: spoolDir });
   const appPool = dependencies.createPool({ connectionString });
   let pgStaffDirectory: readonly LocalStaffDirectoryEntry[];
   try {
@@ -392,6 +396,9 @@ export async function createPgLocalRuntime(
         orgId: LOCAL_PROFILE.orgId,
         storeId: LOCAL_PROFILE.storeId,
       }),
+      // ADR-14 defers real hardware; when a spool is configured the mock file
+      // printer becomes the first-party print path.
+      ...(printSpool === null ? {} : { spool: printSpool, workerId: "local-server" }),
     }),
     stats: Object.freeze({ source: statsSource, timeZone: LOCAL_PROFILE.timezone }),
     customer: Object.freeze({ store: customerStore }),

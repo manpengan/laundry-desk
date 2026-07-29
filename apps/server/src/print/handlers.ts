@@ -7,6 +7,8 @@ import { createCommandError } from "@laundry/contracts";
 import { randomUUID } from "node:crypto";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
+import type { FileSpool } from "./file-spool.js";
+import { runPrintJob } from "./worker.js";
 import { HandlerCommandError } from "../bus/types.js";
 import { processXp58PrintJob, type ProcessXp58Result } from "./process-xp58.js";
 import type { PrintJobKind, PrintJobRecord, PrintJobStatus, PrintJobStore } from "./types.js";
@@ -15,6 +17,15 @@ export type PrintHandlerDeps = Readonly<{
   store: PrintJobStore;
   now?: () => number;
   newId?: () => string;
+  /**
+   * Mock file spool. When present, `print.ticket.process` prints through it
+   * instead of building ESC/POS bytes — ADR-14 defers real hardware, so the
+   * mock is the first-party path for now. Without a spool the ESC/POS builder
+   * stays in place unchanged.
+   */
+  spool?: FileSpool;
+  /** Identifies this server as the printing worker in the job lease. */
+  workerId?: string;
 }>;
 
 const KIND_SET: ReadonlySet<string> = new Set(["xp58", "dl206", "gp3120"]);
@@ -188,11 +199,65 @@ function enqueueHandler(deps: PrintHandlerDeps): CommandHandler {
   };
 }
 
+/**
+ * Mock print path: claim the named job, render a text artifact into the spool
+ * and settle the job. The worker already records the artifact and maps failures
+ * to safe codes, so this only has to translate the outcome into the envelope.
+ */
+async function processViaSpool(
+  deps: PrintHandlerDeps,
+  spool: FileSpool,
+  jobId: string,
+  now: number,
+): Promise<PrintJobRecord> {
+  const outcome = await runPrintJob(
+    {
+      store: deps.store,
+      spool,
+      workerId: deps.workerId ?? "local-server",
+      now: () => now,
+    },
+    jobId,
+  );
+  if (outcome.kind === "idle") {
+    // Not claimable: already terminal, out of attempts, or held by a live lease.
+    throw new HandlerCommandError(createCommandError("INVARIANT_FAILED"));
+  }
+  const job = await deps.store.get(jobId);
+  if (job === null) {
+    throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+  }
+  return job;
+}
+
 function processHandler(deps: PrintHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
     const jobId = requireString(input.job_id);
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
+
+    const spool = deps.spool;
+    if (spool !== undefined) {
+      const job = await processViaSpool(deps, spool, jobId, now);
+      return Object.freeze({
+        result: jobResultFields(job, job.payload_bytes ?? 0),
+        audit: Object.freeze({
+          entity: "print_job",
+          entityId: job.job_id,
+          afterJson: JSON.stringify({
+            kind: job.kind,
+            status: job.status,
+            payload_bytes: job.payload_bytes ?? 0,
+          }),
+        }),
+        events: Object.freeze([
+          Object.freeze({
+            type: "print.job_processed",
+            payload: Object.freeze({ job_id: job.job_id, status: job.status }),
+          }),
+        ]),
+      });
+    }
 
     let result: ProcessXp58Result;
     try {

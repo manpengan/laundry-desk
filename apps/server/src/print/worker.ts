@@ -72,7 +72,39 @@ export async function runPrintWorkerOnce(deps: PrintWorkerDeps): Promise<PrintWo
 
   const claim = await claimNext(claimInput);
   if (claim === null) return Object.freeze({ kind: "idle" as const });
+  return await printClaim(deps, claim, now);
+}
 
+/**
+ * Print one named job — the path `print.ticket.process` takes. Returns `idle`
+ * when that job is not claimable so the caller can distinguish "nothing to do"
+ * from a print failure.
+ */
+export async function runPrintJob(
+  deps: PrintWorkerDeps,
+  jobId: string,
+): Promise<PrintWorkerOutcome> {
+  const claimJob = deps.store.claimJob;
+  if (claimJob === undefined) {
+    throw new Error("print worker requires a store that supports claiming a named job");
+  }
+  const now = deps.now ?? ((): number => Math.floor(Date.now() / 1000));
+  const claim = await claimJob(jobId, {
+    worker_id: deps.workerId,
+    now: now(),
+    ...(deps.leaseSeconds === undefined ? {} : { lease_seconds: deps.leaseSeconds }),
+    ...(deps.maxAttempts === undefined ? {} : { max_attempts: deps.maxAttempts }),
+  });
+  if (claim === null) return Object.freeze({ kind: "idle" as const });
+  return await printClaim(deps, claim, now);
+}
+
+/** Render, spool and settle a claim the caller already holds. */
+async function printClaim(
+  deps: PrintWorkerDeps,
+  claim: PrintJobClaim,
+  now: () => number,
+): Promise<PrintWorkerOutcome> {
   try {
     if (!KNOWN_KINDS.has(claim.kind)) {
       throw new SpoolError("PRINT_UNKNOWN_KIND", "unsupported printer kind");
