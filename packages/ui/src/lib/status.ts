@@ -28,11 +28,14 @@ const garment: Record<string, StatusDescriptor> = {
   lost: { tone: "danger", shape: "square", label: "丢失" },
 };
 
+// Must track OrderStatusSchema (draft | open | closed | cancelled). An unknown
+// status falls back to the raw value, which would leak English into the UI.
 const order: Record<string, StatusDescriptor> = {
+  draft: { tone: "neutral", shape: "ring", label: "挂单" },
   open: { tone: "busy", shape: "ring", label: "进行中" },
   partial: { tone: "warn", shape: "triangle", label: "部分取" },
   closed: { tone: "neutral", shape: "square", label: "已结" },
-  voided: { tone: "danger", shape: "square", label: "已撤" },
+  cancelled: { tone: "danger", shape: "square", label: "已撤销" },
 };
 
 const print: Record<string, StatusDescriptor> = {

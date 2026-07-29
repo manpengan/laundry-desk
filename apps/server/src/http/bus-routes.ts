@@ -105,6 +105,18 @@ type RouteCommandPayload = Readonly<{
  * intentionally retained for already-installed local shells, but it cannot
  * opt into idempotency without the canonical envelope.
  */
+function isBareConfirmation(
+  body: Record<string, unknown>,
+): body is Readonly<{ confirm_ref: string }> {
+  const keys = Object.keys(body);
+  return (
+    keys.length === 1 &&
+    keys[0] === "confirm_ref" &&
+    typeof body.confirm_ref === "string" &&
+    body.confirm_ref.length > 0
+  );
+}
+
 function parseRouteCommandPayload(
   name: string,
   body: Record<string, unknown>,
@@ -137,6 +149,13 @@ function parseRouteCommandPayload(
     } catch {
       return null;
     }
+  }
+  // The direct-args client answers a confirmation with a bare { confirm_ref }
+  // body — no envelope keys — so it never reaches the branded parse above. Left
+  // as raw args it is validated against the command schema and fails, which
+  // made every R3 confirmation unfinishable over HTTP.
+  if (isBareConfirmation(body)) {
+    return Object.freeze({ input: Object.freeze({}), confirmRef: body.confirm_ref });
   }
   return Object.freeze({ input: body });
 }

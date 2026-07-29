@@ -5,6 +5,7 @@ import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { NavItemId } from "../nav.js";
 import { CustomersPage } from "./CustomersPage.js";
+import { DebtPage } from "./DebtPage.js";
 import { CounterWorkbench } from "./CounterWorkbench.js";
 import { pageCopy } from "./page-copy.js";
 import { PickupPage } from "./PickupPage.js";
@@ -118,6 +119,22 @@ export function PageHost({
         authClient={authClient}
         commandClient={commandClient}
         {...(queryClient !== undefined ? { queryClient } : {})}
+      />
+    );
+  }
+
+  // Product design §5.1 lists 订单与欠款 as a first-phase navigation entry; it
+  // is the only route that reaches the order detail drawer.
+  if (activeId === "orders" && session !== undefined && queryClient !== undefined) {
+    return (
+      <DebtPage
+        queryClient={queryClient}
+        {...(commandClient !== undefined ? { commandClient } : {})}
+        onOpenPickup={(orderId) => {
+          setPickupOrderId(orderId);
+          setPickupLookupKey(undefined);
+          onNavigate("pickup");
+        }}
       />
     );
   }

@@ -49,6 +49,7 @@ export const NAV_ACCESS_RULES: Readonly<Record<NavItemId, NavAccessRule>> = Obje
   workbench: Object.freeze({}),
   receive: Object.freeze({}),
   pickup: Object.freeze({}),
+  orders: Object.freeze({}),
   customers: Object.freeze({}),
   stats: Object.freeze({ roles: Object.freeze(["admin"] as const) }),
   settings: Object.freeze({ roles: Object.freeze(["admin"] as const) }),

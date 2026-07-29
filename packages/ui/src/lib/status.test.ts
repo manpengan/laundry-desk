@@ -28,3 +28,18 @@ describe("status dual encoding", () => {
     assert.equal(u.label, "weird");
   });
 });
+
+describe("order status coverage", () => {
+  it("labels every OrderStatusSchema value", () => {
+    // A missing entry falls back to the raw status, which would leak English
+    // into the UI. draft and cancelled were both missing at one point.
+    for (const [status, label] of [
+      ["draft", "挂单"],
+      ["open", "进行中"],
+      ["closed", "已结"],
+      ["cancelled", "已撤销"],
+    ] as const) {
+      assert.equal(resolveStatus("order", status).label, label);
+    }
+  });
+});
