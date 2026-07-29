@@ -6,7 +6,8 @@
 > 设计：[通用 V2 本地优先产品设计](2026-07-25-local-first-v2-product-design.md)
 
 本文记录 ADR-14 §5 定义的首个里程碑达成情况：**逐条列出验收口径、支撑证据，以及覆盖到哪一层**。
-不夸大——有的能力只有服务端覆盖，没有进端到端，下表如实标注。
+不夸大——仍有能力只有服务端覆盖（见 §7），下表如实标注每条到底覆盖到哪一层。
+数字与结论在 §6 加固之后已刷新。
 
 ## 1. 逐条对照
 
@@ -35,8 +36,8 @@
 
 | 门禁                            | 结果                                                    |
 | ------------------------------- | ------------------------------------------------------- |
-| 服务端 vs 真实 PostgreSQL       | **500/500，0 skipped**（CI 的 no-skip 门禁强制）        |
-| 浏览器 E2E（真实 Fastify + PG） | **2/2**                                                 |
+| 服务端 vs 真实 PostgreSQL       | **502/502，0 skipped**（CI 的 no-skip 门禁强制）        |
+| 浏览器 E2E（真实 Fastify + PG） | **6/6**                                                 |
 | macOS 打包应用验收              | `LOCAL_ACCEPTANCE_OK`，`local-mac.spec.ts` 通过，exit 0 |
 | `pnpm workspace:check`          | 全绿（format / lint / strict typecheck / test / build） |
 | `main` CI                       | `workspace-check` + `real-postgres` 双绿                |
