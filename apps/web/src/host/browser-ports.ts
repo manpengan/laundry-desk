@@ -2,6 +2,7 @@ import { createHttpAuthClient, type HttpAuthCredentialStore } from "../auth/Http
 import { createHttpCommandClient } from "../commands/command-client.js";
 import { createHttpQueryClient } from "../commands/query-client.js";
 import type { AppPorts, HealthResult } from "./types.js";
+import { createHttpPhotoPort } from "./photo-port.js";
 
 export type BrowserPortsOptions = Readonly<{
   apiBaseUrl: string;
@@ -82,6 +83,12 @@ export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
     auth,
     command,
     query,
+    photo: createHttpPhotoPort({
+      apiBaseUrl: base,
+      fetchImpl,
+      getAccessToken: credentialStore.getAccessToken,
+      readCsrf: credentialStore.readCsrf,
+    }),
     health: Object.freeze({
       async get(): Promise<HealthResult> {
         try {

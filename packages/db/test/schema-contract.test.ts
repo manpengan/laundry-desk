@@ -413,13 +413,14 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(columns).toContain("kind");
     expect(columns).toContain("storage_key");
     expect(columns).toContain("content_type");
+    expect(columns).toContain("content_sha256");
     expect(columns).toContain("byte_size");
     expect(columns).toContain("taken_at");
     expect(columns).toContain("created_by_staff_id");
     expect(getTenantTableScope("garment_photos")).toBe("store");
   });
 
-  it("declares M3 garment_photos tenant unique layout", () => {
+  it("declares M3 garment_photos tenant and server-owned storage unique layouts", () => {
     const config = getTableConfig(M3_PHOTO_TABLES.garment_photos);
     const hasTenantUnique = config.indexes.some((index) => {
       const cols = index.config.columns.map((column) => {
@@ -430,6 +431,11 @@ describe("M1 schema contract vs A3 matrix", () => {
       return cols[0] === "org_id" && cols[1] === "store_id" && cols.includes("id");
     });
     expect(hasTenantUnique).toBe(true);
+    const storageIndex = config.indexes.find(
+      (index) => index.config.name === "garment_photos_storage_key_uidx",
+    );
+    expect(storageIndex?.config.unique).toBe(true);
+    expect(storageIndex?.config.where).toBeDefined();
   });
 
   it("binds each photo to a garment in the same tenant and order", () => {

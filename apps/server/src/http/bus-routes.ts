@@ -28,6 +28,7 @@ const ADMIN_PERMISSIONS = Object.freeze([
 ]);
 const STAFF_PERMISSIONS = Object.freeze(["staff_read", "order_write"]);
 const NO_PERMISSIONS = Object.freeze([] as string[]);
+const INTERNAL_ONLY_COMMANDS: ReadonlySet<string> = new Set(["photo.register"]);
 
 function tenantFromSession(resolved: AuthorizedSession): TenantContext {
   return Object.freeze({
@@ -91,6 +92,30 @@ function createSqlRunner(runtime: LocalRuntime) {
 }
 
 type SqlRunner = ReturnType<typeof createSqlRunner>;
+
+export async function executeTrustedSessionCommand(
+  context: RouteSecurityContext,
+  resolved: AuthorizedSession,
+  name: string,
+  input: Readonly<Record<string, unknown>>,
+): Promise<CommandResult> {
+  const { registry, chainHooks } = createBus(context.runtime);
+  const runWithSql = createSqlRunner(context.runtime);
+  return runWithSql((sql) =>
+    executeCommand(sql, tenantFromSession(resolved), name, input, {
+      registry,
+      actor: actorFromSession(resolved),
+      chainHooks,
+      pendingStore: context.runtime.pendingStore,
+      stepUpProofStore: context.runtime.stepUpProofStore,
+      idempotencyStore: context.runtime.idempotencyStore,
+      sessionBinding: Object.freeze({
+        sessionId: resolved.session.session_id,
+        sessionVersion: resolved.session.session_version,
+      }),
+    }),
+  );
+}
 
 type RouteCommandPayload = Readonly<{
   input: Readonly<Record<string, unknown>>;
@@ -213,6 +238,10 @@ function registerCommandRoute(
       if (name.length === 0) {
         reply.code(400);
         return fail("VALIDATION_FAILED");
+      }
+      if (INTERNAL_ONLY_COMMANDS.has(name)) {
+        reply.code(404);
+        return fail("RESOURCE_UNAVAILABLE");
       }
       const body = isRecord(request.body) ? request.body : {};
       const result = await executeCommandRoute(context, runWithSql, resolved, name, body);

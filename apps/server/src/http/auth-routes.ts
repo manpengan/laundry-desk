@@ -12,6 +12,7 @@ import {
   rotateRefresh,
 } from "../identity/session.js";
 import { IdentityError } from "../identity/types.js";
+import { loadPgStaffDirectory } from "../local/staff-directory.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
 import {
   clearAuthCookies,
@@ -42,7 +43,11 @@ function registerStaffRoute(app: FastifyInstance, context: AuthRouteContext): vo
         reply.code(401);
         return fail("AUTHENTICATION_FAILED");
       }
-      return Object.freeze({ ok: true as const, data: context.runtime.staffDirectory });
+      const data =
+        context.runtime.mode === "pg" && context.runtime.pool !== null
+          ? await loadPgStaffDirectory(context.runtime.pool)
+          : context.runtime.staffDirectory;
+      return Object.freeze({ ok: true as const, data });
     } catch (error) {
       return mapIdentityHttpError(error, reply, request);
     }

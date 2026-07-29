@@ -15,6 +15,8 @@ import {
   DesktopPinChallengeResultSchema,
   DesktopPinVerifyInputSchema,
   DesktopPinVerifyResultSchema,
+  DesktopPhotoUploadInputSchema,
+  DesktopPhotoUploadResultSchema,
   DesktopQueryExecuteInputSchema,
   DesktopQueryExecuteResultSchema,
   DesktopRefreshInputSchema,
@@ -32,15 +34,23 @@ import {
   type DesktopLogoutResult,
   type DesktopPinChallengeResult,
   type DesktopPinVerifyResult,
+  type DesktopPhotoUploadResult,
   type DesktopQueryExecuteResult,
   type DesktopRefreshResult,
   type DesktopSessionView,
 } from "@laundry/contracts";
 
 import { createLoginIntentGate } from "./auth-intent.js";
-
-export const DESKTOP_API_BASE_URL = "http://127.0.0.1:8787" as const;
-export const DESKTOP_REQUEST_ORIGIN = DESKTOP_API_BASE_URL;
+import {
+  createDesktopRequest,
+  DESKTOP_API_BASE_URL,
+  type DesktopHttpRequest,
+} from "./request-builder.js";
+export {
+  DESKTOP_API_BASE_URL,
+  DESKTOP_REQUEST_ORIGIN,
+  type DesktopHttpRequest,
+} from "./request-builder.js";
 
 const LOCAL_CSRF_COOKIE_NAME = "laundry_csrf";
 const CSRF_COOKIE_CANDIDATES = Object.freeze([LOCAL_CSRF_COOKIE_NAME, CSRF_COOKIE_NAME]);
@@ -48,15 +58,6 @@ const RESPONSE_ENCODER = new TextEncoder();
 const NO_SUCCESS_DATA = Symbol("NO_SUCCESS_DATA");
 const ACCESS_REFRESH_SKEW_MS = 30_000;
 
-export type DesktopHttpRequest = Readonly<{
-  method: "GET" | "POST";
-  url: string;
-  headers: Readonly<Record<string, string>>;
-  credentials: "include";
-  redirect: "error";
-  origin: typeof DESKTOP_REQUEST_ORIGIN;
-  body?: string;
-}>;
 export type DesktopHttpResponse = Readonly<{
   statusCode: number;
   bodyText: string;
@@ -89,6 +90,9 @@ export type DesktopHttpTransport = Readonly<{
   }>;
   query: Readonly<{
     execute: (input: unknown) => Promise<DesktopQueryExecuteResult>;
+  }>;
+  photo: Readonly<{
+    upload: (input: unknown) => Promise<DesktopPhotoUploadResult>;
   }>;
   health: Readonly<{
     get: () => Promise<DesktopHealthGetResult>;
@@ -260,54 +264,18 @@ export function createDesktopHttpTransport(
   let latestAuthIntent = 0;
   let authMutationTail: Promise<void> = Promise.resolve();
 
-  const createRequest = (
-    method: "GET" | "POST",
-    path: string,
-    options: Readonly<{
-      body?: unknown;
-      accessToken?: string;
-      csrfToken?: string;
-    }> = {},
-  ): DesktopHttpRequest => {
-    const target = new URL(path, `${DESKTOP_API_BASE_URL}/`);
-    if (target.origin !== DESKTOP_API_BASE_URL || !path.startsWith("/")) {
-      throw new TypeError("Desktop HTTP route escaped the fixed loopback origin");
-    }
-    const headers = Object.freeze({
-      Origin: DESKTOP_REQUEST_ORIGIN,
-      "Sec-Fetch-Site": "same-origin",
-      ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
-      ...(options.accessToken === undefined
-        ? {}
-        : { Authorization: `Bearer ${options.accessToken}` }),
-      ...(options.csrfToken === undefined ? {} : { "X-CSRF-Token": options.csrfToken }),
-    });
-    if (Object.keys(headers).some((name) => /^x-forwarded-/iu.test(name))) {
-      throw new TypeError("Forwarded headers are forbidden on the desktop transport");
-    }
-    const body = options.body === undefined ? undefined : JSON.stringify(options.body);
-    return Object.freeze({
-      method,
-      url: target.href,
-      headers,
-      credentials: "include" as const,
-      redirect: "error" as const,
-      origin: DESKTOP_REQUEST_ORIGIN,
-      ...(body === undefined ? {} : { body }),
-    });
-  };
-
   const requestJson = async (
     method: "GET" | "POST",
     path: string,
     options?: Readonly<{
-      body?: unknown;
+      body?: Readonly<Record<string, unknown>> | Uint8Array;
+      contentType?: string;
       accessToken?: string;
       csrfToken?: string;
     }>,
   ): Promise<JsonHttpResponse | null> => {
     try {
-      const response = await dependencies.request(createRequest(method, path, options));
+      const response = await dependencies.request(createDesktopRequest(method, path, options));
       if (
         !Number.isInteger(response.statusCode) ||
         response.statusCode < 100 ||
@@ -730,7 +698,8 @@ export function createDesktopHttpTransport(
   const executeProtected = async <T extends ResultEnvelope>(
     schema: AsyncSchema<T>,
     path: string,
-    body: Readonly<Record<string, unknown>>,
+    body: Readonly<Record<string, unknown>> | Uint8Array,
+    contentType?: string,
   ): Promise<T | DesktopFailure> => {
     let state = authState;
     if (state === null) return parseOutput(schema, AUTHENTICATION_FAILURE);
@@ -742,6 +711,7 @@ export function createDesktopHttpTransport(
     const send = (credentials: AuthState) =>
       requestJson("POST", path, {
         body,
+        ...(contentType === undefined ? {} : { contentType }),
         accessToken: credentials.accessToken,
         csrfToken: credentials.csrfToken,
       });
@@ -784,6 +754,25 @@ export function createDesktopHttpTransport(
     );
   };
 
+  const uploadPhoto = async (input: unknown): Promise<DesktopPhotoUploadResult> => {
+    const parsedInput = await parseInput(DesktopPhotoUploadInputSchema, input);
+    if (!parsedInput.valid) return parseOutput(DesktopPhotoUploadResultSchema, VALIDATION_FAILURE);
+    const query = new URLSearchParams({
+      order_id: parsedInput.data.order_id,
+      garment_id: parsedInput.data.garment_id,
+      kind: parsedInput.data.kind,
+      ...(parsedInput.data.taken_at === undefined
+        ? {}
+        : { taken_at: String(parsedInput.data.taken_at) }),
+    });
+    return executeProtected(
+      DesktopPhotoUploadResultSchema,
+      `/api/v2/photos?${query.toString()}`,
+      parsedInput.data.bytes,
+      parsedInput.data.content_type,
+    );
+  };
+
   const getHealth = async (): Promise<DesktopHealthGetResult> => {
     const parsedInput = await parseInput(DesktopHealthGetInputSchema, {});
     if (!parsedInput.valid) return parseOutput(DesktopHealthGetResultSchema, VALIDATION_FAILURE);
@@ -794,6 +783,7 @@ export function createDesktopHttpTransport(
     auth: Object.freeze({ login, refresh, pinChallenge, pinVerify, logout }),
     command: Object.freeze({ execute: executeCommand }),
     query: Object.freeze({ execute: executeQuery }),
+    photo: Object.freeze({ upload: uploadPhoto }),
     health: Object.freeze({ get: getHealth }),
   });
 }

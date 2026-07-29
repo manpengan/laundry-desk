@@ -1050,7 +1050,7 @@
 
 /* Customer detail + history orders (M2) */
 
-/* Order detail drawer + M3 photo metadata skeleton */
+/* Order detail drawer + durable garment photos */
 .ld-order-detail {
   display: flex;
   flex-direction: column;
@@ -1144,6 +1144,35 @@
 .ld-order-detail__photo-bytes {
   color: var(--lg-ink3);
   font-variant-numeric: tabular-nums;
+}
+
+.ld-order-detail__photo-upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-leaf);
+  color: var(--lg-ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ld-order-detail__photo-upload:focus-within {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 2px;
+}
+
+.ld-order-detail__photo-upload input[type="file"] {
+  max-width: 220px;
+  font-size: 12px;
+}
+
+.ld-order-detail__photo-upload:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .ld-order-detail__garment-list {

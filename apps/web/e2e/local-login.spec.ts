@@ -27,6 +27,7 @@ const LOGIN = Object.freeze({
   storeCode: requiredEnvironment("LAUNDRY_LOCAL_STORE_CODE"),
   username: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_USERNAME"),
   password: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD"),
+  pin: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PIN"),
 });
 
 test.beforeAll(async ({ request }) => {
@@ -106,4 +107,26 @@ test("generic local administrator login reaches the counter shell", async ({ pag
     logoutStatus: 200,
     cleared: true,
   });
+});
+
+test("an administrator can quick-switch to a fixture staff member with PIN", async ({ page }) => {
+  await page.goto(WEB);
+  await page.locator('input[name="org_code"]').fill(LOGIN.orgCode);
+  await page.locator('input[name="store_code"]').fill(LOGIN.storeCode);
+  await page.locator('input[name="username"]').fill(LOGIN.username);
+  await page.locator('input[name="password"]').fill(LOGIN.password);
+  await page.getByRole("button", { name: "登录" }).click();
+  await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole("button", { name: "切换员工" }).click();
+  const staffSelect = page.getByLabel("目标员工");
+  await expect(staffSelect).toBeVisible();
+  await staffSelect.selectOption({ label: "E2E Staff One" });
+  await page.locator('input[name="pin"]').fill(LOGIN.pin);
+  await page.getByRole("button", { name: "确认切换" }).click();
+
+  await expect(page.locator(".ld-shell-topbar__staff")).toHaveText("E2E Staff One", {
+    timeout: 15_000,
+  });
+  await expect(page.locator('[data-shell="counter"]')).toHaveAttribute("data-role", "staff");
 });

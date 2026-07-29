@@ -6,10 +6,12 @@ import { createCommandError } from "@laundry/contracts";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
+import type { PhotoContentType, PhotoFileStore } from "./file-store.js";
 import type { PhotoKind, PhotoRecord, PhotoStore } from "./types.js";
 
 export type PhotoHandlerDeps = Readonly<{
   store: PhotoStore;
+  files?: PhotoFileStore;
   now?: () => number;
 }>;
 
@@ -51,9 +53,15 @@ function requireByteSize(value: unknown): number {
   return value;
 }
 
-function parseContentType(value: unknown): string {
-  if (value === undefined) return "image/jpeg";
-  if (typeof value !== "string" || value.length < 1 || value.length > 128) {
+function parseContentType(value: unknown): PhotoContentType {
+  if (value !== "image/jpeg" && value !== "image/png" && value !== "image/webp") {
+    throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+  }
+  return value;
+}
+
+function requireSha256(value: unknown): string {
+  if (typeof value !== "string" || !/^[0-9a-f]{64}$/u.test(value)) {
     throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
   }
   return value;
@@ -73,7 +81,6 @@ function toRow(record: PhotoRecord): Readonly<Record<string, unknown>> {
     garment_id: record.garment_id,
     order_id: record.order_id,
     kind: record.kind,
-    storage_key: record.storage_key,
     content_type: record.content_type,
     byte_size: record.byte_size,
     taken_at: record.taken_at,
@@ -90,6 +97,7 @@ function registerHandler(deps: PhotoHandlerDeps): CommandHandler {
     const kind = requireKind(input.kind);
     const storageKey = requireStorageKey(input.storage_key);
     const contentType = parseContentType(input.content_type);
+    const contentSha256 = requireSha256(input.content_sha256);
     const byteSize = requireByteSize(input.byte_size);
     const takenAt = parseTakenAt(input.taken_at, now);
 
@@ -101,6 +109,7 @@ function registerHandler(deps: PhotoHandlerDeps): CommandHandler {
       kind,
       storage_key: storageKey,
       content_type: contentType,
+      content_sha256: contentSha256,
       byte_size: byteSize,
       taken_at: takenAt,
       created_by_staff_id: ctx.actor.staffId,

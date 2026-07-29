@@ -79,7 +79,11 @@ describe("M2 contract surface", () => {
     const document = buildLaundryOpenApiDocument();
     for (const definition of M2_CONTRACT_DEFINITIONS) {
       const path = `/v1/${definition.kind === "command" ? "commands" : "queries"}/${definition.name}`;
-      expect(document.paths[path], path).toBeDefined();
+      if (definition.name === "photo.register") {
+        expect(document.paths[path], `${path} is internal-only`).toBeUndefined();
+      } else {
+        expect(document.paths[path], path).toBeDefined();
+      }
     }
   });
 });

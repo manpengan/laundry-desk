@@ -46,9 +46,15 @@ const CATALOG_SERVICE = "wash";
 const CATALOG_CATEGORY = "e2eshirt";
 const CATALOG_PRICE_CENTS = "1500";
 const QTY = 2;
-const PAYABLE_TEXT = "¥30.00";
+const ADJUSTMENTS = Object.freeze({
+  discountCents: "100",
+  addonCents: "200",
+  urgentCents: "300",
+  freightCents: "400",
+});
+const PAYABLE_TEXT = "¥38.00";
 const INITIAL_PAYMENT_CENTS = "1000";
-const DEBT_TEXT = "¥20.00";
+const DEBT_TEXT = "¥28.00";
 const SETTLED_TEXT = "¥0.00";
 
 async function signIn(page: Page): Promise<void> {
@@ -100,7 +106,16 @@ test("counter takes an order with a partial payment and settles it at pickup", a
   const phone = `139${Date.now().toString().slice(-8)}`;
   await page.locator('input[name="customer-phone"]').fill(phone);
   await page.locator('input[name="customer-name"]').fill("E2E 顾客");
+  await page.locator('input[name="discount-cents"]').fill(ADJUSTMENTS.discountCents);
+  await page.locator('input[name="addon-cents"]').fill(ADJUSTMENTS.addonCents);
+  await page.locator('input[name="urgent-cents"]').fill(ADJUSTMENTS.urgentCents);
+  await page.locator('input[name="freight-cents"]').fill(ADJUSTMENTS.freightCents);
   await page.locator('input[name="initial-payment"]').fill(INITIAL_PAYMENT_CENTS);
+
+  const preview = page.locator('[aria-label="本地预览"]');
+  await expect(preview).toContainText("原价");
+  await expect(preview).toContainText("¥30.00");
+  await expect(preview).toContainText(PAYABLE_TEXT);
 
   await page.getByRole("button", { name: "确认开单" }).click();
 
@@ -109,7 +124,9 @@ test("counter takes an order with a partial payment and settles it at pickup", a
   const ticketNo = (await ticketCell.innerText()).trim();
   expect(ticketNo.length).toBeGreaterThan(0);
 
-  // Server-authoritative pricing: 2 x ¥15.00, ¥10.00 paid, ¥20.00 owed.
+  // Server-authoritative pricing:
+  // 2 x ¥15.00 - ¥1.00 + ¥2.00 + ¥3.00 + ¥4.00 = ¥38.00.
+  // ¥10.00 paid leaves ¥28.00 owed.
   const receiveResult = page.locator(".ld-order-result");
   await expect(receiveResult).toContainText(PAYABLE_TEXT);
   await expect(receiveResult).toContainText(DEBT_TEXT);
@@ -124,7 +141,7 @@ test("counter takes an order with a partial payment and settles it at pickup", a
   });
   await expect(page.locator('[data-testid="pickup-loaded-balance"]')).toContainText(DEBT_TEXT);
 
-  await page.locator('input[name="collect-cents"]').fill("2000");
+  await page.locator('input[name="collect-cents"]').fill("2800");
   await page.getByRole("button", { name: "确认取衣" }).click();
 
   await expect(page.locator('[data-testid="pickup-ticket"]')).toHaveText(ticketNo, {

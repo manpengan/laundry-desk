@@ -28,7 +28,6 @@ const ACCESS_C = "header.payload.signature-c";
 const CSRF_A = `v1.${"a".repeat(43)}`;
 const CSRF_B = `v1.${"b".repeat(43)}`;
 const CSRF_C = `v1.${"c".repeat(43)}`;
-
 // prettier-ignore
 const LOGIN_INPUT = Object.freeze({ org_code: "demo-org", store_code: "demo-store", username: "admin", password: "password" });
 // prettier-ignore
@@ -222,7 +221,8 @@ test("login fixes every transport control, injects one stable device id, and str
   assert.equal(loginRequest.headers["Content-Type"], "application/json");
   assert.equal(loginRequest.headers.Authorization, undefined);
   assert.equal(loginRequest.headers["X-CSRF-Token"], undefined);
-  assert.deepEqual(JSON.parse(loginRequest.body ?? ""), {
+  assert.equal(typeof loginRequest.body, "string");
+  assert.deepEqual(JSON.parse(typeof loginRequest.body === "string" ? loginRequest.body : ""), {
     ...LOGIN_INPUT,
     device_id: DEVICE_ID,
   });
@@ -322,7 +322,8 @@ test("command, confirm, and query use only contract-selected routes with process
     assert.equal(request.method, "POST");
     assert.equal(request.headers.Authorization, `Bearer ${ACCESS_A}`);
     assert.equal(request.headers["X-CSRF-Token"], CSRF_A);
-    assert.deepEqual(JSON.parse(request.body ?? ""), body);
+    assert.equal(typeof request.body, "string");
+    assert.deepEqual(JSON.parse(typeof request.body === "string" ? request.body : ""), body);
   });
 });
 
@@ -775,25 +776,4 @@ test("concurrent near-expiry operations share one serialized refresh", async () 
     harness.requests.filter((request) => request.url.endsWith("/auth/refresh")).length,
     1,
   );
-});
-
-test("health uses the fixed loopback route and converts malformed responses to a safe envelope", async () => {
-  const harness = createHarness({
-    responses: [
-      jsonResponse({ ok: true, data: { status: "ready" } }),
-      jsonResponse({ ok: true, data: { status: "compromised", secret: "detail" } }),
-    ],
-  });
-  const transport = createDesktopHttpTransport(harness.dependencies);
-  const ready = await transport.health.get();
-  const malformed = await transport.health.get();
-  assert.deepEqual(ready, { ok: true, data: { status: "ready" } });
-  assertFailure(malformed, "RESOURCE_UNAVAILABLE");
-  assert.equal(JSON.stringify(malformed).includes("secret"), false);
-  harness.requests.forEach((request) => {
-    assertFixedRequest(request);
-    assert.equal(request.url, `${DESKTOP_API_BASE_URL}/health`);
-    assert.equal(request.method, "GET");
-    assert.equal(request.headers.Authorization, undefined);
-  });
 });

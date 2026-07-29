@@ -1,3 +1,5 @@
+import { DESKTOP_MAX_PHOTO_BYTES } from "@laundry/contracts";
+
 import {
   DESKTOP_API_BASE_URL,
   DESKTOP_REQUEST_ORIGIN,
@@ -24,6 +26,9 @@ const ALLOWED_HEADER_NAMES = new Set([
   "x-csrf-token",
 ]);
 const API_URL = new URL(DESKTOP_API_BASE_URL);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const PHOTO_KINDS = new Set(["receive", "defect", "ready", "other"]);
 
 export type ElectronCookieSurface = Readonly<{
   name: string;
@@ -57,7 +62,7 @@ type ElectronClientRequestSurface = Readonly<{
     (event: "response", listener: (response: ElectronIncomingMessageSurface) => void): unknown;
     (event: "error", listener: (error: Error) => void): unknown;
   };
-  write: (body: string) => void;
+  write: (body: string | Uint8Array) => void;
   end: () => void;
   abort: () => void;
 }>;
@@ -82,6 +87,40 @@ export type ElectronDesktopDependencyOptions = Readonly<{
   deviceId: string;
 }>;
 
+function isPhotoUpload(url: URL, request: DesktopHttpRequest): boolean {
+  if (
+    request.method !== "POST" ||
+    url.pathname !== "/api/v2/photos" ||
+    !(request.body instanceof Uint8Array) ||
+    !PHOTO_TYPES.has(request.headers["Content-Type"] ?? "") ||
+    request.body.byteLength < 1 ||
+    request.body.byteLength > DESKTOP_MAX_PHOTO_BYTES
+  ) {
+    return false;
+  }
+  const expected = url.searchParams.has("taken_at")
+    ? ["order_id", "garment_id", "kind", "taken_at"]
+    : ["order_id", "garment_id", "kind"];
+  const keys = [...url.searchParams.keys()];
+  if (
+    keys.length !== expected.length ||
+    expected.some((key) => url.searchParams.getAll(key).length !== 1)
+  ) {
+    return false;
+  }
+  const takenAt = url.searchParams.get("taken_at");
+  const takenAtNumber = takenAt === null ? null : Number(takenAt);
+  return (
+    UUID.test(url.searchParams.get("order_id") ?? "") &&
+    UUID.test(url.searchParams.get("garment_id") ?? "") &&
+    PHOTO_KINDS.has(url.searchParams.get("kind") ?? "") &&
+    (takenAt === null ||
+      (/^(?:0|[1-9]\d*)$/u.test(takenAt) &&
+        Number.isSafeInteger(takenAtNumber) &&
+        (takenAtNumber ?? -1) >= 0))
+  );
+}
+
 function assertFixedRequestPolicy(request: DesktopHttpRequest): void {
   let url: URL;
   try {
@@ -103,6 +142,13 @@ function assertFixedRequestPolicy(request: DesktopHttpRequest): void {
     /[\r\n]/u.test(value),
   );
   const isPost = request.method === "POST";
+  const isJsonPost =
+    isPost &&
+    typeof request.body === "string" &&
+    request.headers["Content-Type"] === "application/json" &&
+    Buffer.byteLength(request.body, "utf8") <= DESKTOP_MAX_REQUEST_BYTES &&
+    url.search === "";
+  const isPhotoPost = isPhotoUpload(url, request);
   if (
     request.credentials !== "include" ||
     request.redirect !== "error" ||
@@ -115,14 +161,11 @@ function assertFixedRequestPolicy(request: DesktopHttpRequest): void {
     url.origin !== API_URL.origin ||
     url.username !== "" ||
     url.password !== "" ||
-    url.search !== "" ||
     url.hash !== "" ||
     url.href !== request.url ||
     (request.method !== "GET" && !isPost) ||
-    (isPost && request.headers["Content-Type"] !== "application/json") ||
-    (isPost && request.body === undefined) ||
-    (request.body !== undefined &&
-      Buffer.byteLength(request.body, "utf8") > DESKTOP_MAX_REQUEST_BYTES) ||
+    (isPost && !isJsonPost && !isPhotoPost) ||
+    (!isPost && url.search !== "") ||
     (!isPost && request.body !== undefined)
   ) {
     throw new Error("Request violates the fixed desktop HTTP policy");

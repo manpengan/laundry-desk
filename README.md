@@ -9,12 +9,12 @@
 | 项         | 值                                                                                                                                                                                            |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 活动路线   | **通用 V2 本地优先交付**（[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)）；[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 保留为 V2-only 基础裁决 |
-| 当前阶段   | Local Foundation：先收口可重复启动、安全会话、本地 Web 与 macOS 壳                                                                                                                            |
+| 当前阶段   | 里程碑 1 已达成并加固：本地完整柜台工作日 + Web/macOS 衣物照片上传                                                                                                                            |
 | 设计真源   | [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) · [Claude V2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)                       |
 | 当前 owner | **Codex** — 设计、实现、集成与门禁                                                                                                                                                            |
 | 目标平台   | 本地 Web Server + macOS App 优先；云服务器部署与 Windows 适配后置                                                                                                                             |
 
-当前只按此顺序交付：`Local Foundation → Money Integrity → Workday Commands → Counter UI → Mock Print → Acceptance → later cloud/Windows`。
+当前已完成：`Local Foundation → Money Integrity → Workday Commands → Counter UI → Mock Print → Acceptance → Photo Upload`。下一步继续完善本地工作日体验；云部署和 Windows 仍后置。
 
 宏发版本停止开发；根 `src/` 只作为历史行为参考，不作为当前产品入口。
 
@@ -38,7 +38,7 @@ Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 ·
 
 ## 当前交付顺序
 
-`Local Foundation → Money Integrity → Workday Commands → Counter UI → Mock Print → Acceptance → later cloud/Windows`
+`Photo Browse/Delete → Print Worker Integration → Customer Detail → Local Operations → later cloud/Windows`
 
 历史 [Grok owner 任务书](docs/superpowers/plans/tasks/2026-07-21-task-grok-lead.md) 仅作治理记录，不是当前执行入口。
 

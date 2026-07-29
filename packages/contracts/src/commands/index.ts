@@ -158,10 +158,18 @@ export {
   PHOTO_COMMANDS,
   PHOTO_QUERY_NAMES,
   PHOTO_QUERIES,
+  PhotoContentTypeSchema,
   PhotoKindSchema,
   PhotoListByOrderInputSchema,
   PhotoRegisterInputSchema,
+  PhotoRowSchema,
+  PhotoUploadDataSchema,
   photoListByOrderQuery,
   photoRegisterCommand,
 } from "./photo.js";
-export type { PhotoListByOrderResult, PhotoRegisterResult, PhotoRow } from "./photo.js";
+export type {
+  PhotoListByOrderResult,
+  PhotoRegisterResult,
+  PhotoRow,
+  PhotoUploadData,
+} from "./photo.js";

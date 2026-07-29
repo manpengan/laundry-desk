@@ -5,6 +5,7 @@
 import { Button, Input, MoneyText, StatusBadge, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CommandPort, QueryPort } from "../commands/types.js";
+import type { PhotoPort } from "../host/photo-port.js";
 import { OrderDetailDrawer } from "./OrderDetailDrawer.js";
 
 export type OrderListRowView = Readonly<{
@@ -23,8 +24,8 @@ export type OrderListRowView = Readonly<{
 
 export type OrdersListProps = {
   queryClient: QueryPort;
-  /** Optional command bus for photo.register skeleton in detail drawer. */
   commandClient?: CommandPort;
+  photoPort?: PhotoPort;
   /** Override default UTC business date (tests). Empty string = all days. */
   defaultDate?: string;
   /** Skip auto-load on mount (tests). */
@@ -115,6 +116,7 @@ export function findOrderByCounterKey(
 export function OrdersList({
   queryClient,
   commandClient,
+  photoPort,
   defaultDate,
   autoLoad = true,
   onOpenPickup,
@@ -242,6 +244,7 @@ export function OrdersList({
         orderId={detailOrderId}
         queryClient={queryClient}
         {...(commandClient !== undefined ? { commandClient } : {})}
+        {...(photoPort !== undefined ? { photoPort } : {})}
         onClose={() => setDetailOrderId(null)}
         {...(onOpenPickup !== undefined
           ? {

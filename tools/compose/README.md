@@ -15,6 +15,12 @@
 PostgreSQL 和 Fastify 只发布到 loopback，不对局域网开放。源码和 Compose
 文件不提供数据库密码、管理员密码或 PIN。
 
+`server` 还把仓库外配置目录的 `photos/` 挂载到
+`/var/lib/laundry/photos`。照片只通过认证后的固定 HTTP 路由访问，不发布静态目录；
+服务端限制 JPEG/PNG/WebP、单文件 8 MiB，并按文件数和总字节执行配额。该固定挂载点
+必须是空目录或包含有效 `.laundry-photo-store-v1` 所有权标记；其他非空目录、符号链接
+路径和任意环境路径都会拒绝启动。
+
 ## 首次启动
 
 需要 Docker Desktop（或兼容的 Docker Compose runtime）、Node.js 22+ 和
@@ -58,6 +64,9 @@ Fastify 启动前。
 配置目录权限必须为 `0700`，配置文件必须为 `0600`；权限不正确时命令会拒绝
 继续。该文件位于仓库外，不包含管理员密码或 PIN。测试和 CI 可以通过绝对路径
 `LAUNDRY_LOCAL_CONFIG_DIR` 使用隔离目录，日常运行无需设置。
+
+同目录的 `photos/` 是持久化业务数据，`local:down` 不会删除。不要把它复制进仓库；
+备份时应与 PostgreSQL 数据保持同一恢复点，也不要手工删除其中的所有权标记。
 
 ## 验证
 

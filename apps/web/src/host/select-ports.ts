@@ -47,21 +47,27 @@ function hasExactFunctionSurface(
 }
 
 function isDesktopBridge(value: unknown): value is LaundryDesktopBridge {
-  if (!isPlainRecord(value) || !hasExactOwnKeys(value, ["auth", "command", "query", "health"])) {
+  if (
+    !isPlainRecord(value) ||
+    !hasExactOwnKeys(value, ["auth", "command", "query", "photo", "health"])
+  ) {
     return false;
   }
   const auth = readOwnPlainRecord(value, "auth");
   const command = readOwnPlainRecord(value, "command");
   const query = readOwnPlainRecord(value, "query");
+  const photo = readOwnPlainRecord(value, "photo");
   const health = readOwnPlainRecord(value, "health");
   return (
     auth !== null &&
     command !== null &&
     query !== null &&
+    photo !== null &&
     health !== null &&
     hasExactFunctionSurface(auth, ["login", "refresh", "pinChallenge", "pinVerify", "logout"]) &&
     hasExactFunctionSurface(command, ["execute"]) &&
     hasExactFunctionSurface(query, ["execute"]) &&
+    hasExactFunctionSurface(photo, ["upload"]) &&
     hasExactFunctionSurface(health, ["get"])
   );
 }

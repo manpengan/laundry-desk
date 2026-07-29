@@ -26,9 +26,11 @@ const POLICY = createRequestSecurityPolicy(OPTIONS);
 function request(
   method: string,
   headers: RequestSecurityInput["headers"] = Object.freeze({}),
+  url?: string,
 ): RequestSecurityInput {
   return Object.freeze({
     method,
+    ...(url === undefined ? {} : { url }),
     headers: Object.freeze({
       host: ALLOWED_HOST,
       ...headers,
@@ -154,7 +156,7 @@ test("accepts only the browser and desktop Origin/Fetch Metadata pairings", () =
   }
 });
 
-test("requires application/json for every unsafe request", () => {
+test("requires JSON except for exact raw photo upload media types", () => {
   assert.deepEqual(
     evaluateLocalRequest(
       browserJsonRequest(Object.freeze({ "content-type": "application/json; charset=utf-8" })),
@@ -175,6 +177,39 @@ test("requires application/json for every unsafe request", () => {
       POLICY,
     );
     assert.deepEqual(decision, { allowed: false, statusCode: 415 }, String(contentType));
+  }
+
+  for (const contentType of ["image/jpeg", "image/png", "image/webp"] as const) {
+    assert.deepEqual(
+      evaluateLocalRequest(
+        request(
+          "POST",
+          {
+            origin: BROWSER_ORIGIN,
+            "sec-fetch-site": "same-site",
+            "content-type": contentType,
+          },
+          "/api/v2/photos?order_id=ignored",
+        ),
+        POLICY,
+      ),
+      { allowed: true },
+    );
+    assert.deepEqual(
+      evaluateLocalRequest(
+        request(
+          "POST",
+          {
+            origin: BROWSER_ORIGIN,
+            "sec-fetch-site": "same-site",
+            "content-type": contentType,
+          },
+          "/v1/commands/photo.register",
+        ),
+        POLICY,
+      ),
+      { allowed: false, statusCode: 415 },
+    );
   }
 });
 

@@ -16,6 +16,7 @@ import {
   M2_CONTRACT_DEFINITIONS,
   M2_CONTRACT_QUERY_NAMES,
 } from "../commands/catalog.js";
+import { PhotoUploadDataSchema } from "../commands/photo.js";
 import { CommandResponseSchema } from "../envelope/responses.js";
 import { ConfirmReferenceSchema } from "../envelope/wire-payload.js";
 import type { CommandDefinition, QueryDefinition } from "../registry/definitions.js";
@@ -26,6 +27,7 @@ export const DESKTOP_MAX_JSON_BYTES = 256 * 1_024;
 export const DESKTOP_MAX_JSON_DEPTH = 32;
 export const DESKTOP_MAX_JSON_NODES = 10_000;
 export const DESKTOP_MAX_STAFF_DIRECTORY_SIZE = 500;
+export const DESKTOP_MAX_PHOTO_BYTES = 8 * 1_024 * 1_024;
 
 type DeepReadonly<T> = T extends readonly (infer Item)[]
   ? readonly DeepReadonly<Item>[]
@@ -81,9 +83,11 @@ const validateBoundedJson = (
   }
 };
 
+const INTERNAL_DESKTOP_COMMANDS = new Set(["photo.register"]);
 const commandDefinitions = Object.freeze(
   M2_CONTRACT_DEFINITIONS.filter(
-    (definition): definition is CommandDefinition<z.ZodObject> => definition.kind === "command",
+    (definition): definition is CommandDefinition<z.ZodObject> =>
+      definition.kind === "command" && !INTERNAL_DESKTOP_COMMANDS.has(definition.name),
   ),
 );
 const queryDefinitions = Object.freeze(
@@ -110,7 +114,11 @@ const assertRegistryProjection = (
   }
 };
 
-assertRegistryProjection("Desktop command names", M2_CONTRACT_COMMAND_NAMES, commandDefinitions);
+const desktopCommandNames = Object.freeze(
+  M2_CONTRACT_COMMAND_NAMES.filter((name) => !INTERNAL_DESKTOP_COMMANDS.has(name)),
+);
+
+assertRegistryProjection("Desktop command names", desktopCommandNames, commandDefinitions);
 assertRegistryProjection("Desktop query names", M2_CONTRACT_QUERY_NAMES, queryDefinitions);
 
 const commandDefinitionByName = new Map(
@@ -120,7 +128,7 @@ const queryDefinitionByName = new Map(
   queryDefinitions.map((definition) => [definition.name, definition] as const),
 );
 
-export const DesktopCommandNameSchema = z.enum(M2_CONTRACT_COMMAND_NAMES);
+export const DesktopCommandNameSchema = z.enum(desktopCommandNames);
 export const DesktopQueryNameSchema = z.enum(M2_CONTRACT_QUERY_NAMES);
 
 const addDefinitionInputIssues = async (
@@ -274,6 +282,25 @@ export const DesktopPinChallengeResultSchema = createDesktopResultSchema(
 export const DesktopPinVerifyResultSchema = createDesktopResultSchema(DesktopPinVerifyDataSchema);
 export const DesktopLogoutResultSchema = createDesktopResultSchema(LogoutResponseSchema);
 export const DesktopHealthGetResultSchema = createDesktopResultSchema(DesktopHealthReadySchema);
+export const DesktopPhotoUploadInputSchema = z
+  .strictObject({
+    order_id: z.uuid(),
+    garment_id: z.uuid(),
+    kind: z.enum(["receive", "defect", "ready", "other"]),
+    content_type: z.enum(["image/jpeg", "image/png", "image/webp"]),
+    bytes: z.instanceof(Uint8Array),
+    taken_at: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+  })
+  .superRefine((input, context) => {
+    if (input.bytes.byteLength < 1 || input.bytes.byteLength > DESKTOP_MAX_PHOTO_BYTES) {
+      context.addIssue({
+        code: "custom",
+        message: "Desktop photo bytes exceed the allowed range",
+        path: ["bytes"],
+      });
+    }
+  });
+export const DesktopPhotoUploadResultSchema = createDesktopResultSchema(PhotoUploadDataSchema);
 
 const operation = <TInput extends z.ZodType, TResult extends z.ZodType>(
   input: TInput,
@@ -297,6 +324,9 @@ export const DESKTOP_OPERATION_SCHEMAS = Object.freeze({
   }),
   query: Object.freeze({
     execute: operation(DesktopQueryExecuteInputSchema, DesktopQueryExecuteResultSchema),
+  }),
+  photo: Object.freeze({
+    upload: operation(DesktopPhotoUploadInputSchema, DesktopPhotoUploadResultSchema),
   }),
   health: Object.freeze({
     get: operation(DesktopHealthGetInputSchema, DesktopHealthGetResultSchema),
@@ -326,6 +356,17 @@ export type DesktopPinChallengeResult = DeepReadonly<
 export type DesktopPinVerifyResult = DeepReadonly<z.output<typeof DesktopPinVerifyResultSchema>>;
 export type DesktopLogoutResult = DeepReadonly<z.output<typeof DesktopLogoutResultSchema>>;
 export type DesktopHealthGetResult = DeepReadonly<z.output<typeof DesktopHealthGetResultSchema>>;
+export type DesktopPhotoUploadInput = Readonly<{
+  order_id: string;
+  garment_id: string;
+  kind: "receive" | "defect" | "ready" | "other";
+  content_type: "image/jpeg" | "image/png" | "image/webp";
+  bytes: Uint8Array;
+  taken_at?: number;
+}>;
+export type DesktopPhotoUploadResult = DeepReadonly<
+  z.output<typeof DesktopPhotoUploadResultSchema>
+>;
 export type DesktopSessionView = DeepReadonly<z.output<typeof DesktopSessionViewSchema>>;
 export type DesktopStaffDirectoryEntry = DeepReadonly<
   z.output<typeof DesktopStaffDirectoryEntrySchema>

@@ -31,6 +31,7 @@ export function shellPropsFrom(
     authClient: ports.auth,
     commandClient: ports.command,
     queryClient: ports.query,
+    photoPort: ports.photo,
     onSessionChange,
   };
   if (connection !== undefined) props.initialConnection = connection;

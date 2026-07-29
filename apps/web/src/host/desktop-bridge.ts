@@ -1,0 +1,48 @@
+import type { LoginFormValues, PinChallengeRequest, PinVerifyRequest } from "../auth/types.js";
+import type { PhotoUploadInput } from "./photo-port.js";
+
+export type DesktopCommandInput =
+  | Readonly<{
+      name: string;
+      body: unknown;
+      confirm_ref?: never;
+    }>
+  | Readonly<{
+      name: string;
+      confirm_ref: string;
+      body?: never;
+    }>;
+
+export type DesktopQueryInput = Readonly<{
+  name: string;
+  body: unknown;
+}>;
+
+/**
+ * Renderer-safe desktop capability surface.
+ *
+ * The preload must expose only these named operations. Transport controls such
+ * as URLs, methods, headers, cookies, tokens, generic fetch, or generic invoke
+ * deliberately have no representation here.
+ */
+export type LaundryDesktopBridge = Readonly<{
+  auth: Readonly<{
+    login: (input: LoginFormValues) => Promise<unknown>;
+    refresh: () => Promise<unknown>;
+    pinChallenge: (input: PinChallengeRequest) => Promise<unknown>;
+    pinVerify: (input: PinVerifyRequest) => Promise<unknown>;
+    logout: () => Promise<unknown>;
+  }>;
+  command: Readonly<{
+    execute: (input: DesktopCommandInput) => Promise<unknown>;
+  }>;
+  query: Readonly<{
+    execute: (input: DesktopQueryInput) => Promise<unknown>;
+  }>;
+  photo?: Readonly<{
+    upload: (input: PhotoUploadInput) => Promise<unknown>;
+  }>;
+  health: Readonly<{
+    get: () => Promise<unknown>;
+  }>;
+}>;

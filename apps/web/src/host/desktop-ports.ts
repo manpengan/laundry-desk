@@ -10,50 +10,15 @@ import type {
   SwitchableStaff,
 } from "../auth/types.js";
 import type { CommandPort, CommandResult, QueryPort } from "../commands/types.js";
+import type {
+  DesktopCommandInput,
+  DesktopQueryInput,
+  LaundryDesktopBridge,
+} from "./desktop-bridge.js";
+import { createDesktopPhotoPort } from "./desktop-photo-port.js";
 import type { AppPorts, HealthPort, HealthResult } from "./types.js";
 
-type DesktopCommandInput =
-  | Readonly<{
-      name: string;
-      body: unknown;
-      confirm_ref?: never;
-    }>
-  | Readonly<{
-      name: string;
-      confirm_ref: string;
-      body?: never;
-    }>;
-
-type DesktopQueryInput = Readonly<{
-  name: string;
-  body: unknown;
-}>;
-
-/**
- * Renderer-safe desktop capability surface.
- *
- * The preload must expose only these named operations. Transport controls such
- * as URLs, methods, headers, cookies, tokens, generic fetch, or generic invoke
- * deliberately have no representation here.
- */
-export type LaundryDesktopBridge = Readonly<{
-  auth: Readonly<{
-    login: (input: LoginFormValues) => Promise<unknown>;
-    refresh: () => Promise<unknown>;
-    pinChallenge: (input: PinChallengeRequest) => Promise<unknown>;
-    pinVerify: (input: PinVerifyRequest) => Promise<unknown>;
-    logout: () => Promise<unknown>;
-  }>;
-  command: Readonly<{
-    execute: (input: DesktopCommandInput) => Promise<unknown>;
-  }>;
-  query: Readonly<{
-    execute: (input: DesktopQueryInput) => Promise<unknown>;
-  }>;
-  health: Readonly<{
-    get: () => Promise<unknown>;
-  }>;
-}>;
+export type { LaundryDesktopBridge } from "./desktop-bridge.js";
 
 const EMPTY_STAFF_DIRECTORY: readonly SwitchableStaff[] = Object.freeze([]);
 const EMPTY_BUSINESS_BODY: Readonly<Record<string, never>> = Object.freeze({});
@@ -666,6 +631,7 @@ export function createDesktopPorts(bridge: LaundryDesktopBridge): AppPorts {
     auth: createAuthPort(bridge),
     command: createCommandPort(bridge),
     query: createQueryPort(bridge),
+    photo: createDesktopPhotoPort(bridge),
     health: createHealthPort(bridge),
   });
 }

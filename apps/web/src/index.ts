@@ -102,6 +102,13 @@ export type { AppPorts, HealthError, HealthPort, HealthReady, HealthResult } fro
 export { createBrowserPorts, type BrowserPortsOptions } from "./host/browser-ports.js";
 export { createDesktopPorts, type LaundryDesktopBridge } from "./host/desktop-ports.js";
 export {
+  MAX_PHOTO_BYTES,
+  type PhotoContentType,
+  type PhotoKind,
+  type PhotoPort,
+  type PhotoUploadInput,
+} from "./host/photo-port.js";
+export {
   createServiceGateController,
   ServiceGate,
   ServiceGateView,

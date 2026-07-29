@@ -1,12 +1,13 @@
 /**
  * Workbench order detail drawer — loads order.get + photo.list_by_order when open.
- * Photo section is M3 metadata skeleton (count + placeholder thumbs; no blobs).
+ * Photo section uses the named PhotoPort; transport credentials stay outside React.
  */
 
 import { Button, Drawer, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
+import { MAX_PHOTO_BYTES, type PhotoContentType, type PhotoPort } from "../host/photo-port.js";
 import { DangerConfirmDialog } from "./DangerConfirmDialog.js";
 import { OrderDetailContent } from "./OrderDetailContent.js";
 import { PaymentCollectionDialog } from "./PaymentCollectionDialog.js";
@@ -18,8 +19,8 @@ export type OrderDetailDrawerProps = {
   open: boolean;
   orderId: string | null;
   queryClient: QueryPort;
-  /** Required for photo.register skeleton button. */
   commandClient?: CommandPort;
+  photoPort?: PhotoPort;
   onClose: () => void;
   /** Navigate to pickup with this order id. */
   onPickup?: (orderId: string) => void;
@@ -36,7 +37,6 @@ export type PhotoMetaRow = Readonly<{
   garment_id: string;
   order_id: string;
   kind: string;
-  storage_key: string;
   content_type: string;
   byte_size: number;
   taken_at: number;
@@ -70,7 +70,6 @@ export function parsePhotoList(value: unknown): readonly PhotoMetaRow[] | null {
     if (typeof item.garment_id !== "string") return null;
     if (typeof item.order_id !== "string") return null;
     if (typeof item.kind !== "string") return null;
-    if (typeof item.storage_key !== "string") return null;
     if (typeof item.content_type !== "string") return null;
     const byteSize = asInt(item.byte_size);
     const takenAt = asInt(item.taken_at);
@@ -81,7 +80,6 @@ export function parsePhotoList(value: unknown): readonly PhotoMetaRow[] | null {
         garment_id: item.garment_id,
         order_id: item.order_id,
         kind: item.kind,
-        storage_key: item.storage_key,
         content_type: item.content_type,
         byte_size: byteSize,
         taken_at: takenAt,
@@ -96,12 +94,15 @@ export function OrderDetailDrawer({
   orderId,
   queryClient,
   commandClient,
+  photoPort,
   onClose,
   onPickup,
 }: OrderDetailDrawerProps) {
   const toast = useToast();
   const [load, setLoad] = useState<OrderDetailLoadState>({ status: "idle" });
   const [photos, setPhotos] = useState<readonly PhotoMetaRow[]>([]);
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
@@ -111,6 +112,9 @@ export function OrderDetailDrawer({
 
   const loadPhotos = useCallback(
     async (id: string, req: number) => {
+      if (req !== requestRef.current) return;
+      setPhotoLoading(true);
+      setPhotoError(null);
       try {
         const res = await queryClient.execute<unknown>("photo.list_by_order", {
           order_id: id,
@@ -118,13 +122,22 @@ export function OrderDetailDrawer({
         if (req !== requestRef.current) return;
         if (!res.ok) {
           setPhotos([]);
+          setPhotoError(res.error.message ?? res.error.code);
           return;
         }
         const parsed = parsePhotoList(unwrapPhotoResult(res.data));
-        setPhotos(parsed ?? []);
+        if (parsed === null) {
+          setPhotos([]);
+          setPhotoError("照片列表响应格式错误");
+          return;
+        }
+        setPhotos(parsed);
       } catch {
         if (req !== requestRef.current) return;
         setPhotos([]);
+        setPhotoError("加载照片失败");
+      } finally {
+        if (req === requestRef.current) setPhotoLoading(false);
       }
     },
     [queryClient],
@@ -135,6 +148,8 @@ export function OrderDetailDrawer({
       const req = ++requestRef.current;
       setLoad({ status: "loading" });
       setPhotos([]);
+      setPhotoLoading(false);
+      setPhotoError(null);
       try {
         const res = await queryClient.execute<unknown>("order.get", { order_id: id });
         if (req !== requestRef.current) return;
@@ -162,8 +177,11 @@ export function OrderDetailDrawer({
 
   useEffect(() => {
     if (!open || orderId === null || orderId.length === 0) {
+      requestRef.current += 1;
       setLoad({ status: "idle" });
       setPhotos([]);
+      setPhotoLoading(false);
+      setPhotoError(null);
       return;
     }
     void loadOrder(orderId);
@@ -180,41 +198,50 @@ export function OrderDetailDrawer({
     onPickup(orderId);
   }, [onPickup, orderId, toast]);
 
-  const handleRegisterPhoto = useCallback(async () => {
-    if (commandClient === undefined) {
-      toast.push("照片登记不可用", "error");
-      return;
-    }
-    if (load.status !== "ready" || orderId === null) return;
-    const garment = load.order.garments[0];
-    if (garment === undefined) {
-      toast.push("订单暂无衣物，无法登记照片", "error");
-      return;
-    }
-    setPhotoBusy(true);
-    try {
-      const fakeKey = `skeleton/${orderId}/${garment.garment_id}/${Date.now()}.jpg`;
-      const res = await commandClient.execute<unknown>("photo.register", {
-        order_id: orderId,
-        garment_id: garment.garment_id,
-        kind: "receive",
-        storage_key: fakeKey,
-        content_type: "image/jpeg",
-        byte_size: 1024,
-      });
-      if (!res.ok) {
-        toast.push(res.error.message ?? res.error.code, "error");
+  const handleRegisterPhoto = useCallback(
+    async (file: File) => {
+      if (photoPort === undefined) {
+        toast.push("照片上传不可用", "error");
         return;
       }
-      toast.push("已登记照片元数据（骨架）", "success");
-      const req = requestRef.current;
-      await loadPhotos(orderId, req);
-    } catch {
-      toast.push("登记照片失败", "error");
-    } finally {
-      setPhotoBusy(false);
-    }
-  }, [commandClient, load, loadPhotos, orderId, toast]);
+      if (load.status !== "ready" || orderId === null) return;
+      const garment = load.order.garments[0];
+      if (garment === undefined) {
+        toast.push("订单暂无衣物，无法上传照片", "error");
+        return;
+      }
+      if (file.type !== "image/jpeg" && file.type !== "image/png" && file.type !== "image/webp") {
+        toast.push("仅支持 JPEG、PNG 或 WebP", "error");
+        return;
+      }
+      if (file.size < 1 || file.size > MAX_PHOTO_BYTES) {
+        toast.push("照片大小必须在 1 B 至 8 MiB 之间", "error");
+        return;
+      }
+      setPhotoBusy(true);
+      try {
+        const res = await photoPort.upload({
+          order_id: orderId,
+          garment_id: garment.garment_id,
+          kind: "receive",
+          content_type: file.type as PhotoContentType,
+          bytes: new Uint8Array(await file.arrayBuffer()),
+        });
+        if (!res.ok) {
+          toast.push(res.error.message ?? res.error.code, "error");
+          return;
+        }
+        toast.push("照片已安全保存", "success");
+        const req = requestRef.current;
+        await loadPhotos(orderId, req);
+      } catch {
+        toast.push("上传照片失败", "error");
+      } finally {
+        setPhotoBusy(false);
+      }
+    },
+    [load, loadPhotos, orderId, photoPort, toast],
+  );
 
   const closeCancel = useCallback(() => {
     if (cancelBusy) return;
@@ -281,8 +308,13 @@ export function OrderDetailDrawer({
           <OrderDetailContent
             order={load.order}
             photos={photos}
-            {...(commandClient !== undefined
-              ? { onRegisterPhoto: () => void handleRegisterPhoto() }
+            photoLoading={photoLoading}
+            photoError={photoError}
+            onRetryPhotos={() => {
+              if (orderId !== null) void loadPhotos(orderId, requestRef.current);
+            }}
+            {...(photoPort !== undefined
+              ? { onRegisterPhoto: (file: File) => void handleRegisterPhoto(file) }
               : {})}
             registerBusy={photoBusy}
           />

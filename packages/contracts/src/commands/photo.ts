@@ -1,6 +1,5 @@
 /**
- * M3 skeleton garment photo metadata (register + list_by_order).
- * Metadata only — storage_key is opaque; no blob / S3 in this wave.
+ * M3 garment photo metadata (internal register + public list_by_order).
  * Not in OpenAPI freeze snapshot.
  */
 
@@ -14,14 +13,20 @@ import {
 } from "../registry/definitions.js";
 
 export const PhotoKindSchema = z.enum(["receive", "defect", "ready", "other"]);
+export const PhotoContentTypeSchema = z.enum(["image/jpeg", "image/png", "image/webp"]);
 
 export const PhotoRegisterInputSchema = z.strictObject({
   garment_id: z.uuid(),
   order_id: z.uuid(),
   kind: PhotoKindSchema,
-  /** Opaque path/key; client uploads bytes elsewhere later. */
-  storage_key: z.string().min(1).max(512),
-  content_type: z.string().min(1).max(128).optional(),
+  /** Server-generated opaque key. Browser/desktop callers use the upload route. */
+  storage_key: z
+    .string()
+    .regex(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/u,
+    ),
+  content_type: PhotoContentTypeSchema,
+  content_sha256: z.string().regex(/^[0-9a-f]{64}$/u),
   /** Positive integer bytes (no float). */
   byte_size: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   /** Epoch seconds when photo was taken; omit = server now. */
@@ -32,28 +37,26 @@ export const PhotoListByOrderInputSchema = z.strictObject({
   order_id: z.uuid(),
 });
 
-/**
- * Photo row (documented for tests / handlers; not Zod-validated on wire).
- *
- * ```ts
- * {
- *   photo_id, garment_id, order_id, kind, storage_key,
- *   content_type, byte_size, taken_at, created_by_staff_id
- * }
- * ```
- */
-export type PhotoRow = Readonly<{
-  photo_id: string;
-  garment_id: string;
-  order_id: string;
-  kind: "receive" | "defect" | "ready" | "other";
-  storage_key: string;
-  content_type: string;
-  byte_size: number;
+/** Public metadata row. Storage keys and digests are deliberately absent. */
+export const PhotoRowSchema = z.strictObject({
+  photo_id: z.uuid(),
+  garment_id: z.uuid(),
+  order_id: z.uuid(),
+  kind: PhotoKindSchema,
+  content_type: PhotoContentTypeSchema,
+  byte_size: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   /** Epoch seconds. */
-  taken_at: number;
-  created_by_staff_id: string;
-}>;
+  taken_at: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  created_by_staff_id: z.uuid(),
+});
+
+export const PhotoUploadDataSchema = z.strictObject({
+  execution: z.literal("executed"),
+  result: PhotoRowSchema,
+});
+
+export type PhotoRow = Readonly<z.output<typeof PhotoRowSchema>>;
+export type PhotoUploadData = Readonly<z.output<typeof PhotoUploadDataSchema>>;
 
 export type PhotoRegisterResult = PhotoRow;
 
@@ -64,13 +67,13 @@ export type PhotoListByOrderResult = Readonly<{
 type RegisterInput = typeof PhotoRegisterInputSchema;
 type ListInput = typeof PhotoListByOrderInputSchema;
 
-/** 登记衣物照片元数据：仅 storage_key，不传 blob。 */
+/** Internal metadata append after the trusted upload route installs bytes. */
 export const photoRegisterCommand: CommandDefinition<RegisterInput> = defineCommand({
   name: "photo.register",
-  version: "0.2.0",
-  description: "Register garment photo metadata (opaque storage_key; no blob upload).",
+  version: "0.3.0",
+  description: "Register server-installed garment photo metadata.",
   description_llm:
-    "Append photo metadata for a garment on an order. kind in receive|defect|ready|other. byte_size positive integer. storage_key opaque path/key. Returns photo_id and row fields. Integer timestamps only.",
+    "Internal only. Append metadata for bytes already installed by the trusted photo upload route.",
   input: PhotoRegisterInputSchema,
   risk: "R2",
   invariants: ["rbac.order_write"],
@@ -85,10 +88,10 @@ export const photoRegisterCommand: CommandDefinition<RegisterInput> = defineComm
 /** 按订单列出衣物照片元数据（无 blob）。 */
 export const photoListByOrderQuery: QueryDefinition<ListInput> = defineQuery({
   name: "photo.list_by_order",
-  version: "0.2.0",
-  description: "List garment photo metadata rows for one order (no blobs).",
+  version: "0.3.0",
+  description: "List garment photo metadata rows for one order.",
   description_llm:
-    "Return photos for order_id (photo_id, garment_id, kind, storage_key, content_type, byte_size, taken_at). max 100 rows. Metadata only.",
+    "Return photos for order_id (photo_id, garment_id, kind, content_type, byte_size, taken_at). max 100 rows. Download bytes only through the authenticated photo_id route.",
   input: PhotoListByOrderInputSchema,
   risk: "R1",
   invariants: [],

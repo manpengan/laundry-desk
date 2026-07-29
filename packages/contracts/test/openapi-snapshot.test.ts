@@ -76,6 +76,8 @@ describe("A7 OpenAPI 3.1 snapshot", () => {
     expect(M1_FIRST_WAVE_DEFINITIONS.length).toBe(
       M1_FIRST_WAVE_COMMAND_NAMES.length + M1_FIRST_WAVE_QUERY_NAMES.length,
     );
+    expect(document.paths["/v1/commands/photo.register"]).toBeUndefined();
+    expect(document.paths["/v1/queries/photo.list_by_order"]).toBeDefined();
   });
 
   it("references the unified command error envelope components", () => {

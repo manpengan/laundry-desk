@@ -28,6 +28,7 @@ export class MemoryPhotoStore implements PhotoStore {
       kind: input.kind,
       storage_key: input.storage_key,
       content_type: input.content_type,
+      content_sha256: input.content_sha256,
       byte_size: input.byte_size,
       taken_at: input.taken_at,
       created_by_staff_id: input.created_by_staff_id,
@@ -54,6 +55,20 @@ export class MemoryPhotoStore implements PhotoStore {
     }
     rows.sort((a, b) => b.taken_at - a.taken_at);
     return Object.freeze(rows);
+  }
+
+  async findById(orgId: string, storeId: string, photoId: string): Promise<PhotoRecord | null> {
+    const row = this.byId.get(photoId);
+    if (row === undefined || row.org_id !== orgId || row.store_id !== storeId) return null;
+    return row;
+  }
+
+  async listStorageKeys(orgId: string, storeId: string): Promise<ReadonlySet<string>> {
+    return new Set(
+      [...this.byId.values()]
+        .filter((row) => row.org_id === orgId && row.store_id === storeId)
+        .map((row) => row.storage_key),
+    );
   }
 
   clear(): void {

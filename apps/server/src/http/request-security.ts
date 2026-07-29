@@ -19,6 +19,7 @@ export type LocalRequestSecurityPolicy = Readonly<{
 
 export type RequestSecurityInput = Readonly<{
   method: string;
+  url?: string;
   headers: Readonly<Record<string, HeaderValue>>;
 }>;
 
@@ -150,11 +151,22 @@ function hasAllowedOriginPair(
   );
 }
 
-function hasJsonContentType(headers: RequestSecurityInput["headers"]): boolean {
+function mediaType(headers: RequestSecurityInput["headers"]): string | null {
   const contentTypes = headerValues(headers, "content-type");
-  if (contentTypes.length !== 1) return false;
-  const [mediaType] = (contentTypes[0] as string).split(";", 1);
-  return mediaType?.trim().toLowerCase() === "application/json";
+  if (contentTypes.length !== 1) return null;
+  const [value] = (contentTypes[0] as string).split(";", 1);
+  return value?.trim().toLowerCase() ?? null;
+}
+
+function hasAllowedContentType(input: RequestSecurityInput): boolean {
+  const type = mediaType(input.headers);
+  if (type === "application/json") return true;
+  const path = input.url?.split("?", 1)[0];
+  return (
+    input.method === "POST" &&
+    path === "/api/v2/photos" &&
+    (type === "image/jpeg" || type === "image/png" || type === "image/webp")
+  );
 }
 
 export function evaluateLocalRequest(
@@ -166,7 +178,7 @@ export function evaluateLocalRequest(
   }
   if (SAFE_METHODS.includes(input.method as (typeof SAFE_METHODS)[number])) return ALLOWED;
   if (!hasAllowedOriginPair(input.headers, policy)) return FORBIDDEN;
-  if (!hasJsonContentType(input.headers)) return UNSUPPORTED_MEDIA_TYPE;
+  if (!hasAllowedContentType(input)) return UNSUPPORTED_MEDIA_TYPE;
   return ALLOWED;
 }
 
@@ -177,7 +189,7 @@ export function registerRequestSecurityHooks(
   const policy = createRequestSecurityPolicy(options);
   app.addHook("onRequest", async (request, reply) => {
     const decision = evaluateLocalRequest(
-      Object.freeze({ method: request.method, headers: request.headers }),
+      Object.freeze({ method: request.method, url: request.url, headers: request.headers }),
       policy,
     );
     if (!decision.allowed) {

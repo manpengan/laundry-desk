@@ -5,6 +5,7 @@
 import { Button, MoneyText, StatusBadge, formatMoneyFromFen, useToast } from "@laundry/ui";
 import { useCallback, useState } from "react";
 import type { CommandPort, QueryPort } from "../commands/types.js";
+import type { PhotoPort } from "../host/photo-port.js";
 import { parseOrderListRows, unwrapQueryResult, type OrderListRowView } from "./OrdersList.js";
 import { OrderDetailDrawer } from "./OrderDetailDrawer.js";
 
@@ -15,6 +16,7 @@ export type DebtPageProps = {
   queryClient: QueryPort;
   /** Without this the detail drawer can display but not collect or cancel. */
   commandClient?: CommandPort;
+  photoPort?: PhotoPort;
   /** Navigate to pickup with order id prefilled. */
   onOpenPickup?: (orderId: string) => void;
 };
@@ -51,7 +53,7 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function DebtPage({ queryClient, commandClient, onOpenPickup }: DebtPageProps) {
+export function DebtPage({ queryClient, commandClient, photoPort, onOpenPickup }: DebtPageProps) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState<readonly OrderListRowView[]>([]);
@@ -183,6 +185,7 @@ export function DebtPage({ queryClient, commandClient, onOpenPickup }: DebtPageP
         orderId={detailOrderId}
         queryClient={queryClient}
         {...(commandClient === undefined ? {} : { commandClient })}
+        {...(photoPort === undefined ? {} : { photoPort })}
         onClose={() => setDetailOrderId(null)}
         {...(onOpenPickup !== undefined
           ? {
