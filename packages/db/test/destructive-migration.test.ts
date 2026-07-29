@@ -75,6 +75,7 @@ describe("destructive migration static reject", () => {
       "0021_print_job_lease.sql",
       "0022_print_job_artifact.sql",
       "0023_photo_file_integrity.sql",
+      "0024_photo_delete_grant.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
@@ -112,6 +113,7 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE payments TO laundry_app/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE shift_closings TO laundry_app/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE garment_photos TO laundry_app/iu);
+    expect(combined).toMatch(/GRANT DELETE ON TABLE garment_photos TO laundry_app/iu);
     expect(combined).toMatch(
       /GRANT SELECT, INSERT, UPDATE ON TABLE command_idempotency TO laundry_app/iu,
     );
