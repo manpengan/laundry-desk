@@ -4,7 +4,13 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
+import {
+  _electron as electron,
+  expect,
+  test,
+  type ElectronApplication,
+  type Page,
+} from "@playwright/test";
 
 const PASSTHROUGH_ENV_KEYS = Object.freeze([
   "PATH",
@@ -177,6 +183,68 @@ async function waitForHealth(expected: "ready" | "down"): Promise<void> {
   throw new Error(`API health ${expected} timed out; last state was ${lastState}`);
 }
 
+/**
+ * Same counter money path the browser E2E proves, driven inside the packaged
+ * app. The SPA and contracts are shared, so what this adds is evidence that the
+ * desktop IPC transport carries a real workday — not just a login.
+ *
+ * Bootstrapping the price list is part of it: a fresh install ships an empty
+ * catalog and order.receive refuses a line that matches no active item.
+ */
+async function runCounterWorkday(page: Page): Promise<void> {
+  const CODE = "mac_wash_shirt";
+  const NAME = "macOS 水洗衬衫";
+
+  await page.locator('[data-nav-id="settings"]').click();
+  const catalogPanel = page.locator('[data-testid="catalog-admin"]');
+  await expect(catalogPanel).toBeVisible({ timeout: 15_000 });
+  await page.locator('input[name="catalog-code"]').fill(CODE);
+  await page.locator('input[name="catalog-name"]').fill(NAME);
+  await page.locator('input[name="catalog-service"]').fill("wash");
+  await page.locator('input[name="catalog-category"]').fill("macshirt");
+  await page.locator('input[name="catalog-price"]').fill("1500");
+  await page.locator('[data-testid="catalog-save-btn"]').click();
+  await expect(
+    catalogPanel.locator('[data-testid="catalog-admin-row"]', { hasText: NAME }),
+  ).toBeVisible({ timeout: 15_000 });
+
+  // Receive two garments at ¥15.00 paying ¥10.00, leaving ¥20.00 owed.
+  await page.locator('[data-nav-id="receive"]').click();
+  const picker = page.locator('[data-testid="catalog-picker"]');
+  await expect(picker).toBeVisible();
+  await picker.getByRole("option", { name: new RegExp(NAME, "u") }).click();
+  await page.getByLabel("数量").fill("2");
+  await page.locator('input[name="customer-phone"]').fill("13900000042");
+  await page.locator('input[name="customer-name"]').fill("macOS 顾客");
+  await page.locator('input[name="initial-payment"]').fill("1000");
+  await page.getByRole("button", { name: "确认开单" }).click();
+
+  const ticketCell = page.locator('[data-testid="receive-ticket"]');
+  await expect(ticketCell).toBeVisible({ timeout: 15_000 });
+  const ticketNo = (await ticketCell.innerText()).trim();
+  const receiveResult = page.locator(".ld-order-result");
+  await expect(receiveResult).toContainText("¥30.00");
+  await expect(receiveResult).toContainText("¥20.00");
+
+  // Pick up, collecting the remainder.
+  await page.locator('[data-nav-id="pickup"]').click();
+  await page.locator('input[name="pickup-key"]').fill(ticketNo);
+  await page.getByRole("button", { name: "加载订单" }).click();
+  await expect(page.locator('[data-testid="pickup-loaded-ticket"]')).toHaveText(ticketNo, {
+    timeout: 15_000,
+  });
+  await expect(page.locator('[data-testid="pickup-loaded-balance"]')).toContainText("¥20.00");
+  await page.locator('input[name="collect-cents"]').fill("2000");
+  await page.getByRole("button", { name: "确认取衣" }).click();
+
+  await expect(page.locator('[data-testid="pickup-ticket"]')).toHaveText(ticketNo, {
+    timeout: 15_000,
+  });
+  const pickupResult = page.locator(".ld-order-result").last();
+  await expect(pickupResult).toContainText("¥30.00");
+  await expect(pickupResult).toContainText("¥0.00");
+}
+
 test("packaged app recovers from an unavailable local service with a token-free bridge", async () => {
   assertAcceptanceInputs();
   const canonicalApp = await realpath(APP_PATH);
@@ -207,6 +275,8 @@ test("packaged app recovers from an unavailable local service with a token-free 
     await page.getByRole("button", { name: "登录" }).click();
     await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(LOGIN.displayName, { exact: true })).toBeVisible();
+
+    await runCounterWorkday(page);
 
     const audit = await page.evaluate(async () => {
       const bridge = (
