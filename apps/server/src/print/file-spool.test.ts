@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
@@ -167,4 +167,62 @@ test("keeps separate jobs and attempts in separate artifacts", async () => {
 
   assert.equal(new Set([a1.relative_path, a2.relative_path, b1.relative_path]).size, 3);
   assert.equal(a2.relative_path, `${JOB_A}-xp58-0002.txt`);
+});
+
+const jobIdN = (n: number) => `${String(n).padStart(8, "0")}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`;
+
+test("retention evicts the oldest artifacts once the count cap is exceeded", async () => {
+  const root = await tempRoot();
+  const spool = await createFileSpool({ rootPath: join(root, "spool"), maxArtifacts: 3 });
+
+  for (let n = 1; n <= 5; n += 1) {
+    await spool.write(writeInput({ job_id: jobIdN(n), content: `job ${n}\n` }));
+  }
+
+  const remaining = (await readdir(spool.rootPath)).filter((name) => name.endsWith(".txt")).sort();
+  assert.equal(remaining.length, 3, "count cap must hold after repeated writes");
+  // The newest three survive; the oldest two are gone.
+  assert.ok(remaining.some((name) => name.startsWith(jobIdN(5))));
+  assert.ok(!remaining.some((name) => name.startsWith(jobIdN(1))));
+});
+
+test("retention evicts by total bytes as well as by count", async () => {
+  const root = await tempRoot();
+  const spool = await createFileSpool({
+    rootPath: join(root, "spool"),
+    maxTotalBytes: 60,
+    maxArtifacts: 100,
+  });
+
+  for (let n = 1; n <= 4; n += 1) {
+    await spool.write(writeInput({ job_id: jobIdN(n), content: "x".repeat(25) }));
+  }
+
+  const result = await spool.sweep();
+  assert.ok(result.retained_bytes <= 60, `retained ${result.retained_bytes} bytes`);
+  assert.ok(result.retained >= 1, "eviction must not empty the spool entirely");
+});
+
+test("retention never touches files the spool did not produce", async () => {
+  const root = await tempRoot();
+  const spool = await createFileSpool({ rootPath: join(root, "spool"), maxArtifacts: 1 });
+  const foreign = join(spool.rootPath, "operator-notes.txt");
+  await writeFile(foreign, "keep me\n", { mode: 0o600 });
+
+  for (let n = 1; n <= 3; n += 1) {
+    await spool.write(writeInput({ job_id: jobIdN(n), content: `job ${n}\n` }));
+  }
+
+  assert.equal(await readFile(foreign, "utf8"), "keep me\n", "a foreign file must survive");
+});
+
+test("sweep reports what it removed and retained", async () => {
+  const root = await tempRoot();
+  const spool = await createFileSpool({ rootPath: join(root, "spool"), maxArtifacts: 100 });
+  await spool.write(writeInput({ job_id: jobIdN(1) }));
+  await spool.write(writeInput({ job_id: jobIdN(2) }));
+
+  const noop = await spool.sweep();
+  assert.equal(noop.removed, 0, "a spool inside its caps must not evict anything");
+  assert.equal(noop.retained, 2);
 });

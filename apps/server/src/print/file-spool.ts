@@ -18,13 +18,33 @@
 
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { link, lstat, mkdir, open, readFile, realpath, rm, unlink } from "node:fs/promises";
+import {
+  link,
+  lstat,
+  mkdir,
+  open,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  unlink,
+} from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { PrintJobKind } from "./types.js";
 
 /** One artifact may not exceed this; a runaway render must not fill the disk. */
 export const DEFAULT_MAX_ARTIFACT_BYTES = 64 * 1024;
+
+/** Whole-spool budget. Retention evicts oldest-first to stay under it. */
+export const DEFAULT_MAX_TOTAL_BYTES = 32 * 1024 * 1024;
+
+/** Retention count, so a small-artifact workload cannot grow unbounded either. */
+export const DEFAULT_MAX_ARTIFACTS = 500;
+
+/** Only files the spool itself produced are ever eligible for eviction. */
+const ARTIFACT_NAME =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-9a-f][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}-[a-z0-9]{1,16}-[0-9]{4}\.txt$/u;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-9a-f][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const KINDS: ReadonlySet<string> = new Set(["xp58", "dl206", "gp3120"]);
@@ -34,6 +54,8 @@ const FILE_MODE = 0o600;
 export type FileSpoolOptions = Readonly<{
   rootPath: string;
   maxArtifactBytes?: number;
+  maxTotalBytes?: number;
+  maxArtifacts?: number;
 }>;
 
 export type SpoolArtifact = Readonly<{
@@ -48,6 +70,15 @@ export type SpoolArtifact = Readonly<{
 export type FileSpool = Readonly<{
   rootPath: string;
   write: (input: SpoolWriteInput) => Promise<SpoolArtifact>;
+  /** Evict oldest artifacts until the spool is inside its count and byte caps. */
+  sweep: () => Promise<SpoolSweepResult>;
+}>;
+
+export type SpoolSweepResult = Readonly<{
+  removed: number;
+  removed_bytes: number;
+  retained: number;
+  retained_bytes: number;
 }>;
 
 export type SpoolWriteInput = Readonly<{
@@ -152,11 +183,69 @@ async function reuseOrFail(
   return Object.freeze({ relative_path: relativePath, sha256: expectedHash, bytes, reused: true });
 }
 
+type SpoolEntry = Readonly<{ name: string; bytes: number; mtimeMs: number }>;
+
+/**
+ * List only files this spool produced. Anything else in the directory — a
+ * stray file, a symlink someone planted, a leftover staging file — is ignored
+ * rather than considered for deletion, so retention can never remove something
+ * it does not own.
+ */
+async function listArtifacts(rootPath: string): Promise<readonly SpoolEntry[]> {
+  const names = await readdir(rootPath);
+  const entries: SpoolEntry[] = [];
+  for (const name of names) {
+    if (!ARTIFACT_NAME.test(name)) continue;
+    const meta = await lstat(join(rootPath, name)).catch(() => null);
+    if (meta === null || meta.isSymbolicLink() || !meta.isFile()) continue;
+    entries.push({ name, bytes: meta.size, mtimeMs: meta.mtimeMs });
+  }
+  return Object.freeze(entries);
+}
+
+/**
+ * Evict oldest-first until both caps hold. Retention is best-effort against a
+ * concurrent writer: a file that vanished under us is simply skipped.
+ */
+async function sweepSpool(
+  rootPath: string,
+  maxTotalBytes: number,
+  maxArtifacts: number,
+): Promise<SpoolSweepResult> {
+  const entries = [...(await listArtifacts(rootPath))].sort((a, b) => a.mtimeMs - b.mtimeMs);
+  let total = entries.reduce((sum, entry) => sum + entry.bytes, 0);
+  let count = entries.length;
+  let removed = 0;
+  let removedBytes = 0;
+
+  for (const entry of entries) {
+    if (count <= maxArtifacts && total <= maxTotalBytes) break;
+    try {
+      await unlink(join(rootPath, entry.name));
+    } catch {
+      continue;
+    }
+    removed += 1;
+    removedBytes += entry.bytes;
+    total -= entry.bytes;
+    count -= 1;
+  }
+  if (removed > 0) await fsyncDirectory(rootPath);
+  return Object.freeze({
+    removed,
+    removed_bytes: removedBytes,
+    retained: count,
+    retained_bytes: total,
+  });
+}
+
 export async function createFileSpool(options: FileSpoolOptions): Promise<FileSpool> {
   if (!isAbsolute(options.rootPath)) {
     throw new SpoolError("SPOOL_ROOT_RELATIVE", "spool root must be an absolute path");
   }
   const maxBytes = options.maxArtifactBytes ?? DEFAULT_MAX_ARTIFACT_BYTES;
+  const maxTotalBytes = options.maxTotalBytes ?? DEFAULT_MAX_TOTAL_BYTES;
+  const maxArtifacts = options.maxArtifacts ?? DEFAULT_MAX_ARTIFACTS;
   await mkdir(options.rootPath, { recursive: true, mode: DIR_MODE });
   await assertRealDirectory(options.rootPath);
   // Canonicalise once so later containment checks compare real paths.
@@ -164,6 +253,7 @@ export async function createFileSpool(options: FileSpoolOptions): Promise<FileSp
 
   return Object.freeze({
     rootPath,
+    sweep: (): Promise<SpoolSweepResult> => sweepSpool(rootPath, maxTotalBytes, maxArtifacts),
     write: async (input: SpoolWriteInput): Promise<SpoolArtifact> => {
       const bytes = Buffer.from(input.content, "utf8");
       if (bytes.byteLength > maxBytes) {
@@ -173,6 +263,10 @@ export async function createFileSpool(options: FileSpoolOptions): Promise<FileSp
       const finalPath = join(rootPath, name);
       assertContained(rootPath, finalPath);
       const hash = sha256Hex(bytes);
+
+      // Make room before installing, so the artifact just rendered is never
+      // the one evicted to satisfy the cap.
+      await sweepSpool(rootPath, Math.max(0, maxTotalBytes - bytes.byteLength), maxArtifacts - 1);
 
       const tempPath = await stageTemp(rootPath, name, bytes);
       try {

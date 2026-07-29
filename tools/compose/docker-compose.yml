@@ -54,6 +54,13 @@ services:
       LAUNDRY_CSRF_PROOF_SECRET: "${LAUNDRY_CSRF_PROOF_SECRET-}"
       LAUNDRY_CONTAINER_RUNTIME: "1"
       LAUNDRY_USE_LOCAL_PG: "1"
+      # Mock printer output (product design §7). Explicitly configured and well
+      # outside any web-served root. Deliberately NOT a named volume: it lives
+      # in the container layer, so `local:down` reclaims it and the ownership-
+      # validated volume lifecycle keeps managing exactly one volume. Artifacts
+      # are reachable through the authenticated download route while the stack
+      # is up, and retention caps the directory regardless.
+      LAUNDRY_PRINT_SPOOL_DIR: "/var/lib/laundry/print-spool"
     ports:
       - "127.0.0.1:8787:8787"
     depends_on:
