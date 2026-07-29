@@ -12,7 +12,7 @@ import type { CommandPort, QueryPort } from "../commands/types.js";
 import { createMockConnection } from "../connection.js";
 import { CounterShell } from "./CounterShell.js";
 import { PrintQueuePanel } from "./PrintQueuePanel.js";
-import type { PrintJobView } from "./print-jobs.js";
+import type { PrintJobView, PrintWorkerView } from "./print-jobs.js";
 
 const sampleSession: SessionView = Object.freeze({
   session: Object.freeze({
@@ -65,11 +65,22 @@ const SAMPLE_JOBS: readonly PrintJobView[] = Object.freeze([
     payload_bytes: 128,
   }),
 ]);
+const WORKER: PrintWorkerView = Object.freeze({
+  state: "running",
+  worker_id: "local-server",
+  processed_jobs: 8,
+  failed_jobs: 1,
+  last_cycle_at: 1_721_606_400,
+  last_error_code: null,
+  spool_artifacts: 7,
+  spool_bytes: 2_048,
+});
 
 function renderPanel(
   props: Partial<{
     open: boolean;
     initialJobs: readonly PrintJobView[];
+    initialWorker: PrintWorkerView;
     commandClient: CommandPort;
     queryClient: QueryPort;
   }> = {},
@@ -84,6 +95,7 @@ function renderPanel(
         queryClient: props.queryClient ?? createMockQueryClient(),
         commandClient: props.commandClient ?? createMockCommandClient(),
         initialJobs: props.initialJobs ?? SAMPLE_JOBS,
+        initialWorker: props.initialWorker ?? WORKER,
       }),
     ),
   );
@@ -98,6 +110,10 @@ test("PrintQueuePanel lists ticket_no, Chinese status, and error", () => {
   assert.match(html, /失败/);
   assert.match(html, /打印机离线/);
   assert.match(html, /刷新/);
+  assert.match(html, /data-testid="print-worker-status"/);
+  assert.match(html, /打印工作器运行中/);
+  assert.match(html, /已完成 8/);
+  assert.match(html, /留存 7 个文件/);
 });
 
 test("PrintQueuePanel shows 重试 for failed and 补打 for done (not for queued)", () => {

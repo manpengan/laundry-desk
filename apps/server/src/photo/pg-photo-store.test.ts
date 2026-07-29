@@ -48,7 +48,10 @@ function createCapturingPool(): Readonly<{ pool: PgPool; queries: RecordedQuery[
       params?: readonly unknown[],
     ): Promise<{ rows: TRow[]; rowCount: number }> {
       queries.push(Object.freeze({ sql, params }));
-      if (sql.includes("INSERT INTO garment_photos")) {
+      if (
+        sql.includes("INSERT INTO garment_photos") ||
+        sql.includes("DELETE FROM garment_photos")
+      ) {
         return {
           rows: [
             {
@@ -128,6 +131,17 @@ test("PG photo store rejects a repository scope that differs from its server con
     () => store.listByOrder(DEMO_ORG_ID, "dddddddd-dddd-4ddd-8ddd-dddddddddddd", ORDER_ID),
     /does not match authenticated tenant/u,
   );
+});
+
+test("PG photo store deletes by tenant-scoped id and returns private cleanup metadata", async () => {
+  const { pool, queries } = createCapturingPool();
+  const store = createPgPhotoStore(pool, { orgId: DEMO_ORG_ID, storeId: DEMO_STORE_ID });
+
+  const deleted = await store.deleteById(DEMO_ORG_ID, DEMO_STORE_ID, PHOTO_ID);
+
+  assert.equal(deleted?.storage_key, STORAGE_KEY);
+  const query = queries.find((candidate) => candidate.sql.includes("DELETE FROM garment_photos"));
+  assert.deepEqual(query?.params, [DEMO_ORG_ID, DEMO_STORE_ID, PHOTO_ID]);
 });
 
 maybe("PG photo command persists metadata and audit through the command transaction", async () => {
@@ -221,6 +235,32 @@ maybe("PG photo command persists metadata and audit through the command transact
         created_by_staff_id: DEMO_STAFF_A_ID,
       },
     ]);
+
+    const deleted = await withPoolClient(appPool, (sql) =>
+      executeCommand(
+        sql,
+        TENANT,
+        "photo.delete",
+        { photo_id: registered.photo_id },
+        { registry, actor: ACTOR, chainHooks },
+      ),
+    );
+    assert.equal(deleted.ok, true, JSON.stringify(deleted));
+    const deletedCounts = await withPoolClient(appPool, (sql) =>
+      withTenantTransaction(sql, TENANT, async (tx) => {
+        const photos = await tx.query<{ count: string }>(
+          "SELECT count(*)::text AS count FROM garment_photos WHERE id = $1::uuid",
+          [registered.photo_id],
+        );
+        const audits = await tx.query<{ count: string }>(
+          "SELECT count(*)::text AS count FROM audit_log WHERE command = 'photo.delete' AND entity_id = $1",
+          [registered.photo_id],
+        );
+        return Object.freeze({ photos, audits });
+      }),
+    );
+    assert.equal(Number(deletedCounts.photos.rows[0]?.count), 0);
+    assert.equal(Number(deletedCounts.audits.rows[0]?.count), 1);
   } finally {
     await appPool.end();
     await adminPool.end();

@@ -21,6 +21,8 @@ function createBridge(): LaundryDesktopBridge {
     },
     photo: {
       upload: async () => ({ ok: false }),
+      read: async () => ({ ok: false }),
+      delete: async () => ({ ok: false }),
     },
     health: {
       get: async () => ({ ok: false }),

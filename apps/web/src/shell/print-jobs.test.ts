@@ -5,11 +5,14 @@ import { createMockQueryClient } from "../commands/query-client.js";
 import type { QueryPort } from "../commands/types.js";
 import {
   loadPrintJobs,
+  loadPrintQueue,
   loadPrintJobSummary,
+  parsePrintQueue,
   parsePrintJobsList,
   printJobStatusLabel,
   summarizePrintJobs,
   type PrintJobView,
+  type PrintWorkerView,
 } from "./print-jobs.js";
 
 const SAMPLE_JOBS: readonly PrintJobView[] = Object.freeze([
@@ -51,6 +54,16 @@ const SAMPLE_JOBS: readonly PrintJobView[] = Object.freeze([
     updated_at: 450,
   }),
 ]);
+const WORKER: PrintWorkerView = Object.freeze({
+  state: "running",
+  worker_id: "local-server",
+  processed_jobs: 12,
+  failed_jobs: 1,
+  last_cycle_at: 1_721_606_400,
+  last_error_code: null,
+  spool_artifacts: 12,
+  spool_bytes: 3_456,
+});
 
 test("summarizePrintJobs counts queued+printing and failed; ignores done", () => {
   const summary = summarizePrintJobs(SAMPLE_JOBS);
@@ -82,6 +95,23 @@ test("parsePrintJobsList accepts bus envelope and drops bad rows", () => {
   assert.equal(parsed[1]?.error, "纸尽");
 });
 
+test("parsePrintQueue validates the exact worker health boundary", () => {
+  assert.deepEqual(
+    parsePrintQueue({
+      execution: "executed",
+      result: { jobs: SAMPLE_JOBS, worker: WORKER },
+    }),
+    { jobs: SAMPLE_JOBS, worker: WORKER },
+  );
+  assert.equal(
+    parsePrintQueue({
+      execution: "executed",
+      result: { jobs: SAMPLE_JOBS, worker: { ...WORKER, spool_path: "/private/spool" } },
+    }),
+    null,
+  );
+});
+
 test("default mock query client returns empty print.jobs.list", async () => {
   const client = createMockQueryClient();
   const jobs = await loadPrintJobs(client, 20);
@@ -104,6 +134,7 @@ test("loadPrintJobSummary from mock with sample jobs drives indicator counts", a
   });
   const summary = await loadPrintJobSummary(client);
   assert.deepEqual(summary, { queued: 2, failed: 1 });
+  assert.deepEqual(await loadPrintQueue(client), { jobs: SAMPLE_JOBS });
 });
 
 test("loadPrintJobs returns null on failure (keep last summary)", async () => {

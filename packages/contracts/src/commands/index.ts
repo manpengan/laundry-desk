@@ -159,12 +159,14 @@ export {
   PHOTO_QUERY_NAMES,
   PHOTO_QUERIES,
   PhotoContentTypeSchema,
+  PhotoDeleteInputSchema,
   PhotoKindSchema,
   PhotoListByOrderInputSchema,
   PhotoRegisterInputSchema,
   PhotoRowSchema,
   PhotoUploadDataSchema,
   photoListByOrderQuery,
+  photoDeleteCommand,
   photoRegisterCommand,
 } from "./photo.js";
 export type {

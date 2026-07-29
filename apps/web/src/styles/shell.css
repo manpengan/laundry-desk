@@ -350,6 +350,18 @@
   font-size: 13px;
 }
 
+.ld-print-queue__worker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-leaf);
+  color: var(--lg-ink2);
+  font-size: 12px;
+}
+
 .ld-print-queue__list {
   list-style: none;
   margin: 0;
@@ -835,23 +847,23 @@
   background: var(--lg-bg, transparent);
   border: 1px solid var(--lg-hair);
   color: var(--lg-ink);
-  cursor: pointer;
+  cursor: default;
   text-align: left;
 }
 
-.ld-customer-detail__order-btn:hover:not(:disabled) {
-  background: var(--lg-leaf-hover);
-}
-
-.ld-customer-detail__order-btn:disabled {
-  cursor: default;
-}
-
-.ld-customer-detail__order-main {
+.ld-customer-detail__order-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 0;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--lg-ink);
+  cursor: pointer;
+}
+
+.ld-customer-detail__order-link:hover {
+  color: var(--lg-accent);
 }
 
 .ld-customer-detail__ticket {
@@ -871,6 +883,11 @@
 .ld-customer-detail__money-label {
   font-size: 12px;
   color: var(--lg-ink3);
+}
+
+.ld-customer-detail__print {
+  font-size: 12px;
+  color: var(--lg-ink2);
 }
 
 /* Workbench order history (M2 order.list) */
@@ -1124,16 +1141,107 @@
 .ld-order-detail__photo-thumb {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 4px;
-  width: 72px;
-  height: 72px;
-  padding: 8px;
+  width: 112px;
+  min-height: 132px;
+  padding: 6px;
   border-radius: var(--lg-radius-sm);
-  border: 1px dashed var(--lg-hair);
+  border: 1px solid var(--lg-hair);
   background: var(--lg-leaf);
   color: var(--lg-ink2);
   font-size: 11px;
+}
+
+.ld-photo-image__open {
+  display: block;
+  width: 100%;
+  height: 92px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: var(--lg-paper);
+  cursor: zoom-in;
+}
+
+.ld-photo-image__open img,
+.ld-photo-viewer__body > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.ld-photo-image__status,
+.ld-photo-image__error {
+  display: flex;
+  min-height: 92px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+  text-align: center;
+  color: var(--lg-ink3);
+}
+
+.ld-photo-image__error button {
+  border: 1px solid var(--lg-hair);
+  border-radius: 4px;
+  background: var(--lg-paper);
+  color: var(--lg-ink);
+}
+
+.ld-photo-viewer {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / 72%);
+}
+
+.ld-photo-viewer__body {
+  display: flex;
+  width: min(900px, 92vw);
+  height: min(720px, 82vh);
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--lg-radius);
+  background: var(--lg-paper);
+}
+
+.ld-photo-viewer__body > img {
+  min-height: 0;
+  flex: 1;
+}
+
+.ld-photo-viewer__actions,
+.ld-photo-viewer__confirm {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ld-photo-viewer__actions button {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-leaf);
+  color: var(--lg-ink);
+}
+
+.ld-photo-viewer__confirm {
+  flex: 1;
+  justify-content: flex-start;
+  color: var(--lg-danger);
+  font-size: 13px;
+}
+
+.ld-photo-viewer__close {
+  margin-left: auto;
 }
 
 .ld-order-detail__photo-kind {

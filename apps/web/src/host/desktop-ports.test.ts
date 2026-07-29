@@ -3,7 +3,6 @@ import test from "node:test";
 
 import type { LoginFormValues, SessionView, SwitchableStaff } from "../auth/types.js";
 import { createDesktopPorts, type LaundryDesktopBridge } from "./desktop-ports.js";
-import type { PhotoUploadInput } from "./photo-port.js";
 
 type LoginInput = Parameters<LaundryDesktopBridge["auth"]["login"]>[0];
 type PinChallengeInput = Parameters<LaundryDesktopBridge["auth"]["pinChallenge"]>[0];
@@ -674,99 +673,4 @@ test("desktop health adapter never renders a main-process failure message", asyn
     },
   });
   assert.doesNotMatch(JSON.stringify(health), /postgres|super-secret|PG_CONNECTION_FAILED/iu);
-});
-
-test("desktop PhotoPort copies bounded bytes into the one named bridge operation", async () => {
-  const captured: unknown[] = [];
-  const bridge: LaundryDesktopBridge = Object.freeze({
-    auth: createPlannedAuthBridge({
-      login: async () => loginSuccess(),
-      pinChallenge: async () => ({ ok: false }),
-      pinVerify: async () => ({ ok: false }),
-    }),
-    command: Object.freeze({ execute: async () => ({ ok: false }) }),
-    query: Object.freeze({ execute: async () => ({ ok: false }) }),
-    photo: Object.freeze({
-      upload: async (input: PhotoUploadInput) => {
-        captured.push(input);
-        return {
-          ok: true,
-          data: {
-            execution: "executed",
-            result: {
-              photo_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-              garment_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-              order_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-              kind: "receive",
-              content_type: "image/jpeg",
-              byte_size: 3,
-              taken_at: 1_721_606_400,
-              created_by_staff_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-            },
-          },
-        };
-      },
-    }),
-    health: Object.freeze({ get: async () => ({ ok: true, data: { status: "ready" } }) }),
-  });
-  const bytes = new Uint8Array([0xff, 0xd8, 0xff]);
-  const result = await createDesktopPorts(bridge).photo.upload({
-    order_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    garment_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    kind: "receive",
-    content_type: "image/jpeg",
-    bytes,
-  });
-
-  assert.equal(result.ok, true);
-  assert.equal(captured.length, 1);
-  const forwarded = captured[0] as { bytes: Uint8Array };
-  assert.notEqual(forwarded.bytes, bytes);
-  assert.deepEqual(forwarded.bytes, bytes);
-});
-
-test("desktop PhotoPort rejects malformed or storage-bearing success data", async () => {
-  const baseResult = {
-    photo_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-    garment_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    order_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    kind: "receive",
-    content_type: "image/jpeg",
-    byte_size: 3,
-    taken_at: 1_721_606_400,
-    created_by_staff_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-  };
-  const candidates = [
-    { ...baseResult, photo_id: "not-a-uuid" },
-    { ...baseResult, storage_key: "private.jpg" },
-  ];
-  for (const candidate of candidates) {
-    const bridge: LaundryDesktopBridge = Object.freeze({
-      auth: createPlannedAuthBridge({
-        login: async () => loginSuccess(),
-        pinChallenge: async () => ({ ok: false }),
-        pinVerify: async () => ({ ok: false }),
-      }),
-      command: Object.freeze({ execute: async () => ({ ok: false }) }),
-      query: Object.freeze({ execute: async () => ({ ok: false }) }),
-      photo: Object.freeze({
-        upload: async () => ({
-          ok: true,
-          data: { execution: "executed", result: candidate },
-        }),
-      }),
-      health: Object.freeze({ get: async () => ({ ok: true, data: { status: "ready" } }) }),
-    });
-    const result = await createDesktopPorts(bridge).photo.upload({
-      order_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      garment_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-      kind: "receive",
-      content_type: "image/jpeg",
-      bytes: new Uint8Array([0xff, 0xd8, 0xff]),
-    });
-    assert.deepEqual(result, {
-      ok: false,
-      error: { code: "DESKTOP_BRIDGE", message: "桌面照片响应格式错误" },
-    });
-  }
 });

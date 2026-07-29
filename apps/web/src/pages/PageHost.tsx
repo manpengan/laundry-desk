@@ -101,6 +101,7 @@ export function PageHost({
       <CustomersPage
         queryClient={queryClient}
         commandClient={commandClient}
+        {...(photoPort === undefined ? {} : { photoPort })}
         onOpenPickup={(orderId) => {
           setPickupOrderId(orderId);
           setPickupLookupKey(undefined);

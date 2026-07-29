@@ -23,6 +23,10 @@ import {
   DesktopPinChallengeResultSchema,
   DesktopPinVerifyInputSchema,
   DesktopPinVerifyResultSchema,
+  DesktopPhotoDeleteInputSchema,
+  DesktopPhotoDeleteResultSchema,
+  DesktopPhotoReadInputSchema,
+  DesktopPhotoReadResultSchema,
   DesktopPhotoUploadInputSchema,
   DesktopPhotoUploadResultSchema,
   DesktopQueryExecuteInputSchema,
@@ -138,7 +142,7 @@ describe("desktop operation registry", () => {
     ]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.command)).toEqual(["execute"]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.query)).toEqual(["execute"]);
-    expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.photo)).toEqual(["upload"]);
+    expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.photo)).toEqual(["upload", "read", "delete"]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.health)).toEqual(["get"]);
     expect(PUBLIC_DESKTOP_OPERATION_SCHEMAS).toBe(DESKTOP_OPERATION_SCHEMAS);
 
@@ -362,11 +366,12 @@ describe("desktop auth and health schemas", () => {
 describe("desktop command/query schemas", () => {
   it("derives command and query names from the real M2 registries", async () => {
     expect(
-      M2_CONTRACT_COMMAND_NAMES.filter((name) => name !== "photo.register").every(
-        (name) => DesktopCommandNameSchema.safeParse(name).success,
-      ),
+      M2_CONTRACT_COMMAND_NAMES.filter(
+        (name) => name !== "photo.register" && name !== "photo.delete",
+      ).every((name) => DesktopCommandNameSchema.safeParse(name).success),
     ).toBe(true);
     expect(DesktopCommandNameSchema.safeParse("photo.register").success).toBe(false);
+    expect(DesktopCommandNameSchema.safeParse("photo.delete").success).toBe(false);
     expect(
       M2_CONTRACT_QUERY_NAMES.every((name) => DesktopQueryNameSchema.safeParse(name).success),
     ).toBe(true);
@@ -391,6 +396,7 @@ describe("desktop command/query schemas", () => {
 
   it("validates bounded photo bytes without accepting transport controls", () => {
     const input = {
+      upload_id: ids.confirm,
       order_id: ids.order,
       garment_id: ids.target,
       kind: "receive",
@@ -404,6 +410,20 @@ describe("desktop command/query schemas", () => {
         bytes: new Uint8Array(DESKTOP_MAX_PHOTO_BYTES + 1),
       }).success,
     ).toBe(false);
+    expect(
+      DesktopPhotoReadInputSchema.parse({
+        photo_id: ids.target,
+        variant: "thumbnail",
+      }),
+    ).toEqual({ photo_id: ids.target, variant: "thumbnail" });
+    expect(
+      DesktopPhotoDeleteInputSchema.parse({
+        photo_id: ids.target,
+        delete_id: ids.proof,
+      }),
+    ).toEqual({ photo_id: ids.target, delete_id: ids.proof });
+    expect(DesktopPhotoReadResultSchema).toBeInstanceOf(z.ZodType);
+    expect(DesktopPhotoDeleteResultSchema).toBeInstanceOf(z.ZodType);
     expect(
       DesktopPhotoUploadInputSchema.safeParse({
         ...input,

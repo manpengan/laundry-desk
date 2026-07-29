@@ -36,6 +36,9 @@ export const PhotoRegisterInputSchema = z.strictObject({
 export const PhotoListByOrderInputSchema = z.strictObject({
   order_id: z.uuid(),
 });
+export const PhotoDeleteInputSchema = z.strictObject({
+  photo_id: z.uuid(),
+});
 
 /** Public metadata row. Storage keys and digests are deliberately absent. */
 export const PhotoRowSchema = z.strictObject({
@@ -66,6 +69,7 @@ export type PhotoListByOrderResult = Readonly<{
 
 type RegisterInput = typeof PhotoRegisterInputSchema;
 type ListInput = typeof PhotoListByOrderInputSchema;
+type DeleteInput = typeof PhotoDeleteInputSchema;
 
 /** Internal metadata append after the trusted upload route installs bytes. */
 export const photoRegisterCommand: CommandDefinition<RegisterInput> = defineCommand({
@@ -79,6 +83,24 @@ export const photoRegisterCommand: CommandDefinition<RegisterInput> = defineComm
   invariants: ["rbac.order_write"],
   idempotent: false,
   sideEffects: ["photo.registered", "audit.photo_event"],
+  offline_mode: "denied",
+  data_classification: "internal",
+  input_redaction: [],
+  result_redaction: [],
+});
+
+/** Internal metadata removal after the dedicated authenticated route resolves the private file. */
+export const photoDeleteCommand: CommandDefinition<DeleteInput> = defineCommand({
+  name: "photo.delete",
+  version: "0.4.0",
+  description: "Delete one garment photo through the trusted photo route.",
+  description_llm:
+    "Internal only. Remove one store-scoped photo metadata row with audit; file cleanup remains server-owned.",
+  input: PhotoDeleteInputSchema,
+  risk: "R2",
+  invariants: ["rbac.order_write"],
+  idempotent: true,
+  sideEffects: ["photo.deleted", "audit.photo_event"],
   offline_mode: "denied",
   data_classification: "internal",
   input_redaction: [],
@@ -104,11 +126,11 @@ export const photoListByOrderQuery: QueryDefinition<ListInput> = defineQuery({
   max_result_rows: 100,
 });
 
-export const PHOTO_COMMANDS = Object.freeze([photoRegisterCommand] as const);
+export const PHOTO_COMMANDS = Object.freeze([photoRegisterCommand, photoDeleteCommand] as const);
 
 export const PHOTO_COMMAND_NAMES = Object.freeze(
   PHOTO_COMMANDS.map((command) => command.name),
-) as readonly ["photo.register"];
+) as readonly ["photo.register", "photo.delete"];
 
 export const PHOTO_QUERIES = Object.freeze([photoListByOrderQuery] as const);
 

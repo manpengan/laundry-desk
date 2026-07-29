@@ -7,9 +7,10 @@ import { Button, Dialog, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useState } from "react";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import {
-  loadPrintJobs,
+  loadPrintQueue,
   printJobStatusLabel,
   type PrintJobView,
+  type PrintWorkerView,
   PRINT_JOBS_LIST_LIMIT,
 } from "./print-jobs.js";
 
@@ -21,6 +22,7 @@ export type PrintQueuePanelProps = {
   commandClient: CommandPort;
   /** Injected jobs skip initial fetch (tests / SSR). */
   initialJobs?: readonly PrintJobView[];
+  initialWorker?: PrintWorkerView;
 };
 
 type RequeueAction = "retry" | "reprint";
@@ -39,9 +41,11 @@ export function PrintQueuePanel({
   queryClient,
   commandClient,
   initialJobs,
+  initialWorker,
 }: PrintQueuePanelProps) {
   const toast = useToast();
   const [jobs, setJobs] = useState<readonly PrintJobView[]>(initialJobs ?? []);
+  const [worker, setWorker] = useState<PrintWorkerView | undefined>(initialWorker);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyJobId, setBusyJobId] = useState<string | null>(null);
@@ -49,23 +53,25 @@ export function PrintQueuePanel({
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const next = await loadPrintJobs(queryClient, PRINT_JOBS_LIST_LIMIT);
+    const next = await loadPrintQueue(queryClient, PRINT_JOBS_LIST_LIMIT);
     setLoading(false);
     if (next === null) {
       setError("无法加载打印队列");
       return;
     }
-    setJobs(next);
+    setJobs(next.jobs);
+    setWorker(next.worker);
   }, [queryClient]);
 
   useEffect(() => {
     if (!open) return;
     if (initialJobs !== undefined) {
       setJobs(initialJobs);
+      setWorker(initialWorker);
       return;
     }
     void refresh();
-  }, [open, initialJobs, refresh]);
+  }, [open, initialJobs, initialWorker, refresh]);
 
   const onRequeue = useCallback(
     async (job: PrintJobView, action: RequeueAction) => {
@@ -110,6 +116,18 @@ export function PrintQueuePanel({
       }
     >
       <div className="ld-print-queue" data-testid="print-queue-panel">
+        {worker !== undefined ? (
+          <div className="ld-print-queue__worker" data-testid="print-worker-status">
+            <strong>{worker.state === "running" ? "打印工作器运行中" : "打印工作器已停止"}</strong>
+            <span>
+              已完成 {worker.processed_jobs} · 失败 {worker.failed_jobs} · 留存{" "}
+              {worker.spool_artifacts} 个文件 / {worker.spool_bytes} B
+            </span>
+            {worker.last_error_code !== null ? (
+              <span className="ld-print-queue__job-error">{worker.last_error_code}</span>
+            ) : null}
+          </div>
+        ) : null}
         {error ? (
           <p className="ld-print-queue__error" role="alert">
             {error}

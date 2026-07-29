@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0023", () => {
+  it("ships formal SQL migrations ordered 0001 → 0024", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -35,6 +35,7 @@ describe("packages/db migration file inventory", () => {
       "0021_print_job_lease.sql",
       "0022_print_job_artifact.sql",
       "0023_photo_file_integrity.sql",
+      "0024_photo_delete_grant.sql",
     ]);
   });
 
@@ -70,6 +71,7 @@ describe("packages/db migration file inventory", () => {
       "0021",
       "0022",
       "0023",
+      "0024",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -224,6 +226,12 @@ describe("packages/db migration file inventory", () => {
     expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS content_sha256 text/iu);
     expect(sql).toMatch(/garment_photos_content_sha256_chk/iu);
     expect(sql).toMatch(/garment_photos_storage_key_uidx/iu);
+  });
+
+  it("grants only the additional photo mutation required by audited deletion", () => {
+    const sql = readFileSync(join(migrationsDir, "0024_photo_delete_grant.sql"), "utf8");
+    expect(sql).toMatch(/GRANT DELETE ON TABLE garment_photos TO laundry_app/iu);
+    expect(sql).not.toMatch(/GRANT[^;]*(?:UPDATE|TRUNCATE)[^;]*garment_photos/iu);
   });
 
   it("adds customer pickup codes and bounded name-prefix lookup indexes", () => {

@@ -108,15 +108,50 @@ Fastify 容器。目录和文件分别强制为 `0700` / `0600`，文件名由�
 ## 照片工作流
 
 订单必须先包含至少一件衣物。打开订单详情后，可选择 JPEG、PNG 或 WebP 文件并上传；
-单文件上限 8 MiB。服务端校验真实文件头、租户和订单/衣物关系，成功后重新打开详情仍
-可看到持久化的照片记录数。当前 UI 尚未提供缩略图和删除操作。
+单文件上限 8 MiB。服务端完整解码图像、核对声明格式、限制像素和帧数，并重新编码去除
+EXIF 等元数据后才落盘。上传使用稳定 `upload_id`，网络失败后界面可用同一 ID 安全重试；
+同一 ID 携带不同内容会拒绝。详情提供缩略图、原图查看、加载重试和二次确认删除，删除
+元数据与审计在同一数据库事务内完成，随后清理私有文件。
 
 上传与下载只走受认证、CSRF 保护的固定照片路由。浏览器通过 `PhotoPort` 使用内存中的
 access token；macOS 渲染进程只能调用专用的 `desktop:photo:upload`，不能选择 URL、
 HTTP 方法、Header、Cookie 或设备身份。
 上传成功结果在 HTTP、Electron IPC 与 React 端都按严格照片元数据契约校验，私有
-`storage_key` 或非法 ID 不能进入渲染进程。列表读取失败时界面显示可重试错误，不会
-把故障伪装成“暂无照片”。
+`storage_key` 或非法 ID 不能进入渲染进程。macOS 还使用独立的
+`desktop:photo:read` / `desktop:photo:delete` 固定能力。列表或二进制读取失败时界面
+显示可重试错误，不会把故障伪装成“暂无照片”。
+
+## 打印工作器
+
+配置 `LAUNDRY_PRINT_SPOOL_DIR` 后，本地服务会在 HTTP 监听成功后启动租约打印工作器，
+停止服务时等待当前周期结束后再关闭 PostgreSQL。工作器按批次领取任务，失败只记录稳定
+错误码；队列界面显示运行状态、累计成功/失败和 spool 留存数量/字节。spool 只删除自己
+生成的文件，并同时受数量和总字节上限约束。失败任务的“重试”和已完成任务的“补打”
+都会创建新任务，不复活终态记录。
+
+客户详情会聚合最近订单、欠款余额和打印状态；点击订单可继续查看照片及柜台操作。
+
+## 备份、恢复和诊断
+
+数据库备份写入私有配置目录下的 `backups/`（目录 `0700`、文件 `0600`），并生成绑定
+实例标识、字节数和 SHA-256 的 manifest：
+
+```bash
+pnpm local:backup
+pnpm local:diagnose
+```
+
+恢复是破坏性操作，只接受该实例 `backups/` 内由工具生成的文件，并要求显式重复输出的
+SHA-256。恢复前会自动再做一份 `pre-restore` 安全备份，随后停止 API，在单一数据库事务
+中执行恢复，成功后重新启动 API：
+
+```bash
+pnpm local:restore -- --file "/absolute/path/to/backup.dump" \
+  --confirm-sha256 "<local:backup 输出的 64 位摘要>"
+```
+
+当前备份范围是 PostgreSQL；照片保存在独立私有目录，不会被数据库恢复命令覆盖。诊断
+只输出实例标识、服务就绪状态、可用空间和私有目录统计，不输出配置 secret。
 
 ## 一键验收
 
@@ -151,17 +186,21 @@ reset 只接受默认 `laundry-desk` project，只删除
 
 ## 相关实现
 
-| 路径                                  | 作用                          |
-| ------------------------------------- | ----------------------------- |
-| `tools/local/config.mjs`              | 仓库外配置生成、权限和校验    |
-| `tools/local/up.mjs`                  | PG、migration、bootstrap、API |
-| `tools/local/down.mjs`                | 停止服务并保留数据卷          |
-| `tools/local/reset.mjs`               | 受确认保护的默认卷删除        |
-| `tools/compose/docker-compose.yml`    | loopback-only 服务拓扑        |
-| `apps/server/src/local/profile.ts`    | 通用 `local/main` profile     |
-| `apps/server/src/local/bootstrap.ts`  | profile/schema readiness      |
-| `apps/server/src/http/main.ts`        | Fastify 入口                  |
-| `apps/server/src/photo/file-store.ts` | 私有照片文件安装与完整性校验  |
+| 路径                                         | 作用                          |
+| -------------------------------------------- | ----------------------------- |
+| `tools/local/config.mjs`                     | 仓库外配置生成、权限和校验    |
+| `tools/local/up.mjs`                         | PG、migration、bootstrap、API |
+| `tools/local/down.mjs`                       | 停止服务并保留数据卷          |
+| `tools/local/reset.mjs`                      | 受确认保护的默认卷删除        |
+| `tools/local/backup.mjs`                     | 私有 PostgreSQL 备份          |
+| `tools/local/restore.mjs`                    | 校验、预备份与事务恢复        |
+| `tools/local/diagnose.mjs`                   | 无 secret 的本地诊断          |
+| `tools/compose/docker-compose.yml`           | loopback-only 服务拓扑        |
+| `apps/server/src/local/profile.ts`           | 通用 `local/main` profile     |
+| `apps/server/src/local/bootstrap.ts`         | profile/schema readiness      |
+| `apps/server/src/http/main.ts`               | Fastify 入口                  |
+| `apps/server/src/photo/file-store.ts`        | 私有照片文件安装与完整性校验  |
+| `apps/server/src/print/worker-controller.ts` | 打印工作器生命周期与健康      |
 
 单元测试不要求 Docker：
 

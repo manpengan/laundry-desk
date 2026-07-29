@@ -85,6 +85,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "print.ticket.reprint",
   "shift.close",
   "photo.register",
+  "photo.delete",
   "catalog.item.upsert",
 ];
 

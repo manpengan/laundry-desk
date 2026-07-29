@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import type { FileSpool } from "./file-spool.js";
+import type { PrintWorkerController } from "./worker-controller.js";
 import { runPrintJob } from "./worker.js";
 import { HandlerCommandError } from "../bus/types.js";
 import { processXp58PrintJob, type ProcessXp58Result } from "./process-xp58.js";
@@ -26,6 +27,8 @@ export type PrintHandlerDeps = Readonly<{
   spool?: FileSpool;
   /** Identifies this server as the printing worker in the job lease. */
   workerId?: string;
+  /** Runtime-owned background worker; handlers expose only its safe status view. */
+  worker?: PrintWorkerController;
 }>;
 
 const KIND_SET: ReadonlySet<string> = new Set(["xp58", "dl206", "gp3120"]);
@@ -341,6 +344,7 @@ function listHandler(deps: PrintHandlerDeps): CommandHandler {
     return Object.freeze({
       result: Object.freeze({
         jobs: Object.freeze(jobs.map((j) => Object.freeze({ ...j }))),
+        ...(deps.worker === undefined ? {} : { worker: deps.worker.status() }),
       }),
     });
   };

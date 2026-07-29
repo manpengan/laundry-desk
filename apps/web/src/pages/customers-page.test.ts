@@ -13,6 +13,7 @@ import {
   type CustomerRowView,
 } from "./CustomersPage.js";
 import type { OrderListRowView } from "./OrdersList.js";
+import type { PrintJobView } from "../shell/print-jobs.js";
 
 const SAMPLE_CUSTOMER: CustomerRowView = Object.freeze({
   customer_id: "c1111111-1111-4111-8111-111111111111",
@@ -35,6 +36,15 @@ const SAMPLE_ORDER: OrderListRowView = Object.freeze({
   balance_cents: 2500,
   created_at: 1_721_606_400,
   garment_count: 2,
+});
+const SAMPLE_PRINT: PrintJobView = Object.freeze({
+  job_id: "b1111111-1111-4111-8111-111111111111",
+  kind: "xp58",
+  status: "done",
+  order_id: SAMPLE_ORDER.order_id,
+  ticket_no: SAMPLE_ORDER.ticket_no ?? "挂单",
+  created_at: 1_721_606_400,
+  updated_at: 1_721_606_410,
 });
 
 test("parseCustomerRows accepts documented result shape", () => {
@@ -131,6 +141,7 @@ test("CustomersPage SSR detail shell shows profile + history orders", () => {
         autoLoad: false,
         initialSelected: SAMPLE_CUSTOMER,
         initialOrders: Object.freeze([SAMPLE_ORDER]),
+        initialPrintJobs: Object.freeze([SAMPLE_PRINT]),
         onOpenPickup: () => undefined,
       }),
     ),
@@ -148,6 +159,8 @@ test("CustomersPage SSR detail shell shows profile + history orders", () => {
   assert.match(html, /历史订单/);
   assert.match(html, /20240722-0001/);
   assert.match(html, /余额/);
+  assert.match(html, /打印：已完成/);
+  assert.match(html, /去取衣/);
   assert.doesNotMatch(html, /#ff0000/i);
   assert.doesNotMatch(html, /rgb\(/i);
 });

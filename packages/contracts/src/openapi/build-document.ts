@@ -314,7 +314,7 @@ const collectPathsAndSchemas = (): {
   }
 
   for (const definition of [...M1_FIRST_WAVE_DEFINITIONS, ...M2_CONTRACT_DEFINITIONS]) {
-    if (definition.name === "photo.register") continue;
+    if (definition.name === "photo.register" || definition.name === "photo.delete") continue;
     const schemaId = definitionInputSchemaId(definition.kind, definition.name);
     schemas[schemaId] = zodToOpenApiSchema(definition.input);
     const path = busPathFor(definition.kind, definition.name);

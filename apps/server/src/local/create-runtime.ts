@@ -26,6 +26,7 @@ import { createMemoryPrintJobStore } from "../print/memory-store.js";
 import type { PrintHandlerDeps } from "../print/handlers.js";
 import { createPgPrintJobStore } from "../print/pg-print-store.js";
 import { createFileSpool } from "../print/file-spool.js";
+import { createPrintWorkerController } from "../print/worker-controller.js";
 import { createPgOrderStore } from "../order/pg-order-store.js";
 import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
@@ -346,6 +347,18 @@ export async function createPgLocalRuntime(
     orgId: LOCAL_PROFILE.orgId,
     storeId: LOCAL_PROFILE.storeId,
   });
+  const printStore = createPgPrintJobStore(appPool, {
+    orgId: LOCAL_PROFILE.orgId,
+    storeId: LOCAL_PROFILE.storeId,
+  });
+  const printWorker =
+    printSpool === null
+      ? null
+      : createPrintWorkerController({
+          store: printStore,
+          spool: printSpool,
+          workerId: "local-server",
+        });
   return Object.freeze({
     mode: "pg" as const,
     identity: buildIdentityDeps(
@@ -379,13 +392,16 @@ export async function createPgLocalRuntime(
       }),
     }),
     print: Object.freeze({
-      store: createPgPrintJobStore(appPool, {
-        orgId: LOCAL_PROFILE.orgId,
-        storeId: LOCAL_PROFILE.storeId,
-      }),
+      store: printStore,
       // ADR-14 defers real hardware; when a spool is configured the mock file
       // printer becomes the first-party print path.
-      ...(printSpool === null ? {} : { spool: printSpool, workerId: "local-server" }),
+      ...(printSpool === null
+        ? {}
+        : {
+            spool: printSpool,
+            workerId: "local-server",
+            ...(printWorker === null ? {} : { worker: printWorker }),
+          }),
     }),
     stats: Object.freeze({ source: statsSource, timeZone: LOCAL_PROFILE.timezone }),
     customer: Object.freeze({ store: customerStore }),

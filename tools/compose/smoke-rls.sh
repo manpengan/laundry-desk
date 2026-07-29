@@ -225,7 +225,7 @@ require_tables() {
     found="$(psql_app -c "SELECT to_regclass('public.${table}')::text")"
     [[ "${found}" == "${table}" ]] || die "missing formal table: ${table}"
   done
-  pass "all formal migrations (0001–0018) are present"
+  pass "all formal migrations (0001–0024) are present"
 }
 
 assert_default_closed() {

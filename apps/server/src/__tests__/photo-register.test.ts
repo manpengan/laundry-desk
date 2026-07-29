@@ -55,14 +55,64 @@ function buildBus(fixedNow = () => FIXED_NOW) {
   return { registry, queryRegistry, chainHooks, pendingStore, photoStore };
 }
 
-test("command registry includes photo.register when photo deps present", () => {
+test("command registry includes internal photo mutations when photo deps present", () => {
   const { registry, queryRegistry } = buildBus();
   assert.ok(registry.names().includes("photo.register"));
+  assert.ok(registry.names().includes("photo.delete"));
   assert.ok(queryRegistry.names().includes("photo.list_by_order"));
   assert.ok(registry.get("photo.register")?.handler);
+  assert.ok(registry.get("photo.delete")?.handler);
   assert.ok(queryRegistry.get("photo.list_by_order")?.handler);
   assert.equal(registry.get("photo.register")?.definition.risk, "R2");
+  assert.equal(registry.get("photo.delete")?.definition.risk, "R2");
   assert.equal(queryRegistry.get("photo.list_by_order")?.definition.risk, "R1");
+});
+
+test("photo.delete removes metadata and returns only the public audited row", async () => {
+  const { registry, queryRegistry, chainHooks, pendingStore } = buildBus();
+  const sql = new FakeSqlClient();
+  const registered = await executeCommand(
+    sql,
+    TENANT,
+    "photo.register",
+    {
+      order_id: ORDER_ID,
+      garment_id: GARMENT_ID,
+      kind: "receive",
+      storage_key: STORAGE_KEY,
+      content_type: "image/jpeg",
+      content_sha256: CONTENT_SHA256,
+      byte_size: 2048,
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(registered.ok, true, JSON.stringify(registered));
+  if (!registered.ok) return;
+  const photoId = (registered.data.result as { photo_id: string }).photo_id;
+
+  const deleted = await executeCommand(
+    sql,
+    TENANT,
+    "photo.delete",
+    { photo_id: photoId },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+
+  assert.equal(deleted.ok, true, JSON.stringify(deleted));
+  if (!deleted.ok) return;
+  assert.equal((deleted.data.result as { photo_id: string }).photo_id, photoId);
+  assert.equal("storage_key" in (deleted.data.result as object), false);
+  const listed = await executeQuery(
+    sql,
+    TENANT,
+    "photo.list_by_order",
+    { order_id: ORDER_ID },
+    { registry: queryRegistry, actor: CLERK },
+  );
+  assert.equal(listed.ok, true);
+  if (listed.ok) {
+    assert.deepEqual((listed.data.result as { photos: unknown[] }).photos, []);
+  }
 });
 
 test("photo.list_by_order returns empty list when none registered", async () => {

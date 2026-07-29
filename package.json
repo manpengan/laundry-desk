@@ -47,6 +47,9 @@
     "local:mac:build": "pnpm --filter @laundry/edge-agent package:mac",
     "local:mac:e2e": "pnpm exec playwright test -c apps/edge-agent/playwright.electron.config.ts",
     "local:acceptance": "node tools/local/acceptance.mjs",
+    "local:backup": "node tools/local/backup.mjs",
+    "local:restore": "node tools/local/restore.mjs",
+    "local:diagnose": "node tools/local/diagnose.mjs",
     "local:up": "node tools/local/up.mjs",
     "local:down": "node tools/local/down.mjs",
     "local:reset": "node tools/local/reset.mjs"

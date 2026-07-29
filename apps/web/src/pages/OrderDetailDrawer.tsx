@@ -11,9 +11,12 @@ import { MAX_PHOTO_BYTES, type PhotoContentType, type PhotoPort } from "../host/
 import { DangerConfirmDialog } from "./DangerConfirmDialog.js";
 import { OrderDetailContent } from "./OrderDetailContent.js";
 import { PaymentCollectionDialog } from "./PaymentCollectionDialog.js";
+import { parsePhotoList, unwrapPhotoResult } from "./photo-list.js";
+import type { PhotoMetaRow } from "./photo-list.js";
 import { parseOrderGetResult, unwrapCommandResult, type OrderGetResult } from "./order-form.js";
 
 export { OrderDetailContent, type OrderDetailContentProps } from "./OrderDetailContent.js";
+export { parsePhotoList, unwrapPhotoResult, type PhotoMetaRow } from "./photo-list.js";
 
 export type OrderDetailDrawerProps = {
   open: boolean;
@@ -32,62 +35,14 @@ export type OrderDetailLoadState =
   | Readonly<{ status: "error"; message: string }>
   | Readonly<{ status: "ready"; order: OrderGetResult }>;
 
-export type PhotoMetaRow = Readonly<{
-  photo_id: string;
-  garment_id: string;
-  order_id: string;
-  kind: string;
-  content_type: string;
-  byte_size: number;
-  taken_at: number;
-}>;
-
 type CancelState =
   Readonly<{ status: "idle" }> | Readonly<{ status: "server_confirmation"; confirmRef: string }>;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function asInt(value: unknown): number | null {
-  return typeof value === "number" && Number.isSafeInteger(value) ? value : null;
-}
-
-/** Unwrap bus `{ execution, result }` or bare result. */
-export function unwrapPhotoResult(data: unknown): unknown {
-  if (!isRecord(data)) return data;
-  if ("result" in data) return data.result;
-  return data;
-}
-
-export function parsePhotoList(value: unknown): readonly PhotoMetaRow[] | null {
-  if (!isRecord(value)) return null;
-  if (!Array.isArray(value.photos)) return null;
-  const rows: PhotoMetaRow[] = [];
-  for (const item of value.photos) {
-    if (!isRecord(item)) return null;
-    if (typeof item.photo_id !== "string") return null;
-    if (typeof item.garment_id !== "string") return null;
-    if (typeof item.order_id !== "string") return null;
-    if (typeof item.kind !== "string") return null;
-    if (typeof item.content_type !== "string") return null;
-    const byteSize = asInt(item.byte_size);
-    const takenAt = asInt(item.taken_at);
-    if (byteSize === null || takenAt === null || byteSize < 1) return null;
-    rows.push(
-      Object.freeze({
-        photo_id: item.photo_id,
-        garment_id: item.garment_id,
-        order_id: item.order_id,
-        kind: item.kind,
-        content_type: item.content_type,
-        byte_size: byteSize,
-        taken_at: takenAt,
-      }),
-    );
-  }
-  return Object.freeze(rows);
-}
+type FailedPhotoUpload = Readonly<{
+  file: File;
+  uploadId: ReturnType<typeof crypto.randomUUID>;
+  message: string;
+}>;
 
 export function OrderDetailDrawer({
   open,
@@ -104,6 +59,7 @@ export function OrderDetailDrawer({
   const [photoLoading, setPhotoLoading] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [failedPhotoUpload, setFailedPhotoUpload] = useState<FailedPhotoUpload | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelState, setCancelState] = useState<CancelState>({ status: "idle" });
@@ -182,6 +138,7 @@ export function OrderDetailDrawer({
       setPhotos([]);
       setPhotoLoading(false);
       setPhotoError(null);
+      setFailedPhotoUpload(null);
       return;
     }
     void loadOrder(orderId);
@@ -199,7 +156,7 @@ export function OrderDetailDrawer({
   }, [onPickup, orderId, toast]);
 
   const handleRegisterPhoto = useCallback(
-    async (file: File) => {
+    async (file: File, uploadId = crypto.randomUUID()) => {
       if (photoPort === undefined) {
         toast.push("照片上传不可用", "error");
         return;
@@ -221,6 +178,7 @@ export function OrderDetailDrawer({
       setPhotoBusy(true);
       try {
         const res = await photoPort.upload({
+          upload_id: uploadId,
           order_id: orderId,
           garment_id: garment.garment_id,
           kind: "receive",
@@ -228,19 +186,46 @@ export function OrderDetailDrawer({
           bytes: new Uint8Array(await file.arrayBuffer()),
         });
         if (!res.ok) {
-          toast.push(res.error.message ?? res.error.code, "error");
+          const message = res.error.message ?? res.error.code;
+          setFailedPhotoUpload({ file, uploadId, message });
+          toast.push(message, "error");
           return;
         }
+        setFailedPhotoUpload(null);
         toast.push("照片已安全保存", "success");
         const req = requestRef.current;
         await loadPhotos(orderId, req);
       } catch {
+        setFailedPhotoUpload({ file, uploadId, message: "上传照片失败" });
         toast.push("上传照片失败", "error");
       } finally {
         setPhotoBusy(false);
       }
     },
     [load, loadPhotos, orderId, photoPort, toast],
+  );
+
+  const handleDeletePhoto = useCallback(
+    async (photoId: string): Promise<boolean> => {
+      if (photoPort === undefined || orderId === null) return false;
+      setPhotoBusy(true);
+      try {
+        const result = await photoPort.remove(photoId, crypto.randomUUID());
+        if (!result.ok) {
+          toast.push(result.error.message ?? result.error.code, "error");
+          return false;
+        }
+        toast.push("照片已删除，操作已记录审计", "success");
+        await loadPhotos(orderId, requestRef.current);
+        return true;
+      } catch {
+        toast.push("删除照片失败", "error");
+        return false;
+      } finally {
+        setPhotoBusy(false);
+      }
+    },
+    [loadPhotos, orderId, photoPort, toast],
   );
 
   const closeCancel = useCallback(() => {
@@ -310,13 +295,24 @@ export function OrderDetailDrawer({
             photos={photos}
             photoLoading={photoLoading}
             photoError={photoError}
+            uploadError={failedPhotoUpload?.message ?? null}
             onRetryPhotos={() => {
               if (orderId !== null) void loadPhotos(orderId, requestRef.current);
             }}
             {...(photoPort !== undefined
-              ? { onRegisterPhoto: (file: File) => void handleRegisterPhoto(file) }
+              ? {
+                  onRegisterPhoto: (file: File) => void handleRegisterPhoto(file),
+                  onDeletePhoto: handleDeletePhoto,
+                }
               : {})}
+            {...(failedPhotoUpload === null
+              ? {}
+              : {
+                  onRetryUpload: () =>
+                    void handleRegisterPhoto(failedPhotoUpload.file, failedPhotoUpload.uploadId),
+                })}
             registerBusy={photoBusy}
+            {...(photoPort === undefined ? {} : { photoPort })}
           />
         ) : null}
 

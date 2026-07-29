@@ -172,6 +172,56 @@ test("shutdown drains Fastify before ending the PostgreSQL pool", async () => {
   assert.deepEqual(calls, ["app.close:start", "app.close:end", "pool.end"]);
 });
 
+test("configured print worker starts after listen and stops before the pool", async () => {
+  const calls: string[] = [];
+  const base = await runtimeWithPool(async () => {
+    calls.push("pool.end");
+  });
+  const runtime: LocalRuntime = Object.freeze({
+    ...base,
+    print: Object.freeze({
+      ...base.print,
+      worker: Object.freeze({
+        start: () => {
+          calls.push("worker.start");
+        },
+        stop: async () => {
+          calls.push("worker.stop");
+        },
+        runNow: async () => undefined,
+        status: () =>
+          Object.freeze({
+            state: "running" as const,
+            worker_id: "test-worker",
+            processed_jobs: 0,
+            failed_jobs: 0,
+            last_cycle_at: null,
+            last_error_code: null,
+            spool_artifacts: 0,
+            spool_bytes: 0,
+          }),
+      }),
+    }),
+  });
+  const app = fakeApp({
+    listen: async () => {
+      calls.push("app.listen");
+      return "http://127.0.0.1:8787" as never;
+    },
+    close: async () => {
+      calls.push("app.close");
+    },
+  });
+
+  const started = await startLocalHttpServer(
+    ENV,
+    dependencies(runtime, async () => app),
+  );
+  assert.deepEqual(calls, ["app.listen", "worker.start"]);
+  await started.shutdown();
+  assert.deepEqual(calls, ["app.listen", "worker.start", "app.close", "worker.stop", "pool.end"]);
+});
+
 test("startup cleanup reports every resource failure without replacing the startup cause", async () => {
   const appCleanup = new TypeError("app cleanup failed");
   const poolCleanup = new RangeError("pool cleanup failed");

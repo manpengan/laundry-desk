@@ -26,6 +26,10 @@ const HEALTH_URL = "http://127.0.0.1:8787/health";
 const HEALTH_TIMEOUT_MS = 90_000;
 const COMMAND_TIMEOUT_MS = 180_000;
 const PROCESS_EXIT_GRACE_MS = 5_000;
+const VALID_JPEG = Buffer.from(
+  "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAACAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAABf/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AIgAAaf/2Q==",
+  "base64",
+);
 
 function requiredEnvironment(name: string): string {
   const value = process.env[name]?.trim();
@@ -237,7 +241,7 @@ async function runCounterWorkday(page: Page): Promise<void> {
   await drawer.locator('[data-testid="order-detail-register-photo-btn"]').setInputFiles({
     name: "mac-receive.jpg",
     mimeType: "image/jpeg",
-    buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]),
+    buffer: VALID_JPEG,
   });
   await expect(drawer.locator('[data-testid="order-detail-photo-count"]')).toHaveText("1 张", {
     timeout: 15_000,
@@ -303,7 +307,11 @@ test("packaged app recovers from an unavailable local service with a token-free 
             auth: { refresh: () => Promise<unknown>; logout: () => Promise<unknown> };
             command: { execute: (...args: unknown[]) => Promise<unknown> };
             query: { execute: (...args: unknown[]) => Promise<unknown> };
-            photo: { upload: (...args: unknown[]) => Promise<unknown> };
+            photo: {
+              upload: (...args: unknown[]) => Promise<unknown>;
+              read: (...args: unknown[]) => Promise<unknown>;
+              delete: (...args: unknown[]) => Promise<unknown>;
+            };
             health: { get: () => Promise<unknown> };
           };
         }
@@ -334,7 +342,8 @@ test("packaged app recovers from an unavailable local service with a token-free 
             JSON.stringify(["login", "logout", "pinChallenge", "pinVerify", "refresh"]) &&
           Object.keys(bridge.command).join() === "execute" &&
           Object.keys(bridge.query).join() === "execute" &&
-          Object.keys(bridge.photo).join() === "upload" &&
+          JSON.stringify(Object.keys(bridge.photo).sort()) ===
+            JSON.stringify(["delete", "read", "upload"]) &&
           Object.keys(bridge.health).join() === "get",
         refreshOk:
           !containsCredentialKey(refresh) &&

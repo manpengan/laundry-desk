@@ -15,6 +15,10 @@ import {
   DesktopPinChallengeResultSchema,
   DesktopPinVerifyInputSchema,
   DesktopPinVerifyResultSchema,
+  DesktopPhotoDeleteInputSchema,
+  DesktopPhotoDeleteResultSchema,
+  DesktopPhotoReadInputSchema,
+  DesktopPhotoReadResultSchema,
   DesktopPhotoUploadInputSchema,
   DesktopPhotoUploadResultSchema,
   DesktopQueryExecuteInputSchema,
@@ -24,9 +28,7 @@ import {
   DesktopSessionViewSchema,
   DesktopStaffDirectorySchema,
   LoginRequestSchema,
-  createCommandError,
   type AccessSessionResponse,
-  type CommandError,
   type DesktopCommandExecuteResult,
   type DesktopHealthGetResult,
   type DesktopLoginInput,
@@ -34,6 +36,8 @@ import {
   type DesktopLogoutResult,
   type DesktopPinChallengeResult,
   type DesktopPinVerifyResult,
+  type DesktopPhotoDeleteResult,
+  type DesktopPhotoReadResult,
   type DesktopPhotoUploadResult,
   type DesktopQueryExecuteResult,
   type DesktopRefreshResult,
@@ -41,6 +45,29 @@ import {
 } from "@laundry/contracts";
 
 import { createLoginIntentGate } from "./auth-intent.js";
+import {
+  AUTHENTICATION_FAILURE,
+  CSRF_FAILURE,
+  NO_SUCCESS_DATA,
+  RESOURCE_FAILURE,
+  VALIDATION_FAILURE,
+  commandBody,
+  isAuthenticationFailure,
+  isRecord,
+  isSameSession,
+  isSuccessStatus,
+  parseHttpOutput,
+  parseInput,
+  parseOutput,
+  projectSessionView,
+  projectStaffDirectory,
+  readSuccessData,
+  type AsyncSchema,
+  type AuthState,
+  type DesktopFailure,
+  type JsonHttpResponse,
+  type ResultEnvelope,
+} from "./http-transport-support.js";
 import {
   createDesktopRequest,
   DESKTOP_API_BASE_URL,
@@ -55,12 +82,16 @@ export {
 const LOCAL_CSRF_COOKIE_NAME = "laundry_csrf";
 const CSRF_COOKIE_CANDIDATES = Object.freeze([LOCAL_CSRF_COOKIE_NAME, CSRF_COOKIE_NAME]);
 const RESPONSE_ENCODER = new TextEncoder();
-const NO_SUCCESS_DATA = Symbol("NO_SUCCESS_DATA");
 const ACCESS_REFRESH_SKEW_MS = 30_000;
 
 export type DesktopHttpResponse = Readonly<{
   statusCode: number;
   bodyText: string;
+}>;
+export type DesktopPhotoHttpResponse = Readonly<{
+  statusCode: number;
+  contentType: string;
+  bodyBytes: Uint8Array;
 }>;
 export type DesktopCookie = Readonly<{
   name: string;
@@ -72,6 +103,7 @@ export type DesktopCookieStore = Readonly<{
 }>;
 export type DesktopHttpTransportDependencies = Readonly<{
   request: (request: DesktopHttpRequest) => Promise<DesktopHttpResponse>;
+  photoRequest?: (request: DesktopHttpRequest) => Promise<DesktopPhotoHttpResponse>;
   cookies: DesktopCookieStore;
   deviceId: string;
   nowMs?: () => number;
@@ -93,37 +125,12 @@ export type DesktopHttpTransport = Readonly<{
   }>;
   photo: Readonly<{
     upload: (input: unknown) => Promise<DesktopPhotoUploadResult>;
+    read: (input: unknown) => Promise<DesktopPhotoReadResult>;
+    delete: (input: unknown) => Promise<DesktopPhotoDeleteResult>;
   }>;
   health: Readonly<{
     get: () => Promise<DesktopHealthGetResult>;
   }>;
-}>;
-
-type DesktopFailure = Readonly<{
-  ok: false;
-  error: CommandError;
-}>;
-
-type ResultEnvelope = Readonly<{ ok: boolean }>;
-
-type AsyncSchema<T> = Readonly<{
-  safeParseAsync: (
-    input: unknown,
-  ) => Promise<Readonly<{ success: true; data: T }> | Readonly<{ success: false }>>;
-}>;
-
-type ParsedInput<T> = Readonly<{ valid: true; data: T }> | Readonly<{ valid: false }>;
-
-type JsonHttpResponse = Readonly<{
-  statusCode: number;
-  payload: unknown;
-}>;
-
-type AuthState = Readonly<{
-  accessToken: string;
-  csrfToken: string;
-  sessionView: DesktopSessionView;
-  expiresAtMs: number;
 }>;
 
 type AccessOutcome<T extends ResultEnvelope> =
@@ -133,124 +140,6 @@ type AccessOutcome<T extends ResultEnvelope> =
       result: T | DesktopFailure;
       credentialsMayHaveMutated: boolean;
     }>;
-
-const VALIDATION_FAILURE: DesktopFailure = Object.freeze({
-  ok: false,
-  error: createCommandError("VALIDATION_FAILED"),
-});
-const AUTHENTICATION_FAILURE: DesktopFailure = Object.freeze({
-  ok: false,
-  error: createCommandError("AUTHENTICATION_FAILED"),
-});
-const CSRF_FAILURE: DesktopFailure = Object.freeze({
-  ok: false,
-  error: createCommandError("CSRF_REJECTED"),
-});
-const RESOURCE_FAILURE: DesktopFailure = Object.freeze({
-  ok: false,
-  error: createCommandError(
-    "RESOURCE_UNAVAILABLE",
-    Object.freeze({ kind: "reason", reason: "retry_later" }),
-  ),
-});
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readSuccessData(value: unknown): unknown | typeof NO_SUCCESS_DATA {
-  if (!isRecord(value) || value.ok !== true) return NO_SUCCESS_DATA;
-  const keys = Reflect.ownKeys(value);
-  if (
-    keys.length !== 2 ||
-    !Object.prototype.hasOwnProperty.call(value, "ok") ||
-    !Object.prototype.hasOwnProperty.call(value, "data")
-  ) {
-    return NO_SUCCESS_DATA;
-  }
-  return value.data;
-}
-
-function isSuccessStatus(statusCode: number): boolean {
-  return statusCode >= 200 && statusCode < 300;
-}
-
-async function parseInput<T>(schema: AsyncSchema<T>, input: unknown): Promise<ParsedInput<T>> {
-  const parsed = await schema.safeParseAsync(input);
-  return parsed.success
-    ? Object.freeze({ valid: true as const, data: parsed.data })
-    : Object.freeze({ valid: false as const });
-}
-
-async function parseOutput<T extends ResultEnvelope>(
-  schema: AsyncSchema<T>,
-  candidate: unknown,
-): Promise<T | DesktopFailure> {
-  const parsed = await schema.safeParseAsync(candidate);
-  if (parsed.success) return parsed.data;
-  const fallback = await schema.safeParseAsync(RESOURCE_FAILURE);
-  return fallback.success ? fallback.data : RESOURCE_FAILURE;
-}
-
-async function parseHttpOutput<T extends ResultEnvelope>(
-  schema: AsyncSchema<T>,
-  response: JsonHttpResponse | null,
-): Promise<T | DesktopFailure> {
-  if (response === null) return parseOutput(schema, RESOURCE_FAILURE);
-  const parsed = await parseOutput(schema, response.payload);
-  if (parsed.ok && !isSuccessStatus(response.statusCode)) {
-    return parseOutput(schema, RESOURCE_FAILURE);
-  }
-  return parsed;
-}
-
-function projectSessionView(access: AccessSessionResponse): Readonly<Record<string, unknown>> {
-  return Object.freeze({
-    session: Object.freeze({ ...access.session }),
-    role: access.role,
-    features: Object.freeze({ ...access.features }),
-    display: Object.freeze({ ...access.display }),
-  });
-}
-
-function projectStaffDirectory(data: unknown): readonly Readonly<Record<string, unknown>>[] | null {
-  if (!Array.isArray(data) || !data.every(isRecord)) return null;
-  return Object.freeze(
-    data.map((entry) =>
-      Object.freeze({
-        staff_id: entry.staff_id,
-        display_name: entry.display_name,
-        role: entry.role,
-      }),
-    ),
-  );
-}
-
-function commandBody(
-  input: Readonly<{ body: Readonly<Record<string, unknown>> }> | Readonly<{ confirm_ref: string }>,
-): Readonly<Record<string, unknown>> {
-  return "confirm_ref" in input
-    ? Object.freeze({ confirm_ref: input.confirm_ref })
-    : Object.freeze({ ...input.body });
-}
-
-function isAuthenticationFailure(result: ResultEnvelope): boolean {
-  const candidate: unknown = result;
-  const error = isRecord(candidate) ? candidate.error : null;
-  return !result.ok && isRecord(error) && error.code === "AUTHENTICATION_FAILED";
-}
-
-function isSameSession(left: AuthState, right: AuthState): boolean {
-  const a = left.sessionView.session;
-  const b = right.sessionView.session;
-  return (
-    a.session_id === b.session_id &&
-    a.org_id === b.org_id &&
-    a.store_id === b.store_id &&
-    a.staff_id === b.staff_id &&
-    a.device_id === b.device_id
-  );
-}
 
 // This narrow main-process port cannot accept renderer-controlled transport options.
 export function createDesktopHttpTransport(
@@ -758,6 +647,7 @@ export function createDesktopHttpTransport(
     const parsedInput = await parseInput(DesktopPhotoUploadInputSchema, input);
     if (!parsedInput.valid) return parseOutput(DesktopPhotoUploadResultSchema, VALIDATION_FAILURE);
     const query = new URLSearchParams({
+      upload_id: parsedInput.data.upload_id,
       order_id: parsedInput.data.order_id,
       garment_id: parsedInput.data.garment_id,
       kind: parsedInput.data.kind,
@@ -773,6 +663,79 @@ export function createDesktopHttpTransport(
     );
   };
 
+  const deletePhoto = async (input: unknown): Promise<DesktopPhotoDeleteResult> => {
+    const parsedInput = await parseInput(DesktopPhotoDeleteInputSchema, input);
+    if (!parsedInput.valid) return parseOutput(DesktopPhotoDeleteResultSchema, VALIDATION_FAILURE);
+    const photoId = encodeURIComponent(parsedInput.data.photo_id);
+    return executeProtected(
+      DesktopPhotoDeleteResultSchema,
+      `/api/v2/photos/${photoId}/delete`,
+      Object.freeze({ delete_id: parsedInput.data.delete_id }),
+    );
+  };
+
+  const readPhoto = async (input: unknown): Promise<DesktopPhotoReadResult> => {
+    const parsedInput = await parseInput(DesktopPhotoReadInputSchema, input);
+    if (!parsedInput.valid) return parseOutput(DesktopPhotoReadResultSchema, VALIDATION_FAILURE);
+    let state = authState;
+    if (state === null) return parseOutput(DesktopPhotoReadResultSchema, AUTHENTICATION_FAILURE);
+    if (needsRefresh(state)) {
+      const refreshed = await refreshForState(state);
+      if ("failure" in refreshed) {
+        return parseOutput(DesktopPhotoReadResultSchema, refreshed.failure);
+      }
+      state = refreshed.state;
+    }
+    const requestPhoto = dependencies.photoRequest;
+    if (requestPhoto === undefined) {
+      return parseOutput(DesktopPhotoReadResultSchema, RESOURCE_FAILURE);
+    }
+    const suffix = parsedInput.data.variant === "thumbnail" ? "/thumbnail" : "";
+    const path = `/api/v2/photos/${encodeURIComponent(parsedInput.data.photo_id)}${suffix}`;
+    const send = async (credentials: AuthState): Promise<DesktopPhotoReadResult> => {
+      try {
+        const response = await requestPhoto(
+          createDesktopRequest("GET", path, { accessToken: credentials.accessToken }),
+        );
+        if (
+          response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          (response.contentType !== "image/jpeg" &&
+            response.contentType !== "image/png" &&
+            response.contentType !== "image/webp")
+        ) {
+          return parseOutput(
+            DesktopPhotoReadResultSchema,
+            response.statusCode === 401 ? AUTHENTICATION_FAILURE : RESOURCE_FAILURE,
+          );
+        }
+        return parseOutput(DesktopPhotoReadResultSchema, {
+          ok: true,
+          data: {
+            content_type: response.contentType,
+            bytes: Uint8Array.from(response.bodyBytes),
+          },
+        });
+      } catch {
+        return parseOutput(DesktopPhotoReadResultSchema, RESOURCE_FAILURE);
+      }
+    };
+    let result = await send(state);
+    const current = authState;
+    if (current === null || !isSameSession(state, current)) {
+      return parseOutput(DesktopPhotoReadResultSchema, RESOURCE_FAILURE);
+    }
+    if (!isAuthenticationFailure(result)) return result;
+    const refreshed = await refreshForState(state);
+    if ("failure" in refreshed) return parseOutput(DesktopPhotoReadResultSchema, refreshed.failure);
+    state = refreshed.state;
+    result = await send(state);
+    const finalState = authState;
+    return finalState !== null && isSameSession(state, finalState)
+      ? result
+      : parseOutput(DesktopPhotoReadResultSchema, RESOURCE_FAILURE);
+  };
+
   const getHealth = async (): Promise<DesktopHealthGetResult> => {
     const parsedInput = await parseInput(DesktopHealthGetInputSchema, {});
     if (!parsedInput.valid) return parseOutput(DesktopHealthGetResultSchema, VALIDATION_FAILURE);
@@ -783,7 +746,7 @@ export function createDesktopHttpTransport(
     auth: Object.freeze({ login, refresh, pinChallenge, pinVerify, logout }),
     command: Object.freeze({ execute: executeCommand }),
     query: Object.freeze({ execute: executeQuery }),
-    photo: Object.freeze({ upload: uploadPhoto }),
+    photo: Object.freeze({ upload: uploadPhoto, read: readPhoto, delete: deletePhoto }),
     health: Object.freeze({ get: getHealth }),
   });
 }

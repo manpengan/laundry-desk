@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test, { after } from "node:test";
 
 import { CSRF_HEADER_NAME } from "@laundry/contracts";
+import sharp from "sharp";
 
 import {
   createMemoryLocalRuntime,
@@ -21,7 +22,18 @@ import { LOCAL_COOKIE_NAMES } from "./types.js";
 const DEVICE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const ORDER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const GARMENT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]);
+const UPLOAD_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const DELETE_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+const JPEG = await sharp({
+  create: {
+    width: 8,
+    height: 6,
+    channels: 3,
+    background: { r: 90, g: 130, b: 180 },
+  },
+})
+  .jpeg()
+  .toBuffer();
 const localCookies = resolveCookiePolicy({ secure: false });
 const hostHeaders = Object.freeze({ host: "127.0.0.1:8787" });
 const browserHeaders = Object.freeze({
@@ -91,7 +103,10 @@ async function login(app: Awaited<ReturnType<typeof buildApp>>["app"]) {
 }
 
 function uploadUrl(): string {
-  return `/api/v2/photos?order_id=${ORDER_ID}&garment_id=${GARMENT_ID}&kind=receive`;
+  return (
+    `/api/v2/photos?upload_id=${UPLOAD_ID}&order_id=${ORDER_ID}` +
+    `&garment_id=${GARMENT_ID}&kind=receive`
+  );
 }
 
 async function ownedPhotoNames(rootPath: string): Promise<readonly string[]> {
@@ -160,9 +175,48 @@ test("uploads verified bytes, hides storage keys, and downloads only by photo id
   });
   assert.equal(download.statusCode, 200, download.body);
   assert.equal(download.headers["content-type"], "image/jpeg");
-  assert.equal(download.headers["cache-control"], "no-store");
+  assert.equal(download.headers["cache-control"], "private, no-store");
   assert.equal(download.headers["x-content-type-options"], "nosniff");
-  assert.deepEqual(download.rawPayload, JPEG);
+  assert.notDeepEqual(download.rawPayload, JPEG);
+  const normalizedMetadata = await sharp(download.rawPayload).metadata();
+  assert.equal(normalizedMetadata.format, "jpeg");
+  assert.equal(normalizedMetadata.exif, undefined);
+
+  const thumbnail = await app.inject({
+    method: "GET",
+    url: `/api/v2/photos/${record.photo_id}/thumbnail`,
+    headers: { ...hostHeaders, authorization: `Bearer ${auth.token}` },
+  });
+  assert.equal(thumbnail.statusCode, 200, thumbnail.body);
+  assert.equal(thumbnail.headers["content-type"], "image/webp");
+  assert.equal(thumbnail.headers["cache-control"], "private, no-store");
+  const metadata = await sharp(thumbnail.rawPayload).metadata();
+  assert.equal(metadata.format, "webp");
+  assert.ok((metadata.width ?? 0) <= 320);
+  assert.ok((metadata.height ?? 0) <= 320);
+
+  const replay = await app.inject({
+    method: "POST",
+    url: uploadUrl(),
+    headers: {
+      ...browserHeaders,
+      authorization: `Bearer ${auth.token}`,
+      cookie: auth.cookie,
+      [CSRF_HEADER_NAME]: auth.csrf,
+      "content-type": "image/jpeg",
+    },
+    payload: JPEG,
+  });
+  assert.equal(replay.statusCode, 200, replay.body);
+  assert.equal(
+    (replay.json() as { data: { result: { photo_id: string } } }).data.result.photo_id,
+    record.photo_id,
+  );
+  assert.equal(
+    (await runtime.photo.store.listByOrder(DEMO_ORG_ID, DEMO_STORE_ID, ORDER_ID)).length,
+    1,
+  );
+  assert.equal((await ownedPhotoNames(files.rootPath)).length, 1);
   await app.close();
 });
 
@@ -184,9 +238,46 @@ test("rejects disguised bytes and blocks direct metadata registration", async ()
   assert.equal(disguised.statusCode, 415);
   assert.deepEqual(await ownedPhotoNames(files.rootPath), []);
 
-  const direct = await app.inject({
+  for (const command of ["photo.register", "photo.delete"]) {
+    const direct = await app.inject({
+      method: "POST",
+      url: `/v1/commands/${command}`,
+      headers: {
+        ...browserHeaders,
+        authorization: `Bearer ${auth.token}`,
+        cookie: auth.cookie,
+        [CSRF_HEADER_NAME]: auth.csrf,
+        "content-type": "application/json",
+      },
+      payload: {},
+    });
+    assert.equal(direct.statusCode, 404);
+  }
+  await app.close();
+});
+
+test("deletes metadata and private bytes only through the audited route", async () => {
+  const { app, runtime, files } = await buildApp();
+  const auth = await login(app);
+  const upload = await app.inject({
     method: "POST",
-    url: "/v1/commands/photo.register",
+    url: uploadUrl(),
+    headers: {
+      ...browserHeaders,
+      authorization: `Bearer ${auth.token}`,
+      cookie: auth.cookie,
+      [CSRF_HEADER_NAME]: auth.csrf,
+      "content-type": "image/jpeg",
+    },
+    payload: JPEG,
+  });
+  assert.equal(upload.statusCode, 200, upload.body);
+  const photoId = (upload.json() as { data: { result: { photo_id: string } } }).data.result
+    .photo_id;
+
+  const deleted = await app.inject({
+    method: "POST",
+    url: `/api/v2/photos/${photoId}/delete`,
     headers: {
       ...browserHeaders,
       authorization: `Bearer ${auth.token}`,
@@ -194,9 +285,16 @@ test("rejects disguised bytes and blocks direct metadata registration", async ()
       [CSRF_HEADER_NAME]: auth.csrf,
       "content-type": "application/json",
     },
-    payload: {},
+    payload: { delete_id: DELETE_ID },
   });
-  assert.equal(direct.statusCode, 404);
+
+  assert.equal(deleted.statusCode, 200, deleted.body);
+  assert.equal(
+    (deleted.json() as { data: { result: { photo_id: string } } }).data.result.photo_id,
+    photoId,
+  );
+  assert.deepEqual(await runtime.photo.store.listByOrder(DEMO_ORG_ID, DEMO_STORE_ID, ORDER_ID), []);
+  assert.deepEqual(await ownedPhotoNames(files.rootPath), []);
   await app.close();
 });
 

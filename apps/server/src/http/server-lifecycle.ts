@@ -10,7 +10,7 @@ import { safeErrorContext } from "./local-logger.js";
 export type LocalHttpApp = Pick<FastifyInstance, "listen" | "close">;
 
 export type ResourceCleanupFailure = Readonly<{
-  resource: "http" | "database";
+  resource: "http" | "print_worker" | "database";
   error_type: string;
 }>;
 
@@ -56,6 +56,22 @@ async function closeResources(
         Object.freeze({
           report: Object.freeze({
             resource: "http" as const,
+            error_type: safeErrorContext(error).error_type,
+          }),
+          cause: error,
+        }),
+      ]);
+    }
+  }
+  if (runtime?.print.worker !== undefined) {
+    try {
+      await runtime.print.worker.stop();
+    } catch (error) {
+      failures = Object.freeze([
+        ...failures,
+        Object.freeze({
+          report: Object.freeze({
+            resource: "print_worker" as const,
             error_type: safeErrorContext(error).error_type,
           }),
           cause: error,
@@ -127,6 +143,7 @@ export async function startLocalHttpServer(
       browserOrigin: config.browserOrigin,
     });
     await app.listen({ port: config.port, host: config.listenHost });
+    runtime.print.worker?.start();
     return Object.freeze({
       app,
       runtime,

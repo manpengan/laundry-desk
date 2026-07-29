@@ -110,6 +110,7 @@ export function StatsPage({
       toast.push("请输入日期 YYYY-MM-DD", "error");
       return;
     }
+    setSummary(null);
     setBusy(true);
     try {
       const res = await queryClient.execute<unknown>(
@@ -188,7 +189,11 @@ export function StatsPage({
       </div>
 
       {summary !== null ? (
-        <div className="ld-stats-grid" data-testid="stats-summary">
+        <div
+          className="ld-stats-grid"
+          data-business-date={summary.business_date}
+          data-testid="stats-summary"
+        >
           <MetricCard
             testId="stats-card-orders"
             label="开单笔数"

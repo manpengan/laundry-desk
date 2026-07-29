@@ -1,5 +1,5 @@
 import type { LoginFormValues, PinChallengeRequest, PinVerifyRequest } from "../auth/types.js";
-import type { PhotoUploadInput } from "./photo-port.js";
+import type { PhotoReadVariant, PhotoUploadInput } from "./photo-port.js";
 
 export type DesktopCommandInput =
   | Readonly<{
@@ -41,6 +41,8 @@ export type LaundryDesktopBridge = Readonly<{
   }>;
   photo?: Readonly<{
     upload: (input: PhotoUploadInput) => Promise<unknown>;
+    read: (input: Readonly<{ photo_id: string; variant: PhotoReadVariant }>) => Promise<unknown>;
+    delete: (input: Readonly<{ photo_id: string; delete_id: string }>) => Promise<unknown>;
   }>;
   health: Readonly<{
     get: () => Promise<unknown>;

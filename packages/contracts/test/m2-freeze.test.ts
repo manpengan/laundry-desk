@@ -28,6 +28,7 @@ describe("M2 contract surface", () => {
       "print.ticket.reprint",
       "shift.close",
       "photo.register",
+      "photo.delete",
       // ADR-15: deliberate unfreeze so a fresh install can maintain its price
       // list. Further additions still require their own ADR.
       "catalog.item.upsert",
@@ -79,7 +80,7 @@ describe("M2 contract surface", () => {
     const document = buildLaundryOpenApiDocument();
     for (const definition of M2_CONTRACT_DEFINITIONS) {
       const path = `/v1/${definition.kind === "command" ? "commands" : "queries"}/${definition.name}`;
-      if (definition.name === "photo.register") {
+      if (definition.name === "photo.register" || definition.name === "photo.delete") {
         expect(document.paths[path], `${path} is internal-only`).toBeUndefined();
       } else {
         expect(document.paths[path], path).toBeDefined();
