@@ -36,6 +36,12 @@ export type {
   ReceiptBoundPrintJob,
 } from "./receipt-reconciliation.js";
 export type { PrintHandlerDeps } from "./handlers.js";
+export { createPrintWorkerController } from "./worker-controller.js";
+export type {
+  PrintWorkerController,
+  PrintWorkerControllerOptions,
+  PrintWorkerStatus,
+} from "./worker-controller.js";
 export {
   createPrintCommandHandlers,
   createPrintQueryHandlers,

@@ -156,11 +156,47 @@ function listByOrderHandler(deps: PhotoHandlerDeps): CommandHandler {
   };
 }
 
+function deleteHandler(deps: PhotoHandlerDeps): CommandHandler {
+  return async (ctx): Promise<HandlerOutcome> => {
+    const input = asRecord(ctx.parsed);
+    const photoId = requireUuid(input.photo_id);
+    const record = await deps.store.deleteById(ctx.tenant.orgId, ctx.tenant.storeId, photoId);
+    if (record === null) {
+      throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+    }
+    return Object.freeze({
+      result: toRow(record),
+      audit: Object.freeze({
+        entity: "garment_photo",
+        entityId: record.photo_id,
+        beforeJson: JSON.stringify({
+          order_id: record.order_id,
+          garment_id: record.garment_id,
+          kind: record.kind,
+          storage_key: record.storage_key,
+          byte_size: record.byte_size,
+        }),
+      }),
+      events: Object.freeze([
+        Object.freeze({
+          type: "photo.deleted",
+          payload: Object.freeze({
+            photo_id: record.photo_id,
+            order_id: record.order_id,
+            garment_id: record.garment_id,
+          }),
+        }),
+      ]),
+    });
+  };
+}
+
 export function registerPhotoCommandHandlers(
   registry: Readonly<{ registerHandler: (name: string, handler: CommandHandler) => void }>,
   deps: PhotoHandlerDeps,
 ): void {
   registry.registerHandler("photo.register", registerHandler(deps));
+  registry.registerHandler("photo.delete", deleteHandler(deps));
 }
 
 export function registerPhotoQueryHandlers(

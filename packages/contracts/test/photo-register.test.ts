@@ -12,8 +12,10 @@ import {
   PHOTO_COMMANDS,
   PHOTO_QUERY_NAMES,
   PHOTO_QUERIES,
+  PhotoDeleteInputSchema,
   isContractDefinition,
   parseContractInput,
+  photoDeleteCommand,
   photoListByOrderQuery,
   photoRegisterCommand,
 } from "../src/index.js";
@@ -51,23 +53,35 @@ describe("M3 photo.register / photo.list_by_order skeleton", () => {
   });
 
   it("exports stable names and M3 photo aliases", () => {
-    expect([...PHOTO_COMMAND_NAMES]).toEqual(["photo.register"]);
+    expect([...PHOTO_COMMAND_NAMES]).toEqual(["photo.register", "photo.delete"]);
     expect([...PHOTO_QUERY_NAMES]).toEqual(["photo.list_by_order"]);
     expect([...M3_PHOTO_COMMAND_NAMES]).toEqual([...PHOTO_COMMAND_NAMES]);
     expect([...M3_PHOTO_QUERY_NAMES]).toEqual([...PHOTO_QUERY_NAMES]);
-    expect(M3_PHOTO_COMMAND_DEFINITIONS).toHaveLength(1);
+    expect(M3_PHOTO_COMMAND_DEFINITIONS).toHaveLength(2);
     expect(M3_PHOTO_QUERY_DEFINITIONS).toHaveLength(1);
   });
 
   it("wires into M2 skeleton command catalog", () => {
     expect(M2_SKELETON_COMMAND_NAMES).toContain("photo.register");
+    expect(M2_SKELETON_COMMAND_NAMES).toContain("photo.delete");
     expect(M2_SKELETON_DEFINITIONS.map((d) => d.name)).toContain("photo.register");
+    expect(M2_SKELETON_DEFINITIONS.map((d) => d.name)).toContain("photo.delete");
   });
 
   it("keeps OpenAPI M1 first-wave free of photo contracts", () => {
     const names = M1_FIRST_WAVE_DEFINITIONS.map((d) => d.name);
     expect(names).not.toContain("photo.register");
+    expect(names).not.toContain("photo.delete");
     expect(names).not.toContain("photo.list_by_order");
+  });
+
+  it("parses the internal photo.delete input", async () => {
+    expect(PhotoDeleteInputSchema.parse({ photo_id: SAMPLE_UUID })).toEqual({
+      photo_id: SAMPLE_UUID,
+    });
+    await expect(
+      parseContractInput(photoDeleteCommand, { photo_id: SAMPLE_UUID }),
+    ).resolves.toEqual({ photo_id: SAMPLE_UUID });
   });
 
   it("parses photo.register input", async () => {

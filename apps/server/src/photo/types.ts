@@ -42,5 +42,6 @@ export type PhotoStore = Readonly<{
   register: (input: PhotoRegisterInput) => Promise<PhotoRecord>;
   listByOrder: (orgId: string, storeId: string, orderId: string) => Promise<readonly PhotoRecord[]>;
   findById: (orgId: string, storeId: string, photoId: string) => Promise<PhotoRecord | null>;
+  deleteById: (orgId: string, storeId: string, photoId: string) => Promise<PhotoRecord | null>;
   listStorageKeys: (orgId: string, storeId: string) => Promise<ReadonlySet<string>>;
 }>;

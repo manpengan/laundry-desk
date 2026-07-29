@@ -22,6 +22,7 @@ export const DEFAULT_ORPHAN_GRACE_MS = 60 * 60 * 1_000;
 const FILE_MODE = 0o600;
 const STORAGE_KEY =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/u;
+const STORAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const STAGING_NAME = /^\.[0-9a-f-]{36}\.(?:jpg|png|webp)\.[0-9a-f-]{36}\.staging$/u;
 
 export type PhotoContentType = "image/jpeg" | "image/png" | "image/webp";
@@ -44,7 +45,7 @@ export type PhotoFileSweep = Readonly<{
 
 export type PhotoFileStore = Readonly<{
   rootPath: string;
-  write: (bytes: Buffer, declaredType: string) => Promise<StoredPhoto>;
+  write: (bytes: Buffer, declaredType: string, storageId?: string) => Promise<StoredPhoto>;
   read: (metadata: StoredPhoto) => Promise<PhotoFile>;
   remove: (storageKey: string, expectedSha256: string) => Promise<boolean>;
   sweepOrphans: (referencedKeys: ReadonlySet<string>, nowMs?: number) => Promise<PhotoFileSweep>;
@@ -240,7 +241,7 @@ export async function createPhotoFileStore(
 
   return Object.freeze({
     rootPath,
-    write: (bytes: Buffer, declaredType: string) =>
+    write: (bytes: Buffer, declaredType: string, storageId?: string) =>
       serializeWrite(async () => {
         if (bytes.byteLength < 1 || bytes.byteLength > maxPhotoBytes) {
           throw new PhotoFileError("PHOTO_SIZE_INVALID", "photo exceeds its per-file byte limit");
@@ -249,13 +250,36 @@ export async function createPhotoFileStore(
         if (contentType === null || contentType !== declaredType) {
           throw new PhotoFileError("PHOTO_TYPE_INVALID", "photo bytes do not match content type");
         }
+        if (storageId !== undefined && !STORAGE_ID.test(storageId)) {
+          throw new PhotoFileError("PHOTO_STORAGE_KEY_INVALID", "photo upload id is invalid");
+        }
+        const storageKey = `${storageId ?? newId()}.${extension(contentType)}`;
+        const finalPath = pathFor(rootPath, storageKey);
+        const existing = await lstat(finalPath).catch(() => null);
+        if (existing !== null) {
+          const opened = await readRegularPhoto(finalPath);
+          if (
+            opened.bytes.byteLength !== bytes.byteLength ||
+            sha256(opened.bytes) !== sha256(bytes) ||
+            detectedType(opened.bytes) !== contentType
+          ) {
+            throw new PhotoFileError(
+              "PHOTO_IDEMPOTENCY_CONFLICT",
+              "photo upload id is already bound to different bytes",
+            );
+          }
+          return Object.freeze({
+            storage_key: storageKey,
+            content_type: contentType,
+            content_sha256: sha256(bytes),
+            byte_size: bytes.byteLength,
+          });
+        }
         const entries = await inspectOwned(rootPath);
         const totalBytes = entries.reduce((sum, entry) => sum + entry.bytes, 0);
         if (entries.length >= maxFiles || totalBytes + bytes.byteLength > maxTotalBytes) {
           throw new PhotoFileError("PHOTO_QUOTA_EXCEEDED", "photo store quota exceeded");
         }
-        const storageKey = `${newId()}.${extension(contentType)}`;
-        const finalPath = pathFor(rootPath, storageKey);
         const temporaryPath = await stage(rootPath, storageKey, bytes, newId);
         try {
           await link(temporaryPath, finalPath);

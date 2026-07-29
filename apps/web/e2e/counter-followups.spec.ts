@@ -14,6 +14,10 @@ const exactLocalUrl = (name: "LAUNDRY_WEB_URL" | "LAUNDRY_API_URL", expected: st
 };
 const WEB = exactLocalUrl("LAUNDRY_WEB_URL", "http://127.0.0.1:5173");
 const API = exactLocalUrl("LAUNDRY_API_URL", "http://127.0.0.1:8787");
+const VALID_JPEG = Buffer.from(
+  "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAACAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAABf/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AIgAAaf/2Q==",
+  "base64",
+);
 
 const requiredEnvironment = (name: string): string => {
   const value = process.env[name]?.trim();
@@ -134,7 +138,7 @@ test("an open order is cancelled with a reason and a second confirmation", async
   await photoInput.setInputFiles({
     name: "receive.jpg",
     mimeType: "image/jpeg",
-    buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]),
+    buffer: VALID_JPEG,
   });
   const uploadResponse = await uploadResponsePromise;
   expect(
@@ -223,9 +227,13 @@ test("a historic empty business day can be closed without freezing today's count
   await page.locator('[data-testid="stats-date-input"]').fill(ISOLATED_SHIFT_DATE);
   await page.locator('[data-testid="stats-load-btn"]').click();
 
-  const summary = page.locator('[data-testid="stats-summary"]');
+  const summary = page.locator(
+    `[data-testid="stats-summary"][data-business-date="${ISOLATED_SHIFT_DATE}"]`,
+  );
   await expect(summary).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator('[data-testid="stats-card-orders"]')).toContainText("0");
+  await expect(
+    summary.locator('[data-testid="stats-card-orders"] .ld-stats-metric__num'),
+  ).toHaveText("0");
 
   const closed = page.locator('[data-testid="shift-closed-status"]');
   const form = page.locator('[data-testid="shift-signature-input"]');

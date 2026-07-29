@@ -2,87 +2,49 @@
  * 客户档案 — customer.search + customer.upsert + 详情/历史订单 (M2).
  */
 
-import { Button, Input, MoneyText, StatusBadge, useToast } from "@laundry/ui";
+import { Button, Input, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CommandPort, QueryPort } from "../commands/types.js";
-import { parseOrderListRows, type OrderListRowView } from "./OrdersList.js";
+import type { PhotoPort } from "../host/photo-port.js";
+import type { PrintJobView } from "../shell/print-jobs.js";
+import { CustomerDetail } from "./CustomerDetail.js";
+import { loadCustomerHistory } from "./customer-history.js";
+import { parseCustomerRows, type CustomerRowView, unwrapQueryResult } from "./customer-model.js";
+import { OrderDetailDrawer } from "./OrderDetailDrawer.js";
+import type { OrderListRowView } from "./OrdersList.js";
 
-export type CustomerRowView = Readonly<{
-  customer_id: string;
-  phone: string;
-  name: string | null;
-  note: string | null;
-  updated_at: number;
-}>;
+export {
+  formatCustomerUpdatedAt,
+  parseCustomerRows,
+  type CustomerRowView,
+  unwrapQueryResult,
+} from "./customer-model.js";
 
 export type CustomersPageProps = {
   queryClient: QueryPort;
   commandClient: CommandPort;
+  photoPort?: PhotoPort;
   /** Skip auto-search on mount (tests). */
   autoLoad?: boolean;
   /** Prefill selected customer (SSR detail shell / tests). */
   initialSelected?: CustomerRowView;
   /** Prefill history rows for SSR when initialSelected is set. */
   initialOrders?: readonly OrderListRowView[];
+  initialPrintJobs?: readonly PrintJobView[];
   /** Navigate to pickup with order id prefilled. */
   onOpenPickup?: (orderId: string) => void;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Unwrap bus `{ execution, result }` or bare result. */
-export function unwrapQueryResult(data: unknown): unknown {
-  if (!isRecord(data)) return data;
-  if ("result" in data) return data.result;
-  return data;
-}
-
-export function parseCustomerRows(value: unknown): readonly CustomerRowView[] | null {
-  if (!isRecord(value)) return null;
-  if (!Array.isArray(value.customers)) return null;
-  const rows: CustomerRowView[] = [];
-  for (const item of value.customers) {
-    if (!isRecord(item)) return null;
-    if (typeof item.customer_id !== "string") return null;
-    if (typeof item.phone !== "string") return null;
-    if (typeof item.updated_at !== "number" || !Number.isSafeInteger(item.updated_at)) return null;
-    const name = item.name === null || item.name === undefined ? null : String(item.name);
-    const note = item.note === null || item.note === undefined ? null : String(item.note);
-    rows.push(
-      Object.freeze({
-        customer_id: item.customer_id,
-        phone: item.phone,
-        name,
-        note,
-        updated_at: item.updated_at,
-      }),
-    );
-  }
-  return Object.freeze(rows);
-}
-
 const PHONE_RE = /^1[3-9]\d{9}$/u;
-
-/** Format unix seconds for detail shell (local, compact). */
-export function formatCustomerUpdatedAt(epochSec: number): string {
-  const d = new Date(epochSec * 1000);
-  if (Number.isNaN(d.getTime())) return "—";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${y}-${m}-${day} ${hh}:${mm}`;
-}
 
 export function CustomersPage({
   queryClient,
   commandClient,
+  photoPort,
   autoLoad = true,
   initialSelected,
   initialOrders,
+  initialPrintJobs,
   onOpenPickup,
 }: CustomersPageProps) {
   const toast = useToast();
@@ -95,6 +57,10 @@ export function CustomersPage({
   const [orderRows, setOrderRows] = useState<readonly OrderListRowView[]>(
     () => initialOrders ?? Object.freeze([]),
   );
+  const [printJobs, setPrintJobs] = useState<readonly PrintJobView[] | null>(
+    () => initialPrintJobs ?? null,
+  );
+  const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
   const [ordersBusy, setOrdersBusy] = useState(false);
   const searchRef = useRef<() => Promise<void>>(async () => undefined);
 
@@ -129,44 +95,46 @@ export function CustomersPage({
     void searchRef.current();
   }, [autoLoad]);
 
-  const loadOrdersForPhone = useCallback(
-    async (customerPhone: string) => {
-      setOrdersBusy(true);
-      try {
-        const res = await queryClient.execute<unknown>("order.list", {
-          customer_phone: customerPhone,
-          limit: 20,
-        });
-        if (!res.ok) {
-          toast.push(res.error.message ?? res.error.code, "error");
+  useEffect(() => {
+    if (selected === null) {
+      setOrdersBusy(false);
+      return;
+    }
+    let cancelled = false;
+    setOrdersBusy(true);
+    void loadCustomerHistory(queryClient, selected.phone)
+      .then((history) => {
+        if (cancelled) return;
+        if (history === null) {
+          toast.push("客户历史暂时无法加载", "error");
           setOrderRows([]);
+          setPrintJobs(null);
           return;
         }
-        const parsed = parseOrderListRows(unwrapQueryResult(res.data));
-        if (parsed === null) {
-          toast.push("历史订单无法解析", "error");
-          setOrderRows([]);
-          return;
-        }
-        setOrderRows(parsed);
-      } finally {
-        setOrdersBusy(false);
-      }
-    },
-    [queryClient, toast],
-  );
+        setOrderRows(history.orders);
+        setPrintJobs(history.printJobs);
+      })
+      .finally(() => {
+        if (!cancelled) setOrdersBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient, selected, toast]);
 
-  const selectCustomer = useCallback(
-    (row: CustomerRowView) => {
-      setSelected(row);
-      void loadOrdersForPhone(row.phone);
-    },
-    [loadOrdersForPhone],
-  );
+  const selectCustomer = useCallback((row: CustomerRowView) => {
+    setOrderRows([]);
+    setPrintJobs(null);
+    setOrdersBusy(true);
+    setDetailOrderId(null);
+    setSelected(Object.freeze({ ...row }));
+  }, []);
 
   const closeDetail = useCallback(() => {
     setSelected(null);
     setOrderRows([]);
+    setPrintJobs(null);
+    setDetailOrderId(null);
   }, []);
 
   const onUpsert = useCallback(async () => {
@@ -288,73 +256,32 @@ export function CustomersPage({
       </ul>
 
       {selected !== null ? (
-        <section className="ld-customer-detail" data-testid="customer-detail" aria-label="客户详情">
-          <div className="ld-customer-detail__head">
-            <h2 className="ld-customer-detail__title">客户详情</h2>
-            <Button
-              variant="ghost"
-              type="button"
-              onClick={closeDetail}
-              data-testid="customer-detail-close"
-            >
-              关闭
-            </Button>
-          </div>
-          <dl className="ld-customer-detail__profile" data-testid="customer-detail-profile">
-            <div className="ld-customer-detail__field">
-              <dt>手机号</dt>
-              <dd className="ld-customers-phone-internal">{selected.phone}</dd>
-            </div>
-            <div className="ld-customer-detail__field">
-              <dt>姓名</dt>
-              <dd>{selected.name ?? "—"}</dd>
-            </div>
-            <div className="ld-customer-detail__field">
-              <dt>备注</dt>
-              <dd>{selected.note !== null && selected.note.length > 0 ? selected.note : "—"}</dd>
-            </div>
-            <div className="ld-customer-detail__field">
-              <dt>更新时间</dt>
-              <dd data-testid="customer-detail-updated-at">
-                {formatCustomerUpdatedAt(selected.updated_at)}
-              </dd>
-            </div>
-          </dl>
-
-          <h3 className="ld-customer-detail__orders-title">历史订单</h3>
-          <p className="ld-customer-detail__orders-hint">
-            {ordersBusy ? "加载中…" : `按手机号匹配，最多 20 单（最新优先）。`}
-          </p>
-          <ul className="ld-customer-detail__orders" data-testid="customer-detail-orders">
-            {orderRows.length === 0 ? (
-              <li className="ld-customer-detail__orders-empty">
-                {ordersBusy ? "…" : "暂无历史订单"}
-              </li>
-            ) : (
-              orderRows.map((order) => (
-                <li key={order.order_id} className="ld-customer-detail__order-row">
-                  <button
-                    type="button"
-                    className="ld-customer-detail__order-btn"
-                    disabled={onOpenPickup === undefined}
-                    onClick={() => onOpenPickup?.(order.order_id)}
-                    data-testid="customer-detail-order-btn"
-                  >
-                    <div className="ld-customer-detail__order-main">
-                      <span className="ld-customer-detail__ticket">{order.ticket_no}</span>
-                      <StatusBadge family="order" status={order.status} />
-                    </div>
-                    <div className="ld-customer-detail__order-money">
-                      <span className="ld-customer-detail__money-label">余额</span>
-                      <MoneyText fen={order.balance_cents} size="sm" />
-                    </div>
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        </section>
+        <CustomerDetail
+          customer={selected}
+          orders={orderRows}
+          printJobs={printJobs}
+          busy={ordersBusy}
+          onClose={closeDetail}
+          onOpenOrder={setDetailOrderId}
+          {...(onOpenPickup === undefined ? {} : { onOpenPickup })}
+        />
       ) : null}
+      <OrderDetailDrawer
+        open={detailOrderId !== null}
+        orderId={detailOrderId}
+        queryClient={queryClient}
+        commandClient={commandClient}
+        {...(photoPort === undefined ? {} : { photoPort })}
+        onClose={() => setDetailOrderId(null)}
+        {...(onOpenPickup === undefined
+          ? {}
+          : {
+              onPickup: (orderId: string) => {
+                setDetailOrderId(null);
+                onOpenPickup(orderId);
+              },
+            })}
+      />
     </main>
   );
 }

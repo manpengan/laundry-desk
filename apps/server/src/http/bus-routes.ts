@@ -28,7 +28,7 @@ const ADMIN_PERMISSIONS = Object.freeze([
 ]);
 const STAFF_PERMISSIONS = Object.freeze(["staff_read", "order_write"]);
 const NO_PERMISSIONS = Object.freeze([] as string[]);
-const INTERNAL_ONLY_COMMANDS: ReadonlySet<string> = new Set(["photo.register"]);
+const INTERNAL_ONLY_COMMANDS: ReadonlySet<string> = new Set(["photo.register", "photo.delete"]);
 
 function tenantFromSession(resolved: AuthorizedSession): TenantContext {
   return Object.freeze({
@@ -98,6 +98,7 @@ export async function executeTrustedSessionCommand(
   resolved: AuthorizedSession,
   name: string,
   input: Readonly<Record<string, unknown>>,
+  options: Readonly<{ idempotencyKey?: string }> = {},
 ): Promise<CommandResult> {
   const { registry, chainHooks } = createBus(context.runtime);
   const runWithSql = createSqlRunner(context.runtime);
@@ -113,6 +114,7 @@ export async function executeTrustedSessionCommand(
         sessionId: resolved.session.session_id,
         sessionVersion: resolved.session.session_version,
       }),
+      ...(options.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey }),
     }),
   );
 }

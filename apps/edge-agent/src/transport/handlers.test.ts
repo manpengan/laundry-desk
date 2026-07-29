@@ -47,6 +47,8 @@ function createService(overrides: Partial<DesktopOperationService> = {}): Deskto
       overrides.photo ??
       Object.freeze({
         upload: async () => SAFE_FAILURE,
+        read: async () => SAFE_FAILURE,
+        delete: async () => SAFE_FAILURE,
       }),
     health:
       overrides.health ??
@@ -123,6 +125,8 @@ test("registers exactly the fixed desktop capability channels", () => {
       DESKTOP_IPC_CHANNELS.command.execute,
       DESKTOP_IPC_CHANNELS.query.execute,
       DESKTOP_IPC_CHANNELS.photo.upload,
+      DESKTOP_IPC_CHANNELS.photo.read,
+      DESKTOP_IPC_CHANNELS.photo.delete,
       DESKTOP_IPC_CHANNELS.health.get,
     ],
   );
@@ -133,15 +137,18 @@ test("validates photo bytes before invoking the named service", async () => {
   const harness = createHarness(
     createService({
       photo: Object.freeze({
-        upload: async (input) => {
+        upload: async (input: unknown) => {
           captured.push(input);
           return SAFE_FAILURE;
         },
+        read: async () => SAFE_FAILURE,
+        delete: async () => SAFE_FAILURE,
       }),
     }),
   );
   const invoke = getHandler(harness, DESKTOP_IPC_CHANNELS.photo.upload);
   const valid = {
+    upload_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
     order_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     garment_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     kind: "receive",

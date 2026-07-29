@@ -77,6 +77,7 @@ describe("A7 OpenAPI 3.1 snapshot", () => {
       M1_FIRST_WAVE_COMMAND_NAMES.length + M1_FIRST_WAVE_QUERY_NAMES.length,
     );
     expect(document.paths["/v1/commands/photo.register"]).toBeUndefined();
+    expect(document.paths["/v1/commands/photo.delete"]).toBeUndefined();
     expect(document.paths["/v1/queries/photo.list_by_order"]).toBeDefined();
   });
 

@@ -154,6 +154,14 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
     includedFiles.includes("dist/desktop/request-builder.js"),
     "desktop request builder must ship with its importing transport",
   );
+  assert.ok(
+    includedFiles.includes("dist/desktop/electron-photo-request.js"),
+    "desktop photo request must ship with its importing adapter",
+  );
+  assert.ok(
+    includedFiles.includes("dist/desktop/http-transport-support.js"),
+    "desktop transport support must ship with its importing transport",
+  );
   assert.doesNotMatch(
     includedFiles.join("\n"),
     /\*|tests?|spec|\.d\.ts|\.map|src\/|\.env|credentials?|secrets?|logs?/iu,

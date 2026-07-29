@@ -3,9 +3,11 @@ import type { LaundryDesktopBridge } from "./desktop-bridge.js";
 import {
   MAX_PHOTO_BYTES,
   parsePhotoUploadData,
+  type PhotoBinaryData,
   type PhotoContentType,
   type PhotoKind,
   type PhotoPort,
+  type PhotoReadVariant,
   type PhotoUploadData,
   type PhotoUploadInput,
 } from "./photo-port.js";
@@ -27,6 +29,10 @@ function bridgeError(message: string): CommandResult<never> {
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPhotoContentType(value: unknown): value is PhotoContentType {
+  return typeof value === "string" && PHOTO_CONTENT_TYPES.includes(value as PhotoContentType);
 }
 
 function hasExactKeys(
@@ -82,6 +88,7 @@ function readFailure(value: unknown): CommandFailure | null {
 
 function validInput(input: PhotoUploadInput): boolean {
   return (
+    UUID.test(input.upload_id) &&
     UUID.test(input.order_id) &&
     UUID.test(input.garment_id) &&
     PHOTO_KINDS.includes(input.kind) &&
@@ -103,6 +110,35 @@ function readResult(value: unknown): CommandResult<PhotoUploadData> {
   return bridgeError("桌面照片响应格式错误");
 }
 
+function readBinaryResult(value: unknown): CommandResult<PhotoBinaryData> {
+  const failure = readFailure(value);
+  if (failure !== null) return Object.freeze({ ok: false, error: failure });
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["ok", "data"]) ||
+    value.ok !== true ||
+    !isRecord(value.data) ||
+    !hasExactKeys(value.data, ["content_type", "bytes"]) ||
+    !isPhotoContentType(value.data.content_type) ||
+    !(value.data.bytes instanceof Uint8Array) ||
+    value.data.bytes.byteLength < 1 ||
+    value.data.bytes.byteLength > MAX_PHOTO_BYTES
+  ) {
+    return bridgeError("桌面照片响应格式错误");
+  }
+  return Object.freeze({
+    ok: true,
+    data: Object.freeze({
+      content_type: value.data.content_type,
+      bytes: Uint8Array.from(value.data.bytes),
+    }),
+  });
+}
+
+function validRead(photoId: string, variant: PhotoReadVariant): boolean {
+  return UUID.test(photoId) && (variant === "thumbnail" || variant === "original");
+}
+
 export function createDesktopPhotoPort(bridge: LaundryDesktopBridge): PhotoPort {
   return Object.freeze({
     async upload(input) {
@@ -113,6 +149,30 @@ export function createDesktopPhotoPort(bridge: LaundryDesktopBridge): PhotoPort 
           await bridge.photo.upload(
             Object.freeze({ ...input, bytes: Uint8Array.from(input.bytes) }),
           ),
+        );
+      } catch {
+        return bridgeError("桌面照片响应格式错误");
+      }
+    },
+    async read(photoId, variant) {
+      if (!validRead(photoId, variant)) return bridgeError("桌面照片参数格式错误");
+      if (bridge.photo === undefined) return bridgeError("桌面照片能力不可用");
+      try {
+        return readBinaryResult(
+          await bridge.photo.read(Object.freeze({ photo_id: photoId, variant })),
+        );
+      } catch {
+        return bridgeError("桌面照片响应格式错误");
+      }
+    },
+    async remove(photoId, deleteId) {
+      if (!UUID.test(photoId) || !UUID.test(deleteId)) {
+        return bridgeError("桌面照片参数格式错误");
+      }
+      if (bridge.photo === undefined) return bridgeError("桌面照片能力不可用");
+      try {
+        return readResult(
+          await bridge.photo.delete(Object.freeze({ photo_id: photoId, delete_id: deleteId })),
         );
       } catch {
         return bridgeError("桌面照片响应格式错误");

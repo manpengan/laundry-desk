@@ -18,6 +18,9 @@ class MockResponse extends EventEmitter {
   constructor(
     readonly statusCode: number,
     readonly chunks: readonly Buffer[],
+    readonly headers: Readonly<
+      Record<string, string | readonly string[] | undefined>
+    > = Object.freeze({ "content-type": "application/json" }),
   ) {
     super();
   }
@@ -160,6 +163,7 @@ test("Electron adapter permits raw photo bytes only on the fixed validated uploa
     ...VALID_REQUEST,
     url:
       `${DESKTOP_API_BASE_URL}/api/v2/photos?` +
+      "upload_id=dddddddd-dddd-4ddd-8ddd-dddddddddddd&" +
       "order_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&" +
       "garment_id=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb&kind=receive",
     headers: Object.freeze({
@@ -181,6 +185,39 @@ test("Electron adapter permits raw photo bytes only on the fixed validated uploa
       }),
     /fixed desktop HTTP policy/u,
   );
+});
+
+test("Electron adapter reads bounded photo bytes only from the named download route", async () => {
+  const sessionHarness = createSession();
+  const bytes = Buffer.from([0x52, 0x49, 0x46, 0x46]);
+  const clientRequest = new MockRequest(
+    new MockResponse(200, [bytes], Object.freeze({ "content-type": "image/webp" })),
+  );
+  const dependencies = createElectronDesktopDependencies({
+    net: { request: () => clientRequest },
+    session: sessionHarness.session,
+    deviceId: "00000000-0000-4000-8000-000000000001",
+  });
+  const request: DesktopHttpRequest = Object.freeze({
+    method: "GET",
+    url:
+      `${DESKTOP_API_BASE_URL}/api/v2/photos/` + "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/thumbnail",
+    headers: Object.freeze({
+      Origin: DESKTOP_REQUEST_ORIGIN,
+      "Sec-Fetch-Site": "same-origin",
+      Authorization: "Bearer token",
+    }),
+    credentials: "include",
+    redirect: "error",
+    origin: DESKTOP_REQUEST_ORIGIN,
+  });
+
+  assert.deepEqual(await dependencies.photoRequest?.(request), {
+    statusCode: 200,
+    contentType: "image/webp",
+    bodyBytes: Uint8Array.from(bytes),
+  });
+  assert.deepEqual(clientRequest.writes, []);
 });
 
 test("Electron adapter rejects the app scheme as an HTTP request initiator", async () => {

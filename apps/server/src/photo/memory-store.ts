@@ -63,6 +63,17 @@ export class MemoryPhotoStore implements PhotoStore {
     return row;
   }
 
+  async deleteById(orgId: string, storeId: string, photoId: string): Promise<PhotoRecord | null> {
+    const row = await this.findById(orgId, storeId, photoId);
+    if (row === null) return null;
+    this.byId.delete(photoId);
+    const oKey = `${tenantKey(orgId, storeId)}|${row.order_id}`;
+    const remaining = (this.orderIndex.get(oKey) ?? []).filter((id) => id !== photoId);
+    if (remaining.length === 0) this.orderIndex.delete(oKey);
+    else this.orderIndex.set(oKey, remaining);
+    return row;
+  }
+
   async listStorageKeys(orgId: string, storeId: string): Promise<ReadonlySet<string>> {
     return new Set(
       [...this.byId.values()]

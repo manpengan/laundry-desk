@@ -8,6 +8,7 @@ import {
   type DesktopHttpRequest,
   type DesktopHttpResponse,
   type DesktopHttpTransportDependencies,
+  type DesktopPhotoHttpResponse,
 } from "./http-transport.js";
 
 const DEVICE_ID = "00000000-0000-4000-8000-000000000001";
@@ -18,6 +19,8 @@ const ADMIN_ID = "00000000-0000-4000-8000-000000000005";
 const ORDER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const GARMENT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const PHOTO_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const UPLOAD_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const DELETE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const ACCESS_TOKEN = "header.payload.signature";
 const CSRF_TOKEN = `v1.${"a".repeat(43)}`;
 const LOGIN_INPUT = Object.freeze({
@@ -57,7 +60,10 @@ function authenticatedSession(): Readonly<Record<string, unknown>> {
   });
 }
 
-async function createHarness(photoResponse?: DesktopHttpResponse) {
+async function createHarness(
+  photoResponse?: DesktopHttpResponse,
+  binaryResponse?: DesktopPhotoHttpResponse,
+) {
   let requests: readonly DesktopHttpRequest[] = [];
   let responses = [
     jsonResponse({ ok: true, data: authenticatedSession() }),
@@ -71,6 +77,11 @@ async function createHarness(photoResponse?: DesktopHttpResponse) {
       responses = remaining;
       if (next === undefined) throw new Error("Unexpected HTTP request");
       return next;
+    },
+    async photoRequest(request: DesktopHttpRequest) {
+      requests = Object.freeze([...requests, request]);
+      if (binaryResponse === undefined) throw new Error("Unexpected photo HTTP request");
+      return binaryResponse;
     },
     cookies: Object.freeze({
       async get() {
@@ -111,6 +122,7 @@ test("named photo upload sends bounded raw bytes on the fixed authenticated rout
   );
   const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
   const result = await harness.transport.photo.upload({
+    upload_id: UPLOAD_ID,
     order_id: ORDER_ID,
     garment_id: GARMENT_ID,
     kind: "receive",
@@ -121,6 +133,7 @@ test("named photo upload sends bounded raw bytes on the fixed authenticated rout
   assert.equal(result.ok, true);
   const request = harness.requests[2]!;
   assert.match(request.url, new RegExp(`^${DESKTOP_API_BASE_URL}/api/v2/photos\\?`, "u"));
+  assert.equal(new URL(request.url).searchParams.get("upload_id"), UPLOAD_ID);
   assert.equal(request.credentials, "include");
   assert.equal(request.redirect, "error");
   assert.equal(request.origin, DESKTOP_REQUEST_ORIGIN);
@@ -155,6 +168,7 @@ test("named photo upload fails closed when private or malformed fields cross IPC
     }),
   );
   const result = await harness.transport.photo.upload({
+    upload_id: UPLOAD_ID,
     order_id: ORDER_ID,
     garment_id: GARMENT_ID,
     kind: "receive",
@@ -171,4 +185,65 @@ test("desktop generic command surface rejects internal photo.register", async ()
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.error.code, "VALIDATION_FAILED");
   assert.equal(harness.requests.length, 2);
+});
+
+test("named photo read returns copied bytes from the fixed authenticated route", async () => {
+  const bytes = new Uint8Array([0x52, 0x49, 0x46, 0x46]);
+  const harness = await createHarness(undefined, {
+    statusCode: 200,
+    contentType: "image/webp",
+    bodyBytes: bytes,
+  });
+
+  const result = await harness.transport.photo.read({
+    photo_id: PHOTO_ID,
+    variant: "thumbnail",
+  });
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.notEqual(result.data.bytes, bytes);
+  assert.deepEqual(result.data.bytes, bytes);
+  const request = harness.requests[2]!;
+  assert.equal(request.url, `${DESKTOP_API_BASE_URL}/api/v2/photos/${PHOTO_ID}/thumbnail`);
+  assert.deepEqual(request.headers, {
+    Origin: DESKTOP_REQUEST_ORIGIN,
+    "Sec-Fetch-Site": "same-origin",
+    Authorization: `Bearer ${ACCESS_TOKEN}`,
+  });
+  assert.equal(request.body, undefined);
+});
+
+test("named photo delete uses the fixed CSRF-protected route", async () => {
+  const harness = await createHarness(
+    jsonResponse({
+      ok: true,
+      data: {
+        execution: "executed",
+        result: {
+          photo_id: PHOTO_ID,
+          garment_id: GARMENT_ID,
+          order_id: ORDER_ID,
+          kind: "receive",
+          content_type: "image/jpeg",
+          byte_size: 4,
+          taken_at: 1_721_606_400,
+          created_by_staff_id: ADMIN_ID,
+        },
+      },
+    }),
+  );
+
+  const result = await harness.transport.photo.delete({
+    photo_id: PHOTO_ID,
+    delete_id: DELETE_ID,
+  });
+
+  assert.equal(result.ok, true);
+  const request = harness.requests[2]!;
+  assert.equal(request.url, `${DESKTOP_API_BASE_URL}/api/v2/photos/${PHOTO_ID}/delete`);
+  assert.equal(request.method, "POST");
+  assert.equal(request.headers.Authorization, `Bearer ${ACCESS_TOKEN}`);
+  assert.equal(request.headers["X-CSRF-Token"], CSRF_TOKEN);
+  assert.equal(request.body, JSON.stringify({ delete_id: DELETE_ID }));
 });

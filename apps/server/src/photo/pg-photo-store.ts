@@ -174,6 +174,24 @@ async function selectStorageKeys(
   return new Set(result.rows.map((row) => row.storage_key));
 }
 
+async function deleteById(
+  client: SqlClient,
+  orgId: string,
+  storeId: string,
+  photoId: string,
+): Promise<PhotoRecord | null> {
+  const result = await client.query<PhotoRow>(
+    `DELETE FROM garment_photos
+      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid
+      RETURNING id::text, org_id::text, store_id::text, garment_id::text,
+                order_id::text, kind, storage_key, content_type, content_sha256, byte_size,
+                taken_at, created_by_staff_id::text`,
+    [orgId, storeId, photoId],
+  );
+  const row = result.rows[0];
+  return row === undefined ? null : mapRow(row);
+}
+
 /** Create a tenant-scoped PG photo store; no process-memory fallback exists. */
 export function createPgPhotoStore(pool: PgPool, options: CreatePgPhotoStoreOptions): PhotoStore {
   const { orgId, storeId } = options;
@@ -204,6 +222,13 @@ export function createPgPhotoStore(pool: PgPool, options: CreatePgPhotoStoreOpti
       assertConfiguredScope(inputOrgId, inputStoreId, orgId, storeId);
       return withStoreGucOrCurrent(pool, { orgId, storeId }, (client) =>
         selectById(client, orgId, storeId, photoId),
+      );
+    },
+
+    deleteById: async (inputOrgId: string, inputStoreId: string, photoId: string) => {
+      assertConfiguredScope(inputOrgId, inputStoreId, orgId, storeId);
+      return withStoreGucOrCurrent(pool, { orgId, storeId }, (client) =>
+        deleteById(client, orgId, storeId, photoId),
       );
     },
 

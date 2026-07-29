@@ -128,6 +128,22 @@ test("serializes quota decisions so concurrent uploads cannot exceed limits", as
   );
 });
 
+test("replays one upload id only for identical normalized bytes", async () => {
+  const root = await tempRoot();
+  const store = await createPhotoFileStore({ rootPath: join(root, "photos") });
+
+  const first = await store.write(JPEG, "image/jpeg", PHOTO_A);
+  const replay = await store.write(Buffer.from(JPEG), "image/jpeg", PHOTO_A);
+
+  assert.deepEqual(replay, first);
+  assert.equal(first.storage_key, `${PHOTO_A}.jpg`);
+  assert.equal((await readdir(store.rootPath)).filter((name) => name.endsWith(".jpg")).length, 1);
+  await assert.rejects(
+    () => store.write(Buffer.concat([JPEG, Buffer.from([0x00])]), "image/jpeg", PHOTO_A),
+    hasCode("PHOTO_IDEMPOTENCY_CONFLICT"),
+  );
+});
+
 test("refuses filesystem root, unowned directories, and symlink ancestors", async () => {
   await assert.rejects(
     () => createPhotoFileStore({ rootPath: "/" }),

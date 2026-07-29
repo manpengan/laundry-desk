@@ -1,7 +1,9 @@
 import { MoneyText, StatusBadge } from "@laundry/ui";
 
+import type { PhotoPort } from "../host/photo-port.js";
 import type { OrderGetGarment, OrderGetResult } from "./order-form.js";
-import type { PhotoMetaRow } from "./OrderDetailDrawer.js";
+import { PhotoGallery } from "./PhotoGallery.js";
+import type { PhotoMetaRow } from "./photo-list.js";
 
 export type OrderDetailContentProps = {
   order: OrderGetResult;
@@ -10,7 +12,11 @@ export type OrderDetailContentProps = {
   photoError?: string | null;
   onRetryPhotos?: () => void;
   onRegisterPhoto?: (file: File) => void;
+  uploadError?: string | null;
+  onRetryUpload?: () => void;
+  onDeletePhoto?: (photoId: string) => Promise<boolean>;
   registerBusy?: boolean;
+  photoPort?: PhotoPort;
 };
 
 /** Pure detail body, kept separate so the action controller stays compact. */
@@ -21,7 +27,11 @@ export function OrderDetailContent({
   photoError = null,
   onRetryPhotos,
   onRegisterPhoto,
+  uploadError = null,
+  onRetryUpload,
+  onDeletePhoto,
   registerBusy = false,
+  photoPort,
 }: OrderDetailContentProps) {
   return (
     <>
@@ -96,19 +106,11 @@ export function OrderDetailContent({
           ) : photos.length === 0 ? (
             <p className="ld-order-detail__photo-empty">暂无照片</p>
           ) : (
-            <ul className="ld-order-detail__photo-list">
-              {photos.map((photo) => (
-                <li
-                  key={photo.photo_id}
-                  className="ld-order-detail__photo-thumb"
-                  data-testid="order-detail-photo-thumb"
-                  title={`${photo.kind} · ${photo.content_type}`}
-                >
-                  <span className="ld-order-detail__photo-kind">{photo.kind}</span>
-                  <span className="ld-order-detail__photo-bytes">{photo.byte_size} B</span>
-                </li>
-              ))}
-            </ul>
+            <PhotoGallery
+              photos={photos}
+              {...(photoPort === undefined ? {} : { photoPort })}
+              {...(onDeletePhoto === undefined ? {} : { onDelete: onDeletePhoto })}
+            />
           )}
         </div>
         {onRegisterPhoto !== undefined ? (
@@ -126,6 +128,16 @@ export function OrderDetailContent({
               data-testid="order-detail-register-photo-btn"
             />
           </label>
+        ) : null}
+        {uploadError !== null ? (
+          <div className="ld-order-detail__photo-error" role="alert">
+            <p>照片上传失败：{uploadError}</p>
+            {onRetryUpload !== undefined ? (
+              <button type="button" disabled={registerBusy} onClick={onRetryUpload}>
+                重试上传
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </section>
       <section className="ld-order-detail__garments" aria-label="衣物列表">

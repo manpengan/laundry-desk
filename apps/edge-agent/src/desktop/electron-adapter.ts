@@ -7,6 +7,7 @@ import {
   type DesktopHttpResponse,
   type DesktopHttpTransportDependencies,
 } from "./http-transport.js";
+import { executeElectronPhotoRequest } from "./electron-photo-request.js";
 
 export const DESKTOP_MAX_RESPONSE_BYTES = 512 * 1_024;
 const DESKTOP_MAX_REQUEST_BYTES = 256 * 1_024;
@@ -50,6 +51,7 @@ export type ElectronSessionSurface = Readonly<{
 
 type ElectronIncomingMessageSurface = Readonly<{
   statusCode: number;
+  headers: Readonly<Record<string, string | readonly string[] | undefined>>;
   on: {
     (event: "data", listener: (chunk: Buffer | Uint8Array | string) => void): unknown;
     (event: "end", listener: () => void): unknown;
@@ -99,8 +101,8 @@ function isPhotoUpload(url: URL, request: DesktopHttpRequest): boolean {
     return false;
   }
   const expected = url.searchParams.has("taken_at")
-    ? ["order_id", "garment_id", "kind", "taken_at"]
-    : ["order_id", "garment_id", "kind"];
+    ? ["upload_id", "order_id", "garment_id", "kind", "taken_at"]
+    : ["upload_id", "order_id", "garment_id", "kind"];
   const keys = [...url.searchParams.keys()];
   if (
     keys.length !== expected.length ||
@@ -111,6 +113,7 @@ function isPhotoUpload(url: URL, request: DesktopHttpRequest): boolean {
   const takenAt = url.searchParams.get("taken_at");
   const takenAtNumber = takenAt === null ? null : Number(takenAt);
   return (
+    UUID.test(url.searchParams.get("upload_id") ?? "") &&
     UUID.test(url.searchParams.get("order_id") ?? "") &&
     UUID.test(url.searchParams.get("garment_id") ?? "") &&
     PHOTO_KINDS.has(url.searchParams.get("kind") ?? "") &&
@@ -331,6 +334,7 @@ export function createElectronDesktopDependencies(
 ): DesktopHttpTransportDependencies {
   return Object.freeze({
     request: (request) => executeRequest(options.net, options.session, request),
+    photoRequest: (request) => executeElectronPhotoRequest(options.net, options.session, request),
     cookies: Object.freeze({
       get: (url: string) => readCsrfCookies(options.session.cookies, url),
       clear: (url: string) => clearAuthCookies(options.session.cookies, url),

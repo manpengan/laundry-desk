@@ -24,6 +24,22 @@ export type PrintJobsListResult = Readonly<{
   jobs: readonly PrintJobView[];
 }>;
 
+export type PrintWorkerView = Readonly<{
+  state: "running" | "stopped";
+  worker_id: string;
+  processed_jobs: number;
+  failed_jobs: number;
+  last_cycle_at: number | null;
+  last_error_code: string | null;
+  spool_artifacts: number;
+  spool_bytes: number;
+}>;
+
+export type PrintQueueView = Readonly<{
+  jobs: readonly PrintJobView[];
+  worker?: PrintWorkerView;
+}>;
+
 const STATUS_SET: ReadonlySet<string> = new Set(["queued", "printing", "done", "failed"]);
 
 const STATUS_LABELS: Readonly<Record<PrintJobStatus, string>> = Object.freeze({
@@ -61,6 +77,55 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const ownKeys = Reflect.ownKeys(value);
+  return (
+    ownKeys.length === keys.length &&
+    keys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+  );
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function parseWorker(raw: unknown): PrintWorkerView | null {
+  const keys = [
+    "state",
+    "worker_id",
+    "processed_jobs",
+    "failed_jobs",
+    "last_cycle_at",
+    "last_error_code",
+    "spool_artifacts",
+    "spool_bytes",
+  ] as const;
+  if (!isRecord(raw) || !hasExactKeys(raw, keys)) return null;
+  if (
+    (raw.state !== "running" && raw.state !== "stopped") ||
+    typeof raw.worker_id !== "string" ||
+    raw.worker_id.length < 1 ||
+    !isNonNegativeInteger(raw.processed_jobs) ||
+    !isNonNegativeInteger(raw.failed_jobs) ||
+    (raw.last_cycle_at !== null && !isNonNegativeInteger(raw.last_cycle_at)) ||
+    (raw.last_error_code !== null && typeof raw.last_error_code !== "string") ||
+    !isNonNegativeInteger(raw.spool_artifacts) ||
+    !isNonNegativeInteger(raw.spool_bytes)
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    state: raw.state,
+    worker_id: raw.worker_id,
+    processed_jobs: raw.processed_jobs,
+    failed_jobs: raw.failed_jobs,
+    last_cycle_at: raw.last_cycle_at,
+    last_error_code: raw.last_error_code,
+    spool_artifacts: raw.spool_artifacts,
+    spool_bytes: raw.spool_bytes,
+  });
+}
+
 function parseJob(raw: unknown): PrintJobView | null {
   if (!isRecord(raw)) return null;
   const status = raw.status;
@@ -85,16 +150,22 @@ function parseJob(raw: unknown): PrintJobView | null {
 
 /** Parse bus envelope / bare `{ jobs }` into status views; drops malformed rows. */
 export function parsePrintJobsList(data: unknown): readonly PrintJobView[] {
+  return parsePrintQueue(data)?.jobs ?? Object.freeze([]);
+}
+
+export function parsePrintQueue(data: unknown): PrintQueueView | null {
   const payload = unwrapCommandResult<unknown>(data);
   if (!isRecord(payload) || !Array.isArray(payload.jobs)) {
-    return Object.freeze([]);
+    return null;
   }
   const jobs: PrintJobView[] = [];
   for (const row of payload.jobs) {
     const job = parseJob(row);
     if (job !== null) jobs.push(job);
   }
-  return Object.freeze(jobs);
+  if (payload.worker === undefined) return Object.freeze({ jobs: Object.freeze(jobs) });
+  const worker = parseWorker(payload.worker);
+  return worker === null ? null : Object.freeze({ jobs: Object.freeze(jobs), worker });
 }
 
 /**
@@ -105,10 +176,18 @@ export async function loadPrintJobs(
   queryClient: QueryPort,
   limit: number = PRINT_JOBS_LIST_LIMIT,
 ): Promise<readonly PrintJobView[] | null> {
+  const queue = await loadPrintQueue(queryClient, limit);
+  return queue?.jobs ?? null;
+}
+
+export async function loadPrintQueue(
+  queryClient: QueryPort,
+  limit: number = PRINT_JOBS_LIST_LIMIT,
+): Promise<PrintQueueView | null> {
   try {
     const res = await queryClient.execute("print.jobs.list", { limit });
     if (!res.ok) return null;
-    return parsePrintJobsList(res.data);
+    return parsePrintQueue(res.data);
   } catch {
     return null;
   }

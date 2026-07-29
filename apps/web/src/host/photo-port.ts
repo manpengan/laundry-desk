@@ -6,6 +6,7 @@ export type PhotoKind = "receive" | "defect" | "ready" | "other";
 export type PhotoContentType = "image/jpeg" | "image/png" | "image/webp";
 
 export type PhotoUploadInput = Readonly<{
+  upload_id: string;
   order_id: string;
   garment_id: string;
   kind: PhotoKind;
@@ -30,8 +31,17 @@ export type PhotoUploadData = Readonly<{
   result: PhotoRow;
 }>;
 
+export type PhotoReadVariant = "thumbnail" | "original";
+
+export type PhotoBinaryData = Readonly<{
+  content_type: PhotoContentType;
+  bytes: Uint8Array;
+}>;
+
 export type PhotoPort = Readonly<{
   upload: (input: PhotoUploadInput) => Promise<CommandResult<PhotoUploadData>>;
+  read: (photoId: string, variant: PhotoReadVariant) => Promise<CommandResult<PhotoBinaryData>>;
+  remove: (photoId: string, deleteId: string) => Promise<CommandResult<PhotoUploadData>>;
 }>;
 
 export type HttpPhotoPortOptions = Readonly<{
@@ -151,6 +161,7 @@ function parseFailure(value: unknown): CommandFailure {
 
 function validInput(input: PhotoUploadInput): boolean {
   return (
+    UUID.test(input.upload_id) &&
     UUID.test(input.order_id) &&
     UUID.test(input.garment_id) &&
     ["receive", "defect", "ready", "other"].includes(input.kind) &&
@@ -159,6 +170,47 @@ function validInput(input: PhotoUploadInput): boolean {
     input.bytes.byteLength <= MAX_PHOTO_BYTES &&
     (input.taken_at === undefined || (Number.isSafeInteger(input.taken_at) && input.taken_at >= 0))
   );
+}
+
+function readPhotoPath(photoId: string, variant: PhotoReadVariant): string | null {
+  if (!UUID.test(photoId) || (variant !== "thumbnail" && variant !== "original")) return null;
+  return variant === "thumbnail"
+    ? `/api/v2/photos/${photoId}/thumbnail`
+    : `/api/v2/photos/${photoId}`;
+}
+
+async function parseReadFailure(response: Response): Promise<CommandFailure> {
+  try {
+    return parseFailure((await response.json()) as unknown);
+  } catch {
+    return Object.freeze({ code: "PHOTO_READ_FAILED", message: "照片读取失败" });
+  }
+}
+
+async function readBoundedPhotoBytes(response: Response): Promise<Uint8Array | null> {
+  if (response.body === null) return null;
+  const reader = response.body.getReader();
+  let chunks: readonly Uint8Array[] = Object.freeze([]);
+  let totalBytes = 0;
+  while (true) {
+    const next = await reader.read();
+    if (next.done) break;
+    if (next.value.byteLength === 0) continue;
+    totalBytes += next.value.byteLength;
+    if (totalBytes > MAX_PHOTO_BYTES) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks = Object.freeze([...chunks, Uint8Array.from(next.value)]);
+  }
+  if (totalBytes < 1) return null;
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 export function createHttpPhotoPort(options: HttpPhotoPortOptions): PhotoPort {
@@ -172,6 +224,7 @@ export function createHttpPhotoPort(options: HttpPhotoPortOptions): PhotoPort {
       const csrf = options.readCsrf();
       if (csrf === null || csrf.length === 0) return failure("CSRF_REJECTED", "缺少 CSRF cookie");
       const query = new URLSearchParams({
+        upload_id: input.upload_id,
         order_id: input.order_id,
         garment_id: input.garment_id,
         kind: input.kind,
@@ -194,6 +247,81 @@ export function createHttpPhotoPort(options: HttpPhotoPortOptions): PhotoPort {
           const data = parsePhotoUploadData(value.data);
           if (data !== null) return Object.freeze({ ok: true as const, data });
           return failure("PHOTO_UPLOAD_FAILED", "照片上传响应格式错误");
+        }
+        return Object.freeze({ ok: false as const, error: parseFailure(value) });
+      } catch {
+        return failure("NETWORK", "无法连接本地服务器");
+      }
+    },
+    async read(
+      photoId: string,
+      variant: PhotoReadVariant,
+    ): Promise<CommandResult<PhotoBinaryData>> {
+      const path = readPhotoPath(photoId, variant);
+      if (path === null) return failure("VALIDATION_FAILED", "照片参数无效");
+      const token = options.getAccessToken();
+      if (token === null || token.length === 0) return failure("AUTHENTICATION_FAILED", "未登录");
+      try {
+        const response = await fetchImpl(`${base}${path}`, {
+          method: "GET",
+          credentials: "include",
+          headers: { authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) {
+          return Object.freeze({ ok: false as const, error: await parseReadFailure(response) });
+        }
+        const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim() ?? "";
+        if (!isPhotoContentType(contentType)) {
+          return failure("PHOTO_READ_FAILED", "照片响应类型错误");
+        }
+        const contentLengthHeader = response.headers.get("content-length");
+        const contentLength =
+          contentLengthHeader === null ? null : Number.parseInt(contentLengthHeader, 10);
+        if (
+          contentLength !== null &&
+          (!Number.isSafeInteger(contentLength) ||
+            String(contentLength) !== contentLengthHeader ||
+            contentLength < 1 ||
+            contentLength > MAX_PHOTO_BYTES)
+        ) {
+          return failure("PHOTO_READ_FAILED", "照片响应大小错误");
+        }
+        const bytes = await readBoundedPhotoBytes(response);
+        if (bytes === null || (contentLength !== null && bytes.byteLength !== contentLength)) {
+          return failure("PHOTO_READ_FAILED", "照片响应大小错误");
+        }
+        return Object.freeze({
+          ok: true as const,
+          data: Object.freeze({ content_type: contentType, bytes: Uint8Array.from(bytes) }),
+        });
+      } catch {
+        return failure("NETWORK", "无法连接本地服务器");
+      }
+    },
+    async remove(photoId: string, deleteId: string): Promise<CommandResult<PhotoUploadData>> {
+      if (!UUID.test(photoId) || !UUID.test(deleteId)) {
+        return failure("VALIDATION_FAILED", "照片参数无效");
+      }
+      const token = options.getAccessToken();
+      if (token === null || token.length === 0) return failure("AUTHENTICATION_FAILED", "未登录");
+      const csrf = options.readCsrf();
+      if (csrf === null || csrf.length === 0) return failure("CSRF_REJECTED", "缺少 CSRF cookie");
+      try {
+        const response = await fetchImpl(`${base}/api/v2/photos/${photoId}/delete`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+            "x-csrf-token": csrf,
+          },
+          body: JSON.stringify({ delete_id: deleteId }),
+        });
+        const value: unknown = await response.json();
+        if (isRecord(value) && hasExactKeys(value, ["ok", "data"]) && value.ok === true) {
+          const data = parsePhotoUploadData(value.data);
+          if (data !== null) return Object.freeze({ ok: true as const, data });
+          return failure("PHOTO_DELETE_FAILED", "照片删除响应格式错误");
         }
         return Object.freeze({ ok: false as const, error: parseFailure(value) });
       } catch {

@@ -22,7 +22,9 @@ files:
   - dist/desktop/auth-intent.js
   - dist/desktop/device-identity.js
   - dist/desktop/electron-adapter.js
+  - dist/desktop/electron-photo-request.js
   - dist/desktop/http-transport.js
+  - dist/desktop/http-transport-support.js
   - dist/desktop/request-builder.js
   - dist/preload.cjs
   - package.json
