@@ -26,6 +26,12 @@ const COPY: Record<NavItemId, PageCopy> = {
     emptyDescription: "会话就绪后按订单 UUID 取件；件 ID 可留空取全部。",
     actionLabel: "去开单",
   },
+  orders: {
+    title: "订单与欠款",
+    emptyTitle: "暂无欠款订单",
+    emptyDescription: "载入后可查看仍有余额的订单，并在详情里补缴或撤销。",
+    actionLabel: "去开单",
+  },
   customers: {
     title: "客户",
     emptyTitle: "还没有客户",

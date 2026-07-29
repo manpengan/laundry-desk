@@ -4,7 +4,7 @@
 
 import { Button, MoneyText, StatusBadge, formatMoneyFromFen, useToast } from "@laundry/ui";
 import { useCallback, useState } from "react";
-import type { QueryPort } from "../commands/types.js";
+import type { CommandPort, QueryPort } from "../commands/types.js";
 import { parseOrderListRows, unwrapQueryResult, type OrderListRowView } from "./OrdersList.js";
 import { OrderDetailDrawer } from "./OrderDetailDrawer.js";
 
@@ -13,6 +13,8 @@ const DEBT_MIN_BALANCE_CENTS = 1;
 
 export type DebtPageProps = {
   queryClient: QueryPort;
+  /** Without this the detail drawer can display but not collect or cancel. */
+  commandClient?: CommandPort;
   /** Navigate to pickup with order id prefilled. */
   onOpenPickup?: (orderId: string) => void;
 };
@@ -49,7 +51,7 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function DebtPage({ queryClient, onOpenPickup }: DebtPageProps) {
+export function DebtPage({ queryClient, commandClient, onOpenPickup }: DebtPageProps) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState<readonly OrderListRowView[]>([]);
@@ -134,7 +136,7 @@ export function DebtPage({ queryClient, onOpenPickup }: DebtPageProps) {
                   data-testid="debt-row-detail-btn"
                 >
                   <div className="ld-orders-list__main">
-                    <span className="ld-orders-list__ticket">{row.ticket_no}</span>
+                    <span className="ld-orders-list__ticket">{row.ticket_no ?? "挂单"}</span>
                     <StatusBadge family="order" status={row.status} />
                   </div>
                   <div className="ld-orders-list__meta">
@@ -180,6 +182,7 @@ export function DebtPage({ queryClient, onOpenPickup }: DebtPageProps) {
         open={detailOrderId !== null}
         orderId={detailOrderId}
         queryClient={queryClient}
+        {...(commandClient === undefined ? {} : { commandClient })}
         onClose={() => setDetailOrderId(null)}
         {...(onOpenPickup !== undefined
           ? {
