@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { PgPool } from "../db/pg-pool.js";
 import { withStoreGuc } from "../db/tenant-guc-client.js";
+import { DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./demo-ids.js";
 import { LOCAL_PROFILE } from "./profile.js";
 
 export type LocalStaffDirectoryEntry = Readonly<{
@@ -19,6 +20,27 @@ type PgStaffDirectoryRow = Readonly<{
   role: string;
   username: string;
 }>;
+
+export const LOCAL_MEMORY_STAFF_DIRECTORY: readonly LocalStaffDirectoryEntry[] = Object.freeze([
+  Object.freeze({
+    staff_id: DEMO_STAFF_A_ID,
+    display_name: "店员甲",
+    role: "staff",
+    username: "staff",
+  }),
+  Object.freeze({
+    staff_id: DEMO_STAFF_B_ID,
+    display_name: "店员乙",
+    role: "staff",
+    username: "staffb",
+  }),
+  Object.freeze({
+    staff_id: LOCAL_PROFILE.adminStaffId,
+    display_name: "店长",
+    role: "admin",
+    username: "admin",
+  }),
+]);
 
 const PgStaffDirectoryRowSchema = z
   .object({

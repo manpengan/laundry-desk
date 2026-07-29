@@ -19,6 +19,9 @@ function createBridge(): LaundryDesktopBridge {
     query: {
       execute: async () => ({ ok: false }),
     },
+    photo: {
+      upload: async () => ({ ok: false }),
+    },
     health: {
       get: async () => ({ ok: false }),
     },

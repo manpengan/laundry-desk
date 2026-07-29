@@ -2,6 +2,8 @@
  * M3 garment photo metadata types (store-scoped memory / future PG).
  */
 
+import type { PhotoContentType } from "./file-store.js";
+
 export type PhotoKind = "receive" | "defect" | "ready" | "other";
 
 export type PhotoRecord = Readonly<{
@@ -12,7 +14,8 @@ export type PhotoRecord = Readonly<{
   order_id: string;
   kind: PhotoKind;
   storage_key: string;
-  content_type: string;
+  content_type: PhotoContentType;
+  content_sha256: string | null;
   byte_size: number;
   /** Epoch seconds. */
   taken_at: number;
@@ -26,7 +29,8 @@ export type PhotoRegisterInput = Readonly<{
   order_id: string;
   kind: PhotoKind;
   storage_key: string;
-  content_type: string;
+  content_type: PhotoContentType;
+  content_sha256: string;
   byte_size: number;
   /** Epoch seconds. */
   taken_at: number;
@@ -37,4 +41,6 @@ export type PhotoRegisterInput = Readonly<{
 export type PhotoStore = Readonly<{
   register: (input: PhotoRegisterInput) => Promise<PhotoRecord>;
   listByOrder: (orgId: string, storeId: string, orderId: string) => Promise<readonly PhotoRecord[]>;
+  findById: (orgId: string, storeId: string, photoId: string) => Promise<PhotoRecord | null>;
+  listStorageKeys: (orgId: string, storeId: string) => Promise<ReadonlySet<string>>;
 }>;

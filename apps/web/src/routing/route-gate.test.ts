@@ -50,6 +50,9 @@ function appPorts(): AppPorts {
     auth: createMockAuthClient(),
     command: createMockCommandClient(),
     query: createMockQueryClient(),
+    photo: Object.freeze({
+      upload: async () => ({ ok: false as const, error: { code: "NOT_CONFIGURED" } }),
+    }),
     health: Object.freeze({
       get: async () => ({ ok: true as const, data: { status: "ready" as const } }),
     }),

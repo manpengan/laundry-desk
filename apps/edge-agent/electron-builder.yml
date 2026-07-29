@@ -23,6 +23,7 @@ files:
   - dist/desktop/device-identity.js
   - dist/desktop/electron-adapter.js
   - dist/desktop/http-transport.js
+  - dist/desktop/request-builder.js
   - dist/preload.cjs
   - package.json
   - "!**/*.test.*"

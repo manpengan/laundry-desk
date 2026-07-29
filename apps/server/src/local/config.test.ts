@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createLocalRuntime, createMemoryLocalRuntime } from "./create-runtime.js";
-import { parseLocalHostConfig, parseLocalServerConfig } from "./config.js";
+import { parseLocalHostConfig, parseLocalPhotoStoreDir, parseLocalServerConfig } from "./config.js";
 
 const ACCESS_SECRET = "access-secret-is-at-least-32-bytes";
 const CSRF_SECRET = "csrf-proof-secret-is-at-least-32-bytes";
@@ -113,6 +113,26 @@ test("measures signing secret strength in UTF-8 bytes", () => {
   });
 
   assert.equal(config.accessTokenSecret, "台".repeat(11));
+});
+
+test("photo storage accepts only the dedicated compose mount", () => {
+  assert.equal(parseLocalPhotoStoreDir({}), null);
+  assert.equal(
+    parseLocalPhotoStoreDir({ LAUNDRY_PHOTO_STORE_DIR: " /var/lib/laundry/photos " }),
+    "/var/lib/laundry/photos",
+  );
+  for (const candidate of [
+    "/",
+    "/etc",
+    "/tmp/photos",
+    "/var/lib/laundry/photos/../..",
+    "relative/photos",
+  ]) {
+    assert.throws(
+      () => parseLocalPhotoStoreDir({ LAUNDRY_PHOTO_STORE_DIR: candidate }),
+      /must be \/var\/lib\/laundry\/photos/u,
+    );
+  }
 });
 
 test("PG selection fails closed before opening a pool when secrets are absent", async () => {

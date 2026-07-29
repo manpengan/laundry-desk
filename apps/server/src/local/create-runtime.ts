@@ -35,7 +35,7 @@ import { createMemoryShiftStore } from "../shift/memory-store.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import type { PhotoHandlerDeps } from "../photo/handlers.js";
 import { createMemoryPhotoStore } from "../photo/memory-store.js";
-import { createPgPhotoStore } from "../photo/pg-photo-store.js";
+import { preparePgPhotoDeps } from "../photo/runtime-files.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import {
@@ -55,13 +55,18 @@ import { DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./dem
 import { assertLocalBootstrapReady } from "./bootstrap.js";
 import {
   parseLocalHostConfig,
+  parseLocalPhotoStoreDir,
   parseLocalPrintSpoolDir,
   parseLocalServerConfig,
   parseLocalSigningSecrets,
   type LocalServerConfig,
 } from "./config.js";
 import { LOCAL_PROFILE } from "./profile.js";
-import { loadPgStaffDirectory, type LocalStaffDirectoryEntry } from "./staff-directory.js";
+import {
+  loadPgStaffDirectory,
+  LOCAL_MEMORY_STAFF_DIRECTORY,
+  type LocalStaffDirectoryEntry,
+} from "./staff-directory.js";
 
 export {
   DEMO_ADMIN_ID,
@@ -94,7 +99,7 @@ export type LocalRuntime = Readonly<{
   customer: CustomerHandlerDeps;
   /** M2 shift closing (memory; both runtime modes for skeleton). */
   shift: ShiftHandlerDeps;
-  /** M3 garment photo metadata (memory; both runtime modes for skeleton). */
+  /** Garment photo metadata and optional private file store. */
   photo: PhotoHandlerDeps;
   accessTokenSecret: string;
   /** Single runtime-owned capability shared by session issuance and HTTP verification. */
@@ -122,27 +127,6 @@ const defaultPgRuntimeDependencies: CreatePgLocalRuntimeDependencies = Object.fr
   assertReady: assertLocalBootstrapReady,
   loadStaffDirectory: loadPgStaffDirectory,
 });
-
-const memoryStaffDirectory = Object.freeze([
-  Object.freeze({
-    staff_id: DEMO_STAFF_A_ID,
-    display_name: "店员甲",
-    role: "staff" as const,
-    username: "staff",
-  }),
-  Object.freeze({
-    staff_id: DEMO_STAFF_B_ID,
-    display_name: "店员乙",
-    role: "staff" as const,
-    username: "staffb",
-  }),
-  Object.freeze({
-    staff_id: LOCAL_PROFILE.adminStaffId,
-    display_name: "店长",
-    role: "admin" as const,
-    username: "admin",
-  }),
-]);
 
 function freezeStaffDirectory(
   entries: readonly LocalStaffDirectoryEntry[],
@@ -317,7 +301,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     photo: Object.freeze({ store: photoStore }),
     accessTokenSecret,
     csrfProofSigner,
-    staffDirectory: memoryStaffDirectory,
+    staffDirectory: LOCAL_MEMORY_STAFF_DIRECTORY,
     pendingStore: processPendingActionStore,
     stepUpProofStore: processStepUpProofStore,
     idempotencyStore: new MemoryIdempotencyStore(),
@@ -332,15 +316,23 @@ export async function createPgLocalRuntime(
   expectedDemoOnly: boolean,
   config: LocalServerConfig = parseLocalServerConfig(process.env),
   dependencies: CreatePgLocalRuntimeDependencies = defaultPgRuntimeDependencies,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<LocalRuntime> {
   const csrfProofSigner = createCsrfProofSigner(config.csrfProofSecret);
-  const spoolDir = parseLocalPrintSpoolDir(process.env);
+  const spoolDir = parseLocalPrintSpoolDir(env);
   const printSpool = spoolDir === null ? null : await createFileSpool({ rootPath: spoolDir });
   const appPool = dependencies.createPool({ connectionString });
   let pgStaffDirectory: readonly LocalStaffDirectoryEntry[];
+  let photo: PhotoHandlerDeps;
   try {
     await dependencies.assertReady(appPool, expectedDemoOnly);
     pgStaffDirectory = freezeStaffDirectory(await dependencies.loadStaffDirectory(appPool));
+    photo = await preparePgPhotoDeps(
+      appPool,
+      parseLocalPhotoStoreDir(env),
+      LOCAL_PROFILE.orgId,
+      LOCAL_PROFILE.storeId,
+    );
   } catch (error) {
     return closeFailedPgPool(appPool, error);
   }
@@ -354,11 +346,6 @@ export async function createPgLocalRuntime(
     orgId: LOCAL_PROFILE.orgId,
     storeId: LOCAL_PROFILE.storeId,
   });
-  const photoStore = createPgPhotoStore(appPool, {
-    orgId: LOCAL_PROFILE.orgId,
-    storeId: LOCAL_PROFILE.storeId,
-  });
-
   return Object.freeze({
     mode: "pg" as const,
     identity: buildIdentityDeps(
@@ -407,7 +394,7 @@ export async function createPgLocalRuntime(
       stats: statsSource,
       timeZone: LOCAL_PROFILE.timezone,
     }),
-    photo: Object.freeze({ store: photoStore }),
+    photo,
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSigner,
     staffDirectory: pgStaffDirectory,
@@ -443,5 +430,7 @@ export async function createLocalRuntime(
       ...hostConfig,
       ...parseLocalSigningSecrets(env),
     }),
+    defaultPgRuntimeDependencies,
+    env,
   );
 }

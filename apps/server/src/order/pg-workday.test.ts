@@ -51,6 +51,18 @@ const ACTOR: ActorContext = Object.freeze({
 });
 
 const UNIT_PRICE_CENTS = 1_000;
+const PRICING = Object.freeze({
+  discount_cents: 100,
+  addon_cents: 200,
+  urgent_cents: 300,
+  freight_cents: 400,
+});
+const PAYABLE_CENTS =
+  2 * UNIT_PRICE_CENTS -
+  PRICING.discount_cents +
+  PRICING.addon_cents +
+  PRICING.urgent_cents +
+  PRICING.freight_cents;
 
 /**
  * Pin this acceptance to its own business day. shift.close is terminal and
@@ -145,12 +157,13 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       return result.ok ? { ok: true, data: result.data.result } : { ok: false };
     };
 
-    // Receive two garments (2000 cents) paying 600 in cash — 1400 stays as debt.
+    // Receive two garments with every pricing component and pay 600 in cash.
     const received = (
       await run("order.receive", {
         customer_phone: phone,
         customer_name: "验收顾客",
         lines: [{ service_code: serviceCode, category_code: categoryCode, qty: 2 }],
+        ...PRICING,
         initial_payment: { amount_cents: 600, method: "cash" },
       })
     ).data as { order_id: string; business_date: string; balance_cents?: number };
@@ -164,22 +177,54 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       "2026-01-15",
       "receive must persist the pinned ISO business_date",
     );
-    assert.equal(afterReceive.payable_cents, 2 * UNIT_PRICE_CENTS, "authoritative catalog pricing");
+    assert.equal(afterReceive.original_cents, 2 * UNIT_PRICE_CENTS);
+    assert.equal(afterReceive.discount_cents, PRICING.discount_cents);
+    assert.equal(afterReceive.addon_cents, PRICING.addon_cents);
+    assert.equal(afterReceive.urgent_cents, PRICING.urgent_cents);
+    assert.equal(afterReceive.freight_cents, PRICING.freight_cents);
+    assert.equal(afterReceive.payable_cents, PAYABLE_CENTS, "authoritative catalog pricing");
     assert.equal(afterReceive.paid_cents, 600);
-    assert.equal(afterReceive.balance_cents, 1_400);
+    assert.equal(afterReceive.balance_cents, PAYABLE_CENTS - 600);
     assert.equal(afterReceive.garment_count, 2);
     assert.equal(afterReceive.payment_count, 1, "a single ledger row for the initial payment");
+    assert.deepEqual(
+      await statsSource.daySummary({
+        orgId: DEMO_ORG_ID,
+        storeId: DEMO_STORE_ID,
+        businessDate: afterReceive.business_date,
+      }),
+      {
+        business_date: afterReceive.business_date,
+        order_count: 1,
+        garment_count: 2,
+        payable_cents: PAYABLE_CENTS,
+        paid_cents: 600,
+        balance_cents: PAYABLE_CENTS - 600,
+        payment_cents: 600,
+        picked_garment_count: 0,
+      },
+      "stats aggregate must reflect the real order and payment ledgers",
+    );
 
     // Repay the outstanding debt.
     await run("payment.repay", {
       order_id: received.order_id,
-      amount_cents: 1_400,
+      amount_cents: PAYABLE_CENTS - 600,
       method: "wechat",
     });
     const afterRepay = await readOrder(appPool, received.order_id);
     assert.equal(afterRepay.balance_cents, 0, "repay must settle the balance");
-    assert.equal(afterRepay.paid_cents, 2 * UNIT_PRICE_CENTS);
+    assert.equal(afterRepay.paid_cents, PAYABLE_CENTS);
     assert.equal(afterRepay.payment_count, 2, "payments are append-only");
+    assert.deepEqual(
+      await statsSource.cashSummary({
+        orgId: DEMO_ORG_ID,
+        storeId: DEMO_STORE_ID,
+        businessDate: afterReceive.business_date,
+      }),
+      { cash_cents: 600 },
+      "cash summary must exclude the WeChat repayment",
+    );
 
     // Pick up everything; nothing left to collect.
     await run("order.pickup", {
@@ -192,21 +237,65 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     assert.equal(afterPickup.balance_cents, 0);
 
     // Close the business day the order landed on.
-    await run("shift.close", {
-      business_date: afterReceive.business_date,
-      counted_cash_cents: 600,
-      retained_float_cents: 0,
-      signature_name: "验收签字",
-    });
+    const closed = (
+      await run("shift.close", {
+        business_date: afterReceive.business_date,
+        counted_cash_cents: 600,
+        retained_float_cents: 100,
+        signature_name: "验收签字",
+      })
+    ).data as {
+      counted_cash_cents: number;
+      retained_float_cents: number;
+      expected_cash_cents: number;
+      cash_difference_cents: number;
+    };
+    assert.deepEqual(
+      {
+        counted_cash_cents: closed.counted_cash_cents,
+        retained_float_cents: closed.retained_float_cents,
+        expected_cash_cents: closed.expected_cash_cents,
+        cash_difference_cents: closed.cash_difference_cents,
+      },
+      {
+        counted_cash_cents: 600,
+        retained_float_cents: 100,
+        expected_cash_cents: 600,
+        cash_difference_cents: 0,
+      },
+    );
+    const persistedClose = await shiftStore.getByBusinessDate(
+      DEMO_ORG_ID,
+      DEMO_STORE_ID,
+      afterReceive.business_date,
+    );
+    assert.ok(persistedClose);
+    assert.equal(persistedClose.signature_name, "验收签字");
+    assert.equal(persistedClose.order_count, 1);
+    assert.equal(persistedClose.payable_cents, PAYABLE_CENTS);
+    assert.equal(persistedClose.paid_cents, PAYABLE_CENTS);
+    assert.equal(persistedClose.payment_cents, 600, "repay is separate from kind=pay cashflow");
+    assert.equal(persistedClose.counted_cash_cents, 600);
+    assert.equal(persistedClose.retained_float_cents, 100);
+    assert.equal(persistedClose.expected_cash_cents, 600);
+    assert.equal(persistedClose.cash_difference_cents, 0);
     const closings = await withPoolClient(appPool, (sql) =>
       withTenantTransaction(sql, TENANT, (tx) =>
-        tx.query<{ count: string }>(
-          "SELECT count(*)::text AS count FROM shift_closings WHERE business_date = $1",
-          [afterReceive.business_date],
+        tx.query<{ close_count: string; audit_count: string }>(
+          `SELECT
+             (SELECT count(*) FROM shift_closings WHERE business_date = $1)::text AS close_count,
+             (SELECT count(*) FROM audit_log
+               WHERE command = 'shift.close' AND entity_id = $2)::text AS audit_count`,
+          [afterReceive.business_date, persistedClose.shift_id],
         ),
       ),
     );
-    assert.equal(Number(closings.rows[0]?.count), 1, "shift close writes exactly one closing row");
+    assert.equal(
+      Number(closings.rows[0]?.close_count),
+      1,
+      "shift close writes exactly one closing row",
+    );
+    assert.equal(Number(closings.rows[0]?.audit_count), 1, "shift close audit commits atomically");
   } finally {
     await appPool.end();
     await adminPool.end();
@@ -215,6 +304,11 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
 
 type OrderSnapshot = Readonly<{
   business_date: string;
+  original_cents: number;
+  discount_cents: number;
+  addon_cents: number;
+  urgent_cents: number;
+  freight_cents: number;
   payable_cents: number;
   paid_cents: number;
   balance_cents: number;
@@ -231,11 +325,17 @@ async function readOrder(
     withTenantTransaction(sql, TENANT, async (tx) => {
       const order = await tx.query<{
         business_date: string;
+        original_cents: number;
+        discount_cents: number;
+        addon_cents: number;
+        urgent_cents: number;
+        freight_cents: number;
         payable_cents: number;
         paid_cents: number;
         balance_cents: number;
       }>(
-        `SELECT business_date, payable_cents, paid_cents, balance_cents
+        `SELECT business_date, original_cents, discount_cents, addon_cents,
+                urgent_cents, freight_cents, payable_cents, paid_cents, balance_cents
            FROM orders WHERE id = $1`,
         [orderId],
       );
@@ -253,6 +353,11 @@ async function readOrder(
       assert.ok(row, "order row must exist");
       return Object.freeze({
         business_date: row.business_date,
+        original_cents: row.original_cents,
+        discount_cents: row.discount_cents,
+        addon_cents: row.addon_cents,
+        urgent_cents: row.urgent_cents,
+        freight_cents: row.freight_cents,
         payable_cents: row.payable_cents,
         paid_cents: row.paid_cents,
         balance_cents: row.balance_cents,

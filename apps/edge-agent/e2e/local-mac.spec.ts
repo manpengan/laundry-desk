@@ -226,6 +226,24 @@ async function runCounterWorkday(page: Page): Promise<void> {
   await expect(receiveResult).toContainText("¥30.00");
   await expect(receiveResult).toContainText("¥20.00");
 
+  // Upload one real photo through the named desktop IPC capability and verify
+  // that reopening the server-backed order shows the durable metadata.
+  await page.locator('[data-nav-id="orders"]').click();
+  await page.locator('[data-testid="debt-load-btn"]').click();
+  const debtRow = page.locator('[data-testid="debt-row"]').filter({ hasText: ticketNo }).first();
+  await expect(debtRow).toBeVisible({ timeout: 15_000 });
+  await debtRow.locator('[data-testid="debt-row-detail-btn"]').click();
+  const drawer = page.locator('[data-testid="order-detail-drawer"]');
+  await drawer.locator('[data-testid="order-detail-register-photo-btn"]').setInputFiles({
+    name: "mac-receive.jpg",
+    mimeType: "image/jpeg",
+    buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]),
+  });
+  await expect(drawer.locator('[data-testid="order-detail-photo-count"]')).toHaveText("1 张", {
+    timeout: 15_000,
+  });
+  await drawer.locator('[data-testid="order-detail-close-btn"]').click();
+
   // Pick up, collecting the remainder.
   await page.locator('[data-nav-id="pickup"]').click();
   await page.locator('input[name="pickup-key"]').fill(ticketNo);
@@ -285,6 +303,7 @@ test("packaged app recovers from an unavailable local service with a token-free 
             auth: { refresh: () => Promise<unknown>; logout: () => Promise<unknown> };
             command: { execute: (...args: unknown[]) => Promise<unknown> };
             query: { execute: (...args: unknown[]) => Promise<unknown> };
+            photo: { upload: (...args: unknown[]) => Promise<unknown> };
             health: { get: () => Promise<unknown> };
           };
         }
@@ -310,11 +329,12 @@ test("packaged app recovers from an unavailable local service with a token-free 
       return {
         bridgeValid:
           JSON.stringify(Object.keys(bridge).sort()) ===
-            JSON.stringify(["auth", "command", "health", "query"]) &&
+            JSON.stringify(["auth", "command", "health", "photo", "query"]) &&
           JSON.stringify(Object.keys(bridge.auth).sort()) ===
             JSON.stringify(["login", "logout", "pinChallenge", "pinVerify", "refresh"]) &&
           Object.keys(bridge.command).join() === "execute" &&
           Object.keys(bridge.query).join() === "execute" &&
+          Object.keys(bridge.photo).join() === "upload" &&
           Object.keys(bridge.health).join() === "get",
         refreshOk:
           !containsCredentialKey(refresh) &&

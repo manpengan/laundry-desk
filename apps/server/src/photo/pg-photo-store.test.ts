@@ -16,6 +16,8 @@ import { createPgPhotoStore } from "./pg-photo-store.js";
 const ORDER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const GARMENT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const PHOTO_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const STORAGE_KEY = `${PHOTO_ID}.jpg`;
+const CONTENT_SHA256 = "a".repeat(64);
 
 const urls =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true"
@@ -56,8 +58,9 @@ function createCapturingPool(): Readonly<{ pool: PgPool; queries: RecordedQuery[
               garment_id: GARMENT_ID,
               order_id: ORDER_ID,
               kind: "receive",
-              storage_key: "photos/receive.jpg",
+              storage_key: STORAGE_KEY,
               content_type: "image/jpeg",
+              content_sha256: CONTENT_SHA256,
               byte_size: 42,
               taken_at: new Date("2026-07-23T00:00:00.000Z"),
               created_by_staff_id: DEMO_STAFF_A_ID,
@@ -95,8 +98,9 @@ test("PG photo store writes append-only metadata under store GUC scope", async (
     garment_id: GARMENT_ID,
     order_id: ORDER_ID,
     kind: "receive",
-    storage_key: "photos/receive.jpg",
+    storage_key: STORAGE_KEY,
     content_type: "image/jpeg",
+    content_sha256: CONTENT_SHA256,
     byte_size: 42,
     taken_at: 1_784_764_800,
     created_by_staff_id: DEMO_STAFF_A_ID,
@@ -133,7 +137,7 @@ maybe("PG photo command persists metadata and audit through the command transact
   const orderId = randomUUID();
   const lineId = randomUUID();
   const garmentId = randomUUID();
-  const storageKey = `photos/${randomUUID()}.jpg`;
+  const storageKey = `${randomUUID()}.jpg`;
   try {
     await seedPgTestIdentityFixture(adminPool);
     await adminPool.query(
@@ -174,6 +178,8 @@ maybe("PG photo command persists metadata and audit through the command transact
           garment_id: garmentId,
           kind: "receive",
           storage_key: storageKey,
+          content_type: "image/jpeg",
+          content_sha256: CONTENT_SHA256,
           byte_size: 12,
           taken_at: 1_784_764_800,
         },
@@ -199,6 +205,22 @@ maybe("PG photo command persists metadata and audit through the command transact
     );
     assert.equal(Number(counts.photos.rows[0]?.count), 1);
     assert.equal(Number(counts.audits.rows[0]?.count), 1);
+    assert.deepEqual(await store.listByOrder(DEMO_ORG_ID, DEMO_STORE_ID, orderId), [
+      {
+        photo_id: registered.photo_id,
+        org_id: DEMO_ORG_ID,
+        store_id: DEMO_STORE_ID,
+        garment_id: garmentId,
+        order_id: orderId,
+        kind: "receive",
+        storage_key: storageKey,
+        content_type: "image/jpeg",
+        content_sha256: CONTENT_SHA256,
+        byte_size: 12,
+        taken_at: 1_784_764_800,
+        created_by_staff_id: DEMO_STAFF_A_ID,
+      },
+    ]);
   } finally {
     await appPool.end();
     await adminPool.end();

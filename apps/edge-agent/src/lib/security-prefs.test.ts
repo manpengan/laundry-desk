@@ -32,13 +32,14 @@ test("DESKTOP_IPC_CHANNELS is the exact deeply frozen renderer capability map", 
     },
     command: { execute: "desktop:command:execute" },
     query: { execute: "desktop:query:execute" },
+    photo: { upload: "desktop:photo:upload" },
     health: { get: "desktop:health:get" },
   });
   assert.equal(typeof channels, "object");
   assert.notEqual(channels, null);
   assert.equal(Object.isFrozen(channels), true);
 
-  for (const namespace of ["auth", "command", "query", "health"]) {
+  for (const namespace of ["auth", "command", "query", "photo", "health"]) {
     assert.equal(Object.isFrozen(Reflect.get(channels, namespace)), true);
   }
 });
@@ -51,7 +52,7 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
   );
   const invokedDesktopChannels = Array.from(
     preload.matchAll(
-      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:login|refresh|pinChallenge|pinVerify|logout)|command\.execute|query\.execute|health\.get)/gu,
+      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:login|refresh|pinChallenge|pinVerify|logout)|command\.execute|query\.execute|photo\.upload|health\.get)/gu,
     ),
     (match) => match[1],
   );
@@ -71,10 +72,11 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
     "auth.logout",
     "command.execute",
     "query.execute",
+    "photo.upload",
     "health.get",
   ]);
   assert.deepEqual(emptyInputChannels, ["auth.refresh", "auth.logout", "health.get"]);
-  assert.equal(preload.match(/ipcRenderer\.invoke\(/gu)?.length, 8);
+  assert.equal(preload.match(/ipcRenderer\.invoke\(/gu)?.length, 9);
   assert.doesNotMatch(preload, /edgeBridge/);
   assert.doesNotMatch(preload, /import\s*\{\s*IPC_CHANNELS\s*\}/u);
   assert.doesNotMatch(

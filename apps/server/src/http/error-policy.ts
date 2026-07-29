@@ -5,7 +5,7 @@ import { createCommandError, type CommandErrorCode } from "@laundry/contracts";
 import { safeErrorContext } from "./local-logger.js";
 
 type PublicErrorDecision = Readonly<{
-  statusCode: 400 | 415 | 500;
+  statusCode: 400 | 413 | 415 | 500;
   errorCode: CommandErrorCode;
   logMessage: "request parsing failed" | "request failed";
 }>;
@@ -36,6 +36,9 @@ export function publicErrorDecision(error: unknown): PublicErrorDecision {
   }
   if (code === "FST_ERR_CTP_INVALID_MEDIA_TYPE") {
     return Object.freeze({ statusCode: 415 as const, ...VALIDATION_ERROR });
+  }
+  if (code === "FST_ERR_CTP_BODY_TOO_LARGE") {
+    return Object.freeze({ statusCode: 413 as const, ...VALIDATION_ERROR });
   }
   return SERVER_ERROR;
 }

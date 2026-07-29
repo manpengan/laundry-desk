@@ -150,6 +150,10 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
     .split("\n")
     .map((line) => line.replace(/^\s*-\s+/u, "").replaceAll('"', ""))
     .filter((entry) => !entry.startsWith("!"));
+  assert.ok(
+    includedFiles.includes("dist/desktop/request-builder.js"),
+    "desktop request builder must ship with its importing transport",
+  );
   assert.doesNotMatch(
     includedFiles.join("\n"),
     /\*|tests?|spec|\.d\.ts|\.map|src\/|\.env|credentials?|secrets?|logs?/iu,

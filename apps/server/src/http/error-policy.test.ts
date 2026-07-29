@@ -21,6 +21,11 @@ test("only explicit request parser failures are mapped to public client errors",
     errorCode: "VALIDATION_FAILED",
     logMessage: "request parsing failed",
   });
+  assert.deepEqual(publicErrorDecision({ code: "FST_ERR_CTP_BODY_TOO_LARGE" }), {
+    statusCode: 413,
+    errorCode: "VALIDATION_FAILED",
+    logMessage: "request parsing failed",
+  });
 });
 
 test("internal and unknown failures are sanitized as server errors", () => {
@@ -28,7 +33,6 @@ test("internal and unknown failures are sanitized as server errors", () => {
     new Error("secret SQL /private/path"),
     { statusCode: 400 },
     { statusCode: 415 },
-    { code: "FST_ERR_CTP_BODY_TOO_LARGE" },
     null,
   ]) {
     assert.deepEqual(publicErrorDecision(error), {

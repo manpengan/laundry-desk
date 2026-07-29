@@ -5,12 +5,12 @@ import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
+import { ShiftClosePanel } from "./ShiftClosePanel.js";
 import {
   parseShiftClosing,
-  ShiftClosePanel,
   unwrapShiftResult,
   type ShiftClosingView,
-} from "./ShiftClosePanel.js";
+} from "./shift-closing-view.js";
 
 const SAMPLE: ShiftClosingView = Object.freeze({
   shift_id: "s1111111-1111-4111-8111-111111111111",
@@ -20,6 +20,9 @@ const SAMPLE: ShiftClosingView = Object.freeze({
   payable_cents: 12000,
   paid_cents: 4000,
   payment_cents: 2000,
+  counted_cash_cents: 2500,
+  retained_float_cents: 500,
+  cash_difference_cents: 500,
   signature_name: "店员甲",
   note: "晚班",
 });
@@ -57,6 +60,8 @@ test("ShiftClosePanel SSR shows signature form when not closed", () => {
   assert.match(html, /交班确认/);
   assert.match(html, /data-testid="shift-close-panel"/);
   assert.match(html, /data-testid="shift-signature-input"/);
+  assert.match(html, /data-testid="shift-counted-cash-input"/);
+  assert.match(html, /data-testid="shift-retained-float-input"/);
   assert.match(html, /data-testid="shift-close-btn"/);
   assert.doesNotMatch(html, /data-testid="shift-closed-status"/);
   assert.doesNotMatch(html, /#ff0000/i);

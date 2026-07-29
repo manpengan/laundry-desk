@@ -36,6 +36,8 @@ const CLERK: ActorContext = Object.freeze({
 
 const ORDER_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const GARMENT_ID = "11111111-2222-4333-8444-555555555555";
+const STORAGE_KEY = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.jpg";
+const CONTENT_SHA256 = "a".repeat(64);
 const FIXED_NOW = 1_721_606_400;
 
 function buildBus(fixedNow = () => FIXED_NOW) {
@@ -89,7 +91,9 @@ test("photo.register stores metadata and list_by_order returns it", async () => 
       order_id: ORDER_ID,
       garment_id: GARMENT_ID,
       kind: "receive",
-      storage_key: "skeleton/demo.jpg",
+      storage_key: STORAGE_KEY,
+      content_type: "image/jpeg",
+      content_sha256: CONTENT_SHA256,
       byte_size: 2048,
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
@@ -102,7 +106,6 @@ test("photo.register stores metadata and list_by_order returns it", async () => 
     order_id: string;
     garment_id: string;
     kind: string;
-    storage_key: string;
     content_type: string;
     byte_size: number;
     taken_at: number;
@@ -111,7 +114,7 @@ test("photo.register stores metadata and list_by_order returns it", async () => 
   assert.equal(row.order_id, ORDER_ID);
   assert.equal(row.garment_id, GARMENT_ID);
   assert.equal(row.kind, "receive");
-  assert.equal(row.storage_key, "skeleton/demo.jpg");
+  assert.equal("storage_key" in row, false);
   assert.equal(row.content_type, "image/jpeg");
   assert.equal(row.byte_size, 2048);
   assert.equal(row.taken_at, FIXED_NOW);
@@ -143,7 +146,9 @@ test("photo.register rejects non-positive byte_size", async () => {
       order_id: ORDER_ID,
       garment_id: GARMENT_ID,
       kind: "receive",
-      storage_key: "k",
+      storage_key: STORAGE_KEY,
+      content_type: "image/jpeg",
+      content_sha256: CONTENT_SHA256,
       byte_size: 0,
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
@@ -163,7 +168,9 @@ test("photo.register rejects invalid kind", async () => {
       order_id: ORDER_ID,
       garment_id: GARMENT_ID,
       kind: "blob",
-      storage_key: "k",
+      storage_key: STORAGE_KEY,
+      content_type: "image/jpeg",
+      content_sha256: CONTENT_SHA256,
       byte_size: 10,
     },
     { registry, actor: CLERK, chainHooks, pendingStore },

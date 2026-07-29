@@ -38,6 +38,9 @@ export type DesktopOperationService = Readonly<{
   query: Readonly<{
     execute: (input: unknown) => Promise<unknown>;
   }>;
+  photo: Readonly<{
+    upload: (input: unknown) => Promise<unknown>;
+  }>;
   health: Readonly<{
     get: () => Promise<unknown>;
   }>;
@@ -162,6 +165,12 @@ export function registerDesktopOperationHandlers(options: DesktopOperationHandle
     DESKTOP_IPC_CHANNELS.query.execute,
     DESKTOP_OPERATION_SCHEMAS.query.execute,
     (input) => service.query.execute(input),
+  );
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.photo.upload,
+    DESKTOP_OPERATION_SCHEMAS.photo.upload,
+    (input) => service.photo.upload(input),
   );
   registerOperation(
     options,

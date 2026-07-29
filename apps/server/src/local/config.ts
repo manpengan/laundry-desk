@@ -105,3 +105,15 @@ export function parseLocalPrintSpoolDir(env: NodeJS.ProcessEnv): string | null {
   }
   return raw;
 }
+
+/** Private durable garment-photo directory. Unset keeps file routes disabled. */
+export function parseLocalPhotoStoreDir(env: NodeJS.ProcessEnv): string | null {
+  const raw = env.LAUNDRY_PHOTO_STORE_DIR?.trim();
+  if (raw === undefined || raw.length === 0) return null;
+  if (raw !== "/var/lib/laundry/photos") {
+    throw new Error(
+      "Invalid local server configuration: LAUNDRY_PHOTO_STORE_DIR must be /var/lib/laundry/photos",
+    );
+  }
+  return raw;
+}

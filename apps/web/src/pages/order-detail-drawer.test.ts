@@ -52,7 +52,6 @@ const SAMPLE_PHOTOS: readonly PhotoMetaRow[] = Object.freeze([
     garment_id: "11111111-2222-4333-8444-555555555555",
     order_id: SAMPLE_ORDER.order_id,
     kind: "receive",
-    storage_key: "skeleton/demo.jpg",
     content_type: "image/jpeg",
     byte_size: 1024,
     taken_at: 1_721_606_400,
@@ -176,18 +175,42 @@ test("OrderDetailContent SSR shows ticket, money, garments, photo count and thum
   assert.match(html, /data-testid="order-detail-photo-count"/);
   assert.match(html, /data-testid="order-detail-photos"/);
   assert.match(html, /data-testid="order-detail-photo-thumb"/);
-  assert.match(html, /登记照片\(骨架\)/);
+  assert.match(html, /上传照片/);
   assert.match(html, /data-testid="order-detail-register-photo-btn"/);
   assert.match(html, /data-testid="order-detail-garments"/);
   assert.doesNotMatch(html, /#ff0000/i);
   assert.doesNotMatch(html, /rgb\(/i);
 });
 
-test("OrderDetailContent SSR empty photos shows skeleton empty copy", () => {
+test("OrderDetailContent SSR empty photos shows durable empty copy", () => {
   const html = renderToStaticMarkup(createElement(OrderDetailContent, { order: SAMPLE_ORDER }));
   assert.match(html, /0 张/);
-  assert.match(html, /暂无照片（元数据骨架）/);
-  assert.doesNotMatch(html, /登记照片/);
+  assert.match(html, /暂无照片/);
+  assert.doesNotMatch(html, /上传照片/);
+});
+
+test("OrderDetailContent distinguishes photo loading and failure from a durable empty list", () => {
+  const loading = renderToStaticMarkup(
+    createElement(OrderDetailContent, {
+      order: SAMPLE_ORDER,
+      photoLoading: true,
+    }),
+  );
+  assert.match(loading, /照片加载中/);
+  assert.match(loading, /order-detail-photo-count[^>]*>—</);
+  assert.doesNotMatch(loading, /暂无照片/);
+
+  const failed = renderToStaticMarkup(
+    createElement(OrderDetailContent, {
+      order: SAMPLE_ORDER,
+      photoError: "本地服务暂不可用",
+      onRetryPhotos: () => undefined,
+    }),
+  );
+  assert.match(failed, /照片暂时无法加载：本地服务暂不可用/);
+  assert.match(failed, /重试照片/);
+  assert.match(failed, /role="alert"/);
+  assert.doesNotMatch(failed, /暂无照片/);
 });
 
 test("OrderDetailDrawer SSR open shell shows actions with mock order.get client", () => {

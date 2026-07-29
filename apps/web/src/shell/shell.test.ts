@@ -39,6 +39,9 @@ function appPorts(): AppPorts {
     auth: createMockAuthClient(),
     command: createMockCommandClient(),
     query: createMockQueryClient(),
+    photo: Object.freeze({
+      upload: async () => ({ ok: false as const, error: { code: "NOT_CONFIGURED" } }),
+    }),
     health: Object.freeze({
       get: async () => ({ ok: true as const, data: { status: "ready" as const } }),
     }),
@@ -53,6 +56,7 @@ test("App shell mapping preserves the exact injected auth, command, and query po
   assert.equal(props.authClient, ports.auth);
   assert.equal(props.commandClient, ports.command);
   assert.equal(props.queryClient, ports.query);
+  assert.equal(props.photoPort, ports.photo);
   assert.equal(props.onSessionChange, onSessionChange);
 });
 

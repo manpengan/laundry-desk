@@ -20,6 +20,17 @@ import {
 
 const SAMPLE_UUID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const GARMENT_UUID = "11111111-2222-4333-8444-555555555555";
+const STORAGE_KEY = `${SAMPLE_UUID}.jpg`;
+const CONTENT_SHA256 = "a".repeat(64);
+const VALID_REGISTER = Object.freeze({
+  garment_id: GARMENT_UUID,
+  order_id: SAMPLE_UUID,
+  kind: "receive" as const,
+  storage_key: STORAGE_KEY,
+  content_type: "image/jpeg" as const,
+  content_sha256: CONTENT_SHA256,
+  byte_size: 1024,
+});
 
 describe("M3 photo.register / photo.list_by_order skeleton", () => {
   it("registers definitions through A1 factory", () => {
@@ -62,28 +73,17 @@ describe("M3 photo.register / photo.list_by_order skeleton", () => {
   it("parses photo.register input", async () => {
     await expect(
       parseContractInput(photoRegisterCommand, {
-        garment_id: GARMENT_UUID,
-        order_id: SAMPLE_UUID,
-        kind: "receive",
-        storage_key: "skeleton/demo.jpg",
-        byte_size: 1024,
+        ...VALID_REGISTER,
       }),
     ).resolves.toEqual({
-      garment_id: GARMENT_UUID,
-      order_id: SAMPLE_UUID,
-      kind: "receive",
-      storage_key: "skeleton/demo.jpg",
-      byte_size: 1024,
+      ...VALID_REGISTER,
     });
 
     await expect(
       parseContractInput(photoRegisterCommand, {
-        garment_id: GARMENT_UUID,
-        order_id: SAMPLE_UUID,
+        ...VALID_REGISTER,
         kind: "defect",
-        storage_key: "k",
         content_type: "image/png",
-        byte_size: 1,
         taken_at: 1_721_606_400,
       }),
     ).resolves.toMatchObject({
@@ -97,38 +97,26 @@ describe("M3 photo.register / photo.list_by_order skeleton", () => {
     await expect(parseContractInput(photoRegisterCommand, {})).rejects.toBeTruthy();
     await expect(
       parseContractInput(photoRegisterCommand, {
-        garment_id: GARMENT_UUID,
-        order_id: SAMPLE_UUID,
-        kind: "receive",
-        storage_key: "k",
+        ...VALID_REGISTER,
         byte_size: 0,
       }),
     ).rejects.toBeTruthy();
     await expect(
       parseContractInput(photoRegisterCommand, {
-        garment_id: GARMENT_UUID,
-        order_id: SAMPLE_UUID,
-        kind: "receive",
-        storage_key: "k",
+        ...VALID_REGISTER,
         byte_size: 1.5,
       }),
     ).rejects.toBeTruthy();
     await expect(
       parseContractInput(photoRegisterCommand, {
-        garment_id: GARMENT_UUID,
-        order_id: SAMPLE_UUID,
+        ...VALID_REGISTER,
         kind: "unknown",
-        storage_key: "k",
-        byte_size: 1,
       }),
     ).rejects.toBeTruthy();
     await expect(
       parseContractInput(photoRegisterCommand, {
+        ...VALID_REGISTER,
         garment_id: "not-a-uuid",
-        order_id: SAMPLE_UUID,
-        kind: "receive",
-        storage_key: "k",
-        byte_size: 1,
       }),
     ).rejects.toBeTruthy();
   });

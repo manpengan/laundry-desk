@@ -29,6 +29,9 @@ export const DESKTOP_IPC_CHANNELS = Object.freeze({
   query: Object.freeze({
     execute: "desktop:query:execute",
   }),
+  photo: Object.freeze({
+    upload: "desktop:photo:upload",
+  }),
   health: Object.freeze({
     get: "desktop:health:get",
   }),

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   foreignKey,
   index,
@@ -15,8 +16,8 @@ import { stores } from "./stores.js";
 import { garments } from "./garments.js";
 
 /**
- * Store-scope garment photo metadata (M3 skeleton).
- * storage_key is opaque (client upload target later); no blob columns.
+ * Store-scope garment photo metadata.
+ * storage_key is server-owned and content_sha256 binds it to private file bytes.
  * Composite garment/order FK prevents cross-order and cross-tenant photo links.
  * laundry_app is granted SELECT, INSERT only — no UPDATE/DELETE.
  */
@@ -31,6 +32,7 @@ export const garmentPhotos = pgTable(
     kind: text("kind").notNull(),
     storageKey: text("storage_key").notNull(),
     contentType: text("content_type").notNull().default("image/jpeg"),
+    contentSha256: text("content_sha256"),
     byteSize: integer("byte_size").notNull(),
     takenAt: timestamp("taken_at", { withTimezone: true, mode: "date" }).notNull(),
     createdByStaffId: uuid("created_by_staff_id").notNull(),
@@ -38,6 +40,9 @@ export const garmentPhotos = pgTable(
   (table) => [
     primaryKey({ columns: [table.id], name: "garment_photos_pkey" }),
     uniqueIndex("garment_photos_tenant_id_uidx").on(table.orgId, table.storeId, table.id),
+    uniqueIndex("garment_photos_storage_key_uidx")
+      .on(table.orgId, table.storeId, table.storageKey)
+      .where(sql`${table.contentSha256} IS NOT NULL`),
     index("garment_photos_order_idx").on(table.orgId, table.storeId, table.orderId, table.takenAt),
     index("garment_photos_garment_idx").on(
       table.orgId,

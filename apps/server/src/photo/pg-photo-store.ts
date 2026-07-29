@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import type { PgPool } from "../db/pg-pool.js";
 import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
 import type { SqlClient } from "../db/types.js";
+import type { PhotoContentType } from "./file-store.js";
 import type { PhotoKind, PhotoRecord, PhotoRegisterInput, PhotoStore } from "./types.js";
 
 export type CreatePgPhotoStoreOptions = Readonly<{
@@ -27,6 +28,7 @@ type PhotoRow = Readonly<{
   kind: string;
   storage_key: string;
   content_type: string;
+  content_sha256: string | null;
   byte_size: number;
   taken_at: Date | string;
   created_by_staff_id: string;
@@ -48,6 +50,11 @@ function asPhotoKind(value: string): PhotoKind {
   throw new Error(`Unexpected garment photo kind: ${value}`);
 }
 
+function asPhotoContentType(value: string): PhotoContentType {
+  if (value === "image/jpeg" || value === "image/png" || value === "image/webp") return value;
+  throw new Error(`Unexpected garment photo content type: ${value}`);
+}
+
 function mapRow(row: PhotoRow): PhotoRecord {
   return Object.freeze({
     photo_id: row.id,
@@ -57,7 +64,8 @@ function mapRow(row: PhotoRow): PhotoRecord {
     order_id: row.order_id,
     kind: asPhotoKind(row.kind),
     storage_key: row.storage_key,
-    content_type: row.content_type,
+    content_type: asPhotoContentType(row.content_type),
+    content_sha256: row.content_sha256,
     byte_size: row.byte_size,
     taken_at: dateToEpoch(row.taken_at),
     created_by_staff_id: row.created_by_staff_id,
@@ -84,13 +92,13 @@ async function insertPhoto(
   const result = await client.query<PhotoRow>(
     `INSERT INTO garment_photos (
        id, org_id, store_id, garment_id, order_id, kind, storage_key,
-       content_type, byte_size, taken_at, created_by_staff_id
+       content_type, content_sha256, byte_size, taken_at, created_by_staff_id
      ) VALUES (
        $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7,
-       $8, $9, $10, $11::uuid
+       $8, $9, $10, $11, $12::uuid
      )
      RETURNING id::text, org_id::text, store_id::text, garment_id::text,
-               order_id::text, kind, storage_key, content_type, byte_size,
+               order_id::text, kind, storage_key, content_type, content_sha256, byte_size,
                taken_at, created_by_staff_id::text`,
     [
       id,
@@ -101,6 +109,7 @@ async function insertPhoto(
       input.kind,
       input.storage_key,
       input.content_type,
+      input.content_sha256,
       input.byte_size,
       epochToDate(input.taken_at),
       input.created_by_staff_id,
@@ -121,7 +130,7 @@ async function selectByOrder(
 ): Promise<readonly PhotoRecord[]> {
   const result = await client.query<PhotoRow>(
     `SELECT id::text, org_id::text, store_id::text, garment_id::text,
-            order_id::text, kind, storage_key, content_type, byte_size,
+            order_id::text, kind, storage_key, content_type, content_sha256, byte_size,
             taken_at, created_by_staff_id::text
      FROM garment_photos
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND order_id = $3::uuid
@@ -129,6 +138,40 @@ async function selectByOrder(
     [orgId, storeId, orderId],
   );
   return Object.freeze(result.rows.map(mapRow));
+}
+
+async function selectById(
+  client: SqlClient,
+  orgId: string,
+  storeId: string,
+  photoId: string,
+): Promise<PhotoRecord | null> {
+  const result = await client.query<PhotoRow>(
+    `SELECT id::text, org_id::text, store_id::text, garment_id::text,
+            order_id::text, kind, storage_key, content_type, content_sha256, byte_size,
+            taken_at, created_by_staff_id::text
+       FROM garment_photos
+      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid
+      LIMIT 1`,
+    [orgId, storeId, photoId],
+  );
+  const row = result.rows[0];
+  return row === undefined ? null : mapRow(row);
+}
+
+async function selectStorageKeys(
+  client: SqlClient,
+  orgId: string,
+  storeId: string,
+): Promise<ReadonlySet<string>> {
+  const result = await client.query<Readonly<{ storage_key: string }>>(
+    `SELECT storage_key
+       FROM garment_photos
+      WHERE org_id = $1::uuid AND store_id = $2::uuid
+        AND content_sha256 IS NOT NULL`,
+    [orgId, storeId],
+  );
+  return new Set(result.rows.map((row) => row.storage_key));
 }
 
 /** Create a tenant-scoped PG photo store; no process-memory fallback exists. */
@@ -154,6 +197,20 @@ export function createPgPhotoStore(pool: PgPool, options: CreatePgPhotoStoreOpti
       assertConfiguredScope(inputOrgId, inputStoreId, orgId, storeId);
       return withStoreGucOrCurrent(pool, { orgId, storeId }, (client) =>
         selectByOrder(client, orgId, storeId, orderId),
+      );
+    },
+
+    findById: async (inputOrgId: string, inputStoreId: string, photoId: string) => {
+      assertConfiguredScope(inputOrgId, inputStoreId, orgId, storeId);
+      return withStoreGucOrCurrent(pool, { orgId, storeId }, (client) =>
+        selectById(client, orgId, storeId, photoId),
+      );
+    },
+
+    listStorageKeys: async (inputOrgId: string, inputStoreId: string) => {
+      assertConfiguredScope(inputOrgId, inputStoreId, orgId, storeId);
+      return withStoreGucOrCurrent(pool, { orgId, storeId }, (client) =>
+        selectStorageKeys(client, orgId, storeId),
       );
     },
   });

@@ -43,6 +43,11 @@ function createService(overrides: Partial<DesktopOperationService> = {}): Deskto
       Object.freeze({
         execute: async () => SAFE_FAILURE,
       }),
+    photo:
+      overrides.photo ??
+      Object.freeze({
+        upload: async () => SAFE_FAILURE,
+      }),
     health:
       overrides.health ??
       Object.freeze({
@@ -105,7 +110,7 @@ function getHandler(
   return handler;
 }
 
-test("registers exactly the eight fixed desktop capability channels", () => {
+test("registers exactly the fixed desktop capability channels", () => {
   const harness = createHarness();
   assert.deepEqual(
     [...harness.handlers.keys()],
@@ -117,9 +122,40 @@ test("registers exactly the eight fixed desktop capability channels", () => {
       DESKTOP_IPC_CHANNELS.auth.logout,
       DESKTOP_IPC_CHANNELS.command.execute,
       DESKTOP_IPC_CHANNELS.query.execute,
+      DESKTOP_IPC_CHANNELS.photo.upload,
       DESKTOP_IPC_CHANNELS.health.get,
     ],
   );
+});
+
+test("validates photo bytes before invoking the named service", async () => {
+  const captured: unknown[] = [];
+  const harness = createHarness(
+    createService({
+      photo: Object.freeze({
+        upload: async (input) => {
+          captured.push(input);
+          return SAFE_FAILURE;
+        },
+      }),
+    }),
+  );
+  const invoke = getHandler(harness, DESKTOP_IPC_CHANNELS.photo.upload);
+  const valid = {
+    order_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    garment_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    kind: "receive",
+    content_type: "image/jpeg",
+    bytes: new Uint8Array([0xff, 0xd8, 0xff]),
+  };
+
+  assert.deepEqual(await invoke(sender(), valid), SAFE_FAILURE);
+  assert.equal(captured.length, 1);
+  await assert.rejects(
+    () => invoke(sender(), { ...valid, url: "https://attacker.invalid" }),
+    /Desktop operation rejected/u,
+  );
+  assert.equal(captured.length, 1);
 });
 
 test("main wires the fixed Electron adapter and handlers without exporting token access", () => {

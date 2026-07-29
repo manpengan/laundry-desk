@@ -24,14 +24,14 @@ class MockResponse extends EventEmitter {
 }
 
 class MockRequest extends EventEmitter {
-  readonly writes: string[] = [];
+  readonly writes: Array<string | Uint8Array> = [];
   aborted = false;
 
   constructor(private readonly response: MockResponse) {
     super();
   }
 
-  write(body: string): void {
+  write(body: string | Uint8Array): void {
     this.writes.push(body);
   }
 
@@ -144,6 +144,43 @@ test("Electron adapter rejects drifted transport controls before opening a socke
     /fixed desktop HTTP policy/u,
   );
   assert.equal(requests, 0);
+});
+
+test("Electron adapter permits raw photo bytes only on the fixed validated upload route", async () => {
+  const sessionHarness = createSession();
+  const response = new MockResponse(200, [Buffer.from('{"ok":true}')]);
+  const clientRequest = new MockRequest(response);
+  const dependencies = createElectronDesktopDependencies({
+    net: { request: () => clientRequest },
+    session: sessionHarness.session,
+    deviceId: "00000000-0000-4000-8000-000000000001",
+  });
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff]);
+  const photoRequest: DesktopHttpRequest = Object.freeze({
+    ...VALID_REQUEST,
+    url:
+      `${DESKTOP_API_BASE_URL}/api/v2/photos?` +
+      "order_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&" +
+      "garment_id=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb&kind=receive",
+    headers: Object.freeze({
+      ...VALID_REQUEST.headers,
+      "Content-Type": "image/jpeg",
+      Authorization: "Bearer token",
+      "X-CSRF-Token": "csrf",
+    }),
+    body: bytes,
+  });
+
+  await dependencies.request(photoRequest);
+  assert.deepEqual(clientRequest.writes, [bytes]);
+  await assert.rejects(
+    () =>
+      dependencies.request({
+        ...photoRequest,
+        url: `${DESKTOP_API_BASE_URL}/api/v2/auth/login`,
+      }),
+    /fixed desktop HTTP policy/u,
+  );
 });
 
 test("Electron adapter rejects the app scheme as an HTTP request initiator", async () => {

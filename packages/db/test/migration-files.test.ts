@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0022", () => {
+  it("ships formal SQL migrations ordered 0001 → 0023", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -34,6 +34,7 @@ describe("packages/db migration file inventory", () => {
       "0020_counter_lookup_codes.sql",
       "0021_print_job_lease.sql",
       "0022_print_job_artifact.sql",
+      "0023_photo_file_integrity.sql",
     ]);
   });
 
@@ -68,6 +69,7 @@ describe("packages/db migration file inventory", () => {
       "0020",
       "0021",
       "0022",
+      "0023",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -215,6 +217,13 @@ describe("packages/db migration file inventory", () => {
     expect(sql).toMatch(/print_jobs_artifact_shape_chk/iu);
     expect(sql).toMatch(/print_jobs_artifact_path_chk/iu);
     expect(sql).toMatch(/print_jobs_artifact_path_uidx/iu);
+  });
+
+  it("binds photo metadata to server-owned files with a content digest", () => {
+    const sql = readFileSync(join(migrationsDir, "0023_photo_file_integrity.sql"), "utf8");
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS content_sha256 text/iu);
+    expect(sql).toMatch(/garment_photos_content_sha256_chk/iu);
+    expect(sql).toMatch(/garment_photos_storage_key_uidx/iu);
   });
 
   it("adds customer pickup codes and bounded name-prefix lookup indexes", () => {

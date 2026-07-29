@@ -74,6 +74,7 @@ describe("destructive migration static reject", () => {
       "0020_counter_lookup_codes.sql",
       "0021_print_job_lease.sql",
       "0022_print_job_artifact.sql",
+      "0023_photo_file_integrity.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

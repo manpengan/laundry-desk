@@ -7,6 +7,7 @@ import {
   DESKTOP_MAX_JSON_BYTES,
   DESKTOP_MAX_JSON_DEPTH,
   DESKTOP_MAX_JSON_NODES,
+  DESKTOP_MAX_PHOTO_BYTES,
   DESKTOP_MAX_STAFF_DIRECTORY_SIZE,
   DESKTOP_OPERATION_SCHEMAS,
   DesktopCommandExecuteInputSchema,
@@ -22,6 +23,8 @@ import {
   DesktopPinChallengeResultSchema,
   DesktopPinVerifyInputSchema,
   DesktopPinVerifyResultSchema,
+  DesktopPhotoUploadInputSchema,
+  DesktopPhotoUploadResultSchema,
   DesktopQueryExecuteInputSchema,
   DesktopQueryExecuteResultSchema,
   DesktopQueryNameSchema,
@@ -118,8 +121,14 @@ const actionableFailure = Object.freeze({
 });
 
 describe("desktop operation registry", () => {
-  it("exposes exactly the four renderer namespaces and eight named methods", () => {
-    expect(Object.keys(DESKTOP_OPERATION_SCHEMAS)).toEqual(["auth", "command", "query", "health"]);
+  it("exposes only the named renderer capability namespaces", () => {
+    expect(Object.keys(DESKTOP_OPERATION_SCHEMAS)).toEqual([
+      "auth",
+      "command",
+      "query",
+      "photo",
+      "health",
+    ]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.auth)).toEqual([
       "login",
       "refresh",
@@ -129,6 +138,7 @@ describe("desktop operation registry", () => {
     ]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.command)).toEqual(["execute"]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.query)).toEqual(["execute"]);
+    expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.photo)).toEqual(["upload"]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.health)).toEqual(["get"]);
     expect(PUBLIC_DESKTOP_OPERATION_SCHEMAS).toBe(DESKTOP_OPERATION_SCHEMAS);
 
@@ -235,6 +245,25 @@ describe("desktop auth and health schemas", () => {
       ],
       [DesktopLogoutResultSchema, { ok: true, data: { logged_out: true } }],
       [DesktopHealthGetResultSchema, { ok: true, data: { status: "ready" } }],
+      [
+        DesktopPhotoUploadResultSchema,
+        {
+          ok: true,
+          data: {
+            execution: "executed",
+            result: {
+              photo_id: ids.confirm,
+              garment_id: ids.target,
+              order_id: ids.order,
+              kind: "receive",
+              content_type: "image/jpeg",
+              byte_size: 3,
+              taken_at: 1_721_606_400,
+              created_by_staff_id: ids.staff,
+            },
+          },
+        },
+      ],
     ] as const;
 
     successes.forEach(([schema, value]) => expect(schema.safeParse(value).success).toBe(true));
@@ -246,6 +275,7 @@ describe("desktop auth and health schemas", () => {
       DesktopLogoutResultSchema,
       DesktopCommandExecuteResultSchema,
       DesktopQueryExecuteResultSchema,
+      DesktopPhotoUploadResultSchema,
       DesktopHealthGetResultSchema,
     ].forEach((schema) => expect(schema.parse(actionableFailure)).toEqual(actionableFailure));
 
@@ -288,6 +318,34 @@ describe("desktop auth and health schemas", () => {
         }),
       ),
     ).not.toMatch(/access_token|refresh_token|authorization|cookie|headers?/iu);
+    const photoResult = {
+      photo_id: ids.confirm,
+      garment_id: ids.target,
+      order_id: ids.order,
+      kind: "receive",
+      content_type: "image/jpeg",
+      byte_size: 3,
+      taken_at: 1_721_606_400,
+      created_by_staff_id: ids.staff,
+    };
+    expect(
+      DesktopPhotoUploadResultSchema.safeParse({
+        ok: true,
+        data: {
+          execution: "executed",
+          result: { ...photoResult, storage_key: "private.jpg" },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      DesktopPhotoUploadResultSchema.safeParse({
+        ok: true,
+        data: {
+          execution: "executed",
+          result: { ...photoResult, photo_id: "not-a-uuid" },
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("bounds the staff directory before it crosses into the renderer", () => {
@@ -304,8 +362,11 @@ describe("desktop auth and health schemas", () => {
 describe("desktop command/query schemas", () => {
   it("derives command and query names from the real M2 registries", async () => {
     expect(
-      M2_CONTRACT_COMMAND_NAMES.every((name) => DesktopCommandNameSchema.safeParse(name).success),
+      M2_CONTRACT_COMMAND_NAMES.filter((name) => name !== "photo.register").every(
+        (name) => DesktopCommandNameSchema.safeParse(name).success,
+      ),
     ).toBe(true);
+    expect(DesktopCommandNameSchema.safeParse("photo.register").success).toBe(false);
     expect(
       M2_CONTRACT_QUERY_NAMES.every((name) => DesktopQueryNameSchema.safeParse(name).success),
     ).toBe(true);
@@ -326,6 +387,35 @@ describe("desktop command/query schemas", () => {
         (await DesktopQueryExecuteInputSchema.safeParseAsync({ name, body: {} })).success,
       ).toBe(false);
     }
+  });
+
+  it("validates bounded photo bytes without accepting transport controls", () => {
+    const input = {
+      order_id: ids.order,
+      garment_id: ids.target,
+      kind: "receive",
+      content_type: "image/jpeg",
+      bytes: new Uint8Array([0xff, 0xd8, 0xff]),
+    };
+    expect(DesktopPhotoUploadInputSchema.parse(input)).toEqual(input);
+    expect(
+      DesktopPhotoUploadInputSchema.safeParse({
+        ...input,
+        bytes: new Uint8Array(DESKTOP_MAX_PHOTO_BYTES + 1),
+      }).success,
+    ).toBe(false);
+    expect(
+      DesktopPhotoUploadInputSchema.safeParse({
+        ...input,
+        url: "https://attacker.invalid",
+      }).success,
+    ).toBe(false);
+    expect(
+      DesktopPhotoUploadInputSchema.safeParse({
+        ...input,
+        bytes: [0xff, 0xd8, 0xff],
+      }).success,
+    ).toBe(false);
   });
 
   it("validates business bodies with the selected registry definition", async () => {

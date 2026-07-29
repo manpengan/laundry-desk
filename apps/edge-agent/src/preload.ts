@@ -10,6 +10,8 @@ import type {
   DesktopLogoutResult,
   DesktopPinChallengeResult,
   DesktopPinVerifyResult,
+  DesktopPhotoUploadInput,
+  DesktopPhotoUploadResult,
   DesktopQueryExecuteInput,
   DesktopQueryExecuteResult,
   DesktopRefreshResult,
@@ -41,6 +43,10 @@ const laundryDesktop = Object.freeze({
   query: Object.freeze({
     execute: (input: DesktopQueryExecuteInput): Promise<DesktopQueryExecuteResult> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.query.execute, input),
+  }),
+  photo: Object.freeze({
+    upload: (input: DesktopPhotoUploadInput): Promise<DesktopPhotoUploadResult> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.photo.upload, input),
   }),
   health: Object.freeze({
     get: (): Promise<DesktopHealthGetResult> =>

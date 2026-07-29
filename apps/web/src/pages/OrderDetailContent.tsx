@@ -1,4 +1,4 @@
-import { Button, MoneyText, StatusBadge } from "@laundry/ui";
+import { MoneyText, StatusBadge } from "@laundry/ui";
 
 import type { OrderGetGarment, OrderGetResult } from "./order-form.js";
 import type { PhotoMetaRow } from "./OrderDetailDrawer.js";
@@ -6,7 +6,10 @@ import type { PhotoMetaRow } from "./OrderDetailDrawer.js";
 export type OrderDetailContentProps = {
   order: OrderGetResult;
   photos?: readonly PhotoMetaRow[];
-  onRegisterPhoto?: () => void;
+  photoLoading?: boolean;
+  photoError?: string | null;
+  onRetryPhotos?: () => void;
+  onRegisterPhoto?: (file: File) => void;
   registerBusy?: boolean;
 };
 
@@ -14,6 +17,9 @@ export type OrderDetailContentProps = {
 export function OrderDetailContent({
   order,
   photos = [],
+  photoLoading = false,
+  photoError = null,
+  onRetryPhotos,
   onRegisterPhoto,
   registerBusy = false,
 }: OrderDetailContentProps) {
@@ -72,12 +78,23 @@ export function OrderDetailContent({
         <div className="ld-order-detail__section-head">
           <h3 className="ld-order-detail__section-title">照片</h3>
           <span className="ld-order-detail__photo-count" data-testid="order-detail-photo-count">
-            {photos.length} 张
+            {photoLoading || photoError !== null ? "—" : `${photos.length} 张`}
           </span>
         </div>
         <div className="ld-order-detail__photo-strip" data-testid="order-detail-photos">
-          {photos.length === 0 ? (
-            <p className="ld-order-detail__photo-empty">暂无照片（元数据骨架）</p>
+          {photoLoading ? (
+            <p className="ld-order-detail__photo-empty">照片加载中…</p>
+          ) : photoError !== null ? (
+            <div className="ld-order-detail__photo-error" role="alert">
+              <p>照片暂时无法加载：{photoError}</p>
+              {onRetryPhotos !== undefined ? (
+                <button type="button" onClick={onRetryPhotos}>
+                  重试照片
+                </button>
+              ) : null}
+            </div>
+          ) : photos.length === 0 ? (
+            <p className="ld-order-detail__photo-empty">暂无照片</p>
           ) : (
             <ul className="ld-order-detail__photo-list">
               {photos.map((photo) => (
@@ -85,7 +102,7 @@ export function OrderDetailContent({
                   key={photo.photo_id}
                   className="ld-order-detail__photo-thumb"
                   data-testid="order-detail-photo-thumb"
-                  title={`${photo.kind} · ${photo.storage_key}`}
+                  title={`${photo.kind} · ${photo.content_type}`}
                 >
                   <span className="ld-order-detail__photo-kind">{photo.kind}</span>
                   <span className="ld-order-detail__photo-bytes">{photo.byte_size} B</span>
@@ -95,15 +112,20 @@ export function OrderDetailContent({
           )}
         </div>
         {onRegisterPhoto !== undefined ? (
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={onRegisterPhoto}
-            disabled={registerBusy || order.garments.length === 0}
-            data-testid="order-detail-register-photo-btn"
-          >
-            {registerBusy ? "登记中…" : "登记照片(骨架)"}
-          </Button>
+          <label className="ld-order-detail__photo-upload">
+            <span>{registerBusy ? "上传中…" : "上传照片"}</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                if (file !== undefined) onRegisterPhoto(file);
+                event.currentTarget.value = "";
+              }}
+              disabled={registerBusy || order.garments.length === 0}
+              data-testid="order-detail-register-photo-btn"
+            />
+          </label>
         ) : null}
       </section>
       <section className="ld-order-detail__garments" aria-label="衣物列表">
