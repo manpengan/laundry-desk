@@ -18,12 +18,17 @@ export const FulfillmentGarmentStatusSchema = z.enum([
   "lost",
 ]);
 
-export const FulfillmentOperationalTargetSchema = z.enum(["washing", "ready", "racked"]);
+export const FulfillmentOperationalTargetSchema = z.enum(["washing", "ready"]);
 export const GarmentIncidentKindSchema = z.enum(["damage", "other"]);
 
 const GarmentIdSchema = z.uuid();
+const GarmentBarcodeSchema = z.string().trim().min(1).max(64);
 const ReasonSchema = z.string().trim().min(1).max(256);
 const CompensationCentsSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+export const RackPositionSchema = z.strictObject({
+  rack_zone: z.string().trim().min(1).max(16),
+  rack_slot: z.string().trim().min(1).max(16),
+});
 
 export const GarmentTransitionInputSchema = z.strictObject({
   garment_id: GarmentIdSchema,
@@ -35,6 +40,11 @@ export const GarmentBulkTransitionInputSchema = z.strictObject({
   garment_ids: z.array(GarmentIdSchema).min(2).max(50),
   target_status: FulfillmentOperationalTargetSchema,
   note: z.string().trim().max(256).optional(),
+});
+
+export const GarmentRackAssignInputSchema = z.strictObject({
+  barcode: GarmentBarcodeSchema,
+  ...RackPositionSchema.shape,
 });
 
 export const GarmentReworkInputSchema = z.strictObject({
@@ -73,6 +83,8 @@ export type FulfillmentWorkbenchRow = Readonly<{
   color: string | null;
   brand: string | null;
   status: z.output<typeof FulfillmentGarmentStatusSchema>;
+  rack_zone: string | null;
+  rack_slot: string | null;
   updated_at: number;
   incident_count: number;
 }>;
@@ -83,6 +95,7 @@ export type FulfillmentWorkbenchResult = Readonly<{
 
 type TransitionInput = typeof GarmentTransitionInputSchema;
 type BulkTransitionInput = typeof GarmentBulkTransitionInputSchema;
+type RackAssignInput = typeof GarmentRackAssignInputSchema;
 type ReworkInput = typeof GarmentReworkInputSchema;
 type IncidentInput = typeof GarmentIncidentRecordInputSchema;
 type LostInput = typeof GarmentMarkLostInputSchema;
@@ -93,7 +106,7 @@ export const garmentTransitionCommand: CommandDefinition<TransitionInput> = defi
   version: "0.1.0",
   description: "Move one garment through the normal fulfillment status machine.",
   description_llm:
-    "Move one garment to washing, ready, or racked. The server validates the current status and appends an immutable status log.",
+    "Move one garment to washing or ready. Scan-to-rack uses garment.rack.assign so a racked garment always has an authoritative location.",
   input: GarmentTransitionInputSchema,
   risk: "R2",
   invariants: ["rbac.order_write", "garment.transition_allowed"],
@@ -110,7 +123,7 @@ export const garmentBulkTransitionCommand: CommandDefinition<BulkTransitionInput
   version: "0.1.0",
   description: "Atomically move 2 to 50 garments through one normal fulfillment transition.",
   description_llm:
-    "Move a bounded garment batch to washing, ready, or racked. The entire batch fails when any row is missing or has an invalid current status.",
+    "Move a bounded garment batch to washing or ready. The entire batch fails when any row is missing or has an invalid current status.",
   input: GarmentBulkTransitionInputSchema,
   risk: "R3",
   invariants: ["rbac.order_write", "garment.batch_transition_allowed"],
@@ -122,6 +135,23 @@ export const garmentBulkTransitionCommand: CommandDefinition<BulkTransitionInput
   result_redaction: [],
   size_measures: { batch: { kind: "array_length", path: "/garment_ids" } },
   hard_limits: { max_batch: 50 },
+});
+
+export const garmentRackAssignCommand: CommandDefinition<RackAssignInput> = defineCommand({
+  name: "garment.rack.assign",
+  version: "0.1.0",
+  description: "Scan one ready garment onto an explicit rack location.",
+  description_llm:
+    "Resolve a store-scoped garment by scanned barcode, require ready status, atomically move it to racked, persist zone/slot and append immutable status and rack logs.",
+  input: GarmentRackAssignInputSchema,
+  risk: "R2",
+  invariants: ["rbac.order_write", "garment.rack_ready"],
+  idempotent: true,
+  sideEffects: ["garment.racked", "audit.garment_event"],
+  offline_mode: "denied",
+  data_classification: "internal",
+  input_redaction: [],
+  result_redaction: [],
 });
 
 export const garmentReworkCommand: CommandDefinition<ReworkInput> = defineCommand({
@@ -184,7 +214,7 @@ export const fulfillmentWorkbenchQuery: QueryDefinition<WorkbenchInput> = define
   version: "0.1.0",
   description: "List a bounded, store-scoped garment production workbench.",
   description_llm:
-    "List up to 100 garments by status or ticket/barcode/customer key. Phone is always masked in the returned row.",
+    "List up to 100 garments by status or ticket/barcode/rack/customer key. Phone is always masked in the returned row.",
   input: FulfillmentWorkbenchInputSchema,
   risk: "R2",
   invariants: [],
@@ -200,6 +230,7 @@ export const fulfillmentWorkbenchQuery: QueryDefinition<WorkbenchInput> = define
 export const FULFILLMENT_COMMANDS = Object.freeze([
   garmentTransitionCommand,
   garmentBulkTransitionCommand,
+  garmentRackAssignCommand,
   garmentReworkCommand,
   garmentIncidentRecordCommand,
   garmentMarkLostCommand,

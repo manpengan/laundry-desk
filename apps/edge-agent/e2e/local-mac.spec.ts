@@ -47,8 +47,8 @@ const LOGIN = Object.freeze({
   username: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_USERNAME"),
   displayName: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME"),
   password: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD"),
+  pin: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PIN"),
 });
-requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PIN");
 
 function credentialFreeEnvironment(): Readonly<Record<string, string>> {
   return Object.freeze(
@@ -267,6 +267,42 @@ async function runCounterWorkday(page: Page): Promise<void> {
   await expect(pickupResult).toContainText("¥0.00");
 }
 
+async function runPackagedGovernanceSmoke(page: Page): Promise<void> {
+  const suffix = Date.now().toString().slice(-8);
+  const duplicateName = `macOS 合并 ${suffix}`;
+  await page.locator('[data-nav-id="customers"]').click();
+
+  for (const prefix of ["137", "138"]) {
+    await page.locator('[data-testid="customers-phone-input"]').fill(`${prefix}${suffix}`);
+    await page.locator('[data-testid="customers-name-input"]').fill(duplicateName);
+    await page.locator('[data-testid="customers-upsert-btn"]').click();
+    await expect(page.locator(".ld-toast").last()).toContainText("客户已保存", {
+      timeout: 15_000,
+    });
+  }
+
+  await page.locator('[data-testid="customers-search-input"]').fill(duplicateName);
+  await page.locator('[data-testid="customers-search-btn"]').click();
+  const matches = page.locator('[data-testid="customers-row"]', { hasText: duplicateName });
+  await expect(matches).toHaveCount(2, { timeout: 15_000 });
+  await matches.first().click();
+  const governance = page.locator('[aria-label="客户资料治理"]');
+  await governance.getByRole("button", { name: "检查重复" }).click();
+  await expect(governance.getByLabel("保留客户")).toHaveCount(1, { timeout: 15_000 });
+  await governance.locator('input[name="customer-merge-reason"]').fill("packaged macOS E2E");
+  await governance.getByRole("button", { name: "合并到保留客户" }).click();
+  await page.locator(".ld-step-up__select").selectOption({ label: "E2E Staff One" });
+  await page.locator('input[name="step-up-pin"]').fill(LOGIN.pin);
+  await page.getByRole("button", { name: "确认 PIN" }).click();
+  await expect(matches).toHaveCount(1, { timeout: 15_000 });
+
+  await page.locator('[data-nav-id="stats"]').click();
+  await page.locator('[data-testid="stats-date-input"]').fill("1999-12-30");
+  await page.locator('[data-testid="stats-load-btn"]').click();
+  await page.getByRole("button", { name: "查询历史" }).click();
+  await expect(page.getByRole("cell", { name: "1999-12-30" })).toBeVisible({ timeout: 15_000 });
+}
+
 test("packaged app recovers from an unavailable local service with a token-free bridge", async () => {
   assertAcceptanceInputs();
   const canonicalApp = await realpath(APP_PATH);
@@ -299,6 +335,7 @@ test("packaged app recovers from an unavailable local service with a token-free 
     await expect(page.getByText(LOGIN.displayName, { exact: true })).toBeVisible();
 
     await runCounterWorkday(page);
+    await runPackagedGovernanceSmoke(page);
 
     const audit = await page.evaluate(async () => {
       const bridge = (

@@ -46,7 +46,13 @@ const STAFF: ActorContext = Object.freeze({
   permissions: Object.freeze(["settings_admin", "staff_read"]),
 });
 
-async function seedIdentity() {
+async function seedIdentity(
+  resolveStaffRole?: (
+    orgId: string,
+    storeId: string,
+    staffId: string,
+  ) => Promise<"admin" | "staff" | null>,
+) {
   const store = createMemoryIdentityStore();
   const passwordPort = createTestPasswordPort();
   const passwordHash = await passwordPort.hashPassword("demo");
@@ -104,6 +110,7 @@ async function seedIdentity() {
     ...pin,
     pending: pendingStore,
     proofs: proofStore,
+    ...(resolveStaffRole === undefined ? {} : { resolveStaffRole }),
   });
 
   const issued = await issueSession(sessionDeps, {
@@ -119,6 +126,63 @@ async function seedIdentity() {
 
   return { store, pinStepUp, pendingStore, proofStore, session, passwordPort };
 }
+
+test("privacy step-up requires an active admin approver at challenge and verification", async () => {
+  let approverRole: "admin" | "staff" = "staff";
+  const { pinStepUp, pendingStore, session } = await seedIdentity(
+    async (_orgId, _storeId, staffId) => (staffId === DEMO_ADMIN_ID ? approverRole : "staff"),
+  );
+  const pending = pendingStore.create({
+    nonce: "99999999-9999-4999-8999-999999999999",
+    command: "customer.privacy.export",
+    commandVersion: "0.1.0",
+    args: {
+      customer_id: "88888888-8888-4888-8888-888888888888",
+      reason: "客户主动申请",
+    },
+    entityVersions: [],
+    creatorStaffId: DEMO_STAFF_A_ID,
+    orgId: DEMO_ORG_ID,
+    storeId: DEMO_STORE_ID,
+    idempotencyKey: "77777777-7777-4777-8777-777777777777",
+    createdAt: pinStepUp.clock.nowEpochSeconds(),
+    effectiveRisk: "R4",
+    policyOutcome: "step_up",
+    requiresOtherApprover: true,
+  });
+
+  await assert.rejects(
+    () =>
+      createStepUpChallenge(pinStepUp, {
+        purpose: "step_up",
+        session,
+        pending_action_ref: pending.nonce,
+        approver_staff_id: DEMO_ADMIN_ID,
+      }),
+    (error: unknown) =>
+      error instanceof Error && "code" in error && error.code === "AUTHENTICATION_FAILED",
+  );
+
+  approverRole = "admin";
+  const challenge = await createStepUpChallenge(pinStepUp, {
+    purpose: "step_up",
+    session,
+    pending_action_ref: pending.nonce,
+    approver_staff_id: DEMO_ADMIN_ID,
+  });
+
+  approverRole = "staff";
+  await assert.rejects(
+    () =>
+      verifyStepUpPin(pinStepUp, {
+        challenge_id: challenge.challenge_id,
+        pin: ADMIN_PIN,
+        session,
+      }),
+    (error: unknown) =>
+      error instanceof Error && "code" in error && error.code === "AUTHENTICATION_FAILED",
+  );
+});
 
 function buildBus(pendingStore: MemoryPendingActionStore) {
   const settings = createMemorySettingsStore();

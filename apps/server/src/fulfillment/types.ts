@@ -17,6 +17,26 @@ export type FulfillmentTransitionInput = Readonly<{
   }>;
 }>;
 
+export type FulfillmentRackAssignInput = Readonly<{
+  org_id: string;
+  store_id: string;
+  barcode: string;
+  rack_zone: string;
+  rack_slot: string;
+  staff_id: string;
+  at: number;
+}>;
+
+export type FulfillmentRackAssignResult = Readonly<{
+  garment_id: string;
+  order_id: string;
+  barcode: string;
+  rack_zone: string;
+  rack_slot: string;
+  status: "racked";
+  racked_at: number;
+}>;
+
 export type FulfillmentTransitionRow = Readonly<{
   garment_id: string;
   order_id: string;
@@ -62,6 +82,8 @@ export type FulfillmentWorkbenchRow = Readonly<{
   color: string | null;
   brand: string | null;
   status: GarmentStatus;
+  rack_zone: string | null;
+  rack_slot: string | null;
   updated_at: number;
   incident_count: number;
 }>;
@@ -70,6 +92,7 @@ export type FulfillmentStore = Readonly<{
   transition: (
     input: FulfillmentTransitionInput,
   ) => Promise<readonly FulfillmentTransitionRow[] | null>;
+  assignRack: (input: FulfillmentRackAssignInput) => Promise<FulfillmentRackAssignResult | null>;
   recordIncident: (input: FulfillmentIncidentInput) => Promise<FulfillmentIncidentResult | null>;
   listWorkbench: (
     orgId: string,

@@ -28,3 +28,25 @@ test("StepUpConfirmDialog SSR shows approver PIN copy", () => {
   assert.match(html, /复核人 PIN/);
   assert.match(html, /不会切换当前登录人/);
 });
+
+test("StepUpConfirmDialog can expose only other administrators for privacy approval", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(StepUpConfirmDialog, {
+        open: true,
+        onClose: () => undefined,
+        authClient: createMockAuthClient(),
+        confirmRef: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        currentStaffId: "11111111-1111-4111-8111-111111111101",
+        commandLabel: "导出客户数据",
+        requiredApproverRole: "admin",
+        onApproved: () => undefined,
+      }),
+    ),
+  );
+  assert.match(html, /另一位.*店长.*输入 PIN/su);
+  assert.match(html, /店长（店长）/u);
+  assert.doesNotMatch(html, /店员乙/u);
+});

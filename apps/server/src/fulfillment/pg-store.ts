@@ -13,6 +13,7 @@ import type {
   FulfillmentWorkbenchOptions,
   FulfillmentWorkbenchRow,
 } from "./types.js";
+import { assignPgRack } from "./pg-rack-store.js";
 
 type LockedGarmentRow = Readonly<{
   garment_id: string;
@@ -33,6 +34,8 @@ type WorkbenchSqlRow = Readonly<{
   color: string | null;
   brand: string | null;
   status: GarmentStatus;
+  rack_zone: string | null;
+  rack_slot: string | null;
   updated_at: Date | string;
   incident_count: number;
 }>;
@@ -134,7 +137,8 @@ async function transitionRows(
   }
   await client.query(
     `UPDATE garments
-        SET status = $4
+        SET status = $4, rack_zone = NULL, rack_slot = NULL,
+            racked_at = NULL, racked_by_staff_id = NULL
       WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = ANY($3::uuid[])`,
     [input.org_id, input.store_id, [...input.garment_ids], input.target_status],
   );
@@ -230,7 +234,7 @@ async function listWorkbenchRows(
   const result = await client.query<WorkbenchSqlRow>(
     `SELECT g.id::text AS garment_id, g.order_id::text, o.ticket_no, g.barcode,
             o.customer_name, o.customer_phone, g.service_code, g.category_code,
-            g.color, g.brand, g.status,
+            g.color, g.brand, g.status, g.rack_zone, g.rack_slot,
             COALESCE(log.latest_at, o.updated_at) AS updated_at,
             COALESCE(incident.incident_count, 0)::integer AS incident_count
        FROM garments g
@@ -249,6 +253,9 @@ async function listWorkbenchRows(
         AND (
           $4::text IS NULL OR o.ticket_no ILIKE $4 ESCAPE '\\'
           OR g.barcode ILIKE $4 ESCAPE '\\'
+          OR g.rack_zone ILIKE $4 ESCAPE '\\'
+          OR g.rack_slot ILIKE $4 ESCAPE '\\'
+          OR concat_ws('-', g.rack_zone, g.rack_slot) ILIKE $4 ESCAPE '\\'
           OR o.customer_phone LIKE $4 ESCAPE '\\'
           OR o.customer_name ILIKE $4 ESCAPE '\\'
         )
@@ -270,6 +277,8 @@ async function listWorkbenchRows(
         color: row.color,
         brand: row.brand,
         status: row.status,
+        rack_zone: row.rack_zone,
+        rack_slot: row.rack_slot,
         updated_at: toEpoch(row.updated_at),
         incident_count: row.incident_count,
       }),
@@ -288,6 +297,7 @@ export function createPgFulfillmentStore(
         { orgId: input.org_id, storeId: input.store_id, staffId: input.staff_id },
         (client) => transitionRows(client, input, newId),
       ),
+    assignRack: async (input) => assignPgRack(pool, input, newId),
     recordIncident: async (input) =>
       withStoreGucOrCurrent(
         pool,

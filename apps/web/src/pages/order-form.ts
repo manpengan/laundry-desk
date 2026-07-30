@@ -4,6 +4,7 @@
  */
 
 import { parsePricingAdjustments } from "./receive-pricing.js";
+export { buildPickupBody, type BuildPickupBodyResult } from "./pickup-form.js";
 
 const PHONE_RE = /^1[3-9]\d{9}$/u;
 const CODE_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/u;
@@ -55,6 +56,8 @@ export type OrderGetGarment = Readonly<{
   line_index: number;
   seq: number;
   unit_price_cents: number;
+  rack_zone: string | null;
+  rack_slot: string | null;
 }>;
 
 export type OrderGetResult = Readonly<{
@@ -70,9 +73,9 @@ export type OrderGetResult = Readonly<{
   garments: readonly OrderGetGarment[];
 }>;
 
-/** Collapsed fulfillment: only `received` may transition to picked_up. */
+/** Counter pickup supports direct received/ready pickup and verified racked pickup. */
 export function isPickableGarmentStatus(status: string): boolean {
-  return status === "received";
+  return status === "received" || status === "ready" || status === "racked";
 }
 
 export function listPickableGarments(
@@ -108,6 +111,8 @@ function parseOrderGetGarment(row: unknown): OrderGetGarment | null {
   if (typeof r.seq !== "number" || !Number.isInteger(r.seq)) return null;
   if (typeof r.unit_price_cents !== "number" || !Number.isInteger(r.unit_price_cents)) return null;
   if (r.unit_price_cents < 0) return null;
+  const rackZone = typeof r.rack_zone === "string" ? r.rack_zone : null;
+  const rackSlot = typeof r.rack_slot === "string" ? r.rack_slot : null;
   return Object.freeze({
     garment_id: r.garment_id,
     barcode: r.barcode,
@@ -115,6 +120,8 @@ function parseOrderGetGarment(row: unknown): OrderGetGarment | null {
     line_index: r.line_index,
     seq: r.seq,
     unit_price_cents: r.unit_price_cents,
+    rack_zone: rackZone,
+    rack_slot: rackSlot,
   });
 }
 
@@ -328,72 +335,5 @@ export function buildReceiveBody(input: {
     ok: true as const,
     body: Object.freeze(body),
     previewLines: Object.freeze(lines),
-  });
-}
-
-export type BuildPickupBodyResult =
-  | Readonly<{ ok: true; body: Readonly<Record<string, unknown>> }>
-  | Readonly<{ ok: false; message: string }>;
-
-/**
- * Build order.pickup body.
- * - Prefer explicit `garment_ids` (multi-select UX). Empty selection → error.
- * - Legacy `garment_ids_text` still accepted; blank text = empty list (server = all pickable).
- */
-export function buildPickupBody(input: {
-  order_id: string;
-  collect_cents: string;
-  /** Explicit multi-select IDs. When provided, empty is an error. */
-  garment_ids?: readonly string[];
-  /** Legacy free-text UUID list (comma/space). */
-  garment_ids_text?: string;
-  /** When true (default if garment_ids provided), empty selection errors. */
-  require_selection?: boolean;
-}): BuildPickupBodyResult {
-  const orderId = input.order_id.trim();
-  if (!isValidUuid(orderId)) {
-    return Object.freeze({ ok: false as const, message: "订单 ID 须为 UUID" });
-  }
-  const collect = parseNonNegCents(input.collect_cents);
-  if (collect === null) {
-    return Object.freeze({ ok: false as const, message: "收款金额须为整数分" });
-  }
-  let garmentIds: string[] = [];
-  if (input.garment_ids !== undefined) {
-    garmentIds = [...input.garment_ids];
-  } else if (input.garment_ids_text !== undefined) {
-    const raw = input.garment_ids_text.trim();
-    if (raw.length > 0) {
-      garmentIds = raw
-        .split(/[\s,，]+/u)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-    }
-  }
-
-  if (garmentIds.length > 200) {
-    return Object.freeze({ ok: false as const, message: "件 ID 最多 200 个" });
-  }
-  for (const id of garmentIds) {
-    if (!isValidUuid(id)) {
-      return Object.freeze({
-        ok: false as const,
-        message: `无效 garment_id：${id.slice(0, 12)}…`,
-      });
-    }
-  }
-
-  const requireSelection = input.require_selection ?? input.garment_ids !== undefined;
-  if (requireSelection && garmentIds.length === 0) {
-    return Object.freeze({ ok: false as const, message: "请至少选择一件可取衣物" });
-  }
-
-  return Object.freeze({
-    ok: true as const,
-    body: Object.freeze({
-      order_id: orderId,
-      collect_cents: collect,
-      garment_ids: Object.freeze(garmentIds),
-    }),
   });
 }

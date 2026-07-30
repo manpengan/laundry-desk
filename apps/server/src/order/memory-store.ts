@@ -22,6 +22,7 @@ import type {
   PickupApplyOptions,
   PickupApplyResult,
 } from "./types.js";
+import { requireVerifiedRackBarcodes } from "./pickup-verification.js";
 
 const key = (orgId: string, storeId: string, orderId: string): string =>
   `${orgId}|${storeId}|${orderId}`;
@@ -112,8 +113,17 @@ export class MemoryOrderStore implements OrderStore {
     if (order === undefined || list === undefined || order.status !== "open") return null;
 
     const idSet = new Set(garmentIds);
+    if (list.filter((garment) => idSet.has(garment.garment_id)).length !== idSet.size) return null;
+    requireVerifiedRackBarcodes(list, garmentIds, options?.verificationBarcodes ?? []);
     const nextGarments = list.map((g) =>
-      idSet.has(g.garment_id) ? Object.freeze({ ...g, status: "picked_up" as const }) : g,
+      idSet.has(g.garment_id)
+        ? Object.freeze({
+            ...g,
+            status: "picked_up" as const,
+            rack_zone: null,
+            rack_slot: null,
+          })
+        : g,
     );
     const allPicked = nextGarments.every(
       (g) => g.status === "picked_up" || g.status === "delivered" || g.status === "lost",

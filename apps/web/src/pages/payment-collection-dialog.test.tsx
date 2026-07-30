@@ -26,6 +26,8 @@ const OPEN_ORDER: OrderGetResult = Object.freeze({
       line_index: 0,
       seq: 1,
       unit_price_cents: 3000,
+      rack_zone: null,
+      rack_slot: null,
     }),
   ]),
 });

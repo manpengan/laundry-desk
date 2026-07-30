@@ -68,6 +68,7 @@ const sampleOrder = (): OrderRecord =>
     ticket_no: "20260722-0001",
     pickup_code: "P202607220001",
     status: "open" as const,
+    customer_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     customer_phone: "13800000111",
     customer_name: null,
     note: null,
@@ -168,6 +169,7 @@ test("mapOrder + mapOrderLine preserve cents and line_index", () => {
       ticket_no: "20260722-0009",
       pickup_code: "P202607220009",
       status: "open",
+      customer_id: null,
       customer_phone: null,
       customer_name: null,
       note: null,
@@ -188,6 +190,7 @@ test("mapOrder + mapOrderLine preserve cents and line_index", () => {
     [line],
   );
   assert.equal(order.order_id, "ord-1");
+  assert.equal(order.customer_id, null);
   assert.equal(order.lines[0]?.line_index, 2);
   assert.equal(order.created_at, Math.floor(Date.parse("2026-07-22T00:00:00Z") / 1000));
 });
@@ -216,7 +219,10 @@ test("insertOrder writes order + lines + garments with generated order_line_id",
   await store.insertOrder(sampleOrder(), sampleGarments());
 
   const inserts = queries.filter((q) => q.sql.trimStart().toUpperCase().startsWith("INSERT"));
-  assert.ok(inserts.some((q) => q.sql.includes("INTO orders")));
+  const orderInsert = inserts.find((q) => q.sql.includes("INTO orders"));
+  assert.ok(orderInsert);
+  assert.ok(orderInsert.sql.includes("customer_id"));
+  assert.equal(orderInsert.params?.[6], sampleOrder().customer_id);
   assert.ok(inserts.some((q) => q.sql.includes("INTO order_lines")));
   assert.ok(inserts.some((q) => q.sql.includes("INTO garments")));
 
@@ -248,6 +254,14 @@ test("getOrder returns null when no order row", async () => {
 test("applyPickup updates garments to picked_up and settles balance", async () => {
   const order = sampleOrder();
   const garments = sampleGarments();
+  const lockedGarments = garments.map((garment) =>
+    Object.freeze({
+      ...garment,
+      status: "racked" as const,
+      rack_zone: "A",
+      rack_slot: String(garment.seq).padStart(2, "0"),
+    }),
+  );
   const handler: MockQueryHandler = (sql) => {
     if (sql.includes("FROM orders") && sql.includes("WHERE")) {
       return {
@@ -258,6 +272,7 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
             store_id: order.store_id,
             ticket_no: order.ticket_no,
             status: order.status,
+            customer_id: order.customer_id,
             customer_phone: order.customer_phone,
             customer_name: order.customer_name,
             note: order.note,
@@ -296,7 +311,7 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
     }
     if (sql.includes("FROM garments")) {
       return {
-        rows: garments.map((g) => ({
+        rows: lockedGarments.map((g) => ({
           id: g.garment_id,
           org_id: g.org_id,
           store_id: g.store_id,
@@ -312,7 +327,7 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
           brand: g.brand,
           status: g.status,
         })),
-        rowCount: garments.length,
+        rowCount: lockedGarments.length,
       };
     }
     return { rows: [], rowCount: 0 };
@@ -322,6 +337,19 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
   const store = createPgOrderStore(pool, {
     newId: () => "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
   });
+  await assert.rejects(
+    () =>
+      store.applyPickup(
+        DEMO_ORG_ID,
+        DEMO_STORE_ID,
+        order.order_id,
+        garments.map((garment) => garment.garment_id),
+        2500,
+        1_700_000_100,
+        Object.freeze({ staffId: DEMO_STAFF_A_ID, method: "cash" as const }),
+      ),
+    (error) => error instanceof Error && error.name === "HandlerCommandError",
+  );
   const applied = await store.applyPickup(
     DEMO_ORG_ID,
     DEMO_STORE_ID,
@@ -329,7 +357,11 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
     garments.map((g) => g.garment_id),
     2500,
     1_700_000_100,
-    Object.freeze({ staffId: DEMO_STAFF_A_ID, method: "cash" as const }),
+    Object.freeze({
+      staffId: DEMO_STAFF_A_ID,
+      method: "cash" as const,
+      verificationBarcodes: lockedGarments.map((garment) => garment.barcode),
+    }),
   );
   assert.ok(applied);
   assert.equal(applied.order.paid_cents, 3000);
@@ -340,7 +372,15 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
     true,
   );
 
-  assert.ok(queries.some((q) => q.sql.includes("UPDATE garments") && q.sql.includes("picked_up")));
+  assert.ok(
+    queries.some(
+      (q) =>
+        q.sql.includes("UPDATE garments") &&
+        q.sql.includes("picked_up") &&
+        q.sql.includes("rack_zone = NULL") &&
+        q.sql.includes("racked_by_staff_id = NULL"),
+    ),
+  );
   assert.ok(queries.some((q) => q.sql.includes("UPDATE orders")));
   const paymentInsert = queries.find((q) => q.sql.includes("INTO payments"));
   assert.ok(paymentInsert, "expected INSERT INTO payments when collectCents > 0");
@@ -363,6 +403,7 @@ test("applyPickup with collectCents 0 skips payments insert", async () => {
             store_id: order.store_id,
             ticket_no: order.ticket_no,
             status: order.status,
+            customer_id: order.customer_id,
             customer_phone: order.customer_phone,
             customer_name: order.customer_name,
             note: order.note,

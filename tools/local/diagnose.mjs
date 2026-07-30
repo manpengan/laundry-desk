@@ -11,6 +11,7 @@ import {
 import { loadLocalConfig, resolveLocalConfigPaths, toLocalConfigEnvironment } from "./config.mjs";
 import { probeHealthEndpoint } from "./health-probe.mjs";
 import { dataToolErrorCode, LocalDataError } from "./data-tools.mjs";
+import { inspectMaintenanceHealth } from "./maintenance-state.mjs";
 
 export const parseDiagnoseArguments = (argv) => {
   if (unwrapPackageManagerArguments(argv).length !== 0) {
@@ -26,6 +27,8 @@ const defaultDependencies = () =>
     capture: createExecFileCaptureRunner(),
     probeHealthEndpoint,
     statfs,
+    inspectMaintenanceHealth,
+    now: () => new Date(),
   });
 
 async function directorySummary(path) {
@@ -62,8 +65,12 @@ export async function runDiagnose(options, dependencies = defaultDependencies())
   }
   const health = await dependencies.probeHealthEndpoint("http://127.0.0.1:8787/health");
   const filesystem = await dependencies.statfs(paths.directoryPath);
+  const maintenance = await dependencies.inspectMaintenanceHealth(
+    join(paths.directoryPath, "backups"),
+    { now: dependencies.now(), maxAgeSeconds: 26 * 60 * 60 },
+  );
   const report = Object.freeze({
-    ok: health.ready && composeServices !== null,
+    ok: health.ready && composeServices !== null && maintenance.ok,
     project,
     config: Object.freeze({ valid: true, instance_id: config.instanceId }),
     api: Object.freeze({ reachable: health.reachable, ready: health.ready }),
@@ -76,6 +83,7 @@ export async function runDiagnose(options, dependencies = defaultDependencies())
       photos: await directorySummary(join(paths.directoryPath, "photos")),
       backups: await directorySummary(join(paths.directoryPath, "backups")),
     }),
+    maintenance,
   });
   options.stdout(`${JSON.stringify(report, null, 2)}\n`);
   return report;

@@ -19,6 +19,8 @@ const ROW = Object.freeze({
   color: "白色",
   brand: null,
   status: "washing",
+  rack_zone: null,
+  rack_slot: null,
   updated_at: 1_722_297_600,
   incident_count: 0,
 });

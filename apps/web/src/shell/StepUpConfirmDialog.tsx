@@ -18,6 +18,8 @@ export type StepUpConfirmDialogProps = {
   currentStaffId: string;
   /** Optional command label for the dialog title area. */
   commandLabel?: string;
+  /** Optional server-mirrored UI filter; server authority remains decisive. */
+  requiredApproverRole?: SwitchableStaff["role"];
   /** Called after proof is issued (parent re-submits confirm_ref). */
   onApproved: (proof: Readonly<{ step_up_proof_id: string; expires_at: number }>) => void;
 };
@@ -29,12 +31,20 @@ export function StepUpConfirmDialog({
   confirmRef,
   currentStaffId,
   commandLabel = "高风险操作",
+  requiredApproverRole,
   onApproved,
 }: StepUpConfirmDialogProps) {
   const toast = useToast();
   const approvers = useMemo(
-    () => authClient.listSwitchableStaff().filter((s) => s.staff_id !== currentStaffId),
-    [authClient, currentStaffId],
+    () =>
+      authClient
+        .listSwitchableStaff()
+        .filter(
+          (staff) =>
+            staff.staff_id !== currentStaffId &&
+            (requiredApproverRole === undefined || staff.role === requiredApproverRole),
+        ),
+    [authClient, currentStaffId, requiredApproverRole],
   );
   const [approverId, setApproverId] = useState<string>(approvers[0]?.staff_id ?? "");
   const [pin, setPin] = useState("");
@@ -123,14 +133,15 @@ export function StepUpConfirmDialog({
     >
       <div className="ld-step-up">
         <p className="ld-step-up__hint">
-          「{commandLabel}」需另一位员工输入 PIN 复核（不会切换当前登录人）。
+          「{commandLabel}」需另一位
+          {requiredApproverRole === "admin" ? "店长" : "员工"}输入 PIN 复核（不会切换当前登录人）。
         </p>
         <p className="ld-step-up__ref" title={confirmRef}>
           确认卡：{confirmRef.slice(0, 8)}…
         </p>
         {approvers.length === 0 ? (
           <div className="ld-step-up__error" role="alert">
-            没有可复核的其他员工
+            没有可复核的其他{requiredApproverRole === "admin" ? "店长" : "员工"}
           </div>
         ) : (
           <label className="ld-step-up__staff">

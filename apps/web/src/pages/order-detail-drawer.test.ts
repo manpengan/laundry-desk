@@ -34,6 +34,8 @@ const SAMPLE_ORDER: OrderGetResult = Object.freeze({
       line_index: 0,
       seq: 1,
       unit_price_cents: 1500,
+      rack_zone: null,
+      rack_slot: null,
     }),
     Object.freeze({
       garment_id: "22222222-3333-4444-8555-666666666666",
@@ -42,6 +44,8 @@ const SAMPLE_ORDER: OrderGetResult = Object.freeze({
       line_index: 0,
       seq: 2,
       unit_price_cents: 1500,
+      rack_zone: null,
+      rack_slot: null,
     }),
   ]),
 });

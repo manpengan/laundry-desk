@@ -7,6 +7,8 @@ import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { StepUpConfirmDialog } from "../shell/StepUpConfirmDialog.js";
 import { DangerConfirmDialog } from "./DangerConfirmDialog.js";
+import { FulfillmentRackPanel } from "./FulfillmentRackPanel.js";
+import { FulfillmentWorkbenchRow } from "./FulfillmentWorkbenchRow.js";
 import {
   FULFILLMENT_STATUS_LABELS,
   parseFulfillmentRows,
@@ -158,7 +160,7 @@ export function FulfillmentPage({
   }, [commandClient, finish, pending, toast]);
 
   const transition = useCallback(
-    (target: "washing" | "ready" | "racked") => {
+    (target: "washing" | "ready") => {
       if (ids.length === 0) return;
       const command = transitionCommandForCount(ids.length);
       const body =
@@ -258,6 +260,8 @@ export function FulfillmentPage({
         </label>
       </section>
 
+      <FulfillmentRackPanel commandClient={commandClient} onAssigned={finish} />
+
       <section className="ld-fulfillment__actions" aria-label="批量操作">
         <strong>已选 {ids.length} 件</strong>
         <Button
@@ -273,13 +277,6 @@ export function FulfillmentPage({
           disabled={busy || ids.length === 0}
         >
           标记完成
-        </Button>
-        <Button
-          type="button"
-          onClick={() => transition("racked")}
-          disabled={busy || ids.length === 0}
-        >
-          转为待取
         </Button>
         <Button
           variant="secondary"
@@ -337,36 +334,19 @@ export function FulfillmentPage({
 
       <div className="ld-fulfillment__table" role="table" aria-busy={busy}>
         {rows.map((row) => (
-          <label key={row.garment_id} className="ld-fulfillment__row">
-            <input
-              type="checkbox"
-              checked={selected.has(row.garment_id)}
-              onChange={(event) =>
-                setSelected((current) => {
-                  const next = new Set(current);
-                  if (event.target.checked) next.add(row.garment_id);
-                  else next.delete(row.garment_id);
-                  return next;
-                })
-              }
-            />
-            <span>
-              <strong>{row.ticket_no}</strong>
-              <small>{row.barcode}</small>
-            </span>
-            <span>
-              {row.service_code} · {row.category_code}
-              <small>{[row.color, row.brand].filter(Boolean).join(" · ") || "—"}</small>
-            </span>
-            <span>
-              {row.customer_name ?? "散客"}
-              <small>{row.customer_phone_masked ?? "—"}</small>
-            </span>
-            <span className={`ld-fulfillment__status ld-fulfillment__status--${row.status}`}>
-              {FULFILLMENT_STATUS_LABELS[row.status]}
-            </span>
-            <span>异常 {row.incident_count}</span>
-          </label>
+          <FulfillmentWorkbenchRow
+            key={row.garment_id}
+            row={row}
+            checked={selected.has(row.garment_id)}
+            onToggle={(checked) =>
+              setSelected((current) => {
+                const next = new Set(current);
+                if (checked) next.add(row.garment_id);
+                else next.delete(row.garment_id);
+                return next;
+              })
+            }
+          />
         ))}
         {!busy && rows.length === 0 ? (
           <p className="ld-fulfillment__empty">当前筛选没有衣物。</p>

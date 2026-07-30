@@ -11,6 +11,7 @@ import type { PhotoPort } from "../host/photo-port.js";
 import type { PrintJobView } from "../shell/print-jobs.js";
 import { CustomerDetail } from "./CustomerDetail.js";
 import { CustomerGovernancePanel } from "./CustomerGovernancePanel.js";
+import { CustomerPrivacyPanel } from "./CustomerPrivacyPanel.js";
 import { loadCustomerHistory } from "./customer-history.js";
 import {
   parseCustomerDetail,
@@ -305,6 +306,17 @@ export function CustomersPage({
             {...(session === undefined ? {} : { session })}
             onUpdated={() => void selectCustomer(selected)}
             onMerged={() => {
+              closeDetail();
+              void search();
+            }}
+          />
+          <CustomerPrivacyPanel
+            customer={selected}
+            queryClient={queryClient}
+            commandClient={commandClient}
+            {...(authClient === undefined ? {} : { authClient })}
+            {...(session === undefined ? {} : { session })}
+            onAnonymized={() => {
               closeDetail();
               void search();
             }}

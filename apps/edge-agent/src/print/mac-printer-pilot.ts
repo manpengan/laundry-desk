@@ -1,4 +1,5 @@
 import { execFile as nodeExecFile, spawn as nodeSpawn } from "node:child_process";
+import { createHash } from "node:crypto";
 
 import { buildPrinterSmokePayload } from "./printer-smoke.js";
 
@@ -10,6 +11,8 @@ export type MacPrinterPilotResult = Readonly<{
   mode: "discover" | "validate" | "print";
   queues: readonly string[];
   selected_queue?: string;
+  cups_job_id?: string;
+  payload_sha256?: string;
   bytes_written?: number;
   message: string;
 }>;
@@ -22,7 +25,7 @@ export type MacPrinterPilotDependencies = Readonly<{
     args: readonly string[],
     bytes: Uint8Array,
     timeoutMs: number,
-  ) => Promise<void>;
+  ) => Promise<string>;
 }>;
 
 const capture = async (file: string, args: readonly string[]): Promise<string> =>
@@ -38,14 +41,19 @@ const printBytes = async (
   args: readonly string[],
   bytes: Uint8Array,
   timeoutMs: number,
-): Promise<void> =>
+): Promise<string> =>
   await new Promise((resolvePrint, rejectPrint) => {
-    const child = nodeSpawn(file, [...args], { shell: false, stdio: ["pipe", "ignore", "pipe"] });
+    const child = nodeSpawn(file, [...args], { shell: false, stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "";
     let stderr = "";
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
       rejectPrint(new Error("CUPS print timed out"));
     }, timeoutMs);
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      if (stdout.length < 2_048) stdout += chunk;
+    });
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
       if (stderr.length < 2_048) stderr += chunk;
@@ -56,7 +64,7 @@ const printBytes = async (
     });
     child.once("exit", (code) => {
       clearTimeout(timer);
-      if (code === 0) resolvePrint();
+      if (code === 0) resolvePrint(stdout);
       else rejectPrint(new Error(stderr.trim() || "CUPS print failed"));
     });
     child.stdin.end(bytes);
@@ -75,6 +83,11 @@ function parseQueues(output: string): readonly string[] {
       .filter((queue) => QUEUE_NAME.test(queue))
       .sort(),
   );
+}
+
+function parseCupsJobId(output: string, queue: string): string | null {
+  const matches = output.match(/[A-Za-z0-9_.-]+-\d+/gu) ?? [];
+  return matches.find((candidate) => candidate.startsWith(`${queue}-`)) ?? null;
 }
 
 async function discoverQueues(
@@ -124,17 +137,29 @@ export async function runMacPrinterPilot(
       });
     }
     const payload = buildPrinterSmokePayload("LAUNDRY macOS CUPS pilot OK");
-    await (dependencies.print ?? printBytes)(
+    const output = await (dependencies.print ?? printBytes)(
       "/usr/bin/lp",
       ["-d", queue, "-o", "raw"],
       payload,
       input.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     );
+    const cupsJobId = parseCupsJobId(output, queue);
+    if (cupsJobId === null) {
+      return Object.freeze({
+        ok: false,
+        mode: "print",
+        queues,
+        selected_queue: queue,
+        message: "CUPS accepted bytes without a trackable job id",
+      });
+    }
     return Object.freeze({
       ok: true,
       mode: "print",
       queues,
       selected_queue: queue,
+      cups_job_id: cupsJobId,
+      payload_sha256: createHash("sha256").update(payload).digest("hex"),
       bytes_written: payload.byteLength,
       message: "Raw ESC/POS pilot submitted to CUPS",
     });

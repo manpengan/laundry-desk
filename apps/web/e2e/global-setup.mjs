@@ -22,12 +22,14 @@ const FIXTURE_STAFF = Object.freeze([
     roleId: "55555555-5555-4555-8555-111111111101",
     username: "e2e-staff-a",
     displayName: "E2E Staff One",
+    role: "staff",
   }),
   Object.freeze({
     id: "11111111-1111-4111-8111-111111111102",
     roleId: "55555555-5555-4555-8555-111111111102",
     username: "e2e-staff-b",
     displayName: "E2E Staff Two",
+    role: "admin",
   }),
 ]);
 
@@ -63,12 +65,12 @@ async function seedStaff(client, staff) {
   await client.query(
     `INSERT INTO staff_store_roles (
        id, org_id, store_id, staff_id, role, is_active, created_at, updated_at
-     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'staff', true, now(), now())
+     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, true, now(), now())
      ON CONFLICT (id) DO UPDATE SET
        role = EXCLUDED.role,
        is_active = true,
        updated_at = EXCLUDED.updated_at`,
-    [staff.roleId, ORG_ID, STORE_ID, staff.id],
+    [staff.roleId, ORG_ID, STORE_ID, staff.id, staff.role],
   );
 }
 

@@ -210,7 +210,8 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       "stats aggregate must reflect the real order and payment ledgers",
     );
 
-    const garmentIds = await readGarmentIds(appPool, received.order_id);
+    const garmentRefs = await readGarmentRefs(appPool, received.order_id);
+    const garmentIds = garmentRefs.map((garment) => garment.id);
     assert.equal(garmentIds.length, 2);
     await run("garment.bulk_transition", {
       garment_ids: garmentIds,
@@ -230,10 +231,13 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       garment_ids: garmentIds,
       target_status: "ready",
     });
-    await run("garment.bulk_transition", {
-      garment_ids: garmentIds,
-      target_status: "racked",
-    });
+    for (const [index, garment] of garmentRefs.entries()) {
+      await run("garment.rack.assign", {
+        barcode: garment.barcode,
+        rack_zone: "A",
+        rack_slot: String(index + 1).padStart(2, "0"),
+      });
+    }
     assert.deepEqual(
       await readFulfillment(appPool, received.order_id),
       { statuses: ["racked", "racked"], statusLogs: 8, incidents: 3 },
@@ -272,7 +276,10 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     assert.equal(redirectedCustomer?.customer_id, targetCustomer.customer_id);
     assert.equal(redirectedCustomer?.phone, targetPhone);
     assert.equal(redirectedCustomer?.note, "保留目标备注");
-    assert.equal(await readOrderCustomerPhone(appPool, received.order_id), targetPhone);
+    assert.deepEqual(await readOrderCustomerLink(appPool, received.order_id), {
+      customer_id: targetCustomer.customer_id,
+      customer_phone: targetPhone,
+    });
 
     // Repay the outstanding debt.
     await run("payment.repay", {
@@ -299,10 +306,16 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       order_id: received.order_id,
       garment_ids: [],
       collect_cents: 0,
+      verification_barcodes: garmentRefs.map((garment) => garment.barcode),
     });
     const afterPickup = await readOrder(appPool, received.order_id);
     assert.equal(afterPickup.picked_up_count, 2, "all garments transition to picked_up");
     assert.equal(afterPickup.balance_cents, 0);
+    assert.deepEqual(await readFulfillment(appPool, received.order_id), {
+      statuses: ["picked_up", "picked_up"],
+      statusLogs: 10,
+      incidents: 3,
+    });
 
     // Close the business day the order landed on.
     const closed = (
@@ -385,17 +398,17 @@ type OrderSnapshot = Readonly<{
   payment_count: number;
 }>;
 
-async function readGarmentIds(
+async function readGarmentRefs(
   appPool: ReturnType<typeof createPgPool>,
   orderId: string,
-): Promise<readonly string[]> {
+): Promise<readonly Readonly<{ id: string; barcode: string }>[]> {
   return withPoolClient(appPool, (sql) =>
     withTenantTransaction(sql, TENANT, async (tx) => {
-      const result = await tx.query<{ id: string }>(
-        "SELECT id::text FROM garments WHERE order_id = $1::uuid ORDER BY id",
+      const result = await tx.query<{ id: string; barcode: string }>(
+        "SELECT id::text, barcode FROM garments WHERE order_id = $1::uuid ORDER BY id",
         [orderId],
       );
-      return Object.freeze(result.rows.map((row) => row.id));
+      return Object.freeze(result.rows.map((row) => Object.freeze({ ...row })));
     }),
   );
 }
@@ -425,17 +438,20 @@ async function readFulfillment(
   );
 }
 
-async function readOrderCustomerPhone(
+async function readOrderCustomerLink(
   appPool: ReturnType<typeof createPgPool>,
   orderId: string,
-): Promise<string | null> {
+): Promise<Readonly<{ customer_id: string | null; customer_phone: string | null }>> {
   return withPoolClient(appPool, (sql) =>
     withTenantTransaction(sql, TENANT, async (tx) => {
-      const result = await tx.query<{ customer_phone: string | null }>(
-        "SELECT customer_phone FROM orders WHERE id = $1::uuid",
-        [orderId],
-      );
-      return result.rows[0]?.customer_phone ?? null;
+      const result = await tx.query<{
+        customer_id: string | null;
+        customer_phone: string | null;
+      }>("SELECT customer_id::text, customer_phone FROM orders WHERE id = $1::uuid", [orderId]);
+      return Object.freeze({
+        customer_id: result.rows[0]?.customer_id ?? null,
+        customer_phone: result.rows[0]?.customer_phone ?? null,
+      });
     }),
   );
 }

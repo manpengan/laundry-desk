@@ -25,6 +25,11 @@ export type PinStepUpDeps = PinServiceDeps &
   Readonly<{
     pending: PendingActionStore;
     proofs: StepUpProofStore;
+    resolveStaffRole?: (
+      orgId: string,
+      storeId: string,
+      staffId: string,
+    ) => Promise<"admin" | "staff" | null>;
   }>;
 
 export type CreateStepUpChallengeInput = Readonly<{
@@ -89,6 +94,27 @@ const requireStepUpRecord = (record: PinChallengeRecord | null): PinChallengeRec
   return record;
 };
 
+const PRIVACY_ADMIN_COMMANDS: ReadonlySet<string> = new Set([
+  "customer.privacy.export",
+  "customer.anonymize",
+]);
+
+async function requireAuthorizedApprover(
+  deps: PinStepUpDeps,
+  command: string,
+  orgId: string,
+  storeId: string,
+  staffId: string,
+): Promise<void> {
+  if (!PRIVACY_ADMIN_COMMANDS.has(command)) return;
+  if (
+    deps.resolveStaffRole === undefined ||
+    (await deps.resolveStaffRole(orgId, storeId, staffId)) !== "admin"
+  ) {
+    throw new IdentityError("AUTHENTICATION_FAILED", "Authentication failed");
+  }
+}
+
 /**
  * Issue a step-up PIN challenge bound to an open pending card (confirm_ref).
  * Only the card creator's active session may request the challenge.
@@ -133,6 +159,13 @@ export const createStepUpChallenge = async (
   if (approver === null || !approver.is_active || approver.pin_hash === null) {
     throw new IdentityError("AUTHENTICATION_FAILED", "Authentication failed");
   }
+  await requireAuthorizedApprover(
+    deps,
+    pending.command,
+    input.session.org_id,
+    input.session.store_id,
+    input.approver_staff_id,
+  );
 
   const challenge = createPinChallenge({
     purpose: "step_up",
@@ -212,6 +245,13 @@ export const verifyStepUpPin = async (
   if (approver === null || !approver.is_active || approver.pin_hash === null) {
     throw new IdentityError("AUTHENTICATION_FAILED", "Authentication failed");
   }
+  await requireAuthorizedApprover(
+    deps,
+    pending.command,
+    record.org_id,
+    record.store_id,
+    approverStaffId,
+  );
 
   const pinOk = await deps.pinPort.verifyPassword(input.pin, approver.pin_hash);
   const proofId = newUuid();

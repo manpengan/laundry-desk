@@ -96,12 +96,12 @@ export async function insertOrderRows(
   await client.query(
     `INSERT INTO orders (
       id, org_id, store_id, ticket_no, pickup_code, status,
-      customer_phone, customer_name, note,
+      customer_id, customer_phone, customer_name, note,
       subtotal_cents, original_cents, discount_cents, addon_cents, urgent_cents, freight_cents,
       payable_cents, paid_cents, balance_cents, business_date,
       created_at, updated_at, created_by_staff_id
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23
      )`,
     [
       order.order_id,
@@ -110,6 +110,7 @@ export async function insertOrderRows(
       order.ticket_no,
       order.pickup_code,
       order.status,
+      order.customer_id,
       order.customer_phone,
       order.customer_name,
       order.note,
@@ -171,8 +172,9 @@ export async function insertOrderChildren(
     await client.query(
       `INSERT INTO garments (
          id, org_id, store_id, order_id, order_line_id, seq, barcode,
-         service_code, category_code, unit_price_cents, color, brand, status
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+         service_code, category_code, unit_price_cents, color, brand, status,
+         rack_zone, rack_slot
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
       [
         garment.garment_id,
         garment.org_id,
@@ -187,6 +189,8 @@ export async function insertOrderChildren(
         garment.color,
         garment.brand,
         garment.status,
+        garment.rack_zone ?? null,
+        garment.rack_slot ?? null,
       ],
     );
   }
@@ -201,7 +205,7 @@ export async function loadOrder(
 ): Promise<OrderRecord | null> {
   const orderResult = await client.query<OrderRow>(
     `SELECT id::text, org_id::text, store_id::text, ticket_no, pickup_code, status,
-            customer_phone, customer_name, note,
+            customer_id::text, customer_phone, customer_name, note,
             subtotal_cents, original_cents, discount_cents, addon_cents, urgent_cents, freight_cents,
             payable_cents, paid_cents, balance_cents, business_date,
             created_at, updated_at, created_by_staff_id::text
@@ -235,7 +239,7 @@ export async function loadGarments(
     `SELECT g.id::text, g.org_id::text, g.store_id::text, g.order_id::text,
             g.order_line_id::text, ol.line_index, g.seq, g.barcode,
             g.service_code, g.category_code, g.unit_price_cents,
-            g.color, g.brand, g.status
+            g.color, g.brand, g.status, g.rack_zone, g.rack_slot
      FROM garments g
      INNER JOIN order_lines ol
        ON ol.org_id = g.org_id AND ol.store_id = g.store_id

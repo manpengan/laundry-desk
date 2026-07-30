@@ -6,7 +6,8 @@
 .ld-fulfillment__header,
 .ld-fulfillment__filters,
 .ld-fulfillment__actions,
-.ld-fulfillment__incident {
+.ld-fulfillment__incident,
+.ld-fulfillment__rack {
   display: flex;
   align-items: end;
   gap: 12px;
@@ -24,7 +25,8 @@
 }
 
 .ld-fulfillment__filters > label,
-.ld-fulfillment__incident > label {
+.ld-fulfillment__incident > label,
+.ld-fulfillment__rack > label {
   min-width: 180px;
   flex: 1;
 }
@@ -45,7 +47,9 @@
 
 .ld-fulfillment__row {
   display: grid;
-  grid-template-columns: auto minmax(120px, 1fr) minmax(150px, 1.2fr) minmax(130px, 1fr) 80px 70px;
+  grid-template-columns:
+    auto minmax(120px, 1fr) minmax(150px, 1.2fr) minmax(130px, 1fr)
+    minmax(90px, 0.7fr) 80px 70px;
   gap: 12px;
   align-items: center;
   padding: 12px;

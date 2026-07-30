@@ -34,6 +34,11 @@ const CLERK: ActorContext = Object.freeze({
   permissions: Object.freeze(["order_write", "staff_read"]),
 });
 
+const PRIVACY_ADMIN: ActorContext = Object.freeze({
+  ...CLERK,
+  permissions: Object.freeze(["order_write", "staff_read", "privacy_admin"]),
+});
+
 function buildBus(store = createMemoryCustomerStore()) {
   const { registry, queryRegistry, chainHooks } = createRegisteredM1Bus({
     platform: Object.freeze({
@@ -51,9 +56,13 @@ test("query/command registry includes customer governance names", () => {
   assert.ok(queryRegistry.names().includes("customer.search"));
   assert.ok(queryRegistry.names().includes("customer.get"));
   assert.ok(queryRegistry.names().includes("customer.duplicates"));
+  assert.ok(queryRegistry.names().includes("customer.privacy.status"));
+  assert.ok(queryRegistry.names().includes("customer.privacy.events"));
   assert.ok(registry.names().includes("customer.upsert"));
   assert.ok(registry.names().includes("customer.update"));
   assert.ok(registry.names().includes("customer.merge"));
+  assert.ok(registry.names().includes("customer.privacy.export"));
+  assert.ok(registry.names().includes("customer.anonymize"));
 });
 
 test("customer.search returns only masked phones and no notes", async () => {
@@ -279,4 +288,90 @@ test("customer.update and customer.merge fail closed at R3/R4 policy gates", asy
   );
   assert.equal(merge.ok, false);
   if (!merge.ok) assert.equal(merge.error.code, "POLICY_STEP_UP_REQUIRED");
+});
+
+test("customer privacy lifecycle exports before irreversible anonymization", async () => {
+  const store = createMemoryCustomerStore([]);
+  const created = await store.upsert({
+    customer_id: "33333333-3333-4333-8333-333333333333",
+    phone: "13800000333",
+    name: "隐私客户",
+    note: "仅用于测试",
+    now: 100,
+  });
+  const status = await store.privacyStatus(
+    created.customer.customer_id,
+    DEMO_STORE_ID,
+    DEMO_STAFF_A_ID,
+  );
+  assert.equal(status?.anonymization_eligible, true);
+
+  const exported = await store.exportPrivacy({
+    customer_id: created.customer.customer_id,
+    store_id: DEMO_STORE_ID,
+    staff_id: DEMO_STAFF_A_ID,
+    reason: "客户主动申请",
+    event_id: "44444444-4444-4444-8444-444444444444",
+    now: 200,
+  });
+  assert.equal(exported?.customer.phone, "13800000333");
+  assert.equal(exported?.customer.name, "隐私客户");
+
+  const anonymized = await store.anonymize({
+    customer_id: created.customer.customer_id,
+    store_id: DEMO_STORE_ID,
+    staff_id: DEMO_STAFF_A_ID,
+    reason: "客户确认删除直接身份信息",
+    event_id: "55555555-5555-4555-8555-555555555555",
+    now: 300,
+  });
+  assert.deepEqual(anonymized, {
+    customer_id: created.customer.customer_id,
+    affected_order_count: 0,
+  });
+  assert.equal(await store.getById(created.customer.customer_id), null);
+  assert.equal(await store.getByPhone("13800000333"), null);
+  assert.deepEqual(await store.search("隐私客户", 20), []);
+  assert.deepEqual(
+    (await store.listPrivacyEvents(created.customer.customer_id, 20)).map((event) => event.action),
+    ["anonymized", "exported"],
+  );
+});
+
+test("customer privacy R4/R5 commands require privacy admin and step-up", async () => {
+  const { registry, chainHooks } = buildBus();
+  for (const [name, input] of [
+    [
+      "customer.privacy.export",
+      { customer_id: DEMO_CUSTOMERS[0]!.customer_id, reason: "客户主动申请" },
+    ],
+    [
+      "customer.anonymize",
+      {
+        customer_id: DEMO_CUSTOMERS[0]!.customer_id,
+        reason: "客户确认匿名化",
+        confirmation: "ANONYMIZE",
+      },
+    ],
+  ] as const) {
+    const denied = await executeCommand(new FakeSqlClient(), TENANT, name, input, {
+      registry,
+      actor: CLERK,
+      chainHooks,
+      pendingStore: processPendingActionStore,
+      stepUpProofStore: processStepUpProofStore,
+    });
+    assert.equal(denied.ok, false);
+    if (!denied.ok) assert.equal(denied.error.code, "PERMISSION_DENIED");
+
+    const result = await executeCommand(new FakeSqlClient(), TENANT, name, input, {
+      registry,
+      actor: PRIVACY_ADMIN,
+      chainHooks,
+      pendingStore: processPendingActionStore,
+      stepUpProofStore: processStepUpProofStore,
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.code, "POLICY_STEP_UP_REQUIRED");
+  }
 });

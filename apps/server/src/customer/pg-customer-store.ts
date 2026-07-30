@@ -1,13 +1,9 @@
-/**
- * Postgres CustomerStore: laundry_app + withOrgGuc (app.org_id only).
- * Table: customers (0011). Org-scoped one profile per phone.
- */
-
 import { randomUUID } from "node:crypto";
 
 import type { PgPool } from "../db/pg-pool.js";
 import { withOrgGucOrCurrent, withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
 import type { SqlClient } from "../db/types.js";
+import { createPgCustomerPrivacyOperations } from "./pg-customer-privacy-store.js";
 import type {
   CustomerMergeInput,
   CustomerMergeResult,
@@ -81,7 +77,7 @@ async function searchRows(
     const result = await client.query<CustomerRow>(
       `SELECT id, phone, name, note, created_at, updated_at
        FROM customers
-       WHERE org_id = $1::uuid AND merged_into_id IS NULL
+       WHERE org_id = $1::uuid AND merged_into_id IS NULL AND anonymized_at IS NULL
        ORDER BY updated_at DESC
        LIMIT $2`,
       [orgId, capped],
@@ -93,7 +89,7 @@ async function searchRows(
   const result = await client.query<CustomerRow>(
     `SELECT id, phone, name, note, created_at, updated_at
      FROM customers
-     WHERE org_id = $1::uuid AND merged_into_id IS NULL
+     WHERE org_id = $1::uuid AND merged_into_id IS NULL AND anonymized_at IS NULL
        AND (
          phone LIKE $2
          OR phone ILIKE $3
@@ -126,6 +122,7 @@ async function getByPhoneRow(
      LEFT JOIN customers target
        ON target.org_id = source.org_id AND target.id = source.merged_into_id
      WHERE source.org_id = $1::uuid AND source.phone = $2
+       AND source.anonymized_at IS NULL
      LIMIT 1`,
     [orgId, phone],
   );
@@ -141,7 +138,8 @@ async function getByIdRow(
   const result = await client.query<CustomerRow>(
     `SELECT id, phone, name, note, created_at, updated_at, merged_into_id
        FROM customers
-      WHERE org_id = $1::uuid AND id = $2::uuid AND merged_into_id IS NULL
+      WHERE org_id = $1::uuid AND id = $2::uuid
+        AND merged_into_id IS NULL AND anonymized_at IS NULL
       LIMIT 1`,
     [orgId, customerId],
   );
@@ -157,7 +155,7 @@ async function resolveMergeRedirect(
   const result = await client.query<Readonly<{ merged_into_id: string | null }>>(
     `SELECT merged_into_id::text
        FROM customers
-      WHERE org_id = $1::uuid AND phone = $2
+      WHERE org_id = $1::uuid AND phone = $2 AND anonymized_at IS NULL
       LIMIT 1`,
     [orgId, phone],
   );
@@ -184,7 +182,8 @@ async function upsertRow(
           SET name = CASE WHEN $4::boolean THEN $3 ELSE name END,
               note = CASE WHEN $6::boolean THEN $5 ELSE note END,
               updated_at = $7
-        WHERE org_id = $1::uuid AND id = $2::uuid AND merged_into_id IS NULL
+        WHERE org_id = $1::uuid AND id = $2::uuid
+          AND merged_into_id IS NULL AND anonymized_at IS NULL
         RETURNING id, phone, name, note, created_at, updated_at, merged_into_id`,
       [orgId, redirectedId, name, updateName, note, updateNote, at],
     );
@@ -233,7 +232,8 @@ async function updateRow(
             name = CASE WHEN $6::boolean THEN $5 ELSE name END,
             note = CASE WHEN $8::boolean THEN $7 ELSE note END,
             updated_at = $9
-      WHERE org_id = $1::uuid AND id = $2::uuid AND merged_into_id IS NULL
+      WHERE org_id = $1::uuid AND id = $2::uuid
+        AND merged_into_id IS NULL AND anonymized_at IS NULL
       RETURNING id, phone, name, note, created_at, updated_at, merged_into_id`,
       [
         orgId,
@@ -283,11 +283,20 @@ async function mergeRows(
   }
   const relinked = await client.query(
     `UPDATE orders
-        SET customer_phone = $4, customer_name = COALESCE($5, customer_name), updated_at = $6
+        SET customer_id = $4::uuid, customer_phone = $5,
+            customer_name = COALESCE($6, customer_name), updated_at = $7
       WHERE org_id = $1::uuid AND store_id = $2::uuid
-        AND customer_phone = $3 AND customer_phone <> $4
-        AND status IN ('draft', 'open', 'closed')`,
-    [orgId, input.store_id, source.phone, target.phone, target.name, epochToDate(input.now)],
+        AND customer_id = $3::uuid
+        AND customer_id <> $4::uuid`,
+    [
+      orgId,
+      input.store_id,
+      source.id,
+      target.id,
+      target.phone,
+      target.name,
+      epochToDate(input.now),
+    ],
   );
   await client.query(
     `UPDATE customers
@@ -316,10 +325,12 @@ async function findDuplicateRows(
          ON candidate.org_id = source.org_id
         AND candidate.id <> source.id
         AND candidate.merged_into_id IS NULL
+        AND candidate.anonymized_at IS NULL
         AND source.name IS NOT NULL
         AND lower(btrim(candidate.name)) = lower(btrim(source.name))
       WHERE source.org_id = $1::uuid AND source.id = $2::uuid
         AND source.merged_into_id IS NULL
+        AND source.anonymized_at IS NULL
       ORDER BY candidate.updated_at DESC
       LIMIT $3`,
     [orgId, customerId, Math.min(limit, 20)],
@@ -327,9 +338,6 @@ async function findDuplicateRows(
   return Object.freeze(result.rows.map(mapSearchRow));
 }
 
-/**
- * Create a CustomerStore backed by Postgres under laundry_app org RLS GUC.
- */
 export function createPgCustomerStore(
   pool: PgPool,
   options: CreatePgCustomerStoreOptions,
@@ -372,5 +380,6 @@ export function createPgCustomerStore(
       withOrgGucOrCurrent(pool, { orgId }, async (client) =>
         findDuplicateRows(client, orgId, customerId, limit),
       ),
+    ...createPgCustomerPrivacyOperations(pool, orgId),
   });
 }

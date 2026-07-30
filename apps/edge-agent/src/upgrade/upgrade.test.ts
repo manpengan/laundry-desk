@@ -7,7 +7,7 @@ import { rollbackSlot } from "./rollback.js";
 import { canRestoreSnapshot, sha256Hex, snapshotId } from "./snapshot.js";
 import { createInitialState } from "./state.js";
 import type { SupportMatrix } from "./types.js";
-import { compareVersion, isBelowMinSecure } from "./version.js";
+import { compareVersion, isBelowMinSecure, isSemVer } from "./version.js";
 
 const fixedNow = () => "2026-07-20T00:00:00.000Z";
 
@@ -33,6 +33,9 @@ test("compareVersion orders semver triples", () => {
   assert.equal(compareVersion("1.8.0", "1.8.0"), 0);
   assert.ok(isBelowMinSecure("1.0.0", "1.8.0"));
   assert.equal(isBelowMinSecure("1.8.0", "1.8.0"), false);
+  assert.equal(isSemVer("1.8.0"), true);
+  assert.equal(isSemVer("1.8"), false);
+  assert.throws(() => compareVersion("1.8", "1.8.0"), /exact major\.minor\.patch/u);
 });
 
 test("install rejects below min secure version (anti-rollback)", () => {

@@ -2,14 +2,12 @@
  * 取衣（order.pickup）— M2 counter form with partial multi-select via order.get.
  */
 
-import { Button, Input, MoneyText, StatusBadge, useToast } from "@laundry/ui";
+import { Button, Input, useToast } from "@laundry/ui";
 import { useCallback, useMemo, useState } from "react";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import {
   buildPickupBody,
   isValidUuid,
-  isPickableGarmentStatus,
-  listPickableGarments,
   parseOrderGetResult,
   selectAllPickableIds,
   toggleGarmentSelection,
@@ -19,7 +17,8 @@ import {
 } from "./order-form.js";
 import { OrderLookupCandidates, parseOrderLookupRows } from "./OrderLookupCandidates.js";
 import { PaymentCollectionDialog } from "./PaymentCollectionDialog.js";
-import { PickupGarmentCheckRow, PickupResult } from "./PickupDetails.js";
+import { PickupResult } from "./PickupDetails.js";
+import { PickupOrderPanel } from "./PickupOrderPanel.js";
 
 export type PickupPageProps = {
   commandClient: CommandPort;
@@ -48,11 +47,19 @@ export function PickupPage({
   const [result, setResult] = useState<PickupOrderResult | null>(null);
   const [matches, setMatches] = useState<ReturnType<typeof parseOrderLookupRows>>([]);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [verificationBarcode, setVerificationBarcode] = useState("");
+  const [verifiedBarcodes, setVerifiedBarcodes] = useState<ReadonlySet<string>>(() => new Set());
 
-  const pickable = useMemo(
-    () => (loaded === null ? Object.freeze([]) : listPickableGarments(loaded.garments)),
-    [loaded],
+  const selectedRacked = useMemo(
+    () =>
+      loaded?.garments.filter(
+        (garment) => garment.status === "racked" && selected.has(garment.garment_id),
+      ) ?? [],
+    [loaded, selected],
   );
+  const verifiedRequired = selectedRacked.filter((garment) =>
+    verifiedBarcodes.has(garment.barcode.toUpperCase()),
+  ).length;
 
   const loadOrderById = useCallback(
     async (id: string) => {
@@ -62,6 +69,7 @@ export function PickupPage({
         toast.push(res.error.message ?? res.error.code, "error");
         setLoaded(null);
         setSelected(new Set());
+        setVerifiedBarcodes(new Set());
         return;
       }
       const payload = unwrapCommandResult(res.data);
@@ -70,6 +78,7 @@ export function PickupPage({
         toast.push("订单结果无法解析", "error");
         setLoaded(null);
         setSelected(new Set());
+        setVerifiedBarcodes(new Set());
         return;
       }
       setLoaded(parsed);
@@ -77,6 +86,8 @@ export function PickupPage({
       setMatches([]);
       const pickableIds = selectAllPickableIds(parsed.garments);
       setSelected(pickableIds);
+      setVerifiedBarcodes(new Set());
+      setVerificationBarcode("");
       if (pickableIds.size === 0) {
         toast.push("订单已加载，但没有可取衣物", "info");
       } else {
@@ -112,6 +123,7 @@ export function PickupPage({
         toast.push(res.error.message ?? res.error.code, "error");
         setLoaded(null);
         setSelected(new Set());
+        setVerifiedBarcodes(new Set());
         return;
       }
       const found = parseOrderLookupRows(unwrapCommandResult(res.data));
@@ -124,6 +136,7 @@ export function PickupPage({
         toast.push("未找到匹配订单；请核对输入", "error");
         setLoaded(null);
         setSelected(new Set());
+        setVerifiedBarcodes(new Set());
         return;
       }
       if (found.length === 1) await loadOrderById(found[0]!.order_id);
@@ -133,24 +146,50 @@ export function PickupPage({
     }
   }, [loadOrderById, lookupKey, queryClient, toast]);
 
-  const onToggle = useCallback((garmentId: string) => {
-    setSelected((prev) => toggleGarmentSelection(prev, garmentId));
-  }, []);
+  const onToggle = useCallback(
+    (garmentId: string) => {
+      const barcode = loaded?.garments.find((garment) => garment.garment_id === garmentId)?.barcode;
+      setSelected((prev) => toggleGarmentSelection(prev, garmentId));
+      if (barcode !== undefined) {
+        setVerifiedBarcodes((prev) => {
+          const next = new Set(prev);
+          next.delete(barcode.toUpperCase());
+          return next;
+        });
+      }
+    },
+    [loaded],
+  );
 
   const onSelectAll = useCallback(() => {
     if (loaded === null) return;
     setSelected(selectAllPickableIds(loaded.garments));
+    setVerifiedBarcodes(new Set());
   }, [loaded]);
 
   const onSelectNone = useCallback(() => {
     setSelected(new Set());
+    setVerifiedBarcodes(new Set());
   }, []);
+
+  const onVerify = useCallback(() => {
+    const barcode = verificationBarcode.trim().toUpperCase();
+    const match = selectedRacked.find((garment) => garment.barcode.toUpperCase() === barcode);
+    if (match === undefined) {
+      toast.push("条码不属于已选的上架衣物", "error");
+      return;
+    }
+    setVerifiedBarcodes((prev) => new Set(prev).add(barcode));
+    setVerificationBarcode("");
+    toast.push(`已复核 ${barcode}`, "success");
+  }, [selectedRacked, toast, verificationBarcode]);
 
   const onSubmit = useCallback(async () => {
     const built = buildPickupBody({
       order_id: orderId,
       collect_cents: collectText,
       garment_ids: [...selected],
+      verification_barcodes: [...verifiedBarcodes],
       require_selection: true,
     });
     if (!built.ok) {
@@ -173,11 +212,12 @@ export function PickupPage({
       toast.push(`取衣完成 ${payload.ticket_no ?? payload.order_id}`, "success");
       // Clear selection of picked items; keep summary until reset.
       setSelected(new Set());
+      setVerifiedBarcodes(new Set());
       setLoaded(null);
     } finally {
       setBusy(false);
     }
-  }, [collectText, commandClient, orderId, selected, toast]);
+  }, [collectText, commandClient, orderId, selected, toast, verifiedBarcodes]);
 
   const onReset = useCallback(() => {
     setLookupKey("");
@@ -188,9 +228,12 @@ export function PickupPage({
     setResult(null);
     setMatches([]);
     setPaymentOpen(false);
+    setVerificationBarcode("");
+    setVerifiedBarcodes(new Set());
   }, []);
 
   const disabled = busy || loadingOrder;
+  const verificationComplete = verifiedRequired === selectedRacked.length;
 
   return (
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
@@ -230,78 +273,20 @@ export function PickupPage({
         )}
 
         {loaded !== null ? (
-          <section className="ld-pickup-order" aria-label="订单摘要">
-            <dl className="ld-order-result__meta">
-              <div>
-                <dt>票号</dt>
-                <dd data-testid="pickup-loaded-ticket">{loaded.ticket_no ?? "挂单"}</dd>
-              </div>
-              <div>
-                <dt>取件码</dt>
-                <dd>{loaded.pickup_code ?? "—"}</dd>
-              </div>
-              <div>
-                <dt>余额</dt>
-                <dd data-testid="pickup-loaded-balance">
-                  <MoneyText fen={loaded.balance_cents} />
-                </dd>
-              </div>
-              <div>
-                <dt>订单状态</dt>
-                <dd>
-                  <StatusBadge family="order" status={loaded.status} />
-                </dd>
-              </div>
-              <div>
-                <dt>已付累计</dt>
-                <dd>
-                  <MoneyText fen={loaded.paid_cents} />
-                </dd>
-              </div>
-            </dl>
-
-            <div className="ld-pickup-garments">
-              <div className="ld-pickup-garments__header">
-                <h2 className="ld-pickup-garments__title">可取衣物</h2>
-                <div className="ld-pickup-garments__actions">
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    onClick={onSelectAll}
-                    disabled={disabled || pickable.length === 0}
-                  >
-                    全选可取
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    onClick={onSelectNone}
-                    disabled={disabled || selected.size === 0}
-                  >
-                    全不选
-                  </Button>
-                </div>
-              </div>
-              {pickable.length === 0 ? (
-                <p className="ld-pickup-garments__empty">没有可取衣物（仅 received 可取）</p>
-              ) : (
-                <ul className="ld-pickup-garments__list" data-testid="pickup-garment-list">
-                  {loaded.garments.map((g) => (
-                    <PickupGarmentCheckRow
-                      key={g.garment_id}
-                      garment={g}
-                      checked={selected.has(g.garment_id)}
-                      disabled={disabled || !isPickableGarmentStatus(g.status)}
-                      onToggle={() => onToggle(g.garment_id)}
-                    />
-                  ))}
-                </ul>
-              )}
-              <p className="ld-pickup-garments__meta">
-                已选 {selected.size} / 可取 {pickable.length}
-              </p>
-            </div>
-          </section>
+          <PickupOrderPanel
+            order={loaded}
+            selected={selected}
+            verifiedBarcodes={verifiedBarcodes}
+            verificationBarcode={verificationBarcode}
+            verifiedRequired={verifiedRequired}
+            requiredVerification={selectedRacked.length}
+            disabled={disabled}
+            onSelectAll={onSelectAll}
+            onSelectNone={onSelectNone}
+            onToggle={onToggle}
+            onVerificationBarcodeChange={setVerificationBarcode}
+            onVerify={onVerify}
+          />
         ) : null}
 
         <Input
@@ -319,7 +304,7 @@ export function PickupPage({
             variant="primary"
             type="button"
             onClick={() => void onSubmit()}
-            disabled={disabled}
+            disabled={disabled || !verificationComplete}
           >
             {busy ? "提交中…" : "确认取衣"}
           </Button>

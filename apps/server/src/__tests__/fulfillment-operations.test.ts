@@ -46,6 +46,8 @@ function seedRow(
     color: "白色",
     brand: null,
     status,
+    rack_zone: null,
+    rack_slot: null,
     updated_at: FIXED_NOW - 100,
     incident_count: 0,
   });
@@ -84,6 +86,7 @@ function buildBus(rows: readonly FulfillmentWorkbenchRow[]) {
 test("registry exposes fulfillment commands with distinct risk gates", () => {
   const bus = buildBus([]);
   assert.equal(bus.registry.get("garment.transition")?.definition.risk, "R2");
+  assert.equal(bus.registry.get("garment.rack.assign")?.definition.risk, "R2");
   assert.equal(bus.registry.get("garment.bulk_transition")?.definition.risk, "R3");
   assert.equal(bus.registry.get("garment.rework")?.definition.risk, "R3");
   assert.equal(bus.registry.get("garment.incident.record")?.definition.risk, "R3");
@@ -182,6 +185,52 @@ test("batch is atomic and rework can return to washing", async () => {
   assert.equal(washAgain.ok, true, JSON.stringify(washAgain));
 });
 
+test("scan-to-rack requires a ready garment and exposes the authoritative location", async () => {
+  const bus = buildBus([seedRow(GARMENT_A, "ready"), seedRow(GARMENT_B, "washing")]);
+  const racked = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "garment.rack.assign",
+    { barcode: GARMENT_A.slice(0, 8), rack_zone: "a", rack_slot: "01" },
+    {
+      registry: bus.registry,
+      actor: CLERK,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+    },
+  );
+  assert.equal(racked.ok, true, JSON.stringify(racked));
+
+  const listed = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "fulfillment.workbench",
+    { statuses: ["racked"], key: "A-01", limit: 10 },
+    { registry: bus.queryRegistry, actor: CLERK },
+  );
+  assert.equal(listed.ok, true, JSON.stringify(listed));
+  if (listed.ok) {
+    const rows = (listed.data.result as { garments: FulfillmentWorkbenchRow[] }).garments;
+    assert.equal(rows[0]?.rack_zone, "A");
+    assert.equal(rows[0]?.rack_slot, "01");
+  }
+
+  const invalid = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "garment.rack.assign",
+    { barcode: GARMENT_B.slice(0, 8), rack_zone: "A", rack_slot: "02" },
+    {
+      registry: bus.registry,
+      actor: CLERK,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+    },
+  );
+  assert.equal(invalid.ok, false);
+  if (!invalid.ok) assert.equal(invalid.error.code, "VALIDATION_FAILED");
+});
+
 test("incident and loss records are visible without leaking a full phone", async () => {
   const bus = buildBus([seedRow(GARMENT_A, "ready")]);
   const incident = await executeCommand(
@@ -241,7 +290,7 @@ test("R3 and R4 operations fail closed before confirmation", async () => {
     new FakeSqlClient(),
     TENANT,
     "garment.bulk_transition",
-    { garment_ids: [GARMENT_A, GARMENT_B], target_status: "racked" },
+    { garment_ids: [GARMENT_A, GARMENT_B], target_status: "washing" },
     {
       registry: bus.registry,
       actor: CLERK,

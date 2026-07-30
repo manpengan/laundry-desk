@@ -1,7 +1,5 @@
 /** Build an explicit memory test runtime or the durable PostgreSQL local runtime. */
 
-import { randomBytes } from "node:crypto";
-
 import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@laundry/contracts";
 
 import { createCsrfProofSigner, type CsrfProofSigner } from "../auth/csrf.js";
@@ -39,11 +37,6 @@ import { createMemoryPhotoStore } from "../photo/memory-store.js";
 import { preparePgPhotoDeps } from "../photo/runtime-files.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
-import {
-  createMemoryAuditQueryStore,
-  createMemoryFeaturesStore,
-  createMemorySettingsStore,
-} from "../platform/index.js";
 import type { PlatformHandlerDeps } from "../platform/handlers.js";
 import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
 import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
@@ -66,11 +59,17 @@ import {
   type LocalServerConfig,
 } from "./config.js";
 import { LOCAL_PROFILE } from "./profile.js";
+import { buildPlatform, mintRuntimeSecret } from "./runtime-support.js";
 import {
   loadPgStaffDirectory,
   LOCAL_MEMORY_STAFF_DIRECTORY,
   type LocalStaffDirectoryEntry,
 } from "./staff-directory.js";
+import {
+  createPgStaffRoleResolver,
+  resolveMemoryStaffRole,
+  type StaffRoleResolver,
+} from "./staff-role-resolver.js";
 
 export {
   DEMO_ADMIN_ID,
@@ -155,6 +154,7 @@ function buildIdentityDeps(
   csrfProofSigner: CsrfProofSigner,
   pendingStore: PendingActionStore = processPendingActionStore,
   proofStore: StepUpProofStore = processStepUpProofStore,
+  resolveStaffRole?: StaffRoleResolver,
 ): IdentityHandlerDeps {
   const clock = {
     nowEpochSeconds: () => Math.floor(Date.now() / 1000),
@@ -189,6 +189,7 @@ function buildIdentityDeps(
     ...pin,
     pending: pendingStore,
     proofs: proofStore,
+    ...(resolveStaffRole === undefined ? {} : { resolveStaffRole }),
   });
 
   return Object.freeze({
@@ -202,20 +203,6 @@ function buildIdentityDeps(
         refreshSecret: null,
       }),
   });
-}
-
-function buildPlatform(persistence: "memory" | "sql" = "memory"): PlatformHandlerDeps {
-  // Memory stores still required as typed placeholders; SQL mode rebinds per request via ctx.client.
-  return Object.freeze({
-    persistence,
-    settings: createMemorySettingsStore(),
-    features: createMemoryFeaturesStore(),
-    audit: createMemoryAuditQueryStore(),
-  });
-}
-
-function mintRuntimeSecret(): string {
-  return randomBytes(32).toString("base64url");
 }
 
 async function closeFailedPgPool(pool: PgPool, initializationError: unknown): Promise<never> {
@@ -279,6 +266,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       csrfProofSigner,
       processPendingActionStore,
       processStepUpProofStore,
+      resolveMemoryStaffRole,
     ),
     platform: buildPlatform("memory"),
     order: Object.freeze({
@@ -372,6 +360,7 @@ export async function createPgLocalRuntime(
       csrfProofSigner,
       processPendingActionStore,
       processStepUpProofStore,
+      createPgStaffRoleResolver(appPool, dependencies.loadStaffDirectory),
     ),
     platform: buildPlatform("sql"),
     order: Object.freeze({
