@@ -64,6 +64,7 @@ test("PG staff directory reads the active bootstrap administrator under tenant G
       display_name: "真实管理员",
       role: "admin",
       username: "owner",
+      privacy_admin: true,
     },
   ]);
 
@@ -75,6 +76,7 @@ test("PG staff directory reads the active bootstrap administrator under tenant G
       display_name: "真实管理员",
       role: "admin",
       username: "owner",
+      privacy_admin: true,
     },
   ]);
   assert.equal(Object.isFrozen(directory[0]), true);
@@ -112,6 +114,7 @@ test("PG staff directory validates database identity fields", async (t) => {
     display_name: "真实管理员",
     role: "admin",
     username: "owner",
+    privacy_admin: true,
   });
   for (const [name, override, expectedField] of [
     ["invalid staff id", { staff_id: "not-a-uuid" }, "staff_id"],
@@ -192,6 +195,7 @@ test("PG runtime opens one app pool and verifies readiness without an admin conn
       display_name: "真实管理员",
       role: "admin" as const,
       username: "owner",
+      privacy_admin: true,
     },
   ];
 

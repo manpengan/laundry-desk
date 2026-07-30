@@ -5,6 +5,7 @@ import { filterNavItems, permissionContextFrom } from "../auth/permissions.js";
 import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { PhotoPort } from "../host/photo-port.js";
+import type { OfflinePort } from "../host/offline-port.js";
 import { createMockConnection, type ConnectionStatus } from "../connection.js";
 import type { NavItemId } from "../nav.js";
 import { PageHost } from "../pages/PageHost.js";
@@ -27,6 +28,7 @@ export type CounterShellProps = {
   commandClient: CommandPort;
   queryClient: QueryPort;
   photoPort?: PhotoPort;
+  offlinePort?: OfflinePort;
   onSessionChange: (session: SessionView | null) => void;
   initialConnection?: ConnectionStatus;
   initialTheme?: ThemePreference;
@@ -73,6 +75,7 @@ export function CounterShell({
   commandClient,
   queryClient,
   photoPort,
+  offlinePort,
 }: CounterShellProps) {
   const [expanded, setExpanded] = useState(false);
   const [activeId, setActiveId] = useState<NavItemId>(initialNav);
@@ -138,6 +141,7 @@ export function CounterShell({
             authClient={authClient}
             commandClient={commandClient}
             queryClient={queryClient}
+            {...(offlinePort === undefined ? {} : { offlinePort })}
             {...(photoPort === undefined ? {} : { photoPort })}
           />
         </RouteGate>

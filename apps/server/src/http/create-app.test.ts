@@ -441,6 +441,7 @@ test("staff role authority cannot be inferred from a UUID containing 103", async
         display_name: "普通店员",
         role: "staff" as const,
         username: "ordinary-103",
+        privacy_admin: false,
       }),
     ]),
   });

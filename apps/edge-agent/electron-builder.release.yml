@@ -27,6 +27,25 @@ files:
   - dist/desktop/http-transport.js
   - dist/desktop/http-transport-support.js
   - dist/desktop/request-builder.js
+  - dist/print/cups-process.js
+  - dist/print/cups-worker.js
+  - dist/queue/crypto.js
+  - dist/queue/dek-kek.js
+  - dist/queue/file-store.js
+  - dist/queue/persistent-queue.js
+  - dist/queue/safe-storage-kek.js
+  - dist/queue/store.js
+  - dist/queue/types.js
+  - dist/pairing/device-keys.js
+  - dist/lease/primary-lease.js
+  - dist/offline/conflict-store.js
+  - dist/offline/runtime.js
+  - dist/offline/service.js
+  - dist/upgrade/release-manifest.js
+  - dist/upgrade/runtime-controller.js
+  - dist/upgrade/runtime-io.js
+  - dist/upgrade/runtime-state.js
+  - dist/upgrade/version.js
   - dist/preload.cjs
   - package.json
   - "!**/*.test.*"

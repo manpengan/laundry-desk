@@ -32,7 +32,7 @@ export type QueueRowState = "pending" | "inflight";
 
 export interface QueueStore {
   append(record: QueueStoredRecord): void;
-  /** FIFO among non-acked items (pending first, then stable seq). */
+  /** Strict FIFO by stable seq across pending and crash-recovered inflight items. */
   listOpen(): readonly (QueueStoredRecord & { state: QueueRowState })[];
   markInflight(id: QueueItemId): void;
   /** Remove after successful server replay / local ack. */

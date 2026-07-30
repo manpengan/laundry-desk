@@ -42,6 +42,8 @@ describe("M2 contract surface", () => {
       "garment.rework",
       "garment.incident.record",
       "garment.mark_lost",
+      // M1.5: store-scoped staff access administration with R5 step-up.
+      "staff.access.set",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("stats.day.summary");
@@ -49,6 +51,7 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("fulfillment.workbench");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.duplicates");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("staff.access.list");
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );

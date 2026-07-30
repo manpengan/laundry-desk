@@ -50,6 +50,14 @@ export {
   parseServerSignatureOfflineGrantCandidate,
   parseServerSignaturePrimaryLeaseCandidate,
 } from "./signed-envelope.js";
+export {
+  EdgeAuthorityDataSchema,
+  EdgeAuthorityRequestSchema,
+  EdgeAuthorityResponseSchema,
+  SignedOfflineGrantSchema,
+  SignedPrimaryLeaseSchema,
+} from "./authority-api.js";
+export type { EdgeAuthorityData, EdgeAuthorityResponse } from "./authority-api.js";
 export type {
   DeviceSignatureExecutionReceiptCandidate,
   EdgeSignatureCandidate,

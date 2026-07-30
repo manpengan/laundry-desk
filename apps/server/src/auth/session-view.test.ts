@@ -50,6 +50,7 @@ function createFeaturePool(
               display_name: "数据库店长",
               permission_version: 1,
               role: "staff",
+              is_privacy_admin: false,
             }),
           ]),
           rowCount: 1,

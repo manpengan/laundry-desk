@@ -1,6 +1,7 @@
 import type { AuthPort } from "../auth/AuthClient.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { PhotoPort } from "./photo-port.js";
+import type { OfflinePort } from "./offline-port.js";
 
 export type HealthReady = Readonly<{
   status: "ready";
@@ -24,5 +25,6 @@ export type AppPorts = Readonly<{
   command: CommandPort;
   query: QueryPort;
   photo: PhotoPort;
+  offline?: OfflinePort;
   health: HealthPort;
 }>;

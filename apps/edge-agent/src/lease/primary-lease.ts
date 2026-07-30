@@ -32,6 +32,7 @@ export type OfflineAuthorityGuardOptions = Readonly<{
   storeId: string;
   staffId: string;
   deviceId: string;
+  permissionVersion: number;
   clock: MonotonicClock;
   /** Conservative local allowance removed from each signed authority lifetime. */
   safetyMarginMs: number;
@@ -281,7 +282,8 @@ export class OfflineAuthorizationGuard {
       payload.org_id === this.options.orgId &&
       payload.store_id === this.options.storeId &&
       payload.staff_id === this.options.staffId &&
-      payload.device_id === this.options.deviceId
+      payload.device_id === this.options.deviceId &&
+      payload.permission_version === this.options.permissionVersion
     );
   }
 

@@ -58,6 +58,7 @@ function createGuard(clock: FakeClock, safetyMarginMs = 25): OfflineAuthorizatio
     storeId: STORE_ID,
     staffId: STAFF_ID,
     deviceId: DEVICE_ID,
+    permissionVersion: 1,
     clock,
     safetyMarginMs,
   });
@@ -244,7 +245,7 @@ test("denies refund offline from the frozen contract metadata", () => {
   );
 });
 
-test("rejects bad signatures and authority for another paired device", () => {
+test("rejects bad signatures and authority for another device or permission version", () => {
   const clock = new FakeClock(100);
   const guard = createGuard(clock);
   const badRequest = startedRequest(guard);
@@ -259,6 +260,13 @@ test("rejects bad signatures and authority for another paired device", () => {
     grantPayload({ device_id: "81a2eed0-a6c3-493c-a3a7-20bf94b1d678" }),
   );
   assert.deepEqual(guard.acceptOfflineGrant(foreignGrant, audienceRequest), {
+    ok: false,
+    error: "wrong_audience",
+  });
+
+  const permissionRequest = startedRequest(guard);
+  const stalePermissionGrant = signedGrant(grantPayload({ permission_version: 2 }));
+  assert.deepEqual(guard.acceptOfflineGrant(stalePermissionGrant, permissionRequest), {
     ok: false,
     error: "wrong_audience",
   });

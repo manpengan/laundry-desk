@@ -34,6 +34,26 @@ export {
   verifyReleaseManifest,
   verifyReleaseRollbackArtifact,
 } from "./release-manifest.js";
+export { createRuntimeUpdateIo, loadUpdatePublicKey } from "./runtime-io.js";
+export type { RuntimeUpdateIo, UpdateFetch } from "./runtime-io.js";
+export { RuntimeUpdateStateStore } from "./runtime-state.js";
+export type { RuntimeSlotName, RuntimeUpdateState } from "./runtime-state.js";
+export {
+  ACTIVATION_ARGUMENT_PREFIX,
+  STAGED_HEALTH_ARGUMENT,
+  RuntimeUpdateController,
+  activationNonceFromArguments,
+  launchMacApp,
+  macAppBundlePath,
+  prepareRuntimeStartup,
+  runMacStagedHealth,
+  validateMacAppLaunch,
+} from "./runtime-controller.js";
+export type {
+  RuntimeUpdateControllerOptions,
+  RuntimeUpdateResult,
+  StartupAction,
+} from "./runtime-controller.js";
 export type {
   ReleaseManifestAuthority,
   ReleaseVerificationContext,

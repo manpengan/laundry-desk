@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -162,6 +162,10 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
     includedFiles.includes("dist/desktop/http-transport-support.js"),
     "desktop transport support must ship with its importing transport",
   );
+  assert.ok(
+    includedFiles.includes("dist/pairing/device-keys.js"),
+    "Primary Lease signature decoding must ship with its importing verifier",
+  );
   assert.doesNotMatch(
     includedFiles.join("\n"),
     /\*|tests?|spec|\.d\.ts|\.map|src\/|\.env|credentials?|secrets?|logs?/iu,
@@ -211,6 +215,32 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
   ]);
   assert.match(packageMac, /electron-builder\.yml/u);
   assert.doesNotMatch(packageMac, /dmg|notari|publish|windows|nsis|root|src\//iu);
+});
+
+test("packaged runtime whitelist is closed under relative JavaScript imports", async () => {
+  const builderText = await readFile(join(packageRoot, "electron-builder.yml"), "utf8");
+  const filesBlock = /^files:\n(?<body>(?:  - .+\n)+)/mu.exec(builderText)?.groups?.body;
+  assert.ok(filesBlock, "electron-builder files whitelist must exist");
+  const includedFiles = new Set(
+    filesBlock
+      .trim()
+      .split("\n")
+      .map((line) => line.replace(/^\s*-\s+/u, "").replaceAll('"', ""))
+      .filter((entry) => !entry.startsWith("!") && entry.endsWith(".js")),
+  );
+  const missing = [];
+  for (const file of includedFiles) {
+    const source = await readFile(join(packageRoot, file), "utf8");
+    const runtimeImports = Array.from(
+      source.matchAll(/(?:from\s+|import\s*\(\s*|import\s+)["'](\.[^"']+\.js)["']/gu),
+      (match) => match[1],
+    );
+    for (const runtimeImport of runtimeImports) {
+      const resolved = posix.normalize(posix.join(posix.dirname(file), runtimeImport));
+      if (!includedFiles.has(resolved)) missing.push(`${file} -> ${resolved}`);
+    }
+  }
+  assert.deepEqual([...new Set(missing)].sort(), []);
 });
 
 test("mac acceptance does not persist credentials or inherit arbitrary host secrets", async () => {

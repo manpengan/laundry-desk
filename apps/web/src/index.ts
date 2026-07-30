@@ -108,6 +108,12 @@ export type {
   SwitchableStaff,
 } from "./auth/types.js";
 export type { AppPorts, HealthError, HealthPort, HealthReady, HealthResult } from "./host/types.js";
+export type {
+  OfflineConflictView,
+  OfflinePort,
+  OfflineStatusResult,
+  OfflineStatusView,
+} from "./host/offline-port.js";
 export { createBrowserPorts, type BrowserPortsOptions } from "./host/browser-ports.js";
 export { createDesktopPorts, type LaundryDesktopBridge } from "./host/desktop-ports.js";
 export {

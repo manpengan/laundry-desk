@@ -131,6 +131,7 @@ describe("desktop operation registry", () => {
       "command",
       "query",
       "photo",
+      "offline",
       "health",
     ]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.auth)).toEqual([
@@ -143,6 +144,7 @@ describe("desktop operation registry", () => {
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.command)).toEqual(["execute"]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.query)).toEqual(["execute"]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.photo)).toEqual(["upload", "read", "delete"]);
+    expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.offline)).toEqual(["status", "resolve"]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.health)).toEqual(["get"]);
     expect(PUBLIC_DESKTOP_OPERATION_SCHEMAS).toBe(DESKTOP_OPERATION_SCHEMAS);
 

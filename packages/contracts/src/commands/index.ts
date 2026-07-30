@@ -9,6 +9,17 @@ export {
   identityRefreshCommand,
 } from "./identity.js";
 export {
+  STAFF_COMMAND_NAMES,
+  STAFF_COMMANDS,
+  STAFF_DEFINITIONS,
+  STAFF_QUERIES,
+  STAFF_QUERY_NAMES,
+  StaffAccessListInputSchema,
+  StaffAccessSetInputSchema,
+  staffAccessListQuery,
+  staffAccessSetCommand,
+} from "./staff.js";
+export {
   PLATFORM_COMMANDS,
   PLATFORM_DEFINITIONS,
   PLATFORM_QUERIES,

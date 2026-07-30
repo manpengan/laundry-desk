@@ -6,13 +6,9 @@ import { withStoreGuc } from "../db/tenant-guc-client.js";
 import type { PasswordPort } from "../identity/password.js";
 import { LOCAL_PROFILE, type LocalProfile } from "./profile.js";
 
-/**
- * One transaction-scoped lock serializes every local bootstrap attempt.
- * Keep this signed bigint stable across releases so different binaries contend on one key.
- */
+// One stable transaction lock serializes bootstrap attempts across releases.
 export const LOCAL_BOOTSTRAP_ADVISORY_LOCK_ID = "-5847291036815640321";
 
-/** Deterministic role identity for the one fixed local administrator. */
 export const BOOTSTRAP_ADMIN_ROLE_ID = "55555555-5555-4555-8555-111111111103";
 
 const PROFILE_HASH_VERSION = "laundry-local-bootstrap-v1";
@@ -181,6 +177,7 @@ type ExistingStateRow = Readonly<{
   role_staff_id: string;
   role_name: string;
   role_is_active: boolean;
+  role_is_privacy_admin: boolean;
 }>;
 
 type CollisionRow = Readonly<{
@@ -227,6 +224,7 @@ type RuntimeProfileRow = Readonly<{
   role_id: string;
   role_name: string;
   role_is_active: boolean;
+  role_is_privacy_admin: boolean;
 }>;
 
 type ExplicitBootstrapReadyRow = Readonly<{
@@ -269,7 +267,7 @@ const READ_EXISTING_STATE_SQL = `
     role.store_id AS role_store_id,
     role.staff_id AS role_staff_id,
     role.role AS role_name,
-    role.is_active AS role_is_active
+    role.is_active AS role_is_active, role.is_privacy_admin AS role_is_privacy_admin
   FROM local_bootstrap_metadata metadata
   JOIN orgs org ON org.id = metadata.org_id
   JOIN stores store
@@ -376,7 +374,7 @@ const READ_RUNTIME_PROFILE_SQL = `
     admin.is_active AS admin_is_active,
     role.id::text AS role_id,
     role.role AS role_name,
-    role.is_active AS role_is_active
+    role.is_active AS role_is_active, role.is_privacy_admin AS role_is_privacy_admin
   FROM pg_catalog.pg_roles runtime_role
   JOIN public.orgs org
     ON runtime_role.rolname = session_user
@@ -436,7 +434,8 @@ const runtimeProfileMatches = (row: RuntimeProfileRow, expectedDemoOnly: boolean
   row.admin_is_active &&
   row.role_id === BOOTSTRAP_ADMIN_ROLE_ID &&
   row.role_name === ADMIN_ROLE &&
-  row.role_is_active;
+  row.role_is_active &&
+  row.role_is_privacy_admin;
 
 /**
  * Verify runtime connectivity and the fixed local profile entirely through laundry_app.
@@ -554,7 +553,8 @@ const staticStateMatches = (row: ExistingStateRow, input: BootstrapInput): boole
   row.role_store_id === input.profile.storeId &&
   row.role_staff_id === input.profile.adminStaffId &&
   row.role_name === ADMIN_ROLE &&
-  row.role_is_active;
+  row.role_is_active &&
+  row.role_is_privacy_admin;
 
 const credentialsMatch = async (
   passwordPort: PasswordPort,
@@ -682,8 +682,8 @@ const insertAdminRole = (
 ): Promise<unknown> =>
   client.query(
     `INSERT INTO staff_store_roles (
-       id, org_id, store_id, staff_id, role, is_active, created_at, updated_at
-     ) VALUES ($1, $2, $3, $4, $5, true, $6, $6)`,
+       id, org_id, store_id, staff_id, role, is_privacy_admin, is_active, created_at, updated_at
+     ) VALUES ($1, $2, $3, $4, $5, true, true, $6, $6)`,
     [
       BOOTSTRAP_ADMIN_ROLE_ID,
       input.profile.orgId,

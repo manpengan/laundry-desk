@@ -6570,6 +6570,48 @@
         ],
         "type": "object"
       },
+      "input.command.staff.access.set": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_permission_version": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "privacy_admin": {
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "admin",
+              "staff"
+            ],
+            "type": "string"
+          },
+          "target_staff_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_staff_id",
+          "expected_permission_version",
+          "role",
+          "privacy_admin",
+          "is_active",
+          "reason"
+        ],
+        "type": "object"
+      },
       "input.query.catalog.items.get": {
         "additionalProperties": false,
         "properties": {
@@ -6908,6 +6950,11 @@
           "date_from",
           "date_to"
         ],
+        "type": "object"
+      },
+      "input.query.staff.access.list": {
+        "additionalProperties": false,
+        "properties": {},
         "type": "object"
       },
       "input.query.stats.day.summary": {
@@ -8951,6 +8998,58 @@
         "x-laundry-version": "0.3.0"
       }
     },
+    "/v1/commands/staff.access.set": {
+      "post": {
+        "description": "R5 access change. Requires step-up, optimistic permission version, session revocation, and audit. Stable command name: `staff.access.set` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_staff_access_set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.staff.access.set"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Change one staff member's role, privacy authority, or active status.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R5",
+        "x-laundry-version": "1.0.0"
+      }
+    },
     "/v1/queries/catalog.items.get": {
       "post": {
         "description": "Lookup a single catalog item by code. Return empty when not found. Stable query name: `catalog.items.get` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -9885,6 +9984,58 @@
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R1",
         "x-laundry-version": "0.1.0"
+      }
+    },
+    "/v1/queries/staff.access.list": {
+      "post": {
+        "description": "Return bounded staff role and privacy authority assignments for this store. Stable query name: `staff.access.list` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_staff_access_list",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.staff.access.list"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List staff access assignments for the authenticated store.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
       }
     },
     "/v1/queries/stats.day.summary": {
