@@ -24,6 +24,10 @@ function createBridge(): LaundryDesktopBridge {
       read: async () => ({ ok: false }),
       delete: async () => ({ ok: false }),
     },
+    offline: {
+      status: async () => ({ ok: false }),
+      resolve: async () => ({ ok: false }),
+    },
     health: {
       get: async () => ({ ok: false }),
     },
@@ -77,6 +81,13 @@ test("selectHost fails closed when app://local has no valid desktop bridge", () 
       command: {
         ...createBridge().command,
         invoke: async () => ({ ok: true }),
+      },
+    },
+    {
+      ...createBridge(),
+      offline: {
+        ...createBridge().offline,
+        fetch: async () => ({ ok: true }),
       },
     },
   ];

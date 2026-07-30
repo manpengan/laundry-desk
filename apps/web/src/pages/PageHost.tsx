@@ -4,6 +4,7 @@ import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { PhotoPort } from "../host/photo-port.js";
+import type { OfflinePort } from "../host/offline-port.js";
 import type { NavItemId } from "../nav.js";
 import { CustomersPage } from "./CustomersPage.js";
 import { DebtPage } from "./DebtPage.js";
@@ -26,6 +27,7 @@ export type PageHostProps = {
   /** Optional query bus (catalog price list on receive). */
   queryClient?: QueryPort;
   photoPort?: PhotoPort;
+  offlinePort?: OfflinePort;
 };
 
 function actionTarget(from: NavItemId): NavItemId {
@@ -45,6 +47,7 @@ export function PageHost({
   commandClient,
   queryClient,
   photoPort,
+  offlinePort,
 }: PageHostProps) {
   const copy = pageCopy(activeId);
   const [pickupOrderId, setPickupOrderId] = useState<string | undefined>(undefined);
@@ -65,6 +68,7 @@ export function PageHost({
     return (
       <ReceivePage
         commandClient={commandClient}
+        {...(offlinePort !== undefined ? { offlinePort } : {})}
         {...(queryClient !== undefined ? { queryClient } : {})}
       />
     );

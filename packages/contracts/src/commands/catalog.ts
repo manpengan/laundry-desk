@@ -19,6 +19,7 @@ import {
 import { ORDER_COMMANDS, ORDER_COMMAND_NAMES, ORDER_QUERIES, ORDER_QUERY_NAMES } from "./order.js";
 import { PAYMENT_COMMANDS, PAYMENT_COMMAND_NAMES } from "./payment.js";
 import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./platform.js";
+import { STAFF_COMMANDS, STAFF_QUERIES } from "./staff.js";
 import {
   M2_PRINT_COMMAND_DEFINITIONS,
   M2_PRINT_COMMAND_NAMES,
@@ -65,6 +66,7 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
   ...M3_PHOTO_COMMAND_DEFINITIONS,
   ...CATALOG_COMMAND_DEFINITIONS,
   ...M3_FULFILLMENT_COMMAND_DEFINITIONS,
+  ...STAFF_COMMANDS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
@@ -81,6 +83,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "garment.rework",
   "garment.incident.record",
   "garment.mark_lost",
+  "staff.access.set",
 ] as const) as readonly [
   "customer.upsert",
   "customer.update",
@@ -108,6 +111,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "garment.rework",
   "garment.incident.record",
   "garment.mark_lost",
+  "staff.access.set",
 ];
 
 /**
@@ -146,6 +150,7 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   ...M2_SHIFT_QUERY_NAMES,
   ...M3_PHOTO_QUERY_NAMES,
   "fulfillment.workbench",
+  "staff.access.list",
 ] as const);
 
 export const M2_CONTRACT_DEFINITIONS: readonly (
@@ -160,6 +165,7 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...M2_SHIFT_QUERY_DEFINITIONS,
   ...M3_PHOTO_QUERY_DEFINITIONS,
   ...M3_FULFILLMENT_QUERY_DEFINITIONS,
+  ...STAFF_QUERIES,
 ]);
 
 /** M2 AI presets are read-only: no command is exposed to the tool projection. */

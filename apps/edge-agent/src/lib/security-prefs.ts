@@ -34,6 +34,10 @@ export const DESKTOP_IPC_CHANNELS = Object.freeze({
     read: "desktop:photo:read",
     delete: "desktop:photo:delete",
   }),
+  offline: Object.freeze({
+    status: "desktop:offline:status",
+    resolve: "desktop:offline:resolve",
+  }),
   health: Object.freeze({
     get: "desktop:health:get",
   }),

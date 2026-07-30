@@ -50,6 +50,12 @@ function createService(overrides: Partial<DesktopOperationService> = {}): Deskto
         read: async () => SAFE_FAILURE,
         delete: async () => SAFE_FAILURE,
       }),
+    offline:
+      overrides.offline ??
+      Object.freeze({
+        status: async () => SAFE_FAILURE,
+        resolve: async () => SAFE_FAILURE,
+      }),
     health:
       overrides.health ??
       Object.freeze({
@@ -127,6 +133,8 @@ test("registers exactly the fixed desktop capability channels", () => {
       DESKTOP_IPC_CHANNELS.photo.upload,
       DESKTOP_IPC_CHANNELS.photo.read,
       DESKTOP_IPC_CHANNELS.photo.delete,
+      DESKTOP_IPC_CHANNELS.offline.status,
+      DESKTOP_IPC_CHANNELS.offline.resolve,
       DESKTOP_IPC_CHANNELS.health.get,
     ],
   );

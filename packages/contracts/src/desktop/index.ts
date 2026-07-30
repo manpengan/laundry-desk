@@ -56,3 +56,15 @@ export type {
   DesktopSessionView,
   DesktopStaffDirectoryEntry,
 } from "./operations.js";
+export {
+  DesktopOfflineConflictSchema,
+  DesktopOfflineResolveInputSchema,
+  DesktopOfflineResolveResultSchema,
+  DesktopOfflineStatusInputSchema,
+  DesktopOfflineStatusResultSchema,
+} from "./offline-operations.js";
+export type {
+  DesktopOfflineConflict,
+  DesktopOfflineResolveInput,
+  DesktopOfflineStatusResult,
+} from "./offline-operations.js";

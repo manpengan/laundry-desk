@@ -23,6 +23,9 @@ export {
   wrapDek,
 } from "./dek-kek.js";
 export type { Dek, Kek, KekStore, WrappedDek } from "./dek-kek.js";
+export { FileQueueStore } from "./file-store.js";
+export { PersistentEncryptedQueue } from "./persistent-queue.js";
+export { SafeStorageKekStore, type SafeStorageSurface } from "./safe-storage-kek.js";
 
 export { MemoryEncryptedQueue } from "./memory-queue.js";
 export type { MemoryEncryptedQueueOptions } from "./memory-queue.js";

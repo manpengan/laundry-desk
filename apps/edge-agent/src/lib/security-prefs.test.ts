@@ -37,13 +37,17 @@ test("DESKTOP_IPC_CHANNELS is the exact deeply frozen renderer capability map", 
       read: "desktop:photo:read",
       delete: "desktop:photo:delete",
     },
+    offline: {
+      status: "desktop:offline:status",
+      resolve: "desktop:offline:resolve",
+    },
     health: { get: "desktop:health:get" },
   });
   assert.equal(typeof channels, "object");
   assert.notEqual(channels, null);
   assert.equal(Object.isFrozen(channels), true);
 
-  for (const namespace of ["auth", "command", "query", "photo", "health"]) {
+  for (const namespace of ["auth", "command", "query", "photo", "offline", "health"]) {
     assert.equal(Object.isFrozen(Reflect.get(channels, namespace)), true);
   }
 });
@@ -56,13 +60,13 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
   );
   const invokedDesktopChannels = Array.from(
     preload.matchAll(
-      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:login|refresh|pinChallenge|pinVerify|logout)|command\.execute|query\.execute|photo\.(?:upload|read|delete)|health\.get)/gu,
+      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:login|refresh|pinChallenge|pinVerify|logout)|command\.execute|query\.execute|photo\.(?:upload|read|delete)|offline\.(?:status|resolve)|health\.get)/gu,
     ),
     (match) => match[1],
   );
   const emptyInputChannels = Array.from(
     preload.matchAll(
-      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:refresh|logout)|health\.get),\s*EMPTY_DESKTOP_INPUT\s*\)/gu,
+      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:refresh|logout)|offline\.status|health\.get),\s*EMPTY_DESKTOP_INPUT\s*\)/gu,
     ),
     (match) => match[1],
   );
@@ -79,10 +83,17 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
     "photo.upload",
     "photo.read",
     "photo.delete",
+    "offline.status",
+    "offline.resolve",
     "health.get",
   ]);
-  assert.deepEqual(emptyInputChannels, ["auth.refresh", "auth.logout", "health.get"]);
-  assert.equal(preload.match(/ipcRenderer\.invoke\(/gu)?.length, 11);
+  assert.deepEqual(emptyInputChannels, [
+    "auth.refresh",
+    "auth.logout",
+    "offline.status",
+    "health.get",
+  ]);
+  assert.equal(preload.match(/ipcRenderer\.invoke\(/gu)?.length, 13);
   assert.doesNotMatch(preload, /edgeBridge/);
   assert.doesNotMatch(preload, /import\s*\{\s*IPC_CHANNELS\s*\}/u);
   assert.doesNotMatch(

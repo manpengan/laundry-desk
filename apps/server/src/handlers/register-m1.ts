@@ -33,6 +33,8 @@ import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import { registerShiftCommandHandlers, registerShiftQueryHandlers } from "../shift/handlers.js";
 import type { StatsHandlerDeps } from "../stats/handlers.js";
 import { registerStatsQueryHandlers } from "../stats/handlers.js";
+import type { StaffAccessHandlerDeps } from "../staff/handlers.js";
+import { createStaffAccessHandlers } from "../staff/handlers.js";
 import type { IdentityHandlerDeps } from "./identity-handlers.js";
 import { registerIdentityCommandHandlers } from "./identity-handlers.js";
 import type { PlatformHandlerDeps } from "./platform-handlers.js";
@@ -58,6 +60,7 @@ export type RegisterM1Deps = Readonly<{
   photo?: PhotoHandlerDeps;
   /** M3 garment production, incidents and loss handling. */
   fulfillment?: FulfillmentHandlerDeps;
+  staffAccess?: StaffAccessHandlerDeps;
 }>;
 
 export type RegisterM1Result = Readonly<{
@@ -157,6 +160,12 @@ export function registerM1Handlers(
     );
   }
 
+  if (deps.staffAccess !== undefined) {
+    const handlers = createStaffAccessHandlers(deps.staffAccess);
+    registry.registerHandler("staff.access.set", handlers["staff.access.set"]);
+    registered.push("staff.access.set");
+  }
+
   return Object.freeze(registered);
 }
 
@@ -215,6 +224,12 @@ export function registerM1QueryHandlers(
   if (deps.fulfillment !== undefined) {
     registerFulfillmentQueryHandlers(queryRegistry, deps.fulfillment);
     names.push("fulfillment.workbench");
+  }
+
+  if (deps.staffAccess !== undefined) {
+    const handlers = createStaffAccessHandlers(deps.staffAccess);
+    queryRegistry.registerHandler("staff.access.list", handlers["staff.access.list"]);
+    names.push("staff.access.list");
   }
 
   return Object.freeze(names);

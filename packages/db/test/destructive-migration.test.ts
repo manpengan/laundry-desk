@@ -80,6 +80,7 @@ describe("destructive migration static reject", () => {
       "0026_customer_profile_governance.sql",
       "0027_garment_rack_operations.sql",
       "0028_customer_privacy_lifecycle.sql",
+      "0029_staff_access_governance.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

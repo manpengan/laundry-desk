@@ -27,6 +27,7 @@ import {
   DesktopRefreshResultSchema,
   DesktopSessionViewSchema,
   DesktopStaffDirectorySchema,
+  EdgeAuthorityResponseSchema,
   LoginRequestSchema,
   type AccessSessionResponse,
   type DesktopCommandExecuteResult,
@@ -42,6 +43,8 @@ import {
   type DesktopQueryExecuteResult,
   type DesktopRefreshResult,
   type DesktopSessionView,
+  type EdgeAuthorityResponse,
+  type EdgeQueueEnvelope,
 } from "@laundry/contracts";
 
 import { createLoginIntentGate } from "./auth-intent.js";
@@ -130,6 +133,11 @@ export type DesktopHttpTransport = Readonly<{
   }>;
   health: Readonly<{
     get: () => Promise<DesktopHealthGetResult>;
+  }>;
+  /** Main-process-only authority/replay surface. Never project this through preload. */
+  edge: Readonly<{
+    authority: () => Promise<EdgeAuthorityResponse>;
+    replay: (envelope: EdgeQueueEnvelope) => Promise<DesktopCommandExecuteResult>;
   }>;
 }>;
 
@@ -742,11 +750,26 @@ export function createDesktopHttpTransport(
     return parseHttpOutput(DesktopHealthGetResultSchema, await requestJson("GET", "/health"));
   };
 
+  const requestEdgeAuthority = (): Promise<EdgeAuthorityResponse> =>
+    executeProtected(EdgeAuthorityResponseSchema, "/api/v2/edge/authority", {});
+
+  const replayEdgeEnvelope = (
+    envelope: EdgeQueueEnvelope,
+  ): Promise<DesktopCommandExecuteResult> => {
+    const name = encodeURIComponent(envelope.payload.command);
+    return executeProtected(
+      DesktopCommandExecuteResultSchema,
+      `/v1/commands/${name}`,
+      envelope.payload,
+    );
+  };
+
   return Object.freeze({
     auth: Object.freeze({ login, refresh, pinChallenge, pinVerify, logout }),
     command: Object.freeze({ execute: executeCommand }),
     query: Object.freeze({ execute: executeQuery }),
     photo: Object.freeze({ upload: uploadPhoto, read: readPhoto, delete: deletePhoto }),
     health: Object.freeze({ get: getHealth }),
+    edge: Object.freeze({ authority: requestEdgeAuthority, replay: replayEdgeEnvelope }),
   });
 }

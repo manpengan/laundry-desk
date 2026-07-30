@@ -71,6 +71,7 @@ function readyProfileRow(
       current_role_is_superuser: boolean;
       current_role_bypasses_rls: boolean;
       org_demo_only: boolean;
+      role_is_privacy_admin: boolean;
     }>
   > = {},
 ) {
@@ -107,6 +108,7 @@ function readyProfileRow(
     role_id: BOOTSTRAP_ADMIN_ROLE_ID,
     role_name: "admin",
     role_is_active: true,
+    role_is_privacy_admin: true,
     ...overrides,
   });
 }
@@ -189,6 +191,7 @@ test("app-role readiness rejects admin connections and missing bootstrap state",
     ["demo database in non-demo runtime", { org_demo_only: true }],
     ["superuser app role", { current_role_is_superuser: true }],
     ["BYPASSRLS app role", { current_role_bypasses_rls: true }],
+    ["bootstrap administrator without privacy authority", { role_is_privacy_admin: false }],
   ] as const) {
     await t.test(name, async () => {
       const database = createReadinessPool(readyProfileRow(overrides));

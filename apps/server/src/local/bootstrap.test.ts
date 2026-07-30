@@ -57,6 +57,7 @@ type RoleState = Readonly<{
   storeId: string;
   staffId: string;
   role: string;
+  isPrivacyAdmin: boolean;
   isActive: boolean;
 }>;
 
@@ -212,6 +213,7 @@ function createFakeDatabase(
                 role_staff_id: role.staffId,
                 role_name: role.role,
                 role_is_active: role.isActive,
+                role_is_privacy_admin: role.isPrivacyAdmin,
               },
             ],
             rowCount: 1,
@@ -305,6 +307,7 @@ function createFakeDatabase(
               storeId: String(params?.[2]),
               staffId: String(params?.[3]),
               role: String(params?.[4]),
+              isPrivacyAdmin: true,
               isActive: true,
             }),
           });
@@ -488,6 +491,7 @@ test("hashes credentials before connecting and creates the four identity rows wi
   assert.equal(state.org?.demoOnly, false);
   assert.equal(state.role?.id, BOOTSTRAP_ADMIN_ROLE_ID);
   assert.equal(state.role?.role, "admin");
+  assert.equal(state.role?.isPrivacyAdmin, true);
   assert.equal(state.metadata?.profileHash, computeBootstrapProfileHash(input()));
 });
 

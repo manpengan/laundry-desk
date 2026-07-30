@@ -349,6 +349,10 @@ test("packaged app recovers from an unavailable local service with a token-free 
               read: (...args: unknown[]) => Promise<unknown>;
               delete: (...args: unknown[]) => Promise<unknown>;
             };
+            offline: {
+              status: () => Promise<unknown>;
+              resolve: (...args: unknown[]) => Promise<unknown>;
+            };
             health: { get: () => Promise<unknown> };
           };
         }
@@ -374,13 +378,15 @@ test("packaged app recovers from an unavailable local service with a token-free 
       return {
         bridgeValid:
           JSON.stringify(Object.keys(bridge).sort()) ===
-            JSON.stringify(["auth", "command", "health", "photo", "query"]) &&
+            JSON.stringify(["auth", "command", "health", "offline", "photo", "query"]) &&
           JSON.stringify(Object.keys(bridge.auth).sort()) ===
             JSON.stringify(["login", "logout", "pinChallenge", "pinVerify", "refresh"]) &&
           Object.keys(bridge.command).join() === "execute" &&
           Object.keys(bridge.query).join() === "execute" &&
           JSON.stringify(Object.keys(bridge.photo).sort()) ===
             JSON.stringify(["delete", "read", "upload"]) &&
+          JSON.stringify(Object.keys(bridge.offline).sort()) ===
+            JSON.stringify(["resolve", "status"]) &&
           Object.keys(bridge.health).join() === "get",
         refreshOk:
           !containsCredentialKey(refresh) &&

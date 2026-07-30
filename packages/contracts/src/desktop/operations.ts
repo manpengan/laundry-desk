@@ -21,8 +21,13 @@ import { CommandResponseSchema } from "../envelope/responses.js";
 import { ConfirmReferenceSchema } from "../envelope/wire-payload.js";
 import type { CommandDefinition, QueryDefinition } from "../registry/definitions.js";
 import { parseContractInput } from "../registry/definitions.js";
+import {
+  DesktopOfflineResolveInputSchema,
+  DesktopOfflineResolveResultSchema,
+  DesktopOfflineStatusInputSchema,
+  DesktopOfflineStatusResultSchema,
+} from "./offline-operations.js";
 
-/** Hard IPC JSON limits, applied before registry input validation or renderer projection. */
 export const DESKTOP_MAX_JSON_BYTES = 256 * 1_024;
 export const DESKTOP_MAX_JSON_DEPTH = 32;
 export const DESKTOP_MAX_JSON_NODES = 10_000;
@@ -217,10 +222,6 @@ const DesktopBoundedCommandResponseSchema = z.preprocess((value, context) => {
 export const DesktopCommandExecuteResultSchema = DesktopBoundedCommandResponseSchema;
 export const DesktopQueryExecuteResultSchema = DesktopBoundedCommandResponseSchema;
 
-/**
- * Login form data is the A5 request without device_id. The main process owns and injects the
- * stable device identity, so renderer code cannot impersonate another desktop device.
- */
 export const DesktopLoginInputSchema = LoginRequestSchema.omit({ device_id: true });
 export const DesktopRefreshInputSchema = EmptyBodySchema;
 export const DesktopPinChallengeInputSchema = PinChallengeRequestSchema;
@@ -228,7 +229,6 @@ export const DesktopPinVerifyInputSchema = PinVerifyRequestSchema;
 export const DesktopLogoutInputSchema = EmptyBodySchema;
 export const DesktopHealthGetInputSchema = EmptyBodySchema;
 
-/** Credential-free projection derived directly from the authoritative access-session response. */
 export const DesktopSessionViewSchema = AccessSessionResponseSchema.omit({
   access_token: true,
   token_type: true,
@@ -332,10 +332,6 @@ const operation = <TInput extends z.ZodType, TResult extends z.ZodType>(
   result: TResult,
 ) => Object.freeze({ input, result });
 
-/**
- * The complete renderer capability registry. No generic invoke/fetch operation and no transport
- * controls exist in this shape.
- */
 export const DESKTOP_OPERATION_SCHEMAS = Object.freeze({
   auth: Object.freeze({
     login: operation(DesktopLoginInputSchema, DesktopLoginResultSchema),
@@ -354,6 +350,10 @@ export const DESKTOP_OPERATION_SCHEMAS = Object.freeze({
     upload: operation(DesktopPhotoUploadInputSchema, DesktopPhotoUploadResultSchema),
     read: operation(DesktopPhotoReadInputSchema, DesktopPhotoReadResultSchema),
     delete: operation(DesktopPhotoDeleteInputSchema, DesktopPhotoDeleteResultSchema),
+  }),
+  offline: Object.freeze({
+    status: operation(DesktopOfflineStatusInputSchema, DesktopOfflineStatusResultSchema),
+    resolve: operation(DesktopOfflineResolveInputSchema, DesktopOfflineResolveResultSchema),
   }),
   health: Object.freeze({
     get: operation(DesktopHealthGetInputSchema, DesktopHealthGetResultSchema),

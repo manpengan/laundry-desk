@@ -16,6 +16,7 @@ import type {
   LaundryDesktopBridge,
 } from "./desktop-bridge.js";
 import { createDesktopPhotoPort } from "./desktop-photo-port.js";
+import { createDesktopOfflinePort } from "./offline-port.js";
 import type { AppPorts, HealthPort, HealthResult } from "./types.js";
 
 export type { LaundryDesktopBridge } from "./desktop-bridge.js";
@@ -632,6 +633,7 @@ export function createDesktopPorts(bridge: LaundryDesktopBridge): AppPorts {
     command: createCommandPort(bridge),
     query: createQueryPort(bridge),
     photo: createDesktopPhotoPort(bridge),
+    offline: createDesktopOfflinePort(bridge.offline),
     health: createHealthPort(bridge),
   });
 }

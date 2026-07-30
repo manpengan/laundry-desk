@@ -21,6 +21,7 @@ export type SessionStaffAuthority = Readonly<{
   display_name: string;
   role: "admin" | "staff";
   permission_version: number;
+  is_privacy_admin: boolean;
 }>;
 
 export type AuthorizedSession = Readonly<{
@@ -43,6 +44,7 @@ const StaffAuthorityRowSchema = z.strictObject({
   display_name: z.string().trim().min(1),
   role: z.enum(["admin", "staff"]),
   permission_version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  is_privacy_admin: z.boolean(),
 });
 
 const projectFeatureFlags = (flags: StoreFeatureFlags): Readonly<Record<string, boolean>> =>
@@ -61,7 +63,7 @@ async function readPgStaffAuthority(
 ): Promise<SessionStaffAuthority | null> {
   const result = await client.query<z.input<typeof StaffAuthorityRowSchema>>(
     `SELECT staff.id::text AS staff_id, staff.display_name,
-            staff.permission_version, role.role
+            staff.permission_version, role.role, role.is_privacy_admin
        FROM staffs staff
        JOIN staff_store_roles role
          ON role.org_id = staff.org_id
@@ -92,6 +94,7 @@ async function readMemoryStaffAuthority(
     display_name: staff.display_name,
     role: directory.role,
     permission_version: staff.permission_version,
+    is_privacy_admin: directory.privacy_admin,
   });
 }
 

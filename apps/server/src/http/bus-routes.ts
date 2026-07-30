@@ -25,7 +25,6 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "staff_read",
   "staff_write",
   "order_write",
-  "privacy_admin",
 ]);
 const STAFF_PERMISSIONS = Object.freeze(["staff_read", "order_write"]);
 const NO_PERMISSIONS = Object.freeze([] as string[]);
@@ -47,7 +46,10 @@ function actorFromSession(resolved: AuthorizedSession): ActorContext {
     via: "ui" as const,
     permissions:
       authority.role === "admin"
-        ? ADMIN_PERMISSIONS
+        ? Object.freeze([
+            ...ADMIN_PERMISSIONS,
+            ...(authority.is_privacy_admin ? ["privacy_admin"] : []),
+          ])
         : authority.role === "staff"
           ? STAFF_PERMISSIONS
           : NO_PERMISSIONS,
@@ -66,6 +68,7 @@ function createBus(runtime: LocalRuntime) {
     shift: runtime.shift,
     photo: runtime.photo,
     fulfillment: runtime.fulfillment,
+    staffAccess: runtime.staffAccess,
   });
 }
 

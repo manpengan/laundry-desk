@@ -12,6 +12,7 @@ export type LocalStaffDirectoryEntry = Readonly<{
   display_name: string;
   role: "admin" | "staff";
   username: string;
+  privacy_admin: boolean;
 }>;
 
 type PgStaffDirectoryRow = Readonly<{
@@ -19,6 +20,7 @@ type PgStaffDirectoryRow = Readonly<{
   display_name: string;
   role: string;
   username: string;
+  privacy_admin: boolean;
 }>;
 
 export const LOCAL_MEMORY_STAFF_DIRECTORY: readonly LocalStaffDirectoryEntry[] = Object.freeze([
@@ -27,18 +29,21 @@ export const LOCAL_MEMORY_STAFF_DIRECTORY: readonly LocalStaffDirectoryEntry[] =
     display_name: "店员甲",
     role: "staff",
     username: "staff",
+    privacy_admin: false,
   }),
   Object.freeze({
     staff_id: DEMO_STAFF_B_ID,
     display_name: "店员乙",
     role: "staff",
     username: "staffb",
+    privacy_admin: false,
   }),
   Object.freeze({
     staff_id: LOCAL_PROFILE.adminStaffId,
     display_name: "店长",
     role: "admin",
     username: "admin",
+    privacy_admin: true,
   }),
 ]);
 
@@ -48,6 +53,7 @@ const PgStaffDirectoryRowSchema = z
     display_name: z.string().trim().min(1),
     role: z.enum(["admin", "staff"]),
     username: z.string().trim().min(1),
+    privacy_admin: z.boolean(),
   })
   .strict()
   .readonly();
@@ -64,7 +70,8 @@ export async function loadPgStaffDirectory(
     },
     async (client) => {
       const result = await client.query<PgStaffDirectoryRow>(
-        `SELECT staff.id::text AS staff_id, staff.display_name, role.role, staff.username
+        `SELECT staff.id::text AS staff_id, staff.display_name, role.role, staff.username,
+                role.is_privacy_admin AS privacy_admin
            FROM staffs staff
            JOIN staff_store_roles role
              ON role.org_id = staff.org_id

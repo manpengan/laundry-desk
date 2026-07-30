@@ -9,14 +9,18 @@ import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
 import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
+import type { OfflinePort } from "../host/offline-port.js";
 import { StepUpConfirmDialog } from "../shell/StepUpConfirmDialog.js";
 import { CatalogMaintenancePanel } from "./CatalogMaintenancePanel.js";
+import { StaffAccessPanel } from "./StaffAccessPanel.js";
+import { OfflineConflictPanel } from "./OfflineConflictPanel.js";
 
 export type SettingsPageProps = {
   session: SessionView;
   authClient: AuthClient;
   commandClient: CommandPort;
   queryClient?: QueryPort;
+  offlinePort?: OfflinePort;
 };
 
 const SETTINGS_KEY = "pricing.min_order_cents";
@@ -29,6 +33,7 @@ export function SettingsPage({
   authClient,
   commandClient,
   queryClient,
+  offlinePort,
 }: SettingsPageProps) {
   const toast = useToast();
   const [centsText, setCentsText] = useState("1200");
@@ -109,6 +114,15 @@ export function SettingsPage({
         commandClient={commandClient}
         {...(queryClient !== undefined ? { queryClient } : {})}
       />
+
+      <StaffAccessPanel
+        currentStaffId={session.session.staff_id}
+        authClient={authClient}
+        commandClient={commandClient}
+        {...(queryClient !== undefined ? { queryClient } : {})}
+      />
+
+      {offlinePort === undefined ? null : <OfflineConflictPanel offlinePort={offlinePort} />}
 
       <section
         className="ld-settings-printer-smoke"

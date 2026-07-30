@@ -18,7 +18,7 @@
     "package:mac": "pnpm exec turbo run build --filter=@laundry/edge-agent && pnpm run preload:bundle && pnpm exec electron-builder --config electron-builder.yml --mac dir",
     "release:mac": "node scripts/release-mac.mjs",
     "hash:app": "node scripts/hash-app.mjs",
-    "test": "node --test scripts/*.test.mjs && tsc -p tsconfig.json && node --test $(find dist -name '*.test.js')",
+    "test": "tsc -p tsconfig.json && node --test scripts/*.test.mjs && node --test $(find dist -name '*.test.js')",
     "typecheck": "node --check scripts/build-preload.mjs && node --check scripts/build-preload.test.mjs && node --check scripts/hash-app.mjs && node --check scripts/hash-app.test.mjs && node --check scripts/prune-packaged-spa.mjs && node --check scripts/prune-packaged-spa.test.mjs && node --check scripts/sync-spa.mjs && node --check scripts/sync-spa.test.mjs && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.e2e.json",
     "spa:sync": "node scripts/sync-spa.mjs sync",
     "spa:check": "node scripts/sync-spa.mjs check",

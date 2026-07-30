@@ -8,6 +8,8 @@ import type {
   DesktopLoginInput,
   DesktopLoginResult,
   DesktopLogoutResult,
+  DesktopOfflineResolveInput,
+  DesktopOfflineStatusResult,
   DesktopPinChallengeResult,
   DesktopPinVerifyResult,
   DesktopPhotoDeleteInput,
@@ -55,6 +57,12 @@ const laundryDesktop = Object.freeze({
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.photo.read, input),
     delete: (input: DesktopPhotoDeleteInput): Promise<DesktopPhotoDeleteResult> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.photo.delete, input),
+  }),
+  offline: Object.freeze({
+    status: (): Promise<DesktopOfflineStatusResult> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.offline.status, EMPTY_DESKTOP_INPUT),
+    resolve: (input: DesktopOfflineResolveInput): Promise<DesktopOfflineStatusResult> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.offline.resolve, input),
   }),
   health: Object.freeze({
     get: (): Promise<DesktopHealthGetResult> =>

@@ -1,8 +1,11 @@
-/** Build an explicit memory test runtime or the durable PostgreSQL local runtime. */
+import { randomUUID } from "node:crypto";
 
 import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@laundry/contracts";
-
 import { createCsrfProofSigner, type CsrfProofSigner } from "../auth/csrf.js";
+import {
+  createEdgeAuthorityService,
+  type EdgeAuthorityService,
+} from "../edge/authority-service.js";
 import { MemoryIdempotencyStore } from "../bus/idempotency.js";
 import { createPgIdempotencyStore } from "../bus/pg-idempotency.js";
 import type { CommandIdempotencyStore } from "../bus/types.js";
@@ -29,6 +32,7 @@ import { createPgOrderStore } from "../order/pg-order-store.js";
 import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
 import type { StatsHandlerDeps } from "../stats/handlers.js";
+import { createMemoryStaffAccessDeps, createPgStaffAccessDeps } from "../staff/runtime.js";
 import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
@@ -105,6 +109,8 @@ export type LocalRuntime = Readonly<{
   /** Garment photo metadata and optional private file store. */
   photo: PhotoHandlerDeps;
   fulfillment: FulfillmentHandlerDeps;
+  staffAccess: ReturnType<typeof createMemoryStaffAccessDeps>;
+  edgeAuthority: EdgeAuthorityService;
   accessTokenSecret: string;
   /** Single runtime-owned capability shared by session issuance and HTTP verification. */
   csrfProofSigner: CsrfProofSigner;
@@ -292,6 +298,8 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     }),
     photo: Object.freeze({ store: photoStore }),
     fulfillment: Object.freeze({ store: createMemoryFulfillmentStore() }),
+    staffAccess: createMemoryStaffAccessDeps(LOCAL_MEMORY_STAFF_DIRECTORY),
+    edgeAuthority: createEdgeAuthorityService({ randomUUID }),
     accessTokenSecret,
     csrfProofSigner,
     staffDirectory: LOCAL_MEMORY_STAFF_DIRECTORY,
@@ -405,6 +413,8 @@ export async function createPgLocalRuntime(
     }),
     photo,
     fulfillment: Object.freeze({ store: createPgFulfillmentStore(appPool) }),
+    staffAccess: createPgStaffAccessDeps(),
+    edgeAuthority: createEdgeAuthorityService({ randomUUID }),
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSigner,
     staffDirectory: pgStaffDirectory,

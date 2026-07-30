@@ -12,6 +12,7 @@ import type { LocalRuntime } from "../local/demo-seed.js";
 import { registerAuthRoutes } from "./auth-routes.js";
 import type { AuthRouteContext, RouteSecurityContext } from "./auth-route-support.js";
 import { registerBusRoutes } from "./bus-routes.js";
+import { registerEdgeAuthorityRoute } from "./edge-authority-route.js";
 import { registerPhotoFileRoutes } from "./photo-file-routes.js";
 import { registerPrintArtifactRoutes } from "./print-artifact-routes.js";
 import type { FileSpool } from "../print/file-spool.js";
@@ -106,6 +107,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   const context = createRouteContext(options, requestSecurity);
   registerAuthRoutes(app, context);
   registerBusRoutes(app, context);
+  registerEdgeAuthorityRoute(app, context);
   registerPhotoFileRoutes(app, context, options.runtime.photo);
 
   // Artifact download only exists when a spool is configured; the memory
