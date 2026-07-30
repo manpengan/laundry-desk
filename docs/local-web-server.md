@@ -133,25 +133,25 @@ HTTP 方法、Header、Cookie 或设备身份。
 
 ## 备份、恢复和诊断
 
-数据库备份写入私有配置目录下的 `backups/`（目录 `0700`、文件 `0600`），并生成绑定
-实例标识、字节数和 SHA-256 的 manifest：
+灾备恢复集写入私有配置目录下的 `backups/`（目录 `0700`、文件 `0600`）。工具先停止
+API，在同一静止窗口生成 PostgreSQL dump 与私有照片快照，再用 `.bundle.json` 的
+SHA-256 绑定实例、数据库和每张照片；完成后恢复 API：
 
 ```bash
 pnpm local:backup
 pnpm local:diagnose
 ```
 
-恢复是破坏性操作，只接受该实例 `backups/` 内由工具生成的文件，并要求显式重复输出的
-SHA-256。恢复前会自动再做一份 `pre-restore` 安全备份，随后停止 API，在单一数据库事务
-中执行恢复，成功后重新启动 API：
+恢复是破坏性操作，只接受该实例 `backups/` 内完整且校验通过的恢复集，并要求显式重复
+输出的 `Confirm SHA-256`。恢复前会自动再做一份包含数据库和照片的 `pre-restore`
+安全备份；数据库在单一事务中恢复，照片通过私有目录原子换入，全部成功后才重新启动 API：
 
 ```bash
 pnpm local:restore -- --file "/absolute/path/to/backup.dump" \
-  --confirm-sha256 "<local:backup 输出的 64 位摘要>"
+  --confirm-sha256 "<local:backup 输出的 Confirm SHA-256>"
 ```
 
-当前备份范围是 PostgreSQL；照片保存在独立私有目录，不会被数据库恢复命令覆盖。诊断
-只输出实例标识、服务就绪状态、可用空间和私有目录统计，不输出配置 secret。
+诊断只输出实例标识、服务就绪状态、可用空间和私有目录统计，不输出配置 secret。
 
 ## 一键验收
 
@@ -192,8 +192,9 @@ reset 只接受默认 `laundry-desk` project，只删除
 | `tools/local/up.mjs`                         | PG、migration、bootstrap、API |
 | `tools/local/down.mjs`                       | 停止服务并保留数据卷          |
 | `tools/local/reset.mjs`                      | 受确认保护的默认卷删除        |
-| `tools/local/backup.mjs`                     | 私有 PostgreSQL 备份          |
-| `tools/local/restore.mjs`                    | 校验、预备份与事务恢复        |
+| `tools/local/backup.mjs`                     | 数据库与照片一致性灾备        |
+| `tools/local/restore.mjs`                    | 校验、预备份与整体恢复        |
+| `tools/local/disaster-recovery.mjs`          | 恢复集清单、照片校验与换入    |
 | `tools/local/diagnose.mjs`                   | 无 secret 的本地诊断          |
 | `tools/compose/docker-compose.yml`           | loopback-only 服务拓扑        |
 | `apps/server/src/local/profile.ts`           | 通用 `local/main` profile     |

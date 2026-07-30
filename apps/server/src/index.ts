@@ -250,6 +250,25 @@ export {
   requiredPermissionsFromInvariants,
   toAccessSessionResponse,
 } from "./handlers/index.js";
+
+export {
+  createMemoryFulfillmentStore,
+  createPgFulfillmentStore,
+  registerFulfillmentCommandHandlers,
+  registerFulfillmentQueryHandlers,
+} from "./fulfillment/index.js";
+export type {
+  FulfillmentHandlerDeps,
+  FulfillmentIncidentInput,
+  FulfillmentIncidentKind,
+  FulfillmentIncidentResult,
+  FulfillmentStore,
+  FulfillmentTransitionInput,
+  FulfillmentTransitionRow,
+  FulfillmentWorkbenchOptions,
+  FulfillmentWorkbenchRow,
+  MemoryFulfillmentSeed,
+} from "./fulfillment/index.js";
 export type {
   IdentityHandlerDeps,
   IdentityHandlerMap,

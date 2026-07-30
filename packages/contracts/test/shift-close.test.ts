@@ -16,6 +16,7 @@ import {
   parseContractInput,
   shiftCloseCommand,
   shiftGetQuery,
+  shiftHistoryQuery,
 } from "../src/index.js";
 
 describe("M2 shift.close / shift.get skeleton", () => {
@@ -32,17 +33,17 @@ describe("M2 shift.close / shift.get skeleton", () => {
       expect(definition.kind).toBe("query");
       expect(definition.risk).toBe("R1");
       expect(definition.offline_mode).toBe("denied");
-      expect(definition.max_result_rows).toBe(1);
+      expect(definition.max_result_rows).toBeGreaterThan(0);
     }
   });
 
   it("exports stable names and M2 shift aliases", () => {
     expect([...SHIFT_COMMAND_NAMES]).toEqual(["shift.close"]);
-    expect([...SHIFT_QUERY_NAMES]).toEqual(["shift.get"]);
+    expect([...SHIFT_QUERY_NAMES]).toEqual(["shift.get", "shift.history"]);
     expect([...M2_SHIFT_COMMAND_NAMES]).toEqual([...SHIFT_COMMAND_NAMES]);
     expect([...M2_SHIFT_QUERY_NAMES]).toEqual([...SHIFT_QUERY_NAMES]);
     expect(M2_SHIFT_COMMAND_DEFINITIONS).toHaveLength(1);
-    expect(M2_SHIFT_QUERY_DEFINITIONS).toHaveLength(1);
+    expect(M2_SHIFT_QUERY_DEFINITIONS).toHaveLength(2);
   });
 
   it("wires into M2 skeleton command catalog", () => {
@@ -114,6 +115,23 @@ describe("M2 shift.close / shift.get skeleton", () => {
     await expect(
       parseContractInput(shiftGetQuery, { business_date: "2026-07-22" }),
     ).resolves.toEqual({ business_date: "2026-07-22" });
+    await expect(
+      parseContractInput(shiftHistoryQuery, {
+        date_from: "2026-07-01",
+        date_to: "2026-07-22",
+        limit: 31,
+      }),
+    ).resolves.toEqual({
+      date_from: "2026-07-01",
+      date_to: "2026-07-22",
+      limit: 31,
+    });
+    await expect(
+      parseContractInput(shiftHistoryQuery, {
+        date_from: "2026-07-23",
+        date_to: "2026-07-22",
+      }),
+    ).rejects.toBeTruthy();
   });
 
   it("declares metadata floors", () => {
@@ -125,5 +143,6 @@ describe("M2 shift.close / shift.get skeleton", () => {
     expect(shiftGetQuery.name).toBe("shift.get");
     expect(shiftGetQuery.risk).toBe("R1");
     expect(shiftGetQuery.idempotent).toBe(true);
+    expect(shiftHistoryQuery.max_result_rows).toBe(100);
   });
 });

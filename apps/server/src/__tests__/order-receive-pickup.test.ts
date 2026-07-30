@@ -361,10 +361,10 @@ test("order.receive with phone upserts searchable customer", async () => {
   assert.equal(search.ok, true, JSON.stringify(search));
   if (!search.ok) return;
   const customers = (
-    search.data.result as { customers: readonly { phone: string; name: string | null }[] }
+    search.data.result as { customers: readonly { phone_masked: string; name: string | null }[] }
   ).customers;
   assert.equal(customers.length, 1);
-  assert.equal(customers[0]?.phone, "13800000444");
+  assert.equal(customers[0]?.phone_masked, "138****0444");
   assert.equal(customers[0]?.name, "赵六");
 });
 
@@ -372,9 +372,13 @@ test("order.receive rolls back when its customer upsert fails", async () => {
   const brokenCustomer: CustomerStore = Object.freeze({
     search: async () => Object.freeze([]),
     getByPhone: async () => null,
+    getById: async () => null,
     upsert: async () => {
       throw new Error("simulated customer store failure");
     },
+    update: async () => null,
+    merge: async () => null,
+    findDuplicates: async () => Object.freeze([]),
   });
   const orderStore = createMemoryOrderStore();
   const { registry, chainHooks, pendingStore } = buildBus(orderStore, brokenCustomer);

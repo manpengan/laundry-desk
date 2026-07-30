@@ -1,7 +1,14 @@
 /** Desktop left rail items (UI spec §3). Visibility filtered by E3 permissions. */
 
 export type NavItemId =
-  "workbench" | "receive" | "pickup" | "orders" | "customers" | "stats" | "settings";
+  | "workbench"
+  | "receive"
+  | "pickup"
+  | "fulfillment"
+  | "orders"
+  | "customers"
+  | "stats"
+  | "settings";
 
 export type NavItem = {
   id: NavItemId;
@@ -13,6 +20,7 @@ export const COUNTER_NAV: readonly NavItem[] = [
   { id: "workbench", label: "工作台", icon: "⌂" },
   { id: "receive", label: "开单", icon: "＋" },
   { id: "pickup", label: "取衣", icon: "↓" },
+  { id: "fulfillment", label: "生产", icon: "⇄" },
   { id: "orders", label: "订单与欠款", icon: "≡" },
   { id: "customers", label: "客户", icon: "人" },
   { id: "stats", label: "统计", icon: "▣" },

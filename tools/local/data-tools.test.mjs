@@ -137,3 +137,45 @@ test("restore reconciles migrations and grants before restarting the server", as
   );
   assert.ok(calls[2].args.includes("migrate"));
 });
+
+test("restore restarts an untouched server when the pre-restore backup fails", async () => {
+  const calls = [];
+  const backupError = new Error("pre-restore backup failed");
+  const source = Object.freeze({
+    path: "/private/backups/laundry-v2-backup-20260729T123456Z-aaaaaaaa.dump",
+    sha256: "a".repeat(64),
+    bytes: 19,
+  });
+  const dependencies = Object.freeze({
+    prepareLocalDataContext: async () =>
+      Object.freeze({
+        project: "laundry-ci-test",
+        config: Object.freeze({ instanceId: "0123456789abcdefghijklmn" }),
+        env: Object.freeze({ PATH: "/bin" }),
+        backupDirectory: "/private/backups",
+      }),
+    verifyBackupFile: async () => source,
+    createDatabaseBackup: async () => {
+      throw backupError;
+    },
+    run: async (command) => calls.push(command),
+  });
+
+  await assert.rejects(
+    () =>
+      runRestore(
+        {
+          argv: ["--file", source.path, "--confirm-sha256", source.sha256],
+          env: Object.freeze({}),
+          cwd: "/workspace",
+          stdout: () => undefined,
+        },
+        dependencies,
+      ),
+    (error) => error === backupError,
+  );
+  assert.deepEqual(
+    calls.map((command) => (command.args.includes("stop") ? "stop" : "up")),
+    ["stop", "up"],
+  );
+});

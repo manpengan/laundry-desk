@@ -18,6 +18,11 @@ import {
 } from "../customer/handlers.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import { registerOrderCommandHandlers, registerOrderQueryHandlers } from "../order/handlers.js";
+import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
+import {
+  registerFulfillmentCommandHandlers,
+  registerFulfillmentQueryHandlers,
+} from "../fulfillment/handlers.js";
 import { registerOrderWorkdayCommandHandlers } from "../order/workday-handlers.js";
 import { registerPaymentCommandHandlers } from "../payment/handlers.js";
 import type { PhotoHandlerDeps } from "../photo/handlers.js";
@@ -51,6 +56,8 @@ export type RegisterM1Deps = Readonly<{
   shift?: ShiftHandlerDeps;
   /** M3 garment photo metadata (memory). */
   photo?: PhotoHandlerDeps;
+  /** M3 garment production, incidents and loss handling. */
+  fulfillment?: FulfillmentHandlerDeps;
 }>;
 
 export type RegisterM1Result = Readonly<{
@@ -119,7 +126,7 @@ export function registerM1Handlers(
 
   if (deps.customer !== undefined) {
     registerCustomerCommandHandlers(registry, deps.customer);
-    registered.push("customer.upsert");
+    registered.push("customer.upsert", "customer.update", "customer.merge");
   }
 
   if (deps.shift !== undefined) {
@@ -130,6 +137,17 @@ export function registerM1Handlers(
   if (deps.photo !== undefined) {
     registerPhotoCommandHandlers(registry, deps.photo);
     registered.push("photo.register");
+  }
+
+  if (deps.fulfillment !== undefined) {
+    registerFulfillmentCommandHandlers(registry, deps.fulfillment);
+    registered.push(
+      "garment.transition",
+      "garment.bulk_transition",
+      "garment.rework",
+      "garment.incident.record",
+      "garment.mark_lost",
+    );
   }
 
   return Object.freeze(registered);
@@ -168,17 +186,22 @@ export function registerM1QueryHandlers(
 
   if (deps.customer !== undefined) {
     registerCustomerQueryHandlers(queryRegistry, deps.customer);
-    names.push("customer.search");
+    names.push("customer.search", "customer.get", "customer.duplicates");
   }
 
   if (deps.shift !== undefined) {
     registerShiftQueryHandlers(queryRegistry, deps.shift);
-    names.push("shift.get");
+    names.push("shift.get", "shift.history");
   }
 
   if (deps.photo !== undefined) {
     registerPhotoQueryHandlers(queryRegistry, deps.photo);
     names.push("photo.list_by_order");
+  }
+
+  if (deps.fulfillment !== undefined) {
+    registerFulfillmentQueryHandlers(queryRegistry, deps.fulfillment);
+    names.push("fulfillment.workbench");
   }
 
   return Object.freeze(names);

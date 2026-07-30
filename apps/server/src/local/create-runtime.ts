@@ -46,6 +46,9 @@ import {
 } from "../platform/index.js";
 import type { PlatformHandlerDeps } from "../platform/handlers.js";
 import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
+import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
+import { createMemoryFulfillmentStore } from "../fulfillment/memory-store.js";
+import { createPgFulfillmentStore } from "../fulfillment/pg-store.js";
 import {
   createPgPool,
   resolveRuntimeDatabaseUrl,
@@ -102,6 +105,7 @@ export type LocalRuntime = Readonly<{
   shift: ShiftHandlerDeps;
   /** Garment photo metadata and optional private file store. */
   photo: PhotoHandlerDeps;
+  fulfillment: FulfillmentHandlerDeps;
   accessTokenSecret: string;
   /** Single runtime-owned capability shared by session issuance and HTTP verification. */
   csrfProofSigner: CsrfProofSigner;
@@ -111,7 +115,6 @@ export type LocalRuntime = Readonly<{
   stepUpProofStore: StepUpProofStore;
   /** Command replay state; durable in PostgreSQL mode. */
   idempotencyStore: CommandIdempotencyStore;
-  /** Present when mode === "pg"; close on shutdown. */
   pool: PgPool | null;
   /** Memory store when mode === "memory" (tests). */
   store: ReturnType<typeof createMemoryIdentityStore> | null;
@@ -300,6 +303,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       timeZone: LOCAL_PROFILE.timezone,
     }),
     photo: Object.freeze({ store: photoStore }),
+    fulfillment: Object.freeze({ store: createMemoryFulfillmentStore() }),
     accessTokenSecret,
     csrfProofSigner,
     staffDirectory: LOCAL_MEMORY_STAFF_DIRECTORY,
@@ -411,6 +415,7 @@ export async function createPgLocalRuntime(
       timeZone: LOCAL_PROFILE.timezone,
     }),
     photo,
+    fulfillment: Object.freeze({ store: createPgFulfillmentStore(appPool) }),
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSigner,
     staffDirectory: pgStaffDirectory,

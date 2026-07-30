@@ -23,7 +23,17 @@ const SAMPLE_CUSTOMER: CustomerRowView = Object.freeze({
   updated_at: 1_700_000_100,
 });
 
-const SAMPLE_ROWS: readonly CustomerRowView[] = Object.freeze([SAMPLE_CUSTOMER]);
+const SAMPLE_LIST_ROWS = Object.freeze([
+  Object.freeze({
+    customer_id: SAMPLE_CUSTOMER.customer_id,
+    phone_masked: "138****0111",
+    name: SAMPLE_CUSTOMER.name,
+    updated_at: SAMPLE_CUSTOMER.updated_at,
+  }),
+]);
+const PARSED_LIST_ROWS: readonly CustomerRowView[] = Object.freeze([
+  Object.freeze({ ...SAMPLE_CUSTOMER, phone: "138****0111", note: null }),
+]);
 
 const SAMPLE_ORDER: OrderListRowView = Object.freeze({
   order_id: "a1111111-1111-4111-8111-111111111111",
@@ -48,17 +58,19 @@ const SAMPLE_PRINT: PrintJobView = Object.freeze({
 });
 
 test("parseCustomerRows accepts documented result shape", () => {
-  assert.deepEqual(parseCustomerRows({ customers: SAMPLE_ROWS }), SAMPLE_ROWS);
+  assert.deepEqual(parseCustomerRows({ customers: SAMPLE_LIST_ROWS }), PARSED_LIST_ROWS);
   assert.equal(parseCustomerRows({ customers: [{ phone: "x" }] }), null);
   assert.equal(parseCustomerRows(null), null);
 });
 
 test("unwrapQueryResult peels bus envelope", () => {
   assert.deepEqual(
-    unwrapQueryResult({ execution: "executed", result: { customers: SAMPLE_ROWS } }),
-    { customers: SAMPLE_ROWS },
+    unwrapQueryResult({ execution: "executed", result: { customers: SAMPLE_LIST_ROWS } }),
+    { customers: SAMPLE_LIST_ROWS },
   );
-  assert.deepEqual(unwrapQueryResult({ customers: SAMPLE_ROWS }), { customers: SAMPLE_ROWS });
+  assert.deepEqual(unwrapQueryResult({ customers: SAMPLE_LIST_ROWS }), {
+    customers: SAMPLE_LIST_ROWS,
+  });
 });
 
 test("formatCustomerUpdatedAt formats local compact timestamp", () => {
@@ -100,7 +112,7 @@ test("CustomersPage SSR with mock query still renders empty list under SSR", () 
         ok: true as const,
         data: Object.freeze({
           execution: "executed",
-          result: Object.freeze({ customers: SAMPLE_ROWS }),
+          result: Object.freeze({ customers: SAMPLE_LIST_ROWS }),
         }) as T,
       });
     }

@@ -44,6 +44,15 @@ export { PageHost, type PageHostProps } from "./pages/PageHost.js";
 export { SettingsPage, type SettingsPageProps } from "./pages/SettingsPage.js";
 export { ReceivePage, type ReceivePageProps } from "./pages/ReceivePage.js";
 export { PickupPage, type PickupPageProps } from "./pages/PickupPage.js";
+export { FulfillmentPage, type FulfillmentPageProps } from "./pages/FulfillmentPage.js";
+export {
+  FULFILLMENT_STATUS_LABELS,
+  parseFulfillmentRows,
+  transitionCommandForCount,
+  unwrapFulfillmentResult,
+  type FulfillmentRowView,
+  type FulfillmentStatus,
+} from "./pages/fulfillment-model.js";
 export { CounterWorkbench, type CounterWorkbenchProps } from "./pages/CounterWorkbench.js";
 export {
   OrdersList,

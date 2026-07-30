@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
-import { DEMO_ORG_ID } from "../local/demo-ids.js";
+import { DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { createPgCustomerStore } from "./pg-customer-store.js";
 
 type RecordedQuery = Readonly<{
@@ -51,6 +51,7 @@ function createCapturingPool(handler?: MockQueryHandler): {
 }
 
 const FIXED_ID = "c3333333-3333-4333-8333-333333333333";
+const TARGET_ID = "d4444444-4444-4444-8444-444444444444";
 const AT = new Date("2024-01-15T12:00:00.000Z");
 
 test("search empty query orders by updated_at desc and sets org GUC", async () => {
@@ -244,4 +245,55 @@ test("upsert conflict path reports created=false and preserves optional fields",
   assert.ok(insert);
   assert.equal(insert?.params?.[6], true);
   assert.equal(insert?.params?.[7], false);
+});
+
+test("merge sets the store GUC before relinking store-scoped orders", async () => {
+  const { pool, queries } = createCapturingPool((sql) => {
+    if (sql.includes("FROM customers") && sql.includes("FOR UPDATE")) {
+      return {
+        rows: [
+          {
+            id: FIXED_ID,
+            phone: "13800000333",
+            name: "同名顾客",
+            note: null,
+            created_at: AT,
+            updated_at: AT,
+            merged_into_id: null,
+          },
+          {
+            id: TARGET_ID,
+            phone: "13900000333",
+            name: "同名顾客",
+            note: "保留",
+            created_at: AT,
+            updated_at: AT,
+            merged_into_id: null,
+          },
+        ],
+        rowCount: 2,
+      };
+    }
+    if (sql.includes("UPDATE orders")) return { rows: [], rowCount: 1 };
+    return { rows: [], rowCount: 0 };
+  });
+
+  const store = createPgCustomerStore(pool, { orgId: DEMO_ORG_ID });
+  const result = await store.merge({
+    source_customer_id: FIXED_ID,
+    target_customer_id: TARGET_ID,
+    store_id: DEMO_STORE_ID,
+    now: Math.floor(AT.getTime() / 1000),
+  });
+
+  assert.deepEqual(result, {
+    source_customer_id: FIXED_ID,
+    target_customer_id: TARGET_ID,
+    relinked_order_count: 1,
+  });
+  assert.ok(
+    queries.some(
+      (query) => query.sql.includes("app.store_id") && query.params?.[0] === DEMO_STORE_ID,
+    ),
+  );
 });

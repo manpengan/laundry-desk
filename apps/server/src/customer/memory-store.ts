@@ -6,11 +6,14 @@
 import { randomUUID } from "node:crypto";
 
 import type {
+  CustomerMergeInput,
+  CustomerMergeResult,
   CustomerRecord,
   CustomerSearchRow,
   CustomerStore,
   CustomerUpsertInput,
   CustomerUpsertOutcome,
+  CustomerUpdateInput,
 } from "./types.js";
 
 /** Demo seed phones (seed range 13800000xxx — never real PII). */
@@ -22,6 +25,7 @@ export const DEMO_CUSTOMERS: readonly CustomerRecord[] = Object.freeze([
     note: null,
     created_at: 1_700_000_000,
     updated_at: 1_700_000_100,
+    merged_into_id: null,
   }),
   Object.freeze({
     customer_id: "c2222222-2222-4222-8222-222222222222",
@@ -30,6 +34,7 @@ export const DEMO_CUSTOMERS: readonly CustomerRecord[] = Object.freeze([
     note: "常客",
     created_at: 1_700_000_000,
     updated_at: 1_700_000_200,
+    merged_into_id: null,
   }),
 ]);
 
@@ -61,18 +66,32 @@ export class MemoryCustomerStore implements CustomerStore {
   async search(query: string | undefined, limit: number): Promise<readonly CustomerSearchRow[]> {
     const capped = Math.max(0, Math.min(limit, 50));
     const q = typeof query === "string" ? query.trim() : "";
-    const filtered = this.rows.filter((row) => matchesQuery(row, q));
+    const filtered = this.rows.filter((row) => row.merged_into_id === null && matchesQuery(row, q));
     const newestFirst = [...filtered].sort((a, b) => b.updated_at - a.updated_at);
     return Object.freeze(newestFirst.slice(0, capped).map((row) => toSearchRow(row)));
   }
 
   async getByPhone(phone: string): Promise<CustomerRecord | null> {
-    return this.rows.find((row) => row.phone === phone) ?? null;
+    const row = this.rows.find((candidate) => candidate.phone === phone);
+    if (row === undefined) return null;
+    if (row.merged_into_id === null) return row;
+    return this.rows.find((candidate) => candidate.customer_id === row.merged_into_id) ?? null;
+  }
+
+  async getById(customerId: string): Promise<CustomerRecord | null> {
+    return (
+      this.rows.find((row) => row.customer_id === customerId && row.merged_into_id === null) ?? null
+    );
   }
 
   async upsert(input: CustomerUpsertInput): Promise<CustomerUpsertOutcome> {
     const now = input.now ?? Math.floor(Date.now() / 1000);
-    const existingIndex = this.rows.findIndex((row) => row.phone === input.phone);
+    const phoneIndex = this.rows.findIndex((row) => row.phone === input.phone);
+    const redirectedId = phoneIndex >= 0 ? (this.rows[phoneIndex]?.merged_into_id ?? null) : null;
+    const existingIndex =
+      redirectedId === null
+        ? phoneIndex
+        : this.rows.findIndex((row) => row.customer_id === redirectedId);
 
     if (existingIndex >= 0) {
       const current = this.rows[existingIndex]!;
@@ -83,6 +102,7 @@ export class MemoryCustomerStore implements CustomerStore {
         note: input.note !== undefined ? input.note : current.note,
         created_at: current.created_at,
         updated_at: now,
+        merged_into_id: null,
       });
       this.rows[existingIndex] = next;
       return Object.freeze({ customer: next, created: false });
@@ -95,9 +115,76 @@ export class MemoryCustomerStore implements CustomerStore {
       note: input.note ?? null,
       created_at: now,
       updated_at: now,
+      merged_into_id: null,
     });
     this.rows.push(created);
     return Object.freeze({ customer: created, created: true });
+  }
+
+  async update(input: CustomerUpdateInput): Promise<CustomerRecord | null> {
+    const index = this.rows.findIndex(
+      (row) => row.customer_id === input.customer_id && row.merged_into_id === null,
+    );
+    if (index < 0) return null;
+    const current = this.rows[index]!;
+    const nextPhone = input.phone ?? current.phone;
+    if (this.rows.some((row, rowIndex) => rowIndex !== index && row.phone === nextPhone)) {
+      return null;
+    }
+    const next = Object.freeze({
+      ...current,
+      phone: nextPhone,
+      name: input.name !== undefined ? input.name : current.name,
+      note: input.note !== undefined ? input.note : current.note,
+      updated_at: input.now,
+    });
+    this.rows[index] = next;
+    return next;
+  }
+
+  async merge(input: CustomerMergeInput): Promise<CustomerMergeResult | null> {
+    const sourceIndex = this.rows.findIndex(
+      (row) => row.customer_id === input.source_customer_id && row.merged_into_id === null,
+    );
+    const target = this.rows.find(
+      (row) => row.customer_id === input.target_customer_id && row.merged_into_id === null,
+    );
+    if (
+      sourceIndex < 0 ||
+      target === undefined ||
+      input.source_customer_id === input.target_customer_id
+    ) {
+      return null;
+    }
+    const source = this.rows[sourceIndex]!;
+    this.rows[sourceIndex] = Object.freeze({
+      ...source,
+      merged_into_id: target.customer_id,
+      updated_at: input.now,
+    });
+    return Object.freeze({
+      source_customer_id: source.customer_id,
+      target_customer_id: target.customer_id,
+      relinked_order_count: 0,
+    });
+  }
+
+  async findDuplicates(customerId: string, limit: number): Promise<readonly CustomerSearchRow[]> {
+    const source = await this.getById(customerId);
+    if (source === null || source.name === null) return Object.freeze([]);
+    const name = source.name.trim().toLocaleLowerCase();
+    return Object.freeze(
+      this.rows
+        .filter(
+          (row) =>
+            row.customer_id !== customerId &&
+            row.merged_into_id === null &&
+            row.name?.trim().toLocaleLowerCase() === name,
+        )
+        .sort((left, right) => right.updated_at - left.updated_at)
+        .slice(0, Math.min(limit, 20))
+        .map(toSearchRow),
+    );
   }
 }
 

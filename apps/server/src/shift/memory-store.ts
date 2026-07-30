@@ -63,6 +63,26 @@ export class MemoryShiftStore implements ShiftStore {
     return current;
   }
 
+  async listHistory(
+    orgId: string,
+    storeId: string,
+    dateFrom: string,
+    dateTo: string,
+    limit: number,
+  ): Promise<readonly ShiftClosingRecord[]> {
+    const prefix = `${orgId}|${storeId}|`;
+    return Object.freeze(
+      [...this.byDate]
+        .filter(
+          ([key, row]) =>
+            key.startsWith(prefix) && row.business_date >= dateFrom && row.business_date <= dateTo,
+        )
+        .map(([, row]) => row)
+        .sort((left, right) => right.business_date.localeCompare(left.business_date))
+        .slice(0, Math.min(limit, 100)),
+    );
+  }
+
   clear(): void {
     this.byDate.clear();
   }

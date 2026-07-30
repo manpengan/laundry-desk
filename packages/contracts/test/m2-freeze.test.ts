@@ -15,6 +15,8 @@ describe("M2 contract surface", () => {
   it("freezes the counter command and query surface", () => {
     expect(M2_CONTRACT_COMMAND_NAMES).toEqual([
       "customer.upsert",
+      "customer.update",
+      "customer.merge",
       "order.receive",
       "order.hold",
       "order.cancel",
@@ -32,10 +34,18 @@ describe("M2 contract surface", () => {
       // ADR-15: deliberate unfreeze so a fresh install can maintain its price
       // list. Further additions still require their own ADR.
       "catalog.item.upsert",
+      "garment.transition",
+      "garment.bulk_transition",
+      "garment.rework",
+      "garment.incident.record",
+      "garment.mark_lost",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("stats.day.summary");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("photo.list_by_order");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("fulfillment.workbench");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.duplicates");
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );

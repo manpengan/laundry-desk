@@ -1,0 +1,50 @@
+.ld-shift-history {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--lg-hair);
+}
+
+.ld-shift-history header,
+.ld-shift-history__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ld-shift-history h2,
+.ld-shift-history p {
+  margin: 0;
+}
+
+.ld-shift-history header p,
+.ld-shift-history__table-wrap > p {
+  margin-top: 4px;
+  color: var(--lg-ink2);
+  font-size: 13px;
+}
+
+.ld-shift-history__table-wrap {
+  margin-top: 14px;
+  overflow-x: auto;
+}
+
+.ld-shift-history table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ld-shift-history th,
+.ld-shift-history td {
+  padding: 10px;
+  border-bottom: 1px solid var(--lg-hair);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ld-shift-history th {
+  color: var(--lg-ink2);
+  font-weight: 600;
+}

@@ -193,6 +193,28 @@ function getHandler(deps: ShiftHandlerDeps): CommandHandler {
   };
 }
 
+function historyHandler(deps: ShiftHandlerDeps): CommandHandler {
+  return async (ctx): Promise<HandlerOutcome> => {
+    const input = asRecord(ctx.parsed);
+    const dateFrom = requireBusinessDate(input.date_from);
+    const dateTo = requireBusinessDate(input.date_to);
+    const limit =
+      typeof input.limit === "number" && Number.isSafeInteger(input.limit)
+        ? Math.min(input.limit, 100)
+        : 31;
+    const rows = await deps.store.listHistory(
+      ctx.tenant.orgId,
+      ctx.tenant.storeId,
+      dateFrom,
+      dateTo,
+      limit,
+    );
+    return Object.freeze({
+      result: Object.freeze({ shifts: Object.freeze(rows.map(toCloseResult)) }),
+    });
+  };
+}
+
 export function registerShiftCommandHandlers(
   registry: Readonly<{ registerHandler: (name: string, handler: CommandHandler) => void }>,
   deps: ShiftHandlerDeps,
@@ -205,4 +227,5 @@ export function registerShiftQueryHandlers(
   deps: ShiftHandlerDeps,
 ): void {
   registry.registerHandler("shift.get", getHandler(deps));
+  registry.registerHandler("shift.history", historyHandler(deps));
 }

@@ -1,0 +1,50 @@
+.ld-customer-governance {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-leaf);
+}
+
+.ld-customer-governance h3,
+.ld-customer-governance p {
+  margin: 0;
+}
+
+.ld-customer-governance__fields,
+.ld-customer-governance__merge {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.ld-customer-governance textarea {
+  display: block;
+  width: 100%;
+  min-height: 68px;
+  margin-top: 6px;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-paper);
+  color: var(--lg-ink);
+}
+
+.ld-customer-governance__duplicates {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--lg-hair);
+}
+
+.ld-customer-governance__duplicates p {
+  margin-top: 4px;
+  color: var(--lg-ink2);
+  font-size: 13px;
+}

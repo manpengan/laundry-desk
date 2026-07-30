@@ -30,10 +30,16 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
     await assertBusinessDayOpen(deps.isBusinessDayClosed, businessDate);
     const newId = deps.newId ?? randomUUID;
     const draftId = typeof input.draft_id === "string" ? input.draft_id : newId();
-    const phone = typeof input.customer_phone === "string" ? input.customer_phone : null;
-    const name = typeof input.customer_name === "string" ? input.customer_name : null;
+    let phone = typeof input.customer_phone === "string" ? input.customer_phone : null;
+    let name = typeof input.customer_name === "string" ? input.customer_name : null;
     if (phone !== null && deps.customer !== undefined) {
-      await deps.customer.upsert({ phone, ...(name !== null ? { name } : {}), now });
+      const customer = await deps.customer.upsert({
+        phone,
+        ...(name !== null ? { name } : {}),
+        now,
+      });
+      phone = customer.customer.phone;
+      name = customer.customer.name;
     }
     const orderLines: readonly OrderLineRecord[] = Object.freeze(
       lines.map((line, lineIndex) =>

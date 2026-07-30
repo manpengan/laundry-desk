@@ -218,6 +218,7 @@ require_tables() {
     laundry_schema_migrations orgs stores staffs staff_store_roles settings store_features audit_log
     sessions refresh_families refresh_tokens pin_challenges pin_lockouts orders order_lines garments
     ticket_counters catalog_items payments print_jobs customers shift_closings garment_photos
+    garment_status_log garment_incidents
   )
   local table
   for table in "${expected[@]}"; do
@@ -225,7 +226,7 @@ require_tables() {
     found="$(psql_app -c "SELECT to_regclass('public.${table}')::text")"
     [[ "${found}" == "${table}" ]] || die "missing formal table: ${table}"
   done
-  pass "all formal migrations (0001–0024) are present"
+  pass "all formal migrations (0001–0026) are present"
 }
 
 assert_default_closed() {

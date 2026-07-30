@@ -4,13 +4,16 @@ import { pathToFileURL } from "node:url";
 
 import {
   createDataToolDependencies,
-  createDatabaseBackup,
   dataToolErrorCode,
   LocalDataError,
   postgresRestoreCommand,
   prepareLocalDataContext,
-  verifyBackupFile,
 } from "./data-tools.mjs";
+import {
+  createDisasterRecoveryBackup,
+  restorePhotoSnapshot,
+  verifyDisasterRecoveryBackup,
+} from "./disaster-recovery.mjs";
 import {
   composeRunCommand,
   composeStopCommand,
@@ -36,27 +39,37 @@ export function parseRestoreArguments(argv) {
 const defaultDependencies = () =>
   Object.freeze({
     ...createDataToolDependencies(),
-    createDatabaseBackup,
+    createDatabaseBackup: createDisasterRecoveryBackup,
     prepareLocalDataContext,
     run: createSpawnRunner(),
-    verifyBackupFile,
+    verifyBackupFile: verifyDisasterRecoveryBackup,
+    restorePhotoSnapshot,
   });
 
 export async function runRestore(options, dependencies = defaultDependencies()) {
   const parsed = parseRestoreArguments(options.argv);
   const context = await dependencies.prepareLocalDataContext(options, dependencies);
   const source = await dependencies.verifyBackupFile(context, parsed.file, parsed.sha256);
-  const safetyBackup = await dependencies.createDatabaseBackup(
-    context,
-    { cwd: options.cwd, kind: "pre-restore" },
-    dependencies,
-  );
-  options.stdout(`Pre-restore backup: ${safetyBackup.path}\n`);
   const commandOptions = Object.freeze({ cwd: options.cwd, env: context.env });
   await dependencies.run(
     composeStopCommand("server", { project: context.project }),
     commandOptions,
   );
+  let safetyBackup;
+  try {
+    safetyBackup = await dependencies.createDatabaseBackup(
+      context,
+      { cwd: options.cwd, kind: "pre-restore" },
+      dependencies,
+    );
+  } catch (error) {
+    await dependencies.run(
+      composeUpCommand("server", { project: context.project }),
+      commandOptions,
+    );
+    throw error;
+  }
+  options.stdout(`Pre-restore backup: ${safetyBackup.path}\n`);
   const handle = await open(source.path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
     await dependencies.stream(postgresRestoreCommand(context.project), {
@@ -72,6 +85,9 @@ export async function runRestore(options, dependencies = defaultDependencies()) 
     composeRunCommand("migrate", [], { project: context.project }),
     commandOptions,
   );
+  if (source.snapshotPath !== undefined) {
+    await dependencies.restorePhotoSnapshot(context, source);
+  }
   await dependencies.run(composeUpCommand("server", { project: context.project }), commandOptions);
   options.stdout(`Restore complete: ${source.path}\n`);
   return Object.freeze({ source, safetyBackup });

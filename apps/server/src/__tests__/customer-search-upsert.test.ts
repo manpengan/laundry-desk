@@ -46,13 +46,17 @@ function buildBus(store = createMemoryCustomerStore()) {
   return { registry, queryRegistry, chainHooks, store };
 }
 
-test("query/command registry includes customer skeleton names", () => {
+test("query/command registry includes customer governance names", () => {
   const { registry, queryRegistry } = buildBus();
   assert.ok(queryRegistry.names().includes("customer.search"));
+  assert.ok(queryRegistry.names().includes("customer.get"));
+  assert.ok(queryRegistry.names().includes("customer.duplicates"));
   assert.ok(registry.names().includes("customer.upsert"));
+  assert.ok(registry.names().includes("customer.update"));
+  assert.ok(registry.names().includes("customer.merge"));
 });
 
-test("customer.search returns demo seed phones newest first", async () => {
+test("customer.search returns only masked phones and no notes", async () => {
   const { queryRegistry } = buildBus();
   const result = await executeQuery(
     new FakeSqlClient(),
@@ -65,13 +69,20 @@ test("customer.search returns demo seed phones newest first", async () => {
   assert.equal(result.ok, true, JSON.stringify(result));
   if (!result.ok) return;
   const data = result.data.result as {
-    customers: readonly { phone: string; name: string | null; customer_id: string }[];
+    customers: readonly {
+      phone_masked: string;
+      name: string | null;
+      customer_id: string;
+      note?: unknown;
+    }[];
   };
   assert.ok(data.customers.length >= DEMO_CUSTOMERS.length);
-  assert.ok(data.customers.some((row) => row.phone === "13800000111"));
-  assert.ok(data.customers.some((row) => row.phone === "13800000222"));
+  assert.ok(data.customers.some((row) => row.phone_masked === "138****0111"));
+  assert.ok(data.customers.some((row) => row.phone_masked === "138****0222"));
+  assert.ok(data.customers.every((row) => row.note === undefined));
+  assert.equal(JSON.stringify(data).includes("13800000"), false);
   // Demo seed: 00222 has higher updated_at → first
-  assert.equal(data.customers[0]?.phone, "13800000222");
+  assert.equal(data.customers[0]?.phone_masked, "138****0222");
 });
 
 test("customer.search filters by phone prefix and name", async () => {
@@ -85,9 +96,9 @@ test("customer.search filters by phone prefix and name", async () => {
   );
   assert.equal(byPhone.ok, true);
   if (!byPhone.ok) return;
-  const phoneRows = (byPhone.data.result as { customers: { phone: string }[] }).customers;
+  const phoneRows = (byPhone.data.result as { customers: { phone_masked: string }[] }).customers;
   assert.equal(phoneRows.length, 1);
-  assert.equal(phoneRows[0]?.phone, "13800000111");
+  assert.equal(phoneRows[0]?.phone_masked, "138****0111");
 
   const byName = await executeQuery(
     new FakeSqlClient(),
@@ -180,4 +191,92 @@ test("customer.upsert without order_write is PERMISSION_DENIED", async () => {
   assert.equal(result.ok, false);
   if (result.ok) return;
   assert.equal(result.error.code, "PERMISSION_DENIED");
+});
+
+test("customer detail, duplicate merge and old-phone redirect preserve one authority", async () => {
+  const store = createMemoryCustomerStore([]);
+  const source = await store.upsert({
+    customer_id: "11111111-1111-4111-8111-111111111111",
+    phone: "13800000333",
+    name: "同名客户",
+    note: "旧档案",
+    now: 100,
+  });
+  const target = await store.upsert({
+    customer_id: "22222222-2222-4222-8222-222222222222",
+    phone: "13800000444",
+    name: "同名客户",
+    note: "保留档案",
+    now: 200,
+  });
+  const duplicates = await store.findDuplicates(source.customer.customer_id, 20);
+  assert.equal(duplicates.length, 1);
+  assert.equal(duplicates[0]?.customer_id, target.customer.customer_id);
+
+  const merged = await store.merge({
+    source_customer_id: source.customer.customer_id,
+    target_customer_id: target.customer.customer_id,
+    store_id: DEMO_STORE_ID,
+    now: 300,
+  });
+  assert.deepEqual(merged, {
+    source_customer_id: source.customer.customer_id,
+    target_customer_id: target.customer.customer_id,
+    relinked_order_count: 0,
+  });
+  assert.equal(await store.getById(source.customer.customer_id), null);
+  assert.equal(
+    (await store.getByPhone(source.customer.phone))?.customer_id,
+    target.customer.customer_id,
+  );
+  const redirected = await store.upsert({
+    phone: source.customer.phone,
+    name: "合并后名称",
+    now: 400,
+  });
+  assert.equal(redirected.customer.customer_id, target.customer.customer_id);
+  assert.equal(redirected.customer.phone, target.customer.phone);
+  assert.equal(redirected.customer.name, "合并后名称");
+});
+
+test("customer.update and customer.merge fail closed at R3/R4 policy gates", async () => {
+  const { registry, chainHooks } = buildBus();
+  const update = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "customer.update",
+    {
+      customer_id: DEMO_CUSTOMERS[0]!.customer_id,
+      note: "仅详情可见",
+    },
+    {
+      registry,
+      actor: CLERK,
+      chainHooks,
+      pendingStore: processPendingActionStore,
+      stepUpProofStore: processStepUpProofStore,
+    },
+  );
+  assert.equal(update.ok, false);
+  if (!update.ok) assert.equal(update.error.code, "POLICY_CONFIRMATION_REQUIRED");
+
+  const merge = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "customer.merge",
+    {
+      source_customer_id: DEMO_CUSTOMERS[0]!.customer_id,
+      target_customer_id: DEMO_CUSTOMERS[1]!.customer_id,
+      reason: "同一客户重复建档",
+    },
+    {
+      registry,
+      actor: CLERK,
+      chainHooks,
+      pendingStore: processPendingActionStore,
+      stepUpProofStore: processStepUpProofStore,
+    },
+  );
+  assert.equal(merge.ok, false);
+  if (!merge.ok) assert.equal(merge.error.code, "POLICY_STEP_UP_REQUIRED");
 });

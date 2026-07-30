@@ -30,8 +30,54 @@ export const CustomerUpsertInputSchema = z.strictObject({
   note: z.string().max(256).optional(),
 });
 
+export const CustomerGetInputSchema = z.strictObject({
+  customer_id: z.uuid(),
+});
+
+export const CustomerUpdateInputSchema = z
+  .strictObject({
+    customer_id: z.uuid(),
+    phone: PhoneSchema.optional(),
+    name: z.string().trim().min(1).max(64).nullable().optional(),
+    note: z.string().trim().max(256).nullable().optional(),
+  })
+  .superRefine((input, context) => {
+    if (input.phone === undefined && input.name === undefined && input.note === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["customer_id"],
+        message: "At least one editable field is required",
+      });
+    }
+  });
+
+export const CustomerMergeInputSchema = z
+  .strictObject({
+    source_customer_id: z.uuid(),
+    target_customer_id: z.uuid(),
+    reason: z.string().trim().min(1).max(256),
+  })
+  .superRefine((input, context) => {
+    if (input.source_customer_id === input.target_customer_id) {
+      context.addIssue({
+        code: "custom",
+        path: ["target_customer_id"],
+        message: "Source and target customers must differ",
+      });
+    }
+  });
+
+export const CustomerDuplicatesInputSchema = z.strictObject({
+  customer_id: z.uuid(),
+  limit: z.number().int().positive().max(20).optional(),
+});
+
 type SearchInput = typeof CustomerSearchInputSchema;
 type UpsertInput = typeof CustomerUpsertInputSchema;
+type GetInput = typeof CustomerGetInputSchema;
+type UpdateInput = typeof CustomerUpdateInputSchema;
+type MergeInput = typeof CustomerMergeInputSchema;
+type DuplicatesInput = typeof CustomerDuplicatesInputSchema;
 
 /**
  * Search result row (documented for tests / handlers; not Zod-validated on wire).
@@ -42,9 +88,8 @@ type UpsertInput = typeof CustomerUpsertInputSchema;
  */
 export type CustomerSearchRow = Readonly<{
   customer_id: string;
-  phone: string;
+  phone_masked: string;
   name: string | null;
-  note: string | null;
   updated_at: number;
 }>;
 
@@ -59,13 +104,28 @@ export type CustomerUpsertResult = Readonly<{
   created: boolean;
 }>;
 
+export type CustomerDetailResult = Readonly<{
+  customer_id: string;
+  phone: string;
+  name: string | null;
+  note: string | null;
+  updated_at: number;
+}>;
+
+export type CustomerDuplicateRow = Readonly<{
+  customer_id: string;
+  phone_masked: string;
+  name: string | null;
+  updated_at: number;
+}>;
+
 /** 客户搜索：手机号前缀或姓名包含；PII 结果需脱敏声明。 */
 export const customerSearchQuery: QueryDefinition<SearchInput> = defineQuery({
   name: "customer.search",
   version: "0.2.0",
   description: "Search org customer profiles by phone prefix or name contains.",
   description_llm:
-    "Return org-scoped customer rows (customer_id, phone, name, note, updated_at). Match phone prefix or name substring. max 50 rows; default limit 20.",
+    "Return org-scoped active customer rows with a masked phone and no note. Match phone prefix or name substring. max 50 rows; default limit 20.",
   input: CustomerSearchInputSchema,
   risk: "R2",
   invariants: [],
@@ -74,7 +134,7 @@ export const customerSearchQuery: QueryDefinition<SearchInput> = defineQuery({
   offline_mode: "denied",
   data_classification: "pii",
   input_redaction: [],
-  result_redaction: [{ path: "/customers", strategy: "mask" }],
+  result_redaction: [{ path: "/customers/*/phone_masked", strategy: "mask" }],
   max_result_rows: 50,
 });
 
@@ -96,17 +156,95 @@ export const customerUpsertCommand: CommandDefinition<UpsertInput> = defineComma
   result_redaction: [{ path: "/phone", strategy: "mask" }],
 });
 
-export const CUSTOMER_COMMANDS = Object.freeze([customerUpsertCommand] as const);
+export const customerGetQuery: QueryDefinition<GetInput> = defineQuery({
+  name: "customer.get",
+  version: "0.1.0",
+  description: "Load one active customer profile by server id.",
+  description_llm:
+    "Return one active org-scoped customer profile with full phone and note for an authorized detail view.",
+  input: CustomerGetInputSchema,
+  risk: "R2",
+  invariants: [],
+  idempotent: true,
+  sideEffects: [],
+  offline_mode: "denied",
+  data_classification: "pii",
+  input_redaction: [],
+  result_redaction: [{ path: "/phone", strategy: "mask" }],
+  max_result_rows: 1,
+});
+
+export const customerDuplicatesQuery: QueryDefinition<DuplicatesInput> = defineQuery({
+  name: "customer.duplicates",
+  version: "0.1.0",
+  description: "Find bounded active duplicate candidates for one customer.",
+  description_llm:
+    "Return up to 20 same-name active customer candidates with masked phones; never return the source row.",
+  input: CustomerDuplicatesInputSchema,
+  risk: "R2",
+  invariants: [],
+  idempotent: true,
+  sideEffects: [],
+  offline_mode: "denied",
+  data_classification: "pii",
+  input_redaction: [],
+  result_redaction: [{ path: "/customers/*/phone_masked", strategy: "mask" }],
+  max_result_rows: 20,
+});
+
+export const customerUpdateCommand: CommandDefinition<UpdateInput> = defineCommand({
+  name: "customer.update",
+  version: "0.1.0",
+  description: "Edit one active customer profile by id.",
+  description_llm:
+    "Update an active org-scoped customer phone, name, or note. At least one field is required.",
+  input: CustomerUpdateInputSchema,
+  risk: "R3",
+  invariants: ["rbac.order_write"],
+  idempotent: true,
+  sideEffects: ["customer.updated", "audit.customer_event"],
+  offline_mode: "denied",
+  data_classification: "pii",
+  input_redaction: [{ path: "/phone", strategy: "mask" }],
+  result_redaction: [{ path: "/phone", strategy: "mask" }],
+});
+
+export const customerMergeCommand: CommandDefinition<MergeInput> = defineCommand({
+  name: "customer.merge",
+  version: "0.1.0",
+  description: "Merge a duplicate source customer into an active target customer.",
+  description_llm:
+    "High-risk merge: redirect the source profile to a distinct active target and relink this store's order snapshots. The source id remains as an auditable redirect.",
+  input: CustomerMergeInputSchema,
+  risk: "R4",
+  invariants: ["rbac.order_write"],
+  idempotent: true,
+  sideEffects: ["customer.merged", "audit.customer_event"],
+  offline_mode: "denied",
+  data_classification: "pii",
+  input_redaction: [],
+  result_redaction: [],
+});
+
+export const CUSTOMER_COMMANDS = Object.freeze([
+  customerUpsertCommand,
+  customerUpdateCommand,
+  customerMergeCommand,
+] as const);
 
 export const CUSTOMER_COMMAND_NAMES = Object.freeze(
   CUSTOMER_COMMANDS.map((command) => command.name),
-) as readonly ["customer.upsert"];
+) as readonly ["customer.upsert", "customer.update", "customer.merge"];
 
-export const CUSTOMER_QUERIES = Object.freeze([customerSearchQuery] as const);
+export const CUSTOMER_QUERIES = Object.freeze([
+  customerSearchQuery,
+  customerGetQuery,
+  customerDuplicatesQuery,
+] as const);
 
 export const CUSTOMER_QUERY_NAMES = Object.freeze(
   CUSTOMER_QUERIES.map((query) => query.name),
-) as readonly ["customer.search"];
+) as readonly ["customer.search", "customer.get", "customer.duplicates"];
 
 /** M2 customer command catalog (server command registry). */
 export const M2_CUSTOMER_COMMAND_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] =
