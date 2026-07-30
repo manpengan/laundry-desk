@@ -2,12 +2,17 @@ import { pathToFileURL } from "node:url";
 
 import {
   createDataToolDependencies,
-  createDatabaseBackup,
   dataToolErrorCode,
   LocalDataError,
   prepareLocalDataContext,
 } from "./data-tools.mjs";
-import { unwrapPackageManagerArguments } from "./compose.mjs";
+import { createDisasterRecoveryBackup } from "./disaster-recovery.mjs";
+import {
+  composeStopCommand,
+  composeUpCommand,
+  createSpawnRunner,
+  unwrapPackageManagerArguments,
+} from "./compose.mjs";
 
 export const parseBackupArguments = (argv) => {
   if (unwrapPackageManagerArguments(argv).length !== 0) {
@@ -15,16 +20,40 @@ export const parseBackupArguments = (argv) => {
   }
 };
 
-export async function runBackup(options, dependencies = createDataToolDependencies()) {
+const defaultDependencies = () =>
+  Object.freeze({
+    ...createDataToolDependencies(),
+    createDisasterRecoveryBackup,
+    run: createSpawnRunner(),
+  });
+
+export async function runBackup(options, dependencies = defaultDependencies()) {
   parseBackupArguments(options.argv);
   const context = await prepareLocalDataContext(options, dependencies);
-  const backup = await createDatabaseBackup(
-    context,
-    { cwd: options.cwd, kind: "backup" },
-    dependencies,
+  const commandOptions = Object.freeze({ cwd: options.cwd, env: context.env });
+  await dependencies.run(
+    composeStopCommand("server", { project: context.project }),
+    commandOptions,
   );
-  options.stdout(`Backup: ${backup.path}\nSHA-256: ${backup.sha256}\nBytes: ${backup.bytes}\n`);
-  return backup;
+  try {
+    const backup = await dependencies.createDisasterRecoveryBackup(
+      context,
+      { cwd: options.cwd, kind: "backup" },
+      dependencies,
+    );
+    options.stdout(
+      `Recovery set: ${backup.path}\n` +
+        `Confirm SHA-256: ${backup.sha256}\n` +
+        `Database SHA-256: ${backup.database_sha256}\n` +
+        `Photo files: ${backup.photo_files}\nBytes: ${backup.bytes}\n`,
+    );
+    return backup;
+  } finally {
+    await dependencies.run(
+      composeUpCommand("server", { project: context.project }),
+      commandOptions,
+    );
+  }
 }
 
 const isMainModule = () => {

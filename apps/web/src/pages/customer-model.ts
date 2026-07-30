@@ -22,25 +22,43 @@ export function parseCustomerRows(value: unknown): readonly CustomerRowView[] | 
     if (
       !isRecord(item) ||
       typeof item.customer_id !== "string" ||
-      typeof item.phone !== "string" ||
+      typeof item.phone_masked !== "string" ||
       typeof item.updated_at !== "number" ||
       !Number.isSafeInteger(item.updated_at)
     ) {
       return null;
     }
     const name = item.name === null || item.name === undefined ? null : String(item.name);
-    const note = item.note === null || item.note === undefined ? null : String(item.note);
     rows.push(
       Object.freeze({
         customer_id: item.customer_id,
-        phone: item.phone,
+        phone: item.phone_masked,
         name,
-        note,
+        note: null,
         updated_at: item.updated_at,
       }),
     );
   }
   return Object.freeze(rows);
+}
+
+export function parseCustomerDetail(value: unknown): CustomerRowView | null {
+  if (
+    !isRecord(value) ||
+    typeof value.customer_id !== "string" ||
+    typeof value.phone !== "string" ||
+    typeof value.updated_at !== "number" ||
+    !Number.isSafeInteger(value.updated_at)
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    customer_id: value.customer_id,
+    phone: value.phone,
+    name: value.name === null || value.name === undefined ? null : String(value.name),
+    note: value.note === null || value.note === undefined ? null : String(value.note),
+    updated_at: value.updated_at,
+  });
 }
 
 export function formatCustomerUpdatedAt(epochSec: number): string {

@@ -60,4 +60,11 @@ export type ShiftStore = Readonly<{
   ) => Promise<ShiftClosingRecord | null>;
   close: (input: ShiftCloseInput) => Promise<ShiftClosingRecord>;
   getMostRecent: (orgId: string, storeId: string) => Promise<ShiftClosingRecord | null>;
+  listHistory: (
+    orgId: string,
+    storeId: string,
+    dateFrom: string,
+    dateTo: string,
+    limit: number,
+  ) => Promise<readonly ShiftClosingRecord[]>;
 }>;

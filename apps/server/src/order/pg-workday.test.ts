@@ -24,6 +24,7 @@ import type { TenantContext } from "../db/types.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { createPgCatalogStore } from "../catalog/pg-catalog-store.js";
 import { createPgCustomerStore } from "../customer/pg-customer-store.js";
+import { createPgFulfillmentStore } from "../fulfillment/pg-store.js";
 import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
 import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
@@ -101,6 +102,8 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     );
 
     const orderStore = createPgOrderStore(appPool);
+    const customerStore = createPgCustomerStore(appPool, { orgId: DEMO_ORG_ID });
+    const fulfillmentStore = createPgFulfillmentStore(appPool);
     const shiftStore = createPgShiftStore(appPool, {
       orgId: DEMO_ORG_ID,
       storeId: DEMO_STORE_ID,
@@ -109,7 +112,7 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     const { registry, chainHooks } = createRegisteredM1Bus({
       order: Object.freeze({
         store: orderStore,
-        customer: createPgCustomerStore(appPool, { orgId: DEMO_ORG_ID }),
+        customer: customerStore,
         catalog: createPgCatalogStore(appPool, {
           orgId: DEMO_ORG_ID,
           storeId: DEMO_STORE_ID,
@@ -124,6 +127,7 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
         now: fixedNow,
       }),
       stats: Object.freeze({ source: statsSource, timeZone: LOCAL_PROFILE.timezone }),
+      fulfillment: Object.freeze({ store: fulfillmentStore, now: fixedNow }),
     });
 
     const issue = async (name: string, input: unknown, confirmRef?: string) =>
@@ -205,6 +209,70 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       },
       "stats aggregate must reflect the real order and payment ledgers",
     );
+
+    const garmentIds = await readGarmentIds(appPool, received.order_id);
+    assert.equal(garmentIds.length, 2);
+    await run("garment.bulk_transition", {
+      garment_ids: garmentIds,
+      target_status: "washing",
+    });
+    await run("garment.incident.record", {
+      garment_id: garmentIds[0],
+      kind: "damage",
+      note: "验收污渍复核",
+      compensation_cents: 0,
+    });
+    await run("garment.rework", {
+      garment_ids: garmentIds,
+      reason: "验收返工",
+    });
+    await run("garment.bulk_transition", {
+      garment_ids: garmentIds,
+      target_status: "ready",
+    });
+    await run("garment.bulk_transition", {
+      garment_ids: garmentIds,
+      target_status: "racked",
+    });
+    assert.deepEqual(
+      await readFulfillment(appPool, received.order_id),
+      { statuses: ["racked", "racked"], statusLogs: 8, incidents: 3 },
+      "fulfillment transitions and incidents persist atomically on real PostgreSQL",
+    );
+
+    const sourceCustomer = await customerStore.getByPhone(phone);
+    assert.ok(sourceCustomer);
+    const targetPhone = `138${phone.slice(3)}`;
+    const targetCustomer = (
+      await customerStore.upsert({
+        phone: targetPhone,
+        name: "验收顾客",
+        note: "保留目标备注",
+        now: fixedNow(),
+      })
+    ).customer;
+    const duplicateIds = (await customerStore.findDuplicates(sourceCustomer.customer_id, 20)).map(
+      (candidate) => candidate.customer_id,
+    );
+    assert.ok(duplicateIds.includes(targetCustomer.customer_id));
+    assert.deepEqual(
+      await customerStore.merge({
+        source_customer_id: sourceCustomer.customer_id,
+        target_customer_id: targetCustomer.customer_id,
+        store_id: DEMO_STORE_ID,
+        now: fixedNow(),
+      }),
+      {
+        source_customer_id: sourceCustomer.customer_id,
+        target_customer_id: targetCustomer.customer_id,
+        relinked_order_count: 1,
+      },
+    );
+    const redirectedCustomer = await customerStore.getByPhone(phone);
+    assert.equal(redirectedCustomer?.customer_id, targetCustomer.customer_id);
+    assert.equal(redirectedCustomer?.phone, targetPhone);
+    assert.equal(redirectedCustomer?.note, "保留目标备注");
+    assert.equal(await readOrderCustomerPhone(appPool, received.order_id), targetPhone);
 
     // Repay the outstanding debt.
     await run("payment.repay", {
@@ -316,6 +384,61 @@ type OrderSnapshot = Readonly<{
   picked_up_count: number;
   payment_count: number;
 }>;
+
+async function readGarmentIds(
+  appPool: ReturnType<typeof createPgPool>,
+  orderId: string,
+): Promise<readonly string[]> {
+  return withPoolClient(appPool, (sql) =>
+    withTenantTransaction(sql, TENANT, async (tx) => {
+      const result = await tx.query<{ id: string }>(
+        "SELECT id::text FROM garments WHERE order_id = $1::uuid ORDER BY id",
+        [orderId],
+      );
+      return Object.freeze(result.rows.map((row) => row.id));
+    }),
+  );
+}
+
+async function readFulfillment(
+  appPool: ReturnType<typeof createPgPool>,
+  orderId: string,
+): Promise<Readonly<{ statuses: readonly string[]; statusLogs: number; incidents: number }>> {
+  return withPoolClient(appPool, (sql) =>
+    withTenantTransaction(sql, TENANT, async (tx) => {
+      const garments = await tx.query<{ status: string }>(
+        "SELECT status FROM garments WHERE order_id = $1::uuid ORDER BY id",
+        [orderId],
+      );
+      const counts = await tx.query<{ status_logs: string; incidents: string }>(
+        `SELECT
+           (SELECT count(*) FROM garment_status_log WHERE order_id = $1::uuid)::text AS status_logs,
+           (SELECT count(*) FROM garment_incidents WHERE order_id = $1::uuid)::text AS incidents`,
+        [orderId],
+      );
+      return Object.freeze({
+        statuses: Object.freeze(garments.rows.map((row) => row.status)),
+        statusLogs: Number(counts.rows[0]?.status_logs ?? "0"),
+        incidents: Number(counts.rows[0]?.incidents ?? "0"),
+      });
+    }),
+  );
+}
+
+async function readOrderCustomerPhone(
+  appPool: ReturnType<typeof createPgPool>,
+  orderId: string,
+): Promise<string | null> {
+  return withPoolClient(appPool, (sql) =>
+    withTenantTransaction(sql, TENANT, async (tx) => {
+      const result = await tx.query<{ customer_phone: string | null }>(
+        "SELECT customer_phone FROM orders WHERE id = $1::uuid",
+        [orderId],
+      );
+      return result.rows[0]?.customer_phone ?? null;
+    }),
+  );
+}
 
 async function readOrder(
   appPool: ReturnType<typeof createPgPool>,

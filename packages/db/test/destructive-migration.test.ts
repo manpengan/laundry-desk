@@ -76,6 +76,8 @@ describe("destructive migration static reject", () => {
       "0022_print_job_artifact.sql",
       "0023_photo_file_integrity.sql",
       "0024_photo_delete_grant.sql",
+      "0025_fulfillment_operations.sql",
+      "0026_customer_profile_governance.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

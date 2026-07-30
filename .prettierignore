@@ -1,5 +1,6 @@
 # Generated / committed snapshots — serializer owns formatting (JSON.stringify indent 2).
 packages/contracts/openapi/**
+coverage/**
 
 # Generated SPA bundle — sync-spa owns file bytes and manifest hashes.
 apps/edge-agent/resources/spa/**

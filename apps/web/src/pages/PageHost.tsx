@@ -13,6 +13,7 @@ import { PickupPage } from "./PickupPage.js";
 import { ReceivePage } from "./ReceivePage.js";
 import { SettingsPage } from "./SettingsPage.js";
 import { StatsPage } from "./StatsPage.js";
+import { FulfillmentPage } from "./FulfillmentPage.js";
 
 export type PageHostProps = {
   activeId: NavItemId;
@@ -92,6 +93,23 @@ export function PageHost({
   }
 
   if (
+    activeId === "fulfillment" &&
+    session !== undefined &&
+    authClient !== undefined &&
+    commandClient !== undefined &&
+    queryClient !== undefined
+  ) {
+    return (
+      <FulfillmentPage
+        queryClient={queryClient}
+        commandClient={commandClient}
+        authClient={authClient}
+        session={session}
+      />
+    );
+  }
+
+  if (
     activeId === "customers" &&
     session !== undefined &&
     queryClient !== undefined &&
@@ -101,6 +119,8 @@ export function PageHost({
       <CustomersPage
         queryClient={queryClient}
         commandClient={commandClient}
+        {...(authClient === undefined ? {} : { authClient })}
+        session={session}
         {...(photoPort === undefined ? {} : { photoPort })}
         onOpenPickup={(orderId) => {
           setPickupOrderId(orderId);

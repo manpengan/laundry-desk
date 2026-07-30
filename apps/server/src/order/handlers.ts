@@ -36,8 +36,8 @@ async function upsertCustomerForReceipt(
   phone: string,
   name: string | undefined,
   now: number,
-): Promise<void> {
-  await customer.upsert({
+): ReturnType<CustomerStore["upsert"]> {
+  return customer.upsert({
     phone,
     ...(name !== undefined ? { name } : {}),
     now,
@@ -92,17 +92,24 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
     const businessDate = deriveBusinessDate(now, deps.timeZone, deps.rolloverHour);
     await assertBusinessDayOpen(deps.isBusinessDayClosed, businessDate);
     const dayKey = businessDate.replaceAll("-", "");
-    const customerPhone =
+    let customerPhone =
       typeof input.customer_phone === "string" && input.customer_phone.length > 0
         ? input.customer_phone
         : null;
-    const customerName =
+    let customerName =
       typeof input.customer_name === "string" && input.customer_name.length > 0
         ? input.customer_name
         : null;
 
     if (customerPhone !== null && deps.customer !== undefined) {
-      await upsertCustomerForReceipt(deps.customer, customerPhone, customerName ?? undefined, now);
+      const customer = await upsertCustomerForReceipt(
+        deps.customer,
+        customerPhone,
+        customerName ?? undefined,
+        now,
+      );
+      customerPhone = customer.customer.phone;
+      customerName = customer.customer.name;
     }
 
     const seq = await deps.store.nextTicketSeq(ctx.tenant.orgId, ctx.tenant.storeId, dayKey);
@@ -256,7 +263,7 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
       balance_cents: order.balance_cents,
       collect_cents: collectCents,
       order_status: "open",
-      fulfillment_enabled: false,
+      fulfillment_enabled: true,
     });
     if (!plan.ok) {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));

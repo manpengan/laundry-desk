@@ -4,12 +4,20 @@
 
 import { Button, Input, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AuthClient } from "../auth/AuthClient.js";
+import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import type { PrintJobView } from "../shell/print-jobs.js";
 import { CustomerDetail } from "./CustomerDetail.js";
+import { CustomerGovernancePanel } from "./CustomerGovernancePanel.js";
 import { loadCustomerHistory } from "./customer-history.js";
-import { parseCustomerRows, type CustomerRowView, unwrapQueryResult } from "./customer-model.js";
+import {
+  parseCustomerDetail,
+  parseCustomerRows,
+  type CustomerRowView,
+  unwrapQueryResult,
+} from "./customer-model.js";
 import { OrderDetailDrawer } from "./OrderDetailDrawer.js";
 import type { OrderListRowView } from "./OrdersList.js";
 
@@ -23,6 +31,8 @@ export {
 export type CustomersPageProps = {
   queryClient: QueryPort;
   commandClient: CommandPort;
+  authClient?: AuthClient;
+  session?: SessionView;
   photoPort?: PhotoPort;
   /** Skip auto-search on mount (tests). */
   autoLoad?: boolean;
@@ -40,6 +50,8 @@ const PHONE_RE = /^1[3-9]\d{9}$/u;
 export function CustomersPage({
   queryClient,
   commandClient,
+  authClient,
+  session,
   photoPort,
   autoLoad = true,
   initialSelected,
@@ -122,13 +134,35 @@ export function CustomersPage({
     };
   }, [queryClient, selected, toast]);
 
-  const selectCustomer = useCallback((row: CustomerRowView) => {
-    setOrderRows([]);
-    setPrintJobs(null);
-    setOrdersBusy(true);
-    setDetailOrderId(null);
-    setSelected(Object.freeze({ ...row }));
-  }, []);
+  const selectCustomer = useCallback(
+    async (row: CustomerRowView) => {
+      setBusy(true);
+      setOrderRows([]);
+      setPrintJobs(null);
+      setOrdersBusy(true);
+      setDetailOrderId(null);
+      try {
+        const result = await queryClient.execute<unknown>("customer.get", {
+          customer_id: row.customer_id,
+        });
+        if (!result.ok) {
+          toast.push(result.error.message ?? result.error.code, "error");
+          setOrdersBusy(false);
+          return;
+        }
+        const detail = parseCustomerDetail(unwrapQueryResult(result.data));
+        if (detail === null) {
+          toast.push("客户详情无法解析", "error");
+          setOrdersBusy(false);
+          return;
+        }
+        setSelected(detail);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [queryClient, toast],
+  );
 
   const closeDetail = useCallback(() => {
     setSelected(null);
@@ -236,7 +270,7 @@ export function CustomersPage({
               <button
                 type="button"
                 className="ld-customers-list__btn"
-                onClick={() => selectCustomer(row)}
+                onClick={() => void selectCustomer(row)}
                 data-testid="customers-row"
                 aria-pressed={selected?.customer_id === row.customer_id}
               >
@@ -246,9 +280,6 @@ export function CustomersPage({
                   </span>
                   <span className="ld-customers-list__name">{row.name ?? "—"}</span>
                 </div>
-                {row.note !== null && row.note.length > 0 ? (
-                  <div className="ld-customers-list__note">{row.note}</div>
-                ) : null}
               </button>
             </li>
           ))
@@ -256,15 +287,29 @@ export function CustomersPage({
       </ul>
 
       {selected !== null ? (
-        <CustomerDetail
-          customer={selected}
-          orders={orderRows}
-          printJobs={printJobs}
-          busy={ordersBusy}
-          onClose={closeDetail}
-          onOpenOrder={setDetailOrderId}
-          {...(onOpenPickup === undefined ? {} : { onOpenPickup })}
-        />
+        <>
+          <CustomerDetail
+            customer={selected}
+            orders={orderRows}
+            printJobs={printJobs}
+            busy={ordersBusy}
+            onClose={closeDetail}
+            onOpenOrder={setDetailOrderId}
+            {...(onOpenPickup === undefined ? {} : { onOpenPickup })}
+          />
+          <CustomerGovernancePanel
+            customer={selected}
+            queryClient={queryClient}
+            commandClient={commandClient}
+            {...(authClient === undefined ? {} : { authClient })}
+            {...(session === undefined ? {} : { session })}
+            onUpdated={() => void selectCustomer(selected)}
+            onMerged={() => {
+              closeDetail();
+              void search();
+            }}
+          />
+        </>
       ) : null}
       <OrderDetailDrawer
         open={detailOrderId !== null}

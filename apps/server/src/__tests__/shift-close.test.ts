@@ -110,10 +110,42 @@ test("command registry includes shift.close when shift deps present", () => {
   const { registry, queryRegistry } = buildBus();
   assert.ok(registry.names().includes("shift.close"));
   assert.ok(queryRegistry.names().includes("shift.get"));
+  assert.ok(queryRegistry.names().includes("shift.history"));
   assert.ok(registry.get("shift.close")?.handler);
   assert.ok(queryRegistry.get("shift.get")?.handler);
   assert.equal(registry.get("shift.close")?.definition.risk, "R3");
   assert.equal(queryRegistry.get("shift.get")?.definition.risk, "R1");
+});
+
+test("shift.history returns frozen closings newest first within the bounded range", async () => {
+  const bus = buildBus();
+  const first = await closeWithConfirm(bus, {
+    business_date: "2024-07-21",
+    signature_name: "早班",
+    counted_cash_cents: 100,
+  });
+  assert.equal(first.ok, true, JSON.stringify(first));
+  const second = await closeWithConfirm(bus, {
+    business_date: BUSINESS_DATE,
+    signature_name: "晚班",
+    counted_cash_cents: 200,
+  });
+  assert.equal(second.ok, true, JSON.stringify(second));
+
+  const history = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "shift.history",
+    { date_from: "2024-07-01", date_to: BUSINESS_DATE, limit: 10 },
+    { registry: bus.queryRegistry, actor: CLERK },
+  );
+  assert.equal(history.ok, true, JSON.stringify(history));
+  if (!history.ok) return;
+  const rows = (history.data.result as { shifts: { business_date: string }[] }).shifts;
+  assert.deepEqual(
+    rows.map((row) => row.business_date),
+    [BUSINESS_DATE, "2024-07-21"],
+  );
 });
 
 test("shift.close without confirm_ref is blocked with POLICY_CONFIRMATION_REQUIRED", async () => {

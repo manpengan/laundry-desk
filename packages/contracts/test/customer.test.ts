@@ -12,8 +12,12 @@ import {
   M2_CUSTOMER_QUERY_NAMES,
   M2_SKELETON_COMMAND_NAMES,
   M2_SKELETON_DEFINITIONS,
+  customerDuplicatesQuery,
+  customerGetQuery,
+  customerMergeCommand,
   customerSearchQuery,
   customerUpsertCommand,
+  customerUpdateCommand,
   isContractDefinition,
   parseContractInput,
 } from "../src/index.js";
@@ -26,26 +30,33 @@ describe("M2 customer archive skeleton", () => {
       expect(definition.risk).toBe("R2");
       expect(definition.offline_mode).toBe("denied");
       expect(definition.data_classification).toBe("pii");
-      expect(definition.max_result_rows).toBe(50);
+      expect(definition.max_result_rows).toBeGreaterThan(0);
       expect(definition.result_redaction.length).toBeGreaterThan(0);
     }
     for (const definition of CUSTOMER_COMMANDS) {
       expect(isContractDefinition(definition)).toBe(true);
       expect(definition.kind).toBe("command");
-      expect(definition.risk).toBe("R2");
-      expect(definition.offline_mode).toBe("grant");
+      expect(["R2", "R3", "R4"]).toContain(definition.risk);
       expect(definition.data_classification).toBe("pii");
       expect(definition.idempotent).toBe(true);
     }
   });
 
   it("exports stable names and M2 customer aliases", () => {
-    expect([...CUSTOMER_QUERY_NAMES]).toEqual(["customer.search"]);
-    expect([...CUSTOMER_COMMAND_NAMES]).toEqual(["customer.upsert"]);
+    expect([...CUSTOMER_QUERY_NAMES]).toEqual([
+      "customer.search",
+      "customer.get",
+      "customer.duplicates",
+    ]);
+    expect([...CUSTOMER_COMMAND_NAMES]).toEqual([
+      "customer.upsert",
+      "customer.update",
+      "customer.merge",
+    ]);
     expect([...M2_CUSTOMER_QUERY_NAMES]).toEqual([...CUSTOMER_QUERY_NAMES]);
     expect([...M2_CUSTOMER_COMMAND_NAMES]).toEqual([...CUSTOMER_COMMAND_NAMES]);
-    expect(M2_CUSTOMER_QUERY_DEFINITIONS).toHaveLength(1);
-    expect(M2_CUSTOMER_COMMAND_DEFINITIONS).toHaveLength(1);
+    expect(M2_CUSTOMER_QUERY_DEFINITIONS).toHaveLength(3);
+    expect(M2_CUSTOMER_COMMAND_DEFINITIONS).toHaveLength(3);
     expect(M2_CUSTOMER_QUERY_DEFINITIONS[0]?.name).toBe("customer.search");
     expect(M2_CUSTOMER_COMMAND_DEFINITIONS[0]?.name).toBe("customer.upsert");
   });
@@ -102,7 +113,7 @@ describe("M2 customer archive skeleton", () => {
     expect(customerSearchQuery.data_classification).toBe("pii");
     expect(customerSearchQuery.max_result_rows).toBe(50);
     expect(customerSearchQuery.result_redaction).toEqual([
-      { path: "/customers", strategy: "mask" },
+      { path: "/customers/*/phone_masked", strategy: "mask" },
     ]);
 
     expect(customerUpsertCommand.name).toBe("customer.upsert");
@@ -110,5 +121,10 @@ describe("M2 customer archive skeleton", () => {
     expect(customerUpsertCommand.offline_mode).toBe("grant");
     expect(customerUpsertCommand.invariants).toContain("rbac.order_write");
     expect(customerUpsertCommand.input_redaction).toEqual([{ path: "/phone", strategy: "mask" }]);
+    expect(customerGetQuery.max_result_rows).toBe(1);
+    expect(customerDuplicatesQuery.max_result_rows).toBe(20);
+    expect(customerUpdateCommand.risk).toBe("R3");
+    expect(customerMergeCommand.risk).toBe("R4");
+    expect(customerMergeCommand.offline_mode).toBe("denied");
   });
 });

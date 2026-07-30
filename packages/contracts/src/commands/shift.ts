@@ -30,6 +30,22 @@ export const ShiftGetInputSchema = z.strictObject({
   business_date: BusinessDateSchema,
 });
 
+export const ShiftHistoryInputSchema = z
+  .strictObject({
+    date_from: BusinessDateSchema,
+    date_to: BusinessDateSchema,
+    limit: z.number().int().positive().max(100).optional(),
+  })
+  .superRefine((input, context) => {
+    if (input.date_from > input.date_to) {
+      context.addIssue({
+        code: "custom",
+        path: ["date_to"],
+        message: "date_to must not precede date_from",
+      });
+    }
+  });
+
 /**
  * Close result / get row (documented for tests / handlers; not Zod-validated on wire).
  *
@@ -65,6 +81,7 @@ export type ShiftClosingResult = Readonly<{
 
 type CloseInput = typeof ShiftCloseInputSchema;
 type GetInput = typeof ShiftGetInputSchema;
+type HistoryInput = typeof ShiftHistoryInputSchema;
 
 /** 交班日结：快照当日 stats 并写入签字记录；同日仅一次。 */
 export const shiftCloseCommand: CommandDefinition<CloseInput> = defineCommand({
@@ -106,17 +123,36 @@ export const shiftGetQuery: QueryDefinition<GetInput> = defineQuery({
   max_result_rows: 1,
 });
 
+/** 历史交班：按营业日区间返回已冻结快照，供核对和 CSV 导出。 */
+export const shiftHistoryQuery: QueryDefinition<HistoryInput> = defineQuery({
+  name: "shift.history",
+  version: "0.1.0",
+  description: "List bounded frozen shift closings for a business-date range.",
+  description_llm:
+    "Return up to 100 store-scoped shift closings newest first, including integer-fen cash reconciliation fields. Never recompute historical rows.",
+  input: ShiftHistoryInputSchema,
+  risk: "R1",
+  invariants: [],
+  idempotent: true,
+  sideEffects: [],
+  offline_mode: "denied",
+  data_classification: "internal",
+  input_redaction: [],
+  result_redaction: [],
+  max_result_rows: 100,
+});
+
 export const SHIFT_COMMANDS = Object.freeze([shiftCloseCommand] as const);
 
 export const SHIFT_COMMAND_NAMES = Object.freeze(
   SHIFT_COMMANDS.map((command) => command.name),
 ) as readonly ["shift.close"];
 
-export const SHIFT_QUERIES = Object.freeze([shiftGetQuery] as const);
+export const SHIFT_QUERIES = Object.freeze([shiftGetQuery, shiftHistoryQuery] as const);
 
 export const SHIFT_QUERY_NAMES = Object.freeze(
   SHIFT_QUERIES.map((query) => query.name),
-) as readonly ["shift.get"];
+) as readonly ["shift.get", "shift.history"];
 
 /** M2 shift command catalog (server command registry). */
 export const M2_SHIFT_COMMAND_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] =

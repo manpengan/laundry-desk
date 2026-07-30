@@ -1,5 +1,8 @@
 @import "./order-form.css";
 @import "./counter-ui.css";
+@import "./customers.css";
+@import "./fulfillment.css";
+@import "./shift-history.css";
 
 /* Counter shell layout (UI spec §3). Uses --lg-* tokens from @laundry/ui. */
 

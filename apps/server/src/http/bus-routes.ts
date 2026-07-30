@@ -64,6 +64,7 @@ function createBus(runtime: LocalRuntime) {
     customer: runtime.customer,
     shift: runtime.shift,
     photo: runtime.photo,
+    fulfillment: runtime.fulfillment,
   });
 }
 

@@ -9,6 +9,7 @@ import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { downloadDaySummaryCsv } from "./day-summary-csv.js";
 import { ShiftClosePanel } from "./ShiftClosePanel.js";
+import { ShiftHistoryPanel } from "./ShiftHistoryPanel.js";
 
 export type DaySummaryView = Readonly<{
   business_date: string;
@@ -248,6 +249,9 @@ export function StatsPage({
           {...(session !== undefined ? { session } : {})}
           {...(authClient !== undefined ? { authClient } : {})}
         />
+      ) : null}
+      {dateText.length > 0 ? (
+        <ShiftHistoryPanel queryClient={queryClient} initialDate={dateText} />
       ) : null}
     </main>
   );

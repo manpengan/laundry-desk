@@ -136,12 +136,26 @@ export {
   CUSTOMER_QUERY_NAMES,
   CUSTOMER_QUERIES,
   CustomerSearchInputSchema,
+  CustomerGetInputSchema,
+  CustomerUpdateInputSchema,
+  CustomerMergeInputSchema,
+  CustomerDuplicatesInputSchema,
   CustomerUpsertInputSchema,
   PhoneSchema,
   customerSearchQuery,
+  customerGetQuery,
+  customerDuplicatesQuery,
+  customerUpdateCommand,
+  customerMergeCommand,
   customerUpsertCommand,
 } from "./customer.js";
-export type { CustomerSearchResult, CustomerSearchRow, CustomerUpsertResult } from "./customer.js";
+export type {
+  CustomerDetailResult,
+  CustomerDuplicateRow,
+  CustomerSearchResult,
+  CustomerSearchRow,
+  CustomerUpsertResult,
+} from "./customer.js";
 export {
   SHIFT_COMMAND_NAMES,
   SHIFT_COMMANDS,
@@ -149,8 +163,10 @@ export {
   SHIFT_QUERIES,
   ShiftCloseInputSchema,
   ShiftGetInputSchema,
+  ShiftHistoryInputSchema,
   shiftCloseCommand,
   shiftGetQuery,
+  shiftHistoryQuery,
 } from "./shift.js";
 export type { ShiftClosingResult } from "./shift.js";
 export {
@@ -169,6 +185,30 @@ export {
   photoDeleteCommand,
   photoRegisterCommand,
 } from "./photo.js";
+export {
+  FULFILLMENT_COMMAND_NAMES,
+  FULFILLMENT_COMMANDS,
+  FULFILLMENT_QUERIES,
+  FULFILLMENT_QUERY_NAMES,
+  FulfillmentGarmentStatusSchema,
+  FulfillmentOperationalTargetSchema,
+  FulfillmentWorkbenchInputSchema,
+  GarmentBulkTransitionInputSchema,
+  GarmentIncidentKindSchema,
+  GarmentIncidentRecordInputSchema,
+  GarmentMarkLostInputSchema,
+  GarmentReworkInputSchema,
+  GarmentTransitionInputSchema,
+  M3_FULFILLMENT_COMMAND_DEFINITIONS,
+  M3_FULFILLMENT_QUERY_DEFINITIONS,
+  fulfillmentWorkbenchQuery,
+  garmentBulkTransitionCommand,
+  garmentIncidentRecordCommand,
+  garmentMarkLostCommand,
+  garmentReworkCommand,
+  garmentTransitionCommand,
+} from "./fulfillment.js";
+export type { FulfillmentWorkbenchResult, FulfillmentWorkbenchRow } from "./fulfillment.js";
 export type {
   PhotoListByOrderResult,
   PhotoRegisterResult,

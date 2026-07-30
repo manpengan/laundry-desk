@@ -68,6 +68,18 @@ Fastify 启动前。
 同目录的 `photos/` 是持久化业务数据，`local:down` 不会删除。不要把它复制进仓库；
 备份时应与 PostgreSQL 数据保持同一恢复点，也不要手工删除其中的所有权标记。
 
+`pnpm local:backup` 会先停止 Web Server，在同一静止窗口生成 PostgreSQL dump 和
+私有照片快照，并用 `.bundle.json` 的 SHA-256 将二者绑定为一个恢复集；完成后恢复
+Server。恢复时必须提供输出中的 `Confirm SHA-256`，工具会逐文件校验照片、先生成
+完整的恢复前备份，再恢复数据库与照片：
+
+```bash
+pnpm local:restore -- --file "/absolute/path/laundry-v2-backup-....dump" \
+  --confirm-sha256 "<Confirm SHA-256>"
+```
+
+恢复集目录及文件必须保持 `0700/0600`，不得拆分、重命名或手工修改。
+
 ## 验证
 
 ```bash

@@ -12,6 +12,10 @@ import {
   M2_CUSTOMER_QUERY_DEFINITIONS,
   M2_CUSTOMER_QUERY_NAMES,
 } from "./customer.js";
+import {
+  M3_FULFILLMENT_COMMAND_DEFINITIONS,
+  M3_FULFILLMENT_QUERY_DEFINITIONS,
+} from "./fulfillment.js";
 import { ORDER_COMMANDS, ORDER_COMMAND_NAMES, ORDER_QUERIES, ORDER_QUERY_NAMES } from "./order.js";
 import { PAYMENT_COMMANDS, PAYMENT_COMMAND_NAMES } from "./payment.js";
 import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./platform.js";
@@ -60,6 +64,7 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
   ...M2_SHIFT_COMMAND_DEFINITIONS,
   ...M3_PHOTO_COMMAND_DEFINITIONS,
   ...CATALOG_COMMAND_DEFINITIONS,
+  ...M3_FULFILLMENT_COMMAND_DEFINITIONS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
@@ -70,8 +75,15 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   ...M2_SHIFT_COMMAND_NAMES,
   ...M3_PHOTO_COMMAND_NAMES,
   ...CATALOG_COMMAND_NAMES,
+  "garment.transition",
+  "garment.bulk_transition",
+  "garment.rework",
+  "garment.incident.record",
+  "garment.mark_lost",
 ] as const) as readonly [
   "customer.upsert",
+  "customer.update",
+  "customer.merge",
   "order.receive",
   "order.hold",
   "order.cancel",
@@ -87,6 +99,11 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "photo.register",
   "photo.delete",
   "catalog.item.upsert",
+  "garment.transition",
+  "garment.bulk_transition",
+  "garment.rework",
+  "garment.incident.record",
+  "garment.mark_lost",
 ];
 
 /**
@@ -124,6 +141,7 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   ...M2_STATS_QUERY_NAMES,
   ...M2_SHIFT_QUERY_NAMES,
   ...M3_PHOTO_QUERY_NAMES,
+  "fulfillment.workbench",
 ] as const);
 
 export const M2_CONTRACT_DEFINITIONS: readonly (
@@ -137,6 +155,7 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...M2_STATS_QUERY_DEFINITIONS,
   ...M2_SHIFT_QUERY_DEFINITIONS,
   ...M3_PHOTO_QUERY_DEFINITIONS,
+  ...M3_FULFILLMENT_QUERY_DEFINITIONS,
 ]);
 
 /** M2 AI presets are read-only: no command is exposed to the tool projection. */
@@ -148,7 +167,10 @@ export const M2_READ_ONLY_AI_DEFINITIONS: readonly QueryDefinition<z.ZodObject>[
   ...M2_STATS_QUERY_DEFINITIONS,
   ...M2_SHIFT_QUERY_DEFINITIONS,
   ...M3_PHOTO_QUERY_DEFINITIONS,
+  ...M3_FULFILLMENT_QUERY_DEFINITIONS,
 ]);
+
+export { M3_FULFILLMENT_COMMAND_DEFINITIONS, M3_FULFILLMENT_QUERY_DEFINITIONS };
 
 /**
  * M2 print job status queries (print.jobs.list). Memory-first skeleton;
