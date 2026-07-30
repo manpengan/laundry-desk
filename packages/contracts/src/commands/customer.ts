@@ -72,12 +72,36 @@ export const CustomerDuplicatesInputSchema = z.strictObject({
   limit: z.number().int().positive().max(20).optional(),
 });
 
+export const CustomerPrivacyStatusInputSchema = z.strictObject({
+  customer_id: z.uuid(),
+});
+
+export const CustomerPrivacyEventsInputSchema = z.strictObject({
+  customer_id: z.uuid(),
+  limit: z.number().int().positive().max(50).optional(),
+});
+
+export const CustomerPrivacyExportInputSchema = z.strictObject({
+  customer_id: z.uuid(),
+  reason: z.string().trim().min(1).max(256),
+});
+
+export const CustomerAnonymizeInputSchema = z.strictObject({
+  customer_id: z.uuid(),
+  reason: z.string().trim().min(1).max(256),
+  confirmation: z.literal("ANONYMIZE"),
+});
+
 type SearchInput = typeof CustomerSearchInputSchema;
 type UpsertInput = typeof CustomerUpsertInputSchema;
 type GetInput = typeof CustomerGetInputSchema;
 type UpdateInput = typeof CustomerUpdateInputSchema;
 type MergeInput = typeof CustomerMergeInputSchema;
 type DuplicatesInput = typeof CustomerDuplicatesInputSchema;
+type PrivacyStatusInput = typeof CustomerPrivacyStatusInputSchema;
+type PrivacyEventsInput = typeof CustomerPrivacyEventsInputSchema;
+type PrivacyExportInput = typeof CustomerPrivacyExportInputSchema;
+type AnonymizeInput = typeof CustomerAnonymizeInputSchema;
 
 /**
  * Search result row (documented for tests / handlers; not Zod-validated on wire).
@@ -226,25 +250,114 @@ export const customerMergeCommand: CommandDefinition<MergeInput> = defineCommand
   result_redaction: [],
 });
 
+export const customerPrivacyStatusQuery: QueryDefinition<PrivacyStatusInput> = defineQuery({
+  name: "customer.privacy.status",
+  version: "0.1.0",
+  description: "Preview privacy retention blockers and retained record counts.",
+  description_llm:
+    "Return bounded org-wide active/retained order and photo counts for one active customer. Direct PII is excluded.",
+  input: CustomerPrivacyStatusInputSchema,
+  risk: "R2",
+  invariants: [],
+  idempotent: true,
+  sideEffects: [],
+  offline_mode: "denied",
+  data_classification: "internal",
+  input_redaction: [],
+  result_redaction: [],
+  max_result_rows: 1,
+});
+
+export const customerPrivacyEventsQuery: QueryDefinition<PrivacyEventsInput> = defineQuery({
+  name: "customer.privacy.events",
+  version: "0.1.0",
+  description: "List bounded immutable privacy events for one customer.",
+  description_llm:
+    "Return up to 50 exported/anonymized event rows without customer PII or credential material.",
+  input: CustomerPrivacyEventsInputSchema,
+  risk: "R2",
+  invariants: [],
+  idempotent: true,
+  sideEffects: [],
+  offline_mode: "denied",
+  data_classification: "internal",
+  input_redaction: [],
+  result_redaction: [],
+  max_result_rows: 50,
+});
+
+export const customerPrivacyExportCommand: CommandDefinition<PrivacyExportInput> = defineCommand({
+  name: "customer.privacy.export",
+  version: "0.1.0",
+  description: "Create an audited, bounded JSON export for one active customer.",
+  description_llm:
+    "High-risk org-wide export of one customer profile and at most 1000 related order snapshots. The operation appends a privacy event and audit row in the same transaction.",
+  input: CustomerPrivacyExportInputSchema,
+  risk: "R4",
+  invariants: ["rbac.privacy_admin"],
+  idempotent: false,
+  sideEffects: ["customer.privacy_exported", "audit.customer_privacy_event"],
+  offline_mode: "denied",
+  data_classification: "pii",
+  input_redaction: [],
+  result_redaction: [
+    { path: "/customer/phone", strategy: "mask" },
+    { path: "/orders/*/customer_phone", strategy: "mask" },
+  ],
+});
+
+export const customerAnonymizeCommand: CommandDefinition<AnonymizeInput> = defineCommand({
+  name: "customer.anonymize",
+  version: "0.1.0",
+  description: "Irreversibly remove direct PII while retaining accounting records.",
+  description_llm:
+    "R5 org-wide anonymization. Reject while any draft/open order exists; otherwise clear customer PII and terminal order name/phone snapshots, retaining opaque accounting rows and immutable privacy/audit events.",
+  input: CustomerAnonymizeInputSchema,
+  risk: "R5",
+  invariants: ["rbac.privacy_admin"],
+  idempotent: false,
+  sideEffects: ["customer.anonymized", "audit.customer_privacy_event"],
+  offline_mode: "denied",
+  data_classification: "pii",
+  input_redaction: [],
+  result_redaction: [],
+});
+
 export const CUSTOMER_COMMANDS = Object.freeze([
   customerUpsertCommand,
   customerUpdateCommand,
   customerMergeCommand,
+  customerPrivacyExportCommand,
+  customerAnonymizeCommand,
 ] as const);
 
 export const CUSTOMER_COMMAND_NAMES = Object.freeze(
   CUSTOMER_COMMANDS.map((command) => command.name),
-) as readonly ["customer.upsert", "customer.update", "customer.merge"];
+) as readonly [
+  "customer.upsert",
+  "customer.update",
+  "customer.merge",
+  "customer.privacy.export",
+  "customer.anonymize",
+];
 
 export const CUSTOMER_QUERIES = Object.freeze([
   customerSearchQuery,
   customerGetQuery,
   customerDuplicatesQuery,
+  customerPrivacyStatusQuery,
+  customerPrivacyEventsQuery,
 ] as const);
 
 export const CUSTOMER_QUERY_NAMES = Object.freeze(
   CUSTOMER_QUERIES.map((query) => query.name),
-) as readonly ["customer.search", "customer.get", "customer.duplicates"];
+) as readonly [
+  "customer.search",
+  "customer.get",
+  "customer.duplicates",
+  "customer.privacy.status",
+  "customer.privacy.events",
+];
 
 /** M2 customer command catalog (server command registry). */
 export const M2_CUSTOMER_COMMAND_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] =

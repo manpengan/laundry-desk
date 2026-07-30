@@ -27,6 +27,19 @@ server 只对签名、nonce、device、`printing` 状态均匹配的 job 做原�
 只有第 4 级可以标记“实机通过”。DL-206 的 TSPL 方言、中文 codepage、切刀时序均必须以现场样张
 校准；代码测试不能替代该判定。
 
+## macOS · XP-58 CUPS 验收记录
+
+先发现系统安装的精确队列名，再运行交互式验收：
+
+```bash
+pnpm --filter @laundry/edge-agent printer-pilot:mac -- --discover
+pnpm --filter @laundry/edge-agent printer-acceptance:mac -- --cups-queue XP58_USB
+```
+
+只有固定样张取得可追踪 CUPS job id，且操作员逐项确认文字/金额、走纸、切撕位置和
+条码回读后，才会在 Application Support 私有目录生成验收 JSON。该记录是操作员签认，
+仍需另行保存去 EXIF 的样张照片才能达到本清单第 4 级。
+
 ## 每机勾选
 
 ### XP-58（ESC/POS）

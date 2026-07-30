@@ -79,6 +79,7 @@ test("buildPickupBody empty garment_ids_text means all pickable (legacy)", () =>
   assert.equal(ok.ok, true);
   if (!ok.ok) return;
   assert.deepEqual(ok.body.garment_ids, []);
+  assert.deepEqual(ok.body.verification_barcodes, []);
   assert.equal(ok.body.collect_cents, 2000);
 });
 
@@ -93,16 +94,28 @@ test("buildPickupBody empty multi-select selection errors", () => {
   assert.match(bad.message, /至少选择/);
 });
 
-test("buildPickupBody accepts selected garment ids", () => {
+test("buildPickupBody accepts selected garment ids and normalized verification barcodes", () => {
   const id = "11111111-2222-4333-8444-555555555555";
   const ok = buildPickupBody({
     order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
     collect_cents: "1000",
     garment_ids: [id],
+    verification_barcodes: [" rack-001 "],
   });
   assert.equal(ok.ok, true);
   if (!ok.ok) return;
   assert.deepEqual(ok.body.garment_ids, [id]);
+  assert.deepEqual(ok.body.verification_barcodes, ["RACK-001"]);
+});
+
+test("buildPickupBody rejects duplicate verification barcodes", () => {
+  const bad = buildPickupBody({
+    order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    collect_cents: "0",
+    garment_ids: ["11111111-2222-4333-8444-555555555555"],
+    verification_barcodes: ["abc", "ABC"],
+  });
+  assert.equal(bad.ok, false);
 });
 
 test("unwrapCommandResult reads bus envelope result", () => {
@@ -123,6 +136,8 @@ const SAMPLE_GARMENTS: readonly OrderGetGarment[] = Object.freeze([
     line_index: 0,
     seq: 0,
     unit_price_cents: 1500,
+    rack_zone: null,
+    rack_slot: null,
   }),
   Object.freeze({
     garment_id: "22222222-3333-4444-8555-666666666666",
@@ -131,21 +146,26 @@ const SAMPLE_GARMENTS: readonly OrderGetGarment[] = Object.freeze([
     line_index: 0,
     seq: 1,
     unit_price_cents: 1500,
+    rack_zone: null,
+    rack_slot: null,
   }),
   Object.freeze({
     garment_id: "33333333-4444-4555-8666-777777777777",
     barcode: "ABC3",
-    status: "received",
+    status: "racked",
     line_index: 1,
     seq: 0,
     unit_price_cents: 2000,
+    rack_zone: "A",
+    rack_slot: "01",
   }),
 ]);
 
-test("isPickableGarmentStatus only received under collapsed fulfillment", () => {
+test("isPickableGarmentStatus includes direct and verified fulfillment states", () => {
   assert.equal(isPickableGarmentStatus("received"), true);
   assert.equal(isPickableGarmentStatus("picked_up"), false);
-  assert.equal(isPickableGarmentStatus("ready"), false);
+  assert.equal(isPickableGarmentStatus("ready"), true);
+  assert.equal(isPickableGarmentStatus("racked"), true);
   assert.equal(isPickableGarmentStatus("washing"), false);
 });
 

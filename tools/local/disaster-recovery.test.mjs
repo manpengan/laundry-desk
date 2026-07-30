@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { writeSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
@@ -43,6 +43,15 @@ async function fixture() {
     stream: async (_command, options) => {
       writeSync(options.outputFd, Buffer.from("database-dump"));
     },
+    run: async (command) => {
+      assert.equal(command.args.at(-2), "server:/var/lib/laundry/photos/.");
+      const destination = command.args.at(-1);
+      await copyFile(
+        join(photos, ".laundry-photo-store-v1"),
+        join(destination, ".laundry-photo-store-v1"),
+      );
+      await copyFile(join(photos, photoName), join(destination, photoName));
+    },
   });
   return { photos, photoName, context, dependencies };
 }
@@ -65,6 +74,38 @@ test("disaster recovery set binds the database dump and every private photo", as
     () => verifyDisasterRecoveryBackup(context, backup.path, backup.sha256),
     /LOCAL_RESTORE_PHOTOS_INVALID/u,
   );
+});
+
+test("photo snapshot exports through the stopped container when the bind mount is unreadable", async () => {
+  const { photos, photoName, context, dependencies } = await fixture();
+  const exported = Object.freeze({
+    ...dependencies,
+    run: async (command) => {
+      assert.equal(command.file, "docker");
+      assert.equal(command.args.at(-3), "cp");
+      assert.equal(command.args.at(-2), "server:/var/lib/laundry/photos/.");
+      const destination = command.args.at(-1);
+      await writeFile(
+        join(destination, ".laundry-photo-store-v1"),
+        "laundry-desk-photo-store:v1\n",
+        { mode: 0o600 },
+      );
+      await writeFile(join(destination, photoName), Buffer.from([0xff, 0xd8, 0xff, 0xd9]), {
+        mode: 0o600,
+      });
+    },
+  });
+  await chmod(photos, 0o000);
+  try {
+    const backup = await createDisasterRecoveryBackup(
+      context,
+      { cwd: "/workspace", kind: "backup" },
+      exported,
+    );
+    assert.equal(backup.photo_files, 1);
+  } finally {
+    await chmod(photos, 0o700);
+  }
 });
 
 test("photo restore swaps only the owned private photo directory", async () => {

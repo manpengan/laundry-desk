@@ -3,6 +3,7 @@ import { constants, createReadStream } from "node:fs";
 import { chmod, copyFile, lstat, mkdir, open, readdir, rename, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
+import { composeCopyFromCommand } from "./compose.mjs";
 import { createDatabaseBackup, LocalDataError, verifyBackupFile } from "./data-tools.mjs";
 
 const DIRECTORY_MODE = 0o700;
@@ -72,19 +73,35 @@ async function copyPrivateFile(source, destination) {
   });
 }
 
-async function createPhotoSnapshot(context, dumpPath) {
-  const photoRoot = join(dirname(context.backupDirectory), "photos");
-  await assertPrivateDirectory(photoRoot, "LOCAL_PHOTO_BACKUP_DIRECTORY_INVALID");
+async function inspectPrivateFile(path) {
+  const metadata = await lstat(path);
+  if (metadata.isSymbolicLink() || !metadata.isFile() || (metadata.mode & 0o7777) !== FILE_MODE) {
+    fail("LOCAL_PHOTO_BACKUP_SOURCE_INVALID");
+  }
+  return Object.freeze({
+    bytes: metadata.size,
+    sha256: await sha256File(path),
+  });
+}
+
+async function createPhotoSnapshot(context, dumpPath, options, dependencies) {
   const snapshotName = `${basename(dumpPath)}.photos`;
   if (!SNAPSHOT_NAME.test(snapshotName)) fail("LOCAL_PHOTO_BACKUP_NAME_INVALID");
   const snapshotPath = join(context.backupDirectory, snapshotName);
   await mkdir(snapshotPath, { mode: DIRECTORY_MODE });
   const files = [];
   try {
-    for (const name of (await readdir(photoRoot)).sort()) {
+    await dependencies.run(
+      composeCopyFromCommand("server", "/var/lib/laundry/photos/.", snapshotPath, {
+        project: context.project,
+      }),
+      Object.freeze({ cwd: options.cwd, env: context.env }),
+    );
+    await assertPrivateDirectory(snapshotPath, "LOCAL_PHOTO_BACKUP_DIRECTORY_INVALID");
+    for (const name of (await readdir(snapshotPath)).sort()) {
       if (!PHOTO_NAME.test(name)) fail("LOCAL_PHOTO_BACKUP_SOURCE_INVALID");
-      const copied = await copyPrivateFile(join(photoRoot, name), join(snapshotPath, name));
-      files.push(Object.freeze({ name, ...copied }));
+      const inspected = await inspectPrivateFile(join(snapshotPath, name));
+      files.push(Object.freeze({ name, ...inspected }));
     }
   } catch (error) {
     await rm(snapshotPath, { recursive: true, force: true });
@@ -107,7 +124,7 @@ export async function createDisasterRecoveryBackup(context, options, dependencie
   const database = await createDatabaseBackup(context, options, dependencies);
   let photos;
   try {
-    photos = await createPhotoSnapshot(context, database.path);
+    photos = await createPhotoSnapshot(context, database.path, options, dependencies);
     const manifestPath = `${database.path}.bundle.json`;
     await writePrivateJson(manifestPath, {
       version: 1,

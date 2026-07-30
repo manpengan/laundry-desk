@@ -2,6 +2,8 @@ name: V2 PostgreSQL Integration
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 19 * * 0"
   # No paths filter: this job is a required status check on main. A required
   # check that is skipped never reports, which blocks the pull request forever.
   # Costs a full run on every PR; that is cheaper than a stuck merge queue or a
@@ -86,6 +88,35 @@ jobs:
         run: |
           bash tools/compose/smoke-rls.sh
           bash tools/compose/smoke-test.sh
+
+      - name: Create and restore-drill a private recovery set
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          pnpm local:maintenance
+          recovery_metadata="${RUNNER_TEMP}/laundry-recovery-metadata-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'rm -f -- "${recovery_metadata}"' EXIT
+          node --input-type=module > "${recovery_metadata}" <<'NODE'
+          import { createHash } from "node:crypto";
+          import { createReadStream } from "node:fs";
+          import { readdir } from "node:fs/promises";
+          import { join } from "node:path";
+          import { resolveLocalConfigPaths } from "./tools/local/config.mjs";
+
+          const backupDirectory = join(resolveLocalConfigPaths().directoryPath, "backups");
+          const names = (await readdir(backupDirectory))
+            .filter((name) => /^laundry-v2-backup-.*\.dump$/u.test(name))
+            .sort();
+          const file = join(backupDirectory, names.at(-1));
+          const hash = createHash("sha256");
+          for await (const chunk of createReadStream(`${file}.bundle.json`)) hash.update(chunk);
+          process.stdout.write(`${file}\n${hash.digest("hex")}\n`);
+          NODE
+          readarray -t recovery < "${recovery_metadata}"
+          pnpm local:restore:drill -- \
+            --file "${recovery[0]}" \
+            --confirm-sha256 "${recovery[1]}"
 
       - name: Run server tests against real PostgreSQL with no skips
         shell: bash

@@ -24,12 +24,14 @@ describe("M3 fulfillment contracts", () => {
     expect(FULFILLMENT_COMMANDS.map((definition) => definition.name)).toEqual([
       "garment.transition",
       "garment.bulk_transition",
+      "garment.rack.assign",
       "garment.rework",
       "garment.incident.record",
       "garment.mark_lost",
     ]);
     expect(fulfillmentWorkbenchQuery.max_result_rows).toBe(100);
     expect(M2_CONTRACT_COMMAND_NAMES).toContain("garment.mark_lost");
+    expect(M2_CONTRACT_COMMAND_NAMES).toContain("garment.rack.assign");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("fulfillment.workbench");
   });
 

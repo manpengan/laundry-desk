@@ -10,6 +10,7 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 
+import { customers } from "./customers.js";
 import { staffs } from "./staffs.js";
 import { stores } from "./stores.js";
 
@@ -27,6 +28,7 @@ export const orders = pgTable(
     ticketNo: text("ticket_no"),
     pickupCode: text("pickup_code"),
     status: text("status").notNull(),
+    customerId: uuid("customer_id"),
     customerPhone: text("customer_phone"),
     customerName: text("customer_name"),
     note: text("note"),
@@ -55,6 +57,7 @@ export const orders = pgTable(
       table.status,
       table.createdAt,
     ),
+    index("orders_org_customer_created_idx").on(table.orgId, table.customerId, table.createdAt),
     foreignKey({
       columns: [table.orgId, table.storeId],
       foreignColumns: [stores.orgId, stores.id],
@@ -64,6 +67,11 @@ export const orders = pgTable(
       columns: [table.orgId, table.createdByStaffId],
       foreignColumns: [staffs.orgId, staffs.id],
       name: "orders_created_by_staff_fk",
+    }),
+    foreignKey({
+      columns: [table.orgId, table.customerId],
+      foreignColumns: [customers.orgId, customers.id],
+      name: "orders_customer_fk",
     }),
   ],
 );

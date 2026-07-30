@@ -85,11 +85,21 @@ pnpm --filter @laundry/edge-agent printer-smoke
 完整 Windows 指南：[`docs/printer-smoke-windows.md`](docs/printer-smoke-windows.md)。  
 Lab 勾选：`tools/lab/printers/CHECKLIST.md`（Windows 节）。
 
+macOS CUPS 发现、试打和只有人工逐项确认后才落盘的验收入口见
+[`docs/printer-smoke-macos.md`](docs/printer-smoke-macos.md)。
+
 可选：`LAUNDRY_PRINTER_SMOKE_TIMEOUT_MS=3000` 覆盖默认 5s 写超时。  
 退出码：`0` = ok，`1` = 失败。stdout 为 JSON status。
 
 纯函数入口（可单测）：`runPrinterSmoke(env, options?)` → `{ ok, path, kind, message, bytes_written? }`。  
 `normalizePrinterPath`：`COM3` → `\\.\COM3`，`USB001` → `\\.\USB001`。
+
+## macOS 正式分发
+
+正式 `release:mac` 与未签名本地测试包分离。它强制 Developer ID、hardened runtime、
+公证、Gatekeeper/stapler 校验，并为 DMG/ZIP 生成独立 Ed25519 签名的版本与回退策略
+清单。凭据只允许使用 Keychain profile 和仓库外密钥文件路径；完整步骤见
+[`docs/macos-release.md`](docs/macos-release.md)。
 
 ## 开发
 

@@ -343,6 +343,28 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   assert.doesNotMatch(workflow, /set -x|echo\s+["']?\$\{?LAUNDRY_(?:ACCESS|CSRF|BOOTSTRAP)/u);
 });
 
+test("keeps the recovery-set CI shell block syntactically valid", async () => {
+  const workflow = await readRepositoryFile(".github/workflows/v2-integration.yml");
+  const start = workflow.indexOf("      - name: Create and restore-drill a private recovery set");
+  const end = workflow.indexOf(
+    "      - name: Run server tests against real PostgreSQL with no skips",
+    start,
+  );
+  assert.ok(start >= 0 && end > start);
+  const section = workflow.slice(start, end);
+  const runMarker = "        run: |\n";
+  const runStart = section.indexOf(runMarker);
+  assert.ok(runStart >= 0);
+  const script = section
+    .slice(runStart + runMarker.length)
+    .split("\n")
+    .map((line) => (line.startsWith("          ") ? line.slice(10) : line))
+    .join("\n");
+  await execFileAsync("bash", ["-n", "-c", script]);
+  assert.match(script, /^umask 077$/mu);
+  assert.match(script, /^trap 'rm -f -- "\$\{recovery_metadata\}"' EXIT$/mu);
+});
+
 test("uses generated local database secrets and loopback-only Compose ports", async () => {
   const compose = await readRepositoryFile("tools/compose/docker-compose.yml");
   const bootstrapRoles = await readRepositoryFile("tools/compose/bootstrap-roles.sh");

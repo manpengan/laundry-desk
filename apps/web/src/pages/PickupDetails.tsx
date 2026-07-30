@@ -5,15 +5,18 @@ import type { OrderGetGarment, PickupOrderResult } from "./order-form.js";
 export function PickupGarmentCheckRow({
   garment,
   checked,
+  verified,
   disabled,
   onToggle,
 }: Readonly<{
   garment: OrderGetGarment;
   checked: boolean;
+  verified: boolean;
   disabled: boolean;
   onToggle: () => void;
 }>) {
-  const pickable = garment.status === "received";
+  const pickable =
+    garment.status === "received" || garment.status === "ready" || garment.status === "racked";
   const inputId = `pickup-g-${garment.garment_id}`;
   return (
     <li
@@ -38,6 +41,16 @@ export function PickupGarmentCheckRow({
           <span className="ld-pickup-garments__meta-line">
             L{garment.line_index + 1}·#{garment.seq}
           </span>
+          {garment.rack_zone === null ? null : (
+            <span className="ld-pickup-garments__rack">
+              货架 {garment.rack_zone}-{garment.rack_slot}
+            </span>
+          )}
+          {garment.status === "racked" ? (
+            <span className="ld-pickup-garments__verification">
+              {verified ? "已扫码复核" : "待扫码复核"}
+            </span>
+          ) : null}
           <StatusBadge family="garment" status={garment.status} />
           <MoneyText fen={garment.unit_price_cents} />
         </span>

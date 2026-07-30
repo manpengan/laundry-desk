@@ -4,6 +4,10 @@ import { createCommandError } from "@laundry/contracts";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
+import {
+  registerCustomerPrivacyCommandHandlers,
+  registerCustomerPrivacyQueryHandlers,
+} from "./privacy-handlers.js";
 import type { CustomerStore } from "./types.js";
 
 export type CustomerHandlerDeps = Readonly<{
@@ -256,6 +260,7 @@ export function registerCustomerCommandHandlers(
   registry.registerHandler("customer.upsert", upsertHandler(deps));
   registry.registerHandler("customer.update", updateHandler(deps));
   registry.registerHandler("customer.merge", mergeHandler(deps));
+  registerCustomerPrivacyCommandHandlers(registry, deps);
 }
 
 export function registerCustomerQueryHandlers(
@@ -265,4 +270,5 @@ export function registerCustomerQueryHandlers(
   registry.registerHandler("customer.search", searchHandler(deps));
   registry.registerHandler("customer.get", getHandler(deps));
   registry.registerHandler("customer.duplicates", duplicatesHandler(deps));
+  registerCustomerPrivacyQueryHandlers(registry, deps);
 }

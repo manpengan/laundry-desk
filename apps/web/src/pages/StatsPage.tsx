@@ -104,6 +104,7 @@ export function StatsPage({
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState<DaySummaryView | null>(null);
   const loadRef = useRef<() => Promise<void>>(async () => undefined);
+  const loadGenerationRef = useRef(0);
 
   const load = useCallback(async () => {
     const businessDate = dateText.trim();
@@ -111,6 +112,8 @@ export function StatsPage({
       toast.push("请输入日期 YYYY-MM-DD", "error");
       return;
     }
+    const loadGeneration = loadGenerationRef.current + 1;
+    loadGenerationRef.current = loadGeneration;
     setSummary(null);
     setBusy(true);
     try {
@@ -118,12 +121,14 @@ export function StatsPage({
         "stats.day.summary",
         businessDate.length === 0 ? {} : { business_date: businessDate },
       );
+      if (loadGeneration !== loadGenerationRef.current) return;
       if (!res.ok) {
         toast.push(res.error.message ?? res.error.code, "error");
         setSummary(null);
         return;
       }
       const parsed = parseDaySummary(unwrapQueryResult(res.data));
+      if (loadGeneration !== loadGenerationRef.current) return;
       if (parsed === null) {
         toast.push("日结结果无法解析", "error");
         setSummary(null);
@@ -132,7 +137,7 @@ export function StatsPage({
       setSummary(parsed);
       setDateText(parsed.business_date);
     } finally {
-      setBusy(false);
+      if (loadGeneration === loadGenerationRef.current) setBusy(false);
     }
   }, [dateText, queryClient, toast]);
 
@@ -142,6 +147,13 @@ export function StatsPage({
     if (!autoLoad) return;
     void loadRef.current();
   }, [autoLoad]);
+
+  const changeDate = useCallback((value: string) => {
+    loadGenerationRef.current += 1;
+    setBusy(false);
+    setSummary(null);
+    setDateText(value);
+  }, []);
 
   return (
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
@@ -156,7 +168,7 @@ export function StatsPage({
           label="营业日"
           type="date"
           value={dateText}
-          onChange={(event) => setDateText(event.target.value)}
+          onChange={(event) => changeDate(event.target.value)}
           disabled={busy}
           data-testid="stats-date-input"
           hint="留空时由服务端按门店时区和切日时间确定"

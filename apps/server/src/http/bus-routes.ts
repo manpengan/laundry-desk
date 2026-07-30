@@ -25,6 +25,7 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "staff_read",
   "staff_write",
   "order_write",
+  "privacy_admin",
 ]);
 const STAFF_PERMISSIONS = Object.freeze(["staff_read", "order_write"]);
 const NO_PERMISSIONS = Object.freeze([] as string[]);

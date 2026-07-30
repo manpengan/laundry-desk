@@ -71,6 +71,8 @@ export const OrderPickupInputSchema = z.strictObject({
   order_id: z.uuid(),
   /** Empty array = all pickable garments on the order. */
   garment_ids: z.array(z.uuid()).max(200),
+  /** Scanned barcodes proving every selected racked garment was physically checked. */
+  verification_barcodes: z.array(z.string().trim().min(1).max(64)).max(200).optional(),
   collect_cents: NonNegCentsSchema,
 });
 
@@ -199,10 +201,10 @@ export const orderReceiveCommand: CommandDefinition<ReceiveInput> = defineComman
 /** 取衣：件状态 → picked_up，可整单或勾选部分件。 */
 export const orderPickupCommand: CommandDefinition<PickupInput> = defineCommand({
   name: "order.pickup",
-  version: "0.2.0",
+  version: "0.3.0",
   description: "Mark selected garments picked up and record cash collection.",
   description_llm:
-    "Pickup garments by id (or all pickable). collect_cents settles balance; status must allow picked_up.",
+    "Pickup garments by id (or all pickable). Every selected racked garment requires its scanned barcode in verification_barcodes. collect_cents settles balance.",
   input: OrderPickupInputSchema,
   risk: "R2",
   invariants: ["rbac.order_write", "order.pickup_allowed"],

@@ -10,7 +10,7 @@ export type FulfillmentHandlerDeps = Readonly<{
   now?: () => number;
 }>;
 
-const NORMAL_TARGETS = new Set<GarmentStatus>(["washing", "ready", "racked"]);
+const NORMAL_TARGETS = new Set<GarmentStatus>(["washing", "ready"]);
 
 function asRecord(parsed: unknown): Readonly<Record<string, unknown>> {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -174,6 +174,46 @@ function incidentHandler(deps: FulfillmentHandlerDeps): CommandHandler {
   };
 }
 
+function rackAssignHandler(deps: FulfillmentHandlerDeps): CommandHandler {
+  return async (ctx): Promise<HandlerOutcome> => {
+    const input = asRecord(ctx.parsed);
+    const result = await deps.store.assignRack({
+      org_id: ctx.tenant.orgId,
+      store_id: ctx.tenant.storeId,
+      barcode: requireString(input.barcode).trim(),
+      rack_zone: requireString(input.rack_zone).trim().toUpperCase(),
+      rack_slot: requireString(input.rack_slot).trim().toUpperCase(),
+      staff_id: ctx.actor.staffId,
+      at: deps.now?.() ?? Math.floor(Date.now() / 1000),
+    });
+    if (result === null) {
+      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    }
+    return Object.freeze({
+      result,
+      audit: Object.freeze({
+        entity: "garment",
+        entityId: result.garment_id,
+        afterJson: JSON.stringify({
+          status: result.status,
+          rack_zone: result.rack_zone,
+          rack_slot: result.rack_slot,
+        }),
+      }),
+      events: Object.freeze([
+        Object.freeze({
+          type: "garment.racked",
+          payload: Object.freeze({
+            garment_id: result.garment_id,
+            rack_zone: result.rack_zone,
+            rack_slot: result.rack_slot,
+          }),
+        }),
+      ]),
+    });
+  };
+}
+
 function workbenchHandler(deps: FulfillmentHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
@@ -199,6 +239,7 @@ export function registerFulfillmentCommandHandlers(
 ): void {
   registry.registerHandler("garment.transition", transitionHandler(deps, "single"));
   registry.registerHandler("garment.bulk_transition", transitionHandler(deps, "bulk"));
+  registry.registerHandler("garment.rack.assign", rackAssignHandler(deps));
   registry.registerHandler("garment.rework", transitionHandler(deps, "rework"));
   registry.registerHandler("garment.incident.record", incidentHandler(deps));
   registry.registerHandler("garment.mark_lost", transitionHandler(deps, "lost"));

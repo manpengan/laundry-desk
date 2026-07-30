@@ -247,7 +247,7 @@ test("upsert conflict path reports created=false and preserves optional fields",
   assert.equal(insert?.params?.[7], false);
 });
 
-test("merge sets the store GUC before relinking store-scoped orders", async () => {
+test("merge sets the store GUC before relinking store orders by stable customer id", async () => {
   const { pool, queries } = createCapturingPool((sql) => {
     if (sql.includes("FROM customers") && sql.includes("FOR UPDATE")) {
       return {
@@ -296,4 +296,9 @@ test("merge sets the store GUC before relinking store-scoped orders", async () =
       (query) => query.sql.includes("app.store_id") && query.params?.[0] === DEMO_STORE_ID,
     ),
   );
+  const relink = queries.find((query) => query.sql.includes("UPDATE orders"));
+  assert.ok(relink?.sql.includes("customer_id = $4::uuid"));
+  assert.ok(relink?.sql.includes("customer_id = $3::uuid"));
+  assert.equal(relink?.sql.includes("customer_phone = $3"), false);
+  assert.deepEqual(relink?.params?.slice(0, 4), [DEMO_ORG_ID, DEMO_STORE_ID, FIXED_ID, TARGET_ID]);
 });

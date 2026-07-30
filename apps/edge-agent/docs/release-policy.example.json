@@ -1,0 +1,8 @@
+{
+  "channel": "beta",
+  "minimum_secure_version": "0.1.0",
+  "minimum_upgradable_version": "0.1.0",
+  "contracts_major": 0,
+  "local_schema": 3,
+  "rollback": null
+}

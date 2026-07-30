@@ -272,10 +272,25 @@
   color: var(--lg-ink3);
 }
 
+.ld-pickup-garments__rack,
+.ld-pickup-garments__verification {
+  font-size: 12px;
+  color: var(--lg-accent);
+}
+
 .ld-pickup-garments__meta {
   margin: 0;
   font-size: 12px;
   color: var(--lg-ink3);
+}
+
+.ld-pickup-verification {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding-top: 4px;
+  border-top: 1px solid var(--lg-hair);
 }
 
 .ld-order-result {

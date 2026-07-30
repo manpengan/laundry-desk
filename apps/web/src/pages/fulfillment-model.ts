@@ -13,6 +13,8 @@ export type FulfillmentRowView = Readonly<{
   color: string | null;
   brand: string | null;
   status: FulfillmentStatus;
+  rack_zone: string | null;
+  rack_slot: string | null;
   updated_at: number;
   incident_count: number;
 }>;
@@ -72,6 +74,8 @@ export function parseFulfillmentRows(value: unknown): readonly FulfillmentRowVie
         color: nullableString(item.color),
         brand: nullableString(item.brand),
         status: item.status as FulfillmentStatus,
+        rack_zone: nullableString(item.rack_zone),
+        rack_slot: nullableString(item.rack_slot),
         updated_at: item.updated_at,
         incident_count: item.incident_count,
       }),

@@ -227,3 +227,23 @@ test("mac acceptance does not persist credentials or inherit arbitrary host secr
   assert.match(smoke, /signalProcessGroup\(processId,\s*"SIGKILL"\)/u);
   assert.match(smoke, /await waitForProcessGroupExit\(processId\)/u);
 });
+
+test("release packaging is fail-closed, notarized, and keeps the local whitelist exact", async () => {
+  const localBuilder = await readFile(join(packageRoot, "electron-builder.yml"), "utf8");
+  const releaseBuilder = await readFile(join(packageRoot, "electron-builder.release.yml"), "utf8");
+  const packageJson = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
+  const localFiles = /^files:\n(?<body>(?:  - .+\n)+)/mu.exec(localBuilder)?.groups?.body;
+  const releaseFiles = /^files:\n(?<body>(?:  - .+\n)+)/mu.exec(releaseBuilder)?.groups?.body;
+
+  assert.equal(releaseFiles, localFiles);
+  assert.match(releaseBuilder, /^forceCodeSigning:\s+true$/mu);
+  assert.match(releaseBuilder, /^\s+hardenedRuntime:\s+true$/mu);
+  assert.match(releaseBuilder, /^\s+notarize:\s+true$/mu);
+  assert.match(releaseBuilder, /^\s+entitlements:\s+build\/entitlements\.mac\.plist$/mu);
+  assert.match(releaseBuilder, /^\s+entitlementsInherit:\s+build\/entitlements\.mac\.plist$/mu);
+  assert.match(releaseBuilder, /^\s+-\s+dmg$/mu);
+  assert.match(releaseBuilder, /^\s+-\s+zip$/mu);
+  assert.match(releaseBuilder, /^\s+to:\s+update\/update-public-key\.pem$/mu);
+  assert.doesNotMatch(releaseBuilder, /^\s+identity:\s+null$/mu);
+  assert.equal(packageJson.scripts["release:mac"], "node scripts/release-mac.mjs");
+});

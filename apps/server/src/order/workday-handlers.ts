@@ -32,12 +32,14 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
     const draftId = typeof input.draft_id === "string" ? input.draft_id : newId();
     let phone = typeof input.customer_phone === "string" ? input.customer_phone : null;
     let name = typeof input.customer_name === "string" ? input.customer_name : null;
+    let customerId: string | null = null;
     if (phone !== null && deps.customer !== undefined) {
       const customer = await deps.customer.upsert({
         phone,
         ...(name !== null ? { name } : {}),
         now,
       });
+      customerId = customer.customer.customer_id;
       phone = customer.customer.phone;
       name = customer.customer.name;
     }
@@ -62,6 +64,7 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
       ticket_no: null,
       pickup_code: null,
       status: "draft",
+      customer_id: customerId,
       customer_phone: phone,
       customer_name: name,
       note: typeof input.note === "string" ? input.note : null,

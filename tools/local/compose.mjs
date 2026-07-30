@@ -111,6 +111,11 @@ export const composeStopCommand = (service, options = {}) => {
   return composeCommand(["stop", service], options);
 };
 
+export const composeCopyFromCommand = (service, sourcePath, destinationPath, options = {}) => {
+  assertService(service);
+  return composeCommand(["cp", `${service}:${sourcePath}`, destinationPath], options);
+};
+
 const environmentArguments = (names) => names.flatMap((name) => ["-e", name]);
 
 export const composeRunCommand = (service, serviceCommand = [], options = {}) => {

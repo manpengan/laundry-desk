@@ -142,6 +142,31 @@ pnpm local:backup
 pnpm local:diagnose
 ```
 
+自动维护入口会先生成新的完整恢复集，再按 30 天/30 份策略计算轮换。默认只报告待删除
+集合；必须显式加 `--apply-retention` 才会删除，并且始终保留最新一份、拒绝删除损坏集合。
+同一实例的备份、轮换和恢复演练由私有互斥锁串行化，结果写入
+`maintenance-state.json`，`local:diagnose` 会把超过 26 小时、最近失败或状态损坏报告为
+不健康：
+
+```bash
+pnpm local:maintenance
+pnpm local:maintenance -- --apply-retention
+```
+
+macOS 可显式安装每天 03:00 的用户级 LaunchAgent；安装参数和 plist 不包含配置 secret：
+
+```bash
+pnpm local:maintenance:schedule -- --install
+```
+
+恢复演练不会修改生产库。它先校验数据库与每张照片，然后把 dump 恢复到随机命名的影子
+数据库，执行固定 schema 查询，最后删除影子库并记录演练时间：
+
+```bash
+pnpm local:restore:drill -- --file "/absolute/path/to/backup.dump" \
+  --confirm-sha256 "<local:maintenance 输出的 backup.sha256>"
+```
+
 恢复是破坏性操作，只接受该实例 `backups/` 内完整且校验通过的恢复集，并要求显式重复
 输出的 `Confirm SHA-256`。恢复前会自动再做一份包含数据库和照片的 `pre-restore`
 安全备份；数据库在单一事务中恢复，照片通过私有目录原子换入，全部成功后才重新启动 API：
@@ -195,6 +220,9 @@ reset 只接受默认 `laundry-desk` project，只删除
 | `tools/local/backup.mjs`                     | 数据库与照片一致性灾备        |
 | `tools/local/restore.mjs`                    | 校验、预备份与整体恢复        |
 | `tools/local/disaster-recovery.mjs`          | 恢复集清单、照片校验与换入    |
+| `tools/local/maintenance.mjs`                | 自动备份、互斥与保留轮换      |
+| `tools/local/restore-drill.mjs`              | 非破坏性影子库恢复演练        |
+| `tools/local/maintenance-launchd.mjs`        | macOS 每日维护调度安装        |
 | `tools/local/diagnose.mjs`                   | 无 secret 的本地诊断          |
 | `tools/compose/docker-compose.yml`           | loopback-only 服务拓扑        |
 | `apps/server/src/local/profile.ts`           | 通用 `local/main` profile     |

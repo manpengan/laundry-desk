@@ -5654,6 +5654,31 @@
         ],
         "type": "object"
       },
+      "input.command.customer.anonymize": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "const": "ANONYMIZE",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id",
+          "reason",
+          "confirmation"
+        ],
+        "type": "object"
+      },
       "input.command.customer.merge": {
         "additionalProperties": false,
         "properties": {
@@ -5676,6 +5701,26 @@
         "required": [
           "source_customer_id",
           "target_customer_id",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "input.command.customer.privacy.export": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id",
           "reason"
         ],
         "type": "object"
@@ -5763,8 +5808,7 @@
           "target_status": {
             "enum": [
               "washing",
-              "ready",
-              "racked"
+              "ready"
             ],
             "type": "string"
           }
@@ -5834,6 +5878,32 @@
         ],
         "type": "object"
       },
+      "input.command.garment.rack.assign": {
+        "additionalProperties": false,
+        "properties": {
+          "barcode": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rack_slot": {
+            "maxLength": 16,
+            "minLength": 1,
+            "type": "string"
+          },
+          "rack_zone": {
+            "maxLength": 16,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "barcode",
+          "rack_zone",
+          "rack_slot"
+        ],
+        "type": "object"
+      },
       "input.command.garment.rework": {
         "additionalProperties": false,
         "properties": {
@@ -5874,8 +5944,7 @@
           "target_status": {
             "enum": [
               "washing",
-              "ready",
-              "racked"
+              "ready"
             ],
             "type": "string"
           }
@@ -6110,6 +6179,15 @@
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
             "type": "string"
+          },
+          "verification_barcodes": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 200,
+            "type": "array"
           }
         },
         "required": [
@@ -6543,6 +6621,39 @@
         "type": "object"
       },
       "input.query.customer.get": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id"
+        ],
+        "type": "object"
+      },
+      "input.query.customer.privacy.events": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "limit": {
+            "exclusiveMinimum": 0,
+            "maximum": 50,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "customer_id"
+        ],
+        "type": "object"
+      },
+      "input.query.customer.privacy.status": {
         "additionalProperties": false,
         "properties": {
           "customer_id": {
@@ -7332,6 +7443,58 @@
         "x-laundry-version": "0.2.0"
       }
     },
+    "/v1/commands/customer.anonymize": {
+      "post": {
+        "description": "R5 org-wide anonymization. Reject while any draft/open order exists; otherwise clear customer PII and terminal order name/phone snapshots, retaining opaque accounting rows and immutable privacy/audit events. Stable command name: `customer.anonymize` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_customer_anonymize",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.customer.anonymize"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Irreversibly remove direct PII while retaining accounting records.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R5",
+        "x-laundry-version": "0.1.0"
+      }
+    },
     "/v1/commands/customer.merge": {
       "post": {
         "description": "High-risk merge: redirect the source profile to a distinct active target and relink this store's order snapshots. The source id remains as an auditable redirect. Stable command name: `customer.merge` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -7374,6 +7537,58 @@
           }
         ],
         "summary": "Merge a duplicate source customer into an active target customer.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R4",
+        "x-laundry-version": "0.1.0"
+      }
+    },
+    "/v1/commands/customer.privacy.export": {
+      "post": {
+        "description": "High-risk org-wide export of one customer profile and at most 1000 related order snapshots. The operation appends a privacy event and audit row in the same transaction. Stable command name: `customer.privacy.export` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_customer_privacy_export",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.customer.privacy.export"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create an audited, bounded JSON export for one active customer.",
         "tags": [
           "commands"
         ],
@@ -7490,7 +7705,7 @@
     },
     "/v1/commands/garment.bulk_transition": {
       "post": {
-        "description": "Move a bounded garment batch to washing, ready, or racked. The entire batch fails when any row is missing or has an invalid current status. Stable command name: `garment.bulk_transition` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Move a bounded garment batch to washing or ready. The entire batch fails when any row is missing or has an invalid current status. Stable command name: `garment.bulk_transition` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_garment_bulk_transition",
         "requestBody": {
           "content": {
@@ -7644,6 +7859,58 @@
         "x-laundry-version": "0.1.0"
       }
     },
+    "/v1/commands/garment.rack.assign": {
+      "post": {
+        "description": "Resolve a store-scoped garment by scanned barcode, require ready status, atomically move it to racked, persist zone/slot and append immutable status and rack logs. Stable command name: `garment.rack.assign` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_garment_rack_assign",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.garment.rack.assign"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Scan one ready garment onto an explicit rack location.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "0.1.0"
+      }
+    },
     "/v1/commands/garment.rework": {
       "post": {
         "description": "Atomically mark washing, ready, or racked garments as reworked and retain the reason in status history. Stable command name: `garment.rework` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -7698,7 +7965,7 @@
     },
     "/v1/commands/garment.transition": {
       "post": {
-        "description": "Move one garment to washing, ready, or racked. The server validates the current status and appends an immutable status log. Stable command name: `garment.transition` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Move one garment to washing or ready. Scan-to-rack uses garment.rack.assign so a racked garment always has an authoritative location. Stable command name: `garment.transition` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_garment_transition",
         "requestBody": {
           "content": {
@@ -8114,7 +8381,7 @@
     },
     "/v1/commands/order.pickup": {
       "post": {
-        "description": "Pickup garments by id (or all pickable). collect_cents settles balance; status must allow picked_up. Stable command name: `order.pickup` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Pickup garments by id (or all pickable). Every selected racked garment requires its scanned barcode in verification_barcodes. collect_cents settles balance. Stable command name: `order.pickup` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_order_pickup",
         "requestBody": {
           "content": {
@@ -8161,7 +8428,7 @@
         "x-laundry-kind": "command",
         "x-laundry-offline-mode": "primary_lease",
         "x-laundry-risk": "R2",
-        "x-laundry-version": "0.2.0"
+        "x-laundry-version": "0.3.0"
       }
     },
     "/v1/commands/order.receive": {
@@ -8892,6 +9159,110 @@
         "x-laundry-version": "0.1.0"
       }
     },
+    "/v1/queries/customer.privacy.events": {
+      "post": {
+        "description": "Return up to 50 exported/anonymized event rows without customer PII or credential material. Stable query name: `customer.privacy.events` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_customer_privacy_events",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.customer.privacy.events"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List bounded immutable privacy events for one customer.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "0.1.0"
+      }
+    },
+    "/v1/queries/customer.privacy.status": {
+      "post": {
+        "description": "Return bounded org-wide active/retained order and photo counts for one active customer. Direct PII is excluded. Stable query name: `customer.privacy.status` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_customer_privacy_status",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.customer.privacy.status"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Preview privacy retention blockers and retained record counts.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "0.1.0"
+      }
+    },
     "/v1/queries/customer.search": {
       "post": {
         "description": "Return org-scoped active customer rows with a masked phone and no note. Match phone prefix or name substring. max 50 rows; default limit 20. Stable query name: `customer.search` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -8946,7 +9317,7 @@
     },
     "/v1/queries/fulfillment.workbench": {
       "post": {
-        "description": "List up to 100 garments by status or ticket/barcode/customer key. Phone is always masked in the returned row. Stable query name: `fulfillment.workbench` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "List up to 100 garments by status or ticket/barcode/rack/customer key. Phone is always masked in the returned row. Stable query name: `fulfillment.workbench` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "query_fulfillment_workbench",
         "requestBody": {
           "content": {

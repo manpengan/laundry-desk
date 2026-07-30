@@ -11,8 +11,10 @@ import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
 import type { CustomerStore } from "../customer/types.js";
 import type { OrderHandlerDeps } from "./deps.js";
+import { getHandler } from "./get-handler.js";
 import { listHandler } from "./list-handler.js";
 import { lookupHandler } from "./lookup-handler.js";
+import { parseVerificationBarcodes, requireVerifiedRackBarcodes } from "./pickup-verification.js";
 import {
   assertBusinessDayOpen,
   deriveBusinessDate,
@@ -100,6 +102,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
       typeof input.customer_name === "string" && input.customer_name.length > 0
         ? input.customer_name
         : null;
+    let customerId: string | null = null;
 
     if (customerPhone !== null && deps.customer !== undefined) {
       const customer = await upsertCustomerForReceipt(
@@ -108,6 +111,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
         customerName ?? undefined,
         now,
       );
+      customerId = customer.customer.customer_id;
       customerPhone = customer.customer.phone;
       customerName = customer.customer.name;
     }
@@ -145,6 +149,8 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
         color: slot.color,
         brand: slot.brand,
         status: slot.status,
+        rack_zone: null,
+        rack_slot: null,
       });
     });
 
@@ -155,6 +161,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
       ticket_no: ticketNo,
       pickup_code: pickupCode,
       status: "open" as const,
+      customer_id: customerId,
       customer_phone: customerPhone,
       customer_name: customerName,
       note: typeof input.note === "string" ? input.note : null,
@@ -248,6 +255,7 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
     const selectedIds = garmentIdsRaw.map((id) => requireString(id));
+    const verificationBarcodes = parseVerificationBarcodes(input.verification_barcodes);
 
     const order = await deps.store.getOrder(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
     if (order === null) {
@@ -268,6 +276,11 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
     if (!plan.ok) {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
+    const requiredBarcodes = requireVerifiedRackBarcodes(
+      garments,
+      plan.garment_ids,
+      verificationBarcodes,
+    );
 
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
     const businessDate = deriveBusinessDate(now, deps.timeZone, deps.rolloverHour);
@@ -283,6 +296,7 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
         staffId: ctx.actor.staffId,
         method: "cash" as const,
         businessDate,
+        verificationBarcodes,
         nextOrderStatus: plan.next_order_status,
         nextBalanceCents: plan.next_balance_cents,
       }),
@@ -307,6 +321,7 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
           picked: plan.garment_ids.length,
           collect_cents: plan.collect_cents,
           balance_cents: applied.order.balance_cents,
+          verified_racked_count: requiredBarcodes.length,
         }),
       }),
       events: Object.freeze([
@@ -318,43 +333,6 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
           }),
         }),
       ]),
-    });
-  };
-}
-
-function getHandler(deps: OrderHandlerDeps): CommandHandler {
-  return async (ctx): Promise<HandlerOutcome> => {
-    const input = asRecord(ctx.parsed);
-    const orderId = requireString(input.order_id);
-    const order = await deps.store.getOrder(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
-    if (order === null) {
-      throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
-    }
-    const garments = await deps.store.listGarments(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
-    return Object.freeze({
-      result: Object.freeze({
-        order_id: order.order_id,
-        ticket_no: order.ticket_no,
-        pickup_code: order.pickup_code,
-        status: order.status,
-        customer_phone: order.customer_phone,
-        customer_name: order.customer_name,
-        payable_cents: order.payable_cents,
-        paid_cents: order.paid_cents,
-        balance_cents: order.balance_cents,
-        garments: Object.freeze(
-          garments.map((g) =>
-            Object.freeze({
-              garment_id: g.garment_id,
-              barcode: g.barcode,
-              status: g.status,
-              line_index: g.line_index,
-              seq: g.seq,
-              unit_price_cents: g.unit_price_cents,
-            }),
-          ),
-        ),
-      }),
     });
   };
 }

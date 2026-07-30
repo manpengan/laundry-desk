@@ -180,6 +180,9 @@ importers:
       iconv-lite:
         specifier: 0.6.3
         version: 0.6.3
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
     devDependencies:
       electron:
         specifier: 41.10.2

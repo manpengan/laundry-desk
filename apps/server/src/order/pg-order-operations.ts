@@ -11,6 +11,8 @@ import {
 } from "@laundry/domain";
 
 import type { SqlClient } from "../db/types.js";
+import { assertPickupPlanMatchesCurrentRows, markGarmentsPickedUp } from "./pg-garment-pickup.js";
+import { requireVerifiedRackBarcodes } from "./pickup-verification.js";
 import { buildLineIdByIndex, dateToEpoch, epochToDate } from "./pg-order-mappers.js";
 import {
   insertOrderChildren,
@@ -117,10 +119,11 @@ export async function replaceDraftTxn(
   );
   await client.query(
     `UPDATE orders
-     SET ticket_no = $4, pickup_code = $5, status = $6, customer_phone = $7, customer_name = $8, note = $9,
-         subtotal_cents = $10, original_cents = $11, discount_cents = $12, addon_cents = $13,
-         urgent_cents = $14, freight_cents = $15, payable_cents = $16, paid_cents = $17,
-         balance_cents = $18, business_date = $19, updated_at = $20
+     SET ticket_no = $4, pickup_code = $5, status = $6, customer_id = $7,
+         customer_phone = $8, customer_name = $9, note = $10,
+         subtotal_cents = $11, original_cents = $12, discount_cents = $13, addon_cents = $14,
+         urgent_cents = $15, freight_cents = $16, payable_cents = $17, paid_cents = $18,
+         balance_cents = $19, business_date = $20, updated_at = $21
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid`,
     [
       order.org_id,
@@ -129,6 +132,7 @@ export async function replaceDraftTxn(
       order.ticket_no,
       order.pickup_code,
       order.status,
+      order.customer_id,
       order.customer_phone,
       order.customer_name,
       order.note,
@@ -167,6 +171,8 @@ export async function applyPickupTxn(
   if (garments.length === 0 && garmentIds.length > 0) return null;
   const idSet = new Set(garmentIds);
   if (idSet.size !== garmentIds.length) return null;
+  if (garments.filter((garment) => idSet.has(garment.garment_id)).length !== idSet.size)
+    return null;
   if (
     garments.some(
       (garment) =>
@@ -178,6 +184,7 @@ export async function applyPickupTxn(
   ) {
     return null;
   }
+  requireVerifiedRackBarcodes(garments, garmentIds, options?.verificationBarcodes ?? []);
   const nextGarments = garments.map((garment) =>
     idSet.has(garment.garment_id)
       ? Object.freeze({ ...garment, status: "picked_up" as const })
@@ -188,13 +195,16 @@ export async function applyPickupTxn(
   const status = nextOrderStatus(nextGarments, balance);
   assertPickupPlanMatchesCurrentRows(options, balance, status);
   if (garmentIds.length > 0) {
-    await client.query(
-      `UPDATE garments
-       SET status = 'picked_up'
-       WHERE org_id = $1::uuid AND store_id = $2::uuid AND order_id = $3::uuid
-         AND id = ANY($4::uuid[])`,
-      [orgId, storeId, orderId, [...garmentIds]],
-    );
+    await markGarmentsPickedUp(client, {
+      orgId,
+      storeId,
+      orderId,
+      garmentIds,
+      garments,
+      staffId: options?.staffId,
+      nowEpoch,
+      newId,
+    });
   }
   await client.query(
     `UPDATE orders
@@ -384,17 +394,4 @@ export async function cancelOrderTxn(
     balance_cents: 0,
     updated_at: at,
   });
-}
-
-function assertPickupPlanMatchesCurrentRows(
-  options: PickupApplyOptions | undefined,
-  balanceCents: number,
-  nextStatus: OrderRecord["status"],
-): void {
-  if (options?.nextBalanceCents !== undefined && options.nextBalanceCents !== balanceCents) {
-    throw new Error("Pickup plan balance no longer matches persisted order");
-  }
-  if (options?.nextOrderStatus !== undefined && options.nextOrderStatus !== nextStatus) {
-    throw new Error("Pickup plan status no longer matches persisted order");
-  }
 }

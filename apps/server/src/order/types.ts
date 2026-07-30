@@ -18,6 +18,8 @@ export type { PaymentMethod, PaymentRow };
 export type PickupApplyOptions = Readonly<{
   staffId: string;
   method?: PaymentMethod;
+  /** User-submitted normalized rack barcodes; revalidated after PostgreSQL row locks. */
+  verificationBarcodes?: readonly string[];
   /** Domain pickup plan result; verified against the transaction's current rows. */
   nextOrderStatus?: OrderStatus;
   /** Domain pickup plan result; prevents applying a stale payment balance. */
@@ -78,6 +80,8 @@ export type GarmentRecord = Readonly<{
   color: string | null;
   brand: string | null;
   status: GarmentStatus;
+  rack_zone?: string | null;
+  rack_slot?: string | null;
 }>;
 
 export type OrderRecord = Readonly<{
@@ -88,6 +92,8 @@ export type OrderRecord = Readonly<{
   /** Customer-facing receipt code; absent only on an unreceived draft. */
   pickup_code: string | null;
   status: OrderStatus;
+  /** Stable org-scoped customer identity; receipt phone/name remain snapshots. */
+  customer_id: string | null;
   customer_phone: string | null;
   customer_name: string | null;
   note: string | null;

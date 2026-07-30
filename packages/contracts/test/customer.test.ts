@@ -14,7 +14,11 @@ import {
   M2_SKELETON_DEFINITIONS,
   customerDuplicatesQuery,
   customerGetQuery,
+  customerAnonymizeCommand,
   customerMergeCommand,
+  customerPrivacyEventsQuery,
+  customerPrivacyExportCommand,
+  customerPrivacyStatusQuery,
   customerSearchQuery,
   customerUpsertCommand,
   customerUpdateCommand,
@@ -29,16 +33,13 @@ describe("M2 customer archive skeleton", () => {
       expect(definition.kind).toBe("query");
       expect(definition.risk).toBe("R2");
       expect(definition.offline_mode).toBe("denied");
-      expect(definition.data_classification).toBe("pii");
       expect(definition.max_result_rows).toBeGreaterThan(0);
-      expect(definition.result_redaction.length).toBeGreaterThan(0);
     }
     for (const definition of CUSTOMER_COMMANDS) {
       expect(isContractDefinition(definition)).toBe(true);
       expect(definition.kind).toBe("command");
-      expect(["R2", "R3", "R4"]).toContain(definition.risk);
+      expect(["R2", "R3", "R4", "R5"]).toContain(definition.risk);
       expect(definition.data_classification).toBe("pii");
-      expect(definition.idempotent).toBe(true);
     }
   });
 
@@ -47,16 +48,20 @@ describe("M2 customer archive skeleton", () => {
       "customer.search",
       "customer.get",
       "customer.duplicates",
+      "customer.privacy.status",
+      "customer.privacy.events",
     ]);
     expect([...CUSTOMER_COMMAND_NAMES]).toEqual([
       "customer.upsert",
       "customer.update",
       "customer.merge",
+      "customer.privacy.export",
+      "customer.anonymize",
     ]);
     expect([...M2_CUSTOMER_QUERY_NAMES]).toEqual([...CUSTOMER_QUERY_NAMES]);
     expect([...M2_CUSTOMER_COMMAND_NAMES]).toEqual([...CUSTOMER_COMMAND_NAMES]);
-    expect(M2_CUSTOMER_QUERY_DEFINITIONS).toHaveLength(3);
-    expect(M2_CUSTOMER_COMMAND_DEFINITIONS).toHaveLength(3);
+    expect(M2_CUSTOMER_QUERY_DEFINITIONS).toHaveLength(5);
+    expect(M2_CUSTOMER_COMMAND_DEFINITIONS).toHaveLength(5);
     expect(M2_CUSTOMER_QUERY_DEFINITIONS[0]?.name).toBe("customer.search");
     expect(M2_CUSTOMER_COMMAND_DEFINITIONS[0]?.name).toBe("customer.upsert");
   });
@@ -126,5 +131,28 @@ describe("M2 customer archive skeleton", () => {
     expect(customerUpdateCommand.risk).toBe("R3");
     expect(customerMergeCommand.risk).toBe("R4");
     expect(customerMergeCommand.offline_mode).toBe("denied");
+    expect(customerPrivacyStatusQuery.data_classification).toBe("internal");
+    expect(customerPrivacyStatusQuery.max_result_rows).toBe(1);
+    expect(customerPrivacyEventsQuery.data_classification).toBe("internal");
+    expect(customerPrivacyEventsQuery.max_result_rows).toBe(50);
+    expect(customerPrivacyExportCommand.risk).toBe("R4");
+    expect(customerPrivacyExportCommand.idempotent).toBe(false);
+    expect(customerPrivacyExportCommand.invariants).toContain("rbac.privacy_admin");
+    expect(customerAnonymizeCommand.risk).toBe("R5");
+    expect(customerAnonymizeCommand.idempotent).toBe(false);
+    expect(customerAnonymizeCommand.invariants).toContain("rbac.privacy_admin");
+  });
+
+  it("requires an explicit exact phrase before anonymization", async () => {
+    const base = {
+      customer_id: "11111111-1111-4111-8111-111111111111",
+      reason: "客户主动申请",
+    };
+    await expect(
+      parseContractInput(customerAnonymizeCommand, { ...base, confirmation: "ANONYMIZE" }),
+    ).resolves.toEqual({ ...base, confirmation: "ANONYMIZE" });
+    await expect(
+      parseContractInput(customerAnonymizeCommand, { ...base, confirmation: "anonymize" }),
+    ).rejects.toBeTruthy();
   });
 });

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0026", () => {
+  it("ships formal SQL migrations ordered 0001 → 0028", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -38,6 +38,8 @@ describe("packages/db migration file inventory", () => {
       "0024_photo_delete_grant.sql",
       "0025_fulfillment_operations.sql",
       "0026_customer_profile_governance.sql",
+      "0027_garment_rack_operations.sql",
+      "0028_customer_privacy_lifecycle.sql",
     ]);
   });
 
@@ -76,6 +78,8 @@ describe("packages/db migration file inventory", () => {
       "0024",
       "0025",
       "0026",
+      "0027",
+      "0028",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -243,5 +247,22 @@ describe("packages/db migration file inventory", () => {
     expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS pickup_code text/iu);
     expect(sql).toMatch(/orders_pickup_code_uidx/iu);
     expect(sql).toMatch(/lower\(customer_name\) text_pattern_ops/iu);
+  });
+
+  it("binds privacy history to stable customer ids and requires admin authority", () => {
+    const sql = readFileSync(join(migrationsDir, "0028_customer_privacy_lifecycle.sql"), "utf8");
+
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS customer_id uuid/iu);
+    expect(sql).toMatch(/CONSTRAINT orders_customer_fk/iu);
+    expect(sql).toMatch(/FOREIGN KEY \(org_id, customer_id\)/iu);
+    expect(sql).toMatch(/orders_org_customer_created_idx/iu);
+    expect(sql).toMatch(/linked_order\.customer_id = requested_customer_id/iu);
+    expect(sql).toMatch(/order_row\.customer_id = requested_customer_id/iu);
+    expect(sql).toMatch(/customer_id = customer_row\.id/iu);
+    expect(sql).toMatch(/authority\.staff_role <> 'admin'/iu);
+    const privacyFunctions = sql.slice(
+      sql.indexOf("CREATE OR REPLACE FUNCTION customer_privacy_status"),
+    );
+    expect(privacyFunctions).not.toMatch(/customer_phone = customer_row\.phone/iu);
   });
 });

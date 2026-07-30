@@ -20,6 +20,7 @@ export type OrderRow = {
   ticket_no: string | null;
   pickup_code: string | null;
   status: string;
+  customer_id: string | null;
   customer_phone: string | null;
   customer_name: string | null;
   note: string | null;
@@ -68,6 +69,8 @@ export type GarmentRow = {
   color: string | null;
   brand: string | null;
   status: string;
+  rack_zone: string | null;
+  rack_slot: string | null;
 };
 
 const ORDER_STATUSES = new Set<OrderStatus>(["draft", "open", "closed", "cancelled"]);
@@ -118,6 +121,7 @@ export function mapOrder(row: OrderRow, lines: readonly OrderLineRecord[]): Orde
     ticket_no: row.ticket_no,
     pickup_code: row.pickup_code,
     status: asOrderStatus(row.status),
+    customer_id: row.customer_id,
     customer_phone: row.customer_phone,
     customer_name: row.customer_name,
     note: row.note,
@@ -154,6 +158,8 @@ export function mapGarment(row: GarmentRow): GarmentRecord {
     color: row.color,
     brand: row.brand,
     status: asGarmentStatus(row.status),
+    rack_zone: row.rack_zone,
+    rack_slot: row.rack_slot,
   });
 }
 

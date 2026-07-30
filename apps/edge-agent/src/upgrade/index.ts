@@ -24,3 +24,19 @@ export {
   standbySlot,
 } from "./state.js";
 export { compareVersion, isBelowMinSecure } from "./version.js";
+export {
+  canonicalizeReleaseManifest,
+  evaluateReleaseRollback,
+  ReleaseManifestAuthoritySchema,
+  SignedReleaseManifestSchema,
+  signReleaseManifest,
+  verifyReleaseArtifact,
+  verifyReleaseManifest,
+  verifyReleaseRollbackArtifact,
+} from "./release-manifest.js";
+export type {
+  ReleaseManifestAuthority,
+  ReleaseVerificationContext,
+  ReleaseVerificationResult,
+  SignedReleaseManifest,
+} from "./release-manifest.js";

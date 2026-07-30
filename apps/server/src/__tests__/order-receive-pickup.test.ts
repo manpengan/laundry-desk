@@ -199,6 +199,85 @@ test("order.pickup transitions received garments and settles balance", async () 
   assert.equal(payments[0]?.order_id, orderId);
 });
 
+test("order.pickup requires exact barcode verification for every selected racked garment", async () => {
+  const baseStore = createMemoryOrderStore();
+  const baseBus = buildBus(baseStore);
+  const received = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      lines: [
+        {
+          service_code: "wash",
+          category_code: "shirt",
+          unit_price_cents: 1000,
+          qty: 1,
+        },
+      ],
+      paid_cents: 1000,
+    },
+    {
+      registry: baseBus.registry,
+      actor: CLERK,
+      chainHooks: baseBus.chainHooks,
+      pendingStore: baseBus.pendingStore,
+    },
+  );
+  assert.equal(received.ok, true, JSON.stringify(received));
+  if (!received.ok) return;
+  const orderId = (received.data.result as { order_id: string }).order_id;
+  const order = await baseStore.getOrder(TENANT.orgId, TENANT.storeId, orderId);
+  const garment = (await baseStore.listGarments(TENANT.orgId, TENANT.storeId, orderId))[0];
+  assert.ok(order);
+  assert.ok(garment);
+  const rackedStore = createMemoryOrderStore();
+  await rackedStore.insertOrder(order, [
+    Object.freeze({
+      ...garment,
+      status: "racked" as const,
+      rack_zone: "A",
+      rack_slot: "01",
+    }),
+  ]);
+  const { registry, chainHooks, pendingStore } = buildBus(rackedStore);
+
+  for (const verification_barcodes of [[], ["WRONG"]]) {
+    const rejected = await executeCommand(
+      new FakeSqlClient(),
+      TENANT,
+      "order.pickup",
+      {
+        order_id: orderId,
+        garment_ids: [garment.garment_id],
+        collect_cents: 0,
+        verification_barcodes,
+      },
+      { registry, actor: CLERK, chainHooks, pendingStore },
+    );
+    assert.equal(rejected.ok, false);
+    if (!rejected.ok) assert.equal(rejected.error.code, "VALIDATION_FAILED");
+  }
+
+  const accepted = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.pickup",
+    {
+      order_id: orderId,
+      garment_ids: [garment.garment_id],
+      collect_cents: 0,
+      verification_barcodes: [garment.barcode.toLowerCase()],
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(accepted.ok, true, JSON.stringify(accepted));
+  const pickedGarment = (await rackedStore.listGarments(TENANT.orgId, TENANT.storeId, orderId))[0];
+  assert.equal(pickedGarment?.status, "picked_up");
+  assert.equal(pickedGarment?.rack_zone, null);
+  assert.equal(pickedGarment?.rack_slot, null);
+});
+
 test("order.pickup with collect_cents 0 preserves the initial payment without appending another", async () => {
   const orderStore = createMemoryOrderStore();
   const { registry, chainHooks, pendingStore } = buildBus(orderStore);
@@ -379,6 +458,10 @@ test("order.receive rolls back when its customer upsert fails", async () => {
     update: async () => null,
     merge: async () => null,
     findDuplicates: async () => Object.freeze([]),
+    privacyStatus: async () => null,
+    listPrivacyEvents: async () => Object.freeze([]),
+    exportPrivacy: async () => null,
+    anonymize: async () => null,
   });
   const orderStore = createMemoryOrderStore();
   const { registry, chainHooks, pendingStore } = buildBus(orderStore, brokenCustomer);

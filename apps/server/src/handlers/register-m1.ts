@@ -126,7 +126,13 @@ export function registerM1Handlers(
 
   if (deps.customer !== undefined) {
     registerCustomerCommandHandlers(registry, deps.customer);
-    registered.push("customer.upsert", "customer.update", "customer.merge");
+    registered.push(
+      "customer.upsert",
+      "customer.update",
+      "customer.merge",
+      "customer.privacy.export",
+      "customer.anonymize",
+    );
   }
 
   if (deps.shift !== undefined) {
@@ -144,6 +150,7 @@ export function registerM1Handlers(
     registered.push(
       "garment.transition",
       "garment.bulk_transition",
+      "garment.rack.assign",
       "garment.rework",
       "garment.incident.record",
       "garment.mark_lost",
@@ -186,7 +193,13 @@ export function registerM1QueryHandlers(
 
   if (deps.customer !== undefined) {
     registerCustomerQueryHandlers(queryRegistry, deps.customer);
-    names.push("customer.search", "customer.get", "customer.duplicates");
+    names.push(
+      "customer.search",
+      "customer.get",
+      "customer.duplicates",
+      "customer.privacy.status",
+      "customer.privacy.events",
+    );
   }
 
   if (deps.shift !== undefined) {
