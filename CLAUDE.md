@@ -16,11 +16,12 @@ Claude（Opus 4.7）在本项目中的入场指引。
 ## 入场必读
 
 1. [`docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md`](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md) — 当前产品与交付裁决
-2. [`docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md`](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) — 当前本地优先设计
-3. [`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) — Claude 架构基线
-4. [`docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md`](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md) — Claude UI 基线
-5. [`docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md`](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) — V2-only 基础裁决
-6. [`AGENTS.md`](AGENTS.md) — 当前 owner 与执行入口
+2. [`docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md`](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) — 修订 ADR-14 §4 阶段线；契约面新增须附 ADR
+3. [`docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md`](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) — 当前本地优先设计
+4. [`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) — Claude 架构基线
+5. [`docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md`](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md) — Claude UI 基线
+6. [`docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md`](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) — V2-only 基础裁决
+7. [`AGENTS.md`](AGENTS.md) — 当前 owner 与执行入口
 
 ## 门禁清单（每期 Gemini 声明完成时用）
 

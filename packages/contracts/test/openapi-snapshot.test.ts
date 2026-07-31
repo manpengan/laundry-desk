@@ -24,13 +24,17 @@ const snapshotPath = join(packageRoot, OPENAPI_SNAPSHOT_RELATIVE_PATH);
 const loadSnapshotText = (): string => readFileSync(snapshotPath, "utf8");
 
 describe("A7 OpenAPI 3.1 snapshot", () => {
-  it("builds a deterministic OpenAPI 3.1 document", () => {
-    const first = serializeOpenApiDocument(buildLaundryOpenApiDocument());
+  // Two independent builds are what proves determinism; the third build this
+  // used to make was redundant. Document cost scales with the contract surface
+  // (383 KB at 29 commands), so keep the count minimal and the budget explicit
+  // rather than relying on vitest's 5s default — see m2-freeze.test.ts.
+  it("builds a deterministic OpenAPI 3.1 document", { timeout: 10_000 }, () => {
+    const document = buildLaundryOpenApiDocument();
+    const first = serializeOpenApiDocument(document);
     const second = serializeOpenApiDocument(buildLaundryOpenApiDocument());
     expect(first).toBe(second);
     expect(first.endsWith("\n")).toBe(true);
 
-    const document = buildLaundryOpenApiDocument();
     expect(document.openapi).toBe(OPENAPI_VERSION);
     expect(document.openapi).toBe("3.1.0");
     expect(document.info.version).toBe(OPENAPI_INFO_VERSION);

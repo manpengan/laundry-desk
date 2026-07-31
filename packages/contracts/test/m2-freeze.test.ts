@@ -92,10 +92,10 @@ describe("M2 contract surface", () => {
   });
 
   it("projects the frozen M2 surface into deterministic OpenAPI", { timeout: 10_000 }, () => {
-    const first = serializeOpenApiDocument(buildLaundryOpenApiDocument());
+    const document = buildLaundryOpenApiDocument();
+    const first = serializeOpenApiDocument(document);
     const second = serializeOpenApiDocument(buildLaundryOpenApiDocument());
     expect(first).toBe(second);
-    const document = buildLaundryOpenApiDocument();
     for (const definition of M2_CONTRACT_DEFINITIONS) {
       const path = `/v1/${definition.kind === "command" ? "commands" : "queries"}/${definition.name}`;
       if (definition.name === "photo.register" || definition.name === "photo.delete") {
