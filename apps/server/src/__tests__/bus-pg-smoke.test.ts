@@ -33,7 +33,7 @@ const ADMIN: ActorContext = Object.freeze({
   staffId: DEMO_ADMIN_ID,
   deviceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   via: "ui" as const,
-  permissions: Object.freeze(["settings_admin", "staff_read", "staff_write"]),
+  permissions: Object.freeze(["settings_admin", "staff_read", "staff_write", "audit_read"]),
 });
 
 const STAFF: ActorContext = Object.freeze({
@@ -49,6 +49,7 @@ maybe("platform.settings.set persists settings + audit_log under laundry_app", a
   const appPool = createPgPool({ connectionString: urls.app });
   try {
     await seedPgTestIdentityFixture(adminPool);
+    const auditWindowStartEpochS = Math.floor(Date.now() / 1000);
 
     const platform = Object.freeze({
       persistence: "sql" as const,
@@ -139,7 +140,7 @@ maybe("platform.settings.set persists settings + audit_log under laundry_app", a
         TENANT,
         "platform.audit.list",
         {
-          from_epoch_s: 0,
+          from_epoch_s: auditWindowStartEpochS,
           to_epoch_s: Math.floor(Date.now() / 1000) + 60,
           limit: 20,
         },

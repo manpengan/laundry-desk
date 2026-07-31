@@ -2,12 +2,21 @@
  * 日结统计 — stats.day.summary counter surface (M2 skeleton).
  */
 
-import { Button, Input, MoneyText, useToast } from "@laundry/ui";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Button, Input, useToast } from "@laundry/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
+import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
-import { downloadDaySummaryCsv } from "./day-summary-csv.js";
+import type { OfflinePort } from "../host/offline-port.js";
+import { OfflineConflictPanel } from "./OfflineConflictPanel.js";
+import { downloadReconciliationExport } from "./reconciliation-export.js";
+import {
+  parseReconciliationExport,
+  parseReconciliationView,
+  type ReconciliationView,
+} from "./reconciliation-view.js";
+import { ReconciliationSnapshot } from "./ReconciliationSnapshot.js";
 import { ShiftClosePanel } from "./ShiftClosePanel.js";
 import { ShiftHistoryPanel } from "./ShiftHistoryPanel.js";
 
@@ -29,6 +38,8 @@ export type StatsPageProps = {
   /** Optional: manager step-up for POLICY_STEP_UP_REQUIRED on shift.close. */
   session?: SessionView;
   authClient?: AuthClient;
+  /** Desktop-only local queue evidence and recovery actions. */
+  offlinePort?: OfflinePort;
   /** Explicit business date override (tests or historic lookup). */
   defaultDate?: string;
   /** Skip auto-load on mount (tests). */
@@ -91,18 +102,38 @@ export function parseDaySummary(value: unknown): DaySummaryView | null {
   });
 }
 
+export async function executeReconciliationExport(
+  commandClient: CommandPort,
+  businessDate: string,
+) {
+  let result = await commandClient.execute<unknown>("reconciliation.export", {
+    business_date: businessDate,
+    format: "csv",
+  });
+  if (isStepUpRequired(result) && result.error.code === "POLICY_CONFIRMATION_REQUIRED") {
+    result = await commandClient.execute<unknown>(
+      "reconciliation.export",
+      {},
+      { confirmRef: result.error.detail.confirm_ref },
+    );
+  }
+  return result;
+}
+
 export function StatsPage({
   queryClient,
   commandClient,
   session,
   authClient,
+  offlinePort,
   defaultDate,
   autoLoad = true,
 }: StatsPageProps) {
   const toast = useToast();
   const [dateText, setDateText] = useState(() => defaultDate ?? "");
   const [busy, setBusy] = useState(false);
-  const [summary, setSummary] = useState<DaySummaryView | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [snapshot, setSnapshot] = useState<ReconciliationView | null>(null);
   const loadRef = useRef<() => Promise<void>>(async () => undefined);
   const loadGenerationRef = useRef(0);
 
@@ -114,27 +145,27 @@ export function StatsPage({
     }
     const loadGeneration = loadGenerationRef.current + 1;
     loadGenerationRef.current = loadGeneration;
-    setSummary(null);
+    setSnapshot(null);
     setBusy(true);
     try {
       const res = await queryClient.execute<unknown>(
-        "stats.day.summary",
+        "reconciliation.day.get",
         businessDate.length === 0 ? {} : { business_date: businessDate },
       );
       if (loadGeneration !== loadGenerationRef.current) return;
       if (!res.ok) {
         toast.push(res.error.message ?? res.error.code, "error");
-        setSummary(null);
+        setSnapshot(null);
         return;
       }
-      const parsed = parseDaySummary(unwrapQueryResult(res.data));
+      const parsed = parseReconciliationView(unwrapQueryResult(res.data));
       if (loadGeneration !== loadGenerationRef.current) return;
       if (parsed === null) {
-        toast.push("日结结果无法解析", "error");
-        setSummary(null);
+        toast.push("对账快照无法解析", "error");
+        setSnapshot(null);
         return;
       }
-      setSummary(parsed);
+      setSnapshot(parsed);
       setDateText(parsed.business_date);
     } finally {
       if (loadGeneration === loadGenerationRef.current) setBusy(false);
@@ -151,15 +182,15 @@ export function StatsPage({
   const changeDate = useCallback((value: string) => {
     loadGenerationRef.current += 1;
     setBusy(false);
-    setSummary(null);
+    setSnapshot(null);
     setDateText(value);
   }, []);
 
   return (
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
-      <h1 className="ld-shell-main__title">统计</h1>
+      <h1 className="ld-shell-main__title">账目 / 对账</h1>
       <p className="ld-shell-main__hint">
-        日结汇总：默认由服务端确定当前营业日，也可查询历史营业日。
+        服务端统一核对订单、支付账本、交班、打印软件状态与离线回放；历史营业日可追溯。
       </p>
 
       <div className="ld-stats-form">
@@ -181,82 +212,53 @@ export function StatsPage({
             disabled={busy}
             data-testid="stats-load-btn"
           >
-            {busy ? "加载中…" : "查询日结"}
+            {busy ? "加载中…" : "查询对账"}
           </Button>
           <Button
             variant="secondary"
             type="button"
             onClick={() => {
-              if (summary === null) {
-                toast.push("请先查询日结", "error");
+              if (snapshot === null || commandClient === undefined) {
+                toast.push("请先查询对账快照", "error");
                 return;
               }
-              downloadDaySummaryCsv(summary);
+              void (async () => {
+                setExporting(true);
+                try {
+                  const result = await executeReconciliationExport(
+                    commandClient,
+                    snapshot.business_date,
+                  );
+                  if (!result.ok) {
+                    toast.push(result.error.message ?? result.error.code, "error");
+                    return;
+                  }
+                  const exported = parseReconciliationExport(unwrapQueryResult(result.data));
+                  if (exported === null || !(await downloadReconciliationExport(exported))) {
+                    toast.push("对账导出校验失败", "error");
+                    return;
+                  }
+                  toast.push("对账 CSV 已完成完整性校验", "success");
+                } finally {
+                  setExporting(false);
+                }
+              })();
             }}
-            disabled={busy || summary === null}
+            disabled={busy || exporting || snapshot === null || commandClient === undefined}
             data-testid="stats-export-csv-btn"
           >
-            导出 CSV
+            {exporting ? "校验导出中…" : "导出审计 CSV"}
           </Button>
         </div>
       </div>
 
-      {summary !== null ? (
-        <div
-          className="ld-stats-grid"
-          data-business-date={summary.business_date}
-          data-testid="stats-summary"
-        >
-          <MetricCard
-            testId="stats-card-orders"
-            label="开单笔数"
-            value={<span className="ld-stats-metric__num">{summary.order_count}</span>}
-            foot={`衣物 ${summary.garment_count} 件`}
-          />
-          <MetricCard
-            testId="stats-card-garments"
-            label="衣物件数"
-            value={<span className="ld-stats-metric__num">{summary.garment_count}</span>}
-            foot={`已取 ${summary.picked_garment_count} 件`}
-          />
-          <MetricCard
-            testId="stats-card-payable"
-            label="应收"
-            value={<MoneyText fen={summary.payable_cents} size="lg" />}
-            foot={`已收 ${summary.paid_cents} 分`}
-          />
-          <MetricCard
-            testId="stats-card-paid"
-            label="已收（订单）"
-            value={<MoneyText fen={summary.paid_cents} size="lg" />}
-            foot={`余额 ${summary.balance_cents} 分`}
-          />
-          <MetricCard
-            testId="stats-card-balance"
-            label="余额"
-            value={<MoneyText fen={summary.balance_cents} size="lg" />}
-            foot="当日订单 balance 合计"
-          />
-          <MetricCard
-            testId="stats-card-payment"
-            label="收款流水"
-            value={<MoneyText fen={summary.payment_cents} size="lg" />}
-            foot="payments.kind=pay 当日合计"
-          />
-          <MetricCard
-            testId="stats-card-picked"
-            label="已取件数"
-            value={<span className="ld-stats-metric__num">{summary.picked_garment_count}</span>}
-            foot={`营业日 ${summary.business_date}`}
-          />
-        </div>
-      ) : null}
+      {snapshot === null ? null : <ReconciliationSnapshot value={snapshot} />}
 
       {commandClient !== undefined ? (
         <ShiftClosePanel
           queryClient={queryClient}
           commandClient={commandClient}
-          businessDate={summary?.business_date ?? dateText}
+          businessDate={snapshot?.business_date ?? dateText}
           autoLoad={autoLoad}
           {...(session !== undefined ? { session } : {})}
           {...(authClient !== undefined ? { authClient } : {})}
@@ -265,16 +267,7 @@ export function StatsPage({
       {dateText.length > 0 ? (
         <ShiftHistoryPanel queryClient={queryClient} initialDate={dateText} />
       ) : null}
+      {offlinePort === undefined ? null : <OfflineConflictPanel offlinePort={offlinePort} />}
     </main>
-  );
-}
-
-function MetricCard(props: { testId: string; label: string; value: ReactNode; foot: string }) {
-  return (
-    <article className="ld-stats-card" data-testid={props.testId}>
-      <div className="ld-stats-card__label">{props.label}</div>
-      <div className="ld-stats-card__value">{props.value}</div>
-      <div className="ld-stats-card__foot">{props.foot}</div>
-    </article>
   );
 }

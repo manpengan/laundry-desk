@@ -25,11 +25,12 @@ import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { createPgCatalogStore } from "../catalog/pg-catalog-store.js";
 import { createPgCustomerStore } from "../customer/pg-customer-store.js";
 import { createPgFulfillmentStore } from "../fulfillment/pg-store.js";
-import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
+import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
 import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
+import { acquirePgBusinessDayLock } from "../workday/business-day-lock.js";
 import { createPgOrderStore } from "./pg-order-store.js";
 
 const urls =
@@ -48,8 +49,9 @@ const ACTOR: ActorContext = Object.freeze({
   staffId: DEMO_STAFF_A_ID,
   deviceId: null,
   via: "ui",
-  permissions: Object.freeze(["order_write", "payment_write", "shift_close"]),
+  permissions: Object.freeze(["order_write", "payment_write", "payment_refund", "shift_close"]),
 });
+const APPROVER: ActorContext = Object.freeze({ ...ACTOR, staffId: DEMO_STAFF_B_ID });
 
 const UNIT_PRICE_CENTS = 1_000;
 const PRICING = Object.freeze({
@@ -64,6 +66,9 @@ const PAYABLE_CENTS =
   PRICING.addon_cents +
   PRICING.urgent_cents +
   PRICING.freight_cents;
+const FIXED_BUSINESS_DATE = "2026-01-15";
+const CUSTOMER_PHONE = `139${String(Date.parse("2026-07-28") % 100_000_000).padStart(8, "0")}`;
+const TARGET_CUSTOMER_PHONE = `138${CUSTOMER_PHONE.slice(3)}`;
 
 /**
  * Pin this acceptance to its own business day. shift.close is terminal and
@@ -81,10 +86,10 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
   const appPool = createPgPool({ connectionString: urls.app });
   const serviceCode = "wash";
   const categoryCode = `shirt-${randomUUID().slice(0, 8)}`;
-  const phone = `139${String(Date.parse("2026-07-28") % 100_000_000).padStart(8, "0")}`;
 
   try {
     await seedPgTestIdentityFixture(adminPool);
+    await clearWorkdayFixture(adminPool);
     await adminPool.query(
       `INSERT INTO catalog_items (
          id, org_id, store_id, code, name, service_code, category_code,
@@ -119,26 +124,36 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
         }),
         timeZone: LOCAL_PROFILE.timezone,
         now: fixedNow,
+        lockBusinessDay: acquirePgBusinessDayLock,
       }),
       shift: Object.freeze({
         store: shiftStore,
         stats: statsSource,
         timeZone: LOCAL_PROFILE.timezone,
         now: fixedNow,
+        lockBusinessDay: acquirePgBusinessDayLock,
       }),
       stats: Object.freeze({ source: statsSource, timeZone: LOCAL_PROFILE.timezone }),
       fulfillment: Object.freeze({ store: fulfillmentStore, now: fixedNow }),
     });
 
-    const issue = async (name: string, input: unknown, confirmRef?: string) =>
+    const issueAs = async (
+      actor: ActorContext,
+      tenant: TenantContext,
+      name: string,
+      input: unknown,
+      confirmRef?: string,
+    ) =>
       withPoolClient(appPool, (sql) =>
-        executeCommand(sql, TENANT, name, input, {
+        executeCommand(sql, tenant, name, input, {
           registry,
-          actor: ACTOR,
+          actor,
           chainHooks,
           ...(confirmRef === undefined ? {} : { confirmRef }),
         }),
       );
+    const issue = async (name: string, input: unknown, confirmRef?: string) =>
+      issueAs(ACTOR, TENANT, name, input, confirmRef);
 
     /**
      * Mirrors the counter danger-confirm flow: a policy-gated command first
@@ -164,7 +179,7 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     // Receive two garments with every pricing component and pay 600 in cash.
     const received = (
       await run("order.receive", {
-        customer_phone: phone,
+        customer_phone: CUSTOMER_PHONE,
         customer_name: "验收顾客",
         lines: [{ service_code: serviceCode, category_code: categoryCode, qty: 2 }],
         ...PRICING,
@@ -178,7 +193,7 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     // effect, which is what keeps today's shift open for the browser E2E.
     assert.equal(
       afterReceive.business_date,
-      "2026-01-15",
+      FIXED_BUSINESS_DATE,
       "receive must persist the pinned ISO business_date",
     );
     assert.equal(afterReceive.original_cents, 2 * UNIT_PRICE_CENTS);
@@ -244,12 +259,11 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       "fulfillment transitions and incidents persist atomically on real PostgreSQL",
     );
 
-    const sourceCustomer = await customerStore.getByPhone(phone);
+    const sourceCustomer = await customerStore.getByPhone(CUSTOMER_PHONE);
     assert.ok(sourceCustomer);
-    const targetPhone = `138${phone.slice(3)}`;
     const targetCustomer = (
       await customerStore.upsert({
-        phone: targetPhone,
+        phone: TARGET_CUSTOMER_PHONE,
         name: "验收顾客",
         note: "保留目标备注",
         now: fixedNow(),
@@ -272,13 +286,13 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
         relinked_order_count: 1,
       },
     );
-    const redirectedCustomer = await customerStore.getByPhone(phone);
+    const redirectedCustomer = await customerStore.getByPhone(CUSTOMER_PHONE);
     assert.equal(redirectedCustomer?.customer_id, targetCustomer.customer_id);
-    assert.equal(redirectedCustomer?.phone, targetPhone);
+    assert.equal(redirectedCustomer?.phone, TARGET_CUSTOMER_PHONE);
     assert.equal(redirectedCustomer?.note, "保留目标备注");
     assert.deepEqual(await readOrderCustomerLink(appPool, received.order_id), {
       customer_id: targetCustomer.customer_id,
-      customer_phone: targetPhone,
+      customer_phone: TARGET_CUSTOMER_PHONE,
     });
 
     // Repay the outstanding debt.
@@ -291,6 +305,81 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     assert.equal(afterRepay.balance_cents, 0, "repay must settle the balance");
     assert.equal(afterRepay.paid_cents, PAYABLE_CENTS);
     assert.equal(afterRepay.payment_count, 2, "payments are append-only");
+    const repayment = (
+      await orderStore.listPayments?.(DEMO_ORG_ID, DEMO_STORE_ID, received.order_id)
+    )?.find((payment) => payment.kind === "repay");
+    assert.ok(repayment);
+    const refundInput = Object.freeze({
+      order_id: received.order_id,
+      amount_cents: 100,
+      method: repayment.method,
+      ref_payment_id: repayment.payment_id,
+      reason: "real PG refund acceptance",
+    });
+    const refundGate = await issue("payment.refund", refundInput);
+    assert.equal(refundGate.ok, false, JSON.stringify(refundGate));
+    if (refundGate.ok) assert.fail("refund must require another administrator");
+    assert.equal(refundGate.error.code, "POLICY_STEP_UP_REQUIRED");
+    const refundDetail = "detail" in refundGate.error ? refundGate.error.detail : undefined;
+    if (refundDetail?.kind !== "confirmation") {
+      assert.fail("payment.refund must return a step-up confirmation reference");
+    }
+    const approverTenant = Object.freeze({ ...TENANT, staffId: APPROVER.staffId });
+    const refunded = await issueAs(
+      APPROVER,
+      approverTenant,
+      "payment.refund",
+      {},
+      refundDetail.confirm_ref,
+    );
+    assert.equal(refunded.ok, true, JSON.stringify(refunded));
+    if (!refunded.ok) assert.fail("approved refund must execute");
+    const refundResult = refunded.data.result as {
+      payment_id: string;
+      kind: string;
+      ref_payment_id: string;
+      paid_cents: number;
+      balance_cents: number;
+    };
+    assert.equal(refundResult.kind, "refund");
+    assert.equal(refundResult.ref_payment_id, repayment.payment_id);
+    assert.equal(refundResult.paid_cents, PAYABLE_CENTS - 100);
+    assert.equal(refundResult.balance_cents, 100);
+    const refundRows = await withPoolClient(appPool, (sql) =>
+      withTenantTransaction(sql, TENANT, (tx) =>
+        tx.query<{ after_json: string }>(
+          `SELECT after_json
+             FROM audit_log
+            WHERE command = 'payment.refund' AND entity_id = $1
+            ORDER BY at DESC
+            LIMIT 1`,
+          [refundResult.payment_id],
+        ),
+      ),
+    );
+    const refundAudit = JSON.parse(refundRows.rows[0]?.after_json ?? "null") as unknown;
+    assert.deepEqual(
+      refundAudit !== null && typeof refundAudit === "object"
+        ? {
+            initiated_by_staff_id: Reflect.get(refundAudit, "initiated_by_staff_id"),
+            approved_by_staff_id: Reflect.get(refundAudit, "approved_by_staff_id"),
+          }
+        : null,
+      {
+        initiated_by_staff_id: ACTOR.staffId,
+        approved_by_staff_id: APPROVER.staffId,
+      },
+      "R4 refund audit must persist both staff identities after process-local approval is consumed",
+    );
+    await run("payment.repay", {
+      order_id: received.order_id,
+      amount_cents: 100,
+      method: "wechat",
+    });
+    const afterRefundRecovery = await readOrder(appPool, received.order_id);
+    assert.equal(afterRefundRecovery.paid_cents, PAYABLE_CENTS);
+    assert.equal(afterRefundRecovery.balance_cents, 0);
+    assert.equal(afterRefundRecovery.payment_count, 4, "refund and recovery remain append-only");
     assert.deepEqual(
       await statsSource.cashSummary({
         orgId: DEMO_ORG_ID,
@@ -299,6 +388,37 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       }),
       { cash_cents: 600 },
       "cash summary must exclude the WeChat repayment",
+    );
+
+    await run("order.hold", {
+      lines: [{ service_code: serviceCode, category_code: categoryCode, qty: 1 }],
+    });
+    const cancelCandidate = (
+      await run("order.receive", {
+        lines: [{ service_code: serviceCode, category_code: categoryCode, qty: 1 }],
+      })
+    ).data as { order_id: string };
+    await run("order.cancel", {
+      order_id: cancelCandidate.order_id,
+      reason: "real PG shift exclusion acceptance",
+    });
+    assert.deepEqual(
+      await statsSource.daySummary({
+        orgId: DEMO_ORG_ID,
+        storeId: DEMO_STORE_ID,
+        businessDate: afterReceive.business_date,
+      }),
+      {
+        business_date: afterReceive.business_date,
+        order_count: 1,
+        garment_count: 2,
+        payable_cents: PAYABLE_CENTS,
+        paid_cents: PAYABLE_CENTS,
+        balance_cents: 0,
+        payment_cents: 600,
+        picked_garment_count: 0,
+      },
+      "draft and cancelled orders must not enter the shift accounting snapshot",
     );
 
     // Pick up everything; nothing left to collect.
@@ -378,10 +498,85 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     );
     assert.equal(Number(closings.rows[0]?.audit_count), 1, "shift close audit commits atomically");
   } finally {
-    await appPool.end();
-    await adminPool.end();
+    try {
+      await clearWorkdayFixture(adminPool);
+    } finally {
+      await appPool.end();
+      await adminPool.end();
+    }
   }
 });
+
+async function clearWorkdayFixture(pool: ReturnType<typeof createPgPool>): Promise<void> {
+  const client = await pool.connect();
+  const scope = [DEMO_ORG_ID, DEMO_STORE_ID, FIXED_BUSINESS_DATE];
+  try {
+    await client.query("BEGIN");
+    await client.query("SET LOCAL ROLE laundry_owner");
+    await client.query(
+      `DELETE FROM audit_log
+        WHERE org_id = $1::uuid AND store_id = $2::uuid
+          AND entity_id IN (
+            SELECT id::text FROM orders
+              WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3
+            UNION SELECT id::text FROM garments
+              WHERE org_id = $1::uuid AND store_id = $2::uuid
+                AND order_id IN (
+                  SELECT id FROM orders
+                    WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3
+                )
+            UNION SELECT id::text FROM payments
+              WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3
+            UNION SELECT id::text FROM shift_closings
+              WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3
+            UNION SELECT id::text FROM customers
+              WHERE org_id = $1::uuid AND phone IN ($4, $5)
+          )`,
+      [...scope, CUSTOMER_PHONE, TARGET_CUSTOMER_PHONE],
+    );
+    const orderIds = `SELECT id FROM orders
+      WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3`;
+    for (const table of [
+      "garment_rack_log",
+      "garment_incidents",
+      "garment_status_log",
+      "payments",
+      "garments",
+      "order_lines",
+    ]) {
+      await client.query(
+        `DELETE FROM ${table}
+          WHERE org_id = $1::uuid AND store_id = $2::uuid
+            AND order_id IN (${orderIds})`,
+        scope,
+      );
+    }
+    await client.query(
+      "DELETE FROM orders WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3",
+      scope,
+    );
+    await client.query(
+      "DELETE FROM shift_closings WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3",
+      scope,
+    );
+    await client.query(
+      `DELETE FROM customers
+        WHERE org_id = $1::uuid AND phone IN ($2, $3)`,
+      [DEMO_ORG_ID, CUSTOMER_PHONE, TARGET_CUSTOMER_PHONE],
+    );
+    await client.query(
+      `DELETE FROM catalog_items
+        WHERE org_id = $1::uuid AND store_id = $2::uuid AND code LIKE 'acc-shirt-%'`,
+      [DEMO_ORG_ID, DEMO_STORE_ID],
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 type OrderSnapshot = Readonly<{
   business_date: string;

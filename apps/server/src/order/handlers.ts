@@ -92,6 +92,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
     const draftId = typeof input.draft_id === "string" ? input.draft_id : undefined;
     const orderId = draftId ?? newId();
     const businessDate = deriveBusinessDate(now, deps.timeZone, deps.rolloverHour);
+    await deps.lockBusinessDay?.(ctx.client, ctx.tenant, businessDate);
     await assertBusinessDayOpen(deps.isBusinessDayClosed, businessDate);
     const dayKey = businessDate.replaceAll("-", "");
     let customerPhone =
@@ -284,6 +285,7 @@ function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
 
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
     const businessDate = deriveBusinessDate(now, deps.timeZone, deps.rolloverHour);
+    await deps.lockBusinessDay?.(ctx.client, ctx.tenant, businessDate);
     await assertBusinessDayOpen(deps.isBusinessDayClosed, businessDate);
     const applied = await deps.store.applyPickup(
       ctx.tenant.orgId,

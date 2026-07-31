@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +9,11 @@ import test from "node:test";
 import { signReleaseManifest } from "./release-manifest.js";
 import { RuntimeUpdateController, prepareRuntimeStartup } from "./runtime-controller.js";
 import type { RuntimeUpdateIo } from "./runtime-io.js";
-import { RuntimeUpdateStateStore } from "./runtime-state.js";
+import {
+  RUNTIME_RECOVERY_CAPABILITIES,
+  RuntimeUpdateStateStore,
+  type RuntimeUpdateState,
+} from "./runtime-state.js";
 
 const OLD_APP = "/Applications/laundry-desk V2.app";
 const NEW_APP = "/private/update/B/laundry-desk V2.app";
@@ -47,10 +52,10 @@ function manifest() {
   );
 }
 
-function queueStatus(pendingCount = 0) {
+function queueStatus(pendingCount = 0, inflightCount = 0) {
   return Object.freeze({
     pendingCount,
-    inflightCount: 0,
+    inflightCount,
     storageVersion: 1 as const,
     hasDek: true,
     kekKeyVersion: 1,
@@ -69,6 +74,12 @@ function fakeIo(overrides: Partial<RuntimeUpdateIo> = {}): RuntimeUpdateIo {
   });
 }
 
+class FailingActivationStateStore extends RuntimeUpdateStateStore {
+  override activate(): RuntimeUpdateState {
+    throw new Error("activation interrupted");
+  }
+}
+
 test("stages a verified update into standby and raises the security floor atomically", async () => {
   const root = await mkdtemp(join(tmpdir(), "laundry-update-controller-"));
   try {
@@ -80,6 +91,7 @@ test("stages a verified update into standby and raises the security floor atomic
     });
     const ids = [STAGE_ID, ACTIVATION_ID];
     const leaseBlocks: boolean[] = [];
+    let releaseRoot: string | undefined;
     const controller = new RuntimeUpdateController({
       manifestUrl: "https://updates.example.test/stable/latest.json",
       publicKey: keys.publicKey,
@@ -91,7 +103,15 @@ test("stages a verified update into standby and raises the security floor atomic
         supported_contracts_majors: [0],
       },
       state,
-      io: fakeIo(),
+      io: fakeIo({
+        downloadArtifact: async (_url, _authority, _name, destination) => {
+          releaseRoot = destination;
+          return {
+            path: join(destination, "laundry-desk-0.2.0-mac.zip"),
+            sha256: DIGEST,
+          };
+        },
+      }),
       queueStatus: queueStatus,
       stagedHealth: async () => true,
       setPrimaryLeaseBlocked: (blocked) => leaseBlocks.push(blocked),
@@ -109,15 +129,19 @@ test("stages a verified update into standby and raises the security floor atomic
     assert.equal(state.snapshot().minimum_secure_version, "0.1.0");
     assert.equal(state.snapshot().pending_activation?.nonce, ACTIVATION_ID);
     assert.deepEqual(leaseBlocks, [true]);
+    assert.notEqual(releaseRoot, undefined);
+    assert.equal(existsSync(releaseRoot!), true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test("offline queue blocks all update network and filesystem I/O", async () => {
+test("pending or inflight offline work blocks network, filesystem, and lease I/O", async () => {
   const root = await mkdtemp(join(tmpdir(), "laundry-update-controller-"));
   try {
     let fetched = false;
+    let queue = queueStatus(1, 0);
+    const leaseBlocks: boolean[] = [];
     const state = new RuntimeUpdateStateStore(root, {
       currentVersion: "0.1.0",
       currentAppPath: OLD_APP,
@@ -140,16 +164,144 @@ test("offline queue blocks all update network and filesystem I/O", async () => {
           return manifest();
         },
       }),
-      queueStatus: () => queueStatus(1),
+      queueStatus: () => queue,
       stagedHealth: async () => true,
+      setPrimaryLeaseBlocked: (blocked) => leaseBlocks.push(blocked),
     });
     assert.deepEqual(await controller.checkAndStage(), {
       status: "blocked",
       reason: "offline_queue_not_empty",
     });
+    queue = queueStatus(0, 1);
+    assert.deepEqual(await controller.checkAndStage(), {
+      status: "blocked",
+      reason: "offline_queue_not_empty",
+    });
     assert.equal(fetched, false);
+    assert.equal(existsSync(join(root, "slots")), false);
+    assert.deepEqual(leaseBlocks, []);
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("work queued while checking the manifest blocks staging after the lease gate closes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-update-controller-"));
+  try {
+    let queue = queueStatus();
+    let downloaded = false;
+    const leaseBlocks: boolean[] = [];
+    const state = new RuntimeUpdateStateStore(root, {
+      currentVersion: "0.1.0",
+      currentAppPath: OLD_APP,
+      minimumSecureVersion: "0.1.0",
+    });
+    const controller = new RuntimeUpdateController({
+      manifestUrl: "https://updates.example.test/stable/latest.json",
+      publicKey: keys.publicKey,
+      context: {
+        channel: "stable",
+        current_version: "0.1.0",
+        installed_minimum_secure_version: "0.1.0",
+        current_local_schema: 3,
+        supported_contracts_majors: [0],
+      },
+      state,
+      io: fakeIo({
+        fetchManifest: async () => {
+          queue = queueStatus(1, 0);
+          return manifest();
+        },
+        downloadArtifact: async (_url, _authority, _name, destination) => {
+          downloaded = true;
+          return {
+            path: join(destination, "laundry-desk-0.2.0-mac.zip"),
+            sha256: DIGEST,
+          };
+        },
+      }),
+      queueStatus: () => queue,
+      stagedHealth: async () => true,
+      setPrimaryLeaseBlocked: (blocked) => leaseBlocks.push(blocked),
+    });
+
+    assert.deepEqual(await controller.checkAndStage(), {
+      status: "blocked",
+      reason: "offline_queue_not_empty",
+    });
+    assert.equal(downloaded, false);
+    assert.equal(existsSync(join(root, "slots")), false);
+    assert.deepEqual(leaseBlocks, [true, false]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("failed staging removes its release root and releases the primary lease", async (t) => {
+  const cases = [
+    { phase: "download", reason: "download interrupted" },
+    { phase: "extract", reason: "extract interrupted" },
+    { phase: "team", reason: "Update app signing team does not match" },
+    { phase: "health", reason: "UPDATE_STAGED_HEALTH_FAILED" },
+    { phase: "activate", reason: "activation interrupted" },
+  ] as const;
+  for (const failure of cases) {
+    await t.test(failure.phase, async () => {
+      const root = await mkdtemp(join(tmpdir(), "laundry-update-controller-"));
+      try {
+        let releaseRoot: string | undefined;
+        const StateStore =
+          failure.phase === "activate" ? FailingActivationStateStore : RuntimeUpdateStateStore;
+        const state = new StateStore(root, {
+          currentVersion: "0.1.0",
+          currentAppPath: OLD_APP,
+          minimumSecureVersion: "0.1.0",
+        });
+        const leaseBlocks: boolean[] = [];
+        const controller = new RuntimeUpdateController({
+          manifestUrl: "https://updates.example.test/stable/latest.json",
+          publicKey: keys.publicKey,
+          context: {
+            channel: "stable",
+            current_version: "0.1.0",
+            installed_minimum_secure_version: "0.1.0",
+            current_local_schema: 3,
+            supported_contracts_majors: [0],
+          },
+          state,
+          io: fakeIo({
+            downloadArtifact: async (_url, _authority, _name, destination) => {
+              releaseRoot = destination;
+              if (failure.phase === "download") throw new Error(failure.reason);
+              return {
+                path: join(destination, "laundry-desk-0.2.0-mac.zip"),
+                sha256: DIGEST,
+              };
+            },
+            extractAndVerifyMacApp: async () => {
+              if (failure.phase === "extract") throw new Error(failure.reason);
+              return NEW_APP;
+            },
+          }),
+          queueStatus,
+          stagedHealth: async () => {
+            if (failure.phase === "team") throw new Error(failure.reason);
+            return failure.phase !== "health";
+          },
+          setPrimaryLeaseBlocked: (blocked) => leaseBlocks.push(blocked),
+          randomId: () => STAGE_ID,
+        });
+        assert.deepEqual(await controller.checkAndStage(), {
+          status: "failed",
+          reason: failure.reason,
+        });
+        assert.notEqual(releaseRoot, undefined);
+        assert.equal(existsSync(releaseRoot!), false);
+        assert.deepEqual(leaseBlocks, [true, false]);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    });
   }
 });
 
@@ -185,6 +337,50 @@ test("pending activation confirms once or rolls back after an interrupted launch
     });
     assert.equal(state.snapshot().active_slot, "A");
     assert.equal(state.snapshot().slots.B.healthy, false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("security floor enters stable idempotent recovery without changing pending activation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-update-controller-"));
+  try {
+    const state = new RuntimeUpdateStateStore(root, {
+      currentVersion: "0.1.0",
+      currentAppPath: OLD_APP,
+      minimumSecureVersion: "0.1.0",
+    });
+    state.activate({
+      slot: "B",
+      version: "0.2.0",
+      appPath: NEW_APP,
+      artifactSha256: DIGEST,
+      nonce: ACTIVATION_ID,
+      now: "2026-07-30T01:03:00.000Z",
+      minimumSecureVersion: "0.2.0",
+    });
+    assert.equal(prepareRuntimeStartup(state, OLD_APP, null).action, "launch");
+    const beforeRecovery = state.snapshot();
+
+    const first = prepareRuntimeStartup(state, OLD_APP, null, () => "2026-07-30T01:04:00.000Z");
+    assert.deepEqual(first, {
+      action: "recovery",
+      capabilities: ["read_only", "print_only"],
+    });
+    assert.equal(Object.isFrozen(first), true);
+    assert.equal(Object.isFrozen(first.capabilities), true);
+    assert.equal(first.capabilities, RUNTIME_RECOVERY_CAPABILITIES);
+    assert.equal(state.snapshot().active_slot, beforeRecovery.active_slot);
+    assert.deepEqual(state.snapshot().pending_activation, beforeRecovery.pending_activation);
+
+    const decision = state.rollbackPending("2026-07-30T01:05:00.000Z");
+    assert.equal(decision.status, "recovery_required");
+    assert.equal(decision.state, state.snapshot());
+    assert.equal(
+      state.snapshot().history.filter((entry) => entry.event === "security_floor_recovery_required")
+        .length,
+      1,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

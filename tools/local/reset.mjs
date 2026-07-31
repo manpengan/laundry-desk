@@ -64,9 +64,13 @@ export async function runReset(options, dependencies) {
     project,
     instanceId: config.instanceId,
   });
+  const { directoryPath } = dependencies.resolveLocalConfigPaths({ env: options.env });
   const commandOptions = Object.freeze({
     cwd: options.cwd,
-    env: options.env,
+    env: Object.freeze({
+      ...options.env,
+      LAUNDRY_LOCAL_CONFIG_DIR: directoryPath,
+    }),
   });
   await assertOwnedVolume({ project, expectedLabels, commandOptions, dependencies });
   await dependencies.run(composeDownCommand({ project }), commandOptions);

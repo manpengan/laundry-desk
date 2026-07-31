@@ -5,11 +5,11 @@ import { parseCommandWirePayload } from "@laundry/contracts";
 import type { AuthorizedSession } from "../auth/session-view.js";
 import { executeCommand } from "../bus/executor.js";
 import { executeQuery } from "../bus/execute-query.js";
+import { createRuntimeBus, permissionsForAuthority } from "../bus/runtime.js";
 import type { ActorContext, CommandResult } from "../bus/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
-import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import type { LocalRuntime } from "../local/demo-seed.js";
 import {
   fail,
@@ -20,14 +20,6 @@ import {
 } from "./auth-route-support.js";
 import { safeErrorContext } from "./local-logger.js";
 
-const ADMIN_PERMISSIONS = Object.freeze([
-  "settings_admin",
-  "staff_read",
-  "staff_write",
-  "order_write",
-]);
-const STAFF_PERMISSIONS = Object.freeze(["staff_read", "order_write"]);
-const NO_PERMISSIONS = Object.freeze([] as string[]);
 const INTERNAL_ONLY_COMMANDS: ReadonlySet<string> = new Set(["photo.register", "photo.delete"]);
 
 function tenantFromSession(resolved: AuthorizedSession): TenantContext {
@@ -44,31 +36,7 @@ function actorFromSession(resolved: AuthorizedSession): ActorContext {
     staffId: session.staff_id,
     deviceId: session.device_id,
     via: "ui" as const,
-    permissions:
-      authority.role === "admin"
-        ? Object.freeze([
-            ...ADMIN_PERMISSIONS,
-            ...(authority.is_privacy_admin ? ["privacy_admin"] : []),
-          ])
-        : authority.role === "staff"
-          ? STAFF_PERMISSIONS
-          : NO_PERMISSIONS,
-  });
-}
-
-function createBus(runtime: LocalRuntime) {
-  return createRegisteredM1Bus({
-    identity: runtime.identity,
-    platform: runtime.platform,
-    order: runtime.order,
-    catalog: runtime.catalog,
-    print: runtime.print,
-    stats: runtime.stats,
-    customer: runtime.customer,
-    shift: runtime.shift,
-    photo: runtime.photo,
-    fulfillment: runtime.fulfillment,
-    staffAccess: runtime.staffAccess,
+    permissions: permissionsForAuthority(authority),
   });
 }
 
@@ -105,7 +73,7 @@ export async function executeTrustedSessionCommand(
   input: Readonly<Record<string, unknown>>,
   options: Readonly<{ idempotencyKey?: string }> = {},
 ): Promise<CommandResult> {
-  const { registry, chainHooks } = createBus(context.runtime);
+  const { registry, chainHooks } = createRuntimeBus(context.runtime);
   const runWithSql = createSqlRunner(context.runtime);
   return runWithSql((sql) =>
     executeCommand(sql, tenantFromSession(resolved), name, input, {
@@ -206,7 +174,7 @@ async function executeCommandRoute(
       error: { code: "VALIDATION_FAILED", message: "Request validation failed" },
     }) as CommandResult;
   }
-  const { registry, chainHooks } = createBus(context.runtime);
+  const { registry, chainHooks } = createRuntimeBus(context.runtime);
   return runWithSql((sql) =>
     executeCommand(sql, tenantFromSession(resolved), name, payload.input, {
       registry,
@@ -279,7 +247,7 @@ function registerQueryRoute(
         reply.code(400);
         return fail("VALIDATION_FAILED");
       }
-      const { queryRegistry } = createBus(context.runtime);
+      const { queryRegistry } = createRuntimeBus(context.runtime);
       const result = await runWithSql((sql) =>
         executeQuery(
           sql,

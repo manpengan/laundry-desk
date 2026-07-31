@@ -26,6 +26,8 @@ describe("M2 contract surface", () => {
       "payment.collect",
       "payment.repay",
       "payment.refund",
+      "reconciliation.export",
+      "edge.conflict.discard",
       "print.ticket.enqueue",
       "print.ticket.process",
       "print.ticket.retry",

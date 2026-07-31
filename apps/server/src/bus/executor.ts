@@ -9,9 +9,7 @@
  */
 
 import { createCommandError, type CommandError } from "@laundry/contracts";
-import { randomUUID } from "node:crypto";
 
-import { writeAudit, type AuditWriteRecord } from "../audit/write-audit.js";
 import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
@@ -25,6 +23,7 @@ import {
   type BusChainData,
   type ChainPortHooks,
 } from "./chain-adapter.js";
+import { writeAuditForOutcome, type ApprovalAuditEvidence } from "./audit-outcome.js";
 import { resolveConfirmInput } from "./confirm-input.js";
 import {
   asTransactionalIdempotencyStore,
@@ -34,13 +33,13 @@ import {
 } from "./durable-idempotency.js";
 import type {
   ActorContext,
-  AuditWriteInput,
   BusContext,
   CommandHandler,
   CommandIdempotencyStore,
   CommandRegistry,
   CommandRequest,
   CommandResult,
+  CommandTransactionGuard,
   DomainEvent,
   EventBus,
   HandlerOutcome,
@@ -66,6 +65,8 @@ export type ExecuteCommandOptions = Readonly<{
   stepUpProofStore?: StepUpProofStore;
   /** Current authenticated session; required when consuming a step-up proof. */
   sessionBinding?: StepUpSessionBinding;
+  /** Trusted server-side authority that participates in the command transaction. */
+  transactionGuard?: CommandTransactionGuard;
   now?: () => Date;
   newId?: () => string;
 }>;
@@ -75,6 +76,8 @@ type TxnBody = Readonly<{
   events: readonly DomainEvent[];
   cacheable: boolean;
 }>;
+
+const REPEATABLE_READ_COMMANDS: ReadonlySet<string> = new Set(["reconciliation.export"]);
 
 /**
  * Execute one named command under tenant GUC transaction.
@@ -105,6 +108,7 @@ export async function executeCommand(
       ? hashIdempotencyRequest(request)
       : undefined;
   if (
+    opts.transactionGuard === undefined &&
     durableIdempotency !== null &&
     request.idempotencyKey !== undefined &&
     requestHash !== undefined
@@ -117,7 +121,7 @@ export async function executeCommand(
     );
     const replay = durableLookupResult(lookup);
     if (replay !== null) return replay;
-  } else {
+  } else if (opts.transactionGuard === undefined) {
     const cached = await readIdempotentReplay(
       tenantCtx,
       request,
@@ -146,17 +150,21 @@ export async function executeCommand(
 
   let txnOutcome: TxnBody;
   try {
-    txnOutcome = await withTenantTransaction(client, tenantCtx, async (tx) =>
-      runInsideTransaction(
-        tx,
-        busCtx,
-        ports,
-        handler,
-        opts,
-        pendingStore,
-        durableIdempotency,
-        requestHash,
-      ),
+    txnOutcome = await withTenantTransaction(
+      client,
+      tenantCtx,
+      async (tx) =>
+        runInsideTransaction(
+          tx,
+          busCtx,
+          ports,
+          handler,
+          opts,
+          pendingStore,
+          durableIdempotency,
+          requestHash,
+        ),
+      REPEATABLE_READ_COMMANDS.has(name) ? { isolation: "repeatable_read" } : {},
     );
   } catch (error) {
     if (error instanceof CommandBusTxnError) return fail(error.commandError);
@@ -207,21 +215,36 @@ async function runInsideTransaction(
   durableIdempotency: TransactionalIdempotencyStore | null,
   requestHash: string | undefined,
 ): Promise<TxnBody> {
+  let guardState: unknown;
+  if (opts.transactionGuard !== undefined) {
+    const decision = await opts.transactionGuard.before(tx, busCtx);
+    if (decision.kind === "return") {
+      return { result: decision.result, events: Object.freeze([]), cacheable: false };
+    }
+    guardState = decision.state;
+  }
+  const settle = async (body: TxnBody): Promise<TxnBody> => {
+    if (opts.transactionGuard !== undefined) {
+      await opts.transactionGuard.settle(tx, busCtx, guardState, body.result);
+    }
+    return body;
+  };
+
   const chain = await runCommandChain(busCtx, busCtx.request.input, ports);
   if (chain.ok === false) {
-    return {
+    return settle({
       result: fail(chainFailureToResult(chain)),
       events: Object.freeze([]),
       cacheable: false,
-    };
+    });
   }
 
   if (busCtx.request.dryRun) {
-    return {
+    return settle({
       result: preview(chain.data),
       events: Object.freeze([]),
       cacheable: false,
-    };
+    });
   }
 
   if (handler === undefined) {
@@ -242,10 +265,11 @@ async function runInsideTransaction(
     );
     const replay = durableLookupResult(claim);
     if (replay !== null) {
-      return { result: replay, events: Object.freeze([]), cacheable: false };
+      return settle({ result: replay, events: Object.freeze([]), cacheable: false });
     }
   }
 
+  let approvalAudit: ApprovalAuditEvidence | undefined;
   // Consume pending card after chain pass, before mutation (CAS fail-closed).
   if (busCtx.confirmAuthorization !== undefined) {
     const nowEpochSeconds = Math.floor((opts.now?.() ?? new Date()).getTime() / 1000);
@@ -287,6 +311,12 @@ async function runInsideTransaction(
     if (consume.ok === false) {
       throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
     }
+    if (consume.action.requiresOtherApprover && consume.action.consumedByStaffId !== null) {
+      approvalAudit = Object.freeze({
+        initiatedByStaffId: consume.action.creatorStaffId,
+        approvedByStaffId: consume.action.consumedByStaffId,
+      });
+    }
   }
 
   const outcome = await handler({
@@ -297,7 +327,7 @@ async function runInsideTransaction(
     parsed: chain.data.parsed,
   });
 
-  await writeAuditForOutcome(tx, busCtx, outcome.audit, opts);
+  await writeAuditForOutcome(tx, busCtx, outcome.audit, opts, approvalAudit);
   const result = executed(outcome.result);
   if (
     durableIdempotency !== null &&
@@ -314,39 +344,11 @@ async function runInsideTransaction(
     );
   }
 
-  return {
+  return settle({
     result,
     events: Object.freeze([...(outcome.events ?? [])]),
     cacheable: true,
-  };
-}
-
-async function writeAuditForOutcome(
-  tx: SqlClient,
-  busCtx: BusContext,
-  audit: AuditWriteInput | undefined,
-  opts: ExecuteCommandOptions,
-): Promise<void> {
-  const now = opts.now ?? (() => new Date());
-  const newId = opts.newId ?? (() => randomUUID());
-  const record: AuditWriteRecord = {
-    id: newId(),
-    orgId: busCtx.tenant.orgId,
-    storeId: busCtx.tenant.storeId,
-    staffId: busCtx.actor.staffId,
-    via: busCtx.actor.via,
-    command: busCtx.request.name,
-    idempotencyKey: busCtx.request.idempotencyKey ?? null,
-    dryRun: false,
-    entity: audit?.entity ?? null,
-    entityId: audit?.entityId ?? null,
-    beforeJson: audit?.beforeJson ?? null,
-    afterJson: audit?.afterJson ?? null,
-    ip: audit?.ip ?? null,
-    deviceId: busCtx.actor.deviceId,
-    at: now(),
-  };
-  await writeAudit(tx, record);
+  });
 }
 
 async function publishAfterCommit(

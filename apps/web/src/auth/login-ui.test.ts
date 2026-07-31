@@ -106,6 +106,24 @@ test("App with session renders counter shell and switch affordance", () => {
   assert.doesNotMatch(html, /data-page="login"/);
 });
 
+test("desktop cold-start session renders an explicit offline read-only workbench", () => {
+  const html = renderToStaticMarkup(
+    createElement(App, {
+      ports: appPorts(),
+      enableLiquidGlass: false,
+      initialSession: sampleSession(),
+      connection: createMockConnection({ mode: "offline", pendingSyncCount: 0 }),
+      readOnly: true,
+    }),
+  );
+  assert.match(html, /data-shell="counter"/);
+  assert.match(html, /data-read-only="true"/);
+  assert.match(html, /离线只读/);
+  assert.match(html, /本机加密缓存/);
+  assert.doesNotMatch(html, /切换员工/);
+  assert.doesNotMatch(html, /type="password"|name="pin"/);
+});
+
 test("successful mock login yields session usable as App initialSession", async () => {
   setDeviceIdForTests(DEVICE);
   const client = createMockAuthClient({ validPassword: "demo" });

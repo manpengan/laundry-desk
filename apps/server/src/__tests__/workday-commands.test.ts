@@ -3,7 +3,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { INSERT_AUDIT_LOG_SQL } from "../audit/write-audit.js";
 import { executeCommand } from "../bus/executor.js";
+import { MemoryIdempotencyStore } from "../bus/idempotency.js";
 import type { ActorContext } from "../bus/types.js";
 import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
 import { FakeSqlClient } from "../db/fake-client.js";
@@ -20,6 +22,8 @@ import {
   createMemorySettingsStore,
 } from "../platform/index.js";
 import { MemoryPendingActionStore } from "../pending-actions/store.js";
+import { MemoryStepUpProofStore } from "../policy/step-up-proof-store.js";
+import { createStepUpProof } from "../policy/step-up.js";
 
 const TENANT: TenantContext = Object.freeze({
   orgId: DEMO_ORG_ID,
@@ -31,11 +35,19 @@ const CLERK: ActorContext = Object.freeze({
   staffId: DEMO_STAFF_A_ID,
   deviceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   via: "ui" as const,
-  permissions: Object.freeze(["order_write", "staff_read"]),
+  permissions: Object.freeze(["order_write", "staff_read", "payment_refund"]),
+});
+const APPROVER: ActorContext = Object.freeze({
+  ...CLERK,
+  staffId: "10000000-0000-4000-8000-000000000099",
 });
 
 const NOW = 1_721_606_400;
 const BUSINESS_DATE = "2024-07-22";
+const SESSION_BINDING = Object.freeze({
+  sessionId: "20000000-0000-4000-8000-000000000001",
+  sessionVersion: 1,
+});
 
 function buildBus(overrides: Partial<OrderHandlerDeps> = {}) {
   const store = overrides.store ?? createMemoryOrderStore();
@@ -54,10 +66,12 @@ function buildBus(overrides: Partial<OrderHandlerDeps> = {}) {
     order,
   });
   const pendingStore = new MemoryPendingActionStore();
+  const idempotencyStore = new MemoryIdempotencyStore();
   return Object.freeze({
     registry,
     store,
     pendingStore,
+    idempotencyStore,
     chainHooks: createDefaultChainHooks({}, pendingStore),
   });
 }
@@ -100,6 +114,51 @@ async function confirmedCommand(
       confirmRef: detail.confirm_ref,
     },
   );
+}
+
+type RefundChallenge = Readonly<{
+  confirmRef: string;
+  input: Readonly<Record<string, unknown>>;
+}>;
+
+async function createRefundChallenge(bus: ReturnType<typeof buildBus>): Promise<RefundChallenge> {
+  const received = await command(bus, "order.receive", {
+    lines: [{ service_code: "wash", category_code: "shirt", qty: 1 }],
+    initial_payment: { amount_cents: 1000, method: "cash" },
+  });
+  assert.equal(received.ok, true, JSON.stringify(received));
+  if (!received.ok) assert.fail("expected paid order");
+  const orderId = (received.data.result as { order_id: string }).order_id;
+  const original = (await bus.store.listPayments?.(TENANT.orgId, TENANT.storeId, orderId))?.[0];
+  assert.ok(original);
+  const input = Object.freeze({
+    order_id: orderId,
+    amount_cents: 100,
+    method: original.method,
+    ref_payment_id: original.payment_id,
+    reason: "audited refund approval",
+  });
+  const first = await executeCommand(new FakeSqlClient(), TENANT, "payment.refund", input, {
+    registry: bus.registry,
+    actor: CLERK,
+    chainHooks: bus.chainHooks,
+    pendingStore: bus.pendingStore,
+  });
+  assert.equal(first.ok, false, JSON.stringify(first));
+  if (first.ok) assert.fail("expected refund step-up");
+  const detail = "detail" in first.error ? first.error.detail : undefined;
+  if (detail?.kind !== "confirmation") assert.fail("missing refund confirm_ref");
+  return Object.freeze({ confirmRef: detail.confirm_ref, input });
+}
+
+function readApprovalAudit(client: FakeSqlClient): Readonly<Record<string, unknown>> {
+  const query = client.queries.find((entry) => entry.sql === INSERT_AUDIT_LOG_SQL);
+  assert.ok(query, "expected same-transaction audit INSERT");
+  const afterJson = query.params?.[11];
+  if (typeof afterJson !== "string") assert.fail("expected audit after_json");
+  const parsed: unknown = JSON.parse(afterJson);
+  assert.ok(parsed !== null && typeof parsed === "object" && !Array.isArray(parsed));
+  return parsed as Readonly<Record<string, unknown>>;
 }
 
 test("receive snapshots the catalog price and appends the selected initial payment", async () => {
@@ -166,6 +225,203 @@ test("collect then repay append distinct ledger rows and settle the balance", as
   );
 });
 
+test("refund appends a referenced ledger row and idempotent replay cannot double-refund", async () => {
+  const bus = buildBus();
+  const received = await command(bus, "order.receive", {
+    lines: [{ service_code: "wash", category_code: "shirt", qty: 1 }],
+    initial_payment: { amount_cents: 1000, method: "cash" },
+  });
+  assert.equal(received.ok, true, JSON.stringify(received));
+  if (!received.ok) return;
+  const orderId = (received.data.result as { order_id: string }).order_id;
+  const original = (await bus.store.listPayments?.(TENANT.orgId, TENANT.storeId, orderId))?.[0];
+  assert.ok(original);
+
+  const input = Object.freeze({
+    order_id: orderId,
+    amount_cents: 400,
+    method: original.method,
+    ref_payment_id: original.payment_id,
+    reason: "customer changed service",
+  });
+  const idempotencyKey = "10000000-0000-4000-8000-000000000088";
+  const first = await executeCommand(new FakeSqlClient(), TENANT, "payment.refund", input, {
+    registry: bus.registry,
+    actor: CLERK,
+    chainHooks: bus.chainHooks,
+    pendingStore: bus.pendingStore,
+    idempotencyStore: bus.idempotencyStore,
+    idempotencyKey,
+  });
+  assert.equal(first.ok, false, JSON.stringify(first));
+  if (first.ok) return;
+  assert.equal(first.error.code, "POLICY_STEP_UP_REQUIRED");
+  const detail = "detail" in first.error ? first.error.detail : undefined;
+  assert.equal(detail?.kind, "confirmation");
+  if (detail?.kind !== "confirmation") assert.fail("missing step-up confirmation reference");
+
+  const executed = await executeCommand(
+    new FakeSqlClient(),
+    Object.freeze({ ...TENANT, staffId: APPROVER.staffId }),
+    "payment.refund",
+    {},
+    {
+      registry: bus.registry,
+      actor: APPROVER,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+      idempotencyStore: bus.idempotencyStore,
+      idempotencyKey,
+      confirmRef: detail.confirm_ref,
+    },
+  );
+  assert.equal(executed.ok, true, JSON.stringify(executed));
+  if (!executed.ok) return;
+  assert.deepEqual(executed.data.result, {
+    order_id: orderId,
+    payment_id: (executed.data.result as { payment_id: string }).payment_id,
+    kind: "refund",
+    ref_payment_id: original.payment_id,
+    paid_cents: 600,
+    balance_cents: 900,
+    status: "open",
+  });
+
+  const replayed = await executeCommand(new FakeSqlClient(), TENANT, "payment.refund", input, {
+    registry: bus.registry,
+    actor: CLERK,
+    chainHooks: bus.chainHooks,
+    pendingStore: bus.pendingStore,
+    idempotencyStore: bus.idempotencyStore,
+    idempotencyKey,
+  });
+  assert.deepEqual(replayed, executed);
+  const payments = await bus.store.listPayments?.(TENANT.orgId, TENANT.storeId, orderId);
+  assert.equal(payments?.length, 2);
+  assert.equal(payments?.[1]?.kind, "refund");
+  assert.equal(payments?.[1]?.ref_payment_id, original.payment_id);
+  assert.equal(payments?.[1]?.method, original.method);
+  assert.equal(payments?.[1]?.note, input.reason);
+});
+
+test("refund audit persists initiator and direct second-admin approver", async () => {
+  const bus = buildBus();
+  const challenge = await createRefundChallenge(bus);
+  const client = new FakeSqlClient();
+  const result = await executeCommand(
+    client,
+    Object.freeze({ ...TENANT, staffId: APPROVER.staffId }),
+    "payment.refund",
+    {},
+    {
+      registry: bus.registry,
+      actor: APPROVER,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+      confirmRef: challenge.confirmRef,
+    },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+
+  bus.pendingStore.clear();
+  const audit = readApprovalAudit(client);
+  assert.equal(audit.initiated_by_staff_id, CLERK.staffId);
+  assert.equal(audit.approved_by_staff_id, APPROVER.staffId);
+});
+
+test("refund audit persists PIN approver when initiator resumes with proof", async () => {
+  const bus = buildBus();
+  const challenge = await createRefundChallenge(bus);
+  const pending = bus.pendingStore.get(challenge.confirmRef);
+  assert.ok(pending);
+  const proofStore = new MemoryStepUpProofStore();
+  const issuedAt = Math.floor(Date.now() / 1000);
+  proofStore.insert(
+    createStepUpProof({
+      proofId: "20000000-0000-4000-8000-000000000002",
+      pending,
+      approverStaffId: APPROVER.staffId,
+      issuedAt,
+      sessionBinding: SESSION_BINDING,
+    }),
+  );
+  const client = new FakeSqlClient();
+  const result = await executeCommand(
+    client,
+    TENANT,
+    "payment.refund",
+    {},
+    {
+      registry: bus.registry,
+      actor: CLERK,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+      stepUpProofStore: proofStore,
+      confirmRef: challenge.confirmRef,
+      sessionBinding: SESSION_BINDING,
+    },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+
+  bus.pendingStore.clear();
+  proofStore.clear();
+  const audit = readApprovalAudit(client);
+  assert.equal(audit.initiated_by_staff_id, CLERK.staffId);
+  assert.equal(audit.approved_by_staff_id, APPROVER.staffId);
+  assert.doesNotMatch(JSON.stringify(audit), /pin|proof|session/iu);
+});
+
+test("refund rejects a client method that differs from the referenced immutable payment", async () => {
+  const bus = buildBus();
+  const received = await command(bus, "order.receive", {
+    lines: [{ service_code: "wash", category_code: "shirt", qty: 1 }],
+    initial_payment: { amount_cents: 1000, method: "cash" },
+  });
+  assert.equal(received.ok, true, JSON.stringify(received));
+  if (!received.ok) return;
+  const orderId = (received.data.result as { order_id: string }).order_id;
+  const original = (await bus.store.listPayments?.(TENANT.orgId, TENANT.storeId, orderId))?.[0];
+  assert.ok(original);
+
+  const input = Object.freeze({
+    order_id: orderId,
+    amount_cents: 100,
+    method: "wechat",
+    ref_payment_id: original.payment_id,
+    reason: "method mismatch must fail closed",
+  });
+  const first = await executeCommand(new FakeSqlClient(), TENANT, "payment.refund", input, {
+    registry: bus.registry,
+    actor: CLERK,
+    chainHooks: bus.chainHooks,
+    pendingStore: bus.pendingStore,
+  });
+  assert.equal(first.ok, false, JSON.stringify(first));
+  if (first.ok) return;
+  assert.equal(first.error.code, "POLICY_STEP_UP_REQUIRED");
+  const detail = "detail" in first.error ? first.error.detail : undefined;
+  assert.equal(detail?.kind, "confirmation");
+  if (detail?.kind !== "confirmation") assert.fail("missing step-up confirmation reference");
+
+  const executed = await executeCommand(
+    new FakeSqlClient(),
+    Object.freeze({ ...TENANT, staffId: APPROVER.staffId }),
+    "payment.refund",
+    {},
+    {
+      registry: bus.registry,
+      actor: APPROVER,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+      confirmRef: detail.confirm_ref,
+    },
+  );
+  assert.equal(executed.ok, false, JSON.stringify(executed));
+  if (!executed.ok) assert.equal(executed.error.code, "VALIDATION_FAILED");
+  const payments = await bus.store.listPayments?.(TENANT.orgId, TENANT.storeId, orderId);
+  assert.equal(payments?.length, 1);
+});
+
 test("hold creates a ticketless draft and receive atomically consumes that draft", async () => {
   const bus = buildBus();
   const held = await command(bus, "order.hold", {
@@ -225,4 +481,25 @@ test("closed business days reject new counter writes with SHIFT_CLOSED", async (
   });
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.error.code, "SHIFT_CLOSED");
+});
+
+test("business writes acquire the shared day lock before rechecking closed state", async () => {
+  const calls: string[] = [];
+  const bus = buildBus({
+    lockBusinessDay: async (_client, tenant, businessDate) => {
+      assert.equal(tenant.orgId, TENANT.orgId);
+      assert.equal(businessDate, BUSINESS_DATE);
+      calls.push("lock");
+    },
+    isBusinessDayClosed: async () => {
+      calls.push("check");
+      return true;
+    },
+  });
+  const result = await command(bus, "order.receive", {
+    lines: [{ service_code: "wash", category_code: "shirt", qty: 1 }],
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "SHIFT_CLOSED");
+  assert.deepEqual(calls, ["lock", "check"]);
 });

@@ -49,11 +49,14 @@ import { createMainWindow } from "./window.js";
 import { FileQueueStore } from "./queue/file-store.js";
 import { PersistentEncryptedQueue } from "./queue/persistent-queue.js";
 import { SafeStorageKekStore } from "./queue/safe-storage-kek.js";
+import { SafeStorageDeviceKeyStore } from "./pairing/safe-storage-device-keys.js";
+import { SafeStorageAuthorityTrustStore } from "./pairing/authority-trust.js";
 import { createCupsWorkerController, type CupsWorkerController } from "./print/cups-worker.js";
 import { discoverCupsQueues, submitCupsBytes } from "./print/cups-process.js";
 import { OfflineConflictStore } from "./offline/conflict-store.js";
 import { OfflineCommandRuntime } from "./offline/runtime.js";
 import { createOfflineDesktopService } from "./offline/service.js";
+import { OfflineReadCache } from "./offline/read-cache.js";
 import { createRuntimeUpdateIo, loadUpdatePublicKey } from "./upgrade/runtime-io.js";
 import { RuntimeUpdateStateStore } from "./upgrade/runtime-state.js";
 import {
@@ -84,6 +87,8 @@ let disposeTray: (() => void) | null = null;
 let cupsWorker: CupsWorkerController | null = null;
 let offlineQueue: PersistentEncryptedQueue | null = null;
 let offlineRuntime: OfflineCommandRuntime | null = null;
+
+type BootMode = "normal" | "recovery";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -126,7 +131,7 @@ async function showMainWindow(): Promise<void> {
   readyWindow.focus();
 }
 
-async function boot(): Promise<void> {
+async function boot(mode: BootMode): Promise<void> {
   const { manifest, bundleId } = loadCanonicalManifest(manifestPath);
   const activeSpaRoot = activeBundleRootFromSpaRoot(spaResourceRoot, bundleId);
   const verified = verifySpaIntegrity(activeSpaRoot, manifest);
@@ -145,6 +150,8 @@ async function boot(): Promise<void> {
     randomUUID,
   });
   const edgeStateRoot = join(app.getPath("userData"), "edge-state");
+  const deviceKeyStore = new SafeStorageDeviceKeyStore(edgeStateRoot, safeStorage);
+  const deviceKey = deviceKeyStore.load() ?? deviceKeyStore.generate();
   offlineQueue = new PersistentEncryptedQueue({
     kekStore: new SafeStorageKekStore(edgeStateRoot, safeStorage),
     store: new FileQueueStore(edgeStateRoot),
@@ -174,14 +181,30 @@ async function boot(): Promise<void> {
       net: net as unknown as ElectronDesktopDependencyOptions["net"],
       session: desktopSession as unknown as ElectronDesktopDependencyOptions["session"],
       deviceId,
+      deviceSigner: Object.freeze({
+        publicKeySpkiBase64Url: deviceKey.exportPublic().publicKeySpkiBase64Url,
+        signBytes: (message: Uint8Array) => deviceKey.signBytes(message),
+      }),
     }),
   );
+  const authorityTrust = new SafeStorageAuthorityTrustStore(edgeStateRoot, safeStorage);
   offlineRuntime = new OfflineCommandRuntime({
     queue: offlineQueue,
     conflicts: new OfflineConflictStore(edgeStateRoot),
     transport: desktopTransport,
+    authorityTrust,
   });
-  const desktopService = createOfflineDesktopService(desktopTransport, offlineRuntime);
+  if (mode === "recovery") offlineRuntime.setLeaseIssuanceBlocked(true);
+  const desktopService = createOfflineDesktopService(
+    desktopTransport,
+    offlineRuntime,
+    new OfflineReadCache({
+      rootPath: edgeStateRoot,
+      safeStorage,
+      authorityTrust,
+    }),
+    { recoveryReadOnly: mode === "recovery" },
+  );
   powerMonitor.on("suspend", () => offlineRuntime?.invalidateContinuity());
   powerMonitor.on("resume", () => offlineRuntime?.invalidateContinuity());
   registerDesktopOperationHandlers({
@@ -234,6 +257,7 @@ async function runApplication(): Promise<void> {
 
   let updateState: RuntimeUpdateStateStore | null = null;
   let pendingConfirmation: Readonly<{ slot: "A" | "B"; nonce: string }> | null = null;
+  let bootMode: BootMode = "normal";
   if (app.isPackaged && process.platform === "darwin") {
     const currentAppPath = macAppBundlePath(process.execPath);
     updateState = new RuntimeUpdateStateStore(join(app.getPath("userData"), "updates"), {
@@ -252,11 +276,15 @@ async function runApplication(): Promise<void> {
       app.quit();
       return;
     }
-    pendingConfirmation = startup.pendingConfirmation;
+    if (startup.action === "recovery") {
+      bootMode = "recovery";
+    } else {
+      pendingConfirmation = startup.pendingConfirmation;
+    }
   }
 
-  await boot();
-  if (updateState !== null && pendingConfirmation !== null) {
+  await boot(bootMode);
+  if (bootMode === "normal" && updateState !== null && pendingConfirmation !== null) {
     updateState.confirmActivation(
       pendingConfirmation.slot,
       pendingConfirmation.nonce,
@@ -265,7 +293,12 @@ async function runApplication(): Promise<void> {
   }
 
   const manifestUrl = process.env.LAUNDRY_UPDATE_MANIFEST_URL?.trim() ?? "";
-  if (manifestUrl.length > 0 && updateState !== null && offlineQueue !== null) {
+  if (
+    bootMode === "normal" &&
+    manifestUrl.length > 0 &&
+    updateState !== null &&
+    offlineQueue !== null
+  ) {
     const publicKey = await loadUpdatePublicKey(
       join(process.resourcesPath, "update", "update-public-key.pem"),
     );

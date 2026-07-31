@@ -182,6 +182,25 @@ export type BusContext = Readonly<{
   confirmAuthorization?: ConfirmAuthorization;
 }>;
 
+export type CommandTransactionGuardDecision =
+  | Readonly<{ kind: "continue"; state: unknown }>
+  | Readonly<{ kind: "return"; result: CommandResult }>;
+
+/**
+ * Trusted server-side transaction extension. Edge replay uses it to lock and
+ * advance its durable sequence authority in the same transaction as domain
+ * mutation, command idempotency and audit.
+ */
+export type CommandTransactionGuard = Readonly<{
+  before: (client: SqlClient, context: BusContext) => Promise<CommandTransactionGuardDecision>;
+  settle: (
+    client: SqlClient,
+    context: BusContext,
+    state: unknown,
+    result: CommandResult,
+  ) => Promise<void>;
+}>;
+
 export type ChainError = CommandError;
 
 export type { CommandError, SqlClient, TenantContext, Uuid };

@@ -44,6 +44,7 @@ export type DesktopOperationService = Readonly<{
     delete: (input: unknown) => Promise<unknown>;
   }>;
   offline: Readonly<{
+    resume: () => Promise<unknown>;
     status: () => Promise<unknown>;
     resolve: (input: unknown) => Promise<unknown>;
   }>;
@@ -189,6 +190,12 @@ export function registerDesktopOperationHandlers(options: DesktopOperationHandle
     DESKTOP_IPC_CHANNELS.photo.delete,
     DESKTOP_OPERATION_SCHEMAS.photo.delete,
     (input) => service.photo.delete(input),
+  );
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.offline.resume,
+    DESKTOP_OPERATION_SCHEMAS.offline.resume,
+    () => service.offline.resume(),
   );
   registerOperation(
     options,

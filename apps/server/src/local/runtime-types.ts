@@ -1,0 +1,47 @@
+import type { CsrfProofSigner } from "../auth/csrf.js";
+import type { CommandIdempotencyStore } from "../bus/types.js";
+import type { CatalogHandlerDeps } from "../catalog/handlers.js";
+import type { CustomerHandlerDeps } from "../customer/handlers.js";
+import type { PgPool } from "../db/pg-pool.js";
+import type { EdgeAuthorityService } from "../edge/authority-service.js";
+import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
+import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
+import type { createMemoryIdentityStore } from "../identity/memory-store.js";
+import type { OrderHandlerDeps } from "../order/handlers.js";
+import type { PendingActionStore } from "../pending-actions/types.js";
+import type { PhotoHandlerDeps } from "../photo/handlers.js";
+import type { StepUpProofStore } from "../policy/step-up-proof-store.js";
+import type { PrintHandlerDeps } from "../print/handlers.js";
+import type { ReconciliationHandlerDeps } from "../reconciliation/types.js";
+import type { ShiftHandlerDeps } from "../shift/handlers.js";
+import type { StaffAccessHandlerDeps } from "../staff/handlers.js";
+import type { StatsHandlerDeps } from "../stats/handlers.js";
+import type { PlatformHandlerDeps } from "../platform/handlers.js";
+import type { LocalStaffDirectoryEntry } from "./staff-directory.js";
+
+export type LocalRuntimeMode = "memory" | "pg";
+
+export type LocalRuntime = Readonly<{
+  mode: LocalRuntimeMode;
+  identity: IdentityHandlerDeps;
+  platform: PlatformHandlerDeps;
+  order: OrderHandlerDeps;
+  catalog: CatalogHandlerDeps;
+  print: PrintHandlerDeps;
+  stats: StatsHandlerDeps;
+  customer: CustomerHandlerDeps;
+  shift: ShiftHandlerDeps;
+  reconciliation: ReconciliationHandlerDeps;
+  photo: PhotoHandlerDeps;
+  fulfillment: FulfillmentHandlerDeps;
+  staffAccess: StaffAccessHandlerDeps;
+  edgeAuthority: EdgeAuthorityService;
+  accessTokenSecret: string;
+  csrfProofSigner: CsrfProofSigner;
+  staffDirectory: readonly LocalStaffDirectoryEntry[];
+  pendingStore: PendingActionStore;
+  stepUpProofStore: StepUpProofStore;
+  idempotencyStore: CommandIdempotencyStore;
+  pool: PgPool | null;
+  store: ReturnType<typeof createMemoryIdentityStore> | null;
+}>;

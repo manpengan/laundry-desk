@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const TEST_INSTANCE_ID = "0123456789abcdefghijklmn";
-
 const importRequired = async (relativePath) => {
   try {
     return await import(new URL(relativePath, import.meta.url));
@@ -31,6 +30,7 @@ const makeConfigDependencies = (calls) =>
         "com.laundry-desk.project": project,
         "com.laundry-desk.instance": instanceId,
       }),
+    resolveLocalConfigPaths: () => Object.freeze({ directoryPath: "/test/local-config" }),
     toLocalConfigEnvironment: () =>
       Object.freeze({
         POSTGRES_PASSWORD: "postgres-secret",
@@ -40,7 +40,6 @@ const makeConfigDependencies = (calls) =>
         LAUNDRY_LOCAL_INSTANCE_ID: TEST_INSTANCE_ID,
       }),
   });
-
 const makeRunner =
   (calls, failureIndex = -1) =>
   async (command, options) => {
@@ -348,6 +347,7 @@ test("local up runs config, PG health, build, migration, preflight, and server h
     assert.equal(options.cwd, "/workspace");
     assert.deepEqual(options.env, {
       PATH: "/bin",
+      LAUNDRY_LOCAL_CONFIG_DIR: "/test/local-config",
       POSTGRES_PASSWORD: "postgres-secret",
       LAUNDRY_APP_PASSWORD: "app-secret",
       LAUNDRY_ACCESS_TOKEN_SECRET: "access-secret",
@@ -576,7 +576,7 @@ test("local down accepts no arguments and never deletes volumes", async () => {
   assert.deepEqual(commands[0].command.args.slice(-2), ["down", "--remove-orphans"]);
   assert.equal(commands[0].command.args.includes("--volumes"), false);
   assert.equal(commands[0].command.args.includes("-v"), false);
-  assert.equal(commands[0].options.env, environment);
+  assert.equal(commands[0].options.env.LAUNDRY_LOCAL_CONFIG_DIR, "/test/local-config");
 
   for (const argv of [["--volumes"], ["-v"], ["unexpected"]]) {
     const rejectedCalls = [];
@@ -606,7 +606,6 @@ test("local reset requires the exact confirmation and removes only the exact nam
   const { LOCAL_POSTGRES_VOLUME } = await importRequired("./compose.mjs");
   const calls = [];
   const output = [];
-
   const exitCode = await runReset(
     Object.freeze({
       argv: Object.freeze(["--", "--confirm", "DELETE-laundry-desk-v2-local"]),
@@ -635,6 +634,8 @@ test("local reset requires the exact confirmation and removes only the exact nam
     calls.some((call) => call.kind === "config"),
     false,
   );
+  const commands = calls.filter((call) => call.kind === "command");
+  assert.equal(commands[0].options.env.LAUNDRY_LOCAL_CONFIG_DIR, "/test/local-config");
   assert.equal(calls.filter((call) => call.kind === "load-config").length, 1);
   const inspections = calls.filter((call) => call.kind === "capture");
   assert.equal(inspections.length, 2);
@@ -645,7 +646,6 @@ test("local reset requires the exact confirmation and removes only the exact nam
     });
   }
   assert.deepEqual(output, [`Deleting Docker volume: ${LOCAL_POSTGRES_VOLUME}\n`]);
-  const commands = calls.filter((call) => call.kind === "command");
   assert.deepEqual(commands.at(-1).command, {
     file: "docker",
     args: ["volume", "rm", "laundry-desk_pgdata-v2"],

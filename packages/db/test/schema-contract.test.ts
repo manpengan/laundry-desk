@@ -251,6 +251,7 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(columns).toContain("ref_payment_id");
     expect(columns).toContain("staff_id");
     expect(columns).toContain("at");
+    expect(columns).toContain("ledger_seq");
   });
 
   it("declares M2 payments tenant unique layout", () => {
@@ -264,6 +265,26 @@ describe("M1 schema contract vs A3 matrix", () => {
       return cols[0] === "org_id" && cols[1] === "store_id" && cols.includes("id");
     });
     expect(hasTenantUnique).toBe(true);
+
+    const hasLedgerSequenceUnique = config.indexes.some((index) => {
+      const cols = index.config.columns.map((column) => {
+        if (typeof column === "string") return column;
+        if ("name" in column && typeof column.name === "string") return column.name;
+        return "";
+      });
+      return index.config.unique === true && cols.length === 1 && cols[0] === "ledger_seq";
+    });
+    expect(hasLedgerSequenceUnique).toBe(true);
+
+    const hasOrderLedgerSequenceIndex = config.indexes.some((index) => {
+      const cols = index.config.columns.map((column) => {
+        if (typeof column === "string") return column;
+        if ("name" in column && typeof column.name === "string") return column.name;
+        return "";
+      });
+      return cols.join(",") === "org_id,store_id,order_id,ledger_seq";
+    });
+    expect(hasOrderLedgerSequenceIndex).toBe(true);
   });
 
   it("exports M2 print_jobs with store tenant columns and process fields", () => {

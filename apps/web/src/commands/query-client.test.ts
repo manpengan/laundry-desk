@@ -119,3 +119,33 @@ test("mock query client returns empty print.jobs.list", async () => {
   assert.ok(Array.isArray(payload.jobs));
   assert.equal(payload.jobs.length, 0);
 });
+
+test("mock query client returns a strict zero reconciliation snapshot", async () => {
+  const client = createMockQueryClient();
+  const result = await client.execute("reconciliation.day.get", {
+    business_date: "2026-07-30",
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const payload = unwrapCommandResult<{
+    business_date: string;
+    orders: { count: number };
+    ledger: { row_count: number; buckets: readonly unknown[] };
+  }>(result.data);
+  assert.deepEqual(payload, {
+    business_date: "2026-07-30",
+    generated_at: "1970-01-01T00:00:00.000Z",
+    orders: { count: 0, payable_cents: 0, paid_cents: 0, balance_cents: 0 },
+    ledger: {
+      row_count: 0,
+      gross_cents: 0,
+      refund_cents: 0,
+      net_cents: 0,
+      difference_from_orders_cents: 0,
+      buckets: [],
+    },
+    shift: null,
+    print: { total: 0, statuses: [] },
+    edge_replay: { total: 0, conflict_count: 0, decisions: [] },
+  });
+});

@@ -182,25 +182,27 @@ describe("M2 print.ticket.enqueue / process / retry / reprint / print.jobs.list"
     expect(printTicketProcessCommand.risk).toBe("R1");
     expect(printTicketProcessCommand.idempotent).toBe(false);
     expect(printTicketProcessCommand.offline_mode).toBe("denied");
+    expect(printTicketProcessCommand.invariants).toContain("rbac.print_manage");
     expect(printTicketProcessCommand.sideEffects).toContain("print.job_processed");
 
     expect(printTicketRetryCommand.name).toBe("print.ticket.retry");
     expect(printTicketRetryCommand.risk).toBe("R1");
     expect(printTicketRetryCommand.offline_mode).toBe("grant");
     expect(printTicketRetryCommand.idempotent).toBe(true);
-    expect(printTicketRetryCommand.invariants).toContain("rbac.order_write");
+    expect(printTicketRetryCommand.invariants).toContain("rbac.print_manage");
     expect(printTicketRetryCommand.sideEffects).toContain("print.job_queued");
 
     expect(printTicketReprintCommand.name).toBe("print.ticket.reprint");
     expect(printTicketReprintCommand.risk).toBe("R1");
     expect(printTicketReprintCommand.offline_mode).toBe("grant");
     expect(printTicketReprintCommand.idempotent).toBe(true);
-    expect(printTicketReprintCommand.invariants).toContain("rbac.order_write");
+    expect(printTicketReprintCommand.invariants).toContain("rbac.print_manage");
     expect(printTicketReprintCommand.sideEffects).toContain("print.job_queued");
 
     expect(printJobsListQuery.name).toBe("print.jobs.list");
     expect(printJobsListQuery.risk).toBe("R1");
     expect(printJobsListQuery.max_result_rows).toBe(50);
     expect(printJobsListQuery.offline_mode).toBe("denied");
+    expect(printJobsListQuery.invariants).toContain("rbac.print_manage");
   });
 });

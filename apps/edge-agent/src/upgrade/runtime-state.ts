@@ -60,6 +60,16 @@ type DeepReadonly<T> = T extends readonly (infer Item)[]
 
 export type RuntimeSlotName = "A" | "B";
 export type RuntimeUpdateState = DeepReadonly<z.output<typeof RuntimeUpdateStateSchema>>;
+export const RUNTIME_RECOVERY_CAPABILITIES = Object.freeze(["read_only", "print_only"] as const);
+export type RuntimeRecoveryCapabilities = typeof RUNTIME_RECOVERY_CAPABILITIES;
+export type RuntimeRollbackDecision =
+  | Readonly<{ status: "none"; state: RuntimeUpdateState }>
+  | Readonly<{ status: "rolled_back"; state: RuntimeUpdateState }>
+  | Readonly<{
+      status: "recovery_required";
+      state: RuntimeUpdateState;
+      capabilities: RuntimeRecoveryCapabilities;
+    }>;
 
 function assertContained(root: string, candidate: string): void {
   const rel = relative(root, candidate);
@@ -250,15 +260,42 @@ export class RuntimeUpdateStateStore {
     return this.state;
   }
 
-  rollbackPending(now: string): RuntimeUpdateState {
+  rollbackPending(now: string): RuntimeRollbackDecision {
     const pending = this.state.pending_activation;
-    if (pending === null) return this.state;
+    if (pending === null) {
+      return Object.freeze({ status: "none", state: this.state });
+    }
     const fallbackVersion = this.state.slots[pending.previous_slot].version;
     if (
       fallbackVersion === null ||
       compareVersion(fallbackVersion, this.state.minimum_secure_version) < 0
     ) {
-      throw new Error("Pending rollback would cross the installed security floor");
+      const lastHistory = this.state.history.at(-1);
+      if (
+        lastHistory?.event !== "security_floor_recovery_required" ||
+        lastHistory.slot !== pending.slot ||
+        (lastHistory.version ?? null) !== fallbackVersion
+      ) {
+        this.persist(
+          freezeState({
+            ...this.state,
+            history: [
+              ...this.state.history.slice(-198),
+              {
+                at: now,
+                event: "security_floor_recovery_required",
+                slot: pending.slot,
+                ...(fallbackVersion === null ? {} : { version: fallbackVersion }),
+              },
+            ],
+          }),
+        );
+      }
+      return Object.freeze({
+        status: "recovery_required",
+        state: this.state,
+        capabilities: RUNTIME_RECOVERY_CAPABILITIES,
+      });
     }
     this.persist(
       freezeState({
@@ -275,7 +312,7 @@ export class RuntimeUpdateStateStore {
         ],
       }),
     );
-    return this.state;
+    return Object.freeze({ status: "rolled_back", state: this.state });
   }
 
   private persist(state: RuntimeUpdateState): void {

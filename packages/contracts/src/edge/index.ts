@@ -1,6 +1,8 @@
 export {
   canonicalizeCapabilityTicketForSigning,
   canonicalizeExecutionReceiptForSigning,
+  canonicalizeEdgeDeviceRegistrationForSigning,
+  canonicalizeEdgeReplayForSigning,
   canonicalizeForSignatureVerification,
   canonicalizeOfflineGrantForSigning,
   canonicalizePrimaryLeaseForSigning,
@@ -51,13 +53,27 @@ export {
   parseServerSignaturePrimaryLeaseCandidate,
 } from "./signed-envelope.js";
 export {
+  EdgeAuthorityChallengeDataSchema,
+  EdgeAuthorityChallengeRequestSchema,
+  EdgeAuthorityChallengeResponseSchema,
+  EdgeAuthorityChallengeSchema,
   EdgeAuthorityDataSchema,
   EdgeAuthorityRequestSchema,
   EdgeAuthorityResponseSchema,
+  DevicePublicKeySpkiSchema,
+  EdgeDeviceRegistrationPayloadSchema,
+  EdgePairingCodeSchema,
   SignedOfflineGrantSchema,
   SignedPrimaryLeaseSchema,
 } from "./authority-api.js";
-export type { EdgeAuthorityData, EdgeAuthorityResponse } from "./authority-api.js";
+export type {
+  EdgeAuthorityChallengeData,
+  EdgeAuthorityChallengeRequest,
+  EdgeAuthorityChallengeResponse,
+  EdgeAuthorityData,
+  EdgeAuthorityRequest,
+  EdgeAuthorityResponse,
+} from "./authority-api.js";
 export type {
   DeviceSignatureExecutionReceiptCandidate,
   EdgeSignatureCandidate,
@@ -68,6 +84,7 @@ export type {
 
 export {
   classifyQueueEnvelopeCompatibility,
+  EdgeQueueEnvelopeSchema,
   parseEdgeQueueEnvelope,
   QueueAuthorizationSchema,
 } from "./queue-envelope.js";
@@ -76,3 +93,17 @@ export type {
   QueueAuthorization,
   QueueEnvelopeVersionDisposition,
 } from "./queue-envelope.js";
+
+export {
+  EdgeDeviceRegistrationAuthoritySchema,
+  EdgeReplayAuthoritySchema,
+  EdgeReplayDispositionSchema,
+  EdgeReplayRequestSchema,
+  EdgeReplayResponseSchema,
+} from "./replay-api.js";
+export type {
+  EdgeDeviceRegistrationAuthority,
+  EdgeReplayAuthority,
+  EdgeReplayRequest,
+  EdgeReplayResponse,
+} from "./replay-api.js";

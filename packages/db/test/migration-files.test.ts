@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0029", () => {
+  it("ships formal SQL migrations ordered 0001 → 0031", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -41,6 +41,8 @@ describe("packages/db migration file inventory", () => {
       "0027_garment_rack_operations.sql",
       "0028_customer_privacy_lifecycle.sql",
       "0029_staff_access_governance.sql",
+      "0030_edge_replay_authority.sql",
+      "0031_payment_ledger_sequence.sql",
     ]);
   });
 
@@ -82,6 +84,8 @@ describe("packages/db migration file inventory", () => {
       "0027",
       "0028",
       "0029",
+      "0030",
+      "0031",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -215,6 +219,14 @@ describe("packages/db migration file inventory", () => {
     }
   });
 
+  it("keeps the Edge SPKI length outside PostgreSQL's bounded-repeat limit", () => {
+    const sql = readFileSync(join(migrationsDir, "0030_edge_replay_authority.sql"), "utf8");
+
+    expect(sql).toMatch(/char_length\(public_key_spki\) BETWEEN 40 AND 256/iu);
+    expect(sql).toMatch(/public_key_spki ~ '\^\[A-Za-z0-9_-\]\+\$'/iu);
+    expect(sql).not.toContain("{40,256}");
+  });
+
   it("adds print worker lease state without allowing a partial claim", () => {
     const sql = readFileSync(join(migrationsDir, "0021_print_job_lease.sql"), "utf8");
     expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0/iu);
@@ -266,5 +278,69 @@ describe("packages/db migration file inventory", () => {
       sql.indexOf("CREATE OR REPLACE FUNCTION customer_privacy_status"),
     );
     expect(privacyFunctions).not.toMatch(/customer_phone = customer_row\.phone/iu);
+  });
+
+  it("persists device authority and append-only ordered replay arbitration", () => {
+    const sql = readFileSync(join(migrationsDir, "0030_edge_replay_authority.sql"), "utf8");
+
+    for (const table of [
+      "edge_authority_challenges",
+      "edge_devices",
+      "offline_grants",
+      "primary_lease_heads",
+      "primary_leases",
+      "primary_lease_replay_state",
+      "edge_replay_records",
+    ]) {
+      expect(sql).toMatch(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`, "iu"));
+    }
+    expect(sql).toMatch(/FORCE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(/edge_replay_records_accepted_queue_uidx/iu);
+    expect(sql).toMatch(/edge_replay_records_accepted_seq_uidx/iu);
+    expect(sql).toMatch(/CONSTRAINT primary_leases_grant_fk/iu);
+    expect(sql).toMatch(/FOREIGN KEY \(org_id, store_id, grant_id\)/iu);
+    expect(sql).toMatch(/request_nonce uuid NOT NULL/iu);
+    expect(sql).toMatch(/edge_authority_challenges_device_uidx/iu);
+    expect(sql).toMatch(/edge_authority_challenges_request_nonce_uidx/iu);
+    expect(sql).toMatch(/offline_grants_request_nonce_uidx/iu);
+    expect(sql).toMatch(/pairing_code_hash char\(64\)/iu);
+    expect(sql).toMatch(/pairing_code_required boolean NOT NULL/iu);
+    expect(sql).toMatch(/expected_primary_epoch bigint/iu);
+    expect(sql).toMatch(/GRANT SELECT, INSERT, DELETE ON TABLE edge_authority_challenges/iu);
+    expect(sql).toMatch(/GRANT UPDATE \(consumed_at\) ON TABLE edge_authority_challenges/iu);
+    expect(sql).toMatch(/GRANT SELECT, INSERT ON TABLE edge_replay_records TO laundry_app/iu);
+    expect(sql).toMatch(
+      /REVOKE UPDATE, DELETE, TRUNCATE ON TABLE edge_replay_records FROM laundry_app/iu,
+    );
+  });
+
+  it("adds a durable monotonic sequence for deterministic payment ledger order", () => {
+    const sql = readFileSync(join(migrationsDir, "0031_payment_ledger_sequence.sql"), "utf8");
+
+    expect(sql).toMatch(
+      /CREATE SEQUENCE IF NOT EXISTS public\.payments_ledger_seq_seq\s+AS bigint/iu,
+    );
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS ledger_seq bigint/iu);
+    expect(sql).toMatch(/row_number\(\) OVER \(ORDER BY payment\.at, payment\.id\)/iu);
+    expect(sql).toMatch(
+      /ALTER COLUMN ledger_seq\s+SET DEFAULT nextval\('public\.payments_ledger_seq_seq'::regclass\)/iu,
+    );
+    expect(sql).toMatch(
+      /setval\(\s*'public\.payments_ledger_seq_seq'::regclass,[\s\S]*max\(ledger_seq\)[\s\S]*EXISTS/iu,
+    );
+    expect(sql).toMatch(/ALTER COLUMN ledger_seq SET NOT NULL/iu);
+    expect(sql).toMatch(
+      /CREATE UNIQUE INDEX IF NOT EXISTS payments_ledger_seq_uidx\s+ON public\.payments \(ledger_seq\)/iu,
+    );
+    expect(sql).toMatch(
+      /CREATE INDEX IF NOT EXISTS payments_order_ledger_seq_idx\s+ON public\.payments \(org_id, store_id, order_id, ledger_seq\)/iu,
+    );
+    expect(sql).toMatch(
+      /REVOKE ALL ON SEQUENCE public\.payments_ledger_seq_seq FROM PUBLIC, laundry_app/iu,
+    );
+    expect(sql).toMatch(/GRANT USAGE ON SEQUENCE public\.payments_ledger_seq_seq TO laundry_app/iu);
+    expect(sql).not.toMatch(
+      /GRANT (?:SELECT|UPDATE|ALL)[^;]*ON SEQUENCE public\.payments_ledger_seq_seq TO laundry_app/iu,
+    );
   });
 });

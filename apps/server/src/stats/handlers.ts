@@ -2,7 +2,7 @@
  * M2 stats handlers: stats.day.summary (order-backed or seeded).
  */
 
-import { createCommandError } from "@laundry/contracts";
+import { BusinessDateSchema, createCommandError } from "@laundry/contracts";
 import { businessDayAt } from "@laundry/domain";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
@@ -17,8 +17,6 @@ export type StatsHandlerDeps = Readonly<{
   now?: () => Date;
 }>;
 
-const BUSINESS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/u;
-
 function asRecord(parsed: unknown): Readonly<Record<string, unknown>> {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
@@ -31,10 +29,11 @@ function resolveBusinessDate(value: unknown, deps: StatsHandlerDeps): string {
     return businessDayAt(deps.now?.() ?? new Date(), deps.timeZone ?? "UTC", deps.rolloverHour ?? 0)
       .business_date;
   }
-  if (typeof value !== "string" || !BUSINESS_DATE_RE.test(value)) {
+  const parsed = BusinessDateSchema.safeParse(value);
+  if (!parsed.success) {
     throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
   }
-  return value;
+  return parsed.data;
 }
 
 function daySummaryHandler(deps: StatsHandlerDeps): CommandHandler {

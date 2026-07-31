@@ -25,6 +25,7 @@ function createBridge(): LaundryDesktopBridge {
       delete: async () => ({ ok: false }),
     },
     offline: {
+      resume: async () => ({ ok: false }),
       status: async () => ({ ok: false }),
       resolve: async () => ({ ok: false }),
     },

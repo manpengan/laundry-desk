@@ -9,7 +9,13 @@
  * UnimplementedOsDeviceKeyStore stub — do not wire native keytar here if it
  * would break CI without platform secrets APIs.
  */
-import { createPublicKey, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
+import {
+  createPrivateKey,
+  createPublicKey,
+  generateKeyPairSync,
+  sign,
+  type KeyObject,
+} from "node:crypto";
 
 export const DEVICE_KEY_ALGORITHM = "Ed25519" as const;
 
@@ -78,6 +84,27 @@ function wrapMaterial(publicKey: KeyObject, privateKey: KeyObject): DeviceKeyMat
 export function generateEd25519Material(): DeviceKeyMaterial {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   return wrapMaterial(publicKey, privateKey);
+}
+
+/** Main-process persistence adapter seam; raw bytes must never cross IPC. */
+export function importPrivateKeyPkcs8Base64Url(value: string): DeviceKeyMaterial {
+  const privateKey = createPrivateKey({
+    key: Buffer.from(value, "base64url"),
+    format: "der",
+    type: "pkcs8",
+  });
+  if (privateKey.asymmetricKeyType !== "ed25519") {
+    throw new TypeError("Device private key must be Ed25519");
+  }
+  return wrapMaterial(createPublicKey(privateKey), privateKey);
+}
+
+/** Main-process persistence adapter seam; callers must encrypt before writing. */
+export function exportPrivateKeyPkcs8Base64Url(material: DeviceKeyMaterial): string {
+  if (material.privateKey.asymmetricKeyType !== "ed25519") {
+    throw new TypeError("Device private key must be Ed25519");
+  }
+  return material.privateKey.export({ type: "pkcs8", format: "der" }).toString("base64url");
 }
 
 /** In-memory store for tests and ephemeral local dev only. */

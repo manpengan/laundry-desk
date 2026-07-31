@@ -35,6 +35,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0026_customer_profile_
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0027_garment_rack_operations.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0028_customer_privacy_lifecycle.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0029_staff_access_governance.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0030_edge_replay_authority.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0031_payment_ledger_sequence.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -66,5 +68,7 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Rack operations** (0027): authoritative rack position, immutable scan-to-rack history, and lookup index
 - **Customer privacy lifecycle** (0028): audited bounded export and irreversible PII anonymization
 - **Staff access governance** (0029): explicit privacy-admin authority, role invariants, and session revocation support
-- Still deferred: edge lease, AI matrix tables
+- **Edge replay authority** (0030): paired-device keys, signed grants, primary leases, and append-only replay arbitration
+- **Payment ledger sequence** (0031): deterministic historical backfill plus database-assigned global ledger order
+- Still deferred: AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

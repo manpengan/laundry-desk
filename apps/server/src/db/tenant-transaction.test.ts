@@ -47,6 +47,16 @@ test("withTenantTransaction exposes only its authenticated tenant to repositorie
   assert.equal(getActiveTenantTransaction(), undefined);
 });
 
+test("withTenantTransaction can establish a read-only repeatable snapshot before tenant GUCs", async () => {
+  const client = new FakeSqlClient();
+  await withTenantTransaction(client, VALID_CTX, async () => undefined, {
+    isolation: "repeatable_read",
+    readOnly: true,
+  });
+  assert.equal(client.sqlSequence()[0], "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  assert.ok(client.sqlSequence()[1]?.includes(TENANT_GUC_KEYS.orgId));
+});
+
 test("repository GUC helper reuses the command transaction instead of opening a second connection", async () => {
   const client = new FakeSqlClient();
   let poolConnects = 0;

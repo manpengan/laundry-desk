@@ -17,12 +17,25 @@ export type OfflineStatusResult =
 
 export type OfflinePort = Readonly<{
   status: () => Promise<OfflineStatusResult>;
-  resolve: (queueId: string, action: "retry" | "discard") => Promise<OfflineStatusResult>;
+  resolve: (
+    queueId: string,
+    action: "retry" | "discard",
+    discardReason?: string,
+  ) => Promise<OfflineStatusResult>;
 }>;
 
 type OfflineBridge = Readonly<{
   status: () => Promise<unknown>;
-  resolve: (input: Readonly<{ queue_id: string; action: "retry" | "discard" }>) => Promise<unknown>;
+  resolve: (
+    input:
+      | Readonly<{ queue_id: string; action: "retry" }>
+      | Readonly<{
+          queue_id: string;
+          action: "discard";
+          reason: string;
+          confirm: "DISCARD";
+        }>,
+  ) => Promise<unknown>;
 }>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -98,10 +111,20 @@ export function createDesktopOfflinePort(bridge: OfflineBridge | undefined): Off
         return unavailable();
       }
     },
-    resolve: async (queueId, action) => {
+    resolve: async (queueId, action, discardReason) => {
       if (bridge === undefined || !UUID.test(queueId)) return unavailable();
+      const input =
+        action === "retry"
+          ? Object.freeze({ queue_id: queueId, action })
+          : Object.freeze({
+              queue_id: queueId,
+              action,
+              reason: discardReason?.trim() ?? "",
+              confirm: "DISCARD" as const,
+            });
+      if (input.action === "discard" && input.reason.length < 3) return unavailable();
       try {
-        return parseResult(await bridge.resolve(Object.freeze({ queue_id: queueId, action })));
+        return parseResult(await bridge.resolve(input));
       } catch {
         return unavailable();
       }

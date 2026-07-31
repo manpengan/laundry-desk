@@ -251,6 +251,20 @@ test("getOrder returns null when no order row", async () => {
   assert.equal(found, null);
 });
 
+test("listPayments reads the append-only ledger in durable sequence order", async () => {
+  const { pool, queries } = createCapturingPool();
+  const store = createPgOrderStore(pool);
+
+  await store.listPayments?.(DEMO_ORG_ID, DEMO_STORE_ID, sampleOrder().order_id);
+
+  const paymentSelect = queries.find(
+    (query) => query.sql.includes("FROM payments") && query.sql.includes("ledger_seq"),
+  );
+  assert.ok(paymentSelect);
+  assert.match(paymentSelect.sql, /ORDER BY ledger_seq ASC/u);
+  assert.doesNotMatch(paymentSelect.sql, /ORDER BY at ASC, id ASC/u);
+});
+
 test("applyPickup updates garments to picked_up and settles balance", async () => {
   const order = sampleOrder();
   const garments = sampleGarments();

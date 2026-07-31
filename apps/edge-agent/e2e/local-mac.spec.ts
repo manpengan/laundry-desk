@@ -299,6 +299,11 @@ async function runPackagedGovernanceSmoke(page: Page): Promise<void> {
   await page.locator('[data-nav-id="stats"]').click();
   await page.locator('[data-testid="stats-date-input"]').fill("1999-12-30");
   await page.locator('[data-testid="stats-load-btn"]').click();
+  const reconciliation = page.locator(
+    '[data-testid="reconciliation-snapshot"][data-business-date="1999-12-30"]',
+  );
+  await expect(reconciliation).toBeVisible({ timeout: 15_000 });
+  await expect(reconciliation.getByRole("heading", { name: "支付账本" })).toBeVisible();
   await page.getByRole("button", { name: "查询历史" }).click();
   await expect(page.getByRole("cell", { name: "1999-12-30" })).toBeVisible({ timeout: 15_000 });
 }
@@ -350,6 +355,7 @@ test("packaged app recovers from an unavailable local service with a token-free 
               delete: (...args: unknown[]) => Promise<unknown>;
             };
             offline: {
+              resume: () => Promise<unknown>;
               status: () => Promise<unknown>;
               resolve: (...args: unknown[]) => Promise<unknown>;
             };
@@ -386,7 +392,7 @@ test("packaged app recovers from an unavailable local service with a token-free 
           JSON.stringify(Object.keys(bridge.photo).sort()) ===
             JSON.stringify(["delete", "read", "upload"]) &&
           JSON.stringify(Object.keys(bridge.offline).sort()) ===
-            JSON.stringify(["resolve", "status"]) &&
+            JSON.stringify(["resolve", "resume", "status"]) &&
           Object.keys(bridge.health).join() === "get",
         refreshOk:
           !containsCredentialKey(refresh) &&

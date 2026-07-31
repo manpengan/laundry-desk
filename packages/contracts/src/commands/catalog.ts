@@ -18,6 +18,8 @@ import {
 } from "./fulfillment.js";
 import { ORDER_COMMANDS, ORDER_COMMAND_NAMES, ORDER_QUERIES, ORDER_QUERY_NAMES } from "./order.js";
 import { PAYMENT_COMMANDS, PAYMENT_COMMAND_NAMES } from "./payment.js";
+import { EDGE_CONFLICT_COMMANDS } from "./edge-conflict.js";
+import { RECONCILIATION_COMMANDS, RECONCILIATION_QUERIES } from "./reconciliation.js";
 import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./platform.js";
 import { STAFF_COMMANDS, STAFF_QUERIES } from "./staff.js";
 import {
@@ -60,6 +62,8 @@ export const M1_FIRST_WAVE_QUERY_NAMES = Object.freeze(PLATFORM_QUERIES.map((que
 export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] = Object.freeze([
   ...ORDER_COMMANDS,
   ...PAYMENT_COMMANDS,
+  ...RECONCILIATION_COMMANDS,
+  ...EDGE_CONFLICT_COMMANDS,
   ...M2_PRINT_COMMAND_DEFINITIONS,
   ...M2_CUSTOMER_COMMAND_DEFINITIONS,
   ...M2_SHIFT_COMMAND_DEFINITIONS,
@@ -73,6 +77,8 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   ...M2_CUSTOMER_COMMAND_NAMES,
   ...ORDER_COMMAND_NAMES,
   ...PAYMENT_COMMAND_NAMES,
+  "reconciliation.export",
+  "edge.conflict.discard",
   ...M2_PRINT_COMMAND_NAMES,
   ...M2_SHIFT_COMMAND_NAMES,
   ...M3_PHOTO_COMMAND_NAMES,
@@ -97,6 +103,8 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "payment.collect",
   "payment.repay",
   "payment.refund",
+  "reconciliation.export",
+  "edge.conflict.discard",
   "print.ticket.enqueue",
   "print.ticket.process",
   "print.ticket.retry",
@@ -149,6 +157,7 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   ...M2_STATS_QUERY_NAMES,
   ...M2_SHIFT_QUERY_NAMES,
   ...M3_PHOTO_QUERY_NAMES,
+  "reconciliation.day.get",
   "fulfillment.workbench",
   "staff.access.list",
 ] as const);
@@ -164,6 +173,7 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...M2_STATS_QUERY_DEFINITIONS,
   ...M2_SHIFT_QUERY_DEFINITIONS,
   ...M3_PHOTO_QUERY_DEFINITIONS,
+  ...RECONCILIATION_QUERIES,
   ...M3_FULFILLMENT_QUERY_DEFINITIONS,
   ...STAFF_QUERIES,
 ]);
@@ -181,6 +191,7 @@ export const M2_READ_ONLY_AI_DEFINITIONS: readonly QueryDefinition<z.ZodObject>[
 ]);
 
 export { M3_FULFILLMENT_COMMAND_DEFINITIONS, M3_FULFILLMENT_QUERY_DEFINITIONS };
+export { RECONCILIATION_COMMANDS, RECONCILIATION_QUERIES, EDGE_CONFLICT_COMMANDS };
 
 /**
  * M2 print job status queries (print.jobs.list). Memory-first skeleton;

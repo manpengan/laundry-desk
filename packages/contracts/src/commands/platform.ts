@@ -109,7 +109,7 @@ export const platformAuditListQuery: QueryDefinition<AuditListInput> = defineQue
   description_llm: "Query audit_log rows in [from,to] with a hard row cap. PII may appear.",
   input: PlatformAuditListInputSchema,
   risk: "R2",
-  invariants: [],
+  invariants: ["rbac.audit_read"],
   idempotent: true,
   sideEffects: [],
   offline_mode: "denied",
