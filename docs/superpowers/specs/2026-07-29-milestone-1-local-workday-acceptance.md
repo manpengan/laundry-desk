@@ -178,4 +178,28 @@ macOS 侧由 `pnpm local:acceptance` 在开发机本地执行：CI 只有 Linux 
 值得单独记一笔：本次订正**起草期间漂移又发生了一次**——ADR-16 起草时基线是 27 条，
 PR 尚未合入，#125 就把它推到了 29 条。这说明订正一次不解决问题，需要的是门禁。
 
+### 8.5 顺带修掉的一个计时型假绿
+
+本次订正 PR 的 `workspace-check` 随机红了一次，定位结果与本文主题同源，故记在这里。
+
+失败的是 `packages/contracts/test/openapi-snapshot.test.ts` 的
+「builds a deterministic OpenAPI 3.1 document」——**5068ms 超时**，其余 724 个用例全过。
+该用例连着调用三次 `buildLaundryOpenApiDocument()`（两次比对确定性、一次查字段），
+而 `packages/contracts/vitest.config.ts` 没有设 `testTimeout`，吃 vitest 的 5000ms 默认值。
+
+它一直贴着红线：OpenAPI 快照随契约面增长，`d5783af` 时 317 KB、`f673ece` 361 KB、
+`734d1d0` **383 KB**。#125 把契约面推到 29 条后裕度耗尽，能不能过取决于 runner 当天多快。
+`main` 在 `734d1d0` 是绿的——那是运气，不是安全。
+
+更能说明问题的是：隔壁 `m2-freeze.test.ts` 里**同一段三次 build 的代码**早已挂着
+`{ timeout: 10_000 }`——有人撞过同一个坑，给那一个用例打了补丁，既没有推广到同模式的
+兄弟用例，也没有动根因。
+
+修法：两处都把三次 build 收敛为两次（两次独立构建才是确定性的证据，第三次是冗余的），
+并给 `openapi-snapshot` 那条补上显式预算。同机实测 `m2-freeze` 248ms → 175ms、
+`openapi-snapshot` 546ms → 463ms，contracts 全量 **725/725**。
+
+这是第三类假绿，与 §3 的 mock 假绿、§8.4 的随实现改写并列：**门禁绿灯只说明这一次跑过了，
+不说明它守得住**。计时型的尤其阴——它不会稳定复现，重跑一次就"好了"，于是根因被一路带下去。
+
 对应门禁见 ADR-16 §2 与 §4。
