@@ -164,6 +164,11 @@ jobs:
       - name: Capture integration diagnostics
         if: failure()
         run: |
+          if [[ -z "${COMPOSE_PROJECT_NAME:-}" || -z "${LAUNDRY_LOCAL_CONFIG_DIR:-}" ]]; then
+            printf '%s\n' 'integration environment was not initialized' \
+              > /tmp/laundry-compose.log
+            exit 0
+          fi
           docker compose -p "${COMPOSE_PROJECT_NAME}" \
             -f tools/compose/docker-compose.yml logs --no-color \
             > /tmp/laundry-compose.log || true
@@ -181,5 +186,7 @@ jobs:
       - name: Stop compose
         if: always()
         run: |
-          pnpm local:down || true
-          docker volume rm "${COMPOSE_PROJECT_NAME}_pgdata-v2" >/dev/null 2>&1 || true
+          if [[ -n "${COMPOSE_PROJECT_NAME:-}" && -n "${LAUNDRY_LOCAL_CONFIG_DIR:-}" ]]; then
+            pnpm local:down || true
+            docker volume rm "${COMPOSE_PROJECT_NAME}_pgdata-v2" >/dev/null 2>&1 || true
+          fi

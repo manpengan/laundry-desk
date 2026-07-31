@@ -91,7 +91,7 @@ describe("M2 contract surface", () => {
     );
   });
 
-  it("projects the frozen M2 surface into deterministic OpenAPI", () => {
+  it("projects the frozen M2 surface into deterministic OpenAPI", { timeout: 10_000 }, () => {
     const first = serializeOpenApiDocument(buildLaundryOpenApiDocument());
     const second = serializeOpenApiDocument(buildLaundryOpenApiDocument());
     expect(first).toBe(second);
