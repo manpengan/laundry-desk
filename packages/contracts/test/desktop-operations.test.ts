@@ -19,6 +19,7 @@ import {
   DesktopLoginResultSchema,
   DesktopLogoutInputSchema,
   DesktopLogoutResultSchema,
+  DesktopOfflineResumeResultSchema,
   DesktopPinChallengeInputSchema,
   DesktopPinChallengeResultSchema,
   DesktopPinVerifyInputSchema,
@@ -37,6 +38,10 @@ import {
   DesktopSessionViewSchema,
   DesktopStaffDirectorySchema,
 } from "../src/desktop/operations.js";
+import {
+  DesktopOfflineResolveInputSchema,
+  DesktopOfflineResumeInputSchema,
+} from "../src/desktop/offline-operations.js";
 import { DESKTOP_OPERATION_SCHEMAS as PUBLIC_DESKTOP_OPERATION_SCHEMAS } from "../src/index.js";
 
 const ids = Object.freeze({
@@ -144,7 +149,7 @@ describe("desktop operation registry", () => {
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.command)).toEqual(["execute"]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.query)).toEqual(["execute"]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.photo)).toEqual(["upload", "read", "delete"]);
-    expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.offline)).toEqual(["status", "resolve"]);
+    expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.offline)).toEqual(["resume", "status", "resolve"]);
     expect(Object.keys(DESKTOP_OPERATION_SCHEMAS.health)).toEqual(["get"]);
     expect(PUBLIC_DESKTOP_OPERATION_SCHEMAS).toBe(DESKTOP_OPERATION_SCHEMAS);
 
@@ -366,6 +371,81 @@ describe("desktop auth and health schemas", () => {
 });
 
 describe("desktop command/query schemas", () => {
+  it("keeps offline.resume strict and credential-free", () => {
+    expect(DesktopOfflineResumeInputSchema.parse({})).toEqual({});
+    expect(
+      DesktopOfflineResumeResultSchema.safeParse({
+        ok: true,
+        data: {
+          mode: "offline_read_only",
+          session_view: { ...sessionView, access_token: "must.not.escape" },
+          cached_query_count: 3,
+          grant_not_after: "2026-07-30T12:00:00.000Z",
+        },
+      }).success,
+    ).toBe(false);
+    const resumed = DesktopOfflineResumeResultSchema.parse({
+      ok: true,
+      data: {
+        mode: "offline_read_only",
+        session_view: sessionView,
+        cached_query_count: 3,
+        grant_not_after: "2026-07-30T12:00:00.000Z",
+      },
+    });
+    expect(JSON.stringify(resumed)).not.toMatch(
+      /access_token|refresh_token|authorization|cookie|password|pin|secret/iu,
+    );
+    expect(
+      DesktopOfflineResumeResultSchema.safeParse({
+        ok: true,
+        data: {
+          mode: "online",
+          session_view: sessionView,
+          cached_query_count: 1,
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      DesktopOfflineResumeResultSchema.safeParse({
+        ok: true,
+        data: {
+          mode: "offline_read_only",
+          session_view: sessionView,
+          cached_query_count: 0,
+          grant_not_after: "not-a-time",
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires an explicit reason and confirmation only for offline discard", () => {
+    const retry = Object.freeze({ queue_id: ids.order, action: "retry" as const });
+    const discard = Object.freeze({
+      queue_id: ids.order,
+      action: "discard" as const,
+      reason: "operator reconciled conflict",
+      confirm: "DISCARD" as const,
+    });
+    expect(DesktopOfflineResolveInputSchema.parse(retry)).toEqual(retry);
+    expect(DesktopOfflineResolveInputSchema.parse(discard)).toEqual(discard);
+    expect(
+      DesktopOfflineResolveInputSchema.safeParse({ ...retry, reason: "not allowed" }).success,
+    ).toBe(false);
+    expect(
+      DesktopOfflineResolveInputSchema.safeParse({
+        queue_id: ids.order,
+        action: "discard",
+      }).success,
+    ).toBe(false);
+    expect(DesktopOfflineResolveInputSchema.safeParse({ ...discard, reason: "x" }).success).toBe(
+      false,
+    );
+    expect(
+      DesktopOfflineResolveInputSchema.safeParse({ ...discard, confirm: "discard" }).success,
+    ).toBe(false);
+  });
+
   it("derives command and query names from the real M2 registries", async () => {
     expect(
       M2_CONTRACT_COMMAND_NAMES.filter(

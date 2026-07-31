@@ -2,6 +2,18 @@ import { buildSetLocalGucStatements, parseTenantContext } from "./guc.js";
 import { runWithActiveTenantTransaction } from "./active-tenant-transaction.js";
 import type { SqlClient, TenantContext, TenantTransactionFn } from "./types.js";
 
+export type TenantTransactionOptions = Readonly<{
+  isolation?: "read_committed" | "repeatable_read";
+  readOnly?: boolean;
+}>;
+
+function beginSql(options: TenantTransactionOptions): string {
+  const isolation =
+    options.isolation === "repeatable_read" ? " ISOLATION LEVEL REPEATABLE READ" : "";
+  const readOnly = options.readOnly === true ? " READ ONLY" : "";
+  return `BEGIN${isolation}${readOnly}`;
+}
+
 /**
  * Run `fn` inside a single Postgres transaction with tenant GUCs applied via SET LOCAL
  * semantics (`set_config(..., is_local := true)`).
@@ -17,11 +29,12 @@ export async function withTenantTransaction<TResult>(
   client: SqlClient,
   ctx: TenantContext | unknown,
   fn: TenantTransactionFn<TResult>,
+  options: TenantTransactionOptions = {},
 ): Promise<TResult> {
   const tenant = parseTenantContext(ctx);
   const statements = buildSetLocalGucStatements(tenant);
 
-  await client.query("BEGIN");
+  await client.query(beginSql(options));
   try {
     for (const statement of statements) {
       await client.query(statement.sql, statement.values);

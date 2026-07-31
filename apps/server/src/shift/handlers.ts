@@ -2,12 +2,13 @@
  * M2 shift handlers: shift.close + shift.get.
  */
 
-import { createCommandError } from "@laundry/contracts";
+import { BusinessDateSchema, createCommandError } from "@laundry/contracts";
 import { businessDayStart } from "@laundry/domain";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
 import type { StatsQueryPort } from "../stats/types.js";
+import type { BusinessDayLockPort } from "../workday/business-day-lock.js";
 import { ShiftAlreadyClosedError } from "./memory-store.js";
 import type { ShiftClosingRecord, ShiftStore } from "./types.js";
 
@@ -17,9 +18,9 @@ export type ShiftHandlerDeps = Readonly<{
   now?: () => number;
   timeZone?: string;
   rolloverHour?: number;
+  /** PG transaction-scoped serialization shared with all same-day business writes. */
+  lockBusinessDay?: BusinessDayLockPort;
 }>;
-
-const BUSINESS_DATE_RE = /^\d{4}-\d{2}-\d{2}$/u;
 
 function asRecord(parsed: unknown): Readonly<Record<string, unknown>> {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -29,10 +30,11 @@ function asRecord(parsed: unknown): Readonly<Record<string, unknown>> {
 }
 
 function requireBusinessDate(value: unknown): string {
-  if (typeof value !== "string" || !BUSINESS_DATE_RE.test(value)) {
+  const parsed = BusinessDateSchema.safeParse(value);
+  if (!parsed.success) {
     throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
   }
-  return value;
+  return parsed.data;
 }
 
 function requireSignatureName(value: unknown): string {
@@ -85,6 +87,7 @@ function closeHandler(deps: ShiftHandlerDeps): CommandHandler {
     const note = typeof input.note === "string" ? input.note : undefined;
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
 
+    await deps.lockBusinessDay?.(ctx.client, ctx.tenant, businessDate);
     const summary = await deps.stats.daySummary({
       orgId: ctx.tenant.orgId,
       storeId: ctx.tenant.storeId,
@@ -95,7 +98,11 @@ function closeHandler(deps: ShiftHandlerDeps): CommandHandler {
       storeId: ctx.tenant.storeId,
       businessDate,
     });
-    const previous = await deps.store.getMostRecent(ctx.tenant.orgId, ctx.tenant.storeId);
+    const previous = await deps.store.getMostRecentBefore(
+      ctx.tenant.orgId,
+      ctx.tenant.storeId,
+      businessDate,
+    );
     const openingFloatCents = previous?.retained_float_cents ?? 0;
     const expectedCashCents = openingFloatCents + cash.cash_cents;
     if (!Number.isSafeInteger(expectedCashCents) || expectedCashCents < 0) {

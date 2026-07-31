@@ -226,9 +226,21 @@ test("historic shift close is queryable and exported as bounded CSV", async ({ p
   await page.locator('[data-nav-id="stats"]').click();
   await page.locator('[data-testid="stats-date-input"]').fill(SHIFT_DATE);
   await page.locator('[data-testid="stats-load-btn"]').click();
-  await expect(
-    page.locator(`[data-testid="stats-summary"][data-business-date="${SHIFT_DATE}"]`),
-  ).toBeVisible({ timeout: 15_000 });
+  const snapshot = page.locator(
+    `[data-testid="reconciliation-snapshot"][data-business-date="${SHIFT_DATE}"]`,
+  );
+  await expect(snapshot).toBeVisible({ timeout: 15_000 });
+  await expect(snapshot.getByRole("heading", { name: "支付账本" })).toBeVisible();
+
+  const reconciliationDownloadPromise = page.waitForEvent("download");
+  await page.locator('[data-testid="stats-export-csv-btn"]').click();
+  const reconciliationDownload = await reconciliationDownloadPromise;
+  expect(reconciliationDownload.suggestedFilename()).toBe(`reconciliation-${SHIFT_DATE}.csv`);
+  const reconciliationDownloadPath = await reconciliationDownload.path();
+  expect(reconciliationDownloadPath).not.toBeNull();
+  const reconciliationCsv = await readFile(reconciliationDownloadPath!, "utf8");
+  expect(reconciliationCsv).toContain('"section","key_1","key_2","value"');
+  expect(reconciliationCsv).toContain(`"meta","business_date","","${SHIFT_DATE}"`);
 
   const closed = page.locator('[data-testid="shift-closed-status"]');
   const signature = page.locator('[data-testid="shift-signature-input"]');

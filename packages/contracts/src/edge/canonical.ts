@@ -11,6 +11,7 @@ import {
   OfflineGrantPayloadSchema,
   PrimaryLeasePayloadSchema,
 } from "./protocols.js";
+import { EdgeDeviceRegistrationAuthoritySchema, EdgeReplayAuthoritySchema } from "./replay-api.js";
 import {
   getSignatureCandidateAuthority,
   getSignatureCandidateKind,
@@ -136,6 +137,8 @@ const CapabilityTicketAuthoritySchema = createAuthoritySchema(CapabilityTicketPa
 const ExecutionReceiptAuthoritySchema = createAuthoritySchema(ExecutionReceiptPayloadSchema);
 const OfflineGrantAuthoritySchema = createAuthoritySchema(OfflineGrantPayloadSchema);
 const PrimaryLeaseAuthoritySchema = createAuthoritySchema(PrimaryLeasePayloadSchema);
+const DEVICE_REGISTRATION_SIGNING_DOMAIN = "laundry.edge.device-registration.v1";
+const REPLAY_SIGNING_DOMAIN = "laundry.edge.replay.v1";
 
 /** Canonical server signing bytes for one strictly parsed capability-ticket authority. */
 export const canonicalizeCapabilityTicketForSigning = (authority: unknown): Uint8Array =>
@@ -167,6 +170,17 @@ export const canonicalizePrimaryLeaseForSigning = (authority: unknown): Uint8Arr
     SIGNING_DOMAINS.primary_lease,
     PrimaryLeaseAuthoritySchema.parse(authority),
   );
+
+/** Canonical device proof-of-possession bytes used when binding its public key. */
+export const canonicalizeEdgeDeviceRegistrationForSigning = (authority: unknown): Uint8Array =>
+  canonicalizeAuthority(
+    DEVICE_REGISTRATION_SIGNING_DOMAIN,
+    EdgeDeviceRegistrationAuthoritySchema.parse(authority),
+  );
+
+/** Canonical device signing bytes covering the complete immutable offline queue envelope. */
+export const canonicalizeEdgeReplayForSigning = (authority: unknown): Uint8Array =>
+  canonicalizeAuthority(REPLAY_SIGNING_DOMAIN, EdgeReplayAuthoritySchema.parse(authority));
 
 /**
  * Produces verification bytes only for a provenance-registered signature candidate. Registration

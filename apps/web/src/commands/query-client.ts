@@ -200,7 +200,7 @@ export const DEMO_PRINT_JOBS: readonly Readonly<{
 
 /**
  * In-memory query port for SSR/unit tests.
- * Default handler: DEMO catalog, empty print.jobs.list, zero stats.day.summary.
+ * Default handler: DEMO catalog, empty print jobs, stats and reconciliation.
  */
 export function createMockQueryClient(handler?: QueryPort["execute"]): QueryPort {
   if (handler !== undefined) {
@@ -274,6 +274,42 @@ export function createMockQueryClient(handler?: QueryPort["execute"]): QueryPort
               balance_cents: 0,
               payment_cents: 0,
               picked_garment_count: 0,
+            }),
+          }) as T,
+        });
+      }
+      if (name === "reconciliation.day.get") {
+        const input = isRecord(body) ? body : {};
+        const businessDate =
+          typeof input.business_date === "string" ? input.business_date : "1970-01-01";
+        return Object.freeze({
+          ok: true as const,
+          data: Object.freeze({
+            execution: "executed",
+            result: Object.freeze({
+              business_date: businessDate,
+              generated_at: "1970-01-01T00:00:00.000Z",
+              orders: Object.freeze({
+                count: 0,
+                payable_cents: 0,
+                paid_cents: 0,
+                balance_cents: 0,
+              }),
+              ledger: Object.freeze({
+                row_count: 0,
+                gross_cents: 0,
+                refund_cents: 0,
+                net_cents: 0,
+                difference_from_orders_cents: 0,
+                buckets: Object.freeze([]),
+              }),
+              shift: null,
+              print: Object.freeze({ total: 0, statuses: Object.freeze([]) }),
+              edge_replay: Object.freeze({
+                total: 0,
+                conflict_count: 0,
+                decisions: Object.freeze([]),
+              }),
             }),
           }) as T,
         });

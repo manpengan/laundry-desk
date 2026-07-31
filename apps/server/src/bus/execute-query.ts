@@ -14,6 +14,7 @@ import type { SqlClient, TenantContext } from "../db/types.js";
 import type { ActorContext, CommandHandler, CommandResult, HandlerCommandError } from "./types.js";
 import { HandlerCommandError as HandlerCmdErr } from "./types.js";
 import type { QueryRegistry } from "./query-registry.js";
+import { actorHasInvariantPermissions } from "./rbac.js";
 
 export type ExecuteQueryOptions = Readonly<{
   actor: ActorContext;
@@ -66,6 +67,9 @@ export async function executeQuery(
   if (handler === undefined) {
     return fail(createCommandError("RESOURCE_UNAVAILABLE"));
   }
+  if (!actorHasInvariantPermissions(opts.actor, registered.definition.invariants)) {
+    return fail(createCommandError("PERMISSION_DENIED"));
+  }
 
   let parsed: unknown;
   try {
@@ -82,14 +86,18 @@ export async function executeQuery(
   });
 
   try {
-    const outcome = await withTenantTransaction(client, tenantCtx, async (tx) =>
-      handler({
-        client: tx,
-        tenant: tenantCtx,
-        actor: opts.actor,
-        request,
-        parsed,
-      }),
+    const outcome = await withTenantTransaction(
+      client,
+      tenantCtx,
+      async (tx) =>
+        handler({
+          client: tx,
+          tenant: tenantCtx,
+          actor: opts.actor,
+          request,
+          parsed,
+        }),
+      { isolation: "repeatable_read", readOnly: true },
     );
     return executed(outcome.result);
   } catch (error) {

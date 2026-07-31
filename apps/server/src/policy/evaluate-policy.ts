@@ -154,6 +154,7 @@ export function evaluatePolicy(input: EvaluatePolicyInput): PolicyDecision {
   }
 
   if (risk === "R3") {
+    if (actor.via === "edge_replay") return allow(risk, escalated);
     return confirm(risk, escalated);
   }
 

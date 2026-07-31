@@ -216,7 +216,9 @@ test("the stats page loads a day summary for the counter", async ({ page }) => {
   await signIn(page);
   await page.locator('[data-nav-id="stats"]').click();
   await page.locator('[data-testid="stats-load-btn"]').click();
-  await expect(page.locator('[data-testid="stats-summary"]')).toBeVisible({ timeout: 15_000 });
+  const snapshot = page.locator('[data-testid="reconciliation-snapshot"]');
+  await expect(snapshot).toBeVisible({ timeout: 15_000 });
+  await expect(snapshot.getByRole("heading", { name: "支付账本" })).toBeVisible();
 });
 
 test("a historic empty business day can be closed without freezing today's counter", async ({
@@ -227,13 +229,11 @@ test("a historic empty business day can be closed without freezing today's count
   await page.locator('[data-testid="stats-date-input"]').fill(ISOLATED_SHIFT_DATE);
   await page.locator('[data-testid="stats-load-btn"]').click();
 
-  const summary = page.locator(
-    `[data-testid="stats-summary"][data-business-date="${ISOLATED_SHIFT_DATE}"]`,
+  const snapshot = page.locator(
+    `[data-testid="reconciliation-snapshot"][data-business-date="${ISOLATED_SHIFT_DATE}"]`,
   );
-  await expect(summary).toBeVisible({ timeout: 15_000 });
-  await expect(
-    summary.locator('[data-testid="stats-card-orders"] .ld-stats-metric__num'),
-  ).toHaveText("0");
+  await expect(snapshot).toBeVisible({ timeout: 15_000 });
+  await expect(snapshot).toContainText("暂无支付流水");
 
   const closed = page.locator('[data-testid="shift-closed-status"]');
   const form = page.locator('[data-testid="shift-signature-input"]');

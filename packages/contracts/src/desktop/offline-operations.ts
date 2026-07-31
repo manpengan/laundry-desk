@@ -13,6 +13,7 @@ const createDesktopResultSchema = <TData extends z.ZodType>(data: TData) =>
   ]);
 
 export const DesktopOfflineStatusInputSchema = EmptyBodySchema;
+export const DesktopOfflineResumeInputSchema = EmptyBodySchema;
 export const DesktopOfflineConflictSchema = z.strictObject({
   queue_id: z.uuid(),
   command: CommandNameSchema,
@@ -27,10 +28,18 @@ const DesktopOfflineStatusDataSchema = z.strictObject({
 export const DesktopOfflineStatusResultSchema = createDesktopResultSchema(
   DesktopOfflineStatusDataSchema,
 );
-export const DesktopOfflineResolveInputSchema = z.strictObject({
-  queue_id: z.uuid(),
-  action: z.enum(["retry", "discard"]),
-});
+export const DesktopOfflineResolveInputSchema = z.discriminatedUnion("action", [
+  z.strictObject({
+    queue_id: z.uuid(),
+    action: z.literal("retry"),
+  }),
+  z.strictObject({
+    queue_id: z.uuid(),
+    action: z.literal("discard"),
+    reason: z.string().trim().min(3).max(256),
+    confirm: z.literal("DISCARD"),
+  }),
+]);
 export const DesktopOfflineResolveResultSchema = DesktopOfflineStatusResultSchema;
 
 type DeepReadonly<T> = T extends readonly (infer Item)[]

@@ -21,6 +21,7 @@ import {
   createMemorySettingsStore,
 } from "../platform/index.js";
 import { MemoryPendingActionStore } from "../pending-actions/store.js";
+import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
 import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
 
@@ -34,14 +35,17 @@ const CLERK: ActorContext = Object.freeze({
   staffId: DEMO_STAFF_A_ID,
   deviceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   via: "ui" as const,
-  permissions: Object.freeze(["order_write", "staff_read"]),
+  permissions: Object.freeze(["order_write", "staff_read", "shift_close", "accounting_read"]),
 });
 
 /** Fixed: 2024-07-22T00:00:00.000Z */
 const DAY_EPOCH = 1_721_606_400;
 const BUSINESS_DATE = "2024-07-22";
 
-function buildBus(fixedNow = () => DAY_EPOCH) {
+function buildBus(
+  fixedNow = () => DAY_EPOCH,
+  lockBusinessDay?: ShiftHandlerDeps["lockBusinessDay"],
+) {
   const orderStore = createMemoryOrderStore();
   const statsSource = createOrderBackedStatsQuery(orderStore);
   const shiftStore = createMemoryShiftStore();
@@ -53,7 +57,12 @@ function buildBus(fixedNow = () => DAY_EPOCH) {
     }),
     order: Object.freeze({ store: orderStore, catalog: createMemoryCatalogStore(), now: fixedNow }),
     stats: Object.freeze({ source: statsSource }),
-    shift: Object.freeze({ store: shiftStore, stats: statsSource, now: fixedNow }),
+    shift: Object.freeze({
+      store: shiftStore,
+      stats: statsSource,
+      now: fixedNow,
+      ...(lockBusinessDay === undefined ? {} : { lockBusinessDay }),
+    }),
   });
   const pendingStore = new MemoryPendingActionStore();
   const chainHooks = createDefaultChainHooks({}, pendingStore);
@@ -148,6 +157,32 @@ test("shift.history returns frozen closings newest first within the bounded rang
   );
 });
 
+test("closing a historical day never carries float backward from a future closing", async () => {
+  const bus = buildBus();
+  const future = await closeWithConfirm(bus, {
+    business_date: "2024-07-31",
+    signature_name: "未来班次",
+    retained_float_cents: 700,
+  });
+  assert.equal(future.ok, true, JSON.stringify(future));
+
+  const historical = await closeWithConfirm(bus, {
+    business_date: "2024-07-30",
+    signature_name: "历史班次",
+    counted_cash_cents: 0,
+  });
+  assert.equal(historical.ok, true, JSON.stringify(historical));
+  if (!historical.ok) return;
+  const result = historical.data.result as {
+    opening_float_cents: number;
+    expected_cash_cents: number;
+    cash_difference_cents: number;
+  };
+  assert.equal(result.opening_float_cents, 0);
+  assert.equal(result.expected_cash_cents, 0);
+  assert.equal(result.cash_difference_cents, 0);
+});
+
 test("shift.close without confirm_ref is blocked with POLICY_CONFIRMATION_REQUIRED", async () => {
   const { registry, chainHooks, pendingStore } = buildBus();
   const result = await executeCommand(
@@ -173,6 +208,21 @@ test("shift.close without confirm_ref is blocked with POLICY_CONFIRMATION_REQUIR
   }
 });
 
+test("shift.close acquires the same business-day lock before freezing stats", async () => {
+  const calls: string[] = [];
+  const bus = buildBus(undefined, async (_client, tenant, businessDate) => {
+    assert.equal(tenant.storeId, TENANT.storeId);
+    assert.equal(businessDate, BUSINESS_DATE);
+    calls.push("lock");
+  });
+  const result = await closeWithConfirm(bus, {
+    business_date: BUSINESS_DATE,
+    signature_name: "店长",
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.deepEqual(calls, ["lock"]);
+});
+
 test("shift.get returns null when day not closed", async () => {
   const { queryRegistry } = buildBus();
   const listed = await executeQuery(
@@ -185,6 +235,25 @@ test("shift.get returns null when day not closed", async () => {
   assert.equal(listed.ok, true, JSON.stringify(listed));
   if (!listed.ok) return;
   assert.equal(listed.data.result, null);
+});
+
+test("shift reads reject a staff actor without accounting permission", async () => {
+  const { queryRegistry } = buildBus();
+  const actor = Object.freeze({
+    ...CLERK,
+    permissions: Object.freeze(["order_write", "staff_read"]),
+  });
+  for (const [name, input] of [
+    ["shift.get", { business_date: BUSINESS_DATE }],
+    ["shift.history", { date_from: BUSINESS_DATE, date_to: BUSINESS_DATE }],
+  ] as const) {
+    const result = await executeQuery(new FakeSqlClient(), TENANT, name, input, {
+      registry: queryRegistry,
+      actor,
+    });
+    assert.equal(result.ok, false, name);
+    if (!result.ok) assert.equal(result.error.code, "PERMISSION_DENIED", name);
+  }
 });
 
 test("shift.close snapshots day stats and shift.get returns the row", async () => {
@@ -254,6 +323,180 @@ test("shift.close snapshots day stats and shift.get returns the row", async () =
   assert.equal(row.shift_id, body.shift_id);
   assert.equal(row.order_count, 1);
   assert.equal(row.note, "晚班交班");
+});
+
+test("shift.close excludes draft and cancelled orders from its day snapshot", async () => {
+  const bus = buildBus();
+  const draft = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.hold",
+    {
+      lines: [
+        {
+          service_code: "dry",
+          category_code: "coat",
+          unit_price_cents: 2500,
+          qty: 1,
+        },
+      ],
+    },
+    {
+      registry: bus.registry,
+      actor: CLERK,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+    },
+  );
+  assert.equal(draft.ok, true, JSON.stringify(draft));
+
+  const active = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      lines: [
+        {
+          service_code: "wash",
+          category_code: "shirt",
+          unit_price_cents: 1500,
+          qty: 1,
+        },
+      ],
+      paid_cents: 500,
+    },
+    {
+      registry: bus.registry,
+      actor: CLERK,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+    },
+  );
+  assert.equal(active.ok, true, JSON.stringify(active));
+
+  const receivedToCancel = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      lines: [
+        {
+          service_code: "wash",
+          category_code: "shirt",
+          unit_price_cents: 2200,
+          qty: 1,
+        },
+      ],
+    },
+    {
+      registry: bus.registry,
+      actor: CLERK,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+    },
+  );
+  assert.equal(receivedToCancel.ok, true, JSON.stringify(receivedToCancel));
+  if (!receivedToCancel.ok) return;
+  const cancelledOrderId = (receivedToCancel.data.result as { order_id: string }).order_id;
+  const cancelled = await bus.orderStore.cancelOpenOrder?.(
+    TENANT.orgId,
+    TENANT.storeId,
+    cancelledOrderId,
+    "customer changed mind",
+    TENANT.staffId,
+    DAY_EPOCH,
+    BUSINESS_DATE,
+  );
+  assert.equal(cancelled?.status, "cancelled");
+
+  const closed = await closeWithConfirm(bus, {
+    business_date: BUSINESS_DATE,
+    signature_name: "店长",
+  });
+  assert.equal(closed.ok, true, JSON.stringify(closed));
+  if (!closed.ok) return;
+  const result = closed.data.result as {
+    order_count: number;
+    payable_cents: number;
+    paid_cents: number;
+    payment_cents: number;
+  };
+  assert.deepEqual(
+    {
+      order_count: result.order_count,
+      payable_cents: result.payable_cents,
+      paid_cents: result.paid_cents,
+      payment_cents: result.payment_cents,
+    },
+    {
+      order_count: 1,
+      payable_cents: 1500,
+      paid_cents: 500,
+      payment_cents: 500,
+    },
+  );
+});
+
+test("shift.close signs a reversal of a cash refund positively", async () => {
+  const bus = buildBus();
+  const received = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      lines: [{ service_code: "wash", category_code: "shirt", qty: 1 }],
+      initial_payment: { amount_cents: 800, method: "cash" },
+    },
+    {
+      registry: bus.registry,
+      actor: CLERK,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+    },
+  );
+  assert.equal(received.ok, true, JSON.stringify(received));
+  if (!received.ok) return;
+  const orderId = (received.data.result as { order_id: string }).order_id;
+  const original = (
+    await bus.orderStore.listPayments?.(TENANT.orgId, TENANT.storeId, orderId)
+  )?.[0];
+  assert.ok(original);
+  const refund = await bus.orderStore.appendRefund?.({
+    org_id: TENANT.orgId,
+    store_id: TENANT.storeId,
+    order_id: orderId,
+    amount_cents: 300,
+    expected_method: original.method,
+    ref_payment_id: original.payment_id,
+    reason: "partial refund before cancellation",
+    staff_id: TENANT.staffId,
+    at: DAY_EPOCH,
+    business_date: BUSINESS_DATE,
+  });
+  assert.ok(refund);
+  const cancelled = await bus.orderStore.cancelOpenOrder?.(
+    TENANT.orgId,
+    TENANT.storeId,
+    orderId,
+    "customer cancelled",
+    TENANT.staffId,
+    DAY_EPOCH,
+    BUSINESS_DATE,
+  );
+  assert.equal(cancelled?.status, "cancelled");
+
+  const closed = await closeWithConfirm(bus, {
+    business_date: BUSINESS_DATE,
+    signature_name: "店长",
+  });
+  assert.equal(closed.ok, true, JSON.stringify(closed));
+  if (!closed.ok) return;
+  const result = closed.data.result as {
+    expected_cash_cents: number;
+    cash_difference_cents: number;
+  };
+  assert.equal(result.expected_cash_cents, 0);
+  assert.equal(result.cash_difference_cents, 0);
 });
 
 test("shift.close rejects second close same day", async () => {

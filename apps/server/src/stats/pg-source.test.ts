@@ -5,7 +5,7 @@ import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
 import { DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { createPgStatsQuery } from "./pg-source.js";
 
-test("PG stats source uses one aggregate query under store RLS scope", async () => {
+test("PG stats source uses one aggregate per read under store RLS scope", async () => {
   const queries: string[] = [];
   const client = {
     async query<TRow>(sql: string): Promise<{ rows: TRow[]; rowCount: number }> {
@@ -25,6 +25,9 @@ test("PG stats source uses one aggregate query under store RLS scope", async () 
           ],
           rowCount: 1,
         };
+      }
+      if (sql.includes("AS cash_cents")) {
+        return { rows: [{ cash_cents: "0" } as TRow], rowCount: 1 };
       }
       return { rows: [], rowCount: 0 };
     },
@@ -55,5 +58,18 @@ test("PG stats source uses one aggregate query under store RLS scope", async () 
   assert.ok(aggregate);
   assert.match(aggregate, /FROM payments p/u);
   assert.match(aggregate, /g\.status = 'picked_up'/u);
-  assert.equal(queries.filter((sql) => sql === "BEGIN").length, 1);
+  assert.match(aggregate, /o\.status IN \('open', 'closed'\)/u);
+  assert.deepEqual(
+    await source.cashSummary({
+      orgId: DEMO_ORG_ID,
+      storeId: DEMO_STORE_ID,
+      businessDate: "2026-07-23",
+    }),
+    { cash_cents: 0 },
+  );
+  const cash = queries.find((sql) => sql.includes("AS cash_cents"));
+  assert.ok(cash);
+  assert.match(cash, /LEFT JOIN payments referenced/u);
+  assert.match(cash, /referenced\.kind = 'refund'/u);
+  assert.equal(queries.filter((sql) => sql === "BEGIN").length, 2);
 });

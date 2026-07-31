@@ -87,6 +87,7 @@ export type ElectronDesktopDependencyOptions = Readonly<{
   net: ElectronNetSurface;
   session: ElectronSessionSurface;
   deviceId: string;
+  deviceSigner?: NonNullable<DesktopHttpTransportDependencies["deviceSigner"]>;
 }>;
 
 function isPhotoUpload(url: URL, request: DesktopHttpRequest): boolean {
@@ -340,5 +341,6 @@ export function createElectronDesktopDependencies(
       clear: (url: string) => clearAuthCookies(options.session.cookies, url),
     }),
     deviceId: options.deviceId,
+    ...(options.deviceSigner === undefined ? {} : { deviceSigner: options.deviceSigner }),
   });
 }

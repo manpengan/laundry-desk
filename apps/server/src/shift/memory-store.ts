@@ -53,12 +53,16 @@ export class MemoryShiftStore implements ShiftStore {
     return record;
   }
 
-  async getMostRecent(orgId: string, storeId: string): Promise<ShiftClosingRecord | null> {
+  async getMostRecentBefore(
+    orgId: string,
+    storeId: string,
+    businessDate: string,
+  ): Promise<ShiftClosingRecord | null> {
     const prefix = `${orgId}|${storeId}|`;
     let current: ShiftClosingRecord | null = null;
     for (const [key, row] of this.byDate) {
-      if (!key.startsWith(prefix)) continue;
-      if (current === null || row.closed_at > current.closed_at) current = row;
+      if (!key.startsWith(prefix) || row.business_date >= businessDate) continue;
+      if (current === null || row.business_date > current.business_date) current = row;
     }
     return current;
   }

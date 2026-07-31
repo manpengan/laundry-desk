@@ -4,6 +4,7 @@
 
 import type { CustomerStore } from "../customer/types.js";
 import type { CatalogStore } from "../catalog/memory-catalog.js";
+import type { BusinessDayLockPort } from "../workday/business-day-lock.js";
 import type { OrderStore } from "./types.js";
 
 export type OrderHandlerDeps = Readonly<{
@@ -18,4 +19,6 @@ export type OrderHandlerDeps = Readonly<{
   rolloverHour?: number;
   /** Reject business writes once the matching store day has a frozen close. */
   isBusinessDayClosed?: (businessDate: string) => Promise<boolean>;
+  /** PG transaction-scoped serialization shared with shift.close. */
+  lockBusinessDay?: BusinessDayLockPort;
 }>;

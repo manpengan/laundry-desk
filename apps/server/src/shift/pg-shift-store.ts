@@ -116,6 +116,7 @@ async function selectMostRecent(
   client: SqlClient,
   orgId: string,
   storeId: string,
+  businessDate: string,
 ): Promise<ShiftClosingRecord | null> {
   const result = await client.query<ShiftClosingRow>(
     `SELECT id, org_id, store_id, business_date, closed_by_staff_id, note,
@@ -124,10 +125,10 @@ async function selectMostRecent(
             expected_cash_cents, cash_difference_cents, signature_name,
             period_started_at, period_ended_at, closed_at
      FROM shift_closings
-     WHERE org_id = $1::uuid AND store_id = $2::uuid
-     ORDER BY closed_at DESC, id DESC
+     WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date < $3
+     ORDER BY business_date DESC, closed_at DESC, id DESC
      LIMIT 1`,
-    [orgId, storeId],
+    [orgId, storeId, businessDate],
   );
   const row = result.rows[0];
   return row === undefined ? null : mapRecord(row);
@@ -247,10 +248,10 @@ export function createPgShiftStore(pool: PgPool, options: CreatePgShiftStoreOpti
       );
     },
 
-    getMostRecent: async (queryOrgId: string, queryStoreId: string) => {
+    getMostRecentBefore: async (queryOrgId: string, queryStoreId: string, businessDate: string) => {
       assertConfiguredScope(queryOrgId, queryStoreId, orgId, storeId);
       return withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) =>
-        selectMostRecent(client, orgId, storeId),
+        selectMostRecent(client, orgId, storeId, businessDate),
       );
     },
 

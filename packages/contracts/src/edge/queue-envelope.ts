@@ -28,11 +28,27 @@ export const QueueAuthorizationSchema = z.discriminatedUnion("kind", [
   PrimaryLeaseQueueAuthorizationSchema,
 ]);
 
+type DeepReadonly<T> = T extends readonly (infer Item)[]
+  ? readonly DeepReadonly<Item>[]
+  : T extends object
+    ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+    : T;
+
+export type QueueAuthorization = DeepReadonly<z.output<typeof QueueAuthorizationSchema>>;
+export type EdgeQueueEnvelope = Readonly<{
+  queue_envelope_version: number;
+  contracts_major: number;
+  queue_id: string;
+  enqueued_at: string;
+  payload: DeepReadonly<CommandWirePayload>;
+  authorization: QueueAuthorization;
+}>;
+
 /**
  * ADR-04 #7: A4 exclusively owns the replay tuple. It supports idempotency, replay rejection,
  * ordering and audit attribution; it does not claim to prevent physical double delivery.
  */
-const EdgeQueueEnvelopeSchema = z
+export const EdgeQueueEnvelopeSchema: z.ZodType<EdgeQueueEnvelope> = z
   .object({
     /** Independently versioned from the contracts protocol major. */
     queue_envelope_version: PositiveSafeIntegerSchema,
@@ -46,12 +62,6 @@ const EdgeQueueEnvelopeSchema = z
   })
   .strict();
 
-type DeepReadonly<T> = T extends readonly (infer Item)[]
-  ? readonly DeepReadonly<Item>[]
-  : T extends object
-    ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
-    : T;
-
 const copyAndFreeze = <T>(value: T): DeepReadonly<T> => {
   if (Array.isArray(value)) {
     return Object.freeze(value.map((entry) => copyAndFreeze(entry))) as DeepReadonly<T>;
@@ -62,16 +72,6 @@ const copyAndFreeze = <T>(value: T): DeepReadonly<T> => {
   }
   return value as DeepReadonly<T>;
 };
-
-export type QueueAuthorization = DeepReadonly<z.output<typeof QueueAuthorizationSchema>>;
-export type EdgeQueueEnvelope = Readonly<{
-  queue_envelope_version: number;
-  contracts_major: number;
-  queue_id: string;
-  enqueued_at: string;
-  payload: DeepReadonly<CommandWirePayload>;
-  authorization: QueueAuthorization;
-}>;
 
 /** Parses one immutable A4 envelope; tenant/actor identity is intentionally not accepted. */
 export const parseEdgeQueueEnvelope = (value: unknown): EdgeQueueEnvelope =>

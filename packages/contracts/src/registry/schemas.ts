@@ -158,8 +158,11 @@ const QueryMetadataBaseSchema = z
     risk: QueryRiskSchema,
     /** A1 query boundary: query definitions are always idempotent. */
     idempotent: z.literal(true),
-    /** A1 query boundary: queries declare no command invariants. */
-    invariants: z.array(z.never()).length(0),
+    /** Read metadata may bind authorization-only invariants such as rbac.accounting_read. */
+    invariants: StableBindingIdsSchema.refine(
+      (invariants) => invariants.every((invariant) => invariant.startsWith("rbac.")),
+      { message: "Query invariants must be authorization bindings under rbac.*" },
+    ),
     /** A1 query boundary: queries declare no side effects. */
     sideEffects: z.array(z.never()).length(0),
     /** Architecture §11: server queries are not queued or replayed offline. */

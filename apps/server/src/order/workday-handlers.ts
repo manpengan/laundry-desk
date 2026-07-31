@@ -27,6 +27,7 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
     if (!plan.ok) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
     const businessDate = deriveBusinessDate(now, deps.timeZone, deps.rolloverHour);
+    await deps.lockBusinessDay?.(ctx.client, ctx.tenant, businessDate);
     await assertBusinessDayOpen(deps.isBusinessDayClosed, businessDate);
     const newId = deps.newId ?? randomUUID;
     const draftId = typeof input.draft_id === "string" ? input.draft_id : newId();
@@ -111,6 +112,7 @@ function cancelHandler(deps: OrderHandlerDeps): CommandHandler {
     if (reason.length === 0) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
     const businessDate = deriveBusinessDate(now, deps.timeZone, deps.rolloverHour);
+    await deps.lockBusinessDay?.(ctx.client, ctx.tenant, businessDate);
     await assertBusinessDayOpen(deps.isBusinessDayClosed, businessDate);
     const order = await deps.store.cancelOpenOrder(
       ctx.tenant.orgId,

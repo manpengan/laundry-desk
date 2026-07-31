@@ -93,12 +93,11 @@ export const shiftCloseCommand: CommandDefinition<CloseInput> = defineCommand({
     "Append-only shift close for one business_date. It freezes integer-fen ledger totals, opening float, counted cash, retained float and the resulting cash difference. Reject a second close for the same store day.",
   input: ShiftCloseInputSchema,
   risk: "R3",
-  invariants: ["rbac.order_write"],
-  // Offline grant requires idempotent; second close same day is CONFLICT, not a rewrite.
-  // R3 confirm card: first hop fails closed with confirm_ref; second hop resumes frozen args.
+  invariants: ["rbac.shift_close"],
+  // Closing is online-only. R3 confirm card freezes args; duplicate day closes still conflict.
   idempotent: true,
   sideEffects: ["shift.closed", "audit.shift_event"],
-  offline_mode: "grant",
+  offline_mode: "denied",
   data_classification: "internal",
   input_redaction: [],
   result_redaction: [],
@@ -113,7 +112,7 @@ export const shiftGetQuery: QueryDefinition<GetInput> = defineQuery({
     "Return shift row for business_date (shift_id, closed_at, fen totals, signature_name) or null. max 1 row.",
   input: ShiftGetInputSchema,
   risk: "R1",
-  invariants: [],
+  invariants: ["rbac.accounting_read"],
   idempotent: true,
   sideEffects: [],
   offline_mode: "denied",
@@ -132,7 +131,7 @@ export const shiftHistoryQuery: QueryDefinition<HistoryInput> = defineQuery({
     "Return up to 100 store-scoped shift closings newest first, including integer-fen cash reconciliation fields. Never recompute historical rows.",
   input: ShiftHistoryInputSchema,
   risk: "R1",
-  invariants: [],
+  invariants: ["rbac.accounting_read"],
   idempotent: true,
   sideEffects: [],
   offline_mode: "denied",

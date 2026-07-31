@@ -16,7 +16,7 @@ export const PaymentCollectInputSchema = PaymentInputBaseSchema;
 export const PaymentRepayInputSchema = PaymentInputBaseSchema;
 export const PaymentRefundInputSchema = PaymentInputBaseSchema.extend({
   ref_payment_id: z.uuid(),
-  reason: z.string().min(1).max(256),
+  reason: z.string().trim().min(1).max(256),
 });
 
 type CollectInput = typeof PaymentCollectInputSchema;
@@ -69,7 +69,7 @@ export const paymentRefundCommand: CommandDefinition<RefundInput> = defineComman
   version: "0.2.0",
   description: "Append an online-only R4 refund referencing an original payment.",
   description_llm:
-    "Refund only online with step-up approval. Reference the original payment and provide a reason; never mutate the original ledger row.",
+    "Refund only online with step-up approval. Reference the original payment and provide a reason. The submitted method must match the immutable referenced payment; the server verifies it under lock and never mutates the original row.",
   input: PaymentRefundInputSchema,
   risk: "R4",
   invariants: ["rbac.payment_refund", "payment.original_exists", "payment.append_only"],

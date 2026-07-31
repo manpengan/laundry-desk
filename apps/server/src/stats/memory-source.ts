@@ -5,6 +5,7 @@
 import { aggregateDaySummary, emptyDaySummary, type DaySummary } from "@laundry/domain";
 
 import type { OrderStore } from "../order/types.js";
+import { paymentNetCents } from "../reconciliation/common.js";
 import type { StatsDaySummaryInput, StatsQueryPort } from "./types.js";
 
 /**
@@ -70,7 +71,11 @@ async function summarizeOrdersForDay(
   }
 
   const allOrders = await store.listOrders(input.orgId, input.storeId);
-  const dayOrders = allOrders.filter((order) => order.business_date === input.businessDate);
+  const dayOrders = allOrders.filter(
+    (order) =>
+      order.business_date === input.businessDate &&
+      (order.status === "open" || order.status === "closed"),
+  );
 
   const garments: Array<Readonly<{ status: string }>> = [];
   for (const order of dayOrders) {
@@ -111,14 +116,14 @@ async function summarizeCashForDay(
 ): Promise<Readonly<{ cash_cents: number }>> {
   if (store?.listPayments === undefined) return Object.freeze({ cash_cents: 0 });
   const rows = await store.listPayments(input.orgId, input.storeId);
+  const referencedKinds = new Map(rows.map((payment) => [payment.payment_id, payment.kind]));
   let total = 0;
   for (const payment of rows) {
     if (payment.method !== "cash" || payment.business_date !== input.businessDate) continue;
-    const contribution =
-      payment.kind === "refund" || payment.kind === "reversal"
-        ? -payment.amount_cents
-        : payment.amount_cents;
-    total += contribution;
+    total += paymentNetCents(
+      payment,
+      payment.ref_payment_id === null ? undefined : referencedKinds.get(payment.ref_payment_id),
+    );
   }
   return Object.freeze({ cash_cents: total });
 }

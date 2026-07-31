@@ -147,6 +147,33 @@ test("keeps the deferred Windows release workflow manual", async () => {
   assert.doesNotMatch(workflow, /^  (?:push|pull_request):/mu);
 });
 
+test("pins JavaScript actions to Node 24 compatible stable majors", async () => {
+  const [buildWorkflow, foundationWorkflow, integrationWorkflow] = await Promise.all(
+    [
+      ".github/workflows/build.yml",
+      ".github/workflows/foundation.yml",
+      ".github/workflows/v2-integration.yml",
+    ].map(readRepositoryFile),
+  );
+
+  for (const workflow of [buildWorkflow, foundationWorkflow, integrationWorkflow]) {
+    assert.match(workflow, /uses: actions\/checkout@v7/u);
+    assert.match(workflow, /uses: actions\/setup-node@v7/u);
+    assert.doesNotMatch(
+      workflow,
+      /uses: (?:actions\/(?:checkout|setup-node|upload-artifact)|pnpm\/action-setup)@v4/u,
+    );
+  }
+  for (const workflow of [buildWorkflow, integrationWorkflow]) {
+    assert.match(workflow, /uses: actions\/upload-artifact@v7/u);
+  }
+  for (const workflow of [foundationWorkflow, integrationWorkflow]) {
+    assert.match(workflow, /uses: pnpm\/action-setup@v6/u);
+    assert.match(workflow, /node-version: 22/u);
+  }
+  assert.match(buildWorkflow, /node-version: 20/u);
+});
+
 test("keeps Gemini legacy v1 execution guidance inside one forbidden archive block", async () => {
   const gemini = await readRepositoryFile("GEMINI.md");
   const archiveHeading = "## 历史 v1 资料（已归档，禁止执行）";

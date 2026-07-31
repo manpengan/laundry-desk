@@ -13,8 +13,10 @@ export type AppProps = {
   themePreference?: ThemePreference;
   /** Skip liquid-glass install in pure SSR unit tests. */
   enableLiquidGlass?: boolean;
-  /** Seed token-free session view for tests only. Production hosts start logged out. */
+  /** Seed a token-free desktop resume view; browser production still starts logged out. */
   initialSession?: SessionView | null;
+  /** Desktop cold-start fallback is query-only; all mutation paths stay closed. */
+  readOnly?: boolean;
   /** Local host demo prefill only. */
   loginInitialForm?: Partial<LoginFormValues>;
 };
@@ -25,6 +27,7 @@ export function shellPropsFrom(
   session: SessionView,
   ports: AppPorts,
   onSessionChange: (session: SessionView | null) => void,
+  readOnly = false,
 ): CounterShellProps {
   const props: CounterShellProps = {
     session,
@@ -34,6 +37,7 @@ export function shellPropsFrom(
     photoPort: ports.photo,
     ...(ports.offline === undefined ? {} : { offlinePort: ports.offline }),
     onSessionChange,
+    readOnly,
   };
   if (connection !== undefined) props.initialConnection = connection;
   if (themePreference !== undefined) props.initialTheme = themePreference;
@@ -50,6 +54,7 @@ export function App({
   themePreference,
   enableLiquidGlass = true,
   initialSession = null,
+  readOnly = false,
   loginInitialForm,
 }: AppProps) {
   const [session, setSession] = useState<SessionView | null>(initialSession);
@@ -65,6 +70,7 @@ export function App({
       {session ? (
         <CounterShell
           {...shellPropsFrom(connection, themePreference, session, ports, setSession)}
+          readOnly={readOnly}
         />
       ) : (
         <LoginPage

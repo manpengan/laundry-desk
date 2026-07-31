@@ -38,6 +38,7 @@ test("DESKTOP_IPC_CHANNELS is the exact deeply frozen renderer capability map", 
       delete: "desktop:photo:delete",
     },
     offline: {
+      resume: "desktop:offline:resume",
       status: "desktop:offline:status",
       resolve: "desktop:offline:resolve",
     },
@@ -60,13 +61,13 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
   );
   const invokedDesktopChannels = Array.from(
     preload.matchAll(
-      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:login|refresh|pinChallenge|pinVerify|logout)|command\.execute|query\.execute|photo\.(?:upload|read|delete)|offline\.(?:status|resolve)|health\.get)/gu,
+      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:login|refresh|pinChallenge|pinVerify|logout)|command\.execute|query\.execute|photo\.(?:upload|read|delete)|offline\.(?:resume|status|resolve)|health\.get)/gu,
     ),
     (match) => match[1],
   );
   const emptyInputChannels = Array.from(
     preload.matchAll(
-      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:refresh|logout)|offline\.status|health\.get),\s*EMPTY_DESKTOP_INPUT\s*\)/gu,
+      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:refresh|logout)|offline\.(?:resume|status)|health\.get),\s*EMPTY_DESKTOP_INPUT\s*\)/gu,
     ),
     (match) => match[1],
   );
@@ -83,6 +84,7 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
     "photo.upload",
     "photo.read",
     "photo.delete",
+    "offline.resume",
     "offline.status",
     "offline.resolve",
     "health.get",
@@ -90,10 +92,11 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
   assert.deepEqual(emptyInputChannels, [
     "auth.refresh",
     "auth.logout",
+    "offline.resume",
     "offline.status",
     "health.get",
   ]);
-  assert.equal(preload.match(/ipcRenderer\.invoke\(/gu)?.length, 13);
+  assert.equal(preload.match(/ipcRenderer\.invoke\(/gu)?.length, 14);
   assert.doesNotMatch(preload, /edgeBridge/);
   assert.doesNotMatch(preload, /import\s*\{\s*IPC_CHANNELS\s*\}/u);
   assert.doesNotMatch(

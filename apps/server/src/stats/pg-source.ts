@@ -49,6 +49,7 @@ async function queryDaySummary(
        FROM orders o
        WHERE o.org_id = $1::uuid AND o.store_id = $2::uuid
          AND o.business_date = $3
+         AND o.status IN ('open', 'closed')
      )
      SELECT
        (SELECT COUNT(*)::integer FROM orders_day) AS order_count,
@@ -81,13 +82,19 @@ async function queryCashSummary(
   const result = await client.query<Readonly<{ cash_cents: number | string }>>(
     `SELECT COALESCE(SUM(
         CASE
-          WHEN kind IN ('refund', 'reversal') THEN -amount_cents
-          ELSE amount_cents
+          WHEN p.kind = 'refund' THEN -p.amount_cents
+          WHEN p.kind = 'reversal' AND referenced.kind = 'refund' THEN p.amount_cents
+          WHEN p.kind = 'reversal' THEN -p.amount_cents
+          ELSE p.amount_cents
         END
       ), 0)::bigint AS cash_cents
-     FROM payments
-     WHERE org_id = $1::uuid AND store_id = $2::uuid
-       AND business_date = $3 AND method = 'cash'`,
+     FROM payments p
+     LEFT JOIN payments referenced
+       ON referenced.org_id = p.org_id
+      AND referenced.store_id = p.store_id
+      AND referenced.id = p.ref_payment_id
+     WHERE p.org_id = $1::uuid AND p.store_id = $2::uuid
+       AND p.business_date = $3 AND p.method = 'cash'`,
     [input.orgId, input.storeId, input.businessDate],
   );
   const value = result.rows[0]?.cash_cents ?? 0;

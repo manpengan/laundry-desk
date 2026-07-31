@@ -32,7 +32,7 @@ const CLERK: ActorContext = Object.freeze({
   staffId: DEMO_STAFF_A_ID,
   deviceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   via: "ui" as const,
-  permissions: Object.freeze(["order_write", "staff_read"]),
+  permissions: Object.freeze(["order_write", "staff_read", "print_manage"]),
 });
 
 const ORDER_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";

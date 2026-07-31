@@ -53,6 +53,7 @@
     "local:restore:drill": "node tools/local/restore-drill.mjs",
     "local:restore": "node tools/local/restore.mjs",
     "local:diagnose": "node tools/local/diagnose.mjs",
+    "local:support-bundle": "node tools/local/support-bundle.mjs",
     "local:up": "node tools/local/up.mjs",
     "local:down": "node tools/local/down.mjs",
     "local:reset": "node tools/local/reset.mjs"

@@ -69,6 +69,11 @@ export class MemoryPrintJobStore implements PrintJobStore {
     return Object.freeze(newestFirst.map((j) => toStatusView(j)));
   }
 
+  /** Internal reporting projection; unlike the renderer-facing list, this is not truncated. */
+  async listAll(): Promise<readonly PrintJobStatusView[]> {
+    return Object.freeze([...this.jobs].reverse().map((job) => toStatusView(job)));
+  }
+
   async get(jobId: string): Promise<PrintJobRecord | null> {
     return this.jobs.find((j) => j.job_id === jobId) ?? null;
   }
@@ -124,6 +129,6 @@ export class MemoryPrintJobStore implements PrintJobStore {
   }
 }
 
-export function createMemoryPrintJobStore(): PrintJobStore {
+export function createMemoryPrintJobStore(): MemoryPrintJobStore {
   return new MemoryPrintJobStore();
 }

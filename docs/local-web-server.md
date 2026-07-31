@@ -140,7 +140,13 @@ SHA-256 绑定实例、数据库和每张照片；完成后恢复 API：
 ```bash
 pnpm local:backup
 pnpm local:diagnose
+pnpm local:support-bundle
 ```
+
+`local:support-bundle` 不接受参数，只在私有配置目录下的 `support-bundles/` 生成受管
+JSON 文件。文件仅包含固定诊断分区；日志会先限长再脱敏，离线队列、CUPS 和升级状态
+只输出计数或布尔摘要，不包含凭据、客户手机号、作业标识、密文、制品摘要或来源路径。
+命令输出生成文件的路径、SHA-256 和字节数，便于线下交给支持人员核对。
 
 自动维护入口会先生成新的完整恢复集，再按 30 天/30 份策略计算轮换。默认只报告待删除
 集合；必须显式加 `--apply-retention` 才会删除，并且始终保留最新一份、拒绝删除损坏集合。

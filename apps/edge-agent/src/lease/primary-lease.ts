@@ -6,6 +6,7 @@
  * server replay remains the sole business-authority path.
  */
 import {
+  EdgeNonceSchema,
   canonicalizeForSignatureVerification,
   parseEdgeQueueEnvelope,
   parseServerSignatureOfflineGrantCandidate,
@@ -13,78 +14,35 @@ import {
   validateOfflineGrantAllowedCommands,
   type EdgeQueueEnvelope,
   type OfflineGrantPayload,
-  type OfflineGrantRegistrySnapshot,
   type PrimaryLeasePayload,
 } from "@laundry/contracts";
 import { verify, type KeyObject } from "node:crypto";
 
 import { base64UrlToBytes } from "../pairing/device-keys.js";
+import type {
+  AuthorityAcceptanceResult,
+  AuthorityRequestResult,
+  OfflineAuthorityGuardOptions,
+  OfflineAuthorityRequest,
+  OfflineAuthorizationResult,
+} from "./primary-lease-types.js";
 
-export type MonotonicClock = Readonly<{
-  nowMs(): number;
-  continuity(): "trusted" | "uncertain";
+export type {
+  AuthorityAcceptanceResult,
+  AuthorityRequestResult,
+  MonotonicClock,
+  OfflineAuthorityGuardOptions,
+  OfflineAuthorityRequest,
+  OfflineAuthorizationResult,
+} from "./primary-lease-types.js";
+
+type AuthorityRequestRecord = Readonly<{
+  startedAtMs: number;
+  continuityEpoch: number;
+  requestNonce: string;
 }>;
-
-export type OfflineAuthorityGuardOptions = Readonly<{
-  serverPublicKey: KeyObject;
-  registrySnapshot: OfflineGrantRegistrySnapshot;
-  orgId: string;
-  storeId: string;
-  staffId: string;
-  deviceId: string;
-  permissionVersion: number;
-  clock: MonotonicClock;
-  /** Conservative local allowance removed from each signed authority lifetime. */
-  safetyMarginMs: number;
-}>;
-
-type AuthorityRequestRecord = Readonly<{ startedAtMs: number; continuityEpoch: number }>;
 type ActiveGrant = Readonly<{ payload: OfflineGrantPayload; deadlineMonoMs: number }>;
 type ActiveLease = Readonly<{ payload: PrimaryLeasePayload; deadlineMonoMs: number }>;
-
-declare const AUTHORITY_REQUEST_BRAND: unique symbol;
-export type OfflineAuthorityRequest = Readonly<{ [AUTHORITY_REQUEST_BRAND]: true }>;
-
-export type AuthorityRequestResult =
-  | Readonly<{ ok: true; request: OfflineAuthorityRequest }>
-  | Readonly<{ ok: false; error: "untrusted_continuity" }>;
-
-export type AuthorityAcceptanceResult =
-  | Readonly<{ ok: true; localDeadlineMonoMs: number }>
-  | Readonly<{
-      ok: false;
-      error:
-        | "bad_signature"
-        | "authority_replayed"
-        | "deadline_elapsed"
-        | "invalid_request"
-        | "malformed"
-        | "untrusted_continuity"
-        | "wrong_audience";
-    }>;
-
-export type OfflineAuthorizationResult =
-  | Readonly<{
-      ok: true;
-      command: string;
-      mode: "grant" | "primary_lease";
-      localDeadlineMonoMs: number;
-    }>
-  | Readonly<{
-      ok: false;
-      error:
-        | "command_denied"
-        | "grant_expired"
-        | "grant_mismatch"
-        | "grant_required"
-        | "lease_expired"
-        | "lease_mismatch"
-        | "lease_required"
-        | "malformed_envelope"
-        | "sequence_out_of_order"
-        | "sequence_replayed"
-        | "untrusted_continuity";
-    }>;
 
 const failAcceptance = (
   error: Extract<AuthorityAcceptanceResult, { ok: false }>["error"],
@@ -152,13 +110,19 @@ export class OfflineAuthorizationGuard {
   }
 
   /** Call immediately before requesting a fresh grant or lease from the server. */
-  startAuthorityRequest(): AuthorityRequestResult {
+  startAuthorityRequest(requestNonce: string): AuthorityRequestResult {
+    const parsedNonce = EdgeNonceSchema.safeParse(requestNonce);
+    if (!parsedNonce.success) return Object.freeze({ ok: false, error: "invalid_request" });
     const nowMs = this.readTrustedNow();
     if (nowMs === null) return Object.freeze({ ok: false, error: "untrusted_continuity" });
     const request = Object.freeze({}) as OfflineAuthorityRequest;
     this.requests.set(
       request,
-      Object.freeze({ startedAtMs: nowMs, continuityEpoch: this.continuityEpoch }),
+      Object.freeze({
+        startedAtMs: nowMs,
+        continuityEpoch: this.continuityEpoch,
+        requestNonce: parsedNonce.data,
+      }),
     );
     return Object.freeze({ ok: true, request });
   }
@@ -177,6 +141,9 @@ export class OfflineAuthorizationGuard {
         return failAcceptance("bad_signature");
       }
       if (!this.matchesGrantAudience(candidate.payload)) return failAcceptance("wrong_audience");
+      if (candidate.payload.request_nonce !== requestRecord.requestNonce) {
+        return failAcceptance("authority_mismatch");
+      }
       if (this.acceptedGrantIds.has(candidate.payload.grant_id)) {
         return failAcceptance("authority_replayed");
       }
@@ -206,6 +173,12 @@ export class OfflineAuthorizationGuard {
         return failAcceptance("bad_signature");
       }
       if (!this.matchesLeaseAudience(candidate.payload)) return failAcceptance("wrong_audience");
+      if (
+        this.activeGrant === null ||
+        candidate.payload.grant_id !== this.activeGrant.payload.grant_id
+      ) {
+        return failAcceptance("authority_mismatch");
+      }
       const leaseKey = primaryLeaseKey(candidate.payload);
       if (this.acceptedLeaseKeys.has(leaseKey)) return failAcceptance("authority_replayed");
       const safetyMargin = Math.max(
@@ -288,7 +261,11 @@ export class OfflineAuthorizationGuard {
   }
 
   private matchesLeaseAudience(payload: PrimaryLeasePayload): boolean {
-    return payload.store_id === this.options.storeId && payload.device_id === this.options.deviceId;
+    return (
+      payload.org_id === this.options.orgId &&
+      payload.store_id === this.options.storeId &&
+      payload.device_id === this.options.deviceId
+    );
   }
 
   private offlineModeFor(command: string): "grant" | "primary_lease" | null {
@@ -334,6 +311,9 @@ export class OfflineAuthorizationGuard {
     const lease = this.currentLease(nowMs);
     if (lease === null)
       return failAuthorization(this.activeLease ? "lease_expired" : "lease_required");
+    if (lease.payload.grant_id !== grant.payload.grant_id) {
+      return failAuthorization("lease_mismatch");
+    }
     if (!this.matchesEnvelopeLease(envelope, lease)) return failAuthorization("lease_mismatch");
     return this.authorizeLeaseSequence(envelope, lease);
   }

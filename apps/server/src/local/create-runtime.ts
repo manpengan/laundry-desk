@@ -1,49 +1,39 @@
-import { randomUUID } from "node:crypto";
-
 import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@laundry/contracts";
 import { createCsrfProofSigner, type CsrfProofSigner } from "../auth/csrf.js";
 import {
-  createEdgeAuthorityService,
-  type EdgeAuthorityService,
-} from "../edge/authority-service.js";
+  createMemoryRuntimeAuthority,
+  createPgRuntimeAuthority,
+} from "../edge/runtime-authority.js";
 import { MemoryIdempotencyStore } from "../bus/idempotency.js";
 import { createPgIdempotencyStore } from "../bus/pg-idempotency.js";
-import type { CommandIdempotencyStore } from "../bus/types.js";
 import { createAccessTokenSigner } from "../identity/crypto-util.js";
 import { createMemoryIdentityStore } from "../identity/memory-store.js";
 import { createPgIdentityStore } from "../identity/pg-store.js";
 import { createPasswordPort } from "../identity/password.js";
 import type { StaffRecord, Uuid } from "../identity/types.js";
-import type { CatalogHandlerDeps } from "../catalog/handlers.js";
 import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
 import { createPgCatalogStore } from "../catalog/pg-catalog-store.js";
-import type { CustomerHandlerDeps } from "../customer/handlers.js";
 import { createMemoryCustomerStore } from "../customer/memory-store.js";
 import { createPgCustomerStore } from "../customer/pg-customer-store.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
-import type { OrderHandlerDeps } from "../order/handlers.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
 import { createMemoryPrintJobStore } from "../print/memory-store.js";
-import type { PrintHandlerDeps } from "../print/handlers.js";
 import { createPgPrintJobStore } from "../print/pg-print-store.js";
 import { createFileSpool } from "../print/file-spool.js";
 import { createPrintWorkerController } from "../print/worker-controller.js";
 import { createPgOrderStore } from "../order/pg-order-store.js";
 import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
-import type { StatsHandlerDeps } from "../stats/handlers.js";
 import { createMemoryStaffAccessDeps, createPgStaffAccessDeps } from "../staff/runtime.js";
-import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
+import { acquirePgBusinessDayLock } from "../workday/business-day-lock.js";
 import type { PhotoHandlerDeps } from "../photo/handlers.js";
 import { createMemoryPhotoStore } from "../photo/memory-store.js";
 import { preparePgPhotoDeps } from "../photo/runtime-files.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
-import type { PlatformHandlerDeps } from "../platform/handlers.js";
 import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
-import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
 import { createMemoryFulfillmentStore } from "../fulfillment/memory-store.js";
 import { createPgFulfillmentStore } from "../fulfillment/pg-store.js";
 import {
@@ -74,6 +64,11 @@ import {
   resolveMemoryStaffRole,
   type StaffRoleResolver,
 } from "./staff-role-resolver.js";
+import {
+  createMemoryReconciliationDeps,
+  createPgReconciliationDeps,
+} from "./runtime-reconciliation.js";
+import type { LocalRuntime } from "./runtime-types.js";
 
 export {
   DEMO_ADMIN_ID,
@@ -87,43 +82,7 @@ export {
 
 export type { LocalStaffDirectoryEntry } from "./staff-directory.js";
 export { loadPgStaffDirectory } from "./staff-directory.js";
-
-export type LocalRuntimeMode = "memory" | "pg";
-
-export type LocalRuntime = Readonly<{
-  mode: LocalRuntimeMode;
-  identity: IdentityHandlerDeps;
-  platform: PlatformHandlerDeps;
-  /** M2 order receive/pickup (memory or PG). */
-  order: OrderHandlerDeps;
-  /** M2 catalog price list (memory seed or PG catalog_items). */
-  catalog: CatalogHandlerDeps;
-  /** M2 print job queue (memory or PG print_jobs). */
-  print: PrintHandlerDeps;
-  /** M2 day stats (order-backed). */
-  stats: StatsHandlerDeps;
-  /** M2 customer archive (memory seed or PG customers). */
-  customer: CustomerHandlerDeps;
-  /** M2 shift closing (memory; both runtime modes for skeleton). */
-  shift: ShiftHandlerDeps;
-  /** Garment photo metadata and optional private file store. */
-  photo: PhotoHandlerDeps;
-  fulfillment: FulfillmentHandlerDeps;
-  staffAccess: ReturnType<typeof createMemoryStaffAccessDeps>;
-  edgeAuthority: EdgeAuthorityService;
-  accessTokenSecret: string;
-  /** Single runtime-owned capability shared by session issuance and HTTP verification. */
-  csrfProofSigner: CsrfProofSigner;
-  staffDirectory: readonly LocalStaffDirectoryEntry[];
-  /** Shared with Command Bus for confirm_ref / step-up PIN. */
-  pendingStore: PendingActionStore;
-  stepUpProofStore: StepUpProofStore;
-  /** Command replay state; durable in PostgreSQL mode. */
-  idempotencyStore: CommandIdempotencyStore;
-  pool: PgPool | null;
-  /** Memory store when mode === "memory" (tests). */
-  store: ReturnType<typeof createMemoryIdentityStore> | null;
-}>;
+export type { LocalRuntime, LocalRuntimeMode } from "./runtime-types.js";
 
 export type CreatePgLocalRuntimeDependencies = Readonly<{
   createPool: (options: CreatePoolOptions) => PgPool;
@@ -262,6 +221,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const customerStore = createMemoryCustomerStore();
   const statsSource = createOrderBackedStatsQuery(orderStore);
   const shiftStore = createMemoryShiftStore();
+  const printStore = createMemoryPrintJobStore();
   const photoStore = createMemoryPhotoStore();
   return Object.freeze({
     mode: "memory" as const,
@@ -288,7 +248,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
         )) !== null,
     }),
     catalog: Object.freeze({ store: createMemoryCatalogStore() }),
-    print: Object.freeze({ store: createMemoryPrintJobStore() }),
+    print: Object.freeze({ store: printStore }),
     stats: Object.freeze({ source: statsSource, timeZone: LOCAL_PROFILE.timezone }),
     customer: Object.freeze({ store: customerStore }),
     shift: Object.freeze({
@@ -296,10 +256,11 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       stats: statsSource,
       timeZone: LOCAL_PROFILE.timezone,
     }),
+    reconciliation: createMemoryReconciliationDeps(orderStore, shiftStore, printStore),
     photo: Object.freeze({ store: photoStore }),
     fulfillment: Object.freeze({ store: createMemoryFulfillmentStore() }),
     staffAccess: createMemoryStaffAccessDeps(LOCAL_MEMORY_STAFF_DIRECTORY),
-    edgeAuthority: createEdgeAuthorityService({ randomUUID }),
+    edgeAuthority: createMemoryRuntimeAuthority(accessTokenSecret),
     accessTokenSecret,
     csrfProofSigner,
     staffDirectory: LOCAL_MEMORY_STAFF_DIRECTORY,
@@ -379,6 +340,7 @@ export async function createPgLocalRuntime(
         storeId: LOCAL_PROFILE.storeId,
       }),
       timeZone: LOCAL_PROFILE.timezone,
+      lockBusinessDay: acquirePgBusinessDayLock,
       isBusinessDayClosed: async (businessDate: string) =>
         (await shiftStore.getByBusinessDate(
           LOCAL_PROFILE.orgId,
@@ -410,11 +372,13 @@ export async function createPgLocalRuntime(
       store: shiftStore,
       stats: statsSource,
       timeZone: LOCAL_PROFILE.timezone,
+      lockBusinessDay: acquirePgBusinessDayLock,
     }),
+    reconciliation: createPgReconciliationDeps(),
     photo,
     fulfillment: Object.freeze({ store: createPgFulfillmentStore(appPool) }),
     staffAccess: createPgStaffAccessDeps(),
-    edgeAuthority: createEdgeAuthorityService({ randomUUID }),
+    edgeAuthority: createPgRuntimeAuthority(appPool, config.accessTokenSecret),
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSigner,
     staffDirectory: pgStaffDirectory,

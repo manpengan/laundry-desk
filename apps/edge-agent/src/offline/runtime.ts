@@ -20,9 +20,16 @@ import {
 
 import type { DesktopHttpTransport } from "../desktop/http-transport.js";
 import { OfflineAuthorizationGuard, type MonotonicClock } from "../lease/primary-lease.js";
+import type { AuthorityTrustStore } from "../pairing/authority-trust.js";
 import { DEFAULT_QUEUE_ENVELOPE_VERSION } from "../queue/types.js";
 import type { PersistentEncryptedQueue } from "../queue/persistent-queue.js";
+import {
+  authorityMatchesSession,
+  bindAuthoritySession,
+  type AuthoritySessionBinding,
+} from "./authority-session.js";
 import { OfflineConflictStore } from "./conflict-store.js";
+import type { VerifiedOfflineReadAuthority } from "./read-authority.js";
 
 const OFFLINE_COMMANDS = new Set(["order.pickup", "payment.collect", "payment.repay"]);
 const RETRYABLE_REPLAY_CODES = new Set([
@@ -44,19 +51,34 @@ const commandVersions = new Map(
 
 type ActiveAuthority = Readonly<{
   guard: OfflineAuthorizationGuard;
+  binding: AuthoritySessionBinding;
   grantId: string;
   leaseId: string;
   primaryEpoch: number;
   nextSequence: number;
+  leaseDeadlineMonoMs: number;
+}>;
+
+type ReadAuthorityBinding = Readonly<{
+  sessionId: string;
+  sessionVersion: number;
+  orgId: string;
+  storeId: string;
+  staffId: string;
+  deviceId: string;
+  permissionVersion: number;
+  authority: VerifiedOfflineReadAuthority;
 }>;
 
 export type OfflineRuntimeOptions = Readonly<{
   queue: PersistentEncryptedQueue;
   conflicts: OfflineConflictStore;
   transport: Pick<DesktopHttpTransport, "edge">;
+  authorityTrust: AuthorityTrustStore;
   clock?: MonotonicClock;
   now?: () => Date;
   randomId?: () => string;
+  randomAuthorityNonce?: () => string;
 }>;
 
 function resourceFailure(): DesktopCommandExecuteResult {
@@ -97,26 +119,37 @@ export class OfflineCommandRuntime {
   private readonly queue: PersistentEncryptedQueue;
   private readonly conflicts: OfflineConflictStore;
   private readonly transport: Pick<DesktopHttpTransport, "edge">;
+  private readonly authorityTrust: AuthorityTrustStore;
   private readonly clock: MonotonicClock;
   private readonly now: () => Date;
   private readonly randomId: () => string;
+  private readonly randomAuthorityNonce: () => string;
   private authority: ActiveAuthority | null = null;
+  private readAuthority: ReadAuthorityBinding | null = null;
   private leaseIssuanceBlocked = false;
 
   constructor(options: OfflineRuntimeOptions) {
     this.queue = options.queue;
     this.conflicts = options.conflicts;
     this.transport = options.transport;
+    this.authorityTrust = options.authorityTrust;
     this.clock = options.clock ?? createDefaultClock();
     this.now = options.now ?? (() => new Date());
     this.randomId = options.randomId ?? randomUUID;
+    this.randomAuthorityNonce = options.randomAuthorityNonce ?? randomUUID;
   }
 
   provision(
     data: EdgeAuthorityData,
     session: DesktopSessionView,
+    requestNonce: string,
     authorityRoundTripMs = 0,
   ): boolean {
+    if (this.leaseIssuanceBlocked) {
+      this.authority = null;
+      this.readAuthority = null;
+      return false;
+    }
     try {
       if (!Number.isFinite(authorityRoundTripMs) || authorityRoundTripMs < 0) return false;
       const publicKey = createPublicKey({
@@ -135,22 +168,44 @@ export class OfflineCommandRuntime {
         clock: this.clock,
         safetyMarginMs: SAFETY_MARGIN_MS + authorityRoundTripMs,
       });
-      const grantRequest = guard.startAuthorityRequest();
-      const leaseRequest = guard.startAuthorityRequest();
-      if (!grantRequest.ok || !leaseRequest.ok) return false;
+      const grantRequest = guard.startAuthorityRequest(requestNonce);
+      if (!grantRequest.ok) return false;
       const grant = guard.acceptOfflineGrant(data.offline_grant, grantRequest.request);
+      if (!grant.ok || !this.authorityTrust.accept(publicKey)) return false;
+      this.authority = null;
+      this.readAuthority = Object.freeze({
+        sessionId: session.session.session_id,
+        sessionVersion: session.session.session_version,
+        orgId: session.session.org_id,
+        storeId: session.session.store_id,
+        staffId: session.session.staff_id,
+        deviceId: session.session.device_id,
+        permissionVersion: session.session.permission_version,
+        authority: Object.freeze({
+          serverPublicKeySpki: data.server_public_key_spki,
+          offlineGrant: data.offline_grant,
+        }),
+      });
+      if (data.primary_lease === null) {
+        return true;
+      }
+      const leaseRequest = guard.startAuthorityRequest(requestNonce);
+      if (!leaseRequest.ok) return false;
       const lease = guard.acceptPrimaryLease(data.primary_lease, leaseRequest.request);
-      if (!grant.ok || !lease.ok) return false;
+      if (!lease.ok) return false;
       this.authority = Object.freeze({
         guard,
+        binding: bindAuthoritySession(session),
         grantId: data.offline_grant.payload.grant_id,
         leaseId: data.primary_lease.payload.lease_id,
         primaryEpoch: data.primary_lease.payload.primary_epoch,
         nextSequence: 1,
+        leaseDeadlineMonoMs: lease.localDeadlineMonoMs,
       });
       return true;
     } catch {
       this.authority = null;
+      this.readAuthority = null;
       return false;
     }
   }
@@ -162,7 +217,20 @@ export class OfflineCommandRuntime {
       this.invalidateContinuity();
       return false;
     }
-    const response = await this.transport.edge.authority();
+    if (
+      this.authority !== null &&
+      authorityMatchesSession(this.authority.binding, session) &&
+      startedAtMs < this.authority.leaseDeadlineMonoMs
+    ) {
+      return true;
+    }
+    if (this.authority !== null) {
+      this.authority.guard.invalidateContinuity();
+      this.readAuthority = null;
+    }
+    this.authority = null;
+    const requestNonce = this.randomAuthorityNonce();
+    const response = await this.transport.edge.authority(requestNonce, session.role === "admin");
     const receivedAtMs = this.clock.nowMs();
     if (
       !Number.isFinite(receivedAtMs) ||
@@ -176,7 +244,7 @@ export class OfflineCommandRuntime {
       this.authority = null;
       return false;
     }
-    return this.provision(response.data, session, receivedAtMs - startedAtMs);
+    return this.provision(response.data, session, requestNonce, receivedAtMs - startedAtMs);
   }
 
   invalidateContinuity(): void {
@@ -184,9 +252,33 @@ export class OfflineCommandRuntime {
     this.authority = null;
   }
 
+  exportReadAuthority(session: DesktopSessionView): VerifiedOfflineReadAuthority | null {
+    const binding = this.readAuthority;
+    if (
+      binding === null ||
+      binding.sessionId !== session.session.session_id ||
+      binding.sessionVersion !== session.session.session_version ||
+      binding.orgId !== session.session.org_id ||
+      binding.storeId !== session.session.store_id ||
+      binding.staffId !== session.session.staff_id ||
+      binding.deviceId !== session.session.device_id ||
+      binding.permissionVersion !== session.session.permission_version
+    ) {
+      return null;
+    }
+    return binding.authority;
+  }
+
+  clearReadAuthority(): void {
+    this.readAuthority = null;
+  }
+
   setLeaseIssuanceBlocked(blocked: boolean): void {
     this.leaseIssuanceBlocked = blocked;
-    if (blocked) this.invalidateContinuity();
+    if (blocked) {
+      this.invalidateContinuity();
+      this.clearReadAuthority();
+    }
   }
 
   async queueCommand(input: unknown): Promise<DesktopCommandExecuteResult> {
@@ -237,6 +329,7 @@ export class OfflineCommandRuntime {
   }
 
   async replay(): Promise<void> {
+    if (this.leaseIssuanceBlocked) return;
     for (let index = 0; index < MAX_REPLAY_BATCH; index += 1) {
       const item = this.queue.dequeue();
       if (item === null || this.conflicts.has(item.id)) return;

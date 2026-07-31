@@ -42,7 +42,23 @@ export type CounterShellProps = {
   printSummary?: PrintJobSummary;
   /** Simulate first-paint skeleton once (ms). 0 = off. */
   initialLoadingMs?: number;
+  readOnly?: boolean;
 };
+
+const READ_ONLY_COMMAND_PORT: CommandPort = Object.freeze({
+  execute: async <T,>(): Promise<
+    Readonly<
+      { ok: true; data: T } | { ok: false; error: Readonly<{ code: string; message: string }> }
+    >
+  > =>
+    Object.freeze({
+      ok: false as const,
+      error: Object.freeze({
+        code: "OFFLINE_READ_ONLY",
+        message: "当前为离线只读模式，不能执行写操作",
+      }),
+    }),
+});
 
 function readSystemDark(): boolean {
   if (typeof window === "undefined") return false;
@@ -76,6 +92,7 @@ export function CounterShell({
   queryClient,
   photoPort,
   offlinePort,
+  readOnly = false,
 }: CounterShellProps) {
   const [expanded, setExpanded] = useState(false);
   const [activeId, setActiveId] = useState<NavItemId>(initialNav);
@@ -90,7 +107,11 @@ export function CounterShell({
   );
   const dark = systemDark ?? readSystemDark();
 
-  const printSummary = usePrintJobSummary(queryClient, printSummaryProp);
+  const printSummary = usePrintJobSummary(
+    queryClient,
+    readOnly ? Object.freeze({ queued: 0, failed: 0 }) : printSummaryProp,
+  );
+  const effectiveCommandClient = readOnly ? READ_ONLY_COMMAND_PORT : commandClient;
 
   // UI gate only; C8 enforces.
   const permission = useMemo(
@@ -112,7 +133,13 @@ export function CounterShell({
   }, [initialLoadingMs]);
 
   return (
-    <div className="ld-shell" data-shell="counter" data-nav={activeId} data-role={session.role}>
+    <div
+      className="ld-shell"
+      data-shell="counter"
+      data-nav={activeId}
+      data-role={session.role}
+      data-read-only={readOnly ? "true" : "false"}
+    >
       <a className="ld-skip-link" href="#main-content">
         跳到主内容
       </a>
@@ -130,8 +157,14 @@ export function CounterShell({
           onCycleTheme={() => setThemePref((p) => cycleThemePreference(p))}
           printSummary={printSummary}
           onOpenPrintQueue={() => setPrintQueueOpen(true)}
-          onSwitchStaff={() => setPinOpen(true)}
+          {...(readOnly ? {} : { onSwitchStaff: () => setPinOpen(true) })}
+          readOnly={readOnly}
         />
+        {readOnly ? (
+          <div className="ld-offline-read-only" role="status">
+            离线只读：当前显示本机加密缓存，不能开单、收款、取衣或修改资料。
+          </div>
+        ) : null}
         <RouteGate permission={permission} activeId={activeId} onNavigate={setActiveId}>
           <PageHost
             activeId={activeId}
@@ -139,10 +172,10 @@ export function CounterShell({
             onNavigate={setActiveId}
             session={session}
             authClient={authClient}
-            commandClient={commandClient}
+            commandClient={effectiveCommandClient}
             queryClient={queryClient}
             {...(offlinePort === undefined ? {} : { offlinePort })}
-            {...(photoPort === undefined ? {} : { photoPort })}
+            {...(photoPort === undefined || readOnly ? {} : { photoPort })}
           />
         </RouteGate>
       </div>
@@ -160,7 +193,7 @@ export function CounterShell({
         open={printQueueOpen}
         onClose={() => setPrintQueueOpen(false)}
         queryClient={queryClient}
-        commandClient={commandClient}
+        commandClient={effectiveCommandClient}
       />
     </div>
   );
