@@ -21,7 +21,9 @@
 | [ADR-11](2026-07-21-adr-11-auth-lifecycle-envelope.md)             | 身份生命周期信封与认证来源                      | **Accepted**                                       |
 | [ADR-12](2026-07-21-adr-12-grok-unified-delivery-ownership.md)     | Grok 统一交付所有权（设计 + 实现）              | **Superseded by ADR-14**                           |
 | [ADR-13](2026-07-23-adr-13-v2-only-upgrade-delivery.md)            | 停止 v1 功能线，统一交付 v2 升级版本            | **Accepted**；宏发目标与迁移顺序由 ADR-14 覆盖     |
-| [ADR-14](2026-07-25-adr-14-generic-local-first-v2-delivery.md)     | 通用 V2 本地优先交付与 Codex 接管               | **Accepted** 2026-07-25                            |
+| [ADR-14](2026-07-25-adr-14-generic-local-first-v2-delivery.md)     | 通用 V2 本地优先交付与 Codex 接管               | **Accepted** 2026-07-25；§4 阶段线由 ADR-16 修订   |
+| [ADR-15](2026-07-28-adr-15-catalog-maintenance-unfreeze.md)        | 解冻价目写入，补齐首期价目维护                  | **Accepted** 2026-07-28                            |
+| [ADR-16](2026-07-31-adr-16-edge-operations-scope-ratification.md)  | 边缘运营范围追认与契约面 ADR 门禁               | **Accepted** 2026-07-31                            |
 
 ## v1 线
 

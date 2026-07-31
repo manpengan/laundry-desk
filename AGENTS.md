@@ -21,11 +21,16 @@
 ## 入场必读
 
 1. [ADR-14：通用 V2 本地优先交付](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
-2. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
-3. [Claude V2 架构 draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
-4. [Claude V2 Web UI draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
-5. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
-6. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
+2. [ADR-16：边缘运营范围追认与契约面门禁](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md)
+   — **修订 ADR-14 §4 阶段线**，并规定新增命令/查询必须附 ADR
+3. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
+4. [Claude V2 架构 draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
+5. [Claude V2 Web UI draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
+6. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
+7. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
+
+判断"某能力是否已交付"以 `main` 代码与绿灯门禁为准，不以文档为准；发现文档滞后
+按缺陷订正（ADR-16 §4）。
 
 ## 活动 V2 文件规模政策
 
@@ -43,3 +48,5 @@
 - 金额整型分
 - 租户上下文只从服务端会话注入
 - Electron 安全九项基线
+- 新增命令/查询必须在同一 PR 附 ADR；`m2-freeze.test.ts` 清单变更须在 PR 描述点名（ADR-16 §2）
+- 改变对外能力边界的 PR 必须同批更新 `docs/CHANGELOG.md` 与被其推翻的验收记录（ADR-16 §4）
