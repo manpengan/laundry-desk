@@ -24,6 +24,7 @@
 | [ADR-14](2026-07-25-adr-14-generic-local-first-v2-delivery.md)     | 通用 V2 本地优先交付与 Codex 接管               | **Accepted** 2026-07-25；§4 阶段线由 ADR-16 修订   |
 | [ADR-15](2026-07-28-adr-15-catalog-maintenance-unfreeze.md)        | 解冻价目写入，补齐首期价目维护                  | **Accepted** 2026-07-28                            |
 | [ADR-16](2026-07-31-adr-16-edge-operations-scope-ratification.md)  | 边缘运营范围追认与契约面 ADR 门禁               | **Accepted** 2026-07-31                            |
+| [ADR-17](2026-07-31-adr-17-member-stored-value.md)                 | 会员储值：组织级账户与只追加账本                | **Accepted** 2026-07-31                            |
 
 ## v1 线
 

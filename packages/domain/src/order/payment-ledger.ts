@@ -1,6 +1,6 @@
 /** Append-only payment-ledger projection and reversal targeting. */
 
-import type { PaymentRow } from "./payment.js";
+import { PAYMENT_LEDGER_METHODS, type PaymentRow } from "./payment.js";
 
 export type PaymentLedgerRejectReason =
   | "INVALID_PAYABLE"
@@ -48,8 +48,11 @@ type LedgerStep =
 
 const hasText = (value: string): boolean => value.trim().length > 0;
 const isPositiveSafeCents = (value: number): boolean => Number.isSafeInteger(value) && value > 0;
+// Derived from the single source of truth rather than a second hardcoded list:
+// the ledger must accept every method the payments table can hold, and a copy
+// here would silently reject new ones (ADR-17 §6).
 const isPaymentMethod = (value: string): boolean =>
-  ["cash", "wechat", "alipay", "other"].includes(value);
+  (PAYMENT_LEDGER_METHODS as readonly string[]).includes(value);
 const isPaymentKind = (value: string): boolean =>
   ["pay", "repay", "refund", "storage_fee", "reversal"].includes(value);
 

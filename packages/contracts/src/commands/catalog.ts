@@ -21,6 +21,7 @@ import { PAYMENT_COMMANDS, PAYMENT_COMMAND_NAMES } from "./payment.js";
 import { EDGE_CONFLICT_COMMANDS } from "./edge-conflict.js";
 import { RECONCILIATION_COMMANDS, RECONCILIATION_QUERIES } from "./reconciliation.js";
 import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./platform.js";
+import { MEMBER_COMMANDS, MEMBER_QUERIES } from "./member.js";
 import { STAFF_COMMANDS, STAFF_QUERIES } from "./staff.js";
 import {
   M2_PRINT_COMMAND_DEFINITIONS,
@@ -71,6 +72,7 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
   ...CATALOG_COMMAND_DEFINITIONS,
   ...M3_FULFILLMENT_COMMAND_DEFINITIONS,
   ...STAFF_COMMANDS,
+  ...MEMBER_COMMANDS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
@@ -90,6 +92,9 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "garment.incident.record",
   "garment.mark_lost",
   "staff.access.set",
+  "member.account.open",
+  "member.topup",
+  "member.balance.pay",
 ] as const) as readonly [
   "customer.upsert",
   "customer.update",
@@ -120,6 +125,9 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "garment.incident.record",
   "garment.mark_lost",
   "staff.access.set",
+  "member.account.open",
+  "member.topup",
+  "member.balance.pay",
 ];
 
 /**
@@ -160,6 +168,7 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   "reconciliation.day.get",
   "fulfillment.workbench",
   "staff.access.list",
+  "member.account.get",
 ] as const);
 
 export const M2_CONTRACT_DEFINITIONS: readonly (
@@ -176,6 +185,7 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...RECONCILIATION_QUERIES,
   ...M3_FULFILLMENT_QUERY_DEFINITIONS,
   ...STAFF_QUERIES,
+  ...MEMBER_QUERIES,
 ]);
 
 /** M2 AI presets are read-only: no command is exposed to the tool projection. */

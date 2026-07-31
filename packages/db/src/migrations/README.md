@@ -37,6 +37,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0028_customer_privacy_
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0029_staff_access_governance.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0030_edge_replay_authority.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0031_payment_ledger_sequence.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0032_member_stored_value.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -70,5 +71,6 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Staff access governance** (0029): explicit privacy-admin authority, role invariants, and session revocation support
 - **Edge replay authority** (0030): paired-device keys, signed grants, primary leases, and append-only replay arbitration
 - **Payment ledger sequence** (0031): deterministic historical backfill plus database-assigned global ledger order
+- **Member stored value** (0032, [ADR-17](../../../../docs/adr/2026-07-31-adr-17-member-stored-value.md)): org-scoped member accounts plus an append-only signed-delta ledger; the balance is `SUM(delta)` with no stored column, and `payments.method` gains `balance`
 - Still deferred: AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)
