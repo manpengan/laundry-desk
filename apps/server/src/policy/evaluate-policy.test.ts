@@ -54,6 +54,11 @@ test("R3 confirm for ui and ai", () => {
   assert.equal(ai.outcome, "confirm");
 });
 
+test("verified edge replay treats a Primary-lease R3 operation as pre-authorized", () => {
+  const decision = evaluatePolicy(inputFor("R3", "edge_replay"));
+  assert.equal(decision.outcome, "allow");
+});
+
 test("R4 step_up for ui; requires other approver", () => {
   const decision = evaluatePolicy(inputFor("R4", "ui"));
   assert.equal(decision.outcome, "step_up");

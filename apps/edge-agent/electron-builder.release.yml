@@ -23,6 +23,8 @@ files:
   - dist/desktop/auth-intent.js
   - dist/desktop/device-identity.js
   - dist/desktop/electron-adapter.js
+  - dist/desktop/edge-authority-transport.js
+  - dist/desktop/edge-http.js
   - dist/desktop/electron-photo-request.js
   - dist/desktop/http-transport.js
   - dist/desktop/http-transport-support.js
@@ -37,8 +39,14 @@ files:
   - dist/queue/store.js
   - dist/queue/types.js
   - dist/pairing/device-keys.js
+  - dist/pairing/authority-trust.js
+  - dist/pairing/safe-storage-device-keys.js
   - dist/lease/primary-lease.js
+  - dist/offline/authority-session.js
   - dist/offline/conflict-store.js
+  - dist/offline/read-authority.js
+  - dist/offline/read-cache-file.js
+  - dist/offline/read-cache.js
   - dist/offline/runtime.js
   - dist/offline/service.js
   - dist/upgrade/release-manifest.js

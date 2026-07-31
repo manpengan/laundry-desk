@@ -159,12 +159,28 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
     "desktop photo request must ship with its importing adapter",
   );
   assert.ok(
+    includedFiles.includes("dist/desktop/edge-authority-transport.js"),
+    "fresh Edge authority exchange must ship with its importing transport",
+  );
+  assert.ok(
+    includedFiles.includes("dist/desktop/edge-http.js"),
+    "device-signed Edge HTTP helper must ship with its importing transport",
+  );
+  assert.ok(
     includedFiles.includes("dist/desktop/http-transport-support.js"),
     "desktop transport support must ship with its importing transport",
   );
   assert.ok(
     includedFiles.includes("dist/pairing/device-keys.js"),
     "Primary Lease signature decoding must ship with its importing verifier",
+  );
+  assert.ok(
+    includedFiles.includes("dist/pairing/authority-trust.js"),
+    "persistent authority signer trust must ship with its importing runtime",
+  );
+  assert.ok(
+    includedFiles.includes("dist/pairing/safe-storage-device-keys.js"),
+    "Keychain-backed device key store must ship with its importing shell",
   );
   assert.doesNotMatch(
     includedFiles.join("\n"),

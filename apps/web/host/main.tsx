@@ -18,6 +18,7 @@ const rootEl = document.getElementById("root");
 if (rootEl === null) {
   throw new Error("#root missing");
 }
+const hostRoot = rootEl;
 
 const bridge = (
   window as Window & {
@@ -28,12 +29,20 @@ const host = selectHost(window.location.href, bridge);
 const ports =
   host.kind === "desktop" ? createDesktopPorts(host.bridge) : createBrowserPorts({ apiBaseUrl });
 
-createRoot(rootEl).render(
-  <ServiceGate health={ports.health}>
-    <App
-      ports={ports}
-      connection={createMockConnection({ mode: "online" })}
-      enableLiquidGlass={host.kind === "browser"}
-    />
-  </ServiceGate>,
-);
+async function start(): Promise<void> {
+  const resumed = (await ports.resume?.resume()) ?? Object.freeze({ ok: false as const });
+  const readOnly = resumed.ok && resumed.mode === "offline_read_only";
+  createRoot(hostRoot).render(
+    <ServiceGate health={ports.health}>
+      <App
+        ports={ports}
+        connection={createMockConnection({ mode: readOnly ? "offline" : "online" })}
+        enableLiquidGlass={host.kind === "browser"}
+        initialSession={resumed.ok ? resumed.session : null}
+        readOnly={readOnly}
+      />
+    </ServiceGate>,
+  );
+}
+
+void start();

@@ -7,6 +7,7 @@ import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
 import { daySummaryCsvFilename, formatDaySummaryCsv } from "./day-summary-csv.js";
 import {
+  executeReconciliationExport,
   utcYmd,
   parseDaySummary,
   StatsPage,
@@ -53,6 +54,50 @@ test("parseDaySummary accepts documented result shape", () => {
 test("unwrapQueryResult peels bus envelope", () => {
   assert.deepEqual(unwrapQueryResult({ execution: "executed", result: SAMPLE }), SAMPLE);
   assert.deepEqual(unwrapQueryResult(SAMPLE), SAMPLE);
+});
+
+test("reconciliation export completes the R3 confirmation hop with frozen arguments", async () => {
+  const calls: Readonly<{ name: string; body: unknown; confirmRef?: string }>[] = [];
+  const confirmRef = "00000000-0000-4000-8000-000000000099";
+  const commandClient = createMockCommandClient(
+    async <T = unknown>(
+      name: string,
+      body: unknown = {},
+      options?: Readonly<{ confirmRef?: string }>,
+    ) => {
+      calls.push({
+        name,
+        body,
+        ...(options?.confirmRef === undefined ? {} : { confirmRef: options.confirmRef }),
+      });
+      if (options?.confirmRef === undefined) {
+        return {
+          ok: false as const,
+          error: {
+            code: "POLICY_CONFIRMATION_REQUIRED",
+            detail: { kind: "confirmation" as const, confirm_ref: confirmRef },
+          },
+        };
+      }
+      return {
+        ok: true as const,
+        data: { execution: "executed", result: { csv: "ok" } } as T,
+      };
+    },
+  );
+
+  assert.equal((await executeReconciliationExport(commandClient, "2026-07-30")).ok, true);
+  assert.deepEqual(calls, [
+    {
+      name: "reconciliation.export",
+      body: { business_date: "2026-07-30", format: "csv" },
+    },
+    {
+      name: "reconciliation.export",
+      body: {},
+      confirmRef,
+    },
+  ]);
 });
 
 test("formatDaySummaryCsv emits header + integer fen columns (no float)", () => {
@@ -110,15 +155,15 @@ test("StatsPage SSR shell shows date control and load button", () => {
     ),
   );
 
-  assert.match(html, /统计/);
+  assert.match(html, /账目 \/ 对账/);
   assert.match(html, /营业日/);
-  assert.match(html, /查询日结/);
-  assert.match(html, /导出 CSV/);
+  assert.match(html, /查询对账/);
+  assert.match(html, /导出审计 CSV/);
   assert.match(html, /data-testid="stats-date-input"/);
   assert.match(html, /data-testid="stats-load-btn"/);
   assert.match(html, /data-testid="stats-export-csv-btn"/);
   // useEffect does not run under SSR — cards only after client load
-  assert.doesNotMatch(html, /data-testid="stats-summary"/);
+  assert.doesNotMatch(html, /data-testid="reconciliation-snapshot"/);
   // shift panel only when commandClient provided
   assert.doesNotMatch(html, /data-testid="shift-close-panel"/);
 });
@@ -142,10 +187,10 @@ test("StatsPage SSR with commandClient shows shift close panel", () => {
   assert.match(html, /交班确认/);
 });
 
-test("StatsPage SSR with pre-resolved summary cards via parse path", () => {
+test("StatsPage SSR keeps the reconciliation shell free of hard-coded colors", () => {
   // SSR cannot run effects; verify metric card markup shape independently.
   const queryClient = createMockQueryClient(async <T = unknown>(name: string) => {
-    if (name === "stats.day.summary") {
+    if (name === "reconciliation.day.get") {
       return Object.freeze({
         ok: true as const,
         data: Object.freeze({
@@ -171,7 +216,7 @@ test("StatsPage SSR with pre-resolved summary cards via parse path", () => {
       }),
     ),
   );
-  assert.match(html, /日结汇总/);
+  assert.match(html, /服务端统一核对/);
   assert.doesNotMatch(html, /#ff0000/i);
   assert.doesNotMatch(html, /rgb\(/i);
 });

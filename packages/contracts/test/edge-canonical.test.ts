@@ -36,6 +36,8 @@ const leaseAuthority = {
   protocol_version: "1.0.0",
   payload: {
     lease_id: "936da01f-9abd-4d9d-80c7-02af85c822a8",
+    grant_id: "f7c4b945-2f08-41f3-b8da-b1af3f7ac547",
+    org_id: "692e7b46-2c52-4b77-b790-c2cb4037b9ef",
     store_id: "74b83b3d-a9db-4d82-ba36-bb25a685cd3f",
     device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
     primary_epoch: 7,
@@ -80,6 +82,7 @@ const offlineGrantAuthority = {
     store_id: "74b83b3d-a9db-4d82-ba36-bb25a685cd3f",
     staff_id: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
     device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
+    request_nonce: "a9f2028a-fc30-4f95-9d32-e91d19709a50",
     permission_version: 9,
     allowed_commands: [offlineDefinition.name],
     issued_at: "2026-07-21T01:02:03.000Z",

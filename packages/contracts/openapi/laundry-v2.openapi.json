@@ -2046,6 +2046,131 @@
             "additionalProperties": false,
             "properties": {
               "code": {
+                "const": "REPLAY_ARBITRATION_REQUIRED",
+                "type": "string"
+              },
+              "detail": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "field",
+                        "type": "string"
+                      },
+                      "path": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "path"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "reason",
+                        "type": "string"
+                      },
+                      "reason": {
+                        "enum": [
+                          "constraint",
+                          "unavailable",
+                          "retry_later",
+                          "idempotency_conflict"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "reason"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "confirm_ref": {
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "confirmation",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "confirm_ref"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "kind": {
+                        "const": "step_up",
+                        "type": "string"
+                      },
+                      "methods": {
+                        "items": {
+                          "enum": [
+                            "pin",
+                            "qr"
+                          ],
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "methods"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "approval_ref": {
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "approval",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "approval_ref"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "message": {
+                "const": "Offline replay requires reconciliation",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
                 "const": "AUTHENTICATION_FAILED",
                 "type": "string"
               },
@@ -3719,6 +3844,131 @@
                   },
                   "message": {
                     "const": "Idempotency key conflicts with an existing request",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "const": "REPLAY_ARBITRATION_REQUIRED",
+                    "type": "string"
+                  },
+                  "detail": {
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "field",
+                            "type": "string"
+                          },
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "path"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "reason",
+                            "type": "string"
+                          },
+                          "reason": {
+                            "enum": [
+                              "constraint",
+                              "unavailable",
+                              "retry_later",
+                              "idempotency_conflict"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "reason"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "confirm_ref": {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "confirmation",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "confirm_ref"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "kind": {
+                            "const": "step_up",
+                            "type": "string"
+                          },
+                          "methods": {
+                            "items": {
+                              "enum": [
+                                "pin",
+                                "qr"
+                              ],
+                              "type": "string"
+                            },
+                            "minItems": 1,
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "methods"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "approval_ref": {
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "approval",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "approval_ref"
+                        ],
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "message": {
+                    "const": "Offline replay requires reconciliation",
                     "type": "string"
                   }
                 },
@@ -5541,6 +5791,131 @@
                     "additionalProperties": false,
                     "properties": {
                       "code": {
+                        "const": "REPLAY_ARBITRATION_REQUIRED",
+                        "type": "string"
+                      },
+                      "detail": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "field",
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "path"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "reason",
+                                "type": "string"
+                              },
+                              "reason": {
+                                "enum": [
+                                  "constraint",
+                                  "unavailable",
+                                  "retry_later",
+                                  "idempotency_conflict"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "reason"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "confirm_ref": {
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "confirmation",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "confirm_ref"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "kind": {
+                                "const": "step_up",
+                                "type": "string"
+                              },
+                              "methods": {
+                                "items": {
+                                  "enum": [
+                                    "pin",
+                                    "qr"
+                                  ],
+                                  "type": "string"
+                                },
+                                "minItems": 1,
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "methods"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "approval_ref": {
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "approval",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "approval_ref"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "message": {
+                        "const": "Offline replay requires reconciliation",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "code",
+                      "message"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "code": {
                         "const": "AUTHENTICATION_FAILED",
                         "type": "string"
                       },
@@ -5785,6 +6160,31 @@
         },
         "required": [
           "phone"
+        ],
+        "type": "object"
+      },
+      "input.command.edge.conflict.discard": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm": {
+            "const": "DISCARD",
+            "type": "string"
+          },
+          "queue_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 256,
+            "minLength": 3,
+            "type": "string"
+          }
+        },
+        "required": [
+          "queue_id",
+          "reason",
+          "confirm"
         ],
         "type": "object"
       },
@@ -6535,6 +6935,23 @@
         ],
         "type": "object"
       },
+      "input.command.reconciliation.export": {
+        "additionalProperties": false,
+        "properties": {
+          "business_date": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "format": {
+            "const": "csv",
+            "type": "string"
+          }
+        },
+        "required": [
+          "format"
+        ],
+        "type": "object"
+      },
       "input.command.shift.close": {
         "additionalProperties": false,
         "properties": {
@@ -6912,6 +7329,16 @@
             "exclusiveMinimum": 0,
             "maximum": 50,
             "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "input.query.reconciliation.day.get": {
+        "additionalProperties": false,
+        "properties": {
+          "business_date": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
           }
         },
         "type": "object"
@@ -7750,6 +8177,58 @@
         "x-laundry-version": "0.2.0"
       }
     },
+    "/v1/commands/edge.conflict.discard": {
+      "post": {
+        "description": "Require an administrator, exact DISCARD confirmation and a non-empty reason. Verify a non-success replay record exists; never update append-only replay rows. Stable command name: `edge.conflict.discard` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_edge_conflict_discard",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.edge.conflict.discard"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Audit an operator decision to discard one server-recorded Edge replay conflict.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "0.1.0"
+      }
+    },
     "/v1/commands/garment.bulk_transition": {
       "post": {
         "description": "Move a bounded garment batch to washing or ready. The entire batch fails when any row is missing or has an invalid current status. Stable command name: `garment.bulk_transition` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -8584,7 +9063,7 @@
     },
     "/v1/commands/payment.refund": {
       "post": {
-        "description": "Refund only online with step-up approval. Reference the original payment and provide a reason; never mutate the original ledger row. Stable command name: `payment.refund` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Refund only online with step-up approval. Reference the original payment and provide a reason. The submitted method must match the immutable referenced payment; the server verifies it under lock and never mutates the original row. Stable command name: `payment.refund` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_payment_refund",
         "requestBody": {
           "content": {
@@ -8946,6 +9425,58 @@
         "x-laundry-version": "0.2.0"
       }
     },
+    "/v1/commands/reconciliation.export": {
+      "post": {
+        "description": "Generate a deterministic UTF-8 CSV with formula-injection protection and a SHA-256 digest. The command audit records the export without storing raw CSV. Stable command name: `reconciliation.export` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_reconciliation_export",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.reconciliation.export"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Generate an audited, deterministic CSV for one business day; omit business_date for the server-derived current day.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "0.1.0"
+      }
+    },
     "/v1/commands/shift.close": {
       "post": {
         "description": "Append-only shift close for one business_date. It freezes integer-fen ledger totals, opening float, counted cash, retained float and the resulting cash difference. Reject a second close for the same store day. Stable command name: `shift.close` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -8993,7 +9524,7 @@
         ],
         "x-laundry-classification": "internal",
         "x-laundry-kind": "command",
-        "x-laundry-offline-mode": "grant",
+        "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R3",
         "x-laundry-version": "0.3.0"
       }
@@ -9880,6 +10411,58 @@
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R1",
         "x-laundry-version": "0.2.0"
+      }
+    },
+    "/v1/queries/reconciliation.day.get": {
+      "post": {
+        "description": "Return current cumulative totals for orders opened on the requested day alongside ledger activity recorded on that day, shift closing, print status and Edge replay decisions. difference_from_orders_cents is diagnostic and may reflect legitimate cross-day repayment, refund or reversal activity. No customer, note, error or raw payload fields. Stable query name: `reconciliation.day.get` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_reconciliation_day_get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.reconciliation.day.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Load one bounded, redacted business-day reconciliation summary; omit business_date for the server-derived current day.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "0.1.0"
       }
     },
     "/v1/queries/shift.get": {

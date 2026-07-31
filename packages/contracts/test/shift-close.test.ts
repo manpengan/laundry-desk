@@ -25,7 +25,7 @@ describe("M2 shift.close / shift.get skeleton", () => {
       expect(isContractDefinition(definition)).toBe(true);
       expect(definition.kind).toBe("command");
       expect(definition.risk).toBe("R3");
-      expect(definition.offline_mode).toBe("grant");
+      expect(definition.offline_mode).toBe("denied");
       expect(definition.data_classification).toBe("internal");
     }
     for (const definition of SHIFT_QUERIES) {
@@ -116,6 +116,9 @@ describe("M2 shift.close / shift.get skeleton", () => {
       parseContractInput(shiftGetQuery, { business_date: "2026-07-22" }),
     ).resolves.toEqual({ business_date: "2026-07-22" });
     await expect(
+      parseContractInput(shiftGetQuery, { business_date: "2026-02-30" }),
+    ).rejects.toBeTruthy();
+    await expect(
       parseContractInput(shiftHistoryQuery, {
         date_from: "2026-07-01",
         date_to: "2026-07-22",
@@ -137,12 +140,14 @@ describe("M2 shift.close / shift.get skeleton", () => {
   it("declares metadata floors", () => {
     expect(shiftCloseCommand.name).toBe("shift.close");
     expect(shiftCloseCommand.risk).toBe("R3");
-    expect(shiftCloseCommand.invariants).toContain("rbac.order_write");
-    expect(shiftCloseCommand.offline_mode).toBe("grant");
+    expect(shiftCloseCommand.invariants).toContain("rbac.shift_close");
+    expect(shiftCloseCommand.offline_mode).toBe("denied");
     expect(shiftCloseCommand.idempotent).toBe(true);
     expect(shiftGetQuery.name).toBe("shift.get");
     expect(shiftGetQuery.risk).toBe("R1");
+    expect(shiftGetQuery.invariants).toEqual(["rbac.accounting_read"]);
     expect(shiftGetQuery.idempotent).toBe(true);
+    expect(shiftHistoryQuery.invariants).toEqual(["rbac.accounting_read"]);
     expect(shiftHistoryQuery.max_result_rows).toBe(100);
   });
 });

@@ -13,6 +13,7 @@ import { registerAuthRoutes } from "./auth-routes.js";
 import type { AuthRouteContext, RouteSecurityContext } from "./auth-route-support.js";
 import { registerBusRoutes } from "./bus-routes.js";
 import { registerEdgeAuthorityRoute } from "./edge-authority-route.js";
+import { registerEdgeReplayRoute } from "./edge-replay-route.js";
 import { registerPhotoFileRoutes } from "./photo-file-routes.js";
 import { registerPrintArtifactRoutes } from "./print-artifact-routes.js";
 import type { FileSpool } from "../print/file-spool.js";
@@ -69,7 +70,10 @@ async function installCoreHttp(
   });
   await app.register(cookie);
   app.addHook("onSend", async (request, reply, payload) => {
-    if (request.url.startsWith("/api/v2/auth/")) {
+    if (
+      request.url.startsWith("/api/v2/auth/") ||
+      request.url.startsWith("/api/v2/edge/authority")
+    ) {
       reply.header("Cache-Control", "no-store");
     }
     return payload;
@@ -108,6 +112,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   registerAuthRoutes(app, context);
   registerBusRoutes(app, context);
   registerEdgeAuthorityRoute(app, context);
+  registerEdgeReplayRoute(app, context);
   registerPhotoFileRoutes(app, context, options.runtime.photo);
 
   // Artifact download only exists when a spool is configured; the memory

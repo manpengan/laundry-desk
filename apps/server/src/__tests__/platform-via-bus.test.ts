@@ -11,6 +11,7 @@ import { FakeSqlClient } from "../db/fake-client.js";
 import type { TenantContext } from "../db/types.js";
 import { findForbiddenImports } from "../architecture/import-boundary.js";
 import {
+  assertAuditPayloadSafe,
   createMemoryAuditQueryStore,
   createMemoryFeaturesStore,
   createMemorySettingsStore,
@@ -197,6 +198,63 @@ test("audit query never returns token/secret fields even if seeded raw", async (
   assert.ok(items.every((item) => Object.hasOwn(item, "has_diff")));
   assert.ok(items.every((item) => !Object.hasOwn(item, "before_json")));
   assert.ok(items.every((item) => !Object.hasOwn(item, "after_json")));
+});
+
+test("audit query accepts safe credential-lifecycle command metadata", async () => {
+  const audit = createMemoryAuditQueryStore([
+    {
+      id: "a3",
+      at_epoch_s: 1_700_000_300,
+      command: "identity.pin.verify",
+      staff_id: TENANT.staffId,
+      via: "ui",
+      entity: "session",
+      entity_id: "session-3",
+      has_diff: true,
+    },
+    {
+      id: "a4",
+      at_epoch_s: 1_700_000_301,
+      command: "identity.refresh.rotate",
+      staff_id: TENANT.staffId,
+      via: "ui",
+      entity: "session",
+      entity_id: "session-4",
+      has_diff: true,
+    },
+  ]);
+
+  const items = await audit.list({
+    orgId: TENANT.orgId,
+    storeId: TENANT.storeId,
+    fromEpochS: 0,
+    toEpochS: 2_000_000_000,
+    limit: 10,
+  });
+  assert.deepEqual(
+    items.map((item) => item.command),
+    ["identity.pin.verify", "identity.refresh.rotate"],
+  );
+});
+
+test("audit projection rejects fields outside its safe runtime shape", () => {
+  assert.throws(
+    () =>
+      assertAuditPayloadSafe([
+        {
+          id: "a5",
+          at_epoch_s: 1_700_000_400,
+          command: "identity.login",
+          staff_id: TENANT.staffId,
+          via: "ui",
+          entity: "session",
+          entity_id: "session-5",
+          has_diff: true,
+          after_json: '{"access_token":"must-not-leak"}',
+        },
+      ]),
+    /unsafe field/u,
+  );
 });
 
 test("architecture: routes must not import platform store mutator modules", () => {

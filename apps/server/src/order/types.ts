@@ -53,6 +53,19 @@ export type PaymentAppendResult = Readonly<{
   payment: LedgerPaymentRow;
 }>;
 
+export type PaymentRefundAppendInput = Readonly<{
+  org_id: string;
+  store_id: string;
+  order_id: string;
+  amount_cents: number;
+  expected_method: PaymentMethod;
+  ref_payment_id: string;
+  reason: string;
+  staff_id: string;
+  at: number;
+  business_date: string;
+}>;
+
 export type OrderLineRecord = Readonly<{
   line_index: number;
   service_code: string;
@@ -182,6 +195,7 @@ export type OrderStore = Readonly<{
     options?: PickupApplyOptions,
   ) => Promise<PickupApplyResult | null>;
   appendPayment?: (input: PaymentAppendInput) => Promise<PaymentAppendResult | null>;
+  appendRefund?: (input: PaymentRefundAppendInput) => Promise<PaymentAppendResult | null>;
   cancelOpenOrder?: (
     orgId: string,
     storeId: string,

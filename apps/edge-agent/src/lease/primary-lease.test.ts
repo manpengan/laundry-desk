@@ -23,6 +23,8 @@ const STAFF_ID = "21a2eed0-a6c3-493c-a3a7-20bf94b1d678";
 const DEVICE_ID = "31a2eed0-a6c3-493c-a3a7-20bf94b1d678";
 const GRANT_ID = "41a2eed0-a6c3-493c-a3a7-20bf94b1d678";
 const LEASE_ID = "51a2eed0-a6c3-493c-a3a7-20bf94b1d678";
+const REQUEST_NONCE = "61a2eed0-a6c3-493c-a3a7-20bf94b1d678";
+const OTHER_REQUEST_NONCE = "71a2eed0-a6c3-493c-a3a7-20bf94b1d678";
 const ISSUED_AT = "2026-07-21T01:02:03.000Z";
 const NOT_AFTER = "2026-07-21T01:02:04.000Z";
 const registrySnapshot = createOfflineGrantRegistrySnapshot();
@@ -71,6 +73,7 @@ function grantPayload(overrides: Partial<OfflineGrantPayload> = {}): OfflineGran
     store_id: STORE_ID,
     staff_id: STAFF_ID,
     device_id: DEVICE_ID,
+    request_nonce: REQUEST_NONCE,
     permission_version: 1,
     allowed_commands: ["order.receive", "order.pickup", "payment.collect"],
     issued_at: ISSUED_AT,
@@ -83,6 +86,8 @@ function grantPayload(overrides: Partial<OfflineGrantPayload> = {}): OfflineGran
 function leasePayload(overrides: Partial<PrimaryLeasePayload> = {}): PrimaryLeasePayload {
   return Object.freeze({
     lease_id: LEASE_ID,
+    grant_id: GRANT_ID,
+    org_id: ORG_ID,
     store_id: STORE_ID,
     device_id: DEVICE_ID,
     primary_epoch: 7,
@@ -114,8 +119,11 @@ function signedLease(payload = leasePayload()) {
   });
 }
 
-function startedRequest(guard: OfflineAuthorizationGuard): OfflineAuthorityRequest {
-  const result = guard.startAuthorityRequest();
+function startedRequest(
+  guard: OfflineAuthorizationGuard,
+  requestNonce = REQUEST_NONCE,
+): OfflineAuthorityRequest {
+  const result = guard.startAuthorityRequest(requestNonce);
   assert.equal(result.ok, true);
   return result.request;
 }
@@ -270,6 +278,28 @@ test("rejects bad signatures and authority for another device or permission vers
     ok: false,
     error: "wrong_audience",
   });
+
+  const nonceRequest = startedRequest(guard);
+  const staleResponse = signedGrant(grantPayload({ request_nonce: OTHER_REQUEST_NONCE }));
+  assert.deepEqual(guard.acceptOfflineGrant(staleResponse, nonceRequest), {
+    ok: false,
+    error: "authority_mismatch",
+  });
+});
+
+test("rejects a valid lease signed for a different grant issuance", () => {
+  const clock = new FakeClock(100);
+  const guard = createGuard(clock);
+  acceptGrant(guard, clock);
+  const request = startedRequest(guard);
+  const mismatched = signedLease(
+    leasePayload({ grant_id: "91a2eed0-a6c3-493c-a3a7-20bf94b1d678" }),
+  );
+
+  assert.deepEqual(guard.acceptPrimaryLease(mismatched, request), {
+    ok: false,
+    error: "authority_mismatch",
+  });
 });
 
 test("fails closed when the response arrives too late for its signed lifetime", () => {
@@ -298,7 +328,10 @@ test("clears offline authority on suspend uncertainty and a monotonic reset", ()
   );
 
   clock.setContinuity("uncertain");
-  assert.deepEqual(guard.startAuthorityRequest(), { ok: false, error: "untrusted_continuity" });
+  assert.deepEqual(guard.startAuthorityRequest(REQUEST_NONCE), {
+    ok: false,
+    error: "untrusted_continuity",
+  });
   clock.setContinuity("trusted");
   acceptGrant(
     guard,
@@ -312,4 +345,12 @@ test("clears offline authority on suspend uncertainty and a monotonic reset", ()
     ),
     { ok: false, error: "untrusted_continuity" },
   );
+});
+
+test("rejects malformed request nonces before recording authority request state", () => {
+  const guard = createGuard(new FakeClock(100));
+  assert.deepEqual(guard.startAuthorityRequest("not-a-uuid"), {
+    ok: false,
+    error: "invalid_request",
+  });
 });

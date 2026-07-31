@@ -136,6 +136,23 @@ test("getByBusinessDate rejects a scope different from the configured store", as
   assert.equal(queries.length, 0);
 });
 
+test("getMostRecentBefore excludes future business dates and orders by business date", async () => {
+  const { pool, queries } = createCapturingPool();
+  const store = createPgShiftStore(pool, {
+    orgId: DEMO_ORG_ID,
+    storeId: DEMO_STORE_ID,
+  });
+
+  assert.equal(await store.getMostRecentBefore(DEMO_ORG_ID, DEMO_STORE_ID, BUSINESS_DATE), null);
+  const select = queries.find(
+    (query) =>
+      query.sql.includes("FROM shift_closings") && query.sql.includes("business_date < $3"),
+  );
+  assert.ok(select);
+  assert.match(select.sql, /ORDER BY business_date DESC, closed_at DESC, id DESC/u);
+  assert.deepEqual(select.params, [DEMO_ORG_ID, DEMO_STORE_ID, BUSINESS_DATE]);
+});
+
 test("configured scope is captured when the caller later mutates its options object", async () => {
   const { pool, queries } = createCapturingPool();
   const options = { orgId: DEMO_ORG_ID, storeId: DEMO_STORE_ID };

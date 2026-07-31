@@ -10,6 +10,7 @@ export type TopBarProps = {
   onOpenPrintQueue?: () => void;
   /** Open PIN quick-switch when session is present. */
   onSwitchStaff?: () => void;
+  readOnly?: boolean;
 };
 
 export function TopBar({
@@ -19,6 +20,7 @@ export function TopBar({
   printSummary = { queued: 0, failed: 0 },
   onOpenPrintQueue,
   onSwitchStaff,
+  readOnly = false,
 }: TopBarProps) {
   return (
     <header className="ld-shell-topbar" role="banner">
@@ -30,6 +32,7 @@ export function TopBar({
         <SyncStatusBar mode={connection.mode} pendingSyncCount={connection.pendingSyncCount} />
       </div>
       <div className="ld-shell-topbar__actions">
+        {readOnly ? <strong aria-label="离线只读">离线只读</strong> : null}
         {onSwitchStaff ? (
           <Button variant="secondary" size="sm" type="button" onClick={onSwitchStaff}>
             切换员工

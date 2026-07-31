@@ -34,6 +34,16 @@ export type AuditQueryStore = Readonly<{
 
 const SECRET_KEY_PATTERN =
   /(?:password|passwd|secret|token|refresh|access_token|csrf|pin|api_key|private_key)/iu;
+const AUDIT_LIST_ITEM_KEYS = Object.freeze([
+  "at_epoch_s",
+  "command",
+  "entity",
+  "entity_id",
+  "has_diff",
+  "id",
+  "staff_id",
+  "via",
+]);
 
 /** True when a JSON string looks like it embeds credential material. */
 export function jsonLooksSecret(json: string | null | undefined): boolean {
@@ -74,11 +84,40 @@ export function projectAuditListItem(
   });
 }
 
-/** Guard: serialized audit list payload must not contain secret substrings. */
+const isNullableString = (value: unknown): boolean => value === null || typeof value === "string";
+
+/**
+ * Guard the projection shape rather than scanning values for words such as
+ * "pin" or "refresh". Those words are valid audit command metadata; secrets
+ * remain excluded by allowing only the fixed safe projection fields.
+ */
 export function assertAuditPayloadSafe(payload: unknown): void {
-  const text = JSON.stringify(payload);
-  if (SECRET_KEY_PATTERN.test(text)) {
-    throw new Error("audit query projection leaked a secret-classified field");
+  if (!Array.isArray(payload)) {
+    throw new Error("audit query projection must be a list");
+  }
+  for (const item of payload) {
+    if (item === null || typeof item !== "object") {
+      throw new Error("audit query projection contains an invalid item");
+    }
+    const keys = Object.keys(item).sort();
+    if (
+      keys.length !== AUDIT_LIST_ITEM_KEYS.length ||
+      !keys.every((key, index) => key === AUDIT_LIST_ITEM_KEYS[index])
+    ) {
+      throw new Error("audit query projection contains an unsafe field");
+    }
+    if (
+      typeof Reflect.get(item, "id") !== "string" ||
+      !Number.isSafeInteger(Reflect.get(item, "at_epoch_s")) ||
+      typeof Reflect.get(item, "command") !== "string" ||
+      !isNullableString(Reflect.get(item, "staff_id")) ||
+      !isNullableString(Reflect.get(item, "via")) ||
+      !isNullableString(Reflect.get(item, "entity")) ||
+      !isNullableString(Reflect.get(item, "entity_id")) ||
+      typeof Reflect.get(item, "has_diff") !== "boolean"
+    ) {
+      throw new Error("audit query projection contains an invalid value");
+    }
   }
 }
 

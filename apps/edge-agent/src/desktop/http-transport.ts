@@ -27,7 +27,7 @@ import {
   DesktopRefreshResultSchema,
   DesktopSessionViewSchema,
   DesktopStaffDirectorySchema,
-  EdgeAuthorityResponseSchema,
+  EdgeReplayResponseSchema,
   LoginRequestSchema,
   type AccessSessionResponse,
   type DesktopCommandExecuteResult,
@@ -48,6 +48,12 @@ import {
 } from "@laundry/contracts";
 
 import { createLoginIntentGate } from "./auth-intent.js";
+import { createEdgeAuthorityRequester } from "./edge-authority-transport.js";
+import {
+  createSignedReplayRequest,
+  projectReplayResponse,
+  type DeviceRequestSigner,
+} from "./edge-http.js";
 import {
   AUTHENTICATION_FAILURE,
   CSRF_FAILURE,
@@ -109,6 +115,8 @@ export type DesktopHttpTransportDependencies = Readonly<{
   photoRequest?: (request: DesktopHttpRequest) => Promise<DesktopPhotoHttpResponse>;
   cookies: DesktopCookieStore;
   deviceId: string;
+  /** Main-process-only device key; absence disables all Edge authority operations. */
+  deviceSigner?: DeviceRequestSigner;
   nowMs?: () => number;
   loginInputSchema?: AsyncSchema<DesktopLoginInput>;
 }>;
@@ -136,7 +144,7 @@ export type DesktopHttpTransport = Readonly<{
   }>;
   /** Main-process-only authority/replay surface. Never project this through preload. */
   edge: Readonly<{
-    authority: () => Promise<EdgeAuthorityResponse>;
+    authority: (requestNonce: string, requestPrimary: boolean) => Promise<EdgeAuthorityResponse>;
     replay: (envelope: EdgeQueueEnvelope) => Promise<DesktopCommandExecuteResult>;
   }>;
 }>;
@@ -597,6 +605,7 @@ export function createDesktopHttpTransport(
     path: string,
     body: Readonly<Record<string, unknown>> | Uint8Array,
     contentType?: string,
+    retryAuthentication = true,
   ): Promise<T | DesktopFailure> => {
     let state = authState;
     if (state === null) return parseOutput(schema, AUTHENTICATION_FAILURE);
@@ -617,7 +626,7 @@ export function createDesktopHttpTransport(
     if (current === null || !isSameSession(state, current)) {
       return parseOutput(schema, RESOURCE_FAILURE);
     }
-    if (!isAuthenticationFailure(result)) return result;
+    if (!isAuthenticationFailure(result) || !retryAuthentication) return result;
     const refreshed = await refreshForState(state);
     if ("failure" in refreshed) return parseOutput(schema, refreshed.failure);
     state = refreshed.state;
@@ -750,18 +759,30 @@ export function createDesktopHttpTransport(
     return parseHttpOutput(DesktopHealthGetResultSchema, await requestJson("GET", "/health"));
   };
 
-  const requestEdgeAuthority = (): Promise<EdgeAuthorityResponse> =>
-    executeProtected(EdgeAuthorityResponseSchema, "/api/v2/edge/authority", {});
+  const requestEdgeAuthority = createEdgeAuthorityRequester({
+    deviceId,
+    signer: dependencies.deviceSigner,
+    executeProtected,
+    refreshAuthentication: async () => {
+      const state = authState;
+      return state !== null && !("failure" in (await refreshForState(state)));
+    },
+  });
 
-  const replayEdgeEnvelope = (
+  const replayEdgeEnvelope = async (
     envelope: EdgeQueueEnvelope,
   ): Promise<DesktopCommandExecuteResult> => {
-    const name = encodeURIComponent(envelope.payload.command);
-    return executeProtected(
-      DesktopCommandExecuteResultSchema,
-      `/v1/commands/${name}`,
-      envelope.payload,
+    const signer = dependencies.deviceSigner;
+    if (signer === undefined) {
+      return parseOutput(DesktopCommandExecuteResultSchema, RESOURCE_FAILURE);
+    }
+    const request = createSignedReplayRequest(deviceId, envelope, signer);
+    const response = await executeProtected(
+      EdgeReplayResponseSchema,
+      "/api/v2/edge/replay",
+      request,
     );
+    return projectReplayResponse(response);
   };
 
   return Object.freeze({

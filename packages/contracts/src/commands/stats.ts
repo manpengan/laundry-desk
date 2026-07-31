@@ -10,7 +10,11 @@ import { defineQuery, type QueryDefinition } from "../registry/definitions.js";
 /** Business calendar day as YYYY-MM-DD. */
 export const BusinessDateSchema = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/u, "Expected business_date YYYY-MM-DD");
+  .regex(/^\d{4}-\d{2}-\d{2}$/u, "Expected business_date YYYY-MM-DD")
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  }, "Expected a real Gregorian calendar date");
 
 export const StatsDaySummaryInputSchema = z.strictObject({
   /** Omit to let the server derive the store's current business day. */

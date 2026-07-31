@@ -215,34 +215,42 @@ export const createExecFileCaptureRunner =
     });
 
 export const loadLifecycleDependencies = async () => {
-  const { ensureLocalConfig, toLocalConfigEnvironment } = await import("./config.mjs");
+  const { ensureLocalConfig, resolveLocalConfigPaths, toLocalConfigEnvironment } =
+    await import("./config.mjs");
   return Object.freeze({
     ensureLocalConfig,
+    resolveLocalConfigPaths,
     toLocalConfigEnvironment,
     run: createSpawnRunner(),
   });
 };
 
 export const loadResetDependencies = async () => {
-  const { loadLocalConfig } = await import("./config.mjs");
+  const { loadLocalConfig, resolveLocalConfigPaths } = await import("./config.mjs");
   return Object.freeze({
     loadLocalConfig,
+    resolveLocalConfigPaths,
     localVolumeLabels,
     run: createSpawnRunner(),
     capture: createExecFileCaptureRunner(),
   });
 };
 
-export const createCommandDependencies = () =>
-  Object.freeze({
+export const loadCommandDependencies = async () => {
+  const { resolveLocalConfigPaths } = await import("./config.mjs");
+  return Object.freeze({
+    resolveLocalConfigPaths,
     run: createSpawnRunner(),
   });
+};
 
 export const lifecycleEnvironment = async (environment, dependencies) => {
+  const { directoryPath } = dependencies.resolveLocalConfigPaths({ env: environment });
   const config = await dependencies.ensureLocalConfig({ env: environment });
   return Object.freeze({
     ...environment,
     ...dependencies.toLocalConfigEnvironment(config),
+    LAUNDRY_LOCAL_CONFIG_DIR: directoryPath,
   });
 };
 

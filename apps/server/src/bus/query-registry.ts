@@ -15,6 +15,7 @@ import {
   M2_STATS_QUERY_DEFINITIONS,
   M3_PHOTO_QUERY_DEFINITIONS,
   M3_FULFILLMENT_QUERY_DEFINITIONS,
+  RECONCILIATION_QUERIES,
   STAFF_QUERIES,
 } from "@laundry/contracts";
 import type { QueryDefinition } from "@laundry/contracts";
@@ -54,6 +55,7 @@ export const DEFAULT_BUS_QUERY_DEFINITIONS: readonly AnyDefinition[] = Object.fr
   ...(M2_SHIFT_QUERY_DEFINITIONS as readonly AnyDefinition[]),
   ...(M3_PHOTO_QUERY_DEFINITIONS as readonly AnyDefinition[]),
   ...(M3_FULFILLMENT_QUERY_DEFINITIONS as readonly AnyDefinition[]),
+  ...(RECONCILIATION_QUERIES as readonly AnyDefinition[]),
   ...(STAFF_QUERIES as readonly AnyDefinition[]),
 ]);
 

@@ -1,4 +1,4 @@
-import { Button, useToast } from "@laundry/ui";
+import { Button, Input, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import type { OfflinePort, OfflineStatusView } from "../host/offline-port.js";
@@ -9,6 +9,7 @@ export function OfflineConflictPanel({ offlinePort }: OfflineConflictPanelProps)
   const toast = useToast();
   const [status, setStatus] = useState<OfflineStatusView | null>(null);
   const [busyQueueId, setBusyQueueId] = useState<string | null>(null);
+  const [discardReason, setDiscardReason] = useState("");
 
   const refresh = useCallback(async () => {
     const result = await offlinePort.status();
@@ -21,20 +22,26 @@ export function OfflineConflictPanel({ offlinePort }: OfflineConflictPanelProps)
 
   const resolve = useCallback(
     async (queueId: string, action: "retry" | "discard") => {
+      const reason = discardReason.trim();
+      if (action === "discard" && reason.length < 3) {
+        toast.push("放弃前请填写至少 3 个字符的原因", "error");
+        return;
+      }
       setBusyQueueId(queueId);
       try {
-        const result = await offlinePort.resolve(queueId, action);
+        const result = await offlinePort.resolve(queueId, action, reason);
         if (!result.ok) {
           toast.push(result.error.message, "error");
           return;
         }
         setStatus(result.data);
+        if (action === "discard") setDiscardReason("");
         toast.push(action === "retry" ? "已重新尝试同步" : "已放弃该离线操作", "success");
       } finally {
         setBusyQueueId(null);
       }
     },
-    [offlinePort, toast],
+    [discardReason, offlinePort, toast],
   );
 
   if (status === null) return null;
@@ -49,31 +56,41 @@ export function OfflineConflictPanel({ offlinePort }: OfflineConflictPanelProps)
       {status.conflicts.length === 0 ? (
         <p>当前没有需要人工处理的离线冲突。</p>
       ) : (
-        <ul>
-          {status.conflicts.map((conflict) => (
-            <li key={conflict.queueId}>
-              <code>{conflict.command}</code>：{conflict.errorCode}
-              <div className="ld-settings-form__actions">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={busyQueueId === conflict.queueId}
-                  onClick={() => void resolve(conflict.queueId, "retry")}
-                >
-                  重试
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={busyQueueId === conflict.queueId}
-                  onClick={() => void resolve(conflict.queueId, "discard")}
-                >
-                  放弃
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          <Input
+            name="offline-discard-reason"
+            label="放弃原因"
+            value={discardReason}
+            maxLength={256}
+            onChange={(event) => setDiscardReason(event.target.value)}
+            hint="放弃会先由在线命令总线验证并写入审计，再从本机队列移除。"
+          />
+          <ul>
+            {status.conflicts.map((conflict) => (
+              <li key={conflict.queueId}>
+                <code>{conflict.command}</code>：{conflict.errorCode}
+                <div className="ld-settings-form__actions">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={busyQueueId === conflict.queueId}
+                    onClick={() => void resolve(conflict.queueId, "retry")}
+                  >
+                    重试
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={busyQueueId === conflict.queueId || discardReason.trim().length < 3}
+                    onClick={() => void resolve(conflict.queueId, "discard")}
+                  >
+                    审计后放弃
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </section>
   );

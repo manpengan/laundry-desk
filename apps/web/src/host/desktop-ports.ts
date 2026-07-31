@@ -17,6 +17,8 @@ import type {
 } from "./desktop-bridge.js";
 import { createDesktopPhotoPort } from "./desktop-photo-port.js";
 import { createDesktopOfflinePort } from "./offline-port.js";
+import { createDesktopResumePort } from "./desktop-resume-port.js";
+import { readDesktopSessionView } from "./desktop-session-view.js";
 import type { AppPorts, HealthPort, HealthResult } from "./types.js";
 
 export type { LaundryDesktopBridge } from "./desktop-bridge.js";
@@ -38,15 +40,6 @@ const FORBIDDEN_CREDENTIAL_KEYS = new Set([
   "refreshtoken",
   "token",
 ]);
-const SESSION_KEYS = Object.freeze([
-  "session_id",
-  "session_version",
-  "org_id",
-  "store_id",
-  "staff_id",
-  "device_id",
-  "permission_version",
-] as const);
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -141,66 +134,6 @@ function isSafeBusinessValue(value: unknown): boolean {
   return true;
 }
 
-function readFeatures(value: unknown): Readonly<Record<string, boolean>> | null {
-  if (!isRecord(value)) return null;
-  const entries = Object.entries(value);
-  if (
-    !entries.every(
-      (entry): entry is [string, boolean] =>
-        !isCredentialBoundaryKey(entry[0]) && typeof entry[1] === "boolean",
-    )
-  ) {
-    return null;
-  }
-  return Object.freeze(Object.fromEntries(entries));
-}
-
-function readSession(value: unknown): SessionView["session"] | null {
-  if (!isRecord(value) || !hasExactKeys(value, SESSION_KEYS)) return null;
-  const uuidKeys = ["session_id", "org_id", "store_id", "staff_id", "device_id"] as const;
-  if (!uuidKeys.every((key) => isUuid(value[key]))) return null;
-  if (!isPositiveInteger(value.session_version) || !isPositiveInteger(value.permission_version)) {
-    return null;
-  }
-  return Object.freeze({
-    session_id: value.session_id as string,
-    session_version: value.session_version,
-    org_id: value.org_id as string,
-    store_id: value.store_id as string,
-    staff_id: value.staff_id as string,
-    device_id: value.device_id as string,
-    permission_version: value.permission_version,
-  });
-}
-
-function readDisplay(value: unknown): SessionView["display"] | null {
-  const keys = ["store_name", "staff_name", "org_code", "store_code"] as const;
-  if (!isRecord(value) || !hasExactKeys(value, keys)) return null;
-  if (!keys.every((key) => isNonEmptyString(value[key]))) return null;
-  return Object.freeze({
-    store_name: value.store_name as string,
-    staff_name: value.staff_name as string,
-    org_code: value.org_code as string,
-    store_code: value.store_code as string,
-  });
-}
-
-function readSessionView(value: unknown): SessionView | null {
-  const keys = ["session", "role", "features", "display"] as const;
-  if (!isRecord(value) || !hasExactKeys(value, keys)) return null;
-  if (value.role !== "admin" && value.role !== "staff") return null;
-  const session = readSession(value.session);
-  const features = readFeatures(value.features);
-  const display = readDisplay(value.display);
-  if (session === null || features === null || display === null) return null;
-  return Object.freeze({
-    session,
-    role: value.role,
-    features,
-    display,
-  });
-}
-
 function readSwitchableStaff(value: unknown): SwitchableStaff | null {
   const keys = ["staff_id", "display_name", "role"] as const;
   if (!isRecord(value) || !hasExactKeys(value, keys)) return null;
@@ -240,7 +173,7 @@ function readLoginSuccess(value: unknown): ParsedLoginSuccess | null {
   if (!isRecord(value) || !hasExactKeys(value, ["ok", "data"]) || value.ok !== true) return null;
   const data = value.data;
   if (!isRecord(data) || !hasExactKeys(data, ["session_view", "staff_directory"])) return null;
-  const sessionView = readSessionView(data.session_view);
+  const sessionView = readDesktopSessionView(data.session_view);
   const staffDirectory = readStaffDirectory(data.staff_directory);
   if (sessionView === null || staffDirectory === null) return null;
   return Object.freeze({ sessionView, staffDirectory });
@@ -325,7 +258,7 @@ function readSessionResult(value: unknown, malformedMessage: string): AuthResult
   if (!isRecord(value) || !hasExactKeys(value, ["ok", "data"]) || value.ok !== true) {
     return authError(malformedMessage);
   }
-  const session = readSessionView(value.data);
+  const session = readDesktopSessionView(value.data);
   return session === null
     ? authError(malformedMessage)
     : Object.freeze({ ok: true as const, data: session });
@@ -367,7 +300,7 @@ function readStepUpResult(value: unknown): AuthResult<StepUpProofResult> {
     return authError("桌面 step-up 响应格式错误");
   }
   const data = value.data;
-  if (readSessionView(data) !== null) {
+  if (readDesktopSessionView(data) !== null) {
     return authError("当前挑战为 quick-switch，请使用切换账号流程");
   }
   if (
@@ -628,12 +561,14 @@ function createHealthPort(bridge: LaundryDesktopBridge): HealthPort {
 }
 
 export function createDesktopPorts(bridge: LaundryDesktopBridge): AppPorts {
+  const resume = createDesktopResumePort(bridge.offline);
   return Object.freeze({
     auth: createAuthPort(bridge),
     command: createCommandPort(bridge),
     query: createQueryPort(bridge),
     photo: createDesktopPhotoPort(bridge),
     offline: createDesktopOfflinePort(bridge.offline),
+    ...(resume === undefined ? {} : { resume }),
     health: createHealthPort(bridge),
   });
 }

@@ -16,7 +16,6 @@ import {
   M2_CONTRACT_DEFINITIONS,
   M2_CONTRACT_QUERY_NAMES,
 } from "../commands/catalog.js";
-import { PhotoContentTypeSchema, PhotoUploadDataSchema } from "../commands/photo.js";
 import { CommandResponseSchema } from "../envelope/responses.js";
 import { ConfirmReferenceSchema } from "../envelope/wire-payload.js";
 import type { CommandDefinition, QueryDefinition } from "../registry/definitions.js";
@@ -24,15 +23,32 @@ import { parseContractInput } from "../registry/definitions.js";
 import {
   DesktopOfflineResolveInputSchema,
   DesktopOfflineResolveResultSchema,
+  DesktopOfflineResumeInputSchema,
   DesktopOfflineStatusInputSchema,
   DesktopOfflineStatusResultSchema,
 } from "./offline-operations.js";
+import {
+  DesktopPhotoDeleteInputSchema,
+  DesktopPhotoDeleteResultSchema,
+  DesktopPhotoReadInputSchema,
+  DesktopPhotoReadResultSchema,
+  DesktopPhotoUploadInputSchema,
+  DesktopPhotoUploadResultSchema,
+} from "./photo-operations.js";
+export {
+  DESKTOP_MAX_PHOTO_BYTES,
+  DesktopPhotoDeleteInputSchema,
+  DesktopPhotoDeleteResultSchema,
+  DesktopPhotoReadInputSchema,
+  DesktopPhotoReadResultSchema,
+  DesktopPhotoUploadInputSchema,
+  DesktopPhotoUploadResultSchema,
+} from "./photo-operations.js";
 
 export const DESKTOP_MAX_JSON_BYTES = 256 * 1_024;
 export const DESKTOP_MAX_JSON_DEPTH = 32;
 export const DESKTOP_MAX_JSON_NODES = 10_000;
 export const DESKTOP_MAX_STAFF_DIRECTORY_SIZE = 500;
-export const DESKTOP_MAX_PHOTO_BYTES = 8 * 1_024 * 1_024;
 
 type DeepReadonly<T> = T extends readonly (infer Item)[]
   ? readonly DeepReadonly<Item>[]
@@ -282,50 +298,21 @@ export const DesktopPinChallengeResultSchema = createDesktopResultSchema(
 export const DesktopPinVerifyResultSchema = createDesktopResultSchema(DesktopPinVerifyDataSchema);
 export const DesktopLogoutResultSchema = createDesktopResultSchema(LogoutResponseSchema);
 export const DesktopHealthGetResultSchema = createDesktopResultSchema(DesktopHealthReadySchema);
-export const DesktopPhotoUploadInputSchema = z
-  .strictObject({
-    upload_id: z.uuid(),
-    order_id: z.uuid(),
-    garment_id: z.uuid(),
-    kind: z.enum(["receive", "defect", "ready", "other"]),
-    content_type: z.enum(["image/jpeg", "image/png", "image/webp"]),
-    bytes: z.instanceof(Uint8Array),
-    taken_at: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
-  })
-  .superRefine((input, context) => {
-    if (input.bytes.byteLength < 1 || input.bytes.byteLength > DESKTOP_MAX_PHOTO_BYTES) {
-      context.addIssue({
-        code: "custom",
-        message: "Desktop photo bytes exceed the allowed range",
-        path: ["bytes"],
-      });
-    }
-  });
-export const DesktopPhotoUploadResultSchema = createDesktopResultSchema(PhotoUploadDataSchema);
-export const DesktopPhotoReadInputSchema = z.strictObject({
-  photo_id: z.uuid(),
-  variant: z.enum(["thumbnail", "original"]),
-});
-const DesktopPhotoBinaryDataSchema = z
-  .strictObject({
-    content_type: PhotoContentTypeSchema,
-    bytes: z.instanceof(Uint8Array),
-  })
-  .superRefine((data, context) => {
-    if (data.bytes.byteLength < 1 || data.bytes.byteLength > DESKTOP_MAX_PHOTO_BYTES) {
-      context.addIssue({
-        code: "custom",
-        message: "Desktop photo response exceeds the allowed range",
-        path: ["bytes"],
-      });
-    }
-  });
-export const DesktopPhotoReadResultSchema = createDesktopResultSchema(DesktopPhotoBinaryDataSchema);
-export const DesktopPhotoDeleteInputSchema = z.strictObject({
-  photo_id: z.uuid(),
-  delete_id: z.uuid(),
-});
-export const DesktopPhotoDeleteResultSchema = createDesktopResultSchema(PhotoUploadDataSchema);
+const DesktopOfflineResumeDataSchema = z.discriminatedUnion("mode", [
+  z.strictObject({
+    mode: z.literal("online"),
+    session_view: DesktopSessionViewSchema,
+  }),
+  z.strictObject({
+    mode: z.literal("offline_read_only"),
+    session_view: DesktopSessionViewSchema,
+    cached_query_count: z.number().int().positive().max(128),
+    grant_not_after: z.iso.datetime({ offset: true }),
+  }),
+]);
+export const DesktopOfflineResumeResultSchema = createDesktopResultSchema(
+  DesktopOfflineResumeDataSchema,
+);
 
 const operation = <TInput extends z.ZodType, TResult extends z.ZodType>(
   input: TInput,
@@ -352,6 +339,7 @@ export const DESKTOP_OPERATION_SCHEMAS = Object.freeze({
     delete: operation(DesktopPhotoDeleteInputSchema, DesktopPhotoDeleteResultSchema),
   }),
   offline: Object.freeze({
+    resume: operation(DesktopOfflineResumeInputSchema, DesktopOfflineResumeResultSchema),
     status: operation(DesktopOfflineStatusInputSchema, DesktopOfflineStatusResultSchema),
     resolve: operation(DesktopOfflineResolveInputSchema, DesktopOfflineResolveResultSchema),
   }),
@@ -383,15 +371,8 @@ export type DesktopPinChallengeResult = DeepReadonly<
 export type DesktopPinVerifyResult = DeepReadonly<z.output<typeof DesktopPinVerifyResultSchema>>;
 export type DesktopLogoutResult = DeepReadonly<z.output<typeof DesktopLogoutResultSchema>>;
 export type DesktopHealthGetResult = DeepReadonly<z.output<typeof DesktopHealthGetResultSchema>>;
-export type DesktopPhotoUploadInput = DeepReadonly<z.output<typeof DesktopPhotoUploadInputSchema>>;
-export type DesktopPhotoUploadResult = DeepReadonly<
-  z.output<typeof DesktopPhotoUploadResultSchema>
->;
-export type DesktopPhotoReadInput = DeepReadonly<z.output<typeof DesktopPhotoReadInputSchema>>;
-export type DesktopPhotoReadResult = DeepReadonly<z.output<typeof DesktopPhotoReadResultSchema>>;
-export type DesktopPhotoDeleteInput = DeepReadonly<z.output<typeof DesktopPhotoDeleteInputSchema>>;
-export type DesktopPhotoDeleteResult = DeepReadonly<
-  z.output<typeof DesktopPhotoDeleteResultSchema>
+export type DesktopOfflineResumeResult = DeepReadonly<
+  z.output<typeof DesktopOfflineResumeResultSchema>
 >;
 export type DesktopSessionView = DeepReadonly<z.output<typeof DesktopSessionViewSchema>>;
 export type DesktopStaffDirectoryEntry = DeepReadonly<

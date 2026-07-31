@@ -15,6 +15,7 @@ import {
   listPaymentRows,
   replaceDraftTxn,
 } from "./pg-order-operations.js";
+import { appendRefundTxn } from "./pg-order-refund.js";
 import type { OrderRecord, OrderStore } from "./types.js";
 
 export type CreatePgOrderStoreOptions = Readonly<{
@@ -123,6 +124,13 @@ export function createPgOrderStore(
         pool,
         { orgId: input.org_id, storeId: input.store_id, staffId: input.staff_id },
         async (client) => appendPaymentTxn(client, input, newId),
+      ),
+
+    appendRefund: async (input) =>
+      withStoreGucOrCurrent(
+        pool,
+        { orgId: input.org_id, storeId: input.store_id, staffId: input.staff_id },
+        async (client) => appendRefundTxn(client, input, newId),
       ),
 
     cancelOpenOrder: async (orgId, storeId, orderId, reason, staffId, at, businessDate) =>

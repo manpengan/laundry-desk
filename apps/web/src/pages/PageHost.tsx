@@ -92,6 +92,7 @@ export function PageHost({
         session={session}
         {...(commandClient !== undefined ? { commandClient } : {})}
         {...(authClient !== undefined ? { authClient } : {})}
+        {...(offlinePort !== undefined ? { offlinePort } : {})}
       />
     );
   }
@@ -147,6 +148,7 @@ export function PageHost({
         authClient={authClient}
         commandClient={commandClient}
         {...(queryClient !== undefined ? { queryClient } : {})}
+        {...(offlinePort !== undefined ? { offlinePort } : {})}
       />
     );
   }

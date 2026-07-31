@@ -29,6 +29,11 @@ import type { PhotoHandlerDeps } from "../photo/handlers.js";
 import { registerPhotoCommandHandlers, registerPhotoQueryHandlers } from "../photo/handlers.js";
 import type { PrintHandlerDeps } from "../print/handlers.js";
 import { registerPrintCommandHandlers, registerPrintQueryHandlers } from "../print/handlers.js";
+import type { ReconciliationHandlerDeps } from "../reconciliation/types.js";
+import {
+  registerReconciliationCommandHandlers,
+  registerReconciliationQueryHandlers,
+} from "../reconciliation/handlers.js";
 import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import { registerShiftCommandHandlers, registerShiftQueryHandlers } from "../shift/handlers.js";
 import type { StatsHandlerDeps } from "../stats/handlers.js";
@@ -56,6 +61,8 @@ export type RegisterM1Deps = Readonly<{
   customer?: CustomerHandlerDeps;
   /** M2 shift closing / 日结签字 (memory). */
   shift?: ShiftHandlerDeps;
+  /** Store-day accounting reconciliation, audited export and Edge conflict resolution. */
+  reconciliation?: ReconciliationHandlerDeps;
   /** M3 garment photo metadata (memory). */
   photo?: PhotoHandlerDeps;
   /** M3 garment production, incidents and loss handling. */
@@ -114,6 +121,7 @@ export function registerM1Handlers(
       "order.pickup",
       "payment.collect",
       "payment.repay",
+      "payment.refund",
     );
   }
 
@@ -141,6 +149,11 @@ export function registerM1Handlers(
   if (deps.shift !== undefined) {
     registerShiftCommandHandlers(registry, deps.shift);
     registered.push("shift.close");
+  }
+
+  if (deps.reconciliation !== undefined) {
+    registerReconciliationCommandHandlers(registry, deps.reconciliation);
+    registered.push("reconciliation.export", "edge.conflict.discard");
   }
 
   if (deps.photo !== undefined) {
@@ -214,6 +227,11 @@ export function registerM1QueryHandlers(
   if (deps.shift !== undefined) {
     registerShiftQueryHandlers(queryRegistry, deps.shift);
     names.push("shift.get", "shift.history");
+  }
+
+  if (deps.reconciliation !== undefined) {
+    registerReconciliationQueryHandlers(queryRegistry, deps.reconciliation);
+    names.push("reconciliation.day.get");
   }
 
   if (deps.photo !== undefined) {

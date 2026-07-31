@@ -21,6 +21,7 @@ import {
   loadOrder,
   nextOrderStatus,
 } from "./pg-order-data.js";
+import { orderPaymentsByReference } from "./payment-reference-order.js";
 import type {
   InitialPayment,
   LedgerPaymentRow,
@@ -67,7 +68,7 @@ export async function insertInitialPayment(
   await insertLedgerPayment(client, input.payment, input.business_date);
 }
 
-async function insertLedgerPayment(
+export async function insertLedgerPayment(
   client: SqlClient,
   payment: LedgerPaymentRow,
   businessDate: string,
@@ -261,25 +262,27 @@ export async function listPaymentRows(
      FROM payments
      WHERE org_id = $1::uuid AND store_id = $2::uuid
        AND ($3::uuid IS NULL OR order_id = $3::uuid)
-     ORDER BY at ASC, id ASC`,
+     ORDER BY ledger_seq ASC`,
     [orgId, storeId, orderId ?? null],
   );
-  return Object.freeze(
-    result.rows.map((row) =>
-      Object.freeze({
-        payment_id: row.id,
-        org_id: row.org_id,
-        store_id: row.store_id,
-        order_id: row.order_id,
-        method: row.method,
-        amount_cents: row.amount_cents,
-        kind: row.kind,
-        ref_payment_id: row.ref_payment_id,
-        staff_id: row.staff_id,
-        at: dateToEpoch(row.at),
-        business_date: row.business_date,
-        note: row.note,
-      }),
+  return orderPaymentsByReference(
+    Object.freeze(
+      result.rows.map((row) =>
+        Object.freeze({
+          payment_id: row.id,
+          org_id: row.org_id,
+          store_id: row.store_id,
+          order_id: row.order_id,
+          method: row.method,
+          amount_cents: row.amount_cents,
+          kind: row.kind,
+          ref_payment_id: row.ref_payment_id,
+          staff_id: row.staff_id,
+          at: dateToEpoch(row.at),
+          business_date: row.business_date,
+          note: row.note,
+        }),
+      ),
     ),
   );
 }

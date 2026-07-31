@@ -45,9 +45,17 @@ export type LaundryDesktopBridge = Readonly<{
     delete: (input: Readonly<{ photo_id: string; delete_id: string }>) => Promise<unknown>;
   }>;
   offline?: Readonly<{
+    resume: () => Promise<unknown>;
     status: () => Promise<unknown>;
     resolve: (
-      input: Readonly<{ queue_id: string; action: "retry" | "discard" }>,
+      input:
+        | Readonly<{ queue_id: string; action: "retry" }>
+        | Readonly<{
+            queue_id: string;
+            action: "discard";
+            reason: string;
+            confirm: "DISCARD";
+          }>,
     ) => Promise<unknown>;
   }>;
   health: Readonly<{

@@ -52,6 +52,12 @@ describe("M2 stats.day.summary skeleton", () => {
     await expect(
       parseContractInput(statsDaySummaryQuery, { business_date: "2026/07/22" }),
     ).rejects.toBeTruthy();
+    await expect(
+      parseContractInput(statsDaySummaryQuery, { business_date: "2026-02-30" }),
+    ).rejects.toBeTruthy();
+    await expect(
+      parseContractInput(statsDaySummaryQuery, { business_date: "2024-02-29" }),
+    ).resolves.toEqual({ business_date: "2024-02-29" });
   });
 
   it("declares metadata floors", () => {

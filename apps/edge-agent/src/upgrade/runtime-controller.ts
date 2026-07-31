@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { execFile, spawn } from "node:child_process";
-import { lstat, mkdir, readdir } from "node:fs/promises";
+import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 import type { KeyObject } from "node:crypto";
@@ -12,7 +12,12 @@ import {
   type ReleaseVerificationContext,
 } from "./release-manifest.js";
 import type { RuntimeUpdateIo } from "./runtime-io.js";
-import { RuntimeUpdateStateStore, type RuntimeSlotName } from "./runtime-state.js";
+import {
+  RUNTIME_RECOVERY_CAPABILITIES,
+  RuntimeUpdateStateStore,
+  type RuntimeRecoveryCapabilities,
+  type RuntimeSlotName,
+} from "./runtime-state.js";
 
 const execFileAsync = promisify(execFile);
 export const STAGED_HEALTH_ARGUMENT = "--laundry-staged-health-check";
@@ -35,7 +40,8 @@ export type StartupAction =
       action: "continue";
       pendingConfirmation: Readonly<{ slot: RuntimeSlotName; nonce: string }>;
     }>
-  | Readonly<{ action: "launch"; appPath: string; activationNonce: string | null }>;
+  | Readonly<{ action: "launch"; appPath: string; activationNonce: string | null }>
+  | Readonly<{ action: "recovery"; capabilities: RuntimeRecoveryCapabilities }>;
 
 export type RuntimeUpdateControllerOptions = Readonly<{
   manifestUrl: string;
@@ -83,8 +89,14 @@ export function prepareRuntimeStartup(
       activationNonce: pending.nonce,
     });
   }
-  const rolledBack = state.rollbackPending(now());
-  const fallbackPath = rolledBack.slots[rolledBack.active_slot].app_path;
+  const rollback = state.rollbackPending(now());
+  if (rollback.status === "recovery_required") {
+    return Object.freeze({
+      action: "recovery",
+      capabilities: RUNTIME_RECOVERY_CAPABILITIES,
+    });
+  }
+  const fallbackPath = rollback.state.slots[rollback.state.active_slot].app_path;
   return fallbackPath !== null && fallbackPath !== currentAppPath
     ? Object.freeze({ action: "launch", appPath: fallbackPath, activationNonce: null })
     : Object.freeze({ action: "continue", pendingConfirmation: null });
@@ -106,6 +118,7 @@ export class RuntimeUpdateController {
     }
     let leaseBlocked = false;
     let retainLeaseBlock = false;
+    let releaseRoot: string | null = null;
     try {
       const candidate = await this.options.io.fetchManifest(this.options.manifestUrl);
       const verified = verifyReleaseManifest(
@@ -139,12 +152,13 @@ export class RuntimeUpdateController {
       }
       this.options.setPrimaryLeaseBlocked?.(true);
       leaseBlocked = true;
+      const queueAfterLeaseBlock = this.options.queueStatus();
+      if (queueAfterLeaseBlock.pendingCount !== 0 || queueAfterLeaseBlock.inflightCount !== 0) {
+        return Object.freeze({ status: "blocked", reason: "offline_queue_not_empty" });
+      }
       const slot = this.options.state.standbySlot();
       const slotRoot = this.options.state.slotRoot(slot);
-      const releaseRoot = join(
-        slotRoot,
-        `${verified.manifest.authority.version}-${this.randomId()}`,
-      );
+      releaseRoot = join(slotRoot, `${verified.manifest.authority.version}-${this.randomId()}`);
       await mkdir(releaseRoot, { mode: 0o700 });
       const downloaded = await this.options.io.downloadArtifact(
         this.options.manifestUrl,
@@ -178,6 +192,9 @@ export class RuntimeUpdateController {
         reason: error instanceof Error ? error.message : "UPDATE_RUNTIME_FAILED",
       });
     } finally {
+      if (releaseRoot !== null && !retainLeaseBlock) {
+        await rm(releaseRoot, { recursive: true, force: true }).catch(() => undefined);
+      }
       if (leaseBlocked && !retainLeaseBlock) {
         this.options.setPrimaryLeaseBlocked?.(false);
       }

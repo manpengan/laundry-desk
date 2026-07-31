@@ -45,9 +45,9 @@ const COPY: Record<NavItemId, PageCopy> = {
     actionLabel: "新建客户",
   },
   stats: {
-    title: "统计",
-    emptyTitle: "暂无汇总",
-    emptyDescription: "有业务数据后显示今日收衣/取衣与营业额。",
+    title: "账目 / 对账",
+    emptyTitle: "暂无对账快照",
+    emptyDescription: "有业务数据后显示账本、交班、打印与离线同步证据。",
     actionLabel: "查看工作台",
   },
   settings: {

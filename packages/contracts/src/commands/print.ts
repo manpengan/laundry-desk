@@ -79,7 +79,7 @@ export const printTicketProcessCommand: CommandDefinition<ProcessInput> = define
     "Load print job by job_id. kind must be xp58. Transition queued→printing, build ESC/POS payload, set payload_bytes and status done. On error mark failed with error text. No USB/device I/O.",
   input: PrintTicketProcessInputSchema,
   risk: "R1",
-  invariants: ["rbac.order_write"],
+  invariants: ["rbac.print_manage"],
   idempotent: false,
   sideEffects: ["print.job_processed", "audit.print_job"],
   // Process is a server-side state machine step; not offline-granted (must be idempotent if grant).
@@ -101,7 +101,7 @@ export const printTicketRetryCommand: CommandDefinition<RetryInput> = defineComm
     "Load print job by job_id. Source status must be failed. Enqueue a NEW print_jobs row with same order_id, ticket_no, kind. Do not mutate the failed row. Returns new job (may auto-process xp58 to done). No device I/O paths stored.",
   input: PrintTicketRetryInputSchema,
   risk: "R1",
-  invariants: ["rbac.order_write"],
+  invariants: ["rbac.print_manage"],
   // offline grant requires idempotent floor (same as enqueue; bus may still allocate a new job_id).
   idempotent: true,
   sideEffects: ["print.job_queued", "print.job_processed", "audit.print_job"],
@@ -123,7 +123,7 @@ export const printTicketReprintCommand: CommandDefinition<ReprintInput> = define
     "Load print job by job_id. Source status must be done. Enqueue a NEW print_jobs row with same order_id, ticket_no, kind. Do not mutate the done row. Returns new job (may auto-process xp58 to done). No device I/O paths stored.",
   input: PrintTicketReprintInputSchema,
   risk: "R1",
-  invariants: ["rbac.order_write"],
+  invariants: ["rbac.print_manage"],
   // offline grant requires idempotent floor (same as enqueue; bus may still allocate a new job_id).
   idempotent: true,
   sideEffects: ["print.job_queued", "print.job_processed", "audit.print_job"],
@@ -142,7 +142,7 @@ export const printJobsListQuery: QueryDefinition<ListInput> = defineQuery({
     "Return newest-first print job status rows (job_id, kind, status, order_id, ticket_no, timestamps, optional error/payload_bytes).",
   input: PrintJobsListInputSchema,
   risk: "R1",
-  invariants: [],
+  invariants: ["rbac.print_manage"],
   idempotent: true,
   sideEffects: [],
   offline_mode: "denied",

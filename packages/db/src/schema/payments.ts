@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+  bigint,
   foreignKey,
   index,
   integer,
@@ -32,6 +34,9 @@ export const payments = pgTable(
     refPaymentId: uuid("ref_payment_id"),
     staffId: uuid("staff_id").notNull(),
     at: timestamp("at", { withTimezone: true, mode: "date" }).notNull(),
+    ledgerSeq: bigint("ledger_seq", { mode: "bigint" })
+      .notNull()
+      .default(sql`nextval('public.payments_ledger_seq_seq'::regclass)`),
     businessDate: text("business_date").notNull(),
     note: text("note"),
   },
@@ -39,6 +44,13 @@ export const payments = pgTable(
     primaryKey({ columns: [table.id], name: "payments_pkey" }),
     uniqueIndex("payments_tenant_id_uidx").on(table.orgId, table.storeId, table.id),
     index("payments_order_at_idx").on(table.orgId, table.storeId, table.orderId, table.at),
+    uniqueIndex("payments_ledger_seq_uidx").on(table.ledgerSeq),
+    index("payments_order_ledger_seq_idx").on(
+      table.orgId,
+      table.storeId,
+      table.orderId,
+      table.ledgerSeq,
+    ),
     index("payments_store_at_idx").on(table.orgId, table.storeId, table.at),
     index("payments_store_business_date_idx").on(table.orgId, table.storeId, table.businessDate),
     foreignKey({

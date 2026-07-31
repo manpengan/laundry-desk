@@ -79,6 +79,7 @@ export const OfflineGrantPayloadSchema = z
     store_id: z.uuid(),
     staff_id: z.uuid(),
     device_id: z.uuid(),
+    request_nonce: EdgeNonceSchema,
     permission_version: PositiveSafeIntegerSchema,
     allowed_commands: UniqueCommandNamesSchema,
     issued_at: ExactUtcTimestampSchema,
@@ -103,6 +104,8 @@ export const OfflineGrantPayloadSchema = z
 export const PrimaryLeasePayloadSchema = z
   .object({
     lease_id: z.uuid(),
+    grant_id: z.uuid(),
+    org_id: z.uuid(),
     store_id: z.uuid(),
     device_id: z.uuid(),
     primary_epoch: PositiveSafeIntegerSchema,

@@ -14,7 +14,8 @@ import { createCommandError, type CommandError } from "@laundry/contracts";
 import type { StepResult } from "@laundry/domain";
 
 import type { BusChainPorts, ChainPortHooks } from "../bus/chain-adapter.js";
-import type { ActorContext, BusContext } from "../bus/types.js";
+import type { BusContext } from "../bus/types.js";
+import { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";
 import { evaluatePolicy } from "../policy/evaluate-policy.js";
 import type { PolicyActor, PolicyCommandMeta, PolicyDecision } from "../policy/types.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
@@ -32,21 +33,7 @@ const okPolicy = (): StepResult<Readonly<{ allowed: true }>, CommandError> => ({
   data: Object.freeze({ allowed: true as const }),
 });
 
-/** Permissions implied by `rbac.<code>` invariant bindings on a command definition. */
-export function requiredPermissionsFromInvariants(
-  invariants: readonly string[],
-): readonly string[] {
-  return Object.freeze(
-    invariants
-      .filter((name) => name.startsWith("rbac."))
-      .map((name) => name.slice("rbac.".length))
-      .filter((code) => code.length > 0),
-  );
-}
-
-export function actorPermissionSet(actor: ActorContext): ReadonlySet<string> {
-  return new Set(actor.permissions ?? []);
-}
+export { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";
 
 export const defaultCheckRbac: BusChainPorts["checkRbac"] = async (_parsed, context) => {
   const bus = context.meta as BusContext;

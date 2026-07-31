@@ -7,6 +7,7 @@ import {
   buildReversalPayment,
   planCancel,
   planCollectPayment,
+  planRefundPayment,
   planRepayPayment,
 } from "@laundry/domain";
 import { randomUUID } from "node:crypto";
@@ -19,6 +20,7 @@ import type {
   OrderStore,
   PaymentAppendInput,
   PaymentAppendResult,
+  PaymentRefundAppendInput,
   PickupApplyOptions,
   PickupApplyResult,
 } from "./types.js";
@@ -215,6 +217,53 @@ export class MemoryOrderStore implements OrderStore {
     });
     this.orders.set(k, next);
     const payment = Object.freeze({ ...plan.payment, business_date: input.business_date });
+    this.payments.push(payment);
+    return Object.freeze({ order: next, payment });
+  }
+
+  async appendRefund(input: PaymentRefundAppendInput): Promise<PaymentAppendResult | null> {
+    const k = key(input.org_id, input.store_id, input.order_id);
+    const order = this.orders.get(k);
+    if (order === undefined || (order.status !== "open" && order.status !== "closed")) {
+      return null;
+    }
+    const existing = await this.listPayments(input.org_id, input.store_id, input.order_id);
+    const referenced = existing.find((payment) => payment.payment_id === input.ref_payment_id);
+    if (referenced === undefined || referenced.method !== input.expected_method) return null;
+    const plan = planRefundPayment({
+      payment_id: randomUUID(),
+      org_id: input.org_id,
+      store_id: input.store_id,
+      order_id: input.order_id,
+      amount_cents: input.amount_cents,
+      staff_id: input.staff_id,
+      at: input.at,
+      method: referenced.method,
+      payable_cents: order.payable_cents,
+      existing_payments: existing,
+      ref_payment_id: input.ref_payment_id,
+      reason: input.reason,
+    });
+    if (!plan.ok) return null;
+    const garments = this.garments.get(k) ?? [];
+    const allTerminal = garments.every(
+      (garment) =>
+        garment.status === "picked_up" ||
+        garment.status === "delivered" ||
+        garment.status === "lost",
+    );
+    const next = Object.freeze({
+      ...order,
+      paid_cents: plan.paid_cents,
+      balance_cents: plan.balance_cents,
+      status: allTerminal && plan.balance_cents === 0 ? ("closed" as const) : ("open" as const),
+      updated_at: input.at,
+    });
+    const payment = Object.freeze({
+      ...plan.payment,
+      business_date: input.business_date,
+    });
+    this.orders.set(k, next);
     this.payments.push(payment);
     return Object.freeze({ order: next, payment });
   }
