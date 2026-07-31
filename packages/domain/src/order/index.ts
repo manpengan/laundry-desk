@@ -35,6 +35,7 @@ export {
 } from "./pickup-plan.js";
 export {
   PAYMENT_KINDS,
+  PAYMENT_LEDGER_METHODS,
   PAYMENT_METHODS,
   activeReversalTargets,
   buildRefundPayment,
@@ -53,6 +54,7 @@ export {
   type PaymentLedgerRejectReason,
   type PaymentLedgerResult,
   type PaymentKind,
+  type PaymentLedgerMethod,
   type PaymentMethod,
   type PaymentPlanBaseInput,
   type PaymentPlanRejectReason,

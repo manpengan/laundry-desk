@@ -46,6 +46,11 @@ describe("M2 contract surface", () => {
       "garment.mark_lost",
       // M1.5: store-scoped staff access administration with R5 step-up.
       "staff.access.set",
+      // ADR-17: member stored value. Top-up is R3 because real money enters an
+      // append-only ledger; the balance is SUM(delta), never a stored column.
+      "member.account.open",
+      "member.topup",
+      "member.balance.pay",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("stats.day.summary");
@@ -54,6 +59,7 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.duplicates");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("staff.access.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("member.account.get");
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );

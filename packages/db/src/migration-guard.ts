@@ -11,14 +11,31 @@ const DESTRUCTIVE_SQL_PATTERNS: readonly Readonly<{ name: string; pattern: RegEx
 ];
 
 /**
- * PostgreSQL requires replacing a CHECK constraint to expand its allowed enum-like
- * values. This sole replacement broadens `orders.status` for ticketless drafts;
- * it does not remove rows or values. Keep the exception exact so arbitrary
- * constraint drops remain a migration-gate failure.
+ * PostgreSQL requires replacing a CHECK constraint to expand its allowed
+ * enum-like values, so each broadening shows up as a DROP CONSTRAINT.
+ *
+ * Every entry here must be an exact (table, constraint) pair that is only ever
+ * re-added wider in the same migration: broadening accepts more values and
+ * removes no row. Keep this list exact — a loosened pattern would let an
+ * arbitrary constraint drop through the expand-only gate.
  */
-const isCompatibleOrdersStatusConstraintReplacement = (statement: string): boolean =>
-  /^ALTER\s+TABLE\s+(?:"?public"?\.)?"?orders"?\s+DROP\s+CONSTRAINT\s+IF\s+EXISTS\s+"?orders_status_chk"?\s*;?$/iu.test(
-    statement,
+const COMPATIBLE_CONSTRAINT_REPLACEMENTS: readonly Readonly<{
+  table: string;
+  constraint: string;
+}>[] = [
+  // Broadens orders.status for ticketless drafts.
+  { table: "orders", constraint: "orders_status_chk" },
+  // ADR-17: broadens payments.method with 'balance' so a stored-value
+  // settlement lands in the same ledger as every other tender.
+  { table: "payments", constraint: "payments_method_chk" },
+];
+
+const isCompatibleConstraintReplacement = (statement: string): boolean =>
+  COMPATIBLE_CONSTRAINT_REPLACEMENTS.some(({ table, constraint }) =>
+    new RegExp(
+      `^ALTER\\s+TABLE\\s+(?:"?public"?\\.)?"?${table}"?\\s+DROP\\s+CONSTRAINT\\s+IF\\s+EXISTS\\s+"?${constraint}"?\\s*;?$`,
+      "iu",
+    ).test(statement),
   );
 
 export type DestructiveMigrationFinding = Readonly<{
@@ -48,7 +65,7 @@ export const findDestructiveSql = (
       if (rule.name === "TRUNCATE" && /^REVOKE\b/iu.test(stripped)) continue;
       if (
         rule.name === "ALTER ... DROP CONSTRAINT (data-loss style)" &&
-        isCompatibleOrdersStatusConstraintReplacement(stripped)
+        isCompatibleConstraintReplacement(stripped)
       ) {
         continue;
       }

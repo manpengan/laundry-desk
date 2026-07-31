@@ -6449,6 +6449,88 @@
         "properties": {},
         "type": "object"
       },
+      "input.command.member.account.open": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "note": {
+            "maxLength": 256,
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id"
+        ],
+        "type": "object"
+      },
+      "input.command.member.balance.pay": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "amount_cents": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "note": {
+            "maxLength": 256,
+            "type": "string"
+          },
+          "order_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "order_id",
+          "amount_cents"
+        ],
+        "type": "object"
+      },
+      "input.command.member.topup": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "amount_cents": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "method": {
+            "enum": [
+              "cash",
+              "wechat",
+              "alipay",
+              "other"
+            ],
+            "type": "string"
+          },
+          "note": {
+            "maxLength": 256,
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "amount_cents",
+          "method"
+        ],
+        "type": "object"
+      },
       "input.command.order.cancel": {
         "additionalProperties": false,
         "properties": {
@@ -7173,6 +7255,20 @@
             "type": "array"
           }
         },
+        "type": "object"
+      },
+      "input.query.member.account.get": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id"
+        ],
         "type": "object"
       },
       "input.query.order.get": {
@@ -8801,6 +8897,162 @@
         "x-laundry-version": "1.0.0"
       }
     },
+    "/v1/commands/member.account.open": {
+      "post": {
+        "description": "Open a member account for an existing customer. One account per customer, so repeating the call returns the existing account instead of creating a second one. Stable command name: `member.account.open` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_member_account_open",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.member.account.open"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Open the stored-value account for a customer.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/member.balance.pay": {
+      "post": {
+        "description": "Spend stored value on an order. The server locks the account, re-reads the balance under that lock and refuses to overdraw; the same transaction writes both the ledger debit and the order payment. Stable command name: `member.balance.pay` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_member_balance_pay",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.member.balance.pay"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Settle part of an order from the member stored-value balance.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/member.topup": {
+      "post": {
+        "description": "Record money the customer prepaid, in integer fen. The ledger is append-only and the balance is its sum, so a mistake is corrected with a reversal rather than an edit. Stable command name: `member.topup` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_member_topup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.member.topup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Append a stored-value top-up to the member ledger.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "1.0.0"
+      }
+    },
     "/v1/commands/order.cancel": {
       "post": {
         "description": "Cancel one open order only with a non-empty reason. Runtime writes auditable reversals; it never deletes ledger rows. Stable command name: `order.cancel` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -9995,6 +10247,58 @@
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R2",
         "x-laundry-version": "0.1.0"
+      }
+    },
+    "/v1/queries/member.account.get": {
+      "post": {
+        "description": "Return the member balance split into principal and bonus, plus the most recent ledger movements. The balance is summed from the ledger, never read from a stored column. Stable query name: `member.account.get` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_member_account_get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.member.account.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read a customer's stored-value balance and recent ledger rows.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R1",
+        "x-laundry-version": "1.0.0"
       }
     },
     "/v1/queries/order.get": {

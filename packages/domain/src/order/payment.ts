@@ -22,10 +22,26 @@ export const PAYMENT_KINDS = Object.freeze([
   "reversal",
 ] as const);
 
+/**
+ * Tenders a clerk may choose at the counter.
+ *
+ * `balance` is deliberately NOT here. If `payment.collect` accepted it, a
+ * balance payment could be recorded against an order without any matching debit
+ * on the member ledger — money out of nowhere. Stored value is spent only
+ * through `member.balance.pay`, which writes both sides in one transaction
+ * (ADR-17 §6).
+ */
 export const PAYMENT_METHODS = Object.freeze(["cash", "wechat", "alipay", "other"] as const);
+
+/**
+ * Methods the payments table can hold. Wider than the counter tenders because
+ * the member spend path writes `balance` rows directly.
+ */
+export const PAYMENT_LEDGER_METHODS = Object.freeze([...PAYMENT_METHODS, "balance"] as const);
 
 export type PaymentKind = (typeof PAYMENT_KINDS)[number];
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+export type PaymentLedgerMethod = (typeof PAYMENT_LEDGER_METHODS)[number];
 
 export type PaymentRow = Readonly<{
   payment_id: string;

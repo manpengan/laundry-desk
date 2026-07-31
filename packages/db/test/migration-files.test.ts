@@ -43,6 +43,7 @@ describe("packages/db migration file inventory", () => {
       "0029_staff_access_governance.sql",
       "0030_edge_replay_authority.sql",
       "0031_payment_ledger_sequence.sql",
+      "0032_member_stored_value.sql",
     ]);
   });
 
@@ -86,6 +87,7 @@ describe("packages/db migration file inventory", () => {
       "0029",
       "0030",
       "0031",
+      "0032",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -210,13 +212,26 @@ describe("packages/db migration file inventory", () => {
     expect(offenders).toEqual([]);
   });
 
+  // Scans every migration rather than a fixed file list: 0019 shipped a
+  // business_date regex that rejected all real dates, and a list that has to be
+  // extended by hand is exactly how the next one would slip through too.
   it("constrains business_date to a regex that accepts a real ISO date", () => {
-    for (const name of ["0012_shift_closings.sql", "0019_money_integrity_workday.sql"]) {
+    const names = readdirSync(migrationsDir)
+      .filter((name) => name.endsWith(".sql"))
+      .sort();
+    let checked = 0;
+
+    for (const name of names) {
       const sql = readFileSync(join(migrationsDir, name), "utf8");
       for (const [, pattern] of sql.matchAll(/business_date\s*~\s*'([^']+)'/gu)) {
         expect(new RegExp(pattern ?? "").test("2026-07-28"), `${name}: ${pattern}`).toBe(true);
+        checked += 1;
       }
     }
+
+    // Guard the guard: a refactor that renames the column or changes the CHECK
+    // shape must not silently reduce this to a no-op pass.
+    expect(checked).toBeGreaterThanOrEqual(3);
   });
 
   it("keeps the Edge SPKI length outside PostgreSQL's bounded-repeat limit", () => {

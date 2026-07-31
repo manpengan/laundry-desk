@@ -20,6 +20,22 @@ export {
   staffAccessSetCommand,
 } from "./staff.js";
 export {
+  MEMBER_COMMAND_NAMES,
+  MEMBER_COMMANDS,
+  MEMBER_DEFINITIONS,
+  MEMBER_QUERIES,
+  MEMBER_QUERY_NAMES,
+  MemberAccountGetInputSchema,
+  MemberAccountOpenInputSchema,
+  MemberBalancePayInputSchema,
+  MemberTopupInputSchema,
+  MemberTopupMethodSchema,
+  memberAccountGetQuery,
+  memberAccountOpenCommand,
+  memberBalancePayCommand,
+  memberTopupCommand,
+} from "./member.js";
+export {
   PLATFORM_COMMANDS,
   PLATFORM_DEFINITIONS,
   PLATFORM_QUERIES,
