@@ -18,6 +18,7 @@ import { OrdersList } from "./OrdersList.js";
 
 const SAMPLE_ORDER: OrderGetResult = Object.freeze({
   order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+  customer_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   ticket_no: "20260722-0001",
   pickup_code: "P202607220001",
   status: "open",

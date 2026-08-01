@@ -29,6 +29,10 @@ export function getHandler(deps: OrderHandlerDeps): CommandHandler {
         ticket_no: order.ticket_no,
         pickup_code: order.pickup_code,
         status: order.status,
+        // Needed so the counter can offer stored-value settlement without a
+        // second lookup: the phone here is masked and cannot identify a
+        // customer reliably (ADR-17).
+        customer_id: order.customer_id,
         customer_phone: order.customer_phone,
         customer_name: order.customer_name,
         payable_cents: order.payable_cents,

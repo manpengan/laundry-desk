@@ -62,6 +62,8 @@ export type OrderGetGarment = Readonly<{
 
 export type OrderGetResult = Readonly<{
   order_id: string;
+  /** Null for a walk-in order with no customer on file. */
+  customer_id: string | null;
   ticket_no: string | null;
   pickup_code: string | null;
   status: string;
@@ -153,6 +155,7 @@ export function parseOrderGetResult(raw: unknown): OrderGetResult | null {
     payable_cents: r.payable_cents,
     paid_cents: r.paid_cents,
     balance_cents: r.balance_cents,
+    customer_id: typeof r.customer_id === "string" ? r.customer_id : null,
     garments: Object.freeze(garments),
   });
 }
