@@ -24,8 +24,11 @@
 | [ADR-14](2026-07-25-adr-14-generic-local-first-v2-delivery.md)     | 通用 V2 本地优先交付与 Codex 接管               | **Accepted** 2026-07-25；§4 阶段线由 ADR-16 修订   |
 | [ADR-15](2026-07-28-adr-15-catalog-maintenance-unfreeze.md)        | 解冻价目写入，补齐首期价目维护                  | **Accepted** 2026-07-28                            |
 | [ADR-16](2026-07-31-adr-16-edge-operations-scope-ratification.md)  | 边缘运营范围追认与契约面 ADR 门禁               | **Accepted** 2026-07-31                            |
-| [ADR-17](2026-07-31-adr-17-member-stored-value.md)                 | 会员储值：组织级账户与只追加账本                | **Accepted** 2026-07-31                            |
+| [ADR-17](2026-07-31-adr-17-member-stored-value.md)                 | 会员储值：组织级账户与只追加账本                | **Accepted** 2026-07-31；解冻 ADR-16 的会员后置项  |
 | [ADR-18](2026-08-01-adr-18-stored-value-settlement-reporting.md)   | 储值核销单列对账、不进钱箱                      | **Accepted** 2026-08-01                            |
+| [ADR-19](2026-08-01-adr-19-ordinary-offline-grant-replay.md)      | 普通 offline grant 独立序号与权威重放           | **Accepted** 2026-08-01                            |
+| [ADR-20](2026-08-01-adr-20-authoritative-edge-print-dispatch.md)  | 权威打印快照、一次性派发与设备回执              | **Accepted** 2026-08-01                            |
+| [ADR-21](2026-08-01-adr-21-independent-macos-runtime-app.md)      | 独立 Runtime.app 管理本地 Server/PostgreSQL     | **Accepted** 2026-08-01                            |
 
 ## v1 线
 

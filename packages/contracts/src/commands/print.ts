@@ -1,12 +1,14 @@
 /**
  * M2 print ticket job queue (enqueue + process + retry/reprint + status list).
  * Memory default; PG print_jobs when runtime is pg. Not in OpenAPI freeze snapshot.
- * Status flow: queued → printing → done | failed (terminal).
+ * Status flow: queued → printing → done | failed | uncertain (terminal).
  * Retry/reprint create a **new** print_jobs row (do not resurrect terminal jobs).
- * process builds XP-58 ESC/POS bytes in-process (no USB / device I/O).
+ * process is a legacy diagnostic and cannot claim server-snapshotted jobs.
  */
 
 import { z } from "zod";
+
+import { EdgePrinterKindSchema } from "../edge/primitives.js";
 
 import {
   defineCommand,
@@ -15,12 +17,11 @@ import {
   type QueryDefinition,
 } from "../registry/definitions.js";
 
-export const PrintJobKindSchema = z.enum(["xp58", "dl206", "gp3120"]);
-export const PrintJobStatusSchema = z.enum(["queued", "printing", "done", "failed"]);
+export const PrintJobKindSchema = EdgePrinterKindSchema;
+export const PrintJobStatusSchema = z.enum(["queued", "printing", "done", "failed", "uncertain"]);
 
 export const PrintTicketEnqueueInputSchema = z.strictObject({
   order_id: z.uuid(),
-  ticket_no: z.string().min(1).max(64),
   /** Printer family; omit to use xp58 thermal receipt (handler default). */
   kind: PrintJobKindSchema.optional(),
 });
@@ -49,13 +50,13 @@ type RetryInput = typeof PrintTicketRetryInputSchema;
 type ReprintInput = typeof PrintTicketReprintInputSchema;
 type ListInput = typeof PrintJobsListInputSchema;
 
-/** 排队打印小票：绑定 order_id / ticket_no，返回 job_id（status=queued）。 */
+/** 排队打印小票：只接受 order_id，ticket_no 与票据快照由服务端订单真源派生。 */
 export const printTicketEnqueueCommand: CommandDefinition<EnqueueInput> = defineCommand({
   name: "print.ticket.enqueue",
-  version: "0.2.0",
-  description: "Enqueue a ticket print job bound to an order and ticket number.",
+  version: "0.3.0",
+  description: "Enqueue a ticket print job from the server-owned order snapshot.",
   description_llm:
-    "Queue a counter ticket print job (kind xp58|dl206|gp3120). Returns job_id with status queued. No device I/O.",
+    "Queue a counter ticket print job by order_id (kind xp58|dl206|gp3120). The server derives ticket number and immutable receipt snapshot; clients cannot supply either.",
   input: PrintTicketEnqueueInputSchema,
   risk: "R1",
   invariants: ["rbac.order_write"],
@@ -74,9 +75,9 @@ export const printTicketEnqueueCommand: CommandDefinition<EnqueueInput> = define
 export const printTicketProcessCommand: CommandDefinition<ProcessInput> = defineCommand({
   name: "print.ticket.process",
   version: "0.2.0",
-  description: "Process a queued XP-58 print job: build ESC/POS bytes and mark done or failed.",
+  description: "Process a legacy diagnostic XP-58 job in-process.",
   description_llm:
-    "Load print job by job_id. kind must be xp58. Transition queued→printing, build ESC/POS payload, set payload_bytes and status done. On error mark failed with error text. No USB/device I/O.",
+    "Diagnostic-only legacy path. Server-snapshotted real-order jobs fail closed and require signed Edge dispatch plus a verified device receipt.",
   input: PrintTicketProcessInputSchema,
   risk: "R1",
   invariants: ["rbac.print_manage"],
@@ -89,44 +90,39 @@ export const printTicketProcessCommand: CommandDefinition<ProcessInput> = define
   result_redaction: [],
 });
 
-/**
- * 失败任务重试：source 必须 status=failed；新建 print_jobs 行（同 order_id/ticket_no/kind）。
- * 不复活原 terminal 行。服务端可对 xp58 自动 process。
- */
+/** 失败或不确定任务重试：重新读取当前服务端权威快照并新建任务，不复活原 terminal 行。 */
 export const printTicketRetryCommand: CommandDefinition<RetryInput> = defineCommand({
   name: "print.ticket.retry",
   version: "0.2.0",
-  description: "Retry a failed print job by enqueueing a new job with the same order/ticket/kind.",
+  description:
+    "Retry a failed or uncertain print job from the current server-authoritative snapshot.",
   description_llm:
-    "Load print job by job_id. Source status must be failed. Enqueue a NEW print_jobs row with same order_id, ticket_no, kind. Do not mutate the failed row. Returns new job (may auto-process xp58 to done). No device I/O paths stored.",
+    "Load a failed or uncertain print job, re-read the current server-authoritative order snapshot, and enqueue a NEW queued row with that snapshot and the source printer kind. Never auto-process and never mutate the source row.",
   input: PrintTicketRetryInputSchema,
   risk: "R1",
   invariants: ["rbac.print_manage"],
   // offline grant requires idempotent floor (same as enqueue; bus may still allocate a new job_id).
   idempotent: true,
-  sideEffects: ["print.job_queued", "print.job_processed", "audit.print_job"],
+  sideEffects: ["print.job_queued", "audit.print_job"],
   offline_mode: "grant",
   data_classification: "internal",
   input_redaction: [],
   result_redaction: [],
 });
 
-/**
- * 已完成任务补打：source 必须 status=done；新建 print_jobs 行（同 order_id/ticket_no/kind）。
- * 不复活原 terminal 行。服务端可对 xp58 自动 process。
- */
+/** 已完成任务补打：重新读取当前服务端权威快照并新建任务，不复活原 terminal 行。 */
 export const printTicketReprintCommand: CommandDefinition<ReprintInput> = defineCommand({
   name: "print.ticket.reprint",
   version: "0.2.0",
-  description: "Reprint a done print job by enqueueing a new job with the same order/ticket/kind.",
+  description: "Reprint a done print job from the current server-authoritative snapshot.",
   description_llm:
-    "Load print job by job_id. Source status must be done. Enqueue a NEW print_jobs row with same order_id, ticket_no, kind. Do not mutate the done row. Returns new job (may auto-process xp58 to done). No device I/O paths stored.",
+    "Load a done print job, re-read the current server-authoritative order snapshot, and enqueue a NEW queued row with that snapshot and the source printer kind. Never auto-process and never mutate the source row.",
   input: PrintTicketReprintInputSchema,
   risk: "R1",
   invariants: ["rbac.print_manage"],
   // offline grant requires idempotent floor (same as enqueue; bus may still allocate a new job_id).
   idempotent: true,
-  sideEffects: ["print.job_queued", "print.job_processed", "audit.print_job"],
+  sideEffects: ["print.job_queued", "audit.print_job"],
   offline_mode: "grant",
   data_classification: "internal",
   input_redaction: [],

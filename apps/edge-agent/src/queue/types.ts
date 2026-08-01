@@ -15,7 +15,7 @@ export const QUEUE_STORAGE_VERSION = 1 as const;
  * Default `queue_envelope_version` written by this Edge build when constructing
  * envelopes for tests / local enqueue helpers. Keep in sync with contracts samples.
  */
-export const DEFAULT_QUEUE_ENVELOPE_VERSION = 2 as const;
+export const DEFAULT_QUEUE_ENVELOPE_VERSION = 3 as const;
 
 export type QueueItemId = string;
 

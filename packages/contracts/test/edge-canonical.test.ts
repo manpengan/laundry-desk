@@ -26,6 +26,10 @@ const capabilityAuthority = {
     staff_id: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
     device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
     origin: "https://desk.example.test",
+    printer_kind: "xp58",
+    snapshot_sha256: "a".repeat(64),
+    recovered: false,
+    next_receipt_seq: 1,
     issued_at: "2026-07-21T01:02:03.000Z",
     exp: "2026-07-21T01:03:03.000Z",
     nonce: "9dfc4424-9b9a-4e52-baaa-c02868f8e7de",
@@ -51,8 +55,12 @@ const leaseAuthority = {
 const receiptAuthority = {
   protocol_version: "1.0.0",
   payload: {
+    job_id: capabilityAuthority.payload.job_id,
+    device_id: capabilityAuthority.payload.device_id,
     ticket_nonce: capabilityAuthority.payload.nonce,
+    snapshot_sha256: capabilityAuthority.payload.snapshot_sha256,
     result: "succeeded",
+    cups_job_id: "xp58-42",
     seq: 1,
     at: "2026-07-21T01:02:04.000Z",
   },
@@ -106,7 +114,7 @@ describe("A4 canonical signed authority bytes", () => {
     expect(canonicalizeForSignatureVerification(firstCandidate)).toEqual(signingBytes);
     expect(canonicalizeForSignatureVerification(secondCandidate)).toEqual(signingBytes);
     expect(textDecoder.decode(signingBytes)).toBe(
-      'laundry.edge.capability-ticket.v1\n{"payload":{"action":"print_job","device_id":"01a2eed0-a6c3-493c-a3a7-20bf94b1d678","exp":"2026-07-21T01:03:03.000Z","issued_at":"2026-07-21T01:02:03.000Z","job_id":"936da01f-9abd-4d9d-80c7-02af85c822a8","nonce":"9dfc4424-9b9a-4e52-baaa-c02868f8e7de","origin":"https://desk.example.test","staff_id":"d5a92f5a-653a-4b06-b014-e4a5e0d91f0c"},"protocol_version":"1.0.0"}',
+      'laundry.edge.capability-ticket.v1\n{"payload":{"action":"print_job","device_id":"01a2eed0-a6c3-493c-a3a7-20bf94b1d678","exp":"2026-07-21T01:03:03.000Z","issued_at":"2026-07-21T01:02:03.000Z","job_id":"936da01f-9abd-4d9d-80c7-02af85c822a8","next_receipt_seq":1,"nonce":"9dfc4424-9b9a-4e52-baaa-c02868f8e7de","origin":"https://desk.example.test","printer_kind":"xp58","recovered":false,"snapshot_sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","staff_id":"d5a92f5a-653a-4b06-b014-e4a5e0d91f0c"},"protocol_version":"1.0.0"}',
     );
   });
 

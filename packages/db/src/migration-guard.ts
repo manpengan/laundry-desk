@@ -28,6 +28,12 @@ const COMPATIBLE_CONSTRAINT_REPLACEMENTS: readonly Readonly<{
   // ADR-17: broadens payments.method with 'balance' so a stored-value
   // settlement lands in the same ledger as every other tender.
   { table: "payments", constraint: "payments_method_chk" },
+  // 0033 turns the Primary-only replay record into a strict tagged union with
+  // the ordinary-grant sequence fields. Both CHECKs are replaced immediately.
+  { table: "edge_replay_records", constraint: "edge_replay_records_epoch_seq_chk" },
+  { table: "edge_replay_records", constraint: "edge_replay_records_acceptance_chk" },
+  // 0034 adds the terminal `uncertain` state without invalidating old rows.
+  { table: "print_jobs", constraint: "print_jobs_status_chk" },
 ];
 
 const isCompatibleConstraintReplacement = (statement: string): boolean =>

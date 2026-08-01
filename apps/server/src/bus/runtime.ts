@@ -6,6 +6,8 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "settings_admin",
   "staff_read",
   "staff_write",
+  "customer_read",
+  "customer_write",
   "order_write",
   "accounting_read",
   "ledger_export",
@@ -15,7 +17,12 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "audit_read",
   "edge_conflict_resolve",
 ]);
-const STAFF_PERMISSIONS = Object.freeze(["staff_read", "order_write"]);
+const STAFF_PERMISSIONS = Object.freeze([
+  "staff_read",
+  "customer_read",
+  "customer_write",
+  "order_write",
+]);
 const NO_PERMISSIONS = Object.freeze([] as string[]);
 
 export function permissionsForAuthority(
@@ -44,5 +51,6 @@ export function createRuntimeBus(runtime: LocalRuntime) {
     photo: runtime.photo,
     fulfillment: runtime.fulfillment,
     staffAccess: runtime.staffAccess,
+    member: runtime.member,
   });
 }

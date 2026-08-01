@@ -27,10 +27,27 @@ files:
   - dist/desktop/edge-http.js
   - dist/desktop/electron-photo-request.js
   - dist/desktop/http-transport.js
+  - dist/desktop/http-transport-ports.js
   - dist/desktop/http-transport-support.js
+  - dist/desktop/print-http-transport.js
   - dist/desktop/request-builder.js
+  - dist/drivers/render/code128-width.js
+  - dist/drivers/render/money-gbk.js
+  - dist/print/continuity.js
   - dist/print/cups-process.js
+  - dist/print/cups-queue.js
   - dist/print/cups-worker.js
+  - dist/print/dispatch-controller.js
+  - dist/print/dispatch-ledger-state.js
+  - dist/print/dispatch-ledger.js
+  - dist/print/dispatch-verifier.js
+  - dist/print/durable-json-file.js
+  - dist/print/escpos-xp58.js
+  - dist/print/execution-gate.js
+  - dist/print/runtime.js
+  - dist/print/signed-executor.js
+  - dist/print/snapshot-render.js
+  - dist/print/template-render.js
   - dist/queue/crypto.js
   - dist/queue/dek-kek.js
   - dist/queue/file-store.js
@@ -41,9 +58,14 @@ files:
   - dist/pairing/device-keys.js
   - dist/pairing/authority-trust.js
   - dist/pairing/safe-storage-device-keys.js
+  - dist/pairing/sign-receipt.js
+  - dist/pairing/verify-ticket.js
   - dist/lease/primary-lease.js
   - dist/offline/authority-session.js
   - dist/offline/conflict-store.js
+  - dist/offline/grant-sequence-store.js
+  - dist/offline/offline-command-policy.js
+  - dist/offline/offline-results.js
   - dist/offline/read-authority.js
   - dist/offline/read-cache-file.js
   - dist/offline/read-cache.js

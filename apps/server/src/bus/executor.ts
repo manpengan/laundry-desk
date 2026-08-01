@@ -77,11 +77,13 @@ type TxnBody = Readonly<{
   cacheable: boolean;
 }>;
 
-const REPEATABLE_READ_COMMANDS: ReadonlySet<string> = new Set(["reconciliation.export"]);
+const REPEATABLE_READ_COMMANDS: ReadonlySet<string> = new Set([
+  "reconciliation.export",
+  "print.ticket.enqueue",
+]);
 
 /**
  * Execute one named command under tenant GUC transaction.
- * Routes / AI / workers must call this (or a thin wrapper) — never write repos directly.
  */
 export async function executeCommand(
   client: SqlClient,

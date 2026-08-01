@@ -100,8 +100,8 @@ export type RefundPaymentPlanInput = PaymentPlanBaseInput &
 export type ReversalPaymentPlanInput = PaymentPlanBaseInput &
   Readonly<{ ref_payment_id: string; reason: string }>;
 
-const isPaymentMethod = (value: string): value is PaymentMethod =>
-  (PAYMENT_METHODS as readonly string[]).includes(value);
+const isPaymentLedgerMethod = (value: string): value is PaymentLedgerMethod =>
+  (PAYMENT_LEDGER_METHODS as readonly string[]).includes(value);
 
 const isPositiveSafeCents = (value: number): boolean => Number.isSafeInteger(value) && value > 0;
 
@@ -125,7 +125,7 @@ function assertBuildInput(input: BuildPayPaymentInput): void {
   ) {
     throw new TypeError("payment identifiers must be non-empty strings");
   }
-  if (!isPaymentMethod(input.method ?? "cash")) {
+  if (!isPaymentLedgerMethod(input.method ?? "cash")) {
     throw new TypeError(`unsupported payment method: ${input.method}`);
   }
 }

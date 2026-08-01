@@ -3,7 +3,8 @@
  *
  * Claim atomicity cannot be shown with a capturing pool: SKIP LOCKED only means
  * anything against a real transaction manager. These cases run concurrent
- * claimers, expire a lease, and exhaust the attempt budget on real rows.
+ * claimers and prove that neither expired nor signed authoritative rows are
+ * ever re-submitted by the legacy diagnostic worker.
  */
 
 import assert from "node:assert/strict";
@@ -14,6 +15,8 @@ import { createPgPool, resolvePgUrls, type PgPool } from "../db/pg-pool.js";
 import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
 import { DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { createPgPrintJobStore } from "./pg-print-store.js";
+import { processXp58PrintJob } from "./process-xp58.js";
+import { hashPrintSnapshot } from "./snapshot.js";
 
 const urls =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true"
@@ -82,7 +85,7 @@ maybe("concurrent workers never claim the same print job", async () => {
   }
 });
 
-maybe("an expired lease is re-claimed in place and counts a second attempt", async () => {
+maybe("an expired diagnostic lease is never reclaimed automatically", async () => {
   assert.ok(urls);
   const pool = createPgPool({ connectionString: urls.app });
   try {
@@ -101,13 +104,11 @@ maybe("an expired lease is re-claimed in place and counts a second attempt", asy
       "a live lease must block other workers",
     );
 
-    // After it expires the same row is re-claimed — the status machine forbids
-    // going back to queued, so it stays 'printing' with a fresh lease.
+    // Expiry is not evidence that no physical submission happened.
     const recovered = await store.claimNext?.({ worker_id: "worker-b", now: now + 31 });
-    assert.equal(recovered?.job_id, job.job_id);
-    assert.equal(recovered?.attempt_count, 2);
-    assert.equal(recovered?.worker_id, "worker-b");
+    assert.equal(recovered, null);
     assert.equal((await store.get(job.job_id))?.status, "printing");
+    assert.equal((await store.get(job.job_id))?.updated_at, now);
   } finally {
     await pool.end();
   }
@@ -162,31 +163,75 @@ maybe("finishing a job records its artifact and releases the lease", async () =>
   }
 });
 
-maybe("a job that exhausts its attempt budget fails instead of looping forever", async () => {
+maybe("a signed snapshot cannot enter the legacy claim or process path", async () => {
   assert.ok(urls);
   const pool = createPgPool({ connectionString: urls.app });
   try {
     const store = createStore(pool);
     const now = 1_800_200_000;
     await drainQueue(store, now);
-    const job = await enqueueTicket(store, now);
-
-    // Two attempts allowed; each worker "dies" so the lease keeps expiring.
-    assert.equal(
-      (await store.claimNext?.({ worker_id: "w1", max_attempts: 2, now }))?.job_id,
-      job.job_id,
+    const jobId = randomUUID();
+    const orderId = randomUUID();
+    const snapshot = Object.freeze({
+      version: 1 as const,
+      store_name: "Signed test",
+      store_phone: null,
+      order_id: orderId,
+      ticket_no: `signed-${jobId.slice(0, 8)}`,
+      received_at: new Date(now * 1_000).toISOString(),
+      customer_name: null,
+      customer_phone: null,
+      note: null,
+      lines: Object.freeze([
+        Object.freeze({
+          line_index: 0,
+          service_code: "wash",
+          category_code: "shirt",
+          unit_price_cents: 100,
+          qty: 1,
+          line_total_cents: 100,
+          color: null,
+          brand: null,
+        }),
+      ]),
+      totals: Object.freeze({
+        original_cents: 100,
+        discount_cents: 0,
+        addon_cents: 0,
+        urgent_cents: 0,
+        freight_cents: 0,
+        payable_cents: 100,
+        paid_cents: 100,
+        balance_cents: 0,
+      }),
+      payment_methods: Object.freeze(["cash" as const]),
+    });
+    await withStoreGucOrCurrent(pool, TENANT, (client) =>
+      client.query(
+        `INSERT INTO print_jobs (
+           id, org_id, store_id, order_id, ticket_no, kind, status,
+           snapshot_json, snapshot_sha256, created_at, updated_at
+         ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, 'xp58', 'queued',
+                   $6::jsonb, $7, $8, $8)`,
+        [
+          jobId,
+          TENANT.orgId,
+          TENANT.storeId,
+          orderId,
+          snapshot.ticket_no,
+          JSON.stringify(snapshot),
+          hashPrintSnapshot(snapshot),
+          new Date(now * 1_000),
+        ],
+      ),
     );
-    assert.equal(
-      (await store.claimNext?.({ worker_id: "w2", max_attempts: 2, now: now + 31 }))?.attempt_count,
-      2,
+
+    assert.equal(await store.claimJob?.(jobId, { worker_id: "legacy", now }), null);
+    await assert.rejects(
+      () => processXp58PrintJob(store, jobId, { now }),
+      /requires a verified device receipt/u,
     );
-
-    const exhausted = await store.claimNext?.({ worker_id: "w3", max_attempts: 2, now: now + 62 });
-    assert.equal(exhausted, null, "an exhausted job must not be handed out again");
-
-    const record = await store.get(job.job_id);
-    assert.equal(record?.status, "failed");
-    assert.match(record?.error ?? "", /attempt/iu, "failure must say why it gave up");
+    assert.equal((await store.get(jobId))?.status, "queued");
   } finally {
     await pool.end();
   }

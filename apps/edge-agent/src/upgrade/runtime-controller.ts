@@ -290,7 +290,7 @@ export async function runMacStagedHealth(appPath: string): Promise<boolean> {
     await validateMacAppLaunch(macAppBundlePath(process.execPath), appPath);
     const cupsQueue = process.env.LAUNDRY_CUPS_QUEUE?.trim();
     const safeQueue =
-      cupsQueue !== undefined && /^[A-Za-z0-9._-]{1,128}$/u.test(cupsQueue) ? cupsQueue : undefined;
+      cupsQueue !== undefined && /^[A-Za-z0-9._-]{1,64}$/u.test(cupsQueue) ? cupsQueue : undefined;
     const result = await execFileAsync(executable, [STAGED_HEALTH_ARGUMENT], {
       timeout: 30_000,
       maxBuffer: 64 * 1_024,

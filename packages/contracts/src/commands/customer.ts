@@ -291,7 +291,7 @@ export const customerPrivacyExportCommand: CommandDefinition<PrivacyExportInput>
   version: "0.1.0",
   description: "Create an audited, bounded JSON export for one active customer.",
   description_llm:
-    "High-risk org-wide export of one customer profile and at most 1000 related order snapshots. The operation appends a privacy event and audit row in the same transaction.",
+    "High-risk org-wide export of one customer profile, at most 1000 related order snapshots, and up to 1000 signed print snapshots per order. The operation appends a privacy event and audit row in the same transaction.",
   input: CustomerPrivacyExportInputSchema,
   risk: "R4",
   invariants: ["rbac.privacy_admin"],
@@ -302,7 +302,14 @@ export const customerPrivacyExportCommand: CommandDefinition<PrivacyExportInput>
   input_redaction: [],
   result_redaction: [
     { path: "/customer/phone", strategy: "mask" },
+    { path: "/customer/name", strategy: "mask" },
+    { path: "/customer/note", strategy: "mask" },
     { path: "/orders/*/customer_phone", strategy: "mask" },
+    { path: "/orders/*/customer_name", strategy: "mask" },
+    { path: "/orders/*/note", strategy: "mask" },
+    { path: "/orders/*/print_jobs/*/snapshot_json/customer_phone", strategy: "mask" },
+    { path: "/orders/*/print_jobs/*/snapshot_json/customer_name", strategy: "mask" },
+    { path: "/orders/*/print_jobs/*/snapshot_json/note", strategy: "mask" },
   ],
 });
 
@@ -311,7 +318,7 @@ export const customerAnonymizeCommand: CommandDefinition<AnonymizeInput> = defin
   version: "0.1.0",
   description: "Irreversibly remove direct PII while retaining accounting records.",
   description_llm:
-    "R5 org-wide anonymization. Reject while any draft/open order exists; otherwise clear customer PII and terminal order name/phone snapshots, retaining opaque accounting rows and immutable privacy/audit events.",
+    "R5 org-wide anonymization. Reject while any draft/open order or queued/in-flight PII print snapshot exists; otherwise clear customer PII, terminal order name/phone/note fields, and terminal print snapshot JSON while retaining opaque accounting rows, snapshot hashes, receipts, and immutable privacy/audit events.",
   input: CustomerAnonymizeInputSchema,
   risk: "R5",
   invariants: ["rbac.privacy_admin"],

@@ -32,7 +32,6 @@ import {
   type AccessSessionResponse,
   type DesktopCommandExecuteResult,
   type DesktopHealthGetResult,
-  type DesktopLoginInput,
   type DesktopLoginResult,
   type DesktopLogoutResult,
   type DesktopPinChallengeResult,
@@ -49,11 +48,7 @@ import {
 
 import { createLoginIntentGate } from "./auth-intent.js";
 import { createEdgeAuthorityRequester } from "./edge-authority-transport.js";
-import {
-  createSignedReplayRequest,
-  projectReplayResponse,
-  type DeviceRequestSigner,
-} from "./edge-http.js";
+import { createSignedReplayRequest, projectReplayResponse } from "./edge-http.js";
 import {
   AUTHENTICATION_FAILURE,
   CSRF_FAILURE,
@@ -77,49 +72,30 @@ import {
   type JsonHttpResponse,
   type ResultEnvelope,
 } from "./http-transport-support.js";
+import type { DesktopCookie, DesktopHttpTransportDependencies } from "./http-transport-ports.js";
 import {
-  createDesktopRequest,
-  DESKTOP_API_BASE_URL,
-  type DesktopHttpRequest,
-} from "./request-builder.js";
+  createEdgePrintHttpTransport,
+  type EdgePrintHttpTransport,
+} from "./print-http-transport.js";
+import { createDesktopRequest, DESKTOP_API_BASE_URL } from "./request-builder.js";
 export {
   DESKTOP_API_BASE_URL,
   DESKTOP_REQUEST_ORIGIN,
   type DesktopHttpRequest,
 } from "./request-builder.js";
+export type {
+  DesktopCookie,
+  DesktopCookieStore,
+  DesktopHttpResponse,
+  DesktopHttpTransportDependencies,
+  DesktopPhotoHttpResponse,
+} from "./http-transport-ports.js";
 
 const LOCAL_CSRF_COOKIE_NAME = "laundry_csrf";
 const CSRF_COOKIE_CANDIDATES = Object.freeze([LOCAL_CSRF_COOKIE_NAME, CSRF_COOKIE_NAME]);
 const RESPONSE_ENCODER = new TextEncoder();
 const ACCESS_REFRESH_SKEW_MS = 30_000;
 
-export type DesktopHttpResponse = Readonly<{
-  statusCode: number;
-  bodyText: string;
-}>;
-export type DesktopPhotoHttpResponse = Readonly<{
-  statusCode: number;
-  contentType: string;
-  bodyBytes: Uint8Array;
-}>;
-export type DesktopCookie = Readonly<{
-  name: string;
-  value: string;
-}>;
-export type DesktopCookieStore = Readonly<{
-  get: (url: string) => Promise<readonly DesktopCookie[]>;
-  clear: (url: string) => Promise<void>;
-}>;
-export type DesktopHttpTransportDependencies = Readonly<{
-  request: (request: DesktopHttpRequest) => Promise<DesktopHttpResponse>;
-  photoRequest?: (request: DesktopHttpRequest) => Promise<DesktopPhotoHttpResponse>;
-  cookies: DesktopCookieStore;
-  deviceId: string;
-  /** Main-process-only device key; absence disables all Edge authority operations. */
-  deviceSigner?: DeviceRequestSigner;
-  nowMs?: () => number;
-  loginInputSchema?: AsyncSchema<DesktopLoginInput>;
-}>;
 export type DesktopHttpTransport = Readonly<{
   auth: Readonly<{
     login: (input: unknown) => Promise<DesktopLoginResult>;
@@ -146,6 +122,8 @@ export type DesktopHttpTransport = Readonly<{
   edge: Readonly<{
     authority: (requestNonce: string, requestPrimary: boolean) => Promise<EdgeAuthorityResponse>;
     replay: (envelope: EdgeQueueEnvelope) => Promise<DesktopCommandExecuteResult>;
+    print: EdgePrintHttpTransport;
+    currentSession: () => DesktopSessionView | null;
   }>;
 }>;
 
@@ -785,12 +763,27 @@ export function createDesktopHttpTransport(
     return projectReplayResponse(response);
   };
 
+  const print = createEdgePrintHttpTransport({
+    executeProtected,
+    currentSession: () => authState?.sessionView ?? null,
+    wallNowMs: nowMs,
+    ...(dependencies.monotonicNowMs === undefined
+      ? {}
+      : { monotonicNowMs: dependencies.monotonicNowMs }),
+  });
+  const currentSession = (): DesktopSessionView | null => authState?.sessionView ?? null;
+
   return Object.freeze({
     auth: Object.freeze({ login, refresh, pinChallenge, pinVerify, logout }),
     command: Object.freeze({ execute: executeCommand }),
     query: Object.freeze({ execute: executeQuery }),
     photo: Object.freeze({ upload: uploadPhoto, read: readPhoto, delete: deletePhoto }),
     health: Object.freeze({ get: getHealth }),
-    edge: Object.freeze({ authority: requestEdgeAuthority, replay: replayEdgeEnvelope }),
+    edge: Object.freeze({
+      authority: requestEdgeAuthority,
+      replay: replayEdgeEnvelope,
+      print,
+      currentSession,
+    }),
   });
 }

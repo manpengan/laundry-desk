@@ -7,19 +7,14 @@ import {
   type PairingSession,
 } from "./pairing/index.js";
 import { createExecutionGate } from "./print/execution-gate.js";
-import { DEFAULT_SAMPLE_TICKET, executeJob } from "./print/executor.js";
 import { createMockSpool, enqueue, type MockSpool } from "./print/mock-spool.js";
 import {
   createPrintJobStore,
   enqueuePrintJob,
-  getPrintJob,
   listPrintJobStatus,
   type PrintJobKind,
-  type PrintJobRecord,
-  type PrintJobStatusView,
   type PrintJobStore,
 } from "./print/print-jobs.js";
-import { resolveUsbPrintPort } from "./print/usb-port.js";
 import { MemoryEncryptedQueue, MemoryKekStore } from "./queue/index.js";
 import { mockConnection } from "./shell/connection-mock.js";
 import { checkShellHealth, type ShellHealth } from "./shell/health.js";
@@ -46,21 +41,9 @@ export type IpcContext = {
 export type PrintProcessInput = Readonly<{
   jobId?: string;
   kind?: string;
-  ticketNo?: string;
 }>;
 
-export type PrintEnqueueInput = string | Readonly<{ kind?: string; autoProcess?: boolean }>;
-
-/** Status + receipt projection for process path — never raw payload bytes. */
-export type PrintProcessResult = Readonly<{
-  status: PrintJobStatusView;
-  receipt: Readonly<{
-    ticket_nonce: string;
-    result: "succeeded" | "failed";
-    seq: number;
-    at: string;
-  }>;
-}>;
+export type PrintEnqueueInput = string | Readonly<{ kind?: string }>;
 
 function assertAppSender(event: IpcMainInvokeEvent): void {
   const senderUrl = event.senderFrame?.url;
@@ -79,49 +62,18 @@ function parsePrintKind(kind: unknown): PrintJobKind {
   return kind as PrintJobKind;
 }
 
-function parseEnqueueArgs(raw: unknown): { kind: PrintJobKind; autoProcess: boolean } {
+function parseEnqueueArgs(raw: unknown): { kind: PrintJobKind } {
   if (raw === undefined || raw === null || typeof raw === "string") {
-    const kind = parsePrintKind(raw);
-    return { kind, autoProcess: kind === "xp58" };
+    return { kind: parsePrintKind(raw) };
   }
-  if (typeof raw !== "object") {
+  if (typeof raw !== "object" || Array.isArray(raw)) {
     throw new Error("invalid print enqueue input");
   }
-  const obj = raw as { kind?: unknown; autoProcess?: unknown };
-  const kind = parsePrintKind(obj.kind);
-  const autoProcess = typeof obj.autoProcess === "boolean" ? obj.autoProcess : kind === "xp58";
-  return { kind, autoProcess };
-}
-
-function statusViewOf(job: PrintJobRecord): PrintJobStatusView {
-  if (job.error !== undefined) {
-    return Object.freeze({
-      id: job.id,
-      kind: job.kind,
-      status: job.status,
-      createdAt: job.createdAt,
-      updatedAt: job.updatedAt,
-      error: job.error,
-    });
+  const keys = Reflect.ownKeys(raw);
+  if (keys.some((key) => key !== "kind")) {
+    throw new Error("invalid print enqueue input");
   }
-  return Object.freeze({
-    id: job.id,
-    kind: job.kind,
-    status: job.status,
-    createdAt: job.createdAt,
-    updatedAt: job.updatedAt,
-  });
-}
-
-function ticketForProcess(ticketNo: string | undefined) {
-  if (ticketNo === undefined || ticketNo.length === 0) {
-    return DEFAULT_SAMPLE_TICKET;
-  }
-  return Object.freeze({
-    ...DEFAULT_SAMPLE_TICKET,
-    ticketNo,
-    barcode: ticketNo,
-  });
+  return { kind: parsePrintKind(Reflect.get(raw, "kind")) };
 }
 
 /**
@@ -133,32 +85,6 @@ function assertUnsignedRendererPrintAllowed(allowed: boolean): void {
   if (!allowed) {
     throw new Error("renderer print execution is disabled; use signed Edge dispatch");
   }
-}
-
-function lastQueuedJob(store: PrintJobStore): PrintJobRecord | undefined {
-  for (let i = store.jobs.length - 1; i >= 0; i -= 1) {
-    const job = store.jobs[i];
-    if (job?.status === "queued") return job;
-  }
-  return undefined;
-}
-
-async function runExecute(
-  store: PrintJobStore,
-  spool: MockSpool,
-  jobId: string,
-  mockJobId: string | undefined,
-  ticketNo: string | undefined,
-  now: number,
-) {
-  return executeJob(
-    store,
-    spool,
-    jobId,
-    ticketForProcess(ticketNo),
-    { now, usbPort: resolveUsbPrintPort(process.env) },
-    mockJobId,
-  );
 }
 
 export function registerIpcHandlers(ctx: IpcContext): void {
@@ -206,24 +132,10 @@ export function registerIpcHandlers(ctx: IpcContext): void {
     assertAppSender(event);
     assertUnsignedRendererPrintAllowed(ctx.allowUnsignedRendererPrint);
     return printMutationGate(async () => {
-      const { kind, autoProcess } = parseEnqueueArgs(kindRaw);
+      const { kind } = parseEnqueueArgs(kindRaw);
       const now = Date.now();
       const enq = enqueuePrintJob(ctx.getPrintJobs(), kind, now);
       const mock = enqueue(ctx.getSpool(), kind, now);
-      if (autoProcess && kind === "xp58") {
-        const result = await runExecute(
-          enq.store,
-          mock.spool,
-          enq.job.id,
-          mock.job.id,
-          undefined,
-          now,
-        );
-        ctx.setPrintJobs(result.store);
-        ctx.setSpool(result.spool);
-        const status = listPrintJobStatus(result.store).find((j) => j.id === enq.job.id);
-        return { ok: true as const, data: status ?? null };
-      }
       ctx.setPrintJobs(enq.store);
       ctx.setSpool(mock.spool);
       const status = listPrintJobStatus(enq.store).find((j) => j.id === enq.job.id);
@@ -234,57 +146,10 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   ipcMain.handle(IPC_CHANNELS.printProcess, (event, raw: unknown = {}) => {
     assertAppSender(event);
     assertUnsignedRendererPrintAllowed(ctx.allowUnsignedRendererPrint);
-    return printMutationGate(async () => {
-      const input = (raw ?? {}) as PrintProcessInput;
-      if (typeof input !== "object") {
-        throw new Error("invalid print process input");
-      }
-      const now = Date.now();
-      let store = ctx.getPrintJobs();
-      let spool = ctx.getSpool();
-      let jobId = typeof input.jobId === "string" ? input.jobId : undefined;
-      let mockJobId: string | undefined;
-
-      if (jobId) {
-        const existing = getPrintJob(store, jobId);
-        if (!existing) throw new Error(`print job not found: ${jobId}`);
-      } else {
-        const queued = lastQueuedJob(store);
-        if (queued) {
-          jobId = queued.id;
-        } else {
-          const kind = parsePrintKind(input.kind);
-          const enq = enqueuePrintJob(store, kind, now);
-          const mock = enqueue(spool, kind, now);
-          store = enq.store;
-          spool = mock.spool;
-          jobId = enq.job.id;
-          mockJobId = mock.job.id;
-        }
-      }
-
-      const result = await runExecute(
-        store,
-        spool,
-        jobId,
-        mockJobId,
-        typeof input.ticketNo === "string" ? input.ticketNo : undefined,
-        now,
-      );
-      ctx.setPrintJobs(result.store);
-      ctx.setSpool(result.spool);
-
-      const data: PrintProcessResult = Object.freeze({
-        status: statusViewOf(result.job),
-        receipt: Object.freeze({
-          ticket_nonce: result.receiptPayload.ticket_nonce,
-          result: result.receiptPayload.result,
-          seq: result.receiptPayload.seq,
-          at: result.receiptPayload.at,
-        }),
-      });
-      return { ok: true as const, data };
-    });
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new Error("invalid print process input");
+    }
+    throw new Error("renderer print execution is disabled; use signed Edge dispatch");
   });
 
   ipcMain.handle(IPC_CHANNELS.printList, (event) => {

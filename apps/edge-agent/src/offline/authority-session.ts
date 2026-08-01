@@ -1,4 +1,6 @@
-import type { DesktopSessionView } from "@laundry/contracts";
+import type { DesktopSessionView, EdgeAuthorityData } from "@laundry/contracts";
+
+import type { VerifiedOfflineReadAuthority } from "./read-authority.js";
 
 export type AuthoritySessionBinding = Readonly<{
   sessionId: string;
@@ -9,6 +11,11 @@ export type AuthoritySessionBinding = Readonly<{
   deviceId: string;
   permissionVersion: number;
   role: DesktopSessionView["role"];
+}>;
+
+export type ReadAuthoritySessionBinding = Readonly<{
+  session: AuthoritySessionBinding;
+  authority: VerifiedOfflineReadAuthority;
 }>;
 
 export function bindAuthoritySession(session: DesktopSessionView): AuthoritySessionBinding {
@@ -38,4 +45,24 @@ export function authorityMatchesSession(
     binding.permissionVersion === session.session.permission_version &&
     binding.role === session.role
   );
+}
+
+export function bindReadAuthoritySession(
+  session: DesktopSessionView,
+  data: EdgeAuthorityData,
+): ReadAuthoritySessionBinding {
+  return Object.freeze({
+    session: bindAuthoritySession(session),
+    authority: Object.freeze({
+      serverPublicKeySpki: data.server_public_key_spki,
+      offlineGrant: data.offline_grant,
+    }),
+  });
+}
+
+export function readAuthorityMatchesSession(
+  binding: ReadAuthoritySessionBinding,
+  session: DesktopSessionView,
+): boolean {
+  return authorityMatchesSession(binding.session, session);
 }

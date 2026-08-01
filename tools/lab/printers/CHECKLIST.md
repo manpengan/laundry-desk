@@ -29,16 +29,24 @@ server 只对签名、nonce、device、`printing` 状态均匹配的 job 做原�
 
 ## macOS · XP-58 CUPS 验收记录
 
-先发现系统安装的精确队列名，再运行交互式验收：
+先发现并只读验证系统安装的精确队列名：
 
 ```bash
 pnpm --filter @laundry/edge-agent printer-pilot:mac -- --discover
-pnpm --filter @laundry/edge-agent printer-acceptance:mac -- --cups-queue XP58_USB
+pnpm --filter @laundry/edge-agent printer-pilot:mac -- --cups-queue XP58_USB --validate
 ```
 
-只有固定样张取得可追踪 CUPS job id，且操作员逐项确认文字/金额、走纸、切撕位置和
-条码回读后，才会在 Application Support 私有目录生成验收 JSON。该记录是操作员签认，
-仍需另行保存去 EXIF 的样张照片才能达到本清单第 4 级。
+随后必须在正常 macOS App 会话中让一笔真实订单完成 server 签名派发、XP-58 CUPS 提交和
+设备签名回执上传。保留该派发返回的 `job_id`，再运行：
+
+```bash
+pnpm --filter @laundry/edge-agent printer-acceptance:mac -- --job-id <uploaded-signed-dispatch-uuid>
+```
+
+CLI 只接受本机私有 ledger 中已上传且结果为 `succeeded` 的签名派发，不会另打固定 smoke
+样张。操作员必须逐项确认中文清晰、金额正确、条码回读、走纸、切/撕位置、断连不重复和
+显式重打仅一份，才会在 Application Support 私有目录生成验收 JSON。该记录是操作员签认，
+仍需另行保存去 EXIF 的真实样张照片才能达到本清单第 4 级。
 
 ## 每机勾选
 

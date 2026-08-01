@@ -45,6 +45,18 @@ describe("destructive migration static reject", () => {
         "ALTER TABLE public.payments DROP CONSTRAINT IF EXISTS payments_method_chk;",
       ),
     ).toHaveLength(0);
+    expect(
+      findDestructiveSql(
+        "0033_offline_grant_replay.sql",
+        "ALTER TABLE edge_replay_records DROP CONSTRAINT IF EXISTS edge_replay_records_epoch_seq_chk;",
+      ),
+    ).toHaveLength(0);
+    expect(
+      findDestructiveSql(
+        "0033_offline_grant_replay.sql",
+        "ALTER TABLE edge_replay_records DROP CONSTRAINT IF EXISTS edge_replay_records_acceptance_chk;",
+      ),
+    ).toHaveLength(0);
     // The exemption list must stay exact: a near-miss on either the table or the
     // constraint name is still a gate failure, so widening it cannot leak.
     expect(
@@ -104,6 +116,8 @@ describe("destructive migration static reject", () => {
       "0030_edge_replay_authority.sql",
       "0031_payment_ledger_sequence.sql",
       "0032_member_stored_value.sql",
+      "0033_offline_grant_replay.sql",
+      "0034_signed_print_dispatch.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

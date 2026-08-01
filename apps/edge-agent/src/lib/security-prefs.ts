@@ -12,6 +12,8 @@ export const SECURITY_WEB_PREFERENCES = {
 
 export const APP_SCHEME = "app";
 export const APP_HOST = "local";
+/** Exact capability-ticket audience for the privileged local desktop shell. */
+export const APP_CAPABILITY_ORIGIN = `${APP_SCHEME}://${APP_HOST}` as const;
 export const APP_ENTRY_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
 
 /** Renderer-facing IPC capability map. Keep this exact and deeply frozen. */

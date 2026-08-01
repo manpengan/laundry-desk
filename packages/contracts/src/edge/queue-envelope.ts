@@ -6,10 +6,21 @@ import { ExactUtcTimestampSchema } from "./primitives.js";
 
 const NonNegativeSafeIntegerSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 
+export const LEGACY_PRIMARY_QUEUE_ENVELOPE_VERSION = 2 as const;
+export const CURRENT_EDGE_QUEUE_ENVELOPE_VERSION = 3 as const;
+
+const LegacyGrantQueueAuthorizationSchema = z
+  .object({
+    kind: z.literal("grant"),
+    grant_id: z.uuid(),
+  })
+  .strict();
+
 const GrantQueueAuthorizationSchema = z
   .object({
     kind: z.literal("grant"),
     grant_id: z.uuid(),
+    per_grant_seq: PositiveSafeIntegerSchema,
   })
   .strict();
 
@@ -28,6 +39,11 @@ export const QueueAuthorizationSchema = z.discriminatedUnion("kind", [
   PrimaryLeaseQueueAuthorizationSchema,
 ]);
 
+const QueueEnvelopeAuthorizationSchema = z.union([
+  LegacyGrantQueueAuthorizationSchema,
+  QueueAuthorizationSchema,
+]);
+
 type DeepReadonly<T> = T extends readonly (infer Item)[]
   ? readonly DeepReadonly<Item>[]
   : T extends object
@@ -35,13 +51,17 @@ type DeepReadonly<T> = T extends readonly (infer Item)[]
     : T;
 
 export type QueueAuthorization = DeepReadonly<z.output<typeof QueueAuthorizationSchema>>;
+export type LegacyGrantQueueAuthorization = Readonly<{
+  kind: "grant";
+  grant_id: string;
+}>;
 export type EdgeQueueEnvelope = Readonly<{
   queue_envelope_version: number;
   contracts_major: number;
   queue_id: string;
   enqueued_at: string;
   payload: DeepReadonly<CommandWirePayload>;
-  authorization: QueueAuthorization;
+  authorization: QueueAuthorization | LegacyGrantQueueAuthorization;
 }>;
 
 /**
@@ -58,9 +78,22 @@ export const EdgeQueueEnvelopeSchema: z.ZodType<EdgeQueueEnvelope> = z
     enqueued_at: ExactUtcTimestampSchema,
     /** A2 carries no caller-reported actor or tenant; C8 injects authenticated server context. */
     payload: CommandWirePayloadSchema,
-    authorization: QueueAuthorizationSchema,
+    authorization: QueueEnvelopeAuthorizationSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((envelope, context) => {
+    if (envelope.authorization.kind !== "grant") return;
+    const hasPersistentSequence = "per_grant_seq" in envelope.authorization;
+    const isLegacyGrant = envelope.queue_envelope_version === LEGACY_PRIMARY_QUEUE_ENVELOPE_VERSION;
+    if (isLegacyGrant === !hasPersistentSequence) return;
+    context.addIssue({
+      code: "custom",
+      message: isLegacyGrant
+        ? "Legacy v2 grant envelopes may not claim persistent sequencing"
+        : "Grant envelopes require per_grant_seq from queue envelope v3 onward",
+      path: ["authorization", "per_grant_seq"],
+    });
+  });
 
 const copyAndFreeze = <T>(value: T): DeepReadonly<T> => {
   if (Array.isArray(value)) {
@@ -106,6 +139,12 @@ export const classifyQueueEnvelopeCompatibility = (
   const policy = QueueEnvelopeCompatibilityPolicySchema.parse(policyInput);
   const previousContractsMajor = Math.max(0, policy.current_contracts_major - 1);
 
+  if (
+    envelope.queue_envelope_version === LEGACY_PRIMARY_QUEUE_ENVELOPE_VERSION &&
+    envelope.authorization.kind === "grant"
+  ) {
+    return Object.freeze({ mode: "recover_to_arbitration", automatic_replay: false });
+  }
   if (
     envelope.queue_envelope_version < policy.minimum_secure_queue_version ||
     envelope.contracts_major < previousContractsMajor

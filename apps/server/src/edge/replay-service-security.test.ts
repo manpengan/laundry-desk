@@ -62,7 +62,7 @@ test("older and future queue versions arbitrate before authority preparation", a
     prepareCalls += 1;
     return null;
   };
-  for (const queueVersion of [1, 3]) {
+  for (const queueVersion of [1, 4]) {
     const result = await executeEdgeReplay(
       runtime,
       authoritySession("admin"),
@@ -100,6 +100,7 @@ test("guard construction refuses a compatibility-bypassed prepared replay", () =
   const request = replayRequest(1);
   const prepared: PreparedPgReplay = Object.freeze({
     request,
+    authorizationKind: "primary_lease",
     orgId: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
     storeId: "11a2eed0-a6c3-493c-a3a7-20bf94b1d678",
     originalStaffId: "21a2eed0-a6c3-493c-a3a7-20bf94b1d678",
@@ -110,6 +111,7 @@ test("guard construction refuses a compatibility-bypassed prepared replay", () =
     isPrivacyAdmin: false,
     envelopeSha256: "a".repeat(64),
     publicKeySpki: "A".repeat(60),
+    grantWindowValid: true,
   });
   assert.throws(() => createPgReplayGuard(prepared, randomUUID), /compatibility/u);
 });

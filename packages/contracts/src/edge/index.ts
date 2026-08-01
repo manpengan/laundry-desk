@@ -6,16 +6,45 @@ export {
   canonicalizeForSignatureVerification,
   canonicalizeOfflineGrantForSigning,
   canonicalizePrimaryLeaseForSigning,
+  canonicalizePrintSnapshot,
 } from "./canonical.js";
 
 export {
   Base64UrlSignatureSchema,
+  CupsJobIdSchema,
   EdgeCapabilityActionSchema,
   EdgeExecutionResultSchema,
   EdgeNonceSchema,
   EdgeOriginSchema,
+  EdgePrinterKindSchema,
   ExactUtcTimestampSchema,
+  Sha256HexSchema,
 } from "./primitives.js";
+
+export {
+  PrintPaymentMethodSchema,
+  PrintSnapshotLineSchema,
+  PrintSnapshotSchema,
+  PrintSnapshotTotalsSchema,
+} from "./print-snapshot.js";
+export type { PrintSnapshot } from "./print-snapshot.js";
+
+export {
+  PrintDispatchClaimRequestSchema,
+  PrintDispatchClaimResponseSchema,
+  PrintDispatchDataSchema,
+  PrintExecutionReceiptRequestSchema,
+  PrintReceiptResponseSchema,
+  PrintReceiptSettlementSchema,
+  SignedPrintCapabilityTicketSchema,
+  SignedPrintExecutionReceiptSchema,
+} from "./print-api.js";
+export type {
+  PrintDispatchClaimRequest,
+  PrintDispatchData,
+  PrintExecutionReceiptRequest,
+  PrintReceiptSettlement,
+} from "./print-api.js";
 
 export {
   CapabilityTicketPayloadSchema,
@@ -83,6 +112,8 @@ export type {
 } from "./signed-envelope.js";
 
 export {
+  CURRENT_EDGE_QUEUE_ENVELOPE_VERSION,
+  LEGACY_PRIMARY_QUEUE_ENVELOPE_VERSION,
   classifyQueueEnvelopeCompatibility,
   EdgeQueueEnvelopeSchema,
   parseEdgeQueueEnvelope,
@@ -90,6 +121,7 @@ export {
 } from "./queue-envelope.js";
 export type {
   EdgeQueueEnvelope,
+  LegacyGrantQueueAuthorization,
   QueueAuthorization,
   QueueEnvelopeVersionDisposition,
 } from "./queue-envelope.js";

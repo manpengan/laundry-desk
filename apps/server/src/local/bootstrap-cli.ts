@@ -12,6 +12,7 @@ import {
   type BootstrapResult,
 } from "./bootstrap.js";
 import { LOCAL_PROFILE } from "./profile.js";
+import { resolveSecretEnvironment } from "./secret-file.js";
 
 const LOCAL_CONFIRMATION = "laundry-desk-v2-local";
 const DEMO_CONFIRMATION = "laundry-desk-v2-demo";
@@ -69,6 +70,14 @@ const EnvironmentSchema = z.object({
   LAUNDRY_BOOTSTRAP_ADMIN_PIN: z.string().min(1, "is required"),
 });
 
+const BOOTSTRAP_SECRET_NAMES = Object.freeze([
+  "DATABASE_ADMIN_URL",
+  "LAUNDRY_BOOTSTRAP_ADMIN_USERNAME",
+  "LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME",
+  "LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD",
+  "LAUNDRY_BOOTSTRAP_ADMIN_PIN",
+]);
+
 const parseConfirmation = (argv: readonly string[]): string => {
   if (argv.length !== 2 || argv[0] !== "--confirm" || argv[1] === undefined) {
     throw new CliInputError("ARGS_INVALID");
@@ -115,7 +124,9 @@ const parseInput = (
   environment: BootstrapCliEnvironment,
 ): Readonly<{ databaseAdminUrl: string; input: BootstrapInput }> => {
   const confirmation = parseConfirmation(argv);
-  const env = EnvironmentSchema.parse(environment);
+  const env = EnvironmentSchema.parse(
+    resolveSecretEnvironment(environment, BOOTSTRAP_SECRET_NAMES),
+  );
   const demoOnly = environment.LAUNDRY_LOCAL_DEMO === "1";
   assertConfirmation(confirmation, env.DATABASE_ADMIN_URL, demoOnly);
   const input = BootstrapInputSchema.parse({

@@ -7,12 +7,13 @@ import {
   type CapabilityTicketPayload,
 } from "@laundry/contracts";
 
+import { APP_CAPABILITY_ORIGIN } from "../lib/security-prefs.js";
 import { bytesToBase64Url } from "./device-keys.js";
 import { verifyCapabilityTicket } from "./verify-ticket.js";
 
 const DEVICE_ID = "01a2eed0-a6c3-493c-a3a7-20bf94b1d678";
 const OTHER_DEVICE = "11111111-1111-4111-8111-111111111111";
-const ORIGIN = "https://desk.example.test";
+const ORIGIN = APP_CAPABILITY_ORIGIN;
 const ISSUED = "2026-07-21T01:02:03.000Z";
 const EXP = "2026-07-21T01:03:03.000Z";
 
@@ -26,6 +27,10 @@ function payload(overrides: Partial<CapabilityTicketPayload> = {}): CapabilityTi
     issued_at: ISSUED,
     exp: EXP,
     nonce: "9dfc4424-9b9a-4e52-baaa-c02868f8e7de",
+    printer_kind: "xp58",
+    snapshot_sha256: "a".repeat(64),
+    recovered: false,
+    next_receipt_seq: 1,
     ...overrides,
   }) as CapabilityTicketPayload;
 }

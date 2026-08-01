@@ -2,8 +2,6 @@
  * Print job executor (D4/M2) — render → family driver → UsbPrintPort.write.
  * Never blocks forever; failures set error text and yield failed receipt.
  */
-import type { ExecutionReceiptPayload } from "@laundry/contracts";
-
 import { advanceJob, type MockPrintJob, type MockSpool } from "./mock-spool.js";
 import { buildPrinterPayload } from "./printer-drivers.js";
 import {
@@ -12,6 +10,7 @@ import {
   transitionPrintJob,
   type PrintJobRecord,
   type PrintJobStore,
+  type LegacyExecutionReceiptPayload,
 } from "./print-jobs.js";
 import {
   renderTicketTemplate,
@@ -27,7 +26,7 @@ export type ExecuteJobResult = Readonly<{
   job: PrintJobRecord;
   bytes: Uint8Array<ArrayBufferLike>;
   rendered: RenderedTicket | undefined;
-  receiptPayload: ExecutionReceiptPayload;
+  receiptPayload: LegacyExecutionReceiptPayload;
 }>;
 
 export type ExecuteJobOptions = Readonly<{
@@ -43,23 +42,6 @@ export type ExecuteJobOptions = Readonly<{
   /** USB/mock port; defaults to createMockUsbPort(). */
   usbPort?: UsbPrintPort;
 }>;
-
-/** Minimal default ticket for enqueue-only XP-58 smoke (no real PII). */
-export const DEFAULT_SAMPLE_TICKET: TicketTemplateInput = Object.freeze({
-  storeName: "宏发洗衣演示店",
-  storePhone: "13800000001",
-  ticketNo: "T202607210001",
-  barcode: "HF202607210001",
-  customerName: "演示顾客",
-  receiveDate: "2026-07-21",
-  pickupDate: "2026-07-23",
-  lines: Object.freeze([Object.freeze({ name: "衬衫", qty: 2, unitPriceFen: 1500 })]),
-  totalFen: 3000,
-  paidFen: 3000,
-  payMethod: "现金",
-  noticeLines: Object.freeze(["请凭条码取衣"] as const),
-  barcodeModuleWidth: 1,
-});
 
 function mirrorMockStatus(
   spool: MockSpool,
@@ -132,7 +114,7 @@ export async function executeJob(
   store: PrintJobStore,
   spool: MockSpool,
   jobId: string,
-  ticket: TicketTemplateInput = DEFAULT_SAMPLE_TICKET,
+  ticket: TicketTemplateInput,
   options: ExecuteJobOptions = {},
   mockJobId?: string,
 ): Promise<ExecuteJobResult> {

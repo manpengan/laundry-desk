@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { readSecretValue } from "./secret-file.js";
+
 const MINIMUM_SECRET_BYTES = 32;
 const LOCAL_PORT = 8787 as const;
 const LOCAL_BROWSER_ORIGIN = "http://127.0.0.1:5173" as const;
@@ -75,7 +77,11 @@ export function parseLocalHostConfig(env: NodeJS.ProcessEnv): LocalHostConfig {
 }
 
 export function parseLocalSigningSecrets(env: NodeJS.ProcessEnv): LocalSigningSecrets {
-  const result = LocalSigningEnvironmentSchema.safeParse(env);
+  const result = LocalSigningEnvironmentSchema.safeParse({
+    ...env,
+    LAUNDRY_ACCESS_TOKEN_SECRET: readSecretValue(env, "LAUNDRY_ACCESS_TOKEN_SECRET"),
+    LAUNDRY_CSRF_PROOF_SECRET: readSecretValue(env, "LAUNDRY_CSRF_PROOF_SECRET"),
+  });
   if (!result.success) {
     throw configError(result.error);
   }

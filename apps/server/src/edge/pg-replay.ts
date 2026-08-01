@@ -10,8 +10,14 @@ import { z } from "zod";
 import type { AuthorizedSession } from "../auth/session-view.js";
 import type { PgPool } from "../db/pg-pool.js";
 import { withStoreGuc } from "../db/tenant-guc-client.js";
-import type { SqlClient } from "../db/types.js";
 import { SERVER_EDGE_REPLAY_COMPATIBILITY_POLICY } from "./replay-compatibility.js";
+import {
+  grantCommandArgsAllowed,
+  replayCommandAllowed,
+  storedGrantAllowsCommand,
+  timestampInWindow,
+  type ReplayAuthorizationKind,
+} from "./replay-policy.js";
 
 const AllowedCommandsSchema = z.array(z.string().min(1)).min(1);
 const ActiveAuthorityRowSchema = z.strictObject({
@@ -23,11 +29,11 @@ const ActiveAuthorityRowSchema = z.strictObject({
   grant_issued_at: z.coerce.date(),
   grant_not_after: z.coerce.date(),
   grant_revoked_at: z.coerce.date().nullable(),
-  lease_grant_id: z.uuid(),
-  lease_device_id: z.uuid(),
-  lease_epoch: z.coerce.number().int().positive(),
-  lease_issued_at: z.coerce.date(),
-  lease_not_after: z.coerce.date(),
+  lease_grant_id: z.uuid().nullable(),
+  lease_device_id: z.uuid().nullable(),
+  lease_epoch: z.coerce.number().int().positive().nullable(),
+  lease_issued_at: z.coerce.date().nullable(),
+  lease_not_after: z.coerce.date().nullable(),
   lease_released_at: z.coerce.date().nullable(),
   current_permission_version: z.coerce.number().int().positive(),
   staff_active: z.boolean(),
@@ -40,6 +46,7 @@ type ActiveAuthorityRow = z.output<typeof ActiveAuthorityRowSchema>;
 
 export type PreparedPgReplay = Readonly<{
   request: EdgeReplayRequest;
+  authorizationKind: ReplayAuthorizationKind;
   orgId: string;
   storeId: string;
   originalStaffId: string;
@@ -50,6 +57,7 @@ export type PreparedPgReplay = Readonly<{
   isPrivacyAdmin: boolean;
   envelopeSha256: string;
   publicKeySpki: string;
+  grantWindowValid: boolean;
 }>;
 
 function replayAuthority(request: EdgeReplayRequest) {
@@ -84,7 +92,7 @@ async function loadAuthority(
   request: EdgeReplayRequest,
 ): Promise<ActiveAuthorityRow | null> {
   const authorization = request.payload.envelope.authorization;
-  if (authorization.kind !== "primary_lease") return null;
+  const leaseId = authorization.kind === "primary_lease" ? authorization.lease_id : null;
   return withStoreGuc(
     pool,
     {
@@ -114,8 +122,8 @@ async function loadAuthority(
              ON device.org_id = grant_row.org_id
             AND device.store_id = grant_row.store_id
             AND device.device_id = grant_row.device_id
-           JOIN primary_leases lease_row
-            ON lease_row.org_id = grant_row.org_id
+           LEFT JOIN primary_leases lease_row
+             ON lease_row.org_id = grant_row.org_id
             AND lease_row.store_id = grant_row.store_id
             AND lease_row.grant_id = grant_row.id
             AND lease_row.device_id = grant_row.device_id
@@ -136,7 +144,7 @@ async function loadAuthority(
           session.session.store_id,
           authorization.grant_id,
           session.session.device_id,
-          authorization.lease_id,
+          leaseId,
         ],
       );
       if (result.rows.length !== 1) return null;
@@ -146,11 +154,33 @@ async function loadAuthority(
   );
 }
 
-function timeContains(enqueuedAt: string, issuedAt: Date, notAfter: Date): boolean {
-  const enqueued = Date.parse(enqueuedAt);
+function primaryMatches(request: EdgeReplayRequest, row: ActiveAuthorityRow): boolean {
+  const authorization = request.payload.envelope.authorization;
+  if (authorization.kind !== "primary_lease") return false;
   return (
-    Number.isFinite(enqueued) && enqueued >= issuedAt.getTime() && enqueued <= notAfter.getTime()
+    row.lease_grant_id === authorization.grant_id &&
+    row.lease_device_id === request.payload.device_id &&
+    row.lease_epoch === authorization.primary_epoch &&
+    row.lease_issued_at !== null &&
+    row.lease_not_after !== null &&
+    timestampInWindow(
+      request.payload.envelope.enqueued_at,
+      row.lease_issued_at,
+      row.lease_not_after,
+    )
   );
+}
+
+function authorityMatchesRequest(request: EdgeReplayRequest, row: ActiveAuthorityRow): boolean {
+  const envelope = request.payload.envelope;
+  const kind = envelope.authorization.kind;
+  if (!replayCommandAllowed(kind, envelope.payload.command)) return false;
+  if (!storedGrantAllowsCommand(kind, row.allowed_commands, envelope.payload.command)) return false;
+  if (kind === "grant") {
+    if (envelope.payload.mode !== "direct") return false;
+    if (!grantCommandArgsAllowed(envelope.payload.command, envelope.payload.args)) return false;
+  }
+  return kind === "grant" || primaryMatches(request, row);
 }
 
 export async function preparePgReplay(
@@ -165,29 +195,27 @@ export async function preparePgReplay(
   ) {
     return null;
   }
-  const authorization = envelope.authorization;
   if (
     request.protocol_version !== "1.0.0" ||
-    request.payload.device_id !== session.session.device_id ||
-    authorization.kind !== "primary_lease"
+    request.payload.device_id !== session.session.device_id
   ) {
     return null;
   }
   const row = await loadAuthority(pool, session, request);
+  const grantWindowValid =
+    row !== null &&
+    timestampInWindow(envelope.enqueued_at, row.grant_issued_at, row.grant_not_after);
   if (
     row === null ||
-    row.lease_grant_id !== authorization.grant_id ||
-    row.lease_device_id !== session.session.device_id ||
-    row.lease_epoch !== authorization.primary_epoch ||
-    !row.allowed_commands.includes(envelope.payload.command) ||
-    !timeContains(envelope.enqueued_at, row.grant_issued_at, row.grant_not_after) ||
-    !timeContains(envelope.enqueued_at, row.lease_issued_at, row.lease_not_after) ||
+    !authorityMatchesRequest(request, row) ||
+    (envelope.authorization.kind === "primary_lease" && !grantWindowValid) ||
     !verifyRequestSignature(request, row.public_key_spki)
   ) {
     return null;
   }
   return Object.freeze({
     request,
+    authorizationKind: envelope.authorization.kind,
     orgId: session.session.org_id,
     storeId: session.session.store_id,
     originalStaffId: row.original_staff_id,
@@ -200,116 +228,6 @@ export async function preparePgReplay(
       .update(canonicalizeEdgeReplayForSigning(replayAuthority(request)))
       .digest("hex"),
     publicKeySpki: row.public_key_spki,
-  });
-}
-
-export type LockedReplayState = Readonly<{
-  expectedSeq: number;
-  currentEpoch: number;
-  currentLeaseId: string | null;
-  authorityCurrent: boolean;
-}>;
-
-export async function lockPgReplayState(
-  client: SqlClient,
-  prepared: PreparedPgReplay,
-): Promise<LockedReplayState> {
-  const authorization = prepared.request.payload.envelope.authorization;
-  if (authorization.kind !== "primary_lease") throw new Error("Primary lease replay required");
-  const staff = await client.query<{
-    permission_version: number;
-    role: string;
-    is_privacy_admin: boolean;
-  }>(
-    `SELECT staff_row.permission_version, role_row.role, role_row.is_privacy_admin
-       FROM staffs staff_row
-       JOIN staff_store_roles role_row
-         ON role_row.org_id = staff_row.org_id AND role_row.staff_id = staff_row.id
-      WHERE staff_row.org_id = $1::uuid AND staff_row.id = $3::uuid
-        AND role_row.store_id = $2::uuid
-        AND staff_row.is_active = true AND role_row.is_active = true
-      FOR UPDATE OF staff_row, role_row`,
-    [prepared.orgId, prepared.storeId, prepared.originalStaffId],
-  );
-  const device = await client.query<{ status: string; public_key_spki: string }>(
-    `SELECT status, public_key_spki FROM edge_devices
-      WHERE org_id = $1::uuid AND store_id = $2::uuid AND device_id = $3::uuid
-      FOR UPDATE`,
-    [prepared.orgId, prepared.storeId, prepared.deviceId],
-  );
-  const grant = await client.query<{
-    permission_version: number;
-    allowed_commands: unknown;
-    revoked_at: Date | string | null;
-  }>(
-    `SELECT permission_version, allowed_commands, revoked_at FROM offline_grants
-      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid
-        AND staff_id = $4::uuid AND device_id = $5::uuid`,
-    [
-      prepared.orgId,
-      prepared.storeId,
-      authorization.grant_id,
-      prepared.originalStaffId,
-      prepared.deviceId,
-    ],
-  );
-  const head = await client.query<{
-    current_epoch: string | number;
-    current_lease_id: string | null;
-  }>(
-    `SELECT current_epoch, current_lease_id FROM primary_lease_heads
-      WHERE org_id = $1::uuid AND store_id = $2::uuid FOR UPDATE`,
-    [prepared.orgId, prepared.storeId],
-  );
-  const lease = await client.query<{ released_at: Date | string | null }>(
-    `SELECT released_at FROM primary_leases
-      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid
-        AND grant_id = $4::uuid`,
-    [prepared.orgId, prepared.storeId, authorization.lease_id, authorization.grant_id],
-  );
-  await client.query(
-    `INSERT INTO primary_lease_replay_state (org_id, store_id, lease_id, last_seq, updated_at)
-     VALUES ($1::uuid, $2::uuid, $3::uuid, 0, clock_timestamp())
-     ON CONFLICT (org_id, store_id, lease_id) DO NOTHING`,
-    [prepared.orgId, prepared.storeId, authorization.lease_id],
-  );
-  const state = await client.query<{ last_seq: string | number }>(
-    `SELECT last_seq FROM primary_lease_replay_state
-      WHERE org_id = $1::uuid AND store_id = $2::uuid AND lease_id = $3::uuid
-      FOR UPDATE`,
-    [prepared.orgId, prepared.storeId, authorization.lease_id],
-  );
-  const staffRow = staff.rows[0];
-  const deviceRow = device.rows[0];
-  const grantRow = grant.rows[0];
-  const headRow = head.rows[0];
-  const stateRow = state.rows[0];
-  if (headRow === undefined || stateRow === undefined || lease.rows.length !== 1) {
-    throw new Error("Replay authority state disappeared");
-  }
-  const currentEpoch = Number(headRow.current_epoch);
-  const lastSeq = Number(stateRow.last_seq);
-  if (!Number.isSafeInteger(currentEpoch) || !Number.isSafeInteger(lastSeq)) {
-    throw new Error("Replay authority counters are invalid");
-  }
-  const authorityCurrent =
-    staffRow !== undefined &&
-    staffRow.permission_version === prepared.permissionVersion &&
-    staffRow.role === prepared.role &&
-    staffRow.is_privacy_admin === prepared.isPrivacyAdmin &&
-    deviceRow?.status === "paired" &&
-    deviceRow.public_key_spki === prepared.publicKeySpki &&
-    grantRow?.permission_version === prepared.permissionVersion &&
-    grantRow.revoked_at === null &&
-    AllowedCommandsSchema.safeParse(grantRow.allowed_commands).success &&
-    AllowedCommandsSchema.parse(grantRow.allowed_commands).includes(
-      prepared.request.payload.envelope.payload.command,
-    ) &&
-    lease.rows[0]?.released_at === null;
-  return Object.freeze({
-    expectedSeq: lastSeq + 1,
-    currentEpoch,
-    currentLeaseId: headRow.current_lease_id,
-    authorityCurrent,
+    grantWindowValid,
   });
 }

@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { createLocalRuntime, createMemoryLocalRuntime } from "./create-runtime.js";
@@ -113,6 +116,30 @@ test("measures signing secret strength in UTF-8 bytes", () => {
   });
 
   assert.equal(config.accessTokenSecret, "台".repeat(11));
+});
+
+test("loads signing secrets from container secret files", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-signing-files-"));
+  const accessPath = join(root, "access");
+  const csrfPath = join(root, "csrf");
+  await writeFile(accessPath, ACCESS_SECRET, { mode: 0o600 });
+  await writeFile(csrfPath, CSRF_SECRET, { mode: 0o600 });
+
+  assert.deepEqual(
+    parseLocalServerConfig({
+      LAUNDRY_ACCESS_TOKEN_SECRET_FILE: accessPath,
+      LAUNDRY_CSRF_PROOF_SECRET_FILE: csrfPath,
+      LAUNDRY_CONTAINER_RUNTIME: "1",
+    }),
+    {
+      listenHost: "0.0.0.0",
+      port: 8787,
+      browserOrigin: "http://127.0.0.1:5173",
+      hostAuthorities: ["127.0.0.1:8787"],
+      accessTokenSecret: ACCESS_SECRET,
+      csrfProofSecret: CSRF_SECRET,
+    },
+  );
 });
 
 test("photo storage accepts only the dedicated compose mount", () => {

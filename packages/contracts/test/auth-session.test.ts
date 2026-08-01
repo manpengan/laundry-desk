@@ -52,17 +52,22 @@ const activeSession = {
 };
 
 const wirePayload = {
-  command: "orders.collect_offline",
-  version: "1.0.0",
+  command: "order.receive",
+  version: "0.3.0",
   mode: "direct" as const,
   args: { order_id: "936da01f-9abd-4d9d-80c7-02af85c822a8" },
   idempotency_key: "9dfc4424-9b9a-4e52-baaa-c02868f8e7de",
   dry_run: false,
 };
 
+const primaryWirePayload = {
+  ...wirePayload,
+  command: "order.pickup",
+};
+
 const queueEnvelope = (authorization: Readonly<Record<string, unknown>>) =>
   parseEdgeQueueEnvelope({
-    queue_envelope_version: 2,
+    queue_envelope_version: 3,
     contracts_major: 0,
     queue_id: ids.queue,
     enqueued_at: "2026-07-21T01:02:03.000Z",
@@ -74,15 +79,23 @@ const grantQueueEnvelope = () =>
   queueEnvelope({
     kind: "grant",
     grant_id: ids.grant,
+    per_grant_seq: 1,
   });
 
 const primaryLeaseQueueEnvelope = () =>
-  queueEnvelope({
-    kind: "primary_lease",
-    grant_id: ids.grant,
-    lease_id: ids.lease,
-    primary_epoch: 7,
-    per_lease_seq: 12,
+  parseEdgeQueueEnvelope({
+    queue_envelope_version: 2,
+    contracts_major: 0,
+    queue_id: ids.queue,
+    enqueued_at: "2026-07-21T01:02:03.000Z",
+    payload: primaryWirePayload,
+    authorization: {
+      kind: "primary_lease",
+      grant_id: ids.grant,
+      lease_id: ids.lease,
+      primary_epoch: 7,
+      per_lease_seq: 12,
+    },
   });
 
 const browserInput = (via: "ui" | "ai" | "automation" = "ui") => ({
@@ -292,7 +305,11 @@ describe("A5 verified Edge replay source", () => {
       via: "edge_replay",
     });
     expect(source.tenant).toEqual({ org_id: ids.org, store_id: ids.store });
-    expect(source.queue_envelope.authorization).toEqual({ kind: "grant", grant_id: ids.grant });
+    expect(source.queue_envelope.authorization).toEqual({
+      kind: "grant",
+      grant_id: ids.grant,
+      per_grant_seq: 1,
+    });
     expect(source.authorization).toEqual({
       kind: "grant",
       grant_id: ids.grant,
@@ -316,7 +333,7 @@ describe("A5 verified Edge replay source", () => {
           lease_id: ids.lease,
           primary_epoch: 7,
           allowed_commands: [wirePayload.command],
-          primary_lease_commands: [wirePayload.command],
+          primary_lease_commands: [primaryWirePayload.command],
         },
       }),
     );
@@ -346,7 +363,7 @@ describe("A5 verified Edge replay source", () => {
           lease_id: "4c0c60e4-59df-4d8b-95f1-2ffebc143ecd",
           primary_epoch: 7,
           allowed_commands: [wirePayload.command],
-          primary_lease_commands: [wirePayload.command],
+          primary_lease_commands: [primaryWirePayload.command],
         },
       },
       "lease mismatch",
@@ -360,7 +377,7 @@ describe("A5 verified Edge replay source", () => {
           lease_id: ids.lease,
           primary_epoch: 8,
           allowed_commands: [wirePayload.command],
-          primary_lease_commands: [wirePayload.command],
+          primary_lease_commands: [primaryWirePayload.command],
         },
       },
       "epoch mismatch",
@@ -378,11 +395,23 @@ describe("A5 verified Edge replay source", () => {
     ],
     [
       {
+        queue_envelope: parseEdgeQueueEnvelope({
+          queue_envelope_version: 3,
+          contracts_major: 0,
+          queue_id: ids.queue,
+          enqueued_at: "2026-07-21T01:02:03.000Z",
+          payload: primaryWirePayload,
+          authorization: {
+            kind: "grant",
+            grant_id: ids.grant,
+            per_grant_seq: 1,
+          },
+        }),
         authorization: {
           kind: "grant",
           grant_id: ids.grant,
-          allowed_commands: [wirePayload.command],
-          primary_lease_commands: [wirePayload.command],
+          allowed_commands: [primaryWirePayload.command],
+          primary_lease_commands: [primaryWirePayload.command],
         },
       },
       "lease-required command on grant",

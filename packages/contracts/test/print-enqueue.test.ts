@@ -73,16 +73,14 @@ describe("M2 print.ticket.enqueue / process / retry / reprint / print.jobs.list"
     expect(names).not.toContain("print.jobs.list");
   });
 
-  it("parses enqueue input without kind (handler defaults to xp58)", async () => {
+  it("parses enqueue input without client ticket authority", async () => {
     const orderId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
     await expect(
       parseContractInput(printTicketEnqueueCommand, {
         order_id: orderId,
-        ticket_no: "20260722-0001",
       }),
     ).resolves.toEqual({
       order_id: orderId,
-      ticket_no: "20260722-0001",
     });
   });
 
@@ -91,12 +89,10 @@ describe("M2 print.ticket.enqueue / process / retry / reprint / print.jobs.list"
     await expect(
       parseContractInput(printTicketEnqueueCommand, {
         order_id: orderId,
-        ticket_no: "T-1",
         kind: "dl206",
       }),
     ).resolves.toEqual({
       order_id: orderId,
-      ticket_no: "T-1",
       kind: "dl206",
     });
   });
@@ -106,19 +102,17 @@ describe("M2 print.ticket.enqueue / process / retry / reprint / print.jobs.list"
     await expect(
       parseContractInput(printTicketEnqueueCommand, {
         order_id: "not-a-uuid",
-        ticket_no: "x",
       }),
     ).rejects.toBeTruthy();
     await expect(
       parseContractInput(printTicketEnqueueCommand, {
         order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-        ticket_no: "",
+        ticket_no: "client-controlled",
       }),
     ).rejects.toBeTruthy();
     await expect(
       parseContractInput(printTicketEnqueueCommand, {
         order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
-        ticket_no: "ok",
         kind: "unknown",
       }),
     ).rejects.toBeTruthy();
@@ -173,6 +167,7 @@ describe("M2 print.ticket.enqueue / process / retry / reprint / print.jobs.list"
 
   it("declares metadata floors for enqueue, process, retry, reprint, and list", () => {
     expect(printTicketEnqueueCommand.name).toBe("print.ticket.enqueue");
+    expect(printTicketEnqueueCommand.version).toBe("0.3.0");
     expect(printTicketEnqueueCommand.risk).toBe("R1");
     expect(printTicketEnqueueCommand.offline_mode).toBe("grant");
     expect(printTicketEnqueueCommand.idempotent).toBe(true);

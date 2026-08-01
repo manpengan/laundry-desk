@@ -1,8 +1,9 @@
 /**
- * Lease claim SQL for print_jobs (0021).
+ * Diagnostic lease claim SQL for print_jobs.
  *
  * Split out of pg-print-store.ts to keep that module inside its size budget;
- * these three statements are the whole claim protocol and belong together.
+ * These statements claim queued rows only. An expired `printing` row is never
+ * reclaimed because another physical submission could duplicate a print.
  */
 
 import type { SqlClient } from "../db/types.js";
@@ -19,34 +20,7 @@ export type ClaimRow = Readonly<{
 }>;
 
 /**
- * Retire jobs whose lease expired after the final allowed attempt.
- *
- * Runs before every claim so an exhausted job leaves the claimable set instead
- * of being re-claimed forever by a payload that kills its worker.
- */
-export async function failExhausted(
-  client: SqlClient,
-  orgId: string,
-  storeId: string,
-  maxAttempts: number,
-  at: Date,
-): Promise<void> {
-  await client.query(
-    `UPDATE print_jobs
-     SET status = 'failed',
-         error = 'print worker gave up after ' || attempt_count || ' attempts',
-         claimed_at = NULL, lease_until = NULL, worker_id = NULL,
-         updated_at = $4
-     WHERE org_id = $1::uuid AND store_id = $2::uuid
-       AND status = 'printing'
-       AND lease_until IS NOT NULL AND lease_until <= $4
-       AND attempt_count >= $3`,
-    [orgId, storeId, maxAttempts, at],
-  );
-}
-
-/**
- * Take the oldest claimable job in one statement.
+ * Take the oldest queued job in one statement.
  *
  * SKIP LOCKED lets concurrent workers pass over rows another worker is already
  * taking rather than serialising behind them, and the single UPDATE keeps
@@ -57,7 +31,6 @@ export async function claimOne(
   orgId: string,
   storeId: string,
   workerId: string,
-  maxAttempts: number,
   at: Date,
   leaseUntil: Date,
 ): Promise<ClaimRow | null> {
@@ -65,24 +38,21 @@ export async function claimOne(
     `UPDATE print_jobs
      SET status = 'printing',
          attempt_count = attempt_count + 1,
-         claimed_at = $5,
-         lease_until = $6,
-         worker_id = $4,
-         updated_at = $5
+         claimed_at = $4,
+         lease_until = $5,
+         worker_id = $3,
+         updated_at = $4
      WHERE id = (
        SELECT id FROM print_jobs
        WHERE org_id = $1::uuid AND store_id = $2::uuid
-         AND attempt_count < $3
-         AND (
-           status = 'queued'
-           OR (status = 'printing' AND lease_until IS NOT NULL AND lease_until <= $5)
-         )
+         AND status = 'queued'
+         AND snapshot_json IS NULL
        ORDER BY created_at ASC, id ASC
        FOR UPDATE SKIP LOCKED
        LIMIT 1
      )
      RETURNING id, kind, order_id, ticket_no, attempt_count, lease_until, worker_id`,
-    [orgId, storeId, maxAttempts, workerId, at, leaseUntil],
+    [orgId, storeId, workerId, at, leaseUntil],
   );
   return result.rows[0] ?? null;
 }
@@ -98,7 +68,6 @@ export async function claimById(
   storeId: string,
   jobId: string,
   workerId: string,
-  maxAttempts: number,
   at: Date,
   leaseUntil: Date,
 ): Promise<ClaimRow | null> {
@@ -106,18 +75,15 @@ export async function claimById(
     `UPDATE print_jobs
      SET status = 'printing',
          attempt_count = attempt_count + 1,
-         claimed_at = $6,
-         lease_until = $7,
-         worker_id = $5,
-         updated_at = $6
+         claimed_at = $5,
+         lease_until = $6,
+         worker_id = $4,
+         updated_at = $5
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid
-       AND attempt_count < $4
-       AND (
-         status = 'queued'
-         OR (status = 'printing' AND lease_until IS NOT NULL AND lease_until <= $6)
-       )
+       AND status = 'queued'
+       AND snapshot_json IS NULL
      RETURNING id, kind, order_id, ticket_no, attempt_count, lease_until, worker_id`,
-    [orgId, storeId, jobId, maxAttempts, workerId, at, leaseUntil],
+    [orgId, storeId, jobId, workerId, at, leaseUntil],
   );
   return result.rows[0] ?? null;
 }

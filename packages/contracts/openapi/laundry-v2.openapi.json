@@ -6962,16 +6962,10 @@
             "format": "uuid",
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
             "type": "string"
-          },
-          "ticket_no": {
-            "maxLength": 64,
-            "minLength": 1,
-            "type": "string"
           }
         },
         "required": [
-          "order_id",
-          "ticket_no"
+          "order_id"
         ],
         "type": "object"
       },
@@ -8015,7 +8009,7 @@
     },
     "/v1/commands/customer.anonymize": {
       "post": {
-        "description": "R5 org-wide anonymization. Reject while any draft/open order exists; otherwise clear customer PII and terminal order name/phone snapshots, retaining opaque accounting rows and immutable privacy/audit events. Stable command name: `customer.anonymize` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "R5 org-wide anonymization. Reject while any draft/open order or queued/in-flight PII print snapshot exists; otherwise clear customer PII, terminal order name/phone/note fields, and terminal print snapshot JSON while retaining opaque accounting rows, snapshot hashes, receipts, and immutable privacy/audit events. Stable command name: `customer.anonymize` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_customer_anonymize",
         "requestBody": {
           "content": {
@@ -8119,7 +8113,7 @@
     },
     "/v1/commands/customer.privacy.export": {
       "post": {
-        "description": "High-risk org-wide export of one customer profile and at most 1000 related order snapshots. The operation appends a privacy event and audit row in the same transaction. Stable command name: `customer.privacy.export` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "High-risk org-wide export of one customer profile, at most 1000 related order snapshots, and up to 1000 signed print snapshots per order. The operation appends a privacy event and audit row in the same transaction. Stable command name: `customer.privacy.export` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_customer_privacy_export",
         "requestBody": {
           "content": {
@@ -9471,7 +9465,7 @@
     },
     "/v1/commands/print.ticket.enqueue": {
       "post": {
-        "description": "Queue a counter ticket print job (kind xp58|dl206|gp3120). Returns job_id with status queued. No device I/O. Stable command name: `print.ticket.enqueue` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Queue a counter ticket print job by order_id (kind xp58|dl206|gp3120). The server derives ticket number and immutable receipt snapshot; clients cannot supply either. Stable command name: `print.ticket.enqueue` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_print_ticket_enqueue",
         "requestBody": {
           "content": {
@@ -9510,7 +9504,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "Enqueue a ticket print job bound to an order and ticket number.",
+        "summary": "Enqueue a ticket print job from the server-owned order snapshot.",
         "tags": [
           "commands"
         ],
@@ -9518,12 +9512,12 @@
         "x-laundry-kind": "command",
         "x-laundry-offline-mode": "grant",
         "x-laundry-risk": "R1",
-        "x-laundry-version": "0.2.0"
+        "x-laundry-version": "0.3.0"
       }
     },
     "/v1/commands/print.ticket.process": {
       "post": {
-        "description": "Load print job by job_id. kind must be xp58. Transition queued→printing, build ESC/POS payload, set payload_bytes and status done. On error mark failed with error text. No USB/device I/O. Stable command name: `print.ticket.process` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Diagnostic-only legacy path. Server-snapshotted real-order jobs fail closed and require signed Edge dispatch plus a verified device receipt. Stable command name: `print.ticket.process` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_print_ticket_process",
         "requestBody": {
           "content": {
@@ -9562,7 +9556,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "Process a queued XP-58 print job: build ESC/POS bytes and mark done or failed.",
+        "summary": "Process a legacy diagnostic XP-58 job in-process.",
         "tags": [
           "commands"
         ],
@@ -9575,7 +9569,7 @@
     },
     "/v1/commands/print.ticket.reprint": {
       "post": {
-        "description": "Load print job by job_id. Source status must be done. Enqueue a NEW print_jobs row with same order_id, ticket_no, kind. Do not mutate the done row. Returns new job (may auto-process xp58 to done). No device I/O paths stored. Stable command name: `print.ticket.reprint` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Load a done print job, re-read the current server-authoritative order snapshot, and enqueue a NEW queued row with that snapshot and the source printer kind. Never auto-process and never mutate the source row. Stable command name: `print.ticket.reprint` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_print_ticket_reprint",
         "requestBody": {
           "content": {
@@ -9614,7 +9608,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "Reprint a done print job by enqueueing a new job with the same order/ticket/kind.",
+        "summary": "Reprint a done print job from the current server-authoritative snapshot.",
         "tags": [
           "commands"
         ],
@@ -9627,7 +9621,7 @@
     },
     "/v1/commands/print.ticket.retry": {
       "post": {
-        "description": "Load print job by job_id. Source status must be failed. Enqueue a NEW print_jobs row with same order_id, ticket_no, kind. Do not mutate the failed row. Returns new job (may auto-process xp58 to done). No device I/O paths stored. Stable command name: `print.ticket.retry` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Load a failed or uncertain print job, re-read the current server-authoritative order snapshot, and enqueue a NEW queued row with that snapshot and the source printer kind. Never auto-process and never mutate the source row. Stable command name: `print.ticket.retry` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_print_ticket_retry",
         "requestBody": {
           "content": {
@@ -9666,7 +9660,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "Retry a failed print job by enqueueing a new job with the same order/ticket/kind.",
+        "summary": "Retry a failed or uncertain print job from the current server-authoritative snapshot.",
         "tags": [
           "commands"
         ],

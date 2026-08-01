@@ -12,6 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
 
+import type { PrintSnapshot } from "@laundry/contracts";
+
 import { createFileSpool, type FileSpool } from "./file-spool.js";
 import { createPrintCommandHandlers, type PrintHandlerDeps } from "./handlers.js";
 import { MemoryPrintJobStore } from "./memory-store.js";
@@ -29,6 +31,46 @@ async function tempSpool(): Promise<FileSpool> {
 }
 
 const ORDER = "11111111-1111-4111-8111-111111111111";
+const SNAPSHOT: PrintSnapshot = Object.freeze({
+  version: 1,
+  store_name: "Mock Print Test",
+  store_phone: null,
+  order_id: ORDER,
+  ticket_no: "T-77",
+  received_at: "2026-08-01T00:00:00.000Z",
+  customer_name: null,
+  customer_phone: null,
+  note: null,
+  lines: Object.freeze([
+    Object.freeze({
+      line_index: 0,
+      service_code: "wash",
+      category_code: "shirt",
+      unit_price_cents: 500,
+      qty: 1,
+      line_total_cents: 500,
+      color: null,
+      brand: null,
+    }),
+  ]),
+  totals: Object.freeze({
+    original_cents: 500,
+    discount_cents: 0,
+    addon_cents: 0,
+    urgent_cents: 0,
+    freight_cents: 0,
+    payable_cents: 500,
+    paid_cents: 500,
+    balance_cents: 0,
+  }),
+  payment_methods: Object.freeze(["cash" as const]),
+});
+
+function memoryStore(): MemoryPrintJobStore {
+  return new MemoryPrintJobStore({
+    loadSnapshot: async (orderId) => (orderId === ORDER ? SNAPSHOT : null),
+  });
+}
 
 /**
  * MemoryPrintJobStore has no lease support, so wrap it with the claim-by-id the
@@ -41,6 +83,11 @@ function claimableStore(base: PrintJobStore): PrintJobStore {
   // drop every prototype method.
   return Object.freeze({
     enqueue: (input) => base.enqueue(input),
+    enqueueFromOrder: (input) => {
+      const enqueueFromOrder = base.enqueueFromOrder;
+      if (enqueueFromOrder === undefined) throw new Error("test store has no order resolver");
+      return enqueueFromOrder.call(base, input);
+    },
     list: (limit) => base.list(limit),
     get: (jobId) => base.get(jobId),
     claimJob: async (jobId: string): Promise<PrintJobClaim | null> => {
@@ -67,7 +114,7 @@ function claimableStore(base: PrintJobStore): PrintJobStore {
 async function enqueueJob(deps: PrintHandlerDeps): Promise<string> {
   const handlers = createPrintCommandHandlers(deps);
   const outcome = await handlers["print.ticket.enqueue"]!({
-    parsed: { order_id: ORDER, ticket_no: "T-77", kind: "xp58" },
+    parsed: { order_id: ORDER, kind: "xp58" },
   } as never);
   return (outcome.result as { job_id: string }).job_id;
 }
@@ -75,7 +122,7 @@ async function enqueueJob(deps: PrintHandlerDeps): Promise<string> {
 test("process writes a spool artifact and completes the job", async () => {
   const spool = await tempSpool();
   const deps: PrintHandlerDeps = Object.freeze({
-    store: claimableStore(new MemoryPrintJobStore()),
+    store: claimableStore(memoryStore()),
     spool,
     workerId: "test-worker",
     now: () => 1_800_000_000,
@@ -97,7 +144,7 @@ test("process writes a spool artifact and completes the job", async () => {
 test("processing a job twice is rejected rather than printing again", async () => {
   const spool = await tempSpool();
   const deps: PrintHandlerDeps = Object.freeze({
-    store: claimableStore(new MemoryPrintJobStore()),
+    store: claimableStore(memoryStore()),
     spool,
     workerId: "test-worker",
     now: () => 1_800_000_000,
@@ -114,7 +161,7 @@ test("processing a job twice is rejected rather than printing again", async () =
 
 test("without a spool the ESC/POS path is unchanged", async () => {
   const deps: PrintHandlerDeps = Object.freeze({
-    store: new MemoryPrintJobStore(),
+    store: memoryStore(),
     now: () => 1_800_000_000,
   });
   const jobId = await enqueueJob(deps);

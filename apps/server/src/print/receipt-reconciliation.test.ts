@@ -14,9 +14,10 @@ import {
 const DEVICE_ID = "01a2eed0-a6c3-493c-a3a7-20bf94b1d678";
 const JOB_ID = "936da01f-9abd-4d9d-80c7-02af85c822a8";
 const NONCE = "9dfc4424-9b9a-4e52-baaa-c02868f8e7de";
+const SNAPSHOT_SHA256 = "a".repeat(64);
 const keys = generateKeyPairSync("ed25519");
 
-function job(status: "done" | "failed"): PrintJobRecord {
+function job(status: "done" | "failed" | "uncertain"): PrintJobRecord {
   return Object.freeze({
     job_id: JOB_ID,
     kind: "xp58",
@@ -37,6 +38,7 @@ function store(): PrintReceiptStore {
         status: committed ? ("done" as const) : ("printing" as const),
         ticket_nonce: NONCE,
         device_id: DEVICE_ID,
+        snapshot_sha256: SNAPSHOT_SHA256,
       }),
     commitReceipt: async (input) => {
       if (committed || input.ticket_nonce !== NONCE || input.device_id !== DEVICE_ID) return null;
@@ -48,21 +50,36 @@ function store(): PrintReceiptStore {
 
 function ingress(result: "succeeded" | "failed" = "succeeded") {
   return Object.freeze({
-    job_id: JOB_ID,
-    device_id: DEVICE_ID,
-    receipt: signedReceipt({ ticket_nonce: NONCE, result, seq: 1, at: "2026-07-23T01:02:04.000Z" }),
+    receipt: signedReceipt({
+      ticket_nonce: NONCE,
+      result,
+      seq: 1,
+      at: "2026-07-23T01:02:04.000Z",
+    }),
   });
 }
 
 function signedReceipt(
   payload: Readonly<{
     ticket_nonce: string;
-    result: "succeeded" | "failed";
+    result: "succeeded" | "failed" | "uncertain";
     seq: number;
     at: string;
   }>,
 ) {
-  const authority = Object.freeze({ protocol_version: "1.0.0", payload });
+  const authority = Object.freeze({
+    protocol_version: "1.0.0",
+    payload: Object.freeze({
+      job_id: JOB_ID,
+      device_id: DEVICE_ID,
+      ticket_nonce: payload.ticket_nonce,
+      snapshot_sha256: SNAPSHOT_SHA256,
+      result: payload.result,
+      cups_job_id: payload.result === "succeeded" ? "xp58-42" : null,
+      seq: payload.seq,
+      at: payload.at,
+    }),
+  });
   return Object.freeze({
     ...authority,
     sig: sign(null, canonicalizeExecutionReceiptForSigning(authority), keys.privateKey).toString(
@@ -73,6 +90,7 @@ function signedReceipt(
 
 function deps(receipts: PrintReceiptStore) {
   return Object.freeze({
+    authenticatedDeviceId: DEVICE_ID,
     store: receipts,
     deviceKeys: Object.freeze({ getDevicePublicKey: async () => keys.publicKey }),
   });
@@ -103,11 +121,7 @@ test("server rejects altered signature, wrong nonce and a replayed receipt", asy
     at: "2026-07-23T01:02:04.000Z",
   });
   await assert.rejects(
-    () =>
-      reconcilePrintReceipt(
-        { job_id: JOB_ID, device_id: DEVICE_ID, receipt: wrongNonce },
-        deps(receipts),
-      ),
+    () => reconcilePrintReceipt({ receipt: wrongNonce }, deps(receipts)),
     (error: unknown) =>
       error instanceof PrintReceiptReconciliationError && error.code === "binding",
   );

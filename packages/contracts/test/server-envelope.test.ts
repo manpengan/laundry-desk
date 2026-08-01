@@ -11,8 +11,8 @@ import {
 } from "../src/index.js";
 
 const wirePayload = CommandWirePayloadSchema.parse({
-  command: "orders.cancel",
-  version: "1.0.0",
+  command: "order.receive",
+  version: "0.3.0",
   mode: "direct",
   args: { order_id: "bd042a25-1d95-4b5d-a3f6-7a62b451ae39" },
   idempotency_key: "9dfc4424-9b9a-4e52-baaa-c02868f8e7de",
@@ -53,7 +53,7 @@ const browserSource = (via: "ui" | "ai" | "automation" = "ui") =>
 
 const edgeSource = () => {
   const queueEnvelope = parseEdgeQueueEnvelope({
-    queue_envelope_version: 2,
+    queue_envelope_version: 3,
     contracts_major: 0,
     queue_id: "32ff7821-0b72-4f9c-8ec6-8d7e08500e04",
     enqueued_at: "2026-07-21T01:02:03.000Z",
@@ -61,6 +61,7 @@ const edgeSource = () => {
     authorization: {
       kind: "grant",
       grant_id: "f7c4b945-2f08-41f3-b8da-b1af3f7ac547",
+      per_grant_seq: 1,
     },
   });
 

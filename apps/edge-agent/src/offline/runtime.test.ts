@@ -25,6 +25,7 @@ import { FileQueueStore } from "../queue/file-store.js";
 import { PersistentEncryptedQueue } from "../queue/persistent-queue.js";
 import { SafeStorageKekStore, type SafeStorageSurface } from "../queue/safe-storage-kek.js";
 import { OfflineConflictStore } from "./conflict-store.js";
+import { FileGrantSequenceStore } from "./grant-sequence-store.js";
 import { OfflineCommandRuntime } from "./runtime.js";
 
 const ORG_ID = "01a2eed0-a6c3-493c-a3a7-20bf94b1d678";
@@ -102,7 +103,14 @@ function authorityData(options: Readonly<{ requestNonce?: string; primaryLease?:
       device_id: DEVICE_ID,
       request_nonce: options.requestNonce ?? AUTHORITY_NONCE,
       permission_version: 1,
-      allowed_commands: ["order.pickup", "payment.collect", "payment.repay"],
+      allowed_commands: [
+        "order.receive",
+        "order.hold",
+        "customer.upsert",
+        "print.ticket.enqueue",
+        "print.ticket.retry",
+        "print.ticket.reprint",
+      ],
       issued_at: issuedAt,
       ttl_ms: 300_000,
       not_after: "2026-07-30T01:07:03.000Z",
@@ -136,6 +144,55 @@ function pickupInput() {
   });
 }
 
+function receiveInput(method?: "cash" | "wechat" | "alipay" | "other") {
+  return Object.freeze({
+    name: "order.receive",
+    body: Object.freeze({
+      lines: Object.freeze([
+        Object.freeze({ service_code: "wash", category_code: "shirt", qty: 1 }),
+      ]),
+      ...(method === undefined
+        ? {}
+        : { initial_payment: Object.freeze({ amount_cents: 100, method }) }),
+    }),
+  });
+}
+
+const grantCommandInputs = Object.freeze([
+  receiveInput(),
+  Object.freeze({
+    name: "order.hold",
+    body: Object.freeze({
+      lines: Object.freeze([
+        Object.freeze({ service_code: "wash", category_code: "shirt", qty: 1 }),
+      ]),
+    }),
+  }),
+  Object.freeze({
+    name: "customer.upsert",
+    body: Object.freeze({ phone: "13800000000", name: "Offline Customer" }),
+  }),
+  Object.freeze({
+    name: "print.ticket.enqueue",
+    body: Object.freeze({ order_id: QUEUE_ID }),
+  }),
+  Object.freeze({
+    name: "print.ticket.retry",
+    body: Object.freeze({ job_id: QUEUE_ID }),
+  }),
+  Object.freeze({
+    name: "print.ticket.reprint",
+    body: Object.freeze({ job_id: QUEUE_ID }),
+  }),
+]);
+
+function perGrantSequence(envelope: EdgeQueueEnvelope): number | null {
+  const authorization = envelope.authorization;
+  return authorization.kind === "grant" && "per_grant_seq" in authorization
+    ? authorization.per_grant_seq
+    : null;
+}
+
 function createRuntime(
   root: string,
   replay: (envelope: EdgeQueueEnvelope) => Promise<DesktopCommandExecuteResult>,
@@ -148,6 +205,7 @@ function createRuntime(
   const runtime = new OfflineCommandRuntime({
     queue,
     conflicts: new OfflineConflictStore(root),
+    grantSequences: new FileGrantSequenceStore(root),
     transport: {
       edge: {
         authority: async (requestNonce) => ({
@@ -236,6 +294,7 @@ test("authority refresh subtracts the measured round trip from the lease lifetim
     const runtime = new OfflineCommandRuntime({
       queue,
       conflicts: new OfflineConflictStore(root),
+      grantSequences: new FileGrantSequenceStore(root),
       transport: {
         edge: {
           authority: async (requestNonce) => {
@@ -274,6 +333,7 @@ test("authority refresh never reuses an active lease across a session authority 
     const runtime = new OfflineCommandRuntime({
       queue,
       conflicts: new OfflineConflictStore(root),
+      grantSequences: new FileGrantSequenceStore(root),
       transport: {
         edge: {
           authority: async (requestNonce, requestPrimary) => {
@@ -312,7 +372,7 @@ test("authority refresh never reuses an active lease across a session authority 
   }
 });
 
-test("grant-only authority refreshes the read cache binding without enabling offline writes", async () => {
+test("grant-only authority enables exactly the six contract grant commands but not Primary writes", async () => {
   const root = await mkdtemp(join(tmpdir(), "laundry-offline-runtime-"));
   let requestedPrimary: boolean | null = null;
   try {
@@ -324,6 +384,7 @@ test("grant-only authority refreshes the read cache binding without enabling off
     const runtime = new OfflineCommandRuntime({
       queue,
       conflicts: new OfflineConflictStore(root),
+      grantSequences: new FileGrantSequenceStore(root),
       transport: {
         edge: {
           authority: async (requestNonce, requestPrimary) => {
@@ -350,7 +411,144 @@ test("grant-only authority refreshes the read cache binding without enabling off
       runtime.exportReadAuthority(adminSession)?.offlineGrant.payload.grant_id,
       GRANT_ID,
     );
+    const queuedResults = await Promise.all(
+      grantCommandInputs.map(async (input) => runtime.queueCommand(input)),
+    );
+    assert.equal(
+      queuedResults.every((result) => result.ok),
+      true,
+    );
     assert.equal((await runtime.queueCommand(pickupInput())).ok, false);
+    assert.equal(
+      (
+        await runtime.queueCommand({
+          name: "payment.refund",
+          body: {
+            order_id: QUEUE_ID,
+            ref_payment_id: IDEMPOTENCY_ID,
+            amount_cents: 100,
+            method: "cash",
+            reason: "denied offline",
+          },
+        })
+      ).ok,
+      false,
+    );
+
+    const queued: EdgeQueueEnvelope[] = [];
+    while (true) {
+      const item = queue.dequeue();
+      if (item === null) break;
+      queued.push(item.envelope);
+      queue.ack(item.id);
+    }
+    assert.deepEqual(
+      queued.map((envelope) => envelope.payload.command),
+      grantCommandInputs.map((input) => input.name),
+    );
+    assert.deepEqual(
+      queued.map((envelope) =>
+        perGrantSequence(envelope) === null
+          ? null
+          : [envelope.queue_envelope_version, perGrantSequence(envelope)],
+      ),
+      [
+        [3, 1],
+        [3, 2],
+        [3, 3],
+        [3, 4],
+        [3, 5],
+        [3, 6],
+      ],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("grant order.receive permits debt or cash and rejects every non-cash payment method", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-offline-runtime-"));
+  try {
+    const replayed: EdgeQueueEnvelope[] = [];
+    const { runtime } = createRuntime(root, async (envelope) => {
+      replayed.push(envelope);
+      return DesktopCommandExecuteResultSchema.parse({
+        ok: true,
+        data: { execution: "executed", result: {} },
+      });
+    });
+    assert.equal(
+      runtime.provision(authorityData({ primaryLease: false }), session, AUTHORITY_NONCE),
+      true,
+    );
+
+    for (const method of ["wechat", "alipay", "other"] as const) {
+      assert.equal((await runtime.queueCommand(receiveInput(method))).ok, false);
+    }
+    assert.equal((await runtime.queueCommand(receiveInput())).ok, true);
+    assert.equal((await runtime.queueCommand(receiveInput("cash"))).ok, true);
+    await runtime.replay();
+    assert.deepEqual(replayed.map(perGrantSequence), [1, 2]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("persists committed grant sequence high-water across runtime restart", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-offline-runtime-"));
+  try {
+    const first = createRuntime(root, async () =>
+      DesktopCommandExecuteResultSchema.parse({
+        ok: false,
+        error: createCommandError("RESOURCE_UNAVAILABLE"),
+      }),
+    );
+    assert.equal(
+      first.runtime.provision(authorityData({ primaryLease: false }), session, AUTHORITY_NONCE),
+      true,
+    );
+    assert.equal((await first.runtime.queueCommand(receiveInput())).ok, true);
+
+    const restartedQueue = new PersistentEncryptedQueue({
+      kekStore: new SafeStorageKekStore(root, safeStorage),
+      store: new FileQueueStore(root),
+    });
+    const restarted = new OfflineCommandRuntime({
+      queue: restartedQueue,
+      conflicts: new OfflineConflictStore(root),
+      grantSequences: new FileGrantSequenceStore(root),
+      transport: {
+        edge: {
+          authority: async (requestNonce) => ({
+            ok: true,
+            data: authorityData({ requestNonce, primaryLease: false }),
+          }),
+          replay: async () =>
+            DesktopCommandExecuteResultSchema.parse({
+              ok: false,
+              error: createCommandError("RESOURCE_UNAVAILABLE"),
+            }),
+        },
+      },
+      authorityTrust: new MemoryAuthorityTrustStore(),
+      clock: Object.freeze({ nowMs: () => 100, continuity: () => "trusted" as const }),
+      randomId: () => crypto.randomUUID(),
+    });
+    assert.equal(
+      restarted.provision(authorityData({ primaryLease: false }), session, AUTHORITY_NONCE),
+      true,
+    );
+    assert.equal((await restarted.queueCommand(grantCommandInputs[1])).ok, true);
+
+    const sequences: number[] = [];
+    while (true) {
+      const item = restartedQueue.dequeue();
+      if (item === null) break;
+      const sequence = perGrantSequence(item.envelope);
+      if (sequence !== null) sequences.push(sequence);
+      restartedQueue.ack(item.id);
+    }
+    assert.deepEqual(sequences, [1, 2]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -397,6 +595,7 @@ test("blocking lease issuance clears every authority and makes replay a zero-I/O
         },
       } as unknown as PersistentEncryptedQueue,
       conflicts: new OfflineConflictStore(root),
+      grantSequences: new FileGrantSequenceStore(root),
       transport: {
         edge: {
           authority: async (requestNonce) => ({
@@ -502,6 +701,7 @@ test("queue persistence failure is sanitized and invalidates the consumed lease 
         },
       } as unknown as PersistentEncryptedQueue,
       conflicts: new OfflineConflictStore(root),
+      grantSequences: new FileGrantSequenceStore(root),
       transport: {
         edge: {
           authority: async (requestNonce) => ({

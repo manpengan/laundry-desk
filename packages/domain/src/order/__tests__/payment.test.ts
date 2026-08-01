@@ -37,6 +37,24 @@ describe("append-only payment ledger", () => {
     });
   });
 
+  it("plans the balance ledger row used by the transactional member-spend path", () => {
+    const result = planCollectPayment({
+      ...common,
+      payment_id: "balance-pay-1",
+      method: "balance",
+      amount_cents: 600,
+      payable_cents: 1_000,
+      existing_payments: [],
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      payment: { method: "balance", kind: "pay" },
+      paid_cents: 600,
+      balance_cents: 400,
+    });
+  });
+
   it("plans collection then repayment without allowing an overpayment", () => {
     const collect = planCollectPayment({
       ...common,

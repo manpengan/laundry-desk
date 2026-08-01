@@ -5,8 +5,6 @@
  */
 import { randomUUID } from "node:crypto";
 
-import type { ExecutionReceiptPayload } from "@laundry/contracts";
-
 export type PrintJobStatus = "queued" | "printing" | "done" | "failed";
 export type PrintJobKind = "xp58" | "dl206" | "gp3120";
 
@@ -36,6 +34,14 @@ export type PrintJobStatusView = Readonly<{
 export type PrintJobStore = Readonly<{
   jobs: readonly PrintJobRecord[];
   nextSeq: number;
+}>;
+
+/** Legacy USB diagnostic receipt. Production CUPS receipts use the signed Edge contract. */
+export type LegacyExecutionReceiptPayload = Readonly<{
+  ticket_nonce: string;
+  result: "succeeded" | "failed";
+  seq: number;
+  at: string;
 }>;
 
 let idSeq = 0;
@@ -177,7 +183,7 @@ export function listPrintJobStatus(store: PrintJobStore): readonly PrintJobStatu
 export function buildExecutionReceiptPayload(
   job: PrintJobRecord,
   at: Date = new Date(),
-): ExecutionReceiptPayload {
+): LegacyExecutionReceiptPayload {
   if (job.status !== "done" && job.status !== "failed") {
     throw new Error(`receipt requires terminal job, got ${job.status}`);
   }

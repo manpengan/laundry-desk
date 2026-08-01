@@ -100,7 +100,7 @@ async function printSummary(
   );
   const counts = new Map<PrintJobStatus, number>();
   for (const row of dayRows) counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
-  const order: readonly PrintJobStatus[] = ["queued", "printing", "done", "failed"];
+  const order: readonly PrintJobStatus[] = ["queued", "printing", "done", "failed", "uncertain"];
   return Object.freeze({
     total: dayRows.length,
     statuses: Object.freeze(

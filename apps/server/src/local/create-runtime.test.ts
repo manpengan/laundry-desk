@@ -160,7 +160,7 @@ test("PG staff directory rejects unexpected database fields", async () => {
 test("runtime refuses the process-memory fallback without laundry_app DATABASE_URL", async () => {
   await assert.rejects(
     () => createLocalRuntime({}),
-    /Runtime requires DATABASE_URL for the laundry_app role/u,
+    /Runtime requires an explicit database URL for the laundry_app role/u,
   );
 });
 
@@ -170,7 +170,7 @@ test("runtime rejects local-PG defaults without an explicit DATABASE_URL", async
       createLocalRuntime({
         LAUNDRY_USE_LOCAL_PG: "1",
       }),
-    /Runtime requires DATABASE_URL for the laundry_app role/u,
+    /Runtime requires an explicit database URL for the laundry_app role/u,
   );
 });
 
@@ -180,7 +180,7 @@ test("runtime rejects an admin-only URL instead of using it as the app role", as
       createLocalRuntime({
         DATABASE_ADMIN_URL: "postgresql://owner:owner@localhost:5432/laundry_v2",
       }),
-    /Runtime requires DATABASE_URL for the laundry_app role/u,
+    /Runtime requires an explicit database URL for the laundry_app role/u,
   );
 });
 
@@ -221,6 +221,8 @@ test("PG runtime opens one app pool and verifies readiness without an admin conn
   assert.equal(runtime.pool, poolDouble.pool);
   assert.deepEqual(runtime.staffDirectory, loadedDirectory);
   assert.equal(runtime.identity.sessions.csrfProofMinter, runtime.csrfProofSigner);
+  assert.notEqual(runtime.printDispatch, null);
+  assert.equal("worker" in runtime.print, false, "production must not auto-start mock printing");
   assert.equal("csrfProofSecret" in runtime, false);
   assert.notEqual(runtime.staffDirectory, loadedDirectory);
   assert.equal(Object.isFrozen(runtime.staffDirectory), true);

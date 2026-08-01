@@ -218,7 +218,13 @@ async function groupedCounts(
   return result.rows;
 }
 
-const PRINT_STATUSES: readonly PrintStatus[] = ["queued", "printing", "done", "failed"];
+const PRINT_STATUSES: readonly PrintStatus[] = [
+  "queued",
+  "printing",
+  "done",
+  "failed",
+  "uncertain",
+];
 const REPLAY_DECISIONS: readonly ReplayDecision[] = [
   "applied",
   "duplicate",

@@ -4,11 +4,11 @@ import { lstat, mkdir, open, readFile, readdir, realpath, rename } from "node:fs
 import { isAbsolute, join, relative, sep } from "node:path";
 import { z } from "zod";
 
-const QUEUE_NAME = /^[A-Za-z0-9_.-]{1,128}$/u;
+import { CUPS_JOB_ID_PATTERN, isCupsJobIdForQueue, isCupsQueueName } from "./cups-queue.js";
+
 const ARTIFACT_NAME =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-9a-f][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}-(?:xp58|dl206|gp3120)-[0-9]{4}\.txt$/u;
 const HASH = /^[0-9a-f]{64}$/u;
-const JOB_ID = /^[A-Za-z0-9_.-]{1,128}-\d+$/u;
 
 const WorkerStateSchema = z
   .strictObject({
@@ -19,7 +19,7 @@ const WorkerStateSchema = z
           artifact: z.string().regex(ARTIFACT_NAME),
           sha256: z.string().regex(HASH),
           state: z.enum(["submitting", "submitted"]),
-          cups_job_id: z.string().regex(JOB_ID).nullable(),
+          cups_job_id: z.string().regex(CUPS_JOB_ID_PATTERN).nullable(),
           updated_at: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
         }),
       )
@@ -189,7 +189,8 @@ export async function runCupsWorkerOnce(
   if ((dependencies.platform ?? process.platform) !== "darwin") {
     return status("disabled", null, "CUPS worker requires macOS");
   }
-  if (!QUEUE_NAME.test(options.queue)) return status("failed", null, "Invalid CUPS queue");
+  if (!isCupsQueueName(options.queue)) return status("failed", null, "Invalid CUPS queue");
+  let submittingArtifact: string | null = null;
   try {
     const [spoolRoot, stateRoot, queues] = await Promise.all([
       canonicalDirectory(options.spoolRoot, false),
@@ -228,8 +229,9 @@ export async function runCupsWorkerOnce(
       updated_at: now,
     });
     await writeState(stateRoot, statePath, current);
+    submittingArtifact = artifact.name;
     const jobId = await dependencies.submit(options.queue, artifact.bytes);
-    if (!JOB_ID.test(jobId) || !jobId.startsWith(`${options.queue}-`)) {
+    if (!isCupsJobIdForQueue(options.queue, jobId)) {
       return status("uncertain", options.queue, "CUPS returned no trackable job id", artifact.name);
     }
     current = replaceRecord(current, artifact.name, {
@@ -248,7 +250,14 @@ export async function runCupsWorkerOnce(
       jobId,
     );
   } catch {
-    return status("failed", options.queue, "CUPS worker failed closed");
+    return submittingArtifact === null
+      ? status("failed", options.queue, "CUPS worker failed closed")
+      : status(
+          "uncertain",
+          options.queue,
+          "CUPS submission outcome is uncertain; automatic retry is blocked",
+          submittingArtifact,
+        );
   }
 }
 

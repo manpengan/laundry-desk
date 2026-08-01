@@ -195,6 +195,7 @@ async function clearFixture(pool: PgPool): Promise<void> {
       [DEMO_ORG_ID, DEMO_STORE_ID],
     );
     for (const table of [
+      "offline_grant_replay_state",
       "primary_lease_replay_state",
       "primary_leases",
       "offline_grants",

@@ -49,6 +49,27 @@ const LOGIN = Object.freeze({
   password: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD"),
   pin: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PIN"),
 });
+const MAC_CATALOG = Object.freeze({
+  code: "mac_wash_shirt",
+  name: "macOS 水洗衬衫",
+  service: "wash",
+  category: "macshirt",
+  priceCents: "1500",
+});
+const MAC_MEMBER = Object.freeze({
+  phone: "13900000042",
+  name: "macOS 顾客",
+  topupYuan: "50",
+  remainingBalance: "¥35.00",
+});
+
+type OfflineAcceptanceBridge = Readonly<{
+  command: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  offline: Readonly<{
+    resume: () => Promise<unknown>;
+    status: () => Promise<unknown>;
+  }>;
+}>;
 
 function credentialFreeEnvironment(): Readonly<Record<string, string>> {
   return Object.freeze(
@@ -196,30 +217,27 @@ async function waitForHealth(expected: "ready" | "down"): Promise<void> {
  * catalog and order.receive refuses a line that matches no active item.
  */
 async function runCounterWorkday(page: Page): Promise<void> {
-  const CODE = "mac_wash_shirt";
-  const NAME = "macOS 水洗衬衫";
-
   await page.locator('[data-nav-id="settings"]').click();
   const catalogPanel = page.locator('[data-testid="catalog-admin"]');
   await expect(catalogPanel).toBeVisible({ timeout: 15_000 });
-  await page.locator('input[name="catalog-code"]').fill(CODE);
-  await page.locator('input[name="catalog-name"]').fill(NAME);
-  await page.locator('input[name="catalog-service"]').fill("wash");
-  await page.locator('input[name="catalog-category"]').fill("macshirt");
-  await page.locator('input[name="catalog-price"]').fill("1500");
+  await page.locator('input[name="catalog-code"]').fill(MAC_CATALOG.code);
+  await page.locator('input[name="catalog-name"]').fill(MAC_CATALOG.name);
+  await page.locator('input[name="catalog-service"]').fill(MAC_CATALOG.service);
+  await page.locator('input[name="catalog-category"]').fill(MAC_CATALOG.category);
+  await page.locator('input[name="catalog-price"]').fill(MAC_CATALOG.priceCents);
   await page.locator('[data-testid="catalog-save-btn"]').click();
   await expect(
-    catalogPanel.locator('[data-testid="catalog-admin-row"]', { hasText: NAME }),
+    catalogPanel.locator('[data-testid="catalog-admin-row"]', { hasText: MAC_CATALOG.name }),
   ).toBeVisible({ timeout: 15_000 });
 
   // Receive two garments at ¥15.00 paying ¥10.00, leaving ¥20.00 owed.
   await page.locator('[data-nav-id="receive"]').click();
   const picker = page.locator('[data-testid="catalog-picker"]');
   await expect(picker).toBeVisible();
-  await picker.getByRole("option", { name: new RegExp(NAME, "u") }).click();
+  await picker.getByRole("option", { name: new RegExp(MAC_CATALOG.name, "u") }).click();
   await page.getByLabel("数量").fill("2");
-  await page.locator('input[name="customer-phone"]').fill("13900000042");
-  await page.locator('input[name="customer-name"]').fill("macOS 顾客");
+  await page.locator('input[name="customer-phone"]').fill(MAC_MEMBER.phone);
+  await page.locator('input[name="customer-name"]').fill(MAC_MEMBER.name);
   await page.locator('input[name="initial-payment"]').fill("1000");
   await page.getByRole("button", { name: "确认开单" }).click();
 
@@ -265,6 +283,171 @@ async function runCounterWorkday(page: Page): Promise<void> {
   const pickupResult = page.locator(".ld-order-result").last();
   await expect(pickupResult).toContainText("¥30.00");
   await expect(pickupResult).toContainText("¥0.00");
+}
+
+async function selectMacMember(page: Page): Promise<void> {
+  await page.locator('[data-testid="customers-search-input"]').fill(MAC_MEMBER.name);
+  await page.locator('[data-testid="customers-search-btn"]').click();
+  const customer = page.locator('[data-testid="customers-row"]', { hasText: MAC_MEMBER.name });
+  await expect(customer).toHaveCount(1, { timeout: 15_000 });
+  await customer.click();
+  await expect(page.locator('[aria-label="会员储值"]')).toBeVisible({ timeout: 15_000 });
+}
+
+async function openAndTopupMacMember(page: Page): Promise<void> {
+  await page.locator('[data-nav-id="customers"]').click();
+  await selectMacMember(page);
+  const memberPanel = page.locator('[aria-label="会员储值"]');
+  await expect(memberPanel.getByText("尚未开通会员")).toBeVisible({ timeout: 15_000 });
+  await memberPanel.getByRole("button", { name: "开通会员账户" }).click();
+  await expect(page.locator(".ld-toast").last()).toContainText("会员账户已开通", {
+    timeout: 15_000,
+  });
+  await expect(memberPanel).toContainText("¥0.00", { timeout: 15_000 });
+
+  await memberPanel.getByLabel("充值金额（元）").fill(MAC_MEMBER.topupYuan);
+  await memberPanel.getByRole("button", { name: "充值", exact: true }).click();
+  await expect(page.locator(".ld-toast").last()).toContainText("充值已入账", {
+    timeout: 15_000,
+  });
+  await expect(memberPanel).toContainText("¥50.00", { timeout: 15_000 });
+  await expect(memberPanel).toContainText("充值");
+}
+
+async function createUnpaidMacMemberOrder(page: Page): Promise<string> {
+  await page.locator('[data-nav-id="receive"]').click();
+  const picker = page.locator('[data-testid="catalog-picker"]');
+  await picker.getByRole("option", { name: new RegExp(MAC_CATALOG.name, "u") }).click();
+  await page.locator('input[name="customer-phone"]').fill(MAC_MEMBER.phone);
+  await page.locator('input[name="customer-name"]').fill(MAC_MEMBER.name);
+  await page.getByRole("button", { name: "确认开单" }).click();
+  const ticketNo = (await page.locator('[data-testid="receive-ticket"]').innerText()).trim();
+  await expect(page.locator(".ld-order-result")).toContainText("¥15.00");
+  return ticketNo;
+}
+
+async function settleMacOrderFromBalance(page: Page, ticketNo: string): Promise<void> {
+  await page.locator('[data-nav-id="orders"]').click();
+  await page.locator('[data-testid="debt-load-btn"]').click();
+  const debtRow = page.locator('[data-testid="debt-row"]', { hasText: ticketNo });
+  await expect(debtRow).toBeVisible({ timeout: 15_000 });
+  await debtRow.locator('[data-testid="debt-row-detail-btn"]').click();
+  const drawer = page.locator('[data-testid="order-detail-drawer"]');
+  await drawer.locator('[data-testid="order-detail-payment-btn"]').click();
+  const payment = page.locator('[data-testid="payment-collection-dialog"]');
+  const method = payment.getByLabel("付款方式");
+  await expect(method.getByRole("option", { name: "会员余额" })).toHaveCount(1, {
+    timeout: 15_000,
+  });
+  await method.selectOption({ label: "会员余额" });
+  await expect(payment).toContainText("会员可用余额 ¥50.00");
+  await page.getByRole("button", { name: "确认收款" }).click();
+  await expect(page.locator(".ld-toast").last()).toContainText("已从会员余额扣款", {
+    timeout: 15_000,
+  });
+  await expect(drawer.locator('[data-testid="order-detail-balance"]')).toContainText("¥0.00", {
+    timeout: 15_000,
+  });
+  await drawer.locator('[data-testid="order-detail-close-btn"]').click();
+}
+
+async function assertMacMemberSettlement(page: Page): Promise<void> {
+  await page.locator('[data-nav-id="customers"]').click();
+  await selectMacMember(page);
+  await expect(page.locator('[aria-label="会员储值"]')).toContainText(MAC_MEMBER.remainingBalance, {
+    timeout: 15_000,
+  });
+
+  await page.locator('[data-nav-id="stats"]').click();
+  await page.locator('[data-testid="stats-load-btn"]').click();
+  const snapshot = page.locator('[data-testid="reconciliation-snapshot"]');
+  await expect(snapshot).toBeVisible({ timeout: 15_000 });
+  const balanceBucket = snapshot.getByRole("row").filter({ hasText: "会员余额" });
+  await expect(balanceBucket).toHaveCount(1);
+  await expect(balanceBucket).toContainText("收款");
+  await expect(balanceBucket).toContainText("¥15.00");
+}
+
+/** Prove the packaged SPA contains the latest stored-value counter slice. */
+async function runPackagedMemberSettlement(page: Page): Promise<void> {
+  await openAndTopupMacMember(page);
+  const ticketNo = await createUnpaidMacMemberOrder(page);
+  await settleMacOrderFromBalance(page, ticketNo);
+  await assertMacMemberSettlement(page);
+}
+
+/** Prove a packaged Edge queues an ordinary grant command and never widens denied commands. */
+async function runPackagedOfflineGrantReplay(page: Page): Promise<void> {
+  const suffix = Date.now().toString().slice(-8);
+  const customerName = `macOS 离线 ${suffix}`;
+  const customerPhone = `136${suffix}`;
+  const authority = await page.evaluate(async () =>
+    (
+      window as Window & { laundryDesktop?: OfflineAcceptanceBridge }
+    ).laundryDesktop?.offline.resume(),
+  );
+  expect((authority as { ok?: unknown } | undefined)?.ok).toBe(true);
+
+  let offlineEvidence: unknown;
+  await runLifecycle("local:down");
+  await waitForHealth("down");
+  try {
+    offlineEvidence = await page.evaluate(
+      async ({ name, phone, catalogCode }) => {
+        const bridge = (window as Window & { laundryDesktop?: OfflineAcceptanceBridge })
+          .laundryDesktop;
+        if (bridge === undefined) throw new Error("desktop bridge unavailable");
+        const queued = await bridge.command.execute({
+          name: "customer.upsert",
+          body: { phone, name },
+        });
+        const denied = await bridge.command.execute({
+          name: "catalog.item.upsert",
+          body: {
+            code: catalogCode,
+            name: "Denied offline price",
+            service_code: "wash",
+            category_code: "offline",
+            unit_price_cents: 1,
+            is_active: true,
+          },
+        });
+        return { queued, denied, status: await bridge.offline.status() };
+      },
+      { name: customerName, phone: customerPhone, catalogCode: `denied_${suffix}` },
+    );
+  } finally {
+    await runLifecycle("local:up");
+    await waitForHealth("ready");
+  }
+
+  expect(offlineEvidence).toMatchObject({
+    queued: { ok: true, data: { result: { offline_queued: true } } },
+    denied: { ok: false, error: { code: "RESOURCE_UNAVAILABLE" } },
+    status: { ok: true, data: { pending_count: 1, inflight_count: 0, conflicts: [] } },
+  });
+  const resumed = await page.evaluate(async () =>
+    (
+      window as Window & { laundryDesktop?: OfflineAcceptanceBridge }
+    ).laundryDesktop?.offline.resume(),
+  );
+  expect(resumed).toMatchObject({ ok: true, data: { mode: "online" } });
+  const status = await page.evaluate(async () =>
+    (
+      window as Window & { laundryDesktop?: OfflineAcceptanceBridge }
+    ).laundryDesktop?.offline.status(),
+  );
+  expect(status).toMatchObject({
+    ok: true,
+    data: { pending_count: 0, inflight_count: 0, conflicts: [] },
+  });
+
+  await page.locator('[data-nav-id="customers"]').click();
+  await page.locator('[data-testid="customers-search-input"]').fill(customerName);
+  await page.locator('[data-testid="customers-search-btn"]').click();
+  await expect(
+    page.locator('[data-testid="customers-row"]', { hasText: customerName }),
+  ).toHaveCount(1, { timeout: 15_000 });
 }
 
 async function runPackagedGovernanceSmoke(page: Page): Promise<void> {
@@ -340,6 +523,8 @@ test("packaged app recovers from an unavailable local service with a token-free 
     await expect(page.getByText(LOGIN.displayName, { exact: true })).toBeVisible();
 
     await runCounterWorkday(page);
+    await runPackagedMemberSettlement(page);
+    await runPackagedOfflineGrantReplay(page);
     await runPackagedGovernanceSmoke(page);
 
     const audit = await page.evaluate(async () => {

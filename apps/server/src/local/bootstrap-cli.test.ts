@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { BootstrapError, type BootstrapInput, type BootstrapResult } from "./bootstrap.js";
@@ -107,6 +110,39 @@ test("runs non-demo bootstrap only after the exact local confirmation", async ()
     admin_staff_id: LOCAL_PROFILE.adminStaffId,
     demo_only: false,
   });
+});
+
+test("bootstrap consumes setup credentials only through *_FILE inputs", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-bootstrap-files-"));
+  const values = Object.freeze({
+    DATABASE_ADMIN_URL: DATABASE_URL,
+    LAUNDRY_BOOTSTRAP_ADMIN_USERNAME: "admin",
+    LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME: "店长",
+    LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD: PASSWORD,
+    LAUNDRY_BOOTSTRAP_ADMIN_PIN: PIN,
+  });
+  const fileEnvironment: Record<string, string> = {};
+  for (const [name, value] of Object.entries(values)) {
+    const path = join(root, name.toLowerCase());
+    await writeFile(path, value, { mode: 0o600 });
+    fileEnvironment[`${name}_FILE`] = path;
+  }
+  const harness = createHarness();
+  let capturedInput: BootstrapInput | undefined;
+  const code = await harness.run({
+    env: Object.freeze(fileEnvironment),
+    dependencies: Object.freeze({
+      bootstrap: async (_url, input): Promise<BootstrapResult> => {
+        capturedInput = input;
+        return successResult();
+      },
+    }),
+  });
+
+  assert.equal(code, 0);
+  assert.equal(capturedInput?.adminPassword, PASSWORD);
+  assert.equal(capturedInput?.adminPin, PIN);
+  assert.doesNotMatch(harness.stdout.join(""), new RegExp(`${PASSWORD}|${PIN}`, "u"));
 });
 
 test("allows demo bootstrap only with flag, exact demo confirmation, and loopback database", async () => {

@@ -5,8 +5,13 @@
 
 import pg from "pg";
 
+import { readSecretValue } from "../local/secret-file.js";
+
 export type PgPool = pg.Pool;
 export type PgPoolClient = pg.PoolClient;
+
+export const RUNTIME_DATABASE_URL_REQUIRED =
+  "Runtime requires an explicit database URL for the laundry_app role";
 
 export type CreatePoolOptions = Readonly<{
   connectionString: string;
@@ -48,7 +53,7 @@ export function resolvePgUrls(env: NodeJS.ProcessEnv = process.env): ResolvedPgU
  * The local PG opt-in may use its dedicated app URL, but never a source credential default.
  */
 export function resolveRuntimeDatabaseUrl(env: NodeJS.ProcessEnv = process.env): string | null {
-  const databaseUrl = env.DATABASE_URL?.trim() ?? "";
+  const databaseUrl = readSecretValue(env, "DATABASE_URL")?.trim() ?? "";
   if (databaseUrl.length > 0) {
     return databaseUrl;
   }
@@ -58,7 +63,7 @@ export function resolveRuntimeDatabaseUrl(env: NodeJS.ProcessEnv = process.env):
   }
   const localAppUrl = env.LAUNDRY_PG_APP_URL?.trim() || "";
   if (localAppUrl.length === 0) {
-    throw new Error("Local PG runtime requires an explicit app-role database URL");
+    throw new Error(RUNTIME_DATABASE_URL_REQUIRED);
   }
   return localAppUrl;
 }

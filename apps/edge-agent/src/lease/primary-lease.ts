@@ -95,6 +95,7 @@ export class OfflineAuthorizationGuard {
   private activeLease: ActiveLease | null = null;
   private continuityEpoch = 0;
   private lastMonotonicMs: number | null = null;
+  private readonly grantHighWater = new Map<string, number>();
   private readonly leaseHighWater = new Map<string, number>();
   private readonly acceptedGrantIds = new Set<string>();
   private readonly acceptedLeaseKeys = new Set<string>();
@@ -139,6 +140,13 @@ export class OfflineAuthorizationGuard {
       );
       if (!verifyServerSignature(candidate, this.options.serverPublicKey)) {
         return failAcceptance("bad_signature");
+      }
+      const summary = validateOfflineGrantAllowedCommands(
+        candidate.payload.allowed_commands,
+        this.options.registrySnapshot,
+      );
+      if (summary.allowed_commands.length !== 6 || summary.primary_lease_commands.length !== 0) {
+        return failAcceptance("malformed");
       }
       if (!this.matchesGrantAudience(candidate.payload)) return failAcceptance("wrong_audience");
       if (candidate.payload.request_nonce !== requestRecord.requestNonce) {
@@ -204,6 +212,7 @@ export class OfflineAuthorizationGuard {
   invalidateContinuity(): void {
     this.activeGrant = null;
     this.activeLease = null;
+    this.grantHighWater.clear();
     this.leaseHighWater.clear();
     this.continuityEpoch += 1;
     this.lastMonotonicMs = null;
@@ -291,6 +300,18 @@ export class OfflineAuthorizationGuard {
     if (!grant.payload.allowed_commands.includes(envelope.payload.command)) {
       return failAuthorization("grant_mismatch");
     }
+    if (envelope.queue_envelope_version < 3 || !("per_grant_seq" in envelope.authorization)) {
+      return failAuthorization("malformed_envelope");
+    }
+    const sequence = envelope.authorization.per_grant_seq;
+    const previous = this.grantHighWater.get(grant.payload.grant_id);
+    if (previous !== undefined && sequence <= previous) {
+      return failAuthorization("sequence_replayed");
+    }
+    if (previous !== undefined && sequence !== previous + 1) {
+      return failAuthorization("sequence_out_of_order");
+    }
+    this.grantHighWater.set(grant.payload.grant_id, sequence);
     return Object.freeze({
       ok: true,
       command: envelope.payload.command,
@@ -305,9 +326,6 @@ export class OfflineAuthorizationGuard {
     nowMs: number,
   ): OfflineAuthorizationResult {
     if (envelope.authorization.kind !== "primary_lease") return failAuthorization("lease_required");
-    if (!grant.payload.allowed_commands.includes(envelope.payload.command)) {
-      return failAuthorization("grant_mismatch");
-    }
     const lease = this.currentLease(nowMs);
     if (lease === null)
       return failAuthorization(this.activeLease ? "lease_expired" : "lease_required");
