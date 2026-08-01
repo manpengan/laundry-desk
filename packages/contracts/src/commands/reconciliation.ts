@@ -27,7 +27,15 @@ export const ReconciliationExportInputSchema = z.strictObject({
   format: z.literal("csv"),
 });
 
-export const ReconciliationPaymentMethodSchema = z.enum(["cash", "wechat", "alipay", "other"]);
+// ADR-18: stored-value settlement gets its own bucket row so cash-in and
+// balance-burn never merge into one unreadable number.
+export const ReconciliationPaymentMethodSchema = z.enum([
+  "cash",
+  "wechat",
+  "alipay",
+  "other",
+  "balance",
+]);
 export const ReconciliationPaymentKindSchema = z.enum([
   "pay",
   "repay",
@@ -69,7 +77,9 @@ export const ReconciliationDayResultSchema = z.strictObject({
           net_cents: SafeIntegerSchema,
         }),
       )
-      .max(20)
+      // 5 methods x 5 kinds. The previous 20 was exactly 4 x 5, so adding a
+      // method without raising this would reject a legitimate day.
+      .max(25)
       .refine(
         (buckets) =>
           new Set(buckets.map((bucket) => `${bucket.method}:${bucket.kind}`)).size ===

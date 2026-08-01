@@ -48,7 +48,8 @@ export type PaymentRow = Readonly<{
   org_id: string;
   store_id: string;
   order_id: string;
-  method: PaymentMethod;
+  /** A persisted row may hold any ledger method, including `balance`. */
+  method: PaymentLedgerMethod;
   amount_cents: number;
   kind: PaymentKind;
   ref_payment_id: string | null;
@@ -65,7 +66,11 @@ export type BuildPayPaymentInput = Readonly<{
   amount_cents: number;
   staff_id: string;
   at: number;
-  method?: PaymentMethod;
+  /**
+   * Ledger-wide, not counter-wide: the member spend path plans a `balance` row.
+   * `payment.collect` stays narrow at the command boundary (ADR-17 §6).
+   */
+  method?: PaymentLedgerMethod;
   note?: string | null;
 }>;
 

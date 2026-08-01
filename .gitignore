@@ -1,5 +1,9 @@
 # dependencies
 node_modules/
+# Also match a node_modules symlink: `node_modules/` alone matches only real
+# directories, so a linked one (common in throwaway worktrees) stays trackable
+# and can be committed by a broad `git add`, breaking pnpm install on CI.
+node_modules
 .pnpm-store/
 
 # build output
