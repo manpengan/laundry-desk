@@ -38,6 +38,8 @@ import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import { registerShiftCommandHandlers, registerShiftQueryHandlers } from "../shift/handlers.js";
 import type { StatsHandlerDeps } from "../stats/handlers.js";
 import { registerStatsQueryHandlers } from "../stats/handlers.js";
+import type { MemberRuntimeDeps } from "../member/handlers.js";
+import { createMemberHandlers } from "../member/handlers.js";
 import type { StaffAccessHandlerDeps } from "../staff/handlers.js";
 import { createStaffAccessHandlers } from "../staff/handlers.js";
 import type { IdentityHandlerDeps } from "./identity-handlers.js";
@@ -68,6 +70,7 @@ export type RegisterM1Deps = Readonly<{
   /** M3 garment production, incidents and loss handling. */
   fulfillment?: FulfillmentHandlerDeps;
   staffAccess?: StaffAccessHandlerDeps;
+  member?: MemberRuntimeDeps;
 }>;
 
 export type RegisterM1Result = Readonly<{
@@ -179,6 +182,15 @@ export function registerM1Handlers(
     registered.push("staff.access.set");
   }
 
+  if (deps.member !== undefined && deps.order !== undefined) {
+    const memberOrder = deps.order;
+    const handlers = createMemberHandlers({ ...deps.member, order: memberOrder });
+    registry.registerHandler("member.account.open", handlers["member.account.open"]);
+    registry.registerHandler("member.topup", handlers["member.topup"]);
+    registry.registerHandler("member.balance.pay", handlers["member.balance.pay"]);
+    registered.push("member.account.open", "member.topup", "member.balance.pay");
+  }
+
   return Object.freeze(registered);
 }
 
@@ -248,6 +260,13 @@ export function registerM1QueryHandlers(
     const handlers = createStaffAccessHandlers(deps.staffAccess);
     queryRegistry.registerHandler("staff.access.list", handlers["staff.access.list"]);
     names.push("staff.access.list");
+  }
+
+  if (deps.member !== undefined && deps.order !== undefined) {
+    const memberOrder = deps.order;
+    const handlers = createMemberHandlers({ ...deps.member, order: memberOrder });
+    queryRegistry.registerHandler("member.account.get", handlers["member.account.get"]);
+    names.push("member.account.get");
   }
 
   return Object.freeze(names);
