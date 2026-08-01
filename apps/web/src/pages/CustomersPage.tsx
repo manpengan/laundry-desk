@@ -11,6 +11,7 @@ import type { PhotoPort } from "../host/photo-port.js";
 import type { PrintJobView } from "../shell/print-jobs.js";
 import { CustomerDetail } from "./CustomerDetail.js";
 import { CustomerGovernancePanel } from "./CustomerGovernancePanel.js";
+import { MemberBalancePanel } from "./MemberBalancePanel.js";
 import { CustomerPrivacyPanel } from "./CustomerPrivacyPanel.js";
 import { loadCustomerHistory } from "./customer-history.js";
 import {
@@ -297,6 +298,12 @@ export function CustomersPage({
             onClose={closeDetail}
             onOpenOrder={setDetailOrderId}
             {...(onOpenPickup === undefined ? {} : { onOpenPickup })}
+          />
+          <MemberBalancePanel
+            customer={selected}
+            queryClient={queryClient}
+            commandClient={commandClient}
+            toast={toast}
           />
           <CustomerGovernancePanel
             customer={selected}
