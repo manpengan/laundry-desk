@@ -461,12 +461,15 @@ test("shift.close signs a reversal of a cash refund positively", async () => {
     await bus.orderStore.listPayments?.(TENANT.orgId, TENANT.storeId, orderId)
   )?.[0];
   assert.ok(original);
+  // Pinned rather than echoed: refund input stays narrow on purpose, because a
+  // stored-value settlement is not refundable in the first slice (ADR-17).
+  assert.equal(original.method, "cash");
   const refund = await bus.orderStore.appendRefund?.({
     org_id: TENANT.orgId,
     store_id: TENANT.storeId,
     order_id: orderId,
     amount_cents: 300,
-    expected_method: original.method,
+    expected_method: "cash",
     ref_payment_id: original.payment_id,
     reason: "partial refund before cancellation",
     staff_id: TENANT.staffId,

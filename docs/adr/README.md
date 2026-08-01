@@ -25,6 +25,7 @@
 | [ADR-15](2026-07-28-adr-15-catalog-maintenance-unfreeze.md)        | 解冻价目写入，补齐首期价目维护                  | **Accepted** 2026-07-28                            |
 | [ADR-16](2026-07-31-adr-16-edge-operations-scope-ratification.md)  | 边缘运营范围追认与契约面 ADR 门禁               | **Accepted** 2026-07-31                            |
 | [ADR-17](2026-07-31-adr-17-member-stored-value.md)                 | 会员储值：组织级账户与只追加账本                | **Accepted** 2026-07-31                            |
+| [ADR-18](2026-08-01-adr-18-stored-value-settlement-reporting.md)   | 储值核销单列对账、不进钱箱                      | **Accepted** 2026-08-01                            |
 
 ## v1 线
 

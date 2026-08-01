@@ -3,7 +3,12 @@
  * OrderStore is async so memory and Postgres backends share one interface.
  */
 
-import type { GarmentStatus, PaymentMethod, PaymentRow } from "@laundry/domain";
+import type {
+  GarmentStatus,
+  PaymentLedgerMethod,
+  PaymentMethod,
+  PaymentRow,
+} from "@laundry/domain";
 
 export type OrderStatus = "draft" | "open" | "closed" | "cancelled";
 
@@ -13,7 +18,7 @@ export type LedgerPaymentRow = PaymentRow &
     business_date?: string;
   }>;
 
-export type { PaymentMethod, PaymentRow };
+export type { PaymentLedgerMethod, PaymentMethod, PaymentRow };
 
 export type PickupApplyOptions = Readonly<{
   staffId: string;
@@ -40,7 +45,8 @@ export type PaymentAppendInput = Readonly<{
   store_id: string;
   order_id: string;
   amount_cents: number;
-  method: PaymentMethod;
+  /** Wider than counter tenders: the member spend path appends `balance`. */
+  method: PaymentLedgerMethod;
   note: string | null;
   kind: "pay" | "repay";
   staff_id: string;
