@@ -25,7 +25,20 @@ test("Keychain-backed device key survives restart without plaintext private mate
     const publicKey = generated.exportPublic().publicKeySpkiBase64Url;
     const stored = await readFile(join(root, "device-signing-key.json"), "utf8");
     assert.match(stored, /protected_private_key/u);
-    assert.doesNotMatch(stored, /PRIVATE KEY|BEGIN|END/u);
+    // PEM armour is matched with its dashes. A bare /BEGIN|END/ also matches the
+    // base64 of the protected blob by chance — those letters are in the base64
+    // alphabet — which turned this security guard into a ~0.18% random red that
+    // reviewers would re-run away.
+    assert.doesNotMatch(stored, /PRIVATE KEY|-----BEGIN|-----END/u);
+
+    // Absence of scary words is weak evidence. Assert the positive property the
+    // guard exists for: what landed on disk is the protected form, and the raw
+    // PKCS#8 body is not recoverable from the file without the OS keychain.
+    const parsed = JSON.parse(stored) as Readonly<{ protected_private_key: string }>;
+    const protectedBytes = Buffer.from(parsed.protected_private_key, "base64");
+    assert.equal(protectedBytes.toString("utf8").startsWith("keychain:"), true);
+    const plaintextPkcs8 = protectedBytes.toString("utf8").slice("keychain:".length);
+    assert.equal(stored.includes(plaintextPkcs8), false);
 
     const restarted = new SafeStorageDeviceKeyStore(root, fakeSafeStorage);
     assert.equal(restarted.load()?.exportPublic().publicKeySpkiBase64Url, publicKey);

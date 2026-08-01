@@ -3,13 +3,22 @@
 import { Button, Dialog, Input, MoneyText, useToast } from "@laundry/ui";
 import { useEffect, useMemo, useState } from "react";
 
-import type { CommandPort } from "../commands/types.js";
+import type { CommandPort, QueryPort } from "../commands/types.js";
+import { unwrapQueryResult } from "./customer-model.js";
+import { parseMemberAccountView } from "./member-model.js";
 import { parseNonNegCents, type OrderGetResult, type PaymentMethod } from "./order-form.js";
+import {
+  BALANCE_CHOICE,
+  buildPaymentSubmission,
+  submissionErrorMessage,
+} from "./payment-submission.js";
 
 export type PaymentCollectionDialogProps = Readonly<{
   open: boolean;
   order: OrderGetResult;
   commandClient: CommandPort;
+  /** Omit to hide stored-value settlement (e.g. hosts without a query port). */
+  queryClient?: QueryPort;
   onClose: () => void;
   onCompleted: () => void;
 }>;
@@ -36,12 +45,15 @@ export function PaymentCollectionDialog({
   open,
   order,
   commandClient,
+  queryClient,
   onClose,
   onCompleted,
 }: PaymentCollectionDialogProps) {
   const toast = useToast();
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState<PaymentMethod>("cash");
+  const [method, setMethod] = useState<string>("cash");
+  const [memberAccountId, setMemberAccountId] = useState<string | null>(null);
+  const [memberBalanceCents, setMemberBalanceCents] = useState(0);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const command = useMemo(() => paymentCommandFor(order), [order]);
@@ -52,36 +64,59 @@ export function PaymentCollectionDialog({
     setAmount(String(order.balance_cents));
     setMethod("cash");
     setNote("");
-  }, [open, order.balance_cents, order.order_id]);
+    setMemberAccountId(null);
+    setMemberBalanceCents(0);
+    const customerId = order.customer_id;
+    if (queryClient === undefined || customerId === null) return;
+    let cancelled = false;
+    void (async () => {
+      const res = await queryClient.execute<unknown>("member.account.get", {
+        customer_id: customerId,
+      });
+      if (cancelled || !res.ok) return;
+      const view = parseMemberAccountView(unwrapQueryResult(res.data));
+      // Only an active account with money in it earns the extra option; showing
+      // a zero balance choice would just produce a guaranteed rejection.
+      if (view?.account == null || view.account.status !== "active") return;
+      if (view.account.balance_cents <= 0) return;
+      setMemberAccountId(view.account.account_id);
+      setMemberBalanceCents(view.account.balance_cents);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, order.balance_cents, order.customer_id, order.order_id, queryClient]);
 
   const submit = async () => {
-    const amountCents = parseNonNegCents(amount);
-    if (amountCents === null || amountCents === 0) {
-      toast.push("收款金额须为正整数分", "error");
-      return;
-    }
-    if (amountCents > order.balance_cents) {
-      toast.push("收款不能超过当前欠款", "error");
-      return;
-    }
-    const trimmedNote = note.trim();
-    if (trimmedNote.length > 256) {
-      toast.push("备注不能超过 256 个字符", "error");
+    const plan = buildPaymentSubmission({
+      ledgerCommand: command,
+      orderId: order.order_id,
+      orderBalanceCents: order.balance_cents,
+      amountCents: parseNonNegCents(amount),
+      method,
+      note,
+      memberAccountId,
+      memberBalanceCents,
+    });
+    if (!plan.ok) {
+      toast.push(submissionErrorMessage(plan.reason), "error");
       return;
     }
     setBusy(true);
     try {
-      const res = await commandClient.execute<unknown>(command, {
-        order_id: order.order_id,
-        amount_cents: amountCents,
-        method,
-        ...(trimmedNote.length === 0 ? {} : { note: trimmedNote }),
-      });
+      const res = await commandClient.execute<unknown>(plan.command, plan.body);
       if (!res.ok) {
         toast.push(res.error.message ?? res.error.code, "error");
         return;
       }
-      toast.push(isRepayment ? "补缴已记入支付流水" : "收款已记入支付流水", "success");
+      toast.push(
+        plan.usesBalance
+          ? "已从会员余额扣款并记入支付流水"
+          : isRepayment
+            ? "补缴已记入支付流水"
+            : "收款已记入支付流水",
+        "success",
+      );
       onCompleted();
       onClose();
     } finally {
@@ -124,7 +159,7 @@ export function PaymentCollectionDialog({
           <span>付款方式</span>
           <select
             value={method}
-            onChange={(event) => setMethod(event.target.value as PaymentMethod)}
+            onChange={(event) => setMethod(event.target.value)}
             disabled={busy}
           >
             {METHODS.map((entry) => (
@@ -132,8 +167,15 @@ export function PaymentCollectionDialog({
                 {entry.label}
               </option>
             ))}
+            {memberAccountId === null ? null : <option value={BALANCE_CHOICE}>会员余额</option>}
           </select>
         </label>
+        {method === BALANCE_CHOICE ? (
+          <p className="ld-payment-collection__balance">
+            会员可用余额 <MoneyText fen={memberBalanceCents} />
+            ；扣款与本单支付在同一事务内完成。
+          </p>
+        ) : null}
         <Input
           name="payment-note"
           label="备注（可选）"

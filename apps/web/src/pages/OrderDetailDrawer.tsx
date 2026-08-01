@@ -379,6 +379,7 @@ export function OrderDetailDrawer({
           open={paymentOpen}
           order={load.order}
           commandClient={commandClient}
+          queryClient={queryClient}
           onClose={() => setPaymentOpen(false)}
           onCompleted={() => {
             if (orderId !== null) void loadOrder(orderId);
