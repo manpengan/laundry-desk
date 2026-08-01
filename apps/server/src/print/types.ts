@@ -1,10 +1,10 @@
 /**
  * Server-side print job queue types (M2).
- * Status flow: queued → printing → done | failed.
+ * Status flow: queued → printing → done | failed | uncertain.
  * payload_bytes is ESC/POS length after successful process (no device paths stored).
  */
 
-export type PrintJobStatus = "queued" | "printing" | "done" | "failed";
+export type PrintJobStatus = "queued" | "printing" | "done" | "failed" | "uncertain";
 export type PrintJobKind = "xp58" | "dl206" | "gp3120";
 
 export type PrintJobRecord = Readonly<{
@@ -43,6 +43,20 @@ export type EnqueuePrintJobInput = Readonly<{
   now?: number;
 }>;
 
+export type EnqueueOrderPrintJobInput = Readonly<{
+  order_id: string;
+  kind: PrintJobKind;
+  job_id?: string;
+  now?: number;
+}>;
+
+export type RequeuePrintJobInput = Readonly<{
+  source_job_id: string;
+  action: "retry" | "reprint";
+  job_id?: string;
+  now?: number;
+}>;
+
 /** What the spool actually wrote; recorded as one unit on a successful print. */
 export type PrintArtifactRef = Readonly<{
   /** Spool-relative artifact name. Never absolute, never traversing. */
@@ -64,8 +78,8 @@ export type TransitionPrintJobOptions = Readonly<{
 export const DEFAULT_LEASE_SECONDS = 30;
 
 /**
- * Give up after this many claims of the same job. Guards a poison payload that
- * kills its worker every time, which would otherwise be re-claimed forever.
+ * Retained for diagnostic-worker configuration compatibility. Claims now take
+ * queued rows only, so an expired printing row is never automatically retried.
  */
 export const DEFAULT_MAX_ATTEMPTS = 3;
 
@@ -91,22 +105,23 @@ export type PrintJobClaim = Readonly<{
 
 export type PrintJobStore = Readonly<{
   enqueue: (input: EnqueuePrintJobInput) => Promise<PrintJobRecord>;
+  /** Server-only command path: derive ticket and immutable snapshot from the order authority. */
+  enqueueFromOrder?: (input: EnqueueOrderPrintJobInput) => Promise<PrintJobRecord>;
+  /** Re-resolve the source order's current authority into one new queued row. */
+  requeueFromSource?: (input: RequeuePrintJobInput) => Promise<PrintJobRecord>;
   list: (limit: number) => Promise<readonly PrintJobStatusView[]>;
   get: (jobId: string) => Promise<PrintJobRecord | null>;
   /**
    * Atomically take the oldest claimable job, or null when there is none.
    *
-   * Claimable means queued, or printing with an expired lease — a worker that
-   * died mid-print leaves the row in `printing`, and the status machine forbids
-   * moving back to `queued`, so recovery re-claims in place. A job that has
-   * already been attempted `max_attempts` times is failed instead of returned.
+   * Only queued rows are claimable. A worker that dies mid-print leaves an
+   * uncertain physical outcome and must never cause an automatic reprint.
    */
   claimNext?: (input: ClaimPrintJobInput) => Promise<PrintJobClaim | null>;
   /**
    * Claim one specific job. `print.ticket.process` names the job it wants, so
    * the queue-order claim above cannot serve it. Returns null when that job is
-   * not claimable — already terminal, out of attempts, or leased by someone
-   * else whose lease has not expired.
+   * not claimable — already printing or terminal.
    */
   claimJob?: (jobId: string, input: ClaimPrintJobInput) => Promise<PrintJobClaim | null>;
   /** Recorded artifact for a finished job, or null when it has none. */

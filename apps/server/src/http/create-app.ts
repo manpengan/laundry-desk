@@ -14,6 +14,8 @@ import type { AuthRouteContext, RouteSecurityContext } from "./auth-route-suppor
 import { registerBusRoutes } from "./bus-routes.js";
 import { registerEdgeAuthorityRoute } from "./edge-authority-route.js";
 import { registerEdgeReplayRoute } from "./edge-replay-route.js";
+import { registerEdgePrintRoute } from "./edge-print-route.js";
+import { createEdgePrintRateLimiter, type EdgePrintRateLimiter } from "./edge-print-rate-limit.js";
 import { registerPhotoFileRoutes } from "./photo-file-routes.js";
 import { registerPrintArtifactRoutes } from "./print-artifact-routes.js";
 import type { FileSpool } from "../print/file-spool.js";
@@ -36,6 +38,8 @@ export type CreateAppOptions = Readonly<{
   desktopOrigin?: string;
   /** Deterministic limiter injection for focused tests. */
   loginRateLimiter?: LoginRateLimiter;
+  /** Dedicated main-process print transport limiter. */
+  edgePrintRateLimiter?: EdgePrintRateLimiter;
   /** Mock print spool; when absent the artifact download route is not mounted. */
   printSpool?: FileSpool;
   /** Structured redacted auth-security events (tests may capture). */
@@ -72,7 +76,8 @@ async function installCoreHttp(
   app.addHook("onSend", async (request, reply, payload) => {
     if (
       request.url.startsWith("/api/v2/auth/") ||
-      request.url.startsWith("/api/v2/edge/authority")
+      request.url.startsWith("/api/v2/edge/authority") ||
+      request.url.startsWith("/api/v2/edge/print/")
     ) {
       reply.header("Cache-Control", "no-store");
     }
@@ -113,6 +118,11 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   registerBusRoutes(app, context);
   registerEdgeAuthorityRoute(app, context);
   registerEdgeReplayRoute(app, context);
+  registerEdgePrintRoute(
+    app,
+    context,
+    options.edgePrintRateLimiter ?? createEdgePrintRateLimiter(),
+  );
   registerPhotoFileRoutes(app, context, options.runtime.photo);
 
   // Artifact download only exists when a spool is configured; the memory

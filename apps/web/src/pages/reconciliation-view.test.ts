@@ -42,6 +42,13 @@ const SAMPLE: ReconciliationView = Object.freeze({
         amount_cents: 1_000,
         net_cents: -1_000,
       }),
+      Object.freeze({
+        method: "balance",
+        kind: "pay",
+        row_count: 1,
+        amount_cents: 3_000,
+        net_cents: 3_000,
+      }),
     ]),
   }),
   shift: Object.freeze({
@@ -56,10 +63,11 @@ const SAMPLE: ReconciliationView = Object.freeze({
     cash_difference_cents: 0,
   }),
   print: Object.freeze({
-    total: 3,
+    total: 4,
     statuses: Object.freeze([
       Object.freeze({ status: "done", count: 2 }),
       Object.freeze({ status: "failed", count: 1 }),
+      Object.freeze({ status: "uncertain", count: 1 }),
     ]),
   }),
   edge_replay: Object.freeze({
@@ -105,6 +113,7 @@ test("parseReconciliationView rejects unsafe money and unbounded evidence", () =
           { status: "printing", count: 1 },
           { status: "done", count: 1 },
           { status: "failed", count: 1 },
+          { status: "uncertain", count: 1 },
           { status: "done", count: 1 },
         ],
       },
@@ -119,8 +128,10 @@ test("ReconciliationSnapshot renders ledger, shift, print and replay evidence", 
   assert.match(html, /当日口径一致/u);
   assert.match(html, /支付账本/u);
   assert.match(html, /现金/u);
+  assert.match(html, /会员余额/u);
   assert.match(html, /退款/u);
   assert.match(html, /打印（软件状态）/u);
+  assert.match(html, /结果待确认/u);
   assert.match(html, /离线回放/u);
   assert.doesNotMatch(html, /13800000000|token|cookie/iu);
 });

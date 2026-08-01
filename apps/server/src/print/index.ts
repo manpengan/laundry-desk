@@ -10,6 +10,14 @@ export type {
 export { MemoryPrintJobStore, createMemoryPrintJobStore } from "./memory-store.js";
 export { createPgPrintJobStore } from "./pg-print-store.js";
 export type { CreatePgPrintJobStoreOptions } from "./pg-print-store.js";
+export { createPgPrintDispatchService } from "./pg-print-dispatch.js";
+export type { CreatePgPrintDispatchServiceOptions } from "./pg-print-dispatch.js";
+export { PrintDispatchError } from "./dispatch-service.js";
+export type {
+  PrintDispatchErrorCode,
+  PrintDispatchService,
+  PrintDispatchSession,
+} from "./dispatch-service.js";
 export {
   buildXp58EscPosFromTicket,
   escAlign,

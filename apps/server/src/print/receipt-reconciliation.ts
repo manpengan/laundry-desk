@@ -16,8 +16,6 @@ import type { PrintJobRecord, PrintJobStatus } from "./types.js";
 const BASE64URL = /^[A-Za-z0-9_-]+$/u;
 
 const PrintReceiptIngressSchema = z.strictObject({
-  job_id: z.uuid(),
-  device_id: z.uuid(),
   receipt: z.unknown(),
 });
 
@@ -28,6 +26,7 @@ export type ReceiptBoundPrintJob = Readonly<{
   status: PrintJobStatus;
   ticket_nonce: string;
   device_id: string;
+  snapshot_sha256: string;
 }>;
 
 export type PrintReceiptStore = Readonly<{
@@ -38,7 +37,11 @@ export type PrintReceiptStore = Readonly<{
       job_id: string;
       device_id: string;
       ticket_nonce: string;
-      status: "done" | "failed";
+      snapshot_sha256: string;
+      status: "done" | "failed" | "uncertain";
+      result: "succeeded" | "failed" | "uncertain";
+      cups_job_id: string | null;
+      seq: number;
       receipt_at: string;
     }>,
   ): Promise<PrintJobRecord | null>;
@@ -49,6 +52,8 @@ export type DevicePublicKeyRegistry = Readonly<{
 }>;
 
 export type PrintReceiptReconciliationDeps = Readonly<{
+  /** Authenticated server session binding; never accepted from the receipt ingress wrapper. */
+  authenticatedDeviceId: string;
   store: PrintReceiptStore;
   deviceKeys: DevicePublicKeyRegistry;
 }>;
@@ -100,19 +105,22 @@ function verifyReceiptSignature(receipt: unknown, key: KeyObject): ExecutionRece
   return candidate.payload;
 }
 
-function receiptStatus(result: ExecutionReceiptPayload["result"]): "done" | "failed" {
-  return result === "succeeded" ? "done" : "failed";
+function receiptStatus(result: ExecutionReceiptPayload["result"]): "done" | "failed" | "uncertain" {
+  return result === "succeeded" ? "done" : result;
 }
 
 function assertReceiptBinding(
   job: ReceiptBoundPrintJob,
-  ingress: PrintReceiptIngress,
+  authenticatedDeviceId: string,
   receipt: ExecutionReceiptPayload,
 ): void {
   if (
     job.status !== "printing" ||
-    job.device_id !== ingress.device_id ||
-    job.ticket_nonce !== receipt.ticket_nonce
+    job.job_id !== receipt.job_id ||
+    job.device_id !== authenticatedDeviceId ||
+    receipt.device_id !== authenticatedDeviceId ||
+    job.ticket_nonce !== receipt.ticket_nonce ||
+    job.snapshot_sha256 !== receipt.snapshot_sha256
   ) {
     throw new PrintReceiptReconciliationError("binding");
   }
@@ -127,18 +135,22 @@ export async function reconcilePrintReceipt(
   deps: PrintReceiptReconciliationDeps,
 ): Promise<PrintReceiptReconciliationResult> {
   const ingress = parseIngress(rawIngress);
-  const key = await deps.deviceKeys.getDevicePublicKey(ingress.device_id);
+  const key = await deps.deviceKeys.getDevicePublicKey(deps.authenticatedDeviceId);
   if (key === null) throw new PrintReceiptReconciliationError("signature");
   const receipt = verifyReceiptSignature(ingress.receipt, key);
-  const bound = await deps.store.getReceiptBoundJob(ingress.job_id);
+  const bound = await deps.store.getReceiptBoundJob(receipt.job_id);
   if (bound === null) throw new PrintReceiptReconciliationError("binding");
-  assertReceiptBinding(bound, ingress, receipt);
+  assertReceiptBinding(bound, deps.authenticatedDeviceId, receipt);
 
   const job = await deps.store.commitReceipt({
-    job_id: ingress.job_id,
-    device_id: ingress.device_id,
+    job_id: receipt.job_id,
+    device_id: deps.authenticatedDeviceId,
     ticket_nonce: receipt.ticket_nonce,
+    snapshot_sha256: receipt.snapshot_sha256,
     status: receiptStatus(receipt.result),
+    result: receipt.result,
+    cups_job_id: receipt.cups_job_id,
+    seq: receipt.seq,
     receipt_at: receipt.at,
   });
   if (job === null) throw new PrintReceiptReconciliationError("replayed");

@@ -156,47 +156,33 @@ function enqueueOutcome(
   });
 }
 
-/**
- * Auto-process xp58 after enqueue (receive / retry / reprint convenience).
- * Other kinds stay queued. Process failures surface as handler errors (job may be failed).
- */
-async function maybeProcessXp58(
-  deps: PrintHandlerDeps,
-  job: PrintJobRecord,
-  now: number,
-): Promise<Readonly<{ job: PrintJobRecord; payloadBytes?: number; processed: boolean }>> {
-  if (job.kind !== "xp58") {
-    return Object.freeze({ job, processed: false });
-  }
-  let result: ProcessXp58Result;
-  try {
-    result = await processXp58PrintJob(deps.store, job.job_id, { now });
-  } catch (err) {
-    mapProcessError(err);
-  }
-  return Object.freeze({
-    job: result.job,
-    payloadBytes: result.payload_bytes,
-    processed: true,
-  });
-}
-
 function enqueueHandler(deps: PrintHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
     const orderId = requireString(input.order_id);
-    const ticketNo = requireString(input.ticket_no);
     const kind = parseKind(input.kind);
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
     const jobId = deps.newId?.() ?? randomUUID();
+    const enqueueFromOrder = deps.store.enqueueFromOrder;
+    if (enqueueFromOrder === undefined) {
+      throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+    }
 
-    const job = await deps.store.enqueue({
-      order_id: orderId,
-      ticket_no: ticketNo,
-      kind,
-      job_id: jobId,
-      now,
-    });
+    let job: PrintJobRecord;
+    try {
+      job = await enqueueFromOrder.call(deps.store, {
+        order_id: orderId,
+        kind,
+        job_id: jobId,
+        now,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.includes("not found") || message.includes("not printable")) {
+        throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+      }
+      throw new HandlerCommandError(createCommandError("TRANSACTION_FAILED"));
+    }
 
     return enqueueOutcome(job, { action: "enqueue" });
   };
@@ -296,12 +282,11 @@ function processHandler(deps: PrintHandlerDeps): CommandHandler {
 }
 
 /**
- * Clone terminal source into a new queued job, then auto-process xp58.
- * expectedStatus: failed → retry; done → reprint.
+ * Clone a terminal source and its immutable snapshot into one new queued job.
  */
 function requeueHandler(
   deps: PrintHandlerDeps,
-  expectedStatus: "failed" | "done",
+  expectedStatuses: ReadonlySet<PrintJobStatus>,
   action: "retry" | "reprint",
 ): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
@@ -312,26 +297,31 @@ function requeueHandler(
     if (source === null) {
       throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
     }
-    if (source.status !== expectedStatus) {
+    if (!expectedStatuses.has(source.status)) {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
 
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
     const newJobId = deps.newId?.() ?? randomUUID();
-    const enqueued = await deps.store.enqueue({
-      order_id: source.order_id,
-      ticket_no: source.ticket_no,
-      kind: source.kind,
-      job_id: newJobId,
-      now,
-    });
-
-    const after = await maybeProcessXp58(deps, enqueued, now);
-    return enqueueOutcome(after.job, {
+    const requeueFromSource = deps.store.requeueFromSource;
+    if (requeueFromSource === undefined) {
+      throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+    }
+    let enqueued: PrintJobRecord;
+    try {
+      enqueued = await requeueFromSource.call(deps.store, {
+        source_job_id: sourceJobId,
+        action,
+        job_id: newJobId,
+        now,
+      });
+    } catch {
+      throw new HandlerCommandError(createCommandError("TRANSACTION_FAILED"));
+    }
+    return enqueueOutcome(enqueued, {
       action,
       sourceJobId,
-      ...(after.payloadBytes !== undefined ? { payloadBytes: after.payloadBytes } : {}),
-      processed: after.processed,
+      processed: false,
     });
   };
 }
@@ -356,8 +346,8 @@ export function createPrintCommandHandlers(
   return Object.freeze({
     "print.ticket.enqueue": enqueueHandler(deps),
     "print.ticket.process": processHandler(deps),
-    "print.ticket.retry": requeueHandler(deps, "failed", "retry"),
-    "print.ticket.reprint": requeueHandler(deps, "done", "reprint"),
+    "print.ticket.retry": requeueHandler(deps, new Set(["failed", "uncertain"]), "retry"),
+    "print.ticket.reprint": requeueHandler(deps, new Set(["done"]), "reprint"),
   });
 }
 

@@ -1,7 +1,10 @@
+import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import {
+  chmodSync,
   closeSync,
-  existsSync,
+  fchmodSync,
+  fstatSync,
   fsyncSync,
   lstatSync,
   mkdirSync,
@@ -29,6 +32,19 @@ const DeviceKeyStateSchema = z.strictObject({
   protected_private_key: z.base64(),
 });
 
+const PRIVATE_DIRECTORY_MODE = 0o700;
+const PRIVATE_FILE_MODE = 0o600;
+const MAX_STATE_BYTES = 64 * 1024;
+const STAGING_ID = /^[0-9a-f]{24}$/u;
+
+export type SafeStorageDeviceKeyStoreOptions = Readonly<{
+  randomStagingId?: () => string;
+  /** Deterministic race seam; omitted by production. */
+  afterReadBytes?: () => void;
+  /** Deterministic clear-race seam; omitted by production. */
+  beforeClearRevalidate?: () => void;
+}>;
+
 function prepareRoot(path: string): string {
   if (!isAbsolute(path)) throw new Error("Device key root must be absolute");
   mkdirSync(path, { recursive: true, mode: 0o700 });
@@ -36,7 +52,17 @@ function prepareRoot(path: string): string {
   if (!meta.isDirectory() || meta.isSymbolicLink()) {
     throw new Error("Device key root must be a real directory");
   }
-  return realpathSync(path);
+  chmodSync(path, PRIVATE_DIRECTORY_MODE);
+  const root = realpathSync(path);
+  const canonical = lstatSync(root);
+  if (
+    !canonical.isDirectory() ||
+    canonical.isSymbolicLink() ||
+    (canonical.mode & 0o777) !== PRIVATE_DIRECTORY_MODE
+  ) {
+    throw new Error("Device key root must be private");
+  }
+  return root;
 }
 
 function assertContained(root: string, path: string): void {
@@ -46,23 +72,34 @@ function assertContained(root: string, path: string): void {
   }
 }
 
-function writePrivateState(root: string, path: string, protectedKey: Buffer): void {
-  const staging = join(root, ".device-key.staging");
-  const fd = openSync(staging, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC, 0o600);
-  try {
-    writeFileSync(
-      fd,
-      `${JSON.stringify({
-        version: 1,
-        protected_private_key: protectedKey.toString("base64"),
-      })}\n`,
-      "utf8",
-    );
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
+function assertPrivateStateFile(
+  metadata: Readonly<{
+    dev: number;
+    ino: number;
+    mode: number;
+    nlink: number;
+    size: number;
+    isFile: () => boolean;
+  }>,
+): void {
+  if (
+    !metadata.isFile() ||
+    metadata.nlink !== 1 ||
+    (metadata.mode & 0o777) !== PRIVATE_FILE_MODE ||
+    metadata.size > MAX_STATE_BYTES
+  ) {
+    throw new Error("Invalid private device key state file");
   }
-  renameSync(staging, path);
+}
+
+function sameFile(
+  expected: Readonly<{ dev: number; ino: number }>,
+  observed: Readonly<{ dev: number; ino: number }>,
+): boolean {
+  return expected.dev === observed.dev && expected.ino === observed.ino;
+}
+
+function syncRoot(root: string): void {
   const dirFd = openSync(root, constants.O_RDONLY);
   try {
     fsyncSync(dirFd);
@@ -71,13 +108,124 @@ function writePrivateState(root: string, path: string, protectedKey: Buffer): vo
   }
 }
 
+function writePrivateState(
+  root: string,
+  path: string,
+  protectedKey: Buffer,
+  randomStagingId?: () => string,
+): void {
+  const serialized = `${JSON.stringify({
+    version: 1,
+    protected_private_key: protectedKey.toString("base64"),
+  })}\n`;
+  if (Buffer.byteLength(serialized, "utf8") > MAX_STATE_BYTES) {
+    throw new Error("Protected device key state is too large");
+  }
+  const randomId = randomStagingId?.() ?? randomBytes(12).toString("hex");
+  if (!STAGING_ID.test(randomId)) throw new Error("Invalid device key staging id");
+  const staging = join(root, `.device-signing-key.json.${randomId}.staging`);
+  assertContained(root, staging);
+  let fd: number | null = null;
+  let created = false;
+  let renamed = false;
+  try {
+    fd = openSync(
+      staging,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+      PRIVATE_FILE_MODE,
+    );
+    created = true;
+    fchmodSync(fd, PRIVATE_FILE_MODE);
+    writeFileSync(fd, serialized, "utf8");
+    fsyncSync(fd);
+    closeSync(fd);
+    fd = null;
+    renameSync(staging, path);
+    renamed = true;
+    syncRoot(root);
+  } catch (error) {
+    if (fd !== null) {
+      try {
+        closeSync(fd);
+      } catch {
+        // Preserve the original write error.
+      }
+    }
+    if (created && !renamed) {
+      try {
+        unlinkSync(staging);
+        syncRoot(root);
+      } catch {
+        // Preserve the original write error.
+      }
+    }
+    throw error;
+  }
+}
+
+type ReadPrivateState = Readonly<{
+  state: z.output<typeof DeviceKeyStateSchema>;
+  identity: Readonly<{ dev: number; ino: number }>;
+}>;
+
+function readPrivateState(path: string, afterReadBytes?: () => void): ReadPrivateState | null {
+  let expected;
+  try {
+    expected = lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  if (expected.isSymbolicLink()) throw new Error("Device key state cannot be a symlink");
+  assertPrivateStateFile(expected);
+  const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  try {
+    const opened = fstatSync(fd);
+    assertPrivateStateFile(opened);
+    if (!sameFile(expected, opened)) throw new Error("Device key state changed before open");
+    const bytes = readFileSync(fd);
+    afterReadBytes?.();
+    const final = fstatSync(fd);
+    assertPrivateStateFile(final);
+    if (
+      !sameFile(opened, final) ||
+      final.size !== opened.size ||
+      final.mtimeMs !== opened.mtimeMs ||
+      bytes.byteLength !== final.size
+    ) {
+      throw new Error("Device key state changed while reading");
+    }
+    const pathAfter = lstatSync(path);
+    if (pathAfter.isSymbolicLink()) throw new Error("Device key state cannot be a symlink");
+    assertPrivateStateFile(pathAfter);
+    if (
+      !sameFile(final, pathAfter) ||
+      pathAfter.size !== final.size ||
+      pathAfter.mtimeMs !== final.mtimeMs
+    ) {
+      throw new Error("Device key state path changed while reading");
+    }
+    return Object.freeze({
+      state: DeviceKeyStateSchema.parse(JSON.parse(bytes.toString("utf8")) as unknown),
+      identity: Object.freeze({ dev: final.dev, ino: final.ino }),
+    });
+  } finally {
+    closeSync(fd);
+  }
+}
+
 /** Ed25519 private key encrypted by Electron safeStorage (macOS Keychain backed). */
 export class SafeStorageDeviceKeyStore implements DeviceKeyStore {
   private readonly root: string;
   private readonly path: string;
   private readonly safeStorage: SafeStorageSurface;
+  private readonly options: SafeStorageDeviceKeyStoreOptions;
 
-  constructor(rootPath: string, safeStorage: SafeStorageSurface) {
+  constructor(
+    rootPath: string,
+    safeStorage: SafeStorageSurface,
+    options: SafeStorageDeviceKeyStoreOptions = {},
+  ) {
     if (!safeStorage.isEncryptionAvailable()) {
       throw new Error("macOS Keychain encryption is unavailable");
     }
@@ -85,37 +233,36 @@ export class SafeStorageDeviceKeyStore implements DeviceKeyStore {
     this.path = join(this.root, "device-signing-key.json");
     assertContained(this.root, this.path);
     this.safeStorage = safeStorage;
+    this.options = options;
   }
 
   generate(): DeviceKeyMaterial {
     const material = generateEd25519Material();
     const protectedKey = this.safeStorage.encryptString(exportPrivateKeyPkcs8Base64Url(material));
-    writePrivateState(this.root, this.path, protectedKey);
+    writePrivateState(this.root, this.path, protectedKey, this.options.randomStagingId);
     return material;
   }
 
   load(): DeviceKeyMaterial | null {
-    if (!existsSync(this.path)) return null;
-    const meta = lstatSync(this.path);
-    if (!meta.isFile() || meta.isSymbolicLink() || meta.size > 64 * 1024) {
-      throw new Error("Invalid device key state file");
-    }
-    const state = DeviceKeyStateSchema.parse(
-      JSON.parse(readFileSync(this.path, "utf8")) as unknown,
-    );
+    const observed = readPrivateState(this.path, this.options.afterReadBytes);
+    if (observed === null) return null;
     const plaintext = this.safeStorage.decryptString(
-      Buffer.from(state.protected_private_key, "base64"),
+      Buffer.from(observed.state.protected_private_key, "base64"),
     );
     return importPrivateKeyPkcs8Base64Url(plaintext);
   }
 
   clear(): void {
-    if (existsSync(this.path)) {
-      const meta = lstatSync(this.path);
-      if (!meta.isFile() || meta.isSymbolicLink()) {
-        throw new Error("Invalid device key state file");
-      }
-      unlinkSync(this.path);
+    const observed = readPrivateState(this.path, this.options.afterReadBytes);
+    if (observed === null) return;
+    this.options.beforeClearRevalidate?.();
+    const current = lstatSync(this.path);
+    if (current.isSymbolicLink()) throw new Error("Device key state cannot be a symlink");
+    assertPrivateStateFile(current);
+    if (!sameFile(observed.identity, current)) {
+      throw new Error("Device key state changed before clear");
     }
+    unlinkSync(this.path);
+    syncRoot(this.root);
   }
 }

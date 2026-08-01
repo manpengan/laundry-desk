@@ -11,6 +11,7 @@ import {
   OfflineGrantPayloadSchema,
   PrimaryLeasePayloadSchema,
 } from "./protocols.js";
+import { PrintSnapshotSchema } from "./print-snapshot.js";
 import { EdgeDeviceRegistrationAuthoritySchema, EdgeReplayAuthoritySchema } from "./replay-api.js";
 import {
   getSignatureCandidateAuthority,
@@ -139,6 +140,7 @@ const OfflineGrantAuthoritySchema = createAuthoritySchema(OfflineGrantPayloadSch
 const PrimaryLeaseAuthoritySchema = createAuthoritySchema(PrimaryLeasePayloadSchema);
 const DEVICE_REGISTRATION_SIGNING_DOMAIN = "laundry.edge.device-registration.v1";
 const REPLAY_SIGNING_DOMAIN = "laundry.edge.replay.v1";
+const PRINT_SNAPSHOT_DOMAIN = "laundry.edge.print-snapshot.v1";
 
 /** Canonical server signing bytes for one strictly parsed capability-ticket authority. */
 export const canonicalizeCapabilityTicketForSigning = (authority: unknown): Uint8Array =>
@@ -181,6 +183,14 @@ export const canonicalizeEdgeDeviceRegistrationForSigning = (authority: unknown)
 /** Canonical device signing bytes covering the complete immutable offline queue envelope. */
 export const canonicalizeEdgeReplayForSigning = (authority: unknown): Uint8Array =>
   canonicalizeAuthority(REPLAY_SIGNING_DOMAIN, EdgeReplayAuthoritySchema.parse(authority));
+
+/** Canonical immutable snapshot bytes hashed into each print capability and receipt. */
+export const canonicalizePrintSnapshot = (snapshotInput: unknown): Uint8Array => {
+  const snapshot = PrintSnapshotSchema.parse(snapshotInput);
+  return textEncoder.encode(
+    `${PRINT_SNAPSHOT_DOMAIN}\n${serializeCanonicalValue(snapshot, new WeakSet<object>())}`,
+  );
+};
 
 /**
  * Produces verification bytes only for a provenance-registered signature candidate. Registration

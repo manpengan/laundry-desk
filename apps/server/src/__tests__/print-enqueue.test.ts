@@ -43,6 +43,47 @@ const ID_A = "11111111-1111-4111-8111-111111111111";
 const ID_B = "22222222-2222-4222-8222-222222222222";
 const ID_C = "33333333-3333-4333-8333-333333333333";
 
+const ORDER_SNAPSHOT = Object.freeze({
+  version: 1 as const,
+  store_name: "Test Laundry",
+  store_phone: null,
+  order_id: ORDER_ID,
+  ticket_no: "20260722-0001",
+  received_at: "2026-07-22T00:00:00.000Z",
+  customer_name: null,
+  customer_phone: null,
+  note: null,
+  lines: Object.freeze([
+    Object.freeze({
+      line_index: 0,
+      service_code: "wash",
+      category_code: "shirt",
+      unit_price_cents: 500,
+      qty: 1,
+      line_total_cents: 500,
+      color: null,
+      brand: null,
+    }),
+  ]),
+  totals: Object.freeze({
+    original_cents: 500,
+    discount_cents: 0,
+    addon_cents: 0,
+    urgent_cents: 0,
+    freight_cents: 0,
+    payable_cents: 500,
+    paid_cents: 500,
+    balance_cents: 0,
+  }),
+  payment_methods: Object.freeze(["cash" as const]),
+});
+
+function createAuthorityPrintStore() {
+  return createMemoryPrintJobStore({
+    loadSnapshot: async (orderId) => (orderId === ORDER_ID ? ORDER_SNAPSHOT : null),
+  });
+}
+
 function sequentialIds(ids: readonly string[]): () => string {
   let i = 0;
   return () => {
@@ -56,7 +97,7 @@ function sequentialIds(ids: readonly string[]): () => string {
 }
 
 function buildBus(
-  printStore: PrintJobStore = createMemoryPrintJobStore(),
+  printStore: PrintJobStore = createAuthorityPrintStore(),
   options: Readonly<{ newId?: () => string }> = {},
 ) {
   const { registry, queryRegistry } = createRegisteredM1Bus({
@@ -94,7 +135,6 @@ test("print.ticket.enqueue returns queued job and list sees it", async () => {
     "print.ticket.enqueue",
     {
       order_id: ORDER_ID,
-      ticket_no: "20260722-0001",
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
   );
@@ -151,7 +191,6 @@ test("print.ticket.enqueue accepts explicit kind", async () => {
     "print.ticket.enqueue",
     {
       order_id: ORDER_ID,
-      ticket_no: "T-99",
       kind: "gp3120",
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
@@ -209,7 +248,6 @@ test("print.ticket.enqueue without order_write is PERMISSION_DENIED", async () =
     "print.ticket.enqueue",
     {
       order_id: ORDER_ID,
-      ticket_no: "x",
     },
     { registry, actor: noWrite, chainHooks, pendingStore },
   );
@@ -226,7 +264,6 @@ test("print.ticket.enqueue invalid input is VALIDATION_FAILED", async () => {
     "print.ticket.enqueue",
     {
       order_id: "not-a-uuid",
-      ticket_no: "x",
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
   );
@@ -244,7 +281,6 @@ test("enqueue → process → list shows done + payload_bytes", async () => {
     "print.ticket.enqueue",
     {
       order_id: ORDER_ID,
-      ticket_no: "20260722-0001",
       kind: "xp58",
     },
     { registry, actor: CLERK, chainHooks, pendingStore },
@@ -328,7 +364,7 @@ test("print.ticket.process missing job is RESOURCE_UNAVAILABLE", async () => {
   assert.equal(result.error.code, "RESOURCE_UNAVAILABLE");
 });
 
-test("failed job → retry enqueues new job, auto-processes xp58 to done, source stays failed", async () => {
+test("failed job → retry enqueues a new queued job and source stays failed", async () => {
   const printStore = createMemoryPrintJobStore();
   const source = await printStore.enqueue({
     order_id: ORDER_ID,
@@ -366,11 +402,11 @@ test("failed job → retry enqueues new job, auto-processes xp58 to done, source
   };
   assert.equal(data.job_id, ID_B);
   assert.notEqual(data.job_id, ID_A);
-  assert.equal(data.status, "done");
+  assert.equal(data.status, "queued");
   assert.equal(data.kind, "xp58");
   assert.equal(data.order_id, ORDER_ID);
   assert.equal(data.ticket_no, "20260722-RETRY");
-  assert.ok(typeof data.payload_bytes === "number" && data.payload_bytes > 0);
+  assert.equal(data.payload_bytes, undefined);
 
   const sourceAfter = await printStore.get(ID_A);
   assert.equal(sourceAfter?.status, "failed");
@@ -391,11 +427,11 @@ test("failed job → retry enqueues new job, auto-processes xp58 to done, source
   assert.ok(body.jobs.length >= 2);
   const byId = new Map(body.jobs.map((j) => [j.job_id, j.status]));
   assert.equal(byId.get(ID_A), "failed");
-  assert.equal(byId.get(ID_B), "done");
+  assert.equal(byId.get(ID_B), "queued");
 });
 
-test("done job → reprint enqueues new job and auto-processes xp58", async () => {
-  const printStore = createMemoryPrintJobStore();
+test("done job → reprint enqueues one new queued job", async () => {
+  const printStore = createAuthorityPrintStore();
   const { registry, chainHooks, pendingStore } = buildBus(printStore, {
     newId: sequentialIds([ID_A, ID_B]),
   });
@@ -404,7 +440,7 @@ test("done job → reprint enqueues new job and auto-processes xp58", async () =
     new FakeSqlClient(),
     TENANT,
     "print.ticket.enqueue",
-    { order_id: ORDER_ID, ticket_no: "20260722-REPRINT", kind: "xp58" },
+    { order_id: ORDER_ID, kind: "xp58" },
     { registry, actor: CLERK, chainHooks, pendingStore },
   );
   assert.equal(enqueued.ok, true, JSON.stringify(enqueued));
@@ -439,9 +475,9 @@ test("done job → reprint enqueues new job and auto-processes xp58", async () =
     payload_bytes?: number;
   };
   assert.equal(data.job_id, ID_B);
-  assert.equal(data.status, "done");
-  assert.equal(data.ticket_no, "20260722-REPRINT");
-  assert.ok(typeof data.payload_bytes === "number" && data.payload_bytes > 0);
+  assert.equal(data.status, "queued");
+  assert.equal(data.ticket_no, ORDER_SNAPSHOT.ticket_no);
+  assert.equal(data.payload_bytes, undefined);
 
   const original = await printStore.get(ID_A);
   assert.equal(original?.status, "done");

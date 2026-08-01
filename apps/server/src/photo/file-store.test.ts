@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  chmod,
   lstat,
   mkdir,
   mkdtemp,
@@ -152,6 +153,7 @@ test("refuses filesystem root, unowned directories, and symlink ancestors", asyn
   const root = await tempRoot();
   const unowned = join(root, "unowned");
   await mkdir(unowned, { mode: 0o755 });
+  await chmod(unowned, 0o755);
   await writeFile(join(unowned, "do-not-touch.txt"), "keep");
   await assert.rejects(
     () => createPhotoFileStore({ rootPath: unowned }),

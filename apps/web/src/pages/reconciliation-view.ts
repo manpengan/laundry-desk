@@ -1,4 +1,10 @@
-export const PAYMENT_METHODS = Object.freeze(["cash", "wechat", "alipay", "other"] as const);
+export const PAYMENT_METHODS = Object.freeze([
+  "cash",
+  "wechat",
+  "alipay",
+  "other",
+  "balance",
+] as const);
 export const PAYMENT_KINDS = Object.freeze([
   "pay",
   "repay",
@@ -6,7 +12,13 @@ export const PAYMENT_KINDS = Object.freeze([
   "storage_fee",
   "reversal",
 ] as const);
-export const PRINT_STATUSES = Object.freeze(["queued", "printing", "done", "failed"] as const);
+export const PRINT_STATUSES = Object.freeze([
+  "queued",
+  "printing",
+  "done",
+  "failed",
+  "uncertain",
+] as const);
 export const REPLAY_DECISIONS = Object.freeze([
   "applied",
   "duplicate",
@@ -150,7 +162,7 @@ function parseLedger(value: unknown): ReconciliationView["ledger"] | null {
     !isSafeInt(value.net_cents) ||
     !isSafeInt(value.difference_from_orders_cents) ||
     !Array.isArray(value.buckets) ||
-    value.buckets.length > 20
+    value.buckets.length > 25
   ) {
     return null;
   }
@@ -303,7 +315,7 @@ export function parseReconciliationView(value: unknown): ReconciliationView | nu
   ) {
     return null;
   }
-  const statuses = parseCounts(value.print.statuses, PRINT_STATUSES, "status", 4);
+  const statuses = parseCounts(value.print.statuses, PRINT_STATUSES, "status", 5);
   const decisions = parseCounts(value.edge_replay.decisions, REPLAY_DECISIONS, "decision", 5);
   if (statuses === null || decisions === null) return null;
   return Object.freeze({

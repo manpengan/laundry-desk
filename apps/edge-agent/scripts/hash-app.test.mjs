@@ -182,6 +182,26 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
     includedFiles.includes("dist/pairing/safe-storage-device-keys.js"),
     "Keychain-backed device key store must ship with its importing shell",
   );
+  for (const stage3Module of [
+    "dist/desktop/print-http-transport.js",
+    "dist/print/continuity.js",
+    "dist/print/cups-queue.js",
+    "dist/print/dispatch-controller.js",
+    "dist/print/dispatch-ledger-state.js",
+    "dist/print/dispatch-ledger.js",
+    "dist/print/dispatch-verifier.js",
+    "dist/print/durable-json-file.js",
+    "dist/print/runtime.js",
+    "dist/print/signed-executor.js",
+    "dist/print/snapshot-render.js",
+    "dist/pairing/sign-receipt.js",
+    "dist/pairing/verify-ticket.js",
+  ]) {
+    assert.ok(
+      includedFiles.includes(stage3Module),
+      `signed print runtime missing: ${stage3Module}`,
+    );
+  }
   assert.doesNotMatch(
     includedFiles.join("\n"),
     /\*|tests?|spec|\.d\.ts|\.map|src\/|\.env|credentials?|secrets?|logs?/iu,
@@ -282,6 +302,13 @@ test("release packaging is fail-closed, notarized, and keeps the local whitelist
   const releaseFiles = /^files:\n(?<body>(?:  - .+\n)+)/mu.exec(releaseBuilder)?.groups?.body;
 
   assert.equal(releaseFiles, localFiles);
+  for (const modulePath of [
+    "dist/offline/grant-sequence-store.js",
+    "dist/offline/offline-command-policy.js",
+  ]) {
+    assert.match(localFiles ?? "", new RegExp(`^  - ${modulePath}$`, "mu"));
+    assert.match(releaseFiles ?? "", new RegExp(`^  - ${modulePath}$`, "mu"));
+  }
   assert.match(releaseBuilder, /^forceCodeSigning:\s+true$/mu);
   assert.match(releaseBuilder, /^\s+hardenedRuntime:\s+true$/mu);
   assert.match(releaseBuilder, /^\s+notarize:\s+true$/mu);

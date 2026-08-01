@@ -1,0 +1,231 @@
+name: laundry-desk-runtime
+
+x-server-image: &server-image "${LAUNDRY_RUNTIME_SERVER_IMAGE:?signed server image digest required}"
+x-runtime-environment: &runtime-environment
+  LAUNDRY_RUNTIME_RELEASE: "${LAUNDRY_RUNTIME_RELEASE:?signed release required}"
+  LAUNDRY_RUNTIME_CONTRACTS_SHA256: "${LAUNDRY_RUNTIME_CONTRACTS_SHA256:?contracts checksum required}"
+  LAUNDRY_RUNTIME_SCHEMA_SHA256: "${LAUNDRY_RUNTIME_SCHEMA_SHA256:?schema checksum required}"
+  LAUNDRY_RUNTIME_MIGRATIONS_SHA256: "${LAUNDRY_RUNTIME_MIGRATIONS_SHA256:?migrations checksum required}"
+  LAUNDRY_RUNTIME_MIGRATION_HEAD: "${LAUNDRY_RUNTIME_MIGRATION_HEAD:?migration head required}"
+x-runtime-security: &runtime-security
+  user: "10001:10001"
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777,uid=10001,gid=10001
+
+services:
+  postgres:
+    image: "${LAUNDRY_RUNTIME_POSTGRES_IMAGE:?signed PostgreSQL 16 digest required}"
+    environment:
+      POSTGRES_DB: laundry_v2
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets:
+      - source: postgres-password
+        target: postgres-password
+        mode: 0400
+    ports:
+      - "127.0.0.1:8543:5432"
+    volumes:
+      - pgdata-v2:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d laundry_v2"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  roles:
+    <<: *runtime-security
+    image: *server-image
+    command: ["roles"]
+    environment:
+      <<: *runtime-environment
+      DATABASE_ADMIN_URL_FILE: /run/secrets/database-admin-url
+      LAUNDRY_APP_PASSWORD_FILE: /run/secrets/app-password
+    secrets:
+      - source: database-admin-url
+        target: database-admin-url
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: app-password
+        target: app-password
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  migrate:
+    <<: *runtime-security
+    image: *server-image
+    command: ["migrate"]
+    environment:
+      <<: *runtime-environment
+      DATABASE_ADMIN_URL_FILE: /run/secrets/database-admin-url
+    secrets:
+      - source: database-admin-url
+        target: database-admin-url
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  bootstrap:
+    <<: *runtime-security
+    image: *server-image
+    command: ["bootstrap"]
+    environment:
+      <<: *runtime-environment
+      DATABASE_ADMIN_URL_FILE: /run/secrets/database-admin-url
+      LAUNDRY_BOOTSTRAP_ADMIN_USERNAME_FILE: /run/secrets/bootstrap-admin-username
+      LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME_FILE: /run/secrets/bootstrap-admin-display-name
+      LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/bootstrap-admin-password
+      LAUNDRY_BOOTSTRAP_ADMIN_PIN_FILE: /run/secrets/bootstrap-admin-pin
+    secrets:
+      - source: database-admin-url
+        target: database-admin-url
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: bootstrap-admin-username
+        target: bootstrap-admin-username
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: bootstrap-admin-display-name
+        target: bootstrap-admin-display-name
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: bootstrap-admin-password
+        target: bootstrap-admin-password
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: bootstrap-admin-pin
+        target: bootstrap-admin-pin
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  verify:
+    <<: *runtime-security
+    image: *server-image
+    command: ["verify"]
+    environment:
+      <<: *runtime-environment
+      DATABASE_URL_FILE: /run/secrets/database-url
+      DATABASE_ADMIN_URL_FILE: /run/secrets/database-admin-url
+    secrets:
+      - source: database-url
+        target: database-url
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: database-admin-url
+        target: database-admin-url
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  server:
+    <<: *runtime-security
+    image: *server-image
+    command: ["server"]
+    environment:
+      <<: *runtime-environment
+      DATABASE_URL_FILE: /run/secrets/database-url
+      LAUNDRY_ACCESS_TOKEN_SECRET_FILE: /run/secrets/access-token-secret
+      LAUNDRY_CSRF_PROOF_SECRET_FILE: /run/secrets/csrf-proof-secret
+      LAUNDRY_CONTAINER_RUNTIME: "1"
+      LAUNDRY_USE_LOCAL_PG: "1"
+      LAUNDRY_PHOTO_STORE_DIR: /var/lib/laundry/photos
+    secrets:
+      - source: database-url
+        target: database-url
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: access-token-secret
+        target: access-token-secret
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: csrf-proof-secret
+        target: csrf-proof-secret
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - type: volume
+        source: photos
+        target: /var/lib/laundry/photos
+        read_only: false
+        volume:
+          nocopy: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+secrets:
+  postgres-password:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/postgres-password"
+  app-password:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/app-password"
+  database-url:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/database-url"
+  database-admin-url:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/database-admin-url"
+  access-token-secret:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/access-token-secret"
+  csrf-proof-secret:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/csrf-proof-secret"
+  bootstrap-admin-username:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/bootstrap-admin-username"
+  bootstrap-admin-display-name:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/bootstrap-admin-display-name"
+  bootstrap-admin-password:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/bootstrap-admin-password"
+  bootstrap-admin-pin:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/bootstrap-admin-pin"
+
+volumes:
+  pgdata-v2:
+    name: laundry-desk-runtime_pgdata-v2
+    external: true
+  photos:
+    name: laundry-desk-runtime_photos
+    external: true

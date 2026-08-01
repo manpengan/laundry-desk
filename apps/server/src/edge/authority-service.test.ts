@@ -125,6 +125,14 @@ test("persists proof-bound grants and serializes Primary lease takeover", async 
   assert.notEqual(first, null);
   if (first === null) return;
   assert.equal(first.offline_grant.payload.permission_version, 4);
+  assert.deepEqual(first.offline_grant.payload.allowed_commands, [
+    "order.receive",
+    "order.hold",
+    "customer.upsert",
+    "print.ticket.enqueue",
+    "print.ticket.retry",
+    "print.ticket.reprint",
+  ]);
   assert.equal(first.offline_grant.payload.ttl_ms, OFFLINE_GRANT_MAX_TTL_MS);
   assert.equal(
     Date.parse(first.offline_grant.payload.not_after) -

@@ -43,7 +43,13 @@ export const ReconciliationPaymentKindSchema = z.enum([
   "storage_fee",
   "reversal",
 ]);
-export const ReconciliationPrintStatusSchema = z.enum(["queued", "printing", "done", "failed"]);
+export const ReconciliationPrintStatusSchema = z.enum([
+  "queued",
+  "printing",
+  "done",
+  "failed",
+  "uncertain",
+]);
 export const ReconciliationReplayDecisionSchema = z.enum([
   "applied",
   "duplicate",
@@ -109,7 +115,7 @@ export const ReconciliationDayResultSchema = z.strictObject({
           count: NonNegativeSafeIntegerSchema,
         }),
       )
-      .max(4)
+      .max(5)
       .refine(
         (statuses) => new Set(statuses.map((status) => status.status)).size === statuses.length,
         { message: "Print status counts must be unique" },

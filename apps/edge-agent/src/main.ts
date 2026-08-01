@@ -13,7 +13,7 @@ import {
   session,
   type Session,
 } from "electron";
-import { randomUUID } from "node:crypto";
+import { randomUUID, type KeyObject } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -50,10 +50,14 @@ import { FileQueueStore } from "./queue/file-store.js";
 import { PersistentEncryptedQueue } from "./queue/persistent-queue.js";
 import { SafeStorageKekStore } from "./queue/safe-storage-kek.js";
 import { SafeStorageDeviceKeyStore } from "./pairing/safe-storage-device-keys.js";
-import { SafeStorageAuthorityTrustStore } from "./pairing/authority-trust.js";
-import { createCupsWorkerController, type CupsWorkerController } from "./print/cups-worker.js";
-import { discoverCupsQueues, submitCupsBytes } from "./print/cups-process.js";
+import {
+  SafeStorageAuthorityTrustStore,
+  type AuthorityTrustStore,
+} from "./pairing/authority-trust.js";
+import { discoverCupsQueues } from "./print/cups-process.js";
+import { createSignedPrintRuntime, type SignedPrintRuntime } from "./print/runtime.js";
 import { OfflineConflictStore } from "./offline/conflict-store.js";
+import { FileGrantSequenceStore } from "./offline/grant-sequence-store.js";
 import { OfflineCommandRuntime } from "./offline/runtime.js";
 import { createOfflineDesktopService } from "./offline/service.js";
 import { OfflineReadCache } from "./offline/read-cache.js";
@@ -84,7 +88,7 @@ let mainWindow: BrowserWindow | null = null;
 let mainWindowReady: Promise<void> | null = null;
 let activeDesktopSession: Session | null = null;
 let disposeTray: (() => void) | null = null;
-let cupsWorker: CupsWorkerController | null = null;
+let signedPrintRuntime: SignedPrintRuntime | null = null;
 let offlineQueue: PersistentEncryptedQueue | null = null;
 let offlineRuntime: OfflineCommandRuntime | null = null;
 
@@ -157,25 +161,6 @@ async function boot(mode: BootMode): Promise<void> {
     store: new FileQueueStore(edgeStateRoot),
   });
   console.log("[edge-agent] encrypted offline queue ready", offlineQueue.status());
-  const cupsQueue = process.env.LAUNDRY_CUPS_QUEUE?.trim() ?? "";
-  const printSpoolRoot = process.env.LAUNDRY_PRINT_SPOOL_DIR?.trim() ?? "";
-  if ((cupsQueue.length === 0) !== (printSpoolRoot.length === 0)) {
-    throw new Error("CUPS worker requires both LAUNDRY_CUPS_QUEUE and LAUNDRY_PRINT_SPOOL_DIR");
-  }
-  if (cupsQueue.length > 0) {
-    cupsWorker = createCupsWorkerController(
-      {
-        queue: cupsQueue,
-        spoolRoot: printSpoolRoot,
-        stateRoot: app.getPath("userData"),
-      },
-      { discover: discoverCupsQueues, submit: submitCupsBytes },
-    );
-    const initialPrintStatus = await cupsWorker.start();
-    if (initialPrintStatus.state === "failed" || initialPrintStatus.state === "uncertain") {
-      throw new Error("CUPS worker startup failed closed");
-    }
-  }
   const desktopTransport = createDesktopHttpTransport(
     createElectronDesktopDependencies({
       net: net as unknown as ElectronDesktopDependencyOptions["net"],
@@ -187,10 +172,19 @@ async function boot(mode: BootMode): Promise<void> {
       }),
     }),
   );
-  const authorityTrust = new SafeStorageAuthorityTrustStore(edgeStateRoot, safeStorage);
+  const persistentAuthorityTrust = new SafeStorageAuthorityTrustStore(edgeStateRoot, safeStorage);
+  let trustedPrintAuthority: KeyObject | null = null;
+  const authorityTrust: AuthorityTrustStore = Object.freeze({
+    accept(publicKey: KeyObject): boolean {
+      const accepted = persistentAuthorityTrust.accept(publicKey);
+      if (accepted) trustedPrintAuthority = publicKey;
+      return accepted;
+    },
+  });
   offlineRuntime = new OfflineCommandRuntime({
     queue: offlineQueue,
     conflicts: new OfflineConflictStore(edgeStateRoot),
+    grantSequences: new FileGrantSequenceStore(edgeStateRoot),
     transport: desktopTransport,
     authorityTrust,
   });
@@ -205,8 +199,39 @@ async function boot(mode: BootMode): Promise<void> {
     }),
     { recoveryReadOnly: mode === "recovery" },
   );
-  powerMonitor.on("suspend", () => offlineRuntime?.invalidateContinuity());
-  powerMonitor.on("resume", () => offlineRuntime?.invalidateContinuity());
+  const cupsQueue = process.env.LAUNDRY_CUPS_QUEUE?.trim() ?? "";
+  if (mode === "normal" && cupsQueue.length > 0) {
+    signedPrintRuntime = await createSignedPrintRuntime({
+      stateRoot: join(edgeStateRoot, "print-dispatch"),
+      queue: cupsQueue,
+      deviceId,
+      devicePrivateKey: deviceKey.privateKey,
+      serverPublicKey: () => trustedPrintAuthority,
+      ensureAuthority: async () => {
+        let current = desktopTransport.edge.currentSession();
+        if (current === null) {
+          const refreshed = await desktopTransport.auth.refresh();
+          if (!refreshed.ok) return false;
+          current = desktopTransport.edge.currentSession();
+        }
+        return (
+          current !== null &&
+          (await offlineRuntime!.refreshAuthority(current)) &&
+          trustedPrintAuthority !== null
+        );
+      },
+      transport: desktopTransport.edge.print,
+      onStatus: (status) => console.log("[edge-agent] signed print", status.state, status.message),
+      onError: () => console.error("[edge-agent] signed print poll failed closed"),
+    });
+    await signedPrintRuntime.controller.start();
+  }
+  const invalidateContinuity = (): void => {
+    offlineRuntime?.invalidateContinuity();
+    signedPrintRuntime?.continuity.invalidate();
+  };
+  powerMonitor.on("suspend", invalidateContinuity);
+  powerMonitor.on("resume", invalidateContinuity);
   registerDesktopOperationHandlers({
     ipcMain: ipcMain as unknown as DesktopIpcMainSurface,
     service: desktopService,
@@ -355,6 +380,6 @@ if (!claimPrimaryInstance(app)) {
     powerMonitor.removeAllListeners("suspend");
     powerMonitor.removeAllListeners("resume");
     disposeTray?.();
-    void cupsWorker?.stop();
+    void signedPrintRuntime?.controller.stop();
   });
 }

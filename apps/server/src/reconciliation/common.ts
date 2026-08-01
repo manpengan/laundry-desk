@@ -12,6 +12,7 @@ export const PAYMENT_METHOD_ORDER: readonly PaymentMethod[] = Object.freeze([
   "wechat",
   "alipay",
   "other",
+  "balance",
 ]);
 export const PAYMENT_KIND_ORDER: readonly PaymentKind[] = Object.freeze([
   "pay",

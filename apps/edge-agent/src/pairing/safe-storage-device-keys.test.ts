@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { renameSync, writeFileSync } from "node:fs";
+import { chmod, link, lstat, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -66,4 +67,118 @@ test("device key store refuses to start without OS encryption", async () => {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("device key state and its root stay owner-private", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-device-key-mode-"));
+  try {
+    const store = new SafeStorageDeviceKeyStore(root, fakeSafeStorage);
+    store.generate();
+    assert.equal((await lstat(root)).mode & 0o777, 0o700);
+    assert.equal((await lstat(join(root, "device-signing-key.json"))).mode & 0o777, 0o600);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("device key state rejects symlinks, hard links, and public modes", async (t) => {
+  await t.test("symlink", async () => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-device-key-symlink-"));
+    try {
+      const target = join(root, "target.json");
+      await writeFile(target, "{}\n", { mode: 0o600 });
+      await symlink(target, join(root, "device-signing-key.json"));
+      const store = new SafeStorageDeviceKeyStore(root, fakeSafeStorage);
+      assert.throws(() => store.load(), /symlink/u);
+      assert.throws(() => store.clear(), /symlink/u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  await t.test("hard link", async () => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-device-key-hardlink-"));
+    try {
+      const store = new SafeStorageDeviceKeyStore(root, fakeSafeStorage);
+      store.generate();
+      await link(join(root, "device-signing-key.json"), join(root, "duplicate.json"));
+      assert.throws(() => store.load(), /private/u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  await t.test("public mode", async () => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-device-key-public-"));
+    try {
+      const store = new SafeStorageDeviceKeyStore(root, fakeSafeStorage);
+      store.generate();
+      await chmod(join(root, "device-signing-key.json"), 0o644);
+      assert.throws(() => store.load(), /private/u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+test("attacker-controlled staging paths are never followed or truncated", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-device-key-staging-"));
+  const stagingId = "a".repeat(24);
+  try {
+    const target = join(root, "do-not-overwrite.txt");
+    const staging = join(root, `.device-signing-key.json.${stagingId}.staging`);
+    await writeFile(target, "sentinel", { mode: 0o600 });
+    await symlink(target, staging);
+    const store = new SafeStorageDeviceKeyStore(root, fakeSafeStorage, {
+      randomStagingId: () => stagingId,
+    });
+
+    assert.throws(() => store.generate(), /EEXIST/u);
+    assert.equal(await readFile(target, "utf8"), "sentinel");
+    assert.equal((await lstat(staging)).isSymbolicLink(), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("path replacement during load or before clear is rejected", async (t) => {
+  await t.test("load replacement", async () => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-device-key-read-race-"));
+    try {
+      const path = join(root, "device-signing-key.json");
+      new SafeStorageDeviceKeyStore(root, fakeSafeStorage).generate();
+      const original = await readFile(path);
+      let replaced = false;
+      const racing = new SafeStorageDeviceKeyStore(root, fakeSafeStorage, {
+        afterReadBytes: () => {
+          if (replaced) return;
+          replaced = true;
+          renameSync(path, join(root, "device-signing-key.old"));
+          writeFileSync(path, original, { mode: 0o600 });
+        },
+      });
+      assert.throws(() => racing.load(), /path changed/u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  await t.test("clear replacement", async () => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-device-key-clear-race-"));
+    try {
+      const path = join(root, "device-signing-key.json");
+      new SafeStorageDeviceKeyStore(root, fakeSafeStorage).generate();
+      const original = await readFile(path);
+      const racing = new SafeStorageDeviceKeyStore(root, fakeSafeStorage, {
+        beforeClearRevalidate: () => {
+          renameSync(path, join(root, "device-signing-key.old"));
+          writeFileSync(path, original, { mode: 0o600 });
+        },
+      });
+      assert.throws(() => racing.clear(), /changed before clear/u);
+      assert.equal((await lstat(path)).isFile(), true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

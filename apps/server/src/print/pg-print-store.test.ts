@@ -110,6 +110,7 @@ test("transition printing → done sets payload_bytes", async () => {
             updated_at: created,
             error: null,
             payload_bytes: null,
+            snapshot_sha256: null,
           },
         ],
         rowCount: 1,

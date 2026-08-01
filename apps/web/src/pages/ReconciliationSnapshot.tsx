@@ -8,6 +8,7 @@ const METHOD_LABELS = Object.freeze({
   wechat: "微信",
   alipay: "支付宝",
   other: "其他",
+  balance: "会员余额",
 });
 const KIND_LABELS = Object.freeze({
   pay: "收款",
@@ -21,6 +22,7 @@ const PRINT_LABELS = Object.freeze({
   printing: "打印中",
   done: "软件完成",
   failed: "失败",
+  uncertain: "结果待确认",
 });
 const REPLAY_LABELS = Object.freeze({
   applied: "已应用",

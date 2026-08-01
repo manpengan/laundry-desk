@@ -46,7 +46,7 @@
       "dependsOn": ["^build", "@laundry/contracts#build"]
     },
     "@laundry/edge-agent#test": {
-      "dependsOn": ["^build", "@laundry/contracts#build"]
+      "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/web#test"]
     },
     "@laundry/edge-agent#build": {
       "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/web#build"],

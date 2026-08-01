@@ -6,15 +6,15 @@ import { fileURLToPath } from "node:url";
 
 import {
   createMacPrinterAcceptanceRecord,
+  loadSignedPrintAcceptanceEvidence,
   writeMacPrinterAcceptanceRecord,
   type MacPrinterOperatorConfirmation,
 } from "./mac-printer-acceptance.js";
-import { runMacPrinterPilot } from "./mac-printer-pilot.js";
 
-function parseQueue(argv: readonly string[]): string {
+function parseJobId(argv: readonly string[]): string {
   const args = argv[0] === "--" ? argv.slice(1) : argv;
-  if (args.length !== 2 || args[0] !== "--cups-queue" || args[1] === undefined) {
-    throw new Error("use --cups-queue <installed-name>");
+  if (args.length !== 2 || args[0] !== "--job-id" || args[1] === undefined) {
+    throw new Error("use --job-id <uploaded-signed-dispatch-uuid>");
   }
   return args[1];
 }
@@ -24,10 +24,13 @@ async function askForConfirmation(): Promise<MacPrinterOperatorConfirmation> {
     throw new Error("physical acceptance requires an interactive terminal");
   }
   const prompts = [
-    ["text_clear", "文字和金额清晰"],
+    ["chinese_clear", "中文文字清晰可辨"],
+    ["amounts_correct", "金额与真实订单一致"],
     ["feed_ok", "走纸长度正常"],
     ["cut_or_tear_ok", "切刀或撕纸位置正常"],
     ["barcode_scanned", "条码已被扫描器成功回读"],
+    ["disconnect_no_duplicate", "断开打印机测试未产生重复票据"],
+    ["explicit_reprint_one_copy", "显式重打测试只产生一份票据"],
   ] as const;
   const terminal = createInterface({ input: process.stdin, output: process.stdout });
   try {
@@ -52,19 +55,15 @@ async function loadVersion(): Promise<string> {
 }
 
 async function main(): Promise<void> {
-  const queue = parseQueue(process.argv.slice(2));
-  const pilot = await runMacPrinterPilot({ mode: "print", queue });
-  process.stdout.write(`${JSON.stringify(pilot, null, 2)}\n`);
-  if (!pilot.ok) throw new Error("physical print submission failed");
-  const confirmation = await askForConfirmation();
-  const record = createMacPrinterAcceptanceRecord(pilot, confirmation, await loadVersion());
-  const directory = join(
-    homedir(),
-    "Library",
-    "Application Support",
-    "laundry-desk V2",
-    "hardware-acceptance",
+  const jobId = parseJobId(process.argv.slice(2));
+  const applicationRoot = join(homedir(), "Library", "Application Support", "laundry-desk V2");
+  const evidence = await loadSignedPrintAcceptanceEvidence(
+    join(applicationRoot, "edge-state", "print-dispatch"),
+    jobId,
   );
+  const confirmation = await askForConfirmation();
+  const record = createMacPrinterAcceptanceRecord(evidence, confirmation, await loadVersion());
+  const directory = join(applicationRoot, "hardware-acceptance");
   const path = await writeMacPrinterAcceptanceRecord(directory, record);
   process.stdout.write(`${JSON.stringify({ ok: true, record: path })}\n`);
 }

@@ -25,7 +25,7 @@ const fakeSafeStorage: SafeStorageSurface = Object.freeze({
 
 function envelope() {
   return {
-    queue_envelope_version: 2,
+    queue_envelope_version: 3,
     contracts_major: 0,
     queue_id: QUEUE_ID,
     enqueued_at: "2026-07-30T01:02:03.000Z",
@@ -40,6 +40,7 @@ function envelope() {
     authorization: {
       kind: "grant" as const,
       grant_id: GRANT_ID,
+      per_grant_seq: 1,
     },
   };
 }

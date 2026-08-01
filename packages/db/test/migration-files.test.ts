@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0031", () => {
+  it("ships formal SQL migrations ordered 0001 → 0034", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -44,6 +44,8 @@ describe("packages/db migration file inventory", () => {
       "0030_edge_replay_authority.sql",
       "0031_payment_ledger_sequence.sql",
       "0032_member_stored_value.sql",
+      "0033_offline_grant_replay.sql",
+      "0034_signed_print_dispatch.sql",
     ]);
   });
 
@@ -88,6 +90,8 @@ describe("packages/db migration file inventory", () => {
       "0030",
       "0031",
       "0032",
+      "0033",
+      "0034",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -327,6 +331,94 @@ describe("packages/db migration file inventory", () => {
     expect(sql).toMatch(
       /REVOKE UPDATE, DELETE, TRUNCATE ON TABLE edge_replay_records FROM laundry_app/iu,
     );
+  });
+
+  it("adds grant replay state and mutually exclusive replay authorization shapes", () => {
+    const sql = readFileSync(join(migrationsDir, "0033_offline_grant_replay.sql"), "utf8");
+
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS offline_grant_replay_state/iu);
+    expect(sql).toMatch(/REFERENCES offline_grants \(org_id, store_id, id\)/iu);
+    expect(sql).toMatch(/authorization_kind text/iu);
+    expect(sql).toMatch(/reported_per_grant_seq bigint/iu);
+    expect(sql).toMatch(/accepted_per_grant_seq bigint/iu);
+    expect(sql).toMatch(/authorization_kind = 'grant'[\s\S]*lease_id IS NULL/iu);
+    expect(sql).toMatch(/authorization_kind = 'primary_lease'[\s\S]*lease_id IS NOT NULL/iu);
+    expect(sql).toMatch(/reported_per_grant_seq IS NOT NULL[\s\S]*reported_per_grant_seq > 0/iu);
+    expect(sql).toMatch(/primary_epoch IS NOT NULL[\s\S]*reported_per_lease_seq IS NOT NULL/iu);
+    expect(sql).toMatch(/edge_replay_records_accepted_grant_seq_uidx/iu);
+    expect(sql).toMatch(/guard_offline_grant_replay_monotonicity/iu);
+    expect(sql).toMatch(/NEW\.last_seq <> 0/iu);
+    expect(sql).toMatch(/NEW\.last_seq <> OLD\.last_seq \+ 1/iu);
+    expect(sql).toMatch(/ENABLE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(/FORCE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(
+      /GRANT UPDATE \(last_seq, updated_at\) ON TABLE offline_grant_replay_state TO laundry_app/iu,
+    );
+    expect(sql).toMatch(
+      /REVOKE UPDATE, DELETE, TRUNCATE ON TABLE edge_replay_records FROM laundry_app/iu,
+    );
+  });
+
+  it("adds immutable signed print dispatch and monotonic device receipt settlement", () => {
+    const sql = readFileSync(join(migrationsDir, "0034_signed_print_dispatch.sql"), "utf8");
+
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS snapshot_json jsonb/iu);
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS snapshot_sha256 char\(64\)/iu);
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS snapshot_purged_at timestamptz/iu);
+    expect(sql).toMatch(
+      /ADD COLUMN IF NOT EXISTS printer_kind text GENERATED ALWAYS AS \(kind\)/iu,
+    );
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS ticket_nonce uuid/iu);
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS capability_json jsonb/iu);
+    expect(sql).toMatch(/print_jobs_signed_snapshot_chk/iu);
+    expect(sql).toMatch(/print_jobs_dispatch_shape_chk/iu);
+    expect(sql).toMatch(/print_jobs_receipt_shape_chk/iu);
+    expect(sql).toMatch(
+      /snapshot_json IS NOT NULL\s+AND snapshot_sha256 IS NOT NULL\s+AND snapshot_purged_at IS NULL\s+AND jsonb_typeof\(snapshot_json\)/iu,
+    );
+    expect(sql).toMatch(
+      /ticket_nonce IS NOT NULL\s+AND capability_json IS NOT NULL\s+AND jsonb_typeof\(capability_json\)/iu,
+    );
+    expect(sql).toMatch(
+      /dispatch_issued_at IS NOT NULL\s+AND dispatch_expires_at IS NOT NULL\s+AND dispatch_expires_at > dispatch_issued_at/iu,
+    );
+    expect(sql).toMatch(
+      /receipt_seq IS NOT NULL[\s\S]+receipt_result IS NOT NULL[\s\S]+receipt_json IS NOT NULL[\s\S]+receipt_envelope_sha256 IS NOT NULL/iu,
+    );
+    expect(sql).toMatch(/print_jobs_device_unsettled_uidx/iu);
+    expect(sql).toMatch(
+      /snapshot_json IS NULL AND snapshot_sha256 IS NULL AND snapshot_purged_at IS NULL/iu,
+    );
+    expect(sql).toMatch(
+      /snapshot_json IS NULL AND snapshot_purged_at IS NOT NULL[\s\S]+status IN \('done', 'failed', 'uncertain'\)/iu,
+    );
+    expect(sql).toMatch(/print_jobs_source_job_fk_idx/iu);
+    expect(sql).toMatch(/print_jobs_dispatch_device_fk_idx/iu);
+    expect(sql).toMatch(/print_jobs_dispatch_staff_fk_idx/iu);
+    expect(sql).toMatch(/print_jobs_order_privacy_idx/iu);
+    expect(sql).toMatch(/guard_print_job_dispatch_immutability/iu);
+    expect(sql).toMatch(/print dispatch binding is immutable/iu);
+    expect(sql).toMatch(/print snapshot is immutable except for terminal privacy purge/iu);
+    expect(sql).toMatch(/print receipt settlement is immutable/iu);
+    expect(sql).toMatch(/guard_print_receipt_head_monotonicity/iu);
+    expect(sql).toMatch(/NEW\.last_seq <> OLD\.last_seq \+ 1/iu);
+    expect(sql).toMatch(/status IN \('queued', 'printing', 'done', 'failed', 'uncertain'\)/iu);
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS print_device_receipt_heads/iu);
+    expect(sql).toMatch(/last_seq bigint NOT NULL/iu);
+    expect(sql).toMatch(/ENABLE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(/FORCE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(/REVOKE UPDATE ON TABLE print_jobs FROM laundry_app/iu);
+    expect(sql).toMatch(/GRANT UPDATE \([^)]+\) ON TABLE print_jobs TO laundry_app/isu);
+    expect(sql).toMatch(
+      /GRANT UPDATE \(last_seq, updated_at\) ON TABLE print_device_receipt_heads TO laundry_app/iu,
+    );
+    expect(sql).not.toMatch(/GRANT[^;]*(?:DELETE|TRUNCATE)[^;]*print_device_receipt_heads/iu);
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION customer_privacy_status/iu);
+    expect(sql).toMatch(/print_job\.status IN \('queued', 'printing'\)/iu);
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION customer_privacy_export/iu);
+    expect(sql).toMatch(/print_job\.snapshot_json/iu);
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION customer_privacy_anonymize/iu);
+    expect(sql).toMatch(/SET snapshot_json = NULL,[\s\S]+snapshot_purged_at = requested_at/iu);
   });
 
   it("adds a durable monotonic sequence for deterministic payment ledger order", () => {

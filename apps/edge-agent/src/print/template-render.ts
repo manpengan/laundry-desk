@@ -14,6 +14,8 @@ export type TicketLineItem = Readonly<{
   name: string;
   qty: number;
   unitPriceFen: number;
+  /** Signed authoritative line total; legacy callers may omit only when qty*unit is exact. */
+  lineTotalFen?: number;
 }>;
 
 /** Variables a signed storefront ticket template may bind. */
@@ -22,7 +24,8 @@ export type TicketTemplateInput = Readonly<{
   storePhone?: string;
   ticketNo: string;
   barcode: string;
-  customerName: string;
+  customerName?: string;
+  customerPhone?: string;
   receiveDate: string;
   pickupDate?: string;
   lines: readonly TicketLineItem[];
@@ -56,7 +59,10 @@ function assertPositiveQty(qty: number): void {
 function lineAmountFen(item: TicketLineItem): number {
   assertIntegerFen(item.unitPriceFen);
   assertPositiveQty(item.qty);
-  return item.unitPriceFen * item.qty;
+  const calculated = item.unitPriceFen * item.qty;
+  const amount = item.lineTotalFen ?? calculated;
+  assertIntegerFen(amount);
+  return amount;
 }
 
 /**
@@ -92,7 +98,8 @@ export function renderTicketTemplate(input: TicketTemplateInput): RenderedTicket
       ? `收件 ${input.receiveDate}  可取 ${input.pickupDate}`
       : `收件 ${input.receiveDate}`,
   );
-  lines.push(`顾客 ${input.customerName}`);
+  if (input.customerName) lines.push(`顾客 ${input.customerName}`);
+  if (input.customerPhone) lines.push(`顾客电话 ${input.customerPhone}`);
   lines.push("--------------------------------");
   lines.push("名称            数  金额");
 

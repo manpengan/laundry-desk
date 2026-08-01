@@ -1,9 +1,10 @@
 import { execFile as nodeExecFile, spawn as nodeSpawn } from "node:child_process";
 import { createHash } from "node:crypto";
 
+import { isCupsQueueName } from "./cups-queue.js";
+import { parseCupsJobReference } from "./cups-process.js";
 import { buildPrinterSmokePayload } from "./printer-smoke.js";
 
-const QUEUE_NAME = /^[A-Za-z0-9_.-]{1,128}$/u;
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 export type MacPrinterPilotResult = Readonly<{
@@ -80,14 +81,17 @@ function parseQueues(output: string): readonly string[] {
           .filter(Boolean),
       ),
     ]
-      .filter((queue) => QUEUE_NAME.test(queue))
+      .filter(isCupsQueueName)
       .sort(),
   );
 }
 
 function parseCupsJobId(output: string, queue: string): string | null {
-  const matches = output.match(/[A-Za-z0-9_.-]+-\d+/gu) ?? [];
-  return matches.find((candidate) => candidate.startsWith(`${queue}-`)) ?? null;
+  try {
+    return parseCupsJobReference(queue, output);
+  } catch {
+    return null;
+  }
 }
 
 async function discoverQueues(
@@ -119,7 +123,7 @@ export async function runMacPrinterPilot(
       });
     }
     const queue = input.queue?.trim() ?? "";
-    if (!QUEUE_NAME.test(queue) || !queues.includes(queue)) {
+    if (!isCupsQueueName(queue) || !queues.includes(queue)) {
       return Object.freeze({
         ok: false,
         mode: input.mode,

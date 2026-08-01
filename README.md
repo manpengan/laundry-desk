@@ -2,19 +2,19 @@
 
 产品目标是面向洗衣店行业提供通用 V2 柜台与经营系统，规划支持多租户、离线柜台、硬件打印和 AI-first 操作。
 
-当前优先完成本地 Web Server 与 macOS App，覆盖登录/PIN、收件、取衣、客户、付款/欠款、照片、统计、交班、打印、通知、权限与审计。
+当前优先完成本地 Web Server 与 macOS App，覆盖登录/PIN、收件、取衣、客户、会员储值、付款/欠款、照片、统计、交班、离线恢复、打印、权限与审计。
 
 ## 当前状态
 
-| 项         | 值                                                                                                                                                                                            |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 活动路线   | **通用 V2 本地优先交付**（[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)）；[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 保留为 V2-only 基础裁决 |
-| 当前阶段   | 里程碑 1 已达成并加固：本地完整柜台工作日 + Web/macOS 衣物照片上传                                                                                                                            |
-| 设计真源   | [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) · [Claude V2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)                       |
-| 当前 owner | **Codex** — 设计、实现、集成与门禁                                                                                                                                                            |
-| 目标平台   | 本地 Web Server + macOS App 优先；云服务器部署与 Windows 适配后置                                                                                                                             |
+| 项         | 值                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 活动路线   | **通用 V2 本地优先交付**（[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)）；[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 保留为 V2-only 基础裁决                                                                                                                                                                                                                                                                                    |
+| 当前阶段   | 普通 offline grant、签名打印软件链与独立 Runtime.app 软件已进入本地交付；实体与正式发布门禁待完成                                                                                                                                                                                                                                                                                                                                                                                |
+| 设计真源   | [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) · [Claude V2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) · [ADR-16](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-19](docs/adr/2026-08-01-adr-19-ordinary-offline-grant-replay.md) · [ADR-20](docs/adr/2026-08-01-adr-20-authoritative-edge-print-dispatch.md) · [ADR-21](docs/adr/2026-08-01-adr-21-independent-macos-runtime-app.md) |
+| 当前 owner | **Codex** — 设计、实现、集成与门禁                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 目标平台   | 本地 Web Server + macOS App 优先；云服务器部署与 Windows 适配后置                                                                                                                                                                                                                                                                                                                                                                                                                |
 
-当前已完成：`Local Foundation → Money Integrity → Workday Commands → Counter UI → Mock Print → Acceptance → Photo Upload`。下一步继续完善本地工作日体验；云部署和 Windows 仍后置。
+当前已完成：`Local Foundation → 完整柜台工作日 → 履约/顾客/员工治理 → 本地备份恢复 → 加密离线队列与 Primary → 重放对账 → 会员储值首期 → 普通 offline grant → 签名打印软件链 → 独立 Runtime.app 软件`。尚未交付 XP-58 实体走样、Developer ID 签名/公证、正式 manifest 签名权威、已签名多架构 OCI，以及 Runtime.app upgrade/rollback；云部署和 Windows 仍后置。
 
 宏发版本停止开发；根 `src/` 只作为历史行为参考，不作为当前产品入口。
 
@@ -38,7 +38,7 @@ Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 ·
 
 ## 当前交付顺序
 
-`Photo Browse/Delete → Print Worker Integration → Customer Detail → Local Operations → later cloud/Windows`
+`XP-58 实体走样 → Developer ID/公证 → 正式 manifest 权威与签名多架构 OCI → Runtime upgrade/rollback → later cloud/Windows`
 
 历史 [Grok owner 任务书](docs/superpowers/plans/tasks/2026-07-21-task-grok-lead.md) 仅作治理记录，不是当前执行入口。
 
@@ -46,12 +46,12 @@ Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 ·
 
 - `apps/server`：Fastify、认证、Bus、Policy、PG handlers
 - `apps/web`：柜台 SPA
-- `apps/edge-agent`：Electron、离线、打印、升级
+- `apps/edge-agent`：Electron、离线、打印与发布入口
 - `packages/contracts`：Zod/OpenAPI/命令查询真源
 - `packages/domain`：零 IO 领域函数
 - `packages/db`：v2 PostgreSQL schema/migrations/RLS
 - `packages/ui`：共享设计系统
-- `tools`：compose、seed、迁移与实机实验室
+- `tools`：compose、seed、迁移、独立 Runtime.app 与实机实验室
 - `src`：冻结的 v1 迁移源与历史实现
 
 ## 开发与门禁
@@ -60,6 +60,7 @@ Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 ·
 corepack enable
 pnpm install --frozen-lockfile
 pnpm run workspace:check
+pnpm --filter @laundry/edge-agent spa:verify
 pnpm run local:up -- --bootstrap
 pnpm run local:web
 pnpm run local:web:e2e

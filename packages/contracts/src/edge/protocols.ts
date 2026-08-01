@@ -3,11 +3,13 @@ import { z } from "zod";
 import { PositiveSafeIntegerSchema } from "../registry/limits.js";
 import { CommandNameSchema } from "../registry/primitives.js";
 import {
-  EdgeCapabilityActionSchema,
   EdgeExecutionResultSchema,
   EdgeNonceSchema,
   EdgeOriginSchema,
+  EdgePrinterKindSchema,
   ExactUtcTimestampSchema,
+  CupsJobIdSchema,
+  Sha256HexSchema,
 } from "./primitives.js";
 
 const addPositiveTimeWindowIssue = (
@@ -40,18 +42,29 @@ const UniqueCommandNamesSchema = z
  * `exp - issued_at`, anchors it to request-start monotonic time, and fails closed when RTT or
  * continuity cannot prove the deadline. A wall clock is not an authorization clock.
  */
+const CapabilityTicketBaseSchema = z.object({
+  job_id: z.uuid(),
+  staff_id: z.uuid(),
+  device_id: z.uuid(),
+  origin: EdgeOriginSchema,
+  issued_at: ExactUtcTimestampSchema,
+  exp: ExactUtcTimestampSchema,
+  nonce: EdgeNonceSchema,
+});
+
 export const CapabilityTicketPayloadSchema = z
-  .object({
-    action: EdgeCapabilityActionSchema,
-    job_id: z.uuid(),
-    staff_id: z.uuid(),
-    device_id: z.uuid(),
-    origin: EdgeOriginSchema,
-    issued_at: ExactUtcTimestampSchema,
-    exp: ExactUtcTimestampSchema,
-    nonce: EdgeNonceSchema,
-  })
-  .strict()
+  .discriminatedUnion("action", [
+    CapabilityTicketBaseSchema.extend({
+      action: z.literal("print_job"),
+      printer_kind: EdgePrinterKindSchema,
+      snapshot_sha256: Sha256HexSchema,
+      recovered: z.boolean(),
+      next_receipt_seq: PositiveSafeIntegerSchema,
+    }).strict(),
+    CapabilityTicketBaseSchema.extend({
+      action: z.literal("cash_drawer_open"),
+    }).strict(),
+  ])
   .superRefine((payload, context) =>
     addPositiveTimeWindowIssue(payload.issued_at, payload.exp, context, ["exp"]),
   );
@@ -59,12 +72,32 @@ export const CapabilityTicketPayloadSchema = z
 /** Architecture §10 device-signed outcome used for print-job reconciliation and audit. */
 export const ExecutionReceiptPayloadSchema = z
   .object({
+    job_id: z.uuid(),
+    device_id: z.uuid(),
     ticket_nonce: EdgeNonceSchema,
+    snapshot_sha256: Sha256HexSchema,
     result: EdgeExecutionResultSchema,
+    cups_job_id: CupsJobIdSchema.nullable(),
     seq: PositiveSafeIntegerSchema,
     at: ExactUtcTimestampSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((payload, context) => {
+    if (payload.result === "succeeded" && payload.cups_job_id === null) {
+      context.addIssue({
+        code: "custom",
+        message: "A succeeded receipt requires a CUPS job id",
+        path: ["cups_job_id"],
+      });
+    }
+    if (payload.result === "failed" && payload.cups_job_id !== null) {
+      context.addIssue({
+        code: "custom",
+        message: "A failed pre-submit receipt cannot carry a CUPS job id",
+        path: ["cups_job_id"],
+      });
+    }
+  });
 
 /**
  * ADR-04 #6: short-lived, tenant-scoped dynamic authorization for one staff/device pair.

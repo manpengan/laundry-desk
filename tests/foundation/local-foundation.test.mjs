@@ -453,7 +453,7 @@ test("registers the guarded local lifecycle in default workspace gates", async (
   assert.match(rootPackage.scripts["workspace:format:check"], /tools\/compose/u);
   assert.match(
     rootPackage.scripts["workspace:lint"],
-    /eslint tools\/local tests\/foundation --ext \.mjs/u,
+    /eslint tools\/local tests\/foundation tools\/runtime-kit\/\*\.mjs --ext \.mjs/u,
   );
 });
 

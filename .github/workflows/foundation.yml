@@ -37,3 +37,22 @@ jobs:
 
       - name: Check workspace foundation
         run: pnpm run workspace:check
+
+  runtime-app-macos:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+          run_install: false
+
+      - name: Lint native runtime Swift sources
+        run: pnpm run runtime:app:lint:swift
+
+      - name: Build, inspect, and run no-repo native acceptance
+        run: pnpm run runtime:app:acceptance

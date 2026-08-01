@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import * as securityPrefs from "./security-prefs.js";
 
-const { IPC_CHANNELS, SECURITY_WEB_PREFERENCES } = securityPrefs;
+const { APP_CAPABILITY_ORIGIN, APP_HOST, APP_SCHEME, IPC_CHANNELS, SECURITY_WEB_PREFERENCES } =
+  securityPrefs;
 
 // Compiled tests live in dist/lib/; package sources stay under src/.
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -17,6 +18,11 @@ test("SECURITY_WEB_PREFERENCES hard baseline values", () => {
   assert.equal(SECURITY_WEB_PREFERENCES.sandbox, true);
   assert.equal(SECURITY_WEB_PREFERENCES.webSecurity, true);
   assert.equal(SECURITY_WEB_PREFERENCES.allowRunningInsecureContent, false);
+});
+
+test("print capability audience is derived from the actual local shell origin", () => {
+  assert.equal(APP_CAPABILITY_ORIGIN, "app://local");
+  assert.equal(APP_CAPABILITY_ORIGIN, `${APP_SCHEME}://${APP_HOST}`);
 });
 
 test("DESKTOP_IPC_CHANNELS is the exact deeply frozen renderer capability map", () => {
@@ -128,6 +134,9 @@ test("main/window/preload sources wire baseline and guards", () => {
   // dedicated Electron session and its deny-all permission handler.
   assert.doesNotMatch(main, /session\.defaultSession/);
   assert.match(main, /verifySpaIntegrity/);
+  assert.match(main, /ensureAuthority:\s*async/u);
+  assert.match(main, /desktopTransport\.auth\.refresh\(\)/u);
+  assert.match(main, /offlineRuntime!\.refreshAuthority\(current\)/u);
   assert.match(preload, /contextBridge\.exposeInMainWorld/);
   assert.match(preload, /laundryDesktop/);
   assert.doesNotMatch(preload, /edgeBridge/);
@@ -162,7 +171,8 @@ test("main/window/preload sources wire baseline and guards", () => {
   assert.doesNotMatch(ipc, /IPC_CHANNELS\.printerSmoke/);
   assert.match(printerSmokeCli, /--validate/);
   assert.match(enqueueHandler, /return printMutationGate/u);
-  assert.match(processHandler, /return printMutationGate/u);
+  assert.match(processHandler, /use signed Edge dispatch/u);
+  assert.doesNotMatch(processHandler, /executeJob|submitCups|buildPrinterSmokePayload/u);
   assert.doesNotMatch(main, /NODE_ENV|registerIpcHandlers|createRuntimeState/u);
   assert.doesNotMatch(ipc, /NODE_ENV/u);
   assert.match(ipc, /allowUnsignedRendererPrint/u);

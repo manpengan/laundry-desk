@@ -7,11 +7,13 @@ import type { EdgeAuthorityService } from "../edge/authority-service.js";
 import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
 import type { createMemoryIdentityStore } from "../identity/memory-store.js";
+import type { MemberRuntimeDeps } from "../member/handlers.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import type { PhotoHandlerDeps } from "../photo/handlers.js";
 import type { StepUpProofStore } from "../policy/step-up-proof-store.js";
 import type { PrintHandlerDeps } from "../print/handlers.js";
+import type { PrintDispatchService } from "../print/dispatch-service.js";
 import type { ReconciliationHandlerDeps } from "../reconciliation/types.js";
 import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import type { StaffAccessHandlerDeps } from "../staff/handlers.js";
@@ -28,6 +30,8 @@ export type LocalRuntime = Readonly<{
   order: OrderHandlerDeps;
   catalog: CatalogHandlerDeps;
   print: PrintHandlerDeps;
+  /** Main-process-only signed Edge print transport; absent from memory diagnostics. */
+  printDispatch: PrintDispatchService | null;
   stats: StatsHandlerDeps;
   customer: CustomerHandlerDeps;
   shift: ShiftHandlerDeps;
@@ -35,6 +39,7 @@ export type LocalRuntime = Readonly<{
   photo: PhotoHandlerDeps;
   fulfillment: FulfillmentHandlerDeps;
   staffAccess: StaffAccessHandlerDeps;
+  member: MemberRuntimeDeps;
   edgeAuthority: EdgeAuthorityService;
   accessTokenSecret: string;
   csrfProofSigner: CsrfProofSigner;

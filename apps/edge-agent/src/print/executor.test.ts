@@ -2,11 +2,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createMockSpool, enqueue as mockEnqueue } from "./mock-spool.js";
-import { DEFAULT_SAMPLE_TICKET, executeJob } from "./executor.js";
+import { executeJob } from "./executor.js";
 import { createPrintJobStore, enqueuePrintJob, listPrintJobStatus } from "./print-jobs.js";
+import type { TicketTemplateInput } from "./template-render.js";
 import { createMockUsbPort } from "./usb-port.js";
 
 const NONCE = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const TEST_TICKET: TicketTemplateInput = Object.freeze({
+  storeName: "测试洗衣店",
+  ticketNo: "TEST-001",
+  barcode: "TEST-001",
+  customerName: "测试顾客",
+  receiveDate: "2026-07-21",
+  lines: Object.freeze([Object.freeze({ name: "衬衫", qty: 1, unitPriceFen: 1_500 })]),
+  totalFen: 1_500,
+  paidFen: 1_500,
+});
 
 test("executeJob happy path: done + non-empty ESC/POS + succeeded receipt", async () => {
   let store = createPrintJobStore();
@@ -20,7 +31,7 @@ test("executeJob happy path: done + non-empty ESC/POS + succeeded receipt", asyn
     store,
     spool,
     enq.job.id,
-    DEFAULT_SAMPLE_TICKET,
+    TEST_TICKET,
     { now: 1000, at: new Date("2026-07-21T10:00:00.000Z") },
     mock.job.id,
   );
@@ -36,7 +47,7 @@ test("executeJob happy path: done + non-empty ESC/POS + succeeded receipt", asyn
 
 test("executeJob failed keeps error and failed receipt", async () => {
   const { store, job } = enqueuePrintJob(createPrintJobStore(), "xp58", 1, NONCE);
-  const result = await executeJob(store, createMockSpool(), job.id, DEFAULT_SAMPLE_TICKET, {
+  const result = await executeJob(store, createMockSpool(), job.id, TEST_TICKET, {
     forceError: "spool offline",
     now: 1,
     at: new Date("2026-07-21T10:00:00.000Z"),
@@ -50,19 +61,16 @@ test("executeJob failed keeps error and failed receipt", async () => {
 
 test("executeJob rejects non-queued jobs", async () => {
   const { store, job } = enqueuePrintJob(createPrintJobStore(), "xp58", 1, NONCE);
-  const once = await executeJob(store, createMockSpool(), job.id, DEFAULT_SAMPLE_TICKET, {
+  const once = await executeJob(store, createMockSpool(), job.id, TEST_TICKET, {
     now: 1,
   });
-  await assert.rejects(
-    () => executeJob(once.store, once.spool, job.id, DEFAULT_SAMPLE_TICKET),
-    /queued/,
-  );
+  await assert.rejects(() => executeJob(once.store, once.spool, job.id, TEST_TICKET), /queued/);
 });
 
 test("executeJob mock USB success path", async () => {
   const { store, job } = enqueuePrintJob(createPrintJobStore(), "xp58", 10, NONCE);
   const usbPort = createMockUsbPort();
-  const result = await executeJob(store, createMockSpool(), job.id, DEFAULT_SAMPLE_TICKET, {
+  const result = await executeJob(store, createMockSpool(), job.id, TEST_TICKET, {
     now: 10,
     usbPort,
     at: new Date("2026-07-21T10:00:00.000Z"),
@@ -75,7 +83,7 @@ test("executeJob mock USB success path", async () => {
 test("executeJob mock USB fail → failed status", async () => {
   const { store, job } = enqueuePrintJob(createPrintJobStore(), "xp58", 20, NONCE);
   const usbPort = createMockUsbPort({ failWith: "USB device not found" });
-  const result = await executeJob(store, createMockSpool(), job.id, DEFAULT_SAMPLE_TICKET, {
+  const result = await executeJob(store, createMockSpool(), job.id, TEST_TICKET, {
     now: 20,
     usbPort,
     at: new Date("2026-07-21T10:00:00.000Z"),
@@ -88,7 +96,7 @@ test("executeJob mock USB fail → failed status", async () => {
 test("executeJob USB timeout fail", async () => {
   const { store, job } = enqueuePrintJob(createPrintJobStore(), "xp58", 30, NONCE);
   const usbPort = createMockUsbPort({ delayMs: 200 });
-  const result = await executeJob(store, createMockSpool(), job.id, DEFAULT_SAMPLE_TICKET, {
+  const result = await executeJob(store, createMockSpool(), job.id, TEST_TICKET, {
     now: 30,
     timeoutMs: 30,
     usbPort,
@@ -102,7 +110,7 @@ test("executeJob USB timeout fail", async () => {
 for (const kind of ["dl206", "gp3120"] as const) {
   test(`executeJob dispatches ${kind} through its family driver`, async () => {
     const { store, job } = enqueuePrintJob(createPrintJobStore(), kind, 40, NONCE);
-    const result = await executeJob(store, createMockSpool(), job.id, DEFAULT_SAMPLE_TICKET, {
+    const result = await executeJob(store, createMockSpool(), job.id, TEST_TICKET, {
       now: 40,
       usbPort: createMockUsbPort(),
     });

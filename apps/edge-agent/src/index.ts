@@ -75,12 +75,7 @@ export {
   type TicketLineItem,
   type TicketTemplateInput,
 } from "./print/template-render.js";
-export {
-  DEFAULT_SAMPLE_TICKET,
-  executeJob,
-  type ExecuteJobOptions,
-  type ExecuteJobResult,
-} from "./print/executor.js";
+export { executeJob, type ExecuteJobOptions, type ExecuteJobResult } from "./print/executor.js";
 export {
   createFileUsbPort,
   createMockUsbPort,

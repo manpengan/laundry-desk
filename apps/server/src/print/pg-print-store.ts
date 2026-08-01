@@ -8,10 +8,12 @@ import { randomUUID } from "node:crypto";
 import type { PgPool } from "../db/pg-pool.js";
 import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
 import type { SqlClient } from "../db/types.js";
-import { claimById, claimOne, failExhausted } from "./pg-print-claim.js";
-import { DEFAULT_LEASE_SECONDS, DEFAULT_MAX_ATTEMPTS } from "./types.js";
+import { claimById, claimOne } from "./pg-print-claim.js";
+import { enqueuePgDiagnosticJob, enqueuePgOrderJob, requeuePgPrintJob } from "./pg-print-queue.js";
+import { DEFAULT_LEASE_SECONDS } from "./types.js";
 import type {
   ClaimPrintJobInput,
+  EnqueueOrderPrintJobInput,
   EnqueuePrintJobInput,
   PrintArtifactRef,
   PrintJobClaim,
@@ -20,6 +22,7 @@ import type {
   PrintJobStatus,
   PrintJobStatusView,
   PrintJobStore,
+  RequeuePrintJobInput,
   TransitionPrintJobOptions,
 } from "./types.js";
 
@@ -39,9 +42,10 @@ type PrintJobRow = Readonly<{
   updated_at: Date;
   error: string | null;
   payload_bytes: number | null;
+  snapshot_sha256: string | null;
 }>;
 
-const TERMINAL: ReadonlySet<PrintJobStatus> = new Set(["done", "failed"]);
+const TERMINAL: ReadonlySet<PrintJobStatus> = new Set(["done", "failed", "uncertain"]);
 
 function epochSeconds(d: Date): number {
   return Math.floor(d.getTime() / 1000);
@@ -86,7 +90,7 @@ function assertLegalTransition(current: PrintJobStatus, next: PrintJobStatus, jo
   if (next === "printing" && current !== "queued") {
     throw new Error(`cannot move ${current} → printing`);
   }
-  if ((next === "done" || next === "failed") && current !== "printing") {
+  if ((next === "done" || next === "failed" || next === "uncertain") && current !== "printing") {
     throw new Error(`cannot move ${current} → ${next}`);
   }
   if (next === "queued") {
@@ -101,7 +105,8 @@ async function selectJob(
   jobId: string,
 ): Promise<PrintJobRow | null> {
   const result = await client.query<PrintJobRow>(
-    `SELECT id, kind, status, order_id, ticket_no, created_at, updated_at, error, payload_bytes
+    `SELECT id, kind, status, order_id, ticket_no, created_at, updated_at, error, payload_bytes,
+            snapshot_sha256
      FROM print_jobs
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid`,
     [orgId, storeId, jobId],
@@ -121,45 +126,31 @@ export function createPgPrintJobStore(
 
   return Object.freeze({
     enqueue: async (input: EnqueuePrintJobInput): Promise<PrintJobRecord> =>
-      withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
-        const now = input.now ?? Math.floor(Date.now() / 1000);
-        const jobId = input.job_id ?? newId();
-        const at = epochToDate(now);
-        await client.query(
-          `INSERT INTO print_jobs (
-             id, org_id, store_id, order_id, ticket_no, kind, status,
-             error, payload_bytes, created_at, updated_at
-           ) VALUES (
-             $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, 'queued',
-             NULL, NULL, $7, $7
-           )`,
-          [jobId, orgId, storeId, input.order_id, input.ticket_no, input.kind, at],
-        );
-        return Object.freeze({
-          job_id: jobId,
-          kind: input.kind,
-          status: "queued" as const,
-          order_id: input.order_id,
-          ticket_no: input.ticket_no,
-          created_at: now,
-          updated_at: now,
-        });
-      }),
+      withStoreGucOrCurrent(pool, { orgId, storeId }, (client) =>
+        enqueuePgDiagnosticJob(client, orgId, storeId, input, newId),
+      ),
+
+    enqueueFromOrder: async (input: EnqueueOrderPrintJobInput): Promise<PrintJobRecord> =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, (client) =>
+        enqueuePgOrderJob(client, orgId, storeId, input, newId),
+      ),
+
+    requeueFromSource: async (input: RequeuePrintJobInput): Promise<PrintJobRecord> =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, (client) =>
+        requeuePgPrintJob(client, orgId, storeId, input, newId),
+      ),
 
     claimNext: async (input: ClaimPrintJobInput): Promise<PrintJobClaim | null> =>
       withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
         const now = input.now ?? Math.floor(Date.now() / 1000);
         const leaseSeconds = input.lease_seconds ?? DEFAULT_LEASE_SECONDS;
-        const maxAttempts = input.max_attempts ?? DEFAULT_MAX_ATTEMPTS;
         const at = epochToDate(now);
 
-        await failExhausted(client, orgId, storeId, maxAttempts, at);
         const claimed = await claimOne(
           client,
           orgId,
           storeId,
           input.worker_id,
-          maxAttempts,
           at,
           epochToDate(now + leaseSeconds),
         );
@@ -180,17 +171,14 @@ export function createPgPrintJobStore(
       withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) => {
         const now = input.now ?? Math.floor(Date.now() / 1000);
         const leaseSeconds = input.lease_seconds ?? DEFAULT_LEASE_SECONDS;
-        const maxAttempts = input.max_attempts ?? DEFAULT_MAX_ATTEMPTS;
         const at = epochToDate(now);
 
-        await failExhausted(client, orgId, storeId, maxAttempts, at);
         const claimed = await claimById(
           client,
           orgId,
           storeId,
           jobId,
           input.worker_id,
-          maxAttempts,
           at,
           epochToDate(now + leaseSeconds),
         );
@@ -263,6 +251,9 @@ export function createPgPrintJobStore(
         const row = await selectJob(client, orgId, storeId, jobId);
         if (row === null) {
           throw new Error(`print job not found: ${jobId}`);
+        }
+        if (row.snapshot_sha256 !== null) {
+          throw new Error(`signed print job ${jobId} requires a verified device receipt`);
         }
         const current = mapRow(row);
         assertLegalTransition(current.status, status, jobId);

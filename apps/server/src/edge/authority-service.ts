@@ -24,6 +24,7 @@ import {
   signAuthorityLease,
   verifyAuthorityDeviceProof,
 } from "./authority-crypto.js";
+import { OFFLINE_GRANT_ALLOWED_COMMANDS } from "./replay-policy.js";
 
 const DEFAULT_CHALLENGE_TTL_MS = 60 * 1_000;
 const MAX_CHALLENGE_TTL_MS = 60 * 1_000;
@@ -31,13 +32,6 @@ const DEFAULT_GRANT_TTL_MS = OFFLINE_GRANT_MAX_TTL_MS;
 const DEFAULT_LEASE_TTL_MS = 60 * 1_000;
 const DEFAULT_MAX_CLOCK_SKEW_MS = 2_000;
 const POSTGRES_INTEGER_MAX = 2_147_483_647;
-const ALLOWED_COMMANDS = Object.freeze([
-  "order.receive",
-  "order.hold",
-  "order.pickup",
-  "payment.collect",
-  "payment.repay",
-] as const);
 
 export type EdgeAuthorityService = Readonly<{
   challenge: (
@@ -223,7 +217,7 @@ export function createEdgeAuthorityService(
               device_id: session.session.device_id,
               request_nonce: deviceKey.requestNonce,
               permission_version: session.session.permission_version,
-              allowed_commands: ALLOWED_COMMANDS,
+              allowed_commands: OFFLINE_GRANT_ALLOWED_COMMANDS,
               issued_at: exactTime(issuedAt),
               ttl_ms: grantTtlMs,
               not_after: exactTime(issuedAt, grantTtlMs),

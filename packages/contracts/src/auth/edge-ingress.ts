@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { parseEdgeQueueEnvelope } from "../edge/queue-envelope.js";
 import type { EdgeQueueEnvelope } from "../edge/queue-envelope.js";
+import { M2_CONTRACT_DEFINITIONS } from "../commands/catalog.js";
 import { CommandNameSchema } from "../registry/primitives.js";
 import { snapshotExactPlainObject } from "./plain-data.js";
 import { registerEdgeReplaySource } from "./source-registry.js";
@@ -36,15 +37,16 @@ const PrimaryLeaseAuthorizationSchema = z.strictObject({
   primary_lease_commands: UniquePrimaryLeaseCommandsSchema,
 });
 
-const VerifiedEdgeAuthorizationSchema = z
-  .discriminatedUnion("kind", [GrantAuthorizationSchema, PrimaryLeaseAuthorizationSchema])
-  .refine(
-    (authorization) =>
-      authorization.primary_lease_commands.every((command) =>
-        authorization.allowed_commands.includes(command),
-      ),
-    { message: "Primary lease commands must be a subset of allowed commands" },
-  );
+const VerifiedEdgeAuthorizationSchema = z.discriminatedUnion("kind", [
+  GrantAuthorizationSchema,
+  PrimaryLeaseAuthorizationSchema,
+]);
+
+const offlineModeByCommand = new Map(
+  M2_CONTRACT_DEFINITIONS.filter((definition) => definition.kind === "command").map(
+    (definition) => [definition.name, definition.offline_mode] as const,
+  ),
+);
 
 type DeepReadonly<T> = T extends readonly (infer Item)[]
   ? readonly DeepReadonly<Item>[]
@@ -119,13 +121,19 @@ const requireMatchingAuthorization = (
   }
 
   const command = envelope.payload.command;
-  if (!authorization.allowed_commands.includes(command)) {
-    throw new TypeError("Queued command is not present in the verified authorization");
+  const staticMode = offlineModeByCommand.get(command) ?? "denied";
+  if (queueAuthorization.kind === "grant") {
+    if (
+      envelope.queue_envelope_version < 3 ||
+      !("per_grant_seq" in queueAuthorization) ||
+      staticMode !== "grant" ||
+      !authorization.allowed_commands.includes(command)
+    ) {
+      throw new TypeError("Queued command is not present in the verified grant authorization");
+    }
+    return;
   }
-  if (
-    authorization.primary_lease_commands.includes(command) &&
-    authorization.kind !== "primary_lease"
-  ) {
+  if (staticMode !== "primary_lease" || !authorization.primary_lease_commands.includes(command)) {
     throw new TypeError("Queued command requires verified Primary lease authorization");
   }
 };

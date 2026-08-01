@@ -20,7 +20,8 @@ import { createMemoryOrderStore } from "../order/memory-store.js";
 import { createMemoryPrintJobStore } from "../print/memory-store.js";
 import { createPgPrintJobStore } from "../print/pg-print-store.js";
 import { createFileSpool } from "../print/file-spool.js";
-import { createPrintWorkerController } from "../print/worker-controller.js";
+import { createPgPrintDispatchService } from "../print/pg-print-dispatch.js";
+import { snapshotFromOrder } from "../print/snapshot.js";
 import { createPgOrderStore } from "../order/pg-order-store.js";
 import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
@@ -37,9 +38,11 @@ import type { PendingActionStore } from "../pending-actions/types.js";
 import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
 import { createMemoryFulfillmentStore } from "../fulfillment/memory-store.js";
 import { createPgFulfillmentStore } from "../fulfillment/pg-store.js";
+import { deriveEdgeAuthorityKeyPair } from "../edge/authority-key.js";
 import {
   createPgPool,
   resolveRuntimeDatabaseUrl,
+  RUNTIME_DATABASE_URL_REQUIRED,
   type CreatePoolOptions,
   type PgPool,
 } from "../db/pg-pool.js";
@@ -222,7 +225,22 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const customerStore = createMemoryCustomerStore();
   const statsSource = createOrderBackedStatsQuery(orderStore);
   const shiftStore = createMemoryShiftStore();
-  const printStore = createMemoryPrintJobStore();
+  const printStore = createMemoryPrintJobStore({
+    loadSnapshot: async (orderId) => {
+      const order = await orderStore.getOrder(LOCAL_PROFILE.orgId, LOCAL_PROFILE.storeId, orderId);
+      if (order === null) return null;
+      const payments =
+        orderStore.listPayments === undefined
+          ? Object.freeze([])
+          : await orderStore.listPayments(LOCAL_PROFILE.orgId, LOCAL_PROFILE.storeId, orderId);
+      return snapshotFromOrder({
+        order,
+        storeName: LOCAL_PROFILE.storeName,
+        storePhone: null,
+        payments,
+      });
+    },
+  });
   const photoStore = createMemoryPhotoStore();
   return Object.freeze({
     mode: "memory" as const,
@@ -250,6 +268,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     }),
     catalog: Object.freeze({ store: createMemoryCatalogStore() }),
     print: Object.freeze({ store: printStore }),
+    printDispatch: null,
     stats: Object.freeze({ source: statsSource, timeZone: LOCAL_PROFILE.timezone }),
     customer: Object.freeze({ store: customerStore }),
     shift: Object.freeze({
@@ -316,14 +335,9 @@ export async function createPgLocalRuntime(
     orgId: LOCAL_PROFILE.orgId,
     storeId: LOCAL_PROFILE.storeId,
   });
-  const printWorker =
-    printSpool === null
-      ? null
-      : createPrintWorkerController({
-          store: printStore,
-          spool: printSpool,
-          workerId: "local-server",
-        });
+  const printDispatch = createPgPrintDispatchService(appPool, {
+    privateKey: deriveEdgeAuthorityKeyPair(config.accessTokenSecret).privateKey,
+  });
   return Object.freeze({
     mode: "pg" as const,
     identity: buildIdentityDeps(
@@ -360,16 +374,16 @@ export async function createPgLocalRuntime(
     }),
     print: Object.freeze({
       store: printStore,
-      // ADR-14 defers real hardware; when a spool is configured the mock file
-      // printer becomes the first-party print path.
+      // The file spool remains an explicit diagnostic surface. Signed jobs are
+      // excluded from legacy claims and no background mock worker is started.
       ...(printSpool === null
         ? {}
         : {
             spool: printSpool,
             workerId: "local-server",
-            ...(printWorker === null ? {} : { worker: printWorker }),
           }),
     }),
+    printDispatch,
     stats: Object.freeze({ source: statsSource, timeZone: LOCAL_PROFILE.timezone }),
     customer: Object.freeze({ store: customerStore }),
     shift: Object.freeze({
@@ -402,15 +416,10 @@ export async function createPgLocalRuntime(
 export async function createLocalRuntime(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<LocalRuntime> {
-  const explicitDatabaseUrl = env.DATABASE_URL?.trim() ?? "";
-  const explicitLocalAppUrl = env.LAUNDRY_PG_APP_URL?.trim() ?? "";
-  if (explicitDatabaseUrl.length === 0 && explicitLocalAppUrl.length === 0) {
-    throw new Error("Runtime requires DATABASE_URL for the laundry_app role");
-  }
   const hostConfig = parseLocalHostConfig(env);
   const databaseUrl = resolveRuntimeDatabaseUrl(env);
   if (databaseUrl === null) {
-    throw new Error("Runtime requires DATABASE_URL for the laundry_app role");
+    throw new Error(RUNTIME_DATABASE_URL_REQUIRED);
   }
   return createPgLocalRuntime(
     databaseUrl,

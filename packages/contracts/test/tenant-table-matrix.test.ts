@@ -44,6 +44,7 @@ const EXPECTED_TABLES = Object.freeze([
   "member_ledger",
   "notification_log",
   "notification_templates",
+  "offline_grant_replay_state",
   "offline_grants",
   "order_lines",
   "orders",
@@ -53,6 +54,7 @@ const EXPECTED_TABLES = Object.freeze([
   "primary_lease_heads",
   "primary_lease_replay_state",
   "primary_leases",
+  "print_device_receipt_heads",
   "print_jobs",
   "print_templates",
   "production_batches",
@@ -115,6 +117,7 @@ const EXPECTED_STORE_TABLES = Object.freeze([
   "garment_status_log",
   "garments",
   "item_catalog",
+  "offline_grant_replay_state",
   "offline_grants",
   "order_lines",
   "orders",
@@ -122,6 +125,7 @@ const EXPECTED_STORE_TABLES = Object.freeze([
   "primary_lease_heads",
   "primary_lease_replay_state",
   "primary_leases",
+  "print_device_receipt_heads",
   "print_jobs",
   "print_templates",
   "remark_dict",
@@ -157,6 +161,17 @@ describe("A3 tenant table matrix", () => {
 
   it("keeps optional store filters at org scope", () => {
     expect(getTenantTableScope("automation_policies")).toBe("org");
+  });
+
+  it("registers ordinary grant replay high-water as a strict store-scoped RLS table", () => {
+    const replayState = getTenantTableDescriptor("offline_grant_replay_state");
+
+    expect(replayState.scope).toBe("store");
+    expect(replayState.scopeBasis).toMatch(/both org_id and store_id/u);
+  });
+
+  it("registers print receipt high-water as a strict store-scoped RLS table", () => {
+    expect(getTenantTableDescriptor("print_device_receipt_heads").scope).toBe("store");
   });
 
   it("fails closed for unknown table names", () => {

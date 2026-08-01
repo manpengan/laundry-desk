@@ -75,7 +75,14 @@ function grantPayload(overrides: Partial<OfflineGrantPayload> = {}): OfflineGran
     device_id: DEVICE_ID,
     request_nonce: REQUEST_NONCE,
     permission_version: 1,
-    allowed_commands: ["order.receive", "order.pickup", "payment.collect"],
+    allowed_commands: [
+      "order.receive",
+      "order.hold",
+      "customer.upsert",
+      "print.ticket.enqueue",
+      "print.ticket.retry",
+      "print.ticket.reprint",
+    ],
     issued_at: ISSUED_AT,
     ttl_ms: 1_000,
     not_after: NOT_AFTER,
@@ -131,7 +138,7 @@ function startedRequest(
 function queueEnvelope(
   command: string,
   authorization:
-    | Readonly<{ kind: "grant"; grant_id: string }>
+    | Readonly<{ kind: "grant"; grant_id: string; per_grant_seq: number }>
     | Readonly<{
         kind: "primary_lease";
         grant_id: string;
@@ -141,7 +148,7 @@ function queueEnvelope(
       }>,
 ) {
   return {
-    queue_envelope_version: 2,
+    queue_envelope_version: 3,
     contracts_major: 0,
     queue_id: "61a2eed0-a6c3-493c-a3a7-20bf94b1d678",
     enqueued_at: ISSUED_AT,
@@ -187,7 +194,7 @@ test("accepts a signed grant with a request-start monotonic deadline", () => {
   acceptGrant(guard, clock);
 
   const result = guard.authorizeQueueEnvelope(
-    queueEnvelope("order.receive", { kind: "grant", grant_id: GRANT_ID }),
+    queueEnvelope("order.receive", { kind: "grant", grant_id: GRANT_ID, per_grant_seq: 1 }),
   );
   assert.deepEqual(result, {
     ok: true,
@@ -195,6 +202,24 @@ test("accepts a signed grant with a request-start monotonic deadline", () => {
     mode: "grant",
     localDeadlineMonoMs: 1_075,
   });
+  assert.deepEqual(
+    guard.authorizeQueueEnvelope(
+      queueEnvelope("order.receive", { kind: "grant", grant_id: GRANT_ID, per_grant_seq: 1 }),
+    ),
+    { ok: false, error: "sequence_replayed" },
+  );
+  assert.deepEqual(
+    guard.authorizeQueueEnvelope(
+      queueEnvelope("order.receive", { kind: "grant", grant_id: GRANT_ID, per_grant_seq: 3 }),
+    ),
+    { ok: false, error: "sequence_out_of_order" },
+  );
+  assert.equal(
+    guard.authorizeQueueEnvelope(
+      queueEnvelope("order.hold", { kind: "grant", grant_id: GRANT_ID, per_grant_seq: 2 }),
+    ).ok,
+    true,
+  );
 });
 
 test("requires the Primary lease for pickup and validates ordered per-lease sequence", () => {
@@ -203,7 +228,11 @@ test("requires the Primary lease for pickup and validates ordered per-lease sequ
   acceptGrant(guard, clock);
   acceptLease(guard, clock);
 
-  const missingLease = queueEnvelope("order.pickup", { kind: "grant", grant_id: GRANT_ID });
+  const missingLease = queueEnvelope("order.pickup", {
+    kind: "grant",
+    grant_id: GRANT_ID,
+    per_grant_seq: 1,
+  });
   assert.deepEqual(guard.authorizeQueueEnvelope(missingLease), {
     ok: false,
     error: "lease_required",
@@ -240,6 +269,21 @@ test("requires the Primary lease for pickup and validates ordered per-lease sequ
   );
 });
 
+test("rejects any signed grant allowlist that is not the exact six grant-mode commands", () => {
+  const clock = new FakeClock(100);
+  const guard = createGuard(clock);
+  const request = startedRequest(guard);
+  clock.set(105);
+
+  assert.deepEqual(
+    guard.acceptOfflineGrant(
+      signedGrant(grantPayload({ allowed_commands: ["order.receive"] })),
+      request,
+    ),
+    { ok: false, error: "malformed" },
+  );
+});
+
 test("denies refund offline from the frozen contract metadata", () => {
   const clock = new FakeClock(100);
   const guard = createGuard(clock);
@@ -247,7 +291,11 @@ test("denies refund offline from the frozen contract metadata", () => {
 
   assert.deepEqual(
     guard.authorizeQueueEnvelope(
-      queueEnvelope("payment.refund", { kind: "grant", grant_id: GRANT_ID }),
+      queueEnvelope("payment.refund", {
+        kind: "grant",
+        grant_id: GRANT_ID,
+        per_grant_seq: 1,
+      }),
     ),
     { ok: false, error: "command_denied" },
   );
@@ -322,7 +370,11 @@ test("clears offline authority on suspend uncertainty and a monotonic reset", ()
 
   assert.deepEqual(
     guard.authorizeQueueEnvelope(
-      queueEnvelope("order.receive", { kind: "grant", grant_id: GRANT_ID }),
+      queueEnvelope("order.receive", {
+        kind: "grant",
+        grant_id: GRANT_ID,
+        per_grant_seq: 1,
+      }),
     ),
     { ok: false, error: "grant_required" },
   );
@@ -341,7 +393,11 @@ test("clears offline authority on suspend uncertainty and a monotonic reset", ()
   clock.set(1);
   assert.deepEqual(
     guard.authorizeQueueEnvelope(
-      queueEnvelope("order.receive", { kind: "grant", grant_id: GRANT_ID }),
+      queueEnvelope("order.receive", {
+        kind: "grant",
+        grant_id: GRANT_ID,
+        per_grant_seq: 1,
+      }),
     ),
     { ok: false, error: "untrusted_continuity" },
   );

@@ -45,6 +45,7 @@ test("createM1QueryRegistry lists platform query names", () => {
   assert.ok(names.includes("platform.settings.get"));
   assert.ok(names.includes("platform.store_features.get"));
   assert.ok(names.includes("platform.audit.list"));
+  assert.ok(names.includes("member.account.get"));
   assert.ok(!names.includes("platform.settings.set"));
 });
 
@@ -133,6 +134,51 @@ test("POST /v1/queries/platform.settings.get over HTTP (memory)", async () => {
   };
   assert.equal(body.ok, true);
   assert.equal(body.data.result.values["store.name"], JSON.stringify("HTTP Demo"));
+
+  await app.close();
+});
+
+test("POST /v1/queries/member.account.get is wired through the runtime bus", async () => {
+  const runtime = await createMemoryLocalRuntime();
+  const app = await createLocalApp({
+    runtime,
+    cookiePolicy: resolveCookiePolicy({ secure: false }),
+    logger: false,
+  });
+
+  const login = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    headers: browserMutationHeaders,
+    payload: {
+      org_code: "local",
+      store_code: "main",
+      username: "admin",
+      password: DEMO_PASSWORD,
+      device_id: DEVICE,
+    },
+  });
+  assert.equal(login.statusCode, 200);
+  const token = (login.json() as { data: { access_token: string } }).data.access_token;
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/v1/queries/member.account.get",
+    headers: {
+      ...browserMutationHeaders,
+      authorization: `Bearer ${token}`,
+    },
+    payload: { customer_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc" },
+  });
+
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json(), {
+    ok: true,
+    data: {
+      execution: "executed",
+      result: { account: null, recent: [] },
+    },
+  });
 
   await app.close();
 });

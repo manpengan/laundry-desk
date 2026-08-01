@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button, EmptyState, Input, MoneyText } from "@laundry/ui";
 
-import type { CommandPort, QueryPort } from "../commands/types.js";
+import { isStepUpRequired } from "../commands/command-client.js";
+import type { CommandPort, CommandResult, QueryPort } from "../commands/types.js";
 
 import { unwrapQueryResult, type CustomerRowView } from "./customer-model.js";
 import {
@@ -29,6 +30,18 @@ function ledgerLabel(kind: string): string {
   if (kind === "topup") return "充值";
   if (kind === "pay") return "消费";
   return "冲正";
+}
+
+/** Complete the frozen-argument R3 confirmation hop for a member top-up. */
+export async function executeMemberTopup(
+  commandClient: CommandPort,
+  body: Readonly<{ account_id: string; amount_cents: number; method: string }>,
+): Promise<CommandResult> {
+  const first = await commandClient.execute("member.topup", body);
+  if (!isStepUpRequired(first) || first.error.code !== "POLICY_CONFIRMATION_REQUIRED") {
+    return first;
+  }
+  return commandClient.execute("member.topup", {}, { confirmRef: first.error.detail.confirm_ref });
 }
 
 export function MemberBalancePanel({
@@ -99,7 +112,7 @@ export function MemberBalancePanel({
     if (view?.account === null || view === null) return;
     setBusy(true);
     try {
-      const result = await commandClient.execute<unknown>("member.topup", {
+      const result = await executeMemberTopup(commandClient, {
         account_id: view.account.account_id,
         amount_cents: cents,
         method,

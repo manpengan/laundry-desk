@@ -343,9 +343,9 @@ class ReconciliationSqlClient implements SqlClient {
           method: "cash",
           kind: "pay",
           row_count: 1,
-          amount_cents: "1000",
-          net_cents: "1000",
-          gross_cents: "1000",
+          amount_cents: "700",
+          net_cents: "700",
+          gross_cents: "700",
           refund_cents: "0",
         },
         {
@@ -357,9 +357,21 @@ class ReconciliationSqlClient implements SqlClient {
           gross_cents: "0",
           refund_cents: "300",
         },
+        {
+          method: "balance",
+          kind: "pay",
+          row_count: 1,
+          amount_cents: "300",
+          net_cents: "300",
+          gross_cents: "300",
+          refund_cents: "0",
+        },
       ];
     } else if (sql.includes("FROM print_jobs")) {
-      rows = [{ value: "done", count: 2 }];
+      rows = [
+        { value: "done", count: 2 },
+        { value: "uncertain", count: 1 },
+      ];
     } else if (sql.includes("FROM edge_replay_records")) {
       rows = [{ value: "collision", count: 1 }];
     }
@@ -381,7 +393,21 @@ test("PostgreSQL reconciliation source uses store-day UTC bounds and safe signed
   assert.equal(result.ledger.refund_cents, 300);
   assert.equal(result.ledger.net_cents, 700);
   assert.equal(result.ledger.difference_from_orders_cents, 0);
-  assert.deepEqual(result.print.statuses, [{ status: "done", count: 2 }]);
+  assert.deepEqual(result.ledger.buckets, [
+    { method: "cash", kind: "pay", row_count: 1, amount_cents: 700, net_cents: 700 },
+    { method: "cash", kind: "refund", row_count: 1, amount_cents: 300, net_cents: -300 },
+    {
+      method: "balance",
+      kind: "pay",
+      row_count: 1,
+      amount_cents: 300,
+      net_cents: 300,
+    },
+  ]);
+  assert.deepEqual(result.print.statuses, [
+    { status: "done", count: 2 },
+    { status: "uncertain", count: 1 },
+  ]);
   assert.equal(result.edge_replay.conflict_count, 1);
   const boundedCall = client.params.find(
     (params) => params[2] instanceof Date && params[3] instanceof Date,

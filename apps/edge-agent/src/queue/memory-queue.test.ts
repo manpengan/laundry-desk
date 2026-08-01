@@ -27,6 +27,7 @@ function sampleEnvelope(queueId: string, command = "orders.collect_offline") {
     authorization: {
       kind: "grant" as const,
       grant_id: grantId,
+      per_grant_seq: 1,
     },
   };
 }

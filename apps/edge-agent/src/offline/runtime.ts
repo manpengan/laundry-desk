@@ -2,12 +2,11 @@ import { createPublicKey, randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import {
   DesktopCommandExecuteInputSchema,
-  DesktopCommandExecuteResultSchema,
   DesktopCommandNameSchema,
   DesktopOfflineResolveInputSchema,
   DesktopOfflineStatusResultSchema,
+  CURRENT_EDGE_QUEUE_ENVELOPE_VERSION,
   M2_CONTRACT_DEFINITIONS,
-  createCommandError,
   createOfflineGrantRegistrySnapshot,
   parseEdgeQueueEnvelope,
   type DesktopCommandExecuteResult,
@@ -16,22 +15,27 @@ import {
   type DesktopSessionView,
   type EdgeAuthorityData,
   type EdgeQueueEnvelope,
+  type QueueAuthorization,
 } from "@laundry/contracts";
 
 import type { DesktopHttpTransport } from "../desktop/http-transport.js";
 import { OfflineAuthorizationGuard, type MonotonicClock } from "../lease/primary-lease.js";
 import type { AuthorityTrustStore } from "../pairing/authority-trust.js";
-import { DEFAULT_QUEUE_ENVELOPE_VERSION } from "../queue/types.js";
 import type { PersistentEncryptedQueue } from "../queue/persistent-queue.js";
 import {
   authorityMatchesSession,
   bindAuthoritySession,
+  bindReadAuthoritySession,
+  readAuthorityMatchesSession,
   type AuthoritySessionBinding,
+  type ReadAuthoritySessionBinding,
 } from "./authority-session.js";
 import { OfflineConflictStore } from "./conflict-store.js";
+import type { GrantSequenceStore } from "./grant-sequence-store.js";
+import { isGrantCommandBodyAllowed, offlineQueueModeForCommand } from "./offline-command-policy.js";
+import { offlineQueuedSuccess, offlineResourceFailure } from "./offline-results.js";
 import type { VerifiedOfflineReadAuthority } from "./read-authority.js";
 
-const OFFLINE_COMMANDS = new Set(["order.pickup", "payment.collect", "payment.repay"]);
 const RETRYABLE_REPLAY_CODES = new Set([
   "AUTHENTICATION_FAILED",
   "CSRF_REJECTED",
@@ -49,61 +53,6 @@ const commandVersions = new Map(
   ),
 );
 
-type ActiveAuthority = Readonly<{
-  guard: OfflineAuthorizationGuard;
-  binding: AuthoritySessionBinding;
-  grantId: string;
-  leaseId: string;
-  primaryEpoch: number;
-  nextSequence: number;
-  leaseDeadlineMonoMs: number;
-}>;
-
-type ReadAuthorityBinding = Readonly<{
-  sessionId: string;
-  sessionVersion: number;
-  orgId: string;
-  storeId: string;
-  staffId: string;
-  deviceId: string;
-  permissionVersion: number;
-  authority: VerifiedOfflineReadAuthority;
-}>;
-
-export type OfflineRuntimeOptions = Readonly<{
-  queue: PersistentEncryptedQueue;
-  conflicts: OfflineConflictStore;
-  transport: Pick<DesktopHttpTransport, "edge">;
-  authorityTrust: AuthorityTrustStore;
-  clock?: MonotonicClock;
-  now?: () => Date;
-  randomId?: () => string;
-  randomAuthorityNonce?: () => string;
-}>;
-
-function resourceFailure(): DesktopCommandExecuteResult {
-  return Object.freeze({
-    ok: false,
-    error: createCommandError(
-      "RESOURCE_UNAVAILABLE",
-      Object.freeze({ kind: "reason", reason: "retry_later" }),
-    ),
-  });
-}
-
-function offlineSuccess(
-  body: Readonly<Record<string, unknown>>,
-  queueId: string,
-): DesktopCommandExecuteResult {
-  return DesktopCommandExecuteResultSchema.parse({
-    ok: true,
-    data: {
-      execution: "executed",
-      result: { ...body, offline_queued: true, queue_id: queueId },
-    },
-  });
-}
-
 function createDefaultClock(): MonotonicClock {
   let continuity: "trusted" | "uncertain" = "trusted";
   return Object.freeze({
@@ -115,22 +64,53 @@ function createDefaultClock(): MonotonicClock {
   });
 }
 
+type ActiveAuthority = Readonly<{
+  guard: OfflineAuthorizationGuard;
+  binding: AuthoritySessionBinding;
+  grantId: string;
+  grantDeadlineMonoMs: number;
+  primary: Readonly<{
+    leaseId: string;
+    primaryEpoch: number;
+    nextSequence: number;
+    leaseDeadlineMonoMs: number;
+  }> | null;
+}>;
+
+type OfflineEdgeTransport = Readonly<{
+  edge: Pick<DesktopHttpTransport["edge"], "authority" | "replay">;
+}>;
+
+export type OfflineRuntimeOptions = Readonly<{
+  queue: PersistentEncryptedQueue;
+  conflicts: OfflineConflictStore;
+  grantSequences: GrantSequenceStore;
+  transport: OfflineEdgeTransport;
+  authorityTrust: AuthorityTrustStore;
+  clock?: MonotonicClock;
+  now?: () => Date;
+  randomId?: () => string;
+  randomAuthorityNonce?: () => string;
+}>;
+
 export class OfflineCommandRuntime {
   private readonly queue: PersistentEncryptedQueue;
   private readonly conflicts: OfflineConflictStore;
-  private readonly transport: Pick<DesktopHttpTransport, "edge">;
+  private readonly grantSequences: GrantSequenceStore;
+  private readonly transport: OfflineEdgeTransport;
   private readonly authorityTrust: AuthorityTrustStore;
   private readonly clock: MonotonicClock;
   private readonly now: () => Date;
   private readonly randomId: () => string;
   private readonly randomAuthorityNonce: () => string;
   private authority: ActiveAuthority | null = null;
-  private readAuthority: ReadAuthorityBinding | null = null;
+  private readAuthority: ReadAuthoritySessionBinding | null = null;
   private leaseIssuanceBlocked = false;
 
   constructor(options: OfflineRuntimeOptions) {
     this.queue = options.queue;
     this.conflicts = options.conflicts;
+    this.grantSequences = options.grantSequences;
     this.transport = options.transport;
     this.authorityTrust = options.authorityTrust;
     this.clock = options.clock ?? createDefaultClock();
@@ -173,20 +153,16 @@ export class OfflineCommandRuntime {
       const grant = guard.acceptOfflineGrant(data.offline_grant, grantRequest.request);
       if (!grant.ok || !this.authorityTrust.accept(publicKey)) return false;
       this.authority = null;
-      this.readAuthority = Object.freeze({
-        sessionId: session.session.session_id,
-        sessionVersion: session.session.session_version,
-        orgId: session.session.org_id,
-        storeId: session.session.store_id,
-        staffId: session.session.staff_id,
-        deviceId: session.session.device_id,
-        permissionVersion: session.session.permission_version,
-        authority: Object.freeze({
-          serverPublicKeySpki: data.server_public_key_spki,
-          offlineGrant: data.offline_grant,
-        }),
+      this.readAuthority = bindReadAuthoritySession(session, data);
+      const baseAuthority = Object.freeze({
+        guard,
+        binding: bindAuthoritySession(session),
+        grantId: data.offline_grant.payload.grant_id,
+        grantDeadlineMonoMs: grant.localDeadlineMonoMs,
+        primary: null,
       });
       if (data.primary_lease === null) {
+        this.authority = baseAuthority;
         return true;
       }
       const leaseRequest = guard.startAuthorityRequest(requestNonce);
@@ -194,13 +170,13 @@ export class OfflineCommandRuntime {
       const lease = guard.acceptPrimaryLease(data.primary_lease, leaseRequest.request);
       if (!lease.ok) return false;
       this.authority = Object.freeze({
-        guard,
-        binding: bindAuthoritySession(session),
-        grantId: data.offline_grant.payload.grant_id,
-        leaseId: data.primary_lease.payload.lease_id,
-        primaryEpoch: data.primary_lease.payload.primary_epoch,
-        nextSequence: 1,
-        leaseDeadlineMonoMs: lease.localDeadlineMonoMs,
+        ...baseAuthority,
+        primary: Object.freeze({
+          leaseId: data.primary_lease.payload.lease_id,
+          primaryEpoch: data.primary_lease.payload.primary_epoch,
+          nextSequence: 1,
+          leaseDeadlineMonoMs: lease.localDeadlineMonoMs,
+        }),
       });
       return true;
     } catch {
@@ -217,10 +193,14 @@ export class OfflineCommandRuntime {
       this.invalidateContinuity();
       return false;
     }
+    const requestPrimary = session.role === "admin";
     if (
       this.authority !== null &&
       authorityMatchesSession(this.authority.binding, session) &&
-      startedAtMs < this.authority.leaseDeadlineMonoMs
+      startedAtMs < this.authority.grantDeadlineMonoMs &&
+      (!requestPrimary ||
+        (this.authority.primary !== null &&
+          startedAtMs < this.authority.primary.leaseDeadlineMonoMs))
     ) {
       return true;
     }
@@ -230,7 +210,7 @@ export class OfflineCommandRuntime {
     }
     this.authority = null;
     const requestNonce = this.randomAuthorityNonce();
-    const response = await this.transport.edge.authority(requestNonce, session.role === "admin");
+    const response = await this.transport.edge.authority(requestNonce, requestPrimary);
     const receivedAtMs = this.clock.nowMs();
     if (
       !Number.isFinite(receivedAtMs) ||
@@ -254,18 +234,7 @@ export class OfflineCommandRuntime {
 
   exportReadAuthority(session: DesktopSessionView): VerifiedOfflineReadAuthority | null {
     const binding = this.readAuthority;
-    if (
-      binding === null ||
-      binding.sessionId !== session.session.session_id ||
-      binding.sessionVersion !== session.session.session_version ||
-      binding.orgId !== session.session.org_id ||
-      binding.storeId !== session.session.store_id ||
-      binding.staffId !== session.session.staff_id ||
-      binding.deviceId !== session.session.device_id ||
-      binding.permissionVersion !== session.session.permission_version
-    ) {
-      return null;
-    }
+    if (binding === null || !readAuthorityMatchesSession(binding, session)) return null;
     return binding.authority;
   }
 
@@ -283,17 +252,47 @@ export class OfflineCommandRuntime {
 
   async queueCommand(input: unknown): Promise<DesktopCommandExecuteResult> {
     const parsed = await DesktopCommandExecuteInputSchema.safeParseAsync(input);
-    if (!parsed.success || !("body" in parsed.data) || !OFFLINE_COMMANDS.has(parsed.data.name)) {
-      return resourceFailure();
+    if (!parsed.success || !("body" in parsed.data)) {
+      return offlineResourceFailure();
+    }
+    const mode = offlineQueueModeForCommand(parsed.data.name);
+    if (mode === null || !isGrantCommandBodyAllowed(parsed.data.name, parsed.data.body)) {
+      return offlineResourceFailure();
     }
     const authority = this.authority;
     const version = commandVersions.get(parsed.data.name);
     if (this.leaseIssuanceBlocked || authority === null || version === undefined) {
-      return resourceFailure();
+      return offlineResourceFailure();
+    }
+    const primary = mode === "primary_lease" ? authority.primary : null;
+    if (mode === "primary_lease" && primary === null) return offlineResourceFailure();
+    let grantSequence: number | null = null;
+    let authorization: QueueAuthorization;
+    if (mode === "grant") {
+      try {
+        grantSequence = this.grantSequences.reserve(authority.grantId);
+      } catch {
+        this.invalidateContinuity();
+        return offlineResourceFailure();
+      }
+      authorization = Object.freeze({
+        kind: "grant",
+        grant_id: authority.grantId,
+        per_grant_seq: grantSequence,
+      });
+    } else {
+      if (primary === null) return offlineResourceFailure();
+      authorization = Object.freeze({
+        kind: "primary_lease",
+        grant_id: authority.grantId,
+        lease_id: primary.leaseId,
+        primary_epoch: primary.primaryEpoch,
+        per_lease_seq: primary.nextSequence,
+      });
     }
     const queueId = this.randomId();
     const envelope = parseEdgeQueueEnvelope({
-      queue_envelope_version: DEFAULT_QUEUE_ENVELOPE_VERSION,
+      queue_envelope_version: CURRENT_EDGE_QUEUE_ENVELOPE_VERSION,
       contracts_major: 0,
       queue_id: queueId,
       enqueued_at: this.now().toISOString(),
@@ -305,27 +304,33 @@ export class OfflineCommandRuntime {
         mode: "direct",
         args: parsed.data.body,
       },
-      authorization: {
-        kind: "primary_lease",
-        grant_id: authority.grantId,
-        lease_id: authority.leaseId,
-        primary_epoch: authority.primaryEpoch,
-        per_lease_seq: authority.nextSequence,
-      },
+      authorization,
     });
     const authorized = authority.guard.authorizeQueueEnvelope(envelope);
-    if (!authorized.ok) return resourceFailure();
+    if (!authorized.ok) {
+      if (grantSequence !== null) this.invalidateContinuity();
+      return offlineResourceFailure();
+    }
     try {
       this.queue.enqueue(envelope, queueId);
     } catch {
       this.invalidateContinuity();
-      return resourceFailure();
+      return offlineResourceFailure();
     }
-    this.authority = Object.freeze({
-      ...authority,
-      nextSequence: authority.nextSequence + 1,
-    });
-    return offlineSuccess(parsed.data.body, queueId);
+    if (grantSequence !== null) {
+      try {
+        this.grantSequences.commit(authority.grantId, grantSequence);
+      } catch {
+        // Envelope is durable; fail this grant closed but return its queued success.
+        this.invalidateContinuity();
+      }
+    } else if (primary !== null) {
+      this.authority = Object.freeze({
+        ...authority,
+        primary: Object.freeze({ ...primary, nextSequence: primary.nextSequence + 1 }),
+      });
+    }
+    return offlineQueuedSuccess(parsed.data.body, queueId);
   }
 
   async replay(): Promise<void> {
