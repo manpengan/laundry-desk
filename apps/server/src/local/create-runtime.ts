@@ -223,7 +223,12 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
 
   const orderStore = createMemoryOrderStore();
   const customerStore = createMemoryCustomerStore();
-  const statsSource = createOrderBackedStatsQuery(orderStore);
+  // Memory runtime has no customer table to consult, so seed the demo
+  // customer set the memory customer store starts from.
+  const memberDeps = createMemoryMemberDeps([]);
+  // Cash top-ups belong to the day's expected cash (ADR-22 §1.2), so stats must
+  // see the same member store the top-up command writes to.
+  const statsSource = createOrderBackedStatsQuery(orderStore, memberDeps.store);
   const shiftStore = createMemoryShiftStore();
   const printStore = createMemoryPrintJobStore({
     loadSnapshot: async (orderId) => {
@@ -280,9 +285,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     photo: Object.freeze({ store: photoStore }),
     fulfillment: Object.freeze({ store: createMemoryFulfillmentStore() }),
     staffAccess: createMemoryStaffAccessDeps(LOCAL_MEMORY_STAFF_DIRECTORY),
-    // Memory runtime has no customer table to consult, so seed the demo
-    // customer set the memory customer store starts from.
-    member: createMemoryMemberDeps([]),
+    member: memberDeps,
     edgeAuthority: createMemoryRuntimeAuthority(accessTokenSecret),
     accessTokenSecret,
     csrfProofSigner,

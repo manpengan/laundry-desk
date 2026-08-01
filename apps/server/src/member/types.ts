@@ -11,6 +11,15 @@ export type MemberAccountRecord = Readonly<{
 
 export type MemberLedgerKind = "topup" | "pay" | "reversal";
 
+/**
+ * How real money moved for this row (ADR-22 §1.1).
+ *
+ * Only rows that move money outside the ledger carry a tender: a top-up records
+ * how the money came in. `kind = 'pay'` is always null — spending stored value
+ * moves no cash, the cash arrived on the top-up day (ADR-18 §1).
+ */
+export type MemberTender = "cash" | "wechat" | "alipay" | "other";
+
 export type MemberLedgerRow = Readonly<{
   ledger_id: string;
   kind: MemberLedgerKind;
@@ -18,6 +27,7 @@ export type MemberLedgerRow = Readonly<{
   bonus_delta_cents: number;
   order_id: string | null;
   store_id: string;
+  tender: MemberTender | null;
   at: number;
   business_date: string;
   note: string | null;
@@ -45,6 +55,8 @@ export type MemberTopupInput = Readonly<{
   account_id: string;
   store_id: string;
   amount_cents: number;
+  /** Required: money entered the shop somehow, and the day's cash depends on it. */
+  tender: MemberTender;
   staff_id: string;
   at: number;
   business_date: string;
@@ -98,4 +110,12 @@ export type MemberStore = Readonly<{
    * single owner of paid_cents / status (ADR-17 §6).
    */
   spend: (input: MemberSpendInput) => Promise<MemberOutcome<MemberLedgerAppendResult>>;
+  /**
+   * Cash that entered the drawer through stored value on one store-day (ADR-22 §1.2).
+   *
+   * Only `principal_delta_cents` of `tender = 'cash'` rows: a bonus is a book
+   * grant with no banknote behind it, so counting it would make the drawer short
+   * by exactly the bonus — the very kind of unexplained gap this closes.
+   */
+  sumCashPrincipal: (storeId: string, businessDate: string) => Promise<number>;
 }>;

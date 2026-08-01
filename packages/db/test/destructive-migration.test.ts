@@ -118,6 +118,7 @@ describe("destructive migration static reject", () => {
       "0032_member_stored_value.sql",
       "0033_offline_grant_replay.sql",
       "0034_signed_print_dispatch.sql",
+      "0035_member_tender_cash_reconciliation.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

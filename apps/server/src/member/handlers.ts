@@ -12,7 +12,7 @@ import {
   requireString,
 } from "../order/server-pricing.js";
 import { createPgMemberStore } from "./pg-store.js";
-import type { MemberRejectReason, MemberStore } from "./types.js";
+import type { MemberRejectReason, MemberStore, MemberTender } from "./types.js";
 
 /**
  * What a runtime provides. Deliberately excludes the order deps: those already
@@ -66,6 +66,23 @@ function resolveStore(
 
 function optionalNote(input: Readonly<Record<string, unknown>>): string | null {
   return typeof input.note === "string" ? input.note : null;
+}
+
+const TOPUP_TENDERS: ReadonlySet<string> = new Set(["cash", "wechat", "alipay", "other"]);
+
+/**
+ * Narrow the validated top-up method to a ledger tender.
+ *
+ * The contract schema already restricts this set; refusing anything else here
+ * keeps an unpersistable value from reaching the INSERT, where the CHECK would
+ * abort the transaction with a far less specific error.
+ */
+function requireTender(value: unknown): MemberTender {
+  const method = requireString(value);
+  if (!TOPUP_TENDERS.has(method)) {
+    throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+  }
+  return method as MemberTender;
 }
 
 /** Shared clock + business-day gate, identical to the payment path. */
@@ -130,12 +147,14 @@ export function createMemberHandlers(
     const accountId = requireString(input.account_id);
     const amountCents = requireNonNegativeInteger(input.amount_cents);
     if (amountCents === 0) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-    const method = requireString(input.method);
+    const method = requireTender(input.method);
     const { now, businessDate } = await openBusinessDate(deps, context);
     const outcome = await resolveStore(deps, context).topup({
       account_id: accountId,
       store_id: context.tenant.storeId,
       amount_cents: amountCents,
+      // Persisted, not just audited: the day's cash depends on it (ADR-22 §1).
+      tender: method,
       staff_id: context.actor.staffId,
       at: now,
       business_date: businessDate,

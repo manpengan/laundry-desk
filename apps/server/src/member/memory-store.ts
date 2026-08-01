@@ -125,6 +125,7 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemberStore {
           bonus_delta_cents: 0,
           order_id: null,
           store_id: input.store_id,
+          tender: input.tender,
           at: input.at,
           business_date: input.business_date,
           note: input.note,
@@ -146,11 +147,25 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemberStore {
           bonus_delta_cents: outcome.allocation.bonus_delta_cents,
           order_id: input.order_id,
           store_id: input.store_id,
+          // Spending stored value moves no cash (ADR-18 §1).
+          tender: null,
           at: input.at,
           business_date: input.business_date,
           note: input.note,
         }),
       );
+    },
+
+    sumCashPrincipal: async (storeId: string, businessDate: string): Promise<number> => {
+      let total = 0;
+      for (const rows of ledger.values()) {
+        for (const row of rows) {
+          if (row.tender !== "cash") continue;
+          if (row.store_id !== storeId || row.business_date !== businessDate) continue;
+          total += row.principal_delta_cents;
+        }
+      }
+      return total;
     },
   });
 }

@@ -66,7 +66,7 @@ async function seedCustomer(): Promise<string> {
 }
 
 /** A real order for the ledger's order FK to point at. */
-async function seedOrder(): Promise<string> {
+async function seedOrder(businessDate: string = BUSINESS_DATE): Promise<string> {
   const orderId = randomUUID();
   const pool = createPgPool({ connectionString: urls!.app });
   try {
@@ -81,7 +81,7 @@ async function seedOrder(): Promise<string> {
              $1::uuid, $2::uuid, $3::uuid, 'open', 5000, 5000,
              0, 5000, now(), now(), $4::uuid, $5
            )`,
-          [orderId, TENANT.orgId, TENANT.storeId, TENANT.staffId, BUSINESS_DATE],
+          [orderId, TENANT.orgId, TENANT.storeId, TENANT.staffId, businessDate],
         );
       }),
     );
@@ -140,6 +140,7 @@ maybe("a top-up lands as a real row and the balance sums to it", async () => {
       account_id: accountId,
       store_id: TENANT.storeId,
       amount_cents: 20_000,
+      tender: "cash",
       staff_id: TENANT.staffId,
       at: 1_780_000_200,
       business_date: BUSINESS_DATE,
@@ -173,6 +174,7 @@ maybe("a spend beyond the balance is refused and leaves no ledger row", async ()
       account_id: accountId,
       store_id: TENANT.storeId,
       amount_cents: 1_000,
+      tender: "cash",
       staff_id: TENANT.staffId,
       at: 1_780_000_200,
       business_date: BUSINESS_DATE,
@@ -214,6 +216,7 @@ maybe("a successful spend writes a real ledger row against the order", async () 
       account_id: accountId,
       store_id: TENANT.storeId,
       amount_cents: 10_000,
+      tender: "cash",
       staff_id: TENANT.staffId,
       at: 1_780_000_200,
       business_date: BUSINESS_DATE,
@@ -264,6 +267,7 @@ maybe("two concurrent spends cannot both take the same money", async () => {
       account_id: accountId,
       store_id: TENANT.storeId,
       amount_cents: 1_000,
+      tender: "cash",
       staff_id: TENANT.staffId,
       at: 1_780_000_200,
       business_date: BUSINESS_DATE,
@@ -310,6 +314,7 @@ maybe("the ledger rejects UPDATE for the application role", async () => {
       account_id: opened.value.account.account_id,
       store_id: TENANT.storeId,
       amount_cents: 5_000,
+      tender: "cash",
       staff_id: TENANT.staffId,
       at: 1_780_000_200,
       business_date: BUSINESS_DATE,
@@ -340,4 +345,176 @@ maybe("the ledger rejects UPDATE for the application role", async () => {
 
   const view = await withStore((store) => store.getByCustomer(customerId, 10));
   assert.equal(view?.balance.total_cents, 5_000);
+});
+
+/**
+ * Insert straight into the ledger, bypassing the store.
+ *
+ * The CHECKs below are the guarantee that no future write path can attach a
+ * tender to a settlement or invent a tender the cash rollup cannot read. Going
+ * through the store would only prove the store behaves, which is the thing the
+ * constraint exists to stop depending on.
+ */
+async function insertRawLedger(
+  values: Readonly<{
+    accountId: string;
+    kind: "topup" | "pay";
+    principal: number;
+    orderId: string | null;
+    tender: string | null;
+    businessDate: string;
+  }>,
+): Promise<void> {
+  const pool = createPgPool({ connectionString: urls!.app });
+  try {
+    await withPoolClient(pool, async (client) =>
+      withTenantTransaction(client, TENANT, async (tx) => {
+        await tx.query(
+          `INSERT INTO member_ledger (
+             id, org_id, store_id, account_id, kind,
+             principal_delta_cents, bonus_delta_cents, order_id, tender,
+             staff_id, at, business_date, note
+           ) VALUES (
+             $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5,
+             $6::integer, 0, $7::uuid, $8,
+             $9::uuid, now(), $10, NULL
+           )`,
+          [
+            randomUUID(),
+            TENANT.orgId,
+            TENANT.storeId,
+            values.accountId,
+            values.kind,
+            values.principal,
+            values.orderId,
+            values.tender,
+            TENANT.staffId,
+            values.businessDate,
+          ],
+        );
+      }),
+    );
+  } finally {
+    await pool.end();
+  }
+}
+
+async function openAccountFor(customerId: string): Promise<string> {
+  const opened = await withStore((store) =>
+    store.openAccount({ customer_id: customerId, store_id: TENANT.storeId, at: 1_780_000_000 }),
+  );
+  assert.equal(opened.ok, true);
+  if (!opened.ok) throw new Error("unreachable");
+  return opened.value.account.account_id;
+}
+
+maybe("a cash top-up persists its tender and only cash reaches the day sum", async () => {
+  const customerId = await seedCustomer();
+  const accountId = await openAccountFor(customerId);
+  const isolatedDate = "2026-08-11";
+
+  const before = await withStore((store) => store.sumCashPrincipal(TENANT.storeId, isolatedDate));
+
+  for (const [amount, tender] of [
+    [30_000, "cash"],
+    [70_000, "wechat"],
+  ] as const) {
+    const result = await withStore((store) =>
+      store.topup({
+        account_id: accountId,
+        store_id: TENANT.storeId,
+        amount_cents: amount,
+        tender,
+        staff_id: TENANT.staffId,
+        at: 1_780_000_200,
+        business_date: isolatedDate,
+        note: null,
+      }),
+    );
+    assert.equal(result.ok, true);
+  }
+
+  const view = await withStore((store) => store.getByCustomer(customerId, 10));
+  assert.equal(view?.recent[0]?.tender, "wechat");
+  assert.equal(view?.recent[1]?.tender, "cash");
+
+  // Only the cash tender counts: the wechat top-up put no banknote in the drawer.
+  const after = await withStore((store) => store.sumCashPrincipal(TENANT.storeId, isolatedDate));
+  assert.equal(after - before, 30_000);
+});
+
+maybe("a settlement carries no tender, so it never double-counts the drawer", async () => {
+  const customerId = await seedCustomer();
+  const accountId = await openAccountFor(customerId);
+  const isolatedDate = "2026-08-12";
+  const orderId = await seedOrder(isolatedDate);
+
+  const toppedUp = await withStore((store) =>
+    store.topup({
+      account_id: accountId,
+      store_id: TENANT.storeId,
+      amount_cents: 50_000,
+      tender: "cash",
+      staff_id: TENANT.staffId,
+      at: 1_780_000_200,
+      business_date: isolatedDate,
+      note: null,
+    }),
+  );
+  assert.equal(toppedUp.ok, true);
+  const spent = await withStore((store) =>
+    store.spend({
+      account_id: accountId,
+      store_id: TENANT.storeId,
+      order_id: orderId,
+      amount_cents: 20_000,
+      staff_id: TENANT.staffId,
+      at: 1_780_000_400,
+      business_date: isolatedDate,
+      note: null,
+    }),
+  );
+  assert.equal(spent.ok, true);
+
+  const view = await withStore((store) => store.getByCustomer(customerId, 10));
+  assert.equal(view?.recent[0]?.kind, "pay");
+  assert.equal(view?.recent[0]?.tender, null);
+  const cash = await withStore((store) => store.sumCashPrincipal(TENANT.storeId, isolatedDate));
+  assert.equal(cash, 50_000);
+});
+
+maybe("PostgreSQL refuses a settlement row that claims a tender", async () => {
+  const customerId = await seedCustomer();
+  const accountId = await openAccountFor(customerId);
+  const isolatedDate = "2026-08-13";
+  const orderId = await seedOrder(isolatedDate);
+
+  await assert.rejects(
+    insertRawLedger({
+      accountId,
+      kind: "pay",
+      principal: -1_000,
+      orderId,
+      tender: "cash",
+      businessDate: isolatedDate,
+    }),
+    /member_ledger_pay_tender_chk/u,
+  );
+});
+
+maybe("PostgreSQL refuses a tender the cash rollup cannot read", async () => {
+  const customerId = await seedCustomer();
+  const accountId = await openAccountFor(customerId);
+
+  await assert.rejects(
+    insertRawLedger({
+      accountId,
+      kind: "topup",
+      principal: 1_000,
+      orderId: null,
+      tender: "bitcoin",
+      businessDate: "2026-08-14",
+    }),
+    /member_ledger_tender_value_chk/u,
+  );
 });

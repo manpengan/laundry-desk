@@ -32,6 +32,7 @@ async function openAndTopup(store: MemberStore, amountCents: number): Promise<st
     account_id: accountId,
     store_id: STORE_A,
     amount_cents: amountCents,
+    tender: "cash",
     staff_id: STAFF,
     at: 1001,
     business_date: "2026-08-01",
@@ -103,6 +104,7 @@ test("topup refuses a zero or negative amount", async () => {
       account_id: accountId,
       store_id: STORE_A,
       amount_cents: amount,
+      tender: "cash",
       staff_id: STAFF,
       at: 1002,
       business_date: "2026-08-01",
@@ -119,6 +121,7 @@ test("topup and spend on an unknown account are refused", async () => {
     account_id: "88888888-8888-4888-8888-888888888888",
     store_id: STORE_A,
     amount_cents: 100,
+    tender: "cash",
     staff_id: STAFF,
     at: 1002,
     business_date: "2026-08-01",
@@ -237,6 +240,7 @@ test("getByCustomer returns the newest rows first and honours the limit", async 
       account_id: accountId,
       store_id: STORE_A,
       amount_cents: 100,
+      tender: "cash",
       staff_id: STAFF,
       at: 2000 + index,
       business_date: "2026-08-01",
@@ -249,4 +253,77 @@ test("getByCustomer returns the newest rows first and honours the limit", async 
   assert.equal(view?.recent.length, 2);
   assert.equal(view?.recent[0]?.note, "n2");
   assert.equal(view?.recent[1]?.note, "n1");
+});
+
+test("cash top-ups sum per store-day; other tenders and bonus stay out (ADR-22 §1.2)", async () => {
+  const { store } = makeStore();
+  const opened = await store.openAccount({ customer_id: CUSTOMER, store_id: STORE_A, at: 1000 });
+  assert.equal(opened.ok, true);
+  if (!opened.ok) throw new Error("unreachable");
+  const accountId = opened.value.account.account_id;
+
+  const topup = async (
+    amountCents: number,
+    tender: "cash" | "wechat",
+    businessDate: string,
+    storeId: string = STORE_A,
+  ): Promise<void> => {
+    const result = await store.topup({
+      account_id: accountId,
+      store_id: storeId,
+      amount_cents: amountCents,
+      tender,
+      staff_id: STAFF,
+      at: 1001,
+      business_date: businessDate,
+      note: null,
+    });
+    assert.equal(result.ok, true);
+  };
+
+  await topup(100_000, "cash", "2026-08-01");
+  await topup(50_000, "wechat", "2026-08-01");
+  await topup(7_000, "cash", "2026-08-02");
+  await topup(3_000, "cash", "2026-08-01", STORE_B);
+
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-01"), 100_000);
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-02"), 7_000);
+  assert.equal(await store.sumCashPrincipal(STORE_B, "2026-08-01"), 3_000);
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-03"), 0);
+});
+
+test("balance spend never moves cash: it carries no tender (ADR-18 §1, ADR-22 §1.1)", async () => {
+  const { store } = makeStore();
+  const opened = await store.openAccount({ customer_id: CUSTOMER, store_id: STORE_A, at: 1000 });
+  assert.equal(opened.ok, true);
+  if (!opened.ok) throw new Error("unreachable");
+  const accountId = opened.value.account.account_id;
+  await store.topup({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_000,
+    tender: "cash",
+    staff_id: STAFF,
+    at: 1001,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  const spent = await store.spend({
+    account_id: accountId,
+    store_id: STORE_A,
+    order_id: ORDER,
+    amount_cents: 40_000,
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+  assert.equal(spent.ok, true);
+
+  // The spend must not reduce the day's cash: that money entered on top-up day.
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-01"), 100_000);
+  const view = await store.getByCustomer(CUSTOMER, 10);
+  const payRow = view?.recent.find((row) => row.kind === "pay");
+  assert.equal(payRow?.tender, null);
 });
