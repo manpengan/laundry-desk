@@ -95,6 +95,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.account.open",
   "member.topup",
   "member.balance.pay",
+  "member.bonus_rule.upsert",
 ] as const) as readonly [
   "customer.upsert",
   "customer.update",
@@ -128,6 +129,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.account.open",
   "member.topup",
   "member.balance.pay",
+  "member.bonus_rule.upsert",
 ];
 
 /**
@@ -169,6 +171,7 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   "fulfillment.workbench",
   "staff.access.list",
   "member.account.get",
+  "member.bonus_rules.list",
 ] as const);
 
 export const M2_CONTRACT_DEFINITIONS: readonly (

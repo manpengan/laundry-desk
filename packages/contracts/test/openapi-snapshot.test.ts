@@ -26,7 +26,7 @@ const loadSnapshotText = (): string => readFileSync(snapshotPath, "utf8");
 describe("A7 OpenAPI 3.1 snapshot", () => {
   // Two independent builds are what proves determinism; the third build this
   // used to make was redundant. Document cost scales with the contract surface
-  // (383 KB at 29 commands), so keep the count minimal and the budget explicit
+  // (399 KB at 33 commands), so keep the count minimal and the budget explicit
   // rather than relying on vitest's 5s default — see m2-freeze.test.ts.
   it("builds a deterministic OpenAPI 3.1 document", { timeout: 10_000 }, () => {
     const document = buildLaundryOpenApiDocument();

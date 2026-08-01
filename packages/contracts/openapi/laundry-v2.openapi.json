@@ -6497,6 +6497,43 @@
         ],
         "type": "object"
       },
+      "input.command.member.bonus_rule.upsert": {
+        "additionalProperties": false,
+        "properties": {
+          "bonus_cents": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "min_topup_cents": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "note": {
+            "maxLength": 256,
+            "type": "string"
+          },
+          "rule_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "retired"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "min_topup_cents",
+          "bonus_cents",
+          "status"
+        ],
+        "type": "object"
+      },
       "input.command.member.topup": {
         "additionalProperties": false,
         "properties": {
@@ -7263,6 +7300,15 @@
         "required": [
           "customer_id"
         ],
+        "type": "object"
+      },
+      "input.query.member.bonus_rules.list": {
+        "additionalProperties": false,
+        "properties": {
+          "include_retired": {
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "input.query.order.get": {
@@ -8995,6 +9041,58 @@
         "x-laundry-version": "1.0.0"
       }
     },
+    "/v1/commands/member.bonus_rule.upsert": {
+      "post": {
+        "description": "Maintain the tiers that decide how much bonus a top-up grants. Retiring a tier only takes it off the shelf; ledger rows that already cite it stay readable, and no past top-up is re-valued. Stable command name: `member.bonus_rule.upsert` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_member_bonus_rule_upsert",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.member.bonus_rule.upsert"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create, reprice or retire one top-up bonus tier.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "1.0.0"
+      }
+    },
     "/v1/commands/member.topup": {
       "post": {
         "description": "Record money the customer prepaid, in integer fen. The ledger is append-only and the balance is its sum, so a mistake is corrected with a reversal rather than an edit. Stable command name: `member.topup` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -10285,6 +10383,58 @@
           }
         ],
         "summary": "Read a customer's stored-value balance and recent ledger rows.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R1",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/member.bonus_rules.list": {
+      "post": {
+        "description": "Return the bonus tiers, active ones by default. Tiers are organisation-wide because the balance itself is usable at every store. Stable query name: `member.bonus_rules.list` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_member_bonus_rules_list",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.member.bonus_rules.list"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List the top-up bonus tiers for this organisation.",
         "tags": [
           "queries"
         ],

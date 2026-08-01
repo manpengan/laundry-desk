@@ -51,6 +51,10 @@ describe("M2 contract surface", () => {
       "member.account.open",
       "member.topup",
       "member.balance.pay",
+      // ADR-22 §2: top-up bonus tiers. R3 because it changes how much money the
+      // shop gives away on every later top-up; the amount itself is always
+      // computed server-side and never accepted from a client.
+      "member.bonus_rule.upsert",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("stats.day.summary");
@@ -60,6 +64,7 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.duplicates");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("staff.access.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("member.account.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("member.bonus_rules.list");
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
