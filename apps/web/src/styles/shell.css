@@ -1422,3 +1422,75 @@
 }
 
 /* Customer detail + history orders (M2) */
+
+/* Member stored value (ADR-17). Tokens only — no literal colours or radii. */
+.ld-member-panel {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-leaf);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ld-member-panel__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ld-member-panel__balance {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+}
+
+.ld-member-panel__balance-label,
+.ld-member-panel__date,
+.ld-member-panel__hint,
+.ld-member-panel__split {
+  color: var(--lg-ink2);
+  font-size: 13px;
+}
+
+.ld-member-panel__split {
+  margin: 0;
+}
+
+.ld-member-panel__topup {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ld-member-panel__method {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.ld-member-panel__ledger {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ld-member-panel__row {
+  display: grid;
+  grid-template-columns: 4em auto 1fr;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.ld-member-panel__row .ld-member-panel__date {
+  justify-self: end;
+}
