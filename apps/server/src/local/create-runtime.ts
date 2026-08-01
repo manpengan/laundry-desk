@@ -25,6 +25,7 @@ import { createPgOrderStore } from "../order/pg-order-store.js";
 import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
 import { createMemoryStaffAccessDeps, createPgStaffAccessDeps } from "../staff/runtime.js";
+import { createMemoryMemberDeps, createPgMemberDeps } from "../member/runtime.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import { acquirePgBusinessDayLock } from "../workday/business-day-lock.js";
@@ -260,6 +261,9 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     photo: Object.freeze({ store: photoStore }),
     fulfillment: Object.freeze({ store: createMemoryFulfillmentStore() }),
     staffAccess: createMemoryStaffAccessDeps(LOCAL_MEMORY_STAFF_DIRECTORY),
+    // Memory runtime has no customer table to consult, so seed the demo
+    // customer set the memory customer store starts from.
+    member: createMemoryMemberDeps([]),
     edgeAuthority: createMemoryRuntimeAuthority(accessTokenSecret),
     accessTokenSecret,
     csrfProofSigner,
@@ -378,6 +382,7 @@ export async function createPgLocalRuntime(
     photo,
     fulfillment: Object.freeze({ store: createPgFulfillmentStore(appPool) }),
     staffAccess: createPgStaffAccessDeps(),
+    member: createPgMemberDeps(),
     edgeAuthority: createPgRuntimeAuthority(appPool, config.accessTokenSecret),
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSigner,
