@@ -36,6 +36,41 @@ export const MemberAccountGetInputSchema = z.strictObject({
   customer_id: z.uuid(),
 });
 
+/**
+ * A top-up bonus tier (ADR-22 §2).
+ *
+ * Tiers rather than percentages: "top up 1000, get 100" is integer fen by
+ * construction, so no rounding rule has to be invented and later argued about.
+ * `bonus_cents` may be 0 — that switches a tier off without retiring it, and the
+ * ledger still records which rule applied.
+ */
+export const MemberBonusRuleUpsertInputSchema = z.strictObject({
+  rule_id: z.uuid().optional(),
+  min_topup_cents: PositiveCentsSchema,
+  bonus_cents: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  status: z.enum(["active", "retired"]),
+  note: z.string().max(256).optional(),
+});
+
+export const MemberBonusRulesListInputSchema = z.strictObject({
+  include_retired: z.boolean().optional(),
+});
+
+/**
+ * Return unspent principal to the customer (ADR-22 §4, §5).
+ *
+ * `balance` is absent from the tender set for the same reason it is absent from
+ * `PAYMENT_METHODS`: stored value cannot fund its own refund.
+ */
+export const MemberRefundInputSchema = z.strictObject({
+  account_id: z.uuid(),
+  amount_cents: PositiveCentsSchema,
+  tender: MemberTopupMethodSchema,
+  // Money leaving the business carries a human's reason, as order.cancel does.
+  reason: z.string().min(1).max(256),
+  note: z.string().max(256).optional(),
+});
+
 const amountMeasure = Object.freeze({
   amount: { kind: "field" as const, path: "/amount_cents" },
 });
@@ -126,14 +161,83 @@ export const memberAccountGetQuery: QueryDefinition<typeof MemberAccountGetInput
     max_result_rows: 50,
   });
 
+export const memberBonusRuleUpsertCommand: CommandDefinition<
+  typeof MemberBonusRuleUpsertInputSchema
+> = defineCommand({
+  name: "member.bonus_rule.upsert",
+  version: "1.0.0",
+  description: "Create, reprice or retire one top-up bonus tier.",
+  description_llm:
+    "Maintain the tiers that decide how much bonus a top-up grants. Retiring a tier only takes it off the shelf; ledger rows that already cite it stay readable, and no past top-up is re-valued.",
+  input: MemberBonusRuleUpsertInputSchema,
+  // Changes how much money the shop gives away on every later top-up.
+  risk: "R3",
+  invariants: ["rbac.member_rule_write", "member.bonus_rule_threshold_positive"],
+  idempotent: true,
+  sideEffects: ["member.bonus_rule_changed", "audit.member_event"],
+  offline_mode: "denied",
+  data_classification: "internal",
+  input_redaction: [],
+  result_redaction: [],
+});
+
+export const memberBonusRulesListQuery: QueryDefinition<typeof MemberBonusRulesListInputSchema> =
+  defineQuery({
+    name: "member.bonus_rules.list",
+    version: "1.0.0",
+    description: "List the top-up bonus tiers for this organisation.",
+    description_llm:
+      "Return the bonus tiers, active ones by default. Tiers are organisation-wide because the balance itself is usable at every store.",
+    input: MemberBonusRulesListInputSchema,
+    risk: "R1",
+    invariants: [],
+    idempotent: true,
+    sideEffects: [],
+    offline_mode: "denied",
+    data_classification: "internal",
+    input_redaction: [],
+    result_redaction: [],
+    max_result_rows: 50,
+  });
+
+export const memberRefundCommand: CommandDefinition<typeof MemberRefundInputSchema> = defineCommand(
+  {
+    name: "member.refund",
+    version: "1.0.0",
+    description: "Return unspent stored-value principal to the customer.",
+    description_llm:
+      "Refund prepaid money with step-up approval. Only principal is refundable and only what is left of it: the bonus is a book grant the customer never paid for. The server locks the account and re-reads the principal under that lock.",
+    input: MemberRefundInputSchema,
+    // Money leaves the business and cannot be taken back.
+    risk: "R4",
+    invariants: [
+      "rbac.member_refund",
+      "member.account_active",
+      "member.refundable_principal",
+      "member.ledger_append_only",
+    ],
+    idempotent: true,
+    sideEffects: ["member.refunded", "audit.member_event"],
+    offline_mode: "denied",
+    data_classification: "internal",
+    input_redaction: [],
+    result_redaction: [],
+    size_measures: amountMeasure,
+    hard_limits: memberLimits,
+  },
+);
+
 export const MEMBER_COMMANDS: readonly CommandDefinition<z.ZodObject>[] = Object.freeze([
   memberAccountOpenCommand,
   memberTopupCommand,
   memberBalancePayCommand,
+  memberBonusRuleUpsertCommand,
+  memberRefundCommand,
 ]);
 
 export const MEMBER_QUERIES: readonly QueryDefinition<z.ZodObject>[] = Object.freeze([
   memberAccountGetQuery,
+  memberBonusRulesListQuery,
 ]);
 
 export const MEMBER_DEFINITIONS = Object.freeze([...MEMBER_COMMANDS, ...MEMBER_QUERIES]);
@@ -141,5 +245,10 @@ export const MEMBER_COMMAND_NAMES = Object.freeze([
   "member.account.open",
   "member.topup",
   "member.balance.pay",
+  "member.bonus_rule.upsert",
+  "member.refund",
 ] as const);
-export const MEMBER_QUERY_NAMES = Object.freeze(["member.account.get"] as const);
+export const MEMBER_QUERY_NAMES = Object.freeze([
+  "member.account.get",
+  "member.bonus_rules.list",
+] as const);

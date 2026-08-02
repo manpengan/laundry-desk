@@ -239,3 +239,223 @@ test("account.get exposes the balance split and the ledger it summed", async () 
   assert.equal(recent.length, 1);
   assert.equal(recent[0]?.kind, "topup");
 });
+
+test("bonus_rule.upsert refuses a caller without member_rule_write (ADR-22 §2.3)", async () => {
+  const { handlers } = makeDeps();
+
+  // Deliberately holding every other write permission: changing how much money
+  // the shop gives away must not ride along with pricing or customer rights.
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.bonus_rule.upsert"],
+        { min_topup_cents: 100_000, bonus_cents: 10_000, status: "active" },
+        ["customer_write", "order_write", "catalog_write", "settings_admin"],
+      ),
+    hasCode("PERMISSION_DENIED"),
+  );
+});
+
+test("bonus_rule.upsert creates a tier and a later top-up grants it", async () => {
+  const { handlers } = makeDeps();
+
+  const created = await run(
+    handlers["member.bonus_rule.upsert"],
+    { min_topup_cents: 100_000, bonus_cents: 10_000, status: "active" },
+    ["member_rule_write"],
+  );
+  const rule = created.result as { rule_id: string; bonus_cents: number };
+  assert.equal(rule.bonus_cents, 10_000);
+  assert.equal(created.audit?.entity, "member_bonus_rules");
+
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const account = opened.result as { account_id: string };
+  const topped = await run(
+    handlers["member.topup"],
+    { account_id: account.account_id, amount_cents: 100_000, method: "cash" },
+    ["customer_write"],
+  );
+
+  const balance = topped.result as { principal_cents: number; bonus_cents: number };
+  assert.equal(balance.principal_cents, 100_000);
+  assert.equal(balance.bonus_cents, 10_000);
+});
+
+test("topup ignores a client-supplied bonus: the schema has no such field", async () => {
+  const { handlers } = makeDeps();
+  await run(
+    handlers["member.bonus_rule.upsert"],
+    { min_topup_cents: 100_000, bonus_cents: 10_000, status: "active" },
+    ["member_rule_write"],
+  );
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const account = opened.result as { account_id: string };
+
+  const topped = await run(
+    handlers["member.topup"],
+    {
+      account_id: account.account_id,
+      amount_cents: 100_000,
+      method: "cash",
+      // A clerk cannot pair any top-up with any grant (ADR-22 §3.1).
+      bonus_cents: 999_999,
+    },
+    ["customer_write"],
+  );
+
+  const balance = topped.result as { bonus_cents: number };
+  assert.equal(balance.bonus_cents, 10_000);
+});
+
+test("bonus_rules.list hides retired tiers unless asked", async () => {
+  const { handlers } = makeDeps();
+  const created = await run(
+    handlers["member.bonus_rule.upsert"],
+    { min_topup_cents: 100_000, bonus_cents: 10_000, status: "active" },
+    ["member_rule_write"],
+  );
+  const rule = created.result as { rule_id: string };
+  await run(
+    handlers["member.bonus_rule.upsert"],
+    {
+      rule_id: rule.rule_id,
+      min_topup_cents: 100_000,
+      bonus_cents: 10_000,
+      status: "retired",
+    },
+    ["member_rule_write"],
+  );
+
+  const visible = await run(handlers["member.bonus_rules.list"], {}, ["customer_read"]);
+  assert.deepEqual((visible.result as { rules: readonly unknown[] }).rules, []);
+
+  const all = await run(handlers["member.bonus_rules.list"], { include_retired: true }, [
+    "customer_read",
+  ]);
+  assert.equal((all.result as { rules: readonly unknown[] }).rules.length, 1);
+});
+
+test("bonus_rule.upsert refuses an unknown rule id instead of creating a second tier", async () => {
+  const { handlers } = makeDeps();
+
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.bonus_rule.upsert"],
+        {
+          rule_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          min_topup_cents: 100_000,
+          bonus_cents: 10_000,
+          status: "active",
+        },
+        ["member_rule_write"],
+      ),
+    hasCode("VALIDATION_FAILED"),
+  );
+});
+
+test("refund refuses a caller without member_refund (ADR-22 §5.1)", async () => {
+  const { handlers } = makeDeps();
+
+  // payment_refund returns an order payment; this returns prepaid money the
+  // shop is holding. Holding one must not grant the other.
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.refund"],
+        { account_id: ORDER_ID, amount_cents: 1_000, tender: "cash", reason: "退卡" },
+        ["payment_refund", "order_write", "customer_write", "member_rule_write"],
+      ),
+    hasCode("PERMISSION_DENIED"),
+  );
+});
+
+test("refund returns principal, never the bonus, and reports the new balance", async () => {
+  const { handlers } = makeDeps();
+  await run(
+    handlers["member.bonus_rule.upsert"],
+    { min_topup_cents: 100_000, bonus_cents: 10_000, status: "active" },
+    ["member_rule_write"],
+  );
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const account = opened.result as { account_id: string };
+  await run(
+    handlers["member.topup"],
+    { account_id: account.account_id, amount_cents: 100_000, method: "cash" },
+    ["customer_write"],
+  );
+
+  const refunded = await run(
+    handlers["member.refund"],
+    {
+      account_id: account.account_id,
+      amount_cents: 100_000,
+      tender: "cash",
+      reason: "顾客退卡",
+    },
+    ["member_refund"],
+  );
+
+  const body = refunded.result as { principal_cents: number; bonus_cents: number };
+  assert.equal(body.principal_cents, 0);
+  assert.equal(body.bonus_cents, 10_000);
+  assert.equal(refunded.audit?.entity, "member_ledger");
+});
+
+test("refund refuses to reach past the principal into the bonus", async () => {
+  const { handlers } = makeDeps();
+  await run(
+    handlers["member.bonus_rule.upsert"],
+    { min_topup_cents: 100_000, bonus_cents: 10_000, status: "active" },
+    ["member_rule_write"],
+  );
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const account = opened.result as { account_id: string };
+  await run(
+    handlers["member.topup"],
+    { account_id: account.account_id, amount_cents: 100_000, method: "cash" },
+    ["customer_write"],
+  );
+
+  // Total balance is 110_000; only 100_000 of it is the customer's own money.
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.refund"],
+        {
+          account_id: account.account_id,
+          amount_cents: 110_000,
+          tender: "cash",
+          reason: "顾客退卡",
+        },
+        ["member_refund"],
+      ),
+    hasCode("INVARIANT_FAILED"),
+  );
+});
+
+test("refund refuses a blank reason", async () => {
+  const { handlers } = makeDeps();
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const account = opened.result as { account_id: string };
+
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.refund"],
+        { account_id: account.account_id, amount_cents: 100, tender: "cash", reason: "   " },
+        ["member_refund"],
+      ),
+    hasCode("VALIDATION_FAILED"),
+  );
+});

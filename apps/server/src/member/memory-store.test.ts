@@ -32,6 +32,7 @@ async function openAndTopup(store: MemberStore, amountCents: number): Promise<st
     account_id: accountId,
     store_id: STORE_A,
     amount_cents: amountCents,
+    tender: "cash",
     staff_id: STAFF,
     at: 1001,
     business_date: "2026-08-01",
@@ -103,6 +104,7 @@ test("topup refuses a zero or negative amount", async () => {
       account_id: accountId,
       store_id: STORE_A,
       amount_cents: amount,
+      tender: "cash",
       staff_id: STAFF,
       at: 1002,
       business_date: "2026-08-01",
@@ -119,6 +121,7 @@ test("topup and spend on an unknown account are refused", async () => {
     account_id: "88888888-8888-4888-8888-888888888888",
     store_id: STORE_A,
     amount_cents: 100,
+    tender: "cash",
     staff_id: STAFF,
     at: 1002,
     business_date: "2026-08-01",
@@ -237,6 +240,7 @@ test("getByCustomer returns the newest rows first and honours the limit", async 
       account_id: accountId,
       store_id: STORE_A,
       amount_cents: 100,
+      tender: "cash",
       staff_id: STAFF,
       at: 2000 + index,
       business_date: "2026-08-01",
@@ -249,4 +253,389 @@ test("getByCustomer returns the newest rows first and honours the limit", async 
   assert.equal(view?.recent.length, 2);
   assert.equal(view?.recent[0]?.note, "n2");
   assert.equal(view?.recent[1]?.note, "n1");
+});
+
+test("cash top-ups sum per store-day; other tenders and bonus stay out (ADR-22 §1.2)", async () => {
+  const { store } = makeStore();
+  const opened = await store.openAccount({ customer_id: CUSTOMER, store_id: STORE_A, at: 1000 });
+  assert.equal(opened.ok, true);
+  if (!opened.ok) throw new Error("unreachable");
+  const accountId = opened.value.account.account_id;
+
+  const topup = async (
+    amountCents: number,
+    tender: "cash" | "wechat",
+    businessDate: string,
+    storeId: string = STORE_A,
+  ): Promise<void> => {
+    const result = await store.topup({
+      account_id: accountId,
+      store_id: storeId,
+      amount_cents: amountCents,
+      tender,
+      staff_id: STAFF,
+      at: 1001,
+      business_date: businessDate,
+      note: null,
+    });
+    assert.equal(result.ok, true);
+  };
+
+  await topup(100_000, "cash", "2026-08-01");
+  await topup(50_000, "wechat", "2026-08-01");
+  await topup(7_000, "cash", "2026-08-02");
+  await topup(3_000, "cash", "2026-08-01", STORE_B);
+
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-01"), 100_000);
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-02"), 7_000);
+  assert.equal(await store.sumCashPrincipal(STORE_B, "2026-08-01"), 3_000);
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-03"), 0);
+});
+
+test("balance spend never moves cash: it carries no tender (ADR-18 §1, ADR-22 §1.1)", async () => {
+  const { store } = makeStore();
+  const opened = await store.openAccount({ customer_id: CUSTOMER, store_id: STORE_A, at: 1000 });
+  assert.equal(opened.ok, true);
+  if (!opened.ok) throw new Error("unreachable");
+  const accountId = opened.value.account.account_id;
+  await store.topup({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_000,
+    tender: "cash",
+    staff_id: STAFF,
+    at: 1001,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  const spent = await store.spend({
+    account_id: accountId,
+    store_id: STORE_A,
+    order_id: ORDER,
+    amount_cents: 40_000,
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+  assert.equal(spent.ok, true);
+
+  // The spend must not reduce the day's cash: that money entered on top-up day.
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-01"), 100_000);
+  const view = await store.getByCustomer(CUSTOMER, 10);
+  const payRow = view?.recent.find((row) => row.kind === "pay");
+  assert.equal(payRow?.tender, null);
+});
+
+test("a top-up grants the matching tier and snapshots which rule applied (ADR-22 §3)", async () => {
+  const { store } = makeStore();
+  const rule = await store.upsertBonusRule({
+    rule_id: null,
+    min_topup_cents: 100_000,
+    bonus_cents: 10_000,
+    status: "active",
+    staff_id: STAFF,
+    at: 900,
+    note: null,
+  });
+  assert.equal(rule.ok, true);
+  if (!rule.ok) throw new Error("unreachable");
+
+  const opened = await store.openAccount({ customer_id: CUSTOMER, store_id: STORE_A, at: 1000 });
+  assert.equal(opened.ok, true);
+  if (!opened.ok) throw new Error("unreachable");
+  const topped = await store.topup({
+    account_id: opened.value.account.account_id,
+    store_id: STORE_A,
+    amount_cents: 100_000,
+    tender: "cash",
+    staff_id: STAFF,
+    at: 1001,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.equal(topped.ok, true);
+  if (!topped.ok) throw new Error("unreachable");
+  assert.equal(topped.value.principal_delta_cents, 100_000);
+  assert.equal(topped.value.bonus_delta_cents, 10_000);
+  assert.deepEqual(topped.value.balance, {
+    principal_cents: 100_000,
+    bonus_cents: 10_000,
+    total_cents: 110_000,
+  });
+
+  const view = await store.getByCustomer(CUSTOMER, 1);
+  assert.equal(view?.recent[0]?.bonus_rule_id, rule.value.rule_id);
+  // Only the principal is cash: the bonus put no banknote in the drawer.
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-01"), 100_000);
+});
+
+test("retiring a tier stops new grants but never re-values past top-ups", async () => {
+  const { store } = makeStore();
+  const created = await store.upsertBonusRule({
+    rule_id: null,
+    min_topup_cents: 100_000,
+    bonus_cents: 10_000,
+    status: "active",
+    staff_id: STAFF,
+    at: 900,
+    note: null,
+  });
+  assert.equal(created.ok, true);
+  if (!created.ok) throw new Error("unreachable");
+  const opened = await store.openAccount({ customer_id: CUSTOMER, store_id: STORE_A, at: 1000 });
+  assert.equal(opened.ok, true);
+  if (!opened.ok) throw new Error("unreachable");
+  const accountId = opened.value.account.account_id;
+  const before = await store.topup({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_000,
+    tender: "cash",
+    staff_id: STAFF,
+    at: 1001,
+    business_date: "2026-08-01",
+    note: null,
+  });
+  assert.equal(before.ok, true);
+
+  const retired = await store.upsertBonusRule({
+    rule_id: created.value.rule_id,
+    min_topup_cents: 100_000,
+    bonus_cents: 10_000,
+    status: "retired",
+    staff_id: STAFF,
+    at: 1002,
+    note: null,
+  });
+  assert.equal(retired.ok, true);
+
+  const after = await store.topup({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_000,
+    tender: "cash",
+    staff_id: STAFF,
+    at: 1003,
+    business_date: "2026-08-01",
+    note: null,
+  });
+  assert.equal(after.ok, true);
+  if (!after.ok) throw new Error("unreachable");
+  assert.equal(after.value.bonus_delta_cents, 0);
+
+  // The earlier top-up keeps the bonus it was granted at the time.
+  const view = await store.getByCustomer(CUSTOMER, 10);
+  assert.equal(view?.recent[1]?.bonus_delta_cents, 10_000);
+  assert.equal(view?.recent[1]?.bonus_rule_id, created.value.rule_id);
+  assert.equal(view?.balance.bonus_cents, 10_000);
+
+  const active = await store.listBonusRules(false);
+  assert.equal(active.length, 0);
+  const all = await store.listBonusRules(true);
+  assert.equal(all.length, 1);
+  assert.equal(all[0]?.status, "retired");
+});
+
+test("a spend eats the bonus first, leaving principal refundable (ADR-22 §4.2)", async () => {
+  const { store } = makeStore();
+  const rule = await store.upsertBonusRule({
+    rule_id: null,
+    min_topup_cents: 100_000,
+    bonus_cents: 10_000,
+    status: "active",
+    staff_id: STAFF,
+    at: 900,
+    note: null,
+  });
+  assert.equal(rule.ok, true);
+  const opened = await store.openAccount({ customer_id: CUSTOMER, store_id: STORE_A, at: 1000 });
+  assert.equal(opened.ok, true);
+  if (!opened.ok) throw new Error("unreachable");
+  const accountId = opened.value.account.account_id;
+  await store.topup({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_000,
+    tender: "cash",
+    staff_id: STAFF,
+    at: 1001,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  const spent = await store.spend({
+    account_id: accountId,
+    store_id: STORE_A,
+    order_id: ORDER,
+    amount_cents: 10_000,
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.equal(spent.ok, true);
+  if (!spent.ok) throw new Error("unreachable");
+  // Bonus first: the refundable principal stays whole for longer.
+  assert.deepEqual(spent.value.balance, {
+    principal_cents: 100_000,
+    bonus_cents: 0,
+    total_cents: 100_000,
+  });
+});
+
+async function accountWithBonusTopup(store: MemberStore): Promise<string> {
+  const rule = await store.upsertBonusRule({
+    rule_id: null,
+    min_topup_cents: 100_000,
+    bonus_cents: 10_000,
+    status: "active",
+    staff_id: STAFF,
+    at: 900,
+    note: null,
+  });
+  assert.equal(rule.ok, true);
+  const opened = await store.openAccount({ customer_id: CUSTOMER, store_id: STORE_A, at: 1000 });
+  assert.equal(opened.ok, true);
+  if (!opened.ok) throw new Error("unreachable");
+  const accountId = opened.value.account.account_id;
+  const topped = await store.topup({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_000,
+    tender: "cash",
+    staff_id: STAFF,
+    at: 1001,
+    business_date: "2026-08-01",
+    note: null,
+  });
+  assert.equal(topped.ok, true);
+  return accountId;
+}
+
+test("a refund returns principal only and never the bonus (ADR-22 §4.1)", async () => {
+  const { store } = makeStore();
+  const accountId = await accountWithBonusTopup(store);
+
+  const refunded = await store.refund({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_000,
+    tender: "cash",
+    reason: "顾客退卡",
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.equal(refunded.ok, true);
+  if (!refunded.ok) throw new Error("unreachable");
+  assert.equal(refunded.value.principal_delta_cents, -100_000);
+  assert.equal(refunded.value.bonus_delta_cents, 0);
+  // The bonus survives the refund as an un-withdrawable book balance.
+  assert.deepEqual(refunded.value.balance, {
+    principal_cents: 0,
+    bonus_cents: 10_000,
+    total_cents: 10_000,
+  });
+});
+
+test("a refund cannot exceed the remaining principal, bonus included or not", async () => {
+  const { store } = makeStore();
+  const accountId = await accountWithBonusTopup(store);
+
+  // Total balance is 110_000, but only 100_000 of it is principal.
+  const tooMuch = await store.refund({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_001,
+    tender: "cash",
+    reason: "顾客退卡",
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.deepEqual(tooMuch, { ok: false, reason: "insufficient_balance" });
+});
+
+test("a spend first, then a refund, returns exactly the untouched principal (ADR-22 §4.2)", async () => {
+  const { store } = makeStore();
+  const accountId = await accountWithBonusTopup(store);
+  const spent = await store.spend({
+    account_id: accountId,
+    store_id: STORE_A,
+    order_id: ORDER,
+    amount_cents: 10_000,
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+  assert.equal(spent.ok, true);
+
+  // The spend ate the bonus, so the full 100_000 principal is still refundable.
+  const refunded = await store.refund({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_000,
+    tender: "cash",
+    reason: "顾客退卡",
+    staff_id: STAFF,
+    at: 1003,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.equal(refunded.ok, true);
+  if (!refunded.ok) throw new Error("unreachable");
+  assert.deepEqual(refunded.value.balance, {
+    principal_cents: 0,
+    bonus_cents: 0,
+    total_cents: 0,
+  });
+});
+
+test("a cash refund leaves the drawer by the refunded amount (ADR-22 §5.4)", async () => {
+  const { store } = makeStore();
+  const accountId = await accountWithBonusTopup(store);
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-01"), 100_000);
+
+  await store.refund({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 30_000,
+    tender: "cash",
+    reason: "顾客退卡",
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-01"), 70_000);
+});
+
+test("a wechat refund does not touch the drawer", async () => {
+  const { store } = makeStore();
+  const accountId = await accountWithBonusTopup(store);
+
+  await store.refund({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 30_000,
+    tender: "wechat",
+    reason: "原路退回",
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-01"), 100_000);
 });

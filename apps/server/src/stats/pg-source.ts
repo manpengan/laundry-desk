@@ -75,6 +75,33 @@ async function queryDaySummary(
   return mapSummary(input, result.rows[0]);
 }
 
+function requireCashInt(value: number | string | undefined): number {
+  const parsed = typeof value === "number" ? value : Number(value ?? 0);
+  if (!Number.isSafeInteger(parsed)) throw new Error("Invalid cash aggregate from PostgreSQL");
+  return parsed;
+}
+
+/**
+ * Cash that entered through stored value (ADR-18 §3, ADR-22 §1.2).
+ *
+ * Top-ups never touch `payments`, so they are summed from the ledger instead —
+ * principal only, because a bonus is a book grant with no banknote behind it and
+ * counting it would leave the drawer short by exactly the bonus.
+ */
+async function queryMemberCashCents(
+  client: SqlClient,
+  input: StatsDaySummaryInput,
+): Promise<number> {
+  const result = await client.query<Readonly<{ cash_cents: number | string }>>(
+    `SELECT COALESCE(SUM(principal_delta_cents), 0)::bigint AS cash_cents
+       FROM member_ledger
+      WHERE org_id = $1::uuid AND store_id = $2::uuid
+        AND business_date = $3 AND tender = 'cash'`,
+    [input.orgId, input.storeId, input.businessDate],
+  );
+  return requireCashInt(result.rows[0]?.cash_cents);
+}
+
 async function queryCashSummary(
   client: SqlClient,
   input: StatsDaySummaryInput,
@@ -97,10 +124,11 @@ async function queryCashSummary(
        AND p.business_date = $3 AND p.method = 'cash'`,
     [input.orgId, input.storeId, input.businessDate],
   );
-  const value = result.rows[0]?.cash_cents ?? 0;
-  const cashCents = typeof value === "number" ? value : Number(value);
-  if (!Number.isSafeInteger(cashCents)) throw new Error("Invalid cash aggregate from PostgreSQL");
-  return Object.freeze({ cash_cents: cashCents });
+  const orderCash = requireCashInt(result.rows[0]?.cash_cents);
+  const memberCash = await queryMemberCashCents(client, input);
+  const total = orderCash + memberCash;
+  if (!Number.isSafeInteger(total)) throw new Error("Invalid cash aggregate from PostgreSQL");
+  return Object.freeze({ cash_cents: total });
 }
 
 /**

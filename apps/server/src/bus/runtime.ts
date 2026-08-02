@@ -16,6 +16,12 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "print_manage",
   "audit_read",
   "edge_conflict_resolve",
+  // ADR-22 §2.3: changing a top-up bonus tier changes how much money the shop
+  // gives away, so it is admin-only and deliberately not bundled with pricing.
+  "member_rule_write",
+  // ADR-22 §5: R4 money-out. Separate from payment_refund because that returns
+  // an order payment, while this returns prepaid money held for the customer.
+  "member_refund",
 ]);
 const STAFF_PERMISSIONS = Object.freeze([
   "staff_read",

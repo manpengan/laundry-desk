@@ -4,6 +4,7 @@
 
 import { aggregateDaySummary, emptyDaySummary, type DaySummary } from "@laundry/domain";
 
+import type { MemberStore } from "../member/types.js";
 import type { OrderStore } from "../order/types.js";
 import { paymentNetCents } from "../reconciliation/common.js";
 import type { StatsDaySummaryInput, StatsQueryPort } from "./types.js";
@@ -50,11 +51,20 @@ export function createMemoryStatsSource(orderStore: OrderStore | null = null): M
   return new MemoryStatsSource(orderStore);
 }
 
-/** Always compute from OrderStore (no seed layer). */
-export function createOrderBackedStatsQuery(orderStore: OrderStore): StatsQueryPort {
+/**
+ * Always compute from OrderStore (no seed layer).
+ *
+ * `memberStore` is optional so callers with no stored value keep the old shape;
+ * when supplied, its cash top-ups join the day's expected cash (ADR-22 §1.2).
+ */
+export function createOrderBackedStatsQuery(
+  orderStore: OrderStore,
+  memberStore: MemberStore | null = null,
+): StatsQueryPort {
   return Object.freeze({
     daySummary: (input: StatsDaySummaryInput) => summarizeOrdersForDay(orderStore, input),
-    cashSummary: (input: StatsDaySummaryInput) => summarizeCashForDay(orderStore, input),
+    cashSummary: (input: StatsDaySummaryInput) =>
+      summarizeCashForDay(orderStore, input, memberStore),
   });
 }
 
@@ -113,8 +123,19 @@ async function summarizeOrdersForDay(
 async function summarizeCashForDay(
   store: OrderStore | null,
   input: StatsDaySummaryInput,
+  memberStore: MemberStore | null = null,
 ): Promise<Readonly<{ cash_cents: number }>> {
-  if (store?.listPayments === undefined) return Object.freeze({ cash_cents: 0 });
+  return Object.freeze({
+    cash_cents:
+      (await orderCashForDay(store, input)) + (await memberCashForDay(memberStore, input)),
+  });
+}
+
+async function orderCashForDay(
+  store: OrderStore | null,
+  input: StatsDaySummaryInput,
+): Promise<number> {
+  if (store?.listPayments === undefined) return 0;
   const rows = await store.listPayments(input.orgId, input.storeId);
   const referencedKinds = new Map(rows.map((payment) => [payment.payment_id, payment.kind]));
   let total = 0;
@@ -125,5 +146,20 @@ async function summarizeCashForDay(
       payment.ref_payment_id === null ? undefined : referencedKinds.get(payment.ref_payment_id),
     );
   }
-  return Object.freeze({ cash_cents: total });
+  return total;
+}
+
+/**
+ * Cash that entered through stored value (ADR-18 §3, ADR-22 §1.2).
+ *
+ * A top-up never touches `payments`, so without this the banknotes a customer
+ * hands over for a top-up sit in the drawer while the expected figure ignores
+ * them — a shift surplus nothing on the books explains.
+ */
+async function memberCashForDay(
+  memberStore: MemberStore | null,
+  input: StatsDaySummaryInput,
+): Promise<number> {
+  if (memberStore === null) return 0;
+  return memberStore.sumCashPrincipal(input.storeId, input.businessDate);
 }

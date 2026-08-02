@@ -188,7 +188,15 @@ export function registerM1Handlers(
     registry.registerHandler("member.account.open", handlers["member.account.open"]);
     registry.registerHandler("member.topup", handlers["member.topup"]);
     registry.registerHandler("member.balance.pay", handlers["member.balance.pay"]);
-    registered.push("member.account.open", "member.topup", "member.balance.pay");
+    registry.registerHandler("member.bonus_rule.upsert", handlers["member.bonus_rule.upsert"]);
+    registry.registerHandler("member.refund", handlers["member.refund"]);
+    registered.push(
+      "member.account.open",
+      "member.topup",
+      "member.balance.pay",
+      "member.bonus_rule.upsert",
+      "member.refund",
+    );
   }
 
   return Object.freeze(registered);
@@ -266,7 +274,8 @@ export function registerM1QueryHandlers(
     const memberOrder = deps.order;
     const handlers = createMemberHandlers({ ...deps.member, order: memberOrder });
     queryRegistry.registerHandler("member.account.get", handlers["member.account.get"]);
-    names.push("member.account.get");
+    queryRegistry.registerHandler("member.bonus_rules.list", handlers["member.bonus_rules.list"]);
+    names.push("member.account.get", "member.bonus_rules.list");
   }
 
   return Object.freeze(names);

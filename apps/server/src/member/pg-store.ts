@@ -1,15 +1,19 @@
 import { randomUUID } from "node:crypto";
 
 import { allocateSpend, projectBalance, type LedgerDelta } from "./balance.js";
+import { matchBonusRule } from "./bonus.js";
+import { listBonusRules, readActiveBonusRules, upsertBonusRule } from "./pg-bonus-rules.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import type {
   MemberAccountRecord,
   MemberAccountView,
+  MemberBonusRuleUpsertInput,
   MemberLedgerAppendResult,
   MemberLedgerRow,
   MemberOpenInput,
   MemberOpenResult,
   MemberOutcome,
+  MemberRefundInput,
   MemberRejectReason,
   MemberSpendInput,
   MemberStore,
@@ -32,6 +36,8 @@ type LedgerDbRow = Readonly<{
   bonus_delta_cents: number | string;
   order_id: string | null;
   store_id: string;
+  tender: string | null;
+  bonus_rule_id: string | null;
   at: Date | string;
   business_date: string;
   note: string | null;
@@ -51,6 +57,20 @@ function requireInt(value: number | string, label: string): number {
   return parsed;
 }
 
+const TENDERS: ReadonlySet<string> = new Set(["cash", "wechat", "alipay", "other"]);
+
+/**
+ * Refuse an unknown tender rather than coercing it to null.
+ *
+ * Null means "no cash moved"; silently mapping an unrecognised value to it would
+ * drop real money out of the day's cash instead of failing loudly.
+ */
+function toTender(value: string | null): MemberLedgerRow["tender"] {
+  if (value === null) return null;
+  if (!TENDERS.has(value)) throw new Error(`member ledger tender is not recognised: ${value}`);
+  return value as MemberLedgerRow["tender"];
+}
+
 function toLedgerRow(row: LedgerDbRow): MemberLedgerRow {
   return Object.freeze({
     ledger_id: row.id,
@@ -59,6 +79,8 @@ function toLedgerRow(row: LedgerDbRow): MemberLedgerRow {
     bonus_delta_cents: requireInt(row.bonus_delta_cents, "bonus_delta_cents"),
     order_id: row.order_id,
     store_id: row.store_id,
+    tender: toTender(row.tender),
+    bonus_rule_id: row.bonus_rule_id,
     at: toEpoch(row.at),
     business_date: row.business_date,
     note: row.note,
@@ -123,11 +145,13 @@ export function createPgMemberStore(
   const insertLedger = async (
     accountId: string,
     values: Readonly<{
-      kind: "topup" | "pay";
+      kind: "topup" | "pay" | "refund";
       principal: number;
       bonus: number;
       orderId: string | null;
       storeId: string;
+      tender: MemberLedgerRow["tender"];
+      bonusRuleId: string | null;
       staffId: string;
       at: number;
       businessDate: string;
@@ -138,12 +162,12 @@ export function createPgMemberStore(
     await client.query(
       `INSERT INTO member_ledger (
          id, org_id, store_id, account_id, kind,
-         principal_delta_cents, bonus_delta_cents, order_id,
+         principal_delta_cents, bonus_delta_cents, order_id, tender, bonus_rule_id,
          staff_id, at, business_date, note
        ) VALUES (
          $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5,
-         $6::integer, $7::integer, $8::uuid,
-         $9::uuid, to_timestamp($10), $11, $12
+         $6::integer, $7::integer, $8::uuid, $9, $10::uuid,
+         $11::uuid, to_timestamp($12), $13, $14
        )`,
       [
         ledgerId,
@@ -154,6 +178,8 @@ export function createPgMemberStore(
         values.principal,
         values.bonus,
         values.orderId,
+        values.tender,
+        values.bonusRuleId,
         values.staffId,
         values.at,
         values.businessDate,
@@ -233,7 +259,7 @@ export function createPgMemberStore(
       const account = toAccount(accountRow);
       const rows = await client.query<LedgerDbRow>(
         `SELECT id, kind, principal_delta_cents, bonus_delta_cents, order_id,
-                store_id, at, business_date, note
+                store_id, tender, bonus_rule_id, at, business_date, note
            FROM member_ledger
           WHERE org_id = $1::uuid AND account_id = $2::uuid
           ORDER BY ledger_seq DESC
@@ -253,12 +279,18 @@ export function createPgMemberStore(
       }
       const locked = await lockAccount(input.account_id);
       if (!locked.ok) return locked as MemberOutcome<MemberLedgerAppendResult>;
+      // Read the tiers inside the same transaction, after the account lock: a
+      // rule edited between an earlier read and this insert would otherwise be
+      // snapshotted stale, granting a bonus nobody had configured (ADR-22 §3.3).
+      const bonus = matchBonusRule(await readActiveBonusRules(client, tenant), input.amount_cents);
       const appended = await insertLedger(input.account_id, {
         kind: "topup",
         principal: input.amount_cents,
-        bonus: 0,
+        bonus: bonus.bonus_cents,
         orderId: null,
         storeId: input.store_id,
+        tender: input.tender,
+        bonusRuleId: bonus.rule_id,
         staffId: input.staff_id,
         at: input.at,
         businessDate: input.business_date,
@@ -281,12 +313,59 @@ export function createPgMemberStore(
         bonus: outcome.allocation.bonus_delta_cents,
         orderId: input.order_id,
         storeId: input.store_id,
+        // Spending stored value moves no cash (ADR-18 §1).
+        tender: null,
+        bonusRuleId: null,
         staffId: input.staff_id,
         at: input.at,
         businessDate: input.business_date,
         note: input.note,
       });
       return Object.freeze({ ok: true as const, value: appended });
+    },
+
+    refund: async (input: MemberRefundInput): Promise<MemberOutcome<MemberLedgerAppendResult>> => {
+      if (!Number.isSafeInteger(input.amount_cents) || input.amount_cents <= 0) {
+        return reject("invalid_amount");
+      }
+      const locked = await lockAccount(input.account_id);
+      if (!locked.ok) return locked as MemberOutcome<MemberLedgerAppendResult>;
+      // Re-read under the lock, exactly as spend does: a principal read before
+      // FOR UPDATE would let two concurrent refunds both pass the check.
+      const balance = projectBalance(await sumLedger(input.account_id));
+      // Principal only — the bonus is not the customer's money (ADR-22 §4.1).
+      if (input.amount_cents > balance.principal_cents) return reject("insufficient_balance");
+      const appended = await insertLedger(input.account_id, {
+        kind: "refund",
+        principal: -input.amount_cents,
+        bonus: 0,
+        orderId: null,
+        storeId: input.store_id,
+        tender: input.tender,
+        bonusRuleId: null,
+        staffId: input.staff_id,
+        at: input.at,
+        businessDate: input.business_date,
+        note: input.note,
+      });
+      return Object.freeze({ ok: true as const, value: appended });
+    },
+
+    upsertBonusRule: async (input: MemberBonusRuleUpsertInput) =>
+      upsertBonusRule(client, tenant, newId, input),
+
+    listBonusRules: async (includeRetired: boolean) =>
+      listBonusRules(client, tenant, includeRetired),
+
+    sumCashPrincipal: async (storeId: string, businessDate: string): Promise<number> => {
+      const rows = await client.query<Readonly<{ cash_cents: number | string }>>(
+        `SELECT COALESCE(SUM(principal_delta_cents), 0)::bigint AS cash_cents
+           FROM member_ledger
+          WHERE org_id = $1::uuid AND store_id = $2::uuid
+            AND business_date = $3 AND tender = 'cash'`,
+        [tenant.orgId, storeId, businessDate],
+      );
+      return requireInt(rows.rows[0]?.cash_cents ?? 0, "cash_cents");
     },
   });
 }

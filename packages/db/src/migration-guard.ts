@@ -34,6 +34,9 @@ const COMPATIBLE_CONSTRAINT_REPLACEMENTS: readonly Readonly<{
   { table: "edge_replay_records", constraint: "edge_replay_records_acceptance_chk" },
   // 0034 adds the terminal `uncertain` state without invalidating old rows.
   { table: "print_jobs", constraint: "print_jobs_status_chk" },
+  // ADR-22 §5: 0037 admits the `refund` ledger kind. Strictly wider, and the
+  // sign/order CHECKs that constrain it are added in the same migration.
+  { table: "member_ledger", constraint: "member_ledger_kind_chk" },
 ];
 
 const isCompatibleConstraintReplacement = (statement: string): boolean =>

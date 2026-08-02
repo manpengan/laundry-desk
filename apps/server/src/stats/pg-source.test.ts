@@ -73,3 +73,37 @@ test("PG stats source uses one aggregate per read under store RLS scope", async 
   assert.match(cash, /referenced\.kind = 'refund'/u);
   assert.equal(queries.filter((sql) => sql === "BEGIN").length, 2);
 });
+
+test("PG expected cash adds member cash top-ups to order cash (ADR-22 §1.2)", async () => {
+  const queries: string[] = [];
+  const client = {
+    async query<TRow>(sql: string): Promise<{ rows: TRow[]; rowCount: number }> {
+      queries.push(sql);
+      if (sql.includes("FROM member_ledger")) {
+        return { rows: [{ cash_cents: "25000" } as TRow], rowCount: 1 };
+      }
+      if (sql.includes("AS cash_cents")) {
+        return { rows: [{ cash_cents: "100000" } as TRow], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+    release(): void {
+      // Capturing test double.
+    },
+  } as unknown as PgPoolClient;
+  const pool = { connect: async () => client } as unknown as PgPool;
+
+  const cash = await createPgStatsQuery(pool).cashSummary({
+    orgId: DEMO_ORG_ID,
+    storeId: DEMO_STORE_ID,
+    businessDate: "2026-08-01",
+  });
+
+  assert.deepEqual(cash, { cash_cents: 125_000 });
+  const memberCash = queries.find((sql) => sql.includes("FROM member_ledger"));
+  assert.ok(memberCash);
+  // Only principal: a bonus is a book grant with no banknote behind it.
+  assert.match(memberCash, /SUM\(principal_delta_cents\)/u);
+  assert.doesNotMatch(memberCash, /bonus_delta_cents/u);
+  assert.match(memberCash, /tender = 'cash'/u);
+});

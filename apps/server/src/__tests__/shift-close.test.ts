@@ -14,6 +14,7 @@ import type { TenantContext } from "../db/types.js";
 import { createDefaultChainHooks } from "../handlers/default-chain-hooks.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
+import { createMemoryMemberStore } from "../member/memory-store.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
 import {
   createMemoryAuditQueryStore,
@@ -41,13 +42,17 @@ const CLERK: ActorContext = Object.freeze({
 /** Fixed: 2024-07-22T00:00:00.000Z */
 const DAY_EPOCH = 1_721_606_400;
 const BUSINESS_DATE = "2024-07-22";
+const MEMBER_CUSTOMER = "77777777-7777-4777-8777-777777777777";
 
 function buildBus(
   fixedNow = () => DAY_EPOCH,
   lockBusinessDay?: ShiftHandlerDeps["lockBusinessDay"],
 ) {
   const orderStore = createMemoryOrderStore();
-  const statsSource = createOrderBackedStatsQuery(orderStore);
+  // Stored-value cash reaches the drawer without ever touching `payments`, so
+  // the stats source must read the same member store (ADR-22 §1.2).
+  const memberStore = createMemoryMemberStore({ customerIds: [MEMBER_CUSTOMER] });
+  const statsSource = createOrderBackedStatsQuery(orderStore, memberStore);
   const shiftStore = createMemoryShiftStore();
   const { registry, queryRegistry } = createRegisteredM1Bus({
     platform: Object.freeze({
@@ -66,7 +71,7 @@ function buildBus(
   });
   const pendingStore = new MemoryPendingActionStore();
   const chainHooks = createDefaultChainHooks({}, pendingStore);
-  return { registry, queryRegistry, chainHooks, pendingStore, orderStore, shiftStore };
+  return { registry, queryRegistry, chainHooks, pendingStore, orderStore, shiftStore, memberStore };
 }
 
 /** R3: first hop creates confirm card; second hop with confirm_ref executes. */
@@ -550,4 +555,69 @@ test("shift.close zeros when no orders that day", async () => {
   assert.equal(body.payable_cents, 0);
   assert.equal(body.paid_cents, 0);
   assert.equal(body.payment_cents, 0);
+});
+
+test("a cash top-up raises expected cash at shift close (ADR-18 §3, ADR-22 §1)", async () => {
+  const bus = buildBus();
+  const opened = await bus.memberStore.openAccount({
+    customer_id: MEMBER_CUSTOMER,
+    store_id: DEMO_STORE_ID,
+    at: DAY_EPOCH,
+  });
+  assert.equal(opened.ok, true);
+  if (!opened.ok) return;
+  const topped = await bus.memberStore.topup({
+    account_id: opened.value.account.account_id,
+    store_id: DEMO_STORE_ID,
+    amount_cents: 100_000,
+    tender: "cash",
+    staff_id: DEMO_STAFF_A_ID,
+    at: DAY_EPOCH,
+    business_date: BUSINESS_DATE,
+    note: null,
+  });
+  assert.equal(topped.ok, true);
+
+  const closed = await closeWithConfirm(bus, {
+    business_date: BUSINESS_DATE,
+    signature_name: "店长",
+  });
+
+  assert.equal(closed.ok, true, JSON.stringify(closed));
+  if (!closed.ok) return;
+  const result = closed.data.result as { expected_cash_cents: number };
+  // The drawer really holds these banknotes. Before ADR-22 §1 this was 0 and
+  // every cash top-up closed the shift with an unexplained surplus.
+  assert.equal(result.expected_cash_cents, 100_000);
+});
+
+test("a wechat top-up leaves expected cash untouched", async () => {
+  const bus = buildBus();
+  const opened = await bus.memberStore.openAccount({
+    customer_id: MEMBER_CUSTOMER,
+    store_id: DEMO_STORE_ID,
+    at: DAY_EPOCH,
+  });
+  assert.equal(opened.ok, true);
+  if (!opened.ok) return;
+  await bus.memberStore.topup({
+    account_id: opened.value.account.account_id,
+    store_id: DEMO_STORE_ID,
+    amount_cents: 100_000,
+    tender: "wechat",
+    staff_id: DEMO_STAFF_A_ID,
+    at: DAY_EPOCH,
+    business_date: BUSINESS_DATE,
+    note: null,
+  });
+
+  const closed = await closeWithConfirm(bus, {
+    business_date: BUSINESS_DATE,
+    signature_name: "店长",
+  });
+
+  assert.equal(closed.ok, true, JSON.stringify(closed));
+  if (!closed.ok) return;
+  const result = closed.data.result as { expected_cash_cents: number };
+  assert.equal(result.expected_cash_cents, 0);
 });
