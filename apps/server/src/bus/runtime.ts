@@ -16,6 +16,9 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "print_manage",
   "audit_read",
   "edge_conflict_resolve",
+  // ADR-22 §2.3: changing a top-up bonus tier changes how much money the shop
+  // gives away, so it is admin-only and deliberately not bundled with pricing.
+  "member_rule_write",
 ]);
 const STAFF_PERMISSIONS = Object.freeze([
   "staff_read",

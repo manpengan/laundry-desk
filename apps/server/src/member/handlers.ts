@@ -40,6 +40,7 @@ function refusalError(reason: MemberRejectReason): HandlerCommandError {
     // reports the same way rather than inventing a code.
     case "customer_not_found":
     case "account_not_found":
+    case "bonus_rule_not_found":
       return new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     case "account_frozen":
     case "insufficient_balance":
@@ -102,7 +103,12 @@ export function createMemberHandlers(
   deps: MemberHandlerDeps,
 ): Readonly<
   Record<
-    "member.account.open" | "member.topup" | "member.balance.pay" | "member.account.get",
+    | "member.account.open"
+    | "member.topup"
+    | "member.balance.pay"
+    | "member.account.get"
+    | "member.bonus_rule.upsert"
+    | "member.bonus_rules.list",
     CommandHandler
   >
 > {
@@ -306,11 +312,76 @@ export function createMemberHandlers(
     });
   };
 
+  const bonusRuleUpsert: CommandHandler = async (context): Promise<HandlerOutcome> => {
+    // Not `catalog_write`: changing a tier changes how much money the shop gives
+    // away, which is not the same risk as repricing one service (ADR-22 §2.3).
+    requirePermission(context.actor.permissions, "member_rule_write");
+    const input = asRecord(context.parsed);
+    const outcome = await resolveStore(deps, context).upsertBonusRule({
+      rule_id: typeof input.rule_id === "string" ? input.rule_id : null,
+      min_topup_cents: requireNonNegativeInteger(input.min_topup_cents),
+      bonus_cents: requireNonNegativeInteger(input.bonus_cents),
+      status: requireString(input.status) === "retired" ? "retired" : "active",
+      staff_id: context.actor.staffId,
+      at: (await openBusinessDate(deps, context)).now,
+      note: optionalNote(input),
+    });
+    if (!outcome.ok) throw refusalError(outcome.reason);
+
+    return Object.freeze({
+      result: Object.freeze({
+        rule_id: outcome.value.rule_id,
+        min_topup_cents: outcome.value.min_topup_cents,
+        bonus_cents: outcome.value.bonus_cents,
+        status: outcome.value.status,
+      }),
+      audit: Object.freeze({
+        entity: "member_bonus_rules",
+        entityId: outcome.value.rule_id,
+        afterJson: JSON.stringify({
+          min_topup_cents: outcome.value.min_topup_cents,
+          bonus_cents: outcome.value.bonus_cents,
+          status: outcome.value.status,
+        }),
+      }),
+      events: Object.freeze([
+        Object.freeze({
+          type: "member.bonus_rule_changed",
+          payload: Object.freeze({ rule_id: outcome.value.rule_id }),
+        }),
+      ]),
+    });
+  };
+
+  const bonusRulesList: CommandHandler = async (context): Promise<HandlerOutcome> => {
+    requirePermission(context.actor.permissions, "customer_read");
+    const input = asRecord(context.parsed);
+    const rules = await resolveStore(deps, context).listBonusRules(input.include_retired === true);
+    return Object.freeze({
+      result: Object.freeze({
+        rules: Object.freeze(
+          rules.map((rule) =>
+            Object.freeze({
+              rule_id: rule.rule_id,
+              min_topup_cents: rule.min_topup_cents,
+              bonus_cents: rule.bonus_cents,
+              status: rule.status,
+              updated_at: rule.updated_at,
+              note: rule.note,
+            }),
+          ),
+        ),
+      }),
+    });
+  };
+
   return Object.freeze({
     "member.account.open": open,
     "member.topup": topup,
     "member.balance.pay": pay,
     "member.account.get": get,
+    "member.bonus_rule.upsert": bonusRuleUpsert,
+    "member.bonus_rules.list": bonusRulesList,
   });
 }
 
@@ -323,5 +394,7 @@ export function registerMemberHandlers(
   commandRegistry.registerHandler("member.account.open", handlers["member.account.open"]);
   commandRegistry.registerHandler("member.topup", handlers["member.topup"]);
   commandRegistry.registerHandler("member.balance.pay", handlers["member.balance.pay"]);
+  commandRegistry.registerHandler("member.bonus_rule.upsert", handlers["member.bonus_rule.upsert"]);
   queryRegistry?.registerHandler("member.account.get", handlers["member.account.get"]);
+  queryRegistry?.registerHandler("member.bonus_rules.list", handlers["member.bonus_rules.list"]);
 }

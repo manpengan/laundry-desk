@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import { allocateSpend, projectBalance, type MemberBalance } from "./balance.js";
+import { matchBonusRule, type BonusRule } from "./bonus.js";
 import type {
   MemberAccountRecord,
   MemberAccountView,
+  MemberBonusRuleRecord,
+  MemberBonusRuleUpsertInput,
   MemberLedgerAppendResult,
   MemberLedgerRow,
   MemberOpenInput,
@@ -36,6 +39,18 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemberStore {
   const accounts = new Map<string, MemberAccountRecord>();
   const byCustomer = new Map<string, string>();
   const ledger = new Map<string, MemberLedgerRow[]>();
+  const bonusRules = new Map<string, MemberBonusRuleRecord>();
+
+  const activeBonusRules = (): readonly BonusRule[] =>
+    [...bonusRules.values()]
+      .filter((rule) => rule.status === "active")
+      .map((rule) =>
+        Object.freeze({
+          rule_id: rule.rule_id,
+          min_topup_cents: rule.min_topup_cents,
+          bonus_cents: rule.bonus_cents,
+        }),
+      );
 
   const balanceOf = (accountId: string): MemberBalance =>
     projectBalance(ledger.get(accountId) ?? []);
@@ -114,15 +129,17 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemberStore {
       if (!Number.isSafeInteger(input.amount_cents) || input.amount_cents <= 0) {
         return reject("invalid_amount");
       }
+      const bonus = matchBonusRule(activeBonusRules(), input.amount_cents);
       return append(
         input.account_id,
         Object.freeze({
           ledger_id: newId(),
           kind: "topup" as const,
-          // First slice grants no bonus; the column exists so the split is
-          // already correct when bonuses arrive (ADR-17 §5).
           principal_delta_cents: input.amount_cents,
-          bonus_delta_cents: 0,
+          // Server-side, never from the caller: a client-supplied bonus would
+          // let a clerk pair any top-up with any grant (ADR-22 §3.1).
+          bonus_delta_cents: bonus.bonus_cents,
+          bonus_rule_id: bonus.rule_id,
           order_id: null,
           store_id: input.store_id,
           tender: input.tender,
@@ -145,6 +162,7 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemberStore {
           kind: "pay" as const,
           principal_delta_cents: outcome.allocation.principal_delta_cents,
           bonus_delta_cents: outcome.allocation.bonus_delta_cents,
+          bonus_rule_id: null,
           order_id: input.order_id,
           store_id: input.store_id,
           // Spending stored value moves no cash (ADR-18 §1).
@@ -155,6 +173,38 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemberStore {
         }),
       );
     },
+
+    upsertBonusRule: async (
+      input: MemberBonusRuleUpsertInput,
+    ): Promise<MemberOutcome<MemberBonusRuleRecord>> => {
+      if (!Number.isSafeInteger(input.min_topup_cents) || input.min_topup_cents <= 0) {
+        return reject("invalid_amount");
+      }
+      if (!Number.isSafeInteger(input.bonus_cents) || input.bonus_cents < 0) {
+        return reject("invalid_amount");
+      }
+      if (input.rule_id !== null && !bonusRules.has(input.rule_id)) {
+        return reject("bonus_rule_not_found");
+      }
+      const ruleId = input.rule_id ?? newId();
+      const record = Object.freeze({
+        rule_id: ruleId,
+        min_topup_cents: input.min_topup_cents,
+        bonus_cents: input.bonus_cents,
+        status: input.status,
+        updated_at: input.at,
+        note: input.note,
+      });
+      bonusRules.set(ruleId, record);
+      return Object.freeze({ ok: true as const, value: record });
+    },
+
+    listBonusRules: async (includeRetired: boolean): Promise<readonly MemberBonusRuleRecord[]> =>
+      Object.freeze(
+        [...bonusRules.values()]
+          .filter((rule) => includeRetired || rule.status === "active")
+          .sort((left, right) => right.min_topup_cents - left.min_topup_cents),
+      ),
 
     sumCashPrincipal: async (storeId: string, businessDate: string): Promise<number> => {
       let total = 0;

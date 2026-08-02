@@ -28,8 +28,38 @@ export type MemberLedgerRow = Readonly<{
   order_id: string | null;
   store_id: string;
   tender: MemberTender | null;
+  /**
+   * Which bonus tier granted this top-up's bonus (ADR-22 §3.3).
+   *
+   * Snapshotted like an order's price: repricing or retiring a tier later must
+   * not re-value a top-up that already happened. Null when no tier matched or
+   * the row predates migration 0036.
+   */
+  bonus_rule_id: string | null;
   at: number;
   business_date: string;
+  note: string | null;
+}>;
+
+export type MemberBonusRuleStatus = "active" | "retired";
+
+export type MemberBonusRuleRecord = Readonly<{
+  rule_id: string;
+  min_topup_cents: number;
+  bonus_cents: number;
+  status: MemberBonusRuleStatus;
+  updated_at: number;
+  note: string | null;
+}>;
+
+export type MemberBonusRuleUpsertInput = Readonly<{
+  /** Null creates a tier; a known id reprices or retires that exact tier. */
+  rule_id: string | null;
+  min_topup_cents: number;
+  bonus_cents: number;
+  status: MemberBonusRuleStatus;
+  staff_id: string;
+  at: number;
   note: string | null;
 }>;
 
@@ -93,7 +123,8 @@ export type MemberRejectReason =
   | "account_not_found"
   | "account_frozen"
   | "invalid_amount"
-  | "insufficient_balance";
+  | "insufficient_balance"
+  | "bonus_rule_not_found";
 
 export type MemberOutcome<TValue> =
   Readonly<{ ok: true; value: TValue }> | Readonly<{ ok: false; reason: MemberRejectReason }>;
@@ -118,4 +149,15 @@ export type MemberStore = Readonly<{
    * by exactly the bonus — the very kind of unexplained gap this closes.
    */
   sumCashPrincipal: (storeId: string, businessDate: string) => Promise<number>;
+  /**
+   * Create, reprice or retire one bonus tier (ADR-22 §2).
+   *
+   * Retiring is an UPDATE of `status`, not a new row: a tier is configuration,
+   * not a money movement. The history that matters lives on the ledger, where
+   * each top-up already snapshots the tier that granted it.
+   */
+  upsertBonusRule: (
+    input: MemberBonusRuleUpsertInput,
+  ) => Promise<MemberOutcome<MemberBonusRuleRecord>>;
+  listBonusRules: (includeRetired: boolean) => Promise<readonly MemberBonusRuleRecord[]>;
 }>;

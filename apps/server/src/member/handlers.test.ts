@@ -239,3 +239,121 @@ test("account.get exposes the balance split and the ledger it summed", async () 
   assert.equal(recent.length, 1);
   assert.equal(recent[0]?.kind, "topup");
 });
+
+test("bonus_rule.upsert refuses a caller without member_rule_write (ADR-22 §2.3)", async () => {
+  const { handlers } = makeDeps();
+
+  // Deliberately holding every other write permission: changing how much money
+  // the shop gives away must not ride along with pricing or customer rights.
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.bonus_rule.upsert"],
+        { min_topup_cents: 100_000, bonus_cents: 10_000, status: "active" },
+        ["customer_write", "order_write", "catalog_write", "settings_admin"],
+      ),
+    hasCode("PERMISSION_DENIED"),
+  );
+});
+
+test("bonus_rule.upsert creates a tier and a later top-up grants it", async () => {
+  const { handlers } = makeDeps();
+
+  const created = await run(
+    handlers["member.bonus_rule.upsert"],
+    { min_topup_cents: 100_000, bonus_cents: 10_000, status: "active" },
+    ["member_rule_write"],
+  );
+  const rule = created.result as { rule_id: string; bonus_cents: number };
+  assert.equal(rule.bonus_cents, 10_000);
+  assert.equal(created.audit?.entity, "member_bonus_rules");
+
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const account = opened.result as { account_id: string };
+  const topped = await run(
+    handlers["member.topup"],
+    { account_id: account.account_id, amount_cents: 100_000, method: "cash" },
+    ["customer_write"],
+  );
+
+  const balance = topped.result as { principal_cents: number; bonus_cents: number };
+  assert.equal(balance.principal_cents, 100_000);
+  assert.equal(balance.bonus_cents, 10_000);
+});
+
+test("topup ignores a client-supplied bonus: the schema has no such field", async () => {
+  const { handlers } = makeDeps();
+  await run(
+    handlers["member.bonus_rule.upsert"],
+    { min_topup_cents: 100_000, bonus_cents: 10_000, status: "active" },
+    ["member_rule_write"],
+  );
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const account = opened.result as { account_id: string };
+
+  const topped = await run(
+    handlers["member.topup"],
+    {
+      account_id: account.account_id,
+      amount_cents: 100_000,
+      method: "cash",
+      // A clerk cannot pair any top-up with any grant (ADR-22 §3.1).
+      bonus_cents: 999_999,
+    },
+    ["customer_write"],
+  );
+
+  const balance = topped.result as { bonus_cents: number };
+  assert.equal(balance.bonus_cents, 10_000);
+});
+
+test("bonus_rules.list hides retired tiers unless asked", async () => {
+  const { handlers } = makeDeps();
+  const created = await run(
+    handlers["member.bonus_rule.upsert"],
+    { min_topup_cents: 100_000, bonus_cents: 10_000, status: "active" },
+    ["member_rule_write"],
+  );
+  const rule = created.result as { rule_id: string };
+  await run(
+    handlers["member.bonus_rule.upsert"],
+    {
+      rule_id: rule.rule_id,
+      min_topup_cents: 100_000,
+      bonus_cents: 10_000,
+      status: "retired",
+    },
+    ["member_rule_write"],
+  );
+
+  const visible = await run(handlers["member.bonus_rules.list"], {}, ["customer_read"]);
+  assert.deepEqual((visible.result as { rules: readonly unknown[] }).rules, []);
+
+  const all = await run(handlers["member.bonus_rules.list"], { include_retired: true }, [
+    "customer_read",
+  ]);
+  assert.equal((all.result as { rules: readonly unknown[] }).rules.length, 1);
+});
+
+test("bonus_rule.upsert refuses an unknown rule id instead of creating a second tier", async () => {
+  const { handlers } = makeDeps();
+
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.bonus_rule.upsert"],
+        {
+          rule_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          min_topup_cents: 100_000,
+          bonus_cents: 10_000,
+          status: "active",
+        },
+        ["member_rule_write"],
+      ),
+    hasCode("VALIDATION_FAILED"),
+  );
+});

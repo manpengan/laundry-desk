@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 
 import { allocateSpend, projectBalance, type LedgerDelta } from "./balance.js";
+import { matchBonusRule } from "./bonus.js";
+import { listBonusRules, readActiveBonusRules, upsertBonusRule } from "./pg-bonus-rules.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import type {
   MemberAccountRecord,
   MemberAccountView,
+  MemberBonusRuleUpsertInput,
   MemberLedgerAppendResult,
   MemberLedgerRow,
   MemberOpenInput,
@@ -33,6 +36,7 @@ type LedgerDbRow = Readonly<{
   order_id: string | null;
   store_id: string;
   tender: string | null;
+  bonus_rule_id: string | null;
   at: Date | string;
   business_date: string;
   note: string | null;
@@ -75,6 +79,7 @@ function toLedgerRow(row: LedgerDbRow): MemberLedgerRow {
     order_id: row.order_id,
     store_id: row.store_id,
     tender: toTender(row.tender),
+    bonus_rule_id: row.bonus_rule_id,
     at: toEpoch(row.at),
     business_date: row.business_date,
     note: row.note,
@@ -145,6 +150,7 @@ export function createPgMemberStore(
       orderId: string | null;
       storeId: string;
       tender: MemberLedgerRow["tender"];
+      bonusRuleId: string | null;
       staffId: string;
       at: number;
       businessDate: string;
@@ -155,12 +161,12 @@ export function createPgMemberStore(
     await client.query(
       `INSERT INTO member_ledger (
          id, org_id, store_id, account_id, kind,
-         principal_delta_cents, bonus_delta_cents, order_id, tender,
+         principal_delta_cents, bonus_delta_cents, order_id, tender, bonus_rule_id,
          staff_id, at, business_date, note
        ) VALUES (
          $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5,
-         $6::integer, $7::integer, $8::uuid, $9,
-         $10::uuid, to_timestamp($11), $12, $13
+         $6::integer, $7::integer, $8::uuid, $9, $10::uuid,
+         $11::uuid, to_timestamp($12), $13, $14
        )`,
       [
         ledgerId,
@@ -172,6 +178,7 @@ export function createPgMemberStore(
         values.bonus,
         values.orderId,
         values.tender,
+        values.bonusRuleId,
         values.staffId,
         values.at,
         values.businessDate,
@@ -271,13 +278,18 @@ export function createPgMemberStore(
       }
       const locked = await lockAccount(input.account_id);
       if (!locked.ok) return locked as MemberOutcome<MemberLedgerAppendResult>;
+      // Read the tiers inside the same transaction, after the account lock: a
+      // rule edited between an earlier read and this insert would otherwise be
+      // snapshotted stale, granting a bonus nobody had configured (ADR-22 §3.3).
+      const bonus = matchBonusRule(await readActiveBonusRules(client, tenant), input.amount_cents);
       const appended = await insertLedger(input.account_id, {
         kind: "topup",
         principal: input.amount_cents,
-        bonus: 0,
+        bonus: bonus.bonus_cents,
         orderId: null,
         storeId: input.store_id,
         tender: input.tender,
+        bonusRuleId: bonus.rule_id,
         staffId: input.staff_id,
         at: input.at,
         businessDate: input.business_date,
@@ -302,6 +314,7 @@ export function createPgMemberStore(
         storeId: input.store_id,
         // Spending stored value moves no cash (ADR-18 §1).
         tender: null,
+        bonusRuleId: null,
         staffId: input.staff_id,
         at: input.at,
         businessDate: input.business_date,
@@ -309,6 +322,12 @@ export function createPgMemberStore(
       });
       return Object.freeze({ ok: true as const, value: appended });
     },
+
+    upsertBonusRule: async (input: MemberBonusRuleUpsertInput) =>
+      upsertBonusRule(client, tenant, newId, input),
+
+    listBonusRules: async (includeRetired: boolean) =>
+      listBonusRules(client, tenant, includeRetired),
 
     sumCashPrincipal: async (storeId: string, businessDate: string): Promise<number> => {
       const rows = await client.query<Readonly<{ cash_cents: number | string }>>(
