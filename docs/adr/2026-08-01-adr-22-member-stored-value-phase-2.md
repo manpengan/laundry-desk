@@ -8,9 +8,10 @@
 - 门禁依据：[ADR-16 §2](2026-07-31-adr-16-edge-operations-scope-ratification.md)（新增契约面须附 ADR）
 - 影响：`member_ledger` schema、`packages/contracts` v0.2 冻结面、当日现金口径、交班
 
-> **交付状态**：§1 已交付（迁移 0035 + 现金口径 + 回归）。§2–§5 已裁决、待实现，
-> 切片见文末。ADR 记录裁决，不代表已实现——判据仍以 `main` 代码与绿灯门禁为准
-> （ADR-16 §4）。
+> **交付状态**：§1–§5 的**服务端**已交付（迁移 0035–0037、契约面 32 → 34 命令 /
+> +2 查询、档位与退款的存储与 handler、权限位 `member_rule_write` 与 `member_refund`）。
+> **柜台界面尚未接线**：档位维护与退款目前只能经命令总线调用，设置页与会员面板的
+> 入口是后续一片。判据以 `main` 代码与绿灯门禁为准（ADR-16 §4）。
 
 ---
 
@@ -69,7 +70,7 @@ ADR-18 §3 写明：
 - `member_ledger_pay_tender_chk`：`CHECK (kind <> 'pay' OR tender IS NULL)`
   ——核销不许带渠道；
 - `member_ledger_tender_value_chk`：`CHECK (tender IS NULL OR tender IN
-  ('cash','wechat','alipay','other'))` ——带了渠道就必须是现金汇总读得懂的那几种。
+('cash','wechat','alipay','other'))` ——带了渠道就必须是现金汇总读得懂的那几种。
 
 第二条**不要求非核销行必须带渠道**：0035 之前的历史充值行没有这一列，其渠道已无从
 追认，强制非空会让迁移失败。这些行留 `NULL`，因而不进现金口径——与它们此前的行为
@@ -125,12 +126,12 @@ CHECK、部分索引 `member_ledger_cash_day_idx`、memory 与 PostgreSQL 两侧
 **2.1** 新表 `member_bonus_rules`（组织级 RLS，照抄 `member_accounts` 的
 `customers_org_scope` 姿态）：
 
-| 列                 | 说明                                        |
-| ------------------ | ------------------------------------------- |
-| `min_topup_cents`  | 命中门槛，整数分                            |
-| `bonus_cents`      | 赠送额，整数分                              |
-| `status`           | `active` / `retired`                        |
-| `effective_from`   | 生效时间                                    |
+| 列                | 说明                 |
+| ----------------- | -------------------- |
+| `min_topup_cents` | 命中门槛，整数分     |
+| `bonus_cents`     | 赠送额，整数分       |
+| `status`          | `active` / `retired` |
+| `effective_from`  | 生效时间             |
 
 命中规则：取 `status='active'` 且 `min_topup_cents <= amount_cents` 中
 `min_topup_cents` **最大**的一条；无命中则赠送为 0。
@@ -192,11 +193,11 @@ CHECK、部分索引 `member_ledger_cash_day_idx`、memory 与 PostgreSQL 两侧
 
 举例（充 1000 送 100，消费 100 后退卡）：
 
-| 顺序             | principal | bonus | 可退       |
-| ---------------- | --------- | ----- | ---------- |
-| 充值后           | 1000      | 100   | —          |
-| 消费 100（先扣赠款） | 1000      | 0     | **1000**   |
-| 若改为先扣本金   | 900       | 100   | 900        |
+| 顺序                 | principal | bonus | 可退     |
+| -------------------- | --------- | ----- | -------- |
+| 充值后               | 1000      | 100   | —        |
+| 消费 100（先扣赠款） | 1000      | 0     | **1000** |
+| 若改为先扣本金       | 900       | 100   | 900      |
 
 先扣赠款对顾客有利，这一点 ADR-17 §5 已经写明，本节只是把它的**退款侧后果**固化。
 
@@ -228,12 +229,12 @@ CHECK、部分索引 `member_ledger_cash_day_idx`、memory 与 PostgreSQL 两侧
 （`packages/contracts/src/commands/payment.ts:67`，R4、`offline_mode: "denied"`、
 引用原行、只追加、绝不改原行）：
 
-| 属性         | 取值                                                           |
-| ------------ | -------------------------------------------------------------- |
-| `risk`       | `R4`（资金出账，须 step-up 身份复核）                          |
-| `offline_mode` | `denied`（离线无权威余额，与其余三条储值命令一致）           |
-| 入参         | `account_id`、`amount_cents`、`tender`、`reason`（必填非空）   |
-| 不变式       | `rbac.member_refund`、`member.account_active`、`member.refundable_principal` |
+| 属性           | 取值                                                                         |
+| -------------- | ---------------------------------------------------------------------------- |
+| `risk`         | `R4`（资金出账，须 step-up 身份复核）                                        |
+| `offline_mode` | `denied`（离线无权威余额，与其余三条储值命令一致）                           |
+| 入参           | `account_id`、`amount_cents`、`tender`、`reason`（必填非空）                 |
+| 不变式         | `rbac.member_refund`、`member.account_active`、`member.refundable_principal` |
 
 `reason` 必填且非空，与 `order.cancel` 同姿态：资金出账必须留下人写的理由。
 
@@ -263,11 +264,20 @@ CHECK、部分索引 `member_ledger_cash_day_idx`、memory 与 PostgreSQL 两侧
 
 ## 交付切片
 
-| 片  | 内容                                          | 依赖              |
-| --- | --------------------------------------------- | ----------------- |
-| 1   | §1 现金口径修复：`tender` 列 + 现金净额 + 回归 | **无**，可先合    |
-| 2   | §2 §3 赠送规则表、命令、服务端计算与快照       | 片 1              |
-| 3   | §4 §5 `member.refund`、kind 扩展、R4 step-up   | 片 1；口径需先裁  |
+| 片  | 内容                                                | 状态       |
+| --- | --------------------------------------------------- | ---------- |
+| 1   | §1 现金口径修复：`tender` 列 + 现金净额 + 回归      | **已交付** |
+| 2a  | §2 §3 契约面、迁移 0036、档位匹配纯算术             | **已交付** |
+| 2b  | §2 §3 档位存储、handler、注册与 `member_rule_write` | **已交付** |
+| 3   | §4 §5 `member.refund`、迁移 0037、`member_refund`   | **已交付** |
+| 4   | 柜台界面：档位维护页与退款入口                      | **未交付** |
+
+片 1 与产品裁决无关，先行合入没有等赠送口径。片 4 只是接线，服务端契约已冻结。
+
+--- | --------------------------------------------- | ----------------- |
+| 1 | §1 现金口径修复：`tender` 列 + 现金净额 + 回归 | **无**，可先合 |
+| 2 | §2 §3 赠送规则表、命令、服务端计算与快照 | 片 1 |
+| 3 | §4 §5 `member.refund`、kind 扩展、R4 step-up | 片 1；口径需先裁 |
 
 片 1 与产品裁决无关，卡在 Q1–Q5 上的只有片 2、片 3。
 
