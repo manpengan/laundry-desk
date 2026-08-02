@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS member_bonus_rules (
   CONSTRAINT member_bonus_rules_tenant_id_uidx UNIQUE (org_id, id),
   CONSTRAINT member_bonus_rules_org_fk FOREIGN KEY (org_id) REFERENCES orgs (id),
   CONSTRAINT member_bonus_rules_staff_fk
-    FOREIGN KEY (org_id, updated_by_staff_id) REFERENCES staff (org_id, id),
+    FOREIGN KEY (org_id, updated_by_staff_id) REFERENCES staffs (org_id, id),
   CONSTRAINT member_bonus_rules_status_chk CHECK (status IN ('active', 'retired')),
   -- A threshold of 0 would fire on every top-up including the smallest, which is
   -- a giveaway nobody configures on purpose.

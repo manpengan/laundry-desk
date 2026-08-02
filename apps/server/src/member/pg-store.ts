@@ -259,7 +259,7 @@ export function createPgMemberStore(
       const account = toAccount(accountRow);
       const rows = await client.query<LedgerDbRow>(
         `SELECT id, kind, principal_delta_cents, bonus_delta_cents, order_id,
-                store_id, at, business_date, note
+                store_id, tender, bonus_rule_id, at, business_date, note
            FROM member_ledger
           WHERE org_id = $1::uuid AND account_id = $2::uuid
           ORDER BY ledger_seq DESC

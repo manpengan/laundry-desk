@@ -462,6 +462,12 @@ maybe("a settlement carries no tender, so it never double-counts the drawer", as
     }),
   );
   assert.equal(toppedUp.ok, true);
+  // Measure across the settlement, not against an absolute figure: these run on
+  // a shared volume, so a re-run on the same store-day accumulates and an
+  // absolute assertion would fail for a reason unrelated to the claim.
+  const beforeSpend = await withStore((store) =>
+    store.sumCashPrincipal(TENANT.storeId, isolatedDate),
+  );
   const spent = await withStore((store) =>
     store.spend({
       account_id: accountId,
@@ -479,8 +485,11 @@ maybe("a settlement carries no tender, so it never double-counts the drawer", as
   const view = await withStore((store) => store.getByCustomer(customerId, 10));
   assert.equal(view?.recent[0]?.kind, "pay");
   assert.equal(view?.recent[0]?.tender, null);
-  const cash = await withStore((store) => store.sumCashPrincipal(TENANT.storeId, isolatedDate));
-  assert.equal(cash, 50_000);
+  const afterSpend = await withStore((store) =>
+    store.sumCashPrincipal(TENANT.storeId, isolatedDate),
+  );
+  // The settlement moved no cash: that money entered on the top-up day.
+  assert.equal(afterSpend - beforeSpend, 0);
 });
 
 maybe("PostgreSQL refuses a settlement row that claims a tender", async () => {
