@@ -13,6 +13,7 @@ import type {
   MemberOpenInput,
   MemberOpenResult,
   MemberOutcome,
+  MemberRefundInput,
   MemberRejectReason,
   MemberSpendInput,
   MemberStore,
@@ -144,7 +145,7 @@ export function createPgMemberStore(
   const insertLedger = async (
     accountId: string,
     values: Readonly<{
-      kind: "topup" | "pay";
+      kind: "topup" | "pay" | "refund";
       principal: number;
       bonus: number;
       orderId: string | null;
@@ -314,6 +315,33 @@ export function createPgMemberStore(
         storeId: input.store_id,
         // Spending stored value moves no cash (ADR-18 §1).
         tender: null,
+        bonusRuleId: null,
+        staffId: input.staff_id,
+        at: input.at,
+        businessDate: input.business_date,
+        note: input.note,
+      });
+      return Object.freeze({ ok: true as const, value: appended });
+    },
+
+    refund: async (input: MemberRefundInput): Promise<MemberOutcome<MemberLedgerAppendResult>> => {
+      if (!Number.isSafeInteger(input.amount_cents) || input.amount_cents <= 0) {
+        return reject("invalid_amount");
+      }
+      const locked = await lockAccount(input.account_id);
+      if (!locked.ok) return locked as MemberOutcome<MemberLedgerAppendResult>;
+      // Re-read under the lock, exactly as spend does: a principal read before
+      // FOR UPDATE would let two concurrent refunds both pass the check.
+      const balance = projectBalance(await sumLedger(input.account_id));
+      // Principal only — the bonus is not the customer's money (ADR-22 §4.1).
+      if (input.amount_cents > balance.principal_cents) return reject("insufficient_balance");
+      const appended = await insertLedger(input.account_id, {
+        kind: "refund",
+        principal: -input.amount_cents,
+        bonus: 0,
+        orderId: null,
+        storeId: input.store_id,
+        tender: input.tender,
         bonusRuleId: null,
         staffId: input.staff_id,
         at: input.at,

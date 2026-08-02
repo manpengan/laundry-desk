@@ -56,6 +56,21 @@ export const MemberBonusRulesListInputSchema = z.strictObject({
   include_retired: z.boolean().optional(),
 });
 
+/**
+ * Return unspent principal to the customer (ADR-22 §4, §5).
+ *
+ * `balance` is absent from the tender set for the same reason it is absent from
+ * `PAYMENT_METHODS`: stored value cannot fund its own refund.
+ */
+export const MemberRefundInputSchema = z.strictObject({
+  account_id: z.uuid(),
+  amount_cents: PositiveCentsSchema,
+  tender: MemberTopupMethodSchema,
+  // Money leaving the business carries a human's reason, as order.cancel does.
+  reason: z.string().min(1).max(256),
+  note: z.string().max(256).optional(),
+});
+
 const amountMeasure = Object.freeze({
   amount: { kind: "field" as const, path: "/amount_cents" },
 });
@@ -185,11 +200,39 @@ export const memberBonusRulesListQuery: QueryDefinition<typeof MemberBonusRulesL
     max_result_rows: 50,
   });
 
+export const memberRefundCommand: CommandDefinition<typeof MemberRefundInputSchema> = defineCommand(
+  {
+    name: "member.refund",
+    version: "1.0.0",
+    description: "Return unspent stored-value principal to the customer.",
+    description_llm:
+      "Refund prepaid money with step-up approval. Only principal is refundable and only what is left of it: the bonus is a book grant the customer never paid for. The server locks the account and re-reads the principal under that lock.",
+    input: MemberRefundInputSchema,
+    // Money leaves the business and cannot be taken back.
+    risk: "R4",
+    invariants: [
+      "rbac.member_refund",
+      "member.account_active",
+      "member.refundable_principal",
+      "member.ledger_append_only",
+    ],
+    idempotent: true,
+    sideEffects: ["member.refunded", "audit.member_event"],
+    offline_mode: "denied",
+    data_classification: "internal",
+    input_redaction: [],
+    result_redaction: [],
+    size_measures: amountMeasure,
+    hard_limits: memberLimits,
+  },
+);
+
 export const MEMBER_COMMANDS: readonly CommandDefinition<z.ZodObject>[] = Object.freeze([
   memberAccountOpenCommand,
   memberTopupCommand,
   memberBalancePayCommand,
   memberBonusRuleUpsertCommand,
+  memberRefundCommand,
 ]);
 
 export const MEMBER_QUERIES: readonly QueryDefinition<z.ZodObject>[] = Object.freeze([
@@ -203,6 +246,7 @@ export const MEMBER_COMMAND_NAMES = Object.freeze([
   "member.topup",
   "member.balance.pay",
   "member.bonus_rule.upsert",
+  "member.refund",
 ] as const);
 export const MEMBER_QUERY_NAMES = Object.freeze([
   "member.account.get",

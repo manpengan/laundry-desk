@@ -3,101 +3,21 @@ import { createCommandError } from "@laundry/contracts";
 import type { MutableCommandRegistry } from "../bus/registry.js";
 import type { MutableQueryRegistry } from "../bus/query-registry.js";
 import { HandlerCommandError, type CommandHandler, type HandlerOutcome } from "../bus/types.js";
-import type { OrderHandlerDeps } from "../order/handlers.js";
+import { asRecord, requireNonNegativeInteger, requireString } from "../order/server-pricing.js";
+import { createMemberBonusHandlers } from "./bonus-handlers.js";
 import {
-  asRecord,
-  assertBusinessDayOpen,
-  deriveBusinessDate,
-  requireNonNegativeInteger,
-  requireString,
-} from "../order/server-pricing.js";
-import { createPgMemberStore } from "./pg-store.js";
-import type { MemberRejectReason, MemberStore, MemberTender } from "./types.js";
+  openBusinessDate,
+  optionalNote,
+  refusalError,
+  requirePermission,
+  requireTender,
+  resolveStore,
+  RECENT_LEDGER_LIMIT,
+  type MemberHandlerDeps,
+  type MemberRuntimeDeps,
+} from "./handler-support.js";
 
-/**
- * What a runtime provides. Deliberately excludes the order deps: those already
- * exist on the registry input, so composing them here keeps the runtime from
- * having to reference its own half-built object literal.
- */
-export type MemberRuntimeDeps = Readonly<{
-  persistence?: "memory" | "sql";
-  store: MemberStore;
-}>;
-
-export type MemberHandlerDeps = MemberRuntimeDeps &
-  Readonly<{
-    /** Order-side accounting stays the single owner of paid_cents / status. */
-    order: OrderHandlerDeps;
-  }>;
-
-const RECENT_LEDGER_LIMIT = 50;
-
-/** Maps a store refusal onto the envelope error the bus understands. */
-function refusalError(reason: MemberRejectReason): HandlerCommandError {
-  switch (reason) {
-    // No NOT_FOUND in the envelope's code set; the payment path already maps a
-    // missing order to VALIDATION_FAILED, so a missing customer or account
-    // reports the same way rather than inventing a code.
-    case "customer_not_found":
-    case "account_not_found":
-    case "bonus_rule_not_found":
-      return new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-    case "account_frozen":
-    case "insufficient_balance":
-      return new HandlerCommandError(createCommandError("INVARIANT_FAILED"));
-    case "invalid_amount":
-      return new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-  }
-}
-
-function requirePermission(permissions: readonly string[] | undefined, permission: string): void {
-  if (permissions?.includes(permission) !== true) {
-    throw new HandlerCommandError(createCommandError("PERMISSION_DENIED"));
-  }
-}
-
-function resolveStore(
-  deps: MemberHandlerDeps,
-  context: Parameters<CommandHandler>[0],
-): MemberStore {
-  return deps.persistence === "sql"
-    ? createPgMemberStore(context.client, context.tenant)
-    : deps.store;
-}
-
-function optionalNote(input: Readonly<Record<string, unknown>>): string | null {
-  return typeof input.note === "string" ? input.note : null;
-}
-
-const TOPUP_TENDERS: ReadonlySet<string> = new Set(["cash", "wechat", "alipay", "other"]);
-
-/**
- * Narrow the validated top-up method to a ledger tender.
- *
- * The contract schema already restricts this set; refusing anything else here
- * keeps an unpersistable value from reaching the INSERT, where the CHECK would
- * abort the transaction with a far less specific error.
- */
-function requireTender(value: unknown): MemberTender {
-  const method = requireString(value);
-  if (!TOPUP_TENDERS.has(method)) {
-    throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-  }
-  return method as MemberTender;
-}
-
-/** Shared clock + business-day gate, identical to the payment path. */
-async function openBusinessDate(
-  deps: MemberHandlerDeps,
-  context: Parameters<CommandHandler>[0],
-): Promise<Readonly<{ now: number; businessDate: string }>> {
-  const order = deps.order;
-  const now = order.now?.() ?? Math.floor(Date.now() / 1000);
-  const businessDate = deriveBusinessDate(now, order.timeZone, order.rolloverHour);
-  await order.lockBusinessDay?.(context.client, context.tenant, businessDate);
-  await assertBusinessDayOpen(order.isBusinessDayClosed, businessDate);
-  return Object.freeze({ now, businessDate });
-}
+export type { MemberHandlerDeps, MemberRuntimeDeps };
 
 export function createMemberHandlers(
   deps: MemberHandlerDeps,
@@ -108,7 +28,8 @@ export function createMemberHandlers(
     | "member.balance.pay"
     | "member.account.get"
     | "member.bonus_rule.upsert"
-    | "member.bonus_rules.list",
+    | "member.bonus_rules.list"
+    | "member.refund",
     CommandHandler
   >
 > {
@@ -312,76 +233,74 @@ export function createMemberHandlers(
     });
   };
 
-  const bonusRuleUpsert: CommandHandler = async (context): Promise<HandlerOutcome> => {
-    // Not `catalog_write`: changing a tier changes how much money the shop gives
-    // away, which is not the same risk as repricing one service (ADR-22 §2.3).
-    requirePermission(context.actor.permissions, "member_rule_write");
+  const refund: CommandHandler = async (context): Promise<HandlerOutcome> => {
+    requirePermission(context.actor.permissions, "member_refund");
     const input = asRecord(context.parsed);
-    const outcome = await resolveStore(deps, context).upsertBonusRule({
-      rule_id: typeof input.rule_id === "string" ? input.rule_id : null,
-      min_topup_cents: requireNonNegativeInteger(input.min_topup_cents),
-      bonus_cents: requireNonNegativeInteger(input.bonus_cents),
-      status: requireString(input.status) === "retired" ? "retired" : "active",
+    const accountId = requireString(input.account_id);
+    const amountCents = requireNonNegativeInteger(input.amount_cents);
+    if (amountCents === 0) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    const tender = requireTender(input.tender);
+    const reason = requireString(input.reason);
+    if (reason.trim().length === 0) {
+      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    }
+    const { now, businessDate } = await openBusinessDate(deps, context);
+    const outcome = await resolveStore(deps, context).refund({
+      account_id: accountId,
+      store_id: context.tenant.storeId,
+      amount_cents: amountCents,
+      tender,
+      reason,
       staff_id: context.actor.staffId,
-      at: (await openBusinessDate(deps, context)).now,
+      at: now,
+      business_date: businessDate,
       note: optionalNote(input),
     });
     if (!outcome.ok) throw refusalError(outcome.reason);
 
     return Object.freeze({
       result: Object.freeze({
-        rule_id: outcome.value.rule_id,
-        min_topup_cents: outcome.value.min_topup_cents,
-        bonus_cents: outcome.value.bonus_cents,
-        status: outcome.value.status,
+        account_id: outcome.value.account_id,
+        ledger_id: outcome.value.ledger_id,
+        refunded_cents: amountCents,
+        principal_cents: outcome.value.balance.principal_cents,
+        bonus_cents: outcome.value.balance.bonus_cents,
+        balance_cents: outcome.value.balance.total_cents,
       }),
       audit: Object.freeze({
-        entity: "member_bonus_rules",
-        entityId: outcome.value.rule_id,
+        entity: "member_ledger",
+        entityId: outcome.value.ledger_id,
         afterJson: JSON.stringify({
-          min_topup_cents: outcome.value.min_topup_cents,
-          bonus_cents: outcome.value.bonus_cents,
-          status: outcome.value.status,
+          account_id: outcome.value.account_id,
+          kind: "refund",
+          amount_cents: amountCents,
+          tender,
+          reason,
+          balance_cents: outcome.value.balance.total_cents,
         }),
       }),
       events: Object.freeze([
         Object.freeze({
-          type: "member.bonus_rule_changed",
-          payload: Object.freeze({ rule_id: outcome.value.rule_id }),
+          type: "member.refunded",
+          payload: Object.freeze({
+            account_id: outcome.value.account_id,
+            ledger_id: outcome.value.ledger_id,
+          }),
         }),
       ]),
     });
   };
 
-  const bonusRulesList: CommandHandler = async (context): Promise<HandlerOutcome> => {
-    requirePermission(context.actor.permissions, "customer_read");
-    const input = asRecord(context.parsed);
-    const rules = await resolveStore(deps, context).listBonusRules(input.include_retired === true);
-    return Object.freeze({
-      result: Object.freeze({
-        rules: Object.freeze(
-          rules.map((rule) =>
-            Object.freeze({
-              rule_id: rule.rule_id,
-              min_topup_cents: rule.min_topup_cents,
-              bonus_cents: rule.bonus_cents,
-              status: rule.status,
-              updated_at: rule.updated_at,
-              note: rule.note,
-            }),
-          ),
-        ),
-      }),
-    });
-  };
+  const bonusHandlers = createMemberBonusHandlers(deps);
 
   return Object.freeze({
     "member.account.open": open,
     "member.topup": topup,
     "member.balance.pay": pay,
     "member.account.get": get,
-    "member.bonus_rule.upsert": bonusRuleUpsert,
-    "member.bonus_rules.list": bonusRulesList,
+    "member.bonus_rule.upsert": bonusHandlers["member.bonus_rule.upsert"],
+    "member.bonus_rules.list": bonusHandlers["member.bonus_rules.list"],
+    "member.refund": refund,
   });
 }
 
@@ -396,5 +315,6 @@ export function registerMemberHandlers(
   commandRegistry.registerHandler("member.balance.pay", handlers["member.balance.pay"]);
   commandRegistry.registerHandler("member.bonus_rule.upsert", handlers["member.bonus_rule.upsert"]);
   queryRegistry?.registerHandler("member.account.get", handlers["member.account.get"]);
+  commandRegistry.registerHandler("member.refund", handlers["member.refund"]);
   queryRegistry?.registerHandler("member.bonus_rules.list", handlers["member.bonus_rules.list"]);
 }

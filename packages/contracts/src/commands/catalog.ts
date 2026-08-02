@@ -96,6 +96,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.topup",
   "member.balance.pay",
   "member.bonus_rule.upsert",
+  "member.refund",
 ] as const) as readonly [
   "customer.upsert",
   "customer.update",
@@ -130,6 +131,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.topup",
   "member.balance.pay",
   "member.bonus_rule.upsert",
+  "member.refund",
 ];
 
 /**

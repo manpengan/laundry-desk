@@ -189,11 +189,13 @@ export function registerM1Handlers(
     registry.registerHandler("member.topup", handlers["member.topup"]);
     registry.registerHandler("member.balance.pay", handlers["member.balance.pay"]);
     registry.registerHandler("member.bonus_rule.upsert", handlers["member.bonus_rule.upsert"]);
+    registry.registerHandler("member.refund", handlers["member.refund"]);
     registered.push(
       "member.account.open",
       "member.topup",
       "member.balance.pay",
       "member.bonus_rule.upsert",
+      "member.refund",
     );
   }
 

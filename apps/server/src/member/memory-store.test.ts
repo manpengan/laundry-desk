@@ -486,3 +486,156 @@ test("a spend eats the bonus first, leaving principal refundable (ADR-22 §4.2)"
     total_cents: 100_000,
   });
 });
+
+async function accountWithBonusTopup(store: MemberStore): Promise<string> {
+  const rule = await store.upsertBonusRule({
+    rule_id: null,
+    min_topup_cents: 100_000,
+    bonus_cents: 10_000,
+    status: "active",
+    staff_id: STAFF,
+    at: 900,
+    note: null,
+  });
+  assert.equal(rule.ok, true);
+  const opened = await store.openAccount({ customer_id: CUSTOMER, store_id: STORE_A, at: 1000 });
+  assert.equal(opened.ok, true);
+  if (!opened.ok) throw new Error("unreachable");
+  const accountId = opened.value.account.account_id;
+  const topped = await store.topup({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_000,
+    tender: "cash",
+    staff_id: STAFF,
+    at: 1001,
+    business_date: "2026-08-01",
+    note: null,
+  });
+  assert.equal(topped.ok, true);
+  return accountId;
+}
+
+test("a refund returns principal only and never the bonus (ADR-22 §4.1)", async () => {
+  const { store } = makeStore();
+  const accountId = await accountWithBonusTopup(store);
+
+  const refunded = await store.refund({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_000,
+    tender: "cash",
+    reason: "顾客退卡",
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.equal(refunded.ok, true);
+  if (!refunded.ok) throw new Error("unreachable");
+  assert.equal(refunded.value.principal_delta_cents, -100_000);
+  assert.equal(refunded.value.bonus_delta_cents, 0);
+  // The bonus survives the refund as an un-withdrawable book balance.
+  assert.deepEqual(refunded.value.balance, {
+    principal_cents: 0,
+    bonus_cents: 10_000,
+    total_cents: 10_000,
+  });
+});
+
+test("a refund cannot exceed the remaining principal, bonus included or not", async () => {
+  const { store } = makeStore();
+  const accountId = await accountWithBonusTopup(store);
+
+  // Total balance is 110_000, but only 100_000 of it is principal.
+  const tooMuch = await store.refund({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_001,
+    tender: "cash",
+    reason: "顾客退卡",
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.deepEqual(tooMuch, { ok: false, reason: "insufficient_balance" });
+});
+
+test("a spend first, then a refund, returns exactly the untouched principal (ADR-22 §4.2)", async () => {
+  const { store } = makeStore();
+  const accountId = await accountWithBonusTopup(store);
+  const spent = await store.spend({
+    account_id: accountId,
+    store_id: STORE_A,
+    order_id: ORDER,
+    amount_cents: 10_000,
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+  assert.equal(spent.ok, true);
+
+  // The spend ate the bonus, so the full 100_000 principal is still refundable.
+  const refunded = await store.refund({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 100_000,
+    tender: "cash",
+    reason: "顾客退卡",
+    staff_id: STAFF,
+    at: 1003,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.equal(refunded.ok, true);
+  if (!refunded.ok) throw new Error("unreachable");
+  assert.deepEqual(refunded.value.balance, {
+    principal_cents: 0,
+    bonus_cents: 0,
+    total_cents: 0,
+  });
+});
+
+test("a cash refund leaves the drawer by the refunded amount (ADR-22 §5.4)", async () => {
+  const { store } = makeStore();
+  const accountId = await accountWithBonusTopup(store);
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-01"), 100_000);
+
+  await store.refund({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 30_000,
+    tender: "cash",
+    reason: "顾客退卡",
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-01"), 70_000);
+});
+
+test("a wechat refund does not touch the drawer", async () => {
+  const { store } = makeStore();
+  const accountId = await accountWithBonusTopup(store);
+
+  await store.refund({
+    account_id: accountId,
+    store_id: STORE_A,
+    amount_cents: 30_000,
+    tender: "wechat",
+    reason: "原路退回",
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.equal(await store.sumCashPrincipal(STORE_A, "2026-08-01"), 100_000);
+});

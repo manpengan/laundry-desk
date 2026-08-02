@@ -357,3 +357,105 @@ test("bonus_rule.upsert refuses an unknown rule id instead of creating a second 
     hasCode("VALIDATION_FAILED"),
   );
 });
+
+test("refund refuses a caller without member_refund (ADR-22 §5.1)", async () => {
+  const { handlers } = makeDeps();
+
+  // payment_refund returns an order payment; this returns prepaid money the
+  // shop is holding. Holding one must not grant the other.
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.refund"],
+        { account_id: ORDER_ID, amount_cents: 1_000, tender: "cash", reason: "退卡" },
+        ["payment_refund", "order_write", "customer_write", "member_rule_write"],
+      ),
+    hasCode("PERMISSION_DENIED"),
+  );
+});
+
+test("refund returns principal, never the bonus, and reports the new balance", async () => {
+  const { handlers } = makeDeps();
+  await run(
+    handlers["member.bonus_rule.upsert"],
+    { min_topup_cents: 100_000, bonus_cents: 10_000, status: "active" },
+    ["member_rule_write"],
+  );
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const account = opened.result as { account_id: string };
+  await run(
+    handlers["member.topup"],
+    { account_id: account.account_id, amount_cents: 100_000, method: "cash" },
+    ["customer_write"],
+  );
+
+  const refunded = await run(
+    handlers["member.refund"],
+    {
+      account_id: account.account_id,
+      amount_cents: 100_000,
+      tender: "cash",
+      reason: "顾客退卡",
+    },
+    ["member_refund"],
+  );
+
+  const body = refunded.result as { principal_cents: number; bonus_cents: number };
+  assert.equal(body.principal_cents, 0);
+  assert.equal(body.bonus_cents, 10_000);
+  assert.equal(refunded.audit?.entity, "member_ledger");
+});
+
+test("refund refuses to reach past the principal into the bonus", async () => {
+  const { handlers } = makeDeps();
+  await run(
+    handlers["member.bonus_rule.upsert"],
+    { min_topup_cents: 100_000, bonus_cents: 10_000, status: "active" },
+    ["member_rule_write"],
+  );
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const account = opened.result as { account_id: string };
+  await run(
+    handlers["member.topup"],
+    { account_id: account.account_id, amount_cents: 100_000, method: "cash" },
+    ["customer_write"],
+  );
+
+  // Total balance is 110_000; only 100_000 of it is the customer's own money.
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.refund"],
+        {
+          account_id: account.account_id,
+          amount_cents: 110_000,
+          tender: "cash",
+          reason: "顾客退卡",
+        },
+        ["member_refund"],
+      ),
+    hasCode("INVARIANT_FAILED"),
+  );
+});
+
+test("refund refuses a blank reason", async () => {
+  const { handlers } = makeDeps();
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const account = opened.result as { account_id: string };
+
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.refund"],
+        { account_id: account.account_id, amount_cents: 100, tender: "cash", reason: "   " },
+        ["member_refund"],
+      ),
+    hasCode("VALIDATION_FAILED"),
+  );
+});

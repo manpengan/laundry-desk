@@ -6534,6 +6534,46 @@
         ],
         "type": "object"
       },
+      "input.command.member.refund": {
+        "additionalProperties": false,
+        "properties": {
+          "account_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "amount_cents": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "note": {
+            "maxLength": 256,
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "tender": {
+            "enum": [
+              "cash",
+              "wechat",
+              "alipay",
+              "other"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_id",
+          "amount_cents",
+          "tender",
+          "reason"
+        ],
+        "type": "object"
+      },
       "input.command.member.topup": {
         "additionalProperties": false,
         "properties": {
@@ -9090,6 +9130,58 @@
         "x-laundry-kind": "command",
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R3",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/member.refund": {
+      "post": {
+        "description": "Refund prepaid money with step-up approval. Only principal is refundable and only what is left of it: the bonus is a book grant the customer never paid for. The server locks the account and re-reads the principal under that lock. Stable command name: `member.refund` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_member_refund",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.member.refund"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Return unspent stored-value principal to the customer.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R4",
         "x-laundry-version": "1.0.0"
       }
     },

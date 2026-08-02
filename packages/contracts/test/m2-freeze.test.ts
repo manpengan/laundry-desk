@@ -55,6 +55,9 @@ describe("M2 contract surface", () => {
       // shop gives away on every later top-up; the amount itself is always
       // computed server-side and never accepted from a client.
       "member.bonus_rule.upsert",
+      // ADR-22 §5: R4 because money leaves the business and cannot be undone.
+      // Only principal is refundable; the DB CHECK enforces bonus_delta = 0.
+      "member.refund",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("stats.day.summary");

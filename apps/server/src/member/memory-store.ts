@@ -12,6 +12,7 @@ import type {
   MemberOpenInput,
   MemberOpenResult,
   MemberOutcome,
+  MemberRefundInput,
   MemberRejectReason,
   MemberSpendInput,
   MemberStore,
@@ -167,6 +168,35 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemberStore {
           store_id: input.store_id,
           // Spending stored value moves no cash (ADR-18 §1).
           tender: null,
+          at: input.at,
+          business_date: input.business_date,
+          note: input.note,
+        }),
+      );
+    },
+
+    refund: async (input: MemberRefundInput): Promise<MemberOutcome<MemberLedgerAppendResult>> => {
+      const found = activeAccount(input.account_id);
+      if (!found.ok) return found as MemberOutcome<MemberLedgerAppendResult>;
+      if (!Number.isSafeInteger(input.amount_cents) || input.amount_cents <= 0) {
+        return reject("invalid_amount");
+      }
+      // Principal only, and only what is left of it: the bonus is not the
+      // customer's money to withdraw (ADR-22 §4.1).
+      if (input.amount_cents > balanceOf(input.account_id).principal_cents) {
+        return reject("insufficient_balance");
+      }
+      return append(
+        input.account_id,
+        Object.freeze({
+          ledger_id: newId(),
+          kind: "refund" as const,
+          principal_delta_cents: -input.amount_cents,
+          bonus_delta_cents: 0,
+          bonus_rule_id: null,
+          order_id: null,
+          store_id: input.store_id,
+          tender: input.tender,
           at: input.at,
           business_date: input.business_date,
           note: input.note,
