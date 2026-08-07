@@ -10555,7 +10555,29 @@
         },
         "type": "object"
       },
+      "input.query.reporting.owner_dashboard.drilldown": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "today_pickups",
+              "new_receivables",
+              "stagnant_garments"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
       "input.query.reporting.owner_dashboard.get": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "input.query.reporting.owner_portfolio.get": {
         "additionalProperties": false,
         "properties": {},
         "type": "object"
@@ -14410,6 +14432,58 @@
         "x-laundry-version": "0.1.0"
       }
     },
+    "/v1/queries/reporting.owner_dashboard.drilldown": {
+      "post": {
+        "description": "Owner-only operational detail. This query is not projected to AI tools. Stable query name: `reporting.owner_dashboard.drilldown` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_reporting_owner_dashboard_drilldown",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.reporting.owner_dashboard.drilldown"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read one fixed, server-scoped owner dashboard drilldown with at most 50 rows.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R1",
+        "x-laundry-version": "0.1.0"
+      }
+    },
     "/v1/queries/reporting.owner_dashboard.get": {
       "post": {
         "description": "Owner-only operational and accounting dashboard. This query is not projected to AI tools. Stable query name: `reporting.owner_dashboard.get` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -14452,6 +14526,58 @@
           }
         ],
         "summary": "Read the current store owner's four operating cards and a fixed 30-day dual-basis income trend.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R1",
+        "x-laundry-version": "0.1.0"
+      }
+    },
+    "/v1/queries/reporting.owner_portfolio.get": {
+      "post": {
+        "description": "Owner-only multi-store comparison. This query is not projected to AI tools. Stable query name: `reporting.owner_portfolio.get` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_reporting_owner_portfolio_get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.reporting.owner_portfolio.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Compare ADR-26 owner cards across at most 50 stores where the actor is admin.",
         "tags": [
           "queries"
         ],

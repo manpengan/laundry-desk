@@ -2,6 +2,7 @@ import { Button, EmptyState, MoneyText, Skeleton } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { QueryPort } from "../commands/types.js";
+import type { OwnerDrilldownKind } from "./owner-operations-model.js";
 import {
   loadOwnerDashboard,
   selectOwnerTrend,
@@ -11,6 +12,7 @@ import {
 
 export type OwnerDashboardPageProps = Readonly<{
   queryClient: QueryPort;
+  onOpenDrilldown?: ((kind: OwnerDrilldownKind) => void) | undefined;
   /** Unit/SSR escape hatch; production loads immediately. */
   autoLoad?: boolean;
 }>;
@@ -22,6 +24,7 @@ export type OwnerDashboardViewProps = Readonly<{
   trendDays: OwnerTrendDays;
   onTrendDaysChange: (days: OwnerTrendDays) => void;
   onRefresh: () => void;
+  onOpenDrilldown?: ((kind: OwnerDrilldownKind) => void) | undefined;
 }>;
 
 function shortBusinessDate(value: string): string {
@@ -61,17 +64,24 @@ function OwnerMetricCard({
   value,
   detail,
   tone,
+  action,
 }: Readonly<{
   label: string;
   value: React.ReactNode;
   detail: React.ReactNode;
   tone: "income" | "pickup" | "debt" | "overdue";
+  action?: Readonly<{ label: string; onClick: () => void }> | undefined;
 }>) {
   return (
     <article className="ld-owner-metric lg-card" data-tone={tone}>
       <span className="ld-owner-metric__label">{label}</span>
       <strong className="ld-owner-metric__value">{value}</strong>
       <span className="ld-owner-metric__detail">{detail}</span>
+      {action === undefined ? null : (
+        <button className="ld-owner-metric__action" type="button" onClick={action.onClick}>
+          {action.label}
+        </button>
+      )}
     </article>
   );
 }
@@ -143,15 +153,9 @@ export function OwnerDashboardView({
   trendDays,
   onTrendDaysChange,
   onRefresh,
+  onOpenDrilldown,
 }: OwnerDashboardViewProps) {
-  if (dashboard === null && loading) {
-    return (
-      <div data-testid="owner-dashboard">
-        <OwnerDashboardLoading />
-      </div>
-    );
-  }
-  if (dashboard === null && error !== null) {
+  if (error !== null) {
     return (
       <section className="ld-owner-state lg-card" data-state="error" data-testid="owner-dashboard">
         <div className="ld-owner-state__alert" role="alert">
@@ -162,6 +166,13 @@ export function OwnerDashboardView({
           重新加载
         </Button>
       </section>
+    );
+  }
+  if (dashboard === null && loading) {
+    return (
+      <div data-testid="owner-dashboard">
+        <OwnerDashboardLoading />
+      </div>
     );
   }
   if (dashboard === null) {
@@ -201,12 +212,6 @@ export function OwnerDashboardView({
         </Button>
       </header>
 
-      {error === null ? null : (
-        <div className="ld-owner-dashboard__refresh-error" role="alert">
-          本次刷新失败：{error}。当前仍显示上次成功数据。
-        </div>
-      )}
-
       <section className="ld-owner-metrics" aria-label="今日经营指标">
         <OwnerMetricCard
           label="今日营业额"
@@ -224,18 +229,42 @@ export function OwnerDashboardView({
           value={`${dashboard.today.picked_up_garment_count} 件`}
           detail="按今日完成的取衣事件计件"
           tone="pickup"
+          action={
+            onOpenDrilldown === undefined
+              ? undefined
+              : {
+                  label: "查看取衣明细",
+                  onClick: () => onOpenDrilldown("today_pickups"),
+                }
+          }
         />
         <OwnerMetricCard
           label="新增欠款"
           value={<MoneyText fen={dashboard.today.new_receivable_cents} size="xl" />}
           detail={`${dashboard.today.new_receivable_order_count} 单 · 当前尚未收回`}
           tone="debt"
+          action={
+            onOpenDrilldown === undefined
+              ? undefined
+              : {
+                  label: "查看欠款明细",
+                  onClick: () => onOpenDrilldown("new_receivables"),
+                }
+          }
         />
         <OwnerMetricCard
           label="滞留件"
           value={`${dashboard.today.overdue_garment_count} 件`}
           detail={`${dashboard.today.overdue_order_count} 单 · 满 ${dashboard.overdue_min_age_days} 天`}
           tone="overdue"
+          action={
+            onOpenDrilldown === undefined
+              ? undefined
+              : {
+                  label: "查看滞留明细",
+                  onClick: () => onOpenDrilldown("stagnant_garments"),
+                }
+          }
         />
       </section>
 
@@ -244,7 +273,11 @@ export function OwnerDashboardView({
   );
 }
 
-export function OwnerDashboardPage({ queryClient, autoLoad = true }: OwnerDashboardPageProps) {
+export function OwnerDashboardPage({
+  queryClient,
+  onOpenDrilldown,
+  autoLoad = true,
+}: OwnerDashboardPageProps) {
   const [dashboard, setDashboard] = useState<OwnerDashboardData | null>(null);
   const [loading, setLoading] = useState(autoLoad);
   const [error, setError] = useState<string | null>(null);
@@ -263,6 +296,7 @@ export function OwnerDashboardPage({ queryClient, autoLoad = true }: OwnerDashbo
       if (result.ok) {
         setDashboard(result.data);
       } else {
+        setDashboard(null);
         setError(result.error);
       }
     } finally {
@@ -287,6 +321,7 @@ export function OwnerDashboardPage({ queryClient, autoLoad = true }: OwnerDashbo
       trendDays={trendDays}
       onTrendDaysChange={setTrendDays}
       onRefresh={() => void load()}
+      onOpenDrilldown={onOpenDrilldown}
     />
   );
 }

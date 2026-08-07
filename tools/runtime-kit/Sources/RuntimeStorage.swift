@@ -1,6 +1,12 @@
+import CryptoKit
 import Darwin
 import Foundation
 import Security
+
+struct RuntimePrivateFileDigest {
+  let size: Int64
+  let sha256: String
+}
 
 struct RuntimePaths {
   let root: URL
@@ -49,6 +55,10 @@ enum RuntimeStorage {
     guard Darwin.fsync(descriptor) == 0 else { try runtimeFail("RUNTIME_PRIVATE_PATH_INVALID") }
   }
 
+  static func syncParent(of url: URL) throws {
+    try fsyncDirectory(url.deletingLastPathComponent())
+  }
+
   static func ensureDirectory(_ url: URL) throws {
     try FileManager.default.createDirectory(
       at: url, withIntermediateDirectories: true,
@@ -56,6 +66,15 @@ enum RuntimeStorage {
     guard let value = metadata(url.path), isMode(value, type: S_IFDIR, permissions: 0o700)
     else { try runtimeFail("RUNTIME_PRIVATE_PATH_INVALID") }
     try fsyncDirectory(url)
+  }
+
+  static func createExclusiveDirectory(_ url: URL) throws {
+    guard Darwin.mkdir(url.path, 0o700) == 0 else {
+      try runtimeFail("RUNTIME_PRIVATE_PATH_INVALID")
+    }
+    guard let value = metadata(url.path), isMode(value, type: S_IFDIR, permissions: 0o700)
+    else { try runtimeFail("RUNTIME_PRIVATE_PATH_INVALID") }
+    try fsyncDirectory(url.deletingLastPathComponent())
   }
 
   static func validateDirectory(_ url: URL) throws {
@@ -101,6 +120,105 @@ enum RuntimeStorage {
     guard let data = try handle.readToEnd(), data.count == Int(value.st_size)
     else { try runtimeFail("RUNTIME_MANIFEST_INVALID") }
     return data
+  }
+
+  static func privateFileDigest(
+    _ url: URL, maximum: Int64 = 137_438_953_472
+  ) throws -> RuntimePrivateFileDigest {
+    let descriptor = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW)
+    guard descriptor >= 0 else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
+    defer { Darwin.close(descriptor) }
+    var before = stat()
+    guard Darwin.fstat(descriptor, &before) == 0,
+      isMode(before, type: S_IFREG, permissions: 0o600), before.st_nlink == 1,
+      before.st_size > 0, before.st_size <= maximum
+    else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
+    let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
+    var hasher = SHA256()
+    var readBytes: Int64 = 0
+    while true {
+      let chunk: Data
+      do { chunk = try handle.read(upToCount: 1_048_576) ?? Data() } catch {
+        try runtimeFail("RUNTIME_BACKUP_INVALID")
+      }
+      guard !chunk.isEmpty else { break }
+      hasher.update(data: chunk)
+      readBytes += Int64(chunk.count)
+    }
+    var after = stat()
+    guard readBytes == before.st_size, Darwin.fstat(descriptor, &after) == 0,
+      before.st_dev == after.st_dev, before.st_ino == after.st_ino,
+      before.st_size == after.st_size,
+      before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec,
+      before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec
+    else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
+    return RuntimePrivateFileDigest(
+      size: readBytes, sha256: hasher.finalize().map { String(format: "%02x", $0) }.joined())
+  }
+
+  static func openVerifiedPrivateFile(
+    _ url: URL, expectedSize: Int64, expectedSHA256: String
+  ) throws -> FileHandle {
+    let descriptor = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW)
+    guard descriptor >= 0 else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
+    let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    var value = stat()
+    guard Darwin.fstat(descriptor, &value) == 0,
+      isMode(value, type: S_IFREG, permissions: 0o600), value.st_nlink == 1,
+      value.st_size == expectedSize, expectedSize > 0
+    else {
+      try? handle.close()
+      try runtimeFail("RUNTIME_BACKUP_INVALID")
+    }
+    var hasher = SHA256()
+    var count: Int64 = 0
+    while true {
+      let chunk: Data
+      do { chunk = try handle.read(upToCount: 1_048_576) ?? Data() } catch {
+        try? handle.close()
+        try runtimeFail("RUNTIME_BACKUP_INVALID")
+      }
+      guard !chunk.isEmpty else { break }
+      hasher.update(data: chunk)
+      count += Int64(chunk.count)
+    }
+    let digest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    guard count == expectedSize, digest == expectedSHA256 else {
+      try? handle.close()
+      try runtimeFail("RUNTIME_BACKUP_INVALID")
+    }
+    do { try handle.seek(toOffset: 0) } catch {
+      try? handle.close()
+      try runtimeFail("RUNTIME_BACKUP_INVALID")
+    }
+    return handle
+  }
+
+  static func createPrivateStreamFile(_ url: URL) throws -> FileHandle {
+    let descriptor = Darwin.open(url.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+    guard descriptor >= 0 else { try runtimeFail("RUNTIME_PRIVATE_PATH_INVALID") }
+    var value = stat()
+    guard Darwin.fstat(descriptor, &value) == 0,
+      isMode(value, type: S_IFREG, permissions: 0o600), value.st_nlink == 1
+    else {
+      Darwin.close(descriptor)
+      try runtimeFail("RUNTIME_PRIVATE_PATH_INVALID")
+    }
+    return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+  }
+
+  static func withMaintenanceLock<T>(_ root: URL, _ body: () throws -> T) throws -> T {
+    let url = root.appendingPathComponent(".maintenance.lock")
+    let descriptor = Darwin.open(url.path, O_RDWR | O_CREAT | O_NOFOLLOW, 0o600)
+    guard descriptor >= 0 else { try runtimeFail("RUNTIME_MAINTENANCE_BUSY") }
+    defer { Darwin.close(descriptor) }
+    var value = stat()
+    guard Darwin.fstat(descriptor, &value) == 0,
+      isMode(value, type: S_IFREG, permissions: 0o600), value.st_nlink == 1,
+      Darwin.lockf(descriptor, F_TLOCK, 0) == 0
+    else { try runtimeFail("RUNTIME_MAINTENANCE_BUSY") }
+    defer { _ = Darwin.lockf(descriptor, F_ULOCK, 0) }
+    return try body()
   }
 
   static func writeExclusive(_ data: Data, to url: URL) throws {

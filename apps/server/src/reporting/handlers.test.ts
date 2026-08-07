@@ -9,6 +9,7 @@ import { HandlerCommandError } from "../bus/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
 import type { TenantContext } from "../db/types.js";
 import { createReportingHandlers } from "./handlers.js";
+import { createMemoryOwnerDashboardSource } from "./memory-source.js";
 import type { OwnerDashboardReadRequest, ReportingHandlerDeps } from "./types.js";
 
 const ORG_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -42,6 +43,7 @@ function deps(recorded: OwnerDashboardReadRequest[]): ReportingHandlerDeps {
       },
     }),
     source: Object.freeze({
+      ...createMemoryOwnerDashboardSource(),
       readOperations: async (request: OwnerDashboardReadRequest) => {
         recorded.push(request);
         return Object.freeze({

@@ -9,7 +9,7 @@ export function createMemoryReportingDeps(
 ): ReportingHandlerDeps {
   return Object.freeze({
     accounting,
-    source: createMemoryOwnerDashboardSource(),
+    source: createMemoryOwnerDashboardSource(undefined, { timeZone }),
     timeZone,
   });
 }

@@ -10,10 +10,11 @@ import { createCsrfProofSigner } from "../auth/csrf.js";
 import { executeCommand } from "../bus/executor.js";
 import { createPgIdempotencyStore } from "../bus/pg-idempotency.js";
 import type { ActorContext, CommandResult } from "../bus/types.js";
+import { FakeSqlClient } from "../db/fake-client.js";
 import { createPgPool, resolvePgUrls, type PgPool } from "../db/pg-pool.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
 import { withTenantTransaction } from "../db/tenant-transaction.js";
-import type { TenantContext } from "../db/types.js";
+import type { SqlClient, TenantContext } from "../db/types.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
@@ -54,6 +55,60 @@ type ProofFixture = Readonly<{
   idempotencyKey: string;
   settingKey: string;
 }>;
+
+async function getWithClient(
+  pool: PgPool,
+  store: StepUpProofStore,
+  proofId: string,
+  tenant: TenantContext,
+  configure: (sql: SqlClient) => Promise<void>,
+) {
+  return withPoolClient(pool, async (sql) => {
+    await sql.query("BEGIN");
+    try {
+      await configure(sql);
+      const proof = await store.get(proofId, { tenant, client: sql });
+      await sql.query("ROLLBACK");
+      return proof;
+    } catch (error) {
+      await sql.query("ROLLBACK");
+      throw error;
+    }
+  });
+}
+
+async function setTenantGucs(sql: SqlClient, tenant: TenantContext): Promise<void> {
+  await sql.query("SELECT set_config('app.org_id', $1, true)", [tenant.orgId]);
+  await sql.query("SELECT set_config('app.store_id', $1, true)", [tenant.storeId]);
+}
+
+async function readTenantGucs(
+  sql: SqlClient,
+): Promise<Readonly<{ org_id: string | null; store_id: string | null }>> {
+  const result = await sql.query<Readonly<{ org_id: string | null; store_id: string | null }>>(
+    `SELECT current_setting('app.org_id', true) AS org_id,
+            current_setting('app.store_id', true) AS store_id`,
+  );
+  assert.ok(result.rows[0]);
+  return result.rows[0];
+}
+
+test("PG step-up proof get binds org, store, and proof identifiers in SQL", async () => {
+  const proofId = randomUUID();
+  const client = new FakeSqlClient();
+  const store = createPgStepUpProofStore({} as PgPool);
+
+  assert.equal(await store.get(proofId, { tenant: TENANT, client }), null);
+
+  assert.equal(client.queries.length, 1);
+  const query = client.queries[0];
+  assert.ok(query);
+  assert.match(
+    query.sql,
+    /WHERE org_id = \$1::uuid AND store_id = \$2::uuid\s+AND proof_id = \$3::uuid/u,
+  );
+  assert.deepEqual(query.params, [TENANT.orgId, TENANT.storeId, proofId]);
+});
 
 function sqlPlatformDeps() {
   return Object.freeze({
@@ -290,6 +345,67 @@ test(
     } finally {
       await cleanup(adminPool, sessionId, fixtures);
       await singlePool.end();
+      await adminPool.end();
+    }
+  },
+);
+
+test(
+  "PG step-up proof get rejects cross-tenant context and unset or empty GUCs",
+  { skip: urls === null },
+  async () => {
+    assert.ok(urls);
+    const adminPool = createPgPool({ connectionString: urls.admin });
+    const appPool = createPgPool({ connectionString: urls.app, max: 1 });
+    const unconfiguredPool = createPgPool({ connectionString: urls.app, max: 1 });
+    const sessionId = randomUUID();
+    const fixtures: ProofFixture[] = [];
+    const now = Math.floor(Date.now() / 1000);
+    try {
+      await seedPgTestIdentityFixture(adminPool);
+      await insertSession(adminPool, sessionId);
+      const fixture = await seedProof(appPool, sessionId, now);
+      fixtures.push(fixture);
+      const store = createPgStepUpProofStore(appPool);
+
+      assert.equal(
+        await getWithClient(
+          appPool,
+          store,
+          fixture.proofId,
+          Object.freeze({ ...TENANT, orgId: randomUUID() }),
+          (sql) => setTenantGucs(sql, TENANT),
+        ),
+        null,
+      );
+      assert.equal(
+        await getWithClient(
+          appPool,
+          store,
+          fixture.proofId,
+          Object.freeze({ ...TENANT, storeId: randomUUID() }),
+          (sql) => setTenantGucs(sql, TENANT),
+        ),
+        null,
+      );
+      assert.equal(
+        await getWithClient(unconfiguredPool, store, fixture.proofId, TENANT, async (sql) => {
+          assert.deepEqual(await readTenantGucs(sql), { org_id: null, store_id: null });
+        }),
+        null,
+      );
+      assert.equal(
+        await getWithClient(appPool, store, fixture.proofId, TENANT, async (sql) => {
+          await sql.query("SELECT set_config('app.org_id', '', true)");
+          await sql.query("SELECT set_config('app.store_id', '', true)");
+          assert.deepEqual(await readTenantGucs(sql), { org_id: "", store_id: "" });
+        }),
+        null,
+      );
+    } finally {
+      await cleanup(adminPool, sessionId, fixtures);
+      await unconfiguredPool.end();
+      await appPool.end();
       await adminPool.end();
     }
   },

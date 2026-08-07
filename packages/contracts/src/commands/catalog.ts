@@ -188,6 +188,8 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   ...M3_PHOTO_QUERY_NAMES,
   "accounting.report.get",
   "reporting.owner_dashboard.get",
+  "reporting.owner_dashboard.drilldown",
+  "reporting.owner_portfolio.get",
   "reconciliation.day.get",
   "fulfillment.workbench",
   "staff.access.list",

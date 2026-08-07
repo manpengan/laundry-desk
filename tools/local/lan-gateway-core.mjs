@@ -11,13 +11,16 @@ const MAXIMUM_RESPONSE_BYTES = 4 * 1024 * 1024;
 const BACKEND_TIMEOUT_MS = 10_000;
 const STATIC_INDEX_ROUTE = "/owner";
 const STATIC_INDEX_REDIRECT_ROUTE = "/owner/";
-const PROXY_ROUTES = new Set([
+export const LAN_GATEWAY_PROXY_ROUTES = Object.freeze([
   "GET /health",
   "GET /api/v2/local/staff",
   "POST /api/v2/auth/login",
   "POST /api/v2/auth/logout",
   "POST /v1/queries/reporting.owner_dashboard.get",
+  "POST /v1/queries/reporting.owner_dashboard.drilldown",
+  "POST /v1/queries/reporting.owner_portfolio.get",
 ]);
+const PROXY_ROUTES = new Set(LAN_GATEWAY_PROXY_ROUTES);
 const FORWARDED_REQUEST_HEADERS = new Set([
   "accept",
   "accept-language",

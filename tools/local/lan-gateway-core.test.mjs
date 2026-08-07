@@ -8,6 +8,7 @@ import test from "node:test";
 import {
   classifyLanGatewayRequest,
   createLanGateway,
+  LAN_GATEWAY_PROXY_ROUTES,
   loadLanStaticAssets,
 } from "./lan-gateway-core.mjs";
 
@@ -217,13 +218,24 @@ test("redirects the trailing-slash owner route to the fixed canonical path", asy
   }
 });
 
-test("proxies only health, staff projection, login/logout, and the owner query", () => {
+test("proxies only health, staff projection, login/logout, and owner queries", () => {
+  assert.deepEqual(LAN_GATEWAY_PROXY_ROUTES, [
+    "GET /health",
+    "GET /api/v2/local/staff",
+    "POST /api/v2/auth/login",
+    "POST /api/v2/auth/logout",
+    "POST /v1/queries/reporting.owner_dashboard.get",
+    "POST /v1/queries/reporting.owner_dashboard.drilldown",
+    "POST /v1/queries/reporting.owner_portfolio.get",
+  ]);
   for (const [method, path] of [
     ["GET", "/health"],
     ["GET", "/api/v2/local/staff"],
     ["POST", "/api/v2/auth/login"],
     ["POST", "/api/v2/auth/logout"],
     ["POST", "/v1/queries/reporting.owner_dashboard.get"],
+    ["POST", "/v1/queries/reporting.owner_dashboard.drilldown"],
+    ["POST", "/v1/queries/reporting.owner_portfolio.get"],
   ]) {
     const input =
       method === "POST"
@@ -240,6 +252,10 @@ test("proxies only health, staff projection, login/logout, and the owner query",
     "/v1/commands/order.receive",
     "/api/v2/auth/pin/challenges",
     "/api/v2/photos",
+    "/api/v2/local/diagnostics",
+    "/v1/commands/order.receive",
+    "/v1/commands/payment.collect",
+    "/.well-known/laundry-desk-onboarding",
   ]) {
     assert.deepEqual(classifyLanGatewayRequest(request("POST", path), CONFIG, ASSETS), {
       kind: "reject",

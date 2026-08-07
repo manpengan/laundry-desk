@@ -17,6 +17,34 @@ enum RuntimeCLI {
     return value
   }
 
+  private static func backupSelection(_ data: Data) throws -> RuntimeBackupSelection {
+    guard !data.isEmpty, data.count <= 512,
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      Set(object.keys) == ["backup_id"],
+      let value = try? JSONDecoder().decode(RuntimeBackupSelection.self, from: data),
+      RuntimeBackupCodec.validBackupID(value.backupID)
+    else { try runtimeFail("RUNTIME_BACKUP_STDIN_INVALID") }
+    return value
+  }
+
+  private static func restoreRequest(_ data: Data) throws -> RuntimeRestoreRequest {
+    guard !data.isEmpty, data.count <= 512,
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      Set(object.keys) == ["backup_id", "confirmation"],
+      let value = try? JSONDecoder().decode(RuntimeRestoreRequest.self, from: data),
+      RuntimeBackupCodec.validBackupID(value.backupID),
+      value.confirmation.range(
+        of: "^RESTORE-[0-9A-F]{12}$", options: .regularExpression) != nil
+    else { try runtimeFail("RUNTIME_BACKUP_STDIN_INVALID") }
+    return value
+  }
+
+  private static func encoded<T: Encodable>(_ value: T) throws -> String {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+    return String(decoding: try encoder.encode(value), as: UTF8.self)
+  }
+
   private static func output(
     _ status: String, release: String? = nil,
     path: String? = nil
@@ -42,6 +70,24 @@ enum RuntimeCLI {
     if command == "recover" {
       let release = try controller.recover(manifestURL: manifestURL(arguments, command: command))
       return try output("ready", release: release)
+    }
+    if command == "backup" {
+      guard arguments.count == 2 else { try runtimeFail("RUNTIME_ARGS_INVALID") }
+      if arguments[1] == "create" {
+        guard stdin.isEmpty else { try runtimeFail("RUNTIME_ARGS_INVALID") }
+        return try encoded(controller.createBackup())
+      }
+      if arguments[1] == "list" {
+        guard stdin.isEmpty else { try runtimeFail("RUNTIME_ARGS_INVALID") }
+        return try encoded(RuntimeBackupList(backups: controller.listBackups()))
+      }
+      if arguments[1] == "verify" {
+        return try encoded(controller.verifyBackup(backupSelection(stdin).backupID))
+      }
+      if arguments[1] == "restore" {
+        return try encoded(controller.restoreBackup(restoreRequest(stdin)))
+      }
+      try runtimeFail("RUNTIME_ARGS_INVALID")
     }
     if ["start", "stop", "restart", "status", "diagnose"].contains(command) {
       guard arguments.count == 1, stdin.isEmpty else { try runtimeFail("RUNTIME_ARGS_INVALID") }

@@ -46,6 +46,11 @@ private func run() throws {
   if arguments.first == "install" {
     input = try FileHandle.standardInput.read(upToCount: 4_097) ?? Data()
     guard input.count <= 4_096 else { try runtimeFail("RUNTIME_SETUP_STDIN_INVALID") }
+  } else if arguments.count == 2, arguments[0] == "backup",
+    ["verify", "restore"].contains(arguments[1])
+  {
+    input = try FileHandle.standardInput.read(upToCount: 513) ?? Data()
+    guard input.count <= 512 else { try runtimeFail("RUNTIME_BACKUP_STDIN_INVALID") }
   } else {
     input = Data()
   }

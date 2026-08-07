@@ -3,8 +3,8 @@
 
   final class FakeRuntimeRunner: RuntimeRunner {
     let dockerPath = "/Applications/Docker.app/Contents/Resources/bin/docker"
-    private let logURL: URL
-    private let volumesURL: URL
+    let logURL: URL
+    let volumesURL: URL
     private var manifest: RuntimeManifestPayload?
 
     init(logURL: URL) {
@@ -14,7 +14,7 @@
 
     func setManifest(_ payload: RuntimeManifestPayload) { manifest = payload }
 
-    private func appendLog(_ spec: RuntimeCommandSpec) throws {
+    func appendLog(_ spec: RuntimeCommandSpec) throws {
       let body: [String: Any] = [
         "executable": spec.executable,
         "arguments": spec.arguments,
@@ -33,7 +33,7 @@
       try handle.close()
     }
 
-    private func failOnce(_ spec: RuntimeCommandSpec) -> Bool {
+    func failOnce(_ spec: RuntimeCommandSpec) -> Bool {
       let control = URL(fileURLWithPath: logURL.path + ".fail-once")
       guard
         let value = try? String(contentsOf: control, encoding: .utf8)
@@ -42,6 +42,28 @@
       else { return false }
       try? FileManager.default.removeItem(at: control)
       return true
+    }
+
+    func pauseOnce(_ spec: RuntimeCommandSpec) throws {
+      let control = URL(fileURLWithPath: logURL.path + ".pause-once")
+      guard
+        let value = try? String(contentsOf: control, encoding: .utf8)
+          .trimmingCharacters(in: .whitespacesAndNewlines),
+        spec.arguments.contains(value)
+      else { return }
+      try FileManager.default.removeItem(at: control)
+      let paused = URL(fileURLWithPath: logURL.path + ".paused")
+      let resumed = URL(fileURLWithPath: logURL.path + ".continue")
+      try Data("paused\n".utf8).write(to: paused, options: .atomic)
+      for _ in 0..<1_000 {
+        if FileManager.default.fileExists(atPath: resumed.path) {
+          try? FileManager.default.removeItem(at: resumed)
+          try? FileManager.default.removeItem(at: paused)
+          return
+        }
+        Thread.sleep(forTimeInterval: 0.01)
+      }
+      try runtimeFail("RUNTIME_COMMAND_TIMEOUT")
     }
 
     private func volumes() -> [String: [String: String]] {
@@ -84,6 +106,7 @@
     func run(_ spec: RuntimeCommandSpec, accepting: Set<Int32>) throws -> RuntimeCommandResult {
       try appendLog(spec)
       if failOnce(spec) { try runtimeFail("RUNTIME_COMMAND_FAILED") }
+      try pauseOnce(spec)
       var result = RuntimeCommandResult(code: 0, stdout: "", stderr: "")
       if spec.arguments.starts(with: ["volume", "inspect"]) {
         if let name = spec.arguments.last, let labels = volumes()[name] {

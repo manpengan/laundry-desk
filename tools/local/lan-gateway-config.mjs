@@ -96,7 +96,12 @@ async function readPemFile(candidatePath, name, privateFile) {
     if (!metadata.isFile() || metadata.size <= 0 || metadata.size > MAXIMUM_PEM_BYTES) {
       fail(`${name}_INVALID`);
     }
-    if (privateFile && (metadata.mode & 0o077) !== 0) {
+    if (privateFile && metadata.nlink !== 1) {
+      fail(`${name}_HARDLINKS`);
+    }
+    const privatePermissionsInvalid =
+      (metadata.mode & 0o400) === 0 || (metadata.mode & 0o177) !== 0;
+    if (privateFile && privatePermissionsInvalid) {
       fail(`${name}_PERMISSIONS`);
     }
     return await handle.readFile();

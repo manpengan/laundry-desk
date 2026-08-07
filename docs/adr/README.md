@@ -34,6 +34,9 @@
 | [ADR-24](2026-08-07-adr-24-accounting-dual-basis-reports.md)       | 账目双口径与日/月/职员报表                      | **Accepted** 2026-08-07；仅交付 Linux 本地 Web     |
 | [ADR-25](2026-08-07-adr-25-member-account-lifecycle.md)            | 会员账户冻结、解冻与原子关户                    | **Accepted** 2026-08-07；仅交付 Linux 本地 Web     |
 | [ADR-26](2026-08-07-adr-26-lan-owner-dashboard.md)                 | 局域网只读 Owner Dashboard 与 HTTPS 边界        | **Accepted** 2026-08-07；单店 LAN Web              |
+| [ADR-27](2026-08-08-adr-27-owner-drilldown-portfolio.md)           | Owner 明细下钻与授权门店组合视图                | **Accepted** 2026-08-08；LAN 只读扩展              |
+| [ADR-28](2026-08-08-adr-28-lan-onboarding-diagnostics.md)          | LAN 设备接入与证书诊断                          | **Accepted** 2026-08-08；不扩大代理面              |
+| [ADR-29](2026-08-08-adr-29-runtime-managed-backup-restore.md)      | Runtime.app 管理的本地备份与恢复                | **Accepted** 2026-08-08；仅原生主机维护入口        |
 
 ## v1 线
 
