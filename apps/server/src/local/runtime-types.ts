@@ -1,4 +1,5 @@
 import type { CsrfProofSigner } from "../auth/csrf.js";
+import type { AccountingHandlerDeps } from "../accounting/types.js";
 import type { CommandIdempotencyStore } from "../bus/types.js";
 import type { CatalogHandlerDeps } from "../catalog/handlers.js";
 import type { CustomerHandlerDeps } from "../customer/handlers.js";
@@ -37,6 +38,7 @@ export type LocalRuntime = Readonly<{
   customer: CustomerHandlerDeps;
   shift: ShiftHandlerDeps;
   reconciliation: ReconciliationHandlerDeps;
+  accounting: AccountingHandlerDeps;
   photo: PhotoHandlerDeps;
   fulfillment: FulfillmentHandlerDeps;
   staffAccess: StaffAccessHandlerDeps;

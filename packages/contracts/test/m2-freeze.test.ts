@@ -26,6 +26,9 @@ describe("M2 contract surface", () => {
       "payment.collect",
       "payment.repay",
       "payment.refund",
+      // ADR-24: audited dual-basis report export. The paired read query remains
+      // outside the current AI projection until a later accounting/AI ADR.
+      "accounting.report.export",
       "reconciliation.export",
       "edge.conflict.discard",
       "print.ticket.enqueue",
@@ -73,6 +76,9 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("member.bonus_rules.list");
     // ADR-23: PII-bearing manual counter worklist, deliberately not in AI tools.
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.pickup_reminders.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("accounting.report.get");
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(36);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(22);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
@@ -110,6 +116,9 @@ describe("M2 contract surface", () => {
     );
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "notification.pickup_reminders.list",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "accounting.report.get",
     );
   });
 

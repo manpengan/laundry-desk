@@ -9,6 +9,7 @@ import type { SessionView } from "../auth/types.js";
 import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { OfflinePort } from "../host/offline-port.js";
+import { AccountingReportPanel } from "./AccountingReportPanel.js";
 import { OfflineConflictPanel } from "./OfflineConflictPanel.js";
 import { downloadReconciliationExport } from "./reconciliation-export.js";
 import {
@@ -192,6 +193,12 @@ export function StatsPage({
       <p className="ld-shell-main__hint">
         服务端统一核对订单、支付账本、交班、打印软件状态与离线回放；历史营业日可追溯。
       </p>
+
+      <AccountingReportPanel
+        queryClient={queryClient}
+        autoLoad={autoLoad}
+        {...(commandClient === undefined ? {} : { commandClient })}
+      />
 
       <div className="ld-stats-form">
         <Input

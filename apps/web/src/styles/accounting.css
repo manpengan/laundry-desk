@@ -1,0 +1,98 @@
+.ld-accounting {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 20px 0 28px;
+  padding: 18px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-leaf);
+}
+
+.ld-accounting__header h2,
+.ld-accounting__header p,
+.ld-accounting__table-section h3,
+.ld-accounting__table-section p,
+.ld-accounting__period {
+  margin: 0;
+}
+
+.ld-accounting__header p,
+.ld-accounting__period,
+.ld-accounting__table-section > p {
+  color: var(--lg-ink2);
+  font-size: 13px;
+}
+
+.ld-accounting__header p {
+  margin-top: 4px;
+}
+
+.ld-accounting__filters,
+.ld-accounting__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.ld-accounting__filters {
+  padding: 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface);
+}
+
+.ld-accounting__result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ld-accounting__confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ld-accounting__confirmation p {
+  margin: 0;
+}
+
+.ld-accounting__table-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ld-accounting__table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.ld-accounting__table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ld-accounting__table-wrap th,
+.ld-accounting__table-wrap td {
+  padding: 9px;
+  border-bottom: 1px solid var(--lg-hair);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ld-accounting__table-wrap th {
+  color: var(--lg-ink2);
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .ld-accounting__filters,
+  .ld-accounting__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

@@ -4,6 +4,7 @@
 @import "./fulfillment.css";
 @import "./shift-history.css";
 @import "./reminders.css";
+@import "./accounting.css";
 
 /* Counter shell layout (UI spec §3). Uses --lg-* tokens from @laundry/ui. */
 

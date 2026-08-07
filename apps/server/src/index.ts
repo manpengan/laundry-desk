@@ -333,6 +333,21 @@ export { createLocalRuntime, DEMO_PASSWORD, DEMO_PIN } from "./local/demo-seed.j
 export type { LocalRuntime } from "./local/demo-seed.js";
 
 export {
+  buildAccountingCsv,
+  createAccountingHandlers,
+  createMemoryAccountingSource,
+  createPgAccountingSource,
+  escapeAccountingCsvCell,
+  registerAccountingHandlers,
+} from "./accounting/index.js";
+export type {
+  AccountingHandlerDeps,
+  AccountingReadPort,
+  AccountingReadRequest,
+  MemoryAccountingSourceInput,
+} from "./accounting/index.js";
+
+export {
   buildNotificationCsv,
   createMemoryNotificationStore,
   createNotificationHandlers,

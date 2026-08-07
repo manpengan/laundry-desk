@@ -6,6 +6,7 @@
  */
 
 import {
+  ACCOUNTING_QUERIES,
   M1_FIRST_WAVE_DEFINITIONS,
   M2_CATALOG_DEFINITIONS,
   M2_CUSTOMER_QUERY_DEFINITIONS,
@@ -59,6 +60,7 @@ export const DEFAULT_BUS_QUERY_DEFINITIONS: readonly AnyDefinition[] = Object.fr
   ...(M3_FULFILLMENT_QUERY_DEFINITIONS as readonly AnyDefinition[]),
   ...(MEMBER_QUERIES as readonly AnyDefinition[]),
   ...(NOTIFICATION_QUERIES as readonly AnyDefinition[]),
+  ...(ACCOUNTING_QUERIES as readonly AnyDefinition[]),
   ...(RECONCILIATION_QUERIES as readonly AnyDefinition[]),
   ...(STAFF_QUERIES as readonly AnyDefinition[]),
 ]);

@@ -54,6 +54,7 @@ export function createRuntimeBus(runtime: LocalRuntime) {
     customer: runtime.customer,
     shift: runtime.shift,
     reconciliation: runtime.reconciliation,
+    accounting: runtime.accounting,
     photo: runtime.photo,
     fulfillment: runtime.fulfillment,
     staffAccess: runtime.staffAccess,

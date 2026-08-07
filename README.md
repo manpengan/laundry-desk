@@ -2,19 +2,19 @@
 
 产品目标是面向洗衣店行业提供通用 V2 柜台与经营系统，规划支持多租户、离线柜台、硬件打印和 AI-first 操作。
 
-当前优先完成本地 Web Server 与 macOS App，覆盖登录/PIN、收件、取衣、客户、会员储值、付款/欠款、照片、统计、交班、离线恢复、打印、权限与审计。
+当前只推进 Linux 本地 Web Server + Web，覆盖登录/PIN、收件、取衣、客户、会员储值、付款/欠款、照片、统计、交班、离线恢复、打印、权限与审计；macOS App 暂停开发与验收。
 
 ## 当前状态
 
-| 项         | 值                                                                                                                                                                                                                                                                                                                                                                                               |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 活动路线   | **通用 V2 本地优先交付**（[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)）；[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 保留为 V2-only 基础裁决                                                                                                                                                                                                    |
-| 当前阶段   | Linux 本地 Web 已进入催取工作台与人工名单交付；普通 offline grant、签名打印软件链与独立 Runtime.app 软件已进入本地交付，实体与正式发布门禁待完成                                                                                                                                                                                                                                                 |
-| 设计真源   | [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) · [Claude V2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) · [ADR-16](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-22](docs/adr/2026-08-01-adr-22-member-stored-value-phase-2.md) · [ADR-23](docs/adr/2026-08-07-adr-23-pickup-reminder-manual-list.md) |
-| 当前 owner | **Codex** — 设计、实现、集成与门禁                                                                                                                                                                                                                                                                                                                                                               |
-| 目标平台   | 本地 Web Server + macOS App 优先；云服务器部署与 Windows 适配后置                                                                                                                                                                                                                                                                                                                                |
+| 项         | 值                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 活动路线   | **通用 V2 本地优先交付**（[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)）；[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 保留为 V2-only 基础裁决                                                                                                                                                                                                                                                                            |
+| 当前阶段   | Linux 本地 Web 已交付账目双口径与日/月/职员报表；下一批按 P2 继续会员生命周期，再进入 P3 局域网 Owner Dashboard                                                                                                                                                                                                                                                                                                                                                          |
+| 设计真源   | [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) · [Claude V2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) · [ADR-16](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-22](docs/adr/2026-08-01-adr-22-member-stored-value-phase-2.md) · [ADR-23](docs/adr/2026-08-07-adr-23-pickup-reminder-manual-list.md) · [ADR-24](docs/adr/2026-08-07-adr-24-accounting-dual-basis-reports.md) |
+| 当前 owner | **Codex** — 设计、实现、集成与门禁                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 目标平台   | 当前：Linux 本地 Web Server + Web；macOS App、云服务器部署与 Windows 适配后置                                                                                                                                                                                                                                                                                                                                                                                            |
 
-当前已完成：`Local Foundation → 完整柜台工作日 → 履约/顾客/员工治理 → 本地备份恢复 → 加密离线队列与 Primary → 重放对账 → 会员储值二期 Web 柜台入口（含赠送与退款） → 催取工作台与人工名单 → 普通 offline grant → 签名打印软件链 → 独立 Runtime.app 软件`。催取名单只供电话或现有聊天工具人工联系，不含短信、微信或自动发送。尚未交付 XP-58 实体走样、Developer ID 签名/公证、正式 manifest 签名权威、已签名多架构 OCI，以及 Runtime.app upgrade/rollback；云部署和 Windows 仍后置。
+当前已完成：`Local Foundation → 完整柜台工作日 → 履约/顾客/员工治理 → 本地备份恢复 → 加密离线队列与 Primary → 重放对账 → 会员储值二期 Web 柜台入口（含赠送与退款） → 催取工作台与人工名单 → 账目双口径（日/月/职员） → 普通 offline grant → 签名打印软件链 → 独立 Runtime.app 软件`。催取名单只供电话或现有聊天工具人工联系，不含短信、微信或自动发送。当前 Linux Web 报表不含老板 H5 或 AI 分析；macOS 后续开发与验收暂停，云部署和 Windows 仍后置。
 
 宏发版本停止开发；根 `src/` 只作为历史行为参考，不作为当前产品入口。
 
@@ -38,7 +38,7 @@ Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 ·
 
 ## 当前交付顺序
 
-`XP-58 实体走样 → Developer ID/公证 → 正式 manifest 权威与签名多架构 OCI → Runtime upgrade/rollback → later cloud/Windows`
+`P2 会员生命周期 → P3 局域网 Owner Dashboard → later 工厂协同/取送/营销 → macOS/云/Windows 后置`
 
 历史 [Grok owner 任务书](docs/superpowers/plans/tasks/2026-07-21-task-grok-lead.md) 仅作治理记录，不是当前执行入口。
 
