@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseMemberAccountView, topupAmountToCents } from "./member-model.js";
+import {
+  centsToYuanInput,
+  parseMemberAccountView,
+  parseMemberBonusRules,
+  topupAmountToCents,
+  yuanAmountToCents,
+} from "./member-model.js";
 
 test("topupAmountToCents converts whole yuan", () => {
   assert.equal(topupAmountToCents("100"), 10_000);
@@ -31,6 +37,57 @@ test("topupAmountToCents refuses zero, negative and non-numeric input", () => {
 test("topupAmountToCents refuses more than two decimals", () => {
   assert.equal(topupAmountToCents("1.234"), null);
   assert.equal(topupAmountToCents("1.005"), null);
+});
+
+test("yuanAmountToCents accepts a zero bonus without floating point", () => {
+  assert.equal(yuanAmountToCents("0"), 0);
+  assert.equal(yuanAmountToCents("8.29"), 829);
+  assert.equal(centsToYuanInput(829), "8.29");
+});
+
+test("parseMemberBonusRules validates the complete authority response", () => {
+  assert.deepEqual(
+    parseMemberBonusRules({
+      rules: [
+        {
+          rule_id: "r1",
+          min_topup_cents: 100_000,
+          bonus_cents: 10_000,
+          status: "active",
+          note: "台卡活动",
+        },
+      ],
+    }),
+    [
+      {
+        rule_id: "r1",
+        min_topup_cents: 100_000,
+        bonus_cents: 10_000,
+        status: "active",
+        note: "台卡活动",
+      },
+    ],
+  );
+  assert.equal(
+    parseMemberBonusRules({
+      rules: [{ rule_id: "r1", min_topup_cents: 0, bonus_cents: 10, status: "active" }],
+    }),
+    null,
+  );
+  assert.equal(
+    parseMemberBonusRules({
+      rules: [
+        {
+          rule_id: "r1",
+          min_topup_cents: 100,
+          bonus_cents: 10,
+          status: "active",
+          note: 42,
+        },
+      ],
+    }),
+    null,
+  );
 });
 
 const rows = [
