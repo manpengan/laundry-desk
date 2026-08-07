@@ -83,7 +83,7 @@ test("resolveRouteGate denies staff on settings with fallback", () => {
 test("visibleNavItems for staff omits stats and settings", () => {
   const items = visibleNavItems(permissionContextFrom("staff", STAFF_STORE_FEATURES));
   const ids = items.map((i) => i.id);
-  assert.deepEqual(ids, ["workbench", "receive", "pickup", "orders", "customers"]);
+  assert.deepEqual(ids, ["workbench", "receive", "pickup", "orders", "customers", "reminders"]);
 });
 
 test("RouteGate denied SSR shows 无权限 EmptyState without crash", () => {
@@ -145,7 +145,15 @@ test("admin CounterShell sidebar includes all nav ids", () => {
     ),
   );
   assert.match(html, /data-role="admin"/);
-  for (const id of ["workbench", "receive", "pickup", "customers", "stats", "settings"]) {
+  for (const id of [
+    "workbench",
+    "receive",
+    "pickup",
+    "customers",
+    "reminders",
+    "stats",
+    "settings",
+  ]) {
     assert.match(html, new RegExp(`data-nav-id="${id}"`));
   }
   assert.doesNotMatch(html, /data-route-gate="denied"/);

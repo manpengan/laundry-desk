@@ -145,6 +145,24 @@ test("PageHost workbench with session+queryClient mounts three-pane counter work
   assert.match(html, /欠款/);
 });
 
+test("PageHost reminder route mounts the explicit manual fallback", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(PageHost, {
+        activeId: "reminders",
+        onNavigate: () => undefined,
+        session: sampleSession,
+        commandClient: createMockCommandClient(),
+        queryClient: createMockQueryClient(),
+      }),
+    ),
+  );
+  assert.match(html, /催取工作台/);
+  assert.match(html, /短信、微信未接入/);
+});
+
 test("App shell SSR includes skip link, sync bar, print indicator when authenticated", () => {
   const html = renderToStaticMarkup(
     createElement(App, {

@@ -1,0 +1,70 @@
+.ld-reminders {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ld-reminders__header,
+.ld-reminders__filters,
+.ld-reminders__composer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ld-reminders__header {
+  justify-content: space-between;
+}
+
+.ld-reminders__filters,
+.ld-reminders__composer {
+  padding: 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-leaf);
+}
+
+.ld-reminders__filters label,
+.ld-reminders__composer label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ld-reminders__table-wrap {
+  overflow-x: auto;
+}
+
+.ld-reminders__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ld-reminders__table th,
+.ld-reminders__table td {
+  padding: 10px;
+  border-bottom: 1px solid var(--lg-hair);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.ld-reminders__template {
+  flex: 1 1 480px;
+  align-items: stretch !important;
+  flex-direction: column;
+}
+
+.ld-reminders__template textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+@media (max-width: 760px) {
+  .ld-reminders__header,
+  .ld-reminders__filters,
+  .ld-reminders__composer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

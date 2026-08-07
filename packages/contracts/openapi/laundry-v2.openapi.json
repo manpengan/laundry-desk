@@ -6608,6 +6608,78 @@
         ],
         "type": "object"
       },
+      "input.command.notification.manual_list.create": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "const": "csv",
+            "type": "string"
+          },
+          "garment_statuses": {
+            "items": {
+              "enum": [
+                "ready",
+                "racked"
+              ],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "type": "array"
+          },
+          "group_by": {
+            "enum": [
+              "order",
+              "customer"
+            ],
+            "type": "string"
+          },
+          "message_template": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "min_age_days": {
+            "anyOf": [
+              {
+                "const": 30,
+                "type": "number"
+              },
+              {
+                "const": 90,
+                "type": "number"
+              },
+              {
+                "const": 180,
+                "type": "number"
+              }
+            ]
+          },
+          "order_ids": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array"
+          },
+          "unpaid_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "order_ids",
+          "group_by",
+          "message_template",
+          "format",
+          "min_age_days",
+          "unpaid_only",
+          "garment_statuses"
+        ],
+        "type": "object"
+      },
       "input.command.order.cancel": {
         "additionalProperties": false,
         "properties": {
@@ -7346,6 +7418,48 @@
         "additionalProperties": false,
         "properties": {
           "include_retired": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "input.query.notification.pickup_reminders.list": {
+        "additionalProperties": false,
+        "properties": {
+          "garment_statuses": {
+            "items": {
+              "enum": [
+                "ready",
+                "racked"
+              ],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "type": "array"
+          },
+          "limit": {
+            "exclusiveMinimum": 0,
+            "maximum": 200,
+            "type": "integer"
+          },
+          "min_age_days": {
+            "anyOf": [
+              {
+                "const": 30,
+                "type": "number"
+              },
+              {
+                "const": 90,
+                "type": "number"
+              },
+              {
+                "const": 180,
+                "type": "number"
+              }
+            ]
+          },
+          "unpaid_only": {
             "type": "boolean"
           }
         },
@@ -9237,6 +9351,58 @@
         "x-laundry-version": "1.0.0"
       }
     },
+    "/v1/commands/notification.manual_list.create": {
+      "post": {
+        "description": "After R3 confirmation, lock and revalidate the selected orders, render a deterministic CSV and record only hashes. This creates a manual list; it never sends or marks a notification delivered. Stable command name: `notification.manual_list.create` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_notification_manual_list_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.notification.manual_list.create"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Generate an audited manual pickup-reminder CSV for 1 to 50 current candidates.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "0.1.0"
+      }
+    },
     "/v1/commands/order.cancel": {
       "post": {
         "description": "Cancel one open order only with a non-empty reason. Runtime writes auditable reversals; it never deletes ledger rows. Stable command name: `order.cancel` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -10535,6 +10701,58 @@
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R1",
         "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/notification.pickup_reminders.list": {
+      "post": {
+        "description": "Return a bounded PII-bearing counter worklist for human contact. This query is deliberately excluded from the AI tool projection and does not imply that any message was sent. Stable query name: `notification.pickup_reminders.list` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_notification_pickup_reminders_list",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.notification.pickup_reminders.list"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List store-scoped pickup reminder candidates for manual contact.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "0.1.0"
       }
     },
     "/v1/queries/order.get": {

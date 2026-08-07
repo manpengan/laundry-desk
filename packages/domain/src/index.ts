@@ -8,3 +8,4 @@ export * from "./order/index.js";
 export * from "./catalog/index.js";
 export * from "./print/index.js";
 export * from "./stats/index.js";
+export * from "./notification/index.js";
