@@ -14,6 +14,8 @@ const SERVER_CONFIG = Object.freeze({
   listenHost: "127.0.0.1",
   port: 8787,
   browserOrigin: "http://127.0.0.1:5173",
+  browserFetchSite: "same-site",
+  cookieSecure: false,
   hostAuthorities: Object.freeze(["127.0.0.1:8787"] as const),
   accessTokenSecret: "a".repeat(32),
   csrfProofSecret: "b".repeat(32),

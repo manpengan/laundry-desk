@@ -3,6 +3,7 @@
  */
 
 import type { CommandFailure, CommandPort, CommandResult } from "./types.js";
+import { readMemberTopupConfirmationSummary } from "./member-topup-confirmation.js";
 
 /** Matches packages/contracts CSRF_HEADER_NAME. */
 const CSRF_HEADER_NAME = "x-csrf-token";
@@ -35,13 +36,20 @@ function parseFailure(body: unknown): CommandFailure {
   const message = typeof err.message === "string" ? err.message : undefined;
   let detail: CommandFailure["detail"];
   if (isRecord(err.detail)) {
-    detail = Object.freeze({
-      ...(typeof err.detail.kind === "string" ? { kind: err.detail.kind } : {}),
-      ...(typeof err.detail.confirm_ref === "string"
-        ? { confirm_ref: err.detail.confirm_ref }
-        : {}),
-      ...(typeof err.detail.message === "string" ? { message: err.detail.message } : {}),
-    });
+    const summary =
+      err.detail.summary === undefined
+        ? undefined
+        : readMemberTopupConfirmationSummary(err.detail.summary);
+    if (summary !== null) {
+      detail = Object.freeze({
+        ...(typeof err.detail.kind === "string" ? { kind: err.detail.kind } : {}),
+        ...(typeof err.detail.confirm_ref === "string"
+          ? { confirm_ref: err.detail.confirm_ref }
+          : {}),
+        ...(typeof err.detail.message === "string" ? { message: err.detail.message } : {}),
+        ...(summary === undefined ? {} : { summary }),
+      });
+    }
   }
   return Object.freeze({
     code,

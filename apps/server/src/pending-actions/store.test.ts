@@ -16,6 +16,7 @@ const baseInput = (overrides: Partial<CreatePendingActionInput> = {}): CreatePen
     command: overrides.command ?? "order.refund",
     commandVersion: overrides.commandVersion ?? "1.0.0",
     args: overrides.args ?? { order_id: "o1", amount_cents: 500 },
+    ...(overrides.authority === undefined ? {} : { authority: overrides.authority }),
     entityVersions:
       overrides.entityVersions ??
       Object.freeze([{ entityType: "order", entityId: ORG, version: 3 }]),
@@ -52,6 +53,20 @@ test("WYSIWYS: different args produce different hash; old card hash mismatches",
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.reason, "ARGS_HASH_MISMATCH");
   assert.equal(store.get(card.nonce)?.status, "pending");
+});
+
+test("server authority is frozen and participates in the WYSIWYS hash", () => {
+  const store = new MemoryPendingActionStore();
+  const authority = {
+    kind: "member_topup",
+    bonus_cents: 1_000,
+    bonus_rule_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+  };
+  const card = store.create(baseInput({ authority }));
+
+  assert.deepEqual(card.authority, authority);
+  assert.ok(Object.isFrozen(card.authority));
+  assert.equal(card.argsHash, hashCanonical({ args: card.args, authority: card.authority }));
 });
 
 test("self-approve rejected when requiresOtherApprover", () => {

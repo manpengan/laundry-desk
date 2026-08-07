@@ -22,6 +22,13 @@ test("runtime roles separate protective freeze from lifecycle administration", (
   assert.equal(staff.includes("member_refund"), false);
 });
 
+test("owner dashboard accounting authority remains admin-only", () => {
+  const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
+  const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });
+  assert.ok(admin.includes("accounting_read"));
+  assert.equal(staff.includes("accounting_read"), false);
+});
+
 test("runtime bus registers the complete member command and query surface", async () => {
   const runtime = await createMemoryLocalRuntime();
   const bus = createRuntimeBus(runtime);
@@ -35,4 +42,5 @@ test("runtime bus registers the complete member command and query surface", asyn
   assert.ok(bus.registeredQueries.includes("member.account.get"));
   assert.ok(bus.registered.includes("notification.manual_list.create"));
   assert.ok(bus.registeredQueries.includes("notification.pickup_reminders.list"));
+  assert.ok(bus.registeredQueries.includes("reporting.owner_dashboard.get"));
 });

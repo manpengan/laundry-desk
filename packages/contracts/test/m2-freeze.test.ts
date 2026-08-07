@@ -83,8 +83,9 @@ describe("M2 contract surface", () => {
     // ADR-23: PII-bearing manual counter worklist, deliberately not in AI tools.
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.pickup_reminders.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("accounting.report.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.get");
     expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(39);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(22);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(23);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
@@ -125,6 +126,9 @@ describe("M2 contract surface", () => {
     );
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "accounting.report.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "reporting.owner_dashboard.get",
     );
   });
 

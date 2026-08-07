@@ -191,6 +191,20 @@ export type {
   AccountingReportRow,
 } from "./accounting.js";
 export {
+  REPORTING_QUERIES,
+  REPORTING_QUERY_NAMES,
+  OwnerDashboardInputSchema,
+  OwnerDashboardResultSchema,
+  OwnerDashboardTodaySchema,
+  OwnerDashboardTrendPointSchema,
+  reportingOwnerDashboardGetQuery,
+} from "./reporting.js";
+export type {
+  OwnerDashboardResult,
+  OwnerDashboardToday,
+  OwnerDashboardTrendPoint,
+} from "./reporting.js";
+export {
   RECONCILIATION_COMMANDS,
   RECONCILIATION_QUERIES,
   ReconciliationDayGetInputSchema,

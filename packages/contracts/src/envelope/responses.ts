@@ -68,6 +68,65 @@ export type AuthPublicErrorDescriptor =
   (typeof AUTH_PUBLIC_ERROR_DESCRIPTORS)[keyof typeof AUTH_PUBLIC_ERROR_DESCRIPTORS];
 export type AuthPublicErrorCode = keyof typeof AUTH_PUBLIC_ERROR_DESCRIPTORS;
 
+const ConfirmationCentsSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+
+const MemberTopupMatchedRuleSchema = z
+  .object({
+    rule_id: z.uuid(),
+    min_topup_cents: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    bonus_cents: ConfirmationCentsSchema,
+  })
+  .strict();
+
+/**
+ * Public, money-only WYSIWYS summary for ADR-22 member top-up confirmation.
+ *
+ * It deliberately contains no customer/account identity or caller arguments.
+ * The server owns every number and binds the same snapshot to the pending card.
+ */
+export const MemberTopupConfirmationSummarySchema = z
+  .object({
+    kind: z.literal("member_topup"),
+    principal_cents: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    bonus_cents: ConfirmationCentsSchema,
+    credited_cents: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+    matched_rule: MemberTopupMatchedRuleSchema.nullable(),
+  })
+  .strict()
+  .superRefine((summary, context) => {
+    if (summary.credited_cents !== summary.principal_cents + summary.bonus_cents) {
+      context.addIssue({
+        code: "custom",
+        path: ["credited_cents"],
+        message: "credited total must equal principal plus bonus",
+      });
+    }
+    if (summary.matched_rule === null) {
+      if (summary.bonus_cents !== 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["bonus_cents"],
+          message: "an unmatched top-up cannot grant a bonus",
+        });
+      }
+      return;
+    }
+    if (summary.matched_rule.bonus_cents !== summary.bonus_cents) {
+      context.addIssue({
+        code: "custom",
+        path: ["matched_rule", "bonus_cents"],
+        message: "matched rule bonus must equal the frozen bonus",
+      });
+    }
+    if (summary.matched_rule.min_topup_cents > summary.principal_cents) {
+      context.addIssue({
+        code: "custom",
+        path: ["matched_rule", "min_topup_cents"],
+        message: "matched rule threshold exceeds the top-up principal",
+      });
+    }
+  });
+
 const ErrorDetailSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("field"), path: JsonPointerSchema }).strict(),
   z
@@ -76,7 +135,13 @@ const ErrorDetailSchema = z.discriminatedUnion("kind", [
       reason: z.enum(["constraint", "unavailable", "retry_later", "idempotency_conflict"]),
     })
     .strict(),
-  z.object({ kind: z.literal("confirmation"), confirm_ref: ConfirmReferenceSchema }).strict(),
+  z
+    .object({
+      kind: z.literal("confirmation"),
+      confirm_ref: ConfirmReferenceSchema,
+      summary: MemberTopupConfirmationSummarySchema.optional(),
+    })
+    .strict(),
   z.object({ kind: z.literal("step_up"), methods: z.array(z.enum(["pin", "qr"])).min(1) }).strict(),
   z.object({ kind: z.literal("approval"), approval_ref: z.uuid() }).strict(),
 ]);
@@ -88,6 +153,9 @@ type DeepReadonly<T> = T extends readonly (infer Item)[]
     : T;
 
 export type CommandErrorDetail = DeepReadonly<z.output<typeof ErrorDetailSchema>>;
+export type MemberTopupConfirmationSummary = DeepReadonly<
+  z.output<typeof MemberTopupConfirmationSummarySchema>
+>;
 
 const createErrorSchema = <TCode extends CommandErrorCode, TMessage extends string>(
   code: TCode,
@@ -143,10 +211,22 @@ type DetailedCommandErrorCode = Exclude<CommandErrorCode, AuthPublicErrorCode>;
 
 const freezeCommandError = (error: CommandError): CommandError => {
   if (!("detail" in error) || error.detail === undefined) return Object.freeze(error);
-  const detail =
-    error.detail.kind === "step_up"
-      ? { ...error.detail, methods: [...error.detail.methods] }
-      : { ...error.detail };
+  const detail = (() => {
+    if (error.detail.kind === "step_up") {
+      return { ...error.detail, methods: [...error.detail.methods] };
+    }
+    if (error.detail.kind === "confirmation" && error.detail.summary !== undefined) {
+      const matchedRule =
+        error.detail.summary.matched_rule === null
+          ? null
+          : Object.freeze({ ...error.detail.summary.matched_rule });
+      return {
+        ...error.detail,
+        summary: Object.freeze({ ...error.detail.summary, matched_rule: matchedRule }),
+      };
+    }
+    return { ...error.detail };
+  })();
   if (detail.kind === "step_up") Object.freeze(detail.methods);
   return Object.freeze({ ...error, detail: Object.freeze(detail) });
 };

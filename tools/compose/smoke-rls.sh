@@ -89,10 +89,13 @@ elif [[ -z "${APP_PASSWORD_VALUE}" || -z "${ADMIN_PASSWORD_VALUE}" ]]; then
 fi
 
 ORG_A="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+STORE_A="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 STAFF_A="11111111-1111-4111-8111-111111111103"
+STORE_A_OTHER="abababab-abab-4bab-8bab-abababababab"
 ORG_B="cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 STORE_B="dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 STAFF_B="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+PENDING_A="fafafafa-fafa-4afa-8afa-fafafafafafa"
 
 compose_postgres_container() {
   docker compose -p "${COMPOSE_PROJECT_NAME}" -f "${COMPOSE_FILE}" ps -q postgres 2>/dev/null
@@ -219,6 +222,7 @@ require_tables() {
     sessions refresh_families refresh_tokens pin_challenges pin_lockouts orders order_lines garments
     ticket_counters catalog_items payments print_jobs customers shift_closings garment_photos
     garment_status_log garment_incidents
+    ai_pending_actions
   )
   local table
   for table in "${expected[@]}"; do
@@ -226,13 +230,16 @@ require_tables() {
     found="$(psql_app -c "SELECT to_regclass('public.${table}')::text")"
     [[ "${found}" == "${table}" ]] || die "missing formal table: ${table}"
   done
-  pass "all formal migrations (0001–0026) are present"
+  pass "required formal RLS tables, including ai_pending_actions, are present"
 }
 
 assert_default_closed() {
-  local no_guc empty_guc
+  local no_guc empty_guc pending_no_guc pending_empty_guc
   no_guc="$(psql_app -c 'SELECT count(*)::text FROM staffs')"
   [[ "${no_guc}" == '0' ]] || die "unset GUC exposed ${no_guc} staff rows"
+  pending_no_guc="$(psql_app -c 'SELECT count(*)::text FROM ai_pending_actions')"
+  [[ "${pending_no_guc}" == '0' ]] ||
+    die "unset GUC exposed ${pending_no_guc} pending-action rows"
 
   empty_guc="$(psql_app <<'SQL'
 BEGIN;
@@ -244,6 +251,17 @@ SQL
   )"
   empty_guc="$(printf '%s\n' "${empty_guc}" | tail -n 1)"
   [[ "${empty_guc}" == '0' ]] || die "empty GUC exposed ${empty_guc} staff rows"
+  pending_empty_guc="$(psql_app <<'SQL'
+BEGIN;
+SELECT set_config('app.org_id', '', true);
+SELECT set_config('app.store_id', '', true);
+SELECT count(*)::text FROM ai_pending_actions;
+COMMIT;
+SQL
+  )"
+  pending_empty_guc="$(printf '%s\n' "${pending_empty_guc}" | tail -n 1)"
+  [[ "${pending_empty_guc}" == '0' ]] ||
+    die "empty GUC exposed ${pending_empty_guc} pending-action rows"
   pass "unset and empty GUCs default closed"
 }
 
@@ -296,6 +314,97 @@ SQL
   other="$(printf '%s\n' "${other}" | tail -n 1)"
   [[ "${other}" == '0' ]] || die "tenant B observed tenant A row"
   pass "tenant A/B isolation holds under laundry_app"
+}
+
+assert_pending_action_isolation() {
+  local own unset_scope empty_scope other_store other_org
+  psql_app <<SQL
+BEGIN;
+SET LOCAL app.org_id = '${ORG_A}';
+INSERT INTO stores (id, org_id, code, name, timezone, created_at, updated_at)
+VALUES ('${STORE_A_OTHER}'::uuid, '${ORG_A}'::uuid, 'rls-a-other', 'RLS Smoke A Other', 'Asia/Taipei', now(), now())
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, updated_at = EXCLUDED.updated_at;
+COMMIT;
+
+BEGIN;
+SET LOCAL app.org_id = '${ORG_A}';
+SET LOCAL app.store_id = '${STORE_A}';
+DELETE FROM ai_pending_actions WHERE nonce = '${PENDING_A}'::uuid;
+INSERT INTO ai_pending_actions (
+  nonce, org_id, store_id, command, command_version, args_json,
+  authority_present, args_hash, entity_versions_json, creator_staff_id,
+  idempotency_key, created_at_epoch, expires_at_epoch, status,
+  effective_risk, policy_outcome, requires_other_approver
+)
+VALUES (
+  '${PENDING_A}'::uuid, '${ORG_A}'::uuid, '${STORE_A}'::uuid,
+  'member.topup', '1.0.0', '{}'::jsonb, false,
+  repeat('a', 64), '[]'::jsonb, '${STAFF_A}'::uuid,
+  '${PENDING_A}'::uuid, 1700000000, 1700000300, 'pending', 'R3', 'confirm', false
+);
+COMMIT;
+SQL
+
+  unset_scope="$(psql_app -c "SELECT count(*)::text FROM ai_pending_actions WHERE nonce = '${PENDING_A}'::uuid")"
+  [[ "${unset_scope}" == '0' ]] || die "unset GUC exposed a pending action"
+
+  empty_scope="$(psql_app <<SQL
+BEGIN;
+SELECT set_config('app.org_id', '', true);
+SELECT set_config('app.store_id', '', true);
+SELECT count(*)::text FROM ai_pending_actions WHERE nonce = '${PENDING_A}'::uuid;
+COMMIT;
+SQL
+  )"
+  empty_scope="$(printf '%s\n' "${empty_scope}" | tail -n 1)"
+  [[ "${empty_scope}" == '0' ]] || die "empty GUC exposed a pending action"
+
+  own="$(psql_app <<SQL
+BEGIN;
+SET LOCAL app.org_id = '${ORG_A}';
+SET LOCAL app.store_id = '${STORE_A}';
+SELECT count(*)::text FROM ai_pending_actions WHERE nonce = '${PENDING_A}'::uuid;
+COMMIT;
+SQL
+  )"
+  own="$(printf '%s\n' "${own}" | tail -n 1)"
+  [[ "${own}" == '1' ]] || die "pending action is hidden from its own store"
+
+  other_store="$(psql_app <<SQL
+BEGIN;
+SET LOCAL app.org_id = '${ORG_A}';
+SET LOCAL app.store_id = '${STORE_A_OTHER}';
+SELECT count(*)::text FROM ai_pending_actions WHERE nonce = '${PENDING_A}'::uuid;
+COMMIT;
+SQL
+  )"
+  other_store="$(printf '%s\n' "${other_store}" | tail -n 1)"
+  [[ "${other_store}" == '0' ]] || die "another store observed a pending action"
+
+  other_org="$(psql_app <<SQL
+BEGIN;
+SET LOCAL app.org_id = '${ORG_B}';
+SET LOCAL app.store_id = '${STORE_B}';
+SELECT count(*)::text FROM ai_pending_actions WHERE nonce = '${PENDING_A}'::uuid;
+COMMIT;
+SQL
+  )"
+  other_org="$(printf '%s\n' "${other_org}" | tail -n 1)"
+  [[ "${other_org}" == '0' ]] || die "another organization observed a pending action"
+
+  psql_app <<SQL
+BEGIN;
+SET LOCAL app.org_id = '${ORG_A}';
+SET LOCAL app.store_id = '${STORE_A}';
+DELETE FROM ai_pending_actions WHERE nonce = '${PENDING_A}'::uuid;
+COMMIT;
+
+BEGIN;
+SET LOCAL app.org_id = '${ORG_A}';
+DELETE FROM stores WHERE id = '${STORE_A_OTHER}'::uuid;
+COMMIT;
+SQL
+  pass "pending-action RLS blocks unset, cross-store and cross-organization reads"
 }
 
 assert_org_writes_denied() {
@@ -360,6 +469,7 @@ main() {
   assert_default_closed
   seed_second_tenant
   assert_tenant_isolation
+  assert_pending_action_isolation
   assert_org_writes_denied
   assert_runtime_ddl_denied
   assert_no_bypass

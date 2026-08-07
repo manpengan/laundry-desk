@@ -8,6 +8,7 @@ import type {
   CommandError,
 } from "@laundry/contracts";
 import type { z } from "zod";
+import type { CanonicalJson } from "../pending-actions/types.js";
 import type { SqlClient, TenantContext, Uuid } from "../db/types.js";
 
 /** M1 bus registers classic ZodObject command definitions only. */
@@ -82,6 +83,8 @@ export type HandlerContext = Readonly<{
   actor: ActorContext;
   request: CommandRequest;
   parsed: unknown;
+  /** Hash-bound server authority recovered from a pending confirmation card. */
+  confirmationAuthority?: CanonicalJson;
 }>;
 
 /** Business mutation handler — runs only when chain passes and dry_run is false. */
@@ -167,8 +170,9 @@ export type CommandIdempotencyStore = IdempotencyStore | TransactionalIdempotenc
  */
 export type ConfirmAuthorization = Readonly<{
   confirmRef: string;
-  /** SHA-256 hex of frozen args (WYSIWYS re-check at consume). */
+  /** SHA-256 hex of frozen args plus optional authority (WYSIWYS re-check at consume). */
   argsHash: string;
+  authority?: CanonicalJson;
 }>;
 
 /** Runtime context shared by chain adapter + executor. */
@@ -177,8 +181,12 @@ export type BusContext = Readonly<{
   actor: ActorContext;
   request: CommandRequest;
   definition: BusCommandDefinition;
+  /** Present only while the validation chain is executing inside the tenant transaction. */
+  transactionClient?: SqlClient;
   /** True after confirm_ref pre-validation; skips confirm/step_up card creation. */
   confirmAuthorized?: boolean;
+  /** A completed idempotent result still requires current RBAC and pure policy authorization. */
+  idempotentReplay?: true;
   confirmAuthorization?: ConfirmAuthorization;
 }>;
 

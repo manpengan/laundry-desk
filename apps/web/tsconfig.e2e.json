@@ -5,5 +5,10 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["e2e/**/*.ts", "playwright.local.config.ts"]
+  "include": [
+    "e2e/**/*.ts",
+    "e2e-lan/**/*.ts",
+    "playwright.local.config.ts",
+    "playwright.lan.config.ts"
+  ]
 }

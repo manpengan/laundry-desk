@@ -14,7 +14,9 @@ import {
   type PendingActionStore,
 } from "./types.js";
 
-const freezeEntityVersions = (versions: readonly EntityVersion[]): readonly EntityVersion[] =>
+export const freezeEntityVersions = (
+  versions: readonly EntityVersion[],
+): readonly EntityVersion[] =>
   Object.freeze(
     versions.map((entry) =>
       Object.freeze({
@@ -25,7 +27,39 @@ const freezeEntityVersions = (versions: readonly EntityVersion[]): readonly Enti
     ),
   );
 
-const freezeAction = (action: PendingAction): PendingAction => Object.freeze({ ...action });
+export const freezePendingAction = (action: PendingAction): PendingAction =>
+  Object.freeze({ ...action });
+
+/** Build the one canonical snapshot used by both memory and PostgreSQL stores. */
+export function createPendingActionSnapshot(input: CreatePendingActionInput): PendingAction {
+  const args = freezeCanonical(input.args);
+  const authority = input.authority === undefined ? undefined : freezeCanonical(input.authority);
+  const argsHash = hashCanonical(
+    authority === undefined ? args : Object.freeze({ args, authority }),
+  );
+  const ttl = input.ttlSeconds ?? PENDING_ACTION_TTL_SECONDS;
+  return freezePendingAction({
+    nonce: input.nonce,
+    command: input.command,
+    commandVersion: input.commandVersion,
+    args,
+    ...(authority === undefined ? {} : { authority }),
+    argsHash,
+    entityVersions: freezeEntityVersions(input.entityVersions),
+    creatorStaffId: input.creatorStaffId,
+    orgId: input.orgId,
+    storeId: input.storeId,
+    idempotencyKey: input.idempotencyKey,
+    createdAt: input.createdAt,
+    expiresAt: input.createdAt + ttl,
+    status: "pending",
+    effectiveRisk: input.effectiveRisk,
+    policyOutcome: input.policyOutcome,
+    requiresOtherApprover: input.requiresOtherApprover,
+    consumedByStaffId: null,
+    consumedAt: null,
+  });
+}
 
 /**
  * Process-local store. Not shared across workers — Postgres CAS is the durable form.
@@ -38,29 +72,7 @@ export class MemoryPendingActionStore implements PendingActionStore {
       throw new Error(`Pending action nonce already exists: ${input.nonce}`);
     }
 
-    const args = freezeCanonical(input.args);
-    const argsHash = hashCanonical(args);
-    const ttl = input.ttlSeconds ?? PENDING_ACTION_TTL_SECONDS;
-    const action = freezeAction({
-      nonce: input.nonce,
-      command: input.command,
-      commandVersion: input.commandVersion,
-      args,
-      argsHash,
-      entityVersions: freezeEntityVersions(input.entityVersions),
-      creatorStaffId: input.creatorStaffId,
-      orgId: input.orgId,
-      storeId: input.storeId,
-      idempotencyKey: input.idempotencyKey,
-      createdAt: input.createdAt,
-      expiresAt: input.createdAt + ttl,
-      status: "pending",
-      effectiveRisk: input.effectiveRisk,
-      policyOutcome: input.policyOutcome,
-      requiresOtherApprover: input.requiresOtherApprover,
-      consumedByStaffId: null,
-      consumedAt: null,
-    });
+    const action = createPendingActionSnapshot(input);
 
     this.records.set(action.nonce, action);
     return action;
@@ -97,7 +109,7 @@ export class MemoryPendingActionStore implements PendingActionStore {
     }
     if (current.status === "expired" || now >= current.expiresAt) {
       if (current.status === "pending") {
-        this.records.set(nonce, freezeAction({ ...current, status: "expired" }));
+        this.records.set(nonce, freezePendingAction({ ...current, status: "expired" }));
       }
       return Object.freeze({ ok: false as const, reason: "EXPIRED" as const });
     }
@@ -115,7 +127,7 @@ export class MemoryPendingActionStore implements PendingActionStore {
       return Object.freeze({ ok: false as const, reason: "ALREADY_CONSUMED" as const });
     }
 
-    const consumed = freezeAction({
+    const consumed = freezePendingAction({
       ...current,
       status: "consumed",
       consumedByStaffId: approverStaffId,

@@ -13,7 +13,7 @@ import {
   resolveSession,
   type RouteSecurityContext,
 } from "./auth-route-support.js";
-import { executeTrustedSessionCommand } from "./bus-routes.js";
+import { applyCommandErrorStatus, executeTrustedSessionCommand } from "./bus-routes.js";
 import { safeErrorContext } from "./local-logger.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -188,12 +188,16 @@ export function registerPhotoFileRoutes(
           byte_size: installed.byte_size,
           ...(query.data.taken_at === undefined ? {} : { taken_at: query.data.taken_at }),
         }),
-        Object.freeze({ idempotencyKey: query.data.upload_id }),
+        Object.freeze({
+          idempotencyKey: query.data.upload_id,
+          onUnexpectedError: (error: unknown) =>
+            request.log.error(safeErrorContext(error), "photo register execution failed"),
+        }),
       );
       if (!result.ok) {
         await files.remove(installed.storage_key, installed.content_sha256);
         installed = null;
-        reply.code(result.error.code === "PERMISSION_DENIED" ? 403 : 400);
+        applyCommandErrorStatus(reply, result.error.code);
       }
       return result;
     } catch (error) {
@@ -237,10 +241,14 @@ export function registerPhotoFileRoutes(
         resolved,
         "photo.delete",
         Object.freeze({ photo_id: photoId }),
-        Object.freeze({ idempotencyKey: body.data.delete_id }),
+        Object.freeze({
+          idempotencyKey: body.data.delete_id,
+          onUnexpectedError: (error: unknown) =>
+            request.log.error(safeErrorContext(error), "photo delete execution failed"),
+        }),
       );
       if (!result.ok) {
-        reply.code(result.error.code === "PERMISSION_DENIED" ? 403 : 400);
+        applyCommandErrorStatus(reply, result.error.code);
         return result;
       }
       if (privateRecord !== null && privateRecord.content_sha256 !== null) {

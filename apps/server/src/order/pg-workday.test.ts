@@ -31,6 +31,9 @@ import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
 import { acquirePgBusinessDayLock } from "../workday/business-day-lock.js";
+import { processPendingActionStore } from "../pending-actions/process-store.js";
+import { createStepUpProof } from "../policy/step-up.js";
+import { MemoryStepUpProofStore } from "../policy/step-up-proof-store.js";
 import { createPgOrderStore } from "./pg-order-store.js";
 
 const urls =
@@ -324,13 +327,34 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     if (refundDetail?.kind !== "confirmation") {
       assert.fail("payment.refund must return a step-up confirmation reference");
     }
-    const approverTenant = Object.freeze({ ...TENANT, staffId: APPROVER.staffId });
-    const refunded = await issueAs(
-      APPROVER,
-      approverTenant,
-      "payment.refund",
-      {},
-      refundDetail.confirm_ref,
+    const pending = await processPendingActionStore.get(refundDetail.confirm_ref);
+    assert.ok(pending);
+    const sessionBinding = Object.freeze({ sessionId: randomUUID(), sessionVersion: 1 });
+    const proofStore = new MemoryStepUpProofStore();
+    await proofStore.insert(
+      createStepUpProof({
+        proofId: randomUUID(),
+        pending,
+        approverStaffId: APPROVER.staffId,
+        issuedAt: Math.floor(Date.now() / 1000),
+        sessionBinding,
+      }),
+    );
+    const refunded = await withPoolClient(appPool, (sql) =>
+      executeCommand(
+        sql,
+        TENANT,
+        "payment.refund",
+        {},
+        {
+          registry,
+          actor: ACTOR,
+          chainHooks,
+          stepUpProofStore: proofStore,
+          confirmRef: refundDetail.confirm_ref,
+          sessionBinding,
+        },
+      ),
     );
     assert.equal(refunded.ok, true, JSON.stringify(refunded));
     if (!refunded.ok) assert.fail("approved refund must execute");

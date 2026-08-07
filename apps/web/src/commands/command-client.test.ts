@@ -54,6 +54,60 @@ test("HTTP command client posts confirm_ref only on resume hop", async () => {
   assert.equal(calls[0]!.body, JSON.stringify({ confirm_ref: "ref-1" }));
 });
 
+test("HTTP command client preserves the validated member top-up confirmation summary", async () => {
+  const fetchImpl: typeof fetch = async () =>
+    new Response(
+      JSON.stringify({
+        ok: false,
+        error: {
+          code: "POLICY_CONFIRMATION_REQUIRED",
+          message: "Confirmation is required",
+          detail: {
+            kind: "confirmation",
+            confirm_ref: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            summary: {
+              kind: "member_topup",
+              principal_cents: 100_000,
+              bonus_cents: 10_000,
+              credited_cents: 110_000,
+              matched_rule: {
+                rule_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+                min_topup_cents: 100_000,
+                bonus_cents: 10_000,
+              },
+            },
+          },
+        },
+      }),
+      { status: 403, headers: { "content-type": "application/json" } },
+    );
+  const client = createHttpCommandClient({
+    apiBaseUrl: "http://127.0.0.1:8787",
+    getAccessToken: () => "tok",
+    readCsrf: () => "csrf-token",
+    fetchImpl,
+  });
+
+  const result = await client.execute("member.topup", {
+    account_id: "11111111-1111-4111-8111-111111111111",
+    amount_cents: 100_000,
+    method: "cash",
+  });
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.deepEqual(result.error.detail?.summary, {
+    kind: "member_topup",
+    principal_cents: 100_000,
+    bonus_cents: 10_000,
+    credited_cents: 110_000,
+    matched_rule: {
+      rule_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      min_topup_cents: 100_000,
+      bonus_cents: 10_000,
+    },
+  });
+});
+
 test("mock command client returns injectable step-up gate", async () => {
   const client = createMockCommandClient();
   const result = await client.execute("platform.settings.set", {});

@@ -25,7 +25,7 @@ export type PinStepUpDeps = PinServiceDeps &
   Readonly<{
     pending: PendingActionStore;
     proofs: StepUpProofStore;
-    resolveStaffRole?: (
+    resolveStaffRole: (
       orgId: string,
       storeId: string,
       staffId: string,
@@ -94,23 +94,13 @@ const requireStepUpRecord = (record: PinChallengeRecord | null): PinChallengeRec
   return record;
 };
 
-const PRIVACY_ADMIN_COMMANDS: ReadonlySet<string> = new Set([
-  "customer.privacy.export",
-  "customer.anonymize",
-]);
-
 async function requireAuthorizedApprover(
   deps: PinStepUpDeps,
-  command: string,
   orgId: string,
   storeId: string,
   staffId: string,
 ): Promise<void> {
-  if (!PRIVACY_ADMIN_COMMANDS.has(command)) return;
-  if (
-    deps.resolveStaffRole === undefined ||
-    (await deps.resolveStaffRole(orgId, storeId, staffId)) !== "admin"
-  ) {
+  if ((await deps.resolveStaffRole(orgId, storeId, staffId)) !== "admin") {
     throw new IdentityError("AUTHENTICATION_FAILED", "Authentication failed");
   }
 }
@@ -128,7 +118,13 @@ export const createStepUpChallenge = async (
   }
 
   const now = deps.clock.nowEpochSeconds();
-  const pending = deps.pending.get(input.pending_action_ref);
+  const pending = await deps.pending.get(input.pending_action_ref, {
+    tenant: Object.freeze({
+      orgId: input.session.org_id,
+      storeId: input.session.store_id,
+      staffId: input.session.staff_id,
+    }),
+  });
   if (pending === null || pending.status !== "pending" || now >= pending.expiresAt) {
     throw new IdentityError("PIN_CHALLENGE_INVALID", "Pending action not available");
   }
@@ -161,7 +157,6 @@ export const createStepUpChallenge = async (
   }
   await requireAuthorizedApprover(
     deps,
-    pending.command,
     input.session.org_id,
     input.session.store_id,
     input.approver_staff_id,
@@ -233,7 +228,13 @@ export const verifyStepUpPin = async (
     throw new IdentityError("PIN_LOCKED", "PIN is locked out");
   }
 
-  const pending = deps.pending.get(record.pending_action_ref!);
+  const pending = await deps.pending.get(record.pending_action_ref!, {
+    tenant: Object.freeze({
+      orgId: record.org_id,
+      storeId: record.store_id,
+      staffId: input.session.staff_id,
+    }),
+  });
   if (pending === null || pending.status !== "pending" || now >= pending.expiresAt) {
     throw new IdentityError("PIN_CHALLENGE_INVALID", "Pending action not available");
   }
@@ -245,13 +246,7 @@ export const verifyStepUpPin = async (
   if (approver === null || !approver.is_active || approver.pin_hash === null) {
     throw new IdentityError("AUTHENTICATION_FAILED", "Authentication failed");
   }
-  await requireAuthorizedApprover(
-    deps,
-    pending.command,
-    record.org_id,
-    record.store_id,
-    approverStaffId,
-  );
+  await requireAuthorizedApprover(deps, record.org_id, record.store_id, approverStaffId);
 
   const pinOk = await deps.pinPort.verifyPassword(input.pin, approver.pin_hash);
   const proofId = newUuid();
@@ -309,23 +304,37 @@ export const verifyStepUpPin = async (
       sessionVersion: record.session_version,
     }),
   });
-  if (deps.proofs.get(proof.proofId) !== null) {
+  const proofContext = Object.freeze({
+    tenant: Object.freeze({
+      orgId: record.org_id,
+      storeId: record.store_id,
+      staffId: record.requester_staff_id,
+    }),
+  });
+  if ((await deps.proofs.get(proof.proofId, proofContext)) !== null) {
     throw new IdentityError("PIN_CHALLENGE_INVALID", "Proof identifier collision");
   }
-  const committed = await deps.challenges.consumeSuccess({
-    challenge_id: record.challenge_id,
-    org_id: record.org_id,
-    store_id: record.store_id,
-    staff_id: approverStaffId,
-    device_id: record.device_id,
-    expected_failed_attempts: record.failed_attempts,
-    attempted_at: deps.clock.nowEpochSeconds(),
-  });
+  const committed = await deps.challenges.consumeSuccess(
+    {
+      challenge_id: record.challenge_id,
+      org_id: record.org_id,
+      store_id: record.store_id,
+      staff_id: approverStaffId,
+      device_id: record.device_id,
+      expected_failed_attempts: record.failed_attempts,
+      attempted_at: deps.clock.nowEpochSeconds(),
+    },
+    async (transaction) =>
+      await deps.proofs.insert(
+        proof,
+        transaction === undefined
+          ? proofContext
+          : Object.freeze({ tenant: transaction.tenant, client: transaction.client }),
+      ),
+  );
   if (committed !== 1) {
     throw new IdentityError("PIN_CHALLENGE_INVALID", "Challenge already consumed");
   }
-  deps.proofs.insert(proof);
-
   return Object.freeze({
     step_up_proof_id: proof.proofId,
     expires_at: proof.expiresAt,

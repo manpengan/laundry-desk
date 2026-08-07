@@ -17,6 +17,7 @@ import {
   type MemberHandlerDeps,
   type MemberRuntimeDeps,
 } from "./handler-support.js";
+import { requireFrozenTopupBonus } from "./topup-confirmation.js";
 
 export type { MemberHandlerDeps, MemberRuntimeDeps };
 
@@ -80,6 +81,7 @@ export function createMemberHandlers(
     if (amountCents === 0) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     const method = requireTender(input.method);
     const { now, businessDate } = await openBusinessDate(deps, context);
+    const frozenBonus = requireFrozenTopupBonus(context, amountCents);
     const outcome = await resolveStore(deps, context).topup({
       account_id: accountId,
       store_id: context.tenant.storeId,
@@ -90,6 +92,7 @@ export function createMemberHandlers(
       at: now,
       business_date: businessDate,
       note: optionalNote(input),
+      ...(frozenBonus === undefined ? {} : { frozen_bonus: frozenBonus }),
     });
     if (!outcome.ok) throw refusalError(outcome.reason);
     return Object.freeze({

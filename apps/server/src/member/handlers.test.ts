@@ -82,14 +82,19 @@ async function run(
   parsed: Readonly<Record<string, unknown>>,
   permissions: readonly string[],
 ): Promise<Awaited<ReturnType<CommandHandler>>> {
-  return handler(
-    Object.freeze({
-      client: new FakeSqlClient(),
-      tenant: TENANT,
-      actor: actor(permissions),
-      parsed,
-    }) as unknown as Parameters<CommandHandler>[0],
-  );
+  const context: Parameters<CommandHandler>[0] = Object.freeze({
+    client: new FakeSqlClient(),
+    tenant: TENANT,
+    actor: actor(permissions),
+    request: Object.freeze({
+      name: "member.handler.test",
+      version: "1.0.0",
+      input: parsed,
+      dryRun: false,
+    }),
+    parsed,
+  });
+  return handler(context);
 }
 
 const asRecord = (value: unknown): Readonly<Record<string, unknown>> =>

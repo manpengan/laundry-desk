@@ -5,10 +5,12 @@ import type { LoginFormValues, SessionView } from "../auth/types.js";
 import { hasLoginFieldErrors, validateLoginForm } from "../auth/validate-login.js";
 
 export type LoginPageProps = {
-  authClient: AuthClient;
+  authClient: Pick<AuthClient, "login">;
   onSuccess: (session: SessionView) => void;
   /** Optional prefill (local host demo only — never bake secrets into library defaults). */
   initialForm?: Partial<LoginFormValues>;
+  title?: string;
+  hint?: string;
 };
 
 const EMPTY_FORM: LoginFormValues = {
@@ -28,7 +30,13 @@ function mergeForm(initial?: Partial<LoginFormValues>): LoginFormValues {
   };
 }
 
-export function LoginPage({ authClient, onSuccess, initialForm }: LoginPageProps) {
+export function LoginPage({
+  authClient,
+  onSuccess,
+  initialForm,
+  title = "柜台登录",
+  hint = "使用机构 / 门店代码与员工账号进入柜台",
+}: LoginPageProps) {
   const toast = useToast();
   const [form, setForm] = useState<LoginFormValues>(() => mergeForm(initialForm));
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof LoginFormValues, string>>>(
@@ -71,8 +79,8 @@ export function LoginPage({ authClient, onSuccess, initialForm }: LoginPageProps
     <div className="ld-login" data-page="login">
       <div className="ld-login__card lg-card">
         <header className="ld-login__header">
-          <h1 className="ld-login__title">柜台登录</h1>
-          <p className="ld-login__hint">使用机构 / 门店代码与员工账号进入柜台</p>
+          <h1 className="ld-login__title">{title}</h1>
+          <p className="ld-login__hint">{hint}</p>
         </header>
         <form className="ld-login__form" onSubmit={(e) => void onSubmit(e)} noValidate>
           <Input

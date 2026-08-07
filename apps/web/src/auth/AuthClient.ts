@@ -23,6 +23,8 @@ import type {
  */
 export type AuthPort = Readonly<{
   login: (values: LoginFormValues) => Promise<AuthResult<SessionView>>;
+  /** Revoke the server session when possible and always clear host-local credentials. */
+  logout: () => Promise<void>;
   createPinChallenge: (request: PinChallengeRequest) => Promise<AuthResult<PinChallengeResponse>>;
   /** quick_switch: issues replacement session. */
   verifyPin: (request: PinVerifyRequest) => Promise<AuthResult<SessionView>>;
@@ -153,6 +155,11 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthP
 
   return {
     listSwitchableStaff: () => staffList,
+
+    async logout(): Promise<void> {
+      lastLogin = null;
+      challenges.clear();
+    },
 
     async login(values: LoginFormValues): Promise<AuthResult<SessionView>> {
       // Intentionally do not log values.password

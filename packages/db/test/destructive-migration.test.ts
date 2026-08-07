@@ -124,6 +124,10 @@ describe("destructive migration static reject", () => {
       "0038_notification_manual_list.sql",
       "0039_accounting_report_indexes.sql",
       "0040_member_account_lifecycle.sql",
+      "0041_owner_dashboard_indexes.sql",
+      "0042_durable_pending_actions.sql",
+      "0043_receipt_and_member_bonus_integrity.sql",
+      "0044_durable_step_up_proofs.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

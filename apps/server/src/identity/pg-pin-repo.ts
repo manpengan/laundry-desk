@@ -9,6 +9,7 @@ import { withStoreGuc } from "../db/tenant-guc-client.js";
 import { lockDeviceLifecycle } from "./pg-device-lifecycle-lock.js";
 import { writePinLockoutAudit } from "./pin-lockout-audit.js";
 import { advancePinLockoutWindow } from "./pin-lockout-window.js";
+import { commitPgPinSuccess } from "./pin-success-commit.js";
 import {
   dateToEpoch,
   epochToDate,
@@ -325,7 +326,7 @@ export function createPinChallengeRepo(pool: PgPool): PinChallengeRepository {
         },
       );
     },
-    consumeSuccess: async (input) => {
+    consumeSuccess: async (input, commit) => {
       const requesterStaffId = await lookupPinMutationActor(pool, input);
       if (requesterStaffId === null) return 0;
       return withStoreGuc(
@@ -358,14 +359,7 @@ export function createPinChallengeRepo(pool: PgPool): PinChallengeRepository {
           if (consumed.rows[0]?.requester_staff_id !== requesterStaffId) {
             throw new Error("PIN requester binding changed");
           }
-          await client.query(
-            `DELETE FROM pin_lockouts
-              WHERE org_id = $1
-                AND store_id = $2
-                AND staff_id = $3
-                AND device_id = $4`,
-            [input.org_id, input.store_id, input.staff_id, input.device_id],
-          );
+          await commitPgPinSuccess(client, input, requesterStaffId, commit);
           return 1 as const;
         },
       );

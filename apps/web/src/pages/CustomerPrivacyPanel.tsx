@@ -276,7 +276,6 @@ export function CustomerPrivacyPanel({
           confirmRef={pending.confirmRef}
           currentStaffId={session.session.staff_id}
           commandLabel={pending.label}
-          requiredApproverRole="admin"
           onApproved={() => void resume()}
         />
       ) : null}

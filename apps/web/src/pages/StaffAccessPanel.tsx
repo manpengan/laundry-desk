@@ -202,7 +202,6 @@ export function StaffAccessPanel({
         confirmRef={pendingRef ?? ""}
         currentStaffId={currentStaffId}
         commandLabel="修改员工权限"
-        requiredApproverRole="admin"
         onApproved={() => {
           const ref = pendingRef;
           setPendingRef(null);

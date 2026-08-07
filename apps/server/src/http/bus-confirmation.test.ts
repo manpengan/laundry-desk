@@ -136,3 +136,44 @@ test("a confirm_ref alongside other keys stays on the raw-args path", async () =
     await app.close();
   }
 });
+
+test("a malformed bare confirm_ref fails at the HTTP boundary", async () => {
+  const app = await buildApp();
+  try {
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/v2/auth/login",
+      headers: browserHeaders,
+      payload: {
+        org_code: "local",
+        store_code: "main",
+        username: "admin",
+        password: DEMO_PASSWORD,
+        device_id: DEVICE,
+      },
+    });
+    assert.equal(login.statusCode, 200, login.body);
+    const token = (login.json() as { data: { access_token: string } }).data.access_token;
+    const cookies = readCookies(login.headers as Record<string, unknown>);
+    const csrf = /(?:__Host-)?laundry_csrf=([^;]+)/u.exec(cookies)?.[1] ?? "";
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/commands/member.topup",
+      headers: {
+        ...browserHeaders,
+        authorization: `Bearer ${token}`,
+        cookie: cookies,
+        "x-csrf-token": csrf,
+      },
+      payload: { confirm_ref: "not-a-uuid" },
+    });
+    assert.equal(response.statusCode, 400, response.body);
+    assert.equal(
+      (response.json() as { error?: { code?: string } }).error?.code,
+      "VALIDATION_FAILED",
+    );
+  } finally {
+    await app.close();
+  }
+});

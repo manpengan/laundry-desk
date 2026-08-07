@@ -33,6 +33,7 @@
 | [ADR-23](2026-08-07-adr-23-pickup-reminder-manual-list.md)         | 催取工作台与人工通知名单                        | **Accepted** 2026-08-07；仅解冻人工降级切片        |
 | [ADR-24](2026-08-07-adr-24-accounting-dual-basis-reports.md)       | 账目双口径与日/月/职员报表                      | **Accepted** 2026-08-07；仅交付 Linux 本地 Web     |
 | [ADR-25](2026-08-07-adr-25-member-account-lifecycle.md)            | 会员账户冻结、解冻与原子关户                    | **Accepted** 2026-08-07；仅交付 Linux 本地 Web     |
+| [ADR-26](2026-08-07-adr-26-lan-owner-dashboard.md)                 | 局域网只读 Owner Dashboard 与 HTTPS 边界        | **Accepted** 2026-08-07；单店 LAN Web              |
 
 ## v1 线
 

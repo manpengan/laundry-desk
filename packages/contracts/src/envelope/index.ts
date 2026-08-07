@@ -23,6 +23,7 @@ export {
   CommandErrorCodeSchema,
   CommandErrorSchema,
   CommandResponseSchema,
+  MemberTopupConfirmationSummarySchema,
   createCommandError,
 } from "./responses.js";
 export type {
@@ -32,4 +33,5 @@ export type {
   CommandErrorCode,
   CommandErrorDetail,
   CommandResponse,
+  MemberTopupConfirmationSummary,
 } from "./responses.js";

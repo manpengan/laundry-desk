@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0040", () => {
+  it("ships formal SQL migrations ordered 0001 → 0044", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -52,6 +52,10 @@ describe("packages/db migration file inventory", () => {
       "0038_notification_manual_list.sql",
       "0039_accounting_report_indexes.sql",
       "0040_member_account_lifecycle.sql",
+      "0041_owner_dashboard_indexes.sql",
+      "0042_durable_pending_actions.sql",
+      "0043_receipt_and_member_bonus_integrity.sql",
+      "0044_durable_step_up_proofs.sql",
     ]);
   });
 
@@ -104,6 +108,10 @@ describe("packages/db migration file inventory", () => {
       "0038",
       "0039",
       "0040",
+      "0041",
+      "0042",
+      "0043",
+      "0044",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -145,6 +153,74 @@ describe("packages/db migration file inventory", () => {
     expect(sql).toMatch(/bonus_delta_cents < 0/iu);
     expect(sql).toMatch(/tender IS NULL/iu);
     expect(sql).toMatch(/bonus_rule_id IS NULL/iu);
+  });
+
+  it("indexes bounded store pickup-transition scans for the owner dashboard", () => {
+    const sql = readFileSync(join(migrationsDir, "0041_owner_dashboard_indexes.sql"), "utf8");
+    expect(sql).toMatch(/ON public\.garment_status_log \(org_id, store_id, to_status, at\)/iu);
+    expect(sql).not.toMatch(/CREATE TABLE|ALTER TABLE|DROP\s/u);
+  });
+
+  it("persists tenant-scoped confirmation cards for transaction-local CAS consumption", () => {
+    const sql = readFileSync(join(migrationsDir, "0042_durable_pending_actions.sql"), "utf8");
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS ai_pending_actions/iu);
+    expect(sql).toMatch(/args_json jsonb NOT NULL/iu);
+    expect(sql).toMatch(/authority_json jsonb/iu);
+    expect(sql).toMatch(/args_hash char\(64\) NOT NULL/iu);
+    expect(sql).toMatch(/idempotency_key uuid NOT NULL/iu);
+    expect(sql).toMatch(/status IN \('pending', 'consumed', 'expired', 'denied'\)/iu);
+    expect(sql).toMatch(
+      /ai_pending_actions_creator_staff_idx[\s\S]*\(org_id, creator_staff_id\)/iu,
+    );
+    expect(sql).toMatch(
+      /ai_pending_actions_consumer_staff_idx[\s\S]*\(org_id, consumed_by_staff_id\)[\s\S]*WHERE consumed_by_staff_id IS NOT NULL/iu,
+    );
+    expect(sql).toMatch(/FORCE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(
+      /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE ai_pending_actions TO laundry_app/iu,
+    );
+    expect(sql).not.toMatch(/command_idempotency[\s\S]*args_json/iu);
+  });
+
+  it("defines the receipt clock and rejects ruleless positive member bonuses", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "0043_receipt_and_member_bonus_integrity.sql"),
+      "utf8",
+    );
+    expect(sql).toMatch(/COMMENT ON COLUMN orders\.created_at/iu);
+    expect(sql).toMatch(/formal receipt\/open instant/iu);
+    expect(sql).toMatch(/WHERE command = 'order\.receive'/iu);
+    expect(sql).toMatch(/AND entity = 'order'/iu);
+    expect(sql).toMatch(/MIN\(at\) AS received_at/iu);
+    expect(sql).toMatch(/COALESCE\(receipt_audit\.received_at, orders\.updated_at\)/iu);
+    expect(sql).toMatch(/SET created_at = receipt_clock\.received_at/iu);
+    expect(sql).toMatch(/member_ledger_positive_bonus_origin_chk/iu);
+    expect(sql).toMatch(/kind <> 'topup' OR bonus_delta_cents <= 0 OR bonus_rule_id IS NOT NULL/iu);
+  });
+
+  it("persists tenant-scoped step-up proofs with transaction-local CAS consumption", () => {
+    const sql = readFileSync(join(migrationsDir, "0044_durable_step_up_proofs.sql"), "utf8");
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS step_up_proofs/iu);
+    expect(sql).toMatch(/pending_action_ref uuid NOT NULL/iu);
+    expect(sql).toMatch(
+      /FOREIGN KEY \(org_id, store_id, pending_action_ref\)[\s\S]*REFERENCES ai_pending_actions \(org_id, store_id, nonce\) ON DELETE CASCADE/iu,
+    );
+    expect(sql).toMatch(
+      /FOREIGN KEY \(org_id, store_id, session_id\) REFERENCES sessions \(org_id, store_id, id\)/iu,
+    );
+    expect(sql).toMatch(/entity_versions_json jsonb NOT NULL/iu);
+    expect(sql).toMatch(/status IN \('active', 'consumed'\)/iu);
+    expect(sql).toMatch(/requester_staff_id <> approver_staff_id/iu);
+    expect(sql).toMatch(
+      /step_up_proofs_pending_fk_idx[\s\S]*\(org_id, store_id, pending_action_ref\)/iu,
+    );
+    expect(sql).toMatch(
+      /step_up_proofs_requester_staff_idx[\s\S]*\(org_id, requester_staff_id\)/iu,
+    );
+    expect(sql).toMatch(/step_up_proofs_approver_staff_idx[\s\S]*\(org_id, approver_staff_id\)/iu);
+    expect(sql).toMatch(/step_up_proofs_session_idx[\s\S]*\(org_id, store_id, session_id\)/iu);
+    expect(sql).toMatch(/FORCE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(/GRANT SELECT, INSERT, UPDATE ON TABLE step_up_proofs TO laundry_app/iu);
   });
 
   it("adds order.list indexes after the garment photos migration", () => {

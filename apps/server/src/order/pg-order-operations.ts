@@ -1,5 +1,4 @@
 /** PostgreSQL order mutations that also maintain the append-only payment ledger. */
-
 import {
   buildPayPayment,
   buildReversalPayment,
@@ -124,7 +123,7 @@ export async function replaceDraftTxn(
          customer_phone = $8, customer_name = $9, note = $10,
          subtotal_cents = $11, original_cents = $12, discount_cents = $13, addon_cents = $14,
          urgent_cents = $15, freight_cents = $16, payable_cents = $17, paid_cents = $18,
-         balance_cents = $19, business_date = $20, updated_at = $21
+         balance_cents = $19, business_date = $20, created_at = $21, updated_at = $22
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid`,
     [
       order.org_id,
@@ -147,6 +146,7 @@ export async function replaceDraftTxn(
       order.paid_cents,
       order.balance_cents,
       order.business_date,
+      epochToDate(order.created_at),
       epochToDate(order.updated_at),
     ],
   );

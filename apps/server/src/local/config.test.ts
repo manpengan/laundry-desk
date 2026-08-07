@@ -19,6 +19,8 @@ test("explicit memory runtime stays isolated from the strict host configuration"
     listenHost: "127.0.0.1",
     port: 8787,
     browserOrigin: "http://127.0.0.1:5173",
+    browserFetchSite: "same-site",
+    cookieSecure: false,
     hostAuthorities: ["127.0.0.1:8787"],
   });
   assert.equal(runtime.mode, "memory");
@@ -45,12 +47,45 @@ test("parses the fixed loopback local server boundary", () => {
     listenHost: "127.0.0.1",
     port: 8787,
     browserOrigin: "http://127.0.0.1:5173",
+    browserFetchSite: "same-site",
+    cookieSecure: false,
     hostAuthorities: ["127.0.0.1:8787"],
     accessTokenSecret: ACCESS_SECRET,
     csrfProofSecret: CSRF_SECRET,
   });
   assert.equal(Object.isFrozen(config), true);
   assert.equal(Object.isFrozen(config.hostAuthorities), true);
+});
+
+test("LAN profile requires an exact private HTTPS origin and enables secure browser policy", () => {
+  assert.deepEqual(parseLocalHostConfig({ LAUNDRY_LAN_ORIGIN: "https://192.168.50.12:8443" }), {
+    listenHost: "127.0.0.1",
+    port: 8787,
+    browserOrigin: "https://192.168.50.12:8443",
+    browserFetchSite: "same-origin",
+    cookieSecure: true,
+    hostAuthorities: ["127.0.0.1:8787"],
+  });
+  assert.equal(parseLocalHostConfig({ LAUNDRY_LAN_ORIGIN: "" }).cookieSecure, false);
+
+  for (const origin of [
+    "http://192.168.50.12:8443",
+    "https://127.0.0.1:8443",
+    "https://198.18.0.1:8443",
+    "https://example.com",
+    "https://192.168.50.12",
+    "https://192.168.50.12:443",
+    "https://192.168.50.12:65536",
+    "https://192.168.50.12:8443/owner",
+    "https://user@192.168.50.12:8443",
+    " https://192.168.50.12:8443",
+  ]) {
+    assert.throws(
+      () => parseLocalHostConfig({ LAUNDRY_LAN_ORIGIN: origin }),
+      /LAUNDRY_LAN_ORIGIN/u,
+      origin,
+    );
+  }
 });
 
 test("allows 0.0.0.0 only for the explicit container runtime", () => {
@@ -135,6 +170,8 @@ test("loads signing secrets from container secret files", async () => {
       listenHost: "0.0.0.0",
       port: 8787,
       browserOrigin: "http://127.0.0.1:5173",
+      browserFetchSite: "same-site",
+      cookieSecure: false,
       hostAuthorities: ["127.0.0.1:8787"],
       accessTokenSecret: ACCESS_SECRET,
       csrfProofSecret: CSRF_SECRET,

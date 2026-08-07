@@ -18,8 +18,6 @@ export type StepUpConfirmDialogProps = {
   currentStaffId: string;
   /** Optional command label for the dialog title area. */
   commandLabel?: string;
-  /** Optional server-mirrored UI filter; server authority remains decisive. */
-  requiredApproverRole?: SwitchableStaff["role"];
   /** Full WYSIWYS summary of the server-frozen action being approved. */
   summary?: ReactNode;
   /** Called after proof is issued (parent re-submits confirm_ref). */
@@ -33,7 +31,6 @@ export function StepUpConfirmDialog({
   confirmRef,
   currentStaffId,
   commandLabel = "高风险操作",
-  requiredApproverRole,
   summary,
   onApproved,
 }: StepUpConfirmDialogProps) {
@@ -42,12 +39,8 @@ export function StepUpConfirmDialog({
     () =>
       authClient
         .listSwitchableStaff()
-        .filter(
-          (staff) =>
-            staff.staff_id !== currentStaffId &&
-            (requiredApproverRole === undefined || staff.role === requiredApproverRole),
-        ),
-    [authClient, currentStaffId, requiredApproverRole],
+        .filter((staff) => staff.staff_id !== currentStaffId && staff.role === "admin"),
+    [authClient, currentStaffId],
   );
   const [approverId, setApproverId] = useState<string>(approvers[0]?.staff_id ?? "");
   const [pin, setPin] = useState("");
@@ -136,8 +129,7 @@ export function StepUpConfirmDialog({
     >
       <div className="ld-step-up">
         <p className="ld-step-up__hint">
-          「{commandLabel}」需另一位
-          {requiredApproverRole === "admin" ? "店长" : "员工"}输入 PIN 复核（不会切换当前登录人）。
+          「{commandLabel}」需另一位店长输入 PIN 复核（不会切换当前登录人）。
         </p>
         <p className="ld-step-up__ref" title={confirmRef}>
           确认卡：{confirmRef.slice(0, 8)}…
@@ -149,7 +141,7 @@ export function StepUpConfirmDialog({
         )}
         {approvers.length === 0 ? (
           <div className="ld-step-up__error" role="alert">
-            没有可复核的其他{requiredApproverRole === "admin" ? "店长" : "员工"}
+            没有可复核的其他店长
           </div>
         ) : (
           <label className="ld-step-up__staff">

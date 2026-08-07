@@ -16,6 +16,7 @@ import type {
 } from "../bus/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
+import { MemoryPendingActionStore } from "../pending-actions/store.js";
 import { INSERT_AUDIT_LOG_SQL } from "../audit/write-audit.js";
 
 const TENANT: TenantContext = Object.freeze({
@@ -250,6 +251,33 @@ test("validation failure on bad input (login missing password)", async () => {
   }
 });
 
+test("unexpected command failures are privately observable without leaking details", async () => {
+  const client = new FakeSqlClient();
+  const sentinel = new Error("credential-bearing-database-detail");
+  const observed: unknown[] = [];
+  const registry = setupRegistry(async () => {
+    throw sentinel;
+  });
+
+  const result = await executeCommand(
+    client,
+    TENANT,
+    "identity.logout",
+    {},
+    {
+      actor: ACTOR,
+      registry,
+      onUnexpectedError: (error) => observed.push(error),
+    },
+  );
+
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "TRANSACTION_FAILED");
+  assert.deepEqual(observed, [sentinel]);
+  assert.doesNotMatch(JSON.stringify(result), /credential-bearing-database-detail/iu);
+  assert.equal(client.sqlSequence().at(-1), "ROLLBACK");
+});
+
 test("dry_run returns preview and skips handler mutation + audit", async () => {
   const client = new FakeSqlClient();
   let handlerRan = false;
@@ -319,9 +347,9 @@ test("idempotent replay returns cached result without re-exec", async () => {
   assert.equal(runs, 1);
   assert.deepEqual(first, second);
   assert.equal(first.ok, true);
-  // Second call must not open a new transaction.
+  // Replays still cross the authorization chain inside a transaction.
   const begins = client.sqlSequence().filter((s) => s === "BEGIN");
-  assert.equal(begins.length, 1);
+  assert.equal(begins.length, 2);
 });
 
 test("durable idempotency replays the committed result and rejects changed requests", async () => {
@@ -364,10 +392,11 @@ test("durable idempotency replays the committed result and rejects changed reque
     client,
     TENANT,
     "identity.logout",
-    { changed: true },
+    {},
     {
       actor: ACTOR,
       registry,
+      version: "1.0.1",
       idempotencyKey: key,
       idempotencyStore: store,
     },
@@ -377,7 +406,94 @@ test("durable idempotency replays the committed result and rejects changed reque
   assert.deepEqual(replay, first);
   assert.equal(conflict.ok, false);
   if (!conflict.ok) assert.equal(conflict.error.code, "IDEMPOTENCY_CONFLICT");
-  assert.equal(client.sqlSequence().filter((sql) => sql === "BEGIN").length, 1);
+  assert.equal(client.sqlSequence().filter((sql) => sql === "BEGIN").length, 3);
+});
+
+test("durable replay never bypasses the current actor authorization chain", async () => {
+  const client = new FakeSqlClient();
+  const registry = setupRegistry();
+  const key = "acacacac-acac-4cac-8cac-acacacacacac";
+  const store = new TestTransactionalIdempotencyStore();
+  const allowed = await executeCommand(
+    client,
+    TENANT,
+    "identity.logout",
+    {},
+    {
+      actor: ACTOR,
+      registry,
+      idempotencyKey: key,
+      idempotencyStore: store,
+      chainHooks: { checkRbac: async () => ({ ok: true, data: undefined }) },
+    },
+  );
+  assert.equal(allowed.ok, true);
+
+  const denied = await executeCommand(
+    client,
+    TENANT,
+    "identity.logout",
+    {},
+    {
+      actor: ACTOR,
+      registry,
+      idempotencyKey: key,
+      idempotencyStore: store,
+      chainHooks: {
+        checkRbac: async () => ({
+          ok: false,
+          error: createCommandError("PERMISSION_DENIED"),
+        }),
+      },
+    },
+  );
+  assert.equal(denied.ok, false);
+  if (!denied.ok) assert.equal(denied.error.code, "PERMISSION_DENIED");
+  assert.doesNotMatch(JSON.stringify(denied), /logged_out/iu);
+});
+
+test("a persisted confirmation card cannot cross a registered command version change", async () => {
+  const pendingStore = new MemoryPendingActionStore();
+  const confirmRef = "adadadad-adad-4dad-8dad-adadadadadad";
+  const createdAt = Math.floor(FIXED_NOW().getTime() / 1000);
+  await pendingStore.create({
+    nonce: confirmRef,
+    command: "identity.logout",
+    commandVersion: "0.9.0",
+    args: {},
+    entityVersions: Object.freeze([]),
+    creatorStaffId: ACTOR.staffId,
+    orgId: TENANT.orgId,
+    storeId: TENANT.storeId,
+    idempotencyKey: "aeaeaeae-aeae-4eae-8eae-aeaeaeaeaeae",
+    createdAt,
+    effectiveRisk: "R3",
+    policyOutcome: "confirm",
+    requiresOtherApprover: false,
+  });
+
+  for (const version of [undefined, "0.9.0"] as const) {
+    const client = new FakeSqlClient();
+    const result = await executeCommand(
+      client,
+      TENANT,
+      "identity.logout",
+      {},
+      {
+        actor: ACTOR,
+        registry: setupRegistry(),
+        pendingStore,
+        confirmRef,
+        now: FIXED_NOW,
+        ...(version === undefined ? {} : { version }),
+      },
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.code, "POLICY_DENIED");
+    assert.equal(client.sqlSequence()[0], "BEGIN");
+    assert.equal(client.sqlSequence().at(-1), "ROLLBACK");
+    assert.equal(client.sqlSequence().includes(INSERT_AUDIT_LOG_SQL), false);
+  }
 });
 
 test("domain events publish only after successful commit", async () => {

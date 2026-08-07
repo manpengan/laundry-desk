@@ -21,6 +21,7 @@ import type {
   Uuid,
 } from "./types.js";
 import { advancePinLockoutWindow } from "./pin-lockout-window.js";
+import { commitMemoryPinSuccess } from "./pin-success-commit.js";
 
 export type MemoryIdentityStore = Readonly<{
   staff: StaffRepository;
@@ -418,30 +419,7 @@ export const createMemoryIdentityStore = (): MemoryIdentityStore => {
       );
       return 1;
     },
-    consumeSuccess: async (input) => {
-      const current = challenges.get(input.challenge_id);
-      if (
-        current === undefined ||
-        current.status !== "active" ||
-        current.org_id !== input.org_id ||
-        current.store_id !== input.store_id ||
-        current.device_id !== input.device_id ||
-        current.failed_attempts !== input.expected_failed_attempts ||
-        current.failed_attempts >= current.max_attempts ||
-        current.expires_at <= input.attempted_at ||
-        (lockouts.get(lockoutKey(input.org_id, input.store_id, input.staff_id, input.device_id))
-          ?.locked_until ?? 0) > input.attempted_at ||
-        (current.target_staff_id !== input.staff_id && current.approver_staff_id !== input.staff_id)
-      ) {
-        return 0;
-      }
-      challenges.set(
-        current.challenge_id,
-        Object.freeze({ ...current, status: "consumed" as const }),
-      );
-      lockouts.delete(lockoutKey(input.org_id, input.store_id, input.staff_id, input.device_id));
-      return 1;
-    },
+    consumeSuccess: (input, commit) => commitMemoryPinSuccess(challenges, lockouts, input, commit),
   });
 
   const pinLockouts: PinLockoutRepository = Object.freeze({

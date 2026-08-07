@@ -504,5 +504,6 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("customers");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("shift_closings");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("garment_photos");
+    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("ai_pending_actions");
   });
 });

@@ -1,6 +1,7 @@
 /** Money Integrity + Workday Commands: server price, ledger, draft, cancel, close gate. */
 
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 import { INSERT_AUDIT_LOG_SQL } from "../audit/write-audit.js";
@@ -161,6 +162,42 @@ function readApprovalAudit(client: FakeSqlClient): Readonly<Record<string, unkno
   return parsed as Readonly<Record<string, unknown>>;
 }
 
+async function executeRefundWithProof(
+  bus: ReturnType<typeof buildBus>,
+  confirmRef: string,
+  options: Readonly<{ client?: FakeSqlClient; idempotencyKey?: string }> = {},
+) {
+  const pending = await bus.pendingStore.get(confirmRef);
+  assert.ok(pending);
+  const proofStore = new MemoryStepUpProofStore();
+  await proofStore.insert(
+    createStepUpProof({
+      proofId: randomUUID(),
+      pending,
+      approverStaffId: APPROVER.staffId,
+      issuedAt: Math.floor(Date.now() / 1000),
+      sessionBinding: SESSION_BINDING,
+    }),
+  );
+  return executeCommand(
+    options.client ?? new FakeSqlClient(),
+    TENANT,
+    "payment.refund",
+    {},
+    {
+      registry: bus.registry,
+      actor: CLERK,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+      stepUpProofStore: proofStore,
+      idempotencyStore: bus.idempotencyStore,
+      confirmRef,
+      sessionBinding: SESSION_BINDING,
+      ...(options.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey }),
+    },
+  );
+}
+
 test("receive snapshots the catalog price and appends the selected initial payment", async () => {
   const bus = buildBus();
   const received = await command(bus, "order.receive", {
@@ -260,21 +297,7 @@ test("refund appends a referenced ledger row and idempotent replay cannot double
   assert.equal(detail?.kind, "confirmation");
   if (detail?.kind !== "confirmation") assert.fail("missing step-up confirmation reference");
 
-  const executed = await executeCommand(
-    new FakeSqlClient(),
-    Object.freeze({ ...TENANT, staffId: APPROVER.staffId }),
-    "payment.refund",
-    {},
-    {
-      registry: bus.registry,
-      actor: APPROVER,
-      chainHooks: bus.chainHooks,
-      pendingStore: bus.pendingStore,
-      idempotencyStore: bus.idempotencyStore,
-      idempotencyKey,
-      confirmRef: detail.confirm_ref,
-    },
-  );
+  const executed = await executeRefundWithProof(bus, detail.confirm_ref, { idempotencyKey });
   assert.equal(executed.ok, true, JSON.stringify(executed));
   if (!executed.ok) return;
   assert.deepEqual(executed.data.result, {
@@ -304,7 +327,7 @@ test("refund appends a referenced ledger row and idempotent replay cannot double
   assert.equal(payments?.[1]?.note, input.reason);
 });
 
-test("refund audit persists initiator and direct second-admin approver", async () => {
+test("refund confirm_ref cannot be resumed directly by another administrator", async () => {
   const bus = buildBus();
   const challenge = await createRefundChallenge(bus);
   const client = new FakeSqlClient();
@@ -321,12 +344,12 @@ test("refund audit persists initiator and direct second-admin approver", async (
       confirmRef: challenge.confirmRef,
     },
   );
-  assert.equal(result.ok, true, JSON.stringify(result));
-
-  bus.pendingStore.clear();
-  const audit = readApprovalAudit(client);
-  assert.equal(audit.initiated_by_staff_id, CLERK.staffId);
-  assert.equal(audit.approved_by_staff_id, APPROVER.staffId);
+  assert.equal(result.ok, false, JSON.stringify(result));
+  if (!result.ok) assert.equal(result.error.code, "POLICY_DENIED");
+  assert.equal(
+    client.queries.some((entry) => entry.sql === INSERT_AUDIT_LOG_SQL),
+    false,
+  );
 });
 
 test("refund audit persists PIN approver when initiator resumes with proof", async () => {
@@ -403,27 +426,16 @@ test("refund rejects a client method that differs from the referenced immutable 
   assert.equal(detail?.kind, "confirmation");
   if (detail?.kind !== "confirmation") assert.fail("missing step-up confirmation reference");
 
-  const executed = await executeCommand(
-    new FakeSqlClient(),
-    Object.freeze({ ...TENANT, staffId: APPROVER.staffId }),
-    "payment.refund",
-    {},
-    {
-      registry: bus.registry,
-      actor: APPROVER,
-      chainHooks: bus.chainHooks,
-      pendingStore: bus.pendingStore,
-      confirmRef: detail.confirm_ref,
-    },
-  );
+  const executed = await executeRefundWithProof(bus, detail.confirm_ref);
   assert.equal(executed.ok, false, JSON.stringify(executed));
   if (!executed.ok) assert.equal(executed.error.code, "VALIDATION_FAILED");
   const payments = await bus.store.listPayments?.(TENANT.orgId, TENANT.storeId, orderId);
   assert.equal(payments?.length, 1);
 });
 
-test("hold creates a ticketless draft and receive atomically consumes that draft", async () => {
-  const bus = buildBus();
+test("hold creates a ticketless draft and receive resets its formal created_at", async () => {
+  let clock = NOW - 31 * 86_400;
+  const bus = buildBus({ now: () => clock });
   const held = await command(bus, "order.hold", {
     customer_phone: "13800000111",
     lines: [{ service_code: "dry", category_code: "coat", qty: 1 }],
@@ -434,8 +446,10 @@ test("hold creates a ticketless draft and receive atomically consumes that draft
   const draft = await bus.store.getOrder(TENANT.orgId, TENANT.storeId, draftId);
   assert.equal(draft?.status, "draft");
   assert.equal(draft?.ticket_no, null);
+  assert.equal(draft?.created_at, clock);
   assert.equal((await bus.store.listGarments(TENANT.orgId, TENANT.storeId, draftId)).length, 0);
 
+  clock = NOW;
   const received = await command(bus, "order.receive", {
     draft_id: draftId,
     customer_phone: "13800000111",
@@ -445,6 +459,7 @@ test("hold creates a ticketless draft and receive atomically consumes that draft
   assert.equal(received.ok, true, JSON.stringify(received));
   const opened = await bus.store.getOrder(TENANT.orgId, TENANT.storeId, draftId);
   assert.equal(opened?.status, "open");
+  assert.equal(opened?.created_at, NOW, "draft age must not become open-order retention age");
   assert.match(opened?.ticket_no ?? "", /^\d{8}-\d{4}$/u);
   assert.equal((await bus.store.listGarments(TENANT.orgId, TENANT.storeId, draftId)).length, 1);
 });

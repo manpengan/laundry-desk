@@ -19,6 +19,7 @@ import {
 import { ORDER_COMMANDS, ORDER_COMMAND_NAMES, ORDER_QUERIES, ORDER_QUERY_NAMES } from "./order.js";
 import { PAYMENT_COMMANDS, PAYMENT_COMMAND_NAMES } from "./payment.js";
 import { ACCOUNTING_COMMANDS, ACCOUNTING_QUERIES } from "./accounting.js";
+import { REPORTING_QUERIES } from "./reporting.js";
 import { EDGE_CONFLICT_COMMANDS } from "./edge-conflict.js";
 import { RECONCILIATION_COMMANDS, RECONCILIATION_QUERIES } from "./reconciliation.js";
 import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./platform.js";
@@ -186,6 +187,7 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   ...M2_SHIFT_QUERY_NAMES,
   ...M3_PHOTO_QUERY_NAMES,
   "accounting.report.get",
+  "reporting.owner_dashboard.get",
   "reconciliation.day.get",
   "fulfillment.workbench",
   "staff.access.list",
@@ -206,6 +208,7 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...M2_SHIFT_QUERY_DEFINITIONS,
   ...M3_PHOTO_QUERY_DEFINITIONS,
   ...ACCOUNTING_QUERIES,
+  ...REPORTING_QUERIES,
   ...RECONCILIATION_QUERIES,
   ...M3_FULFILLMENT_QUERY_DEFINITIONS,
   ...STAFF_QUERIES,

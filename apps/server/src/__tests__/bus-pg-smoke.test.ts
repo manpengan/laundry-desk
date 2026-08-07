@@ -13,7 +13,7 @@ import { createPgPool, resolvePgUrls } from "../db/pg-pool.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
 import type { TenantContext } from "../db/types.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
-import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
+import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
 
 const urls =
@@ -34,13 +34,6 @@ const ADMIN: ActorContext = Object.freeze({
   deviceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   via: "ui" as const,
   permissions: Object.freeze(["settings_admin", "staff_read", "staff_write", "audit_read"]),
-});
-
-const STAFF: ActorContext = Object.freeze({
-  staffId: DEMO_STAFF_A_ID,
-  deviceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-  via: "ui" as const,
-  permissions: Object.freeze(["settings_admin", "staff_read"]),
 });
 
 maybe("platform.settings.set persists settings + audit_log under laundry_app", async () => {
@@ -72,12 +65,21 @@ maybe("platform.settings.set persists settings + audit_log under laundry_app", a
       audit: { list: async () => Object.freeze([]) },
     });
     const { registry, queryRegistry, chainHooks } = createRegisteredM1Bus({ platform });
+    const persistenceHooks = Object.freeze({
+      ...chainHooks,
+      checkPolicy: async () =>
+        Object.freeze({
+          ok: true as const,
+          data: Object.freeze({ allowed: true as const }),
+        }),
+    });
 
     const key = `smoke.bus.min_order_cents`;
     const value = JSON.stringify(2500);
 
-    // R5: first hop creates pending + POLICY_STEP_UP_REQUIRED
-    const gated = await withPoolClient(appPool, async (sql) =>
+    // This smoke isolates app-role persistence; the production step-up path has
+    // dedicated memory and real-PG proof/CAS coverage.
+    const result = await withPoolClient(appPool, async (sql) =>
       executeCommand(
         sql,
         TENANT,
@@ -86,29 +88,7 @@ maybe("platform.settings.set persists settings + audit_log under laundry_app", a
         {
           registry,
           actor: ADMIN,
-          chainHooks,
-        },
-      ),
-    );
-    assert.equal(gated.ok, false, JSON.stringify(gated));
-    const gatedDetail = !gated.ok && "detail" in gated.error ? gated.error.detail : undefined;
-    if (gatedDetail?.kind !== "confirmation") {
-      assert.fail("expected step-up confirm_ref");
-    }
-    const confirmRef = gatedDetail.confirm_ref;
-
-    // Other staff resumes with confirm_ref (WYSIWYS frozen args)
-    const result = await withPoolClient(appPool, async (sql) =>
-      executeCommand(
-        sql,
-        { ...TENANT, staffId: DEMO_STAFF_A_ID },
-        "platform.settings.set",
-        {},
-        {
-          registry,
-          actor: STAFF,
-          chainHooks,
-          confirmRef,
+          chainHooks: persistenceHooks,
         },
       ),
     );

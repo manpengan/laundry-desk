@@ -1,6 +1,10 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 
-import { parseCommandWirePayload } from "@laundry/contracts";
+import {
+  ConfirmReferenceSchema,
+  parseCommandWirePayload,
+  type CommandErrorCode,
+} from "@laundry/contracts";
 
 import type { AuthorizedSession } from "../auth/session-view.js";
 import { executeCommand } from "../bus/executor.js";
@@ -45,10 +49,15 @@ function routeName(params: unknown): string {
   return typeof params.name === "string" ? params.name : "";
 }
 
-function applyCommandErrorStatus(reply: FastifyReply, code: string): void {
+export function applyCommandErrorStatus(reply: FastifyReply, code: CommandErrorCode): void {
+  if (code === "TRANSACTION_FAILED" || code === "EVENT_DISPATCH_FAILED") {
+    reply.code(500);
+    return;
+  }
   const authorizationOutcome =
     code === "POLICY_STEP_UP_REQUIRED" ||
     code === "POLICY_CONFIRMATION_REQUIRED" ||
+    code === "POLICY_APPROVAL_REQUIRED" ||
     code === "POLICY_DENIED" ||
     code === "PERMISSION_DENIED";
   reply.code(authorizationOutcome ? 403 : 400);
@@ -71,7 +80,10 @@ export async function executeTrustedSessionCommand(
   resolved: AuthorizedSession,
   name: string,
   input: Readonly<Record<string, unknown>>,
-  options: Readonly<{ idempotencyKey?: string }> = {},
+  options: Readonly<{
+    idempotencyKey?: string;
+    onUnexpectedError?: (error: unknown) => void;
+  }> = {},
 ): Promise<CommandResult> {
   const { registry, chainHooks } = createRuntimeBus(context.runtime);
   const runWithSql = createSqlRunner(context.runtime);
@@ -83,6 +95,9 @@ export async function executeTrustedSessionCommand(
       pendingStore: context.runtime.pendingStore,
       stepUpProofStore: context.runtime.stepUpProofStore,
       idempotencyStore: context.runtime.idempotencyStore,
+      ...(options.onUnexpectedError === undefined
+        ? {}
+        : { onUnexpectedError: options.onUnexpectedError }),
       sessionBinding: Object.freeze({
         sessionId: resolved.session.session_id,
         sessionVersion: resolved.session.session_version,
@@ -113,7 +128,7 @@ function isBareConfirmation(
     keys.length === 1 &&
     keys[0] === "confirm_ref" &&
     typeof body.confirm_ref === "string" &&
-    body.confirm_ref.length > 0
+    ConfirmReferenceSchema.safeParse(body.confirm_ref).success
   );
 }
 
@@ -166,6 +181,7 @@ async function executeCommandRoute(
   resolved: AuthorizedSession,
   name: string,
   body: Record<string, unknown>,
+  onUnexpectedError: (error: unknown) => void,
 ) {
   const payload = parseRouteCommandPayload(name, body);
   if (payload === null) {
@@ -183,6 +199,7 @@ async function executeCommandRoute(
       pendingStore: context.runtime.pendingStore,
       stepUpProofStore: context.runtime.stepUpProofStore,
       idempotencyStore: context.runtime.idempotencyStore,
+      onUnexpectedError,
       sessionBinding: Object.freeze({
         sessionId: resolved.session.session_id,
         sessionVersion: resolved.session.session_version,
@@ -218,8 +235,14 @@ function registerCommandRoute(
         reply.code(404);
         return fail("RESOURCE_UNAVAILABLE");
       }
-      const body = isRecord(request.body) ? request.body : {};
-      const result = await executeCommandRoute(context, runWithSql, resolved, name, body);
+      if (!isRecord(request.body)) {
+        reply.code(400);
+        return fail("VALIDATION_FAILED");
+      }
+      const body = request.body;
+      const result = await executeCommandRoute(context, runWithSql, resolved, name, body, (error) =>
+        request.log.error(safeErrorContext(error), "command execution failed"),
+      );
       if (!result.ok) applyCommandErrorStatus(reply, result.error.code);
       return result;
     } catch (error) {
@@ -247,17 +270,20 @@ function registerQueryRoute(
         reply.code(400);
         return fail("VALIDATION_FAILED");
       }
+      if (!isRecord(request.body)) {
+        reply.code(400);
+        return fail("VALIDATION_FAILED");
+      }
       const { queryRegistry } = createRuntimeBus(context.runtime);
       const result = await runWithSql((sql) =>
-        executeQuery(
-          sql,
-          tenantFromSession(resolved),
-          name,
-          isRecord(request.body) ? request.body : {},
-          { registry: queryRegistry, actor: actorFromSession(resolved) },
-        ),
+        executeQuery(sql, tenantFromSession(resolved), name, request.body, {
+          registry: queryRegistry,
+          actor: actorFromSession(resolved),
+          onUnexpectedError: (error) =>
+            request.log.error(safeErrorContext(error), "query execution failed"),
+        }),
       );
-      if (!result.ok) reply.code(400);
+      if (!result.ok) applyCommandErrorStatus(reply, result.error.code);
       return result;
     } catch (error) {
       request.log.error(safeErrorContext(error), "query request failed");

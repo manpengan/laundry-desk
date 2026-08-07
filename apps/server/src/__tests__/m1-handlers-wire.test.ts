@@ -168,7 +168,7 @@ test("requiredPermissionsFromInvariants extracts rbac.* codes", () => {
   assert.deepEqual(requiredPermissionsFromInvariants(["identity.credentials_valid"]), []);
 });
 
-test("platform.settings.set via registerM1Handlers + default C5 policy hooks", async () => {
+test("platform.settings.set via registerM1Handlers is gated by default C5 policy hooks", async () => {
   const platform = buildPlatformDeps();
   const { registry, chainHooks, registered } = createRegisteredM1Bus({ platform });
   assert.ok(registered.includes("platform.settings.set"));
@@ -197,7 +197,7 @@ test("platform.settings.set via registerM1Handlers + default C5 policy hooks", a
   assert.equal(detail?.kind, "confirmation");
   if (detail?.kind !== "confirmation") assert.fail("confirm_ref required");
 
-  const approver: ActorContext = Object.freeze({
+  const otherStaff: ActorContext = Object.freeze({
     staffId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
     deviceId: DEVICE_ID,
     via: "ui" as const,
@@ -205,11 +205,11 @@ test("platform.settings.set via registerM1Handlers + default C5 policy hooks", a
   });
   const result = await executeCommand(
     client,
-    { ...TENANT, staffId: approver.staffId },
+    { ...TENANT, staffId: otherStaff.staffId },
     "platform.settings.set",
     {},
     {
-      actor: approver,
+      actor: otherStaff,
       registry,
       chainHooks,
       confirmRef: detail.confirm_ref,
@@ -218,13 +218,10 @@ test("platform.settings.set via registerM1Handlers + default C5 policy hooks", a
     },
   );
 
-  assert.equal(result.ok, true, JSON.stringify(result));
-  if (result.ok) {
-    assert.equal(result.data.execution, "executed");
-    assert.deepEqual(result.data.result, { updated: 1 });
-  }
+  assert.equal(result.ok, false, JSON.stringify(result));
+  if (!result.ok) assert.equal(result.error.code, "POLICY_DENIED");
   const values = await platform.settings.getMany(["store.name"]);
-  assert.equal(values["store.name"], JSON.stringify("Hongfa Front Desk"));
+  assert.equal(values["store.name"], JSON.stringify("Demo Laundry"));
 });
 
 test("platform.settings.set RBAC denies without settings_admin", async () => {

@@ -152,10 +152,12 @@ export function createPgMemberStore(
       }
       const locked = await lockAccount(input.account_id);
       if (!locked.ok) return locked as MemberOutcome<MemberLedgerAppendResult>;
-      // Read the tiers inside the same transaction, after the account lock: a
-      // rule edited between an earlier read and this insert would otherwise be
-      // snapshotted stale, granting a bonus nobody had configured (ADR-22 §3.3).
-      const bonus = matchBonusRule(await readActiveBonusRules(client, tenant), input.amount_cents);
+      // A normal direct store call resolves the current tier under the account
+      // lock. A confirmed command instead supplies the hash-bound first-hop
+      // snapshot so the ledger exactly matches what the operator approved.
+      const bonus =
+        input.frozen_bonus ??
+        matchBonusRule(await readActiveBonusRules(client, tenant), input.amount_cents);
       const appended = await insertMemberLedger(client, tenant, newId, input.account_id, {
         kind: "topup",
         principal: input.amount_cents,

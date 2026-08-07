@@ -7,7 +7,6 @@
  */
 
 import { createCommandError, parseContractInput, type CommandError } from "@laundry/contracts";
-import { ZodError } from "zod";
 
 import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
@@ -15,6 +14,7 @@ import type { ActorContext, CommandHandler, CommandResult, HandlerCommandError }
 import { HandlerCommandError as HandlerCmdErr } from "./types.js";
 import type { QueryRegistry } from "./query-registry.js";
 import { actorHasInvariantPermissions } from "./rbac.js";
+import { validationErrorFrom } from "./validation-error.js";
 
 export type ExecuteQueryOptions = Readonly<{
   actor: ActorContext;
@@ -22,6 +22,8 @@ export type ExecuteQueryOptions = Readonly<{
   version?: string;
   /** Optional override (tests). */
   handler?: CommandHandler;
+  /** HTTP boundary hook for private diagnostics; never enters the public envelope. */
+  onUnexpectedError?: (error: unknown) => void;
 }>;
 
 function fail(error: CommandError): CommandResult {
@@ -36,16 +38,6 @@ function executed(result: unknown): CommandResult {
       result,
     }),
   });
-}
-
-function toValidationError(error: unknown): CommandError {
-  if (error instanceof ZodError) {
-    const first = error.issues[0];
-    const path =
-      first === undefined || first.path.length === 0 ? "/" : `/${first.path.map(String).join("/")}`;
-    return createCommandError("VALIDATION_FAILED", { kind: "field", path });
-  }
-  return createCommandError("VALIDATION_FAILED");
 }
 
 /**
@@ -75,7 +67,7 @@ export async function executeQuery(
   try {
     parsed = await parseContractInput(registered.definition, input);
   } catch (error) {
-    return fail(toValidationError(error));
+    return fail(validationErrorFrom(error));
   }
 
   const request = Object.freeze({
@@ -104,6 +96,7 @@ export async function executeQuery(
     if (error instanceof HandlerCmdErr) {
       return fail(error.commandError);
     }
+    opts.onUnexpectedError?.(error);
     return fail(createCommandError("TRANSACTION_FAILED"));
   }
 }

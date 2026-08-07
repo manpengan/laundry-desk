@@ -138,9 +138,10 @@ export async function startLocalHttpServer(
     runtime = await dependencies.createRuntime(env);
     app = await dependencies.createApp({
       runtime,
-      cookiePolicy: resolveCookiePolicy({ secure: false }),
+      cookiePolicy: resolveCookiePolicy({ secure: config.cookieSecure }),
       hostAuthorities: config.hostAuthorities,
       browserOrigin: config.browserOrigin,
+      browserFetchSite: config.browserFetchSite,
     });
     await app.listen({ port: config.port, host: config.listenHost });
     runtime.print.worker?.start();

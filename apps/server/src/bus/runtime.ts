@@ -50,21 +50,25 @@ export function permissionsForAuthority(
 }
 
 export function createRuntimeBus(runtime: LocalRuntime) {
-  return createRegisteredM1Bus({
-    identity: runtime.identity,
-    platform: runtime.platform,
-    order: runtime.order,
-    catalog: runtime.catalog,
-    print: runtime.print,
-    stats: runtime.stats,
-    customer: runtime.customer,
-    shift: runtime.shift,
-    reconciliation: runtime.reconciliation,
-    accounting: runtime.accounting,
-    photo: runtime.photo,
-    fulfillment: runtime.fulfillment,
-    staffAccess: runtime.staffAccess,
-    member: runtime.member,
-    notification: runtime.notification,
-  });
+  return createRegisteredM1Bus(
+    {
+      identity: runtime.identity,
+      platform: runtime.platform,
+      order: runtime.order,
+      catalog: runtime.catalog,
+      print: runtime.print,
+      stats: runtime.stats,
+      customer: runtime.customer,
+      shift: runtime.shift,
+      reconciliation: runtime.reconciliation,
+      accounting: runtime.accounting,
+      reporting: runtime.reporting,
+      photo: runtime.photo,
+      fulfillment: runtime.fulfillment,
+      staffAccess: runtime.staffAccess,
+      member: runtime.member,
+      notification: runtime.notification,
+    },
+    runtime.pendingStore,
+  );
 }

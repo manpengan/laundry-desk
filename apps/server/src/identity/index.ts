@@ -55,6 +55,7 @@ export type { MemoryIdentityStore } from "./memory-store.js";
 
 export { createPgIdentityStore } from "./pg-store.js";
 export type { PgIdentityStore } from "./pg-store.js";
+export { createPgStepUpProofStore } from "./pg-step-up-proof-store.js";
 
 export {
   buildAccessClaims,

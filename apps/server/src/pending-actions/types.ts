@@ -4,6 +4,7 @@
  */
 
 import type { RiskLevel } from "@laundry/domain";
+import type { SqlClient, TenantContext } from "../db/types.js";
 import type { PolicyOutcome } from "../policy/types.js";
 
 /** Default card lifetime — architecture §9.5 / ADR-05 (5 minutes). */
@@ -37,7 +38,9 @@ export type PendingAction = Readonly<{
   commandVersion: string;
   /** Frozen canonical args — sole authority at execution. */
   args: CanonicalJson;
-  /** SHA-256 hex of canonical JSON serialization (WYSIWYS args_hash). */
+  /** Optional server-derived authority frozen with the card (never accepted from wire input). */
+  authority?: CanonicalJson;
+  /** SHA-256 hex of args plus optional authority (WYSIWYS args_hash). */
   argsHash: string;
   entityVersions: readonly EntityVersion[];
   creatorStaffId: string;
@@ -65,6 +68,8 @@ export type CreatePendingActionInput = Readonly<{
   commandVersion: string;
   /** Raw args; store freezes via canonical snapshot. */
   args: unknown;
+  /** Server-derived authority; stored and hash-bound alongside args when present. */
+  authority?: unknown;
   entityVersions: readonly EntityVersion[];
   creatorStaffId: string;
   orgId: string;
@@ -98,9 +103,26 @@ export type ConsumeFailure = Readonly<{
 
 export type ConsumeResult = ConsumeSuccess | ConsumeFailure;
 
+export type PendingActionReadContext = Readonly<{
+  tenant: TenantContext;
+}>;
+
+export type PendingActionTransactionContext = PendingActionReadContext &
+  Readonly<{
+    client: SqlClient;
+  }>;
+
+type MaybePromise<T> = T | Promise<T>;
+
 export type PendingActionStore = Readonly<{
-  create: (input: CreatePendingActionInput) => PendingAction;
-  get: (nonce: string) => PendingAction | null;
+  create: (
+    input: CreatePendingActionInput,
+    transaction?: PendingActionTransactionContext,
+  ) => MaybePromise<PendingAction>;
+  get: (
+    nonce: string,
+    context?: PendingActionReadContext | PendingActionTransactionContext,
+  ) => MaybePromise<PendingAction | null>;
   /**
    * Atomically transition pending → consumed once.
    * Concurrent second consume fails with ALREADY_CONSUMED.
@@ -112,6 +134,8 @@ export type PendingActionStore = Readonly<{
       nowEpochSeconds?: number;
       /** When set, must equal stored args_hash (WYSIWYS re-check). */
       expectedArgsHash?: string;
+      /** PostgreSQL stores require the command's already-open transaction. */
+      transaction?: PendingActionTransactionContext;
     }>,
-  ) => ConsumeResult;
+  ) => MaybePromise<ConsumeResult>;
 }>;

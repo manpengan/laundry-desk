@@ -47,11 +47,12 @@ const STAFF: ActorContext = Object.freeze({
 });
 
 async function seedIdentity(
-  resolveStaffRole?: (
+  resolveStaffRole: (
     orgId: string,
     storeId: string,
     staffId: string,
-  ) => Promise<"admin" | "staff" | null>,
+  ) => Promise<"admin" | "staff" | null> = async (_orgId, _storeId, staffId) =>
+    staffId === DEMO_ADMIN_ID ? "admin" : "staff",
 ) {
   const store = createMemoryIdentityStore();
   const passwordPort = createTestPasswordPort();
@@ -110,7 +111,7 @@ async function seedIdentity(
     ...pin,
     pending: pendingStore,
     proofs: proofStore,
-    ...(resolveStaffRole === undefined ? {} : { resolveStaffRole }),
+    resolveStaffRole,
   });
 
   const issued = await issueSession(sessionDeps, {
@@ -127,18 +128,17 @@ async function seedIdentity(
   return { store, pinStepUp, pendingStore, proofStore, session, passwordPort };
 }
 
-test("privacy step-up requires an active admin approver at challenge and verification", async () => {
+test("every step-up requires an active admin approver at challenge and verification", async () => {
   let approverRole: "admin" | "staff" = "staff";
   const { pinStepUp, pendingStore, session } = await seedIdentity(
     async (_orgId, _storeId, staffId) => (staffId === DEMO_ADMIN_ID ? approverRole : "staff"),
   );
   const pending = pendingStore.create({
     nonce: "99999999-9999-4999-8999-999999999999",
-    command: "customer.privacy.export",
-    commandVersion: "0.1.0",
+    command: "platform.settings.set",
+    commandVersion: "1.0.0",
     args: {
-      customer_id: "88888888-8888-4888-8888-888888888888",
-      reason: "客户主动申请",
+      entries: [{ key: "pricing.min_order_cents", value_json: "2100" }],
     },
     entityVersions: [],
     creatorStaffId: DEMO_STAFF_A_ID,

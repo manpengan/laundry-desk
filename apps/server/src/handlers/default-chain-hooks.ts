@@ -10,7 +10,11 @@
 
 import { randomUUID } from "node:crypto";
 
-import { createCommandError, type CommandError } from "@laundry/contracts";
+import {
+  createCommandError,
+  type CommandError,
+  type MemberTopupConfirmationSummary,
+} from "@laundry/contracts";
 import type { StepResult } from "@laundry/domain";
 
 import type { BusChainPorts, ChainPortHooks } from "../bus/chain-adapter.js";
@@ -34,6 +38,18 @@ const okPolicy = (): StepResult<Readonly<{ allowed: true }>, CommandError> => ({
 });
 
 export { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";
+
+export type PendingActionPreparation = Readonly<{
+  /** Trusted server-derived snapshot, hash-bound to the pending card. */
+  authority: unknown;
+  /** Public money-only confirmation summary derived from the same snapshot. */
+  summary: MemberTopupConfirmationSummary;
+}>;
+
+export type PendingActionPreparer = (
+  parsed: unknown,
+  context: BusContext,
+) => Promise<PendingActionPreparation | null>;
 
 export const defaultCheckRbac: BusChainPorts["checkRbac"] = async (_parsed, context) => {
   const bus = context.meta as BusContext;
@@ -80,9 +96,23 @@ function commandMetaFrom(bus: BusContext): PolicyCommandMeta {
  */
 export function createEnforcingPolicyCheck(
   pendingStore: PendingActionStore = processPendingActionStore,
+  preparePendingAction?: PendingActionPreparer,
 ): BusChainPorts["checkPolicy"] {
   return async (parsed, context) => {
     const bus = context.meta as BusContext;
+
+    if (bus.idempotentReplay === true) {
+      const replayDecision = evaluatePolicy({
+        actor: policyActorFrom(bus),
+        command: commandMetaFrom(bus),
+      });
+      return replayDecision.outcome === "deny"
+        ? {
+            ok: false,
+            error: createCommandError("POLICY_DENIED"),
+          }
+        : okPolicy();
+    }
 
     // Confirm path: executeCommand pre-validated the card and rewrote input to frozen args.
     if (bus.confirmAuthorized === true) {
@@ -106,23 +136,32 @@ export function createEnforcingPolicyCheck(
     }
 
     // confirm | step_up — create WYSIWYS card and refuse direct execution.
+    const preparation =
+      preparePendingAction === undefined ? null : await preparePendingAction(parsed, bus);
     const nonce = randomUUID();
     const now = Math.floor(Date.now() / 1000);
-    pendingStore.create({
-      nonce,
-      command: bus.definition.name,
-      commandVersion: bus.definition.version,
-      args: parsed,
-      entityVersions: Object.freeze([]),
-      creatorStaffId: bus.actor.staffId,
-      orgId: bus.tenant.orgId,
-      storeId: bus.tenant.storeId,
-      idempotencyKey: bus.request.idempotencyKey ?? nonce,
-      createdAt: now,
-      effectiveRisk: decision.effectiveRisk,
-      policyOutcome: decision.outcome,
-      requiresOtherApprover: decision.requiresOtherApprover,
-    });
+    if (bus.transactionClient === undefined) {
+      throw new Error("Pending action creation requires the command transaction");
+    }
+    await pendingStore.create(
+      {
+        nonce,
+        command: bus.definition.name,
+        commandVersion: bus.definition.version,
+        args: parsed,
+        ...(preparation === null ? {} : { authority: preparation.authority }),
+        entityVersions: Object.freeze([]),
+        creatorStaffId: bus.actor.staffId,
+        orgId: bus.tenant.orgId,
+        storeId: bus.tenant.storeId,
+        idempotencyKey: bus.request.idempotencyKey ?? nonce,
+        createdAt: now,
+        effectiveRisk: decision.effectiveRisk,
+        policyOutcome: decision.outcome,
+        requiresOtherApprover: decision.requiresOtherApprover,
+      },
+      Object.freeze({ tenant: bus.tenant, client: bus.transactionClient }),
+    );
 
     const code =
       decision.outcome === "confirm"
@@ -134,6 +173,7 @@ export function createEnforcingPolicyCheck(
       error: createCommandError(code, {
         kind: "confirmation",
         confirm_ref: nonce,
+        ...(preparation === null ? {} : { summary: preparation.summary }),
       }),
     };
   };
@@ -146,11 +186,13 @@ export const defaultCheckPolicy: BusChainPorts["checkPolicy"] =
 export function createDefaultChainHooks(
   overrides: ChainPortHooks = {},
   pendingStore: PendingActionStore = processPendingActionStore,
+  preparePendingAction?: PendingActionPreparer,
 ): ChainPortHooks {
   return Object.freeze({
     checkRbac: overrides.checkRbac ?? defaultCheckRbac,
     checkTenant: overrides.checkTenant ?? defaultCheckTenant,
-    checkPolicy: overrides.checkPolicy ?? createEnforcingPolicyCheck(pendingStore),
+    checkPolicy:
+      overrides.checkPolicy ?? createEnforcingPolicyCheck(pendingStore, preparePendingAction),
     checkInvariants: overrides.checkInvariants ?? defaultCheckInvariants,
   });
 }

@@ -206,6 +206,45 @@ test("desktop auth inputs fail closed before transport metadata can reach the br
   assert.deepEqual(captured, []);
 });
 
+test("desktop logout clears the renderer directory even when the host call fails", async () => {
+  let logoutCalls = 0;
+  const auth = createPlannedAuthBridge({
+    login: async () => loginSuccess(),
+    pinChallenge: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
+    pinVerify: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
+  });
+  const bridge: LaundryDesktopBridge = Object.freeze({
+    auth: Object.freeze({
+      ...auth,
+      logout: async () => {
+        logoutCalls += 1;
+        throw new Error("host unavailable");
+      },
+    }),
+    command: Object.freeze({ execute: async () => ({ ok: true, data: null }) }),
+    query: Object.freeze({ execute: async () => ({ ok: true, data: null }) }),
+    health: Object.freeze({ get: async () => ({ ok: true, data: { status: "ready" } }) }),
+  });
+  const ports = createDesktopPorts(bridge);
+
+  assert.equal(
+    (
+      await ports.auth.login({
+        org_code: "local",
+        store_code: "main",
+        username: "admin",
+        password: "secret",
+      })
+    ).ok,
+    true,
+  );
+  assert.equal(ports.auth.listSwitchableStaff().length, 2);
+  await ports.auth.logout();
+
+  assert.equal(logoutCalls, 1);
+  assert.deepEqual(ports.auth.listSwitchableStaff(), []);
+});
+
 test("desktop auth adapter rejects a step-up proof as a quick-switch session", async () => {
   const bridge: LaundryDesktopBridge = Object.freeze({
     auth: createPlannedAuthBridge({

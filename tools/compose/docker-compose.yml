@@ -53,6 +53,7 @@ services:
       LAUNDRY_ACCESS_TOKEN_SECRET: "${LAUNDRY_ACCESS_TOKEN_SECRET-}"
       LAUNDRY_CSRF_PROOF_SECRET: "${LAUNDRY_CSRF_PROOF_SECRET-}"
       LAUNDRY_CONTAINER_RUNTIME: "1"
+      LAUNDRY_LAN_ORIGIN: "${LAUNDRY_LAN_ORIGIN-}"
       LAUNDRY_USE_LOCAL_PG: "1"
       LAUNDRY_PHOTO_STORE_DIR: "/var/lib/laundry/photos"
       # Mock printer output (product design §7). Explicitly configured and well
