@@ -55,6 +55,19 @@ test("projectBalance refuses a sum that leaves the safe integer range", () => {
   assert.throws(() => projectBalance(rows), RangeError);
 });
 
+test("projectBalance refuses a safe principal plus safe bonus whose total overflows", () => {
+  assert.throws(
+    () =>
+      projectBalance([
+        {
+          principal_delta_cents: Number.MAX_SAFE_INTEGER,
+          bonus_delta_cents: Number.MAX_SAFE_INTEGER,
+        },
+      ]),
+    RangeError,
+  );
+});
+
 test("allocateSpend spends bonus before principal", () => {
   assert.deepEqual(allocateSpend(balance(10_000, 3_000), 5_000), {
     ok: true,

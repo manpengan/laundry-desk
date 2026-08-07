@@ -36,6 +36,21 @@ export {
   memberTopupCommand,
 } from "./member.js";
 export {
+  MEMBER_LIFECYCLE_COMMAND_NAMES,
+  MEMBER_LIFECYCLE_COMMANDS,
+  MemberAccountCloseInputSchema,
+  MemberAccountFreezeInputSchema,
+  MemberAccountGetAccountSchema,
+  MemberAccountGetLedgerRowSchema,
+  MemberAccountGetResultSchema,
+  MemberAccountStatusSchema,
+  MemberAccountUnfreezeInputSchema,
+  MemberLedgerKindSchema,
+  memberAccountCloseCommand,
+  memberAccountFreezeCommand,
+  memberAccountUnfreezeCommand,
+} from "./member-lifecycle.js";
+export {
   NOTIFICATION_COMMAND_NAMES,
   NOTIFICATION_COMMANDS,
   NOTIFICATION_DEFINITIONS,

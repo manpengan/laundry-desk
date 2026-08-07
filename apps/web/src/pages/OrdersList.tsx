@@ -26,6 +26,7 @@ export type OrdersListProps = {
   queryClient: QueryPort;
   commandClient?: CommandPort;
   photoPort?: PhotoPort;
+  memberEnabled?: boolean;
   /** Override default UTC business date (tests). Empty string = all days. */
   defaultDate?: string;
   /** Skip auto-load on mount (tests). */
@@ -117,6 +118,7 @@ export function OrdersList({
   queryClient,
   commandClient,
   photoPort,
+  memberEnabled = false,
   defaultDate,
   autoLoad = true,
   onOpenPickup,
@@ -243,6 +245,7 @@ export function OrdersList({
         open={detailOrderId !== null}
         orderId={detailOrderId}
         queryClient={queryClient}
+        memberEnabled={memberEnabled}
         {...(commandClient !== undefined ? { commandClient } : {})}
         {...(photoPort !== undefined ? { photoPort } : {})}
         onClose={() => setDetailOrderId(null)}

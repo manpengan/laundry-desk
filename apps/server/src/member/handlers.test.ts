@@ -8,6 +8,7 @@ import type { OrderHandlerDeps } from "../order/handlers.js";
 import type { PaymentAppendInput, PaymentAppendResult } from "../order/types.js";
 import { createMemberHandlers } from "./handlers.js";
 import { createMemoryMemberStore } from "./memory-store.js";
+import type { MemberStore } from "./types.js";
 
 const ORG_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const STORE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -35,6 +36,7 @@ type Recorded = { calls: PaymentAppendInput[] };
 function makeDeps(options: { paymentFails?: boolean } = {}): {
   handlers: ReturnType<typeof createMemberHandlers>;
   recorded: Recorded;
+  store: MemberStore;
 } {
   const recorded: Recorded = { calls: [] };
   const appendPayment = async (input: PaymentAppendInput): Promise<PaymentAppendResult | null> => {
@@ -63,13 +65,15 @@ function makeDeps(options: { paymentFails?: boolean } = {}): {
     now: () => 1_780_000_000,
   }) as unknown as OrderHandlerDeps;
 
+  const store = createMemoryMemberStore({ customerIds: [CUSTOMER_ID] });
   return {
     handlers: createMemberHandlers({
       persistence: "memory",
-      store: createMemoryMemberStore({ customerIds: [CUSTOMER_ID] }),
+      store,
       order,
     }),
     recorded,
+    store,
   };
 }
 
@@ -457,5 +461,243 @@ test("refund refuses a blank reason", async () => {
         ["member_refund"],
       ),
     hasCode("VALIDATION_FAILED"),
+  );
+});
+
+test("lifecycle handlers enforce dedicated permissions and frozen blocks ordinary refund", async () => {
+  const { handlers } = makeDeps();
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const accountId = String(asRecord(opened.result).account_id);
+
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.account.freeze"],
+        {
+          account_id: accountId,
+          expected_customer_id: CUSTOMER_ID,
+          expected_status_version: 1,
+          reason: "reported lost",
+        },
+        ["customer_write"],
+      ),
+    hasCode("PERMISSION_DENIED"),
+  );
+  const frozen = await run(
+    handlers["member.account.freeze"],
+    {
+      account_id: accountId,
+      expected_customer_id: CUSTOMER_ID,
+      expected_status_version: 1,
+      reason: "reported lost",
+    },
+    ["member_freeze"],
+  );
+  assert.deepEqual(asRecord(frozen.result), {
+    account_id: accountId,
+    customer_id: CUSTOMER_ID,
+    status: "frozen",
+    status_version: 2,
+    status_changed_at: 1_780_000_000,
+  });
+  assert.deepEqual(JSON.parse(frozen.audit?.beforeJson ?? "null"), {
+    customer_id: CUSTOMER_ID,
+    status: "active",
+    status_version: 1,
+  });
+
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.refund"],
+        {
+          account_id: accountId,
+          amount_cents: 1,
+          tender: "cash",
+          reason: "ordinary refund",
+        },
+        ["member_refund"],
+      ),
+    hasCode("INVARIANT_FAILED"),
+  );
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.account.unfreeze"],
+        {
+          account_id: accountId,
+          expected_customer_id: CUSTOMER_ID,
+          expected_status_version: 2,
+          reason: "verified",
+        },
+        ["member_freeze"],
+      ),
+    hasCode("PERMISSION_DENIED"),
+  );
+});
+
+test("close requires both permissions and returns an exact settled account projection", async () => {
+  const { handlers, store } = makeDeps();
+  const rule = await store.upsertBonusRule({
+    rule_id: null,
+    min_topup_cents: 1_000,
+    bonus_cents: 100,
+    status: "active",
+    staff_id: STAFF_ID,
+    at: 1_779_999_999,
+    note: null,
+  });
+  assert.equal(rule.ok, true);
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const accountId = String(asRecord(opened.result).account_id);
+  await run(
+    handlers["member.topup"],
+    { account_id: accountId, amount_cents: 1_000, method: "cash" },
+    ["customer_write"],
+  );
+
+  const closeInput = {
+    account_id: accountId,
+    expected_customer_id: CUSTOMER_ID,
+    expected_status_version: 1,
+    expected_status: "active",
+    expected_principal_cents: 1_000,
+    expected_bonus_cents: 100,
+    refund_tender: "cash",
+    reason: "customer requested closure",
+  } as const;
+  await assert.rejects(
+    () => run(handlers["member.account.close"], closeInput, ["member_lifecycle_manage"]),
+    hasCode("PERMISSION_DENIED"),
+  );
+  const closed = await run(handlers["member.account.close"], closeInput, [
+    "member_lifecycle_manage",
+    "member_refund",
+  ]);
+  const closeResult = asRecord(closed.result);
+  assert.deepEqual(closeResult, {
+    account_id: accountId,
+    customer_id: CUSTOMER_ID,
+    status: "closed",
+    status_version: 2,
+    refunded_principal_cents: 1_000,
+    forfeited_bonus_cents: 100,
+    refund_ledger_id: closeResult.refund_ledger_id,
+    bonus_forfeit_ledger_id: closeResult.bonus_forfeit_ledger_id,
+    principal_cents: 0,
+    bonus_cents: 0,
+    balance_cents: 0,
+  });
+  assert.equal(typeof closeResult.refund_ledger_id, "string");
+  assert.equal(typeof closeResult.bonus_forfeit_ledger_id, "string");
+  assert.deepEqual(
+    closed.events?.map((event) => event.type),
+    ["member.account_closed", "member.principal_refunded", "member.bonus_forfeited"],
+  );
+
+  const view = await run(handlers["member.account.get"], { customer_id: CUSTOMER_ID }, [
+    "customer_read",
+  ]);
+  const projected = asRecord(view.result);
+  const account = asRecord(projected.account);
+  assert.deepEqual(Object.keys(account).sort(), [
+    "account_id",
+    "balance_cents",
+    "bonus_cents",
+    "customer_id",
+    "principal_cents",
+    "status",
+    "status_changed_at",
+    "status_reason",
+    "status_version",
+  ]);
+  assert.equal(account.status, "closed");
+  assert.equal(account.status_reason, "customer requested closure");
+  const recent = projected.recent as readonly unknown[];
+  assert.deepEqual(Object.keys(asRecord(recent[0])).sort(), [
+    "at",
+    "bonus_delta_cents",
+    "bonus_rule_id",
+    "business_date",
+    "kind",
+    "ledger_id",
+    "note",
+    "order_id",
+    "principal_delta_cents",
+    "store_id",
+    "tender",
+  ]);
+});
+
+test("lifecycle handlers reject blank reasons before changing the account", async () => {
+  const { handlers, store } = makeDeps();
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const accountId = String(asRecord(opened.result).account_id);
+
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.account.freeze"],
+        {
+          account_id: accountId,
+          expected_customer_id: CUSTOMER_ID,
+          expected_status_version: 1,
+          reason: "   ",
+        },
+        ["member_freeze"],
+      ),
+    hasCode("VALIDATION_FAILED"),
+  );
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.account.close"],
+        {
+          account_id: accountId,
+          expected_customer_id: CUSTOMER_ID,
+          expected_status_version: 1,
+          expected_status: "active",
+          expected_principal_cents: 0,
+          expected_bonus_cents: 0,
+          refund_tender: null,
+          reason: "",
+        },
+        ["member_lifecycle_manage", "member_refund"],
+      ),
+    hasCode("VALIDATION_FAILED"),
+  );
+  assert.equal((await store.getByCustomer(CUSTOMER_ID, 10))?.account.status, "active");
+});
+
+test("zero-balance close emits no refund or forfeiture event", async () => {
+  const { handlers } = makeDeps();
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const accountId = String(asRecord(opened.result).account_id);
+  const closed = await run(
+    handlers["member.account.close"],
+    {
+      account_id: accountId,
+      expected_customer_id: CUSTOMER_ID,
+      expected_status_version: 1,
+      expected_status: "active",
+      expected_principal_cents: 0,
+      expected_bonus_cents: 0,
+      refund_tender: null,
+      reason: "empty account",
+    },
+    ["member_lifecycle_manage", "member_refund"],
+  );
+
+  assert.deepEqual(
+    closed.events?.map((event) => event.type),
+    ["member.account_closed"],
   );
 });

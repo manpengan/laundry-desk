@@ -57,13 +57,14 @@ export function projectBalance(rows: readonly LedgerDelta[]): MemberBalance {
     principal += row.principal_delta_cents;
     bonus += row.bonus_delta_cents;
   }
-  if (!isSafeInteger(principal) || !isSafeInteger(bonus)) {
+  const total = principal + bonus;
+  if (!isSafeInteger(principal) || !isSafeInteger(bonus) || !isSafeInteger(total)) {
     throw new RangeError("member balance overflowed the safe integer range");
   }
   return Object.freeze({
     principal_cents: principal,
     bonus_cents: bonus,
-    total_cents: principal + bonus,
+    total_cents: total,
   });
 }
 

@@ -19,6 +19,8 @@ export type PaymentCollectionDialogProps = Readonly<{
   commandClient: CommandPort;
   /** Omit to hide stored-value settlement (e.g. hosts without a query port). */
   queryClient?: QueryPort;
+  /** Server session feature projection; false/omitted must not query or render member data. */
+  memberEnabled?: boolean;
   onClose: () => void;
   onCompleted: () => void;
 }>;
@@ -46,6 +48,7 @@ export function PaymentCollectionDialog({
   order,
   commandClient,
   queryClient,
+  memberEnabled = false,
   onClose,
   onCompleted,
 }: PaymentCollectionDialogProps) {
@@ -67,14 +70,14 @@ export function PaymentCollectionDialog({
     setMemberAccountId(null);
     setMemberBalanceCents(0);
     const customerId = order.customer_id;
-    if (queryClient === undefined || customerId === null) return;
+    if (!memberEnabled || queryClient === undefined || customerId === null) return;
     let cancelled = false;
     void (async () => {
       const res = await queryClient.execute<unknown>("member.account.get", {
         customer_id: customerId,
       });
       if (cancelled || !res.ok) return;
-      const view = parseMemberAccountView(unwrapQueryResult(res.data));
+      const view = parseMemberAccountView(unwrapQueryResult(res.data), customerId);
       // Only an active account with money in it earns the extra option; showing
       // a zero balance choice would just produce a guaranteed rejection.
       if (view?.account == null || view.account.status !== "active") return;
@@ -85,7 +88,7 @@ export function PaymentCollectionDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, order.balance_cents, order.customer_id, order.order_id, queryClient]);
+  }, [memberEnabled, open, order.balance_cents, order.customer_id, order.order_id, queryClient]);
 
   const submit = async () => {
     const plan = buildPaymentSubmission({

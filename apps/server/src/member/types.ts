@@ -1,15 +1,19 @@
 import type { MemberBalance } from "./balance.js";
+import type { MemberAccountStatus } from "@laundry/domain";
 
-export type MemberAccountStatus = "active" | "frozen";
+export type { MemberAccountStatus } from "@laundry/domain";
 
 export type MemberAccountRecord = Readonly<{
   account_id: string;
   customer_id: string;
   status: MemberAccountStatus;
+  status_version: number;
+  status_changed_at: number | null;
+  status_reason: string | null;
   opened_at: number;
 }>;
 
-export type MemberLedgerKind = "topup" | "pay" | "reversal" | "refund";
+export type MemberLedgerKind = "topup" | "pay" | "reversal" | "refund" | "bonus_forfeit";
 
 /**
  * How real money moved for this row (ADR-22 §1.1).
@@ -118,6 +122,38 @@ export type MemberRefundInput = Readonly<{
   note: string | null;
 }>;
 
+type MemberLifecycleBaseInput = Readonly<{
+  account_id: string;
+  expected_customer_id: string;
+  expected_status_version: number;
+  store_id: string;
+  staff_id: string;
+  at: number;
+  reason: string;
+}>;
+
+export type MemberStatusTransitionInput = MemberLifecycleBaseInput &
+  Readonly<{ action: "freeze" | "unfreeze" }>;
+
+export type MemberCloseInput = MemberLifecycleBaseInput &
+  Readonly<{
+    expected_status: "active" | "frozen";
+    expected_principal_cents: number;
+    expected_bonus_cents: number;
+    refund_tender: MemberTender | null;
+    business_date: string;
+  }>;
+
+export type MemberLifecycleResult = Readonly<{
+  account: MemberAccountRecord;
+  previous_status: MemberAccountStatus;
+  balance: MemberBalance;
+  refunded_principal_cents: number;
+  forfeited_bonus_cents: number;
+  refund_ledger_id: string | null;
+  bonus_forfeit_ledger_id: string | null;
+}>;
+
 export type MemberLedgerAppendResult = Readonly<{
   account_id: string;
   ledger_id: string;
@@ -136,6 +172,13 @@ export type MemberRejectReason =
   | "customer_not_found"
   | "account_not_found"
   | "account_frozen"
+  | "account_closed"
+  | "account_customer_mismatch"
+  | "account_version_conflict"
+  | "invalid_transition"
+  | "stale_status"
+  | "stale_balance"
+  | "invalid_balance"
   | "invalid_amount"
   | "insufficient_balance"
   | "bonus_rule_not_found";
@@ -164,6 +207,10 @@ export type MemberStore = Readonly<{
    * never refundable — it is a book grant the customer never paid for.
    */
   refund: (input: MemberRefundInput) => Promise<MemberOutcome<MemberLedgerAppendResult>>;
+  transitionStatus: (
+    input: MemberStatusTransitionInput,
+  ) => Promise<MemberOutcome<MemberLifecycleResult>>;
+  close: (input: MemberCloseInput) => Promise<MemberOutcome<MemberLifecycleResult>>;
   /**
    * Cash that entered the drawer through stored value on one store-day (ADR-22 §1.2).
    *

@@ -24,6 +24,8 @@ export type OrderDetailDrawerProps = {
   queryClient: QueryPort;
   commandClient?: CommandPort;
   photoPort?: PhotoPort;
+  /** UI feature mirror only; server remains authoritative. */
+  memberEnabled?: boolean;
   onClose: () => void;
   /** Navigate to pickup with this order id. */
   onPickup?: (orderId: string) => void;
@@ -50,6 +52,7 @@ export function OrderDetailDrawer({
   queryClient,
   commandClient,
   photoPort,
+  memberEnabled = false,
   onClose,
   onPickup,
 }: OrderDetailDrawerProps) {
@@ -380,6 +383,7 @@ export function OrderDetailDrawer({
           order={load.order}
           commandClient={commandClient}
           queryClient={queryClient}
+          memberEnabled={memberEnabled}
           onClose={() => setPaymentOpen(false)}
           onCompleted={() => {
             if (orderId !== null) void loadOrder(orderId);

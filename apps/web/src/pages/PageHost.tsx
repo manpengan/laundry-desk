@@ -170,6 +170,7 @@ export function PageHost({
     return (
       <DebtPage
         queryClient={queryClient}
+        memberEnabled={session.features.member_enabled === true}
         {...(commandClient !== undefined ? { commandClient } : {})}
         {...(photoPort !== undefined ? { photoPort } : {})}
         onOpenPickup={(orderId) => {

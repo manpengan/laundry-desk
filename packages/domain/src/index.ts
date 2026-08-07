@@ -10,3 +10,4 @@ export * from "./print/index.js";
 export * from "./stats/index.js";
 export * from "./notification/index.js";
 export * from "./accounting/index.js";
+export * from "./member/index.js";

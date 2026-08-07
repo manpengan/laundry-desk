@@ -47,6 +47,13 @@ export function refusalError(reason: MemberRejectReason): HandlerCommandError {
     case "bonus_rule_not_found":
       return new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     case "account_frozen":
+    case "account_closed":
+    case "account_customer_mismatch":
+    case "account_version_conflict":
+    case "invalid_transition":
+    case "stale_status":
+    case "stale_balance":
+    case "invalid_balance":
     case "insufficient_balance":
       return new HandlerCommandError(createCommandError("INVARIANT_FAILED"));
     case "invalid_amount":

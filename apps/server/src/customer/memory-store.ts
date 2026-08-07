@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import type {
   CustomerMergeInput,
   CustomerMergeResult,
+  CustomerMemberAccountMergePort,
   CustomerPrivacyActionInput,
   CustomerPrivacyEvent,
   CustomerRecord,
@@ -62,7 +63,10 @@ export class MemoryCustomerStore implements CustomerStore {
   private readonly rows: CustomerRecord[];
   private readonly privacyEvents: CustomerPrivacyEvent[] = [];
 
-  constructor(seed: readonly CustomerRecord[] = DEMO_CUSTOMERS) {
+  constructor(
+    seed: readonly CustomerRecord[] = DEMO_CUSTOMERS,
+    private readonly memberAccounts?: CustomerMemberAccountMergePort,
+  ) {
     this.rows = seed.map((row) => Object.freeze({ ...row }));
   }
 
@@ -156,10 +160,16 @@ export class MemoryCustomerStore implements CustomerStore {
 
   async merge(input: CustomerMergeInput): Promise<CustomerMergeResult | null> {
     const sourceIndex = this.rows.findIndex(
-      (row) => row.customer_id === input.source_customer_id && row.merged_into_id === null,
+      (row) =>
+        row.customer_id === input.source_customer_id &&
+        row.merged_into_id === null &&
+        row.anonymized_at == null,
     );
     const target = this.rows.find(
-      (row) => row.customer_id === input.target_customer_id && row.merged_into_id === null,
+      (row) =>
+        row.customer_id === input.target_customer_id &&
+        row.merged_into_id === null &&
+        row.anonymized_at == null,
     );
     if (
       sourceIndex < 0 ||
@@ -169,6 +179,14 @@ export class MemoryCustomerStore implements CustomerStore {
       return null;
     }
     const source = this.rows[sourceIndex]!;
+    const memberOutcome = this.memberAccounts?.mergeCustomerMemberAccount(
+      source.customer_id,
+      target.customer_id,
+    );
+    if (memberOutcome === "conflict") return null;
+
+    // There is deliberately no await between the domain-specific member port
+    // and this assignment: both in-memory stores commit in one JS turn.
     this.rows[sourceIndex] = Object.freeze({
       ...source,
       merged_into_id: target.customer_id,
@@ -289,6 +307,7 @@ export class MemoryCustomerStore implements CustomerStore {
 
 export function createMemoryCustomerStore(
   seed: readonly CustomerRecord[] = DEMO_CUSTOMERS,
+  memberAccounts?: CustomerMemberAccountMergePort,
 ): CustomerStore {
-  return new MemoryCustomerStore(seed);
+  return new MemoryCustomerStore(seed, memberAccounts);
 }

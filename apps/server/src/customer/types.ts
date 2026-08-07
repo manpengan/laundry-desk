@@ -42,6 +42,19 @@ export type CustomerMergeResult = Readonly<{
   relinked_order_count: number;
 }>;
 
+export type CustomerMemberAccountMergeOutcome = "no_account" | "relinked" | "conflict";
+
+/**
+ * Synchronous by design: the memory customer row and member ownership change
+ * in one uninterrupted event-loop turn, matching the SQL transaction boundary.
+ */
+export type CustomerMemberAccountMergePort = Readonly<{
+  mergeCustomerMemberAccount: (
+    sourceCustomerId: string,
+    targetCustomerId: string,
+  ) => CustomerMemberAccountMergeOutcome;
+}>;
+
 export type CustomerPrivacyStatus = Readonly<{
   customer_id: string;
   active_order_count: number;

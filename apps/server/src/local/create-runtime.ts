@@ -14,7 +14,7 @@ import { createPasswordPort } from "../identity/password.js";
 import type { StaffRecord, Uuid } from "../identity/types.js";
 import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
 import { createPgCatalogStore } from "../catalog/pg-catalog-store.js";
-import { createMemoryCustomerStore } from "../customer/memory-store.js";
+import { createMemoryCustomerStore, DEMO_CUSTOMERS } from "../customer/memory-store.js";
 import { createPgCustomerStore } from "../customer/pg-customer-store.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
@@ -224,10 +224,10 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   seedStaff(DEMO_STAFF_B_ID, "staffb", "店员乙");
 
   const orderStore = createMemoryOrderStore();
-  const customerStore = createMemoryCustomerStore();
   // Memory runtime has no customer table to consult, so seed the demo
   // customer set the memory customer store starts from.
-  const memberDeps = createMemoryMemberDeps([]);
+  const memberDeps = createMemoryMemberDeps(DEMO_CUSTOMERS.map((row) => row.customer_id));
+  const customerStore = createMemoryCustomerStore(DEMO_CUSTOMERS, memberDeps.customerMerge);
   // Cash top-ups belong to the day's expected cash (ADR-22 §1.2), so stats must
   // see the same member store the top-up command writes to.
   const statsSource = createOrderBackedStatsQuery(orderStore, memberDeps.store);

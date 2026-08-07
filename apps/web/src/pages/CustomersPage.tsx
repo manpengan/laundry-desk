@@ -299,14 +299,16 @@ export function CustomersPage({
             onOpenOrder={setDetailOrderId}
             {...(onOpenPickup === undefined ? {} : { onOpenPickup })}
           />
-          <MemberBalancePanel
-            customer={selected}
-            queryClient={queryClient}
-            commandClient={commandClient}
-            {...(authClient === undefined ? {} : { authClient })}
-            {...(session === undefined ? {} : { session })}
-            toast={toast}
-          />
+          {session?.features.member_enabled === true ? (
+            <MemberBalancePanel
+              customer={selected}
+              queryClient={queryClient}
+              commandClient={commandClient}
+              {...(authClient === undefined ? {} : { authClient })}
+              session={session}
+              toast={toast}
+            />
+          ) : null}
           <CustomerGovernancePanel
             customer={selected}
             queryClient={queryClient}
@@ -337,6 +339,7 @@ export function CustomersPage({
         orderId={detailOrderId}
         queryClient={queryClient}
         commandClient={commandClient}
+        memberEnabled={session?.features.member_enabled === true}
         {...(photoPort === undefined ? {} : { photoPort })}
         onClose={() => setDetailOrderId(null)}
         {...(onOpenPickup === undefined

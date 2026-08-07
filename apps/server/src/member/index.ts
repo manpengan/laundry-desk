@@ -6,8 +6,13 @@ export {
   type SpendAllocation,
   type SpendOutcome,
 } from "./balance.js";
-export { createMemoryMemberStore, type MemoryMemberSeed } from "./memory-store.js";
+export {
+  createMemoryMemberStore,
+  type MemoryMemberSeed,
+  type MemoryMemberStore,
+} from "./memory-store.js";
 export { createPgMemberStore, type CreatePgMemberStoreOptions } from "./pg-store.js";
+export { createMemberLifecycleHandlers } from "./lifecycle-handlers.js";
 export {
   createMemberHandlers,
   registerMemberHandlers,
@@ -25,6 +30,9 @@ export type {
   MemberOpenInput,
   MemberOpenResult,
   MemberOutcome,
+  MemberCloseInput,
+  MemberLifecycleResult,
+  MemberStatusTransitionInput,
   MemberRejectReason,
   MemberSpendInput,
   MemberStore,

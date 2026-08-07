@@ -10,6 +10,7 @@ import { createMockAuthClient } from "../auth/AuthClient.js";
 import { FULL_STORE_FEATURES } from "../auth/permissions.js";
 import type { SessionView } from "../auth/types.js";
 import { createMockCommandClient } from "../commands/command-client.js";
+import { createMockQueryClient } from "../commands/query-client.js";
 import { PRINTER_PATH_ENV_NAME, SettingsPage } from "./SettingsPage.js";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -69,4 +70,26 @@ test("SettingsPage source cannot reconnect renderer printer smoke", () => {
   const source = readFileSync(join(packageRoot, "src/pages/SettingsPage.tsx"), "utf8");
   assert.doesNotMatch(source, /edgeBridge\.printerSmoke|edgePrinterSmoke|resolveEdgePrinterSmoke/u);
   assert.match(source, /--validate/u);
+});
+
+test("member feature flag gates the complete bonus-rule settings surface", () => {
+  const render = (memberEnabled: boolean) =>
+    renderToStaticMarkup(
+      createElement(
+        ToastProvider,
+        null,
+        createElement(SettingsPage, {
+          session: {
+            ...SESSION,
+            features: Object.freeze({ ...FULL_STORE_FEATURES, member_enabled: memberEnabled }),
+          },
+          authClient: createMockAuthClient(),
+          commandClient: createMockCommandClient(),
+          queryClient: createMockQueryClient(),
+        }),
+      ),
+    );
+
+  assert.doesNotMatch(render(false), /data-testid="member-rules"/);
+  assert.match(render(true), /data-testid="member-rules"/);
 });

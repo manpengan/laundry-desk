@@ -145,10 +145,10 @@ export const memberBalancePayCommand: CommandDefinition<typeof MemberBalancePayI
 export const memberAccountGetQuery: QueryDefinition<typeof MemberAccountGetInputSchema> =
   defineQuery({
     name: "member.account.get",
-    version: "1.0.0",
-    description: "Read a customer's stored-value balance and recent ledger rows.",
+    version: "1.1.0",
+    description: "Read a customer's stored-value account state and recent ledger rows.",
     description_llm:
-      "Return the member balance split into principal and bonus, plus the most recent ledger movements. The balance is summed from the ledger, never read from a stored column.",
+      "Return the member account's exact active, frozen or closed state with its optimistic status version and change evidence, the balance split into principal and bonus, and recent ledger movements including any terminal bonus forfeiture. The balance is summed from the ledger, never read from a stored column.",
     input: MemberAccountGetInputSchema,
     risk: "R1",
     invariants: [],

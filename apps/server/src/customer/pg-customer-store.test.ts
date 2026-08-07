@@ -260,6 +260,7 @@ test("merge sets the store GUC before relinking store orders by stable customer 
             created_at: AT,
             updated_at: AT,
             merged_into_id: null,
+            anonymized_at: null,
           },
           {
             id: TARGET_ID,
@@ -269,12 +270,14 @@ test("merge sets the store GUC before relinking store orders by stable customer 
             created_at: AT,
             updated_at: AT,
             merged_into_id: null,
+            anonymized_at: null,
           },
         ],
         rowCount: 2,
       };
     }
     if (sql.includes("UPDATE orders")) return { rows: [], rowCount: 1 };
+    if (sql.includes("UPDATE customers")) return { rows: [], rowCount: 1 };
     return { rows: [], rowCount: 0 };
   });
 
@@ -301,4 +304,177 @@ test("merge sets the store GUC before relinking store orders by stable customer 
   assert.ok(relink?.sql.includes("customer_id = $3::uuid"));
   assert.equal(relink?.sql.includes("customer_phone = $3"), false);
   assert.deepEqual(relink?.params?.slice(0, 4), [DEMO_ORG_ID, DEMO_STORE_ID, FIXED_ID, TARGET_ID]);
+});
+
+test("merge moves a source-only member account to the surviving customer first", async () => {
+  const accountId = "a5555555-5555-4555-8555-555555555555";
+  const { pool, queries } = createCapturingPool((sql) => {
+    if (sql.includes("FROM customers") && sql.includes("FOR UPDATE")) {
+      return {
+        rows: [
+          {
+            id: FIXED_ID,
+            phone: "13800000333",
+            name: "来源",
+            note: null,
+            created_at: AT,
+            updated_at: AT,
+            merged_into_id: null,
+            anonymized_at: null,
+          },
+          {
+            id: TARGET_ID,
+            phone: "13900000333",
+            name: "保留",
+            note: null,
+            created_at: AT,
+            updated_at: AT,
+            merged_into_id: null,
+            anonymized_at: null,
+          },
+        ],
+        rowCount: 2,
+      };
+    }
+    if (sql.includes("FROM member_accounts") && sql.includes("FOR UPDATE")) {
+      return { rows: [{ id: accountId, customer_id: FIXED_ID }], rowCount: 1 };
+    }
+    if (sql.includes("UPDATE orders")) return { rows: [], rowCount: 2 };
+    return { rows: [], rowCount: 1 };
+  });
+
+  const store = createPgCustomerStore(pool, { orgId: DEMO_ORG_ID });
+  const result = await store.merge({
+    source_customer_id: FIXED_ID,
+    target_customer_id: TARGET_ID,
+    store_id: DEMO_STORE_ID,
+    now: Math.floor(AT.getTime() / 1000),
+  });
+
+  assert.equal(result?.relinked_order_count, 2);
+  const accountUpdate = queries.find((query) => query.sql.includes("UPDATE member_accounts"));
+  assert.deepEqual(accountUpdate?.params, [DEMO_ORG_ID, accountId, FIXED_ID, TARGET_ID]);
+  const accountUpdateIndex = queries.findIndex((query) =>
+    query.sql.includes("UPDATE member_accounts"),
+  );
+  const orderUpdateIndex = queries.findIndex((query) => query.sql.includes("UPDATE orders"));
+  const sourceUpdateIndex = queries.findIndex((query) => query.sql.includes("UPDATE customers"));
+  assert.ok(accountUpdateIndex >= 0);
+  assert.ok(accountUpdateIndex < orderUpdateIndex);
+  assert.ok(orderUpdateIndex < sourceUpdateIndex);
+});
+
+test("merge keeps a target-only member account and still retires the source", async () => {
+  const targetAccountId = "a6666666-6666-4666-8666-666666666666";
+  const { pool, queries } = createCapturingPool((sql) => {
+    if (sql.includes("FROM customers") && sql.includes("FOR UPDATE")) {
+      return {
+        rows: [
+          {
+            id: FIXED_ID,
+            phone: "13800000333",
+            name: "来源",
+            merged_into_id: null,
+            anonymized_at: null,
+          },
+          {
+            id: TARGET_ID,
+            phone: "13900000333",
+            name: "保留",
+            merged_into_id: null,
+            anonymized_at: null,
+          },
+        ],
+        rowCount: 2,
+      };
+    }
+    if (sql.includes("FROM member_accounts") && sql.includes("FOR UPDATE")) {
+      return { rows: [{ id: targetAccountId, customer_id: TARGET_ID }], rowCount: 1 };
+    }
+    if (sql.includes("UPDATE orders")) return { rows: [], rowCount: 0 };
+    if (sql.includes("UPDATE customers")) return { rows: [], rowCount: 1 };
+    return { rows: [], rowCount: 0 };
+  });
+
+  const store = createPgCustomerStore(pool, { orgId: DEMO_ORG_ID });
+  const result = await store.merge({
+    source_customer_id: FIXED_ID,
+    target_customer_id: TARGET_ID,
+    store_id: DEMO_STORE_ID,
+    now: Math.floor(AT.getTime() / 1000),
+  });
+
+  assert.notEqual(result, null);
+  assert.equal(
+    queries.some((query) => query.sql.includes("UPDATE member_accounts")),
+    false,
+  );
+  assert.equal(
+    queries.some((query) => query.sql.includes("UPDATE customers")),
+    true,
+  );
+});
+
+test("merge refuses two member accounts before changing either customer", async () => {
+  const { pool, queries } = createCapturingPool((sql) => {
+    if (sql.includes("FROM customers") && sql.includes("FOR UPDATE")) {
+      return {
+        rows: [
+          {
+            id: FIXED_ID,
+            phone: "13800000333",
+            name: "来源",
+            note: null,
+            created_at: AT,
+            updated_at: AT,
+            merged_into_id: null,
+            anonymized_at: null,
+          },
+          {
+            id: TARGET_ID,
+            phone: "13900000333",
+            name: "保留",
+            note: null,
+            created_at: AT,
+            updated_at: AT,
+            merged_into_id: null,
+            anonymized_at: null,
+          },
+        ],
+        rowCount: 2,
+      };
+    }
+    if (sql.includes("FROM member_accounts") && sql.includes("FOR UPDATE")) {
+      return {
+        rows: [
+          { id: "a5555555-5555-4555-8555-555555555555", customer_id: FIXED_ID },
+          { id: "a6666666-6666-4666-8666-666666666666", customer_id: TARGET_ID },
+        ],
+        rowCount: 2,
+      };
+    }
+    return { rows: [], rowCount: 0 };
+  });
+
+  const store = createPgCustomerStore(pool, { orgId: DEMO_ORG_ID });
+  const result = await store.merge({
+    source_customer_id: FIXED_ID,
+    target_customer_id: TARGET_ID,
+    store_id: DEMO_STORE_ID,
+    now: Math.floor(AT.getTime() / 1000),
+  });
+
+  assert.equal(result, null);
+  assert.equal(
+    queries.some((query) => query.sql.includes("UPDATE member_accounts")),
+    false,
+  );
+  assert.equal(
+    queries.some((query) => query.sql.includes("UPDATE orders")),
+    false,
+  );
+  assert.equal(
+    queries.some((query) => query.sql.includes("UPDATE customers")),
+    false,
+  );
 });

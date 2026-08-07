@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 
+import type {
+  CustomerMemberAccountMergeOutcome,
+  CustomerMemberAccountMergePort,
+} from "../customer/types.js";
 import { allocateSpend, projectBalance, type MemberBalance } from "./balance.js";
 import { matchBonusRule, type BonusRule } from "./bonus.js";
+import { createMemoryMemberLifecycleOperations } from "./memory-lifecycle.js";
 import type {
   MemberAccountRecord,
   MemberAccountView,
@@ -25,6 +30,8 @@ export type MemoryMemberSeed = Readonly<{
   newId?: () => string;
 }>;
 
+export type MemoryMemberStore = MemberStore & CustomerMemberAccountMergePort;
+
 const reject = <T>(reason: MemberRejectReason): MemberOutcome<T> =>
   Object.freeze({ ok: false as const, reason });
 
@@ -34,7 +41,7 @@ const reject = <T>(reason: MemberRejectReason): MemberOutcome<T> =>
  * It mirrors the PostgreSQL store's *decisions* (idempotent open, no overdraw,
  * append-only ledger) but not its locking: a single-threaded map needs none.
  */
-export function createMemoryMemberStore(seed: MemoryMemberSeed): MemberStore {
+export function createMemoryMemberStore(seed: MemoryMemberSeed): MemoryMemberStore {
   const newId = seed.newId ?? randomUUID;
   const customers = new Set(seed.customerIds);
   const accounts = new Map<string, MemberAccountRecord>();
@@ -78,11 +85,38 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemberStore {
   const activeAccount = (accountId: string): MemberOutcome<MemberAccountRecord> => {
     const account = accounts.get(accountId);
     if (account === undefined) return reject("account_not_found");
-    if (account.status !== "active") return reject("account_frozen");
+    if (account.status === "frozen") return reject("account_frozen");
+    if (account.status === "closed") return reject("account_closed");
     return Object.freeze({ ok: true as const, value: account });
   };
 
+  const mergeCustomerMemberAccount = (
+    sourceCustomerId: string,
+    targetCustomerId: string,
+  ): CustomerMemberAccountMergeOutcome => {
+    const sourceAccountId = byCustomer.get(sourceCustomerId);
+    const targetAccountId = byCustomer.get(targetCustomerId);
+    if (sourceAccountId !== undefined && targetAccountId !== undefined) return "conflict";
+
+    if (sourceAccountId !== undefined) {
+      const sourceAccount = accounts.get(sourceAccountId);
+      if (sourceAccount === undefined) {
+        throw new Error("member customer index points to a missing account");
+      }
+      accounts.set(
+        sourceAccountId,
+        Object.freeze({ ...sourceAccount, customer_id: targetCustomerId }),
+      );
+      byCustomer.delete(sourceCustomerId);
+      byCustomer.set(targetCustomerId, sourceAccountId);
+    }
+    customers.delete(sourceCustomerId);
+    customers.add(targetCustomerId);
+    return sourceAccountId === undefined ? "no_account" : "relinked";
+  };
+
   return Object.freeze({
+    mergeCustomerMemberAccount,
     openAccount: async (input: MemberOpenInput): Promise<MemberOutcome<MemberOpenResult>> => {
       if (!customers.has(input.customer_id)) return reject("customer_not_found");
       const existingId = byCustomer.get(input.customer_id);
@@ -99,6 +133,9 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemberStore {
         account_id: newId(),
         customer_id: input.customer_id,
         status: "active" as const,
+        status_version: 1,
+        status_changed_at: null,
+        status_reason: null,
         opened_at: input.at,
       });
       accounts.set(account.account_id, account);
@@ -203,6 +240,8 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemberStore {
         }),
       );
     },
+
+    ...createMemoryMemberLifecycleOperations({ accounts, ledger, newId, balanceOf }),
 
     upsertBonusRule: async (
       input: MemberBonusRuleUpsertInput,
