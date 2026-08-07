@@ -4,6 +4,8 @@
  */
 
 import type { ChainPortHooks } from "../bus/chain-adapter.js";
+import type { AccountingHandlerDeps } from "../accounting/types.js";
+import { createAccountingHandlers } from "../accounting/handlers.js";
 import { createM1CommandRegistry, type MutableCommandRegistry } from "../bus/registry.js";
 import { createM1QueryRegistry, type MutableQueryRegistry } from "../bus/query-registry.js";
 import type { CatalogHandlerDeps } from "../catalog/handlers.js";
@@ -67,6 +69,8 @@ export type RegisterM1Deps = Readonly<{
   shift?: ShiftHandlerDeps;
   /** Store-day accounting reconciliation, audited export and Edge conflict resolution. */
   reconciliation?: ReconciliationHandlerDeps;
+  /** ADR-24 dual-basis day/month/staff accounting reports. */
+  accounting?: AccountingHandlerDeps;
   /** M3 garment photo metadata (memory). */
   photo?: PhotoHandlerDeps;
   /** M3 garment production, incidents and loss handling. */
@@ -161,6 +165,12 @@ export function registerM1Handlers(
   if (deps.reconciliation !== undefined) {
     registerReconciliationCommandHandlers(registry, deps.reconciliation);
     registered.push("reconciliation.export", "edge.conflict.discard");
+  }
+
+  if (deps.accounting !== undefined) {
+    const handlers = createAccountingHandlers(deps.accounting);
+    registry.registerHandler("accounting.report.export", handlers["accounting.report.export"]);
+    registered.push("accounting.report.export");
   }
 
   if (deps.photo !== undefined) {
@@ -265,6 +275,12 @@ export function registerM1QueryHandlers(
   if (deps.reconciliation !== undefined) {
     registerReconciliationQueryHandlers(queryRegistry, deps.reconciliation);
     names.push("reconciliation.day.get");
+  }
+
+  if (deps.accounting !== undefined) {
+    const handlers = createAccountingHandlers(deps.accounting);
+    queryRegistry.registerHandler("accounting.report.get", handlers["accounting.report.get"]);
+    names.push("accounting.report.get");
   }
 
   if (deps.photo !== undefined) {

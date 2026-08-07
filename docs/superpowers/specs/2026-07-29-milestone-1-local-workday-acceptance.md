@@ -155,6 +155,7 @@ macOS 侧由 `pnpm local:acceptance` 在开发机本地执行：CI 只有 Linux 
 - PostgreSQL 与私有照片绑定为可校验恢复集、自动维护与恢复演练（#121/#122）
 - 签名重放仲裁与冲突处理、日结对账与导出、支持包脱敏（#125，迁移 `0030`/`0031`）
 - 普通 offline grant 的独立序号、签发/排队与 PostgreSQL 权威重放（ADR-19，迁移 `0033`）
+- 账目双口径与今日/往日/月结/职员报表、经审计的摘要校验 CSV（ADR-24，迁移 `0039`；Linux 本地 Web）
 - 权威订单快照、一次性签名派发、ESC/POS/CUPS 软件执行与设备签名回执（ADR-20）
 - 独立原生 Runtime.app 的固定生命周期、同 manifest recover 与无仓库 native acceptance
   （ADR-21）；这不包含 upgrade/rollback

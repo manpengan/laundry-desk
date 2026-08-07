@@ -1,4 +1,5 @@
 import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@laundry/contracts";
+import { createMemoryAccountingSource, createPgAccountingSource } from "../accounting/index.js";
 import { createCsrfProofSigner, type CsrfProofSigner } from "../auth/csrf.js";
 import {
   createMemoryRuntimeAuthority,
@@ -283,6 +284,10 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       timeZone: LOCAL_PROFILE.timezone,
     }),
     reconciliation: createMemoryReconciliationDeps(orderStore, shiftStore, printStore),
+    accounting: Object.freeze({
+      source: createMemoryAccountingSource(),
+      timeZone: LOCAL_PROFILE.timezone,
+    }),
     photo: Object.freeze({ store: photoStore }),
     fulfillment: Object.freeze({ store: createMemoryFulfillmentStore() }),
     staffAccess: createMemoryStaffAccessDeps(LOCAL_MEMORY_STAFF_DIRECTORY),
@@ -398,6 +403,10 @@ export async function createPgLocalRuntime(
       lockBusinessDay: acquirePgBusinessDayLock,
     }),
     reconciliation: createPgReconciliationDeps(),
+    accounting: Object.freeze({
+      source: createPgAccountingSource(),
+      timeZone: LOCAL_PROFILE.timezone,
+    }),
     photo,
     fulfillment: Object.freeze({ store: createPgFulfillmentStore(appPool) }),
     staffAccess: createPgStaffAccessDeps(),

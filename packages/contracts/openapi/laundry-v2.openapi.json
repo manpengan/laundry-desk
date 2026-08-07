@@ -5981,6 +5981,39 @@
           }
         ]
       },
+      "input.command.accounting.report.export": {
+        "additionalProperties": false,
+        "properties": {
+          "date_from": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "date_to": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "format": {
+            "const": "csv",
+            "type": "string"
+          },
+          "group_by": {
+            "enum": [
+              "day",
+              "staff"
+            ],
+            "type": "string"
+          },
+          "staff_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "format"
+        ],
+        "type": "object"
+      },
       "input.command.catalog.item.upsert": {
         "additionalProperties": false,
         "properties": {
@@ -7254,6 +7287,32 @@
         ],
         "type": "object"
       },
+      "input.query.accounting.report.get": {
+        "additionalProperties": false,
+        "properties": {
+          "date_from": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "date_to": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "group_by": {
+            "enum": [
+              "day",
+              "staff"
+            ],
+            "type": "string"
+          },
+          "staff_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "input.query.catalog.items.get": {
         "additionalProperties": false,
         "properties": {
@@ -8153,6 +8212,58 @@
           "auth"
         ],
         "x-laundry-kind": "auth"
+      }
+    },
+    "/v1/commands/accounting.report.export": {
+      "post": {
+        "description": "Generate a bounded UTF-8 accounting CSV with spreadsheet hardening and SHA-256 verification. Stable command name: `accounting.report.export` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_accounting_report_export",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.accounting.report.export"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Generate an audited deterministic CSV for one dual-basis accounting report.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "0.1.0"
       }
     },
     "/v1/commands/catalog.item.upsert": {
@@ -10181,6 +10292,58 @@
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R5",
         "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/accounting.report.get": {
+      "post": {
+        "description": "Return real income and performance income from immutable ledgers. Current AI presets do not project this query. Stable query name: `accounting.report.get` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_accounting_report_get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.accounting.report.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read a bounded dual-basis accounting report grouped by business day or staff.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "0.1.0"
       }
     },
     "/v1/queries/catalog.items.get": {

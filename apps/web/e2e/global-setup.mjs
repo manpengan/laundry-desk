@@ -43,6 +43,18 @@ const REMINDER_FIXTURE = Object.freeze({
   ticket: "E2E-REMINDER-0001",
 });
 
+const ACCOUNTING_FIXTURE = Object.freeze({
+  businessDate: "2097-08-07",
+  customerId: "77777777-7777-4777-8777-777777777661",
+  accountId: "77777777-7777-4777-8777-777777777662",
+  orderId: "77777777-7777-4777-8777-777777777663",
+  cashPaymentId: "77777777-7777-4777-8777-777777777664",
+  balancePaymentId: "77777777-7777-4777-8777-777777777665",
+  topupLedgerId: "77777777-7777-4777-8777-777777777666",
+  refundLedgerId: "77777777-7777-4777-8777-777777777667",
+  payLedgerId: "77777777-7777-4777-8777-777777777668",
+});
+
 function adminDatabaseUrl(password) {
   const url = new URL("postgresql://127.0.0.1:8543/laundry_v2");
   url.username = "postgres";
@@ -138,6 +150,85 @@ async function seedReminderFixture(client) {
   );
 }
 
+async function seedAccountingFixture(client) {
+  const row = ACCOUNTING_FIXTURE;
+  await client.query(
+    `INSERT INTO customers (id, org_id, phone, name, note, created_at, updated_at)
+     VALUES ($1::uuid, $2::uuid, '13500000024', 'E2E 账目顾客', 'Playwright accounting fixture',
+             now(), now())
+     ON CONFLICT (id) DO UPDATE SET phone = EXCLUDED.phone, name = EXCLUDED.name,
+       updated_at = now()`,
+    [row.customerId, ORG_ID],
+  );
+  await client.query(
+    `INSERT INTO member_accounts (
+       id, org_id, customer_id, status, opened_at, opened_store_id
+     ) VALUES ($1::uuid, $2::uuid, $3::uuid, 'active', now(), $4::uuid)
+     ON CONFLICT (id) DO NOTHING`,
+    [row.accountId, ORG_ID, row.customerId, STORE_ID],
+  );
+  await client.query(
+    `INSERT INTO orders (
+       id, org_id, store_id, ticket_no, pickup_code, status, customer_id,
+       subtotal_cents, original_cents, discount_cents, addon_cents,
+       urgent_cents, freight_cents, payable_cents, paid_cents, balance_cents,
+       business_date, created_at, updated_at, created_by_staff_id
+     ) VALUES (
+       $1::uuid, $2::uuid, $3::uuid, 'E2E-ACCOUNTING-0001', 'E2EA0001', 'closed',
+       $4::uuid, 8000, 8000, 0, 0, 0, 0, 8000, 8000, 0, $5, now(), now(), $6::uuid
+     ) ON CONFLICT (id) DO UPDATE SET
+       status = 'closed', payable_cents = 8000, paid_cents = 8000,
+       balance_cents = 0, business_date = EXCLUDED.business_date, updated_at = now()`,
+    [row.orderId, ORG_ID, STORE_ID, row.customerId, row.businessDate, ADMIN_ID],
+  );
+  await client.query(
+    `INSERT INTO payments (
+       id, org_id, store_id, order_id, method, amount_cents, kind,
+       staff_id, at, business_date
+     ) VALUES
+       ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'cash', 5000, 'pay',
+        $5::uuid, now(), $6),
+       ($7::uuid, $2::uuid, $3::uuid, $4::uuid, 'balance', 3000, 'pay',
+        $8::uuid, now(), $6)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      row.cashPaymentId,
+      ORG_ID,
+      STORE_ID,
+      row.orderId,
+      ADMIN_ID,
+      row.businessDate,
+      row.balancePaymentId,
+      FIXTURE_STAFF[0].id,
+    ],
+  );
+  await client.query(
+    `INSERT INTO member_ledger (
+       id, org_id, store_id, account_id, kind, principal_delta_cents,
+       bonus_delta_cents, order_id, staff_id, at, business_date, tender
+     ) VALUES
+       ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'topup', 10000, 1000, NULL,
+        $5::uuid, now(), $6, 'cash'),
+       ($7::uuid, $2::uuid, $3::uuid, $4::uuid, 'refund', -2000, 0, NULL,
+        $8::uuid, now(), $6, 'cash'),
+       ($9::uuid, $2::uuid, $3::uuid, $4::uuid, 'pay', -2000, -1000, $10::uuid,
+        $8::uuid, now(), $6, NULL)
+     ON CONFLICT (id) DO NOTHING`,
+    [
+      row.topupLedgerId,
+      ORG_ID,
+      STORE_ID,
+      row.accountId,
+      ADMIN_ID,
+      row.businessDate,
+      row.refundLedgerId,
+      FIXTURE_STAFF[0].id,
+      row.payLedgerId,
+      row.orderId,
+    ],
+  );
+}
+
 export default async function globalSetup() {
   const config = await loadLocalConfig();
   const pool = new pg.Pool({
@@ -152,6 +243,7 @@ export default async function globalSetup() {
       await seedStaff(client, staff);
     }
     await seedReminderFixture(client);
+    await seedAccountingFixture(client);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);

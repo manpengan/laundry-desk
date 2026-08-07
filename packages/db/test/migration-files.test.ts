@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0038", () => {
+  it("ships formal SQL migrations ordered 0001 → 0039", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -50,6 +50,7 @@ describe("packages/db migration file inventory", () => {
       "0036_member_bonus_rules.sql",
       "0037_member_refund.sql",
       "0038_notification_manual_list.sql",
+      "0039_accounting_report_indexes.sql",
     ]);
   });
 
@@ -100,6 +101,7 @@ describe("packages/db migration file inventory", () => {
       "0036",
       "0037",
       "0038",
+      "0039",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -116,6 +118,17 @@ describe("packages/db migration file inventory", () => {
       /REVOKE UPDATE, DELETE, TRUNCATE ON TABLE notification_log FROM laundry_app/iu,
     );
     expect(sql).not.toMatch(/customer_phone|message_body|csv text/iu);
+  });
+
+  it("indexes bounded tenant/store accounting report scans", () => {
+    const sql = readFileSync(join(migrationsDir, "0039_accounting_report_indexes.sql"), "utf8");
+    expect(sql).toMatch(
+      /ON public\.payments \(org_id, store_id, business_date, staff_id, method, kind\)/iu,
+    );
+    expect(sql).toMatch(
+      /ON public\.member_ledger \(org_id, store_id, business_date, staff_id, tender\)/iu,
+    );
+    expect(sql).toMatch(/WHERE tender IS NOT NULL/iu);
   });
 
   it("adds order.list indexes after the garment photos migration", () => {
