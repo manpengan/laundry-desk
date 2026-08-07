@@ -14,6 +14,7 @@ import { StepUpConfirmDialog } from "../shell/StepUpConfirmDialog.js";
 import { CatalogMaintenancePanel } from "./CatalogMaintenancePanel.js";
 import { StaffAccessPanel } from "./StaffAccessPanel.js";
 import { OfflineConflictPanel } from "./OfflineConflictPanel.js";
+import { MemberBonusRulesPanel } from "./MemberBonusRulesPanel.js";
 
 export type SettingsPageProps = {
   session: SessionView;
@@ -114,6 +115,10 @@ export function SettingsPage({
         commandClient={commandClient}
         {...(queryClient !== undefined ? { queryClient } : {})}
       />
+
+      {queryClient === undefined ? null : (
+        <MemberBonusRulesPanel commandClient={commandClient} queryClient={queryClient} />
+      )}
 
       <StaffAccessPanel
         currentStaffId={session.session.staff_id}

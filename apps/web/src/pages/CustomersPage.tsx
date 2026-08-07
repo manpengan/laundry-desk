@@ -303,6 +303,8 @@ export function CustomersPage({
             customer={selected}
             queryClient={queryClient}
             commandClient={commandClient}
+            {...(authClient === undefined ? {} : { authClient })}
+            {...(session === undefined ? {} : { session })}
             toast={toast}
           />
           <CustomerGovernancePanel

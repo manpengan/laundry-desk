@@ -22,6 +22,14 @@ export type MemberAccountView = Readonly<{
   recent: readonly MemberLedgerRowView[];
 }>;
 
+export type MemberBonusRuleView = Readonly<{
+  rule_id: string;
+  min_topup_cents: number;
+  bonus_cents: number;
+  status: "active" | "retired";
+  note: string | null;
+}>;
+
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -104,6 +112,12 @@ export function parseMemberAccountView(value: unknown): MemberAccountView | null
  * anything that is not a positive amount with at most two decimals.
  */
 export function topupAmountToCents(text: string): number | null {
+  const cents = yuanAmountToCents(text);
+  return cents !== null && cents > 0 ? cents : null;
+}
+
+/** Parse a non-negative yuan input without ever multiplying a float. */
+export function yuanAmountToCents(text: string): number | null {
   const trimmed = text.trim();
   if (!/^\d{1,9}(\.\d{1,2})?$/u.test(trimmed)) return null;
   const [yuanPart, fenPart = ""] = trimmed.split(".");
@@ -111,6 +125,44 @@ export function topupAmountToCents(text: string): number | null {
   const fen = Number(fenPart.padEnd(2, "0"));
   if (!Number.isSafeInteger(yuan) || !Number.isSafeInteger(fen)) return null;
   const cents = yuan * 100 + fen;
-  if (!Number.isSafeInteger(cents) || cents <= 0) return null;
+  if (!Number.isSafeInteger(cents) || cents < 0) return null;
   return cents;
+}
+
+export function centsToYuanInput(cents: number): string {
+  if (!Number.isSafeInteger(cents) || cents < 0) return "";
+  const yuan = Math.floor(cents / 100);
+  const fen = String(cents % 100).padStart(2, "0");
+  return `${yuan}.${fen}`;
+}
+
+export function parseMemberBonusRules(value: unknown): readonly MemberBonusRuleView[] | null {
+  if (!isRecord(value) || !Array.isArray(value.rules)) return null;
+  const rules: MemberBonusRuleView[] = [];
+  for (const item of value.rules) {
+    if (!isRecord(item)) return null;
+    const threshold = intOrNull(item.min_topup_cents);
+    const bonus = intOrNull(item.bonus_cents);
+    if (
+      typeof item.rule_id !== "string" ||
+      threshold === null ||
+      threshold <= 0 ||
+      bonus === null ||
+      bonus < 0 ||
+      (item.status !== "active" && item.status !== "retired") ||
+      (item.note !== null && typeof item.note !== "string")
+    ) {
+      return null;
+    }
+    rules.push(
+      Object.freeze({
+        rule_id: item.rule_id,
+        min_topup_cents: threshold,
+        bonus_cents: bonus,
+        status: item.status,
+        note: typeof item.note === "string" ? item.note : null,
+      }),
+    );
+  }
+  return Object.freeze(rules);
 }

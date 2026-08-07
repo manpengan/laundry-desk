@@ -1,0 +1,55 @@
+.ld-member-rules {
+  margin-top: 20px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ld-member-rules__form,
+.ld-member-refund__form {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ld-member-rules__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ld-member-rules__row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) 5rem auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--lg-hair);
+}
+
+.ld-member-refund {
+  padding-top: 12px;
+  border-top: 1px solid var(--lg-hair);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ld-member-refund__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .ld-member-rules__row {
+    grid-template-columns: 1fr auto;
+  }
+}

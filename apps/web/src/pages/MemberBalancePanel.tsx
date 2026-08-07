@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button, EmptyState, Input, MoneyText } from "@laundry/ui";
 
+import type { AuthClient } from "../auth/AuthClient.js";
+import type { SessionView } from "../auth/types.js";
 import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, CommandResult, QueryPort } from "../commands/types.js";
 
@@ -11,11 +13,14 @@ import {
   topupAmountToCents,
   type MemberAccountView,
 } from "./member-model.js";
+import { MemberRefundForm } from "./MemberRefundForm.js";
 
 export type MemberBalancePanelProps = Readonly<{
   customer: CustomerRowView;
   queryClient: QueryPort;
   commandClient: CommandPort;
+  authClient?: AuthClient;
+  session?: SessionView;
   toast: Readonly<{ push: (message: string, kind: "success" | "error") => void }>;
 }>;
 
@@ -29,6 +34,7 @@ const TOPUP_METHODS = Object.freeze([
 function ledgerLabel(kind: string): string {
   if (kind === "topup") return "充值";
   if (kind === "pay") return "消费";
+  if (kind === "refund") return "退款";
   return "冲正";
 }
 
@@ -48,6 +54,8 @@ export function MemberBalancePanel({
   customer,
   queryClient,
   commandClient,
+  authClient,
+  session,
   toast,
 }: MemberBalancePanelProps) {
   const [view, setView] = useState<MemberAccountView | null>(null);
@@ -220,6 +228,16 @@ export function MemberBalancePanel({
           充值
         </Button>
       </div>
+
+      <MemberRefundForm
+        accountId={account.account_id}
+        refundableCents={account.principal_cents}
+        commandClient={commandClient}
+        {...(authClient === undefined ? {} : { authClient })}
+        {...(session === undefined ? {} : { session })}
+        toast={toast}
+        onCompleted={load}
+      />
 
       <ul className="ld-member-panel__ledger">
         {view.recent.length === 0 ? (

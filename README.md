@@ -14,7 +14,7 @@
 | 当前 owner | **Codex** — 设计、实现、集成与门禁                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | 目标平台   | 本地 Web Server + macOS App 优先；云服务器部署与 Windows 适配后置                                                                                                                                                                                                                                                                                                                                                                                                                |
 
-当前已完成：`Local Foundation → 完整柜台工作日 → 履约/顾客/员工治理 → 本地备份恢复 → 加密离线队列与 Primary → 重放对账 → 会员储值首期 → 普通 offline grant → 签名打印软件链 → 独立 Runtime.app 软件`。尚未交付 XP-58 实体走样、Developer ID 签名/公证、正式 manifest 签名权威、已签名多架构 OCI，以及 Runtime.app upgrade/rollback；云部署和 Windows 仍后置。
+当前已完成：`Local Foundation → 完整柜台工作日 → 履约/顾客/员工治理 → 本地备份恢复 → 加密离线队列与 Primary → 重放对账 → 会员储值二期 Web 柜台入口（含赠送与退款） → 普通 offline grant → 签名打印软件链 → 独立 Runtime.app 软件`。尚未交付 XP-58 实体走样、Developer ID 签名/公证、正式 manifest 签名权威、已签名多架构 OCI，以及 Runtime.app upgrade/rollback；云部署和 Windows 仍后置。
 
 宏发版本停止开发；根 `src/` 只作为历史行为参考，不作为当前产品入口。
 
