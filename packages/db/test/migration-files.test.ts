@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0039", () => {
+  it("ships formal SQL migrations ordered 0001 → 0040", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -51,6 +51,7 @@ describe("packages/db migration file inventory", () => {
       "0037_member_refund.sql",
       "0038_notification_manual_list.sql",
       "0039_accounting_report_indexes.sql",
+      "0040_member_account_lifecycle.sql",
     ]);
   });
 
@@ -102,6 +103,7 @@ describe("packages/db migration file inventory", () => {
       "0037",
       "0038",
       "0039",
+      "0040",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -129,6 +131,20 @@ describe("packages/db migration file inventory", () => {
       /ON public\.member_ledger \(org_id, store_id, business_date, staff_id, tender\)/iu,
     );
     expect(sql).toMatch(/WHERE tender IS NOT NULL/iu);
+  });
+
+  it("adds versioned member lifecycle and constrained append-only bonus forfeiture", () => {
+    const sql = readFileSync(join(migrationsDir, "0040_member_account_lifecycle.sql"), "utf8");
+    expect(sql).toMatch(/status_version integer NOT NULL DEFAULT 1/iu);
+    expect(sql).toMatch(/ALTER COLUMN principal_delta_cents TYPE bigint/iu);
+    expect(sql).toMatch(/ALTER COLUMN bonus_delta_cents TYPE bigint/iu);
+    expect(sql).toMatch(/status IN \('active', 'frozen', 'closed'\)/iu);
+    expect(sql).toMatch(/kind IN \('topup', 'pay', 'reversal', 'refund', 'bonus_forfeit'\)/iu);
+    expect(sql).toMatch(/member_ledger_bonus_forfeit_shape_chk/iu);
+    expect(sql).toMatch(/principal_delta_cents = 0/iu);
+    expect(sql).toMatch(/bonus_delta_cents < 0/iu);
+    expect(sql).toMatch(/tender IS NULL/iu);
+    expect(sql).toMatch(/bonus_rule_id IS NULL/iu);
   });
 
   it("adds order.list indexes after the garment photos migration", () => {

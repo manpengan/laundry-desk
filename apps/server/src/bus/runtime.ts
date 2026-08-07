@@ -22,12 +22,18 @@ const ADMIN_PERMISSIONS = Object.freeze([
   // ADR-22 §5: R4 money-out. Separate from payment_refund because that returns
   // an order payment, while this returns prepaid money held for the customer.
   "member_refund",
+  "member_freeze",
+  // ADR-25: unfreeze and terminal closure change access to customer value.
+  "member_lifecycle_manage",
 ]);
 const STAFF_PERMISSIONS = Object.freeze([
   "staff_read",
   "customer_read",
   "customer_write",
   "order_write",
+  // A counter worker may immediately protect a reported-lost account; restoring
+  // or closing it remains admin-only.
+  "member_freeze",
 ]);
 const NO_PERMISSIONS = Object.freeze([] as string[]);
 

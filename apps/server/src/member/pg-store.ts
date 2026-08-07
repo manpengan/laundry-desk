@@ -1,15 +1,26 @@
 import { randomUUID } from "node:crypto";
 
-import { allocateSpend, projectBalance, type LedgerDelta } from "./balance.js";
+import { allocateSpend } from "./balance.js";
 import { matchBonusRule } from "./bonus.js";
 import { listBonusRules, readActiveBonusRules, upsertBonusRule } from "./pg-bonus-rules.js";
+import { createPgMemberLifecycleOperations } from "./pg-lifecycle.js";
+import {
+  ACCOUNT_SELECT,
+  insertMemberLedger,
+  lockMemberAccount,
+  readMemberBalance,
+  requireMemberInt,
+  toAccount,
+  toLedgerRow,
+  type AccountRow,
+  type LedgerDbRow,
+} from "./pg-store-support.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import type {
   MemberAccountRecord,
   MemberAccountView,
   MemberBonusRuleUpsertInput,
   MemberLedgerAppendResult,
-  MemberLedgerRow,
   MemberOpenInput,
   MemberOpenResult,
   MemberOutcome,
@@ -22,79 +33,8 @@ import type {
 
 export type CreatePgMemberStoreOptions = Readonly<{ newId?: () => string }>;
 
-type AccountRow = Readonly<{
-  id: string;
-  customer_id: string;
-  status: string;
-  opened_at: Date | string;
-}>;
-
-type LedgerDbRow = Readonly<{
-  id: string;
-  kind: string;
-  principal_delta_cents: number | string;
-  bonus_delta_cents: number | string;
-  order_id: string | null;
-  store_id: string;
-  tender: string | null;
-  bonus_rule_id: string | null;
-  at: Date | string;
-  business_date: string;
-  note: string | null;
-}>;
-
 const reject = <T>(reason: MemberRejectReason): MemberOutcome<T> =>
   Object.freeze({ ok: false as const, reason });
-
-const toEpoch = (value: Date | string): number =>
-  Math.floor((value instanceof Date ? value.getTime() : new Date(value).getTime()) / 1000);
-
-function requireInt(value: number | string, label: string): number {
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isSafeInteger(parsed)) {
-    throw new Error(`member ledger ${label} is not a safe integer`);
-  }
-  return parsed;
-}
-
-const TENDERS: ReadonlySet<string> = new Set(["cash", "wechat", "alipay", "other"]);
-
-/**
- * Refuse an unknown tender rather than coercing it to null.
- *
- * Null means "no cash moved"; silently mapping an unrecognised value to it would
- * drop real money out of the day's cash instead of failing loudly.
- */
-function toTender(value: string | null): MemberLedgerRow["tender"] {
-  if (value === null) return null;
-  if (!TENDERS.has(value)) throw new Error(`member ledger tender is not recognised: ${value}`);
-  return value as MemberLedgerRow["tender"];
-}
-
-function toLedgerRow(row: LedgerDbRow): MemberLedgerRow {
-  return Object.freeze({
-    ledger_id: row.id,
-    kind: row.kind as MemberLedgerRow["kind"],
-    principal_delta_cents: requireInt(row.principal_delta_cents, "principal_delta_cents"),
-    bonus_delta_cents: requireInt(row.bonus_delta_cents, "bonus_delta_cents"),
-    order_id: row.order_id,
-    store_id: row.store_id,
-    tender: toTender(row.tender),
-    bonus_rule_id: row.bonus_rule_id,
-    at: toEpoch(row.at),
-    business_date: row.business_date,
-    note: row.note,
-  });
-}
-
-function toAccount(row: AccountRow): MemberAccountRecord {
-  return Object.freeze({
-    account_id: row.id,
-    customer_id: row.customer_id,
-    status: row.status === "frozen" ? ("frozen" as const) : ("active" as const),
-    opened_at: toEpoch(row.opened_at),
-  });
-}
 
 /**
  * PostgreSQL member store.
@@ -112,93 +52,31 @@ export function createPgMemberStore(
   const newId = options.newId ?? randomUUID;
 
   const lockAccount = async (accountId: string): Promise<MemberOutcome<MemberAccountRecord>> => {
-    const locked = await client.query<AccountRow>(
-      `SELECT id, customer_id, status, opened_at
-         FROM member_accounts
-        WHERE org_id = $1::uuid AND id = $2::uuid
-        FOR UPDATE`,
-      [tenant.orgId, accountId],
-    );
-    const row = locked.rows[0];
-    if (row === undefined) return reject("account_not_found");
-    const account = toAccount(row);
-    if (account.status !== "active") return reject("account_frozen");
-    return Object.freeze({ ok: true as const, value: account });
-  };
-
-  /** Must run while the account row is locked. */
-  const sumLedger = async (accountId: string): Promise<readonly LedgerDelta[]> => {
-    const rows = await client.query<Readonly<{ p: number | string; b: number | string }>>(
-      `SELECT principal_delta_cents AS p, bonus_delta_cents AS b
-         FROM member_ledger
-        WHERE org_id = $1::uuid AND account_id = $2::uuid`,
-      [tenant.orgId, accountId],
-    );
-    return rows.rows.map((row) =>
-      Object.freeze({
-        principal_delta_cents: requireInt(row.p, "principal_delta_cents"),
-        bonus_delta_cents: requireInt(row.b, "bonus_delta_cents"),
-      }),
-    );
-  };
-
-  const insertLedger = async (
-    accountId: string,
-    values: Readonly<{
-      kind: "topup" | "pay" | "refund";
-      principal: number;
-      bonus: number;
-      orderId: string | null;
-      storeId: string;
-      tender: MemberLedgerRow["tender"];
-      bonusRuleId: string | null;
-      staffId: string;
-      at: number;
-      businessDate: string;
-      note: string | null;
-    }>,
-  ): Promise<MemberLedgerAppendResult> => {
-    const ledgerId = newId();
-    await client.query(
-      `INSERT INTO member_ledger (
-         id, org_id, store_id, account_id, kind,
-         principal_delta_cents, bonus_delta_cents, order_id, tender, bonus_rule_id,
-         staff_id, at, business_date, note
-       ) VALUES (
-         $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5,
-         $6::integer, $7::integer, $8::uuid, $9, $10::uuid,
-         $11::uuid, to_timestamp($12), $13, $14
-       )`,
-      [
-        ledgerId,
-        tenant.orgId,
-        values.storeId,
-        accountId,
-        values.kind,
-        values.principal,
-        values.bonus,
-        values.orderId,
-        values.tender,
-        values.bonusRuleId,
-        values.staffId,
-        values.at,
-        values.businessDate,
-        values.note,
-      ],
-    );
-    return Object.freeze({
-      account_id: accountId,
-      ledger_id: ledgerId,
-      balance: projectBalance(await sumLedger(accountId)),
-      principal_delta_cents: values.principal,
-      bonus_delta_cents: values.bonus,
-    });
+    const locked = await lockMemberAccount(client, tenant, accountId);
+    if (!locked.ok) return locked;
+    if (locked.value.status === "frozen") return reject("account_frozen");
+    if (locked.value.status === "closed") return reject("account_closed");
+    return locked;
   };
 
   return Object.freeze({
     openAccount: async (input: MemberOpenInput): Promise<MemberOutcome<MemberOpenResult>> => {
+      // Stabilise the customer identity before looking for or inserting an
+      // account. customer.merge takes FOR UPDATE on this row, so either the
+      // open commits first (and merge sees its account) or the open observes a
+      // merged/anonymized source and refuses it after waiting.
+      const customer = await client.query(
+        `SELECT 1
+           FROM customers
+          WHERE org_id = $1::uuid AND id = $2::uuid
+            AND merged_into_id IS NULL AND anonymized_at IS NULL
+          FOR KEY SHARE`,
+        [tenant.orgId, input.customer_id],
+      );
+      if (customer.rows.length === 0) return reject("customer_not_found");
+
       const existing = await client.query<AccountRow>(
-        `SELECT id, customer_id, status, opened_at
+        `SELECT ${ACCOUNT_SELECT}
            FROM member_accounts
           WHERE org_id = $1::uuid AND customer_id = $2::uuid`,
         [tenant.orgId, input.customer_id],
@@ -210,11 +88,6 @@ export function createPgMemberStore(
           value: Object.freeze({ account: toAccount(found), created: false }),
         });
       }
-      const customer = await client.query(
-        `SELECT 1 FROM customers WHERE org_id = $1::uuid AND id = $2::uuid`,
-        [tenant.orgId, input.customer_id],
-      );
-      if (customer.rows.length === 0) return reject("customer_not_found");
 
       const accountId = newId();
       // ON CONFLICT keeps open idempotent under a concurrent duplicate call;
@@ -223,7 +96,7 @@ export function createPgMemberStore(
         `INSERT INTO member_accounts (id, org_id, customer_id, status, opened_at, opened_store_id)
          VALUES ($1::uuid, $2::uuid, $3::uuid, 'active', to_timestamp($4), $5::uuid)
          ON CONFLICT (org_id, customer_id) DO NOTHING
-         RETURNING id, customer_id, status, opened_at`,
+         RETURNING ${ACCOUNT_SELECT}`,
         [accountId, tenant.orgId, input.customer_id, input.at, input.store_id],
       );
       const row = inserted.rows[0];
@@ -234,7 +107,7 @@ export function createPgMemberStore(
         });
       }
       const raced = await client.query<AccountRow>(
-        `SELECT id, customer_id, status, opened_at
+        `SELECT ${ACCOUNT_SELECT}
            FROM member_accounts
           WHERE org_id = $1::uuid AND customer_id = $2::uuid`,
         [tenant.orgId, input.customer_id],
@@ -249,7 +122,7 @@ export function createPgMemberStore(
 
     getByCustomer: async (customerId: string, limit: number): Promise<MemberAccountView | null> => {
       const accountResult = await client.query<AccountRow>(
-        `SELECT id, customer_id, status, opened_at
+        `SELECT ${ACCOUNT_SELECT}
            FROM member_accounts
           WHERE org_id = $1::uuid AND customer_id = $2::uuid`,
         [tenant.orgId, customerId],
@@ -268,7 +141,7 @@ export function createPgMemberStore(
       );
       return Object.freeze({
         account,
-        balance: projectBalance(await sumLedger(account.account_id)),
+        balance: await readMemberBalance(client, tenant, account.account_id),
         recent: Object.freeze(rows.rows.map(toLedgerRow)),
       });
     },
@@ -283,7 +156,7 @@ export function createPgMemberStore(
       // rule edited between an earlier read and this insert would otherwise be
       // snapshotted stale, granting a bonus nobody had configured (ADR-22 §3.3).
       const bonus = matchBonusRule(await readActiveBonusRules(client, tenant), input.amount_cents);
-      const appended = await insertLedger(input.account_id, {
+      const appended = await insertMemberLedger(client, tenant, newId, input.account_id, {
         kind: "topup",
         principal: input.amount_cents,
         bonus: bonus.bonus_cents,
@@ -304,10 +177,10 @@ export function createPgMemberStore(
       if (!locked.ok) return locked as MemberOutcome<MemberLedgerAppendResult>;
       // Re-read under the lock: a balance fetched before FOR UPDATE would let
       // two concurrent spends both pass the sufficiency check.
-      const balance = projectBalance(await sumLedger(input.account_id));
+      const balance = await readMemberBalance(client, tenant, input.account_id);
       const outcome = allocateSpend(balance, input.amount_cents);
       if (!outcome.ok) return reject(outcome.reason);
-      const appended = await insertLedger(input.account_id, {
+      const appended = await insertMemberLedger(client, tenant, newId, input.account_id, {
         kind: "pay",
         principal: outcome.allocation.principal_delta_cents,
         bonus: outcome.allocation.bonus_delta_cents,
@@ -332,10 +205,10 @@ export function createPgMemberStore(
       if (!locked.ok) return locked as MemberOutcome<MemberLedgerAppendResult>;
       // Re-read under the lock, exactly as spend does: a principal read before
       // FOR UPDATE would let two concurrent refunds both pass the check.
-      const balance = projectBalance(await sumLedger(input.account_id));
+      const balance = await readMemberBalance(client, tenant, input.account_id);
       // Principal only — the bonus is not the customer's money (ADR-22 §4.1).
       if (input.amount_cents > balance.principal_cents) return reject("insufficient_balance");
-      const appended = await insertLedger(input.account_id, {
+      const appended = await insertMemberLedger(client, tenant, newId, input.account_id, {
         kind: "refund",
         principal: -input.amount_cents,
         bonus: 0,
@@ -351,6 +224,8 @@ export function createPgMemberStore(
       return Object.freeze({ ok: true as const, value: appended });
     },
 
+    ...createPgMemberLifecycleOperations(client, tenant, newId),
+
     upsertBonusRule: async (input: MemberBonusRuleUpsertInput) =>
       upsertBonusRule(client, tenant, newId, input),
 
@@ -365,7 +240,7 @@ export function createPgMemberStore(
             AND business_date = $3 AND tender = 'cash'`,
         [tenant.orgId, storeId, businessDate],
       );
-      return requireInt(rows.rows[0]?.cash_cents ?? 0, "cash_cents");
+      return requireMemberInt(rows.rows[0]?.cash_cents ?? 0, "cash principal sum");
     },
   });
 }

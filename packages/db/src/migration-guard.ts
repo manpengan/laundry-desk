@@ -35,8 +35,12 @@ const COMPATIBLE_CONSTRAINT_REPLACEMENTS: readonly Readonly<{
   // 0034 adds the terminal `uncertain` state without invalidating old rows.
   { table: "print_jobs", constraint: "print_jobs_status_chk" },
   // ADR-22 §5: 0037 admits the `refund` ledger kind. Strictly wider, and the
-  // sign/order CHECKs that constrain it are added in the same migration.
+  // sign/order CHECKs that constrain it are added in the same migration. ADR-25
+  // broadens the same vocabulary again with mechanically constrained
+  // `bonus_forfeit` rows.
   { table: "member_ledger", constraint: "member_ledger_kind_chk" },
+  // ADR-25: terminal account closure extends active/frozen with `closed`.
+  { table: "member_accounts", constraint: "member_accounts_status_chk" },
 ];
 
 const isCompatibleConstraintReplacement = (statement: string): boolean =>

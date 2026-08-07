@@ -45,6 +45,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0036_member_bonus_rule
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0037_member_refund.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0038_notification_manual_list.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0039_accounting_report_indexes.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0040_member_account_lifecycle.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -84,5 +85,6 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Stored-value accounting and phase 2** (0035–0037): tender-aware cash reconciliation, bonus tiers, and principal-only refunds
 - **Manual pickup reminders** (0038, [ADR-23](../../../../docs/adr/2026-08-07-adr-23-pickup-reminder-manual-list.md)): org-RLS append-only generation evidence with explicit store attribution and no raw phone/message/CSV retention
 - **Accounting reports** (0039, [ADR-24](../../../../docs/adr/2026-08-07-adr-24-accounting-dual-basis-reports.md)): bounded tenant/store/date/staff indexes for immutable payment and stored-value ledger reads
+- **Member lifecycle** (0040, ADR-25): versioned active/frozen/closed account state and append-only bonus forfeiture on atomic closure
 - Still deferred: AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

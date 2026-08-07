@@ -5,6 +5,7 @@ import type { MutableQueryRegistry } from "../bus/query-registry.js";
 import { HandlerCommandError, type CommandHandler, type HandlerOutcome } from "../bus/types.js";
 import { asRecord, requireNonNegativeInteger, requireString } from "../order/server-pricing.js";
 import { createMemberBonusHandlers } from "./bonus-handlers.js";
+import { createMemberLifecycleHandlers } from "./lifecycle-handlers.js";
 import {
   openBusinessDate,
   optionalNote,
@@ -29,7 +30,10 @@ export function createMemberHandlers(
     | "member.account.get"
     | "member.bonus_rule.upsert"
     | "member.bonus_rules.list"
-    | "member.refund",
+    | "member.refund"
+    | "member.account.freeze"
+    | "member.account.unfreeze"
+    | "member.account.close",
     CommandHandler
   >
 > {
@@ -211,6 +215,9 @@ export function createMemberHandlers(
           account_id: view.account.account_id,
           customer_id: view.account.customer_id,
           status: view.account.status,
+          status_version: view.account.status_version,
+          status_changed_at: view.account.status_changed_at,
+          status_reason: view.account.status_reason,
           principal_cents: view.balance.principal_cents,
           bonus_cents: view.balance.bonus_cents,
           balance_cents: view.balance.total_cents,
@@ -223,6 +230,9 @@ export function createMemberHandlers(
               principal_delta_cents: row.principal_delta_cents,
               bonus_delta_cents: row.bonus_delta_cents,
               order_id: row.order_id,
+              store_id: row.store_id,
+              tender: row.tender,
+              bonus_rule_id: row.bonus_rule_id,
               at: row.at,
               business_date: row.business_date,
               note: row.note,
@@ -292,6 +302,7 @@ export function createMemberHandlers(
   };
 
   const bonusHandlers = createMemberBonusHandlers(deps);
+  const lifecycleHandlers = createMemberLifecycleHandlers(deps);
 
   return Object.freeze({
     "member.account.open": open,
@@ -301,6 +312,9 @@ export function createMemberHandlers(
     "member.bonus_rule.upsert": bonusHandlers["member.bonus_rule.upsert"],
     "member.bonus_rules.list": bonusHandlers["member.bonus_rules.list"],
     "member.refund": refund,
+    "member.account.freeze": lifecycleHandlers["member.account.freeze"],
+    "member.account.unfreeze": lifecycleHandlers["member.account.unfreeze"],
+    "member.account.close": lifecycleHandlers["member.account.close"],
   });
 }
 
@@ -316,5 +330,8 @@ export function registerMemberHandlers(
   commandRegistry.registerHandler("member.bonus_rule.upsert", handlers["member.bonus_rule.upsert"]);
   queryRegistry?.registerHandler("member.account.get", handlers["member.account.get"]);
   commandRegistry.registerHandler("member.refund", handlers["member.refund"]);
+  commandRegistry.registerHandler("member.account.freeze", handlers["member.account.freeze"]);
+  commandRegistry.registerHandler("member.account.unfreeze", handlers["member.account.unfreeze"]);
+  commandRegistry.registerHandler("member.account.close", handlers["member.account.close"]);
   queryRegistry?.registerHandler("member.bonus_rules.list", handlers["member.bonus_rules.list"]);
 }

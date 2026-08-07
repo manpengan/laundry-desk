@@ -204,12 +204,18 @@ export function registerM1Handlers(
     registry.registerHandler("member.balance.pay", handlers["member.balance.pay"]);
     registry.registerHandler("member.bonus_rule.upsert", handlers["member.bonus_rule.upsert"]);
     registry.registerHandler("member.refund", handlers["member.refund"]);
+    registry.registerHandler("member.account.freeze", handlers["member.account.freeze"]);
+    registry.registerHandler("member.account.unfreeze", handlers["member.account.unfreeze"]);
+    registry.registerHandler("member.account.close", handlers["member.account.close"]);
     registered.push(
       "member.account.open",
       "member.topup",
       "member.balance.pay",
       "member.bonus_rule.upsert",
       "member.refund",
+      "member.account.freeze",
+      "member.account.unfreeze",
+      "member.account.close",
     );
   }
 

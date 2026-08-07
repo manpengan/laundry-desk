@@ -408,6 +408,43 @@ async function openAccountFor(customerId: string): Promise<string> {
   return opened.value.account.account_id;
 }
 
+async function seedRawBalance(
+  accountId: string,
+  principalCents: number,
+  bonusCents: number,
+): Promise<void> {
+  const pool = createPgPool({ connectionString: urls!.app });
+  try {
+    await withPoolClient(pool, async (client) =>
+      withTenantTransaction(client, TENANT, async (tx) => {
+        await tx.query(
+          `INSERT INTO member_ledger (
+             id, org_id, store_id, account_id, kind,
+             principal_delta_cents, bonus_delta_cents, order_id, tender,
+             bonus_rule_id, staff_id, at, business_date, note
+           ) VALUES (
+             $1::uuid, $2::uuid, $3::uuid, $4::uuid, 'topup',
+             $5::bigint, $6::bigint, NULL, 'cash',
+             NULL, $7::uuid, now(), $8, NULL
+           )`,
+          [
+            randomUUID(),
+            TENANT.orgId,
+            TENANT.storeId,
+            accountId,
+            principalCents,
+            bonusCents,
+            TENANT.staffId,
+            BUSINESS_DATE,
+          ],
+        );
+      }),
+    );
+  } finally {
+    await pool.end();
+  }
+}
+
 maybe("a cash top-up persists its tender and only cash reaches the day sum", async () => {
   const customerId = await seedCustomer();
   const accountId = await openAccountFor(customerId);
@@ -526,4 +563,69 @@ maybe("PostgreSQL refuses a tender the cash rollup cannot read", async () => {
     }),
     /member_ledger_tender_value_chk/u,
   );
+});
+
+maybe("two concurrent closes settle the account exactly once", async () => {
+  const customerId = await seedCustomer();
+  const accountId = await openAccountFor(customerId);
+  await seedRawBalance(accountId, 500, 0);
+  const input = {
+    account_id: accountId,
+    expected_customer_id: customerId,
+    expected_status_version: 1,
+    expected_status: "active" as const,
+    expected_principal_cents: 500,
+    expected_bonus_cents: 0,
+    refund_tender: "cash" as const,
+    store_id: TENANT.storeId,
+    staff_id: TENANT.staffId,
+    at: 1_780_000_500,
+    business_date: BUSINESS_DATE,
+    reason: "concurrent close",
+  };
+
+  const outcomes = await Promise.all([
+    withStore((store) => store.close(input)),
+    withStore((store) => store.close(input)),
+  ]);
+  assert.equal(outcomes.filter((outcome) => outcome.ok).length, 1);
+  assert.equal(
+    outcomes.some((outcome) => !outcome.ok && outcome.reason === "account_version_conflict"),
+    true,
+  );
+  const view = await withStore((store) => store.getByCustomer(customerId, 10));
+  assert.equal(view?.account.status, "closed");
+  assert.equal(view?.balance.total_cents, 0);
+  assert.equal(view?.recent.filter((row) => row.kind === "refund").length, 1);
+});
+
+maybe("PostgreSQL closes a safe-integer bonus with one bigint forfeiture", async () => {
+  const customerId = await seedCustomer();
+  const accountId = await openAccountFor(customerId);
+  const bonus = Number.MAX_SAFE_INTEGER - 1;
+  await seedRawBalance(accountId, 1, bonus);
+
+  const closed = await withStore((store) =>
+    store.close({
+      account_id: accountId,
+      expected_customer_id: customerId,
+      expected_status_version: 1,
+      expected_status: "active",
+      expected_principal_cents: 1,
+      expected_bonus_cents: bonus,
+      refund_tender: "cash",
+      store_id: TENANT.storeId,
+      staff_id: TENANT.staffId,
+      at: 1_780_000_600,
+      business_date: BUSINESS_DATE,
+      reason: "safe integer boundary",
+    }),
+  );
+  assert.equal(closed.ok, true);
+  if (!closed.ok) return;
+  assert.equal(closed.value.forfeited_bonus_cents, bonus);
+  const view = await withStore((store) => store.getByCustomer(customerId, 10));
+  const forfeitures = view?.recent.filter((row) => row.kind === "bonus_forfeit") ?? [];
+  assert.equal(forfeitures.length, 1);
+  assert.equal(forfeitures[0]?.bonus_delta_cents, -bonus);
 });

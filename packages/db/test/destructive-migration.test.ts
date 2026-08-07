@@ -123,6 +123,7 @@ describe("destructive migration static reject", () => {
       "0037_member_refund.sql",
       "0038_notification_manual_list.sql",
       "0039_accounting_report_indexes.sql",
+      "0040_member_account_lifecycle.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

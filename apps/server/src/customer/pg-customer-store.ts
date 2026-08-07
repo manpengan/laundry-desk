@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { PgPool } from "../db/pg-pool.js";
 import { withOrgGucOrCurrent, withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
 import type { SqlClient } from "../db/types.js";
+import { mergeCustomerRows } from "./pg-customer-merge.js";
 import { createPgCustomerPrivacyOperations } from "./pg-customer-privacy-store.js";
 import type {
   CustomerMergeInput,
@@ -257,60 +258,6 @@ async function updateRow(
   }
 }
 
-async function mergeRows(
-  client: SqlClient,
-  orgId: string,
-  input: CustomerMergeInput,
-): Promise<CustomerMergeResult | null> {
-  const result = await client.query<CustomerRow>(
-    `SELECT id, phone, name, note, created_at, updated_at, merged_into_id
-       FROM customers
-      WHERE org_id = $1::uuid AND id = ANY($2::uuid[])
-      ORDER BY id
-      FOR UPDATE`,
-    [orgId, [input.source_customer_id, input.target_customer_id]],
-  );
-  const source = result.rows.find((row) => row.id === input.source_customer_id);
-  const target = result.rows.find((row) => row.id === input.target_customer_id);
-  if (
-    source === undefined ||
-    target === undefined ||
-    source.id === target.id ||
-    source.merged_into_id != null ||
-    target.merged_into_id != null
-  ) {
-    return null;
-  }
-  const relinked = await client.query(
-    `UPDATE orders
-        SET customer_id = $4::uuid, customer_phone = $5,
-            customer_name = COALESCE($6, customer_name), updated_at = $7
-      WHERE org_id = $1::uuid AND store_id = $2::uuid
-        AND customer_id = $3::uuid
-        AND customer_id <> $4::uuid`,
-    [
-      orgId,
-      input.store_id,
-      source.id,
-      target.id,
-      target.phone,
-      target.name,
-      epochToDate(input.now),
-    ],
-  );
-  await client.query(
-    `UPDATE customers
-        SET merged_into_id = $3::uuid, merged_at = $4, updated_at = $4
-      WHERE org_id = $1::uuid AND id = $2::uuid AND merged_into_id IS NULL`,
-    [orgId, source.id, target.id, epochToDate(input.now)],
-  );
-  return Object.freeze({
-    source_customer_id: source.id,
-    target_customer_id: target.id,
-    relinked_order_count: relinked.rowCount ?? 0,
-  });
-}
-
 async function findDuplicateRows(
   client: SqlClient,
   orgId: string,
@@ -370,7 +317,7 @@ export function createPgCustomerStore(
 
     merge: async (input: CustomerMergeInput): Promise<CustomerMergeResult | null> =>
       withStoreGucOrCurrent(pool, { orgId, storeId: input.store_id }, async (client) =>
-        mergeRows(client, orgId, input),
+        mergeCustomerRows(client, orgId, input),
       ),
 
     findDuplicates: async (
