@@ -16,6 +16,7 @@ const pg = requireFromServer("pg");
 const ORG_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const STORE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const ADMIN_ID = "11111111-1111-4111-8111-111111111103";
+const MEMBER_FEATURE_ID = "88888888-8888-4888-8888-888888888881";
 const FIXTURE_STAFF = Object.freeze([
   Object.freeze({
     id: "11111111-1111-4111-8111-111111111101",
@@ -93,6 +94,22 @@ async function seedStaff(client, staff) {
        is_active = true,
        updated_at = EXCLUDED.updated_at`,
     [staff.roleId, ORG_ID, STORE_ID, staff.id, staff.role],
+  );
+}
+
+async function enableMemberFeature(client) {
+  await client.query(
+    `INSERT INTO store_features (
+       id, org_id, store_id, fulfillment, membership, shift_closing,
+       delivery, marketing, ai, updated_at
+     ) VALUES (
+       $1::uuid, $2::uuid, $3::uuid, true, true, false,
+       false, false, false, now()
+     )
+     ON CONFLICT (org_id, store_id) DO UPDATE SET
+       membership = true,
+       updated_at = EXCLUDED.updated_at`,
+    [MEMBER_FEATURE_ID, ORG_ID, STORE_ID],
   );
 }
 
@@ -239,6 +256,7 @@ export default async function globalSetup() {
   try {
     await client.query("BEGIN");
     await client.query("SET LOCAL ROLE laundry_owner");
+    await enableMemberFeature(client);
     for (const staff of FIXTURE_STAFF) {
       await seedStaff(client, staff);
     }

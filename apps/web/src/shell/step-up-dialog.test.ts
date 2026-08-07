@@ -19,6 +19,7 @@ test("StepUpConfirmDialog SSR shows approver PIN copy", () => {
         confirmRef: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
         currentStaffId: "11111111-1111-4111-8111-111111111101",
         commandLabel: "修改最低消费",
+        summary: createElement("p", null, "冻结快照：退款本金 ¥100.00，渠道现金，原因顾客退卡"),
         onApproved: () => undefined,
       }),
     ),
@@ -27,6 +28,8 @@ test("StepUpConfirmDialog SSR shows approver PIN copy", () => {
   assert.match(html, /修改最低消费/);
   assert.match(html, /复核人 PIN/);
   assert.match(html, /不会切换当前登录人/);
+  assert.match(html, /data-testid="step-up-summary"/);
+  assert.match(html, /退款本金 ¥100.00，渠道现金，原因顾客退卡/);
 });
 
 test("StepUpConfirmDialog can expose only other administrators for privacy approval", () => {

@@ -62,6 +62,7 @@ test("ADR-22 refund surface shows refundable principal and step-up copy for admi
       null,
       createElement(MemberRefundForm, {
         accountId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        accountStatus: "active",
         refundableCents: 100_000,
         commandClient: createMockCommandClient(),
         authClient: createMockAuthClient(),
@@ -74,6 +75,26 @@ test("ADR-22 refund surface shows refundable principal and step-up copy for admi
   assert.match(html, /退还储值本金/);
   assert.match(html, /赠款不退现/);
   assert.match(html, /另一位管理员现场 PIN 复核/);
+});
+
+test("ordinary member refund is hidden while the account is frozen", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(MemberRefundForm, {
+        accountId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+        accountStatus: "frozen",
+        refundableCents: 100_000,
+        commandClient: createMockCommandClient(),
+        authClient: createMockAuthClient(),
+        session: ADMIN_SESSION,
+        toast: { push: () => undefined },
+        onCompleted: async () => undefined,
+      }),
+    ),
+  );
+  assert.doesNotMatch(html, /data-testid="member-refund"/);
 });
 
 test("ADR-22 confirmations resume with only the frozen confirm_ref", async () => {

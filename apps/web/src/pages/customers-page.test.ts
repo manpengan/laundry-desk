@@ -3,6 +3,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
+import { FULL_STORE_FEATURES } from "../auth/permissions.js";
+import type { SessionView } from "../auth/types.js";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
 import {
@@ -56,6 +58,28 @@ const SAMPLE_PRINT: PrintJobView = Object.freeze({
   created_at: 1_721_606_400,
   updated_at: 1_721_606_410,
 });
+
+function memberSession(enabled: boolean): SessionView {
+  return Object.freeze({
+    session: Object.freeze({
+      session_id: "d1111111-1111-4111-8111-111111111111",
+      session_version: 1,
+      org_id: "d2222222-2222-4222-8222-222222222222",
+      store_id: "d3333333-3333-4333-8333-333333333333",
+      staff_id: "d4444444-4444-4444-8444-444444444444",
+      device_id: "d5555555-5555-4555-8555-555555555555",
+      permission_version: 1,
+    }),
+    role: "admin",
+    features: Object.freeze({ ...FULL_STORE_FEATURES, member_enabled: enabled }),
+    display: Object.freeze({
+      store_name: "本地门店",
+      staff_name: "店长",
+      org_code: "ORG",
+      store_code: "S1",
+    }),
+  });
+}
 
 test("parseCustomerRows accepts documented result shape", () => {
   assert.deepEqual(parseCustomerRows({ customers: SAMPLE_LIST_ROWS }), PARSED_LIST_ROWS);
@@ -195,4 +219,25 @@ test("CustomersPage SSR detail empty history copy", () => {
   );
   assert.match(html, /data-testid="customer-detail"/);
   assert.match(html, /暂无历史订单/);
+});
+
+test("member-disabled sessions neither mount nor render the account panel", () => {
+  const render = (enabled: boolean) =>
+    renderToStaticMarkup(
+      createElement(
+        ToastProvider,
+        null,
+        createElement(CustomersPage, {
+          queryClient: createMockQueryClient(),
+          commandClient: createMockCommandClient(),
+          autoLoad: false,
+          initialSelected: SAMPLE_CUSTOMER,
+          initialOrders: Object.freeze([]),
+          session: memberSession(enabled),
+        }),
+      ),
+    );
+
+  assert.doesNotMatch(render(false), /aria-label="会员储值"/);
+  assert.match(render(true), /aria-label="会员储值"/);
 });

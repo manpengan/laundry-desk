@@ -99,6 +99,10 @@ test("bonus tier top-up and R4 principal refund are durable", async ({ page }) =
   });
   await member.getByLabel("充值金额（元）").fill(yuanInput(thresholdCents));
   await member.getByRole("button", { name: "充值", exact: true }).click();
+  const topupConfirmation = page.getByRole("dialog", { name: "确认会员充值" });
+  await expect(topupConfirmation).toContainText(money(thresholdCents), { timeout: 15_000 });
+  await expect(topupConfirmation).toContainText("收款渠道：现金");
+  await topupConfirmation.getByRole("button", { name: "确认充值" }).click();
   await expect(page.locator(".ld-toast").last()).toContainText("充值已入账", {
     timeout: 15_000,
   });
@@ -120,6 +124,9 @@ test("bonus tier top-up and R4 principal refund are durable", async ({ page }) =
 
   const stepUp = page.getByRole("dialog", { name: "需要现场复核" });
   await expect(stepUp).toBeVisible({ timeout: 15_000 });
+  await expect(stepUp).toContainText("退款本金 " + money(refundCents));
+  await expect(stepUp).toContainText("退款渠道：现金");
+  await expect(stepUp).toContainText("退款原因：真实 R4 退款验收");
   await stepUp.locator(".ld-step-up__select").selectOption({
     label: "E2E Staff Two（店长）",
   });

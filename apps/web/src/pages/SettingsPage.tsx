@@ -116,7 +116,7 @@ export function SettingsPage({
         {...(queryClient !== undefined ? { queryClient } : {})}
       />
 
-      {queryClient === undefined ? null : (
+      {queryClient === undefined || session.features.member_enabled !== true ? null : (
         <MemberBonusRulesPanel commandClient={commandClient} queryClient={queryClient} />
       )}
 

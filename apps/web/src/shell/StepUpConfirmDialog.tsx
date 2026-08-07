@@ -3,7 +3,7 @@
  */
 
 import { Button, Dialog, Input, useToast } from "@laundry/ui";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SwitchableStaff } from "../auth/types.js";
 import { validatePin } from "../auth/validate-pin.js";
@@ -20,6 +20,8 @@ export type StepUpConfirmDialogProps = {
   commandLabel?: string;
   /** Optional server-mirrored UI filter; server authority remains decisive. */
   requiredApproverRole?: SwitchableStaff["role"];
+  /** Full WYSIWYS summary of the server-frozen action being approved. */
+  summary?: ReactNode;
   /** Called after proof is issued (parent re-submits confirm_ref). */
   onApproved: (proof: Readonly<{ step_up_proof_id: string; expires_at: number }>) => void;
 };
@@ -32,6 +34,7 @@ export function StepUpConfirmDialog({
   currentStaffId,
   commandLabel = "高风险操作",
   requiredApproverRole,
+  summary,
   onApproved,
 }: StepUpConfirmDialogProps) {
   const toast = useToast();
@@ -139,6 +142,11 @@ export function StepUpConfirmDialog({
         <p className="ld-step-up__ref" title={confirmRef}>
           确认卡：{confirmRef.slice(0, 8)}…
         </p>
+        {summary === undefined ? null : (
+          <div className="ld-step-up__summary" data-testid="step-up-summary">
+            {summary}
+          </div>
+        )}
         {approvers.length === 0 ? (
           <div className="ld-step-up__error" role="alert">
             没有可复核的其他{requiredApproverRole === "admin" ? "店长" : "员工"}

@@ -17,6 +17,7 @@ export type DebtPageProps = {
   /** Without this the detail drawer can display but not collect or cancel. */
   commandClient?: CommandPort;
   photoPort?: PhotoPort;
+  memberEnabled?: boolean;
   /** Navigate to pickup with order id prefilled. */
   onOpenPickup?: (orderId: string) => void;
 };
@@ -53,7 +54,13 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   }
 }
 
-export function DebtPage({ queryClient, commandClient, photoPort, onOpenPickup }: DebtPageProps) {
+export function DebtPage({
+  queryClient,
+  commandClient,
+  photoPort,
+  memberEnabled = false,
+  onOpenPickup,
+}: DebtPageProps) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [rows, setRows] = useState<readonly OrderListRowView[]>([]);
@@ -184,6 +191,7 @@ export function DebtPage({ queryClient, commandClient, photoPort, onOpenPickup }
         open={detailOrderId !== null}
         orderId={detailOrderId}
         queryClient={queryClient}
+        memberEnabled={memberEnabled}
         {...(commandClient === undefined ? {} : { commandClient })}
         {...(photoPort === undefined ? {} : { photoPort })}
         onClose={() => setDetailOrderId(null)}

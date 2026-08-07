@@ -6,10 +6,15 @@ import type { SessionView } from "../auth/types.js";
 import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort } from "../commands/types.js";
 import { StepUpConfirmDialog } from "../shell/StepUpConfirmDialog.js";
-import { topupAmountToCents } from "./member-model.js";
+import {
+  topupAmountToCents,
+  type MemberAccountStatusView,
+  type MemberTenderView,
+} from "./member-model.js";
 
 export type MemberRefundFormProps = Readonly<{
   accountId: string;
+  accountStatus: MemberAccountStatusView;
   refundableCents: number;
   commandClient: CommandPort;
   authClient?: AuthClient;
@@ -25,6 +30,19 @@ const REFUND_TENDERS = Object.freeze([
   { value: "other", label: "其他" },
 ] as const);
 
+type RefundBody = Readonly<{
+  account_id: string;
+  amount_cents: number;
+  tender: MemberTenderView;
+  reason: string;
+}>;
+
+type PendingRefund = Readonly<{ ref: string; body: RefundBody }>;
+
+function refundTenderLabel(tender: MemberTenderView): string {
+  return REFUND_TENDERS.find((item) => item.value === tender)?.label ?? "其他";
+}
+
 /** Resume an R4 refund with only the server-frozen confirmation reference. */
 export function resumeMemberRefund(commandClient: CommandPort, confirmRef: string) {
   return commandClient.execute("member.refund", {}, { confirmRef });
@@ -32,6 +50,7 @@ export function resumeMemberRefund(commandClient: CommandPort, confirmRef: strin
 
 export function MemberRefundForm({
   accountId,
+  accountStatus,
   refundableCents,
   commandClient,
   authClient,
@@ -43,7 +62,7 @@ export function MemberRefundForm({
   const [tender, setTender] = useState("cash");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
-  const [pendingRef, setPendingRef] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingRefund | null>(null);
 
   const finish = useCallback(async () => {
     setAmount("");
@@ -59,28 +78,29 @@ export function MemberRefundForm({
       toast.push("退款金额必须大于 0，且不能超过可退本金", "error");
       return;
     }
-    if (trimmedReason.length === 0) {
-      toast.push("请填写退款原因", "error");
+    if (trimmedReason.length === 0 || trimmedReason.length > 256) {
+      toast.push("请填写 1–256 字退款原因", "error");
       return;
     }
     setBusy(true);
     try {
-      const result = await commandClient.execute("member.refund", {
+      const body: RefundBody = Object.freeze({
         account_id: accountId,
         amount_cents: amountCents,
-        tender,
+        tender: tender as MemberTenderView,
         reason: trimmedReason,
       });
+      const result = await commandClient.execute("member.refund", body);
       if (result.ok) {
         await finish();
         return;
       }
-      if (isStepUpRequired(result)) {
+      if (isStepUpRequired(result) && result.error.code === "POLICY_STEP_UP_REQUIRED") {
         if (authClient === undefined || session === undefined) {
           toast.push("当前客户端无法完成现场复核", "error");
           return;
         }
-        setPendingRef(result.error.detail.confirm_ref);
+        setPending(Object.freeze({ ref: result.error.detail.confirm_ref, body }));
         return;
       }
       toast.push(result.error.message ?? result.error.code, "error");
@@ -101,22 +121,22 @@ export function MemberRefundForm({
   ]);
 
   const resume = useCallback(async () => {
-    if (pendingRef === null) return;
+    if (pending === null) return;
     setBusy(true);
     try {
-      const result = await resumeMemberRefund(commandClient, pendingRef);
+      const result = await resumeMemberRefund(commandClient, pending.ref);
       if (!result.ok) {
         toast.push(result.error.message ?? result.error.code, "error");
         return;
       }
-      setPendingRef(null);
+      setPending(null);
       await finish();
     } finally {
       setBusy(false);
     }
-  }, [commandClient, finish, pendingRef, toast]);
+  }, [commandClient, finish, pending, toast]);
 
-  if (session?.role !== "admin") return null;
+  if (session?.role !== "admin" || accountStatus !== "active") return null;
 
   return (
     <div className="ld-member-refund" data-testid="member-refund">
@@ -152,6 +172,7 @@ export function MemberRefundForm({
         <Input
           label="退款原因"
           value={reason}
+          maxLength={256}
           onChange={(event) => setReason(event.target.value)}
           disabled={busy || refundableCents <= 0}
         />
@@ -164,15 +185,25 @@ export function MemberRefundForm({
           确认退款
         </Button>
       </div>
-      {pendingRef !== null && authClient !== undefined ? (
+      {pending !== null && authClient !== undefined ? (
         <StepUpConfirmDialog
           open
-          onClose={() => setPendingRef(null)}
+          onClose={() => setPending(null)}
           authClient={authClient}
-          confirmRef={pendingRef}
+          confirmRef={pending.ref}
           currentStaffId={session.session.staff_id}
           commandLabel="退还储值本金"
           requiredApproverRole="admin"
+          summary={
+            <div className="ld-member-confirmation">
+              <p>
+                退款本金 <MoneyText fen={pending.body.amount_cents} />
+              </p>
+              <p>退款渠道：{refundTenderLabel(pending.body.tender)}</p>
+              <p>退款原因：{pending.body.reason}</p>
+              <p>赠款不会退现；复核后将立即追加不可编辑的退款流水。</p>
+            </div>
+          }
           onApproved={() => void resume()}
         />
       ) : null}

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createMockCommandClient } from "../commands/command-client.js";
-import { executeMemberTopup } from "./MemberBalancePanel.js";
+import { requestMemberTopup, resumeMemberTopup } from "./MemberBalancePanel.js";
 
 const TOPUP = Object.freeze({
   account_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -10,7 +10,7 @@ const TOPUP = Object.freeze({
   method: "cash",
 });
 
-test("member top-up resumes the R3 confirmation using only the frozen confirm_ref", async () => {
+test("member top-up pauses for explicit R3 confirmation, then resumes with ref only", async () => {
   const calls: { name: string; body: unknown; confirmRef?: string }[] = [];
   const confirmRef = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
   const commandClient = createMockCommandClient(
@@ -40,7 +40,10 @@ test("member top-up resumes the R3 confirmation using only the frozen confirm_re
     },
   );
 
-  assert.equal((await executeMemberTopup(commandClient, TOPUP)).ok, true);
+  const requested = await requestMemberTopup(commandClient, TOPUP);
+  assert.equal(requested.ok, false);
+  assert.deepEqual(calls, [{ name: "member.topup", body: TOPUP }]);
+  assert.equal((await resumeMemberTopup(commandClient, confirmRef)).ok, true);
   assert.deepEqual(calls, [
     { name: "member.topup", body: TOPUP },
     { name: "member.topup", body: {}, confirmRef },
@@ -57,7 +60,7 @@ test("member top-up does not retry a non-confirmation failure", async () => {
     });
   });
 
-  const result = await executeMemberTopup(commandClient, TOPUP);
+  const result = await requestMemberTopup(commandClient, TOPUP);
   assert.equal(result.ok, false);
   assert.equal(calls, 1);
 });
@@ -78,7 +81,7 @@ test("member top-up leaves a manager step-up pending instead of bypassing it", a
     });
   });
 
-  const result = await executeMemberTopup(commandClient, TOPUP);
+  const result = await requestMemberTopup(commandClient, TOPUP);
   assert.equal(result.ok, false);
   assert.equal(calls, 1);
 });
