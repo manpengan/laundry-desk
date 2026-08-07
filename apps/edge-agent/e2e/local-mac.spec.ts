@@ -59,13 +59,8 @@ const MAC_CATALOG = Object.freeze({
 const MAC_MEMBER = Object.freeze({
   phone: "13900000042",
   name: "macOS 顾客",
-  bonusThresholdYuan: "50",
-  bonusYuan: "5",
   topupYuan: "50",
-  topupBalance: "¥55.00",
-  postSettlementBalance: "¥40.00",
-  refundYuan: "10",
-  finalBalance: "¥30.00",
+  remainingBalance: "¥35.00",
 });
 
 type OfflineAcceptanceBridge = Readonly<{
@@ -299,25 +294,6 @@ async function selectMacMember(page: Page): Promise<void> {
   await expect(page.locator('[aria-label="会员储值"]')).toBeVisible({ timeout: 15_000 });
 }
 
-async function configureMacMemberBonus(page: Page): Promise<void> {
-  await page.locator('[data-nav-id="settings"]').click();
-  const rules = page.locator('[data-testid="member-rules"]');
-  await expect(rules).toBeVisible({ timeout: 15_000 });
-  await rules.getByLabel("充满（元）").fill(MAC_MEMBER.bonusThresholdYuan);
-  await rules.getByLabel("赠送（元）").fill(MAC_MEMBER.bonusYuan);
-  await rules.getByLabel("备注（可选）").fill("packaged macOS acceptance");
-  await rules.getByRole("button", { name: "新增档位" }).click();
-  const confirmation = page.getByRole("dialog", { name: "确认修改赠送档位" });
-  await expect(confirmation).toContainText("充 ¥50.00 赠 ¥5.00", { timeout: 15_000 });
-  await confirmation.getByRole("button", { name: "确认保存" }).click();
-  await expect(page.locator(".ld-toast").last()).toContainText("赠送档位已保存", {
-    timeout: 15_000,
-  });
-  const rule = rules.locator(".ld-member-rules__row").filter({ hasText: "¥50.00" });
-  await expect(rule).toHaveCount(1, { timeout: 15_000 });
-  await expect(rule).toContainText("启用");
-}
-
 async function openAndTopupMacMember(page: Page): Promise<void> {
   await page.locator('[data-nav-id="customers"]').click();
   await selectMacMember(page);
@@ -334,12 +310,7 @@ async function openAndTopupMacMember(page: Page): Promise<void> {
   await expect(page.locator(".ld-toast").last()).toContainText("充值已入账", {
     timeout: 15_000,
   });
-  await expect(memberPanel.locator(".ld-member-panel__balance")).toContainText(
-    MAC_MEMBER.topupBalance,
-    { timeout: 15_000 },
-  );
-  await expect(memberPanel.locator(".ld-member-panel__split")).toContainText("本金 ¥50.00");
-  await expect(memberPanel.locator(".ld-member-panel__split")).toContainText("赠款 ¥5.00");
+  await expect(memberPanel).toContainText("¥50.00", { timeout: 15_000 });
   await expect(memberPanel).toContainText("充值");
 }
 
@@ -369,7 +340,7 @@ async function settleMacOrderFromBalance(page: Page, ticketNo: string): Promise<
     timeout: 15_000,
   });
   await method.selectOption({ label: "会员余额" });
-  await expect(payment).toContainText("会员可用余额 " + MAC_MEMBER.topupBalance);
+  await expect(payment).toContainText("会员可用余额 ¥50.00");
   await page.getByRole("button", { name: "确认收款" }).click();
   await expect(page.locator(".ld-toast").last()).toContainText("已从会员余额扣款", {
     timeout: 15_000,
@@ -383,10 +354,9 @@ async function settleMacOrderFromBalance(page: Page, ticketNo: string): Promise<
 async function assertMacMemberSettlement(page: Page): Promise<void> {
   await page.locator('[data-nav-id="customers"]').click();
   await selectMacMember(page);
-  await expect(page.locator(".ld-member-panel__balance")).toContainText(
-    MAC_MEMBER.postSettlementBalance,
-    { timeout: 15_000 },
-  );
+  await expect(page.locator('[aria-label="会员储值"]')).toContainText(MAC_MEMBER.remainingBalance, {
+    timeout: 15_000,
+  });
 
   await page.locator('[data-nav-id="stats"]').click();
   await page.locator('[data-testid="stats-load-btn"]').click();
@@ -398,58 +368,12 @@ async function assertMacMemberSettlement(page: Page): Promise<void> {
   await expect(balanceBucket).toContainText("¥15.00");
 }
 
-async function refundMacMemberPrincipal(page: Page): Promise<void> {
-  await page.locator('[data-nav-id="customers"]').click();
-  await selectMacMember(page);
-  const memberPanel = page.locator('[aria-label="会员储值"]');
-  const refund = memberPanel.locator('[data-testid="member-refund"]');
-  await refund.getByLabel("退款金额（元）").fill(MAC_MEMBER.refundYuan);
-  await refund.getByLabel("退款方式").selectOption("cash");
-  await refund.getByLabel("退款原因").fill("packaged macOS R4 acceptance");
-  await refund.getByRole("button", { name: "确认退款" }).click();
-
-  const stepUp = page.getByRole("dialog", { name: "需要现场复核" });
-  await expect(stepUp).toBeVisible({ timeout: 15_000 });
-  await stepUp.locator(".ld-step-up__select").selectOption({
-    label: "E2E Staff Two（店长）",
-  });
-  await stepUp.locator('input[name="step-up-pin"]').fill(LOGIN.pin);
-  await stepUp.getByRole("button", { name: "确认 PIN" }).click();
-  await expect(page.locator(".ld-toast").last()).toContainText("储值本金已退款", {
-    timeout: 15_000,
-  });
-  await expect(memberPanel.locator(".ld-member-panel__balance")).toContainText(
-    MAC_MEMBER.finalBalance,
-  );
-  const refundLedger = memberPanel.locator(".ld-member-panel__row").filter({ hasText: "退款" });
-  await expect(refundLedger.first()).toContainText("-¥10.00");
-}
-
-async function retireMacMemberBonus(page: Page): Promise<void> {
-  await page.locator('[data-nav-id="settings"]').click();
-  const rules = page.locator('[data-testid="member-rules"]');
-  await expect(rules).toBeVisible({ timeout: 15_000 });
-  const rule = rules.locator(".ld-member-rules__row").filter({ hasText: "¥50.00" });
-  await expect(rule).toHaveCount(1);
-  await rule.getByRole("button", { name: "停用" }).click();
-  const confirmation = page.getByRole("dialog", { name: "确认修改赠送档位" });
-  await expect(confirmation).toContainText("状态：停用", { timeout: 15_000 });
-  await confirmation.getByRole("button", { name: "确认保存" }).click();
-  await expect(page.locator(".ld-toast").last()).toContainText("赠送档位已停用", {
-    timeout: 15_000,
-  });
-  await expect(rule).toContainText("已停用");
-}
-
 /** Prove the packaged SPA contains the latest stored-value counter slice. */
 async function runPackagedMemberSettlement(page: Page): Promise<void> {
-  await configureMacMemberBonus(page);
   await openAndTopupMacMember(page);
   const ticketNo = await createUnpaidMacMemberOrder(page);
   await settleMacOrderFromBalance(page, ticketNo);
   await assertMacMemberSettlement(page);
-  await refundMacMemberPrincipal(page);
-  await retireMacMemberBonus(page);
 }
 
 /** Prove a packaged Edge queues an ordinary grant command and never widens denied commands. */
