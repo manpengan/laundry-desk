@@ -2,7 +2,7 @@
 
 本项目版本记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 SemVer。
 
-> **当前路线（2026-07-25，2026-08-07 修订）**：按 [ADR-14](adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)，v2 是唯一活动交付线；当前只推进 Linux 本地 Web Server + Web，macOS App 暂停。V2-only 基础裁决沿用 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)。宏发 v1 停止功能开发与独立发版，只保留为迁移源和历史行为参考。[ADR-16](adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) 把离线队列、Primary lease 与真实打印机并入当前阶段，[ADR-17](adr/2026-07-31-adr-17-member-stored-value.md)、[ADR-18](adr/2026-08-01-adr-18-stored-value-settlement-reporting.md) 与 [ADR-24](adr/2026-08-07-adr-24-accounting-dual-basis-reports.md) 解冻会员储值和经营账目；云部署、Windows、AI/BYOK 与 v1 迁移保持后置。
+> **当前路线（2026-07-25，2026-08-07 修订）**：按 [ADR-14](adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)，v2 是唯一活动交付线；当前只推进 Linux 本地 Web Server + Web，macOS App 暂停。V2-only 基础裁决沿用 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)。宏发 v1 停止功能开发与独立发版，只保留为迁移源和历史行为参考。[ADR-16](adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) 把离线队列、Primary lease 与真实打印机并入当前阶段，[ADR-17](adr/2026-07-31-adr-17-member-stored-value.md)、[ADR-18](adr/2026-08-01-adr-18-stored-value-settlement-reporting.md)、[ADR-24](adr/2026-08-07-adr-24-accounting-dual-basis-reports.md) 与 [ADR-25](adr/2026-08-07-adr-25-member-account-lifecycle.md) 解冻会员储值、经营账目和账户生命周期；云部署、Windows、AI/BYOK 与 v1 迁移保持后置。
 
 ---
 
@@ -47,10 +47,11 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 - 会员储值（[ADR-17](adr/2026-07-31-adr-17-member-stored-value.md)、[ADR-18](adr/2026-08-01-adr-18-stored-value-settlement-reporting.md)）：顾客可开通会员账户预存金额，并用余额结账。余额在本组织所有门店通用；账本只追加，余额是流水之和而非可改字段，改错只能靠冲正而不能编辑。充值走现有线下收款方式，收银台的支付方式里**没有**「余额」——余额只能通过专门的余额结账扣减，避免出现没有扣款记录的收款。余额不足时拒绝结账，不允许透支。
   储值核销在日结对账中**单列一行**，与现金流入分开；它计入营业额但不计入当日现金，因为钱在充值当天就已收进店，交班的钱箱核对不受影响。
   收款与补缴对话框在顾客有可用余额时多出「会员余额」一项；选中后走专门的余额结账，扣款与本单支付在同一事务内完成，金额受订单欠款与可用余额双重限制。
-  **首期不含**：充值赠送与分档、积分、微信支付对接、提现与储值退款、余额有效期。储值操作一律不支持离线。
+  **ADR-17 首期当时不含**：充值赠送与分档、积分、微信支付对接、提现与储值退款、余额有效期；这是一条历史切片边界，不是当前待办清单。赠送与本金退款已由 ADR-22 后续交付；当前仍后置积分、支付机构接口、任意提现与余额有效期。储值操作一律不支持离线。
 - 充值赠送与分档（[ADR-22](adr/2026-08-01-adr-22-member-stored-value-phase-2.md) §2、§3）：管理员可维护「充满 X 送 Y」的档位，充值时自动按命中的最高档位赠送。档位是满额档而不是比例——「充 1000 送 100」可以直接印在台卡上，也不需要定取整规则。档位对全组织生效，因为余额本身就跨门店通用。停用档位只下架不删除，且**不会重估已经发生的充值**：每笔充值都记下当时命中的是哪一档。赠送额一律由服务端计算，收银台无法自行指定。赠送不计入当日现金（顾客没有为它付钱），消费时**先扣赠款后扣本金**。改档位需要单独的管理员权限，不跟改价目共用。
 - 储值退款（[ADR-22](adr/2026-08-01-adr-22-member-stored-value-phase-2.md) §4、§5）：顾客要求退卡时，可退的是**尚未消费的本金**，赠款不退现也不折现。可退金额不需要翻账：消费一律先扣赠款，所以剩下的本金恰好就是顾客自己没花掉的那部分。**不追扣已经享受过的赠送**——充 1000 送 100、只消费 100 的顾客仍可退回全部 1000 本金。退款需要管理员的专门权限与二次身份校验，必须填写理由，且金额受剩余本金限制、不允许退成负数。现金退款计入当日现金流出，交班能对上。
-- 会员二期本地 Web 柜台入口：设置页可新增、编辑和停用充值赠送档位，R3 确认卡完整展示满额、赠送与状态；客户会员面板展示可退本金并提供退款入口，退款仅向管理员开放，必须填写金额、渠道和原因，再由另一位管理员现场 PIN 复核。所有确认续跑只提交服务端冻结的 `confirm_ref`。本片验收以 Linux 本地 Server、真实 PostgreSQL 与 Web 浏览器为准，macOS App 打包验收后置。
+- 会员二期本地 Web 柜台入口：设置页可新增、编辑和停用充值赠送档位；客户会员面板展示可退本金并提供退款入口，退款仅向管理员开放，必须填写金额、渠道和原因，再由另一位管理员现场 PIN 复核。所有确认续跑只提交服务端冻结的 `confirm_ref`。充值 R3 确认目前只显式展示本金与渠道，并说明赠款会在执行时由服务端计算；命令总线首跳尚未返回 ADR-22 §3.2 要求的精确赠款额和命中档位，因此“服务端冻结赠款/档位确认摘要”仍是待修缺口，不能标记为已交付。本片验收以 Linux 本地 Server、真实 PostgreSQL 与 Web 浏览器为准，macOS App 打包验收后置。
+- 会员账户生命周期（[ADR-25](adr/2026-08-07-adr-25-member-account-lifecycle.md)）：Linux 本地 Web 可将活动账户挂失冻结，并由管理员受权解冻；冻结账户拒绝充值、余额消费和普通退款。关户是不可拆分的 R4 资金事务：锁内复核顾客、状态版本与本金/赠款快照，退回全部剩余本金，追加 `bonus_forfeit` 清零全部剩余赠款，再把账户永久置为 `closed` 并同事务审计。冻结、解冻与关户一律在线执行；实体卡、积分、有效期、双方都有会员账户的自动合并、重新入会和支付机构接口继续后置。macOS App 不因本片恢复开发或验收。
 - 催取工作台与人工通知名单（[ADR-23](adr/2026-08-07-adr-23-pickup-reminder-manual-list.md)）：Linux 本地 Web 可按 30/90/180 天、衣物状态与欠款筛选当前门店未取订单，最多勾选 50 单，经 R3 冻结确认后按订单或顾客生成带 SHA-256 的 CSV 并复制号码。服务端在事务内重新锁定、复核候选，并只追加保存订单、批次和摘要证据，不留存手机号、话术正文或 CSV。该能力明确是人工降级路径，短信、微信、定时任务与任何自动发送仍未接入，生成名单不代表已经联系或送达；本片只验 Linux 本地 Server、真实 PostgreSQL 与 Web 浏览器，macOS App 验收后置。
 - 经营账目双口径（[ADR-24](adr/2026-08-07-adr-24-accounting-dual-basis-reports.md)）：Linux 本地 Web 新增今日、往日、月结与职员报表。「实收」按非余额订单净收加充值/退款本金归集，「业绩」按全部订单支付净额归集并包含会员余额核销，避免充值与消费重复计算。报表固定按五种渠道展示，日期区间最多 366 天，支持带 SHA-256 完整性校验和只留摘要审计的 R3 CSV 导出；查询显式限定会话门店，同组织其他门店流水不会混入。本片不含老板 H5、AI 分析、云端多店汇总或 macOS 验收。
 - macOS Runtime：交付独立原生 Runtime.app 软件，固定管理本地 PostgreSQL/Server 的 install/start/stop/restart/status/diagnose/launchd，以及同一签名 manifest 的中断安装恢复；native acceptance 脱离仓库和宿主 Node。当前测试 App 只做 ad-hoc codesign 并信任临时测试 key。**Developer ID/公证、正式 manifest 签名权威、已签名多架构 OCI 与 upgrade/rollback 均未交付。**

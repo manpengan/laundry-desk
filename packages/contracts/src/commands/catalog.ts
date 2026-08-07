@@ -23,6 +23,7 @@ import { EDGE_CONFLICT_COMMANDS } from "./edge-conflict.js";
 import { RECONCILIATION_COMMANDS, RECONCILIATION_QUERIES } from "./reconciliation.js";
 import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./platform.js";
 import { MEMBER_COMMANDS, MEMBER_QUERIES } from "./member.js";
+import { MEMBER_LIFECYCLE_COMMANDS } from "./member-lifecycle.js";
 import { NOTIFICATION_COMMANDS, NOTIFICATION_QUERIES } from "./notification.js";
 import { STAFF_COMMANDS, STAFF_QUERIES } from "./staff.js";
 import {
@@ -76,6 +77,7 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
   ...M3_FULFILLMENT_COMMAND_DEFINITIONS,
   ...STAFF_COMMANDS,
   ...MEMBER_COMMANDS,
+  ...MEMBER_LIFECYCLE_COMMANDS,
   ...NOTIFICATION_COMMANDS,
 ]);
 
@@ -102,6 +104,9 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.balance.pay",
   "member.bonus_rule.upsert",
   "member.refund",
+  "member.account.freeze",
+  "member.account.unfreeze",
+  "member.account.close",
   "notification.manual_list.create",
 ] as const) as readonly [
   "customer.upsert",
@@ -139,6 +144,9 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.balance.pay",
   "member.bonus_rule.upsert",
   "member.refund",
+  "member.account.freeze",
+  "member.account.unfreeze",
+  "member.account.close",
   "notification.manual_list.create",
 ];
 

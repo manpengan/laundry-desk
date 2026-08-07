@@ -61,6 +61,12 @@ describe("M2 contract surface", () => {
       // ADR-22 §5: R4 because money leaves the business and cannot be undone.
       // Only principal is refundable; the DB CHECK enforces bonus_delta = 0.
       "member.refund",
+      // ADR-25: account lifecycle is an explicit three-command state machine.
+      // Close is atomic: full remaining principal out, full bonus forfeited,
+      // and the account becomes terminally closed in the same transaction.
+      "member.account.freeze",
+      "member.account.unfreeze",
+      "member.account.close",
       // ADR-23: manual fallback only. The R3 command creates an audited CSV;
       // it does not send a message and is hard-capped below the R4 threshold.
       "notification.manual_list.create",
@@ -77,7 +83,7 @@ describe("M2 contract surface", () => {
     // ADR-23: PII-bearing manual counter worklist, deliberately not in AI tools.
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.pickup_reminders.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("accounting.report.get");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(36);
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(39);
     expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(22);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
