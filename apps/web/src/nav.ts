@@ -7,6 +7,7 @@ export type NavItemId =
   | "fulfillment"
   | "orders"
   | "customers"
+  | "reminders"
   | "stats"
   | "settings";
 
@@ -23,6 +24,7 @@ export const COUNTER_NAV: readonly NavItem[] = [
   { id: "fulfillment", label: "生产", icon: "⇄" },
   { id: "orders", label: "订单与欠款", icon: "≡" },
   { id: "customers", label: "客户", icon: "人" },
+  { id: "reminders", label: "催取", icon: "☎" },
   { id: "stats", label: "账目 / 对账", icon: "▣" },
   { id: "settings", label: "设置", icon: "⚙" },
 ] as const;

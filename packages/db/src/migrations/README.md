@@ -38,6 +38,12 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0029_staff_access_gove
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0030_edge_replay_authority.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0031_payment_ledger_sequence.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0032_member_stored_value.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0033_offline_grant_replay.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0034_signed_print_dispatch.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0035_member_tender_cash_reconciliation.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0036_member_bonus_rules.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0037_member_refund.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0038_notification_manual_list.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -72,5 +78,9 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Edge replay authority** (0030): paired-device keys, signed grants, primary leases, and append-only replay arbitration
 - **Payment ledger sequence** (0031): deterministic historical backfill plus database-assigned global ledger order
 - **Member stored value** (0032, [ADR-17](../../../../docs/adr/2026-07-31-adr-17-member-stored-value.md)): org-scoped member accounts plus an append-only signed-delta ledger; the balance is `SUM(delta)` with no stored column, and `payments.method` gains `balance`
+- **Offline grant replay** (0033): independent grant sequence authority and durable replay acceptance
+- **Signed print dispatch** (0034): authoritative print snapshots, one-time dispatch claims, and signed device receipts
+- **Stored-value accounting and phase 2** (0035–0037): tender-aware cash reconciliation, bonus tiers, and principal-only refunds
+- **Manual pickup reminders** (0038, [ADR-23](../../../../docs/adr/2026-08-07-adr-23-pickup-reminder-manual-list.md)): org-RLS append-only generation evidence with explicit store attribution and no raw phone/message/CSV retention
 - Still deferred: AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

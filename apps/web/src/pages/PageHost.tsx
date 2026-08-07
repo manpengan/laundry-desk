@@ -15,6 +15,7 @@ import { ReceivePage } from "./ReceivePage.js";
 import { SettingsPage } from "./SettingsPage.js";
 import { StatsPage } from "./StatsPage.js";
 import { FulfillmentPage } from "./FulfillmentPage.js";
+import { PickupRemindersPage } from "./PickupRemindersPage.js";
 
 export type PageHostProps = {
   activeId: NavItemId;
@@ -34,6 +35,7 @@ function actionTarget(from: NavItemId): NavItemId {
   if (from === "receive") return "settings";
   if (from === "pickup") return "receive";
   if (from === "stats" || from === "settings") return "workbench";
+  if (from === "reminders") return "workbench";
   if (from === "workbench") return "receive";
   return from;
 }
@@ -95,6 +97,15 @@ export function PageHost({
         {...(offlinePort !== undefined ? { offlinePort } : {})}
       />
     );
+  }
+
+  if (
+    activeId === "reminders" &&
+    session !== undefined &&
+    commandClient !== undefined &&
+    queryClient !== undefined
+  ) {
+    return <PickupRemindersPage commandClient={commandClient} queryClient={queryClient} />;
   }
 
   if (

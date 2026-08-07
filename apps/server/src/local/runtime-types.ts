@@ -8,6 +8,7 @@ import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
 import type { createMemoryIdentityStore } from "../identity/memory-store.js";
 import type { MemberRuntimeDeps } from "../member/handlers.js";
+import type { NotificationHandlerDeps } from "../notification/types.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import type { PhotoHandlerDeps } from "../photo/handlers.js";
@@ -40,6 +41,7 @@ export type LocalRuntime = Readonly<{
   fulfillment: FulfillmentHandlerDeps;
   staffAccess: StaffAccessHandlerDeps;
   member: MemberRuntimeDeps;
+  notification: NotificationHandlerDeps;
   edgeAuthority: EdgeAuthorityService;
   accessTokenSecret: string;
   csrfProofSigner: CsrfProofSigner;

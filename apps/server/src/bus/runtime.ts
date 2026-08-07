@@ -58,5 +58,6 @@ export function createRuntimeBus(runtime: LocalRuntime) {
     fulfillment: runtime.fulfillment,
     staffAccess: runtime.staffAccess,
     member: runtime.member,
+    notification: runtime.notification,
   });
 }

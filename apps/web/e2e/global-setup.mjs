@@ -33,6 +33,16 @@ const FIXTURE_STAFF = Object.freeze([
   }),
 ]);
 
+const REMINDER_FIXTURE = Object.freeze({
+  customerId: "66666666-6666-4666-8666-666666666661",
+  orderId: "66666666-6666-4666-8666-666666666662",
+  lineId: "66666666-6666-4666-8666-666666666663",
+  garmentId: "66666666-6666-4666-8666-666666666664",
+  name: "E2E 催取顾客",
+  phone: "13400000000",
+  ticket: "E2E-REMINDER-0001",
+});
+
 function adminDatabaseUrl(password) {
   const url = new URL("postgresql://127.0.0.1:8543/laundry_v2");
   url.username = "postgres";
@@ -74,6 +84,60 @@ async function seedStaff(client, staff) {
   );
 }
 
+async function seedReminderFixture(client) {
+  const row = REMINDER_FIXTURE;
+  await client.query(
+    `INSERT INTO customers (id, org_id, phone, name, note, created_at, updated_at)
+     VALUES ($1::uuid, $2::uuid, $3, $4, 'Playwright pickup reminder fixture',
+             now() - interval '200 days', now())
+     ON CONFLICT (id) DO UPDATE SET phone = EXCLUDED.phone, name = EXCLUDED.name,
+       merged_into_id = NULL, merged_at = NULL, updated_at = now()`,
+    [row.customerId, ORG_ID, row.phone, row.name],
+  );
+  await client.query(
+    `INSERT INTO orders (
+       id, org_id, store_id, ticket_no, pickup_code, status, customer_id,
+       customer_phone, customer_name, note, subtotal_cents, original_cents,
+       discount_cents, addon_cents, urgent_cents, freight_cents, payable_cents,
+       paid_cents, balance_cents, business_date, created_at, updated_at,
+       created_by_staff_id
+     ) VALUES (
+       $1::uuid, $2::uuid, $3::uuid, $4, 'E2ER0001', 'open', $5::uuid,
+       $6, $7, 'Playwright pickup reminder fixture', 1234, 1234,
+       0, 0, 0, 0, 1234, 0, 1234,
+       to_char((now() - interval '200 days') AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
+       now() - interval '200 days', now(), $8::uuid
+     ) ON CONFLICT (id) DO UPDATE SET
+       status = 'open', customer_id = EXCLUDED.customer_id,
+       customer_phone = EXCLUDED.customer_phone, customer_name = EXCLUDED.customer_name,
+       paid_cents = 0, balance_cents = 1234,
+       created_at = now() - interval '200 days', updated_at = now()`,
+    [row.orderId, ORG_ID, STORE_ID, row.ticket, row.customerId, row.phone, row.name, ADMIN_ID],
+  );
+  await client.query(
+    `INSERT INTO order_lines (
+       id, org_id, store_id, order_id, line_index, service_code, category_code,
+       unit_price_cents, qty, line_total_cents, color, brand
+     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 0, 'wash', 'coat',
+               1234, 1, 1234, 'blue', 'e2e')
+     ON CONFLICT (id) DO UPDATE SET unit_price_cents = 1234, qty = 1,
+       line_total_cents = 1234`,
+    [row.lineId, ORG_ID, STORE_ID, row.orderId],
+  );
+  await client.query(
+    `INSERT INTO garments (
+       id, org_id, store_id, order_id, order_line_id, seq, barcode,
+       service_code, category_code, unit_price_cents, color, brand, status,
+       rack_zone, rack_slot, racked_at, racked_by_staff_id
+     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 1,
+       'E2E-REMINDER-GARMENT', 'wash', 'coat', 1234, 'blue', 'e2e',
+       'racked', 'E2E', '001', now() - interval '190 days', $6::uuid)
+     ON CONFLICT (id) DO UPDATE SET status = 'racked', rack_zone = 'E2E', rack_slot = '001',
+       racked_at = now() - interval '190 days', racked_by_staff_id = EXCLUDED.racked_by_staff_id`,
+    [row.garmentId, ORG_ID, STORE_ID, row.orderId, row.lineId, ADMIN_ID],
+  );
+}
+
 export default async function globalSetup() {
   const config = await loadLocalConfig();
   const pool = new pg.Pool({
@@ -87,6 +151,7 @@ export default async function globalSetup() {
     for (const staff of FIXTURE_STAFF) {
       await seedStaff(client, staff);
     }
+    await seedReminderFixture(client);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);

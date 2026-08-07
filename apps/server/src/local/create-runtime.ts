@@ -27,6 +27,7 @@ import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
 import { createMemoryStaffAccessDeps, createPgStaffAccessDeps } from "../staff/runtime.js";
 import { createMemoryMemberDeps, createPgMemberDeps } from "../member/runtime.js";
+import { createMemoryNotificationStore, createPgNotificationStore } from "../notification/index.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import { acquirePgBusinessDayLock } from "../workday/business-day-lock.js";
@@ -286,6 +287,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     fulfillment: Object.freeze({ store: createMemoryFulfillmentStore() }),
     staffAccess: createMemoryStaffAccessDeps(LOCAL_MEMORY_STAFF_DIRECTORY),
     member: memberDeps,
+    notification: Object.freeze({ store: createMemoryNotificationStore({ orderStore }) }),
     edgeAuthority: createMemoryRuntimeAuthority(accessTokenSecret),
     accessTokenSecret,
     csrfProofSigner,
@@ -400,6 +402,7 @@ export async function createPgLocalRuntime(
     fulfillment: Object.freeze({ store: createPgFulfillmentStore(appPool) }),
     staffAccess: createPgStaffAccessDeps(),
     member: createPgMemberDeps(),
+    notification: Object.freeze({ store: createPgNotificationStore() }),
     edgeAuthority: createPgRuntimeAuthority(appPool, config.accessTokenSecret),
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSigner,

@@ -121,6 +121,7 @@ describe("destructive migration static reject", () => {
       "0035_member_tender_cash_reconciliation.sql",
       "0036_member_bonus_rules.sql",
       "0037_member_refund.sql",
+      "0038_notification_manual_list.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
@@ -145,6 +146,7 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS payments/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS print_jobs/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS customers/iu);
+    expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS notification_log/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS shift_closings/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS garment_photos/iu);
     expect(combined).toMatch(/CREATE TABLE IF NOT EXISTS command_idempotency/iu);
@@ -158,6 +160,7 @@ describe("destructive migration static reject", () => {
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE payments TO laundry_app/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE shift_closings TO laundry_app/iu);
     expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE garment_photos TO laundry_app/iu);
+    expect(combined).toMatch(/GRANT SELECT, INSERT ON TABLE notification_log TO laundry_app/iu);
     expect(combined).toMatch(/GRANT DELETE ON TABLE garment_photos TO laundry_app/iu);
     expect(combined).toMatch(
       /GRANT SELECT, INSERT, UPDATE ON TABLE command_idempotency TO laundry_app/iu,
@@ -188,6 +191,8 @@ describe("destructive migration static reject", () => {
     );
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*print_jobs/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*customers/iu);
+    expect(combined).not.toMatch(/GRANT[^;]*UPDATE[^;]*notification_log/iu);
+    expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*notification_log/iu);
     expect(combined).toMatch(
       /REVOKE ALL ON TABLE local_bootstrap_metadata FROM PUBLIC, laundry_app/iu,
     );

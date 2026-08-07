@@ -40,6 +40,8 @@ import type { StatsHandlerDeps } from "../stats/handlers.js";
 import { registerStatsQueryHandlers } from "../stats/handlers.js";
 import type { MemberRuntimeDeps } from "../member/handlers.js";
 import { createMemberHandlers } from "../member/handlers.js";
+import type { NotificationHandlerDeps } from "../notification/types.js";
+import { createNotificationHandlers } from "../notification/handlers.js";
 import type { StaffAccessHandlerDeps } from "../staff/handlers.js";
 import { createStaffAccessHandlers } from "../staff/handlers.js";
 import type { IdentityHandlerDeps } from "./identity-handlers.js";
@@ -71,6 +73,8 @@ export type RegisterM1Deps = Readonly<{
   fulfillment?: FulfillmentHandlerDeps;
   staffAccess?: StaffAccessHandlerDeps;
   member?: MemberRuntimeDeps;
+  /** ADR-23 manual pickup-reminder worklist and append-only generation log. */
+  notification?: NotificationHandlerDeps;
 }>;
 
 export type RegisterM1Result = Readonly<{
@@ -199,6 +203,15 @@ export function registerM1Handlers(
     );
   }
 
+  if (deps.notification !== undefined) {
+    const handlers = createNotificationHandlers(deps.notification);
+    registry.registerHandler(
+      "notification.manual_list.create",
+      handlers["notification.manual_list.create"],
+    );
+    registered.push("notification.manual_list.create");
+  }
+
   return Object.freeze(registered);
 }
 
@@ -276,6 +289,15 @@ export function registerM1QueryHandlers(
     queryRegistry.registerHandler("member.account.get", handlers["member.account.get"]);
     queryRegistry.registerHandler("member.bonus_rules.list", handlers["member.bonus_rules.list"]);
     names.push("member.account.get", "member.bonus_rules.list");
+  }
+
+  if (deps.notification !== undefined) {
+    const handlers = createNotificationHandlers(deps.notification);
+    queryRegistry.registerHandler(
+      "notification.pickup_reminders.list",
+      handlers["notification.pickup_reminders.list"],
+    );
+    names.push("notification.pickup_reminders.list");
   }
 
   return Object.freeze(names);

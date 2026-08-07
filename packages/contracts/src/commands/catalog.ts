@@ -22,6 +22,7 @@ import { EDGE_CONFLICT_COMMANDS } from "./edge-conflict.js";
 import { RECONCILIATION_COMMANDS, RECONCILIATION_QUERIES } from "./reconciliation.js";
 import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./platform.js";
 import { MEMBER_COMMANDS, MEMBER_QUERIES } from "./member.js";
+import { NOTIFICATION_COMMANDS, NOTIFICATION_QUERIES } from "./notification.js";
 import { STAFF_COMMANDS, STAFF_QUERIES } from "./staff.js";
 import {
   M2_PRINT_COMMAND_DEFINITIONS,
@@ -73,6 +74,7 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
   ...M3_FULFILLMENT_COMMAND_DEFINITIONS,
   ...STAFF_COMMANDS,
   ...MEMBER_COMMANDS,
+  ...NOTIFICATION_COMMANDS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
@@ -97,6 +99,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.balance.pay",
   "member.bonus_rule.upsert",
   "member.refund",
+  "notification.manual_list.create",
 ] as const) as readonly [
   "customer.upsert",
   "customer.update",
@@ -132,6 +135,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.balance.pay",
   "member.bonus_rule.upsert",
   "member.refund",
+  "notification.manual_list.create",
 ];
 
 /**
@@ -174,6 +178,7 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   "staff.access.list",
   "member.account.get",
   "member.bonus_rules.list",
+  "notification.pickup_reminders.list",
 ] as const);
 
 export const M2_CONTRACT_DEFINITIONS: readonly (
@@ -191,6 +196,7 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...M3_FULFILLMENT_QUERY_DEFINITIONS,
   ...STAFF_QUERIES,
   ...MEMBER_QUERIES,
+  ...NOTIFICATION_QUERIES,
 ]);
 
 /** M2 AI presets are read-only: no command is exposed to the tool projection. */

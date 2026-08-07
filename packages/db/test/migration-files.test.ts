@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0037", () => {
+  it("ships formal SQL migrations ordered 0001 → 0038", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -49,6 +49,7 @@ describe("packages/db migration file inventory", () => {
       "0035_member_tender_cash_reconciliation.sql",
       "0036_member_bonus_rules.sql",
       "0037_member_refund.sql",
+      "0038_notification_manual_list.sql",
     ]);
   });
 
@@ -98,8 +99,23 @@ describe("packages/db migration file inventory", () => {
       "0035",
       "0036",
       "0037",
+      "0038",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
+  });
+
+  it("adds append-only manual notification evidence without retaining raw PII", () => {
+    const sql = readFileSync(join(migrationsDir, "0038_notification_manual_list.sql"), "utf8");
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS notification_log/iu);
+    expect(sql).toMatch(/channel text NOT NULL/iu);
+    expect(sql).toMatch(/status text NOT NULL/iu);
+    expect(sql).toMatch(/CHECK \(channel = 'manual'\)/iu);
+    expect(sql).toMatch(/CHECK \(status = 'list_generated'\)/iu);
+    expect(sql).toMatch(/GRANT SELECT, INSERT ON TABLE notification_log TO laundry_app/iu);
+    expect(sql).toMatch(
+      /REVOKE UPDATE, DELETE, TRUNCATE ON TABLE notification_log FROM laundry_app/iu,
+    );
+    expect(sql).not.toMatch(/customer_phone|message_body|csv text/iu);
   });
 
   it("adds order.list indexes after the garment photos migration", () => {

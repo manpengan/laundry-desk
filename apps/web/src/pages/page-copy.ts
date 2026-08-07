@@ -44,6 +44,12 @@ const COPY: Record<NavItemId, PageCopy> = {
     emptyDescription: "开单时录入手机号会自动建档（种子号段 13800000xxx）。",
     actionLabel: "新建客户",
   },
+  reminders: {
+    title: "催取工作台",
+    emptyTitle: "催取工作台不可用",
+    emptyDescription: "需要登录并保持本地服务连接，短信与微信渠道尚未接入。",
+    actionLabel: "返回工作台",
+  },
   stats: {
     title: "账目 / 对账",
     emptyTitle: "暂无对账快照",

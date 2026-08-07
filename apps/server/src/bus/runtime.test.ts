@@ -20,4 +20,6 @@ test("runtime bus registers the complete member command and query surface", asyn
   assert.ok(bus.registered.includes("member.topup"));
   assert.ok(bus.registered.includes("member.balance.pay"));
   assert.ok(bus.registeredQueries.includes("member.account.get"));
+  assert.ok(bus.registered.includes("notification.manual_list.create"));
+  assert.ok(bus.registeredQueries.includes("notification.pickup_reminders.list"));
 });
