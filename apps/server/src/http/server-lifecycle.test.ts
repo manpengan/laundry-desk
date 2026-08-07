@@ -142,6 +142,30 @@ test("local listener injects loopback HTTP cookies independent of NODE_ENV", asy
   }
 });
 
+test("LAN origin injects secure cookies and same-origin browser metadata policy", async () => {
+  const runtime = await runtimeWithPool(async () => undefined);
+  const captured: CreateAppOptions[] = [];
+  const started = await startLocalHttpServer(
+    Object.freeze({ ...ENV, LAUNDRY_LAN_ORIGIN: "https://192.168.50.12:8443" }),
+    dependencies(runtime, async (options) => {
+      captured.push(options);
+      return fakeApp({});
+    }),
+  );
+
+  try {
+    const options = captured[0];
+    assert.ok(options);
+    assert.equal(options.cookiePolicy.secure, true);
+    assert.equal(options.cookiePolicy.refreshName, "__Host-laundry_refresh");
+    assert.equal(options.cookiePolicy.csrfName, "__Host-laundry_csrf");
+    assert.equal(options.browserOrigin, "https://192.168.50.12:8443");
+    assert.equal(options.browserFetchSite, "same-origin");
+  } finally {
+    await started.shutdown();
+  }
+});
+
 test("shutdown drains Fastify before ending the PostgreSQL pool", async () => {
   const calls: string[] = [];
   let finishAppClose: () => void = () => undefined;

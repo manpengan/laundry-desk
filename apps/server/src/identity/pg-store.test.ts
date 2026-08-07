@@ -242,18 +242,39 @@ maybe("PG fixture supports login + PIN + refresh via laundry_app", async () => {
       )?.failed_attempts,
       1,
     );
+    const clearSuccessInput = Object.freeze({
+      challenge_id: clearChallenge.challenge_id,
+      org_id: clearSession.org_id,
+      store_id: clearSession.store_id,
+      staff_id: DEMO_STAFF_A_ID,
+      device_id: clearDeviceId,
+      expected_failed_attempts: 1,
+      attempted_at: clock.nowEpochSeconds(),
+    });
+    await assert.rejects(
+      () =>
+        store.pinChallenges.consumeSuccess(clearSuccessInput, async (transaction) => {
+          assert.ok(transaction);
+          assert.equal(transaction.tenant.orgId, clearSession.org_id);
+          assert.equal(transaction.tenant.storeId, clearSession.store_id);
+          await transaction.client.query("SELECT 1");
+          throw new Error("forced proof persistence failure");
+        }),
+      /forced proof persistence failure/u,
+    );
+    assert.equal((await store.pinChallenges.get(clearChallenge.challenge_id))?.status, "active");
     assert.equal(
-      await store.pinChallenges.consumeSuccess({
-        challenge_id: clearChallenge.challenge_id,
-        org_id: clearSession.org_id,
-        store_id: clearSession.store_id,
-        staff_id: DEMO_STAFF_A_ID,
-        device_id: clearDeviceId,
-        expected_failed_attempts: 1,
-        attempted_at: clock.nowEpochSeconds(),
-      }),
+      (
+        await store.pinLockouts.get(
+          clearSession.org_id,
+          clearSession.store_id,
+          DEMO_STAFF_A_ID,
+          clearDeviceId,
+        )
+      )?.failed_attempts,
       1,
     );
+    assert.equal(await store.pinChallenges.consumeSuccess(clearSuccessInput), 1);
     assert.equal(
       await store.pinLockouts.get(
         clearSession.org_id,

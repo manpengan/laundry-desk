@@ -167,7 +167,7 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemoryMemberSto
       if (!Number.isSafeInteger(input.amount_cents) || input.amount_cents <= 0) {
         return reject("invalid_amount");
       }
-      const bonus = matchBonusRule(activeBonusRules(), input.amount_cents);
+      const bonus = input.frozen_bonus ?? matchBonusRule(activeBonusRules(), input.amount_cents);
       return append(
         input.account_id,
         Object.freeze({

@@ -72,6 +72,7 @@ const DirectCommandWirePayloadSchema = z
 const ConfirmCommandWirePayloadSchema = z
   .object({
     ...WireCommonShape,
+    dry_run: z.literal(false),
     mode: z.literal("confirm"),
     confirm_ref: ConfirmReferenceSchema,
   })

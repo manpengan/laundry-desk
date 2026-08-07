@@ -469,7 +469,12 @@ test("keeps browser and Electron acceptance sources inside canonical quality gat
 
   assert.equal(webPackage.scripts.lint, "eslint . --ext .ts,.tsx --max-warnings=0");
   assert.match(webPackage.scripts.typecheck, /tsconfig\.e2e\.json/u);
-  assert.deepEqual(webE2eConfig.include, ["e2e/**/*.ts", "playwright.local.config.ts"]);
+  assert.deepEqual(webE2eConfig.include, [
+    "e2e/**/*.ts",
+    "e2e-lan/**/*.ts",
+    "playwright.local.config.ts",
+    "playwright.lan.config.ts",
+  ]);
 });
 
 test("serializes server test files that mutate shared PostgreSQL roles", async () => {

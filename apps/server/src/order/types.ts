@@ -126,6 +126,7 @@ export type OrderRecord = Readonly<{
   payable_cents: number;
   paid_cents: number;
   balance_cents: number;
+  /** Formal receipt/open instant; replacing a draft resets this retention clock. */
   created_at: number;
   updated_at: number;
   business_date: string;

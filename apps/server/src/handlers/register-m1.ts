@@ -36,13 +36,18 @@ import {
   registerReconciliationCommandHandlers,
   registerReconciliationQueryHandlers,
 } from "../reconciliation/handlers.js";
+import type { ReportingHandlerDeps } from "../reporting/types.js";
+import { registerReportingQueryHandlers } from "../reporting/handlers.js";
 import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import { registerShiftCommandHandlers, registerShiftQueryHandlers } from "../shift/handlers.js";
 import type { StatsHandlerDeps } from "../stats/handlers.js";
 import { registerStatsQueryHandlers } from "../stats/handlers.js";
 import type { MemberRuntimeDeps } from "../member/handlers.js";
 import { createMemberHandlers } from "../member/handlers.js";
+import { createMemberTopupConfirmationPreparer } from "../member/topup-confirmation.js";
 import type { NotificationHandlerDeps } from "../notification/types.js";
+import { processPendingActionStore } from "../pending-actions/process-store.js";
+import type { PendingActionStore } from "../pending-actions/types.js";
 import { createNotificationHandlers } from "../notification/handlers.js";
 import type { StaffAccessHandlerDeps } from "../staff/handlers.js";
 import { createStaffAccessHandlers } from "../staff/handlers.js";
@@ -71,6 +76,8 @@ export type RegisterM1Deps = Readonly<{
   reconciliation?: ReconciliationHandlerDeps;
   /** ADR-24 dual-basis day/month/staff accounting reports. */
   accounting?: AccountingHandlerDeps;
+  /** ADR-26 owner dashboard; financial rows reuse the ADR-24 read port. */
+  reporting?: ReportingHandlerDeps;
   /** M3 garment photo metadata (memory). */
   photo?: PhotoHandlerDeps;
   /** M3 garment production, incidents and loss handling. */
@@ -289,6 +296,11 @@ export function registerM1QueryHandlers(
     names.push("accounting.report.get");
   }
 
+  if (deps.reporting !== undefined) {
+    registerReportingQueryHandlers(queryRegistry, deps.reporting);
+    names.push("reporting.owner_dashboard.get");
+  }
+
   if (deps.photo !== undefined) {
     registerPhotoQueryHandlers(queryRegistry, deps.photo);
     names.push("photo.list_by_order");
@@ -330,7 +342,10 @@ export function registerM1QueryHandlers(
  * Query registry includes M2 catalog + order + print + stats + customer + shift + M3 photo;
  * handlers attach when deps set.
  */
-export function createRegisteredM1Bus(deps: RegisterM1Deps): RegisterM1Result {
+export function createRegisteredM1Bus(
+  deps: RegisterM1Deps,
+  pendingStore: PendingActionStore = processPendingActionStore,
+): RegisterM1Result {
   const registry = createM1CommandRegistry();
   const queryRegistry = createM1QueryRegistry();
   const registered = registerM1Handlers(registry, deps);
@@ -338,7 +353,13 @@ export function createRegisteredM1Bus(deps: RegisterM1Deps): RegisterM1Result {
   return Object.freeze({
     registry,
     queryRegistry,
-    chainHooks: createDefaultChainHooks(),
+    chainHooks: createDefaultChainHooks(
+      {},
+      pendingStore,
+      deps.member === undefined || deps.order === undefined
+        ? undefined
+        : createMemberTopupConfirmationPreparer(deps.member),
+    ),
     registered,
     registeredQueries,
   });

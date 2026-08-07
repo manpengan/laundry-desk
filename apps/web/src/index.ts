@@ -22,7 +22,26 @@ export {
 } from "./theme.js";
 export { COUNTER_NAV, navLabel, type NavItem, type NavItemId } from "./nav.js";
 export { App, type AppProps } from "./App.js";
+export { appSurfaceFromPathname, type AppSurface } from "./host/app-surface.js";
 export { CounterShell, type CounterShellProps } from "./shell/CounterShell.js";
+export { OwnerShell, type OwnerShellProps } from "./owner/OwnerShell.js";
+export {
+  OwnerDashboardPage,
+  OwnerDashboardView,
+  type OwnerDashboardPageProps,
+  type OwnerDashboardViewProps,
+} from "./owner/OwnerDashboardPage.js";
+export {
+  OWNER_DASHBOARD_QUERY_NAME,
+  loadOwnerDashboard,
+  parseOwnerDashboard,
+  selectOwnerTrend,
+  type OwnerDashboardData,
+  type OwnerDashboardLoadResult,
+  type OwnerDashboardToday,
+  type OwnerDashboardTrendRow,
+  type OwnerTrendDays,
+} from "./owner/owner-dashboard-model.js";
 export { Sidebar, type SidebarProps } from "./shell/Sidebar.js";
 export { TopBar, type TopBarProps } from "./shell/TopBar.js";
 export { PinSwitchDialog, type PinSwitchDialogProps } from "./shell/PinSwitchDialog.js";

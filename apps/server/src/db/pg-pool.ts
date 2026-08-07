@@ -16,6 +16,7 @@ export const RUNTIME_DATABASE_URL_REQUIRED =
 export type CreatePoolOptions = Readonly<{
   connectionString: string;
   max?: number;
+  connectionTimeoutMillis?: number;
 }>;
 
 export type ResolvedPgUrls = Readonly<{
@@ -77,6 +78,9 @@ export function createPgPool(options: CreatePoolOptions): PgPool {
   return new pg.Pool({
     connectionString: options.connectionString,
     max: options.max ?? 8,
+    ...(options.connectionTimeoutMillis === undefined
+      ? {}
+      : { connectionTimeoutMillis: options.connectionTimeoutMillis }),
   });
 }
 

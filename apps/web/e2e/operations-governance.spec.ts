@@ -148,7 +148,7 @@ test("duplicate customers require another staff PIN and leave one active profile
   await expect(page.getByRole("dialog", { name: "需要现场复核" })).toBeVisible({
     timeout: 15_000,
   });
-  await page.locator(".ld-step-up__select").selectOption({ label: "E2E Staff One" });
+  await page.locator(".ld-step-up__select").selectOption({ label: "E2E Staff Two（店长）" });
   await page.locator('input[name="step-up-pin"]').fill(LOGIN.pin);
   await page.getByRole("button", { name: "确认 PIN" }).click();
 

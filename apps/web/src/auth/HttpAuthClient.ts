@@ -15,6 +15,7 @@ import type {
   SwitchableStaff,
 } from "./types.js";
 import type { AuthPort } from "./AuthClient.js";
+import { requestHttpLogout } from "./http-logout.js";
 
 /** Matches packages/contracts CSRF_HEADER_NAME (avoid web→contracts dep for host). */
 const CSRF_HEADER_NAME = "x-csrf-token";
@@ -230,26 +231,9 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthPort {
     credentials.replaceAccessToken(null);
   };
 
-  /**
-   * A successful lifecycle response may already have changed browser cookies.
-   * Keep this revocation inside cookieMutationTail; cleanup never replaces the primary auth error.
-   */
   const failClosedCookieMutation = async (): Promise<void> => {
     clearLocalAuth();
-    try {
-      const csrf = credentials.readCsrf();
-      const init: RequestInit =
-        csrf === null
-          ? { method: "POST", credentials: "include" }
-          : {
-              method: "POST",
-              credentials: "include",
-              headers: { [CSRF_HEADER_NAME]: csrf },
-            };
-      await fetchImpl(`${base}/api/v2/auth/logout`, init);
-    } catch {
-      // Best effort: local credentials are already gone and the caller retains its primary error.
-    }
+    await requestHttpLogout({ apiBaseUrl: base, fetchImpl, readCsrf: credentials.readCsrf });
   };
 
   const loadStaff = async (accessToken: string): Promise<readonly SwitchableStaff[] | null> => {
@@ -524,8 +508,15 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthPort {
   const listSwitchableStaff = (): readonly SwitchableStaff[] =>
     Object.freeze(authState.staffDirectory.map((s) => Object.freeze({ ...s })));
 
+  const logout = (): Promise<void> => {
+    latestLoginAttempt += 1;
+    clearLocalAuth();
+    return enqueueCookieMutation(failClosedCookieMutation);
+  };
+
   return Object.freeze({
     login,
+    logout,
     createPinChallenge,
     verifyPin,
     verifyStepUpPin,

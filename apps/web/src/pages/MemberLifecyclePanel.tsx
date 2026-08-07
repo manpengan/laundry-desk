@@ -358,7 +358,6 @@ export function MemberLifecyclePanel({
           confirmRef={pending.confirmRef}
           currentStaffId={session.session.staff_id}
           commandLabel="退卡并永久销户"
-          requiredApproverRole="admin"
           summary={actionSummary(pending, customer, account)}
           onApproved={() => void resume(pending)}
         />

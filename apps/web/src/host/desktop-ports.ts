@@ -9,7 +9,13 @@ import type {
   StepUpProofResult,
   SwitchableStaff,
 } from "../auth/types.js";
-import type { CommandPort, CommandResult, QueryPort } from "../commands/types.js";
+import { readMemberTopupConfirmationSummary } from "../commands/member-topup-confirmation.js";
+import type {
+  CommandErrorDetail,
+  CommandPort,
+  CommandResult,
+  QueryPort,
+} from "../commands/types.js";
 import type {
   DesktopCommandInput,
   DesktopQueryInput,
@@ -325,11 +331,9 @@ function isStepUpSuccess(value: unknown): boolean {
   return Object.prototype.hasOwnProperty.call(value.data, "step_up_proof_id");
 }
 
-function readCommandDetail(
-  value: unknown,
-): Readonly<{ kind?: string; confirm_ref?: string; message?: string }> | null {
+function readCommandDetail(value: unknown): CommandErrorDetail | null {
   if (!isRecord(value)) return null;
-  const allowed = ["kind", "confirm_ref", "message"] as const;
+  const allowed = ["kind", "confirm_ref", "message", "summary"] as const;
   const keys = Reflect.ownKeys(value);
   if (
     !keys.every(
@@ -338,13 +342,17 @@ function readCommandDetail(
   ) {
     return null;
   }
-  for (const key of allowed) {
+  for (const key of ["kind", "confirm_ref", "message"] as const) {
     if (value[key] !== undefined && typeof value[key] !== "string") return null;
   }
+  const summary =
+    value.summary === undefined ? undefined : readMemberTopupConfirmationSummary(value.summary);
+  if (summary === null) return null;
   return Object.freeze({
     ...(typeof value.kind === "string" ? { kind: value.kind } : {}),
     ...(typeof value.confirm_ref === "string" ? { confirm_ref: value.confirm_ref } : {}),
     ...(typeof value.message === "string" ? { message: value.message } : {}),
+    ...(summary === undefined ? {} : { summary }),
   });
 }
 
@@ -429,6 +437,15 @@ function readHealthResult(value: unknown): HealthResult {
 function createAuthPort(bridge: LaundryDesktopBridge): AuthPort {
   let staffDirectory = EMPTY_STAFF_DIRECTORY;
   return Object.freeze({
+    async logout(): Promise<void> {
+      staffDirectory = EMPTY_STAFF_DIRECTORY;
+      try {
+        await bridge.auth.logout();
+      } catch {
+        // The renderer session is cleared by the caller even when the host is unavailable.
+      }
+    },
+
     async login(values: LoginFormValues): Promise<AuthResult<SessionView>> {
       const input = readLoginInput(values);
       if (input === null) {

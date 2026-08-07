@@ -3,7 +3,7 @@
  * Default RBAC/tenant/policy/invariants allow-all (tests override to fail-closed).
  */
 
-import { createCommandError, parseContractInput, type CommandError } from "@laundry/contracts";
+import { parseContractInput, type CommandError } from "@laundry/contracts";
 import {
   evaluateCommandChain,
   type CommandChainContext,
@@ -12,9 +12,8 @@ import {
   type CommandChainResult,
   type StepResult,
 } from "@laundry/domain";
-import { ZodError } from "zod";
-
 import type { BusCommandDefinition, BusContext } from "./types.js";
+import { validationErrorFrom } from "./validation-error.js";
 
 export type ChainPolicyData = Readonly<{ allowed: true }>;
 export type ChainInvariantData = Readonly<{ preview: true }>;
@@ -51,16 +50,6 @@ const okInvariants = (): StepResult<ChainInvariantData, CommandError> => ({
   data: Object.freeze({ preview: true as const }),
 });
 
-const toValidationError = (error: unknown): CommandError => {
-  if (error instanceof ZodError) {
-    const first = error.issues[0];
-    const path =
-      first === undefined || first.path.length === 0 ? "/" : `/${first.path.map(String).join("/")}`;
-    return createCommandError("VALIDATION_FAILED", { kind: "field", path });
-  }
-  return createCommandError("VALIDATION_FAILED");
-};
-
 /**
  * Build ports bound to one command definition.
  * parseInput uses A1 parseContractInput (provenance + Zod).
@@ -75,7 +64,7 @@ export function createChainPorts(
         const parsed = await parseContractInput(definition, input);
         return { ok: true, data: parsed };
       } catch (error) {
-        return { ok: false, error: toValidationError(error) };
+        return { ok: false, error: validationErrorFrom(error) };
       }
     },
     checkRbac: hooks.checkRbac ?? (async () => okVoid()),

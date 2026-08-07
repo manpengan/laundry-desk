@@ -31,6 +31,19 @@ describe("A2 command wire payload", () => {
     expect(parsed).toMatchObject({ mode: "confirm", dry_run: false });
   });
 
+  it("rejects dry-run confirmation so frozen server arguments cannot enter previews", () => {
+    const result = CommandWirePayloadSchema.safeParse({
+      command: "member.topup",
+      version: "1.0.0",
+      mode: "confirm",
+      confirm_ref: "11111111-1111-4111-8111-111111111111",
+      idempotency_key: "22222222-2222-4222-8222-222222222222",
+      dry_run: true,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("rejects a payload that combines frozen confirmation and new arguments", () => {
     const result = CommandWirePayloadSchema.safeParse({
       command: "orders.cancel",

@@ -78,10 +78,11 @@ async function seedOtherStore(adminPool: PgPool): Promise<void> {
   }
 }
 
-async function seedCurrentStore(appPool: PgPool): Promise<void> {
+async function seedCurrentStore(appPool: PgPool): Promise<string> {
   const customerId = randomUUID();
   const accountId = randomUUID();
   const orderId = randomUUID();
+  const bonusRuleId = randomUUID();
   const cashPaymentId = randomUUID();
   const balancePaymentId = randomUUID();
   const reversalPaymentId = randomUUID();
@@ -138,16 +139,27 @@ async function seedCurrentStore(appPool: PgPool): Promise<void> {
         ],
       );
       await tx.query(
+        `INSERT INTO member_bonus_rules (
+           id, org_id, min_topup_cents, bonus_cents, status,
+           effective_from, updated_at, updated_by_staff_id, note
+         ) VALUES (
+           $1::uuid, $2::uuid, 10000, 1000, 'active',
+           now(), now(), $3::uuid, 'Accounting fixture'
+         )`,
+        [bonusRuleId, DEMO_ORG_ID, DEMO_ADMIN_ID],
+      );
+      await tx.query(
         `INSERT INTO member_ledger (
            id, org_id, store_id, account_id, kind, principal_delta_cents,
-           bonus_delta_cents, order_id, staff_id, at, business_date, tender
+           bonus_delta_cents, order_id, staff_id, at, business_date, tender,
+           bonus_rule_id
          ) VALUES
            ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'topup', 10000, 1000, NULL,
-            $5::uuid, now(), $6, 'cash'),
+            $5::uuid, now(), $6, 'cash', $11::uuid),
            ($7::uuid, $2::uuid, $3::uuid, $4::uuid, 'refund', -2000, 0, NULL,
-            $8::uuid, now(), $6, 'cash'),
+            $8::uuid, now(), $6, 'cash', NULL),
            ($9::uuid, $2::uuid, $3::uuid, $4::uuid, 'pay', -2000, -1000, $10::uuid,
-            $8::uuid, now(), $6, NULL)`,
+            $8::uuid, now(), $6, NULL, NULL)`,
         [
           randomUUID(),
           DEMO_ORG_ID,
@@ -159,7 +171,22 @@ async function seedCurrentStore(appPool: PgPool): Promise<void> {
           DEMO_STAFF_A_ID,
           randomUUID(),
           orderId,
+          bonusRuleId,
         ],
+      );
+    }),
+  );
+  return bonusRuleId;
+}
+
+async function retireFixtureBonusRule(appPool: PgPool, bonusRuleId: string): Promise<void> {
+  await withPoolClient(appPool, (client) =>
+    withTenantTransaction(client, TENANT, async (tx) => {
+      await tx.query(
+        `UPDATE member_bonus_rules
+         SET status = 'retired', updated_at = now()
+         WHERE id = $1::uuid AND org_id = $2::uuid`,
+        [bonusRuleId, TENANT.orgId],
       );
     }),
   );
@@ -169,10 +196,11 @@ maybe("real PG accounting report keeps dual bases and excludes another store", a
   assert.ok(urls);
   const adminPool = createPgPool({ connectionString: urls.admin });
   const appPool = createPgPool({ connectionString: urls.app });
+  let bonusRuleId: string | null = null;
   try {
     await seedPgTestIdentityFixture(adminPool);
     await seedOtherStore(adminPool);
-    await seedCurrentStore(appPool);
+    bonusRuleId = await seedCurrentStore(appPool);
     const { queryRegistry } = createRegisteredM1Bus({
       accounting: Object.freeze({
         source: createPgAccountingSource(),
@@ -207,6 +235,9 @@ maybe("real PG accounting report keeps dual bases and excludes another store", a
     assert.ok(report.rows.some((row) => row.real_income_cents === 15_000));
     assert.ok(report.rows.some((row) => row.performance_income_cents === 0));
   } finally {
+    if (bonusRuleId !== null) {
+      await retireFixtureBonusRule(appPool, bonusRuleId);
+    }
     await adminPool.end();
     await appPool.end();
   }

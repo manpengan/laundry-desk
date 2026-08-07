@@ -1,5 +1,6 @@
 import type { MemberBalance } from "./balance.js";
 import type { MemberAccountStatus } from "@laundry/domain";
+import type { BonusMatch } from "./bonus.js";
 
 export type { MemberAccountStatus } from "@laundry/domain";
 
@@ -95,6 +96,8 @@ export type MemberTopupInput = Readonly<{
   at: number;
   business_date: string;
   note: string | null;
+  /** Hash-bound first-hop bonus authority; absent only on trusted direct/store calls. */
+  frozen_bonus?: BonusMatch;
 }>;
 
 export type MemberSpendInput = Readonly<{

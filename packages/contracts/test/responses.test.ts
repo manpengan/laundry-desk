@@ -152,4 +152,51 @@ describe("A2 command responses", () => {
       confirm_ref: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
     });
   });
+
+  it("accepts only an internally consistent member top-up confirmation summary", () => {
+    const detail = {
+      kind: "confirmation" as const,
+      confirm_ref: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
+      summary: {
+        kind: "member_topup" as const,
+        principal_cents: 100_000,
+        bonus_cents: 10_000,
+        credited_cents: 110_000,
+        matched_rule: {
+          rule_id: "a1111111-1111-4111-8111-111111111111",
+          min_topup_cents: 100_000,
+          bonus_cents: 10_000,
+        },
+      },
+    };
+
+    const error = createCommandError("POLICY_CONFIRMATION_REQUIRED", detail);
+    expect(error.detail).toEqual(detail);
+    expect(Object.isFrozen(error.detail)).toBe(true);
+    if (error.detail?.kind === "confirmation" && error.detail.summary !== undefined) {
+      expect(Object.isFrozen(error.detail.summary)).toBe(true);
+      expect(Object.isFrozen(error.detail.summary.matched_rule)).toBe(true);
+    }
+
+    expect(
+      CommandErrorSchema.safeParse({
+        code: "POLICY_CONFIRMATION_REQUIRED",
+        message: "Confirmation is required",
+        detail: {
+          ...detail,
+          summary: { ...detail.summary, credited_cents: 999_999 },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      CommandErrorSchema.safeParse({
+        code: "POLICY_CONFIRMATION_REQUIRED",
+        message: "Confirmation is required",
+        detail: {
+          ...detail,
+          summary: { ...detail.summary, bonus_cents: 9_999 },
+        },
+      }).success,
+    ).toBe(false);
+  });
 });

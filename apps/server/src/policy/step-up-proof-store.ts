@@ -1,19 +1,33 @@
-/**
- * Process-local store for step-up proofs issued after PIN verify.
- * Production will swap to Postgres CAS (active → consumed).
- */
+/** Step-up proof authority. Production uses PostgreSQL; memory is test-only. */
 
+import type { PendingActionTransactionContext } from "../pending-actions/types.js";
 import type { StepUpProof } from "./step-up.js";
 
+export type StepUpProofReadContext = Readonly<{
+  tenant: PendingActionTransactionContext["tenant"];
+  client?: PendingActionTransactionContext["client"];
+}>;
+
+type MaybePromise<T> = T | Promise<T>;
+
 export type StepUpProofStore = Readonly<{
-  insert: (proof: StepUpProof) => void;
-  get: (proofId: string) => StepUpProof | null;
+  insert: (proof: StepUpProof, context?: StepUpProofReadContext) => MaybePromise<void>;
+  get: (proofId: string, context?: StepUpProofReadContext) => MaybePromise<StepUpProof | null>;
   /** Active proof bound to a pending-action nonce, if any. */
-  findActiveByPendingRef: (pendingActionRef: string) => StepUpProof | null;
+  findActiveByPendingRef: (
+    pendingActionRef: string,
+    context?: StepUpProofReadContext,
+  ) => MaybePromise<StepUpProof | null>;
   /**
-   * CAS: active → consumed. Returns true when this caller won the race.
+   * CAS: active → consumed. PostgreSQL callers must supply the already-open
+   * command transaction so proof, pending card, business data and audit commit
+   * or roll back together.
    */
-  atomicConsume: (proofId: string, nowEpochSeconds: number) => boolean;
+  atomicConsume: (
+    proofId: string,
+    nowEpochSeconds: number,
+    transaction?: PendingActionTransactionContext,
+  ) => MaybePromise<boolean>;
 }>;
 
 const freezeProof = (proof: StepUpProof): StepUpProof => Object.freeze({ ...proof });

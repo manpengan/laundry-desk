@@ -18,6 +18,7 @@ const ALLOWED_HOST = "127.0.0.1:8787";
 const OPTIONS = Object.freeze({
   allowedHosts: Object.freeze([ALLOWED_HOST]),
   browserOrigin: BROWSER_ORIGIN,
+  browserFetchSite: "same-site",
   desktopOrigin: DESKTOP_ORIGIN,
 }) satisfies LocalRequestSecurityOptions;
 
@@ -156,6 +157,39 @@ test("accepts only the browser and desktop Origin/Fetch Metadata pairings", () =
   }
 });
 
+test("LAN HTTPS browser profile requires same-origin fetch metadata", () => {
+  const origin = "https://192.168.50.12:8443";
+  const policy = createRequestSecurityPolicy({
+    ...OPTIONS,
+    browserOrigin: origin,
+    browserFetchSite: "same-origin",
+  });
+  assert.deepEqual(
+    evaluateLocalRequest(
+      request("POST", {
+        origin,
+        "sec-fetch-site": "same-origin",
+        "content-type": "application/json",
+      }),
+      policy,
+    ),
+    { allowed: true },
+  );
+  for (const fetchSite of [undefined, "same-site", "cross-site", "none"] as const) {
+    assert.deepEqual(
+      evaluateLocalRequest(
+        request("POST", {
+          origin,
+          "sec-fetch-site": fetchSite,
+          "content-type": "application/json",
+        }),
+        policy,
+      ),
+      { allowed: false, statusCode: 403 },
+    );
+  }
+});
+
 test("requires JSON except for exact raw photo upload media types", () => {
   assert.deepEqual(
     evaluateLocalRequest(
@@ -225,6 +259,7 @@ test("policy exposes one static browser CORS origin and rejects unsafe configura
     { ...OPTIONS, allowedHosts: ["*"] },
     { ...OPTIONS, browserOrigin: "*" },
     { ...OPTIONS, browserOrigin: "null" },
+    { ...OPTIONS, browserFetchSite: "cross-site" },
     { ...OPTIONS, desktopOrigin: "*" },
     { ...OPTIONS, desktopOrigin: "app://local" },
     { ...OPTIONS, desktopOrigin: "http://127.0.0.1:8788" },
@@ -233,7 +268,7 @@ test("policy exposes one static browser CORS origin and rejects unsafe configura
   ] as const;
   for (const options of invalidOptions) {
     assert.throws(
-      () => createRequestSecurityPolicy(options),
+      () => createRequestSecurityPolicy(options as LocalRequestSecurityOptions),
       /^Error: Invalid local request security configuration$/u,
     );
   }

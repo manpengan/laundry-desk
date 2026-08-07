@@ -2,10 +2,25 @@
  * Browser command bus envelope shapes (A2) for SPA clients.
  */
 
+export type MemberTopupMatchedRule = Readonly<{
+  rule_id: string;
+  min_topup_cents: number;
+  bonus_cents: number;
+}>;
+
+export type MemberTopupConfirmationSummary = Readonly<{
+  kind: "member_topup";
+  principal_cents: number;
+  bonus_cents: number;
+  credited_cents: number;
+  matched_rule: MemberTopupMatchedRule | null;
+}>;
+
 export type CommandErrorDetail = Readonly<{
   kind?: string;
   confirm_ref?: string;
   message?: string;
+  summary?: MemberTopupConfirmationSummary;
 }>;
 
 export type CommandFailure = Readonly<{

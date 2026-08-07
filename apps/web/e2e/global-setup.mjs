@@ -54,6 +54,7 @@ const ACCOUNTING_FIXTURE = Object.freeze({
   topupLedgerId: "77777777-7777-4777-8777-777777777666",
   refundLedgerId: "77777777-7777-4777-8777-777777777667",
   payLedgerId: "77777777-7777-4777-8777-777777777668",
+  bonusRuleId: "77777777-7777-4777-8777-777777777669",
 });
 
 function adminDatabaseUrl(password) {
@@ -220,16 +221,41 @@ async function seedAccountingFixture(client) {
     ],
   );
   await client.query(
+    `SELECT set_config('app.org_id', $1, true),
+            set_config('app.store_id', $2, true),
+            set_config('app.staff_id', $3, true)`,
+    [ORG_ID, STORE_ID, ADMIN_ID],
+  );
+  await client.query("SET LOCAL ROLE laundry_app");
+  await client.query(
+    `INSERT INTO member_bonus_rules (
+       id, org_id, min_topup_cents, bonus_cents, status,
+       effective_from, updated_at, updated_by_staff_id, note
+     ) VALUES (
+       $1::uuid, $2::uuid, 10000, 1000, 'active',
+       now(), now(), $3::uuid, 'Playwright accounting fixture'
+     ) ON CONFLICT (id) DO UPDATE SET
+       min_topup_cents = EXCLUDED.min_topup_cents,
+       bonus_cents = EXCLUDED.bonus_cents,
+       status = EXCLUDED.status,
+       updated_at = now(),
+       updated_by_staff_id = EXCLUDED.updated_by_staff_id,
+       note = EXCLUDED.note`,
+    [row.bonusRuleId, ORG_ID, ADMIN_ID],
+  );
+  await client.query("SET LOCAL ROLE laundry_owner");
+  await client.query(
     `INSERT INTO member_ledger (
        id, org_id, store_id, account_id, kind, principal_delta_cents,
-       bonus_delta_cents, order_id, staff_id, at, business_date, tender
+       bonus_delta_cents, order_id, staff_id, at, business_date, tender,
+       bonus_rule_id
      ) VALUES
        ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'topup', 10000, 1000, NULL,
-        $5::uuid, now(), $6, 'cash'),
+        $5::uuid, now(), $6, 'cash', $11::uuid),
        ($7::uuid, $2::uuid, $3::uuid, $4::uuid, 'refund', -2000, 0, NULL,
-        $8::uuid, now(), $6, 'cash'),
+        $8::uuid, now(), $6, 'cash', NULL),
        ($9::uuid, $2::uuid, $3::uuid, $4::uuid, 'pay', -2000, -1000, $10::uuid,
-        $8::uuid, now(), $6, NULL)
+        $8::uuid, now(), $6, NULL, NULL)
      ON CONFLICT (id) DO NOTHING`,
     [
       row.topupLedgerId,
@@ -242,6 +268,7 @@ async function seedAccountingFixture(client) {
       FIXTURE_STAFF[0].id,
       row.payLedgerId,
       row.orderId,
+      row.bonusRuleId,
     ],
   );
 }

@@ -84,6 +84,63 @@ LAUNDRY_LOCAL_STORE_CODE=main \
 
 运行 E2E 的终端需要提供与 bootstrap 相同的管理员用户名和密码环境变量。
 
+## 局域网 Owner Dashboard
+
+局域网模式只提供手机响应式 `/owner` 只读入口。Fastify 仍映射到
+`127.0.0.1:8787`，PostgreSQL 仍映射到 `127.0.0.1:8543`；主机上的 HTTPS 网关只
+代理健康检查、登录、受保护的员工投影和 `reporting.owner_dashboard.get`，不会开放命令、
+照片、PIN 或任意查询路由。
+
+先人工确认真实物理网卡的 RFC 1918 地址。macOS 可分别查看默认路由和物理接口地址：
+
+```bash
+route -n get default
+ipconfig getifaddr en0
+```
+
+不要选择 `utun*`、Clash Verge TUN 常用的 `198.18.0.0/15`、回环或链路本地地址。网关
+不会自动选网卡，也不会接受 `0.0.0.0`。下面以 `192.168.1.20:8443` 为例；证书必须包含
+该 IP 的 SAN，并已由访问手机/电脑信任，证书和私钥都放在仓库外，私钥权限为 `0600`：
+
+```bash
+export LAUNDRY_LAN_BIND_HOST=192.168.1.20
+export LAUNDRY_LAN_ORIGIN=https://192.168.1.20:8443
+export LAUNDRY_TLS_CERT_FILE=/absolute/private/path/lan-cert.pem
+export LAUNDRY_TLS_KEY_FILE=/absolute/private/path/lan-key.pem
+chmod 600 "$LAUNDRY_TLS_KEY_FILE"
+```
+
+`LAUNDRY_LAN_ORIGIN` 必须在启动 Fastify 容器时已经存在，才能启用 Secure
+`__Host-laundry_*` Cookie 和 `same-origin` Fetch Metadata 校验。首次安装仍需同时提供
+四个 bootstrap 输入：
+
+```bash
+pnpm local:up -- --bootstrap
+pnpm local:lan
+```
+
+已有数据库只需 `pnpm local:up`；若 Fastify 已按 loopback profile 启动，先执行
+`pnpm local:down`，再带上述 LAN 环境重新 `pnpm local:up`，数据卷会保留。浏览器只打开：
+
+```text
+https://192.168.1.20:8443/owner
+```
+
+证书未被设备信任时不要点击浏览器警告继续。另一台设备应能访问 8443，但连接同一地址的
+8787 和 8543 必须失败。错误 Host、跨站 Origin、`Sec-Fetch-Site` 非 `same-origin` 或
+任何 `Forwarded` / `X-Forwarded-*` 都会被拒绝。
+
+自动化验收使用证书公钥的单一 SHA-256 SPKI pin，不启用全局
+`ignoreHTTPSErrors`。在提供 bootstrap 登录环境与 `LAUNDRY_TEST_CERT_SPKI` 后执行：
+
+```bash
+pnpm local:lan:e2e
+```
+
+该用例在同一个非回环 HTTPS 地址创建两个隔离浏览器上下文，验证登录、四卡、7/30 日
+切换、Secure Cookie、零命令请求和独立会话，并在第二上下文显式退出后刷新确认不能恢复
+已注销会话。它是第二浏览器自动化证据，不替代手机安装证书后的真实设备走查。
+
 ## 本地配置
 
 首次 `local:up` 会在仓库外生成数据库和签名 secret。macOS 默认路径：
@@ -230,6 +287,9 @@ reset 只接受默认 `laundry-desk` project，只删除
 | `tools/local/restore-drill.mjs`              | 非破坏性影子库恢复演练        |
 | `tools/local/maintenance-launchd.mjs`        | macOS 每日维护调度安装        |
 | `tools/local/diagnose.mjs`                   | 无 secret 的本地诊断          |
+| `tools/local/lan-gateway-config.mjs`         | LAN 地址与 TLS 文件失败关闭   |
+| `tools/local/lan-gateway-core.mjs`           | 同源 HTTPS 静态/只读代理      |
+| `tools/local/lan-gateway.mjs`                | Owner Dashboard LAN 入口      |
 | `tools/compose/docker-compose.yml`           | loopback-only 服务拓扑        |
 | `apps/server/src/local/profile.ts`           | 通用 `local/main` profile     |
 | `apps/server/src/local/bootstrap.ts`         | profile/schema readiness      |

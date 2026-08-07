@@ -6,6 +6,8 @@ const MINIMUM_SECRET_BYTES = 32;
 const LOCAL_PORT = 8787 as const;
 const LOCAL_BROWSER_ORIGIN = "http://127.0.0.1:5173" as const;
 const LOCAL_HOST_AUTHORITIES = Object.freeze(["127.0.0.1:8787"] as const);
+const PRIVATE_IPV4_ORIGIN =
+  /^https:\/\/(?:10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}):\d{1,5}$/u;
 
 const SecretSchema = z
   .string()
@@ -19,8 +21,36 @@ const ContainerRuntimeSchema = z
   .refine((value) => value === "1", "must equal 1 when set")
   .optional();
 
+const LanOriginSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.length === 0 ? undefined : value),
+  z
+    .string()
+    .refine((value) => {
+      if (!PRIVATE_IPV4_ORIGIN.test(value)) return false;
+      try {
+        const parsed = new URL(value);
+        const port = Number(parsed.port);
+        return (
+          parsed.origin === value &&
+          parsed.pathname === "/" &&
+          parsed.search === "" &&
+          parsed.hash === "" &&
+          parsed.username === "" &&
+          parsed.password === "" &&
+          Number.isSafeInteger(port) &&
+          port >= 1024 &&
+          port <= 65_535
+        );
+      } catch {
+        return false;
+      }
+    }, "must be an exact HTTPS origin on a private IPv4 address")
+    .optional(),
+);
+
 const LocalHostEnvironmentSchema = z.object({
   LAUNDRY_CONTAINER_RUNTIME: ContainerRuntimeSchema,
+  LAUNDRY_LAN_ORIGIN: LanOriginSchema,
 });
 
 const LocalSigningEnvironmentSchema = z
@@ -41,7 +71,9 @@ const LocalSigningEnvironmentSchema = z
 export type LocalHostConfig = Readonly<{
   listenHost: "127.0.0.1" | "0.0.0.0";
   port: typeof LOCAL_PORT;
-  browserOrigin: typeof LOCAL_BROWSER_ORIGIN;
+  browserOrigin: string;
+  browserFetchSite: "same-site" | "same-origin";
+  cookieSecure: boolean;
   hostAuthorities: readonly ["127.0.0.1:8787"];
 }>;
 
@@ -68,10 +100,13 @@ export function parseLocalHostConfig(env: NodeJS.ProcessEnv): LocalHostConfig {
     throw configError(result.error);
   }
 
+  const lanOrigin = result.data.LAUNDRY_LAN_ORIGIN;
   return Object.freeze({
     listenHost: result.data.LAUNDRY_CONTAINER_RUNTIME === "1" ? "0.0.0.0" : "127.0.0.1",
     port: LOCAL_PORT,
-    browserOrigin: LOCAL_BROWSER_ORIGIN,
+    browserOrigin: lanOrigin ?? LOCAL_BROWSER_ORIGIN,
+    browserFetchSite: lanOrigin === undefined ? "same-site" : "same-origin",
+    cookieSecure: lanOrigin !== undefined,
     hostAuthorities: LOCAL_HOST_AUTHORITIES,
   });
 }

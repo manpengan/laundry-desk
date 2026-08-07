@@ -46,6 +46,10 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0037_member_refund.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0038_notification_manual_list.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0039_accounting_report_indexes.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0040_member_account_lifecycle.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0041_owner_dashboard_indexes.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0042_durable_pending_actions.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0043_receipt_and_member_bonus_integrity.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0044_durable_step_up_proofs.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -86,5 +90,9 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Manual pickup reminders** (0038, [ADR-23](../../../../docs/adr/2026-08-07-adr-23-pickup-reminder-manual-list.md)): org-RLS append-only generation evidence with explicit store attribution and no raw phone/message/CSV retention
 - **Accounting reports** (0039, [ADR-24](../../../../docs/adr/2026-08-07-adr-24-accounting-dual-basis-reports.md)): bounded tenant/store/date/staff indexes for immutable payment and stored-value ledger reads
 - **Member lifecycle** (0040, ADR-25): versioned active/frozen/closed account state and append-only bonus forfeiture on atomic closure
+- **Owner dashboard** (0041, ADR-26): bounded store pickup-transition index; financial reads continue to reuse ADR-24 accounting indexes
+- **Durable confirmation authority** (0042, ADR-05): tenant-scoped canonical WYSIWYS cards with transaction-local single-consume state; invalid cards are pruned opportunistically in bounded batches after a 30-day retention window, while recent durable response replay remains protected
+- **Receipt and member bonus integrity** (0043): defines `orders.created_at` as the formal receipt/open instant and rejects positive bonus ledger entries without a governing bonus rule
+- **Durable step-up authority** (0044, ADR-05): tenant-scoped two-person approval proofs whose CAS consumption joins the business and audit transaction
 - Still deferred: AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

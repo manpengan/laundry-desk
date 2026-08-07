@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 
 import { createMockCommandClient } from "../commands/command-client.js";
 import { requestMemberTopup, resumeMemberTopup } from "./MemberBalancePanel.js";
+import { MemberTopupConfirmation } from "./MemberTopupConfirmation.js";
 
 const TOPUP = Object.freeze({
   account_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -84,4 +87,30 @@ test("member top-up leaves a manager step-up pending instead of bypassing it", a
   const result = await requestMemberTopup(commandClient, TOPUP);
   assert.equal(result.ok, false);
   assert.equal(calls, 1);
+});
+
+test("member top-up confirmation renders only the server-frozen money and matched tier", () => {
+  const html = renderToStaticMarkup(
+    createElement(MemberTopupConfirmation, {
+      method: "cash",
+      summary: Object.freeze({
+        kind: "member_topup",
+        principal_cents: 100_000,
+        bonus_cents: 10_000,
+        credited_cents: 110_000,
+        matched_rule: Object.freeze({
+          rule_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          min_topup_cents: 100_000,
+          bonus_cents: 10_000,
+        }),
+      }),
+    }),
+  );
+
+  assert.match(html, /充值本金/u);
+  assert.match(html, /赠送/u);
+  assert.match(html, /到账/u);
+  assert.match(html, /命中档位/u);
+  assert.match(html, /收款渠道：现金/u);
+  assert.doesNotMatch(html, /按服务端当前有效档位计算/u);
 });

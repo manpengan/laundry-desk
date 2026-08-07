@@ -244,6 +244,73 @@ test("insertOrder writes order + lines + garments with generated order_line_id",
   assert.ok(queries.some((q) => q.sql.includes("set_config") && q.sql.includes("app.store_id")));
 });
 
+test("replaceDraft resets created_at when the draft formally becomes an open order", async () => {
+  const oldDraft = Object.freeze({
+    ...sampleOrder(),
+    ticket_no: null,
+    pickup_code: null,
+    status: "draft" as const,
+    created_at: 1_697_321_600,
+    updated_at: 1_697_321_600,
+    business_date: "2023-10-14",
+  });
+  const openedAt = 1_700_000_000;
+  const opened = Object.freeze({
+    ...sampleOrder(),
+    created_at: openedAt,
+    updated_at: openedAt,
+  });
+  const handler: MockQueryHandler = (sql) => {
+    if (sql.includes("FROM orders") && sql.includes("WHERE")) {
+      return {
+        rows: [
+          {
+            id: oldDraft.order_id,
+            org_id: oldDraft.org_id,
+            store_id: oldDraft.store_id,
+            ticket_no: oldDraft.ticket_no,
+            pickup_code: oldDraft.pickup_code,
+            status: oldDraft.status,
+            customer_id: oldDraft.customer_id,
+            customer_phone: oldDraft.customer_phone,
+            customer_name: oldDraft.customer_name,
+            note: oldDraft.note,
+            subtotal_cents: oldDraft.subtotal_cents,
+            original_cents: oldDraft.original_cents,
+            discount_cents: oldDraft.discount_cents,
+            addon_cents: oldDraft.addon_cents,
+            urgent_cents: oldDraft.urgent_cents,
+            freight_cents: oldDraft.freight_cents,
+            payable_cents: oldDraft.payable_cents,
+            paid_cents: oldDraft.paid_cents,
+            balance_cents: oldDraft.balance_cents,
+            created_at: new Date(oldDraft.created_at * 1_000),
+            updated_at: new Date(oldDraft.updated_at * 1_000),
+            business_date: oldDraft.business_date,
+            created_by_staff_id: oldDraft.created_by_staff_id,
+          },
+        ],
+        rowCount: 1,
+      };
+    }
+    return { rows: [], rowCount: 0 };
+  };
+  const { pool, queries } = createCapturingPool(handler);
+  const store = createPgOrderStore(pool, {
+    newId: () => "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  });
+
+  assert.equal(await store.replaceDraft?.(opened, sampleGarments()), true);
+
+  const update = queries.find((query) => query.sql.includes("UPDATE orders"));
+  assert.ok(update);
+  assert.match(update.sql, /created_at = \$21, updated_at = \$22/u);
+  assert.deepEqual(update.params?.slice(20, 22), [
+    new Date(opened.created_at * 1_000),
+    new Date(opened.updated_at * 1_000),
+  ]);
+});
+
 test("getOrder returns null when no order row", async () => {
   const { pool } = createCapturingPool();
   const store = createPgOrderStore(pool);

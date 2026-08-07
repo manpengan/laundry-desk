@@ -17,6 +17,7 @@ import type { StepUpProofStore } from "../policy/step-up-proof-store.js";
 import type { PrintHandlerDeps } from "../print/handlers.js";
 import type { PrintDispatchService } from "../print/dispatch-service.js";
 import type { ReconciliationHandlerDeps } from "../reconciliation/types.js";
+import type { ReportingHandlerDeps } from "../reporting/types.js";
 import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import type { StaffAccessHandlerDeps } from "../staff/handlers.js";
 import type { StatsHandlerDeps } from "../stats/handlers.js";
@@ -39,6 +40,7 @@ export type LocalRuntime = Readonly<{
   shift: ShiftHandlerDeps;
   reconciliation: ReconciliationHandlerDeps;
   accounting: AccountingHandlerDeps;
+  reporting: ReportingHandlerDeps;
   photo: PhotoHandlerDeps;
   fulfillment: FulfillmentHandlerDeps;
   staffAccess: StaffAccessHandlerDeps;

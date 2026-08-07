@@ -7,12 +7,14 @@ type HeaderValue = string | readonly string[] | undefined;
 export type LocalRequestSecurityOptions = Readonly<{
   allowedHosts: readonly string[];
   browserOrigin: string;
+  browserFetchSite: "same-site" | "same-origin";
   desktopOrigin: string;
 }>;
 
 export type LocalRequestSecurityPolicy = Readonly<{
   allowedHosts: readonly string[];
   browserOrigin: string;
+  browserFetchSite: "same-site" | "same-origin";
   desktopOrigin: string;
   corsOrigin: string;
 }>;
@@ -107,6 +109,7 @@ function hasValidOptions(options: LocalRequestSecurityOptions): boolean {
     new Set(hosts).size === hosts.length &&
     hosts.every(isExactAuthority) &&
     isExactOrigin(options.browserOrigin, ["http:", "https:"]) &&
+    (options.browserFetchSite === "same-site" || options.browserFetchSite === "same-origin") &&
     isExactOrigin(options.desktopOrigin, ["http:", "https:"]) &&
     hosts.includes(desktopHost) &&
     options.browserOrigin !== options.desktopOrigin
@@ -124,6 +127,7 @@ export function createRequestSecurityPolicy(
   return Object.freeze({
     allowedHosts,
     browserOrigin: options.browserOrigin,
+    browserFetchSite: options.browserFetchSite,
     desktopOrigin: options.desktopOrigin,
     corsOrigin: options.browserOrigin,
   });
@@ -146,7 +150,7 @@ function hasAllowedOriginPair(
   if (origins.length !== 1 || fetchSites.length !== 1) return false;
 
   return (
-    (origins[0] === policy.browserOrigin && fetchSites[0] === "same-site") ||
+    (origins[0] === policy.browserOrigin && fetchSites[0] === policy.browserFetchSite) ||
     (origins[0] === policy.desktopOrigin && fetchSites[0] === "same-origin")
   );
 }

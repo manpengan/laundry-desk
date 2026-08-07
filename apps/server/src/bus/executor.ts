@@ -1,12 +1,4 @@
-/**
- * C1 command executor.
- *
- * Flow: idempotency check → (optional confirm_ref resolve) → withTenantTransaction →
- *   chain → (consume pending) → handler + same-txn audit → after-commit events.
- *
- * Confirm / step_up: first call creates pending and fails closed; second call with
- * confirm_ref executes frozen args after CAS consume (WYSIWYS).
- */
+/** C1 command executor with transactional confirmation, audit, and idempotency. */
 
 import { createCommandError, type CommandError } from "@laundry/contracts";
 
@@ -24,13 +16,14 @@ import {
   type ChainPortHooks,
 } from "./chain-adapter.js";
 import { writeAuditForOutcome, type ApprovalAuditEvidence } from "./audit-outcome.js";
-import { resolveConfirmInput } from "./confirm-input.js";
+import { buildResolvedCommandRequest, resolveConfirmInput } from "./confirm-input.js";
 import {
   asTransactionalIdempotencyStore,
   durableLookupResult,
   hashIdempotencyRequest,
-  readIdempotentReplay,
+  readReplayCandidate,
 } from "./durable-idempotency.js";
+import { bindTransactionClient, createHandlerContext } from "./handler-context.js";
 import type {
   ActorContext,
   BusContext,
@@ -67,6 +60,8 @@ export type ExecuteCommandOptions = Readonly<{
   sessionBinding?: StepUpSessionBinding;
   /** Trusted server-side authority that participates in the command transaction. */
   transactionGuard?: CommandTransactionGuard;
+  /** Private boundary diagnostics; never copy the error into the public command envelope. */
+  onUnexpectedError?: (error: unknown) => void;
   now?: () => Date;
   newId?: () => string;
 }>;
@@ -76,6 +71,8 @@ type TxnBody = Readonly<{
   events: readonly DomainEvent[];
   cacheable: boolean;
 }>;
+
+type TxnOutcome = TxnBody & Readonly<{ request: CommandRequest }>;
 
 const REPEATABLE_READ_COMMANDS: ReadonlySet<string> = new Set([
   "reconciliation.export",
@@ -98,65 +95,66 @@ export async function executeCommand(
   }
 
   const pendingStore = opts.pendingStore ?? processPendingActionStore;
-  const resolved = resolveConfirmInput(name, input, tenantCtx, opts, pendingStore);
-  if (resolved.ok === false) {
-    return fail(resolved.error);
-  }
-
-  const request = buildRequest(name, resolved.input, opts);
   const durableIdempotency = asTransactionalIdempotencyStore(opts.idempotencyStore);
-  const requestHash =
-    durableIdempotency !== null && request.idempotencyKey !== undefined
-      ? hashIdempotencyRequest(request)
-      : undefined;
-  if (
-    opts.transactionGuard === undefined &&
-    durableIdempotency !== null &&
-    request.idempotencyKey !== undefined &&
-    requestHash !== undefined
-  ) {
-    const lookup = await durableIdempotency.lookup(
-      tenantCtx,
-      name,
-      request.idempotencyKey,
-      requestHash,
-    );
-    const replay = durableLookupResult(lookup);
-    if (replay !== null) return replay;
-  } else if (opts.transactionGuard === undefined) {
-    const cached = await readIdempotentReplay(
-      tenantCtx,
-      request,
-      opts.idempotencyStore as IdempotencyStore | undefined,
-    );
-    if (cached !== null) return cached;
-  }
-
   const handler = opts.handler ?? registered.handler;
   const ports = createChainPorts(registered.definition, opts.chainHooks);
-  const busCtx: BusContext = Object.freeze({
-    tenant: tenantCtx,
-    actor: opts.actor,
-    request,
-    definition: registered.definition,
-    ...(resolved.confirmAuthorized
-      ? {
-          confirmAuthorized: true as const,
-          confirmAuthorization: Object.freeze({
-            confirmRef: resolved.confirmRef,
-            argsHash: resolved.argsHash,
-          }),
-        }
-      : {}),
-  });
 
-  let txnOutcome: TxnBody;
+  let txnOutcome: TxnOutcome;
   try {
     txnOutcome = await withTenantTransaction(
       client,
       tenantCtx,
-      async (tx) =>
-        runInsideTransaction(
+      async (tx) => {
+        const resolved = await resolveConfirmInput(
+          name,
+          registered.definition.version,
+          input,
+          tenantCtx,
+          opts,
+          pendingStore,
+          tx,
+        );
+        if (resolved.ok === false) throw new CommandBusTxnError(resolved.error);
+
+        const request = buildResolvedCommandRequest(name, resolved.input, opts, resolved);
+        if (resolved.confirmAuthorized && request.dryRun) {
+          throw new CommandBusTxnError(createCommandError("VALIDATION_FAILED"));
+        }
+        const requestHash =
+          durableIdempotency !== null && request.idempotencyKey !== undefined
+            ? hashIdempotencyRequest(
+                request,
+                resolved.confirmAuthorized ? resolved.argsHash : undefined,
+              )
+            : undefined;
+        const replay =
+          opts.transactionGuard === undefined
+            ? await readReplayCandidate(
+                tenantCtx,
+                request,
+                opts.idempotencyStore,
+                durableIdempotency,
+                requestHash,
+              )
+            : null;
+        const busCtx: BusContext = Object.freeze({
+          tenant: tenantCtx,
+          actor: opts.actor,
+          request,
+          definition: registered.definition,
+          ...(replay === null ? {} : { idempotentReplay: true as const }),
+          ...(resolved.confirmAuthorized
+            ? {
+                confirmAuthorized: true as const,
+                confirmAuthorization: Object.freeze({
+                  confirmRef: resolved.confirmRef,
+                  argsHash: resolved.argsHash,
+                  ...(resolved.authority === undefined ? {} : { authority: resolved.authority }),
+                }),
+              }
+            : {}),
+        });
+        const outcome = await runInsideTransaction(
           tx,
           busCtx,
           ports,
@@ -165,12 +163,16 @@ export async function executeCommand(
           pendingStore,
           durableIdempotency,
           requestHash,
-        ),
+          replay,
+        );
+        return Object.freeze({ ...outcome, request });
+      },
       REPEATABLE_READ_COMMANDS.has(name) ? { isolation: "repeatable_read" } : {},
     );
   } catch (error) {
     if (error instanceof CommandBusTxnError) return fail(error.commandError);
     if (error instanceof HandlerCommandError) return fail(error.commandError);
+    opts.onUnexpectedError?.(error);
     return fail(createCommandError("TRANSACTION_FAILED"));
   }
 
@@ -179,32 +181,18 @@ export async function executeCommand(
   if (
     durableIdempotency === null &&
     txnOutcome.cacheable &&
-    request.idempotencyKey !== undefined &&
+    txnOutcome.request.idempotencyKey !== undefined &&
     opts.idempotencyStore
   ) {
     await (opts.idempotencyStore as IdempotencyStore).put(
       tenantCtx,
       name,
-      request.idempotencyKey,
+      txnOutcome.request.idempotencyKey,
       txnOutcome.result,
     );
   }
 
   return txnOutcome.result;
-}
-
-function buildRequest(name: string, input: unknown, opts: ExecuteCommandOptions): CommandRequest {
-  const base = {
-    name,
-    version: opts.version ?? "1.0.0",
-    input,
-    dryRun: opts.dryRun === true,
-  };
-  return Object.freeze({
-    ...base,
-    ...(opts.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
-    ...(opts.confirmRef !== undefined ? { confirmRef: opts.confirmRef } : {}),
-  });
 }
 
 async function runInsideTransaction(
@@ -216,10 +204,12 @@ async function runInsideTransaction(
   pendingStore: PendingActionStore,
   durableIdempotency: TransactionalIdempotencyStore | null,
   requestHash: string | undefined,
+  replay: CommandResult | null,
 ): Promise<TxnBody> {
+  const transactionBusCtx = bindTransactionClient(busCtx, tx);
   let guardState: unknown;
   if (opts.transactionGuard !== undefined) {
-    const decision = await opts.transactionGuard.before(tx, busCtx);
+    const decision = await opts.transactionGuard.before(tx, transactionBusCtx);
     if (decision.kind === "return") {
       return { result: decision.result, events: Object.freeze([]), cacheable: false };
     }
@@ -227,12 +217,12 @@ async function runInsideTransaction(
   }
   const settle = async (body: TxnBody): Promise<TxnBody> => {
     if (opts.transactionGuard !== undefined) {
-      await opts.transactionGuard.settle(tx, busCtx, guardState, body.result);
+      await opts.transactionGuard.settle(tx, transactionBusCtx, guardState, body.result);
     }
     return body;
   };
 
-  const chain = await runCommandChain(busCtx, busCtx.request.input, ports);
+  const chain = await runCommandChain(transactionBusCtx, transactionBusCtx.request.input, ports);
   if (chain.ok === false) {
     return settle({
       result: fail(chainFailureToResult(chain)),
@@ -241,7 +231,11 @@ async function runInsideTransaction(
     });
   }
 
-  if (busCtx.request.dryRun) {
+  if (replay !== null) {
+    return settle({ result: replay, events: Object.freeze([]), cacheable: false });
+  }
+
+  if (transactionBusCtx.request.dryRun) {
     return settle({
       result: preview(chain.data),
       events: Object.freeze([]),
@@ -255,14 +249,14 @@ async function runInsideTransaction(
 
   if (
     durableIdempotency !== null &&
-    busCtx.request.idempotencyKey !== undefined &&
+    transactionBusCtx.request.idempotencyKey !== undefined &&
     requestHash !== undefined
   ) {
     const claim = await durableIdempotency.claim(
       tx,
-      busCtx.tenant,
-      busCtx.request.name,
-      busCtx.request.idempotencyKey,
+      transactionBusCtx.tenant,
+      transactionBusCtx.request.name,
+      transactionBusCtx.request.idempotencyKey,
       requestHash,
     );
     const replay = durableLookupResult(claim);
@@ -273,21 +267,25 @@ async function runInsideTransaction(
 
   let approvalAudit: ApprovalAuditEvidence | undefined;
   // Consume pending card after chain pass, before mutation (CAS fail-closed).
-  if (busCtx.confirmAuthorization !== undefined) {
+  if (transactionBusCtx.confirmAuthorization !== undefined) {
     const nowEpochSeconds = Math.floor((opts.now?.() ?? new Date()).getTime() / 1000);
-    const confirmRef = busCtx.confirmAuthorization.confirmRef;
-    const pending = pendingStore.get(confirmRef);
-    let approverStaffId = busCtx.actor.staffId;
+    const confirmRef = transactionBusCtx.confirmAuthorization.confirmRef;
+    const pending = await pendingStore.get(confirmRef, {
+      tenant: transactionBusCtx.tenant,
+      client: tx,
+    });
+    let approverStaffId = transactionBusCtx.actor.staffId;
 
     // Creator resume path: active step-up proof (from other staff PIN) stands in for
     // other-approver identity. Consume proof first (single-use), then pending.
     if (
       pending !== null &&
       pending.requiresOtherApprover &&
-      busCtx.actor.staffId === pending.creatorStaffId
+      transactionBusCtx.actor.staffId === pending.creatorStaffId
     ) {
       const proofStore = opts.stepUpProofStore ?? processStepUpProofStore;
-      const proof = proofStore.findActiveByPendingRef(confirmRef);
+      const proofTransaction = Object.freeze({ tenant: transactionBusCtx.tenant, client: tx });
+      const proof = await proofStore.findActiveByPendingRef(confirmRef, proofTransaction);
       if (proof === null) {
         throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
       }
@@ -300,15 +298,16 @@ async function runInsideTransaction(
       if (verified.ok === false) {
         throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
       }
-      if (!proofStore.atomicConsume(proof.proofId, nowEpochSeconds)) {
+      if (!(await proofStore.atomicConsume(proof.proofId, nowEpochSeconds, proofTransaction))) {
         throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
       }
       approverStaffId = proof.approverStaffId;
     }
 
-    const consume = pendingStore.atomicConsume(confirmRef, approverStaffId, {
-      expectedArgsHash: busCtx.confirmAuthorization.argsHash,
+    const consume = await pendingStore.atomicConsume(confirmRef, approverStaffId, {
+      expectedArgsHash: transactionBusCtx.confirmAuthorization.argsHash,
       nowEpochSeconds,
+      transaction: Object.freeze({ tenant: transactionBusCtx.tenant, client: tx }),
     });
     if (consume.ok === false) {
       throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
@@ -321,26 +320,20 @@ async function runInsideTransaction(
     }
   }
 
-  const outcome = await handler({
-    client: tx,
-    tenant: busCtx.tenant,
-    actor: busCtx.actor,
-    request: busCtx.request,
-    parsed: chain.data.parsed,
-  });
+  const outcome = await handler(createHandlerContext(tx, transactionBusCtx, chain.data.parsed));
 
-  await writeAuditForOutcome(tx, busCtx, outcome.audit, opts, approvalAudit);
+  await writeAuditForOutcome(tx, transactionBusCtx, outcome.audit, opts, approvalAudit);
   const result = executed(outcome.result);
   if (
     durableIdempotency !== null &&
-    busCtx.request.idempotencyKey !== undefined &&
+    transactionBusCtx.request.idempotencyKey !== undefined &&
     requestHash !== undefined
   ) {
     await durableIdempotency.complete(
       tx,
-      busCtx.tenant,
-      busCtx.request.name,
-      busCtx.request.idempotencyKey,
+      transactionBusCtx.tenant,
+      transactionBusCtx.request.name,
+      transactionBusCtx.request.idempotencyKey,
       requestHash,
       result,
     );

@@ -2,13 +2,17 @@ import { installLiquidGlass, ToastProvider } from "@laundry/ui";
 import { useEffect, useState } from "react";
 import type { SessionView, LoginFormValues } from "./auth/types.js";
 import type { ConnectionStatus } from "./connection.js";
+import type { AppSurface } from "./host/app-surface.js";
 import type { AppPorts } from "./host/types.js";
+import { OwnerShell, type OwnerShellProps } from "./owner/OwnerShell.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { CounterShell, type CounterShellProps } from "./shell/CounterShell.js";
 import type { ThemePreference } from "./theme.js";
 
 export type AppProps = {
   ports: AppPorts;
+  /** Explicit product surface; desktop and legacy browser entry remain counter by default. */
+  surface?: AppSurface;
   connection?: ConnectionStatus;
   themePreference?: ThemePreference;
   /** Skip liquid-glass install in pure SSR unit tests. */
@@ -20,6 +24,30 @@ export type AppProps = {
   /** Local host demo prefill only. */
   loginInitialForm?: Partial<LoginFormValues>;
 };
+
+export function ownerShellPropsFrom(
+  session: SessionView,
+  ports: Pick<AppPorts, "auth" | "query">,
+  onSessionChange: (session: SessionView | null) => void,
+): OwnerShellProps {
+  return Object.freeze({
+    session,
+    queryClient: ports.query,
+    onLogout: async () => {
+      try {
+        await ports.auth.logout();
+      } catch {
+        // Logout is fail-closed for the renderer: a host failure must not retain the UI session.
+      } finally {
+        onSessionChange(null);
+      }
+    },
+  });
+}
+
+function loginPortFrom(auth: AppPorts["auth"]): Pick<AppPorts["auth"], "login"> {
+  return Object.freeze({ login: (values: LoginFormValues) => auth.login(values) });
+}
 
 export function shellPropsFrom(
   connection: ConnectionStatus | undefined,
@@ -50,6 +78,7 @@ export function shellPropsFrom(
  */
 export function App({
   ports,
+  surface = "counter",
   connection,
   themePreference,
   enableLiquidGlass = true,
@@ -68,14 +97,21 @@ export function App({
   return (
     <ToastProvider>
       {session ? (
-        <CounterShell
-          {...shellPropsFrom(connection, themePreference, session, ports, setSession)}
-          readOnly={readOnly}
-        />
+        surface === "owner" ? (
+          <OwnerShell {...ownerShellPropsFrom(session, ports, setSession)} />
+        ) : (
+          <CounterShell
+            {...shellPropsFrom(connection, themePreference, session, ports, setSession)}
+            readOnly={readOnly}
+          />
+        )
       ) : (
         <LoginPage
-          authClient={ports.auth}
+          authClient={loginPortFrom(ports.auth)}
           onSuccess={setSession}
+          {...(surface === "owner"
+            ? { title: "店主登录", hint: "使用管理员账号进入经营看板" }
+            : {})}
           {...(loginInitialForm !== undefined ? { initialForm: loginInitialForm } : {})}
         />
       )}

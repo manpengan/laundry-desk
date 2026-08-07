@@ -35,6 +35,7 @@ export type CreateAppOptions = Readonly<{
   cookiePolicy: CookiePolicy;
   hostAuthorities?: readonly string[];
   browserOrigin?: string;
+  browserFetchSite?: "same-site" | "same-origin";
   desktopOrigin?: string;
   /** Deterministic limiter injection for focused tests. */
   loginRateLimiter?: LoginRateLimiter;
@@ -66,6 +67,7 @@ async function installCoreHttp(
   const requestSecurity = registerRequestSecurityHooks(app, {
     allowedHosts: options.hostAuthorities ?? DEFAULT_HOST_AUTHORITIES,
     browserOrigin: options.browserOrigin ?? DEFAULT_BROWSER_ORIGIN,
+    browserFetchSite: options.browserFetchSite ?? "same-site",
     desktopOrigin: options.desktopOrigin ?? DEFAULT_DESKTOP_ORIGIN,
   });
   await app.register(cors, {
@@ -77,7 +79,9 @@ async function installCoreHttp(
     if (
       request.url.startsWith("/api/v2/auth/") ||
       request.url.startsWith("/api/v2/edge/authority") ||
-      request.url.startsWith("/api/v2/edge/print/")
+      request.url.startsWith("/api/v2/edge/print/") ||
+      request.url.startsWith("/v1/commands/") ||
+      request.url.startsWith("/v1/queries/")
     ) {
       reply.header("Cache-Control", "no-store");
     }

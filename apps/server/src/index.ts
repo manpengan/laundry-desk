@@ -311,8 +311,11 @@ export {
   freezeCanonical,
   hashCanonical,
   MemoryPendingActionStore,
+  createPgPendingActionStore,
   PENDING_ACTION_TTL_SECONDS,
 } from "./pending-actions/index.js";
+
+export { createPgStepUpProofStore } from "./identity/pg-step-up-proof-store.js";
 
 export type {
   CanonicalJson,
@@ -323,8 +326,10 @@ export type {
   CreatePendingActionInput,
   EntityVersion,
   PendingAction,
+  PendingActionReadContext,
   PendingActionStatus,
   PendingActionStore,
+  PendingActionTransactionContext,
 } from "./pending-actions/index.js";
 
 export { createLocalApp } from "./http/create-app.js";
@@ -346,6 +351,24 @@ export type {
   AccountingReadRequest,
   MemoryAccountingSourceInput,
 } from "./accounting/index.js";
+
+export {
+  OWNER_DASHBOARD_OVERDUE_DAYS,
+  OWNER_DASHBOARD_TREND_DAYS,
+  buildOwnerDashboardResult,
+  createMemoryOwnerDashboardSource,
+  createMemoryReportingDeps,
+  createPgOwnerDashboardSource,
+  createPgReportingDeps,
+  createReportingHandlers,
+  registerReportingQueryHandlers,
+} from "./reporting/index.js";
+export type {
+  OwnerDashboardOperations,
+  OwnerDashboardReadPort,
+  OwnerDashboardReadRequest,
+  ReportingHandlerDeps,
+} from "./reporting/index.js";
 
 export {
   buildNotificationCsv,

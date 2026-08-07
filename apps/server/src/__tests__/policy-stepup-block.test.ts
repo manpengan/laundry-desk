@@ -116,7 +116,7 @@ test("self-approve cannot consume R5 step-up card", async () => {
   assert.equal(values["pricing.min_order_cents"], undefined);
 });
 
-test("other staff can confirm_ref resume and execute frozen R5 args", async () => {
+test("other staff cannot steal another actor's frozen R5 confirm_ref", async () => {
   const pendingStore = new MemoryPendingActionStore();
   const { registry, chainHooks, settings } = buildBus(pendingStore);
 
@@ -149,18 +149,8 @@ test("other staff can confirm_ref resume and execute frozen R5 args", async () =
       confirmRef,
     },
   );
-  assert.equal(second.ok, true, JSON.stringify(second));
-  // WYSIWYS: frozen 1400 wins over body 9999
+  assert.equal(second.ok, false, JSON.stringify(second));
+  if (!second.ok) assert.equal(second.error.code, "POLICY_DENIED");
   const values = await settings.getMany(["pricing.min_order_cents"]);
-  assert.equal(values["pricing.min_order_cents"], "1400");
-
-  // Second consume fails
-  const third = await executeCommand(
-    new FakeSqlClient(),
-    { ...TENANT, staffId: DEMO_STAFF_A_ID },
-    "platform.settings.set",
-    {},
-    { registry, actor: STAFF, chainHooks, pendingStore, confirmRef },
-  );
-  assert.equal(third.ok, false);
+  assert.equal(values["pricing.min_order_cents"], undefined);
 });

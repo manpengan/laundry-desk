@@ -2,6 +2,8 @@ export type BusinessDayResult = Readonly<{ business_date: string }>;
 
 type DateParts = Readonly<{ year: string; month: string; day: string; hour: number }>;
 
+const BUSINESS_DAY_SEARCH_RADIUS_MS = 48 * 60 * 60 * 1_000;
+
 function requireValidInstant(instant: Date): void {
   if (!(instant instanceof Date) || !Number.isFinite(instant.getTime())) {
     throw new TypeError("instant must be a valid Date");
@@ -72,39 +74,41 @@ export function businessDayStart(businessDate: string, timeZone: string, rollove
     throw new TypeError("rolloverHour must be an integer from 0 to 23");
   }
 
-  const [year, month, day] = businessDate.split("-").map(Number);
-  if (year === undefined || month === undefined || day === undefined) {
-    throw new TypeError("businessDate must be YYYY-MM-DD");
+  const calendar = new Date(`${businessDate}T12:00:00.000Z`);
+  if (
+    !Number.isFinite(calendar.getTime()) ||
+    calendar.toISOString().slice(0, 10) !== businessDate
+  ) {
+    throw new TypeError("businessDate must be a real YYYY-MM-DD date");
   }
-  const targetUtc = Date.UTC(year, month - 1, day, rolloverHour);
-  let epoch = targetUtc;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(new Date(epoch));
-    const valueFor = (type: Intl.DateTimeFormatPartTypes): number => {
-      const value = parts.find((part) => part.type === type)?.value;
-      if (value === undefined) throw new RangeError(`timezone did not provide ${type}`);
-      return Number(value);
-    };
-    const localAsUtc = Date.UTC(
-      valueFor("year"),
-      valueFor("month") - 1,
-      valueFor("day"),
-      valueFor("hour"),
-      valueFor("minute"),
-      valueFor("second"),
-    );
-    const next = targetUtc - (localAsUtc - epoch);
-    if (next === epoch) return new Date(next);
-    epoch = next;
+
+  const requestedWallClockAsUtc = Date.parse(
+    `${businessDate}T${String(rolloverHour).padStart(2, "0")}:00:00.000Z`,
+  );
+  let before = requestedWallClockAsUtc - BUSINESS_DAY_SEARCH_RADIUS_MS;
+  let atOrAfter = requestedWallClockAsUtc + BUSINESS_DAY_SEARCH_RADIUS_MS;
+  if (businessDayAt(new Date(before), timeZone, rolloverHour).business_date >= businessDate) {
+    throw new RangeError("business day start fell outside the supported IANA offset range");
   }
-  return new Date(epoch);
+  if (businessDayAt(new Date(atOrAfter), timeZone, rolloverHour).business_date < businessDate) {
+    throw new RangeError("business day start fell outside the supported IANA offset range");
+  }
+
+  // Resolve by the business-date transition itself, rather than iterating a
+  // guessed UTC offset. In a DST gap this chooses the first representable local
+  // instant after the skipped cutover; in an overlap it chooses the first of
+  // the two occurrences. Both policies preserve a half-open, continuous day.
+  while (atOrAfter - before > 1) {
+    const midpoint = before + Math.floor((atOrAfter - before) / 2);
+    if (businessDayAt(new Date(midpoint), timeZone, rolloverHour).business_date < businessDate) {
+      before = midpoint;
+    } else {
+      atOrAfter = midpoint;
+    }
+  }
+  const resolved = new Date(atOrAfter);
+  if (businessDayAt(resolved, timeZone, rolloverHour).business_date !== businessDate) {
+    throw new RangeError("businessDate has no representable start in timeZone");
+  }
+  return resolved;
 }

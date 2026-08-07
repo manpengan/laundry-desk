@@ -5,7 +5,12 @@ import { Button, Dialog, EmptyState, Input, MoneyText } from "@laundry/ui";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
 import { isStepUpRequired } from "../commands/command-client.js";
-import type { CommandPort, CommandResult, QueryPort } from "../commands/types.js";
+import type {
+  CommandPort,
+  CommandResult,
+  MemberTopupConfirmationSummary,
+  QueryPort,
+} from "../commands/types.js";
 
 import { unwrapQueryResult, type CustomerRowView } from "./customer-model.js";
 import {
@@ -17,6 +22,7 @@ import {
 } from "./member-model.js";
 import { MemberRefundForm } from "./MemberRefundForm.js";
 import { MemberLifecyclePanel } from "./MemberLifecyclePanel.js";
+import { MEMBER_TOPUP_METHODS, MemberTopupConfirmation } from "./MemberTopupConfirmation.js";
 
 export type MemberBalancePanelProps = Readonly<{
   customer: CustomerRowView;
@@ -26,13 +32,6 @@ export type MemberBalancePanelProps = Readonly<{
   session?: SessionView;
   toast: Readonly<{ push: (message: string, kind: "success" | "error") => void }>;
 }>;
-
-const TOPUP_METHODS = Object.freeze([
-  { value: "cash", label: "现金" },
-  { value: "wechat", label: "微信" },
-  { value: "alipay", label: "支付宝" },
-  { value: "other", label: "其他" },
-] as const);
 
 function ledgerLabel(kind: MemberLedgerKindView): string {
   if (kind === "topup") return "充值";
@@ -48,7 +47,11 @@ export type MemberTopupBody = Readonly<{
   method: MemberTenderView;
 }>;
 
-type PendingTopup = Readonly<{ confirmRef: string; body: MemberTopupBody }>;
+type PendingTopup = Readonly<{
+  confirmRef: string;
+  method: MemberTenderView;
+  summary: MemberTopupConfirmationSummary;
+}>;
 
 export function requestMemberTopup(
   commandClient: CommandPort,
@@ -60,10 +63,6 @@ export function requestMemberTopup(
 /** Resume the R3 top-up with only the server-frozen confirmation reference. */
 export function resumeMemberTopup(commandClient: CommandPort, confirmRef: string) {
   return commandClient.execute("member.topup", {}, { confirmRef });
-}
-
-function topupMethodLabel(method: MemberTenderView): string {
-  return TOPUP_METHODS.find((item) => item.value === method)?.label ?? "其他";
 }
 
 export function MemberBalancePanel({
@@ -145,7 +144,18 @@ export function MemberBalancePanel({
       const result = await requestMemberTopup(commandClient, body);
       if (!result.ok) {
         if (isStepUpRequired(result) && result.error.code === "POLICY_CONFIRMATION_REQUIRED") {
-          setPendingTopup(Object.freeze({ confirmRef: result.error.detail.confirm_ref, body }));
+          const summary = result.error.detail.summary;
+          if (summary?.kind !== "member_topup" || summary.principal_cents !== cents) {
+            toast.push("服务器未返回可核对的赠款金额，请重试", "error");
+            return;
+          }
+          setPendingTopup(
+            Object.freeze({
+              confirmRef: result.error.detail.confirm_ref,
+              method: body.method,
+              summary,
+            }),
+          );
           return;
         }
         toast.push(result.error.message ?? result.error.code, "error");
@@ -282,7 +292,7 @@ export function MemberBalancePanel({
               onChange={(event) => setMethod(event.target.value as MemberTenderView)}
               disabled={busy}
             >
-              {TOPUP_METHODS.map((item) => (
+              {MEMBER_TOPUP_METHODS.map((item) => (
                 <option key={item.value} value={item.value}>
                   {item.label}
                 </option>
@@ -353,13 +363,7 @@ export function MemberBalancePanel({
         }
       >
         {pendingTopup === null ? null : (
-          <div className="ld-member-confirmation" data-testid="member-topup-summary">
-            <p>
-              充值本金 <MoneyText fen={pendingTopup.body.amount_cents} />
-            </p>
-            <p>收款渠道：{topupMethodLabel(pendingTopup.body.method)}</p>
-            <p>确认后将按服务端当前有效档位计算赠款，并追加不可编辑的储值流水。</p>
-          </div>
+          <MemberTopupConfirmation method={pendingTopup.method} summary={pendingTopup.summary} />
         )}
       </Dialog>
     </section>

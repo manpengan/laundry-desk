@@ -1,5 +1,6 @@
 import { ACCESS_TOKEN_AUDIENCE, ACCESS_TOKEN_ISSUER } from "@laundry/contracts";
 import { createMemoryAccountingSource, createPgAccountingSource } from "../accounting/index.js";
+import { createMemoryReportingDeps, createPgReportingDeps } from "../reporting/index.js";
 import { createCsrfProofSigner, type CsrfProofSigner } from "../auth/csrf.js";
 import {
   createMemoryRuntimeAuthority,
@@ -10,6 +11,7 @@ import { createPgIdempotencyStore } from "../bus/pg-idempotency.js";
 import { createAccessTokenSigner } from "../identity/crypto-util.js";
 import { createMemoryIdentityStore } from "../identity/memory-store.js";
 import { createPgIdentityStore } from "../identity/pg-store.js";
+import { createPgStepUpProofStore } from "../identity/pg-step-up-proof-store.js";
 import { createPasswordPort } from "../identity/password.js";
 import type { StaffRecord, Uuid } from "../identity/types.js";
 import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
@@ -36,6 +38,7 @@ import type { PhotoHandlerDeps } from "../photo/handlers.js";
 import { createMemoryPhotoStore } from "../photo/memory-store.js";
 import { preparePgPhotoDeps } from "../photo/runtime-files.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
+import { createPgPendingActionStore } from "../pending-actions/pg-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
 import { createMemoryFulfillmentStore } from "../fulfillment/memory-store.js";
@@ -125,7 +128,7 @@ function buildIdentityDeps(
   csrfProofSigner: CsrfProofSigner,
   pendingStore: PendingActionStore = processPendingActionStore,
   proofStore: StepUpProofStore = processStepUpProofStore,
-  resolveStaffRole?: StaffRoleResolver,
+  resolveStaffRole: StaffRoleResolver,
 ): IdentityHandlerDeps {
   const clock = {
     nowEpochSeconds: () => Math.floor(Date.now() / 1000),
@@ -160,7 +163,7 @@ function buildIdentityDeps(
     ...pin,
     pending: pendingStore,
     proofs: proofStore,
-    ...(resolveStaffRole === undefined ? {} : { resolveStaffRole }),
+    resolveStaffRole,
   });
 
   return Object.freeze({
@@ -249,6 +252,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     },
   });
   const photoStore = createMemoryPhotoStore();
+  const accountingSource = createMemoryAccountingSource();
   return Object.freeze({
     mode: "memory" as const,
     identity: buildIdentityDeps(
@@ -285,9 +289,10 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     }),
     reconciliation: createMemoryReconciliationDeps(orderStore, shiftStore, printStore),
     accounting: Object.freeze({
-      source: createMemoryAccountingSource(),
+      source: accountingSource,
       timeZone: LOCAL_PROFILE.timezone,
     }),
+    reporting: createMemoryReportingDeps(accountingSource, LOCAL_PROFILE.timezone),
     photo: Object.freeze({ store: photoStore }),
     fulfillment: Object.freeze({ store: createMemoryFulfillmentStore() }),
     staffAccess: createMemoryStaffAccessDeps(LOCAL_MEMORY_STAFF_DIRECTORY),
@@ -348,6 +353,9 @@ export async function createPgLocalRuntime(
   const printDispatch = createPgPrintDispatchService(appPool, {
     privateKey: deriveEdgeAuthorityKeyPair(config.accessTokenSecret).privateKey,
   });
+  const accountingSource = createPgAccountingSource();
+  const pendingStore = createPgPendingActionStore(appPool);
+  const stepUpProofStore = createPgStepUpProofStore(appPool);
   return Object.freeze({
     mode: "pg" as const,
     identity: buildIdentityDeps(
@@ -355,8 +363,8 @@ export async function createPgLocalRuntime(
       passwordPort,
       config.accessTokenSecret,
       csrfProofSigner,
-      processPendingActionStore,
-      processStepUpProofStore,
+      pendingStore,
+      stepUpProofStore,
       createPgStaffRoleResolver(appPool, dependencies.loadStaffDirectory),
     ),
     platform: buildPlatform("sql"),
@@ -384,8 +392,7 @@ export async function createPgLocalRuntime(
     }),
     print: Object.freeze({
       store: printStore,
-      // The file spool remains an explicit diagnostic surface. Signed jobs are
-      // excluded from legacy claims and no background mock worker is started.
+      // Signed jobs are excluded from legacy spool claims; no mock worker starts.
       ...(printSpool === null
         ? {}
         : {
@@ -404,9 +411,10 @@ export async function createPgLocalRuntime(
     }),
     reconciliation: createPgReconciliationDeps(),
     accounting: Object.freeze({
-      source: createPgAccountingSource(),
+      source: accountingSource,
       timeZone: LOCAL_PROFILE.timezone,
     }),
+    reporting: createPgReportingDeps(accountingSource, LOCAL_PROFILE.timezone),
     photo,
     fulfillment: Object.freeze({ store: createPgFulfillmentStore(appPool) }),
     staffAccess: createPgStaffAccessDeps(),
@@ -416,8 +424,8 @@ export async function createPgLocalRuntime(
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSigner,
     staffDirectory: pgStaffDirectory,
-    pendingStore: processPendingActionStore,
-    stepUpProofStore: processStepUpProofStore,
+    pendingStore,
+    stepUpProofStore,
     idempotencyStore: createPgIdempotencyStore(appPool),
     pool: appPool,
     store: null,

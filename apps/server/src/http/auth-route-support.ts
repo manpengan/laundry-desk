@@ -215,8 +215,8 @@ function csrfRequestSurface(
 ): CsrfRequestSurface {
   const origin = request.headers.origin;
   const fetchSite = request.headers["sec-fetch-site"];
-  if (origin === policy.browserOrigin && fetchSite === "same-site") {
-    return Object.freeze({ kind: "browser" as const, fetch_site: "same-site" as const });
+  if (origin === policy.browserOrigin && fetchSite === policy.browserFetchSite) {
+    return Object.freeze({ kind: "browser" as const, fetch_site: policy.browserFetchSite });
   }
   if (origin === policy.desktopOrigin && fetchSite === "same-origin") {
     return Object.freeze({

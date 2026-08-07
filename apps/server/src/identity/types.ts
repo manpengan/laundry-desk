@@ -3,6 +3,8 @@
  * Persistence is injected (memory for tests; PG adapter later) — no real SQL here.
  */
 
+import type { SqlClient, TenantContext } from "../db/types.js";
+
 export type Uuid = string;
 export type EpochSeconds = number;
 export type AuthenticationMethod = "password" | "pin" | "refresh";
@@ -137,6 +139,13 @@ export type PinSuccessMutation = Readonly<{
   attempted_at: EpochSeconds;
 }>;
 
+export type PinSuccessTransactionContext = Readonly<{
+  client: SqlClient;
+  tenant: TenantContext;
+}>;
+
+export type PinSuccessCommit = (transaction?: PinSuccessTransactionContext) => Promise<void>;
+
 export type IdentityErrorCode =
   | "AUTHENTICATION_FAILED"
   | "CSRF_REJECTED"
@@ -254,7 +263,7 @@ export type PinChallengeRepository = Readonly<{
   /** Atomically increments challenge and staff/device window counters. */
   recordFailure: (input: PinFailureMutation) => Promise<0 | 1>;
   /** Atomically consumes a successful challenge and clears its staff/device lockout. */
-  consumeSuccess: (input: PinSuccessMutation) => Promise<0 | 1>;
+  consumeSuccess: (input: PinSuccessMutation, commit?: PinSuccessCommit) => Promise<0 | 1>;
 }>;
 
 export type PinLockoutRepository = Readonly<{

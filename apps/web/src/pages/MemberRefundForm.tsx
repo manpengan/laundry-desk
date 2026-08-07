@@ -193,7 +193,6 @@ export function MemberRefundForm({
           confirmRef={pending.ref}
           currentStaffId={session.session.staff_id}
           commandLabel="退还储值本金"
-          requiredApproverRole="admin"
           summary={
             <div className="ld-member-confirmation">
               <p>

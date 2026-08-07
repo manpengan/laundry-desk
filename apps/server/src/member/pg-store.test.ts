@@ -358,40 +358,48 @@ maybe("the ledger rejects UPDATE for the application role", async () => {
 async function insertRawLedger(
   values: Readonly<{
     accountId: string;
-    kind: "topup" | "pay";
+    kind: "topup" | "pay" | "reversal";
     principal: number;
+    bonus?: number;
+    bonusRuleId?: string | null;
     orderId: string | null;
+    refLedgerId?: string | null;
     tender: string | null;
     businessDate: string;
   }>,
-): Promise<void> {
+): Promise<string> {
   const pool = createPgPool({ connectionString: urls!.app });
   try {
-    await withPoolClient(pool, async (client) =>
+    return await withPoolClient(pool, async (client) =>
       withTenantTransaction(client, TENANT, async (tx) => {
+        const ledgerId = randomUUID();
         await tx.query(
           `INSERT INTO member_ledger (
              id, org_id, store_id, account_id, kind,
-             principal_delta_cents, bonus_delta_cents, order_id, tender,
-             staff_id, at, business_date, note
+             principal_delta_cents, bonus_delta_cents, order_id, ref_ledger_id, tender,
+             bonus_rule_id, staff_id, at, business_date, note
            ) VALUES (
              $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5,
-             $6::integer, 0, $7::uuid, $8,
-             $9::uuid, now(), $10, NULL
+             $6::bigint, $7::bigint, $8::uuid, $9::uuid, $10,
+             $11::uuid, $12::uuid, now(), $13, NULL
            )`,
           [
-            randomUUID(),
+            ledgerId,
             TENANT.orgId,
             TENANT.storeId,
             values.accountId,
             values.kind,
             values.principal,
+            values.bonus ?? 0,
             values.orderId,
+            values.refLedgerId ?? null,
             values.tender,
+            values.bonusRuleId ?? null,
             TENANT.staffId,
             values.businessDate,
           ],
         );
+        return ledgerId;
       }),
     );
   } finally {
@@ -417,6 +425,18 @@ async function seedRawBalance(
   try {
     await withPoolClient(pool, async (client) =>
       withTenantTransaction(client, TENANT, async (tx) => {
+        const bonusRuleId = bonusCents > 0 ? randomUUID() : null;
+        if (bonusRuleId !== null) {
+          await tx.query(
+            `INSERT INTO member_bonus_rules (
+               id, org_id, min_topup_cents, bonus_cents, status,
+               effective_from, updated_at, updated_by_staff_id, note
+             ) VALUES (
+               $1::uuid, $2::uuid, 1, 1, 'retired', now(), now(), $3::uuid, NULL
+             )`,
+            [bonusRuleId, TENANT.orgId, TENANT.staffId],
+          );
+        }
         await tx.query(
           `INSERT INTO member_ledger (
              id, org_id, store_id, account_id, kind,
@@ -425,7 +445,7 @@ async function seedRawBalance(
            ) VALUES (
              $1::uuid, $2::uuid, $3::uuid, $4::uuid, 'topup',
              $5::bigint, $6::bigint, NULL, 'cash',
-             NULL, $7::uuid, now(), $8, NULL
+             $7::uuid, $8::uuid, now(), $9, NULL
            )`,
           [
             randomUUID(),
@@ -434,6 +454,7 @@ async function seedRawBalance(
             accountId,
             principalCents,
             bonusCents,
+            bonusRuleId,
             TENANT.staffId,
             BUSINESS_DATE,
           ],
@@ -479,6 +500,64 @@ maybe("a cash top-up persists its tender and only cash reaches the day sum", asy
   const after = await withStore((store) => store.sumCashPrincipal(TENANT.storeId, isolatedDate));
   assert.equal(after - before, 30_000);
 });
+
+maybe(
+  "a confirmed top-up persists its server-frozen bonus after the tier is repriced",
+  async () => {
+    const customerId = await seedCustomer();
+    const accountId = await openAccountFor(customerId);
+    const created = await withStore((store) =>
+      store.upsertBonusRule({
+        rule_id: null,
+        min_topup_cents: 123_400,
+        bonus_cents: 12_340,
+        status: "active",
+        staff_id: TENANT.staffId,
+        at: 1_780_000_100,
+        note: "frozen confirmation regression",
+      }),
+    );
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+
+    const repriced = await withStore((store) =>
+      store.upsertBonusRule({
+        rule_id: created.value.rule_id,
+        min_topup_cents: created.value.min_topup_cents,
+        bonus_cents: 1,
+        status: "active",
+        staff_id: TENANT.staffId,
+        at: 1_780_000_101,
+        note: "repriced after first hop",
+      }),
+    );
+    assert.equal(repriced.ok, true);
+
+    const topped = await withStore((store) =>
+      store.topup({
+        account_id: accountId,
+        store_id: TENANT.storeId,
+        amount_cents: 123_400,
+        tender: "cash",
+        staff_id: TENANT.staffId,
+        at: 1_780_000_200,
+        business_date: "2026-08-15",
+        note: null,
+        frozen_bonus: {
+          rule_id: created.value.rule_id,
+          bonus_cents: 12_340,
+        },
+      }),
+    );
+    assert.equal(topped.ok, true);
+    if (!topped.ok) return;
+    assert.equal(topped.value.bonus_delta_cents, 12_340);
+
+    const view = await withStore((store) => store.getByCustomer(customerId, 10));
+    assert.equal(view?.recent[0]?.bonus_delta_cents, 12_340);
+    assert.equal(view?.recent[0]?.bonus_rule_id, created.value.rule_id);
+  },
+);
 
 maybe("a settlement carries no tender, so it never double-counts the drawer", async () => {
   const customerId = await seedCustomer();
@@ -562,6 +641,52 @@ maybe("PostgreSQL refuses a tender the cash rollup cannot read", async () => {
       businessDate: "2026-08-14",
     }),
     /member_ledger_tender_value_chk/u,
+  );
+});
+
+maybe("PostgreSQL refuses a positive bonus without its frozen rule origin", async () => {
+  const customerId = await seedCustomer();
+  const accountId = await openAccountFor(customerId);
+
+  await assert.rejects(
+    insertRawLedger({
+      accountId,
+      kind: "topup",
+      principal: 1_000,
+      bonus: 1,
+      orderId: null,
+      tender: "cash",
+      businessDate: "2026-08-16",
+    }),
+    /member_ledger_positive_bonus_origin_chk/u,
+  );
+});
+
+maybe("PostgreSQL permits a reversal to restore previously consumed bonus", async () => {
+  const customerId = await seedCustomer();
+  const accountId = await openAccountFor(customerId);
+  const businessDate = "2026-08-17";
+  const debitId = await insertRawLedger({
+    accountId,
+    kind: "pay",
+    principal: 0,
+    bonus: -1,
+    orderId: await seedOrder(businessDate),
+    tender: null,
+    businessDate,
+  });
+
+  await assert.doesNotReject(
+    insertRawLedger({
+      accountId,
+      kind: "reversal",
+      principal: 0,
+      bonus: 1,
+      orderId: null,
+      refLedgerId: debitId,
+      tender: null,
+      businessDate,
+    }),
   );
 });
 

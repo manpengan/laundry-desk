@@ -39,6 +39,22 @@ export async function readIdempotentReplay(
   return store.get(tenant, request.name, request.idempotencyKey);
 }
 
+/** Read a possible replay inside the active tenant transaction; callers must authorize it. */
+export async function readReplayCandidate(
+  tenant: TenantContext,
+  request: CommandRequest,
+  store: CommandIdempotencyStore | undefined,
+  durable: TransactionalIdempotencyStore | null,
+  requestHash: string | undefined,
+): Promise<CommandResult | null> {
+  if (durable !== null && request.idempotencyKey !== undefined && requestHash !== undefined) {
+    return durableLookupResult(
+      await durable.lookup(tenant, request.name, request.idempotencyKey, requestHash),
+    );
+  }
+  return readIdempotentReplay(tenant, request, store as IdempotencyStore | undefined);
+}
+
 export function durableLookupResult(lookup: DurableIdempotencyLookup): CommandResult | null {
   if (lookup.kind === "replay") return lookup.result;
   if (lookup.kind === "conflict") return fail("IDEMPOTENCY_CONFLICT");
@@ -46,12 +62,16 @@ export function durableLookupResult(lookup: DurableIdempotencyLookup): CommandRe
   return null;
 }
 
-export function hashIdempotencyRequest(request: CommandRequest): string {
+export function hashIdempotencyRequest(
+  request: CommandRequest,
+  confirmationArgsHash?: string,
+): string {
   const canonical = stableJson({
     name: request.name,
     version: request.version,
     input: request.input,
     dryRun: request.dryRun,
+    ...(confirmationArgsHash === undefined ? {} : { confirmationArgsHash }),
   });
   return createHash("sha256").update(canonical).digest("hex");
 }
