@@ -11,3 +11,4 @@ export * from "./stats/index.js";
 export * from "./notification/index.js";
 export * from "./accounting/index.js";
 export * from "./member/index.js";
+export * from "./reporting/index.js";

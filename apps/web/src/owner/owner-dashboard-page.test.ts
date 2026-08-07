@@ -65,10 +65,15 @@ test("OwnerDashboardView renders explicit loading, empty, and error states", () 
   assert.match(failed, /data-state="error"/u);
   assert.match(failed, /本地服务暂时不可用/u);
   assert.match(failed, /重新加载/u);
+
+  const revoked = render({ dashboard: sampleDashboard(), error: "没有查看权限" });
+  assert.match(revoked, /data-state="error"/u);
+  assert.match(revoked, /没有查看权限/u);
+  assert.doesNotMatch(revoked, /data-fen="12300"|owner-trend-row/u);
 });
 
-test("OwnerDashboardView renders the four cards and explains performance versus cash received", () => {
-  const html = render({ dashboard: sampleDashboard() });
+test("OwnerDashboardView renders the four cards and exposes only three bounded drilldowns", () => {
+  const html = render({ dashboard: sampleDashboard(), onOpenDrilldown: () => undefined });
 
   assert.match(html, /data-state="ready"/u);
   assert.match(html, /今日营业额/u);
@@ -85,6 +90,10 @@ test("OwnerDashboardView renders the four cards and explains performance versus 
   assert.match(html, />9 件</u);
   assert.match(html, /4 单 · 满 30 天/u);
   assert.match(html, /刷新数据/u);
+  assert.match(html, /查看取衣明细/u);
+  assert.match(html, /查看欠款明细/u);
+  assert.match(html, /查看滞留明细/u);
+  assert.doesNotMatch(html, /查看营业额明细/u);
 });
 
 test("OwnerDashboardView switches 7 and 30 day trends by client-side slicing", () => {

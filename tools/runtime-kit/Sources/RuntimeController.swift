@@ -6,8 +6,8 @@ final class NativeRuntimeController {
     (logical: "pgdata-v2", name: "laundry-desk-runtime_pgdata-v2"),
     (logical: "photos", name: "laundry-desk-runtime_photos"),
   ]
-  private let paths: RuntimePaths
-  private let runner: RuntimeRunner
+  let paths: RuntimePaths
+  let runner: RuntimeRunner
   private let appVersion: String
   private let contractsMajor = 2
 
@@ -17,18 +17,17 @@ final class NativeRuntimeController {
     self.appVersion = appVersion
   }
 
-  private func command(_ args: [String], environment: [String: String] = [:]) -> RuntimeCommandSpec
-  {
+  func command(_ args: [String], environment: [String: String] = [:]) -> RuntimeCommandSpec {
     RuntimeCommandSpec(executable: runner.dockerPath, arguments: args, environment: environment)
   }
 
-  private func compose(_ args: [String], environment: [String: String]) -> RuntimeCommandSpec {
+  func compose(_ args: [String], environment: [String: String]) -> RuntimeCommandSpec {
     command(
       ["compose", "--project-name", Self.project, "--file", paths.compose.path] + args,
       environment: environment)
   }
 
-  @discardableResult private func run(
+  @discardableResult func run(
     _ spec: RuntimeCommandSpec,
     accepting: Set<Int32> = [0]
   ) throws -> RuntimeCommandResult {
@@ -86,7 +85,7 @@ final class NativeRuntimeController {
     return try encoder.encode(state)
   }
 
-  private func environment(
+  func environment(
     _ state: RuntimeState,
     _ payload: RuntimeManifestPayload
   ) -> [String: String] {
@@ -103,7 +102,7 @@ final class NativeRuntimeController {
     ]
   }
 
-  private func load(allowRecovery: Bool = false) throws
+  func load(allowRecovery: Bool = false) throws
     -> (RuntimeState, RuntimeManifestPayload)
   {
     try RuntimeStorage.validateDirectory(paths.root)
@@ -151,7 +150,7 @@ final class NativeRuntimeController {
     }
   }
 
-  @discardableResult private func assertVolumes(
+  @discardableResult func assertVolumes(
     _ state: RuntimeState, allowMissing: Bool = false
   ) throws -> [(logical: String, name: String, exists: Bool, labels: [String: String]?)] {
     let volumes = try inspectVolumes()
@@ -179,7 +178,7 @@ final class NativeRuntimeController {
     try assertVolumes(state)
   }
 
-  private func assertImage(_ payload: RuntimeManifestPayload) throws {
+  func assertImage(_ payload: RuntimeManifestPayload) throws {
     let result = try run(
       command([
         "image", "inspect", "--format", "{{json .Config.Labels}}",
@@ -220,7 +219,7 @@ final class NativeRuntimeController {
     else { try runtimeFail("RUNTIME_IMAGE_METADATA_INVALID") }
   }
 
-  private func gates(
+  func gates(
     _ state: RuntimeState, _ payload: RuntimeManifestPayload,
     bootstrap: Bool
   ) throws {
@@ -311,7 +310,7 @@ final class NativeRuntimeController {
     return payload.release
   }
 
-  func start() throws -> String {
+  private func startUnlocked() throws -> String {
     let (state, payload) = try load()
     try assertVolumes(state)
     try assertImage(payload)
@@ -319,16 +318,29 @@ final class NativeRuntimeController {
     return payload.release
   }
 
-  func stop() throws -> String {
+  private func stopUnlocked() throws -> String {
     let (state, payload) = try load()
     try assertVolumes(state)
     try run(compose(["stop", "server", "postgres"], environment: environment(state, payload)))
     return payload.release
   }
 
+  func start() throws -> String {
+    try RuntimeStorage.validateDirectory(paths.root)
+    return try RuntimeStorage.withMaintenanceLock(paths.root) { try startUnlocked() }
+  }
+
+  func stop() throws -> String {
+    try RuntimeStorage.validateDirectory(paths.root)
+    return try RuntimeStorage.withMaintenanceLock(paths.root) { try stopUnlocked() }
+  }
+
   func restart() throws -> String {
-    _ = try stop()
-    return try start()
+    try RuntimeStorage.validateDirectory(paths.root)
+    return try RuntimeStorage.withMaintenanceLock(paths.root) {
+      _ = try stopUnlocked()
+      return try startUnlocked()
+    }
   }
 
   func diagnose() -> RuntimeDiagnosis {

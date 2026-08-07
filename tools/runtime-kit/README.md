@@ -25,6 +25,21 @@ argv 调用已探测到的 Docker CLI，管理本地 PostgreSQL 16 与 Server OC
   volume 都由管理器显式创建并绑定 state/instance labels；install/recover/start/stop/
   diagnose 任一阶段发现缺失或标签漂移都会 fail closed，不会静默复用既有数据。
 
+## 托管备份与恢复
+
+- 入口只存在于原生 Runtime.app；柜台 Electron、Owner Web、HTTP、命令总线和 AI 均无
+  备份/恢复权限。
+- App 只读取自身 `backups/` 目录内生成的严格 backup ID。目录为 `0700`，manifest、
+  PostgreSQL custom dump 与照片 tar 均为 `0600`；不支持外部导入、任意路径或删除。
+- manifest 绑定 instance、release、Server/PostgreSQL 镜像 digest、migration head、schema
+  hash，以及两个流式 artifact 的大小和 SHA-256。权限、hardlink、未知字段、哈希、格式或
+  版本任一异常都会失败关闭。
+- 恢复必须从 stdin 提交 backup ID 和界面显示的完整 `RESTORE-…` 确认摘要。Runtime.app
+  会先停服并创建、验证预恢复安全点，再单事务恢复数据库、迁移/校验、恢复照片并过健康
+  门禁；中途失败保留原备份和安全点且保持 Server 停止。
+- 首期仅恢复同一 instance 且与当前已安装 release/schema 精确兼容的托管备份。自动轮换、
+  外部导入、跨实例迁移与旧 release 升级恢复不在当前范围。
+
 ## 固定命令
 
 ```text
@@ -37,6 +52,10 @@ status
 diagnose
 launchd install
 launchd uninstall
+backup create                 # no stdin
+backup list                   # no stdin
+backup verify                 # {"backup_id":"..."} from bounded stdin
+backup restore                # {"backup_id":"...","confirmation":"RESTORE-..."} from stdin
 ```
 
 `diagnose` 只返回有界状态、release、migration head 和稳定故障码，不收集 secret、原始
@@ -50,12 +69,18 @@ pnpm runtime:app:build
 pnpm runtime:app:inspect
 pnpm runtime:app:acceptance
 pnpm runtime:app:lint:swift
+node tools/runtime-kit/real-container-acceptance.mjs  # isolated real PG/photo drill
 ```
 
 acceptance 将测试 App 复制到临时目录，在空工作目录和 `PATH=""` 下执行 install、restart、
-签名篡改/兼容性负例、双 volume 篡改、故障注入与同 manifest recover。测试 App 是原生 arm64
-且可通过 ad-hoc codesign 校验。V2 Foundation 的 macOS job 会持续执行 Swift lint 和这套
-build/inspect/no-repo 门禁；它使用仅测试构建信任的临时签名 key 和 fake runtime runner。
+签名篡改/兼容性负例、双 volume 篡改、故障注入、同 manifest recover，以及备份权限/哈希/
+非法 ID/确认/互斥/成功恢复/失败安全点负例。测试 App 是原生 arm64 且可通过 ad-hoc
+codesign 校验。V2 Foundation 的 macOS job 会持续执行 Swift lint 和这套 build/inspect/
+no-repo 门禁；它使用仅测试构建信任的临时签名 key 和 fake runtime runner。
+
+`real-container-acceptance.mjs` 不监听宿主端口，使用隔离的随机容器/volume 和解析后的镜像
+digest，实跑 PostgreSQL custom dump/单事务 restore、照片 tar、安全点及损坏归档负例；它
+只删除本次随机命名的验收资源。
 
 当前已交付的是独立 Runtime.app 软件与无仓库生命周期门禁。XP-58 实体证据不属于本组件；
 Apple Developer ID 签名/公证、正式 manifest 签名权威、已签名且可访问的多架构 OCI 产物，

@@ -2,7 +2,7 @@
 
 本项目版本记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 SemVer。
 
-> **当前路线（2026-07-25，2026-08-07 修订）**：按 [ADR-14](adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)，v2 是唯一活动交付线；当前只推进 Linux 本地 Web Server + Web，macOS App 暂停。V2-only 基础裁决沿用 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)。宏发 v1 停止功能开发与独立发版，只保留为迁移源和历史行为参考。[ADR-16](adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) 把离线队列、Primary lease 与真实打印机并入当前阶段，[ADR-17](adr/2026-07-31-adr-17-member-stored-value.md)、[ADR-18](adr/2026-08-01-adr-18-stored-value-settlement-reporting.md)、[ADR-24](adr/2026-08-07-adr-24-accounting-dual-basis-reports.md)、[ADR-25](adr/2026-08-07-adr-25-member-account-lifecycle.md) 与 [ADR-26](adr/2026-08-07-adr-26-lan-owner-dashboard.md) 解冻会员储值、经营账目、账户生命周期和单店局域网老板看板；云部署、Windows、AI/BYOK 与 v1 迁移保持后置。
+> **当前路线（2026-07-25，2026-08-08 修订）**：按 [ADR-14](adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)，v2 是唯一活动交付线；当前优先推进本地 Web Server/Web 与 macOS App/Runtime 验收。V2-only 基础裁决沿用 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)。宏发 v1 停止功能开发与独立发版，只保留为迁移源和历史行为参考。[ADR-16](adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) 把离线队列、Primary lease 与真实打印机并入当前阶段，[ADR-17](adr/2026-07-31-adr-17-member-stored-value.md)、[ADR-18](adr/2026-08-01-adr-18-stored-value-settlement-reporting.md)、[ADR-24](adr/2026-08-07-adr-24-accounting-dual-basis-reports.md)、[ADR-25](adr/2026-08-07-adr-25-member-account-lifecycle.md)、[ADR-26](adr/2026-08-07-adr-26-lan-owner-dashboard.md)、[ADR-27](adr/2026-08-08-adr-27-owner-drilldown-portfolio.md)、[ADR-28](adr/2026-08-08-adr-28-lan-onboarding-diagnostics.md) 与 [ADR-29](adr/2026-08-08-adr-29-runtime-managed-backup-restore.md) 解冻会员储值、经营账目、账户生命周期、局域网老板运营视图和本机恢复；云部署、Windows、AI/BYOK 与 v1 迁移保持后置。
 
 ---
 
@@ -25,6 +25,9 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 - 营业日、统计与交班：以门店时区归属营业日，提供当日统计、CSV 导出与交班结账。
 - 柜台界面：三栏工作台与三栏开单页，含订单列表/详情抽屉、取衣页、欠款页、统计页与交班面板。
 - 局域网 Owner Dashboard（[ADR-26](adr/2026-08-07-adr-26-lan-owner-dashboard.md)）：新增独立 `/owner` 手机响应式只读入口，管理员可查看今日营业额（业绩/实收双口径）、取衣件数、新增欠款、满 30 天滞留件，以及同一权威快照的 7/30 日趋势，并可显式注销共享终端会话。查询不接收客户端租户、门店或日期，不进入 AI 投影；PostgreSQL 与 Fastify 继续只暴露在回环地址，局域网仅开放显式私网地址上的同源 HTTPS 网关，使用 Secure host-only Cookie 并拒绝跨站 Origin、错误 Host 与一切转发头。本片不含云访问、跨店汇总、写操作或正式公网证书托管。
+- Owner 运营下钻与授权门店对比（[ADR-27](adr/2026-08-08-adr-27-owner-drilldown-portfolio.md)）：取衣、新增欠款和滞留件三张卡可查看最多 50 单的脱敏明细，完整汇总继续与首屏同口径；门店组合视图只汇总当前员工在该店仍为 active admin 的最多 50 家门店。两条查询都不接收客户端组织、门店、日期或行数，不返回顾客资料、内部 UUID、条码或架位，并逐店在 PostgreSQL RLS 下重新证明权限。
+- LAN 设备接入与诊断（[ADR-28](adr/2026-08-08-adr-28-lan-onboarding-diagnostics.md)）：新增只包含 `/owner` 地址的终端二维码、叶证书指纹和 iOS/Android/macOS 人工信任指引；诊断会有界检查证书有效期、IP SAN、密钥匹配、回环 Server、受信 HTTPS 和 8787/8543 未暴露。工具不生成或安装证书，不输出密钥路径、响应体、异常详情或凭据；网关仍只允许固定的 Owner 只读代理面，不开放任意路由。
+- Runtime.app 托管备份与恢复（[ADR-29](adr/2026-08-08-adr-29-runtime-managed-backup-restore.md)）：原生主机管理器可在私有目录创建、列出、验证并恢复 PostgreSQL + 照片一致性备份；严格 manifest 绑定实例、版本、schema、大小和 SHA-256，恢复前要求摘要确认并自动创建预恢复安全点。该能力不进入柜台 Electron、Owner LAN、Fastify API、命令总线或 AI；本地 ad-hoc/no-repo 验收不等于 Developer ID、公证或换机分发完成。
 
 > **ADR-14 首个里程碑「本地单机完整柜台工作日」已达成**，逐条验收口径、证据与覆盖层见[里程碑 1 验收记录](superpowers/specs/2026-07-29-milestone-1-local-workday-acceptance.md)。服务端走真实命令总线覆盖开单 → 补款 → 取衣 → 交班；同一套工作日（录价目 → 开单收部分款 → 取衣补齐结清）在浏览器与 macOS 打包应用中各跑通一遍，macOS 侧经 `pnpm local:acceptance` 本地验收（CI 只跑 Linux）。柜台 Electron 产物仍是未签名未公证的本地测试包；独立 Runtime.app 的软件与 ad-hoc/no-repo 门禁已交付，但正式发布门禁见下文。
 
@@ -55,7 +58,7 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 - 会员账户生命周期（[ADR-25](adr/2026-08-07-adr-25-member-account-lifecycle.md)）：Linux 本地 Web 可将活动账户挂失冻结，并由管理员受权解冻；冻结账户拒绝充值、余额消费和普通退款。关户是不可拆分的 R4 资金事务：锁内复核顾客、状态版本与本金/赠款快照，退回全部剩余本金，追加 `bonus_forfeit` 清零全部剩余赠款，再把账户永久置为 `closed` 并同事务审计。冻结、解冻与关户一律在线执行；实体卡、积分、有效期、双方都有会员账户的自动合并、重新入会和支付机构接口继续后置。macOS App 不因本片恢复开发或验收。
 - 催取工作台与人工通知名单（[ADR-23](adr/2026-08-07-adr-23-pickup-reminder-manual-list.md)）：Linux 本地 Web 可按 30/90/180 天、衣物状态与欠款筛选当前门店未取订单，最多勾选 50 单，经 R3 冻结确认后按订单或顾客生成带 SHA-256 的 CSV 并复制号码。服务端在事务内重新锁定、复核候选，并只追加保存订单、批次和摘要证据，不留存手机号、话术正文或 CSV。该能力明确是人工降级路径，短信、微信、定时任务与任何自动发送仍未接入，生成名单不代表已经联系或送达；本片只验 Linux 本地 Server、真实 PostgreSQL 与 Web 浏览器，macOS App 验收后置。
 - 经营账目双口径（[ADR-24](adr/2026-08-07-adr-24-accounting-dual-basis-reports.md)）：Linux 本地 Web 新增今日、往日、月结与职员报表。「实收」按非余额订单净收加充值/退款本金归集，「业绩」按全部订单支付净额归集并包含会员余额核销，避免充值与消费重复计算。报表固定按五种渠道展示，日期区间最多 366 天，支持带 SHA-256 完整性校验和只留摘要审计的 R3 CSV 导出；查询显式限定会话门店，同组织其他门店流水不会混入。ADR-24 当时不含老板 H5；后续 ADR-26 已复用同一口径交付单店局域网只读首屏，AI 分析、云端多店汇总与 macOS 验收仍未包含。
-- macOS Runtime：交付独立原生 Runtime.app 软件，固定管理本地 PostgreSQL/Server 的 install/start/stop/restart/status/diagnose/launchd，以及同一签名 manifest 的中断安装恢复；native acceptance 脱离仓库和宿主 Node。当前测试 App 只做 ad-hoc codesign 并信任临时测试 key。**Developer ID/公证、正式 manifest 签名权威、已签名多架构 OCI 与 upgrade/rollback 均未交付。**
+- macOS Runtime：交付独立原生 Runtime.app 软件，固定管理本地 PostgreSQL/Server 的 install/start/stop/restart/status/diagnose/launchd、同一签名 manifest 的中断安装恢复，以及 ADR-29 的托管数据备份/验证/恢复；native acceptance 脱离仓库和宿主 Node。当前测试 App 只做 ad-hoc codesign 并信任临时测试 key。**Developer ID/公证、正式 manifest 签名权威、已签名多架构 OCI 与 upgrade/rollback 均未交付。**
 
 ### 修复
 

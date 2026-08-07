@@ -130,8 +130,15 @@ test("staff receives an explicit owner denial without dashboard content", () => 
 
 test("host entry selects the pathname surface and loads the isolated owner stylesheet", async () => {
   const source = await readFile(new URL("../../host/main.tsx", import.meta.url), "utf8");
+  const operationsStyles = await readFile(
+    new URL("../../src/styles/owner-operations.css", import.meta.url),
+    "utf8",
+  );
 
   assert.match(source, /appSurfaceFromPathname\(window\.location\.pathname\)/u);
   assert.match(source, /surface=\{surface\}/u);
   assert.match(source, /import\s+["']\.\.\/src\/styles\/owner-dashboard\.css["'];/u);
+  assert.match(source, /import\s+["']\.\.\/src\/styles\/owner-operations\.css["'];/u);
+  assert.match(operationsStyles, /\.ld-owner-operations \.ld-btn\s*\{[^}]*min-height: 44px;/su);
+  assert.match(operationsStyles, /\.ld-owner-metric__action\s*\{[^}]*min-height: 44px;/su);
 });

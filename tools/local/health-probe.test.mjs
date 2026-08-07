@@ -31,4 +31,12 @@ test("health is down only when the endpoint cannot be reached", async () => {
     ),
     { reachable: true, ready: true },
   );
+
+  assert.deepEqual(
+    await probeHealthEndpoint(
+      "http://127.0.0.1:8787/health",
+      async () => new Response(`{"ok":true,"data":{"status":"ready"}}${" ".repeat(8_192)}`),
+    ),
+    { reachable: true, ready: false },
+  );
 });

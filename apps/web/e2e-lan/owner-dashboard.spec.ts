@@ -117,6 +117,13 @@ async function loginOwner(page: Page): Promise<void> {
   );
 }
 
+function waitForOwnerQuery(page: Page, queryName: string) {
+  return page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === "POST" && url.pathname === `/v1/queries/${queryName}`;
+  });
+}
+
 test("LAN acceptance refuses non-HTTPS and non-private origins", () => {
   for (const origin of [
     "http://192.168.50.12:8443",
@@ -147,7 +154,11 @@ test("two isolated browser devices read the HTTPS Owner Dashboard without mutati
   page.on("request", (request) => {
     if (request.url().includes("/v1/commands/")) commandRequests.push(request.url());
   });
+  const portfolioResponse = waitForOwnerQuery(page, "reporting.owner_portfolio.get");
   await loginOwner(page);
+  const portfolioResult = await portfolioResponse;
+  expect(portfolioResult.status()).toBe(200);
+  expect(portfolioResult.headers()["cache-control"]).toBe("no-store");
 
   const directLoopbackRequests: string[] = [];
   page.on("request", (request) => {
@@ -168,8 +179,9 @@ test("two isolated browser devices read the HTTPS Owner Dashboard without mutati
   expect(directLoopbackResults).toEqual(["blocked", "blocked"]);
   expect(directLoopbackRequests).toEqual([]);
 
+  const dashboard = page.locator('[data-testid="owner-dashboard"]');
   for (const label of ["今日营业额", "今日取衣件数", "新增欠款", "滞留件"]) {
-    await expect(page.getByText(label, { exact: true })).toBeVisible();
+    await expect(dashboard.getByText(label, { exact: true })).toBeVisible();
   }
   await expect(page.locator('[data-testid="owner-trend-row"]')).toHaveCount(7);
   await page.getByRole("button", { name: "近 30 日" }).click();
@@ -179,6 +191,30 @@ test("two isolated browser devices read the HTTPS Owner Dashboard without mutati
     "data-state",
     "ready",
   );
+  await expect(page.locator('[data-testid="owner-portfolio"]')).toBeVisible();
+  await expect(page.getByText("授权门店对比", { exact: true })).toBeVisible();
+  await expect(page.locator('[data-testid="owner-portfolio"] [role="alert"]')).toHaveCount(0);
+  await expect(page.getByLabel("授权门店总计")).toBeVisible();
+
+  for (const [button, title] of [
+    ["查看取衣明细", "今日取衣明细"],
+    ["查看欠款明细", "今日新增欠款明细"],
+    ["查看滞留明细", "滞留件明细"],
+  ] as const) {
+    const drilldownResponse = waitForOwnerQuery(page, "reporting.owner_dashboard.drilldown");
+    await page.getByRole("button", { name: button }).click();
+    const drilldownResult = await drilldownResponse;
+    expect(drilldownResult.status()).toBe(200);
+    expect(drilldownResult.headers()["cache-control"]).toBe("no-store");
+    await expect(page.locator('[data-testid="owner-drilldown"]')).toBeVisible();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.locator('[data-testid="owner-drilldown"] [role="alert"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="owner-drilldown"]')).toContainText(
+      /共 \d+ 单|暂无明细/u,
+    );
+    await page.getByRole("button", { name: "关闭明细" }).click();
+    await expect(page.locator('[data-testid="owner-drilldown"]')).toHaveCount(0);
+  }
 
   const cookies = await context.cookies();
   expect(cookieSecurityMetadata(cookies, REFRESH_COOKIE_NAME)).toEqual({

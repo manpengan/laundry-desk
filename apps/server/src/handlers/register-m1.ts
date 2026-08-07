@@ -298,7 +298,11 @@ export function registerM1QueryHandlers(
 
   if (deps.reporting !== undefined) {
     registerReportingQueryHandlers(queryRegistry, deps.reporting);
-    names.push("reporting.owner_dashboard.get");
+    names.push(
+      "reporting.owner_dashboard.get",
+      "reporting.owner_dashboard.drilldown",
+      "reporting.owner_portfolio.get",
+    );
   }
 
   if (deps.photo !== undefined) {

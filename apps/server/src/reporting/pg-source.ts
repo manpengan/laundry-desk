@@ -1,4 +1,9 @@
 import type { OwnerDashboardOperations, OwnerDashboardReadPort } from "./types.js";
+import { readPgOwnerDrilldown } from "./pg-drilldown-source.js";
+import {
+  listPgOwnerPortfolioStores,
+  withPgAuthorizedPortfolioStore,
+} from "./pg-portfolio-source.js";
 
 type OperationsRow = Readonly<{
   picked_up_garment_count: number | string;
@@ -97,5 +102,8 @@ export function createPgOwnerDashboardSource(): OwnerDashboardReadPort {
       ]);
       return toOperations(result.rows[0]);
     },
+    readDrilldown: readPgOwnerDrilldown,
+    listPortfolioStores: listPgOwnerPortfolioStores,
+    withAuthorizedPortfolioStore: withPgAuthorizedPortfolioStore,
   });
 }

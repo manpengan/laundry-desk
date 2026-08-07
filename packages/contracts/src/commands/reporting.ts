@@ -2,27 +2,17 @@ import { z } from "zod";
 
 import { ExactUtcTimestampSchema } from "../edge/primitives.js";
 import { defineQuery, type QueryDefinition } from "../registry/definitions.js";
+import {
+  reportingOwnerDashboardDrilldownQuery,
+  reportingOwnerPortfolioGetQuery,
+} from "./reporting-owner-operations.js";
+import { OwnerCardMetricsSchema, SafeIntegerSchema } from "./reporting-owner-shared.js";
 import { BusinessDateSchema } from "./stats.js";
 
 const DAY_MILLISECONDS = 86_400_000;
-const NonNegativeSafeIntegerSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-const SafeIntegerSchema = z
-  .number()
-  .int()
-  .min(Number.MIN_SAFE_INTEGER)
-  .max(Number.MAX_SAFE_INTEGER);
-
 export const OwnerDashboardInputSchema = z.strictObject({});
 
-export const OwnerDashboardTodaySchema = z.strictObject({
-  performance_income_cents: SafeIntegerSchema,
-  real_income_cents: SafeIntegerSchema,
-  picked_up_garment_count: NonNegativeSafeIntegerSchema,
-  new_receivable_cents: NonNegativeSafeIntegerSchema,
-  new_receivable_order_count: NonNegativeSafeIntegerSchema,
-  overdue_garment_count: NonNegativeSafeIntegerSchema,
-  overdue_order_count: NonNegativeSafeIntegerSchema,
-});
+export const OwnerDashboardTodaySchema = OwnerCardMetricsSchema;
 
 export const OwnerDashboardTrendPointSchema = z.strictObject({
   business_date: BusinessDateSchema,
@@ -94,8 +84,41 @@ export const reportingOwnerDashboardGetQuery: QueryDefinition<OwnerDashboardInpu
   max_result_rows: 30,
 });
 
-export const REPORTING_QUERIES = Object.freeze([reportingOwnerDashboardGetQuery] as const);
-export const REPORTING_QUERY_NAMES = Object.freeze(["reporting.owner_dashboard.get"] as const);
+export const REPORTING_QUERIES = Object.freeze([
+  reportingOwnerDashboardGetQuery,
+  reportingOwnerDashboardDrilldownQuery,
+  reportingOwnerPortfolioGetQuery,
+] as const);
+export const REPORTING_QUERY_NAMES = Object.freeze([
+  "reporting.owner_dashboard.get",
+  "reporting.owner_dashboard.drilldown",
+  "reporting.owner_portfolio.get",
+] as const);
+
+export {
+  OwnerDashboardDrilldownInputSchema,
+  OwnerDashboardDrilldownKindSchema,
+  OwnerDashboardDrilldownResultSchema,
+  OwnerNewReceivableRowSchema,
+  OwnerPortfolioInputSchema,
+  OwnerPortfolioResultSchema,
+  OwnerPortfolioStoreSchema,
+  OwnerPortfolioTotalsSchema,
+  OwnerStagnantGarmentRowSchema,
+  OwnerTodayPickupRowSchema,
+  reportingOwnerDashboardDrilldownQuery,
+  reportingOwnerPortfolioGetQuery,
+} from "./reporting-owner-operations.js";
+export type {
+  OwnerDashboardDrilldownInput,
+  OwnerDashboardDrilldownKind,
+  OwnerDashboardDrilldownResult,
+  OwnerNewReceivableRow,
+  OwnerPortfolioResult,
+  OwnerPortfolioStore,
+  OwnerStagnantGarmentRow,
+  OwnerTodayPickupRow,
+} from "./reporting-owner-operations.js";
 
 export type OwnerDashboardResult = z.output<typeof OwnerDashboardResultSchema>;
 export type OwnerDashboardToday = z.output<typeof OwnerDashboardTodaySchema>;

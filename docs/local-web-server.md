@@ -88,8 +88,9 @@ LAUNDRY_LOCAL_STORE_CODE=main \
 
 局域网模式只提供手机响应式 `/owner` 只读入口。Fastify 仍映射到
 `127.0.0.1:8787`，PostgreSQL 仍映射到 `127.0.0.1:8543`；主机上的 HTTPS 网关只
-代理健康检查、登录、受保护的员工投影和 `reporting.owner_dashboard.get`，不会开放命令、
-照片、PIN 或任意查询路由。
+代理健康检查、登录、受保护的员工投影和三条固定 Owner 查询：
+`reporting.owner_dashboard.get`、`reporting.owner_dashboard.drilldown`、
+`reporting.owner_portfolio.get`；不会开放命令、照片、PIN 或任意其他查询路由。
 
 先人工确认真实物理网卡的 RFC 1918 地址。macOS 可分别查看默认路由和物理接口地址：
 
@@ -100,7 +101,8 @@ ipconfig getifaddr en0
 
 不要选择 `utun*`、Clash Verge TUN 常用的 `198.18.0.0/15`、回环或链路本地地址。网关
 不会自动选网卡，也不会接受 `0.0.0.0`。下面以 `192.168.1.20:8443` 为例；证书必须包含
-该 IP 的 SAN，并已由访问手机/电脑信任，证书和私钥都放在仓库外，私钥权限为 `0600`：
+该 IP 的 SAN，并已由访问手机/电脑信任。证书和私钥都放在仓库外；私钥必须是唯一普通
+文件（拒绝符号链接与硬链接），权限为 `0600`：
 
 ```bash
 export LAUNDRY_LAN_BIND_HOST=192.168.1.20
@@ -126,9 +128,40 @@ pnpm local:lan
 https://192.168.1.20:8443/owner
 ```
 
+在第二台设备接入前，可从同一组 LAN 环境生成不含凭据的连接卡：
+
+```bash
+pnpm local:lan:onboard
+```
+
+终端二维码只编码上面的 `/owner` HTTPS URL，不包含组织、门店、用户名、密码、PIN、
+token 或 Cookie；同时显示叶证书 SHA-256 指纹、IP SAN 和到期时间。若叶证书为自签名
+证书，只把该公开证书作为信任锚传到设备；若由私有 CA 签发，只传签发 CA 的公开证书。
+私钥不得传到手机、浏览器或扫码内容中。
+
+- iPhone/iPad：安装公开证书描述文件后，在「设置 → 通用 → 关于本机 → 证书信任设置」
+  显式启用完全信任；
+- Android：在「安全 → 加密与凭据」安装签发 CA；不同厂商菜单名称可能略有差异；
+- macOS：在「钥匙串访问」导入信任锚并显式设为信任。
+
+安装后重新打开 URL，在登录前核对浏览器显示的叶证书 SHA-256 指纹与连接卡一致。
+工具只提供指导，不会生成、复制或安装任何证书。
+
 证书未被设备信任时不要点击浏览器警告继续。另一台设备应能访问 8443，但连接同一地址的
 8787 和 8543 必须失败。错误 Host、跨站 Origin、`Sec-Fetch-Site` 非 `same-origin` 或
 任何 `Forwarded` / `X-Forwarded-*` 都会被拒绝。
+
+启动本地服务和 HTTPS 网关后，可运行 LAN 专项诊断：
+
+```bash
+pnpm local:lan:diagnose
+```
+
+诊断只输出固定 JSON 摘要：精确 Origin 配置、叶证书有效期/IP SAN/密钥匹配、回环
+Fastify 健康、受信任 HTTPS `/owner` 与 `/health`，以及 LAN 地址上的 8787/8543 是否
+意外可连接。它不读取日志、不发登录请求、不携带 Authorization/Cookie/PIN/CSRF，也不
+输出证书或私钥路径、PEM 内容和底层异常文本。任一检查失败时命令以非零状态退出；该结果
+不替代第二台真实设备与防火墙环境的走查。
 
 自动化验收使用证书公钥的单一 SHA-256 SPKI pin，不启用全局
 `ignoreHTTPSErrors`。在提供 bootstrap 登录环境与 `LAUNDRY_TEST_CERT_SPKI` 后执行：
@@ -290,6 +323,8 @@ reset 只接受默认 `laundry-desk` project，只删除
 | `tools/local/lan-gateway-config.mjs`         | LAN 地址与 TLS 文件失败关闭   |
 | `tools/local/lan-gateway-core.mjs`           | 同源 HTTPS 静态/只读代理      |
 | `tools/local/lan-gateway.mjs`                | Owner Dashboard LAN 入口      |
+| `tools/local/lan-onboard.mjs`                | 无凭据连接 QR 与证书指引      |
+| `tools/local/lan-diagnose.mjs`               | HTTPS/LAN 隔离安全诊断        |
 | `tools/compose/docker-compose.yml`           | loopback-only 服务拓扑        |
 | `apps/server/src/local/profile.ts`           | 通用 `local/main` profile     |
 | `apps/server/src/local/bootstrap.ts`         | profile/schema readiness      |

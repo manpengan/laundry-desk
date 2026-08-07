@@ -54,6 +54,22 @@ test("owner dashboard HTTP is admin-only, strict, and never cacheable", async (t
   assert.equal(accepted.headers["cache-control"], "no-store");
   assert.equal((accepted.json() as { ok?: boolean }).ok, true);
 
+  for (const [name, payload] of [
+    ["reporting.owner_dashboard.drilldown", { kind: "today_pickups" }],
+    ["reporting.owner_portfolio.get", {}],
+  ] as const) {
+    const expanded = await app.inject({
+      method: "POST",
+      url: `/v1/queries/${name}`,
+      headers: { ...browserHeaders, authorization: `Bearer ${admin.access_token}` },
+      payload,
+    });
+    assert.equal(expanded.statusCode, 200, expanded.body);
+    assert.equal(expanded.headers["cache-control"], "no-store");
+    assert.equal((expanded.json() as { ok?: boolean }).ok, true);
+    assert.doesNotMatch(expanded.body, /customer_(?:id|name|phone)|store_id/u);
+  }
+
   const denied = await app.inject({
     method: "POST",
     url: "/v1/queries/reporting.owner_dashboard.get",
@@ -63,6 +79,24 @@ test("owner dashboard HTTP is admin-only, strict, and never cacheable", async (t
   assert.equal(denied.statusCode, 403, denied.body);
   assert.equal(denied.headers["cache-control"], "no-store");
   assert.equal((denied.json() as { error?: { code?: string } }).error?.code, "PERMISSION_DENIED");
+
+  for (const [name, payload] of [
+    ["reporting.owner_dashboard.drilldown", { kind: "today_pickups" }],
+    ["reporting.owner_portfolio.get", {}],
+  ] as const) {
+    const expandedDenied = await app.inject({
+      method: "POST",
+      url: `/v1/queries/${name}`,
+      headers: { ...browserHeaders, authorization: `Bearer ${staff.access_token}` },
+      payload,
+    });
+    assert.equal(expandedDenied.statusCode, 403, expandedDenied.body);
+    assert.equal(expandedDenied.headers["cache-control"], "no-store");
+    assert.equal(
+      (expandedDenied.json() as { error?: { code?: string } }).error?.code,
+      "PERMISSION_DENIED",
+    );
+  }
 
   const forgedScope = await app.inject({
     method: "POST",
@@ -76,6 +110,24 @@ test("owner dashboard HTTP is admin-only, strict, and never cacheable", async (t
     (forgedScope.json() as { error?: { code?: string } }).error?.code,
     "VALIDATION_FAILED",
   );
+
+  for (const [name, payload] of [
+    ["reporting.owner_dashboard.drilldown", { kind: "today_pickups", limit: 1 }],
+    ["reporting.owner_portfolio.get", { store_ids: [] }],
+  ] as const) {
+    const expandedForgedScope = await app.inject({
+      method: "POST",
+      url: `/v1/queries/${name}`,
+      headers: { ...browserHeaders, authorization: `Bearer ${admin.access_token}` },
+      payload,
+    });
+    assert.equal(expandedForgedScope.statusCode, 400, expandedForgedScope.body);
+    assert.equal(expandedForgedScope.headers["cache-control"], "no-store");
+    assert.equal(
+      (expandedForgedScope.json() as { error?: { code?: string } }).error?.code,
+      "VALIDATION_FAILED",
+    );
+  }
 
   for (const payload of [null, [], "unexpected"] as const) {
     const malformed = await app.inject({
@@ -104,6 +156,7 @@ test("owner dashboard transaction failures remain server errors without leaking 
     reporting: Object.freeze({
       ...baseRuntime.reporting,
       source: Object.freeze({
+        ...baseRuntime.reporting.source,
         readOperations: async () => {
           throw new Error(sentinel);
         },

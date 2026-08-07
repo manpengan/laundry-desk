@@ -4,6 +4,9 @@ import { useState } from "react";
 import type { SessionView } from "../auth/types.js";
 import type { QueryPort } from "../commands/types.js";
 import { OwnerDashboardPage } from "./OwnerDashboardPage.js";
+import { OwnerDrilldownPanel } from "./OwnerDrilldownPanel.js";
+import type { OwnerDrilldownKind } from "./owner-operations-model.js";
+import { OwnerPortfolioPanel } from "./OwnerPortfolioPanel.js";
 
 export type OwnerShellProps = Readonly<{
   session: SessionView;
@@ -14,6 +17,7 @@ export type OwnerShellProps = Readonly<{
 export function OwnerShell({ session, queryClient, onLogout }: OwnerShellProps) {
   const allowed = session.role === "admin";
   const [loggingOut, setLoggingOut] = useState(false);
+  const [drilldownKind, setDrilldownKind] = useState<OwnerDrilldownKind | null>(null);
   const logout = async (): Promise<void> => {
     if (loggingOut) return;
     setLoggingOut(true);
@@ -48,7 +52,15 @@ export function OwnerShell({ session, queryClient, onLogout }: OwnerShellProps) 
       </header>
       <main className="ld-owner-main" id="owner-main" tabIndex={-1}>
         {allowed ? (
-          <OwnerDashboardPage queryClient={queryClient} />
+          <>
+            <OwnerDashboardPage queryClient={queryClient} onOpenDrilldown={setDrilldownKind} />
+            <OwnerDrilldownPanel
+              queryClient={queryClient}
+              kind={drilldownKind}
+              onClose={() => setDrilldownKind(null)}
+            />
+            <OwnerPortfolioPanel queryClient={queryClient} />
+          </>
         ) : (
           <section className="ld-owner-denied lg-card" role="alert">
             <EmptyState

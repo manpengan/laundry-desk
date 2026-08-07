@@ -448,6 +448,8 @@ test("registers the guarded local lifecycle in default workspace gates", async (
   assert.equal(rootPackage.scripts["local:up"], "node tools/local/up.mjs");
   assert.equal(rootPackage.scripts["local:down"], "node tools/local/down.mjs");
   assert.equal(rootPackage.scripts["local:reset"], "node tools/local/reset.mjs");
+  assert.equal(rootPackage.scripts["local:lan:onboard"], "node tools/local/lan-onboard.mjs");
+  assert.equal(rootPackage.scripts["local:lan:diagnose"], "node tools/local/lan-diagnose.mjs");
   assert.match(rootPackage.scripts["workspace:test"], /tools\/local\/\*\.test\.mjs/u);
   assert.match(rootPackage.scripts["workspace:format:check"], /tools\/local/u);
   assert.match(rootPackage.scripts["workspace:format:check"], /tools\/compose/u);

@@ -125,10 +125,17 @@ async function withContext<T>(
   return withStoreGucOrCurrent(pool, context.tenant, run);
 }
 
-async function selectById(client: SqlClient, proofId: string): Promise<StepUpProof | null> {
+async function selectById(
+  client: SqlClient,
+  tenant: TenantContext,
+  proofId: string,
+): Promise<StepUpProof | null> {
   const result = await client.query<StepUpProofRow>(
-    `SELECT ${SELECT_COLUMNS} FROM step_up_proofs WHERE proof_id = $1::uuid`,
-    [proofId],
+    `SELECT ${SELECT_COLUMNS}
+     FROM step_up_proofs
+     WHERE org_id = $1::uuid AND store_id = $2::uuid
+       AND proof_id = $3::uuid`,
+    [tenant.orgId, tenant.storeId, proofId],
   );
   return result.rows[0] === undefined ? null : proofFromRow(result.rows[0]);
 }
@@ -174,7 +181,7 @@ export function createPgStepUpProofStore(pool: PgPool): StepUpProofStore {
 
     get: async (proofId, untrustedContext) => {
       const context = requireContext(untrustedContext);
-      return withContext(pool, context, (client) => selectById(client, proofId));
+      return withContext(pool, context, (client) => selectById(client, context.tenant, proofId));
     },
 
     findActiveByPendingRef: async (pendingActionRef, untrustedContext) => {

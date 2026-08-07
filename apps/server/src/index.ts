@@ -355,7 +355,10 @@ export type {
 export {
   OWNER_DASHBOARD_OVERDUE_DAYS,
   OWNER_DASHBOARD_TREND_DAYS,
+  buildOwnerCardMetrics,
   buildOwnerDashboardResult,
+  buildOwnerDrilldownResult,
+  buildOwnerPortfolioResult,
   createMemoryOwnerDashboardSource,
   createMemoryReportingDeps,
   createPgOwnerDashboardSource,
@@ -365,8 +368,13 @@ export {
 } from "./reporting/index.js";
 export type {
   OwnerDashboardOperations,
+  OwnerDashboardDrilldownReadRequest,
+  OwnerDashboardDrilldownSnapshot,
   OwnerDashboardReadPort,
   OwnerDashboardReadRequest,
+  OwnerPortfolioStoreCandidate,
+  OwnerPortfolioStoreScopeRequest,
+  OwnerPortfolioStoreSnapshot,
   ReportingHandlerDeps,
 } from "./reporting/index.js";
 

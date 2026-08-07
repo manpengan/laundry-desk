@@ -19,6 +19,6 @@ test(
         maxBuffer: 2 * 1024 * 1024,
       },
     );
-    assert.match(stdout, /RUNTIME_NATIVE_NO_REPO_ACCEPTANCE_OK scenarios=14/u);
+    assert.match(stdout, /RUNTIME_NATIVE_NO_REPO_ACCEPTANCE_OK scenarios=30 manifest_negatives=5/u);
   },
 );

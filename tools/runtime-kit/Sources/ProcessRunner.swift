@@ -13,13 +13,34 @@ struct RuntimeCommandResult {
   let stderr: String
 }
 
+struct RuntimeStreamInput {
+  let url: URL
+  let size: Int64
+  let sha256: String
+}
+
+struct RuntimeStreamOutput {
+  let url: URL
+  let maximumBytes: Int64
+}
+
+struct RuntimeStreamSpec {
+  let input: RuntimeStreamInput?
+  let output: RuntimeStreamOutput?
+  let discardOutput: Bool
+  let timeoutSeconds: Int
+}
+
 protocol RuntimeRunner: AnyObject {
   var dockerPath: String { get }
   func setManifest(_ payload: RuntimeManifestPayload)
   func run(_ spec: RuntimeCommandSpec, accepting: Set<Int32>) throws -> RuntimeCommandResult
+  func runStreaming(
+    _ spec: RuntimeCommandSpec, stream: RuntimeStreamSpec, accepting: Set<Int32>
+  ) throws -> RuntimeCommandResult
 }
 
-private final class CaptureBuffer: @unchecked Sendable {
+final class CaptureBuffer: @unchecked Sendable {
   private let lock = NSLock()
   private var bytes = Data()
   private var exceeded = false
@@ -48,10 +69,10 @@ private final class CaptureBuffer: @unchecked Sendable {
 
 final class SystemRuntimeRunner: RuntimeRunner {
   let dockerPath: String
-  private let allowedExecutables: Set<String>
-  private static let maximumCapture = 16_384
-  private static let timeoutSeconds = 120
-  private static let environmentKeys: Set<String> = [
+  let allowedExecutables: Set<String>
+  static let maximumCapture = 16_384
+  static let timeoutSeconds = 120
+  static let environmentKeys: Set<String> = [
     "LAUNDRY_RUNTIME_CONFIG_ROOT", "LAUNDRY_RUNTIME_INSTANCE_ID",
     "LAUNDRY_RUNTIME_SERVER_IMAGE", "LAUNDRY_RUNTIME_POSTGRES_IMAGE",
     "LAUNDRY_RUNTIME_RELEASE", "LAUNDRY_RUNTIME_CONTRACTS_SHA256",
@@ -73,11 +94,14 @@ final class SystemRuntimeRunner: RuntimeRunner {
 
   func setManifest(_ payload: RuntimeManifestPayload) { _ = payload }
 
-  func run(_ spec: RuntimeCommandSpec, accepting: Set<Int32>) throws -> RuntimeCommandResult {
+  func validate(_ spec: RuntimeCommandSpec) throws {
     guard allowedExecutables.contains(spec.executable), spec.arguments.count <= 64,
       spec.arguments.allSatisfy({ !$0.contains("\0") }),
       Set(spec.environment.keys).isSubset(of: Self.environmentKeys)
     else { try runtimeFail("RUNTIME_COMMAND_FORBIDDEN") }
+  }
+
+  func configuredProcess(_ spec: RuntimeCommandSpec) -> Process {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: spec.executable)
     process.arguments = spec.arguments
@@ -90,6 +114,20 @@ final class SystemRuntimeRunner: RuntimeRunner {
       "PATH": fixedPath,
       "HOME": FileManager.default.homeDirectoryForCurrentUser.path,
     ]) { current, _ in current }
+    return process
+  }
+
+  func terminate(_ process: Process, completed: DispatchSemaphore) {
+    process.terminate()
+    if completed.wait(timeout: .now() + .seconds(5)) == .timedOut {
+      Darwin.kill(process.processIdentifier, SIGKILL)
+      _ = completed.wait(timeout: .now() + .seconds(5))
+    }
+  }
+
+  func run(_ spec: RuntimeCommandSpec, accepting: Set<Int32>) throws -> RuntimeCommandResult {
+    try validate(spec)
+    let process = configuredProcess(spec)
     let output = Pipe()
     let error = Pipe()
     process.standardOutput = output
@@ -111,11 +149,7 @@ final class SystemRuntimeRunner: RuntimeRunner {
     process.terminationHandler = { _ in completed.signal() }
     do { try process.run() } catch { try runtimeFail("RUNTIME_COMMAND_FAILED") }
     if completed.wait(timeout: .now() + .seconds(Self.timeoutSeconds)) == .timedOut {
-      process.terminate()
-      if completed.wait(timeout: .now() + .seconds(5)) == .timedOut {
-        Darwin.kill(process.processIdentifier, SIGKILL)
-        _ = completed.wait(timeout: .now() + .seconds(5))
-      }
+      terminate(process, completed: completed)
       group.wait()
       try runtimeFail("RUNTIME_COMMAND_TIMEOUT")
     }

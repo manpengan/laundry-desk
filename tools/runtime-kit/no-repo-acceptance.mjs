@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash, createPrivateKey, sign } from "node:crypto";
 import {
+  chmod,
   cp,
   link,
   mkdir,
@@ -93,6 +94,19 @@ const execute = (configRoot, runnerLog, args, input = "") =>
     });
     child.stdin.end(input);
   });
+
+const waitForFile = async (path) => {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
+    try {
+      await stat(path);
+      return;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+    }
+  }
+  throw new Error(`timed out waiting for ${path}`);
+};
 
 const setup = JSON.stringify({
   adminUsername: "owner",
@@ -227,8 +241,201 @@ assert.deepEqual((await readdir(join(primaryRoot, "secrets"))).sort(), [
   "postgres-password",
 ]);
 
+result = await execute(primaryRoot, primaryLog, ["backup", "list"]);
+assert.equal(result.code, 0, result.stderr);
+assert.deepEqual(JSON.parse(result.stdout).backups, []);
+result = await execute(primaryRoot, primaryLog, ["backup", "create"]);
+assert.equal(result.code, 0, result.stderr);
+const manualBackup = JSON.parse(result.stdout);
+assert.equal(manualBackup.kind, "manual");
+assert.equal(manualBackup.verified, true);
+assert.match(manualBackup.backup_id, /^manual-\d{8}T\d{6}Z-[A-Za-z0-9_-]{22}$/u);
+assert.match(manualBackup.confirmation, /^RESTORE-[0-9A-F]{12}$/u);
+const backupRoot = join(primaryRoot, "backups");
+const manualRoot = join(backupRoot, manualBackup.backup_id);
+const databaseBackup = join(manualRoot, "database.dump");
+const photoBackup = join(manualRoot, "photos.tar");
+const backupManifest = join(manualRoot, "manifest.json");
+for (const path of [primaryRoot, backupRoot, manualRoot]) {
+  assert.equal((await stat(path)).mode & 0o777, 0o700);
+}
+for (const path of [databaseBackup, photoBackup, backupManifest]) {
+  assert.equal((await stat(path)).mode & 0o777, 0o600);
+}
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["backup", "verify"],
+  JSON.stringify({ backup_id: manualBackup.backup_id }),
+);
+assert.equal(result.code, 0, result.stderr);
+assert.equal(JSON.parse(result.stdout).manifest_sha256, manualBackup.manifest_sha256);
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["backup", "verify"],
+  JSON.stringify({ backup_id: "../../outside" }),
+);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_BACKUP_STDIN_INVALID/u);
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["backup", "verify"],
+  JSON.stringify({ backup_id: manualBackup.backup_id, path: databaseBackup }),
+);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_BACKUP_STDIN_INVALID/u);
+
+const originalDatabaseBackup = await readFile(databaseBackup);
+await writeFile(databaseBackup, "corrupt", { mode: 0o600 });
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["backup", "verify"],
+  JSON.stringify({ backup_id: manualBackup.backup_id }),
+);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_BACKUP_INVALID/u);
+await writeFile(databaseBackup, originalDatabaseBackup, { mode: 0o600 });
+
+const outsideHardlink = join(temporary, "database-hardlink");
+await link(databaseBackup, outsideHardlink);
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["backup", "verify"],
+  JSON.stringify({ backup_id: manualBackup.backup_id }),
+);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_BACKUP_INVALID/u);
+await unlink(outsideHardlink);
+
+await chmod(photoBackup, 0o644);
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["backup", "verify"],
+  JSON.stringify({ backup_id: manualBackup.backup_id }),
+);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_BACKUP_INVALID/u);
+await chmod(photoBackup, 0o600);
+
+const originalBackupManifest = await readFile(backupManifest);
+const manifestWithUnknownField = {
+  ...JSON.parse(originalBackupManifest.toString("utf8")),
+  external_path: "/tmp/forbidden",
+};
+await writeFile(backupManifest, JSON.stringify(manifestWithUnknownField), { mode: 0o600 });
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["backup", "verify"],
+  JSON.stringify({ backup_id: manualBackup.backup_id }),
+);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_BACKUP_INVALID/u);
+await writeFile(backupManifest, originalBackupManifest, { mode: 0o600 });
+
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["backup", "restore"],
+  JSON.stringify({ backup_id: manualBackup.backup_id, confirmation: "RESTORE-000000000000" }),
+);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_RESTORE_CONFIRMATION_INVALID/u);
+assert.deepEqual((await readdir(backupRoot)).sort(), [manualBackup.backup_id]);
+
+await writeFile(`${primaryLog}.fake-database`, "database-mutated-before-restore", { mode: 0o600 });
+await writeFile(`${primaryLog}.fake-photos`, "photos-mutated-before-restore", { mode: 0o600 });
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["backup", "restore"],
+  JSON.stringify({
+    backup_id: manualBackup.backup_id,
+    confirmation: manualBackup.confirmation,
+  }),
+);
+assert.equal(result.code, 0, result.stderr);
+const successfulRestore = JSON.parse(result.stdout);
+assert.equal(successfulRestore.backup_id, manualBackup.backup_id);
+assert.match(successfulRestore.safety_backup_id, /^safety-/u);
+assert.equal(
+  await readFile(`${primaryLog}.restored-database`, "utf8"),
+  "fake-postgres-custom-dump-v1",
+);
+assert.equal(await readFile(`${primaryLog}.restored-photos`, "utf8"), "fake-photo-tar-v1");
+result = await execute(primaryRoot, primaryLog, ["backup", "list"]);
+assert.equal(result.code, 0, result.stderr);
+let listedBackups = JSON.parse(result.stdout).backups;
+assert.equal(listedBackups.length, 2);
+assert.equal(
+  listedBackups.find((entry) => entry.backup_id === successfulRestore.safety_backup_id).kind,
+  "pre_restore",
+);
+
+await writeFile(`${primaryLog}.fake-database`, "database-before-failed-restore", { mode: 0o600 });
+await writeFile(`${primaryLog}.fake-photos`, "photos-before-failed-restore", { mode: 0o600 });
+const logCountBeforeFailure = (await readFile(primaryLog, "utf8")).trim().split("\n").length;
+await writeFile(`${primaryLog}.fail-once`, "--clean", { mode: 0o600 });
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["backup", "restore"],
+  JSON.stringify({
+    backup_id: manualBackup.backup_id,
+    confirmation: manualBackup.confirmation,
+  }),
+);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_COMMAND_FAILED/u);
+const failureCommands = (await readFile(primaryLog, "utf8"))
+  .trim()
+  .split("\n")
+  .slice(logCountBeforeFailure)
+  .map((line) => JSON.parse(line));
+assert.ok(failureCommands.some((entry) => entry.arguments.includes("--clean")));
+const restoreFailureIndex = failureCommands.findIndex((entry) =>
+  entry.arguments.includes("--clean"),
+);
+assert.equal(
+  failureCommands
+    .slice(restoreFailureIndex + 1)
+    .some((entry) => entry.arguments.includes("server")),
+  false,
+);
+result = await execute(primaryRoot, primaryLog, ["backup", "list"]);
+assert.equal(result.code, 0, result.stderr);
+listedBackups = JSON.parse(result.stdout).backups;
+assert.equal(listedBackups.length, 3);
+assert.equal(listedBackups.filter((entry) => entry.kind === "pre_restore").length, 2);
+
+await writeFile(`${primaryLog}.pause-once`, "pg_dump", { mode: 0o600 });
+const concurrentBackup = execute(primaryRoot, primaryLog, ["backup", "create"]);
+await waitForFile(`${primaryLog}.paused`);
+result = await execute(primaryRoot, primaryLog, ["backup", "list"]);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_MAINTENANCE_BUSY/u);
+result = await execute(primaryRoot, primaryLog, ["start"]);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_MAINTENANCE_BUSY/u);
+await writeFile(`${primaryLog}.continue`, "continue\n", { mode: 0o600 });
+result = await concurrentBackup;
+assert.equal(result.code, 0, result.stderr);
+assert.equal((await stat(join(primaryRoot, ".maintenance.lock"))).mode & 0o777, 0o600);
+
+result = await execute(primaryRoot, primaryLog, ["backup", "restore"], "x".repeat(513));
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_BACKUP_STDIN_INVALID/u);
+
 const runnerText = await readFile(primaryLog, "utf8");
-assert.doesNotMatch(runnerText, /native-acceptance-password|86420987|node|pnpm/u);
+assert.doesNotMatch(
+  runnerText,
+  /native-acceptance-password|86420987|RESTORE-[0-9A-F]{12}|\.dump|\.tar|backup_id|pnpm/u,
+);
 
 const statePath = join(primaryRoot, "state.json");
 const hardlinkPath = join(primaryRoot, "state-hardlink");
@@ -278,4 +485,4 @@ assert.match(result.stderr, /RUNTIME_SETUP_STDIN_INVALID/u);
 await assert.rejects(() => stat(oversizedRoot), { code: "ENOENT" });
 
 await rm(privateKeyPath, { force: true });
-process.stdout.write("RUNTIME_NATIVE_NO_REPO_ACCEPTANCE_OK scenarios=14 manifest_negatives=5\n");
+process.stdout.write("RUNTIME_NATIVE_NO_REPO_ACCEPTANCE_OK scenarios=30 manifest_negatives=5\n");
