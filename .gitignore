@@ -21,6 +21,13 @@ playwright-report/
 blob-report/
 coverage/
 
+# agent worktrees
+# Linked worktrees created under the repo (.claude/worktrees/<name>) otherwise
+# show up as untracked in every OTHER checkout sharing this .git — including the
+# one an agent is mid-change in. A broad `git add -A` there would sweep another
+# session's worktree into an unrelated commit.
+.claude/worktrees/
+
 # packaged binaries
 *.exe
 *.dmg
