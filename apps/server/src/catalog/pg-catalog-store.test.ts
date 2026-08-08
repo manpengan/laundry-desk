@@ -1,5 +1,11 @@
 /**
- * Unit tests for createPgCatalogStore with a capturing mock pool.
+ * Unit tests for createPgCatalogStore row mapping.
+ *
+ * listAll's real behaviour — that a fresh install reads an empty price list,
+ * that retired items drop out, and that nothing is auto-seeded — is proven on a
+ * real database in pg-catalog-upsert.test.ts, which drives the same store
+ * through the command bus. What is left here is the mapping the store itself
+ * performs, which needs no database.
  */
 
 import assert from "node:assert/strict";
@@ -50,16 +56,11 @@ function createCapturingPool(handler?: MockQueryHandler): {
   return { pool, queries };
 }
 
-test("listAll returns an empty catalog without executing an INSERT", async () => {
-  const { pool, queries } = createCapturingPool((sql) => {
-    if (sql.includes("set_config") || sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
-      return { rows: [], rowCount: 0 };
-    }
-    if (sql.includes("FROM catalog_items") && sql.includes("is_active")) {
-      return { rows: [], rowCount: 0 };
-    }
-    return { rows: [], rowCount: 0 };
-  });
+// Reading a price list must never write one. This is a property of the store's
+// own statements, so it holds regardless of what the database would return —
+// the mock answers unconditionally rather than keying off the SQL text.
+test("listAll never issues a write, empty or not", async () => {
+  const { pool, queries } = createCapturingPool(() => ({ rows: [], rowCount: 0 }));
 
   const store = createPgCatalogStore(pool, {
     orgId: DEMO_ORG_ID,
@@ -68,31 +69,28 @@ test("listAll returns an empty catalog without executing an INSERT", async () =>
 
   const items = await store.listAll();
   assert.deepEqual(items, []);
-  assert.equal(queries.filter((query) => /\bINSERT\b/iu.test(query.sql)).length, 0);
-  assert.ok(queries.some((q) => q.sql.includes("set_config")));
+  assert.equal(queries.filter((query) => /\b(INSERT|UPDATE|DELETE)\b/iu.test(query.sql)).length, 0);
+  assert.ok(queries.some((query) => query.params?.includes(DEMO_STORE_ID)));
 });
 
-test("listAll returns existing active rows without executing an INSERT", async () => {
+test("listAll maps a row onto the catalog item shape", async () => {
   const { pool, queries } = createCapturingPool((sql) => {
     if (sql.includes("set_config") || sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
       return { rows: [], rowCount: 0 };
     }
-    if (sql.includes("FROM catalog_items") && sql.includes("is_active")) {
-      return {
-        rows: [
-          {
-            code: "custom_item",
-            name: "定制",
-            service_code: "wash",
-            category_code: "shirt",
-            unit_price_cents: 100,
-            mnemonic: null,
-          },
-        ],
-        rowCount: 1,
-      };
-    }
-    return { rows: [], rowCount: 0 };
+    return {
+      rows: [
+        {
+          code: "custom_item",
+          name: "定制",
+          service_code: "wash",
+          category_code: "shirt",
+          unit_price_cents: 100,
+          mnemonic: null,
+        },
+      ],
+      rowCount: 1,
+    };
   });
 
   const store = createPgCatalogStore(pool, {
@@ -103,6 +101,8 @@ test("listAll returns existing active rows without executing an INSERT", async (
   const items = await store.listAll();
   assert.equal(items.length, 1);
   assert.equal(items[0]?.code, "custom_item");
+  assert.equal(items[0]?.name, "定制");
+  assert.equal(items[0]?.unit_price_cents, 100);
   assert.equal(items[0]?.mnemonic, undefined);
   assert.equal(queries.filter((query) => /\bINSERT\b/iu.test(query.sql)).length, 0);
 });
