@@ -28,12 +28,19 @@ const sourceAllowlist = Object.freeze([
   "Sources/RuntimeGUI.swift",
   "Sources/RuntimeModels.swift",
   "Sources/RuntimeStorage.swift",
+  "Sources/RuntimeUpgradeController.swift",
+  "Sources/RuntimeUpgradeModels.swift",
   "Sources/StreamingRunner.swift",
   "Sources/main.swift",
   "build-app.mjs",
+  "generate-manifest.mjs",
+  "generate-manifest.test.mjs",
   "inspect-app.mjs",
   "no-repo-acceptance.mjs",
   "real-container-acceptance.mjs",
+  "release-app.mjs",
+  "release-app.test.mjs",
+  "release-artifacts.mjs",
 ]);
 
 const sourceFiles = async (directory) => {
@@ -68,4 +75,21 @@ test("runtime kit source allowlist excludes generated apps, binaries, and privat
     tracked.stdout,
     /(?:^|\/)(?:build|dist)\/|\.(?:app|dylib|pem|p12|key)(?:\n|$)/u,
   );
+});
+
+test("runtime release transactions use one verified snapshot and one previous-manifest read", async () => {
+  const controller = await readFile(
+    join(kitRoot, "Sources", "RuntimeUpgradeController.swift"),
+    "utf8",
+  );
+  assert.equal(controller.match(/let snapshot = try loadSnapshot\(\)/gu)?.length, 2);
+  assert.equal(
+    controller.match(/RuntimeStorage\.readPrivate\(paths\.previousManifest\)/gu)?.length,
+    2,
+  );
+  assert.doesNotMatch(
+    controller,
+    /RuntimeManifestVerifier\.sha256\(\s*try RuntimeStorage\.readPrivate/u,
+  );
+  assert.match(controller, /_ = try validatedTransition\(prepared\)/u);
 });

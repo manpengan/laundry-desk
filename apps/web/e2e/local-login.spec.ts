@@ -109,6 +109,31 @@ test("generic local administrator login reaches the counter shell", async ({ pag
   });
 });
 
+test("a rejected login clears the password before rendering an error artifact", async ({
+  page,
+}) => {
+  await page.route("**/api/v2/auth/login", async (route) => {
+    await route.fulfill({
+      status: 429,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ok: false,
+        error: { code: "RATE_LIMITED", message: "登录尝试过多，请稍后再试" },
+      }),
+    });
+  });
+  await page.goto(WEB);
+  await page.locator('input[name="org_code"]').fill(LOGIN.orgCode);
+  await page.locator('input[name="store_code"]').fill(LOGIN.storeCode);
+  await page.locator('input[name="username"]').fill(LOGIN.username);
+  await page.locator('input[name="password"]').fill("artifact-redaction-sentinel");
+
+  await page.getByRole("button", { name: "登录" }).click();
+
+  await expect(page.getByRole("alert")).toContainText("登录尝试过多");
+  await expect(page.locator('input[name="password"]')).toHaveValue("");
+});
+
 test("an administrator can quick-switch to a fixture staff member with PIN", async ({ page }) => {
   await page.goto(WEB);
   await page.locator('input[name="org_code"]').fill(LOGIN.orgCode);

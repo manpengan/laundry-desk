@@ -5,7 +5,7 @@ afterPack: ./scripts/prune-packaged-spa.mjs
 forceCodeSigning: true
 
 directories:
-  output: release
+  output: ${env.LAUNDRY_RELEASE_OUTPUT_DIRECTORY}
 
 files:
   - dist/main.js
@@ -62,6 +62,7 @@ files:
   - dist/pairing/verify-ticket.js
   - dist/lease/primary-lease.js
   - dist/offline/authority-session.js
+  - dist/offline/authority-provision.js
   - dist/offline/conflict-store.js
   - dist/offline/grant-sequence-store.js
   - dist/offline/offline-command-policy.js
@@ -72,6 +73,7 @@ files:
   - dist/offline/runtime.js
   - dist/offline/service.js
   - dist/upgrade/release-manifest.js
+  - dist/upgrade/update-config.js
   - dist/upgrade/runtime-controller.js
   - dist/upgrade/runtime-io.js
   - dist/upgrade/runtime-state.js
@@ -105,13 +107,20 @@ extraResources:
     to: spa
     filter:
       - "**/*"
-  - from: build/release/update-public-key.pem
+  - from: ${env.LAUNDRY_RELEASE_UPDATE_PUBLIC_KEY_FILE}
     to: update/update-public-key.pem
+  - from: ${env.LAUNDRY_RELEASE_UPDATE_CONFIG_FILE}
+    to: update/update-config.json
 
 mac:
   target:
-    - dmg
-    - zip
+    - target: dmg
+      arch:
+        - universal
+    - target: zip
+      arch:
+        - universal
+  artifactName: "${productName}-${version}-${arch}.${ext}"
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist

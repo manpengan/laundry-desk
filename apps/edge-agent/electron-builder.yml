@@ -61,6 +61,7 @@ files:
   - dist/pairing/verify-ticket.js
   - dist/lease/primary-lease.js
   - dist/offline/authority-session.js
+  - dist/offline/authority-provision.js
   - dist/offline/conflict-store.js
   - dist/offline/grant-sequence-store.js
   - dist/offline/offline-command-policy.js
@@ -71,6 +72,7 @@ files:
   - dist/offline/runtime.js
   - dist/offline/service.js
   - dist/upgrade/release-manifest.js
+  - dist/upgrade/update-config.js
   - dist/upgrade/runtime-controller.js
   - dist/upgrade/runtime-io.js
   - dist/upgrade/runtime-state.js
@@ -104,6 +106,8 @@ extraResources:
     to: spa
     filter:
       - "**/*"
+  - from: resources/update/update-config.development.json
+    to: update/update-config.json
 
 mac:
   target: dir

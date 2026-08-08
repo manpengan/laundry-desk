@@ -47,6 +47,20 @@ export function authorityMatchesSession(
   );
 }
 
+export function authorityCanRebindSession(
+  binding: AuthoritySessionBinding,
+  session: DesktopSessionView,
+): boolean {
+  return (
+    binding.orgId === session.session.org_id &&
+    binding.storeId === session.session.store_id &&
+    binding.staffId === session.session.staff_id &&
+    binding.deviceId === session.session.device_id &&
+    binding.permissionVersion === session.session.permission_version &&
+    binding.role === session.role
+  );
+}
+
 export function bindReadAuthoritySession(
   session: DesktopSessionView,
   data: EdgeAuthorityData,

@@ -3,6 +3,8 @@ import Foundation
 enum RuntimeBackupKind: String, Codable {
   case manual
   case preRestore = "pre_restore"
+  case preUpgrade = "pre_upgrade"
+  case preRollback = "pre_rollback"
 }
 
 struct RuntimeBackupFile: Codable, Equatable {

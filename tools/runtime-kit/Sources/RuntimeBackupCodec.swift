@@ -36,7 +36,7 @@ enum RuntimeBackupCodec {
       let value = try? JSONDecoder().decode(RuntimeBackupManifest.self, from: data),
       value.version == 1, value.backupID == expectedBackupID,
       validBackupID(value.backupID),
-      [RuntimeBackupKind.manual, .preRestore].contains(value.kind),
+      [RuntimeBackupKind.manual, .preRestore, .preUpgrade, .preRollback].contains(value.kind),
       value.createdAt.range(of: timestampPattern, options: .regularExpression) != nil,
       ISO8601DateFormatter().date(from: value.createdAt) != nil,
       value.instanceID.range(

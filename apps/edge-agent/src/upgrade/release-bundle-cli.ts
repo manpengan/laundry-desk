@@ -1,31 +1,47 @@
-import { readFile } from "node:fs/promises";
-import { dirname, isAbsolute, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { isAbsolute, resolve } from "node:path";
 
-import { buildSignedReleaseBundle } from "./release-bundle.js";
+import { buildSignedReleaseBundle, verifySignedReleaseBundle } from "./release-bundle.js";
+
+function canonicalEnvironmentPath(value: string | undefined): string | null {
+  return value !== undefined && isAbsolute(value) && resolve(value) === value ? value : null;
+}
 
 async function main(): Promise<void> {
-  const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-  const releaseDirectory = join(packageRoot, "release");
-  const privateKeyPath = process.env.LAUNDRY_UPDATE_PRIVATE_KEY_FILE;
-  const policyPath = process.env.LAUNDRY_RELEASE_POLICY_FILE;
-  if (
-    privateKeyPath === undefined ||
-    policyPath === undefined ||
-    !isAbsolute(privateKeyPath) ||
-    !isAbsolute(policyPath)
-  ) {
-    throw new Error("release key and policy must be provided as absolute environment paths");
+  const releaseDirectory = canonicalEnvironmentPath(process.env.LAUNDRY_RELEASE_DIRECTORY);
+  const descriptorText = process.env.LAUNDRY_RELEASE_INPUT_DESCRIPTOR;
+  if (releaseDirectory === null || descriptorText === undefined || descriptorText.length > 16_384) {
+    throw new Error("release directory and immutable input descriptor are required");
   }
-  const packageJson = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")) as {
-    version?: unknown;
-  };
-  if (typeof packageJson.version !== "string") throw new Error("package version is unavailable");
+  const descriptor = JSON.parse(descriptorText) as unknown;
+  const publicKeyPath = canonicalEnvironmentPath(
+    process.env.LAUNDRY_RELEASE_VERIFY_PUBLIC_KEY_FILE,
+  );
+  const updateConfigPath = canonicalEnvironmentPath(
+    process.env.LAUNDRY_RELEASE_VERIFY_UPDATE_CONFIG_FILE,
+  );
+  if (publicKeyPath !== null || updateConfigPath !== null) {
+    if (publicKeyPath === null || updateConfigPath === null) {
+      throw new Error("release verification inputs must be complete");
+    }
+    await verifySignedReleaseBundle({
+      releaseDirectory,
+      publicKeyPath,
+      updateConfigPath,
+      descriptor,
+    });
+    process.stdout.write('{"ok":true,"verified":true}\n');
+    return;
+  }
+  const privateKeyPath = canonicalEnvironmentPath(process.env.LAUNDRY_UPDATE_PRIVATE_KEY_FILE);
+  const policyPath = canonicalEnvironmentPath(process.env.LAUNDRY_RELEASE_POLICY_FILE);
+  if (privateKeyPath === null || policyPath === null) {
+    throw new Error("release signing inputs must be canonical absolute paths");
+  }
   const result = await buildSignedReleaseBundle({
     releaseDirectory,
-    version: packageJson.version,
     privateKeyPath,
     policyPath,
+    descriptor,
   });
   process.stdout.write(
     `${JSON.stringify({

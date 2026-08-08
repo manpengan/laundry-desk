@@ -39,6 +39,19 @@ enum RuntimeCLI {
     return value
   }
 
+  private static func rollbackRequest(_ data: Data) throws -> RuntimeRollbackRequest {
+    guard !data.isEmpty, data.count <= 256,
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      Set(object.keys) == ["confirmation"],
+      let value = try? JSONDecoder().decode(RuntimeRollbackRequest.self, from: data),
+      value.confirmation.hasPrefix("ROLLBACK-"),
+      (try? RuntimeManifestVerifier.compareVersions(
+        String(value.confirmation.dropFirst("ROLLBACK-".count)),
+        String(value.confirmation.dropFirst("ROLLBACK-".count)))) == 0
+    else { try runtimeFail("RUNTIME_ROLLBACK_STDIN_INVALID") }
+    return value
+  }
+
   private static func encoded<T: Encodable>(_ value: T) throws -> String {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -70,6 +83,15 @@ enum RuntimeCLI {
     if command == "recover" {
       let release = try controller.recover(manifestURL: manifestURL(arguments, command: command))
       return try output("ready", release: release)
+    }
+    if command == "upgrade" {
+      guard stdin.isEmpty else { try runtimeFail("RUNTIME_ARGS_INVALID") }
+      return try encoded(
+        controller.upgrade(manifestURL: manifestURL(arguments, command: command)))
+    }
+    if command == "rollback" {
+      guard arguments.count == 1 else { try runtimeFail("RUNTIME_ARGS_INVALID") }
+      return try encoded(controller.rollback(rollbackRequest(stdin)))
     }
     if command == "backup" {
       guard arguments.count == 2 else { try runtimeFail("RUNTIME_ARGS_INVALID") }

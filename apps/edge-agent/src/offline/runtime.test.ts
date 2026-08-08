@@ -322,6 +322,63 @@ test("authority refresh subtracts the measured round trip from the lease lifetim
   }
 });
 
+test("an admin acquires an ordinary grant before best-effort Primary authority", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-offline-runtime-"));
+  const authorityRequests: boolean[] = [];
+  try {
+    const queue = new PersistentEncryptedQueue({
+      kekStore: new SafeStorageKekStore(root, safeStorage),
+      store: new FileQueueStore(root),
+    });
+    const adminSession = DesktopSessionViewSchema.parse({ ...session, role: "admin" });
+    const runtime = new OfflineCommandRuntime({
+      queue,
+      conflicts: new OfflineConflictStore(root),
+      grantSequences: new FileGrantSequenceStore(root),
+      transport: {
+        edge: {
+          authority: async (requestNonce, requestPrimary) => {
+            authorityRequests.push(requestPrimary);
+            if (requestPrimary) {
+              return {
+                ok: false,
+                error: createCommandError("RESOURCE_UNAVAILABLE"),
+              };
+            }
+            return {
+              ok: true,
+              data: authorityData({ requestNonce, primaryLease: false }),
+            };
+          },
+          replay: async () =>
+            DesktopCommandExecuteResultSchema.parse({
+              ok: false,
+              error: createCommandError("RESOURCE_UNAVAILABLE"),
+            }),
+        },
+      },
+      authorityTrust: new MemoryAuthorityTrustStore(),
+      clock: Object.freeze({
+        nowMs: () => 100,
+        continuity: () => "trusted" as const,
+      }),
+    });
+
+    assert.equal(await runtime.refreshAuthority(adminSession), true);
+    assert.equal(await runtime.refreshAuthority(adminSession), false);
+    assert.deepEqual(authorityRequests, [false, true]);
+
+    const queuedCustomer = await runtime.queueCommand({
+      name: "customer.upsert",
+      body: { phone: "13800000000", name: "Offline Customer" },
+    });
+    assert.equal(queuedCustomer.ok, true);
+    assert.equal(queue.status().pendingCount, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("authority refresh never reuses an active lease across a session authority change", async () => {
   const root = await mkdtemp(join(tmpdir(), "laundry-offline-runtime-"));
   let authorityCalls = 0;
@@ -406,7 +463,7 @@ test("grant-only authority enables exactly the six contract grant commands but n
     });
 
     assert.equal(await runtime.refreshAuthority(adminSession), true);
-    assert.equal(requestedPrimary, true);
+    assert.equal(requestedPrimary, false);
     assert.equal(
       runtime.exportReadAuthority(adminSession)?.offlineGrant.payload.grant_id,
       GRANT_ID,
@@ -677,15 +734,28 @@ test("exports only the verified signed grant for its exact session and retains i
     assert.equal(exported?.offlineGrant.payload.grant_id, GRANT_ID);
     assert.equal("primaryLease" in (exported ?? {}), false);
 
-    runtime.invalidateContinuity();
-    assert.equal(runtime.exportReadAuthority(session)?.offlineGrant.payload.grant_id, GRANT_ID);
-    const otherSession = DesktopSessionViewSchema.parse({
+    const rotatedSession = DesktopSessionViewSchema.parse({
       ...session,
       session: { ...session.session, session_version: 2 },
     });
+    runtime.reconcileSession(rotatedSession);
+    assert.equal(
+      runtime.exportReadAuthority(rotatedSession)?.offlineGrant.payload.grant_id,
+      GRANT_ID,
+    );
+    runtime.invalidateContinuity();
+    assert.equal(
+      runtime.exportReadAuthority(rotatedSession)?.offlineGrant.payload.grant_id,
+      GRANT_ID,
+    );
+    const otherSession = DesktopSessionViewSchema.parse({
+      ...rotatedSession,
+      session: { ...rotatedSession.session, permission_version: 2 },
+    });
+    runtime.reconcileSession(otherSession);
     assert.equal(runtime.exportReadAuthority(otherSession), null);
     runtime.clearReadAuthority();
-    assert.equal(runtime.exportReadAuthority(session), null);
+    assert.equal(runtime.exportReadAuthority(rotatedSession), null);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

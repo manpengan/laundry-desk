@@ -6,13 +6,15 @@ argv 调用已探测到的 Docker CLI，管理本地 PostgreSQL 16 与 Server OC
 
 ## 安装态边界
 
-- App bundle 内只有原生 arm64 可执行文件、digest-only Compose 模板和 Ed25519 公钥；
+- App bundle 内只有原生 arm64+x86_64 universal 可执行文件、digest-only Compose 模板和
+  Ed25519 公钥；
   不需要仓库、pnpm 或宿主 Node。
 - `install --manifest /absolute/release.json` 从 stdin 读取严格 JSON setup，不接受密码或
   PIN argv/env。GUI 使用原生 `SecureField`。
 - manifest 签名绑定 release/server/web、contracts major/hash、schema/migrations、
   multi-arch Server digest、PostgreSQL 16 digest、最低 App 版本和 nullable rollback 兼容元数据。
-  rollback 字段当前只参与验签和兼容性校验；Runtime.app 没有 upgrade/rollback 命令。
+  upgrade 要求新清单的 rollback target 精确绑定当前 release/image/schema；本地状态持续保留
+  已接受最高版本与前一清单摘要，不能被新清单调低安全下限。
   Docker 拉取后的 `RepoDigests` 必须精确包含签名的 multi-arch index 引用；arm64/amd64
   child digest 保留为签名发布元数据，不误当成本机 image inspect 返回值。
 - 状态位于 `~/Library/Application Support/Laundry Desk Runtime/`；目录为 `0700`，状态、
@@ -45,6 +47,8 @@ argv 调用已探测到的 Docker CLI，管理本地 PostgreSQL 16 与 Server OC
 ```text
 install --manifest /absolute/runtime-manifest.json   # setup JSON from stdin
 recover --manifest /absolute/runtime-manifest.json
+upgrade --manifest /absolute/runtime-manifest.json   # no stdin
+rollback                         # {"confirmation":"ROLLBACK-<target release>"} from stdin
 start
 stop
 restart
@@ -58,6 +62,13 @@ backup verify                 # {"backup_id":"..."} from bounded stdin
 backup restore                # {"backup_id":"...","confirmation":"RESTORE-..."} from stdin
 ```
 
+upgrade 在维护锁内停服，先创建并验证 `pre_upgrade` 安全点，再切换签名 manifest、迁移并执行
+完整健康门禁；任一步失败会自动恢复原 manifest 与安全点，恢复成功后才重新启动旧 release。
+rollback 只允许一步回到签名绑定的 previous release，先保留 `pre_rollback` 安全点，再恢复
+对应 `pre_upgrade` 快照；失败保持停服并保留两个安全点，不会跳版本或降低最高已接受版本。
+每次切换先以 `0600` transaction 绑定切换前后的 state、history、当前/前一 manifest 与安全点；
+进程在任一原子写边界中断后，会在严格加载正常状态前恢复切换前安全点并清理 transaction。
+
 `diagnose` 只返回有界状态、release、migration head 和稳定故障码，不收集 secret、原始
 容器日志或任意文件。LaunchAgent 使用 App 内绝对 canonical executable，输出定向
 `/dev/null`，详细排查走显式 `diagnose`。
@@ -69,19 +80,55 @@ pnpm runtime:app:build
 pnpm runtime:app:inspect
 pnpm runtime:app:acceptance
 pnpm runtime:app:lint:swift
+node --test tools/runtime-kit/*.test.mjs
 node tools/runtime-kit/real-container-acceptance.mjs  # isolated real PG/photo drill
 ```
 
-acceptance 将测试 App 复制到临时目录，在空工作目录和 `PATH=""` 下执行 install、restart、
+acceptance 会先强制 `lipo` 同时存在 arm64/x86_64，再将测试 App 复制到临时目录，在空工作
+目录和 `PATH=""` 下执行 install、restart、
 签名篡改/兼容性负例、双 volume 篡改、故障注入、同 manifest recover，以及备份权限/哈希/
-非法 ID/确认/互斥/成功恢复/失败安全点负例。测试 App 是原生 arm64 且可通过 ad-hoc
+非法 ID/确认/互斥/成功恢复/失败安全点负例。测试 App 是原生 universal 且可通过 ad-hoc
 codesign 校验。V2 Foundation 的 macOS job 会持续执行 Swift lint 和这套 build/inspect/
 no-repo 门禁；它使用仅测试构建信任的临时签名 key 和 fake runtime runner。
+
+## 正式 manifest 与 macOS 发布入口
+
+`runtime:manifest:generate` 只接受四个 canonical absolute 文件路径环境项，不接受 argv：
+
+```text
+LAUNDRY_RUNTIME_MANIFEST_INPUT_FILE
+LAUNDRY_RUNTIME_MANIFEST_PRIVATE_KEY_FILE
+LAUNDRY_RUNTIME_MANIFEST_PUBLIC_KEY_FILE
+LAUNDRY_RUNTIME_MANIFEST_OUTPUT_FILE
+```
+
+三个输入文件必须是 `0600`、单硬链、canonical real file；生成器通过 no-follow fd 在读取前后
+复核类型、权限、大小、device/inode 与 mtime。payload 必须与原生 verifier 完全同构；生成器
+校验 Ed25519 公私钥匹配、精确字段、OCI 双架构摘要、schema/rollback 兼容边界，并以
+create-only 方式输出签名 envelope。测试每次使用 ephemeral Ed25519 key，不签入或模拟正式私钥。
+
+`runtime:release:mac` 要求以下非 secret 值或仓库外路径；认证 secret 只能预先保存进指定
+Keychain/notarytool profile：
+
+```text
+LAUNDRY_RUNTIME_CODESIGN_IDENTITY
+LAUNDRY_RUNTIME_APPLE_KEYCHAIN
+LAUNDRY_RUNTIME_NOTARY_PROFILE
+LAUNDRY_RUNTIME_MANIFEST_PUBLIC_KEY_FILE
+```
+
+入口使用固定无 shell argv 和白名单子进程环境，构建 universal App，强制 inspect 后执行
+Developer ID hardened-runtime 签名、ZIP 公证、App staple、DMG 签名/公证/staple 与 Gatekeeper
+检查；输入公钥沿用上述严格 fd 规则。发布前的 App 全树、ZIP 与 DMG SHA-256 seal 必须与已验证
+产物一致，bundle id/version/build/team 也必须匹配固定契约，才原子写入
+`tools/runtime-kit/dist/release/`。最终 rename 是明确提交点，之后的暂存清理异常只报告
+`cleanup=pending`，不会伪报产物未发布。缺少任何输入会在执行外部命令前失败关闭。
 
 `real-container-acceptance.mjs` 不监听宿主端口，使用隔离的随机容器/volume 和解析后的镜像
 digest，实跑 PostgreSQL custom dump/单事务 restore、照片 tar、安全点及损坏归档负例；它
 只删除本次随机命名的验收资源。
 
-当前已交付的是独立 Runtime.app 软件与无仓库生命周期门禁。XP-58 实体证据不属于本组件；
-Apple Developer ID 签名/公证、正式 manifest 签名权威、已签名且可访问的多架构 OCI 产物，
-以及 Runtime.app upgrade/rollback 都仍未交付。
+当前已交付的是独立 Runtime.app 软件、universal 构建与无仓库生命周期门禁，以及正式发布
+和 manifest 的失败关闭工具链。XP-58 实体证据不属于本组件；真实 Developer ID 签名/公证
+记录、正式 manifest 私钥权威、已签名且可访问的多架构 OCI 产物仍是外部门禁，不能由
+ephemeral-key 或 ad-hoc 测试替代。

@@ -32,6 +32,7 @@ test("local Playwright owns the fixed Vite lifecycle", async () => {
   );
   assert.match(config, /url:\s*LOCAL_WEB_URL/u);
   assert.match(config, /reuseExistingServer:\s*false/u);
+  assert.match(config, /workers:\s*4/u);
 });
 
 test("login smoke proves blank fields and loads credentials before navigation", async () => {

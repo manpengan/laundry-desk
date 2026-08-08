@@ -38,6 +38,7 @@ export function createOfflineDesktopService(
     session = next;
     offlineReadOnly = readOnly;
     sessionRevision += 1;
+    offline.reconcileSession(next);
   };
 
   const unavailable = () =>
@@ -77,14 +78,12 @@ export function createOfflineDesktopService(
       if (revision !== sessionRevision || session !== current) return;
       await offline.refreshAuthority(current);
       if (revision !== sessionRevision || session !== current) {
-        offline.invalidateContinuity();
-        offline.clearReadAuthority();
+        offline.reconcileSession(session);
         return;
       }
       await offline.replay();
       if (revision !== sessionRevision || session !== current) {
-        offline.invalidateContinuity();
-        offline.clearReadAuthority();
+        offline.reconcileSession(session);
         return;
       }
       const authority = offline.exportReadAuthority(current);
@@ -253,8 +252,7 @@ export function createOfflineDesktopService(
         }
         const resumed = cache.resume();
         if (resumed === null) {
-          session = null;
-          offlineReadOnly = false;
+          replaceSession(null, false);
           return unavailable();
         }
         replaceSession(resumed.sessionView, true);

@@ -51,6 +51,9 @@ private func run() throws {
   {
     input = try FileHandle.standardInput.read(upToCount: 513) ?? Data()
     guard input.count <= 512 else { try runtimeFail("RUNTIME_BACKUP_STDIN_INVALID") }
+  } else if arguments == ["rollback"] {
+    input = try FileHandle.standardInput.read(upToCount: 257) ?? Data()
+    guard input.count <= 256 else { try runtimeFail("RUNTIME_ROLLBACK_STDIN_INVALID") }
   } else {
     input = Data()
   }

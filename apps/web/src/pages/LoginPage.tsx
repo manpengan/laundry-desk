@@ -59,9 +59,11 @@ export function LoginPage({
         toast.push("请完善登录信息", "warning");
         return;
       }
+      const credentials = Object.freeze({ ...form });
+      setForm((previous) => ({ ...previous, password: "" }));
       setSubmitting(true);
       try {
-        const result = await authClient.login(form);
+        const result = await authClient.login(credentials);
         if (!result.ok) {
           setFormError(result.error.message);
           toast.push(result.error.message, "error");

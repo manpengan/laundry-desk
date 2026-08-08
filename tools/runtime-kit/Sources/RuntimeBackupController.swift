@@ -261,4 +261,44 @@ extension NativeRuntimeController {
         safetyBackupID: safety.backupID)
     }
   }
+
+  func createReleaseSafetyBackup(
+    kind: RuntimeBackupKind, state: RuntimeState, payload: RuntimeManifestPayload
+  ) throws -> RuntimeBackupSummary {
+    guard [.preUpgrade, .preRollback].contains(kind) else {
+      try runtimeFail("RUNTIME_BACKUP_INVALID")
+    }
+    runner.setManifest(payload)
+    return try createManagedBackup(
+      kind: kind, state: state, payload: payload, restartAfter: false)
+  }
+
+  func restoreReleaseSafetyBackup(
+    _ backupID: String, state: RuntimeState, payload: RuntimeManifestPayload
+  ) throws {
+    runner.setManifest(payload)
+    try assertVolumes(state)
+    try assertImage(payload)
+    let env = environment(state, payload)
+    try run(compose(["stop", "server"], environment: env))
+    _ = try verifyBackupDirectory(
+      backupID: backupID, state: state, payload: payload, inspectArtifacts: true)
+    let directory = try backupDirectory(backupID)
+    let manifestData = try RuntimeStorage.readPrivate(
+      directory.appendingPathComponent(RuntimeBackupCodec.manifestName))
+    let manifest = try RuntimeBackupCodec.decode(manifestData, expectedBackupID: backupID)
+    try stream(
+      RuntimeBackupCommands.restoreDatabase(controller: self, environment: env),
+      input: streamInput(manifest.database, from: directory), discardOutput: true)
+    try run(compose(["run", "--rm", "roles"], environment: env))
+    try run(compose(["run", "--rm", "migrate"], environment: env))
+    try run(compose(["run", "--rm", "verify"], environment: env))
+    try run(RuntimeBackupCommands.clearPhotos(controller: self, image: payload.serverImage.index))
+    try stream(
+      RuntimeBackupCommands.restorePhotos(controller: self, image: payload.serverImage.index),
+      input: streamInput(manifest.photos, from: directory), discardOutput: true)
+    try run(
+      RuntimeBackupCommands.validatePhotos(controller: self, image: payload.serverImage.index))
+    try gates(state, payload, bootstrap: false)
+  }
 }

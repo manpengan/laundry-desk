@@ -15,6 +15,7 @@ private struct RuntimeView: View {
   @State private var backups: [RuntimeBackupSummary] = []
   @State private var selectedBackupID = ""
   @State private var restoreConfirmation = ""
+  @State private var rollbackConfirmation = ""
 
   private func chooseManifest() {
     let panel = NSOpenPanel()
@@ -25,6 +26,7 @@ private struct RuntimeView: View {
 
   private func action(
     clearCredentials: Bool = false, clearConfirmation: Bool = false,
+    clearRollbackConfirmation: Bool = false,
     _ work: @escaping () throws -> String
   ) {
     guard !busy else { return }
@@ -43,6 +45,7 @@ private struct RuntimeView: View {
           pin = ""
         }
         if clearConfirmation { restoreConfirmation = "" }
+        if clearRollbackConfirmation { rollbackConfirmation = "" }
       }
     }
   }
@@ -90,6 +93,13 @@ private struct RuntimeView: View {
             try controller.recover(manifestURL: URL(fileURLWithPath: manifestPath))
           }
         }
+        Button("升级") {
+          action {
+            let value = try controller.upgrade(
+              manifestURL: URL(fileURLWithPath: manifestPath))
+            return "升级完成：\(value.release)；回滚确认：ROLLBACK-\(value.previousRelease)"
+          }
+        }
         Button("启动") { action { try controller.start() } }
         Button("停止") { action { try controller.stop() } }
         Button("重启") { action { try controller.restart() } }
@@ -111,6 +121,19 @@ private struct RuntimeView: View {
           }
         }
       }.disabled(busy)
+      HStack {
+        TextField("高风险回滚确认：ROLLBACK-目标版本", text: $rollbackConfirmation)
+        Button("回滚到上一版本") {
+          action(clearRollbackConfirmation: true) {
+            let value = try controller.rollback(
+              RuntimeRollbackRequest(confirmation: rollbackConfirmation))
+            return "已回滚到 \(value.release)；当前数据安全点：\(value.recoveryBackupID)"
+          }
+        }
+        .disabled(busy || !rollbackConfirmation.hasPrefix("ROLLBACK-"))
+      }
+      Text("回滚会恢复升级前一致性数据；升级后的当前数据先保存为安全点。")
+        .font(.caption).foregroundStyle(.red)
       Divider()
       Text("本机托管备份与恢复").font(.headline)
       HStack {
@@ -165,7 +188,7 @@ private struct RuntimeView: View {
             || restoreConfirmation != selectedBackup?.confirmation)
       }
       Text(status).font(.system(.body, design: .monospaced)).textSelection(.enabled)
-    }.padding(20).frame(minWidth: 760, minHeight: 560)
+    }.padding(20).frame(minWidth: 760, minHeight: 620)
   }
 }
 

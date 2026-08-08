@@ -1,15 +1,21 @@
 import { execFile, spawn } from "node:child_process";
-import { createPrivateKey, createPublicKey } from "node:crypto";
-import { constants } from "node:fs";
-import { lstat, mkdir, open, readdir, rmdir, unlink, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { readFile, readdir } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { validateReleaseApplicationEquivalence } from "./release-inspection.mjs";
+import { createReleaseInputDescriptor, stageReleaseResources } from "./release-resources.mjs";
+import { withAtomicReleaseDirectory } from "./release-transaction.mjs";
+import { createReleaseTreeVersion, sealReleaseTreePermissions } from "./release-tree.mjs";
+
+export { stageReleaseResources } from "./release-resources.mjs";
 
 const execFileAsync = promisify(execFile);
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9 ._()-]{0,127}$/u;
 const SAFE_PROFILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/u;
+const SAFE_VERSION = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u;
 const FORBIDDEN_AUTH_ENV = [
   "APPLE_API_KEY",
   "APPLE_API_KEY_ID",
@@ -58,11 +64,8 @@ export function parseReleaseEnvironment(env = process.env, platform = process.pl
       throw new Error(`${key} is not accepted by the keychain-only release`);
   }
   const identity = requiredEnvironment(env, "CSC_NAME");
-  const identityPrefix = "Developer ID Application: ";
-  if (
-    !identity.startsWith(identityPrefix) ||
-    !SAFE_NAME.test(identity.slice(identityPrefix.length))
-  ) {
+  const identityMatch = identity.match(/^Developer ID Application: (.+) \(([A-Z0-9]{10})\)$/u);
+  if (identityMatch === null || !SAFE_NAME.test(identityMatch[1])) {
     throw new Error("CSC_NAME must be one exact Developer ID Application identity");
   }
   const keychain = requireCanonicalAbsolutePath(
@@ -73,6 +76,7 @@ export function parseReleaseEnvironment(env = process.env, platform = process.pl
   if (!SAFE_PROFILE.test(profile)) throw new Error("APPLE_KEYCHAIN_PROFILE is invalid");
   return Object.freeze({
     identity,
+    teamIdentifier: identityMatch[2],
     keychain,
     profile,
     privateKeyPath: requireCanonicalAbsolutePath(
@@ -87,78 +91,73 @@ export function parseReleaseEnvironment(env = process.env, platform = process.pl
       requiredEnvironment(env, "LAUNDRY_RELEASE_POLICY_FILE"),
       "LAUNDRY_RELEASE_POLICY_FILE",
     ),
+    updateConfigPath: requireCanonicalAbsolutePath(
+      requiredEnvironment(env, "LAUNDRY_UPDATE_CONFIG_FILE"),
+      "LAUNDRY_UPDATE_CONFIG_FILE",
+    ),
   });
 }
 
-export function createReleaseChildEnvironment(env, releaseEnvironment) {
-  const selected = Object.fromEntries(
+function selectedEnvironment(env) {
+  return Object.fromEntries(
     PASSTHROUGH_ENV.flatMap((key) => (typeof env[key] === "string" ? [[key, env[key]]] : [])),
   );
+}
+
+export function createReleaseBuildEnvironment(
+  env,
+  releaseEnvironment,
+  stagingDirectory,
+  stagedResources,
+) {
+  const selected = selectedEnvironment(env);
   return Object.freeze({
     ...selected,
     CSC_NAME: releaseEnvironment.identity,
     CSC_KEYCHAIN: releaseEnvironment.keychain,
     APPLE_KEYCHAIN: releaseEnvironment.keychain,
     APPLE_KEYCHAIN_PROFILE: releaseEnvironment.profile,
+    LAUNDRY_RELEASE_OUTPUT_DIRECTORY: stagingDirectory,
+    LAUNDRY_RELEASE_UPDATE_PUBLIC_KEY_FILE: stagedResources.publicKeyStagingPath,
+    LAUNDRY_RELEASE_UPDATE_CONFIG_FILE: stagedResources.updateConfigStagingPath,
+  });
+}
+
+export function createReleaseSignerEnvironment(releaseEnvironment, stagingDirectory, descriptor) {
+  return Object.freeze({
     LAUNDRY_UPDATE_PRIVATE_KEY_FILE: releaseEnvironment.privateKeyPath,
-    LAUNDRY_UPDATE_PUBLIC_KEY_FILE: releaseEnvironment.publicKeyPath,
     LAUNDRY_RELEASE_POLICY_FILE: releaseEnvironment.policyPath,
+    LAUNDRY_RELEASE_DIRECTORY: stagingDirectory,
+    LAUNDRY_RELEASE_INPUT_DESCRIPTOR: JSON.stringify(descriptor),
   });
 }
 
-async function readPrivateFile(path, label, maximumBytes, privateMode) {
-  const metadata = await lstat(path);
-  if (!metadata.isFile() || metadata.isSymbolicLink())
-    throw new Error(`${label} must be a real file`);
-  if (metadata.size < 1 || metadata.size > maximumBytes)
-    throw new Error(`${label} size is invalid`);
-  if (privateMode && (metadata.mode & 0o077) !== 0) {
-    throw new Error(`${label} permissions must exclude group and other access`);
-  }
-  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
-  try {
-    const opened = await handle.stat();
-    if (opened.dev !== metadata.dev || opened.ino !== metadata.ino) {
-      throw new Error(`${label} changed while opening`);
-    }
-    return await handle.readFile();
-  } finally {
-    await handle.close();
-  }
-}
-
-export async function stageUpdatePublicKey(releaseEnvironment, root = packageRoot) {
-  const [privateBytes, publicBytes] = await Promise.all([
-    readPrivateFile(releaseEnvironment.privateKeyPath, "update private key", 16 * 1024, true),
-    readPrivateFile(releaseEnvironment.publicKeyPath, "update public key", 16 * 1024, false),
-    readPrivateFile(releaseEnvironment.policyPath, "release policy", 64 * 1024, false),
-  ]);
-  const privateKey = createPrivateKey(privateBytes);
-  const publicKey = createPublicKey(publicBytes);
-  if (privateKey.asymmetricKeyType !== "ed25519" || publicKey.asymmetricKeyType !== "ed25519") {
-    throw new Error("update key pair must be Ed25519");
-  }
-  const derived = createPublicKey(privateKey).export({ format: "der", type: "spki" });
-  const supplied = publicKey.export({ format: "der", type: "spki" });
-  if (!derived.equals(supplied)) throw new Error("update public key does not match private key");
-
-  const stagingDirectory = join(root, "build", "release");
-  const stagingPath = join(stagingDirectory, "update-public-key.pem");
-  await mkdir(stagingDirectory, { recursive: true, mode: 0o700 });
-  await writeFile(stagingPath, publicKey.export({ format: "pem", type: "spki" }), {
-    flag: "wx",
-    mode: 0o644,
+export function createReleaseVerifierEnvironment(stagingDirectory, artifacts, descriptor) {
+  return Object.freeze({
+    LAUNDRY_RELEASE_DIRECTORY: stagingDirectory,
+    LAUNDRY_RELEASE_INPUT_DESCRIPTOR: JSON.stringify(descriptor),
+    LAUNDRY_RELEASE_VERIFY_PUBLIC_KEY_FILE: join(
+      artifacts.appPath,
+      "Contents",
+      "Resources",
+      "update",
+      "update-public-key.pem",
+    ),
+    LAUNDRY_RELEASE_VERIFY_UPDATE_CONFIG_FILE: join(
+      artifacts.appPath,
+      "Contents",
+      "Resources",
+      "update",
+      "update-config.json",
+    ),
   });
-  return Object.freeze({ stagingDirectory, stagingPath });
 }
 
-async function cleanupStagedKey(staged) {
-  try {
-    await unlink(staged.stagingPath);
-    await rmdir(staged.stagingDirectory);
-  } catch (error) {
-    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error;
-  }
+export function createReleaseSignerCommand() {
+  return Object.freeze({
+    file: process.execPath,
+    args: Object.freeze(["dist/upgrade/release-bundle-cli.js"]),
+  });
 }
 
 async function runCaptured(file, args, environment) {
@@ -192,7 +191,9 @@ async function preflightApple(releaseEnvironment, environment) {
     ["find-identity", "-v", "-p", "codesigning", releaseEnvironment.keychain],
     environment,
   );
-  if (!identities.stdout.includes(releaseEnvironment.identity)) {
+  if (
+    !identities.stdout.split("\n").some((line) => line.includes(`"${releaseEnvironment.identity}"`))
+  ) {
     throw new Error("configured Developer ID identity is not available in the selected keychain");
   }
   await runCaptured(
@@ -211,34 +212,53 @@ async function preflightApple(releaseEnvironment, environment) {
   );
 }
 
-async function locateReleaseArtifacts() {
-  const releaseDirectory = join(packageRoot, "release");
+export async function locateReleaseArtifacts(releaseDirectory, includesManifest = false) {
   const entries = await readdir(releaseDirectory, { withFileTypes: true });
+  if (entries.some((entry) => entry.isSymbolicLink())) {
+    throw new Error("release output must not contain symlinks");
+  }
   const diskImages = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".dmg"));
   const archives = entries.filter((entry) => entry.isFile() && entry.name.endsWith(".zip"));
+  const containers = entries.filter((entry) => entry.isDirectory());
   const appPaths = [];
-  for (const entry of entries.filter((candidate) => candidate.isDirectory())) {
+  for (const entry of containers) {
     const children = await readdir(join(releaseDirectory, entry.name), { withFileTypes: true });
-    appPaths.push(
-      ...children
-        .filter((child) => child.isDirectory() && child.name.endsWith(".app"))
-        .map((child) => join(releaseDirectory, entry.name, child.name)),
-    );
+    if (
+      children.length !== 1 ||
+      !children[0]?.isDirectory() ||
+      children[0].isSymbolicLink() ||
+      !children[0].name.endsWith(".app")
+    ) {
+      throw new Error("release app container must contain exactly one real app");
+    }
+    appPaths.push(join(releaseDirectory, entry.name, children[0].name));
   }
-  if (diskImages.length !== 1 || archives.length !== 1 || appPaths.length !== 1) {
+  const manifests = entries.filter(
+    (entry) => entry.isFile() && entry.name === "latest-laundry-v2.json",
+  );
+  const expectedCount = includesManifest ? 4 : 3;
+  if (
+    entries.length !== expectedCount ||
+    diskImages.length !== 1 ||
+    archives.length !== 1 ||
+    containers.length !== 1 ||
+    appPaths.length !== 1 ||
+    manifests.length !== (includesManifest ? 1 : 0)
+  ) {
     throw new Error("release output must contain exactly one app, DMG, and ZIP");
   }
   return Object.freeze({
     appPath: appPaths[0],
     dmgPath: join(releaseDirectory, diskImages[0].name),
+    zipPath: join(releaseDirectory, archives[0].name),
   });
 }
 
-async function validateReleaseArtifacts(artifacts, environment) {
-  await runCaptured(
-    "/usr/bin/codesign",
-    ["--verify", "--deep", "--strict", artifacts.appPath],
-    environment,
+async function validateReleaseArtifacts(artifacts, environment, expectedIdentity) {
+  const application = await validateReleaseApplicationEquivalence(
+    artifacts,
+    async (file, args) => await runCaptured(file, args, environment),
+    expectedIdentity,
   );
   await runCaptured(
     "/usr/sbin/spctl",
@@ -246,45 +266,114 @@ async function validateReleaseArtifacts(artifacts, environment) {
     environment,
   );
   await runCaptured("/usr/bin/xcrun", ["stapler", "validate", artifacts.appPath], environment);
+  await runCaptured("/usr/bin/xcrun", ["stapler", "validate", artifacts.dmgPath], environment);
   await runCaptured(
     "/usr/sbin/spctl",
     ["--assess", "--type", "open", "--context", "context:primary-signature", artifacts.dmgPath],
     environment,
   );
+  return application;
+}
+
+async function readPackageVersion() {
+  const candidate = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
+  if (
+    typeof candidate !== "object" ||
+    candidate === null ||
+    !SAFE_VERSION.test(candidate.version)
+  ) {
+    throw new Error("package version is invalid");
+  }
+  return candidate.version;
 }
 
 export async function runMacRelease(env = process.env) {
   const releaseEnvironment = parseReleaseEnvironment(env);
-  const childEnvironment = createReleaseChildEnvironment(env, releaseEnvironment);
-  await preflightApple(releaseEnvironment, childEnvironment);
-  const staged = await stageUpdatePublicKey(releaseEnvironment);
-  try {
-    await runVisible(
-      "pnpm",
-      ["exec", "turbo", "run", "build", "--filter=@laundry/edge-agent"],
-      childEnvironment,
-    );
-    await runVisible("pnpm", ["run", "preload:bundle"], childEnvironment);
-    await runVisible(
-      "pnpm",
-      [
-        "exec",
-        "electron-builder",
-        "--config",
-        "electron-builder.release.yml",
-        "--mac",
-        "--publish",
-        "never",
-      ],
-      childEnvironment,
-    );
-    const artifacts = await locateReleaseArtifacts();
-    await validateReleaseArtifacts(artifacts, childEnvironment);
-    await runVisible("node", ["dist/upgrade/release-bundle-cli.js"], childEnvironment);
-    return Object.freeze({ ok: true, ...artifacts });
-  } finally {
-    await cleanupStagedKey(staged);
-  }
+  const version = await readPackageVersion();
+  const transaction = await withAtomicReleaseDirectory(
+    packageRoot,
+    async ({ stagingRoot, stagingDirectory, setBeforeCommit }) => {
+      const staged = await stageReleaseResources(releaseEnvironment, stagingRoot);
+      const buildEnvironment = createReleaseBuildEnvironment(
+        env,
+        releaseEnvironment,
+        stagingDirectory,
+        staged,
+      );
+      await preflightApple(releaseEnvironment, buildEnvironment);
+      await runVisible(
+        "pnpm",
+        ["exec", "turbo", "run", "build", "--filter=@laundry/edge-agent"],
+        buildEnvironment,
+      );
+      await runVisible("pnpm", ["run", "preload:bundle"], buildEnvironment);
+      await runVisible(
+        "pnpm",
+        [
+          "exec",
+          "electron-builder",
+          "--config",
+          "electron-builder.release.yml",
+          "--mac",
+          "--publish",
+          "never",
+        ],
+        buildEnvironment,
+      );
+      const artifacts = await locateReleaseArtifacts(stagingDirectory);
+      const application = await validateReleaseArtifacts(artifacts, buildEnvironment, {
+        bundleIdentifier: "com.laundry-desk.v2",
+        version,
+        teamIdentifier: releaseEnvironment.teamIdentifier,
+      });
+      await sealReleaseTreePermissions([artifacts.appPath, artifacts.dmgPath, artifacts.zipPath]);
+      const descriptor = await createReleaseInputDescriptor(
+        staged,
+        artifacts,
+        version,
+        application,
+      );
+      const signer = createReleaseSignerCommand();
+      await runVisible(
+        signer.file,
+        signer.args,
+        createReleaseSignerEnvironment(releaseEnvironment, stagingDirectory, descriptor),
+      );
+      setBeforeCommit(async () => {
+        const current = await locateReleaseArtifacts(stagingDirectory, true);
+        if (
+          current.appPath !== artifacts.appPath ||
+          current.dmgPath !== artifacts.dmgPath ||
+          current.zipPath !== artifacts.zipPath
+        ) {
+          throw new Error("release artifacts changed before final verification");
+        }
+        await sealReleaseTreePermissions(
+          (await readdir(stagingDirectory)).map((name) => join(stagingDirectory, name)),
+        );
+        await runVisible(
+          signer.file,
+          signer.args,
+          createReleaseVerifierEnvironment(stagingDirectory, artifacts, descriptor),
+        );
+        await sealReleaseTreePermissions(
+          (await readdir(stagingDirectory)).map((name) => join(stagingDirectory, name)),
+        );
+        return await createReleaseTreeVersion(stagingDirectory);
+      });
+      return Object.freeze({
+        appRelativePath: relative(stagingDirectory, artifacts.appPath),
+        dmgName: basename(artifacts.dmgPath),
+        zipName: basename(artifacts.zipPath),
+      });
+    },
+  );
+  return Object.freeze({
+    ok: true,
+    appPath: join(transaction.finalDirectory, transaction.result.appRelativePath),
+    dmgPath: join(transaction.finalDirectory, transaction.result.dmgName),
+    zipPath: join(transaction.finalDirectory, transaction.result.zipName),
+  });
 }
 
 const invokedPath = process.argv[1];

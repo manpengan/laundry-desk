@@ -104,6 +104,15 @@ struct RuntimeState: Codable {
       manifestSHA256: manifestSHA256, composeSHA256: composeSHA256,
       instanceID: instanceID, volumes: volumes)
   }
+
+  func withRelease(_ nextRelease: String, manifestSHA256 nextManifestSHA256: String)
+    -> RuntimeState
+  {
+    RuntimeState(
+      version: version, status: status, release: nextRelease,
+      manifestSHA256: nextManifestSHA256, composeSHA256: composeSHA256,
+      instanceID: instanceID, volumes: volumes)
+  }
 }
 
 struct RuntimeSetup: Codable {

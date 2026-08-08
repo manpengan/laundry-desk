@@ -73,12 +73,17 @@ const writeManifest = async (name, value, signature = signPayload(value)) => {
 const signature = signPayload(payload);
 const manifest = await writeManifest("runtime-manifest.json", payload, signature);
 
-const execute = (configRoot, runnerLog, args, input = "") =>
+const execute = (configRoot, runnerLog, args, input = "", extraEnvironment = {}) =>
   new Promise((resolveRun, rejectRun) => {
     const child = spawn(
       executable,
       ["--test-config-root", configRoot, "--test-runner-log", runnerLog, ...args],
-      { cwd: emptyCwd, env: { PATH: "" }, shell: false, stdio: ["pipe", "pipe", "pipe"] },
+      {
+        cwd: emptyCwd,
+        env: { PATH: "", ...extraEnvironment },
+        shell: false,
+        stdio: ["pipe", "pipe", "pipe"],
+      },
     );
     const output = [],
       errors = [];
@@ -163,6 +168,52 @@ const invalidRollbackManifest = await writeManifest("runtime-manifest-invalid-ro
 const unpinnedPostgresManifest = await writeManifest("runtime-manifest-unpinned-postgres.json", {
   ...payload,
   postgres_image: "postgres:16",
+});
+const upgradePayload = Object.freeze({
+  ...payload,
+  release: "0.2.0",
+  server_version: "0.2.0",
+  web_bundle_sha256: repeated("3"),
+  database_schema_sha256: repeated("4"),
+  migrations_sha256: repeated("5"),
+  maximum_compatible_schema: "0034_release_transition.sql",
+  rollback_target: Object.freeze({
+    release: payload.release,
+    server_image_index: payload.server_image.index,
+    maximum_compatible_schema: payload.maximum_compatible_schema,
+  }),
+  server_image: Object.freeze({
+    index: `registry.example/laundry/server@sha256:${repeated("6")}`,
+    linux_arm64: `sha256:${repeated("7")}`,
+    linux_amd64: `sha256:${repeated("8")}`,
+  }),
+});
+const upgradeManifest = await writeManifest("runtime-manifest-0.2.0.json", upgradePayload);
+const upgradeWithoutRollbackManifest = await writeManifest(
+  "runtime-manifest-upgrade-without-rollback.json",
+  { ...upgradePayload, rollback_target: null },
+);
+const upgradeWrongTargetManifest = await writeManifest(
+  "runtime-manifest-upgrade-wrong-target.json",
+  {
+    ...upgradePayload,
+    rollback_target: {
+      ...upgradePayload.rollback_target,
+      server_image_index: upgradePayload.server_image.index,
+    },
+  },
+);
+const upgradeIncompatibleSchemaManifest = await writeManifest(
+  "runtime-manifest-upgrade-incompatible-schema.json",
+  {
+    ...upgradePayload,
+    migration_head: "0034_release_transition.sql",
+  },
+);
+const belowAcceptedFloorManifest = await writeManifest("runtime-manifest-0.1.5.json", {
+  ...upgradePayload,
+  release: "0.1.5",
+  server_version: "0.1.5",
 });
 
 for (const [name, candidate, expected] of [
@@ -431,6 +482,266 @@ result = await execute(primaryRoot, primaryLog, ["backup", "restore"], "x".repea
 assert.equal(result.code, 1);
 assert.match(result.stderr, /RUNTIME_BACKUP_STDIN_INVALID/u);
 
+for (const [candidate, expected] of [
+  [upgradeWithoutRollbackManifest, /RUNTIME_UPGRADE_INCOMPATIBLE/u],
+  [upgradeWrongTargetManifest, /RUNTIME_UPGRADE_INCOMPATIBLE/u],
+  [upgradeIncompatibleSchemaManifest, /RUNTIME_MANIFEST_INVALID/u],
+]) {
+  result = await execute(primaryRoot, primaryLog, ["upgrade", "--manifest", candidate]);
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, expected);
+}
+
+result = await execute(primaryRoot, primaryLog, ["upgrade", "--manifest", upgradeManifest]);
+assert.equal(result.code, 0, result.stderr);
+const upgraded = JSON.parse(result.stdout);
+assert.equal(upgraded.status, "ready");
+assert.equal(upgraded.release, "0.2.0");
+assert.equal(upgraded.previous_release, "0.1.0");
+assert.match(upgraded.safety_backup_id, /^safety-/u);
+assert.equal(JSON.parse(await readFile(join(primaryRoot, "state.json"), "utf8")).release, "0.2.0");
+assert.equal(
+  JSON.parse(await readFile(join(primaryRoot, "release-history.json"), "utf8"))
+    .highest_accepted_release,
+  "0.2.0",
+);
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["rollback"],
+  JSON.stringify({ confirmation: "ROLLBACK-0.0.1" }),
+);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_ROLLBACK_INCOMPATIBLE/u);
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["rollback"],
+  JSON.stringify({ confirmation: "ROLLBACK-0.1.0" }),
+);
+assert.equal(result.code, 0, result.stderr);
+const rolledBack = JSON.parse(result.stdout);
+assert.equal(rolledBack.status, "ready");
+assert.equal(rolledBack.release, "0.1.0");
+assert.equal(rolledBack.rolled_back_from, "0.2.0");
+assert.match(rolledBack.recovery_backup_id, /^safety-/u);
+const rolledBackHistory = JSON.parse(
+  await readFile(join(primaryRoot, "release-history.json"), "utf8"),
+);
+assert.deepEqual(rolledBackHistory, {
+  highest_accepted_release: "0.2.0",
+  version: 1,
+});
+await assert.rejects(() => stat(join(primaryRoot, "previous-runtime-manifest.json")), {
+  code: "ENOENT",
+});
+result = await execute(primaryRoot, primaryLog, [
+  "upgrade",
+  "--manifest",
+  belowAcceptedFloorManifest,
+]);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_UPGRADE_INCOMPATIBLE/u);
+
+const failedUpgradeRoot = join(temporary, "config-failed-upgrade");
+const failedUpgradeLog = join(temporary, "failed-upgrade-runner.jsonl");
+result = await execute(
+  failedUpgradeRoot,
+  failedUpgradeLog,
+  ["install", "--manifest", manifest],
+  setup,
+);
+assert.equal(result.code, 0, result.stderr);
+await writeFile(`${failedUpgradeLog}.fail-once`, "migrate", { mode: 0o600 });
+result = await execute(failedUpgradeRoot, failedUpgradeLog, [
+  "upgrade",
+  "--manifest",
+  upgradeManifest,
+]);
+assert.equal(result.code, 1);
+assert.match(result.stderr, /RUNTIME_UPGRADE_ROLLED_BACK/u);
+result = await execute(failedUpgradeRoot, failedUpgradeLog, ["status"]);
+assert.equal(result.code, 0, result.stderr);
+assert.equal(JSON.parse(result.stdout).release, "0.1.0");
+for (const name of ["pending-runtime-manifest.json", "release-transition.json"]) {
+  await assert.rejects(() => stat(join(failedUpgradeRoot, name)), { code: "ENOENT" });
+}
+
+const atomicCrashEnvironment = (boundary) => ({
+  LAUNDRY_RUNTIME_TEST_CRASH_AFTER_ATOMIC_WRITE: boundary,
+});
+const assertRecoveredPreState = async (root, log, expectedRelease, command, input = "") => {
+  const recovered = await execute(root, log, command, input);
+  assert.equal(recovered.code, 1);
+  assert.match(recovered.stderr, /RUNTIME_RELEASE_TRANSITION_RECOVERED/u);
+  const status = await execute(root, log, ["status"]);
+  assert.equal(status.code, 0, status.stderr);
+  assert.equal(JSON.parse(status.stdout).release, expectedRelease);
+  await assert.rejects(() => stat(join(root, "release-transition.json")), { code: "ENOENT" });
+};
+
+for (const [index, boundary] of [
+  "release-transition.json:1",
+  "release-transition.json:2",
+  "release-transition.json:3",
+  "previous-runtime-manifest.json:1",
+  "runtime-manifest.json:1",
+  "state.json:1",
+  "release-history.json:1",
+].entries()) {
+  const root = join(temporary, `config-upgrade-atomic-${index}`);
+  const log = join(temporary, `upgrade-atomic-${index}.jsonl`);
+  result = await execute(root, log, ["install", "--manifest", manifest], setup);
+  assert.equal(result.code, 0, result.stderr);
+  result = await execute(
+    root,
+    log,
+    ["upgrade", "--manifest", upgradeManifest],
+    "",
+    atomicCrashEnvironment(boundary),
+  );
+  assert.equal(result.code, 86, `${boundary}: ${result.stderr}`);
+  await assertRecoveredPreState(root, log, payload.release, [
+    "upgrade",
+    "--manifest",
+    upgradeManifest,
+  ]);
+  assert.equal(
+    JSON.parse(await readFile(join(root, "release-history.json"))).highest_accepted_release,
+    payload.release,
+  );
+  await assert.rejects(() => stat(join(root, "previous-runtime-manifest.json")), {
+    code: "ENOENT",
+  });
+}
+
+for (const [index, boundary] of [
+  "release-transition.json:1",
+  "release-transition.json:2",
+  "release-transition.json:3",
+  "runtime-manifest.json:1",
+  "state.json:1",
+  "release-history.json:1",
+].entries()) {
+  const root = join(temporary, `config-rollback-atomic-${index}`);
+  const log = join(temporary, `rollback-atomic-${index}.jsonl`);
+  result = await execute(root, log, ["install", "--manifest", manifest], setup);
+  assert.equal(result.code, 0, result.stderr);
+  result = await execute(root, log, ["upgrade", "--manifest", upgradeManifest]);
+  assert.equal(result.code, 0, result.stderr);
+  const rollbackInput = JSON.stringify({ confirmation: "ROLLBACK-0.1.0" });
+  result = await execute(root, log, ["rollback"], rollbackInput, atomicCrashEnvironment(boundary));
+  assert.equal(result.code, 86, `${boundary}: ${result.stderr}`);
+  await assertRecoveredPreState(root, log, upgradePayload.release, ["rollback"], rollbackInput);
+  const history = JSON.parse(await readFile(join(root, "release-history.json")));
+  assert.equal(history.highest_accepted_release, upgradePayload.release);
+  assert.equal(history.previous_release, payload.release);
+  assert.equal(
+    JSON.parse(await readFile(join(root, "previous-runtime-manifest.json"))).payload.release,
+    payload.release,
+  );
+}
+
+const recoveryFaults = [
+  {
+    kind: "upgrade",
+    boundaries: ["runtime-manifest.json:1", "state.json:1", "release-history.json:1"],
+    command: ["upgrade", "--manifest", upgradeManifest],
+    input: "",
+    expected: payload.release,
+  },
+  {
+    kind: "rollback",
+    boundaries: [
+      "runtime-manifest.json:1",
+      "state.json:1",
+      "release-history.json:1",
+      "previous-runtime-manifest.json:1",
+    ],
+    command: ["rollback"],
+    input: JSON.stringify({ confirmation: "ROLLBACK-0.1.0" }),
+    expected: upgradePayload.release,
+  },
+];
+for (const fault of recoveryFaults) {
+  for (const [index, boundary] of fault.boundaries.entries()) {
+    const root = join(temporary, `config-${fault.kind}-recovery-${index}`);
+    const log = join(temporary, `${fault.kind}-recovery-${index}.jsonl`);
+    result = await execute(root, log, ["install", "--manifest", manifest], setup);
+    assert.equal(result.code, 0, result.stderr);
+    if (fault.kind === "rollback") {
+      result = await execute(root, log, ["upgrade", "--manifest", upgradeManifest]);
+      assert.equal(result.code, 0, result.stderr);
+    }
+    result = await execute(
+      root,
+      log,
+      fault.command,
+      fault.input,
+      atomicCrashEnvironment("runtime-manifest.json:1"),
+    );
+    assert.equal(result.code, 86, result.stderr);
+    result = await execute(root, log, fault.command, fault.input, atomicCrashEnvironment(boundary));
+    assert.equal(result.code, 86, `${boundary}: ${result.stderr}`);
+    await assertRecoveredPreState(root, log, fault.expected, fault.command, fault.input);
+  }
+}
+const removeCrashEnvironment = (boundary) => ({
+  LAUNDRY_RUNTIME_TEST_CRASH_AFTER_PRIVATE_REMOVE: boundary,
+});
+for (const kind of ["upgrade", "rollback"]) {
+  const root = join(temporary, `config-${kind}-commit-remove`);
+  const log = join(temporary, `${kind}-commit-remove.jsonl`);
+  result = await execute(root, log, ["install", "--manifest", manifest], setup);
+  assert.equal(result.code, 0, result.stderr);
+  if (kind === "rollback") {
+    result = await execute(root, log, ["upgrade", "--manifest", upgradeManifest]);
+    assert.equal(result.code, 0, result.stderr);
+  }
+  const command = kind === "upgrade" ? ["upgrade", "--manifest", upgradeManifest] : ["rollback"];
+  const input = kind === "rollback" ? JSON.stringify({ confirmation: "ROLLBACK-0.1.0" }) : "";
+  result = await execute(
+    root,
+    log,
+    command,
+    input,
+    removeCrashEnvironment("release-transition.json:1"),
+  );
+  assert.equal(result.code, 86, result.stderr);
+  const status = await execute(root, log, ["status"]);
+  assert.equal(JSON.parse(status.stdout).release, kind === "upgrade" ? "0.2.0" : "0.1.0");
+}
+const rollbackRemoveRoot = join(temporary, "config-rollback-previous-remove");
+const rollbackRemoveLog = join(temporary, "rollback-previous-remove.jsonl");
+result = await execute(
+  rollbackRemoveRoot,
+  rollbackRemoveLog,
+  ["install", "--manifest", manifest],
+  setup,
+);
+assert.equal(result.code, 0, result.stderr);
+result = await execute(rollbackRemoveRoot, rollbackRemoveLog, [
+  "upgrade",
+  "--manifest",
+  upgradeManifest,
+]);
+assert.equal(result.code, 0, result.stderr);
+const rollbackInput = JSON.stringify({ confirmation: "ROLLBACK-0.1.0" });
+result = await execute(
+  rollbackRemoveRoot,
+  rollbackRemoveLog,
+  ["rollback"],
+  rollbackInput,
+  removeCrashEnvironment("previous-runtime-manifest.json:1"),
+);
+assert.equal(result.code, 86, result.stderr);
+await assertRecoveredPreState(
+  rollbackRemoveRoot,
+  rollbackRemoveLog,
+  upgradePayload.release,
+  ["rollback"],
+  rollbackInput,
+);
 const runnerText = await readFile(primaryLog, "utf8");
 assert.doesNotMatch(
   runnerText,
@@ -485,4 +796,4 @@ assert.match(result.stderr, /RUNTIME_SETUP_STDIN_INVALID/u);
 await assert.rejects(() => stat(oversizedRoot), { code: "ENOENT" });
 
 await rm(privateKeyPath, { force: true });
-process.stdout.write("RUNTIME_NATIVE_NO_REPO_ACCEPTANCE_OK scenarios=30 manifest_negatives=5\n");
+process.stdout.write("RUNTIME_NATIVE_NO_REPO_ACCEPTANCE_OK scenarios=62 manifest_negatives=8\n");

@@ -37,6 +37,7 @@
 | [ADR-27](2026-08-08-adr-27-owner-drilldown-portfolio.md)           | Owner 明细下钻与授权门店组合视图                | **Accepted** 2026-08-08；LAN 只读扩展              |
 | [ADR-28](2026-08-08-adr-28-lan-onboarding-diagnostics.md)          | LAN 设备接入与证书诊断                          | **Accepted** 2026-08-08；不扩大代理面              |
 | [ADR-29](2026-08-08-adr-29-runtime-managed-backup-restore.md)      | Runtime.app 管理的本地备份与恢复                | **Accepted** 2026-08-08；仅原生主机维护入口        |
+| [ADR-30](2026-08-08-adr-30-runtime-release-upgrade-rollback.md)    | Runtime.app 发布、升级与受控回滚                | **Accepted** 2026-08-08；正式凭据仍为外部门禁      |
 
 ## v1 线
 

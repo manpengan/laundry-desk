@@ -5,33 +5,28 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as compose from "./compose.mjs";
+import {
+  ACCEPTANCE_ADMIN_ENV_KEYS,
+  findAcceptanceRecoverySet,
+  loadAcceptanceSecretValues,
+  runOnlineRecoveryAcceptance,
+  runStoppedSupportAcceptance,
+  validateSupportBundles,
+} from "./acceptance-recovery.mjs";
 import { loadLocalConfig } from "./config.mjs";
 import { probeHealthEndpoint } from "./health-probe.mjs";
-export const ACCEPTANCE_ADMIN_ENV_KEYS = Object.freeze([
-  "LAUNDRY_BOOTSTRAP_ADMIN_USERNAME",
-  "LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME",
-  "LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD",
-  "LAUNDRY_BOOTSTRAP_ADMIN_PIN",
-]);
+export { ACCEPTANCE_ADMIN_ENV_KEYS };
 const FIXED_PORTS = Object.freeze([8543, 8787]);
 const API_URL = "http://127.0.0.1:8787";
 const HEALTH_URL = `${API_URL}/health`;
 const WEB_URL = "http://127.0.0.1:5173";
 const WAIT = Object.freeze({ timeoutMs: 90_000, intervalMs: 250 });
-const FORBIDDEN_OVERRIDES = Object.freeze([
-  "COMPOSE_PROJECT_NAME",
-  "LAUNDRY_LOCAL_CONFIG_DIR",
-  "LAUNDRY_MAC_USER_DATA_DIR",
-  "LAUNDRY_MAC_APP_PATH",
-]);
-const PASSTHROUGH_ENV_KEYS = Object.freeze([
-  "PATH",
-  "HOME",
-  "TMPDIR",
-  "LANG",
-  "LC_ALL",
-  "LC_CTYPE",
-]);
+const FORBIDDEN_OVERRIDES = Object.freeze(
+  "COMPOSE_PROJECT_NAME LAUNDRY_LOCAL_CONFIG_DIR LAUNDRY_MAC_USER_DATA_DIR LAUNDRY_MAC_APP_PATH".split(
+    " ",
+  ),
+);
+const PASSTHROUGH_ENV_KEYS = Object.freeze("PATH HOME TMPDIR LANG LC_ALL LC_CTYPE".split(" "));
 export class AcceptanceError extends Error {
   constructor(code) {
     super(code);
@@ -47,6 +42,10 @@ const COMMANDS = Object.freeze({
   upBootstrap: command("local:up", "--bootstrap"),
   browserE2e: command("local:web:e2e"),
   macBuild: command("local:mac:build"),
+  printDispatch: Object.freeze({
+    file: process.execPath,
+    args: Object.freeze(["tools/local/print-dispatch-acceptance.mjs"]),
+  }),
   down: command("local:down"),
   macE2e: command("local:mac:e2e"),
 });
@@ -106,21 +105,15 @@ function assertOwnedTemporaryRoot(cwd, temporaryBase, temporaryRoot) {
   }
   return candidate;
 }
-export async function waitForProbe({
-  label,
-  timeoutMs,
-  intervalMs,
-  probe,
-  diagnostic,
-  now = Date.now,
-  sleep = (duration) => new Promise((resolveSleep) => setTimeout(resolveSleep, duration)),
-}) {
+export async function waitForProbe(options) {
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? ((duration) => new Promise((done) => setTimeout(done, duration)));
   const startedAt = now();
-  while (now() - startedAt < timeoutMs) {
-    if (await probe()) return;
-    await sleep(intervalMs);
+  while (now() - startedAt < options.timeoutMs) {
+    if (await options.probe()) return;
+    await sleep(options.intervalMs);
   }
-  diagnostic(`${label} timed out after ${timeoutMs}ms`);
+  options.diagnostic(`${options.label} timed out after ${options.timeoutMs}ms`);
   fail("ACCEPTANCE_WAIT_TIMEOUT");
 }
 export async function assertLoopbackPortAvailable(port) {
@@ -284,6 +277,9 @@ function createDefaultDependencies(cwd) {
         diagnostic,
       }),
     loadInstanceId: async ({ env }) => (await loadLocalConfig({ env })).instanceId,
+    loadSecretValues: loadAcceptanceSecretValues,
+    findRecoverySet: findAcceptanceRecoverySet,
+    validateSupportBundles,
     findPackagedApp: () => findUniquePackagedApp(join(cwd, "apps", "edge-agent", "release")),
     inspectVolumeLabels: async ({ project, cwd: commandCwd, env }) => {
       const stdout = await capture(compose.volumeInspectLabelsCommand(project), {
@@ -351,6 +347,7 @@ export async function runAcceptance(options, providedDependencies) {
     cwd: options.cwd,
     project,
     temporaryRoot,
+    configDirectory,
     baseEnvironment,
     instanceId: null,
   };
@@ -364,10 +361,13 @@ export async function runAcceptance(options, providedDependencies) {
     await dependencies.waitForHealth({ expected: "up" });
     await execute("ACCEPTANCE_BROWSER_E2E_FAILED", COMMANDS.browserE2e, credentialEnvironment);
     await execute("ACCEPTANCE_MAC_BUILD_FAILED", COMMANDS.macBuild, baseEnvironment);
+    await execute("ACCEPTANCE_PRINT_FAILED", COMMANDS.printDispatch, credentialEnvironment);
+    await runOnlineRecoveryAcceptance({ execute, dependencies, env: baseEnvironment });
     const appPath = await dependencies.findPackagedApp();
     await execute("ACCEPTANCE_DOWN_FAILED", COMMANDS.down, baseEnvironment);
     await dependencies.waitForHealth({ expected: "down" });
     await validateAcceptanceVolume(context, dependencies);
+    await runStoppedSupportAcceptance(context, credentials, dependencies, execute);
     const macEnvironment = Object.freeze({
       ...credentialEnvironment,
       LAUNDRY_MAC_APP_PATH: appPath,

@@ -307,6 +307,9 @@ async function openAndTopupMacMember(page: Page): Promise<void> {
 
   await memberPanel.getByLabel("充值金额（元）").fill(MAC_MEMBER.topupYuan);
   await memberPanel.getByRole("button", { name: "充值", exact: true }).click();
+  const confirmation = page.getByRole("dialog", { name: "确认会员充值" });
+  await expect(confirmation).toContainText("充值本金 ¥50.00", { timeout: 15_000 });
+  await confirmation.getByRole("button", { name: "确认充值" }).click();
   await expect(page.locator(".ld-toast").last()).toContainText("充值已入账", {
     timeout: 15_000,
   });
@@ -377,7 +380,10 @@ async function runPackagedMemberSettlement(page: Page): Promise<void> {
 }
 
 /** Prove a packaged Edge queues an ordinary grant command and never widens denied commands. */
-async function runPackagedOfflineGrantReplay(page: Page): Promise<void> {
+async function runPackagedOfflineGrantReplay(
+  page: Page,
+  rejectionDiagnostics: readonly string[],
+): Promise<void> {
   const suffix = Date.now().toString().slice(-8);
   const customerName = `macOS 离线 ${suffix}`;
   const customerPhone = `136${suffix}`;
@@ -421,7 +427,11 @@ async function runPackagedOfflineGrantReplay(page: Page): Promise<void> {
     await waitForHealth("ready");
   }
 
-  expect(offlineEvidence).toMatchObject({
+  await delay(50);
+  expect(
+    offlineEvidence,
+    `offline queue rejection diagnostics: ${rejectionDiagnostics.join(",") || "none"}`,
+  ).toMatchObject({
     queued: { ok: true, data: { result: { offline_queued: true } } },
     denied: { ok: false, error: { code: "RESOURCE_UNAVAILABLE" } },
     status: { ok: true, data: { pending_count: 1, inflight_count: 0, conflicts: [] } },
@@ -474,7 +484,7 @@ async function runPackagedGovernanceSmoke(page: Page): Promise<void> {
   await expect(governance.getByLabel("保留客户")).toHaveCount(1, { timeout: 15_000 });
   await governance.locator('input[name="customer-merge-reason"]').fill("packaged macOS E2E");
   await governance.getByRole("button", { name: "合并到保留客户" }).click();
-  await page.locator(".ld-step-up__select").selectOption({ label: "E2E Staff One" });
+  await page.locator(".ld-step-up__select").selectOption({ label: "E2E Staff Two（店长）" });
   await page.locator('input[name="step-up-pin"]').fill(LOGIN.pin);
   await page.getByRole("button", { name: "确认 PIN" }).click();
   await expect(matches).toHaveCount(1, { timeout: 15_000 });
@@ -497,13 +507,23 @@ test("packaged app recovers from an unavailable local service with a token-free 
   const executablePath = join(canonicalApp, "Contents", "MacOS", "laundry-desk V2");
   await access(executablePath);
   let application: ElectronApplication | null = null;
-
+  const rejectionDiagnostics: string[] = [];
   try {
     application = await electron.launch({
       executablePath,
-      args: [`--user-data-dir=${USER_DATA_PATH}`],
-      env: credentialFreeEnvironment(),
+      args: [`--user-data-dir=${USER_DATA_PATH}`, "--use-mock-keychain"],
+      env: {
+        ...credentialFreeEnvironment(),
+        LAUNDRY_ACCEPTANCE_DIAGNOSTICS: "offline_queue",
+      },
     });
+    const captureDiagnostics = (chunk: Buffer | string): void => {
+      for (const match of chunk.toString().matchAll(/\[edge-agent\] offline diagnostic (\w+)/gu)) {
+        if (match[1] !== undefined) rejectionDiagnostics.push(match[1]);
+      }
+    };
+    application.process().stdout?.on("data", captureDiagnostics);
+    application.process().stderr?.on("data", captureDiagnostics);
     const page = await application.firstWindow();
     await expect(page.getByRole("heading", { name: "本地服务尚未就绪" })).toBeVisible({
       timeout: 15_000,
@@ -524,7 +544,7 @@ test("packaged app recovers from an unavailable local service with a token-free 
 
     await runCounterWorkday(page);
     await runPackagedMemberSettlement(page);
-    await runPackagedOfflineGrantReplay(page);
+    await runPackagedOfflineGrantReplay(page, rejectionDiagnostics);
     await runPackagedGovernanceSmoke(page);
 
     const audit = await page.evaluate(async () => {
