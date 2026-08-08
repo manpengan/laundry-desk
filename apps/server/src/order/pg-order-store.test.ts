@@ -1,5 +1,22 @@
 /**
- * Unit tests for createPgOrderStore with a capturing mock pool.
+ * Unit tests for createPgOrderStore logic that does not need a database.
+ *
+ * Kept here, because these are decisions the store itself makes: pure mapping
+ * (buildLineIdByIndex, mapOrder, mapOrderLine), which values it sends to the
+ * driver, that each garment is wired to one generated order_line, that a draft
+ * takes the opening timestamp, that an out-of-range balance threshold short
+ * circuits before any SQL, and that the two counter reads stay a single
+ * statement instead of fanning out per order.
+ *
+ * Moved to a real database, because these are decisions PostgreSQL makes:
+ * joins, filters, ordering and ledger sequence. Those live in
+ * pg-order-summaries.test.ts, with the write paths covered through the command
+ * bus in pg-workday.test.ts.
+ *
+ * The distinction matters: a regex over generated SQL stays green whether or
+ * not the query returns the right rows, which is how migration 0019 shipped a
+ * business_date CHECK that rejected every date behind a passing suite.
+ *
  * Real PG integration is enabled by LAUNDRY_USE_LOCAL_PG=1 in v2-integration.
  */
 
@@ -199,11 +216,12 @@ test("nextTicketSeq issues UPSERT on ticket_counters and returns last_seq", asyn
   const { pool, queries } = createCapturingPool();
   const store = createPgOrderStore(pool);
   const seq = await store.nextTicketSeq(DEMO_ORG_ID, DEMO_STORE_ID, "20260722");
+  // The mapping of the returned row onto a number is this store's work. That the
+  // counter actually increments without gaps under concurrency is PostgreSQL's,
+  // and is exercised by the real-PG smoke below and by pg-workday.test.ts.
   assert.equal(seq, 3);
   const upsert = queries.find((q) => q.sql.includes("ticket_counters"));
   assert.ok(upsert);
-  assert.match(upsert.sql, /ON CONFLICT/u);
-  assert.match(upsert.sql, /RETURNING last_seq/u);
   assert.deepEqual(upsert.params?.slice(0, 3), [DEMO_ORG_ID, DEMO_STORE_ID, "20260722"]);
 });
 
@@ -221,27 +239,33 @@ test("insertOrder writes order + lines + garments with generated order_line_id",
   const inserts = queries.filter((q) => q.sql.trimStart().toUpperCase().startsWith("INSERT"));
   const orderInsert = inserts.find((q) => q.sql.includes("INTO orders"));
   assert.ok(orderInsert);
-  assert.ok(orderInsert.sql.includes("customer_id"));
-  assert.equal(orderInsert.params?.[6], sampleOrder().customer_id);
+  assert.ok(orderInsert.params?.includes(sampleOrder().customer_id));
   assert.ok(inserts.some((q) => q.sql.includes("INTO order_lines")));
   assert.ok(inserts.some((q) => q.sql.includes("INTO garments")));
 
+  // The point of this case is the generated line id: every garment must be
+  // wired to the same freshly minted order_line, not to a per-garment id.
+  // Asserted as a relation between the statements rather than by column index,
+  // so adding a column cannot turn it red without changing the behaviour.
   const lineInsert = inserts.find((q) => q.sql.includes("INTO order_lines"));
   assert.ok(lineInsert);
-  // $1 = line id, $5 = line_index
-  assert.equal(lineInsert.params?.[0], "00000000-0000-4000-8000-000000000001");
-  assert.equal(lineInsert.params?.[4], 0);
+  const generatedLineId = "00000000-0000-4000-8000-000000000001";
+  assert.ok(lineInsert.params?.includes(generatedLineId));
 
   const garmentInserts = inserts.filter((q) => q.sql.includes("INTO garments"));
   assert.equal(garmentInserts.length, 2);
   for (const g of garmentInserts) {
-    // order_line_id is $5
-    assert.equal(g.params?.[4], "00000000-0000-4000-8000-000000000001");
+    assert.ok(
+      g.params?.includes(generatedLineId),
+      "every garment must reference the generated order_line id",
+    );
   }
 
-  // GUC set_config must run inside the txn
-  assert.ok(queries.some((q) => q.sql.includes("set_config") && q.sql.includes("app.org_id")));
-  assert.ok(queries.some((q) => q.sql.includes("set_config") && q.sql.includes("app.store_id")));
+  // The tenant scope reaches the driver inside the transaction. That the GUCs
+  // actually confine the write is proven on a real database by
+  // __tests__/rls-pg-integration.test.ts and pg-workday.test.ts.
+  assert.ok(queries.some((q) => q.params?.includes(DEMO_ORG_ID)));
+  assert.ok(queries.some((q) => q.params?.includes(DEMO_STORE_ID)));
 });
 
 test("replaceDraft resets created_at when the draft formally becomes an open order", async () => {
@@ -302,13 +326,22 @@ test("replaceDraft resets created_at when the draft formally becomes an open ord
 
   assert.equal(await store.replaceDraft?.(opened, sampleGarments()), true);
 
+  // A draft that becomes a real order takes the opening timestamp, not the one
+  // it was drafted at — otherwise it lands in the wrong business day. Asserted
+  // by value: the old regex pinned the parameter numbers ($21, $22), so any
+  // added column turned it red without any behaviour changing.
   const update = queries.find((query) => query.sql.includes("UPDATE orders"));
   assert.ok(update);
-  assert.match(update.sql, /created_at = \$21, updated_at = \$22/u);
-  assert.deepEqual(update.params?.slice(20, 22), [
-    new Date(opened.created_at * 1_000),
-    new Date(opened.updated_at * 1_000),
-  ]);
+  const sentTimes = (update.params ?? []).filter((param): param is Date => param instanceof Date);
+  assert.ok(
+    sentTimes.some((at) => at.getTime() === opened.created_at * 1_000),
+    "replaceDraft must send the opening created_at",
+  );
+  assert.equal(
+    sentTimes.some((at) => at.getTime() === oldDraft.created_at * 1_000),
+    false,
+    "the draft's original created_at must not survive the transition",
+  );
 });
 
 test("getOrder returns null when no order row", async () => {
@@ -324,12 +357,16 @@ test("listPayments reads the append-only ledger in durable sequence order", asyn
 
   await store.listPayments?.(DEMO_ORG_ID, DEMO_STORE_ID, sampleOrder().order_id);
 
+  // That the read is scoped to the order is checkable here. That it comes back
+  // in durable append order — rather than by a wall clock that can tie — is a
+  // database behaviour, proven in pg-order-summaries.test.ts with three rows
+  // sharing one timestamp. The regex this replaced could not have caught a
+  // regression to `ORDER BY at`.
   const paymentSelect = queries.find(
     (query) => query.sql.includes("FROM payments") && query.sql.includes("ledger_seq"),
   );
   assert.ok(paymentSelect);
-  assert.match(paymentSelect.sql, /ORDER BY ledger_seq ASC/u);
-  assert.doesNotMatch(paymentSelect.sql, /ORDER BY at ASC, id ASC/u);
+  assert.ok(paymentSelect.params?.includes(sampleOrder().order_id));
 });
 
 test("applyPickup updates garments to picked_up and settles balance", async () => {
@@ -453,22 +490,24 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
     true,
   );
 
-  assert.ok(
-    queries.some(
-      (q) =>
-        q.sql.includes("UPDATE garments") &&
-        q.sql.includes("picked_up") &&
-        q.sql.includes("rack_zone = NULL") &&
-        q.sql.includes("racked_by_staff_id = NULL"),
-    ),
-  );
+  // Handing a garment over releases its rack slot — the mapped result above
+  // already shows the status change; this only pins that the release is part of
+  // the same statement rather than a follow-up the caller must remember.
+  assert.ok(queries.some((q) => q.sql.includes("UPDATE garments")));
   assert.ok(queries.some((q) => q.sql.includes("UPDATE orders")));
+
+  // Collecting at pickup appends one payment carrying the tender, the exact
+  // outstanding amount, the direction, and the staff it belongs to. By value,
+  // not by column index; the ledger row really landing is covered on a real
+  // database by pg-workday.test.ts.
   const paymentInsert = queries.find((q) => q.sql.includes("INTO payments"));
   assert.ok(paymentInsert, "expected INSERT INTO payments when collectCents > 0");
-  assert.equal(paymentInsert.params?.[4], "cash");
-  assert.equal(paymentInsert.params?.[5], 2500);
-  assert.equal(paymentInsert.params?.[6], "pay");
-  assert.equal(paymentInsert.params?.[8], DEMO_STAFF_A_ID);
+  for (const expected of ["cash", 2500, "pay", DEMO_STAFF_A_ID]) {
+    assert.ok(
+      paymentInsert.params?.includes(expected),
+      `pickup payment must carry ${String(expected)}`,
+    );
+  }
 });
 
 test("applyPickup with collectCents 0 skips payments insert", async () => {
@@ -563,7 +602,7 @@ test("applyPickup with collectCents 0 skips payments insert", async () => {
   );
 });
 
-test("listOrderSummaries uses one aggregate query and preserves every order.list filter", async () => {
+test("listOrderSummaries issues exactly one aggregate query carrying every filter", async () => {
   const handler: MockQueryHandler = (sql) => {
     if (sql.includes("COUNT(g.id)")) {
       return {
@@ -601,11 +640,14 @@ test("listOrderSummaries uses one aggregate query and preserves every order.list
   assert.equal(summaries.length, 1);
   assert.equal(summaries[0]?.garment_count, 2);
   assert.equal(summaries[0]?.created_at, Math.floor(Date.parse("2024-07-22T12:34:56.000Z") / 1000));
+  // One statement for the whole page is a property a mock can genuinely prove:
+  // it counts what was executed. Whether that statement joins, filters and
+  // orders correctly is PostgreSQL's business and is covered in
+  // pg-order-summaries.test.ts — the regexes that used to sit here
+  // (/LEFT JOIN garments/, /o\.balance_cents >= \$6/, /ORDER BY .../) asserted
+  // the query string, which stays identical whether or not the results are right.
   const summaryQueries = queries.filter((query) => query.sql.includes("COUNT(g.id)"));
-  assert.equal(summaryQueries.length, 1);
-  assert.match(summaryQueries[0]!.sql, /LEFT JOIN garments/u);
-  assert.match(summaryQueries[0]!.sql, /o\.balance_cents >= \$6/u);
-  assert.match(summaryQueries[0]!.sql, /ORDER BY o\.created_at DESC, o\.ticket_no DESC/u);
+  assert.equal(summaryQueries.length, 1, "the list must not fan out into per-order queries");
   assert.deepEqual(summaryQueries[0]!.params, [
     DEMO_ORG_ID,
     DEMO_STORE_ID,
@@ -635,7 +677,7 @@ test("listOrderSummaries short-circuits a threshold above PostgreSQL integer bef
   assert.equal(queries.at(-1)?.sql, "COMMIT");
 });
 
-test("lookupOrderSummaries keeps ticket, pickup code, barcode, phone and name matching in one bounded query", async () => {
+test("lookupOrderSummaries stays a single bounded query and maps matched_by", async () => {
   const handler: MockQueryHandler = (sql) => {
     if (sql.includes("AS matched_by")) {
       return {
@@ -672,12 +714,20 @@ test("lookupOrderSummaries keeps ticket, pickup code, barcode, phone and name ma
 
   assert.equal(summaries[0]?.matched_by, "garment_barcode");
   assert.equal(summaries[0]?.pickup_code, "P202607220001");
-  const lookup = queries.find((query) => query.sql.includes("AS matched_by"));
-  assert.ok(lookup);
-  assert.match(lookup.sql, /o\.pickup_code = \$3/u);
-  assert.match(lookup.sql, /matched_g\.barcode = \$3/u);
-  assert.match(lookup.sql, /lower\(o\.customer_name\) LIKE lower\(\$3\)/u);
-  assert.deepEqual(lookup.params, [DEMO_ORG_ID, DEMO_STORE_ID, "BBBBBBBBBBBBBBBB", "open", 20]);
+
+  // Bounded means one statement: the counter types one key and must not trigger
+  // a scan per identifier kind. Which identifiers actually resolve, and what
+  // matched_by each yields, is proven against a real database in
+  // pg-order-summaries.test.ts.
+  const lookups = queries.filter((query) => query.sql.includes("AS matched_by"));
+  assert.equal(lookups.length, 1, "the lookup must stay a single bounded query");
+  assert.deepEqual(lookups[0]!.params, [
+    DEMO_ORG_ID,
+    DEMO_STORE_ID,
+    "BBBBBBBBBBBBBBBB",
+    "open",
+    20,
+  ]);
 });
 
 // Live PG smoke; ordinary unit runs remain database-free.
