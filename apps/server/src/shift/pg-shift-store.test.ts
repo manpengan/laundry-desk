@@ -1,5 +1,17 @@
 /**
- * Unit tests for createPgShiftStore with a capturing mock pool.
+ * Unit tests for createPgShiftStore logic that does not need a database.
+ *
+ * What belongs here: argument validation that rejects before any query, the
+ * defensive copy of the caller's options, row mapping, and the mapping of
+ * PostgreSQL error codes onto domain errors. A mock pool is the right tool for
+ * all four — they are decisions the store makes, not things PostgreSQL decides.
+ *
+ * What does NOT belong here: ordering, filtering, and persistence. Asserting a
+ * regex over generated SQL only proves the string was assembled; it cannot show
+ * what the database returns, which is how migration 0019 shipped a business_date
+ * CHECK that rejected every date behind a green suite. Those live on a real
+ * database in pg-shift-queries.test.ts (reads) and order/pg-workday.test.ts
+ * (close, through the command bus).
  */
 
 import assert from "node:assert/strict";
@@ -101,10 +113,9 @@ test("getByBusinessDate returns mapped row under store GUC", async () => {
   assert.equal(row.signature_name, "店员甲");
   assert.equal(row.closed_at, CLOSED_EPOCH);
   assert.equal(row.note, "晚班");
-  assert.ok(queries.some((q) => q.sql.includes("set_config")));
-  assert.ok(
-    queries.some((q) => q.sql.includes("app.store_id") || q.params?.includes(DEMO_STORE_ID)),
-  );
+  // The tenant scope reaches the driver. That the GUCs actually confine the read
+  // is a database behaviour, proven in __tests__/rls-pg-integration.test.ts.
+  assert.ok(queries.some((q) => q.params?.includes(DEMO_STORE_ID)));
 });
 
 test("getByBusinessDate returns null when missing", async () => {
@@ -136,7 +147,11 @@ test("getByBusinessDate rejects a scope different from the configured store", as
   assert.equal(queries.length, 0);
 });
 
-test("getMostRecentBefore excludes future business dates and orders by business date", async () => {
+// The ordering and the strict earlier-than bound of getMostRecentBefore used to
+// be asserted here as a regex over the generated SQL. That assertion could not
+// fail if PostgreSQL sorted differently, so it moved to a real database in
+// pg-shift-queries.test.ts. Only the scope forwarding stays mockable.
+test("getMostRecentBefore scopes the query to the configured org and store", async () => {
   const { pool, queries } = createCapturingPool();
   const store = createPgShiftStore(pool, {
     orgId: DEMO_ORG_ID,
@@ -144,12 +159,8 @@ test("getMostRecentBefore excludes future business dates and orders by business 
   });
 
   assert.equal(await store.getMostRecentBefore(DEMO_ORG_ID, DEMO_STORE_ID, BUSINESS_DATE), null);
-  const select = queries.find(
-    (query) =>
-      query.sql.includes("FROM shift_closings") && query.sql.includes("business_date < $3"),
-  );
-  assert.ok(select);
-  assert.match(select.sql, /ORDER BY business_date DESC, closed_at DESC, id DESC/u);
+  const select = queries.find((query) => query.params?.includes(BUSINESS_DATE));
+  assert.ok(select, "the read must carry the requested business date");
   assert.deepEqual(select.params, [DEMO_ORG_ID, DEMO_STORE_ID, BUSINESS_DATE]);
 });
 
@@ -162,8 +173,13 @@ test("configured scope is captured when the caller later mutates its options obj
   const row = await store.getByBusinessDate(DEMO_ORG_ID, DEMO_STORE_ID, BUSINESS_DATE);
 
   assert.equal(row, null);
-  const orgGuc = queries.find((query) => query.sql.includes("app.org_id"));
-  assert.deepEqual(orgGuc?.params, [DEMO_ORG_ID]);
+  // The store still uses the org it was built with, not the mutated one.
+  assert.ok(queries.some((query) => query.params?.includes(DEMO_ORG_ID)));
+  assert.equal(
+    queries.some((query) => query.params?.includes("cccccccc-cccc-4ccc-8ccc-cccccccccccc")),
+    false,
+    "a later mutation of the options object must not reach the database",
+  );
 });
 
 test("close inserts shift_closings row and maps RETURNING", async () => {
@@ -219,18 +235,19 @@ test("close inserts shift_closings row and maps RETURNING", async () => {
   assert.equal(record.payable_cents, 3000);
   assert.equal(record.signature_name, "店员甲");
 
+  // The write carries the caller's values through. Asserted by membership, not
+  // by column position: a positional assertion (params[15]) breaks on every
+  // added column while proving nothing about what was stored. That the row
+  // actually lands in shift_closings is covered on a real database by
+  // order/pg-workday.test.ts.
   const insert = queries.find((q) => q.sql.includes("INSERT INTO shift_closings"));
   assert.ok(insert);
-  assert.equal(insert?.params?.[0], SHIFT_ID);
-  assert.equal(insert?.params?.[1], DEMO_ORG_ID);
-  assert.equal(insert?.params?.[2], DEMO_STORE_ID);
-  assert.equal(insert?.params?.[3], BUSINESS_DATE);
-  assert.equal(insert?.params?.[4], DEMO_STAFF_A_ID);
-  assert.equal(insert?.params?.[6], 1);
-  assert.equal(insert?.params?.[7], 3000);
-  assert.equal(insert?.params?.[15], "店员甲");
-  const staffGuc = queries.find((q) => q.sql.includes("app.staff_id"));
-  assert.deepEqual(staffGuc?.params, [DEMO_STAFF_A_ID]);
+  for (const expected of [SHIFT_ID, DEMO_ORG_ID, DEMO_STORE_ID, BUSINESS_DATE, "店员甲"]) {
+    assert.ok(
+      insert.params?.includes(expected),
+      `close must send ${String(expected)} to the database`,
+    );
+  }
 });
 
 test("close business-date conflict maps to ShiftAlreadyClosedError", async () => {

@@ -1,5 +1,14 @@
 /**
- * Unit tests for createPgPrintJobStore with a capturing mock pool.
+ * Unit tests for createPgPrintJobStore logic that does not need a database.
+ *
+ * Row mapping and the shape of what the store sends to the driver are decisions
+ * this module makes, so a mock pool can prove them. Ordering, the limit, and
+ * claim atomicity are decisions PostgreSQL makes: they live on a real database
+ * in pg-print-list.test.ts and pg-print-claim.test.ts.
+ *
+ * The list ordering case used to live here and was circular — the mock returned
+ * rows only when the SQL contained "ORDER BY created_at DESC", then asserted
+ * they arrived in that order. It could not have failed.
  */
 
 import assert from "node:assert/strict";
@@ -80,15 +89,14 @@ test("enqueue inserts queued print_jobs row under store GUC", async () => {
 
   assert.equal(job.status, "queued");
   assert.equal(job.job_id, JOB_ID);
-  assert.ok(queries.some((q) => q.sql.includes("set_config")));
+  // By membership, not column position — see the note in pg-shift-store.test.ts.
+  // That the row is really persisted as queued is covered on a real database by
+  // pg-print-claim.test.ts and pg-print-list.test.ts.
   const insert = queries.find((q) => q.sql.includes("INSERT INTO print_jobs"));
   assert.ok(insert);
-  assert.equal(insert?.params?.[0], JOB_ID);
-  assert.equal(insert?.params?.[1], DEMO_ORG_ID);
-  assert.equal(insert?.params?.[2], DEMO_STORE_ID);
-  assert.equal(insert?.params?.[3], ORDER_ID);
-  assert.equal(insert?.params?.[4], "20260722-0001");
-  assert.equal(insert?.params?.[5], "xp58");
+  for (const expected of [JOB_ID, DEMO_ORG_ID, DEMO_STORE_ID, ORDER_ID, "20260722-0001", "xp58"]) {
+    assert.ok(insert.params?.includes(expected), `enqueue must send ${expected}`);
+  }
 });
 
 test("transition printing → done sets payload_bytes", async () => {
@@ -155,41 +163,42 @@ test("transition printing → done sets payload_bytes", async () => {
   assert.equal(update?.params?.[5], 128);
 });
 
-test("list returns newest-first mapped views", async () => {
+// Ordering moved to pg-print-list.test.ts. What remains mockable is the row
+// mapping: timestamps become epoch seconds and an absent payload_bytes stays
+// absent rather than becoming null or 0. The mock answers unconditionally, so
+// the assertion cannot be satisfied by the SQL text.
+test("list maps each row and drops an absent payload size", async () => {
   const t1 = new Date("2024-01-01T00:00:01.000Z");
   const t2 = new Date("2024-01-01T00:00:02.000Z");
   const { pool } = createCapturingPool((sql) => {
     if (isControlSql(sql)) return { rows: [], rowCount: 0 };
-    if (sql.includes("ORDER BY created_at DESC")) {
-      return {
-        rows: [
-          {
-            id: "22222222-2222-4222-8222-222222222222",
-            kind: "xp58",
-            status: "done",
-            order_id: ORDER_ID,
-            ticket_no: "new",
-            created_at: t2,
-            updated_at: t2,
-            error: null,
-            payload_bytes: 64,
-          },
-          {
-            id: "11111111-1111-4111-8111-111111111111",
-            kind: "dl206",
-            status: "queued",
-            order_id: ORDER_ID,
-            ticket_no: "old",
-            created_at: t1,
-            updated_at: t1,
-            error: null,
-            payload_bytes: null,
-          },
-        ],
-        rowCount: 2,
-      };
-    }
-    return { rows: [], rowCount: 0 };
+    return {
+      rows: [
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          kind: "xp58",
+          status: "done",
+          order_id: ORDER_ID,
+          ticket_no: "new",
+          created_at: t2,
+          updated_at: t2,
+          error: null,
+          payload_bytes: 64,
+        },
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          kind: "dl206",
+          status: "queued",
+          order_id: ORDER_ID,
+          ticket_no: "old",
+          created_at: t1,
+          updated_at: t1,
+          error: null,
+          payload_bytes: null,
+        },
+      ],
+      rowCount: 2,
+    };
   });
 
   const store = createPgPrintJobStore(pool, {
@@ -200,5 +209,8 @@ test("list returns newest-first mapped views", async () => {
   assert.equal(jobs.length, 2);
   assert.equal(jobs[0]?.ticket_no, "new");
   assert.equal(jobs[0]?.payload_bytes, 64);
+  assert.equal(jobs[0]?.created_at, Math.floor(t2.getTime() / 1000));
   assert.equal(jobs[1]?.ticket_no, "old");
+  assert.equal(jobs[1]?.payload_bytes, undefined);
+  assert.equal(jobs[1]?.kind, "dl206");
 });

@@ -1,5 +1,14 @@
 /**
- * Unit tests for createPgCustomerStore with a capturing mock pool.
+ * Unit tests for createPgCustomerStore logic that does not need a database.
+ *
+ * Search ordering, case-insensitive matching, the fifty-row cap, and the
+ * exclusion of merged and anonymized customers are all decisions PostgreSQL
+ * makes; they are proven on a real database in pg-customer-search.test.ts. The
+ * exclusion in particular is a privacy obligation that a capturing pool would
+ * report as passing while the WHERE clause leaked retired rows.
+ *
+ * What stays here is the store's own work: how it builds its match patterns and
+ * how it maps rows back onto the domain shape.
  */
 
 import assert from "node:assert/strict";
@@ -54,70 +63,51 @@ const FIXED_ID = "c3333333-3333-4333-8333-333333333333";
 const TARGET_ID = "d4444444-4444-4444-8444-444444444444";
 const AT = new Date("2024-01-15T12:00:00.000Z");
 
-test("search empty query orders by updated_at desc and sets org GUC", async () => {
+// Ordering moved to pg-customer-search.test.ts. The mapping stays: timestamps
+// become epoch seconds. The mock answers unconditionally so the SQL text cannot
+// satisfy the assertion.
+test("search maps a row onto the search shape", async () => {
   const { pool, queries } = createCapturingPool((sql) => {
     if (sql.includes("set_config") || sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
       return { rows: [], rowCount: 0 };
     }
-    if (sql.includes("FROM customers") && sql.includes("ORDER BY updated_at DESC")) {
-      return {
-        rows: [
-          {
-            id: FIXED_ID,
-            phone: "13800000222",
-            name: "李四",
-            note: null,
-            created_at: AT,
-            updated_at: AT,
-          },
-        ],
-        rowCount: 1,
-      };
-    }
-    return { rows: [], rowCount: 0 };
+    return {
+      rows: [
+        {
+          id: FIXED_ID,
+          phone: "13800000222",
+          name: "李四",
+          note: null,
+          created_at: AT,
+          updated_at: AT,
+        },
+      ],
+      rowCount: 1,
+    };
   });
 
   const store = createPgCustomerStore(pool, { orgId: DEMO_ORG_ID });
   const rows = await store.search(undefined, 20);
   assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.customer_id, FIXED_ID);
   assert.equal(rows[0]?.phone, "13800000222");
   assert.equal(rows[0]?.name, "李四");
   assert.equal(rows[0]?.updated_at, Math.floor(AT.getTime() / 1000));
-  assert.ok(queries.some((q) => q.sql.includes("set_config")));
-  assert.ok(queries.some((q) => q.sql.includes("app.org_id") || q.params?.includes(DEMO_ORG_ID)));
+  assert.ok(queries.some((q) => q.params?.includes(DEMO_ORG_ID)));
 });
 
-test("search with query uses ILIKE / prefix patterns", async () => {
-  const { pool, queries } = createCapturingPool((sql) => {
-    if (sql.includes("set_config") || sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
-      return { rows: [], rowCount: 0 };
-    }
-    if (sql.includes("ILIKE")) {
-      return {
-        rows: [
-          {
-            id: FIXED_ID,
-            phone: "13800000111",
-            name: "张三",
-            note: null,
-            created_at: AT,
-            updated_at: AT,
-          },
-        ],
-        rowCount: 1,
-      };
-    }
-    return { rows: [], rowCount: 0 };
-  });
+// Building the two patterns is the store's own work — one anchored prefix for
+// phones, one contains pattern for phone-fragment and name matches. That they
+// then match case-insensitively is pg-customer-search.test.ts's job.
+test("search sends an anchored prefix and a contains pattern", async () => {
+  const { pool, queries } = createCapturingPool(() => ({ rows: [], rowCount: 0 }));
 
   const store = createPgCustomerStore(pool, { orgId: DEMO_ORG_ID });
-  const rows = await store.search("138000001", 10);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0]?.phone, "13800000111");
+  await store.search("138000001", 10);
 
-  const searchQ = queries.find((q) => q.sql.includes("ILIKE"));
-  assert.ok(searchQ);
-  assert.deepEqual(searchQ?.params?.slice(1, 3), ["138000001%", "%138000001%"]);
+  const searchQ = queries.find((q) => q.params?.includes("138000001%"));
+  assert.ok(searchQ, "search must send an anchored prefix pattern");
+  assert.ok(searchQ.params?.includes("%138000001%"), "and a contains pattern");
 });
 
 test("getByPhone returns mapped record or null", async () => {
