@@ -1,16 +1,3 @@
-/**
- * Real-PostgreSQL counter workday acceptance.
- *
- * Every other order/payment test in this package runs against a capturing pool
- * that asserts on SQL strings, so no test ever drove a real order through the
- * production command path. That gap let migration 0019 ship a business_date
- * CHECK which rejected every possible date — orders and payments could not be
- * written at all on a real database, and the whole suite still passed.
- *
- * This test closes that gap: receive → repay → pickup → shift close, executed
- * through the real command bus against real PostgreSQL under laundry_app RLS.
- */
-
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -28,6 +15,7 @@ import { createPgFulfillmentStore } from "../fulfillment/pg-store.js";
 import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
 import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
+import { createPgMemberDeps } from "../member/runtime.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
 import { acquirePgBusinessDayLock } from "../workday/business-day-lock.js";
@@ -52,7 +40,13 @@ const ACTOR: ActorContext = Object.freeze({
   staffId: DEMO_STAFF_A_ID,
   deviceId: null,
   via: "ui",
-  permissions: Object.freeze(["order_write", "payment_write", "payment_refund", "shift_close"]),
+  permissions: Object.freeze([
+    "customer_write",
+    "order_write",
+    "payment_write",
+    "payment_refund",
+    "shift_close",
+  ]),
 });
 const APPROVER: ActorContext = Object.freeze({ ...ACTOR, staffId: DEMO_STAFF_B_ID });
 
@@ -73,13 +67,6 @@ const FIXED_BUSINESS_DATE = "2026-01-15";
 const CUSTOMER_PHONE = `139${String(Date.parse("2026-07-28") % 100_000_000).padStart(8, "0")}`;
 const TARGET_CUSTOMER_PHONE = `138${CUSTOMER_PHONE.slice(3)}`;
 
-/**
- * Pin this acceptance to its own business day. shift.close is terminal and
- * append-only, so closing "today" would freeze the shared integration database
- * for everything that runs afterwards — the browser workday E2E runs later in
- * the same CI job and could no longer take an order. Epoch seconds, matching
- * `deps.now`.
- */
 const FIXED_CLOCK_EPOCH_SECONDS = Math.floor(Date.parse("2026-01-15T03:00:00Z") / 1000);
 const fixedNow = (): number => FIXED_CLOCK_EPOCH_SECONDS;
 
@@ -128,6 +115,8 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
         timeZone: LOCAL_PROFILE.timezone,
         now: fixedNow,
         lockBusinessDay: acquirePgBusinessDayLock,
+        isBusinessDayClosed: async (businessDate) =>
+          (await shiftStore.getByBusinessDate(DEMO_ORG_ID, DEMO_STORE_ID, businessDate)) !== null,
       }),
       shift: Object.freeze({
         store: shiftStore,
@@ -138,6 +127,7 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       }),
       stats: Object.freeze({ source: statsSource, timeZone: LOCAL_PROFILE.timezone }),
       fulfillment: Object.freeze({ store: fulfillmentStore, now: fixedNow }),
+      member: createPgMemberDeps(),
     });
 
     const issueAs = async (
@@ -158,13 +148,8 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     const issue = async (name: string, input: unknown, confirmRef?: string) =>
       issueAs(ACTOR, TENANT, name, input, confirmRef);
 
-    /**
-     * Mirrors the counter danger-confirm flow: a policy-gated command first
-     * answers with a confirm_ref, and the client re-issues it. The executor
-     * replays the frozen arguments from the pending card (WYSIWYS), so the
-     * reference travels in the options rather than the request body.
-     */
-    const run = async (name: string, input: unknown): Promise<{ ok: boolean; data?: unknown }> => {
+    // Replay policy-gated commands with the server-issued frozen confirmation reference.
+    const dispatch = async (name: string, input: unknown) => {
       let result = await issue(name, input);
       if (!result.ok && result.error.code === "POLICY_CONFIRMATION_REQUIRED") {
         const detail: unknown = result.error.detail;
@@ -175,11 +160,14 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
         assert.equal(typeof confirmRef, "string", `${name}: missing confirm_ref`);
         result = await issue(name, input, confirmRef as string);
       }
+      return result;
+    };
+    const run = async (name: string, input: unknown): Promise<{ ok: boolean; data?: unknown }> => {
+      const result = await dispatch(name, input);
       assert.equal(result.ok, true, `${name}: ${JSON.stringify(result)}`);
       return result.ok ? { ok: true, data: result.data.result } : { ok: false };
     };
 
-    // Receive two garments with every pricing component and pay 600 in cash.
     const received = (
       await run("order.receive", {
         customer_phone: CUSTOMER_PHONE,
@@ -297,8 +285,9 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       customer_id: targetCustomer.customer_id,
       customer_phone: TARGET_CUSTOMER_PHONE,
     });
+    const member = (await run("member.account.open", { customer_id: targetCustomer.customer_id }))
+      .data as { account_id: string };
 
-    // Repay the outstanding debt.
     await run("payment.repay", {
       order_id: received.order_id,
       amount_cents: PAYABLE_CENTS - 600,
@@ -521,6 +510,38 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       "shift close writes exactly one closing row",
     );
     assert.equal(Number(closings.rows[0]?.audit_count), 1, "shift close audit commits atomically");
+
+    const beforeClosedWrites = await readClosedWriteCounts(appPool);
+    const denyClosed = async (name: string, input: unknown): Promise<void> => {
+      const result = await dispatch(name, input);
+      assert.equal(result.ok, false, `${name} must reject a closed business day`);
+      if (result.ok) assert.fail(`${name} unexpectedly wrote after shift close`);
+      assert.equal(result.error.code, "SHIFT_CLOSED", JSON.stringify(result));
+    };
+    await denyClosed("order.receive", {
+      customer_phone: CUSTOMER_PHONE,
+      lines: [{ service_code: serviceCode, category_code: categoryCode, qty: 1 }],
+    });
+    await denyClosed("payment.repay", {
+      order_id: received.order_id,
+      amount_cents: 1,
+      method: "cash",
+    });
+    await denyClosed("member.topup", {
+      account_id: member.account_id,
+      amount_cents: 100,
+      method: "cash",
+    });
+    await denyClosed("member.balance.pay", {
+      account_id: member.account_id,
+      order_id: received.order_id,
+      amount_cents: 1,
+    });
+    assert.deepEqual(
+      await readClosedWriteCounts(appPool),
+      beforeClosedWrites,
+      "closed-day order/payment/member attempts must leave business and audit rows unchanged",
+    );
   } finally {
     try {
       await clearWorkdayFixture(adminPool);
@@ -555,11 +576,24 @@ async function clearWorkdayFixture(pool: ReturnType<typeof createPgPool>): Promi
               WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3
             UNION SELECT id::text FROM customers
               WHERE org_id = $1::uuid AND phone IN ($4, $5)
+            UNION SELECT id::text FROM member_accounts
+              WHERE org_id = $1::uuid AND customer_id IN (
+                SELECT id FROM customers WHERE org_id = $1::uuid AND phone IN ($4, $5)
+              )
           )`,
       [...scope, CUSTOMER_PHONE, TARGET_CUSTOMER_PHONE],
     );
     const orderIds = `SELECT id FROM orders
       WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3`;
+    await client.query(
+      `DELETE FROM member_ledger
+        WHERE org_id = $1::uuid AND account_id IN (
+          SELECT id FROM member_accounts WHERE org_id = $1::uuid AND customer_id IN (
+            SELECT id FROM customers WHERE org_id = $1::uuid AND phone IN ($2, $3)
+          )
+        )`,
+      [DEMO_ORG_ID, CUSTOMER_PHONE, TARGET_CUSTOMER_PHONE],
+    );
     for (const table of [
       "garment_rack_log",
       "garment_incidents",
@@ -584,6 +618,13 @@ async function clearWorkdayFixture(pool: ReturnType<typeof createPgPool>): Promi
       scope,
     );
     await client.query(
+      `DELETE FROM member_accounts
+        WHERE org_id = $1::uuid AND customer_id IN (
+          SELECT id FROM customers WHERE org_id = $1::uuid AND phone IN ($2, $3)
+        )`,
+      [DEMO_ORG_ID, CUSTOMER_PHONE, TARGET_CUSTOMER_PHONE],
+    );
+    await client.query(
       `DELETE FROM customers
         WHERE org_id = $1::uuid AND phone IN ($2, $3)`,
       [DEMO_ORG_ID, CUSTOMER_PHONE, TARGET_CUSTOMER_PHONE],
@@ -600,6 +641,36 @@ async function clearWorkdayFixture(pool: ReturnType<typeof createPgPool>): Promi
   } finally {
     client.release();
   }
+}
+
+async function readClosedWriteCounts(
+  appPool: ReturnType<typeof createPgPool>,
+): Promise<Readonly<Record<string, number>>> {
+  return withPoolClient(appPool, (sql) =>
+    withTenantTransaction(sql, TENANT, async (tx) => {
+      const result = await tx.query<{
+        orders: string;
+        payments: string;
+        member_ledger: string;
+        audit: string;
+      }>(
+        `SELECT
+           (SELECT count(*) FROM orders WHERE business_date = $1)::text AS orders,
+           (SELECT count(*) FROM payments WHERE business_date = $1)::text AS payments,
+           (SELECT count(*) FROM member_ledger WHERE business_date = $1)::text AS member_ledger,
+           (SELECT count(*) FROM audit_log)::text AS audit`,
+        [FIXED_BUSINESS_DATE],
+      );
+      const row = result.rows[0];
+      assert.ok(row);
+      return Object.freeze({
+        orders: Number(row.orders),
+        payments: Number(row.payments),
+        member_ledger: Number(row.member_ledger),
+        audit: Number(row.audit),
+      });
+    }),
+  );
 }
 
 type OrderSnapshot = Readonly<{

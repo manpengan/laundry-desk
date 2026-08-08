@@ -40,7 +40,7 @@ final class NativeRuntimeController {
     return value
   }
 
-  private func verifyManifest(_ data: Data) throws -> RuntimeManifestPayload {
+  func verifyManifest(_ data: Data) throws -> RuntimeManifestPayload {
     let payload = try RuntimeManifestVerifier.verify(
       data: data, trustedKeyText: trustedKey(),
       appVersion: appVersion,
@@ -63,7 +63,7 @@ final class NativeRuntimeController {
     else { try runtimeFail("RUNTIME_SETUP_INVALID") }
   }
 
-  private func decodeState(_ data: Data) throws -> RuntimeState {
+  func decodeState(_ data: Data) throws -> RuntimeState {
     guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       Set(object.keys) == [
         "version", "status", "release", "manifest_sha256",
@@ -79,7 +79,7 @@ final class NativeRuntimeController {
     return state
   }
 
-  private func encodedState(_ state: RuntimeState) throws -> Data {
+  func encodedState(_ state: RuntimeState) throws -> Data {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
     return try encoder.encode(state)
@@ -102,10 +102,15 @@ final class NativeRuntimeController {
     ]
   }
 
-  func load(allowRecovery: Bool = false) throws
-    -> (RuntimeState, RuntimeManifestPayload)
+  func loadSnapshot(allowRecovery: Bool = false, allowTransition: Bool = false) throws
+    -> (state: RuntimeState, payload: RuntimeManifestPayload, stateData: Data, manifestData: Data)
   {
     try RuntimeStorage.validateDirectory(paths.root)
+    guard
+      allowTransition
+        || (!RuntimeStorage.pathExists(paths.transition)
+          && !RuntimeStorage.pathExists(paths.pendingManifest))
+    else { try runtimeFail("RUNTIME_RELEASE_RECOVERY_REQUIRED") }
     let stateData = try RuntimeStorage.readPrivate(paths.state)
     let manifestData = try RuntimeStorage.readPrivate(paths.manifest)
     let state = try decodeState(stateData)
@@ -118,7 +123,15 @@ final class NativeRuntimeController {
       payload.composeSHA256 == state.composeSHA256
     else { try runtimeFail("RUNTIME_RECOVERY_REQUIRED") }
     try RuntimeStorage.validateSecrets(paths.secrets, phase: state.status)
-    return (state, payload)
+    return (state, payload, stateData, manifestData)
+  }
+
+  func load(allowRecovery: Bool = false, allowTransition: Bool = false) throws
+    -> (RuntimeState, RuntimeManifestPayload)
+  {
+    let snapshot = try loadSnapshot(
+      allowRecovery: allowRecovery, allowTransition: allowTransition)
+    return (snapshot.state, snapshot.payload)
   }
 
   private func inspectVolume(_ name: String) throws -> (exists: Bool, labels: [String: String]?) {
@@ -261,7 +274,11 @@ final class NativeRuntimeController {
     try RuntimeStorage.ensureDirectory(paths.root)
     let entries = (try? FileManager.default.contentsOfDirectory(atPath: paths.secrets.path)) ?? []
     let existingVolumes = try inspectVolumes()
-    guard !FileManager.default.fileExists(atPath: paths.state.path), entries.isEmpty,
+    let managedFiles = [
+      paths.state, paths.manifest, paths.releaseHistory, paths.previousManifest,
+      paths.pendingManifest, paths.transition,
+    ]
+    guard !managedFiles.contains(where: RuntimeStorage.pathExists), entries.isEmpty,
       !existingVolumes.contains(where: { $0.exists })
     else { try runtimeFail("RUNTIME_RECOVERY_REQUIRED") }
     try RuntimeStorage.ensureDirectory(paths.secrets)
@@ -279,6 +296,11 @@ final class NativeRuntimeController {
       composeSHA256: payload.composeSHA256,
       instanceID: try RuntimeStorage.randomToken(), volumes: Self.volumes.map({ $0.name }))
     try RuntimeStorage.writeExclusive(try encodedState(state), to: paths.state)
+    let history = RuntimeReleaseHistory(
+      version: 1, highestAcceptedRelease: payload.release,
+      previousRelease: nil, previousManifestSHA256: nil, preUpgradeBackupID: nil)
+    try RuntimeStorage.writeExclusive(
+      try RuntimeReleaseCodec.encode(history), to: paths.releaseHistory)
     try run(command(["pull", payload.serverImage.index]))
     try run(command(["pull", payload.postgresImage]))
     try assertImage(payload)

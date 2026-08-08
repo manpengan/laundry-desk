@@ -282,6 +282,9 @@ test("packaged runtime whitelist is closed under relative JavaScript imports", a
 test("mac acceptance does not persist credentials or inherit arbitrary host secrets", async () => {
   const config = await readFile(join(packageRoot, "playwright.electron.config.ts"), "utf8");
   const smoke = await readFile(join(packageRoot, "e2e", "local-mac.spec.ts"), "utf8");
+  const main = await readFile(join(packageRoot, "src", "main.ts"), "utf8");
+  const localBuilder = await readFile(join(packageRoot, "electron-builder.yml"), "utf8");
+  const releaseBuilder = await readFile(join(packageRoot, "electron-builder.release.yml"), "utf8");
 
   assert.match(config, /trace:\s*"off"/u);
   assert.match(config, /screenshot:\s*"off"/u);
@@ -292,6 +295,8 @@ test("mac acceptance does not persist credentials or inherit arbitrary host secr
   assert.match(smoke, /signalProcessGroup\(processId,\s*"SIGTERM"\)/u);
   assert.match(smoke, /signalProcessGroup\(processId,\s*"SIGKILL"\)/u);
   assert.match(smoke, /await waitForProcessGroupExit\(processId\)/u);
+  assert.match(smoke, /args:\s*\[[^\]]*"--use-mock-keychain"\]/u);
+  assert.doesNotMatch(`${main}\n${localBuilder}\n${releaseBuilder}`, /--use-mock-keychain/u);
 });
 
 test("release packaging is fail-closed, notarized, and keeps the local whitelist exact", async () => {
@@ -314,9 +319,19 @@ test("release packaging is fail-closed, notarized, and keeps the local whitelist
   assert.match(releaseBuilder, /^\s+notarize:\s+true$/mu);
   assert.match(releaseBuilder, /^\s+entitlements:\s+build\/entitlements\.mac\.plist$/mu);
   assert.match(releaseBuilder, /^\s+entitlementsInherit:\s+build\/entitlements\.mac\.plist$/mu);
-  assert.match(releaseBuilder, /^\s+-\s+dmg$/mu);
-  assert.match(releaseBuilder, /^\s+-\s+zip$/mu);
+  assert.match(releaseBuilder, /^\s+-\s+target:\s+dmg$/mu);
+  assert.match(releaseBuilder, /^\s+-\s+target:\s+zip$/mu);
+  assert.equal((releaseBuilder.match(/^\s+-\s+universal$/gmu) ?? []).length, 2);
+  assert.match(releaseBuilder, /^\s+output:\s+\$\{env\.LAUNDRY_RELEASE_OUTPUT_DIRECTORY\}$/mu);
+  assert.match(
+    releaseBuilder,
+    /^\s+artifactName:\s+"\$\{productName\}-\$\{version\}-\$\{arch\}\.\$\{ext\}"$/mu,
+  );
   assert.match(releaseBuilder, /^\s+to:\s+update\/update-public-key\.pem$/mu);
+  assert.match(releaseBuilder, /^\s+to:\s+update\/update-config\.json$/mu);
+  assert.match(releaseBuilder, /\$\{env\.LAUNDRY_RELEASE_UPDATE_PUBLIC_KEY_FILE\}/u);
+  assert.match(releaseBuilder, /\$\{env\.LAUNDRY_RELEASE_UPDATE_CONFIG_FILE\}/u);
+  assert.match(localBuilder, /resources\/update\/update-config\.development\.json/u);
   assert.doesNotMatch(releaseBuilder, /^\s+identity:\s+null$/mu);
   assert.equal(packageJson.scripts["release:mac"], "node scripts/release-mac.mjs");
 });

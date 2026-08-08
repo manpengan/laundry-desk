@@ -6,6 +6,7 @@ import {
   DesktopHealthGetResultSchema,
   DesktopSessionViewSchema,
   createCommandError,
+  type DesktopSessionView,
 } from "@laundry/contracts";
 
 import type { DesktopHttpTransport } from "../desktop/http-transport.js";
@@ -281,6 +282,7 @@ test("recovery read-only remains immutable across session refreshes and blocks e
     exportReadAuthority: () => null,
     invalidateContinuity: () => undefined,
     clearReadAuthority: () => undefined,
+    reconcileSession: () => undefined,
     resolve: () => {
       calls.resolve += 1;
     },
@@ -409,6 +411,7 @@ function resumeFixture(options: ResumeFixtureOptions) {
       invalidations += 1;
     },
     clearReadAuthority: () => undefined,
+    reconcileSession: () => undefined,
     status: () => serverUnavailable,
   } as unknown as OfflineCommandRuntime;
   const cache = {
@@ -594,6 +597,9 @@ test("logout during authority maintenance cannot resurrect a stale session cache
     clearReadAuthority: () => {
       clearAuthorityCalls += 1;
     },
+    reconcileSession: (value: DesktopSessionView | null) => {
+      if (value === null) clearAuthorityCalls += 1;
+    },
   } as unknown as OfflineCommandRuntime;
   const cache = {
     bind: () => {
@@ -612,4 +618,75 @@ test("logout during authority maintenance cannot resurrect a stale session cache
   assert.equal(bindCalls, 0);
   assert.equal(replayCalls, 0);
   assert.ok(clearAuthorityCalls >= 2);
+});
+
+test("a superseded maintenance task reconciles to the refreshed session without clearing its grant", async () => {
+  let releaseFirstRefresh: (() => void) | undefined;
+  let firstRefreshStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    firstRefreshStarted = resolve;
+  });
+  const refreshedSession = DesktopSessionViewSchema.parse({
+    ...resumedSession,
+    session: { ...resumedSession.session },
+    display: { ...resumedSession.display },
+  });
+  let refreshCalls = 0;
+  let invalidations = 0;
+  const reconciled: Array<DesktopSessionView | null> = [];
+  const online = {
+    auth: {
+      login: async () => ({
+        ok: true as const,
+        data: { session_view: resumedSession, staff_directory: [] },
+      }),
+      refresh: async () => ({ ok: true as const, data: refreshedSession }),
+      pinChallenge: async () => serverUnavailable,
+      pinVerify: async () => serverUnavailable,
+      logout: async () => ({ ok: true, data: { logged_out: true } }),
+    },
+    command: { execute: async () => serverUnavailable },
+    query: { execute: async () => serverUnavailable },
+    photo: {
+      upload: async () => serverUnavailable,
+      read: async () => serverUnavailable,
+      delete: async () => serverUnavailable,
+    },
+    health: { get: async () => serverUnavailable },
+    edge: { authority: async () => serverUnavailable, replay: async () => serverUnavailable },
+  } as unknown as DesktopHttpTransport;
+  const offline = {
+    refreshAuthority: async () => {
+      refreshCalls += 1;
+      if (refreshCalls === 1) {
+        firstRefreshStarted?.();
+        await new Promise<void>((resolve) => {
+          releaseFirstRefresh = resolve;
+        });
+      }
+      return refreshCalls === 1;
+    },
+    replay: async () => undefined,
+    exportReadAuthority: () => null,
+    invalidateContinuity: () => {
+      invalidations += 1;
+    },
+    clearReadAuthority: () => undefined,
+    reconcileSession: (value: DesktopSessionView | null) => reconciled.push(value),
+  } as unknown as OfflineCommandRuntime;
+  const cache = {
+    bind: () => undefined,
+    clear: () => undefined,
+  } as unknown as OfflineReadCache;
+  const service = createOfflineDesktopService(online, offline, cache);
+
+  const login = service.auth.login({});
+  await started;
+  const resume = service.offline.resume();
+  releaseFirstRefresh?.();
+  await Promise.all([login, resume]);
+
+  assert.equal(refreshCalls, 2);
+  assert.equal(invalidations, 0);
+  assert.deepEqual(reconciled, [resumedSession, refreshedSession, refreshedSession]);
 });

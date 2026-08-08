@@ -236,3 +236,45 @@ Web 目前只显式展示本金、渠道并说明执行时由服务端计算，�
 - 已交付：普通 offline grant；签名打印软件链；独立 Runtime.app 软件与 ad-hoc/no-repo 验收。
 - 未交付：XP-58 实体打印证据；Apple Developer ID 签名与公证；正式 manifest 签名权威；
   已签名且可访问的多架构 OCI 发布物；Runtime.app upgrade/rollback。
+
+## 10. 本地发布与故障恢复订正（2026-08-08）
+
+§9.1 是此前切片边界，现由 [ADR-30](../../adr/2026-08-08-adr-30-runtime-release-upgrade-rollback.md)
+订正。Runtime.app 的 universal 构建、签名发布编排、N→N+1 升级与一步回滚软件链已经交付；
+仍未完成的是依赖外部账号、证书、发布源或实体设备的正式分发证据。
+
+### 10.1 本批交付
+
+- Electron 与活动 Web/构建依赖的 high/critical 已清零；两个 moderate 上游告警只在精确版本、
+  路径和调用属性不扩大时允许，`workspace:audit` 会失败关闭。
+- Runtime.app 构建同时包含 arm64/x86_64。发布输入、App/ZIP/DMG、bundle/version/team、签名
+  manifest 与最终原子发布相互绑定；构建/公证子进程不接触更新私钥。
+- 升级和回滚先创建 PostgreSQL + 照片一致性安全点。单一 transition 完整绑定切换前后 state、
+  签名 manifest、history、previous manifest 与 phase；任一元数据原子写后进程中断，重启会在
+  普通严格加载前恢复切换前稳定版本。
+- 有流水营业日关闭后，开单、补款、会员充值与余额核销均返回 `SHIFT_CLOSED`，订单、付款、
+  会员账本与审计零增量。统一本地验收同时执行维护备份、恢复演练，以及运行中/停机支持包的
+  权限、固定 manifest 和秘密 canary 检查。
+- 软件打印验收已贯通真实 PostgreSQL/HTTP claim、受控 fake `lp` 的 ESC/POS 字节、设备签名
+  receipt 与 PostgreSQL `done`；超时进入 `uncertain`，重启后不会重复提交。
+- 管理员设备先取得普通 offline grant，再 best-effort 申请 Primary Lease。另一设备仍持有
+  Primary 或续租暂时被拒时，低风险命令继续能入队，Primary-only 命令、跨会话、过期与
+  时钟连续性异常仍失败关闭；软件打印验收不再占用其并不需要的 Primary。
+
+### 10.2 新鲜分层证据
+
+| 门禁 | 结果 |
+| ---- | ---- |
+| 服务端真实 PostgreSQL 全量 | **792/792，0 skipped** |
+| 浏览器真实 Fastify + PostgreSQL | **17/17** |
+| Runtime.app 无仓库升级/回滚 | **62 个场景、8 个签名清单负例** |
+| 统一本地验收 | **`LOCAL_ACCEPTANCE_OK`；packaged macOS 1/1** |
+
+上述软件证据不等于正式发布。Developer ID Application、公证/staple/Gatekeeper、正式
+Ed25519 权威、可访问的双架构 OCI、第二台无仓库 Mac，以及 XP-58 中文、金额、扫码、走纸、
+切刀与断连实体验收仍是独立外部门禁；云部署和 Windows 适配继续后置。
+
+当前 packaged macOS 自动化在临时 user-data 下显式使用 Chromium mock keychain，以免未签名、
+反复重建的测试 App 触发不可自动处理的系统模态框；该参数只存在于 E2E 启动参数，生产入口与
+打包业务代码有静态拒绝门禁。因此 1/1 证明的是打包业务链，不冒充 Developer ID 包在干净 Mac
+上的真实 Keychain/Gatekeeper 证据。

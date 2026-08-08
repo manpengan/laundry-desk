@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -14,6 +14,15 @@ const UUID = "12345678-1234-4123-8123-123456789abc";
 const PROJECT = "laundry-acceptance-123456781234412381231234";
 const INSTANCE_ID = Buffer.alloc(16, 7).toString("base64url");
 const APP_PATH = "/workspace/apps/edge-agent/release/mac-arm64/laundry-desk V2.app";
+const RECOVERY_PATH =
+  "/private/tmp/laundry-acceptance-owned/config/backups/laundry-v2-backup-20260808T000000Z-a1b2c3d4.dump";
+const RECOVERY_SHA = "a".repeat(64);
+const LOCAL_SECRETS = Object.freeze([
+  "pg-super-secret",
+  "pg-app-secret",
+  "access-secret",
+  "csrf-secret",
+]);
 
 async function implementation() {
   try {
@@ -47,6 +56,22 @@ function createDependencies(overrides = {}) {
     loadInstanceId: async () => {
       events.push("config:load-instance");
       return INSTANCE_ID;
+    },
+    loadSecretValues: async () => {
+      events.push("config:load-secrets");
+      return LOCAL_SECRETS;
+    },
+    findRecoverySet: async () => {
+      events.push("recovery:find");
+      return Object.freeze({ path: RECOVERY_PATH, sha256: RECOVERY_SHA });
+    },
+    validateSupportBundles: async ({ configDirectory, secretValues, expectedCount }) => {
+      events.push(`support:validate:${expectedCount}:${configDirectory}`);
+      assert.deepEqual(secretValues, [
+        ADMIN_ENV.LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD,
+        ADMIN_ENV.LAUNDRY_BOOTSTRAP_ADMIN_PIN,
+        ...LOCAL_SECRETS,
+      ]);
     },
     findPackagedApp: async () => {
       events.push("app:find");
@@ -187,25 +212,30 @@ test("runs the real-browser/package/outage/recovery sequence with one identity",
       "pnpm local:up --bootstrap",
       "pnpm local:web:e2e",
       "pnpm local:mac:build",
+      `${process.execPath} tools/local/print-dispatch-acceptance.mjs`,
+      "pnpm local:maintenance",
+      `pnpm local:restore:drill --file ${RECOVERY_PATH} --confirm-sha256 ${RECOVERY_SHA}`,
+      "pnpm local:support-bundle",
       "pnpm local:down",
+      "pnpm local:support-bundle",
       "pnpm local:mac:e2e",
       "pnpm local:down",
     ],
   );
 
-  for (const index of [0, 1, 4]) {
+  for (const index of [0, 1, 3, 9]) {
     const environment = runs[index].options.env;
     for (const [name, value] of Object.entries(ADMIN_ENV)) {
       assert.equal(environment[name], value);
     }
   }
-  for (const index of [2, 3, 5]) {
+  for (const index of [2, 4, 5, 6, 7, 8, 10]) {
     const environment = runs[index].options.env;
     for (const name of Object.keys(ADMIN_ENV)) {
       assert.equal(name in environment, false);
     }
   }
-  assert.equal(runs[4].options.env.LAUNDRY_MAC_APP_PATH, APP_PATH);
+  assert.equal(runs[9].options.env.LAUNDRY_MAC_APP_PATH, APP_PATH);
   assert.equal(runs[1].options.env.LAUNDRY_LOCAL_ORG_CODE, "local");
   assert.equal(runs[4].options.env.LAUNDRY_LOCAL_STORE_CODE, "main");
 
@@ -228,9 +258,13 @@ test("runs the real-browser/package/outage/recovery sequence with one identity",
       "config:load-instance",
       "wait:postgres-up",
       "wait:health-up",
+      "wait:health-up",
+      "recovery:find",
       "app:find",
       "wait:health-down",
       `volume:inspect:${volumeName}`,
+      "config:load-secrets",
+      "support:validate:2:/private/tmp/laundry-acceptance-owned/config",
       "wait:health-down",
       `volume:inspect:${volumeName}`,
       `volume:remove:${volumeName}`,
@@ -325,6 +359,88 @@ test("finds exactly one regular packaged app under mac-* output", async () => {
     await assert.rejects(
       () => findUniquePackagedApp(root),
       (error) => error?.code === "ACCEPTANCE_MAC_APP_NOT_UNIQUE",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("support bundle acceptance enforces private files, manifest and secret absence", async () => {
+  const { validateSupportBundles } = await import("./acceptance-recovery.mjs");
+  const root = await mkdtemp(join(tmpdir(), "laundry-support-acceptance-"));
+  const output = join(root, "support-bundles");
+  const bundle = (status) =>
+    `${JSON.stringify({
+      version: 1,
+      manifest: {
+        format: "laundry-desk-support-bundle",
+        sections: [
+          "product",
+          "diagnostics",
+          "services",
+          "migrations",
+          "server_logs",
+          "edge_queue",
+          "cups",
+          "update_state",
+        ],
+      },
+      generated_at: "2026-08-08T00:00:00.000Z",
+      sections: {
+        product: { status },
+        diagnostics: {},
+        services: {},
+        migrations: {},
+        server_logs: {},
+        edge_queue: {},
+        cups: {},
+        update_state: {},
+      },
+    })}\n`;
+  try {
+    await mkdir(output, { mode: 0o700 });
+    const files = [
+      ["a".repeat(24), "running"],
+      ["b".repeat(24), "stopped"],
+    ];
+    for (const [suffix, status] of files) {
+      await writeFile(
+        join(output, `laundry-v2-support-20260808T000000Z-${suffix}.json`),
+        bundle(status),
+        { mode: 0o600 },
+      );
+    }
+    const canonicalRoot = await realpath(root);
+    await validateSupportBundles({
+      configDirectory: canonicalRoot,
+      secretValues: ["must-not-appear"],
+      expectedCount: 2,
+    });
+    const first = join(output, `laundry-v2-support-20260808T000000Z-${files[0][0]}.json`);
+    await chmod(first, 0o644);
+    await assert.rejects(
+      () =>
+        validateSupportBundles({
+          configDirectory: canonicalRoot,
+          secretValues: ["must-not-appear"],
+          expectedCount: 2,
+        }),
+      (error) => error?.code === "LOCAL_SUPPORT_SOURCE_INVALID",
+    );
+    await chmod(first, 0o600);
+    await writeFile(
+      join(output, `laundry-v2-support-20260808T000000Z-${"b".repeat(24)}.json`),
+      bundle("must-not-appear"),
+      { mode: 0o600 },
+    );
+    await assert.rejects(
+      () =>
+        validateSupportBundles({
+          configDirectory: canonicalRoot,
+          secretValues: ["must-not-appear"],
+          expectedCount: 2,
+        }),
+      (error) => error?.message === "ACCEPTANCE_SUPPORT_BUNDLE_SECRET_LEAK",
     );
   } finally {
     await rm(root, { recursive: true, force: true });

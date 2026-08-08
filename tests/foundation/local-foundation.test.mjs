@@ -208,7 +208,7 @@ test("runs every foundation test from the default workspace test gate", async ()
 
   assert.equal(
     rootPackage.scripts["workspace:test"],
-    "node --test tools/local/*.test.mjs tests/foundation/*.test.mjs && turbo run test",
+    "node --test tools/local/*.test.mjs tools/runtime-kit/*.test.mjs tests/foundation/*.test.mjs && turbo run test",
   );
 });
 
@@ -228,8 +228,8 @@ test("pins Electron and keeps its install lifecycle explicit", async () => {
   const rootPackage = JSON.parse(rootPackageSource);
   const edgePackage = JSON.parse(edgePackageSource);
 
-  assert.equal(rootPackage.devDependencies.electron, "41.10.2");
-  assert.equal(edgePackage.devDependencies.electron, "41.10.2");
+  assert.equal(rootPackage.devDependencies.electron, "41.10.3");
+  assert.equal(edgePackage.devDependencies.electron, "41.10.3");
   assert.equal(rootPackage.devDependencies["electron-builder"], "26.15.3");
   assert.match(workspaceSource, /^\s{2}"?@google\/genai"?: false$/mu);
   assert.match(workspaceSource, /^\s{2}electron: true$/mu);

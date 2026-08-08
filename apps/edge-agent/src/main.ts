@@ -63,6 +63,7 @@ import { createOfflineDesktopService } from "./offline/service.js";
 import { OfflineReadCache } from "./offline/read-cache.js";
 import { createRuntimeUpdateIo, loadUpdatePublicKey } from "./upgrade/runtime-io.js";
 import { RuntimeUpdateStateStore } from "./upgrade/runtime-state.js";
+import { resolveUpdateConfiguration } from "./upgrade/update-config.js";
 import {
   STAGED_HEALTH_ARGUMENT,
   RuntimeUpdateController,
@@ -187,6 +188,10 @@ async function boot(mode: BootMode): Promise<void> {
     grantSequences: new FileGrantSequenceStore(edgeStateRoot),
     transport: desktopTransport,
     authorityTrust,
+    onDiagnostic:
+      process.env.LAUNDRY_ACCEPTANCE_DIAGNOSTICS === "offline_queue"
+        ? (event) => console.error(`[edge-agent] offline diagnostic ${event}`)
+        : undefined,
   });
   if (mode === "recovery") offlineRuntime.setLeaseIssuanceBlocked(true);
   const desktopService = createOfflineDesktopService(
@@ -317,10 +322,14 @@ async function runApplication(): Promise<void> {
     );
   }
 
-  const manifestUrl = process.env.LAUNDRY_UPDATE_MANIFEST_URL?.trim() ?? "";
+  const updateConfiguration = await resolveUpdateConfiguration({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    env: process.env,
+  });
   if (
     bootMode === "normal" &&
-    manifestUrl.length > 0 &&
+    updateConfiguration.enabled &&
     updateState !== null &&
     offlineQueue !== null
   ) {
@@ -328,10 +337,10 @@ async function runApplication(): Promise<void> {
       join(process.resourcesPath, "update", "update-public-key.pem"),
     );
     const controller = new RuntimeUpdateController({
-      manifestUrl,
+      manifestUrl: updateConfiguration.manifest_url,
       publicKey,
       context: {
-        channel: "stable",
+        channel: updateConfiguration.channel,
         current_version: app.getVersion(),
         installed_minimum_secure_version: updateState.snapshot().minimum_secure_version,
         current_local_schema: 3,

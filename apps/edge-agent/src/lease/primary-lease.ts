@@ -17,11 +17,13 @@ import {
   type PrimaryLeasePayload,
 } from "@laundry/contracts";
 import { verify, type KeyObject } from "node:crypto";
+import { performance } from "node:perf_hooks";
 
 import { base64UrlToBytes } from "../pairing/device-keys.js";
 import type {
   AuthorityAcceptanceResult,
   AuthorityRequestResult,
+  MonotonicClock,
   OfflineAuthorityGuardOptions,
   OfflineAuthorityRequest,
   OfflineAuthorizationResult,
@@ -35,6 +37,17 @@ export type {
   OfflineAuthorityRequest,
   OfflineAuthorizationResult,
 } from "./primary-lease-types.js";
+
+export function createDefaultMonotonicClock(): MonotonicClock {
+  let continuity: "trusted" | "uncertain" = "trusted";
+  return Object.freeze({
+    nowMs: () => performance.now(),
+    continuity: () => continuity,
+    invalidate: () => {
+      continuity = "uncertain";
+    },
+  });
+}
 
 type AuthorityRequestRecord = Readonly<{
   startedAtMs: number;

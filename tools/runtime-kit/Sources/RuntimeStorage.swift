@@ -13,6 +13,10 @@ struct RuntimePaths {
   let secrets: URL
   let state: URL
   let manifest: URL
+  let releaseHistory: URL
+  let previousManifest: URL
+  let pendingManifest: URL
+  let transition: URL
   let compose: URL
   let trustedKey: URL
 
@@ -22,6 +26,10 @@ struct RuntimePaths {
       secrets: root.appendingPathComponent("secrets", isDirectory: true),
       state: root.appendingPathComponent("state.json"),
       manifest: root.appendingPathComponent("runtime-manifest.json"),
+      releaseHistory: root.appendingPathComponent("release-history.json"),
+      previousManifest: root.appendingPathComponent("previous-runtime-manifest.json"),
+      pendingManifest: root.appendingPathComponent("pending-runtime-manifest.json"),
+      transition: root.appendingPathComponent("release-transition.json"),
       compose: resources.appendingPathComponent("docker-compose.runtime.yml"),
       trustedKey: resources.appendingPathComponent("trusted-manifest-public-key.txt")
     )
@@ -39,13 +47,52 @@ enum RuntimeStorage {
   ]
   static let allSecrets = longLivedSecrets + bootstrapSecrets
 
+  #if RUNTIME_TESTING
+    private static var testingAtomicWriteCounts: [String: Int] = [:]
+    private static var testingRemoveCounts: [String: Int] = [:]
+
+    private static func crashAfterAtomicWriteIfRequested(_ url: URL) {
+      let name = url.lastPathComponent
+      let count = (testingAtomicWriteCounts[name] ?? 0) + 1
+      testingAtomicWriteCounts[name] = count
+      guard
+        ProcessInfo.processInfo.environment["LAUNDRY_RUNTIME_TEST_CRASH_AFTER_ATOMIC_WRITE"]
+          == "\(name):\(count)"
+      else { return }
+      Darwin._exit(86)
+    }
+
+    private static func crashAfterRemoveIfRequested(_ url: URL) {
+      let name = url.lastPathComponent
+      let count = (testingRemoveCounts[name] ?? 0) + 1
+      testingRemoveCounts[name] = count
+      guard
+        ProcessInfo.processInfo.environment["LAUNDRY_RUNTIME_TEST_CRASH_AFTER_PRIVATE_REMOVE"]
+          == "\(name):\(count)"
+      else { return }
+      Darwin._exit(86)
+    }
+  #endif
+
   private static func metadata(_ path: String) -> stat? {
     var value = stat()
     return Darwin.lstat(path, &value) == 0 ? value : nil
   }
 
+  static func pathExists(_ url: URL) -> Bool { metadata(url.path) != nil }
+
   private static func isMode(_ value: stat, type: mode_t, permissions: mode_t) -> Bool {
     (value.st_mode & S_IFMT) == type && (value.st_mode & 0o777) == permissions
+  }
+
+  private static func sameFileVersion(_ left: stat, _ right: stat) -> Bool {
+    left.st_dev == right.st_dev && left.st_ino == right.st_ino
+      && left.st_mode == right.st_mode && left.st_nlink == right.st_nlink
+      && left.st_size == right.st_size
+      && left.st_mtimespec.tv_sec == right.st_mtimespec.tv_sec
+      && left.st_mtimespec.tv_nsec == right.st_mtimespec.tv_nsec
+      && left.st_ctimespec.tv_sec == right.st_ctimespec.tv_sec
+      && left.st_ctimespec.tv_nsec == right.st_ctimespec.tv_nsec
   }
 
   private static func fsyncDirectory(_ url: URL) throws {
@@ -90,7 +137,7 @@ enum RuntimeStorage {
     var before = stat()
     guard Darwin.fstat(descriptor, &before) == 0,
       isMode(before, type: S_IFREG, permissions: 0o600), before.st_nlink == 1,
-      before.st_dev == pathBefore.st_dev, before.st_ino == pathBefore.st_ino,
+      sameFileVersion(before, pathBefore),
       before.st_size > 0, before.st_size <= maximum
     else { try runtimeFail("RUNTIME_RECOVERY_REQUIRED") }
     let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
@@ -98,26 +145,29 @@ enum RuntimeStorage {
     else { try runtimeFail("RUNTIME_RECOVERY_REQUIRED") }
     var after = stat()
     guard Darwin.fstat(descriptor, &after) == 0,
-      let pathAfter = metadata(url.path), after.st_nlink == 1,
-      before.st_dev == after.st_dev, before.st_ino == after.st_ino,
-      before.st_size == after.st_size,
-      before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec,
-      before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec,
-      after.st_dev == pathAfter.st_dev, after.st_ino == pathAfter.st_ino
+      let pathAfter = metadata(url.path), isMode(after, type: S_IFREG, permissions: 0o600),
+      after.st_nlink == 1, sameFileVersion(before, after), sameFileVersion(after, pathAfter)
     else { try runtimeFail("RUNTIME_RECOVERY_REQUIRED") }
     return data
   }
 
   static func readBounded(_ url: URL, maximum: Int = 65_536) throws -> Data {
+    guard let pathBefore = metadata(url.path) else { try runtimeFail("RUNTIME_MANIFEST_INVALID") }
     let descriptor = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW)
     guard descriptor >= 0 else { try runtimeFail("RUNTIME_MANIFEST_INVALID") }
     defer { Darwin.close(descriptor) }
     var value = stat()
     guard Darwin.fstat(descriptor, &value) == 0, (value.st_mode & S_IFMT) == S_IFREG,
-      value.st_nlink == 1, value.st_size > 0, value.st_size <= maximum
+      value.st_nlink == 1, sameFileVersion(value, pathBefore),
+      value.st_size > 0, value.st_size <= maximum
     else { try runtimeFail("RUNTIME_MANIFEST_INVALID") }
     let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
     guard let data = try handle.readToEnd(), data.count == Int(value.st_size)
+    else { try runtimeFail("RUNTIME_MANIFEST_INVALID") }
+    var after = stat()
+    guard Darwin.fstat(descriptor, &after) == 0, let pathAfter = metadata(url.path),
+      (after.st_mode & S_IFMT) == S_IFREG, after.st_nlink == 1,
+      sameFileVersion(value, after), sameFileVersion(after, pathAfter)
     else { try runtimeFail("RUNTIME_MANIFEST_INVALID") }
     return data
   }
@@ -125,12 +175,14 @@ enum RuntimeStorage {
   static func privateFileDigest(
     _ url: URL, maximum: Int64 = 137_438_953_472
   ) throws -> RuntimePrivateFileDigest {
+    guard let pathBefore = metadata(url.path) else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
     let descriptor = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW)
     guard descriptor >= 0 else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
     defer { Darwin.close(descriptor) }
     var before = stat()
     guard Darwin.fstat(descriptor, &before) == 0,
       isMode(before, type: S_IFREG, permissions: 0o600), before.st_nlink == 1,
+      sameFileVersion(before, pathBefore),
       before.st_size > 0, before.st_size <= maximum
     else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
     let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: false)
@@ -147,10 +199,8 @@ enum RuntimeStorage {
     }
     var after = stat()
     guard readBytes == before.st_size, Darwin.fstat(descriptor, &after) == 0,
-      before.st_dev == after.st_dev, before.st_ino == after.st_ino,
-      before.st_size == after.st_size,
-      before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec,
-      before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec
+      let pathAfter = metadata(url.path), isMode(after, type: S_IFREG, permissions: 0o600),
+      after.st_nlink == 1, sameFileVersion(before, after), sameFileVersion(after, pathAfter)
     else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
     return RuntimePrivateFileDigest(
       size: readBytes, sha256: hasher.finalize().map { String(format: "%02x", $0) }.joined())
@@ -159,12 +209,14 @@ enum RuntimeStorage {
   static func openVerifiedPrivateFile(
     _ url: URL, expectedSize: Int64, expectedSHA256: String
   ) throws -> FileHandle {
+    guard let pathBefore = metadata(url.path) else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
     let descriptor = Darwin.open(url.path, O_RDONLY | O_NOFOLLOW)
     guard descriptor >= 0 else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
     let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
     var value = stat()
     guard Darwin.fstat(descriptor, &value) == 0,
       isMode(value, type: S_IFREG, permissions: 0o600), value.st_nlink == 1,
+      sameFileVersion(value, pathBefore),
       value.st_size == expectedSize, expectedSize > 0
     else {
       try? handle.close()
@@ -183,7 +235,12 @@ enum RuntimeStorage {
       count += Int64(chunk.count)
     }
     let digest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
-    guard count == expectedSize, digest == expectedSHA256 else {
+    var after = stat()
+    guard count == expectedSize, digest == expectedSHA256,
+      Darwin.fstat(descriptor, &after) == 0, let pathAfter = metadata(url.path),
+      isMode(after, type: S_IFREG, permissions: 0o600), after.st_nlink == 1,
+      sameFileVersion(value, after), sameFileVersion(after, pathAfter)
+    else {
       try? handle.close()
       try runtimeFail("RUNTIME_BACKUP_INVALID")
     }
@@ -248,6 +305,20 @@ enum RuntimeStorage {
       try runtimeFail("RUNTIME_PRIVATE_PATH_INVALID")
     }
     try fsyncDirectory(url.deletingLastPathComponent())
+    #if RUNTIME_TESTING
+      crashAfterAtomicWriteIfRequested(url)
+    #endif
+  }
+
+  static func removePrivateFile(_ url: URL) throws {
+    let result = Darwin.unlink(url.path)
+    if result != 0 && errno != ENOENT {
+      try runtimeFail("RUNTIME_PRIVATE_PATH_INVALID")
+    }
+    try fsyncDirectory(url.deletingLastPathComponent())
+    #if RUNTIME_TESTING
+      if result == 0 { crashAfterRemoveIfRequested(url) }
+    #endif
   }
 
   static func randomToken(bytes: Int = 32) throws -> String {

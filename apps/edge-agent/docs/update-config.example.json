@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "enabled": true,
+  "channel": "stable",
+  "manifest_url": "https://updates.example/laundry/stable/latest-laundry-v2.json"
+}
