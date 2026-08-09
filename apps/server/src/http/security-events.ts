@@ -6,6 +6,7 @@ const EVENT_NAME = "authentication_security" as const;
 const REASONS = Object.freeze(
   new Set([
     "LOGIN_FAILED",
+    "LOGIN_REQUEST_INVALID",
     "LOGIN_RATE_LIMITED",
     "CSRF_REJECTED",
     "REFRESH_REJECTED",
@@ -14,8 +15,15 @@ const REASONS = Object.freeze(
   ] as const),
 );
 
+/**
+ * `LOGIN_REQUEST_INVALID` means the request never reached credential checking —
+ * it failed the login schema. The caller is still answered with the same 401 as
+ * a wrong password; splitting the codes only gives the operator reading their
+ * own logs what the response deliberately withholds.
+ */
 export type SecurityEventReason =
   | "LOGIN_FAILED"
+  | "LOGIN_REQUEST_INVALID"
   | "LOGIN_RATE_LIMITED"
   | "CSRF_REJECTED"
   | "REFRESH_REJECTED"

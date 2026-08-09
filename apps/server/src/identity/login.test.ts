@@ -177,6 +177,36 @@ test("malformed requests still perform exactly one bounded dummy-hash verificati
   }
 });
 
+test("a request the schema rejects carries a malformed_request detail", async () => {
+  const { deps } = createDeps({ staff: ACTIVE_STAFF });
+  const missingDeviceId = Object.freeze({
+    org_code: request.org_code,
+    store_code: request.store_code,
+    username: request.username,
+    password: request.password,
+  });
+
+  await assert.rejects(
+    () => preparePasswordLogin(deps, missingDeviceId),
+    (error: unknown) =>
+      error instanceof IdentityError &&
+      error.code === "AUTHENTICATION_FAILED" &&
+      error.detail === "malformed_request",
+  );
+});
+
+test("a wrong password carries a credential_mismatch detail", async () => {
+  const { deps } = createDeps({ staff: ACTIVE_STAFF });
+
+  await assert.rejects(
+    () => preparePasswordLogin(deps, { ...request, password: "wrong" }),
+    (error: unknown) =>
+      error instanceof IdentityError &&
+      error.code === "AUTHENTICATION_FAILED" &&
+      error.detail === "credential_mismatch",
+  );
+});
+
 test("password verifier failures propagate instead of becoming credential failures", async () => {
   const sentinel = new Error("argon2 runtime unavailable");
   const { deps } = createDeps({ staff: ACTIVE_STAFF });

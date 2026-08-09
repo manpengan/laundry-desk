@@ -147,6 +147,22 @@ ssh hk-vps "set -eu
 在进程内生成 JSON 并保存 token/cookie；只输出状态和固定断言，不能把请求体、密码、token、
 cookie 或响应凭据打印到日志。
 
+**排查 401 时先看服务端日志的 `reason_code`**，不要去猜、也不要为此放宽对外响应：
+
+| `reason_code` | 含义 | 处置 |
+| ---- | ---- | ---- |
+| `LOGIN_REQUEST_INVALID` | 请求没通过登录 schema，压根没到校验凭据这步（最常见是漏 `device_id`） | 修客户端请求体，不要动账号或密码 |
+| `LOGIN_FAILED` | 请求合法，凭据不匹配（org/store、用户名、密码、staff 未激活） | 核对账号与密码 |
+| `LOGIN_RATE_LIMITED` | 触发账号或 IP 限流 | 等 `Retry-After` |
+
+两者对外仍是同一个 401，响应体、状态码和响应头完全一致——这是有意的，外部不该知道请求
+是否合法。差异只存在于运维自己的日志里。查看方式（`account_ref`/`ip_ref` 都是 HMAC 后的
+不透明值，日志里没有明文账号、IP 或密码）：
+
+```bash
+journalctl -u laundry-desk --since "10 min ago" -o cat | grep -o '"reason_code":"[A-Z_]*"' | sort | uniq -c
+```
+
 发布完成的最低验收：
 
 - loopback 与公网 `/health` ready；SPA 200、TLS 验证成功；

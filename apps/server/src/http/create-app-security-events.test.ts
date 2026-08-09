@@ -70,6 +70,93 @@ function securityEvent(record: unknown): Readonly<Record<string, unknown>> {
   return event;
 }
 
+const LOGIN_ACCOUNT = Object.freeze({
+  org_code: "local",
+  store_code: "main",
+  username: "admin",
+});
+/*
+ * No device_id at all — required by the login contract, and the exact shape that
+ * cost hours on the cloud test host because it is answered like a bad password.
+ */
+const MALFORMED_LOGIN = Object.freeze({ ...LOGIN_ACCOUNT, password: DEMO_PASSWORD });
+const WRONG_PASSWORD_LOGIN = Object.freeze({
+  ...LOGIN_ACCOUNT,
+  device_id: DEVICE_ID,
+  password: "definitely-not-the-password",
+});
+
+async function loginDiagnosticsApp(
+  loggedRecords: unknown[],
+): Promise<Awaited<ReturnType<typeof createLocalApp>>> {
+  return createLocalApp({
+    runtime: await createMemoryLocalRuntime(),
+    cookiePolicy: localCookies,
+    // Generous ceilings: these cases must be observed as failures, not as rate limiting.
+    loginRateLimiter: createLoginRateLimiter({
+      clock: { nowMs: () => 1_700_000_000_000 },
+      account: { maxFailures: 50 },
+      ip: { maxFailures: 50 },
+    }),
+    securityEventSink: capturingSecurityEventSink(loggedRecords),
+    logger: false,
+  });
+}
+
+test("a login the schema rejects is recorded apart from a credential failure", async () => {
+  const loggedRecords: unknown[] = [];
+  const app = await loginDiagnosticsApp(loggedRecords);
+
+  const malformed = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    headers: browserMutationHeaders,
+    payload: MALFORMED_LOGIN,
+  });
+  assert.equal(malformed.statusCode, 401, malformed.body);
+
+  const wrongPassword = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    headers: browserMutationHeaders,
+    payload: WRONG_PASSWORD_LOGIN,
+  });
+  assert.equal(wrongPassword.statusCode, 401, wrongPassword.body);
+
+  assert.deepEqual(
+    loggedRecords.map(securityEvent).map((event) => event.reason_code),
+    ["LOGIN_REQUEST_INVALID", "LOGIN_FAILED"],
+  );
+  await app.close();
+});
+
+test("a login the schema rejects is answered exactly like a credential failure", async () => {
+  const loggedRecords: unknown[] = [];
+  const app = await loginDiagnosticsApp(loggedRecords);
+
+  const malformed = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    headers: browserMutationHeaders,
+    payload: MALFORMED_LOGIN,
+  });
+  const wrongPassword = await app.inject({
+    method: "POST",
+    url: "/api/v2/auth/login",
+    headers: browserMutationHeaders,
+    payload: WRONG_PASSWORD_LOGIN,
+  });
+
+  assert.equal(malformed.statusCode, wrongPassword.statusCode);
+  assert.equal(malformed.body, wrongPassword.body);
+  assert.equal(malformed.headers["set-cookie"], undefined);
+  assert.deepEqual(
+    Object.keys(malformed.headers as Readonly<Record<string, unknown>>).sort(),
+    Object.keys(wrongPassword.headers as Readonly<Record<string, unknown>>).sort(),
+  );
+  await app.close();
+});
+
 test("auth security events expose stable reason codes and only opaque dimensions", async () => {
   const loggedRecords: unknown[] = [];
   const runtime = await createMemoryLocalRuntime();
