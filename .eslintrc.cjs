@@ -25,6 +25,25 @@ module.exports = {
   },
   overrides: [
     {
+      files: ["tools/cloud/**/*.mjs"],
+      rules: {
+        "max-lines": maxLines(400),
+      },
+    },
+    {
+      files: [
+        "tools/cloud/**/*.test.mjs",
+        "tools/cloud/**/*.spec.mjs",
+        "tools/cloud/**/*.test-support.mjs",
+        "tools/cloud/**/test/**/*.mjs",
+        "tools/cloud/**/tests/**/*.mjs",
+        "tools/cloud/**/__tests__/**/*.mjs",
+      ],
+      rules: {
+        "max-lines": maxLines(800),
+      },
+    },
+    {
       files: ["tools/local/**/*.mjs"],
       rules: {
         "max-lines": maxLines(400),

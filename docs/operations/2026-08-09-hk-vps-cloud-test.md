@@ -149,11 +149,11 @@ cookie 或响应凭据打印到日志。
 
 **排查 401 时先看服务端日志的 `reason_code`**，不要去猜、也不要为此放宽对外响应：
 
-| `reason_code` | 含义 | 处置 |
-| ---- | ---- | ---- |
+| `reason_code`           | 含义                                                                  | 处置                             |
+| ----------------------- | --------------------------------------------------------------------- | -------------------------------- |
 | `LOGIN_REQUEST_INVALID` | 请求没通过登录 schema，压根没到校验凭据这步（最常见是漏 `device_id`） | 修客户端请求体，不要动账号或密码 |
-| `LOGIN_FAILED` | 请求合法，凭据不匹配（org/store、用户名、密码、staff 未激活） | 核对账号与密码 |
-| `LOGIN_RATE_LIMITED` | 触发账号或 IP 限流 | 等 `Retry-After` |
+| `LOGIN_FAILED`          | 请求合法，凭据不匹配（org/store、用户名、密码、staff 未激活）         | 核对账号与密码                   |
+| `LOGIN_RATE_LIMITED`    | 触发账号或 IP 限流                                                    | 等 `Retry-After`                 |
 
 两者对外仍是同一个 401，响应体、状态码和响应头完全一致——这是有意的，外部不该知道请求
 是否合法。差异只存在于运维自己的日志里。查看方式（`account_ref`/`ip_ref` 都是 HMAC 后的
@@ -171,6 +171,39 @@ journalctl -u laundry-desk --since "10 min ago" -o cat | grep -o '"reason_code":
 - PostgreSQL 只监听 127.0.0.1/::1；
 - `kb.manpengan.xyz` 在部署前后都健康；
 - `.laundry-release.json` 的 SHA 与已提交候选完全一致。
+
+### ADR-36 完整公网验收入口
+
+仓库提供 `pnpm cloud:adr36:acceptance`。它固定连接 `https://desk.manpengan.xyz`，只允许
+合成数据，并会通过产品命令创建、回读和收口带唯一 run-id 的员工、价目、顾客、订单与会员
+状态。不得把它指向生产数据，也不得与其他业务写入并发执行。
+
+验收需要两位不同管理员的 8 个字段：
+
+| 管理员 | 字段前缀                      | 必需字段                                      |
+| ------ | ----------------------------- | --------------------------------------------- |
+| 发起人 | `LAUNDRY_BOOTSTRAP_ADMIN_`    | `USERNAME`、`DISPLAY_NAME`、`PASSWORD`、`PIN` |
+| 复核人 | `LAUNDRY_BOOTSTRAP_APPROVER_` | `USERNAME`、`DISPLAY_NAME`、`PASSWORD`、`PIN` |
+
+每个字段可直接传值，或改用同名加 `_FILE` 的来源；两者同时设置会失败关闭。VPS 上应只使用
+`_FILE`：路径必须是绝对路径、普通文件、权限精确 `0600`、单行且不得是符号链接。运行示例
+只引用文件路径，不回显文件内容：
+
+```bash
+LAUNDRY_BOOTSTRAP_ADMIN_USERNAME_FILE=/absolute/private/admin-username \
+LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME_FILE=/absolute/private/admin-display-name \
+LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD_FILE=/absolute/private/admin-password \
+LAUNDRY_BOOTSTRAP_ADMIN_PIN_FILE=/absolute/private/admin-pin \
+LAUNDRY_BOOTSTRAP_APPROVER_USERNAME_FILE=/absolute/private/approver-username \
+LAUNDRY_BOOTSTRAP_APPROVER_DISPLAY_NAME_FILE=/absolute/private/approver-display-name \
+LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD_FILE=/absolute/private/approver-password \
+LAUNDRY_BOOTSTRAP_APPROVER_PIN_FILE=/absolute/private/approver-pin \
+pnpm cloud:adr36:acceptance
+```
+
+脚本只输出 run-id、旅程状态和稳定错误码，不输出凭据、Cookie、token、手机号或响应体。退出码
+`0` 表示所有脚本内必验项通过，`1` 表示执行失败；在历史催取 fixture 尚未授权时，安全子集
+通过仍会返回 `2` 和 `overall BLOCKED PARTIAL_ACCEPTANCE_ONLY`，不得改写为成功退出。
 
 ## 回滚
 

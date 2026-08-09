@@ -43,6 +43,7 @@
 | [ADR-33](2026-08-08-adr-33-runtime-portable-data-protection.md)        | Runtime 定时备份、加密导出与换机恢复            | **Accepted** 2026-08-08；不复制实例或设备权威      |
 | [ADR-34](2026-08-08-adr-34-device-local-cups-printer-configuration.md) | 设备本地 CUPS 配置与 XP-58 实体验收边界         | **Accepted** 2026-08-08；实体出纸仍为外部门禁      |
 | [ADR-35](2026-08-08-adr-35-portable-release-candidate-evidence.md)     | 可携带正式候选证据与离线验证权威                | **Accepted** 2026-08-08；正式外部证据失败关闭      |
+| [ADR-36](2026-08-09-adr-36-cloud-test-environment.md)                  | hk-vps 云测试环境与完整柜台面公网暴露           | **Accepted** 2026-08-09；仅限合成数据的开发测试    |
 
 ## v1 线
 
