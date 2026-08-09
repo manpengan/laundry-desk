@@ -4,7 +4,9 @@ import { z } from "zod";
 import {
   EdgePrinterKindSchema,
   ExecutionReceiptPayloadSchema,
+  PrintJobActionSchema,
   Sha256HexSchema,
+  type PrintJobAction,
 } from "@laundry/contracts";
 
 import { APP_CAPABILITY_ORIGIN } from "../lib/security-prefs.js";
@@ -25,6 +27,8 @@ const SignedReceiptSchema = z.strictObject({
   sig: z.string().regex(SIGNATURE),
 });
 
+const PersistedPrintJobActionSchema = PrintJobActionSchema.or(z.literal("unknown"));
+
 export const DispatchRecordSchema = z
   .strictObject({
     job_id: z.uuid(),
@@ -33,6 +37,8 @@ export const DispatchRecordSchema = z
     origin: z.literal(APP_CAPABILITY_ORIGIN),
     ticket_nonce: z.uuid(),
     printer_kind: EdgePrinterKindSchema,
+    print_action: PersistedPrintJobActionSchema.optional(),
+    source_job_id: z.uuid().nullable().optional(),
     snapshot_sha256: Sha256HexSchema,
     capability_sha256: Sha256HexSchema,
     expected_receipt_seq: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -42,6 +48,18 @@ export const DispatchRecordSchema = z
     updated_at: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   })
   .superRefine((record, context) => {
+    if ((record.print_action === undefined) !== (record.source_job_id === undefined)) {
+      context.addIssue({ code: "custom", message: "Ledger lineage fields are incomplete" });
+    } else if (record.print_action === "unknown" && record.source_job_id !== null) {
+      context.addIssue({ code: "custom", message: "Unknown ledger lineage cannot name a source" });
+    } else if (record.print_action === "enqueue" && record.source_job_id !== null) {
+      context.addIssue({ code: "custom", message: "Enqueue ledger lineage cannot name a source" });
+    } else if (
+      (record.print_action === "retry" || record.print_action === "reprint") &&
+      record.source_job_id === null
+    ) {
+      context.addIssue({ code: "custom", message: "Derived ledger lineage requires a source" });
+    }
     const terminal = record.phase === "receipt_pending" || record.phase === "receipt_uploaded";
     if (terminal !== (record.receipt !== null)) {
       context.addIssue({ code: "custom", message: "Ledger receipt phase is inconsistent" });
@@ -58,7 +76,14 @@ export const DispatchRecordSchema = z
     ) {
       context.addIssue({ code: "custom", message: "Ledger receipt binding is inconsistent" });
     }
-  });
+  })
+  .transform((record) =>
+    Object.freeze({
+      ...record,
+      print_action: record.print_action ?? ("unknown" as const),
+      source_job_id: record.source_job_id ?? null,
+    }),
+  );
 
 const ReplayFilterSchema = z.base64().superRefine((value, context) => {
   const bytes = Buffer.from(value, "base64");
@@ -103,6 +128,7 @@ export type DispatchLedgerState = Readonly<{
   records: readonly DispatchRecord[];
 }>;
 export type PrinterKind = z.output<typeof EdgePrinterKindSchema>;
+export type PersistedPrintJobAction = PrintJobAction | "unknown";
 export type DispatchLedgerBinding = Readonly<{
   jobId: string;
   deviceId: string;
@@ -110,6 +136,8 @@ export type DispatchLedgerBinding = Readonly<{
   origin: string;
   ticketNonce: string;
   printerKind: PrinterKind;
+  printAction: PersistedPrintJobAction;
+  sourceJobId: string | null;
   snapshotSha256: string;
   capabilitySha256: string;
   expectedReceiptSeq: number;
@@ -161,6 +189,8 @@ export function bindingFrom(record: DispatchRecord): DispatchLedgerBinding {
     origin: record.origin,
     ticketNonce: record.ticket_nonce,
     printerKind: record.printer_kind,
+    printAction: record.print_action,
+    sourceJobId: record.source_job_id,
     snapshotSha256: record.snapshot_sha256,
     capabilitySha256: record.capability_sha256,
     expectedReceiptSeq: record.expected_receipt_seq,
@@ -187,9 +217,21 @@ export function stableBindingMatches(
     record.origin === binding.origin &&
     record.ticket_nonce === binding.ticketNonce &&
     record.printer_kind === binding.printerKind &&
+    (record.print_action === "unknown" ||
+      (record.print_action === binding.printAction &&
+        record.source_job_id === binding.sourceJobId)) &&
     record.snapshot_sha256 === binding.snapshotSha256 &&
     record.queue === binding.queue
   );
+}
+
+export function isAuthoritativePrintLineage(
+  action: PersistedPrintJobAction,
+  sourceJobId: string | null,
+): action is PrintJobAction {
+  return action === "enqueue"
+    ? sourceJobId === null
+    : (action === "retry" || action === "reprint") && sourceJobId !== null;
 }
 
 export function exactReceipt(left: SignedExecutionReceipt, right: SignedExecutionReceipt): boolean {

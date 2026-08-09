@@ -13,6 +13,8 @@ const capabilityEnvelope = {
   protocol_version: "1.0.0",
   payload: {
     action: "print_job",
+    print_action: "enqueue",
+    source_job_id: null,
     job_id: "936da01f-9abd-4d9d-80c7-02af85c822a8",
     staff_id: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
     device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0045", () => {
+  it("ships formal SQL migrations ordered 0001 → 0046", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -57,6 +57,7 @@ describe("packages/db migration file inventory", () => {
       "0043_receipt_and_member_bonus_integrity.sql",
       "0044_durable_step_up_proofs.sql",
       "0045_store_commissioning_staff_credentials.sql",
+      "0046_print_job_request_idempotency.sql",
     ]);
   });
 
@@ -114,6 +115,7 @@ describe("packages/db migration file inventory", () => {
       "0043",
       "0044",
       "0045",
+      "0046",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -614,6 +616,28 @@ describe("packages/db migration file inventory", () => {
     expect(sql).toMatch(/print_job\.snapshot_json/iu);
     expect(sql).toMatch(/CREATE OR REPLACE FUNCTION customer_privacy_anonymize/iu);
     expect(sql).toMatch(/SET snapshot_json = NULL,[\s\S]+snapshot_purged_at = requested_at/iu);
+  });
+
+  it("adds signed-print logical request idempotency without choosing legacy duplicates", () => {
+    const sql = readFileSync(join(migrationsDir, "0046_print_job_request_idempotency.sql"), "utf8");
+
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS idempotency_key text/iu);
+    expect(sql).toMatch(/snapshot_sha256 IS NOT NULL[\s\S]+source_job_id IS NULL/iu);
+    expect(sql).toMatch(/candidate\.logical_count = 1/iu);
+    expect(sql).toMatch(/'root:' \|\| job\.order_id::text \|\| ':' \|\| job\.kind/iu);
+    expect(sql).toMatch(/'child:' \|\| job\.source_job_id::text/iu);
+    expect(sql).toMatch(
+      /CREATE UNIQUE INDEX IF NOT EXISTS print_jobs_idempotency_key_uidx\s+ON public\.print_jobs \(org_id, store_id, idempotency_key\)\s+WHERE idempotency_key IS NOT NULL/iu,
+    );
+    expect(sql).toMatch(
+      /CREATE OR REPLACE FUNCTION guard_print_job_idempotency\(\)\s+RETURNS trigger\s+LANGUAGE plpgsql\s+SET search_path = pg_catalog, public/iu,
+    );
+    expect(sql).toMatch(/IF NEW\.snapshot_sha256 IS NULL/iu);
+    expect(sql).toMatch(
+      /existing\.org_id = NEW\.org_id[\s\S]+existing\.store_id = NEW\.store_id/iu,
+    );
+    expect(sql).toMatch(/print job idempotency authority is ambiguous/iu);
+    expect(sql).toMatch(/REVOKE ALL ON FUNCTION guard_print_job_idempotency\(\) FROM PUBLIC/iu);
   });
 
   it("adds a durable monotonic sequence for deterministic payment ledger order", () => {

@@ -344,6 +344,10 @@ test(
       if (concurrent.capability_ticket.payload.action !== "print_job") {
         assert.fail("concurrent claim must return a print_job capability");
       }
+      assert.equal(first.capability_ticket.payload.print_action, "enqueue");
+      assert.equal(first.capability_ticket.payload.source_job_id, null);
+      assert.equal(concurrent.capability_ticket.payload.print_action, "enqueue");
+      assert.equal(concurrent.capability_ticket.payload.source_job_id, null);
       assert.equal(first.capability_ticket.payload.snapshot_sha256, firstJob.hash);
       assert.equal(first.capability_ticket.payload.recovered, false);
       assert.equal(first.capability_ticket.payload.next_receipt_seq, 1);
@@ -370,6 +374,8 @@ test(
       );
       assert.equal(recovered.capability_ticket.payload.recovered, true);
       assert.equal(recovered.capability_ticket.payload.next_receipt_seq, 1);
+      assert.equal(recovered.capability_ticket.payload.print_action, "enqueue");
+      assert.equal(recovered.capability_ticket.payload.source_job_id, null);
       assertCapabilitySignature(recovered, fixture.serverKeys.publicKey);
 
       await assert.rejects(
@@ -529,6 +535,56 @@ test(
         );
       }
 
+      const retryDispatch = await service.claim(fixture.session, {
+        supported_printer_kinds: ["xp58"],
+      });
+      assert.ok(retryDispatch);
+      if (retryDispatch.capability_ticket.payload.action !== "print_job") {
+        assert.fail("retry claim must return a print_job capability");
+      }
+      assert.equal(retryDispatch.capability_ticket.payload.print_action, "retry");
+      assert.equal(retryDispatch.capability_ticket.payload.source_job_id, secondJob.jobId);
+      assertCapabilitySignature(retryDispatch, fixture.serverKeys.publicKey);
+      assert.equal(
+        (
+          await service.settle(
+            fixture.session,
+            signedReceipt(fixture, retryDispatch, {
+              seq: 3,
+              result: "succeeded",
+              cupsJobId: "xp58-103",
+            }),
+          )
+        ).status,
+        "done",
+      );
+      const reprinted = await store.requeueFromSource?.({
+        source_job_id: retried.job_id,
+        action: "reprint",
+      });
+      assert.ok(reprinted);
+      fixture.jobIds.push(reprinted.job_id);
+      const reprintDispatch = await service.claim(fixture.session, {
+        supported_printer_kinds: ["xp58"],
+      });
+      assert.ok(reprintDispatch);
+      if (reprintDispatch.capability_ticket.payload.action !== "print_job") {
+        assert.fail("reprint claim must return a print_job capability");
+      }
+      assert.equal(reprintDispatch.capability_ticket.payload.print_action, "reprint");
+      assert.equal(reprintDispatch.capability_ticket.payload.source_job_id, retried.job_id);
+      const recoveredReprint = await service.claim(fixture.session, {
+        supported_printer_kinds: ["xp58"],
+      });
+      assert.ok(recoveredReprint);
+      if (recoveredReprint.capability_ticket.payload.action !== "print_job") {
+        assert.fail("recovered reprint claim must return a print_job capability");
+      }
+      assert.equal(recoveredReprint.capability_ticket.payload.print_action, "reprint");
+      assert.equal(recoveredReprint.capability_ticket.payload.source_job_id, retried.job_id);
+      assert.equal(recoveredReprint.capability_ticket.payload.recovered, true);
+      assertCapabilitySignature(recoveredReprint, fixture.serverKeys.publicKey);
+
       await assert.rejects(
         () =>
           withStoreGucOrCurrent(fixture.appPool, fixture.session, (client) =>
@@ -566,7 +622,7 @@ test(
           ORDER BY at, id`,
         [auditIds],
       );
-      assert.equal(audit.rows.length, 2);
+      assert.equal(audit.rows.length, 3);
       for (const row of audit.rows) {
         const parsed = JSON.parse(row.after_json) as Record<string, unknown>;
         assert.equal(Object.keys(parsed).filter((key) => key === "envelope_sha256").length, 1);
@@ -675,6 +731,8 @@ test(
       assert.equal(recovered.capability_ticket.payload.job_id, job.jobId);
       assert.equal(recovered.capability_ticket.payload.recovered, true);
       assert.equal(recovered.capability_ticket.payload.next_receipt_seq, 7);
+      assert.equal(recovered.capability_ticket.payload.print_action, "enqueue");
+      assert.equal(recovered.capability_ticket.payload.source_job_id, null);
 
       const settlement = await service.settle(
         fixture.session,

@@ -13186,7 +13186,7 @@
     },
     "/v1/commands/print.ticket.enqueue": {
       "post": {
-        "description": "Queue a counter ticket print job by order_id (kind xp58|dl206|gp3120). The server derives ticket number and immutable receipt snapshot; clients cannot supply either. Stable command name: `print.ticket.enqueue` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Queue a counter ticket print job by order_id (kind xp58|dl206|gp3120). The server derives ticket number and immutable receipt snapshot; an exact order/kind replay returns the existing authoritative job. Stable command name: `print.ticket.enqueue` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_print_ticket_enqueue",
         "requestBody": {
           "content": {
@@ -13290,7 +13290,7 @@
     },
     "/v1/commands/print.ticket.reprint": {
       "post": {
-        "description": "Load a done print job, re-read the current server-authoritative order snapshot, and enqueue a NEW queued row with that snapshot and the source printer kind. Never auto-process and never mutate the source row. Stable command name: `print.ticket.reprint` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "For a done source, the first call enqueues one child from the current server-authoritative snapshot; an exact replay of that source returns the existing authoritative child. A later explicit reprint must use the terminal child as its new source. Never auto-process or mutate a source row. Stable command name: `print.ticket.reprint` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_print_ticket_reprint",
         "requestBody": {
           "content": {
@@ -13342,7 +13342,7 @@
     },
     "/v1/commands/print.ticket.retry": {
       "post": {
-        "description": "Load a failed or uncertain print job, re-read the current server-authoritative order snapshot, and enqueue a NEW queued row with that snapshot and the source printer kind. Never auto-process and never mutate the source row. Stable command name: `print.ticket.retry` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "For a failed or uncertain source, the first call enqueues one child from the current server-authoritative snapshot; an exact replay of that source returns the existing authoritative child. A later explicit retry must use the terminal child as its new source. Never auto-process or mutate a source row. Stable command name: `print.ticket.retry` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_print_ticket_retry",
         "requestBody": {
           "content": {

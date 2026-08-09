@@ -56,6 +56,8 @@ function binding(): DispatchLedgerBinding {
     origin: APP_CAPABILITY_ORIGIN,
     ticketNonce: NONCE,
     printerKind: "xp58",
+    printAction: "enqueue",
+    sourceJobId: null,
     snapshotSha256: SNAPSHOT_HASH,
     capabilitySha256: "b".repeat(64),
     expectedReceiptSeq: 1,

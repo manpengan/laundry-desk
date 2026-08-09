@@ -9,6 +9,8 @@ import { signPrintCapabilityTicket } from "./capability-ticket.js";
 const keys = generateKeyPairSync("ed25519");
 const payload = Object.freeze({
   action: "print_job",
+  print_action: "enqueue",
+  source_job_id: null,
   job_id: "936da01f-9abd-4d9d-80c7-02af85c822a8",
   staff_id: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
   device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
@@ -45,5 +47,8 @@ test("server refuses non-Ed25519 signing keys and malformed payloads", () => {
   assert.throws(() => signPrintCapabilityTicket(payload, rsa.privateKey), /Ed25519/u);
   assert.throws(() =>
     signPrintCapabilityTicket({ ...payload, nonce: "not-a-uuid" }, keys.privateKey),
+  );
+  assert.throws(() =>
+    signPrintCapabilityTicket({ ...payload, print_action: "retry" }, keys.privateKey),
   );
 });

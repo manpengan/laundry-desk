@@ -27,6 +27,9 @@ const POSTGRES_INTEGER_MAX = 2_147_483_647;
 const PositivePostgresIntegerSchema = z.number().int().positive().max(POSTGRES_INTEGER_MAX);
 const NonNegativePostgresIntegerSchema = z.number().int().nonnegative().max(POSTGRES_INTEGER_MAX);
 
+/** Server-authoritative reason one immutable print_jobs row entered the signed Edge path. */
+export const PrintJobActionSchema = z.enum(["enqueue", "retry", "reprint"]);
+
 /** M1 conservative offline authorization ceiling; future loosening requires a contract change. */
 export const OFFLINE_GRANT_MAX_TTL_MS = 43_200_000;
 
@@ -56,6 +59,8 @@ export const CapabilityTicketPayloadSchema = z
   .discriminatedUnion("action", [
     CapabilityTicketBaseSchema.extend({
       action: z.literal("print_job"),
+      print_action: PrintJobActionSchema,
+      source_job_id: z.uuid().nullable(),
       printer_kind: EdgePrinterKindSchema,
       snapshot_sha256: Sha256HexSchema,
       recovered: z.boolean(),
@@ -65,9 +70,24 @@ export const CapabilityTicketPayloadSchema = z
       action: z.literal("cash_drawer_open"),
     }).strict(),
   ])
-  .superRefine((payload, context) =>
-    addPositiveTimeWindowIssue(payload.issued_at, payload.exp, context, ["exp"]),
-  );
+  .superRefine((payload, context) => {
+    addPositiveTimeWindowIssue(payload.issued_at, payload.exp, context, ["exp"]);
+    if (payload.action !== "print_job") return;
+    if (payload.print_action === "enqueue" && payload.source_job_id !== null) {
+      context.addIssue({
+        code: "custom",
+        message: "An enqueue capability cannot reference a source print job",
+        path: ["source_job_id"],
+      });
+    }
+    if (payload.print_action !== "enqueue" && payload.source_job_id === null) {
+      context.addIssue({
+        code: "custom",
+        message: "A retry or reprint capability requires a source print job",
+        path: ["source_job_id"],
+      });
+    }
+  });
 
 /** Architecture §10 device-signed outcome used for print-job reconciliation and audit. */
 export const ExecutionReceiptPayloadSchema = z
@@ -165,6 +185,7 @@ type DeepReadonly<T> = T extends readonly (infer Item)[]
     : T;
 
 export type CapabilityTicketPayload = DeepReadonly<z.output<typeof CapabilityTicketPayloadSchema>>;
+export type PrintJobAction = z.output<typeof PrintJobActionSchema>;
 export type ExecutionReceiptPayload = DeepReadonly<z.output<typeof ExecutionReceiptPayloadSchema>>;
 export type OfflineGrantPayload = DeepReadonly<z.output<typeof OfflineGrantPayloadSchema>>;
 export type PrimaryLeasePayload = DeepReadonly<z.output<typeof PrimaryLeasePayloadSchema>>;

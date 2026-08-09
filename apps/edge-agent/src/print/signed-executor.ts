@@ -75,6 +75,8 @@ function bindingFrom(
     origin: APP_CAPABILITY_ORIGIN,
     ticketNonce: verified.payload.nonce,
     printerKind: verified.payload.printer_kind,
+    printAction: verified.payload.print_action,
+    sourceJobId: verified.payload.source_job_id,
     snapshotSha256: verified.payload.snapshot_sha256,
     capabilitySha256: verified.capabilitySha256,
     expectedReceiptSeq: verified.payload.next_receipt_seq,

@@ -49,6 +49,8 @@ const CAPABILITY = Object.freeze({
   protocol_version: "1.0.0",
   payload: Object.freeze({
     action: "print_job",
+    print_action: "enqueue",
+    source_job_id: null,
     job_id: "936da01f-9abd-4d9d-80c7-02af85c822a8",
     staff_id: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
     device_id: "01a2eed0-a6c3-493c-a3a7-20bf94b1d678",
@@ -88,6 +90,8 @@ describe("Stage3 signed print dispatch protocol", () => {
   it("binds capability and receipt to printer, snapshot, job, device and nonce", () => {
     expect(parseServerSignatureCapabilityTicketCandidate(CAPABILITY).payload).toMatchObject({
       printer_kind: "xp58",
+      print_action: "enqueue",
+      source_job_id: null,
       snapshot_sha256: SHA256,
       recovered: false,
       next_receipt_seq: 7,
@@ -97,6 +101,26 @@ describe("Stage3 signed print dispatch protocol", () => {
       parseServerSignatureCapabilityTicketCandidate({
         ...CAPABILITY,
         payload: { ...CAPABILITY.payload, next_receipt_seq: 0 },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseServerSignatureCapabilityTicketCandidate({
+        ...CAPABILITY,
+        payload: { ...CAPABILITY.payload, print_action: "retry" },
+      }),
+    ).toThrow();
+    expect(() =>
+      parseServerSignatureCapabilityTicketCandidate({
+        ...CAPABILITY,
+        payload: { ...CAPABILITY.payload, source_job_id: CAPABILITY.payload.job_id },
+      }),
+    ).toThrow();
+    const withoutPrintAction = { ...CAPABILITY.payload } as Record<string, unknown>;
+    delete withoutPrintAction.print_action;
+    expect(() =>
+      parseServerSignatureCapabilityTicketCandidate({
+        ...CAPABILITY,
+        payload: withoutPrintAction,
       }),
     ).toThrow();
     const withoutRecovery = { ...CAPABILITY.payload } as Record<string, unknown>;
