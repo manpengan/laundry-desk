@@ -340,6 +340,18 @@ test(
   },
 );
 
+test("native verifier scopes Darwin output buffers to contiguous storage", async () => {
+  const source = await readFile(
+    join(repositoryRoot, "tools/release-candidate/Sources/SafeIO.swift"),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /Darwin\.read\(\s*descriptor,\s*&buffer/u);
+  assert.doesNotMatch(source, /Darwin\.readlink\([^,]+,\s*&buffer/u);
+  assert.doesNotMatch(source, /Darwin\.realpath\([^,]+,\s*&buffer/u);
+  assert.match(source, /withUnsafeMutableBytes/u);
+  assert.match(source, /withUnsafeMutableBufferPointer/u);
+});
+
 test(
   "portable verifier rejects artifact, key, OCI, report, extra, and missing-field tampering",
   { skip: process.platform !== "darwin" },

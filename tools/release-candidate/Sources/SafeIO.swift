@@ -48,6 +48,29 @@ private func isFile(_ value: stat) -> Bool { value.st_mode & S_IFMT == S_IFREG }
 private func isDirectory(_ value: stat) -> Bool { value.st_mode & S_IFMT == S_IFDIR }
 private func isLink(_ value: stat) -> Bool { value.st_mode & S_IFMT == S_IFLNK }
 
+private func resolvedPath(_ path: String) -> String? {
+  var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+  let succeeded = path.withCString { source in
+    buffer.withUnsafeMutableBufferPointer { storage in
+      guard let address = storage.baseAddress else { return false }
+      return Darwin.realpath(source, address) != nil
+    }
+  }
+  guard succeeded else { return nil }
+  return buffer.withUnsafeBufferPointer { storage in
+    guard let address = storage.baseAddress else { return nil }
+    return String(cString: address)
+  }
+}
+
+private func readBytes(_ descriptor: Int32, into buffer: inout [UInt8], count: Int) -> Int {
+  guard count > 0, count <= buffer.count else { return -1 }
+  return buffer.withUnsafeMutableBytes { storage in
+    guard let address = storage.baseAddress else { return -1 }
+    return Darwin.read(descriptor, address, count)
+  }
+}
+
 func canonicalPath(_ path: String, _ code: String) throws -> String {
   let parts = path.split(separator: "/", omittingEmptySubsequences: false)
   guard path.hasPrefix("/"), path != "/", !path.hasSuffix("/"),
@@ -56,10 +79,7 @@ func canonicalPath(_ path: String, _ code: String) throws -> String {
   else {
     try fail(code)
   }
-  var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
-  guard path.withCString({ Darwin.realpath($0, &buffer) }) != nil else { try fail(code) }
-  let resolved = String(cString: buffer)
-  guard resolved == path else { try fail(code) }
+  guard resolvedPath(path) == path else { try fail(code) }
   return path
 }
 
@@ -93,10 +113,13 @@ func readRealFile(
   output.reserveCapacity(Int(opened.st_size))
   var buffer = [UInt8](repeating: 0, count: 256 * 1024)
   while output.count < opened.st_size {
-    let count = Darwin.read(
-      descriptor, &buffer, min(buffer.count, Int(opened.st_size) - output.count))
+    let count = readBytes(
+      descriptor,
+      into: &buffer,
+      count: min(buffer.count, Int(opened.st_size) - output.count)
+    )
     guard count > 0 else { try fail("RC_FILE_CHANGED") }
-    output.append(buffer, count: count)
+    output.append(contentsOf: buffer[0..<count])
   }
   guard snapshot(opened) == snapshot(try descriptorStat(descriptor)),
     snapshot(opened) == snapshot(try pathStat(path))
@@ -118,7 +141,11 @@ func hashRealFile(_ path: String, maximum: Int64 = maximumArtifactBytes) throws 
   var total: Int64 = 0
   var buffer = [UInt8](repeating: 0, count: 256 * 1024)
   while total < opened.st_size {
-    let count = Darwin.read(descriptor, &buffer, min(buffer.count, Int(opened.st_size - total)))
+    let count = readBytes(
+      descriptor,
+      into: &buffer,
+      count: min(buffer.count, Int(opened.st_size - total))
+    )
     guard count > 0 else { try fail("RC_ARTIFACT_CHANGED") }
     digest.update(data: Data(buffer[0..<count]))
     total += Int64(count)
@@ -136,12 +163,15 @@ private func relativePath(_ root: String, _ path: String) throws -> String {
 }
 
 private func linkTarget(_ path: String) throws -> String {
-  var buffer = [UInt8](repeating: 0, count: Int(PATH_MAX))
+  var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
   let count = path.withCString { pointer in
-    Darwin.readlink(pointer, &buffer, buffer.count)
+    buffer.withUnsafeMutableBufferPointer { storage in
+      Darwin.readlink(pointer, storage.baseAddress, storage.count)
+    }
   }
   guard count > 0, count < buffer.count else { try fail("RC_APP_SYMLINK_UNSAFE") }
-  guard let value = String(bytes: buffer[0..<count], encoding: .utf8) else {
+  let bytes = buffer[0..<count].map { UInt8(bitPattern: $0) }
+  guard let value = String(bytes: bytes, encoding: .utf8) else {
     try fail("RC_APP_SYMLINK_UNSAFE")
   }
   return value
@@ -169,11 +199,7 @@ private func validateLink(_ root: String, _ path: String, _ before: stat) throws
       (path as NSString).deletingLastPathComponent + "/" + target),
     targetParts.starts(with: rootParts)
   else { try fail("RC_APP_SYMLINK_UNSAFE") }
-  var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
-  guard path.withCString({ Darwin.realpath($0, &buffer) }) != nil else {
-    try fail("RC_APP_SYMLINK_UNSAFE")
-  }
-  let resolved = String(cString: buffer)
+  guard let resolved = resolvedPath(path) else { try fail("RC_APP_SYMLINK_UNSAFE") }
   guard resolved == root || resolved.hasPrefix(root + "/"),
     snapshot(before) == snapshot(try pathStat(path))
   else { try fail("RC_APP_SYMLINK_UNSAFE") }
@@ -192,7 +218,11 @@ private func fileRecord(_ root: String, _ path: String, _ before: stat) throws -
   var total: Int64 = 0
   var buffer = [UInt8](repeating: 0, count: 256 * 1024)
   while total < opened.st_size {
-    let count = Darwin.read(descriptor, &buffer, min(buffer.count, Int(opened.st_size - total)))
+    let count = readBytes(
+      descriptor,
+      into: &buffer,
+      count: min(buffer.count, Int(opened.st_size - total))
+    )
     guard count > 0 else { try fail("RC_APP_CHANGED") }
     digest.update(data: Data(buffer[0..<count]))
     total += Int64(count)
