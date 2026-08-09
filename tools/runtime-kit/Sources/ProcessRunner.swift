@@ -69,6 +69,7 @@ final class CaptureBuffer: @unchecked Sendable {
 
 final class SystemRuntimeRunner: RuntimeRunner {
   let dockerPath: String
+  let dockerHost: String
   let allowedExecutables: Set<String>
   static let maximumCapture = 16_384
   static let timeoutSeconds = 120
@@ -90,7 +91,43 @@ final class SystemRuntimeRunner: RuntimeRunner {
     guard let selected = candidates.first(where: { manager.isExecutableFile(atPath: $0) })
     else { try runtimeFail("RUNTIME_DOCKER_UNAVAILABLE") }
     dockerPath = selected
+    dockerHost = try Self.resolveLocalDockerHost()
     allowedExecutables = [selected, "/usr/bin/curl", "/bin/launchctl"]
+  }
+
+  #if RUNTIME_TESTING
+    init(testDockerPath: String, testSocketCandidates: [String]) throws {
+      guard FileManager.default.isExecutableFile(atPath: testDockerPath) else {
+        try runtimeFail("RUNTIME_DOCKER_UNAVAILABLE")
+      }
+      dockerPath = testDockerPath
+      dockerHost = try Self.resolveLocalDockerHost(candidates: testSocketCandidates)
+      allowedExecutables = [testDockerPath, "/usr/bin/curl", "/bin/launchctl"]
+    }
+  #endif
+
+  static func resolveLocalDockerHost(candidates: [String]? = nil) throws -> String {
+    let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+    let socketCandidates =
+      candidates
+      ?? [
+        URL(fileURLWithPath: home, isDirectory: true)
+          .appendingPathComponent(".docker/run/docker.sock").path,
+        "/var/run/docker.sock",
+      ]
+    guard !socketCandidates.isEmpty else { try runtimeFail("RUNTIME_DOCKER_ENDPOINT_INVALID") }
+    for candidate in socketCandidates {
+      guard candidate.hasPrefix("/"), !candidate.contains("\0"),
+        URL(fileURLWithPath: candidate).standardizedFileURL.path == candidate
+      else { try runtimeFail("RUNTIME_DOCKER_ENDPOINT_INVALID") }
+      var metadata = stat()
+      if Darwin.lstat(candidate, &metadata) == 0 {
+        if metadata.st_mode & S_IFMT == S_IFSOCK { return "unix://\(candidate)" }
+        continue
+      }
+      if errno != ENOENT { try runtimeFail("RUNTIME_DOCKER_ENDPOINT_INVALID") }
+    }
+    try runtimeFail("RUNTIME_DOCKER_ENDPOINT_INVALID")
   }
 
   func setManifest(_ payload: RuntimeManifestPayload) { _ = payload }
@@ -98,14 +135,21 @@ final class SystemRuntimeRunner: RuntimeRunner {
   func validate(_ spec: RuntimeCommandSpec) throws {
     guard allowedExecutables.contains(spec.executable), spec.arguments.count <= 64,
       spec.arguments.allSatisfy({ !$0.contains("\0") }),
-      Set(spec.environment.keys).isSubset(of: Self.environmentKeys)
+      Set(spec.environment.keys).isSubset(of: Self.environmentKeys),
+      spec.executable != dockerPath
+        || spec.arguments.allSatisfy({
+          $0 != "--host" && $0 != "-H" && $0 != "--context"
+            && !$0.hasPrefix("-H") && !$0.hasPrefix("--host=")
+            && !$0.hasPrefix("--context=")
+        })
     else { try runtimeFail("RUNTIME_COMMAND_FORBIDDEN") }
   }
 
   func configuredProcess(_ spec: RuntimeCommandSpec) -> Process {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: spec.executable)
-    process.arguments = spec.arguments
+    process.arguments =
+      spec.executable == dockerPath ? ["--host", dockerHost] + spec.arguments : spec.arguments
     let fixedPath = [
       URL(fileURLWithPath: dockerPath).deletingLastPathComponent().path,
       "/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", "/bin",

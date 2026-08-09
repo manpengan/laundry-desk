@@ -1,7 +1,17 @@
 import { execFile } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import {
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
@@ -18,6 +28,19 @@ export function parseRuntimeBuildArguments(arguments_) {
   if (argumentsList.length === 0) return Object.freeze({ release: false, testing: false });
   if (argumentsList.length === 1 && argumentsList[0] === "--testing") {
     return Object.freeze({ release: false, testing: true });
+  }
+  if (
+    argumentsList.length === 5 &&
+    argumentsList[0] === "--testing" &&
+    argumentsList[1] === "--testing-signing-key-output" &&
+    argumentsList[3] === "--testing-output-root"
+  ) {
+    return Object.freeze({
+      release: false,
+      testing: true,
+      testingSigningKeyPath: argumentsList[2],
+      testingOutputRoot: argumentsList[4],
+    });
   }
   if (argumentsList.length === 1 && argumentsList[0] === "--release") {
     return Object.freeze({ release: true, testing: false });
@@ -48,8 +71,76 @@ function compilerArguments(architecture, sources, output, testing) {
   ];
 }
 
-async function copyTrustedKey(resources, options) {
+async function assertPrivateTestingDirectory(path, failureCode) {
+  if (typeof path !== "string" || !isAbsolute(path) || resolve(path) !== path) {
+    throw new Error(failureCode);
+  }
+  let metadata;
+  try {
+    metadata = await lstat(path);
+  } catch {
+    throw new Error(failureCode);
+  }
+  let canonicalPath;
+  try {
+    canonicalPath = await realpath(path);
+  } catch {
+    throw new Error(failureCode);
+  }
+  if (
+    !metadata.isDirectory() ||
+    metadata.isSymbolicLink() ||
+    (metadata.mode & 0o777) !== 0o700 ||
+    (typeof process.getuid === "function" && metadata.uid !== process.getuid()) ||
+    canonicalPath !== path
+  ) {
+    throw new Error(failureCode);
+  }
+  return path;
+}
+
+async function assertPrivateTestingKeyOutput(path) {
+  if (typeof path !== "string" || !isAbsolute(path) || resolve(path) !== path) {
+    throw new Error("RUNTIME_BUILD_TESTING_KEY_PATH_INVALID");
+  }
+  await assertPrivateTestingDirectory(dirname(path), "RUNTIME_BUILD_TESTING_KEY_PATH_INVALID");
+  try {
+    await lstat(path);
+    throw new Error("RUNTIME_BUILD_TESTING_KEY_PREEXISTS");
+  } catch (error) {
+    if (error instanceof Error && error.message === "RUNTIME_BUILD_TESTING_KEY_PREEXISTS") {
+      throw error;
+    }
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+      throw new Error("RUNTIME_BUILD_TESTING_KEY_PATH_INVALID");
+    }
+  }
+  return path;
+}
+
+async function assertPrivateTestingOutputRoot(path) {
+  await assertPrivateTestingDirectory(path, "RUNTIME_BUILD_TESTING_OUTPUT_ROOT_INVALID");
+  const appRoot = join(path, "Laundry Desk Runtime Test.app");
+  try {
+    await lstat(appRoot);
+    throw new Error("RUNTIME_BUILD_TESTING_APP_PREEXISTS");
+  } catch (error) {
+    if (error instanceof Error && error.message === "RUNTIME_BUILD_TESTING_APP_PREEXISTS") {
+      throw error;
+    }
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
+      throw new Error("RUNTIME_BUILD_TESTING_OUTPUT_ROOT_INVALID");
+    }
+  }
+  return appRoot;
+}
+
+export async function copyTrustedKey(resources, options) {
   if (options.testing) {
+    const privateKeyPath =
+      options.testingSigningKeyPath !== undefined
+        ? await assertPrivateTestingKeyOutput(options.testingSigningKeyPath)
+        : join(kitRoot, "dist/test-signing-private.pem");
     const { privateKey, publicKey } = generateKeyPairSync("ed25519");
     const spki = publicKey.export({ format: "der", type: "spki" });
     await writeFile(
@@ -57,8 +148,9 @@ async function copyTrustedKey(resources, options) {
       `${spki.subarray(spki.length - 32).toString("base64url")}\n`,
       { mode: 0o644 },
     );
-    const privateKeyPath = join(kitRoot, "dist/test-signing-private.pem");
-    await rm(privateKeyPath, { force: true });
+    if (options.testingSigningKeyPath === undefined) {
+      await rm(privateKeyPath, { force: true });
+    }
     await writeFile(privateKeyPath, privateKey.export({ format: "pem", type: "pkcs8" }), {
       flag: "wx",
       mode: 0o600,
@@ -89,23 +181,53 @@ function infoPlist() {
 }
 
 export async function buildRuntimeApp(options, dependencies = {}) {
+  const isolatedTestingBuild =
+    options?.testingSigningKeyPath !== undefined || options?.testingOutputRoot !== undefined;
   if (
     typeof options?.testing !== "boolean" ||
     typeof options?.release !== "boolean" ||
-    (options.testing && options.release)
+    (options.testing && options.release) ||
+    (isolatedTestingBuild &&
+      (!options.testing ||
+        typeof options.testingSigningKeyPath !== "string" ||
+        typeof options.testingOutputRoot !== "string"))
   ) {
     throw new Error("RUNTIME_BUILD_OPTIONS_INVALID");
   }
+  if (options.testingSigningKeyPath !== undefined) {
+    await assertPrivateTestingKeyOutput(options.testingSigningKeyPath);
+  }
+  if (
+    isolatedTestingBuild &&
+    relative(dirname(options.testingSigningKeyPath), options.testingOutputRoot) !== "runtime-app"
+  ) {
+    throw new Error("RUNTIME_BUILD_TESTING_OUTPUT_ROOT_INVALID");
+  }
+  const privateAppRoot =
+    options.testingOutputRoot !== undefined
+      ? await assertPrivateTestingOutputRoot(options.testingOutputRoot)
+      : null;
   const run = dependencies.execute ?? execute;
   const outputName = options.testing ? "Laundry Desk Runtime Test.app" : "Laundry Desk Runtime.app";
-  const appRoot = join(kitRoot, "dist", outputName);
+  const appRoot = privateAppRoot ?? join(kitRoot, "dist", outputName);
   const contents = join(appRoot, "Contents");
   const macOS = join(contents, "MacOS");
   const resources = join(contents, "Resources");
   const executable = join(macOS, "Laundry Desk Runtime");
-  const buildRoot = join(kitRoot, "build");
+  const buildRoot = privateAppRoot === null ? join(kitRoot, "build") : options.testingOutputRoot;
 
-  await rm(appRoot, { recursive: true, force: true });
+  if (privateAppRoot === null) {
+    await rm(appRoot, { recursive: true, force: true });
+  } else {
+    try {
+      await mkdir(appRoot, { mode: 0o700 });
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "EEXIST") {
+        throw new Error("RUNTIME_BUILD_TESTING_APP_PREEXISTS");
+      }
+      throw error;
+    }
+  }
   await mkdir(macOS, { recursive: true });
   await mkdir(resources, { recursive: true });
   await mkdir(buildRoot, { recursive: true, mode: 0o700 });

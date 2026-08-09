@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { createPublicKey, generateKeyPairSync } from "node:crypto";
 import {
   chmod,
   cp,
@@ -9,15 +9,17 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rename,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 
-import { buildRuntimeApp, parseRuntimeBuildArguments } from "./build-app.mjs";
+import { buildRuntimeApp, copyTrustedKey, parseRuntimeBuildArguments } from "./build-app.mjs";
 import { inspectRuntimeApp, parseRuntimeArchitectures } from "./inspect-app.mjs";
 import { createRuntimeArtifactSeal, verifyRuntimeReleaseArtifacts } from "./release-artifacts.mjs";
 import {
@@ -32,10 +34,204 @@ test("Runtime build and inspect accept only the fixed universal contract", async
   assert.deepEqual(parseRuntimeBuildArguments([]), { release: false, testing: false });
   assert.deepEqual(parseRuntimeBuildArguments(["--testing"]), { release: false, testing: true });
   assert.deepEqual(parseRuntimeBuildArguments(["--release"]), { release: true, testing: false });
+  assert.deepEqual(
+    parseRuntimeBuildArguments([
+      "--testing",
+      "--testing-signing-key-output",
+      "/private/tmp/runtime-private.pem",
+      "--testing-output-root",
+      "/private/tmp/runtime-app",
+    ]),
+    {
+      release: false,
+      testing: true,
+      testingSigningKeyPath: "/private/tmp/runtime-private.pem",
+      testingOutputRoot: "/private/tmp/runtime-app",
+    },
+  );
   assert.throws(() => parseRuntimeBuildArguments(["--release", "extra"]), /ARGS_INVALID/u);
   await assert.rejects(() => buildRuntimeApp({ release: true, testing: true }), /OPTIONS_INVALID/u);
   assert.deepEqual(parseRuntimeArchitectures("x86_64 arm64\n"), ["arm64", "x86_64"]);
   assert.throws(() => parseRuntimeArchitectures("arm64\n"));
+});
+
+test("testing Runtime builds can write isolated private signing keys", async (t) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "laundry-runtime-build-key-")));
+  t.after(async () => removeTestTree(root));
+  const builds = await Promise.all(
+    ["first", "second"].map(async (name) => {
+      const privateRoot = join(root, name);
+      const resources = join(root, `${name}-resources`);
+      await mkdir(privateRoot, { mode: 0o700 });
+      await mkdir(resources, { mode: 0o700 });
+      const privateKeyPath = join(privateRoot, "runtime-test-signing-private.pem");
+      await copyTrustedKey(resources, {
+        release: false,
+        testing: true,
+        testingSigningKeyPath: privateKeyPath,
+      });
+      return Object.freeze({
+        key: await readFile(privateKeyPath, "utf8"),
+        keyMode: (await lstat(privateKeyPath)).mode & 0o777,
+      });
+    }),
+  );
+  assert.ok(builds.every((build) => build.keyMode === 0o600));
+  assert.notEqual(builds[0].key, builds[1].key);
+
+  const insecureRoot = join(root, "insecure");
+  await mkdir(insecureRoot, { mode: 0o755 });
+  await assert.rejects(
+    () =>
+      copyTrustedKey(join(root, "first-resources"), {
+        release: false,
+        testing: true,
+        testingSigningKeyPath: join(insecureRoot, "private.pem"),
+      }),
+    /RUNTIME_BUILD_TESTING_KEY_PATH_INVALID/u,
+  );
+  await assert.rejects(
+    () =>
+      copyTrustedKey(join(root, "first-resources"), {
+        release: false,
+        testing: true,
+        testingSigningKeyPath: "relative/private.pem",
+      }),
+    /RUNTIME_BUILD_TESTING_KEY_PATH_INVALID/u,
+  );
+  await assert.rejects(
+    () =>
+      copyTrustedKey(join(root, "first-resources"), {
+        release: false,
+        testing: true,
+        testingSigningKeyPath: join(root, "first", "runtime-test-signing-private.pem"),
+      }),
+    /RUNTIME_BUILD_TESTING_KEY_PREEXISTS/u,
+  );
+});
+
+test("concurrent testing Runtime builds own separate apps and matching signing keys", async (t) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "laundry-runtime-build-isolated-")));
+  t.after(async () => removeTestTree(root));
+  const results = await Promise.all(
+    ["first", "second"].map(async (name) => {
+      const temporaryRoot = join(root, name);
+      const testingOutputRoot = join(temporaryRoot, "runtime-app");
+      const testingSigningKeyPath = join(temporaryRoot, "runtime-test-signing-private.pem");
+      const compilerOutputs = [];
+      const execute = async (file, arguments_) => {
+        if (file === "/usr/bin/xcrun" || file === "/usr/bin/lipo") {
+          const output = arguments_.at(-1);
+          if (file === "/usr/bin/xcrun") compilerOutputs.push(output);
+          await writeFile(output, file === "/usr/bin/xcrun" ? "architecture" : "universal");
+        }
+        return { stderr: "", stdout: "" };
+      };
+      await mkdir(temporaryRoot, { mode: 0o700 });
+      await mkdir(testingOutputRoot, { mode: 0o700 });
+      const appRoot = await buildRuntimeApp(
+        {
+          release: false,
+          testing: true,
+          testingOutputRoot,
+          testingSigningKeyPath,
+        },
+        { execute },
+      );
+      const privateKey = await readFile(testingSigningKeyPath, "utf8");
+      const publicDer = createPublicKey(privateKey).export({ format: "der", type: "spki" });
+      const expectedPublicKey = publicDer.subarray(publicDer.length - 32).toString("base64url");
+      const embeddedPublicKey = await readFile(
+        join(appRoot, "Contents/Resources/trusted-manifest-public-key.txt"),
+        "utf8",
+      );
+      assert.equal(embeddedPublicKey, `${expectedPublicKey}\n`);
+      assert.equal((await lstat(testingSigningKeyPath)).mode & 0o777, 0o600);
+      return Object.freeze({ appRoot, compilerOutputs, embeddedPublicKey, privateKey });
+    }),
+  );
+  assert.notEqual(results[0].appRoot, results[1].appRoot);
+  assert.notEqual(results[0].privateKey, results[1].privateKey);
+  assert.notEqual(results[0].embeddedPublicKey, results[1].embeddedPublicKey);
+  for (const [index, name] of ["first", "second"].entries()) {
+    const privateBuildRoot = join(root, name, "runtime-app");
+    assert.equal(results[index].appRoot, join(privateBuildRoot, "Laundry Desk Runtime Test.app"));
+    assert.equal(results[index].compilerOutputs.length, 2);
+    for (const output of results[index].compilerOutputs) {
+      assert.equal(output.startsWith(`${privateBuildRoot}/architectures-`), true);
+    }
+  }
+});
+
+test("isolated testing Runtime output fails closed before replacing an app", async (t) => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "laundry-runtime-build-output-")));
+  t.after(async () => removeTestTree(root));
+  const testingOutputRoot = join(root, "runtime-app");
+  const appRoot = join(testingOutputRoot, "Laundry Desk Runtime Test.app");
+  await mkdir(testingOutputRoot, { mode: 0o700 });
+  await mkdir(appRoot, { mode: 0o700 });
+  let executed = false;
+  await assert.rejects(
+    () =>
+      buildRuntimeApp(
+        {
+          release: false,
+          testing: true,
+          testingOutputRoot,
+          testingSigningKeyPath: join(root, "runtime-test-signing-private.pem"),
+        },
+        {
+          execute: async () => {
+            executed = true;
+            return { stderr: "", stdout: "" };
+          },
+        },
+      ),
+    /RUNTIME_BUILD_TESTING_APP_PREEXISTS/u,
+  );
+  assert.equal(executed, false);
+  assert.ok((await lstat(appRoot)).isDirectory());
+
+  await assert.rejects(
+    () =>
+      buildRuntimeApp({
+        release: false,
+        testing: true,
+        testingSigningKeyPath: join(root, "another-private.pem"),
+      }),
+    /RUNTIME_BUILD_OPTIONS_INVALID/u,
+  );
+  for (const boundary of ["permissions", "symlink", "noncanonical"]) {
+    const boundaryRoot = join(root, boundary);
+    const privateKeyPath = join(boundaryRoot, "runtime-test-signing-private.pem");
+    const outputRoot = join(boundaryRoot, "runtime-app");
+    await mkdir(boundaryRoot, { mode: 0o700 });
+    if (boundary === "permissions") await mkdir(outputRoot, { mode: 0o755 });
+    if (boundary === "symlink") {
+      const realOutput = join(boundaryRoot, "real-output");
+      await mkdir(realOutput, { mode: 0o700 });
+      await symlink(realOutput, outputRoot);
+    }
+    if (boundary === "noncanonical") await mkdir(outputRoot, { mode: 0o700 });
+    await assert.rejects(
+      () =>
+        buildRuntimeApp(
+          {
+            release: false,
+            testing: true,
+            testingOutputRoot:
+              boundary === "noncanonical" ? `${boundaryRoot}/nested/../runtime-app` : outputRoot,
+            testingSigningKeyPath: privateKeyPath,
+          },
+          {
+            execute: async () => {
+              throw new Error("RUNTIME_BUILD_TEST_BOUNDARY_EXECUTED");
+            },
+          },
+        ),
+      /RUNTIME_BUILD_TESTING_OUTPUT_ROOT_INVALID/u,
+    );
+  }
 });
 
 async function fakeRuntimeApp(appRoot, publicKey = "A".repeat(43)) {

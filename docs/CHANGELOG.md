@@ -2,7 +2,7 @@
 
 本项目版本记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 SemVer。
 
-> **当前路线（2026-08-09 修订）**：按 [ADR-36](adr/2026-08-09-adr-36-cloud-test-environment.md)，v2 当前优先在 hk-vps 云测试环境收敛 Linux Server/Web；macOS/Windows 桌面适配移出当前关键路径。该环境不承载真实顾客 PII，也不等于生产级多租户云部署。V2-only 基础裁决继续由 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 约束，本地安全与能力边界继续沿用 ADR-14/16/17–35。
+> **当前路线（2026-08-10 修订）**：ADR-36 的 hk-vps Linux Server/Web 云测试证据继续有效；后续按[1–6 交付计划](superpowers/plans/2026-08-10-post-adr36-delivery-plan.md)依次完成 macOS 产品面与 Runtime 托管回环、XP-58 真机、macOS 正式发布、Windows 实机、生产 SaaS 和 AI/迁移。每阶段必须测试通过并合入 `main` 后才进入下一阶段。V2-only 基础裁决继续由 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 约束，本地安全与能力边界继续沿用 ADR-14/16/17–36。
 
 ---
 
@@ -13,6 +13,9 @@
 _本节记录**面向用户的变化**；纯内部重构与验证性工作不入 CHANGELOG，去向见 `docs/research/` 与 `docs/superpowers/plans/`。_
 
 ### 新增
+
+- macOS 当前 Web 产品面对齐验收：同一真实 PostgreSQL/Server 上的 Browser 17/17 与打包 Counter 7/7 已新鲜通过，覆盖柜台工作日、件级履约与照片、会员资金与生命周期、隐私治理、催取/账务/交班 CSV、离线恢复、设置和本机 CUPS 配置；全新 macOS 投产流程 1/1 通过，并验证员工密码与 PIN 重置前后的新旧凭据切换。验收记录见 [macOS Web 产品面对齐验收](superpowers/specs/2026-08-10-macos-web-product-parity-acceptance.md)。证据标记为 `software_only`，不等于 XP-58 出纸、Developer ID/公证、正式 OCI、Windows 或生产云验收。
+- 新增 Runtime.app → 真实 Server OCI → 打包 Counter 的托管 loopback 组合验收入口，已新鲜覆盖安装、健康检查、停止/启动/重启、Counter 固定桥接与失败路径清理，并输出 `RUNTIME_COUNTER_LOOPBACK_ACCEPTANCE_OK assurance=software_only runner=system ... cleanup=clean`。该结果只证明本机软件组合，不等于正式发布或外部硬件证据。
 
 - hk-vps 云测试环境（[ADR-36](adr/2026-08-09-adr-36-cloud-test-environment.md)）：新增与 `LAUNDRY_LAN_ORIGIN` 互斥的 `LAUNDRY_PUBLIC_ORIGIN`，只接受默认 443 的精确公共 HTTPS 域名；它启用 Secure host-only Cookie 与 same-origin Fetch Metadata，但不放宽 ADR-32 的私网 IPv4 LAN 约束。`desk.manpengan.xyz` 由 Caddy 反代 loopback Fastify，PostgreSQL 16 只监听 localhost，完整柜台写面仍受既有认证、CSRF、Host 与 Origin 门禁保护。部署、回滚、版本标识和双站维护流程见 [hk-vps 运维手册](operations/2026-08-09-hk-vps-cloud-test.md)。
 
@@ -68,6 +71,8 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 - macOS Runtime：交付独立 universal 原生 Runtime.app 软件，固定管理本地 PostgreSQL/Server 的 install/start/stop/restart/status/diagnose/launchd、同一签名 manifest 的中断安装恢复、ADR-29 托管备份恢复及 ADR-30 的 N→N+1/一步回滚；native acceptance 脱离仓库和宿主 Node。当前测试 App 只做 ad-hoc codesign 并信任临时测试 key。**Developer ID/公证、正式 manifest 签名权威、已发布双架构 OCI 与第二台无仓库 Mac 仍未形成外部证据。**
 
 ### 修复
+
+- 补回 Desktop 对既有 `platform.settings.set` 命令的契约投影，使打包 Counter 的 R5 设置保存继续经过主进程 schema 校验并正确转发；此前 Web 可用的设置写入在打包应用内会被拒绝为未支持命令。
 
 - 修复主机 PostgreSQL 迁移与 RLS smoke 在连接失败时可能因 EXIT trap 丢失局部变量而遗留
   0600 临时 pgpass 文件的问题；失败路径现稳定清理，hk-vps 裸机迁移显式绑定 loopback 5432。
