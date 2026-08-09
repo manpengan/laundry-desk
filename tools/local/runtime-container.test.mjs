@@ -19,6 +19,30 @@ test("runtime server image contains a fixed compiled entrypoint and migration re
   assert.doesNotMatch(source.split("FROM node:22-bookworm-slim AS runtime")[1], /corepack|pnpm/u);
 });
 
+test("runtime server image builds and embeds the Owner SPA with the fixed LAN gateway modules", async () => {
+  const source = await readFile(dockerfileUrl, "utf8");
+
+  assert.match(source, /COPY apps\/web apps\/web/u);
+  assert.match(source, /COPY packages\/ui packages\/ui/u);
+  assert.match(source, /pnpm --filter @laundry\/web build/u);
+  assert.match(
+    source,
+    /COPY --chown=10001:10001 --from=build \/workspace\/apps\/web\/dist-spa \/opt\/laundry\/owner-spa/u,
+  );
+  assert.match(
+    source,
+    /COPY --chown=10001:10001 --from=build \/workspace\/tools\/local\/lan-gateway-/u,
+  );
+  assert.match(
+    source,
+    /COPY --chown=10001:10001 --from=build \/workspace\/tools\/local\/lan-runtime-healthcheck\.mjs \/opt\/laundry\/lan-gateway\/lan-runtime-healthcheck\.mjs/u,
+  );
+  assert.doesNotMatch(
+    source.split("FROM node:22-bookworm-slim AS runtime")[1],
+    /apps\/web\/src|packages\/ui\/src/u,
+  );
+});
+
 test("runtime image fixes the Node process identity and seeds its only durable write path", async () => {
   const source = await readFile(dockerfileUrl, "utf8");
   const runtime = source.split("FROM node:22-bookworm-slim AS runtime")[1];

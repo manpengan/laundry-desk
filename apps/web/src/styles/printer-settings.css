@@ -1,0 +1,69 @@
+.ld-printer-settings {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 18px;
+}
+
+.ld-printer-settings__heading {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.ld-printer-settings__heading h2,
+.ld-printer-settings__heading p,
+.ld-printer-settings__message,
+.ld-printer-settings__evidence {
+  margin: 0;
+}
+
+.ld-printer-settings__heading p,
+.ld-printer-settings__message,
+.ld-printer-settings__evidence {
+  color: var(--lg-ink2);
+  font-size: 0.875rem;
+}
+
+.ld-printer-settings__state {
+  background: var(--lg-leaf);
+  border-radius: 999px;
+  flex: 0 0 auto;
+  font-size: 0.8125rem;
+  padding: 6px 10px;
+}
+
+.ld-printer-settings__state.is-ready {
+  color: var(--lg-ok-ink);
+}
+
+.ld-printer-settings__state.is-unavailable {
+  color: var(--lg-late-ink);
+}
+
+.ld-printer-settings__label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.ld-printer-settings__select {
+  background: var(--lg-surface);
+  border: 1px solid var(--lg-hair);
+  border-radius: 10px;
+  color: inherit;
+  min-height: 44px;
+  padding: 0 12px;
+  width: min(100%, 480px);
+}
+
+.ld-printer-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ld-printer-settings__evidence {
+  border-left: 3px solid var(--lg-warn-ink);
+  padding-left: 10px;
+}

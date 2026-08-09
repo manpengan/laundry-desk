@@ -5,6 +5,7 @@ import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import type { OfflinePort } from "../host/offline-port.js";
+import type { PrinterPort } from "../host/printer-port.js";
 import type { NavItemId } from "../nav.js";
 import { CustomersPage } from "./CustomersPage.js";
 import { DebtPage } from "./DebtPage.js";
@@ -29,6 +30,8 @@ export type PageHostProps = {
   queryClient?: QueryPort;
   photoPort?: PhotoPort;
   offlinePort?: OfflinePort;
+  printerPort?: PrinterPort;
+  onSessionChange?: (session: SessionView | null) => void;
 };
 
 function actionTarget(from: NavItemId): NavItemId {
@@ -50,6 +53,8 @@ export function PageHost({
   queryClient,
   photoPort,
   offlinePort,
+  printerPort,
+  onSessionChange,
 }: PageHostProps) {
   const copy = pageCopy(activeId);
   const [pickupOrderId, setPickupOrderId] = useState<string | undefined>(undefined);
@@ -160,6 +165,8 @@ export function PageHost({
         commandClient={commandClient}
         {...(queryClient !== undefined ? { queryClient } : {})}
         {...(offlinePort !== undefined ? { offlinePort } : {})}
+        {...(printerPort !== undefined ? { printerPort } : {})}
+        {...(onSessionChange !== undefined ? { onSessionChange } : {})}
       />
     );
   }

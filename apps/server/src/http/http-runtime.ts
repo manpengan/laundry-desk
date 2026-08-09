@@ -1,4 +1,5 @@
 import { createLocalRuntime, type LocalRuntime } from "../local/create-runtime.js";
+import { resolveRuntimeDatabaseUrl } from "../db/pg-pool.js";
 
 export type HttpRuntimeDependencies = Readonly<{
   createRuntime: (env: NodeJS.ProcessEnv) => Promise<LocalRuntime>;
@@ -16,7 +17,11 @@ export async function createHttpRuntime(
   env: NodeJS.ProcessEnv,
   dependencies: HttpRuntimeDependencies = DEFAULT_DEPENDENCIES,
 ): Promise<LocalRuntime> {
-  if ((env.DATABASE_URL ?? "").trim().length === 0) {
+  const databaseUrl = resolveRuntimeDatabaseUrl({
+    DATABASE_URL: env.DATABASE_URL,
+    DATABASE_URL_FILE: env.DATABASE_URL_FILE,
+  });
+  if (databaseUrl === null) {
     throw new Error("HTTP runtime requires an explicit laundry_app DATABASE_URL");
   }
   return dependencies.createRuntime(env);

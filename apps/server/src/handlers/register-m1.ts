@@ -200,7 +200,9 @@ export function registerM1Handlers(
   if (deps.staffAccess !== undefined) {
     const handlers = createStaffAccessHandlers(deps.staffAccess);
     registry.registerHandler("staff.access.set", handlers["staff.access.set"]);
-    registered.push("staff.access.set");
+    registry.registerHandler("staff.create", handlers["staff.create"]);
+    registry.registerHandler("staff.credentials.reset", handlers["staff.credentials.reset"]);
+    registered.push("staff.access.set", "staff.create", "staff.credentials.reset");
   }
 
   if (deps.member !== undefined && deps.order !== undefined) {

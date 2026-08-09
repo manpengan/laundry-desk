@@ -1,20 +1,42 @@
 import Foundation
 
 final class NativeRuntimeController {
-  static let project = "laundry-desk-runtime"
-  static let volumes = [
+  static let defaultProject = "laundry-desk-runtime"
+  static let defaultVolumes = [
     (logical: "pgdata-v2", name: "laundry-desk-runtime_pgdata-v2"),
     (logical: "photos", name: "laundry-desk-runtime_photos"),
   ]
   let paths: RuntimePaths
   let runner: RuntimeRunner
+  let runtimeProject: String
+  let runtimeVolumes: [(logical: String, name: String)]
+  let testLocalServerImage: String?
   private let appVersion: String
   private let contractsMajor = 2
 
-  init(paths: RuntimePaths, runner: RuntimeRunner, appVersion: String) {
+  init(
+    paths: RuntimePaths, runner: RuntimeRunner, appVersion: String,
+    testIsolationID: String? = nil, testLocalServerImage: String? = nil
+  ) {
     self.paths = paths
     self.runner = runner
     self.appVersion = appVersion
+    self.testLocalServerImage = testLocalServerImage
+    if let testIsolationID {
+      runtimeProject = "laundry-desk-runtime-test-\(testIsolationID)"
+      runtimeVolumes = [
+        ("pgdata-v2", "\(runtimeProject)_pgdata-v2"),
+        ("photos", "\(runtimeProject)_photos"),
+      ]
+    } else {
+      runtimeProject = Self.defaultProject
+      runtimeVolumes = Self.defaultVolumes
+    }
+  }
+
+  var photoVolumeName: String {
+    runtimeVolumes.first(where: { $0.logical == "photos" })?.name
+      ?? Self.defaultVolumes[1].name
   }
 
   func command(_ args: [String], environment: [String: String] = [:]) -> RuntimeCommandSpec {
@@ -23,7 +45,7 @@ final class NativeRuntimeController {
 
   func compose(_ args: [String], environment: [String: String]) -> RuntimeCommandSpec {
     command(
-      ["compose", "--project-name", Self.project, "--file", paths.compose.path] + args,
+      ["compose", "--project-name", runtimeProject, "--file", paths.compose.path] + args,
       environment: environment)
   }
 
@@ -49,20 +71,6 @@ final class NativeRuntimeController {
     return payload
   }
 
-  private func validateSetup(_ setup: RuntimeSetup) throws {
-    let username =
-      setup.adminUsername.range(
-        of: "^[A-Za-z0-9_.-]{1,64}$",
-        options: .regularExpression) != nil
-    let pin = setup.adminPin.range(of: "^[0-9]{6,8}$", options: .regularExpression) != nil
-    guard username, pin, !setup.adminDisplayName.isEmpty, setup.adminDisplayName.count <= 80,
-      setup.adminPassword.count >= 12, setup.adminPassword.count <= 256,
-      ![setup.adminDisplayName, setup.adminPassword].contains(where: {
-        $0.contains("\0") || $0.contains("\n") || $0.contains("\r")
-      })
-    else { try runtimeFail("RUNTIME_SETUP_INVALID") }
-  }
-
   func decodeState(_ data: Data) throws -> RuntimeState {
     guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       Set(object.keys) == [
@@ -70,7 +78,7 @@ final class NativeRuntimeController {
         "compose_sha256", "instance_id", "volumes",
       ],
       let state = try? JSONDecoder().decode(RuntimeState.self, from: data),
-      state.version == 1, state.volumes == Self.volumes.map({ $0.name }),
+      state.version == 1, state.volumes == runtimeVolumes.map({ $0.name }),
       ["prepared", "finalizing", "installed"].contains(state.status),
       state.instanceID.range(
         of: "^[A-Za-z0-9_-]{22,128}$",
@@ -91,8 +99,10 @@ final class NativeRuntimeController {
   ) -> [String: String] {
     [
       "LAUNDRY_RUNTIME_CONFIG_ROOT": paths.root.path,
+      "LAUNDRY_RUNTIME_PGDATA_VOLUME": runtimeVolumes[0].name,
+      "LAUNDRY_RUNTIME_PHOTOS_VOLUME": runtimeVolumes[1].name,
       "LAUNDRY_RUNTIME_INSTANCE_ID": state.instanceID,
-      "LAUNDRY_RUNTIME_SERVER_IMAGE": payload.serverImage.index,
+      "LAUNDRY_RUNTIME_SERVER_IMAGE": runtimeServerImage(payload.serverImage.index),
       "LAUNDRY_RUNTIME_POSTGRES_IMAGE": payload.postgresImage,
       "LAUNDRY_RUNTIME_RELEASE": payload.release,
       "LAUNDRY_RUNTIME_CONTRACTS_SHA256": payload.contractsSHA256,
@@ -150,14 +160,14 @@ final class NativeRuntimeController {
   private func volumeMatches(_ volume: (Bool, [String: String]?), state: RuntimeState) -> Bool {
     guard volume.0, let labels = volume.1 else { return false }
     return labels["com.laundry-desk.managed"] == "true"
-      && labels["com.laundry-desk.project"] == Self.project
+      && labels["com.laundry-desk.project"] == runtimeProject
       && labels["com.laundry-desk.instance"] == state.instanceID
   }
 
   private func inspectVolumes() throws
     -> [(logical: String, name: String, exists: Bool, labels: [String: String]?)]
   {
-    try Self.volumes.map { volume in
+    try runtimeVolumes.map { volume in
       let inspected = try inspectVolume(volume.name)
       return (volume.logical, volume.name, inspected.exists, inspected.labels)
     }
@@ -179,57 +189,16 @@ final class NativeRuntimeController {
   private func ensureVolumes(_ state: RuntimeState) throws {
     let labels = [
       "com.laundry-desk.managed": "true",
-      "com.laundry-desk.project": Self.project,
+      "com.laundry-desk.project": runtimeProject,
       "com.laundry-desk.instance": state.instanceID,
     ]
     let labelArguments = labels.keys.sorted().flatMap { key in
       ["--label", "\(key)=\(labels[key] ?? "")"]
     }
-    for volume in Self.volumes {
+    for volume in runtimeVolumes {
       try run(command(["volume", "create"] + labelArguments + [volume.name]))
     }
     try assertVolumes(state)
-  }
-
-  func assertImage(_ payload: RuntimeManifestPayload) throws {
-    let result = try run(
-      command([
-        "image", "inspect", "--format", "{{json .Config.Labels}}",
-        payload.serverImage.index,
-      ]))
-    guard let data = result.stdout.data(using: .utf8),
-      let labels = try? JSONDecoder().decode([String: String].self, from: data)
-    else { try runtimeFail("RUNTIME_IMAGE_METADATA_INVALID") }
-    let expected = [
-      "com.laundry-desk.runtime.release": payload.release,
-      "com.laundry-desk.runtime.contracts-major": String(payload.contractsMajor),
-      "com.laundry-desk.runtime.contracts-sha256": payload.contractsSHA256,
-      "com.laundry-desk.runtime.server-version": payload.serverVersion,
-      "com.laundry-desk.runtime.web-bundle-sha256": payload.webBundleSHA256,
-      "com.laundry-desk.runtime.schema-sha256": payload.databaseSchemaSHA256,
-      "com.laundry-desk.runtime.migrations-sha256": payload.migrationsSHA256,
-      "com.laundry-desk.runtime.migration-head": payload.migrationHead,
-    ]
-    guard expected.allSatisfy({ labels[$0.key] == $0.value })
-    else { try runtimeFail("RUNTIME_IMAGE_METADATA_INVALID") }
-    let architectureResult = try run(
-      command([
-        "image", "inspect", "--format", "{{json .Architecture}}", payload.serverImage.index,
-      ]))
-    let digestsResult = try run(
-      command([
-        "image", "inspect", "--format", "{{json .RepoDigests}}", payload.serverImage.index,
-      ]))
-    guard let architectureData = architectureResult.stdout.data(using: .utf8),
-      let digestsData = digestsResult.stdout.data(using: .utf8),
-      let architecture = try? JSONDecoder().decode(String.self, from: architectureData),
-      let repoDigests = try? JSONDecoder().decode([String].self, from: digestsData)
-    else { try runtimeFail("RUNTIME_IMAGE_METADATA_INVALID") }
-    // RepoDigests records the pulled multi-platform index. Child digests remain
-    // signature-bound publication metadata in the verified release manifest.
-    guard ["arm64", "amd64"].contains(architecture),
-      repoDigests.contains(payload.serverImage.index)
-    else { try runtimeFail("RUNTIME_IMAGE_METADATA_INVALID") }
   }
 
   func gates(
@@ -242,6 +211,10 @@ final class NativeRuntimeController {
     try run(compose(["run", "--rm", "migrate"], environment: env))
     if bootstrap { try run(compose(["run", "--rm", "bootstrap"], environment: env)) }
     try run(compose(["run", "--rm", "verify"], environment: env))
+    if bootstrap {
+      try run(
+        compose(["run", "--rm", "verify", "verify-commissioned"], environment: env))
+    }
     try run(compose(["up", "-d", "--wait", "server"], environment: env))
     let health = try run(
       RuntimeCommandSpec(
@@ -261,11 +234,13 @@ final class NativeRuntimeController {
     try RuntimeStorage.atomicWrite(
       try encodedState(state.withStatus("finalizing")), to: paths.state)
     try RuntimeStorage.removeBootstrapSecrets(paths.secrets)
+    try initializeMaintenanceBaseline()
     try RuntimeStorage.atomicWrite(try encodedState(state.withStatus("installed")), to: paths.state)
   }
 
   func install(manifestURL: URL, setup: RuntimeSetup) throws -> String {
-    try validateSetup(setup)
+    try validateRuntimeSetup(setup)
+    try prepareForRuntimeMutationIfRootExists()
     let manifestData = try RuntimeStorage.readBounded(manifestURL)
     let payload = try verifyManifest(manifestData)
     let composeData = try Data(contentsOf: paths.compose)
@@ -294,15 +269,14 @@ final class NativeRuntimeController {
       version: 1, status: "prepared", release: payload.release,
       manifestSHA256: RuntimeManifestVerifier.sha256(manifestData),
       composeSHA256: payload.composeSHA256,
-      instanceID: try RuntimeStorage.randomToken(), volumes: Self.volumes.map({ $0.name }))
+      instanceID: try RuntimeStorage.randomToken(), volumes: runtimeVolumes.map({ $0.name }))
     try RuntimeStorage.writeExclusive(try encodedState(state), to: paths.state)
     let history = RuntimeReleaseHistory(
       version: 1, highestAcceptedRelease: payload.release,
       previousRelease: nil, previousManifestSHA256: nil, preUpgradeBackupID: nil)
     try RuntimeStorage.writeExclusive(
       try RuntimeReleaseCodec.encode(history), to: paths.releaseHistory)
-    try run(command(["pull", payload.serverImage.index]))
-    try run(command(["pull", payload.postgresImage]))
+    try prepareImages(payload)
     try assertImage(payload)
     try ensureVolumes(state)
     try gates(state, payload, bootstrap: true)
@@ -312,6 +286,8 @@ final class NativeRuntimeController {
   }
 
   func recover(manifestURL: URL) throws -> String {
+    try RuntimeStorage.validateDirectory(paths.root)
+    try prepareForRuntimeMutation()
     let requestedData = try RuntimeStorage.readBounded(manifestURL)
     let requested = try verifyManifest(requestedData)
     let (state, payload) = try load(allowRecovery: true)
@@ -321,8 +297,7 @@ final class NativeRuntimeController {
     else { try runtimeFail("RUNTIME_RECOVERY_REQUIRED") }
     try assertVolumes(state, allowMissing: state.status == "prepared")
     if state.status == "prepared" {
-      try run(command(["pull", payload.serverImage.index]))
-      try run(command(["pull", payload.postgresImage]))
+      try prepareImages(payload)
       try assertImage(payload)
       try ensureVolumes(state)
       try gates(state, payload, bootstrap: true)
@@ -332,15 +307,19 @@ final class NativeRuntimeController {
     return payload.release
   }
 
-  private func startUnlocked() throws -> String {
+  func startUnlocked() throws -> String {
+    try prepareForRuntimeMutation()
     let (state, payload) = try load()
+    try initializeMaintenanceBaseline()
     try assertVolumes(state)
     try assertImage(payload)
     try gates(state, payload, bootstrap: false)
+    try restoreEnabledLanAfterServerStart(state: state, payload: payload)
     return payload.release
   }
 
-  private func stopUnlocked() throws -> String {
+  func stopUnlocked() throws -> String {
+    try emergencyStopLanGateway()
     let (state, payload) = try load()
     try assertVolumes(state)
     try run(compose(["stop", "server", "postgres"], environment: environment(state, payload)))
@@ -360,31 +339,10 @@ final class NativeRuntimeController {
   func restart() throws -> String {
     try RuntimeStorage.validateDirectory(paths.root)
     return try RuntimeStorage.withMaintenanceLock(paths.root) {
+      try prepareForRuntimeMutation()
       _ = try stopUnlocked()
       return try startUnlocked()
     }
   }
 
-  func diagnose() -> RuntimeDiagnosis {
-    do {
-      let (state, payload) = try load()
-      let volumes = try assertVolumes(state)
-      let services = try run(
-        compose(
-          ["ps", "--format", "json"],
-          environment: environment(state, payload)), accepting: [0, 1])
-      return RuntimeDiagnosis(
-        ok: true, project: Self.project, release: payload.release,
-        migrationHead: payload.migrationHead, faultCode: nil,
-        databaseVolumePresent: volumes.first(where: { $0.logical == "pgdata-v2" })?.exists,
-        photoVolumePresent: volumes.first(where: { $0.logical == "photos" })?.exists,
-        composeReachable: services.code == 0)
-    } catch {
-      let code = (error as? RuntimeKitError)?.description ?? "RUNTIME_DIAGNOSE_FAILED"
-      return RuntimeDiagnosis(
-        ok: false, project: Self.project, release: nil,
-        migrationHead: nil, faultCode: code, databaseVolumePresent: nil, photoVolumePresent: nil,
-        composeReachable: nil)
-    }
-  }
 }

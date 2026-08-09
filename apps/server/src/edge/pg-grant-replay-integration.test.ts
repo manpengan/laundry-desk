@@ -22,8 +22,8 @@ import { createPgPool, resolvePgUrls, type PgPool } from "../db/pg-pool.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
 import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { TenantContext } from "../db/types.js";
-import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
-import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
+import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
+import { PG_TEST_STAFF_B_ID, seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
 import { createEdgeAuthorityService } from "./authority-service.js";
 import { createPgAuthorityStore } from "./pg-authority-store.js";
 import { createPgReplayGuard } from "./pg-replay-guard.js";
@@ -312,7 +312,7 @@ test(
         issuedAt: issued.offline_grant.payload.issued_at,
         notAfter: issued.offline_grant.payload.not_after,
       });
-      const replaySession = session(DEMO_STAFF_B_ID, "Fixture Staff B");
+      const replaySession = session(PG_TEST_STAFF_B_ID, "Fixture Staff B");
 
       const primaryCommand = replayRequest(deviceKeys.privateKey, authority, {
         sequence: 1,

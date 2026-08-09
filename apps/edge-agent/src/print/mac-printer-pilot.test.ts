@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { runMacPrinterPilot } from "./mac-printer-pilot.js";
+
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const discovery = {
   platform: "darwin" as const,
@@ -58,4 +63,10 @@ test("macOS printer pilot fails closed off Darwin", async () => {
   );
   assert.equal(result.ok, false);
   assert.deepEqual(result.queues, []);
+});
+
+test("production discovery reuses the bounded CUPS process gate", () => {
+  const source = readFileSync(join(packageRoot, "src/print/mac-printer-pilot.ts"), "utf8");
+  assert.match(source, /await discoverCupsQueues\(\)/u);
+  assert.doesNotMatch(source, /nodeExecFile|execFile\(/u);
 });

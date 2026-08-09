@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createPgPool, resolvePgUrls, type PgPool, type PgPoolClient } from "../db/pg-pool.js";
-import { BOOTSTRAP_ADMIN_ROLE_ID, assertLocalBootstrapReady } from "./bootstrap.js";
+import {
+  BOOTSTRAP_ADMIN_ROLE_ID,
+  BOOTSTRAP_APPROVER_ROLE_ID,
+  BOOTSTRAP_APPROVER_STAFF_ID,
+  BOOTSTRAP_COMMISSION_AUDIT_ID,
+  assertLocalCommissionedReady,
+  assertLocalBootstrapReady,
+  localRuntimeCommissioningState,
+} from "./bootstrap.js";
 import { LOCAL_PROFILE } from "./profile.js";
 
 const realPgUrls =
@@ -19,6 +27,7 @@ type QueryRecord = Readonly<{
 function createReadinessPool(
   row: ReturnType<typeof readyProfileRow> | undefined,
   explicitBootstrapReady = true,
+  commissioningState = "commissioned",
 ): Readonly<{ pool: PgPool; queries: QueryRecord[]; released: () => boolean }> {
   const queries: QueryRecord[] = [];
   let didRelease = false;
@@ -30,6 +39,12 @@ function createReadinessPool(
       queries.push(Object.freeze({ sql, params }));
       if (sql.includes("current_user")) {
         return { rows: row === undefined ? [] : [row], rowCount: row === undefined ? 0 : 1 };
+      }
+      if (sql.includes("FROM staffs approver")) {
+        return { rows: [readyCommissionedRow()], rowCount: 1 };
+      }
+      if (sql.includes("laundry_local_commissioning_state")) {
+        return { rows: [{ commissioning_state: commissioningState }], rowCount: 1 };
       }
       if (sql.includes("laundry_local_bootstrap_ready")) {
         return {
@@ -47,6 +62,27 @@ function createReadinessPool(
     pool: { connect: async () => client } as unknown as PgPool,
     queries,
     released: () => didRelease,
+  });
+}
+
+function readyCommissionedRow() {
+  return Object.freeze({
+    approver_staff_id: BOOTSTRAP_APPROVER_STAFF_ID,
+    approver_role_id: BOOTSTRAP_APPROVER_ROLE_ID,
+    approver_role_name: "admin",
+    approver_is_active: true,
+    approver_role_is_active: true,
+    approver_is_privacy_admin: true,
+    fulfillment: true,
+    membership: true,
+    shift_closing: true,
+    delivery: false,
+    marketing: false,
+    ai: false,
+    audit_id: BOOTSTRAP_COMMISSION_AUDIT_ID,
+    audit_via: "runtime",
+    audit_command: "local.commissioning.complete",
+    audit_entity: "local_commissioning",
   });
 }
 
@@ -152,6 +188,16 @@ test("app-role readiness accepts demo data only in the explicit demo runtime", a
   assert.equal(database.released(), true);
 });
 
+test("operational readiness identifies strict legacy state without declaring it commissioned", async () => {
+  const database = createReadinessPool(readyProfileRow(), true, "commission_required");
+
+  assert.equal(await localRuntimeCommissioningState(database.pool), "commission_required");
+  await assert.rejects(
+    () => assertLocalCommissionedReady(database.pool),
+    /LOCAL_RUNTIME_NOT_READY/u,
+  );
+});
+
 test("app-role readiness rejects admin connections and missing bootstrap state", async (t) => {
   await t.test("admin connection", async () => {
     const database = createReadinessPool(readyProfileRow({ current_role: "postgres" }));
@@ -233,8 +279,11 @@ maybeRealPg("real PG readiness rejects an admin login that SET ROLEs to laundry_
         org_id: string;
         store_id: string;
         admin_staff_id: string;
+        approver_staff_id: string | null;
         profile_hash: string;
         demo_only: boolean;
+        commissioned_at: Date | null;
+        feature_profile_version: number;
         created_at: Date;
       }>
     | undefined;
@@ -413,7 +462,8 @@ maybeRealPg("real PG readiness rejects an admin login that SET ROLEs to laundry_
       `DELETE FROM local_bootstrap_metadata
        WHERE singleton = true
        RETURNING singleton, org_id::text, store_id::text, admin_staff_id::text,
-                 profile_hash::text, demo_only, created_at`,
+                 approver_staff_id::text, profile_hash::text, demo_only,
+                 commissioned_at, feature_profile_version, created_at`,
     );
     deletedMetadata = removed.rows[0];
     assert.ok(deletedMetadata);
@@ -437,15 +487,19 @@ maybeRealPg("real PG readiness rejects an admin login that SET ROLEs to laundry_
     if (deletedMetadata !== undefined) {
       await adminPool.query(
         `INSERT INTO local_bootstrap_metadata (
-           singleton, org_id, store_id, admin_staff_id, profile_hash, demo_only, created_at
-         ) VALUES ($1, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7)`,
+           singleton, org_id, store_id, admin_staff_id, approver_staff_id,
+           profile_hash, demo_only, commissioned_at, feature_profile_version, created_at
+         ) VALUES ($1, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7, $8, $9, $10)`,
         [
           deletedMetadata.singleton,
           deletedMetadata.org_id,
           deletedMetadata.store_id,
           deletedMetadata.admin_staff_id,
+          deletedMetadata.approver_staff_id,
           deletedMetadata.profile_hash,
           deletedMetadata.demo_only,
+          deletedMetadata.commissioned_at,
+          deletedMetadata.feature_profile_version,
           deletedMetadata.created_at,
         ],
       );

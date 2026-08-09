@@ -8,7 +8,11 @@ import {
   isPrivateLanIpv4,
   LanGatewayConfigError,
   loadLanGatewayConfig,
+  loadRuntimeLanGatewayConfig,
+  loadRuntimeLanHealthcheckConfig,
 } from "./lan-gateway-config.mjs";
+
+const OWNER_SPA_SHA256 = "a".repeat(64);
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "laundry-lan-config-"));
@@ -139,5 +143,127 @@ test("rejects permissive or linked TLS files", async () => {
   await assert.rejects(
     () => loadLanGatewayConfig(environment(paths)),
     (error) => error instanceof LanGatewayConfigError && error.code.endsWith("_HARDLINKS"),
+  );
+});
+
+test("runtime mode loads public address and SPA identity only from one bounded config file", async () => {
+  const paths = await fixture();
+  const configPath = join(paths.root, "lan-config.json");
+  await writeFile(
+    configPath,
+    `${JSON.stringify({
+      schema_version: 1,
+      public_host: "192.168.50.12",
+      public_port: 8443,
+      owner_spa_sha256: OWNER_SPA_SHA256,
+    })}\n`,
+    { mode: 0o600 },
+  );
+
+  const config = await loadRuntimeLanGatewayConfig({
+    configPath,
+    certPath: paths.certPath,
+    keyPath: paths.keyPath,
+    webRoot: "/opt/laundry/owner-spa",
+  });
+
+  assert.deepEqual(
+    {
+      origin: config.origin,
+      authority: config.authority,
+      bindHost: config.bindHost,
+      listenHost: config.listenHost,
+      port: config.port,
+      ownerSpaSha256: config.ownerSpaSha256,
+      webRoot: config.webRoot,
+      backendHost: config.backendHost,
+      backendPort: config.backendPort,
+    },
+    {
+      origin: "https://192.168.50.12:8443",
+      authority: "192.168.50.12:8443",
+      bindHost: "192.168.50.12",
+      listenHost: "0.0.0.0",
+      port: 8443,
+      ownerSpaSha256: OWNER_SPA_SHA256,
+      webRoot: "/opt/laundry/owner-spa",
+      backendHost: "127.0.0.1",
+      backendPort: 8787,
+    },
+  );
+
+  const healthcheck = await loadRuntimeLanHealthcheckConfig({
+    configPath,
+    certPath: paths.certPath,
+  });
+  assert.deepEqual(
+    {
+      authority: healthcheck.authority,
+      bindHost: healthcheck.bindHost,
+      port: healthcheck.port,
+      cert: healthcheck.cert.toString("utf8"),
+    },
+    {
+      authority: "192.168.50.12:8443",
+      bindHost: "192.168.50.12",
+      port: 8443,
+      cert: "test certificate",
+    },
+  );
+});
+
+test("runtime mode rejects extra config keys, reserved ports, linked config, and inline PEM", async () => {
+  const paths = await fixture();
+  const configPath = join(paths.root, "lan-config.json");
+  const writeConfig = async (value) => {
+    await writeFile(configPath, `${JSON.stringify(value)}\n`, { mode: 0o600 });
+  };
+  const valid = {
+    schema_version: 1,
+    public_host: "192.168.50.12",
+    public_port: 8443,
+    owner_spa_sha256: OWNER_SPA_SHA256,
+  };
+  const runtimePaths = {
+    configPath,
+    certPath: paths.certPath,
+    keyPath: paths.keyPath,
+    webRoot: "/opt/laundry/owner-spa",
+  };
+  const load = () => loadRuntimeLanGatewayConfig(runtimePaths);
+
+  for (const value of [
+    { ...valid, unexpected: true },
+    { ...valid, schema_version: 2 },
+    { ...valid, public_host: "0.0.0.0" },
+    { ...valid, public_port: 8543 },
+    { ...valid, public_port: 8787 },
+    { ...valid, owner_spa_sha256: "short" },
+  ]) {
+    await writeConfig(value);
+    await assert.rejects(load, (error) => error instanceof LanGatewayConfigError);
+  }
+
+  await writeConfig(valid);
+  await assert.rejects(
+    () =>
+      loadRuntimeLanGatewayConfig({
+        ...runtimePaths,
+        cert: "inline certificate forbidden",
+        key: "inline private key forbidden",
+      }),
+    (error) => error instanceof LanGatewayConfigError,
+  );
+  const linkedConfig = join(paths.root, "linked-config.json");
+  await symlink(configPath, linkedConfig);
+  await assert.rejects(
+    () =>
+      loadRuntimeLanGatewayConfig({
+        configPath: linkedConfig,
+        certPath: paths.certPath,
+        keyPath: paths.keyPath,
+        webRoot: "/opt/laundry/owner-spa",
+      }),
+    (error) => error instanceof LanGatewayConfigError,
   );
 });

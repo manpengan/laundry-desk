@@ -23,6 +23,7 @@ export const DESKTOP_IPC_CHANNELS = Object.freeze({
     refresh: "desktop:auth:refresh",
     pinChallenge: "desktop:auth:pin-challenge",
     pinVerify: "desktop:auth:pin-verify",
+    credentialComplete: "desktop:auth:staff-credential-complete",
     logout: "desktop:auth:logout",
   }),
   command: Object.freeze({
@@ -40,6 +41,12 @@ export const DESKTOP_IPC_CHANNELS = Object.freeze({
     resume: "desktop:offline:resume",
     status: "desktop:offline:status",
     resolve: "desktop:offline:resolve",
+  }),
+  printer: Object.freeze({
+    discover: "desktop:printer:discover",
+    status: "desktop:printer:status",
+    configure: "desktop:printer:configure",
+    test: "desktop:printer:test-fixed-ticket",
   }),
   health: Object.freeze({
     get: "desktop:health:get",

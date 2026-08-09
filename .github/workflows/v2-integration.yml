@@ -47,9 +47,19 @@ jobs:
         run: |
           set -euo pipefail
           admin_password="$(openssl rand -hex 36)"
+          approver_password="$(openssl rand -hex 36)"
+          while [[ "${approver_password}" == "${admin_password}" ]]; do
+            approver_password="$(openssl rand -hex 36)"
+          done
           admin_pin="$(node -e 'console.log(require("node:crypto").randomInt(100000, 1000000))')"
+          approver_pin="$(node -e 'console.log(require("node:crypto").randomInt(100000, 1000000))')"
+          while [[ "${approver_pin}" == "${admin_pin}" ]]; do
+            approver_pin="$(node -e 'console.log(require("node:crypto").randomInt(100000, 1000000))')"
+          done
           printf '::add-mask::%s\n' "${admin_password}"
           printf '::add-mask::%s\n' "${admin_pin}"
+          printf '::add-mask::%s\n' "${approver_password}"
+          printf '::add-mask::%s\n' "${approver_pin}"
           {
             printf 'COMPOSE_PROJECT_NAME=laundry-ci-%s-%s\n' \
               "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}"
@@ -59,6 +69,10 @@ jobs:
             printf 'LAUNDRY_BOOTSTRAP_ADMIN_PIN=%s\n' "${admin_pin}"
             printf 'LAUNDRY_BOOTSTRAP_ADMIN_USERNAME=%s\n' 'admin'
             printf 'LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME=%s\n' 'Local Administrator'
+            printf 'LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD=%s\n' "${approver_password}"
+            printf 'LAUNDRY_BOOTSTRAP_APPROVER_PIN=%s\n' "${approver_pin}"
+            printf 'LAUNDRY_BOOTSTRAP_APPROVER_USERNAME=%s\n' 'approver'
+            printf 'LAUNDRY_BOOTSTRAP_APPROVER_DISPLAY_NAME=%s\n' 'Approval Administrator'
             printf 'LAUNDRY_LOCAL_ORG_CODE=%s\n' 'local'
             printf 'LAUNDRY_LOCAL_STORE_CODE=%s\n' 'main'
           } >> "${GITHUB_ENV}"
@@ -118,6 +132,51 @@ jobs:
             --file "${recovery[0]}" \
             --confirm-sha256 "${recovery[1]}"
 
+      - name: Install Chromium for local Web smoke
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Verify legacy commissioning against an independent real PostgreSQL volume
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm local:down
+          commissioning_project="laundry-commission-pg-${GITHUB_RUN_ID}${GITHUB_RUN_ATTEMPT}"
+          commissioning_config="${RUNNER_TEMP}/laundry-v2-commission-pg-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup_commissioning() {
+            COMPOSE_PROJECT_NAME="${commissioning_project}" \
+              LAUNDRY_LOCAL_CONFIG_DIR="${commissioning_config}" \
+              pnpm local:down >/dev/null 2>&1 || true
+            docker volume rm "${commissioning_project}_pgdata-v2" >/dev/null 2>&1 || true
+          }
+          trap cleanup_commissioning EXIT
+          export COMPOSE_PROJECT_NAME="${commissioning_project}"
+          export LAUNDRY_LOCAL_CONFIG_DIR="${commissioning_config}"
+          pnpm local:up -- --bootstrap
+          LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED=1 \
+            node tools/local/commissioning-pg-acceptance.mjs
+
+      - name: Commission Browser behavior on an independent fresh volume
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm local:down
+          commissioning_project="laundry-ci-commission-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          commissioning_config="${RUNNER_TEMP}/laundry-v2-commission-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup_commissioning() {
+            COMPOSE_PROJECT_NAME="${commissioning_project}" \
+              LAUNDRY_LOCAL_CONFIG_DIR="${commissioning_config}" \
+              pnpm local:down >/dev/null 2>&1 || true
+            docker volume rm "${commissioning_project}_pgdata-v2" >/dev/null 2>&1 || true
+          }
+          trap cleanup_commissioning EXIT
+          export COMPOSE_PROJECT_NAME="${commissioning_project}"
+          export LAUNDRY_LOCAL_CONFIG_DIR="${commissioning_config}"
+          pnpm local:up -- --bootstrap
+          pnpm local:web:commissioning:e2e
+
+      - name: Restart the isolated fixture stack
+        run: pnpm local:up -- --bootstrap
+
       - name: Run server tests against real PostgreSQL with no skips
         shell: bash
         run: |
@@ -154,9 +213,6 @@ jobs:
           });
           NODE
           ! rg -q '^# skipped [1-9][0-9]*$' /tmp/laundry-server-pg-tests.log
-
-      - name: Install Chromium for local Web smoke
-        run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Playwright against real server and PostgreSQL
         run: pnpm run local:web:e2e

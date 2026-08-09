@@ -21,8 +21,9 @@ async function createHttpSmokeFakes(fixtureDirectory, sentinel) {
     `#!/usr/bin/env bash
 set -euo pipefail
 sentinel='${sentinel}'
+approver_sentinel='${sentinel}-APPROVER'
 if env | grep -Fq "\${sentinel}" ||
-   env | grep -Eq '^(LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD|LAUNDRY_BOOTSTRAP_ADMIN_PIN|LAUNDRY_SMOKE_ADMIN_PASSWORD|POSTGRES_PASSWORD|LAUNDRY_APP_PASSWORD|DATABASE_URL|DATABASE_ADMIN_URL|SUPERUSER_DATABASE_URL|LAUNDRY_PG_APP_URL|PGPASSWORD|PGPASSFILE|LAUNDRY_ACCESS_TOKEN_SECRET|LAUNDRY_CSRF_PROOF_SECRET)='; then
+   env | grep -Eq '^(LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD|LAUNDRY_BOOTSTRAP_ADMIN_PIN|LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD|LAUNDRY_BOOTSTRAP_APPROVER_PIN|LAUNDRY_SMOKE_ADMIN_PASSWORD|LAUNDRY_SMOKE_APPROVER_PASSWORD|POSTGRES_PASSWORD|LAUNDRY_APP_PASSWORD|DATABASE_URL|DATABASE_ADMIN_URL|SUPERUSER_DATABASE_URL|LAUNDRY_PG_APP_URL|PGPASSWORD|PGPASSFILE|LAUNDRY_ACCESS_TOKEN_SECRET|LAUNDRY_CSRF_PROOF_SECRET)='; then
   exit 91
 fi
 for argument in "$@"; do
@@ -38,8 +39,9 @@ case "\${2:-}" in
     ;;
   *org_code:*)
     password="$(cat)"
-    [[ "\${password}" == "\${sentinel}" ]] || exit 93
-    printf '{"org_code":"local","store_code":"main","username":"admin","password":"%s","device_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd"}' "\${password}"
+    [[ "\${password}" == "\${sentinel}" || "\${password}" == "\${approver_sentinel}" ]] || exit 93
+    printf '{"org_code":"local","store_code":"main","username":"%s","password":"%s","device_id":"%s"}' \
+      "\${LAUNDRY_SMOKE_USERNAME}" "\${password}" "\${LAUNDRY_SMOKE_DEVICE_ID}"
     ;;
   *access_token*)
     printf 'Authorization: Bearer safe-access-token\\n' > "\${4}"
@@ -60,7 +62,7 @@ esac
 set -euo pipefail
 sentinel='${sentinel}'
 if env | grep -Fq "\${sentinel}" ||
-   env | grep -Eq '^(LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD|LAUNDRY_BOOTSTRAP_ADMIN_PIN|LAUNDRY_SMOKE_ADMIN_PASSWORD|POSTGRES_PASSWORD|LAUNDRY_APP_PASSWORD|DATABASE_URL|DATABASE_ADMIN_URL|SUPERUSER_DATABASE_URL|LAUNDRY_PG_APP_URL|PGPASSWORD|PGPASSFILE|LAUNDRY_ACCESS_TOKEN_SECRET|LAUNDRY_CSRF_PROOF_SECRET)='; then
+   env | grep -Eq '^(LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD|LAUNDRY_BOOTSTRAP_ADMIN_PIN|LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD|LAUNDRY_BOOTSTRAP_APPROVER_PIN|LAUNDRY_SMOKE_ADMIN_PASSWORD|LAUNDRY_SMOKE_APPROVER_PASSWORD|POSTGRES_PASSWORD|LAUNDRY_APP_PASSWORD|DATABASE_URL|DATABASE_ADMIN_URL|SUPERUSER_DATABASE_URL|LAUNDRY_PG_APP_URL|PGPASSWORD|PGPASSFILE|LAUNDRY_ACCESS_TOKEN_SECRET|LAUNDRY_CSRF_PROOF_SECRET)='; then
   exit 95
 fi
 for argument in "$@"; do
@@ -118,7 +120,7 @@ case "\${url}" in
     [[ -f "\${auth_header_file}" ]] || exit 104
     [[ "$(/bin/cat "\${auth_header_file}")" == 'Authorization: Bearer safe-access-token' ]] ||
       exit 105
-    printf '{"ok":true,"data":[{"role":"admin","username":"admin"}]}' > "\${output}"
+    printf '{"ok":true,"data":[{"role":"admin","username":"admin","privacy_admin":true},{"role":"admin","username":"approver","privacy_admin":true}]}' > "\${output}"
     ;;
   *)
     exit 98
@@ -137,6 +139,8 @@ function httpSmokeSecretEnvironment(sentinel) {
   return {
     LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD: sentinel,
     LAUNDRY_BOOTSTRAP_ADMIN_PIN: "482915",
+    LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD: `${sentinel}-APPROVER`,
+    LAUNDRY_BOOTSTRAP_APPROVER_PIN: "739251",
     LAUNDRY_SMOKE_ADMIN_PASSWORD: "preexisting-exported-alias",
     POSTGRES_PASSWORD: "postgres-secret",
     LAUNDRY_APP_PASSWORD: "app-secret",
@@ -167,23 +171,26 @@ test("keeps the HTTP smoke administrator password out of child argv and environm
         LAUNDRY_LOCAL_ORG_CODE: "local",
         LAUNDRY_LOCAL_STORE_CODE: "main",
         LAUNDRY_BOOTSTRAP_ADMIN_USERNAME: "admin",
+        LAUNDRY_BOOTSTRAP_APPROVER_USERNAME: "approver",
         ...httpSmokeSecretEnvironment(sentinel),
       },
     });
 
     const trace = await readFile(tracePath, "utf8");
     const curlCalls = trace.split("\n").filter((line) => line.startsWith("curl "));
-    assert.equal(curlCalls.length, 3);
+    assert.equal(curlCalls.length, 4);
     assert.match(curlCalls[0], /<http:\/\/127\.0\.0\.1:8787\/health>/u);
     assert.match(curlCalls[1], /<Origin: http:\/\/127\.0\.0\.1:5173>/u);
     assert.match(curlCalls[1], /<Sec-Fetch-Site: same-site>/u);
     assert.match(curlCalls[1], /<content-type: application\/json>/u);
     assert.match(curlCalls[2], /<Origin: http:\/\/127\.0\.0\.1:5173>/u);
     assert.match(curlCalls[2], /<Sec-Fetch-Site: same-site>/u);
-    assert.match(curlCalls[2], /<@[^>]+>/u);
+    assert.match(curlCalls[3], /<Origin: http:\/\/127\.0\.0\.1:5173>/u);
+    assert.match(curlCalls[3], /<Sec-Fetch-Site: same-site>/u);
+    assert.match(curlCalls[3], /<@[^>]+>/u);
     assert.doesNotMatch(trace, new RegExp(sentinel, "u"));
     assert.doesNotMatch(trace, /LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD=/u);
-    assert.match(result.stdout, /fresh bootstrap exposes only the real administrator/u);
+    assert.match(result.stdout, /fresh bootstrap exposes exactly two independent administrators/u);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, new RegExp(sentinel, "u"));
   } finally {
     await rm(fixtureDirectory, { force: true, recursive: true });
@@ -208,6 +215,7 @@ test("redacts HTTP smoke request, response, and token material on login failure"
           LAUNDRY_LOCAL_ORG_CODE: "local",
           LAUNDRY_LOCAL_STORE_CODE: "main",
           LAUNDRY_BOOTSTRAP_ADMIN_USERNAME: "admin",
+          LAUNDRY_BOOTSTRAP_APPROVER_USERNAME: "approver",
           ...httpSmokeSecretEnvironment(sentinel),
         },
       }),

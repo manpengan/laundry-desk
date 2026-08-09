@@ -40,6 +40,8 @@ function compilerArguments(architecture, sources, output, testing) {
     "-framework",
     "CryptoKit",
     "-framework",
+    "CoreImage",
+    "-framework",
     "Security",
     "-o",
     output,
@@ -139,6 +141,10 @@ export async function buildRuntimeApp(options, dependencies = {}) {
     join(repositoryRoot, "tools/compose/docker-compose.runtime.yml"),
     join(resources, "docker-compose.runtime.yml"),
   );
+  await cp(
+    join(repositoryRoot, "tools/compose/docker-compose.runtime-lan.yml"),
+    join(resources, "docker-compose.runtime-lan.yml"),
+  );
   await copyTrustedKey(resources, options);
   await writeFile(join(contents, "Info.plist"), infoPlist(), { mode: 0o644 });
   await run("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", appRoot], {
@@ -146,7 +152,10 @@ export async function buildRuntimeApp(options, dependencies = {}) {
   });
 
   const copiedCompose = await readFile(join(resources, "docker-compose.runtime.yml"));
-  if (copiedCompose.length === 0) throw new Error("RUNTIME_BUILD_RESOURCE_MISSING");
+  const copiedLanCompose = await readFile(join(resources, "docker-compose.runtime-lan.yml"));
+  if (copiedCompose.length === 0 || copiedLanCompose.length === 0) {
+    throw new Error("RUNTIME_BUILD_RESOURCE_MISSING");
+  }
   return appRoot;
 }
 

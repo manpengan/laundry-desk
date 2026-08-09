@@ -35,6 +35,19 @@ test("local Playwright owns the fixed Vite lifecycle", async () => {
   assert.match(config, /workers:\s*4/u);
 });
 
+test("commissioning Playwright runs before SQL fixtures with artifacts disabled", async () => {
+  const config = await readWebFile("playwright.commissioning.config.ts");
+  const spec = await readWebFile("e2e-commissioning/staff-lifecycle.spec.ts");
+
+  assert.doesNotMatch(config, /globalSetup/u);
+  assert.match(config, /trace:\s*"off"/u);
+  assert.match(config, /screenshot:\s*"off"/u);
+  assert.match(config, /video:\s*"off"/u);
+  assert.match(spec, /LAUNDRY_BOOTSTRAP_APPROVER_PIN/u);
+  assert.match(spec, /staff create, reset, completion, and login/u);
+  assert.doesNotMatch(spec, /\b(?:INSERT|UPDATE|DELETE|SELECT)\b|from\s+"pg"|createRequire/u);
+});
+
 test("login smoke proves blank fields and loads credentials before navigation", async () => {
   const smoke = await readWebFile("e2e/local-login.spec.ts");
   const navigationOffset = smoke.indexOf("page.goto");

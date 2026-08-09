@@ -1,4 +1,10 @@
-import { createCommandError } from "@laundry/contracts";
+import { randomUUID } from "node:crypto";
+
+import {
+  createCommandError,
+  StaffCreateInputSchema,
+  StaffCredentialsResetInputSchema,
+} from "@laundry/contracts";
 
 import { HandlerCommandError, type CommandHandler, type HandlerOutcome } from "../bus/types.js";
 import type { MutableCommandRegistry } from "../bus/registry.js";
@@ -8,10 +14,18 @@ import {
   type StaffAccessChange,
   type StaffAccessStore,
 } from "./access-store.js";
+import {
+  STAFF_CREDENTIAL_SETUP_TTL_SECONDS,
+  type StaffCredentialStore,
+} from "./credential-types.js";
+import { createSqlStaffCredentialStore } from "./sql-credential-store.js";
 
 export type StaffAccessHandlerDeps = Readonly<{
   persistence?: "memory" | "sql";
   store: StaffAccessStore;
+  credentials: StaffCredentialStore;
+  nowEpochSeconds?: () => number;
+  newId?: () => string;
 }>;
 
 function hasPermission(permissions: readonly string[] | undefined, permission: string): boolean {
@@ -62,9 +76,41 @@ function resolveStore(
     : deps.store;
 }
 
+function resolveCredentialStore(
+  deps: StaffAccessHandlerDeps,
+  context: Parameters<CommandHandler>[0],
+): StaffCredentialStore {
+  return deps.persistence === "sql"
+    ? createSqlStaffCredentialStore(context.client, context.tenant)
+    : deps.credentials;
+}
+
+function credentialIssue(deps: StaffAccessHandlerDeps, targetStaffId?: string) {
+  const now = deps.nowEpochSeconds?.() ?? Math.floor(Date.now() / 1_000);
+  const newId = deps.newId ?? randomUUID;
+  return Object.freeze({
+    setupRef: newId(),
+    targetStaffId: targetStaffId ?? newId(),
+    roleRowId: newId(),
+    createdAt: now,
+    expiresAt: now + STAFF_CREDENTIAL_SETUP_TTL_SECONDS,
+  });
+}
+
+function mutationError(reason: string): HandlerCommandError {
+  return new HandlerCommandError(
+    createCommandError(reason === "stale" ? "IDEMPOTENCY_CONFLICT" : "INVARIANT_FAILED"),
+  );
+}
+
 export function createStaffAccessHandlers(
   deps: StaffAccessHandlerDeps,
-): Readonly<Record<"staff.access.list" | "staff.access.set", CommandHandler>> {
+): Readonly<
+  Record<
+    "staff.access.list" | "staff.access.set" | "staff.create" | "staff.credentials.reset",
+    CommandHandler
+  >
+> {
   const list: CommandHandler = async (context): Promise<HandlerOutcome> => {
     requireAccessPermission(context.actor.permissions);
     const staff = await resolveStore(deps, context).list();
@@ -101,7 +147,83 @@ export function createStaffAccessHandlers(
       ]),
     });
   };
-  return Object.freeze({ "staff.access.list": list, "staff.access.set": set });
+
+  const create: CommandHandler = async (context): Promise<HandlerOutcome> => {
+    requireAccessPermission(context.actor.permissions);
+    const parsed = StaffCreateInputSchema.safeParse(context.parsed);
+    if (!parsed.success) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    const issue = credentialIssue(deps);
+    const created = await resolveCredentialStore(deps, context).create(
+      context.actor.staffId,
+      parsed.data,
+      issue,
+    );
+    if (!created.ok) throw mutationError(created.reason);
+    return Object.freeze({
+      result: created.setup,
+      audit: Object.freeze({
+        entity: "staff_credentials",
+        entityId: created.after.staff_id,
+        afterJson: JSON.stringify({
+          staff_id: created.after.staff_id,
+          username: created.after.username,
+          display_name: created.after.display_name,
+          role: parsed.data.role,
+          privacy_admin: parsed.data.privacy_admin,
+          status: "credential_pending",
+          reason: parsed.data.reason,
+        }),
+      }),
+      events: Object.freeze([
+        Object.freeze({
+          type: "staff.created_inactive",
+          payload: Object.freeze({ staff_id: created.after.staff_id }),
+        }),
+      ]),
+    });
+  };
+
+  const reset: CommandHandler = async (context): Promise<HandlerOutcome> => {
+    requireAccessPermission(context.actor.permissions);
+    const parsed = StaffCredentialsResetInputSchema.safeParse(context.parsed);
+    if (!parsed.success) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    const issue = credentialIssue(deps, parsed.data.target_staff_id);
+    const changed = await resolveCredentialStore(deps, context).reset(
+      context.actor.staffId,
+      parsed.data,
+      issue,
+    );
+    if (!changed.ok) throw mutationError(changed.reason);
+    return Object.freeze({
+      result: changed.setup,
+      audit: Object.freeze({
+        entity: "staff_credentials",
+        entityId: changed.after.staff_id,
+        ...(changed.before === undefined ? {} : { beforeJson: JSON.stringify(changed.before) }),
+        afterJson: JSON.stringify({
+          staff_id: changed.after.staff_id,
+          permission_version: changed.after.permission_version,
+          status: "credential_pending",
+          reason: parsed.data.reason,
+        }),
+      }),
+      events: Object.freeze([
+        Object.freeze({
+          type: "staff.credentials_invalidated",
+          payload: Object.freeze({
+            staff_id: changed.after.staff_id,
+            permission_version: changed.after.permission_version,
+          }),
+        }),
+      ]),
+    });
+  };
+  return Object.freeze({
+    "staff.access.list": list,
+    "staff.access.set": set,
+    "staff.create": create,
+    "staff.credentials.reset": reset,
+  });
 }
 
 export function registerStaffAccessHandlers(
@@ -111,5 +233,7 @@ export function registerStaffAccessHandlers(
 ): void {
   const handlers = createStaffAccessHandlers(deps);
   commandRegistry.registerHandler("staff.access.set", handlers["staff.access.set"]);
+  commandRegistry.registerHandler("staff.create", handlers["staff.create"]);
+  commandRegistry.registerHandler("staff.credentials.reset", handlers["staff.credentials.reset"]);
   queryRegistry?.registerHandler("staff.access.list", handlers["staff.access.list"]);
 }

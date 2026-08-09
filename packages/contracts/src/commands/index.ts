@@ -16,8 +16,15 @@ export {
   STAFF_QUERY_NAMES,
   StaffAccessListInputSchema,
   StaffAccessSetInputSchema,
+  StaffCreateInputSchema,
+  StaffCredentialSetupResultSchema,
+  StaffCredentialsCompleteRequestSchema,
+  StaffCredentialsCompleteResponseSchema,
+  StaffCredentialsResetInputSchema,
   staffAccessListQuery,
   staffAccessSetCommand,
+  staffCreateCommand,
+  staffCredentialsResetCommand,
 } from "./staff.js";
 export {
   MEMBER_COMMAND_NAMES,

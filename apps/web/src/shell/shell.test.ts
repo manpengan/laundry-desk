@@ -93,6 +93,35 @@ test("PageHost receive with session+commandClient mounts ReceivePage form", () =
   assert.doesNotMatch(html, /登录后开单/);
 });
 
+test("PageHost settings forwards the desktop printer port to the admin panel", () => {
+  const unavailable = Object.freeze({
+    ok: false as const,
+    error: Object.freeze({ code: "UNAVAILABLE", message: "not loaded" }),
+  });
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(PageHost, {
+        activeId: "settings",
+        onNavigate: () => undefined,
+        session: sampleSession,
+        authClient: createMockAuthClient(),
+        commandClient: createMockCommandClient(),
+        printerPort: Object.freeze({
+          discover: async () => unavailable,
+          status: async () => unavailable,
+          configure: async () => unavailable,
+          testFixedTicket: async () => unavailable,
+        }),
+      }),
+    ),
+  );
+
+  assert.match(html, /data-testid="printer-settings"/u);
+  assert.match(html, /CUPS 小票打印机/u);
+});
+
 test("PageHost pickup with session+commandClient mounts PickupPage form", () => {
   const html = renderToStaticMarkup(
     createElement(

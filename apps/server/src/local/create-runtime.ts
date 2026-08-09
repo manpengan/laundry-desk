@@ -28,7 +28,7 @@ import { snapshotFromOrder } from "../print/snapshot.js";
 import { createPgOrderStore } from "../order/pg-order-store.js";
 import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
-import { createMemoryStaffAccessDeps, createPgStaffAccessDeps } from "../staff/runtime.js";
+import { createPgStaffAccessDeps } from "../staff/runtime.js";
 import { createMemoryMemberDeps, createPgMemberDeps } from "../member/runtime.js";
 import { createMemoryNotificationStore, createPgNotificationStore } from "../notification/index.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
@@ -62,8 +62,10 @@ import {
   type LocalServerConfig,
 } from "./config.js";
 import { LOCAL_PROFILE } from "./profile.js";
+import { createLocalMemoryStaffAccessDeps } from "./memory-staff-access.js";
 import { buildPlatform, mintRuntimeSecret } from "./runtime-support.js";
 import {
+  freezeStaffDirectory,
   loadPgStaffDirectory,
   LOCAL_MEMORY_STAFF_DIRECTORY,
   type LocalStaffDirectoryEntry,
@@ -104,14 +106,6 @@ const defaultPgRuntimeDependencies: CreatePgLocalRuntimeDependencies = Object.fr
   assertReady: assertLocalBootstrapReady,
   loadStaffDirectory: loadPgStaffDirectory,
 });
-
-function freezeStaffDirectory(
-  entries: readonly LocalStaffDirectoryEntry[],
-): readonly LocalStaffDirectoryEntry[] {
-  return Object.freeze(
-    entries.map((entry) => (Object.isFrozen(entry) ? entry : Object.freeze({ ...entry }))),
-  );
-}
 
 function buildIdentityDeps(
   ports: Readonly<{
@@ -253,6 +247,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   });
   const photoStore = createMemoryPhotoStore();
   const accountingSource = createMemoryAccountingSource();
+  const staffAccess = createLocalMemoryStaffAccessDeps(store);
   return Object.freeze({
     mode: "memory" as const,
     identity: buildIdentityDeps(
@@ -295,7 +290,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     reporting: createMemoryReportingDeps(accountingSource, LOCAL_PROFILE.timezone),
     photo: Object.freeze({ store: photoStore }),
     fulfillment: Object.freeze({ store: createMemoryFulfillmentStore() }),
-    staffAccess: createMemoryStaffAccessDeps(LOCAL_MEMORY_STAFF_DIRECTORY),
+    staffAccess,
     member: memberDeps,
     notification: Object.freeze({ store: createMemoryNotificationStore({ orderStore }) }),
     edgeAuthority: createMemoryRuntimeAuthority(accessTokenSecret),

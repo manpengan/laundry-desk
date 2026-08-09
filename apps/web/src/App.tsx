@@ -64,6 +64,7 @@ export function shellPropsFrom(
     queryClient: ports.query,
     photoPort: ports.photo,
     ...(ports.offline === undefined ? {} : { offlinePort: ports.offline }),
+    ...(ports.printer === undefined ? {} : { printerPort: ports.printer }),
     onSessionChange,
     readOnly,
   };

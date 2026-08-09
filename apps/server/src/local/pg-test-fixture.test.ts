@@ -10,6 +10,10 @@ const TEST_ENV = Object.freeze({
   LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME: "CI Administrator",
   LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD: "unique-ci-password",
   LAUNDRY_BOOTSTRAP_ADMIN_PIN: "846291",
+  LAUNDRY_BOOTSTRAP_APPROVER_USERNAME: "ci-approver",
+  LAUNDRY_BOOTSTRAP_APPROVER_DISPLAY_NAME: "CI Approval Administrator",
+  LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD: "independent-ci-approver-password",
+  LAUNDRY_BOOTSTRAP_APPROVER_PIN: "729463",
 });
 
 type RecordedQuery = Readonly<{
@@ -58,12 +62,17 @@ test("PG test fixture hashes environment credentials before writing test-only st
   assert.equal(fixture.adminUsername, TEST_ENV.LAUNDRY_BOOTSTRAP_ADMIN_USERNAME);
   assert.equal(fixture.adminPassword, TEST_ENV.LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD);
   assert.equal(fixture.adminPin, TEST_ENV.LAUNDRY_BOOTSTRAP_ADMIN_PIN);
+  assert.equal(fixture.approverUsername, TEST_ENV.LAUNDRY_BOOTSTRAP_APPROVER_USERNAME);
+  assert.equal(fixture.approverPassword, TEST_ENV.LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD);
+  assert.equal(fixture.approverPin, TEST_ENV.LAUNDRY_BOOTSTRAP_APPROVER_PIN);
 
   const staffWrites = queries.filter((query) => query.sql.includes("INSERT INTO staffs"));
   assert.equal(staffWrites.length, 2);
   const writtenValues = staffWrites.flatMap((query) => query.params ?? []);
   assert.equal(writtenValues.includes(TEST_ENV.LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD), false);
   assert.equal(writtenValues.includes(TEST_ENV.LAUNDRY_BOOTSTRAP_ADMIN_PIN), false);
+  assert.equal(writtenValues.includes(TEST_ENV.LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD), false);
+  assert.equal(writtenValues.includes(TEST_ENV.LAUNDRY_BOOTSTRAP_APPROVER_PIN), false);
   assert.equal(writtenValues.includes("demo"), false);
   assert.equal(writtenValues.includes("1234"), false);
   assert.ok(

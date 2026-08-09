@@ -1,5 +1,6 @@
 import { request as requestHttp } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
+import { createHash } from "node:crypto";
 import { constants as fileConstants } from "node:fs";
 import { open, readdir } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
@@ -62,6 +63,21 @@ const CONTENT_TYPES = Object.freeze({
   ".webp": "image/webp",
   ".woff2": "font/woff2",
 });
+
+function hashStaticAssets(rows) {
+  const hash = createHash("sha256");
+  hash.update("laundry-owner-spa:v1\0");
+  for (const [path, asset] of rows) {
+    const fileHash = createHash("sha256").update(asset.body).digest("hex");
+    hash.update(path);
+    hash.update("\0");
+    hash.update(String(asset.body.byteLength));
+    hash.update("\0");
+    hash.update(fileHash);
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
 
 function headerValues(headers, expectedName) {
   return Object.entries(headers).flatMap(([name, value]) => {
@@ -183,7 +199,7 @@ async function readBoundedAsset(filePath, maximumBytes) {
   }
 }
 
-export async function loadLanStaticAssets(webRoot) {
+export async function loadLanStaticAssets(webRoot, expectedSha256 = undefined) {
   const files = await listAssetFiles(webRoot);
   if (files.length === 0 || files.length > MAXIMUM_ASSET_FILES) {
     throw new Error("LAN_STATIC_FILE_COUNT_INVALID");
@@ -204,11 +220,16 @@ export async function loadLanStaticAssets(webRoot) {
   }
   const index = rows.find(([path]) => path === "/index.html");
   if (index === undefined) throw new Error("LAN_STATIC_INDEX_MISSING");
+  const sha256 = hashStaticAssets(rows);
+  if (expectedSha256 !== undefined && sha256 !== expectedSha256) {
+    throw new Error("LAN_STATIC_INTEGRITY_MISMATCH");
+  }
   const assets = new Map(rows);
   return Object.freeze({
     has: (path) => assets.has(path),
     get: (path) => assets.get(path) ?? null,
     paths: Object.freeze([...assets.keys()]),
+    sha256,
   });
 }
 

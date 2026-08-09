@@ -131,6 +131,10 @@ export function createOfflineDesktopService(
         }
         return result;
       },
+      credentialComplete: (input: unknown) =>
+        isMutationBlocked()
+          ? Promise.resolve(unavailable())
+          : online.auth.credentialComplete(input),
       logout: async () => {
         discardReadCache();
         return online.auth.logout();

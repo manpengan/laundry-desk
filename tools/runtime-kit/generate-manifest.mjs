@@ -4,7 +4,7 @@ import { lstat, open, writeFile } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const PAYLOAD_KEYS = Object.freeze([
+const BASE_PAYLOAD_KEYS = Object.freeze([
   "compose_sha256",
   "contracts_major",
   "contracts_sha256",
@@ -22,6 +22,11 @@ const PAYLOAD_KEYS = Object.freeze([
   "server_image",
   "server_version",
   "web_bundle_sha256",
+]);
+const V2_PAYLOAD_KEYS = Object.freeze([
+  ...BASE_PAYLOAD_KEYS,
+  "lan_compose_sha256",
+  "owner_spa_sha256",
 ]);
 const SERVER_IMAGE_KEYS = Object.freeze(["index", "linux_amd64", "linux_arm64"]);
 const ROLLBACK_KEYS = Object.freeze(["maximum_compatible_schema", "release", "server_image_index"]);
@@ -61,10 +66,13 @@ function migrationNumber(value) {
 }
 
 export function validateRuntimeManifestPayload(value) {
-  if (!exactKeys(value, PAYLOAD_KEYS)) throw new Error("RUNTIME_MANIFEST_INPUT_INVALID");
+  const schemaVersion = value?.schema_version;
+  const expectedKeys = schemaVersion === 1 ? BASE_PAYLOAD_KEYS : V2_PAYLOAD_KEYS;
+  if ((schemaVersion !== 1 && schemaVersion !== 2) || !exactKeys(value, expectedKeys)) {
+    throw new Error("RUNTIME_MANIFEST_INPUT_INVALID");
+  }
   const payload = value;
   if (
-    payload.schema_version !== 1 ||
     payload.product !== "laundry-desk-runtime" ||
     !SEMVER.test(payload.release) ||
     payload.server_version !== payload.release ||
@@ -85,6 +93,12 @@ export function validateRuntimeManifestPayload(value) {
     !DIGEST_REFERENCE.test(payload.server_image.index) ||
     !DIGEST.test(payload.server_image.linux_arm64) ||
     !DIGEST.test(payload.server_image.linux_amd64)
+  ) {
+    throw new Error("RUNTIME_MANIFEST_INPUT_INVALID");
+  }
+  if (
+    schemaVersion === 2 &&
+    (!SHA256.test(payload.lan_compose_sha256) || !SHA256.test(payload.owner_spa_sha256))
   ) {
     throw new Error("RUNTIME_MANIFEST_INPUT_INVALID");
   }

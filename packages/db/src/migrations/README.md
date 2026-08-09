@@ -50,6 +50,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0041_owner_dashboard_i
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0042_durable_pending_actions.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0043_receipt_and_member_bonus_integrity.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0044_durable_step_up_proofs.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0045_store_commissioning_staff_credentials.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -94,5 +95,6 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Durable confirmation authority** (0042, ADR-05): tenant-scoped canonical WYSIWYS cards with transaction-local single-consume state; invalid cards are pruned opportunistically in bounded batches after a 30-day retention window, while recent durable response replay remains protected
 - **Receipt and member bonus integrity** (0043): defines `orders.created_at` as the formal receipt/open instant and rejects positive bonus ledger entries without a governing bonus rule
 - **Durable step-up authority** (0044, ADR-05): tenant-scoped two-person approval proofs whose CAS consumption joins the business and audit transaction
+- **Store commissioning and staff credentials** (0045, ADR-31): permanent dual-admin commissioning metadata plus tenant-scoped, expiring, single-use credential setup references with no retained secrets
 - Still deferred: AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

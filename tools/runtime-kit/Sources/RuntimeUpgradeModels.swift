@@ -72,11 +72,15 @@ struct RuntimeUpgradeResult: Codable {
   let release: String
   let previousRelease: String
   let safetyBackupID: String
+  let lanStatus: String
+  let lanFaultCode: String?
 
   enum CodingKeys: String, CodingKey {
     case status, release
     case previousRelease = "previous_release"
     case safetyBackupID = "safety_backup_id"
+    case lanStatus = "lan_status"
+    case lanFaultCode = "lan_fault_code"
   }
 }
 
@@ -85,11 +89,15 @@ struct RuntimeRollbackResult: Codable {
   let release: String
   let rolledBackFrom: String
   let recoveryBackupID: String
+  let lanStatus: String
+  let lanFaultCode: String?
 
   enum CodingKeys: String, CodingKey {
     case status, release
     case rolledBackFrom = "rolled_back_from"
     case recoveryBackupID = "recovery_backup_id"
+    case lanStatus = "lan_status"
+    case lanFaultCode = "lan_fault_code"
   }
 }
 

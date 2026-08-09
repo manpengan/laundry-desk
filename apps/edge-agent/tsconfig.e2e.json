@@ -5,5 +5,9 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["e2e/**/*.ts", "playwright.electron.config.ts"]
+  "include": [
+    "e2e/**/*.ts",
+    "playwright.electron.commissioning.config.ts",
+    "playwright.electron.config.ts"
+  ]
 }

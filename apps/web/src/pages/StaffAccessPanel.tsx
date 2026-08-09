@@ -2,16 +2,20 @@ import { Button, Input, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import type { AuthClient } from "../auth/AuthClient.js";
+import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { isStepUpRequired } from "../commands/command-client.js";
 import { StepUpConfirmDialog } from "../shell/StepUpConfirmDialog.js";
 import { parseStaffAccessRows, type StaffAccessView } from "./staff-access.js";
+import { StaffCreatePanel } from "./StaffCreatePanel.js";
+import { StaffCredentialResetPanel } from "./StaffCredentialResetPanel.js";
 
 export type StaffAccessPanelProps = Readonly<{
   currentStaffId: string;
   authClient: AuthClient;
   commandClient: CommandPort;
   queryClient?: QueryPort;
+  onSessionChange?: (session: SessionView | null) => void;
 }>;
 
 type Draft = Readonly<{
@@ -36,12 +40,14 @@ export function StaffAccessPanel({
   authClient,
   commandClient,
   queryClient,
+  onSessionChange = () => undefined,
 }: StaffAccessPanelProps) {
   const toast = useToast();
   const [rows, setRows] = useState<readonly StaffAccessView[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [pendingRef, setPendingRef] = useState<string | null>(null);
+  const [resetRow, setResetRow] = useState<StaffAccessView | null>(null);
 
   const reload = useCallback(async () => {
     if (queryClient === undefined) return;
@@ -115,6 +121,16 @@ export function StaffAccessPanel({
         角色、在职状态及隐私管理员均为 R5 变更；必须由另一位店长 PIN
         复核，并立即撤销目标员工旧会话。
       </p>
+      <StaffCreatePanel
+        currentStaffId={currentStaffId}
+        authClient={authClient}
+        commandClient={commandClient}
+        onMutation={async (session) => {
+          onSessionChange(session);
+          await reload();
+        }}
+        onAuthenticationLost={() => onSessionChange(null)}
+      />
       <ul className="ld-settings-catalog__list" data-testid="staff-access-list">
         {rows.map((row) => (
           <li key={row.staff_id} className="ld-settings-catalog__row">
@@ -130,6 +146,14 @@ export function StaffAccessPanel({
               onClick={() => setDraft(draftFor(row))}
             >
               {row.staff_id === currentStaffId ? "不可自改" : "编辑"}
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              disabled={busy || row.staff_id === currentStaffId}
+              onClick={() => setResetRow(row)}
+            >
+              重置凭据
             </Button>
           </li>
         ))}
@@ -194,6 +218,21 @@ export function StaffAccessPanel({
           </div>
         </div>
       ) : null}
+
+      {resetRow === null ? null : (
+        <StaffCredentialResetPanel
+          row={resetRow}
+          currentStaffId={currentStaffId}
+          authClient={authClient}
+          commandClient={commandClient}
+          onClose={() => setResetRow(null)}
+          onMutation={async (session) => {
+            onSessionChange(session);
+            await reload();
+          }}
+          onAuthenticationLost={() => onSessionChange(null)}
+        />
+      )}
 
       <StepUpConfirmDialog
         open={pendingRef !== null}

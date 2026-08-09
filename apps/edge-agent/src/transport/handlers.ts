@@ -2,6 +2,11 @@ import { DESKTOP_OPERATION_SCHEMAS } from "@laundry/contracts";
 
 import { DESKTOP_IPC_CHANNELS } from "../lib/security-prefs.js";
 import { isValidDesktopSender } from "../lib/sender.js";
+import {
+  DESKTOP_PRINTER_OPERATIONS,
+  type DesktopPrinterService,
+} from "../desktop/printer-operation.js";
+import { DESKTOP_STAFF_CREDENTIAL_OPERATION } from "../desktop/staff-setup-operation.js";
 
 export type DesktopFrameSurface = Readonly<{
   url: string;
@@ -30,6 +35,7 @@ export type DesktopOperationService = Readonly<{
     refresh: () => Promise<unknown>;
     pinChallenge: (input: unknown) => Promise<unknown>;
     pinVerify: (input: unknown) => Promise<unknown>;
+    credentialComplete?: (input: unknown) => Promise<unknown>;
     logout: () => Promise<unknown>;
   }>;
   command: Readonly<{
@@ -48,6 +54,7 @@ export type DesktopOperationService = Readonly<{
     status: () => Promise<unknown>;
     resolve: (input: unknown) => Promise<unknown>;
   }>;
+  printer?: DesktopPrinterService;
   health: Readonly<{
     get: () => Promise<unknown>;
   }>;
@@ -157,6 +164,17 @@ export function registerDesktopOperationHandlers(options: DesktopOperationHandle
   );
   registerOperation(
     options,
+    DESKTOP_IPC_CHANNELS.auth.credentialComplete,
+    DESKTOP_STAFF_CREDENTIAL_OPERATION,
+    (input) => {
+      if (service.auth.credentialComplete === undefined) {
+        throw new Error("Desktop credential completion service is unavailable");
+      }
+      return service.auth.credentialComplete(input);
+    },
+  );
+  registerOperation(
+    options,
     DESKTOP_IPC_CHANNELS.auth.logout,
     DESKTOP_OPERATION_SCHEMAS.auth.logout,
     () => service.auth.logout(),
@@ -208,6 +226,42 @@ export function registerDesktopOperationHandlers(options: DesktopOperationHandle
     DESKTOP_IPC_CHANNELS.offline.resolve,
     DESKTOP_OPERATION_SCHEMAS.offline.resolve,
     (input) => service.offline.resolve(input),
+  );
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.printer.discover,
+    DESKTOP_PRINTER_OPERATIONS.discover,
+    () => {
+      if (service.printer === undefined) throw new Error("Desktop printer service is unavailable");
+      return service.printer.discover();
+    },
+  );
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.printer.status,
+    DESKTOP_PRINTER_OPERATIONS.status,
+    () => {
+      if (service.printer === undefined) throw new Error("Desktop printer service is unavailable");
+      return service.printer.status();
+    },
+  );
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.printer.configure,
+    DESKTOP_PRINTER_OPERATIONS.configure,
+    (input) => {
+      if (service.printer === undefined) throw new Error("Desktop printer service is unavailable");
+      return service.printer.configure(input);
+    },
+  );
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.printer.test,
+    DESKTOP_PRINTER_OPERATIONS.test,
+    (input) => {
+      if (service.printer === undefined) throw new Error("Desktop printer service is unavailable");
+      return service.printer.test(input);
+    },
   );
   registerOperation(
     options,

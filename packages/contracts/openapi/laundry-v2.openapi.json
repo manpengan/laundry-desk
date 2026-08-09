@@ -415,6 +415,56 @@
           }
         ]
       },
+      "auth.staff_credentials_complete.request": {
+        "additionalProperties": false,
+        "properties": {
+          "credential_setup_ref": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 12,
+            "type": "string"
+          },
+          "pin": {
+            "pattern": "^\\d{6,8}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential_setup_ref",
+          "password",
+          "pin"
+        ],
+        "type": "object"
+      },
+      "auth.staff_credentials_complete.response": {
+        "additionalProperties": false,
+        "properties": {
+          "permission_version": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "status": {
+            "const": "active",
+            "type": "string"
+          },
+          "target_staff_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_staff_id",
+          "permission_version",
+          "status"
+        ],
+        "type": "object"
+      },
       "CommandError": {
         "oneOf": [
           {
@@ -10150,6 +10200,71 @@
         ],
         "type": "object"
       },
+      "input.command.staff.create": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "privacy_admin": {
+            "type": "boolean"
+          },
+          "reason": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "admin",
+              "staff"
+            ],
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[\\x21-\\x7e]+$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "display_name",
+          "role",
+          "privacy_admin",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "input.command.staff.credentials.reset": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_permission_version": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "target_staff_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_staff_id",
+          "expected_permission_version",
+          "reason"
+        ],
+        "type": "object"
+      },
       "input.query.accounting.report.get": {
         "additionalProperties": false,
         "properties": {
@@ -11098,6 +11213,99 @@
           }
         ],
         "summary": "Auth refresh",
+        "tags": [
+          "auth"
+        ],
+        "x-laundry-kind": "auth"
+      }
+    },
+    "/api/v2/auth/staff/credentials/complete": {
+      "post": {
+        "description": "Browser auth operation `staff_credentials_complete` (ingress: browser_session). Allowed public errors: VALIDATION_FAILED, AUTHENTICATION_FAILED, PERMISSION_DENIED, RESOURCE_UNAVAILABLE, CSRF_REJECTED, RATE_LIMITED, TRANSACTION_FAILED. Projection source: AUTH_OPERATION_MATRIX (A5/A7). Server-only hashes and factories are omitted.",
+        "operationId": "auth_staff_credentials_complete",
+        "parameters": [
+          {
+            "description": "Double-submit CSRF proof; must match the readable CSRF cookie value.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/auth.staff_credentials_complete.request"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.staff_credentials_complete.response"
+                }
+              }
+            },
+            "description": "Successful browser auth response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Request origin verification failed"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Too many requests"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Auth staff_credentials_complete",
         "tags": [
           "auth"
         ],
@@ -13330,6 +13538,110 @@
           }
         ],
         "summary": "Change one staff member's role, privacy authority, or active status.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R5",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/staff.create": {
+      "post": {
+        "description": "R5 staff creation. The command never accepts or persists plaintext password or PIN values. Stable command name: `staff.create` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_staff_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.staff.create"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create an inactive staff identity and one bounded credential setup reference.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R5",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/staff.credentials.reset": {
+      "post": {
+        "description": "R5 credential reset. Revokes target sessions, deactivates the target, and never accepts new secrets. Stable command name: `staff.credentials.reset` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_staff_credentials_reset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.staff.credentials.reset"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Invalidate one staff credential set and issue a bounded replacement setup reference.",
         "tags": [
           "commands"
         ],

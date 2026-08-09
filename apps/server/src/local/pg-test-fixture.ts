@@ -8,21 +8,57 @@ import { z } from "zod";
 
 import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
 import { createPasswordPort, type PasswordPort } from "../identity/password.js";
-import { DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./demo-ids.js";
+import { DEMO_STAFF_A_ID } from "./demo-ids.js";
 import { LOCAL_PROFILE } from "./profile.js";
 
-const PgTestFixtureEnvironmentSchema = z.object({
-  LAUNDRY_BOOTSTRAP_ADMIN_USERNAME: z.string().min(1, "is required"),
-  LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME: z.string().min(1, "is required"),
-  LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD: z.string().min(1, "is required"),
-  LAUNDRY_BOOTSTRAP_ADMIN_PIN: z.string().regex(/^\d{4,8}$/u, "must contain 4 to 8 digits"),
-});
+const PgTestFixtureEnvironmentSchema = z
+  .object({
+    LAUNDRY_BOOTSTRAP_ADMIN_USERNAME: z.string().min(1, "is required"),
+    LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME: z.string().min(1, "is required"),
+    LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD: z.string().min(12).max(256),
+    LAUNDRY_BOOTSTRAP_ADMIN_PIN: z.string().regex(/^\d{6,8}$/u, "must contain 6 to 8 digits"),
+    LAUNDRY_BOOTSTRAP_APPROVER_USERNAME: z.string().min(1, "is required"),
+    LAUNDRY_BOOTSTRAP_APPROVER_DISPLAY_NAME: z.string().min(1, "is required"),
+    LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD: z.string().min(12).max(256),
+    LAUNDRY_BOOTSTRAP_APPROVER_PIN: z.string().regex(/^\d{6,8}$/u, "must contain 6 to 8 digits"),
+  })
+  .superRefine((value, context) => {
+    for (const [field, first, second] of [
+      [
+        "LAUNDRY_BOOTSTRAP_APPROVER_USERNAME",
+        value.LAUNDRY_BOOTSTRAP_ADMIN_USERNAME,
+        value.LAUNDRY_BOOTSTRAP_APPROVER_USERNAME,
+      ],
+      [
+        "LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD",
+        value.LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD,
+        value.LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD,
+      ],
+      [
+        "LAUNDRY_BOOTSTRAP_APPROVER_PIN",
+        value.LAUNDRY_BOOTSTRAP_ADMIN_PIN,
+        value.LAUNDRY_BOOTSTRAP_APPROVER_PIN,
+      ],
+    ] as const) {
+      if (first === second) {
+        context.addIssue({
+          code: "custom",
+          path: [field],
+          message: "must differ from administrator",
+        });
+      }
+    }
+  });
 
 export type PgTestFixtureEnvironment = Readonly<{
   adminUsername: string;
   adminDisplayName: string;
   adminPassword: string;
   adminPin: string;
+  approverUsername: string;
+  approverDisplayName: string;
+  approverPassword: string;
+  approverPin: string;
 }>;
 
 export type PgTestFixtureDependencies = Readonly<{
@@ -36,9 +72,16 @@ type FixtureStaff = Readonly<{
   displayName: string;
 }>;
 
+/** Test-only identity; deliberately distinct from both fixed bootstrap administrators. */
+export const PG_TEST_STAFF_B_ID = "11111111-1111-4111-8111-111111111104";
+
 const FIXTURE_STAFF: readonly FixtureStaff[] = Object.freeze([
   Object.freeze({ id: DEMO_STAFF_A_ID, username: "staff", displayName: "Fixture Staff A" }),
-  Object.freeze({ id: DEMO_STAFF_B_ID, username: "staffb", displayName: "Fixture Staff B" }),
+  Object.freeze({
+    id: PG_TEST_STAFF_B_ID,
+    username: "staffb",
+    displayName: "Fixture Staff B",
+  }),
 ]);
 
 function fixtureEnvironmentError(error: z.ZodError): Error {
@@ -58,6 +101,10 @@ export function parsePgTestFixtureEnvironment(env: NodeJS.ProcessEnv): PgTestFix
     adminDisplayName: result.data.LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME,
     adminPassword: result.data.LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD,
     adminPin: result.data.LAUNDRY_BOOTSTRAP_ADMIN_PIN,
+    approverUsername: result.data.LAUNDRY_BOOTSTRAP_APPROVER_USERNAME,
+    approverDisplayName: result.data.LAUNDRY_BOOTSTRAP_APPROVER_DISPLAY_NAME,
+    approverPassword: result.data.LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD,
+    approverPin: result.data.LAUNDRY_BOOTSTRAP_APPROVER_PIN,
   });
 }
 

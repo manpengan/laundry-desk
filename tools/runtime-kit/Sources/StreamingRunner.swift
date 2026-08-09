@@ -68,6 +68,10 @@ extension SystemRuntimeRunner {
       try RuntimeStorage.openVerifiedPrivateFile(
         $0.url, expectedSize: $0.size, expectedSHA256: $0.sha256)
     }
+    let inputVersion = try inputHandle.map {
+      guard let input = stream.input else { try runtimeFail("RUNTIME_STREAM_INVALID") }
+      return try RuntimeTransferFileVersion(handle: $0, url: input.url)
+    }
     process.standardInput = inputHandle ?? FileHandle.nullDevice
 
     let outputPipe: Pipe?
@@ -128,7 +132,16 @@ extension SystemRuntimeRunner {
       }
     }
     group.wait()
-    try? inputHandle?.close()
+    if let inputHandle, let input = stream.input, let inputVersion {
+      do {
+        try inputVersion.verify(handle: inputHandle, url: input.url)
+        try inputHandle.close()
+      } catch {
+        try? inputHandle.close()
+        sink?.cancel()
+        try runtimeFail("RUNTIME_TRANSFER_SOURCE_INVALID")
+      }
+    }
     if stoppedForOutput {
       sink?.cancel()
       try runtimeFail("RUNTIME_STREAM_TOO_LARGE")

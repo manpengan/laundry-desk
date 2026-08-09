@@ -5,10 +5,10 @@ import { chmod, cp, lstat, mkdir, mkdtemp, open, readdir, rename, rm } from "nod
 import { join, relative, resolve } from "node:path";
 import { RUNTIME_APP_BUILD_VERSION, RUNTIME_APP_VERSION } from "./build-app.mjs";
 import { inspectRuntimeApp } from "./inspect-app.mjs";
+
 const APP_NAME = "Laundry Desk Runtime.app";
 const EXPECTED_IDENTIFIER = "com.laundry-desk.runtime";
 const MAX_ARTIFACT_BYTES = 8n * 1024n * 1024n * 1024n;
-
 function sameFileVersion(left, right) {
   return (
     left.dev === right.dev &&
@@ -160,18 +160,18 @@ export async function createRuntimeReleaseWorkspace(sourceKitRoot) {
     });
     const composeRoot = join(repositoryRoot, "tools", "compose");
     await mkdir(composeRoot, { recursive: true, mode: 0o700 });
-    await cp(
-      resolve(sourceKitRoot, "../compose/docker-compose.runtime.yml"),
-      join(composeRoot, "docker-compose.runtime.yml"),
-      { errorOnExist: true, force: false },
-    );
+    for (const file of ["docker-compose.runtime.yml", "docker-compose.runtime-lan.yml"]) {
+      await cp(resolve(sourceKitRoot, `../compose/${file}`), join(composeRoot, file), {
+        errorOnExist: true,
+        force: false,
+      });
+    }
     return Object.freeze({ kitRoot, root });
   } catch (error) {
     await rm(root, { recursive: true, force: true });
     throw error;
   }
 }
-
 async function removeWriteBits(path) {
   const before = await lstat(path, { bigint: true });
   if (before.isSymbolicLink()) throw new Error("Runtime release symlink is forbidden");

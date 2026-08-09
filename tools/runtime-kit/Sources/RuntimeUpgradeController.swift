@@ -112,10 +112,12 @@ extension NativeRuntimeController {
       }
       return false
     }
+    let restoreLan = releaseLanIntent()
     let transition = try RuntimeReleaseCodec.decodeTransition(
       RuntimeStorage.readPrivate(paths.transition, maximum: 524_288))
     let (state, payload, _) = try validatedTransition(transition)
     do {
+      try emergencyStopLanGateway()
       try restoreReleaseSafetyBackup(
         transition.safetyBackupID, state: state, payload: payload)
       try RuntimeStorage.atomicWrite(transition.preManifest, to: paths.manifest)
@@ -129,10 +131,12 @@ extension NativeRuntimeController {
       }
       try clearReleaseTransition()
       runner.setManifest(payload)
-      return true
     } catch {
+      _ = failClosedLanAfterReleaseRecovery(restore: restoreLan, error: error)
       try runtimeFail("RUNTIME_RELEASE_RECOVERY_REQUIRED")
     }
+    _ = releaseLanOutcome(restore: restoreLan, state: state, payload: payload)
+    return true
   }
 
   private func validateUpgrade(
@@ -193,10 +197,13 @@ extension NativeRuntimeController {
   func upgrade(manifestURL: URL) throws -> RuntimeUpgradeResult {
     try RuntimeStorage.validateDirectory(paths.root)
     return try RuntimeStorage.withMaintenanceLock(paths.root) {
+      try prepareForRuntimeMutation()
       if try recoverInterruptedReleaseTransition() {
         try runtimeFail("RUNTIME_RELEASE_TRANSITION_RECOVERED")
       }
       let snapshot = try loadSnapshot()
+      try initializeMaintenanceBaseline()
+      let restoreLan = releaseLanIntent()
       let state = snapshot.state
       let current = snapshot.payload
       let stateData = snapshot.stateData
@@ -216,8 +223,8 @@ extension NativeRuntimeController {
         safety = try createReleaseSafetyBackup(
           kind: .preUpgrade, state: state, payload: current)
       } catch {
-        runner.setManifest(current)
-        try? gates(state, current, bootstrap: false)
+        _ = settleLanAfterFailedRelease(
+          restore: restoreLan, state: state, payload: current)
         throw error
       }
 
@@ -244,15 +251,14 @@ extension NativeRuntimeController {
       do {
         try writeReleaseTransition(prepared)
       } catch {
-        runner.setManifest(current)
-        try? gates(state, current, bootstrap: false)
+        _ = settleLanAfterFailedRelease(
+          restore: restoreLan, state: state, payload: current)
         throw error
       }
       do {
         try writeReleaseTransition(prepared.withPhase("applying"))
         runner.setManifest(candidate)
-        try run(command(["pull", candidate.serverImage.index]))
-        try run(command(["pull", candidate.postgresImage]))
+        try prepareImages(candidate)
         try assertImage(candidate)
         try gates(candidateState, candidate, bootstrap: false)
         try assertVolumes(candidateState)
@@ -269,20 +275,29 @@ extension NativeRuntimeController {
       } catch {
         try recoverAfterFailedUpgrade()
       }
-      try commitReleaseTransition()
+      do { try commitReleaseTransition() } catch {
+        _ = failClosedLanAfterReleaseRecovery(restore: restoreLan, error: error)
+        throw error
+      }
+      let lan = releaseLanOutcome(
+        restore: restoreLan, state: candidateState, payload: candidate)
       return RuntimeUpgradeResult(
         status: "ready", release: candidate.release, previousRelease: current.release,
-        safetyBackupID: safety.backupID)
+        safetyBackupID: safety.backupID, lanStatus: lan.status,
+        lanFaultCode: lan.faultCode)
     }
   }
 
   func rollback(_ request: RuntimeRollbackRequest) throws -> RuntimeRollbackResult {
     try RuntimeStorage.validateDirectory(paths.root)
     return try RuntimeStorage.withMaintenanceLock(paths.root) {
+      try prepareForRuntimeMutation()
       if try recoverInterruptedReleaseTransition() {
         try runtimeFail("RUNTIME_RELEASE_TRANSITION_RECOVERED")
       }
       let snapshot = try loadSnapshot()
+      try initializeMaintenanceBaseline()
+      let restoreLan = releaseLanIntent()
       let state = snapshot.state
       let current = snapshot.payload
       let stateData = snapshot.stateData
@@ -304,8 +319,8 @@ extension NativeRuntimeController {
         recovery = try createReleaseSafetyBackup(
           kind: .preRollback, state: state, payload: current)
       } catch {
-        runner.setManifest(current)
-        try? gates(state, current, bootstrap: false)
+        _ = settleLanAfterFailedRelease(
+          restore: restoreLan, state: state, payload: current)
         throw error
       }
       let previousState = state.withRelease(
@@ -329,8 +344,8 @@ extension NativeRuntimeController {
       do {
         try writeReleaseTransition(prepared)
       } catch {
-        runner.setManifest(current)
-        try? gates(state, current, bootstrap: false)
+        _ = settleLanAfterFailedRelease(
+          restore: restoreLan, state: state, payload: current)
         throw error
       }
       do {
@@ -345,11 +360,17 @@ extension NativeRuntimeController {
       } catch {
         try recoverAfterFailedRollback()
       }
-      try commitReleaseTransition()
+      do { try commitReleaseTransition() } catch {
+        _ = failClosedLanAfterReleaseRecovery(restore: restoreLan, error: error)
+        throw error
+      }
       runner.setManifest(previous)
+      let lan = releaseLanOutcome(
+        restore: restoreLan, state: previousState, payload: previous)
       return RuntimeRollbackResult(
         status: "ready", release: previous.release, rolledBackFrom: current.release,
-        recoveryBackupID: recovery.backupID)
+        recoveryBackupID: recovery.backupID, lanStatus: lan.status,
+        lanFaultCode: lan.faultCode)
     }
   }
 }

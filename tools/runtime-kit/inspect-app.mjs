@@ -56,12 +56,16 @@ export async function inspectRuntimeApp(appRoot, dependencies = {}) {
   const machOBinaries = await inspectMachOBinaries(appRoot, executable, run);
   await run("/usr/bin/codesign", ["--verify", "--strict", appRoot]);
   assert.deepEqual((await readdir(resources)).sort(), [
+    "docker-compose.runtime-lan.yml",
     "docker-compose.runtime.yml",
     "trusted-manifest-public-key.txt",
   ]);
   const compose = await readFile(join(resources, "docker-compose.runtime.yml"), "utf8");
+  const lanCompose = await readFile(join(resources, "docker-compose.runtime-lan.yml"), "utf8");
   assert.doesNotMatch(compose, /^\s*(?:build|context):/mu);
   assert.doesNotMatch(compose, /\.\.\/|packages\/|apps\/|tools\//u);
+  assert.doesNotMatch(lanCompose, /^\s*(?:build|context):/mu);
+  assert.doesNotMatch(lanCompose, /\.\.\/|packages\/|apps\/|tools\//u);
   const trustedKey = await readFile(join(resources, "trusted-manifest-public-key.txt"), "utf8");
   assert.match(trustedKey, /^[A-Za-z0-9_-]{43}\n$/u);
   const bundleFiles = await readdir(join(appRoot, "Contents/MacOS"));

@@ -184,16 +184,23 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
   );
   for (const stage3Module of [
     "dist/desktop/print-http-transport.js",
+    "dist/desktop/printer-operation.js",
     "dist/print/continuity.js",
+    "dist/print/configured-runtime.js",
     "dist/print/cups-queue.js",
     "dist/print/dispatch-controller.js",
     "dist/print/dispatch-ledger-state.js",
     "dist/print/dispatch-ledger.js",
     "dist/print/dispatch-verifier.js",
     "dist/print/durable-json-file.js",
+    "dist/print/mac-printer-pilot.js",
+    "dist/print/main-runtime.js",
+    "dist/print/printer-config.js",
+    "dist/print/printer-smoke.js",
     "dist/print/runtime.js",
     "dist/print/signed-executor.js",
     "dist/print/snapshot-render.js",
+    "dist/print/usb-port.js",
     "dist/pairing/sign-receipt.js",
     "dist/pairing/verify-ticket.js",
   ]) {
@@ -297,6 +304,23 @@ test("mac acceptance does not persist credentials or inherit arbitrary host secr
   assert.match(smoke, /await waitForProcessGroupExit\(processId\)/u);
   assert.match(smoke, /args:\s*\[[^\]]*"--use-mock-keychain"\]/u);
   assert.doesNotMatch(`${main}\n${localBuilder}\n${releaseBuilder}`, /--use-mock-keychain/u);
+});
+
+test("packaged commissioning acceptance is isolated from SQL fixtures and artifacts", async () => {
+  const config = await readFile(
+    join(packageRoot, "playwright.electron.commissioning.config.ts"),
+    "utf8",
+  );
+  const spec = await readFile(join(packageRoot, "e2e", "commissioning-mac.spec.ts"), "utf8");
+
+  assert.match(config, /trace:\s*"off"/u);
+  assert.match(config, /screenshot:\s*"off"/u);
+  assert.match(config, /video:\s*"off"/u);
+  assert.match(spec, /PASSTHROUGH_ENV_KEYS/u);
+  assert.match(spec, /LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD/u);
+  assert.match(spec, /toHaveCount\(2/u);
+  assert.doesNotMatch(spec, /\b(?:INSERT|UPDATE|DELETE|SELECT)\b|from\s+"pg"|createRequire/u);
+  assert.doesNotMatch(spec, /Object\.entries\(process\.env\)/u);
 });
 
 test("release packaging is fail-closed, notarized, and keeps the local whitelist exact", async () => {

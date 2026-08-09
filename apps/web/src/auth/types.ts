@@ -96,6 +96,20 @@ export type StepUpProofResult = Readonly<{
   expires_at: number;
 }>;
 
+/** Secret-bearing input is accepted only by the dedicated credential-completion boundary. */
+export type StaffCredentialsCompleteInput = Readonly<{
+  credential_setup_ref: string;
+  password: string;
+  pin: string;
+}>;
+
+/** Credential-free result safe to cross browser and desktop renderer boundaries. */
+export type StaffCredentialsCompleteResult = Readonly<{
+  target_staff_id: string;
+  permission_version: number;
+  status: "active";
+}>;
+
 export type SwitchableStaff = Readonly<{
   staff_id: string;
   display_name: string;

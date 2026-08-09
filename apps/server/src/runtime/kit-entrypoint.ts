@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { assertLocalBootstrapReady } from "../local/bootstrap.js";
+import { localRuntimeCommissioningState } from "../local/bootstrap.js";
 import { createPgPool, type PgPool } from "../db/pg-pool.js";
 import { readSecretValue } from "../local/secret-file.js";
 import {
@@ -9,11 +9,22 @@ import {
   loadMigrationBundle,
   verifyRuntimeMigrationLedger,
 } from "./migration-bundle.js";
+import { runEmbeddedLanGateway } from "./lan-gateway-command.js";
 import { applyRuntimeRoles, type RuntimeRoleClient } from "./role-bootstrap.js";
 import { parseRuntimeRelease } from "./runtime-release.js";
 
 const MIGRATIONS_ROOT = "/opt/laundry/migrations";
-const COMMANDS = Object.freeze(["server", "roles", "migrate", "bootstrap", "verify"] as const);
+const COMMANDS = Object.freeze([
+  "server",
+  "roles",
+  "migrate",
+  "bootstrap",
+  "commission",
+  "verify",
+  "verify-commissioned",
+  "commission-status",
+  "lan-gateway",
+] as const);
 type RuntimeCommand = (typeof COMMANDS)[number];
 
 const knownCode = (error: unknown): string => {
@@ -80,6 +91,10 @@ const runBootstrap = async (): Promise<void> => {
     "LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME",
     "LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD",
     "LAUNDRY_BOOTSTRAP_ADMIN_PIN",
+    "LAUNDRY_BOOTSTRAP_APPROVER_USERNAME",
+    "LAUNDRY_BOOTSTRAP_APPROVER_DISPLAY_NAME",
+    "LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD",
+    "LAUNDRY_BOOTSTRAP_APPROVER_PIN",
   ]) {
     requiredFileSecret(name);
   }
@@ -98,13 +113,44 @@ const runBootstrap = async (): Promise<void> => {
   });
 };
 
-const runVerify = async (): Promise<void> => {
+const runCommission = async (): Promise<void> => {
+  parseRuntimeRelease(process.env);
+  for (const name of [
+    "DATABASE_ADMIN_URL",
+    "LAUNDRY_COMMISSION_APPROVER_USERNAME",
+    "LAUNDRY_COMMISSION_APPROVER_DISPLAY_NAME",
+    "LAUNDRY_COMMISSION_APPROVER_PASSWORD",
+    "LAUNDRY_COMMISSION_APPROVER_PIN",
+  ])
+    requiredFileSecret(name);
+  const script = fileURLToPath(new URL("../local/bootstrap-cli.js", import.meta.url));
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      process.execPath,
+      [script, "commission", "--confirm", "laundry-desk-v2-commission"],
+      { shell: false, stdio: "inherit", env: process.env },
+    );
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error("RUNTIME_COMMISSION_FAILED"));
+    });
+  });
+};
+
+const runVerify = async (
+  requireCommissioned: boolean,
+): Promise<"commissioned" | "commission_required"> => {
   const { bundle } = await loadVerifiedBundle();
   const adminPool = connect(requiredFileSecret("DATABASE_ADMIN_URL"));
   const appPool = connect(requiredFileSecret("DATABASE_URL"));
   try {
     await verifyRuntimeMigrationLedger(adminPool, bundle);
-    await assertLocalBootstrapReady(appPool, false);
+    const state = await localRuntimeCommissioningState(appPool, false);
+    if (requireCommissioned && state !== "commissioned") {
+      throw new Error("RUNTIME_COMMISSION_REQUIRED");
+    }
+    return state;
   } finally {
     await Promise.allSettled([adminPool.end(), appPool.end()]);
   }
@@ -116,6 +162,11 @@ const runServer = async (): Promise<void> => {
   requiredFileSecret("LAUNDRY_ACCESS_TOKEN_SECRET");
   requiredFileSecret("LAUNDRY_CSRF_PROOF_SECRET");
   await import("../http/main.js");
+};
+
+const runLanGateway = async (): Promise<void> => {
+  parseRuntimeRelease(process.env);
+  await runEmbeddedLanGateway();
 };
 
 const parseCommand = (): RuntimeCommand => {
@@ -132,7 +183,20 @@ async function main(): Promise<void> {
   if (command === "roles") return runRoles();
   if (command === "migrate") return runMigrate();
   if (command === "bootstrap") return runBootstrap();
-  return runVerify();
+  if (command === "commission") return runCommission();
+  if (command === "lan-gateway") return runLanGateway();
+  if (command === "verify") {
+    await runVerify(false);
+    return;
+  }
+  if (command === "verify-commissioned") {
+    await runVerify(true);
+    return;
+  }
+  const state = await runVerify(false);
+  process.stdout.write(
+    `${JSON.stringify({ commission_required: state === "commission_required" })}\n`,
+  );
 }
 
 void main().catch((error: unknown) => {

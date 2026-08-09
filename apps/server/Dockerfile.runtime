@@ -5,18 +5,31 @@ RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/server/package.json apps/server/package.json
+COPY apps/web/package.json apps/web/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/domain/package.json packages/domain/package.json
+COPY packages/ui/package.json packages/ui/package.json
 
-RUN pnpm install --frozen-lockfile --ignore-scripts --filter @laundry/server...
+RUN pnpm install --frozen-lockfile --ignore-scripts \
+  --filter @laundry/server... \
+  --filter @laundry/web...
 
 COPY apps/server apps/server
+COPY apps/web apps/web
 COPY packages/config/tsconfig packages/config/tsconfig
 COPY packages/contracts packages/contracts
 COPY packages/domain packages/domain
+COPY packages/ui packages/ui
+COPY tools/local/lan-gateway-config.mjs tools/local/lan-gateway-config.mjs
+COPY tools/local/lan-gateway-core.mjs tools/local/lan-gateway-core.mjs
+COPY tools/local/lan-gateway-lifecycle.mjs tools/local/lan-gateway-lifecycle.mjs
+COPY tools/local/lan-runtime-entrypoint.mjs tools/local/lan-runtime-entrypoint.mjs
+COPY tools/local/lan-runtime-healthcheck.mjs tools/local/lan-runtime-healthcheck.mjs
 
 RUN pnpm --filter @laundry/server... build \
+  && pnpm --filter @laundry/ui build \
+  && pnpm --filter @laundry/web build \
   && pnpm --filter @laundry/server deploy --legacy --prod /runtime/server \
   && rm -rf /runtime/server/src \
   && rm -rf /runtime/server/node_modules/@laundry/contracts/src \
@@ -64,6 +77,10 @@ LABEL org.opencontainers.image.title="Laundry Desk Runtime Server" \
 
 WORKDIR /opt/laundry/server
 COPY --chown=10001:10001 --from=build /runtime/server /opt/laundry/server
+COPY --chown=10001:10001 --from=build /workspace/apps/web/dist-spa /opt/laundry/owner-spa
+COPY --chown=10001:10001 --from=build /workspace/tools/local/lan-gateway-config.mjs /workspace/tools/local/lan-gateway-core.mjs /workspace/tools/local/lan-gateway-lifecycle.mjs /opt/laundry/lan-gateway/
+COPY --chown=10001:10001 --from=build /workspace/tools/local/lan-runtime-entrypoint.mjs /opt/laundry/lan-gateway/lan-runtime-entrypoint.mjs
+COPY --chown=10001:10001 --from=build /workspace/tools/local/lan-runtime-healthcheck.mjs /opt/laundry/lan-gateway/lan-runtime-healthcheck.mjs
 COPY --chown=10001:10001 packages/db/src/migrations /opt/laundry/migrations
 
 ENV NODE_ENV=production

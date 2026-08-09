@@ -27,6 +27,15 @@ import type {
 } from "@laundry/contracts";
 import { contextBridge, ipcRenderer } from "electron";
 import { DESKTOP_IPC_CHANNELS } from "./lib/security-prefs.js";
+import type {
+  DesktopStaffCredentialCompleteInput,
+  DesktopStaffCredentialCompleteResult,
+} from "./desktop/staff-setup-operation.js";
+import type {
+  DesktopPrinterConfigureInput,
+  DesktopPrinterStatusResult,
+  DesktopPrinterTestResult,
+} from "./desktop/printer-operation.js";
 
 const EMPTY_DESKTOP_INPUT = Object.freeze({});
 
@@ -40,6 +49,10 @@ const laundryDesktop = Object.freeze({
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.auth.pinChallenge, input),
     pinVerify: (input: PinVerifyRequest): Promise<DesktopPinVerifyResult> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.auth.pinVerify, input),
+    credentialComplete: (
+      input: DesktopStaffCredentialCompleteInput,
+    ): Promise<DesktopStaffCredentialCompleteResult> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.auth.credentialComplete, input),
     logout: (): Promise<DesktopLogoutResult> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.auth.logout, EMPTY_DESKTOP_INPUT),
   }),
@@ -66,6 +79,19 @@ const laundryDesktop = Object.freeze({
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.offline.status, EMPTY_DESKTOP_INPUT),
     resolve: (input: DesktopOfflineResolveInput): Promise<DesktopOfflineStatusResult> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.offline.resolve, input),
+  }),
+  printer: Object.freeze({
+    discover: (): Promise<DesktopPrinterStatusResult> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.printer.discover, EMPTY_DESKTOP_INPUT),
+    status: (): Promise<DesktopPrinterStatusResult> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.printer.status, EMPTY_DESKTOP_INPUT),
+    configure: (input: DesktopPrinterConfigureInput): Promise<DesktopPrinterStatusResult> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.printer.configure, input),
+    test: (): Promise<DesktopPrinterTestResult> =>
+      ipcRenderer.invoke(
+        DESKTOP_IPC_CHANNELS.printer.test,
+        Object.freeze({ confirm: "PRINT_FIXED_TEST" as const }),
+      ),
   }),
   health: Object.freeze({
     get: (): Promise<DesktopHealthGetResult> =>

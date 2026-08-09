@@ -26,6 +26,7 @@ export async function createSignedPrintRuntime(
     devicePrivateKey: KeyObject;
     serverPublicKey: () => KeyObject | null;
     ensureAuthority: () => Promise<boolean>;
+    queueReady?: () => Promise<boolean>;
     transport: EdgePrintHttpTransport;
     onStatus?: (status: PrintDispatchControllerStatus) => void;
     onError: (error: unknown) => void;
@@ -52,8 +53,10 @@ export async function createSignedPrintRuntime(
     executor,
     ledger,
     continuity,
-    readyToClaim: async () =>
-      options.serverPublicKey() !== null || (await options.ensureAuthority()),
+    readyToClaim: async () => {
+      if (options.queueReady !== undefined && !(await options.queueReady())) return false;
+      return options.serverPublicKey() !== null || (await options.ensureAuthority());
+    },
     onError: options.onError,
     ...(options.onStatus === undefined ? {} : { onStatus: options.onStatus }),
   });

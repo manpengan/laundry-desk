@@ -9,7 +9,7 @@
 | ----------- | ----------------------------------------- | ----------------------- |
 | `postgres`  | PostgreSQL 16                             | `127.0.0.1:8543`        |
 | `migrate`   | 校验并执行正式 SQL migrations             | 不发布端口              |
-| `bootstrap` | 显式创建通用 local 门店和首位管理员       | 不发布端口              |
+| `bootstrap` | 显式创建通用 local 门店和两位管理员       | 不发布端口              |
 | `server`    | 使用 `laundry_app` 与 RLS 的 Fastify 服务 | `http://127.0.0.1:8787` |
 
 PostgreSQL 和 Fastify 只发布到 loopback，不对局域网开放。源码和 Compose
@@ -21,23 +21,50 @@ PostgreSQL 和 Fastify 只发布到 loopback，不对局域网开放。源码和
 必须是空目录或包含有效 `.laundry-photo-store-v1` 所有权标记；其他非空目录、符号链接
 路径和任意环境路径都会拒绝启动。
 
+## Runtime LAN overlay
+
+`docker-compose.runtime-lan.yml` 是由 Runtime.app 托管的安装态 overlay，不是新的手工
+Compose 入口。它复用同一签名 Server OCI，以固定 `lan-gateway` 命令和
+`network_mode: service:server` 共享 Server 网络命名空间；gateway 只能访问回环 Fastify。
+宿主只把操作者显式选择的 RFC1918 地址和高端口发布给 `/owner` HTTPS，基础文件中的
+`127.0.0.1:8787` 与 `127.0.0.1:8543` 保持不变。
+
+overlay 只从 generation 目录挂载 `config.json`、`certificate.pem`、`private-key.pem` 三个
+固定文件，容器继续以 uid/gid 10001、只读根文件系统、无 Linux capabilities 和
+`no-new-privileges` 运行。gateway healthcheck 调用镜像内固定 Node 探针；探针经
+`127.0.0.1` 连接，但严格按 profile 中的公开 IP 验证 CA、TLS 身份与 Host，只接受有界时间、
+有界响应和 HTTP 200。禁止用 `curl -k`、关闭证书校验或把 Fastify/PostgreSQL 直接发布到 LAN。
+
+Runtime 的 `disable` 只移除 gateway，不停止 Server。再次启用或重新配置时，Runtime 会把
+本项目 Server 从旧 overlay 映射收敛回 loopback，再由 overlay 重建映射；`up --wait` 只有在
+Server 与 gateway 都健康后才成功。启动失败会移除 gateway 并保持 LAN disabled。
+
 ## 首次启动
 
 需要 Docker Desktop（或兼容的 Docker Compose runtime）、Node.js 22+ 和
 pnpm 11。
 
-首次创建管理员时，先在当前终端提供以下四个值：
+首次投产时，先在当前终端提供两位相互独立管理员的八个值。两组用户名、密码和 PIN
+必须分别不同，密码为 12–256 位，PIN 为 6–8 位数字：
 
 ```bash
 : "${LAUNDRY_BOOTSTRAP_ADMIN_USERNAME:?set administrator username}"
 : "${LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME:?set administrator display name}"
 : "${LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD:?set administrator password}"
 : "${LAUNDRY_BOOTSTRAP_ADMIN_PIN:?set administrator PIN}"
+: "${LAUNDRY_BOOTSTRAP_APPROVER_USERNAME:?set approval administrator username}"
+: "${LAUNDRY_BOOTSTRAP_APPROVER_DISPLAY_NAME:?set approval administrator display name}"
+: "${LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD:?set approval administrator password}"
+: "${LAUNDRY_BOOTSTRAP_APPROVER_PIN:?set approval administrator PIN}"
 
 export LAUNDRY_BOOTSTRAP_ADMIN_USERNAME
 export LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME
 export LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD
 export LAUNDRY_BOOTSTRAP_ADMIN_PIN
+export LAUNDRY_BOOTSTRAP_APPROVER_USERNAME
+export LAUNDRY_BOOTSTRAP_APPROVER_DISPLAY_NAME
+export LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD
+export LAUNDRY_BOOTSTRAP_APPROVER_PIN
 
 pnpm local:up -- --bootstrap
 ```
@@ -50,8 +77,8 @@ pnpm local:up
 ```
 
 `local:up` 会依次检查 Compose、启动 PostgreSQL、执行 migrations、检查
-schema/profile，并在通过后启动 Fastify。带 `--bootstrap` 时，管理员创建发生在
-Fastify 启动前。
+schema/profile，并在通过后启动 Fastify。带 `--bootstrap` 时，两位管理员、功能配置、
+投产标记和无秘密审计在同一 owner 事务内写入，并发生在 Fastify 启动前。
 
 ## 本地配置
 
@@ -85,7 +112,12 @@ pnpm local:restore -- --file "/absolute/path/laundry-v2-backup-....dump" \
 ```bash
 curl --fail http://127.0.0.1:8787/health
 bash tools/compose/smoke-rls.sh
+pnpm runtime:lan:container:acceptance
 ```
+
+最后一条是本机真实容器门禁，需要 Docker、物理 RFC1918 网卡和 Playwright。它使用唯一
+project/volume/image/temp，覆盖 HTTPS 边界、disable→enable、重配置与资源清理；GitHub
+required macOS job 只运行无仓库 fake-runner LAN 门禁，不把本机网络条件伪装成 CI 证据。
 
 `migrate-v2.sh` 在 `laundry_schema_migrations` 记录文件名和 SHA-256 checksum。
 重复执行是 no-op；已应用 migration 的内容发生变化时会失败。

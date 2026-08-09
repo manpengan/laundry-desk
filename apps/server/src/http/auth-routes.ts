@@ -14,6 +14,7 @@ import {
 import { IdentityError } from "../identity/types.js";
 import { loadPgStaffDirectory } from "../local/staff-directory.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
+import { registerStaffCredentialRoute } from "../staff/credential-route.js";
 import {
   clearAuthCookies,
   fail,
@@ -247,5 +248,6 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
   registerLoginRoute(app, context);
   registerRefreshRoute(app, context);
   registerLogoutRoute(app, context);
+  registerStaffCredentialRoute(app, context);
   registerPinAuthRoutes(app, context);
 }

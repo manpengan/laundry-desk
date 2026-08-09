@@ -78,6 +78,10 @@ import {
   type EdgePrintHttpTransport,
 } from "./print-http-transport.js";
 import { createDesktopRequest, DESKTOP_API_BASE_URL } from "./request-builder.js";
+import {
+  createStaffCredentialCompleteOperation,
+  type DesktopStaffCredentialCompleteResult,
+} from "./staff-setup-operation.js";
 export {
   DESKTOP_API_BASE_URL,
   DESKTOP_REQUEST_ORIGIN,
@@ -102,6 +106,7 @@ export type DesktopHttpTransport = Readonly<{
     refresh: () => Promise<DesktopRefreshResult>;
     pinChallenge: (input: unknown) => Promise<DesktopPinChallengeResult>;
     pinVerify: (input: unknown) => Promise<DesktopPinVerifyResult>;
+    credentialComplete: (input: unknown) => Promise<DesktopStaffCredentialCompleteResult>;
     logout: () => Promise<DesktopLogoutResult>;
   }>;
   command: Readonly<{
@@ -772,9 +777,10 @@ export function createDesktopHttpTransport(
       : { monotonicNowMs: dependencies.monotonicNowMs }),
   });
   const currentSession = (): DesktopSessionView | null => authState?.sessionView ?? null;
+  const credentialComplete = createStaffCredentialCompleteOperation(executeProtected);
 
   return Object.freeze({
-    auth: Object.freeze({ login, refresh, pinChallenge, pinVerify, logout }),
+    auth: Object.freeze({ login, refresh, pinChallenge, pinVerify, credentialComplete, logout }),
     command: Object.freeze({ execute: executeCommand }),
     query: Object.freeze({ execute: executeQuery }),
     photo: Object.freeze({ upload: uploadPhoto, read: readPhoto, delete: deletePhoto }),

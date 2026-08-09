@@ -16,6 +16,10 @@ export const ACCEPTANCE_ADMIN_ENV_KEYS = Object.freeze([
   "LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME",
   "LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD",
   "LAUNDRY_BOOTSTRAP_ADMIN_PIN",
+  "LAUNDRY_BOOTSTRAP_APPROVER_USERNAME",
+  "LAUNDRY_BOOTSTRAP_APPROVER_DISPLAY_NAME",
+  "LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD",
+  "LAUNDRY_BOOTSTRAP_APPROVER_PIN",
 ]);
 const command = (...args) => Object.freeze({ file: "pnpm", args: Object.freeze(args) });
 const MAINTENANCE = command("local:maintenance");
@@ -94,6 +98,8 @@ export async function runStoppedSupportAcceptance(context, credentials, dependen
     secretValues: Object.freeze([
       credentials.LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD,
       credentials.LAUNDRY_BOOTSTRAP_ADMIN_PIN,
+      credentials.LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD,
+      credentials.LAUNDRY_BOOTSTRAP_APPROVER_PIN,
       ...localSecrets,
     ]),
     expectedCount: 2,

@@ -15,6 +15,8 @@ import {
   PinChallengeResponseSchema,
   PinVerifyRequestSchema,
   PinVerifyResponseSchema,
+  StaffCredentialsCompleteRequestSchema,
+  StaffCredentialsCompleteResponseSchema,
   classifyRefreshCasCommit,
   defineCommand,
   defineQuery,
@@ -217,11 +219,12 @@ describe("A7 auth projection consumer", () => {
     },
   } as const;
 
-  it("projects exactly the five matrix-owned browser request/response pairs", () => {
+  it("projects exactly the six matrix-owned browser request/response pairs", () => {
     expect(AUTH_OPERATION_MATRIX.map((row) => row.operation)).toEqual([
       "login",
       "refresh",
       "logout",
+      "staff_credentials_complete",
       "pin_challenge",
       "pin_verify",
     ]);
@@ -229,6 +232,7 @@ describe("A7 auth projection consumer", () => {
       LoginRequestSchema,
       EmptyBodySchema,
       EmptyBodySchema,
+      StaffCredentialsCompleteRequestSchema,
       PinChallengeRequestSchema,
       PinVerifyRequestSchema,
     ]);
@@ -236,6 +240,7 @@ describe("A7 auth projection consumer", () => {
       AccessSessionResponseSchema,
       AccessSessionResponseSchema,
       LogoutResponseSchema,
+      StaffCredentialsCompleteResponseSchema,
       PinChallengeResponseSchema,
       PinVerifyResponseSchema,
     ]);
@@ -243,6 +248,7 @@ describe("A7 auth projection consumer", () => {
       "auth.login.request",
       "auth.empty.request",
       "auth.empty.request",
+      "auth.staff_credentials_complete.request",
       "auth.pin_challenge.request",
       "auth.pin_verify.request",
     ]);
@@ -267,6 +273,7 @@ describe("A7 auth projection consumer", () => {
 
   it("has no secret examples and rejects request secrets or server bindings in results", () => {
     expect(LoginRequestSchema.meta()?.examples).toBeUndefined();
+    expect(StaffCredentialsCompleteRequestSchema.meta()?.examples).toBeUndefined();
     expect(PinVerifyRequestSchema.meta()?.examples).toBeUndefined();
     expect(PinSchema.meta()?.examples).toBeUndefined();
     expect(CsrfProofSchema.meta()?.examples).toBeUndefined();
@@ -282,6 +289,14 @@ describe("A7 auth projection consumer", () => {
     const resultCandidates = [
       [AccessSessionResponseSchema, accessResponse],
       [LogoutResponseSchema, { logged_out: true }],
+      [
+        StaffCredentialsCompleteResponseSchema,
+        {
+          target_staff_id: "10000000-0000-4000-8000-000000000018",
+          permission_version: 2,
+          status: "active",
+        },
+      ],
       [
         PinChallengeResponseSchema,
         {

@@ -257,6 +257,9 @@ Web 目前只显式展示本金、渠道并说明执行时由服务端计算，�
   权限、固定 manifest 和秘密 canary 检查。
 - 软件打印验收已贯通真实 PostgreSQL/HTTP claim、受控 fake `lp` 的 ESC/POS 字节、设备签名
   receipt 与 PostgreSQL `done`；超时进入 `uncertain`，重启后不会重复提交。
+- ADR-34 增加了设备本地私有 CUPS 队列配置、管理员具名 IPC 与 Settings 操作面；软件定向测试只用
+  注入的 fake CUPS/runtime 证明持久化、切换和固定测试票。`uncertain` 会提示先检查纸张再手动
+  retry，`done` 才允许显式 reprint；两者都创建新任务，不会原地重排或自动重复。
 - 管理员设备先取得普通 offline grant，再 best-effort 申请 Primary Lease。另一设备仍持有
   Primary 或续租暂时被拒时，低风险命令继续能入队，Primary-only 命令、跨会话、过期与
   时钟连续性异常仍失败关闭；软件打印验收不再占用其并不需要的 Primary。

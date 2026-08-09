@@ -11,9 +11,34 @@ enum RuntimeCLI {
   private static func setup(_ data: Data) throws -> RuntimeSetup {
     guard !data.isEmpty, data.count <= 4_096,
       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-      Set(object.keys) == ["adminUsername", "adminDisplayName", "adminPassword", "adminPin"],
+      Set(object.keys) == [
+        "adminUsername", "adminDisplayName", "adminPassword", "adminPin",
+        "approverUsername", "approverDisplayName", "approverPassword", "approverPin",
+      ],
       let value = try? JSONDecoder().decode(RuntimeSetup.self, from: data)
     else { try runtimeFail("RUNTIME_SETUP_STDIN_INVALID") }
+    return value
+  }
+
+  private static func commissionSetup(_ data: Data) throws -> RuntimeCommissionSetup {
+    guard !data.isEmpty, data.count <= 2_048,
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      Set(object.keys) == [
+        "approverUsername", "approverDisplayName", "approverPassword", "approverPin",
+      ],
+      let value = try? JSONDecoder().decode(RuntimeCommissionSetup.self, from: data)
+    else { try runtimeFail("RUNTIME_COMMISSION_STDIN_INVALID") }
+    return value
+  }
+
+  private static func lanSetup(_ data: Data) throws -> RuntimeLanSetup {
+    guard !data.isEmpty, data.count <= 32_768,
+      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      Set(object.keys) == ["bind_ipv4", "port", "certificate_pem", "private_key_pem"],
+      let value = try? JSONDecoder().decode(RuntimeLanSetup.self, from: data),
+      value.certificatePEM.utf8.count <= 16_384,
+      value.privateKeyPEM.utf8.count <= 16_384
+    else { try runtimeFail("RUNTIME_LAN_STDIN_INVALID") }
     return value
   }
 
@@ -74,6 +99,10 @@ enum RuntimeCLI {
     runner: RuntimeRunner, executable: String
   ) throws -> String {
     guard let command = arguments.first else { try runtimeFail("RUNTIME_ARGS_INVALID") }
+    if command == "transfer" {
+      return try RuntimeCLIDataProtection.run(
+        arguments: arguments, stdin: stdin, controller: controller)
+    }
     if command == "install" {
       let release = try controller.install(
         manifestURL: manifestURL(arguments, command: command),
@@ -83,6 +112,14 @@ enum RuntimeCLI {
     if command == "recover" {
       let release = try controller.recover(manifestURL: manifestURL(arguments, command: command))
       return try output("ready", release: release)
+    }
+    if command == "commission" {
+      guard arguments.count == 1 else { try runtimeFail("RUNTIME_ARGS_INVALID") }
+      return try encoded(controller.commission(commissionSetup(stdin)))
+    }
+    if command == "maintenance" {
+      guard arguments.count == 1, stdin.isEmpty else { try runtimeFail("RUNTIME_ARGS_INVALID") }
+      return try encoded(controller.maintenance())
     }
     if command == "upgrade" {
       guard stdin.isEmpty else { try runtimeFail("RUNTIME_ARGS_INVALID") }
@@ -111,6 +148,26 @@ enum RuntimeCLI {
       }
       try runtimeFail("RUNTIME_ARGS_INVALID")
     }
+    if command == "lan" {
+      guard arguments.count == 2 else { try runtimeFail("RUNTIME_ARGS_INVALID") }
+      let operation = arguments[1]
+      if operation == "configure" {
+        return try encoded(controller.configureLan(lanSetup(stdin)))
+      }
+      guard stdin.isEmpty else { try runtimeFail("RUNTIME_ARGS_INVALID") }
+      if operation == "enable" { return try encoded(controller.enableLan()) }
+      if operation == "disable" { return try encoded(controller.disableLan()) }
+      if operation == "status" { return try encoded(controller.lanStatus()) }
+      if operation == "onboard" { return try encoded(controller.lanOnboarding()) }
+      if operation == "diagnose" { return try encoded(controller.diagnoseLan()) }
+      try runtimeFail("RUNTIME_ARGS_INVALID")
+    }
+    if command == "support" {
+      guard arguments == ["support", "create"], stdin.isEmpty else {
+        try runtimeFail("RUNTIME_ARGS_INVALID")
+      }
+      return try encoded(controller.createSupportBundle())
+    }
     if ["start", "stop", "restart", "status", "diagnose"].contains(command) {
       guard arguments.count == 1, stdin.isEmpty else { try runtimeFail("RUNTIME_ARGS_INVALID") }
       if command == "start" { return try output("ready", release: controller.start()) }
@@ -124,12 +181,10 @@ enum RuntimeCLI {
       if arguments[1] == "install" {
         return try output(
           "installed",
-          path: RuntimeLaunchAgent.install(
-            executable: executable,
-            runner: runner))
+          path: controller.installLaunchAgent(executable: executable))
       }
       if arguments[1] == "uninstall" {
-        return try output("uninstalled", path: RuntimeLaunchAgent.uninstall(runner: runner))
+        return try output("uninstalled", path: controller.uninstallLaunchAgent())
       }
     }
     try runtimeFail("RUNTIME_ARGS_INVALID")

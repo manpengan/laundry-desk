@@ -7,7 +7,7 @@ import type { PrintJobSummary } from "@laundry/ui";
 import type { QueryPort } from "../commands/types.js";
 import { unwrapCommandResult } from "../pages/order-form.js";
 
-export type PrintJobStatus = "queued" | "printing" | "done" | "failed";
+export type PrintJobStatus = "queued" | "printing" | "done" | "failed" | "uncertain";
 
 export type PrintJobView = Readonly<{
   job_id: string;
@@ -40,13 +40,20 @@ export type PrintQueueView = Readonly<{
   worker?: PrintWorkerView;
 }>;
 
-const STATUS_SET: ReadonlySet<string> = new Set(["queued", "printing", "done", "failed"]);
+const STATUS_SET: ReadonlySet<string> = new Set([
+  "queued",
+  "printing",
+  "done",
+  "failed",
+  "uncertain",
+]);
 
 const STATUS_LABELS: Readonly<Record<PrintJobStatus, string>> = Object.freeze({
   queued: "排队中",
   printing: "打印中",
   done: "已完成",
   failed: "失败",
+  uncertain: "结果不确定",
 });
 
 export const PRINT_JOBS_POLL_MS = 5000;
@@ -59,14 +66,14 @@ export function printJobStatusLabel(status: string): string {
   return status;
 }
 
-/** Badge counts: queued|printing → queued; failed → failed; done ignored. */
+/** Badge counts: queued|printing → queued; failed|uncertain → attention; done ignored. */
 export function summarizePrintJobs(jobs: readonly Readonly<{ status: string }>[]): PrintJobSummary {
   let queued = 0;
   let failed = 0;
   for (const job of jobs) {
     if (job.status === "queued" || job.status === "printing") {
       queued += 1;
-    } else if (job.status === "failed") {
+    } else if (job.status === "failed" || job.status === "uncertain") {
       failed += 1;
     }
   }

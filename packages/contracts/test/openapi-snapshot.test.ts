@@ -59,7 +59,7 @@ describe("A7 OpenAPI 3.1 snapshot", () => {
       expect(document.components.schemas[row.response_schema_id]).toBeDefined();
     }
 
-    expect(AUTH_OPERATION_MATRIX).toHaveLength(5);
+    expect(AUTH_OPERATION_MATRIX).toHaveLength(6);
   });
 
   it("maps M1 first-wave commands and queries to stable bus paths", () => {

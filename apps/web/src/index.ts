@@ -61,6 +61,10 @@ export {
 } from "./shell/print-jobs.js";
 export { PageHost, type PageHostProps } from "./pages/PageHost.js";
 export { SettingsPage, type SettingsPageProps } from "./pages/SettingsPage.js";
+export {
+  PrinterSettingsPanel,
+  type PrinterSettingsPanelProps,
+} from "./pages/PrinterSettingsPanel.js";
 export { ReceivePage, type ReceivePageProps } from "./pages/ReceivePage.js";
 export { PickupPage, type PickupPageProps } from "./pages/PickupPage.js";
 export { FulfillmentPage, type FulfillmentPageProps } from "./pages/FulfillmentPage.js";
@@ -156,6 +160,13 @@ export type {
   SwitchableStaff,
 } from "./auth/types.js";
 export type { AppPorts, HealthError, HealthPort, HealthReady, HealthResult } from "./host/types.js";
+export type {
+  PrinterFailure,
+  PrinterPort,
+  PrinterResult,
+  PrinterStatus,
+  PrinterTestSubmission,
+} from "./host/printer-port.js";
 export type {
   OfflineConflictView,
   OfflinePort,

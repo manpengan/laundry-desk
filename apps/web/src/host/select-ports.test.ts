@@ -11,6 +11,7 @@ function createBridge(): LaundryDesktopBridge {
       refresh: async () => ({ ok: false }),
       pinChallenge: async () => ({ ok: false }),
       pinVerify: async () => ({ ok: false }),
+      credentialComplete: async () => ({ ok: false }),
       logout: async () => ({ ok: false }),
     },
     command: {
@@ -28,6 +29,12 @@ function createBridge(): LaundryDesktopBridge {
       resume: async () => ({ ok: false }),
       status: async () => ({ ok: false }),
       resolve: async () => ({ ok: false }),
+    },
+    printer: {
+      discover: async () => ({ ok: false }),
+      status: async () => ({ ok: false }),
+      configure: async () => ({ ok: false }),
+      test: async () => ({ ok: false }),
     },
     health: {
       get: async () => ({ ok: false }),
@@ -91,6 +98,13 @@ test("selectHost fails closed when app://local has no valid desktop bridge", () 
         fetch: async () => ({ ok: true }),
       },
     },
+    {
+      ...createBridge(),
+      printer: {
+        ...createBridge().printer,
+        exec: async () => ({ ok: true }),
+      },
+    },
   ];
 
   for (const bridge of invalidBridges) {
@@ -98,12 +112,13 @@ test("selectHost fails closed when app://local has no valid desktop bridge", () 
   }
 });
 
-test("selectHost requires the exact five-method desktop auth surface", () => {
+test("selectHost requires the exact six-method desktop auth surface", () => {
   const valid = createBridge();
   const missingRefresh = {
     login: valid.auth.login,
     pinChallenge: valid.auth.pinChallenge,
     pinVerify: valid.auth.pinVerify,
+    credentialComplete: valid.auth.credentialComplete,
     logout: valid.auth.logout,
   };
   const invalidBridges: readonly unknown[] = [
@@ -158,6 +173,7 @@ test("selectHost rejects accessor-backed bridge namespaces and methods without e
       },
       pinChallenge: { enumerable: true, value: valid.auth.pinChallenge },
       pinVerify: { enumerable: true, value: valid.auth.pinVerify },
+      credentialComplete: { enumerable: true, value: valid.auth.credentialComplete },
       logout: { enumerable: true, value: valid.auth.logout },
     },
   );

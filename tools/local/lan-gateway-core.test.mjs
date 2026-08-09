@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, open, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -302,10 +303,29 @@ test("loads a fixed startup manifest and requires index.html", async () => {
   assert.deepEqual(assets.paths, ["/assets/app.js", "/index.html"]);
   assert.equal(assets.get("/index.html").contentType, "text/html; charset=utf-8");
   assert.equal(assets.get("/missing"), null);
+  assert.match(assets.sha256, /^[0-9a-f]{64}$/u);
 
   const missing = await mkdtemp(join(tmpdir(), "laundry-lan-static-missing-"));
   await writeFile(join(missing, "app.js"), "export {};");
   await assert.rejects(() => loadLanStaticAssets(missing), /LAN_STATIC_INDEX_MISSING/u);
+});
+
+test("binds the embedded Owner SPA to one deterministic digest and fails closed on drift", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-lan-static-integrity-"));
+  await mkdir(join(root, "assets"));
+  await writeFile(join(root, "index.html"), "<main>owner</main>");
+  await writeFile(join(root, "assets", "app.js"), "export {};\n");
+
+  const first = await loadLanStaticAssets(root);
+  const second = await loadLanStaticAssets(root, first.sha256);
+  assert.equal(second.sha256, first.sha256);
+  assert.notEqual(first.sha256, createHash("sha256").update("<main>owner</main>").digest("hex"));
+
+  await writeFile(join(root, "assets", "app.js"), "export const drift = true;\n");
+  await assert.rejects(
+    () => loadLanStaticAssets(root, first.sha256),
+    /LAN_STATIC_INTEGRITY_MISMATCH/u,
+  );
 });
 
 test("rejects an oversized sparse asset before buffering its contents", async () => {
