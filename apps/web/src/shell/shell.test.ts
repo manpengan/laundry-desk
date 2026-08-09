@@ -11,7 +11,7 @@ import { createMockQueryClient } from "../commands/query-client.js";
 import { createMockConnection } from "../connection.js";
 import type { AppPorts } from "../host/types.js";
 import { App, shellPropsFrom } from "../App.js";
-import { PageHost } from "../pages/PageHost.js";
+import { hasLocalPrintQueue, PageHost } from "../pages/PageHost.js";
 import { CounterShell } from "./CounterShell.js";
 
 const sampleSession: SessionView = Object.freeze({
@@ -91,6 +91,22 @@ test("PageHost receive with session+commandClient mounts ReceivePage form", () =
   assert.match(html, /确认开单/);
   assert.match(html, /衣物明细/);
   assert.doesNotMatch(html, /登录后开单/);
+});
+
+test("PageHost enables the signed print queue only for a desktop printer capability", () => {
+  const unavailable = Object.freeze({
+    ok: false as const,
+    error: Object.freeze({ code: "UNAVAILABLE", message: "not loaded" }),
+  });
+  const printerPort = Object.freeze({
+    discover: async () => unavailable,
+    status: async () => unavailable,
+    configure: async () => unavailable,
+    testFixedTicket: async () => unavailable,
+  });
+
+  assert.equal(hasLocalPrintQueue(undefined), false);
+  assert.equal(hasLocalPrintQueue(printerPort), true);
 });
 
 test("PageHost settings forwards the desktop printer port to the admin panel", () => {

@@ -4,7 +4,7 @@
  */
 
 import { Button, Dialog, useToast } from "@laundry/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import {
   loadPrintQueue,
@@ -26,6 +26,31 @@ export type PrintQueuePanelProps = {
 };
 
 type RequeueAction = "retry" | "reprint";
+
+export type PrintQueueActionGate = Readonly<{
+  run: (jobId: string, action: () => Promise<void>) => Promise<"completed" | "busy">;
+}>;
+
+/** Keep retry/reprint exclusive until the command and its follow-up refresh both settle. */
+export function createPrintQueueActionGate(
+  onBusyJobIdChange: (jobId: string | null) => void,
+): PrintQueueActionGate {
+  let busyJobId: string | null = null;
+  return Object.freeze({
+    async run(jobId, action): Promise<"completed" | "busy"> {
+      if (busyJobId !== null) return "busy";
+      busyJobId = jobId;
+      onBusyJobIdChange(jobId);
+      try {
+        await action();
+        return "completed";
+      } finally {
+        busyJobId = null;
+        onBusyJobIdChange(null);
+      }
+    },
+  });
+}
 
 function commandNameFor(action: RequeueAction): string {
   return action === "retry" ? "print.ticket.retry" : "print.ticket.reprint";
@@ -49,18 +74,24 @@ export function PrintQueuePanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyJobId, setBusyJobId] = useState<string | null>(null);
+  const actionGate = useMemo(() => createPrintQueueActionGate(setBusyJobId), []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const next = await loadPrintQueue(queryClient, PRINT_JOBS_LIST_LIMIT);
-    setLoading(false);
-    if (next === null) {
-      setError("无法加载打印队列");
-      return;
+    try {
+      const next = await loadPrintQueue(queryClient, PRINT_JOBS_LIST_LIMIT);
+      if (next === null) {
+        setError("无法加载打印队列");
+        return;
+      }
+      setJobs(next.jobs);
+      setWorker(next.worker);
+    } catch {
+      setError("无法加载打印队列，请检查本地服务连接");
+    } finally {
+      setLoading(false);
     }
-    setJobs(next.jobs);
-    setWorker(next.worker);
   }, [queryClient]);
 
   useEffect(() => {
@@ -75,25 +106,28 @@ export function PrintQueuePanel({
 
   const onRequeue = useCallback(
     async (job: PrintJobView, action: RequeueAction) => {
-      setBusyJobId(job.job_id);
-      setError(null);
-      try {
-        const res = await commandClient.execute<unknown>(commandNameFor(action), {
-          job_id: job.job_id,
-        });
-        if (!res.ok) {
-          const message = res.error.message ?? res.error.code;
+      await actionGate.run(job.job_id, async () => {
+        setError(null);
+        try {
+          const res = await commandClient.execute<unknown>(commandNameFor(action), {
+            job_id: job.job_id,
+          });
+          if (!res.ok) {
+            const message = res.error.message ?? res.error.code;
+            setError(message);
+            toast.push(message, "error");
+            return;
+          }
+          toast.push(successMessage(action, job.ticket_no), "success");
+          await refresh();
+        } catch {
+          const message = "打印队列命令失败，请检查本地服务连接";
           setError(message);
           toast.push(message, "error");
-          return;
         }
-        toast.push(successMessage(action, job.ticket_no), "success");
-        await refresh();
-      } finally {
-        setBusyJobId(null);
-      }
+      });
     },
-    [commandClient, refresh, toast],
+    [actionGate, commandClient, refresh, toast],
   );
 
   return (
@@ -153,6 +187,9 @@ export function PrintQueuePanel({
                   <span className="ld-print-queue__ticket">{job.ticket_no}</span>
                   <span className="ld-print-queue__status">{printJobStatusLabel(job.status)}</span>
                 </div>
+                <span className="ld-print-queue__job-id">
+                  job_id: <code>{job.job_id}</code>
+                </span>
                 {job.error ? <p className="ld-print-queue__job-error">{job.error}</p> : null}
                 {job.status === "uncertain" ? (
                   <p className="ld-print-queue__job-error" role="alert">

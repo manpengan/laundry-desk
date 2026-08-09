@@ -36,17 +36,32 @@ pnpm --filter @laundry/edge-agent printer-pilot:mac -- --discover
 pnpm --filter @laundry/edge-agent printer-pilot:mac -- --cups-queue XP58_USB --validate
 ```
 
-随后必须在正常 macOS App 会话中让一笔真实订单完成 server 签名派发、XP-58 CUPS 提交和
-设备签名回执上传。保留该派发返回的 `job_id`，再运行：
+正式流程必须针对待发布的 packaged `.app`，并用同一真实订单快照顺序完成：
+
+1. 打印机在线时完成原始成功打印，保留已上传设备签名回执的 `job_id`。
+2. 断开实体打印机，从失败/不确定任务执行一次 retry/reprint；保留结果为 `failed` 或
+   `uncertain`、`cups_job_id=null` 的已上传回执，并确认现场没有迟到/重复票据。
+3. 重新连接同一队列，显式执行「补打一份」；保留第三个成功回执并确认只出一份。
+
+三 job UUID 必须各异，queue 与 snapshot 必须相同，receipt sequence 必须严格递增，两次成功
+CUPS job id 必须不同。使用真实机型、连接类型和 `.app` canonical 绝对路径运行：
 
 ```bash
-pnpm --filter @laundry/edge-agent printer-acceptance:mac -- --job-id <uploaded-signed-dispatch-uuid>
+pnpm --filter @laundry/edge-agent printer-acceptance:mac -- \
+  --original-job-id <original-succeeded-uuid> \
+  --disconnect-job-id <disconnect-failed-or-uncertain-uuid> \
+  --reprint-job-id <explicit-reprint-succeeded-uuid> \
+  --printer-model "Xprinter XP-58IIH" \
+  --connection usb \
+  --app-path "/Applications/laundry-desk V2.app"
 ```
 
-CLI 只接受本机私有 ledger 中已上传且结果为 `succeeded` 的签名派发，不会另打固定 smoke
-样张。操作员必须逐项确认中文清晰、金额正确、条码回读、走纸、切/撕位置、断连不重复和
-显式重打仅一份，才会在 Application Support 私有目录生成验收 JSON。该记录是操作员签认，
-仍需另行保存去 EXIF 的真实样张照片才能达到本清单第 4 级。
+CLI 只接受本机私有 ledger 中满足上述三步的已上传设备签名回执，不会另打固定 smoke 样张；
+连接类型仅允许 `usb|ethernet|wifi`。它会安全读取 packaged app 的 `app.asar` 与 SPA manifest
+并自行计算 SHA-256，操作员不能传入 hash。逐项确认中文、金额、条码回读、走纸、切/撕、
+断连不重复和显式补打一份后，才会在 Application Support 私有目录 create-only 生成 `0600`
+schema v3 JSON；原始 job、queue、CUPS job id 不进入记录。该记录是操作员签认，仍需另行保存
+去 EXIF 的真实样张照片才能达到本清单第 4 级。
 
 ## 每机勾选
 

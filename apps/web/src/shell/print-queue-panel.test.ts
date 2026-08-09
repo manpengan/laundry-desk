@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import { ToastProvider } from "@laundry/ui";
 import { createMockAuthClient } from "../auth/AuthClient.js";
 import { FULL_STORE_FEATURES } from "../auth/permissions.js";
@@ -14,10 +11,8 @@ import { createMockQueryClient } from "../commands/query-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { createMockConnection } from "../connection.js";
 import { CounterShell } from "./CounterShell.js";
-import { PrintQueuePanel } from "./PrintQueuePanel.js";
+import { createPrintQueueActionGate, PrintQueuePanel } from "./PrintQueuePanel.js";
 import type { PrintJobView, PrintWorkerView } from "./print-jobs.js";
-
-const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const sampleSession: SessionView = Object.freeze({
   session: Object.freeze({
@@ -116,7 +111,7 @@ function renderPanel(
   );
 }
 
-test("PrintQueuePanel lists ticket_no, Chinese status, and error", () => {
+test("PrintQueuePanel lists ticket_no, visible job_id, Chinese status, and error", () => {
   const html = renderPanel();
   assert.match(html, /data-testid="print-queue-panel"/);
   assert.match(html, /20260722-0001/);
@@ -129,6 +124,8 @@ test("PrintQueuePanel lists ticket_no, Chinese status, and error", () => {
   assert.match(html, /打印工作器运行中/);
   assert.match(html, /已完成 8/);
   assert.match(html, /留存 7 个文件/);
+  assert.match(html, /job_id: <code>11111111-1111-4111-8111-111111111111<\/code>/);
+  assert.doesNotMatch(html, /aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee/);
 });
 
 test("PrintQueuePanel shows 重试 for failed and 补打 for done (not for queued)", () => {
@@ -157,15 +154,34 @@ test("PrintQueuePanel makes uncertain receipt explicit and never offers automati
   assert.doesNotMatch(uncertain, /data-action="reprint"/u);
 });
 
-test("PrintQueuePanel keeps a requeue action locked until its refresh settles", () => {
-  const source = readFileSync(join(packageRoot, "src/shell/PrintQueuePanel.tsx"), "utf8");
-  const refresh = source.indexOf("await refresh();", source.indexOf("const onRequeue"));
-  const release = source.indexOf("setBusyJobId(null);", refresh);
+test("PrintQueuePanel keeps a requeue action locked until its refresh settles", async () => {
+  const busyJobIds: Array<string | null> = [];
+  let firstCalls = 0;
+  let duplicateCalls = 0;
+  let releaseRefresh: () => void = () => assert.fail("release was not initialized");
+  const refreshPending = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  const gate = createPrintQueueActionGate((jobId) => busyJobIds.push(jobId));
 
-  assert.ok(refresh >= 0);
-  assert.ok(release > refresh);
-  assert.match(source.slice(refresh, release), /finally/u);
-  assert.equal(source.match(/disabled=\{loading \|\| busyJobId !== null\}/gu)?.length, 3);
+  const failedJobId = "22222222-2222-4222-8222-222222222222";
+  const doneJobId = "33333333-3333-4333-8333-333333333333";
+  const first = gate.run(failedJobId, async () => {
+    firstCalls += 1;
+    await refreshPending;
+  });
+  const duplicate = await gate.run(doneJobId, async () => {
+    duplicateCalls += 1;
+  });
+
+  assert.equal(duplicate, "busy");
+  assert.equal(firstCalls, 1);
+  assert.equal(duplicateCalls, 0);
+  assert.deepEqual(busyJobIds, [failedJobId]);
+
+  releaseRefresh();
+  assert.equal(await first, "completed");
+  assert.deepEqual(busyJobIds, [failedJobId, null]);
 });
 
 test("PrintQueuePanel closed renders no queue panel (toast host may remain)", () => {

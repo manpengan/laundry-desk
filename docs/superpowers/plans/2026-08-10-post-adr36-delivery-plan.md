@@ -1,8 +1,8 @@
 # ADR-36 后续 1–6 交付计划
 
 > 日期：2026-08-10
-> 状态：**执行中（阶段 1）**
-> 当前阶段验收：[macOS Web 产品面对齐验收](../specs/2026-08-10-macos-web-product-parity-acceptance.md)
+> 状态：**阶段 1 完成；阶段 2 外部硬件阻塞**
+> 当前阶段验收：[XP-58 实体打印验收](../specs/2026-08-10-xp58-physical-print-acceptance.md)
 > 既有裁决：[ADR-14](../../adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md) · [ADR-16](../../adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-36](../../adr/2026-08-09-adr-36-cloud-test-environment.md)
 
 ## 1. 目标与推进规则
@@ -19,14 +19,14 @@
 
 ## 2. 固定交付顺序
 
-| 阶段 | 状态       | 范围                                                   | 必须关闭的证据                                                                                                                      |
-| ---: | ---------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-|    1 | **执行中** | macOS 当前 Web 产品面 + Runtime.app 托管 loopback 组合 | Browser 与打包 Counter 同产品面；全新投产与凭据切换；Runtime 托管真实 Server OCI 后的 stop/start/restart 与 Counter 桥接；`main` CI |
-|    2 | pending    | XP-58 真机                                             | 实际中文、金额、条码、走纸、切刀、断连/恢复和重复打印边界；记录打印机型号、连接方式与现场结果                                       |
-|    3 | pending    | Developer ID、公证与正式双架构 OCI                     | Developer ID 签名、notary/staple/Gatekeeper；arm64/x86_64 正式 OCI index、签名 manifest、干净机安装/升级/回滚                       |
-|    4 | pending    | Windows 打包与真实主机                                 | 真实 Windows 主机安装、启动、升级/卸载、持久化、打印与安全基线；不能只依赖 `windows-latest` CI                                      |
-|    5 | pending    | 生产 SaaS、多门店与运维                                | 正式环境租户隔离、容量/SLA、备份恢复、监控告警、发布回滚、事故与数据运维；hk-vps 合成测试环境不作为生产证据                         |
-|    6 | pending    | AI/BYOK、v1 迁移与外部提供商                           | 模型密钥隔离与成本/失败降级、真实 v1 只读迁移演练、短信/微信/支付等提供商 sandbox 与正式切换边界                                    |
+| 阶段 | 状态                          | 范围                                                   | 必须关闭的证据                                                                                                                      |
+| ---: | ----------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+|    1 | completed                     | macOS 当前 Web 产品面 + Runtime.app 托管 loopback 组合 | Browser 与打包 Counter 同产品面；全新投产与凭据切换；Runtime 托管真实 Server OCI 后的 stop/start/restart 与 Counter 桥接；`main` CI |
+|    2 | **blocked_external_hardware** | XP-58 真机                                             | 实际中文、金额、条码、走纸、切刀、断连/恢复和重复打印边界；记录打印机型号、连接方式与现场结果                                       |
+|    3 | pending                       | Developer ID、公证与正式双架构 OCI                     | Developer ID 签名、notary/staple/Gatekeeper；arm64/x86_64 正式 OCI index、签名 manifest、干净机安装/升级/回滚                       |
+|    4 | pending                       | Windows 打包与真实主机                                 | 真实 Windows 主机安装、启动、升级/卸载、持久化、打印与安全基线；不能只依赖 `windows-latest` CI                                      |
+|    5 | pending                       | 生产 SaaS、多门店与运维                                | 正式环境租户隔离、容量/SLA、备份恢复、监控告警、发布回滚、事故与数据运维；hk-vps 合成测试环境不作为生产证据                         |
+|    6 | pending                       | AI/BYOK、v1 迁移与外部提供商                           | 模型密钥隔离与成本/失败降级、真实 v1 只读迁移演练、短信/微信/支付等提供商 sandbox 与正式切换边界                                    |
 
 ## 3. 阶段 1 关闭条件
 
@@ -49,9 +49,12 @@
 - `pnpm local:commissioning:fresh:mac`：1/1，`LOCAL_FRESH_COMMISSIONING_ACCEPTANCE_OK`。
 - `pnpm runtime:counter:acceptance`：**通过**；真实 System runner 完成 install/stop/start/restart、staged/window health 与严格清理，输出 `assurance=software_only` marker。
 - `pnpm workspace:check`：**通过**；format、lint、typecheck、test、build 全绿，Node 本地与 Runtime 276/276。
-- 提交、PR、`main` required CI：**待执行**。
+- PR #154：workspace 6m19s、Runtime macOS 3m19s、real PostgreSQL 12m23s，全部通过。
+- 已保留两笔分组提交并合入 `main=7e72b57`；push 级 V2 Foundation（workspace 6m03s、Runtime 3m53s）和 V2 PostgreSQL Integration（12m01s）再次通过。
 
-因此阶段 1 的本地软件验收与工作区总门禁已通过，但在 PR 与 `main` required CI 关闭前仍为“执行中”；阶段 2–6 不启动。
+因此阶段 1 已完成。阶段 2 已按顺序启动，但 2026-08-10 的本机盘点未发现 CUPS 队列、USB Printer class 设备、USB 串口打印桥或局域网 IPP 打印服务；在接入并通电 XP-58、安装启用真实队列前，阶段 2 保持 `blocked_external_hardware`，阶段 3–6 不启动。
+
+阶段 2 的软件检查点已新鲜通过 Web 350/350、Edge Agent scripts 56/56 + dist 403/403、数据库静态 68/68、隔离真实 PostgreSQL 的打印迁移/精确重放/并发回归 8/8，以及完整 `workspace:check`（基础/Runtime 276/276、Cloud 32/32、Server 常规 763 pass、全量 build）。严格入队、COMMIT 后响应丢失仍返回同一任务、浏览器打印旁路防护、可见 job UUID 与 schema v3 签名三回执证据入口均已就绪。这些绿灯不替代实体出纸，阶段状态仍由上述硬件 blocker 决定。
 
 ## 5. 证据边界
 

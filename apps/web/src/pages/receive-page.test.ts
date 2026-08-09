@@ -6,8 +6,8 @@ import type { TicketPreview } from "@laundry/domain";
 import { ToastProvider } from "@laundry/ui";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
-import { ReceivePage } from "./ReceivePage.js";
-import { TicketPreviewPanel } from "./TicketPreviewPanel.js";
+import { enqueueTicketPrint, ReceivePage } from "./ReceivePage.js";
+import { createTicketPrintAction, TicketPreviewPanel } from "./TicketPreviewPanel.js";
 import { buildReceiveTicketPreview } from "./ticket-preview.js";
 import type { ReceiveOrderResult } from "./order-form.js";
 
@@ -103,4 +103,228 @@ test("TicketPreviewPanel print button is present for browser print", () => {
   const html = renderToStaticMarkup(createElement(TicketPreviewPanel, { preview }));
   assert.match(html, /data-testid="ticket-print-button"/);
   assert.match(html, /data-testid="ticket-preview-body"/);
+});
+
+test("enqueueTicketPrint sends only the server-authoritative order_id", async () => {
+  const calls: Array<Readonly<{ name: string; body: unknown }>> = [];
+  const notices: Array<readonly [string, "success" | "error"]> = [];
+  const commandClient = createMockCommandClient(
+    async <T = unknown>(name: string, body?: unknown) => {
+      calls.push(Object.freeze({ name, body }));
+      return Object.freeze({ ok: true as const, data: Object.freeze({}) as T });
+    },
+  );
+
+  const enqueued = await enqueueTicketPrint(
+    commandClient,
+    "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    "20260722-0042",
+    (message, kind) => notices.push([message, kind]),
+  );
+
+  assert.deepEqual(calls, [
+    {
+      name: "print.ticket.enqueue",
+      body: { order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+    },
+  ]);
+  assert.deepEqual(notices, [["已排队打印 20260722-0042", "success"]]);
+  assert.equal(enqueued, true);
+});
+
+test("enqueueTicketPrint turns command and transport failures into visible errors", async () => {
+  const commandNotices: Array<readonly [string, "success" | "error"]> = [];
+  const commandClient = createMockCommandClient(async () =>
+    Object.freeze({
+      ok: false as const,
+      error: Object.freeze({ code: "PRINTER_OFFLINE", message: "打印机离线" }),
+    }),
+  );
+  const commandEnqueued = await enqueueTicketPrint(
+    commandClient,
+    "order-1",
+    "ticket-1",
+    (message, kind) => commandNotices.push([message, kind]),
+  );
+  assert.deepEqual(commandNotices, [["打印机离线", "error"]]);
+  assert.equal(commandEnqueued, false);
+
+  const transportNotices: Array<readonly [string, "success" | "error"]> = [];
+  const rejectingClient = createMockCommandClient(async () => {
+    throw new Error("connection reset");
+  });
+  let transportEnqueued: boolean | undefined;
+  await assert.doesNotReject(async () => {
+    transportEnqueued = await enqueueTicketPrint(
+      rejectingClient,
+      "order-2",
+      "ticket-2",
+      (message, kind) => transportNotices.push([message, kind]),
+    );
+  });
+  assert.deepEqual(transportNotices, [["无法提交打印任务，请检查本地服务连接", "error"]]);
+  assert.equal(transportEnqueued, false);
+});
+
+test("ticket print action uses enqueue exclusively on success and failure", async () => {
+  const preview: TicketPreview = Object.freeze({
+    lines: Object.freeze(["票单号 T-1"]),
+    total_text: "¥1.00",
+    paid_text: "¥0.00",
+    balance_text: "¥1.00",
+  });
+  let browserPrints = 0;
+  let ticketReadyCalls = 0;
+  let enqueueCalls = 0;
+  const errors: unknown[] = [];
+  const action = createTicketPrintAction(() => undefined);
+  const success = await action.run({
+    preview,
+    onTicketReady: () => {
+      ticketReadyCalls += 1;
+    },
+    onEnqueuePrint: () => {
+      enqueueCalls += 1;
+      return true;
+    },
+    browserPrint: () => {
+      browserPrints += 1;
+    },
+    onError: (error) => errors.push(error),
+  });
+  const failure = await createTicketPrintAction(() => undefined).run({
+    preview,
+    onTicketReady: () => {
+      ticketReadyCalls += 1;
+    },
+    onEnqueuePrint: async () => {
+      enqueueCalls += 1;
+      throw new Error("network down");
+    },
+    browserPrint: () => {
+      browserPrints += 1;
+    },
+    onError: (error) => errors.push(error),
+  });
+
+  assert.equal(success, "completed");
+  assert.equal(failure, "failed");
+  assert.equal(enqueueCalls, 2);
+  assert.equal(browserPrints, 0);
+  assert.equal(ticketReadyCalls, 0);
+  assert.equal(errors.length, 1);
+});
+
+test("ticket print action latches a fast successful enqueue for the current order", async () => {
+  const preview: TicketPreview = Object.freeze({
+    lines: Object.freeze(["票单号 T-FAST"]),
+    total_text: "¥1.00",
+    paid_text: "¥0.00",
+    balance_text: "¥1.00",
+  });
+  const enqueuedChanges: boolean[] = [];
+  let enqueueCalls = 0;
+  const action = createTicketPrintAction(
+    () => undefined,
+    (enqueued) => enqueuedChanges.push(enqueued),
+  );
+  const options = Object.freeze({
+    preview,
+    onEnqueuePrint: () => {
+      enqueueCalls += 1;
+      return true;
+    },
+    browserPrint: () => assert.fail("browser print must not run"),
+    onError: (error: unknown) => assert.fail(String(error)),
+  });
+
+  assert.equal(await action.run(options), "completed");
+  assert.equal(await action.run(options), "already-enqueued");
+  assert.equal(enqueueCalls, 1);
+  assert.deepEqual(enqueuedChanges, [true]);
+});
+
+test("ticket print action permits retry after a visible enqueue failure", async () => {
+  const preview: TicketPreview = Object.freeze({
+    lines: Object.freeze(["票单号 T-RETRY"]),
+    total_text: "¥1.00",
+    paid_text: "¥0.00",
+    balance_text: "¥1.00",
+  });
+  let enqueueCalls = 0;
+  const action = createTicketPrintAction(() => undefined);
+  const options = Object.freeze({
+    preview,
+    onEnqueuePrint: () => {
+      enqueueCalls += 1;
+      return enqueueCalls === 2;
+    },
+    browserPrint: () => assert.fail("browser print must not run"),
+    onError: (error: unknown) => assert.fail(String(error)),
+  });
+
+  assert.equal(await action.run(options), "failed");
+  assert.equal(await action.run(options), "completed");
+  assert.equal(enqueueCalls, 2);
+});
+
+test("ticket print action falls back to browser only without an enqueue handler", async () => {
+  const preview: TicketPreview = Object.freeze({
+    lines: Object.freeze(["票单号 T-2"]),
+    total_text: "¥1.00",
+    paid_text: "¥0.00",
+    balance_text: "¥1.00",
+  });
+  let browserPrints = 0;
+  let readyPreview: TicketPreview | null = null;
+  const result = await createTicketPrintAction(() => undefined).run({
+    preview,
+    onTicketReady: (value) => {
+      readyPreview = value;
+    },
+    browserPrint: () => {
+      browserPrints += 1;
+    },
+    onError: (error) => assert.fail(String(error)),
+  });
+
+  assert.equal(result, "completed");
+  assert.equal(browserPrints, 1);
+  assert.equal(readyPreview, preview);
+});
+
+test("ticket print action rejects duplicate clicks until the first enqueue settles", async () => {
+  const preview: TicketPreview = Object.freeze({
+    lines: Object.freeze(["票单号 T-3"]),
+    total_text: "¥1.00",
+    paid_text: "¥0.00",
+    balance_text: "¥1.00",
+  });
+  const busyChanges: boolean[] = [];
+  let enqueueCalls = 0;
+  let release: () => void = () => assert.fail("release was not initialized");
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const action = createTicketPrintAction((busy) => busyChanges.push(busy));
+  const options = Object.freeze({
+    preview,
+    onEnqueuePrint: async () => {
+      enqueueCalls += 1;
+      await pending;
+      return true;
+    },
+    browserPrint: () => assert.fail("browser print must not run"),
+    onError: (error: unknown) => assert.fail(String(error)),
+  });
+
+  const first = action.run(options);
+  const duplicate = await action.run(options);
+  assert.equal(duplicate, "busy");
+  assert.equal(enqueueCalls, 1);
+  assert.deepEqual(busyChanges, [true]);
+
+  release();
+  assert.equal(await first, "completed");
+  assert.deepEqual(busyChanges, [true, false]);
 });

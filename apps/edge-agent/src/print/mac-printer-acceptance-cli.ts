@@ -1,23 +1,15 @@
-import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { fileURLToPath } from "node:url";
 
 import {
   createMacPrinterAcceptanceRecord,
-  loadSignedPrintAcceptanceEvidence,
+  loadMacPrinterAcceptanceEvidence,
   writeMacPrinterAcceptanceRecord,
   type MacPrinterOperatorConfirmation,
 } from "./mac-printer-acceptance.js";
-
-function parseJobId(argv: readonly string[]): string {
-  const args = argv[0] === "--" ? argv.slice(1) : argv;
-  if (args.length !== 2 || args[0] !== "--job-id" || args[1] === undefined) {
-    throw new Error("use --job-id <uploaded-signed-dispatch-uuid>");
-  }
-  return args[1];
-}
+import { hashPackagedMacApp } from "./mac-printer-acceptance-artifacts.js";
+import { parseMacPrinterAcceptanceArgs } from "./mac-printer-acceptance-cli-args.js";
 
 async function askForConfirmation(): Promise<MacPrinterOperatorConfirmation> {
   if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {
@@ -45,24 +37,24 @@ async function askForConfirmation(): Promise<MacPrinterOperatorConfirmation> {
   }
 }
 
-async function loadVersion(): Promise<string> {
-  const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-  const parsed = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")) as {
-    version?: unknown;
-  };
-  if (typeof parsed.version !== "string") throw new Error("package version is unavailable");
-  return parsed.version;
-}
-
 async function main(): Promise<void> {
-  const jobId = parseJobId(process.argv.slice(2));
+  const args = parseMacPrinterAcceptanceArgs(process.argv.slice(2));
   const applicationRoot = join(homedir(), "Library", "Application Support", "laundry-desk V2");
-  const evidence = await loadSignedPrintAcceptanceEvidence(
+  const evidence = await loadMacPrinterAcceptanceEvidence(
     join(applicationRoot, "edge-state", "print-dispatch"),
-    jobId,
+    {
+      original: args.originalJobId,
+      disconnect: args.disconnectJobId,
+      reprint: args.reprintJobId,
+    },
   );
+  const packagedApp = await hashPackagedMacApp(args.appPath);
   const confirmation = await askForConfirmation();
-  const record = createMacPrinterAcceptanceRecord(evidence, confirmation, await loadVersion());
+  const record = createMacPrinterAcceptanceRecord(evidence, confirmation, {
+    printerModel: args.printerModel,
+    connection: args.connection,
+    packagedApp,
+  });
   const directory = join(applicationRoot, "hardware-acceptance");
   const path = await writeMacPrinterAcceptanceRecord(directory, record);
   process.stdout.write(`${JSON.stringify({ ok: true, record: path })}\n`);

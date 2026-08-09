@@ -72,6 +72,9 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 修复
 
+- 修复打包 Counter 的小票按钮向严格 `print.ticket.enqueue` 投影多传 `ticket_no`、导致真实签名打印任务无法入队的问题；有桌面入队能力时，成功或失败都不再旁路调用浏览器 `window.print()`，并阻止重复点击产生多份任务。打印队列现向操作员显示验收 CLI 所需的 `job_id`，不显示订单内部 ID 或顾客资料。
+- 签名打印请求现由 PostgreSQL 派生租户内精确幂等键：原始订单/票种重放与同一 source job 的 retry/reprint 都回读同一权威任务，覆盖刷新、跨客户端和 COMMIT 后响应丢失；历史歧义重复组与伪造 lineage 继续失败关闭，不会生成第二张实体票据。
+- macOS XP-58 验收记录升级为 schema v3：必须由已上传设备签名回执绑定 `enqueue → reprint → retry` 的原始成功、断连失败/不确定和恢复后显式补打一份三个不同任务，同时记录 XP-58 型号、连接方式与打包 App 的 `app.asar`、SPA manifest、`Info.plist` 身份和版本摘要。当前 Mac 未发现可用 CUPS、USB 或局域网 IPP 打印机，因此该变化只关闭软件证据缺口，不宣称实体打印通过。
 - 补回 Desktop 对既有 `platform.settings.set` 命令的契约投影，使打包 Counter 的 R5 设置保存继续经过主进程 schema 校验并正确转发；此前 Web 可用的设置写入在打包应用内会被拒绝为未支持命令。
 
 - 修复主机 PostgreSQL 迁移与 RLS smoke 在连接失败时可能因 EXIT trap 丢失局部变量而遗留
