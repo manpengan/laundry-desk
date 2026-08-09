@@ -3,6 +3,7 @@ import {
   PrintSnapshotSchema,
   type PrintDispatchClaimRequest,
   type PrintDispatchData,
+  type PrintJobAction,
 } from "@laundry/contracts";
 import { randomUUID, type KeyObject } from "node:crypto";
 
@@ -36,6 +37,7 @@ type DispatchRow = Readonly<{
   ticket_no: string;
   snapshot_json: unknown;
   snapshot_sha256: string;
+  source_job_id: string | null;
   dispatch_staff_id: string | null;
   ticket_nonce: string | null;
 }>;
@@ -65,7 +67,8 @@ async function findExistingDispatch(
 ): Promise<DispatchRow | null> {
   const result = await client.query<DispatchRow>(
     `SELECT id::text, kind, order_id::text, ticket_no, snapshot_json,
-            snapshot_sha256, dispatch_staff_id::text, ticket_nonce::text
+            snapshot_sha256, source_job_id::text,
+            dispatch_staff_id::text, ticket_nonce::text
        FROM print_jobs
       WHERE org_id = $1::uuid AND store_id = $2::uuid
         AND dispatch_device_id = $3::uuid AND status = 'printing'
@@ -85,7 +88,8 @@ async function lockNextDispatch(
 ): Promise<DispatchRow | null> {
   const result = await client.query<DispatchRow>(
     `SELECT id::text, kind, order_id::text, ticket_no, snapshot_json,
-            snapshot_sha256, dispatch_staff_id::text, ticket_nonce::text
+            snapshot_sha256, source_job_id::text,
+            dispatch_staff_id::text, ticket_nonce::text
        FROM print_jobs
       WHERE org_id = $1::uuid AND store_id = $2::uuid
         AND status = 'queued' AND snapshot_json IS NOT NULL
@@ -97,6 +101,35 @@ async function lockNextDispatch(
     [session.orgId, session.storeId, request.supported_printer_kinds],
   );
   return result.rows[0] ?? null;
+}
+
+export function derivePrintJobActionFromSource(
+  sourceJobId: string | null,
+  sourceStatus: string | null,
+): PrintJobAction {
+  if (sourceJobId === null && sourceStatus === null) return "enqueue";
+  if (sourceJobId !== null && sourceStatus === "done") return "reprint";
+  if (sourceJobId !== null && (sourceStatus === "failed" || sourceStatus === "uncertain")) {
+    return "retry";
+  }
+  throw new PrintDispatchError("binding");
+}
+
+async function derivePrintJobAction(
+  client: SqlClient,
+  session: PrintDispatchSession,
+  row: DispatchRow,
+): Promise<PrintJobAction> {
+  if (row.source_job_id === null) return derivePrintJobActionFromSource(null, null);
+  const source = await client.query<{ status: string }>(
+    `SELECT status
+       FROM print_jobs
+      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid
+      FOR SHARE`,
+    [session.orgId, session.storeId, row.source_job_id],
+  );
+  if (source.rows.length !== 1) throw new PrintDispatchError("binding");
+  return derivePrintJobActionFromSource(row.source_job_id, source.rows[0]?.status ?? null);
 }
 
 async function lockNextReceiptSequence(
@@ -203,6 +236,7 @@ export function createPgPrintDispatchService(
           const row = existing ?? (await lockNextDispatch(client, session, request));
           if (row === null) return null;
           const snapshot = parseBoundSnapshot(row);
+          const printAction = await derivePrintJobAction(client, session, row);
           const nonce = existing === null ? createNonce() : row.ticket_nonce;
           if (nonce === null) throw new PrintDispatchError("binding");
           const now = await printDatabaseNow(client);
@@ -211,6 +245,8 @@ export function createPgPrintDispatchService(
           const capabilityTicket = signPrintCapabilityTicket(
             {
               action: "print_job",
+              print_action: printAction,
+              source_job_id: row.source_job_id,
               job_id: row.id,
               staff_id: session.staffId,
               device_id: session.deviceId,

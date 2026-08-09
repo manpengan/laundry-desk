@@ -2,7 +2,7 @@
  * M2 print ticket job queue (enqueue + process + retry/reprint + status list).
  * Memory default; PG print_jobs when runtime is pg. Not in OpenAPI freeze snapshot.
  * Status flow: queued → printing → done | failed | uncertain (terminal).
- * Retry/reprint create a **new** print_jobs row (do not resurrect terminal jobs).
+ * The first retry/reprint creates a child row; an exact replay returns that row.
  * process is a legacy diagnostic and cannot claim server-snapshotted jobs.
  */
 
@@ -56,7 +56,7 @@ export const printTicketEnqueueCommand: CommandDefinition<EnqueueInput> = define
   version: "0.3.0",
   description: "Enqueue a ticket print job from the server-owned order snapshot.",
   description_llm:
-    "Queue a counter ticket print job by order_id (kind xp58|dl206|gp3120). The server derives ticket number and immutable receipt snapshot; clients cannot supply either.",
+    "Queue a counter ticket print job by order_id (kind xp58|dl206|gp3120). The server derives ticket number and immutable receipt snapshot; an exact order/kind replay returns the existing authoritative job.",
   input: PrintTicketEnqueueInputSchema,
   risk: "R1",
   invariants: ["rbac.order_write"],
@@ -90,18 +90,18 @@ export const printTicketProcessCommand: CommandDefinition<ProcessInput> = define
   result_redaction: [],
 });
 
-/** 失败或不确定任务重试：重新读取当前服务端权威快照并新建任务，不复活原 terminal 行。 */
+/** 失败或不确定任务重试：首次调用新建 child；同 source 重放返回该 child。 */
 export const printTicketRetryCommand: CommandDefinition<RetryInput> = defineCommand({
   name: "print.ticket.retry",
   version: "0.2.0",
   description:
     "Retry a failed or uncertain print job from the current server-authoritative snapshot.",
   description_llm:
-    "Load a failed or uncertain print job, re-read the current server-authoritative order snapshot, and enqueue a NEW queued row with that snapshot and the source printer kind. Never auto-process and never mutate the source row.",
+    "For a failed or uncertain source, the first call enqueues one child from the current server-authoritative snapshot; an exact replay of that source returns the existing authoritative child. A later explicit retry must use the terminal child as its new source. Never auto-process or mutate a source row.",
   input: PrintTicketRetryInputSchema,
   risk: "R1",
   invariants: ["rbac.print_manage"],
-  // offline grant requires idempotent floor (same as enqueue; bus may still allocate a new job_id).
+  // Durable DB lineage makes source-job replay exact across clients and reloads.
   idempotent: true,
   sideEffects: ["print.job_queued", "audit.print_job"],
   offline_mode: "grant",
@@ -110,17 +110,17 @@ export const printTicketRetryCommand: CommandDefinition<RetryInput> = defineComm
   result_redaction: [],
 });
 
-/** 已完成任务补打：重新读取当前服务端权威快照并新建任务，不复活原 terminal 行。 */
+/** 已完成任务补打：首次调用新建 child；同 source 重放返回该 child。 */
 export const printTicketReprintCommand: CommandDefinition<ReprintInput> = defineCommand({
   name: "print.ticket.reprint",
   version: "0.2.0",
   description: "Reprint a done print job from the current server-authoritative snapshot.",
   description_llm:
-    "Load a done print job, re-read the current server-authoritative order snapshot, and enqueue a NEW queued row with that snapshot and the source printer kind. Never auto-process and never mutate the source row.",
+    "For a done source, the first call enqueues one child from the current server-authoritative snapshot; an exact replay of that source returns the existing authoritative child. A later explicit reprint must use the terminal child as its new source. Never auto-process or mutate a source row.",
   input: PrintTicketReprintInputSchema,
   risk: "R1",
   invariants: ["rbac.print_manage"],
-  // offline grant requires idempotent floor (same as enqueue; bus may still allocate a new job_id).
+  // Durable DB lineage makes source-job replay exact across clients and reloads.
   idempotent: true,
   sideEffects: ["print.job_queued", "audit.print_job"],
   offline_mode: "grant",

@@ -31,6 +31,8 @@ export type ReceivePageProps = {
   storeName?: string;
   storePhone?: string;
   onTicketReady?: (preview: TicketPreview) => void;
+  /** Only the packaged desktop host has a local signed-print queue. */
+  queuePrintEnabled?: boolean;
 };
 
 type AdjustmentText = Readonly<{
@@ -54,6 +56,31 @@ const paymentMethods: readonly Readonly<{ value: PaymentMethod; label: string }>
   Object.freeze({ value: "alipay", label: "支付宝" }),
   Object.freeze({ value: "other", label: "其他" }),
 ]);
+
+type PrintNotification = (message: string, kind: "success" | "error") => void;
+
+/** Submit the server-authoritative order identity to the local print queue. */
+export async function enqueueTicketPrint(
+  commandClient: CommandPort,
+  orderId: string,
+  ticketNo: string,
+  notify: PrintNotification,
+): Promise<boolean> {
+  try {
+    const res = await commandClient.execute<unknown>("print.ticket.enqueue", {
+      order_id: orderId,
+    });
+    if (!res.ok) {
+      notify(res.error.message ?? res.error.code, "error");
+      return false;
+    }
+    notify(`已排队打印 ${ticketNo}`, "success");
+    return true;
+  } catch {
+    notify("无法提交打印任务，请检查本地服务连接", "error");
+    return false;
+  }
+}
 
 function previewTotals(lines: readonly ReceiveLineDraft[], adjustments: AdjustmentText) {
   const original = lines.reduce(
@@ -80,6 +107,7 @@ export function ReceivePage({
   storeName = DEFAULT_STORE_NAME,
   storePhone,
   onTicketReady,
+  queuePrintEnabled = false,
 }: ReceivePageProps) {
   const toast = useToast();
   const [phone, setPhone] = useState("");
@@ -203,16 +231,8 @@ export function ReceivePage({
   }, []);
 
   const onEnqueuePrint = useCallback(async () => {
-    if (result === null) return;
-    const res = await commandClient.execute<unknown>("print.ticket.enqueue", {
-      order_id: result.order_id,
-      ticket_no: result.ticket_no,
-    });
-    if (!res.ok) {
-      toast.push(res.error.message ?? res.error.code, "error");
-      return;
-    }
-    toast.push(`已排队模拟打印 ${result.ticket_no}`, "success");
+    if (result === null) return false;
+    return enqueueTicketPrint(commandClient, result.order_id, result.ticket_no, toast.push);
   }, [commandClient, result, toast]);
 
   return (
@@ -350,11 +370,12 @@ export function ReceivePage({
         </section>
       </div>
       {result === null ? null : <ReceiveResult result={result} />}
-      {ticketPreview === null ? null : (
+      {ticketPreview === null || result === null ? null : (
         <TicketPreviewPanel
+          key={result.order_id}
           preview={ticketPreview}
           onTicketReady={onTicketReady}
-          onEnqueuePrint={onEnqueuePrint}
+          {...(queuePrintEnabled ? { onEnqueuePrint } : {})}
           disabled={busy}
         />
       )}

@@ -20,6 +20,8 @@ const EXP = "2026-07-21T01:03:03.000Z";
 function payload(overrides: Partial<CapabilityTicketPayload> = {}): CapabilityTicketPayload {
   return Object.freeze({
     action: "print_job",
+    print_action: "enqueue",
+    source_job_id: null,
     job_id: "936da01f-9abd-4d9d-80c7-02af85c822a8",
     staff_id: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
     device_id: DEVICE_ID,

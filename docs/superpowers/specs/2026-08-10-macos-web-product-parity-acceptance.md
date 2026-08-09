@@ -1,7 +1,7 @@
 # macOS Web 产品面对齐验收记录
 
 > 日期：2026-08-10
-> 整体状态：**本地软件与工作区总门禁通过；待 PR 与 main required CI**
+> 整体状态：**阶段 1 完成；已合入 main 且 required CI 通过**
 > 执行计划：[ADR-36 后续 1–6 交付计划](../plans/2026-08-10-post-adr36-delivery-plan.md)
 > 证据等级：`software_only`
 
@@ -9,18 +9,18 @@
 
 证明当前 Web 柜台的用户可见产品面在 Browser 与 macOS 打包 Counter 中保持一致，并从全新本地数据库走通投产与凭据切换；随后用独立 Runtime.app 托管真实 Server OCI，证明打包 Counter 只通过固定 loopback bridge 工作。
 
-本记录不把软件证据扩大为 XP-58 实体打印、Developer ID/公证、正式双架构 OCI、Windows 真实主机或生产云证据。PR 合入与 `main` required CI 完成前，阶段 1 仍为执行中。
+本记录不把软件证据扩大为 XP-58 实体打印、Developer ID/公证、正式双架构 OCI、Windows 真实主机或生产云证据。阶段 1 已在这些边界内完成；后续外部门禁继续按 1–6 计划独立推进。
 
 ## 2. 新鲜结果
 
-| 验收项               | 命令                                 | 结果        | 当前证据                                                                         |
-| -------------------- | ------------------------------------ | ----------- | -------------------------------------------------------------------------------- |
-| Browser 当前产品面   | `pnpm local:acceptance`              | **通过**    | 17/17；与同轮真实 PostgreSQL/Server 交互                                         |
-| macOS 打包 Counter   | `pnpm local:acceptance`              | **通过**    | 7/7；固定 desktop bridge；最终输出 `LOCAL_ACCEPTANCE_OK`                         |
-| 全新 macOS 投产      | `pnpm local:commissioning:fresh:mac` | **通过**    | 1/1；最终输出 `LOCAL_FRESH_COMMISSIONING_ACCEPTANCE_OK`                          |
-| Runtime 托管回环组合 | `pnpm runtime:counter:acceptance`    | **通过**    | System runner；install/stop/start/restart；staged/window health；`cleanup=clean` |
-| 工作区总门禁         | `pnpm workspace:check`               | **通过**    | format/lint/typecheck/test/build 全绿；Node 本地与 Runtime 276/276               |
-| 合入后 required CI   | GitHub Actions                       | **pending** | 待 PR 合入后记录                                                                 |
+| 验收项               | 命令                                 | 结果     | 当前证据                                                                         |
+| -------------------- | ------------------------------------ | -------- | -------------------------------------------------------------------------------- |
+| Browser 当前产品面   | `pnpm local:acceptance`              | **通过** | 17/17；与同轮真实 PostgreSQL/Server 交互                                         |
+| macOS 打包 Counter   | `pnpm local:acceptance`              | **通过** | 7/7；固定 desktop bridge；最终输出 `LOCAL_ACCEPTANCE_OK`                         |
+| 全新 macOS 投产      | `pnpm local:commissioning:fresh:mac` | **通过** | 1/1；最终输出 `LOCAL_FRESH_COMMISSIONING_ACCEPTANCE_OK`                          |
+| Runtime 托管回环组合 | `pnpm runtime:counter:acceptance`    | **通过** | System runner；install/stop/start/restart；staged/window health；`cleanup=clean` |
+| 工作区总门禁         | `pnpm workspace:check`               | **通过** | format/lint/typecheck/test/build 全绿；Node 本地与 Runtime 276/276               |
+| 合入后 required CI   | GitHub Actions                       | **通过** | `main=7e72b57`；workspace 6m03s、Runtime 3m53s、real PostgreSQL 12m01s           |
 
 以上计数只对应 2026-08-10 的新鲜本地运行；不从更早验收记录推导当前通过状态。运行使用进程环境中的临时唯一凭据，文档不记录密码、PIN、token、cookie、私钥或顾客 PII。
 
@@ -58,15 +58,15 @@ Browser 17/17 用同一真实本地 Server/PostgreSQL 覆盖当前 Web 行为。
 5. SIGINT/SIGTERM/SIGHUP、子进程异常和超时路径均回收进程组、容器、卷、临时目录、测试 key 与 lease；信号终止不能误报成功。
 6. 输出明确标记 `assurance=software_only` 和实际 runner，不声称正式签名或外部发布。
 
-最终输出为 `RUNTIME_COUNTER_LOOPBACK_ACCEPTANCE_OK assurance=software_only runner=system ports=8543,8787 lifecycle=install,stop,start,restart staged_health=ready window_health=ready cleanup=clean`。退出后反向核查确认 8543/8787、验收进程、全局 lease、临时根以及带本轮标签的容器、镜像和卷均不存在。阶段 1 的本地软件与工作区证据已关闭，但整体阶段仍等待 PR 合入与 `main` required CI。
+最终输出为 `RUNTIME_COUNTER_LOOPBACK_ACCEPTANCE_OK assurance=software_only runner=system ports=8543,8787 lifecycle=install,stop,start,restart staged_health=ready window_health=ready cleanup=clean`。退出后反向核查确认 8543/8787、验收进程、全局 lease、临时根以及带本轮标签的容器、镜像和卷均不存在。PR #154 保留两笔分组提交后合入 `main=7e72b57`；push 级 V2 Foundation 与 V2 PostgreSQL Integration 均再次通过，阶段 1 正式关闭。
 
 ## 6. 外部门禁
 
-| 门禁                         | 本记录结论                                                          |
-| ---------------------------- | ------------------------------------------------------------------- |
-| XP-58 实体打印               | 未验证；必须在阶段 2 检查中文、金额、条码、走纸、切刀和断连恢复     |
-| Developer ID/公证/Gatekeeper | 未验证；ad-hoc/临时 key 只用于软件验收                              |
-| 正式双架构 OCI               | 未验证；测试 Server OCI 不等于已发布和签名的 arm64/x86_64 OCI index |
-| Windows 真实主机             | 未验证；不以 CI runner 代替                                         |
-| 生产 SaaS                    | 未验证；hk-vps 合成数据环境不等于生产多租户/SLA                     |
-| AI/BYOK/v1 迁移/外部提供商   | 未验证；属于固定顺序的阶段 6                                        |
+| 门禁                         | 本记录结论                                                                                   |
+| ---------------------------- | -------------------------------------------------------------------------------------------- |
+| XP-58 实体打印               | 未验证；当前现场阻塞与恢复入口见 [阶段 2 记录](2026-08-10-xp58-physical-print-acceptance.md) |
+| Developer ID/公证/Gatekeeper | 未验证；ad-hoc/临时 key 只用于软件验收                                                       |
+| 正式双架构 OCI               | 未验证；测试 Server OCI 不等于已发布和签名的 arm64/x86_64 OCI index                          |
+| Windows 真实主机             | 未验证；不以 CI runner 代替                                                                  |
+| 生产 SaaS                    | 未验证；hk-vps 合成数据环境不等于生产多租户/SLA                                              |
+| AI/BYOK/v1 迁移/外部提供商   | 未验证；属于固定顺序的阶段 6                                                                 |

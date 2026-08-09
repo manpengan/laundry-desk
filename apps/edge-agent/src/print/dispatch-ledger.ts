@@ -8,6 +8,7 @@ import {
   entryFrom,
   exactReceipt,
   freezeLedgerState,
+  isAuthoritativePrintLineage,
   MAX_LEDGER_RECORDS,
   mayContainCompactedBinding,
   stableBindingMatches,
@@ -20,6 +21,7 @@ import { DurableJsonFile } from "./durable-json-file.js";
 export type {
   DispatchLedgerBinding,
   DispatchLedgerEntry,
+  PersistedPrintJobAction,
   PrinterKind,
 } from "./dispatch-ledger-state.js";
 
@@ -97,6 +99,9 @@ export class PrintDispatchLedger {
   ): Promise<PreparedDispatchLedgerEntry> {
     return this.exclusive(async () => {
       await this.refreshCurrent();
+      if (!isAuthoritativePrintLineage(binding.printAction, binding.sourceJobId)) {
+        throw new Error("Print dispatch lineage is not authoritative");
+      }
       const parsed = DispatchRecordSchema.parse({
         job_id: binding.jobId,
         device_id: binding.deviceId,
@@ -104,6 +109,8 @@ export class PrintDispatchLedger {
         origin: binding.origin,
         ticket_nonce: binding.ticketNonce,
         printer_kind: binding.printerKind,
+        print_action: binding.printAction,
+        source_job_id: binding.sourceJobId,
         snapshot_sha256: binding.snapshotSha256,
         capability_sha256: binding.capabilitySha256,
         expected_receipt_seq: binding.expectedReceiptSeq,
@@ -139,6 +146,12 @@ export class PrintDispatchLedger {
           if (!recovered) throw new Error("Print receipt sequence does not match signed authority");
           const resynchronized = Object.freeze({
             ...existing,
+            ...(existing.phase === "prepared" && existing.print_action === "unknown"
+              ? {
+                  print_action: binding.printAction,
+                  source_job_id: binding.sourceJobId,
+                }
+              : {}),
             capability_sha256: binding.capabilitySha256,
             expected_receipt_seq: binding.expectedReceiptSeq,
             updated_at: now,
@@ -158,10 +171,13 @@ export class PrintDispatchLedger {
         }
         if (
           existing.phase === "prepared" &&
-          existing.capability_sha256 !== binding.capabilitySha256
+          (existing.capability_sha256 !== binding.capabilitySha256 ||
+            existing.print_action === "unknown")
         ) {
           const refreshed = Object.freeze({
             ...existing,
+            print_action: binding.printAction,
+            source_job_id: binding.sourceJobId,
             capability_sha256: binding.capabilitySha256,
             updated_at: now,
           });

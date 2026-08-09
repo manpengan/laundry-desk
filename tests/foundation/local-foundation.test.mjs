@@ -337,6 +337,9 @@ test("keeps local integration free of automatic seeds and fixed container names"
 test("makes Task 3B integration explicit and secret-driven", async () => {
   const compose = await readRepositoryFile("tools/compose/docker-compose.yml");
   const workflow = await readRepositoryFile(".github/workflows/v2-integration.yml");
+  const commissioningPgAcceptance = await readRepositoryFile(
+    "tools/local/commissioning-pg-acceptance.mjs",
+  );
 
   assert.doesNotMatch(workflow, /^\s*-\s+name:\s+Start local Vite Web host\s*$/mu);
   assert.match(workflow, /^\s*-\s+name:\s+Run Playwright against real server and PostgreSQL\s*$/mu);
@@ -375,6 +378,14 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   assert.match(workflow, /LAUNDRY_APP_PASSWORD:\s*config\.postgresAppPassword/u);
   assert.doesNotMatch(workflow, /docker compose[^\n]*run[^\n]*(?:migrate|bootstrap)/u);
   assert.doesNotMatch(workflow, /set -x|echo\s+["']?\$\{?LAUNDRY_(?:ACCESS|CSRF|BOOTSTRAP)/u);
+  assert.match(
+    commissioningPgAcceptance,
+    /DELETE FROM public\.laundry_schema_migrations WHERE filename = \$1[\s\S]*0045_store_commissioning_staff_credentials\.sql/u,
+  );
+  assert.match(
+    commissioningPgAcceptance,
+    /assert\.equal\(migrations\.head, "0046_print_job_request_idempotency\.sql"\)/u,
+  );
 });
 
 test("keeps the recovery-set CI shell block syntactically valid", async () => {

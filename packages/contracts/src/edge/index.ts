@@ -51,12 +51,14 @@ export {
   ExecutionReceiptPayloadSchema,
   OFFLINE_GRANT_MAX_TTL_MS,
   OfflineGrantPayloadSchema,
+  PrintJobActionSchema,
   PrimaryLeasePayloadSchema,
 } from "./protocols.js";
 export type {
   CapabilityTicketPayload,
   ExecutionReceiptPayload,
   OfflineGrantPayload,
+  PrintJobAction,
   PrimaryLeasePayload,
 } from "./protocols.js";
 

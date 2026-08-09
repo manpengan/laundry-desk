@@ -43,6 +43,10 @@ function actionTarget(from: NavItemId): NavItemId {
   return from;
 }
 
+export function hasLocalPrintQueue(printerPort: PrinterPort | undefined): boolean {
+  return printerPort !== undefined;
+}
+
 export function PageHost({
   activeId,
   loading = false,
@@ -75,6 +79,7 @@ export function PageHost({
     return (
       <ReceivePage
         commandClient={commandClient}
+        queuePrintEnabled={hasLocalPrintQueue(printerPort)}
         {...(offlinePort !== undefined ? { offlinePort } : {})}
         {...(queryClient !== undefined ? { queryClient } : {})}
       />

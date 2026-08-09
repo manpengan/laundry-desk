@@ -88,6 +88,8 @@ function dispatch(
 ): Readonly<{ capability_ticket: unknown; snapshot: PrintSnapshot }> {
   const payload: Extract<CapabilityTicketPayload, { action: "print_job" }> = Object.freeze({
     action: "print_job",
+    print_action: "enqueue",
+    source_job_id: null,
     job_id: jobId,
     staff_id: STAFF_ID,
     device_id: DEVICE_ID,
@@ -186,6 +188,36 @@ test("verified snapshot renders to CUPS and persists a device-signed accepted re
     true,
   );
   assert.deepEqual((await setup.ledger.pendingReceipts())[0]?.receipt, result.receipt);
+  const durable = await setup.ledger.get(JOB_ID);
+  assert.equal(durable?.binding.printAction, "enqueue");
+  assert.equal(durable?.binding.sourceJobId, null);
+});
+
+test("signed retry lineage is durable and cannot be rebound as a reprint", async (t) => {
+  const setup = await fixture(t);
+  const retry = dispatch(JOB_ID, NONCE, SNAPSHOT, {
+    print_action: "retry",
+    source_job_id: OTHER_JOB_ID,
+  });
+
+  await setup.executor.execute(request(retry));
+
+  const durable = await setup.ledger.get(JOB_ID);
+  assert.equal(durable?.binding.printAction, "retry");
+  assert.equal(durable?.binding.sourceJobId, OTHER_JOB_ID);
+  await assert.rejects(
+    () =>
+      setup.executor.execute(
+        request(
+          dispatch(JOB_ID, NONCE, SNAPSHOT, {
+            print_action: "reprint",
+            source_job_id: OTHER_JOB_ID,
+          }),
+        ),
+      ),
+    /collision/u,
+  );
+  assert.equal(setup.submissions(), 1);
 });
 
 test("tampered snapshot and exact staff/device/origin/printer mismatches fail before ledger/CUPS", async (t) => {
@@ -271,6 +303,8 @@ test("restart turns both prepared and submitting entries into durable uncertain 
       origin: ORIGIN,
       ticketNonce: verified.payload.nonce,
       printerKind: verified.payload.printer_kind,
+      printAction: verified.payload.print_action,
+      sourceJobId: verified.payload.source_job_id,
       snapshotSha256: verified.payload.snapshot_sha256,
       capabilitySha256: verified.capabilitySha256,
       expectedReceiptSeq: verified.payload.next_receipt_seq,

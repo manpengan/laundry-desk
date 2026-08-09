@@ -34,6 +34,8 @@ function binding(overrides: Partial<DispatchLedgerBinding> = {}): DispatchLedger
     origin: APP_CAPABILITY_ORIGIN,
     ticketNonce: NONCE,
     printerKind: "xp58",
+    printAction: "enqueue",
+    sourceJobId: null,
     snapshotSha256: SNAPSHOT_HASH,
     capabilitySha256: CAPABILITY_HASH,
     expectedReceiptSeq: 1,
@@ -70,7 +72,10 @@ test("ledger persists nonce before submission and exact signed receipt before up
   const prepared = await ledger.prepare(binding(), 1);
   assert.equal(prepared.created, true);
   assert.equal(prepared.entry.phase, "prepared");
-  assert.match(await readFile(join(root, "print-dispatch-ledger.json"), "utf8"), /ticket_nonce/u);
+  const preparedState = await readFile(join(root, "print-dispatch-ledger.json"), "utf8");
+  assert.match(preparedState, /ticket_nonce/u);
+  assert.match(preparedState, /"print_action":"enqueue"/u);
+  assert.match(preparedState, /"source_job_id":null/u);
   const submitting = await ledger.markSubmitting(JOB, 2);
   const pending = await ledger.persistReceipt(JOB, (sequence) =>
     signedReceipt(submitting, sequence),
@@ -134,6 +139,43 @@ test("duplicate nonce or changed binding is rejected without replacing the origi
     () => ledger.prepare(binding({ snapshotSha256: "c".repeat(64) })),
     /collision/u,
   );
+  await assert.rejects(
+    () => ledger.prepare(binding({ printAction: "retry", sourceJobId: OTHER_JOB })),
+    /collision/u,
+  );
+});
+
+test("legacy v1 records load as unknown lineage and cannot become formal evidence", async (t) => {
+  const root = await mkdtemp(ROOT_PREFIX);
+  const path = join(root, "print-dispatch-ledger.json");
+  t.after(async () => rm(root, { recursive: true, force: true }));
+  const ledger = await PrintDispatchLedger.open(root);
+  const prepared = await ledger.prepare(binding());
+  await ledger.persistReceipt(JOB, (sequence) => signedReceipt(prepared.entry, sequence, "failed"));
+  const persisted = JSON.parse(await readFile(path, "utf8")) as {
+    records: readonly Record<string, unknown>[];
+    [key: string]: unknown;
+  };
+  const current = persisted.records[0];
+  assert.ok(current);
+  const legacy = Object.fromEntries(
+    Object.entries(current).filter(([key]) => key !== "print_action" && key !== "source_job_id"),
+  );
+  await writeFile(path, `${JSON.stringify({ ...persisted, records: [legacy] })}\n`, {
+    mode: 0o600,
+  });
+
+  const restarted = await PrintDispatchLedger.open(root);
+  const loaded = await restarted.get(JOB);
+  assert.equal(loaded?.binding.printAction, "unknown");
+  assert.equal(loaded?.binding.sourceJobId, null);
+  const replay = await restarted.prepare(binding());
+  assert.equal(replay.entry.binding.printAction, "unknown");
+  assert.equal(replay.entry.binding.sourceJobId, null);
+  await assert.rejects(
+    () => restarted.prepare(binding({ printAction: "unknown" })),
+    /lineage is not authoritative/u,
+  );
 });
 
 test("valid-looking on-disk phase rollback is detected by the live high-water", async (t) => {
@@ -154,6 +196,14 @@ test("signed receipt sequence mismatch is rejected before a dispatch can submit"
   t.after(async () => rm(root, { recursive: true, force: true }));
   const ledger = await PrintDispatchLedger.open(root);
 
+  await assert.rejects(
+    () => ledger.prepare(binding({ sourceJobId: OTHER_JOB })),
+    /lineage is not authoritative/u,
+  );
+  await assert.rejects(
+    () => ledger.prepare(binding({ printAction: "retry" })),
+    /lineage is not authoritative/u,
+  );
   await assert.rejects(
     () => ledger.prepare(binding({ expectedReceiptSeq: 2 })),
     /sequence.*signed authority/u,
