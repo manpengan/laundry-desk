@@ -153,13 +153,27 @@ export type IdentityErrorCode =
   | "PIN_CHALLENGE_INVALID"
   | "SESSION_INVALID";
 
+/**
+ * Why an authentication attempt failed, for server-side evidence only.
+ *
+ * The response an unauthenticated caller receives is uniform on purpose — the
+ * outside must not learn whether a request was well-formed. Operators looking
+ * at their own logs need exactly the opposite, because a client that omits a
+ * required field is otherwise indistinguishable from a wrong password.
+ * Never map this onto a response body, status code, or header.
+ */
+export type IdentityFailureDetail = "malformed_request" | "credential_mismatch";
+
 export class IdentityError extends Error {
   readonly code: IdentityErrorCode;
 
-  constructor(code: IdentityErrorCode, message: string) {
+  readonly detail?: IdentityFailureDetail;
+
+  constructor(code: IdentityErrorCode, message: string, detail?: IdentityFailureDetail) {
     super(message);
     this.name = "IdentityError";
     this.code = code;
+    if (detail !== undefined) this.detail = detail;
   }
 }
 

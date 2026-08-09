@@ -101,7 +101,7 @@ function registerLoginRoute(app: FastifyInstance, context: AuthRouteContext): vo
         error.code === "AUTHENTICATION_FAILED"
       ) {
         const after = settleReservation(attempt.reservation.fail);
-        recordLoginFailure(request, context.securityEvents, limitInput);
+        recordLoginFailure(request, context.securityEvents, limitInput, error.detail);
         if (!after.allowed) {
           return rateLimited(
             request,

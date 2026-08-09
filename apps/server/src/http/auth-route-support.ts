@@ -16,7 +16,12 @@ import {
   type AuthorizedSession,
 } from "../auth/session-view.js";
 import { hashOpaqueSecret } from "../identity/crypto-util.js";
-import type { RefreshFamilyRecord, RefreshTokenRecord, SessionRecord } from "../identity/types.js";
+import type {
+  IdentityFailureDetail,
+  RefreshFamilyRecord,
+  RefreshTokenRecord,
+  SessionRecord,
+} from "../identity/types.js";
 import { IdentityError } from "../identity/types.js";
 import type { LocalRuntime } from "../local/demo-seed.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
@@ -329,9 +334,10 @@ export function recordLoginFailure(
   request: FastifyRequest,
   securityEvents: SecurityEventSink,
   input: LoginRateLimitInput,
+  detail?: IdentityFailureDetail,
 ): void {
   securityEvents.record(request, {
-    reason: "LOGIN_FAILED",
+    reason: detail === "malformed_request" ? "LOGIN_REQUEST_INVALID" : "LOGIN_FAILED",
     account: accountDimension(input),
     ip: input.ip,
   });

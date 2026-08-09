@@ -9,7 +9,12 @@ import { LoginRequestSchema, type LoginRequest } from "@laundry/contracts";
 
 import type { PasswordPort } from "./password.js";
 import { issueSession, type IssueSessionInput, type SessionServiceDeps } from "./session.js";
-import type { OrgStoreRepository, SessionIssueResult, StaffRepository } from "./types.js";
+import type {
+  IdentityFailureDetail,
+  OrgStoreRepository,
+  SessionIssueResult,
+  StaffRepository,
+} from "./types.js";
 import { IdentityError } from "./types.js";
 
 export type PasswordLoginDeps = Readonly<{
@@ -28,8 +33,8 @@ export type LoginServiceDeps = PasswordLoginDeps &
 export type LoginResult = SessionIssueResult;
 export type PreparedPasswordLogin = IssueSessionInput;
 
-const authFailed = (): IdentityError =>
-  new IdentityError("AUTHENTICATION_FAILED", "Authentication failed");
+const authFailed = (detail: IdentityFailureDetail): IdentityError =>
+  new IdentityError("AUTHENTICATION_FAILED", "Authentication failed", detail);
 
 /*
  * Generated from an unreachable random value using the production Argon2id
@@ -78,7 +83,7 @@ export const preparePasswordLogin = async (
       candidateFromMalformedRequest(rawRequest),
       dummyPasswordHash,
     );
-    throw authFailed();
+    throw authFailed("malformed_request");
   }
 
   const orgStore = await deps.orgStore.findByCodes(request.org_code, request.store_code);
@@ -91,7 +96,8 @@ export const preparePasswordLogin = async (
     request.password,
     activeStaff?.password_hash ?? dummyPasswordHash,
   );
-  if (orgStore === null || activeStaff === null || !passwordMatches) throw authFailed();
+  if (orgStore === null || activeStaff === null || !passwordMatches)
+    throw authFailed("credential_mismatch");
 
   return Object.freeze({
     org_id: orgStore.org_id,
