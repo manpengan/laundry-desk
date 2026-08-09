@@ -300,7 +300,17 @@ async function runVerifier(root, cwd) {
     root,
     "verifier/Laundry Desk Release Candidate Verifier.app/Contents/MacOS/Laundry Desk Release Candidate Verifier",
   );
-  return await execute(executable, [root], { cwd, encoding: "utf8", env: { PATH: "" } });
+  try {
+    return await execute(executable, [root], { cwd, encoding: "utf8", env: { PATH: "" } });
+  } catch (error) {
+    const details = {
+      code: error?.code ?? null,
+      signal: error?.signal ?? null,
+      stderr: typeof error?.stderr === "string" ? error.stderr : null,
+      stdout: typeof error?.stdout === "string" ? error.stdout : null,
+    };
+    throw new Error(`RC_TEST_VERIFIER_FAILED ${JSON.stringify(details)}`, { cause: error });
+  }
 }
 
 async function cloneCandidate(setup, name) {
