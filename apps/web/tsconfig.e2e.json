@@ -7,7 +7,9 @@
   },
   "include": [
     "e2e/**/*.ts",
+    "e2e-commissioning/**/*.ts",
     "e2e-lan/**/*.ts",
+    "playwright.commissioning.config.ts",
     "playwright.local.config.ts",
     "playwright.lan.config.ts"
   ]

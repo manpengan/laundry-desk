@@ -4,6 +4,7 @@ import test from "node:test";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import {
   createMemoryStaffAccessStore,
+  createMemoryStaffAccessState,
   createSqlStaffAccessStore,
   type StaffAccessRow,
 } from "./access-store.js";
@@ -92,6 +93,74 @@ test("staff access keeps at least one active admin and privacy administrator", a
     is_active: true,
   });
   assert.deepEqual(revoked, { ok: false, reason: "last_privacy_admin" });
+});
+
+test("staff access rejects activation and role changes while credentials are pending", async () => {
+  const pending = Object.freeze({
+    ...ADMIN_B,
+    privacy_admin: false,
+    is_active: false,
+  });
+  const state = createMemoryStaffAccessState([ADMIN_A, pending]);
+  state.markCredentialPending(ADMIN_B.staff_id);
+  const store = createMemoryStaffAccessStore(state);
+
+  assert.deepEqual(
+    await store.set(ADMIN_A.staff_id, {
+      target_staff_id: ADMIN_B.staff_id,
+      expected_permission_version: ADMIN_B.permission_version,
+      role: "admin",
+      privacy_admin: true,
+      is_active: true,
+    }),
+    { ok: false, reason: "credential_pending" },
+  );
+  assert.deepEqual(
+    await store.set(ADMIN_A.staff_id, {
+      target_staff_id: ADMIN_B.staff_id,
+      expected_permission_version: ADMIN_B.permission_version,
+      role: "staff",
+      privacy_admin: false,
+      is_active: false,
+    }),
+    { ok: false, reason: "credential_pending" },
+  );
+});
+
+test("SQL staff access stops before mutation when a credential setup is pending", async () => {
+  const statements: string[] = [];
+  const client = {
+    query: async (sql: string) => {
+      statements.push(sql);
+      if (sql.includes("ORDER BY staff.username")) {
+        return { rows: [ADMIN_B], rowCount: 1 };
+      }
+      if (sql.includes("FROM staff_credential_setups")) {
+        return { rows: [{ exists: 1 }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 1 };
+    },
+  } as unknown as SqlClient;
+  const tenant: TenantContext = Object.freeze({
+    orgId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    storeId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    staffId: ADMIN_A.staff_id,
+  });
+
+  const result = await createSqlStaffAccessStore(client, tenant).set(ADMIN_A.staff_id, {
+    target_staff_id: ADMIN_B.staff_id,
+    expected_permission_version: ADMIN_B.permission_version,
+    role: "staff",
+    privacy_admin: false,
+    is_active: false,
+  });
+  assert.deepEqual(result, { ok: false, reason: "credential_pending" });
+  assert.match(statements[0] ?? "", /pg_advisory_xact_lock/iu);
+  assert.match(statements[1] ?? "", /ORDER BY staff_id FOR UPDATE/iu);
+  assert.equal(
+    statements.some((sql) => sql.includes("UPDATE staffs")),
+    false,
+  );
 });
 
 test("SQL access change stops before the role update when the staff CAS loses", async () => {

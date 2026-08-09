@@ -38,6 +38,19 @@ struct RuntimeRollbackTarget: Codable, Equatable {
   }
 }
 
+struct RuntimeCommissionResult: Codable {
+  let status: String
+  let release: String
+  let lanStatus: String
+  let lanFaultCode: String?
+
+  enum CodingKeys: String, CodingKey {
+    case status, release
+    case lanStatus = "lan_status"
+    case lanFaultCode = "lan_fault_code"
+  }
+}
+
 struct RuntimeManifestPayload: Codable, Equatable {
   let schemaVersion: Int
   let product: String
@@ -56,6 +69,8 @@ struct RuntimeManifestPayload: Codable, Equatable {
   let serverImage: RuntimeServerImage
   let postgresMajor: Int
   let postgresImage: String
+  let lanComposeSHA256: String?
+  let ownerSPASHA256: String?
 
   enum CodingKeys: String, CodingKey {
     case schemaVersion = "schema_version"
@@ -74,6 +89,8 @@ struct RuntimeManifestPayload: Codable, Equatable {
     case serverImage = "server_image"
     case postgresMajor = "postgres_major"
     case postgresImage = "postgres_image"
+    case lanComposeSHA256 = "lan_compose_sha256"
+    case ownerSPASHA256 = "owner_spa_sha256"
   }
 }
 
@@ -120,6 +137,17 @@ struct RuntimeSetup: Codable {
   let adminDisplayName: String
   let adminPassword: String
   let adminPin: String
+  let approverUsername: String
+  let approverDisplayName: String
+  let approverPassword: String
+  let approverPin: String
+}
+
+struct RuntimeCommissionSetup: Codable {
+  let approverUsername: String
+  let approverDisplayName: String
+  let approverPassword: String
+  let approverPin: String
 }
 
 struct RuntimeDiagnosis: Codable {
@@ -128,16 +156,24 @@ struct RuntimeDiagnosis: Codable {
   let release: String?
   let migrationHead: String?
   let faultCode: String?
+  let commissionRequired: Bool?
   let databaseVolumePresent: Bool?
   let photoVolumePresent: Bool?
   let composeReachable: Bool?
+  let maintenance: RuntimeMaintenanceDiagnosis?
+  let transferPhase: String?
+  let transferFaultCode: String?
 
   enum CodingKeys: String, CodingKey {
     case ok, project, release
     case migrationHead = "migration_head"
     case faultCode = "fault_code"
+    case commissionRequired = "commission_required"
     case databaseVolumePresent = "database_volume_present"
     case photoVolumePresent = "photo_volume_present"
     case composeReachable = "compose_reachable"
+    case maintenance
+    case transferPhase = "transfer_phase"
+    case transferFaultCode = "transfer_fault_code"
   }
 }

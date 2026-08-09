@@ -7,7 +7,7 @@ enum RuntimeBackupCodec {
   static let maximumArtifactBytes: Int64 = 137_438_953_472
   static let maximumBackups = 1_000
   private static let backupPattern =
-    "^(?:manual|safety)-[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9_-]{22}$"
+    "^(?:manual|scheduled|safety)-[0-9]{8}T[0-9]{6}Z-[A-Za-z0-9_-]{22}$"
   private static let digestPattern = "^[0-9a-f]{64}$"
   private static let timestampPattern =
     "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
@@ -36,7 +36,10 @@ enum RuntimeBackupCodec {
       let value = try? JSONDecoder().decode(RuntimeBackupManifest.self, from: data),
       value.version == 1, value.backupID == expectedBackupID,
       validBackupID(value.backupID),
-      [RuntimeBackupKind.manual, .preRestore, .preUpgrade, .preRollback].contains(value.kind),
+      [
+        RuntimeBackupKind.manual, .scheduled, .preRestore, .preUpgrade, .preRollback,
+        .preTransfer,
+      ].contains(value.kind),
       value.createdAt.range(of: timestampPattern, options: .regularExpression) != nil,
       ISO8601DateFormatter().date(from: value.createdAt) != nil,
       value.instanceID.range(
@@ -67,14 +70,16 @@ enum RuntimeBackupCodec {
       backupID: manifest.backupID, kind: manifest.kind, createdAt: manifest.createdAt,
       release: manifest.release, bytes: manifest.database.size + manifest.photos.size,
       manifestSHA256: manifestSHA256,
-      confirmation: try confirmation(manifestSHA256), verified: true, faultCode: nil)
+      confirmation: try confirmation(manifestSHA256), verified: true, faultCode: nil,
+      lanStatus: nil, lanFaultCode: nil)
   }
 
   static func invalidSummary(backupID: String, error: Error) -> RuntimeBackupSummary {
     RuntimeBackupSummary(
       backupID: backupID, kind: nil, createdAt: nil, release: nil, bytes: nil,
       manifestSHA256: nil, confirmation: nil, verified: false,
-      faultCode: (error as? RuntimeKitError)?.description ?? "RUNTIME_BACKUP_INVALID")
+      faultCode: (error as? RuntimeKitError)?.description ?? "RUNTIME_BACKUP_INVALID",
+      lanStatus: nil, lanFaultCode: nil)
   }
 
   private static func validFile(_ value: RuntimeBackupFile) -> Bool {

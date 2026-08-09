@@ -1,47 +1,19 @@
+import Darwin
 import Foundation
 
 extension NativeRuntimeController {
-  private var backupsRoot: URL {
+  var backupsRoot: URL {
     paths.root.appendingPathComponent("backups", isDirectory: true)
   }
 
-  private func backupDirectory(_ backupID: String) throws -> URL {
+  func backupDirectory(_ backupID: String) throws -> URL {
     guard RuntimeBackupCodec.validBackupID(backupID) else {
       try runtimeFail("RUNTIME_BACKUP_ID_INVALID")
     }
     return backupsRoot.appendingPathComponent(backupID, isDirectory: true)
   }
 
-  private func ensureBackupCapacity() throws {
-    let values = try backupsRoot.resourceValues(forKeys: [
-      .volumeAvailableCapacityForImportantUsageKey
-    ])
-    guard let available = values.volumeAvailableCapacityForImportantUsage,
-      available >= 536_870_912
-    else { try runtimeFail("RUNTIME_BACKUP_CAPACITY_LOW") }
-  }
-
-  private func backupTimestamp(_ date: Date) -> String {
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.timeZone = TimeZone(secondsFromGMT: 0)
-    formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
-    return formatter.string(from: date)
-  }
-
-  private func manifestTimestamp(_ date: Date) -> String {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime]
-    formatter.timeZone = TimeZone(secondsFromGMT: 0)
-    return formatter.string(from: date)
-  }
-
-  private func makeBackupID(kind: RuntimeBackupKind, now: Date) throws -> String {
-    let prefix = kind == .manual ? "manual" : "safety"
-    return "\(prefix)-\(backupTimestamp(now))-\(try RuntimeStorage.randomToken(bytes: 16))"
-  }
-
-  private func stream(
+  func stream(
     _ spec: RuntimeCommandSpec, input: RuntimeStreamInput? = nil,
     output: RuntimeStreamOutput? = nil, discardOutput: Bool = false
   ) throws {
@@ -52,7 +24,7 @@ extension NativeRuntimeController {
         timeoutSeconds: 3_600), accepting: [0])
   }
 
-  private func streamInput(_ file: RuntimeBackupFile, from directory: URL) -> RuntimeStreamInput {
+  func streamInput(_ file: RuntimeBackupFile, from directory: URL) -> RuntimeStreamInput {
     RuntimeStreamInput(
       url: directory.appendingPathComponent(file.name), size: file.size, sha256: file.sha256)
   }
@@ -71,11 +43,12 @@ extension NativeRuntimeController {
     else { try runtimeFail("RUNTIME_BACKUP_INCOMPATIBLE") }
   }
 
-  private func verifyBackupDirectory(
+  func verifyBackupDirectory(
     backupID: String, state: RuntimeState, payload: RuntimeManifestPayload,
-    inspectArtifacts: Bool
+    inspectArtifacts: Bool, directory: URL? = nil,
+    preservingValidationRoot preserved: URL? = nil
   ) throws -> RuntimeBackupSummary {
-    let directory = try backupDirectory(backupID)
+    let directory = try directory ?? backupDirectory(backupID)
     do { try RuntimeStorage.validateDirectory(directory) } catch {
       try runtimeFail("RUNTIME_BACKUP_INVALID")
     }
@@ -105,42 +78,45 @@ extension NativeRuntimeController {
     if inspectArtifacts {
       let env = environment(state, payload)
       try run(compose(["up", "-d", "--wait", "postgres"], environment: env))
-      try stream(
-        RuntimeBackupCommands.inspectDatabaseDump(controller: self, environment: env),
-        input: streamInput(manifest.database, from: directory), discardOutput: true)
-      try stream(
-        RuntimeBackupCommands.inspectPhotoArchive(
-          controller: self, image: payload.serverImage.index),
-        input: streamInput(manifest.photos, from: directory), discardOutput: true)
+      let validated = try RuntimeTransferPayloadValidation.validateBeforeRestore(
+        controller: self, directory: directory,
+        database: manifest.database, photos: manifest.photos,
+        postgresImage: payload.postgresImage,
+        migrationsSHA256: payload.migrationsSHA256,
+        preservingValidationRoot: preserved)
+      try RuntimePayloadValidationStaging.remove(validated.root)
     }
     return try RuntimeBackupCodec.summary(
       manifest: manifest, manifestSHA256: RuntimeManifestVerifier.sha256(manifestData))
   }
 
-  private func createManagedBackup(
+  func createManagedBackup(
     kind: RuntimeBackupKind, state: RuntimeState, payload: RuntimeManifestPayload,
-    restartAfter: Bool
+    restartAfter: Bool, preservingValidationRoot preserved: URL? = nil
   ) throws -> RuntimeBackupSummary {
     try assertVolumes(state)
     try assertImage(payload)
     try RuntimeStorage.ensureDirectory(backupsRoot)
-    let entries = try FileManager.default.contentsOfDirectory(atPath: backupsRoot.path)
-    guard entries.count < RuntimeBackupCodec.maximumBackups else {
-      try runtimeFail("RUNTIME_BACKUP_LIMIT_REACHED")
-    }
+    try RuntimeMaintenanceRetention.resumeStaging(paths)
+    try assertBackupSlotAvailable(kind: kind, state: state, payload: payload)
     try ensureBackupCapacity()
     let now = Date()
     let backupID = try makeBackupID(kind: kind, now: now)
-    let directory = try backupDirectory(backupID)
+    let stagingRoot = paths.root.appendingPathComponent("backup-staging", isDirectory: true)
+    try RuntimeStorage.ensureDirectory(stagingRoot)
+    let directory = stagingRoot.appendingPathComponent(backupID, isDirectory: true)
+    let destination = try backupDirectory(backupID)
     try RuntimeStorage.createExclusiveDirectory(directory)
     let env = environment(state, payload)
     var serverStopped = false
+    var published = false
     do {
       try run(compose(["stop", "server"], environment: env))
       serverStopped = true
       try run(compose(["up", "-d", "--wait", "postgres"], environment: env))
       try run(
         RuntimeBackupCommands.validatePhotos(controller: self, image: payload.serverImage.index))
+      try validatePhotoConsistency(state: state, payload: payload)
       let databaseURL = directory.appendingPathComponent(RuntimeBackupCodec.databaseName)
       try stream(
         RuntimeBackupCommands.dumpDatabase(controller: self, environment: env),
@@ -168,45 +144,84 @@ extension NativeRuntimeController {
         try RuntimeBackupCodec.encode(manifest),
         to: directory.appendingPathComponent(RuntimeBackupCodec.manifestName))
       let summary = try verifyBackupDirectory(
-        backupID: backupID, state: state, payload: payload, inspectArtifacts: true)
+        backupID: backupID, state: state, payload: payload, inspectArtifacts: true,
+        directory: directory, preservingValidationRoot: preserved)
+      guard Darwin.renamex_np(directory.path, destination.path, UInt32(RENAME_EXCL)) == 0 else {
+        try runtimeFail("RUNTIME_BACKUP_PUBLISH_FAILED")
+      }
+      published = true
+      try RuntimeStorage.syncParent(of: directory)
+      try RuntimeStorage.syncParent(of: destination)
       if restartAfter { try gates(state, payload, bootstrap: false) }
       return summary
     } catch {
+      var failure = error
+      if !published {
+        do { try RuntimeMaintenanceRetention.removeStagingDirectory(directory) } catch {
+          failure = error
+        }
+      }
       if restartAfter && serverStopped {
         do { try gates(state, payload, bootstrap: false) } catch {
           try runtimeFail("RUNTIME_BACKUP_SERVER_RESTART_FAILED")
         }
       }
-      throw error
+      throw failure
     }
   }
 
   func createBackup() throws -> RuntimeBackupSummary {
     try RuntimeStorage.validateDirectory(paths.root)
     return try RuntimeStorage.withMaintenanceLock(paths.root) {
+      try prepareForRuntimeMutation()
       let (state, payload) = try load()
-      return try createManagedBackup(
-        kind: .manual, state: state, payload: payload, restartAfter: true)
+      let restoreLan = releaseLanIntent()
+      try emergencyStopLanGateway()
+      let summary: RuntimeBackupSummary
+      do {
+        summary = try createManagedBackup(
+          kind: .manual, state: state, payload: payload, restartAfter: true)
+      } catch {
+        let failure = error
+        let outcome = settleLanAfterFailedRelease(
+          restore: restoreLan, state: state, payload: payload)
+        try requireKnownLanMaintenanceOutcome(outcome)
+        throw failure
+      }
+      let outcome = releaseLanOutcome(restore: restoreLan, state: state, payload: payload)
+      try requireKnownLanMaintenanceOutcome(outcome)
+      return summary.withLanOutcome(status: outcome.status, faultCode: outcome.faultCode)
     }
+  }
+
+  func listBackupsUnlocked(
+    state: RuntimeState, payload: RuntimeManifestPayload
+  ) throws -> [RuntimeBackupSummary] {
+    try RuntimeStorage.ensureDirectory(backupsRoot)
+    let entries = try FileManager.default.contentsOfDirectory(atPath: backupsRoot.path)
+    guard entries.count <= RuntimeBackupCodec.maximumBackups + 1,
+      entries.allSatisfy(RuntimeBackupCodec.validBackupID)
+    else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
+    let summaries = entries.sorted(by: >).map { backupID in
+      do {
+        return try verifyBackupDirectory(
+          backupID: backupID, state: state, payload: payload, inspectArtifacts: false)
+      } catch {
+        return RuntimeBackupCodec.invalidSummary(backupID: backupID, error: error)
+      }
+    }
+    guard
+      entries.count <= RuntimeBackupCodec.maximumBackups
+        || RuntimeMaintenanceRetention.canRecoverOverflow(summaries)
+    else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
+    return summaries
   }
 
   func listBackups() throws -> [RuntimeBackupSummary] {
     try RuntimeStorage.validateDirectory(paths.root)
     return try RuntimeStorage.withMaintenanceLock(paths.root) {
       let (state, payload) = try load()
-      try RuntimeStorage.ensureDirectory(backupsRoot)
-      let entries = try FileManager.default.contentsOfDirectory(atPath: backupsRoot.path)
-      guard entries.count <= RuntimeBackupCodec.maximumBackups,
-        entries.allSatisfy(RuntimeBackupCodec.validBackupID)
-      else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
-      return entries.sorted(by: >).map { backupID in
-        do {
-          return try verifyBackupDirectory(
-            backupID: backupID, state: state, payload: payload, inspectArtifacts: false)
-        } catch {
-          return RuntimeBackupCodec.invalidSummary(backupID: backupID, error: error)
-        }
-      }
+      return try listBackupsUnlocked(state: state, payload: payload)
     }
   }
 
@@ -219,47 +234,18 @@ extension NativeRuntimeController {
     }
   }
 
-  func restoreBackup(_ request: RuntimeRestoreRequest) throws -> RuntimeRestoreResult {
-    try RuntimeStorage.validateDirectory(paths.root)
-    return try RuntimeStorage.withMaintenanceLock(paths.root) {
-      let (state, payload) = try load()
-      let selected = try verifyBackupDirectory(
-        backupID: request.backupID, state: state, payload: payload, inspectArtifacts: true)
-      guard selected.confirmation == request.confirmation else {
-        try runtimeFail("RUNTIME_RESTORE_CONFIRMATION_INVALID")
-      }
-      try assertVolumes(state)
-      try assertImage(payload)
-      let env = environment(state, payload)
-      try run(compose(["stop", "server"], environment: env))
-      let safety = try createManagedBackup(
-        kind: .preRestore, state: state, payload: payload, restartAfter: false)
-      _ = try verifyBackupDirectory(
-        backupID: safety.backupID, state: state, payload: payload, inspectArtifacts: true)
-      _ = try verifyBackupDirectory(
-        backupID: request.backupID, state: state, payload: payload, inspectArtifacts: true)
-      let directory = try backupDirectory(request.backupID)
-      let manifestData = try RuntimeStorage.readPrivate(
-        directory.appendingPathComponent(RuntimeBackupCodec.manifestName))
-      let manifest = try RuntimeBackupCodec.decode(
-        manifestData, expectedBackupID: request.backupID)
-      try stream(
-        RuntimeBackupCommands.restoreDatabase(controller: self, environment: env),
-        input: streamInput(manifest.database, from: directory), discardOutput: true)
-      try run(compose(["run", "--rm", "roles"], environment: env))
-      try run(compose(["run", "--rm", "migrate"], environment: env))
-      try run(compose(["run", "--rm", "verify"], environment: env))
-      try run(RuntimeBackupCommands.clearPhotos(controller: self, image: payload.serverImage.index))
-      try stream(
-        RuntimeBackupCommands.restorePhotos(controller: self, image: payload.serverImage.index),
-        input: streamInput(manifest.photos, from: directory), discardOutput: true)
-      try run(
-        RuntimeBackupCommands.validatePhotos(controller: self, image: payload.serverImage.index))
-      try gates(state, payload, bootstrap: false)
-      return RuntimeRestoreResult(
-        status: "ready", release: payload.release, backupID: request.backupID,
-        safetyBackupID: safety.backupID)
-    }
+  func verifiedBackupForTransfer(
+    _ backupID: String, state: RuntimeState, payload: RuntimeManifestPayload
+  ) throws -> RuntimeVerifiedBackup {
+    let summary = try verifyBackupDirectory(
+      backupID: backupID, state: state, payload: payload, inspectArtifacts: true)
+    guard summary.verified else { try runtimeFail("RUNTIME_BACKUP_INVALID") }
+    let directory = try backupDirectory(backupID)
+    let manifestData = try RuntimeStorage.readPrivate(
+      directory.appendingPathComponent(RuntimeBackupCodec.manifestName), maximum: 65_536)
+    let manifest = try RuntimeBackupCodec.decode(manifestData, expectedBackupID: backupID)
+    return RuntimeVerifiedBackup(
+      directory: directory, manifestData: manifestData, manifest: manifest, summary: summary)
   }
 
   func createReleaseSafetyBackup(
@@ -269,14 +255,27 @@ extension NativeRuntimeController {
       try runtimeFail("RUNTIME_BACKUP_INVALID")
     }
     runner.setManifest(payload)
+    try emergencyStopLanGateway()
     return try createManagedBackup(
       kind: kind, state: state, payload: payload, restartAfter: false)
+  }
+
+  func createTransferSafetyBackup(
+    state: RuntimeState, payload: RuntimeManifestPayload,
+    preservingValidationRoot preserved: URL
+  ) throws -> RuntimeBackupSummary {
+    runner.setManifest(payload)
+    try emergencyStopLanGateway()
+    return try createManagedBackup(
+      kind: .preTransfer, state: state, payload: payload, restartAfter: false,
+      preservingValidationRoot: preserved)
   }
 
   func restoreReleaseSafetyBackup(
     _ backupID: String, state: RuntimeState, payload: RuntimeManifestPayload
   ) throws {
     runner.setManifest(payload)
+    try emergencyStopLanGateway()
     try assertVolumes(state)
     try assertImage(payload)
     let env = environment(state, payload)
@@ -287,18 +286,28 @@ extension NativeRuntimeController {
     let manifestData = try RuntimeStorage.readPrivate(
       directory.appendingPathComponent(RuntimeBackupCodec.manifestName))
     let manifest = try RuntimeBackupCodec.decode(manifestData, expectedBackupID: backupID)
-    try stream(
-      RuntimeBackupCommands.restoreDatabase(controller: self, environment: env),
-      input: streamInput(manifest.database, from: directory), discardOutput: true)
-    try run(compose(["run", "--rm", "roles"], environment: env))
-    try run(compose(["run", "--rm", "migrate"], environment: env))
-    try run(compose(["run", "--rm", "verify"], environment: env))
-    try run(RuntimeBackupCommands.clearPhotos(controller: self, image: payload.serverImage.index))
-    try stream(
-      RuntimeBackupCommands.restorePhotos(controller: self, image: payload.serverImage.index),
-      input: streamInput(manifest.photos, from: directory), discardOutput: true)
-    try run(
-      RuntimeBackupCommands.validatePhotos(controller: self, image: payload.serverImage.index))
-    try gates(state, payload, bootstrap: false)
+    let validated = try RuntimeTransferPayloadValidation.validateBeforeRestore(
+      controller: self, directory: directory, database: manifest.database,
+      photos: manifest.photos, postgresImage: payload.postgresImage,
+      migrationsSHA256: payload.migrationsSHA256)
+    do {
+      try importSanitizedDatabase(
+        from: validated.sanitizedDatabase, state: state, payload: payload)
+      try RuntimePayloadValidationStaging.remove(validated.root)
+      try run(
+        RuntimeBackupCommands.clearPhotos(controller: self, image: payload.serverImage.index))
+      try stream(
+        RuntimeBackupCommands.restorePhotos(controller: self, image: payload.serverImage.index),
+        input: streamInput(manifest.photos, from: directory), discardOutput: true)
+      try run(
+        RuntimeBackupCommands.validatePhotos(controller: self, image: payload.serverImage.index))
+      try validatePhotoConsistency(state: state, payload: payload)
+      try gates(state, payload, bootstrap: false)
+    } catch {
+      let failure = error
+      try? RuntimePayloadValidationStaging.remove(validated.root)
+      try stopServerAfterUnsafeMaintenance(state: state, payload: payload)
+      throw failure
+    }
   }
 }

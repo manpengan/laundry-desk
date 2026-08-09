@@ -29,10 +29,13 @@ files:
   - dist/desktop/http-transport-ports.js
   - dist/desktop/http-transport-support.js
   - dist/desktop/print-http-transport.js
+  - dist/desktop/printer-operation.js
   - dist/desktop/request-builder.js
+  - dist/desktop/staff-setup-operation.js
   - dist/drivers/render/code128-width.js
   - dist/drivers/render/money-gbk.js
   - dist/print/continuity.js
+  - dist/print/configured-runtime.js
   - dist/print/cups-process.js
   - dist/print/cups-queue.js
   - dist/print/cups-worker.js
@@ -43,10 +46,15 @@ files:
   - dist/print/durable-json-file.js
   - dist/print/escpos-xp58.js
   - dist/print/execution-gate.js
+  - dist/print/mac-printer-pilot.js
+  - dist/print/main-runtime.js
+  - dist/print/printer-config.js
+  - dist/print/printer-smoke.js
   - dist/print/runtime.js
   - dist/print/signed-executor.js
   - dist/print/snapshot-render.js
   - dist/print/template-render.js
+  - dist/print/usb-port.js
   - dist/queue/crypto.js
   - dist/queue/dek-kek.js
   - dist/queue/file-store.js

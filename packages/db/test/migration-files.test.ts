@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0044", () => {
+  it("ships formal SQL migrations ordered 0001 → 0045", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -56,6 +56,7 @@ describe("packages/db migration file inventory", () => {
       "0042_durable_pending_actions.sql",
       "0043_receipt_and_member_bonus_integrity.sql",
       "0044_durable_step_up_proofs.sql",
+      "0045_store_commissioning_staff_credentials.sql",
     ]);
   });
 
@@ -112,6 +113,7 @@ describe("packages/db migration file inventory", () => {
       "0042",
       "0043",
       "0044",
+      "0045",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -221,6 +223,72 @@ describe("packages/db migration file inventory", () => {
     expect(sql).toMatch(/step_up_proofs_session_idx[\s\S]*\(org_id, store_id, session_id\)/iu);
     expect(sql).toMatch(/FORCE ROW LEVEL SECURITY/iu);
     expect(sql).toMatch(/GRANT SELECT, INSERT, UPDATE ON TABLE step_up_proofs TO laundry_app/iu);
+  });
+
+  it("persists permanent commissioning state and non-secret credential setup authority", () => {
+    const sql = readFileSync(
+      join(migrationsDir, "0045_store_commissioning_staff_credentials.sql"),
+      "utf8",
+    );
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS approver_staff_id uuid/iu);
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS commissioned_at timestamptz/iu);
+    expect(sql).toMatch(/feature_profile_version integer NOT NULL DEFAULT 0/iu);
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.laundry_local_bootstrap_ready/iu);
+    const baseReadiness = sql.match(
+      /CREATE OR REPLACE FUNCTION public\.laundry_local_bootstrap_ready[\s\S]*?\$\$;/iu,
+    )?.[0];
+    const commissioningState = sql.match(
+      /CREATE OR REPLACE FUNCTION public\.laundry_local_commissioning_state[\s\S]*?\$\$;/iu,
+    )?.[0];
+    expect(baseReadiness).toBeDefined();
+    expect(baseReadiness).not.toMatch(/metadata\.approver_staff_id IS NOT NULL/iu);
+    expect(baseReadiness).not.toMatch(/metadata\.commissioned_at IS NOT NULL/iu);
+    expect(baseReadiness).not.toMatch(/metadata\.feature_profile_version = 1/iu);
+    expect(commissioningState).toMatch(
+      /metadata\.approver_staff_id = expected_approver_staff_id/iu,
+    );
+    expect(commissioningState).toMatch(/metadata\.commissioned_at IS NOT NULL/iu);
+    expect(commissioningState).toMatch(
+      /metadata\.feature_profile_version = expected_feature_profile_version/iu,
+    );
+    expect(commissioningState).toMatch(/THEN 'commission_required'/iu);
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS staff_credential_setups/iu);
+    expect(sql).toMatch(/purpose IN \('create', 'reset'\)/iu);
+    expect(sql).toMatch(/status IN \('pending', 'consumed', 'expired'\)/iu);
+    expect(sql).toMatch(/staff_credential_setups_target_pending_uidx/iu);
+    expect(sql).toMatch(/FORCE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(
+      /GRANT SELECT, INSERT, UPDATE ON TABLE staff_credential_setups TO laundry_app/iu,
+    );
+    expect(sql).toMatch(
+      /sessions_active_staff_idx[\s\S]*ON public\.sessions \(org_id, staff_id\)[\s\S]*WHERE status = 'active'/iu,
+    );
+    expect(sql).toMatch(/sessions_staff_idx[\s\S]*ON public\.sessions \(org_id, staff_id\)/iu);
+    expect(sql).toMatch(
+      /refresh_families_active_org_session_idx[\s\S]*\(org_id, session_id\)[\s\S]*WHERE status = 'active'/iu,
+    );
+    expect(sql).toMatch(
+      /refresh_tokens_active_org_session_idx[\s\S]*\(org_id, session_id\)[\s\S]*WHERE status = 'active'/iu,
+    );
+    const sessionRevocation = sql.slice(
+      sql.indexOf("CREATE OR REPLACE FUNCTION public.laundry_revoke_staff_sessions"),
+    );
+    expect(sessionRevocation).toMatch(/SECURITY DEFINER/iu);
+    expect(sessionRevocation).toMatch(/STRICT/iu);
+    expect(sessionRevocation).toMatch(/SET search_path = pg_catalog, pg_temp/iu);
+    expect(sessionRevocation).toMatch(/current_setting\('app\.org_id'/iu);
+    expect(sessionRevocation).toMatch(/actor_role\.role = 'admin'/iu);
+    expect(sessionRevocation).toMatch(
+      /session\.org_id = expected_org_id[\s\S]*session\.staff_id = expected_target_staff_id/iu,
+    );
+    expect(sessionRevocation).not.toMatch(/store_id IN|session\.store_id = expected_store_id/iu);
+    expect(sql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.laundry_revoke_staff_sessions[\s\S]*FROM PUBLIC/iu,
+    );
+    expect(sql).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.laundry_revoke_staff_sessions[\s\S]*TO laundry_app, laundry_owner/iu,
+    );
+    expect(sql).not.toMatch(/password|pin_hash|password_hash|credential_hash/iu);
   });
 
   it("adds order.list indexes after the garment photos migration", () => {

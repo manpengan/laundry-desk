@@ -44,6 +44,8 @@ enum RuntimeStorage {
   static let bootstrapSecrets = [
     "bootstrap-admin-username", "bootstrap-admin-display-name",
     "bootstrap-admin-password", "bootstrap-admin-pin",
+    "bootstrap-approver-username", "bootstrap-approver-display-name",
+    "bootstrap-approver-password", "bootstrap-approver-pin",
   ]
   static let allSecrets = longLivedSecrets + bootstrapSecrets
 
@@ -72,6 +74,7 @@ enum RuntimeStorage {
       else { return }
       Darwin._exit(86)
     }
+
   #endif
 
   private static func metadata(_ path: String) -> stat? {
@@ -95,7 +98,7 @@ enum RuntimeStorage {
       && left.st_ctimespec.tv_nsec == right.st_ctimespec.tv_nsec
   }
 
-  private static func fsyncDirectory(_ url: URL) throws {
+  static func fsyncDirectory(_ url: URL) throws {
     let descriptor = Darwin.open(url.path, O_RDONLY | O_DIRECTORY)
     guard descriptor >= 0 else { try runtimeFail("RUNTIME_PRIVATE_PATH_INVALID") }
     defer { Darwin.close(descriptor) }
@@ -279,6 +282,13 @@ enum RuntimeStorage {
   }
 
   static func writeExclusive(_ data: Data, to url: URL) throws {
+    #if RUNTIME_TESTING
+      if ProcessInfo.processInfo.environment["LAUNDRY_RUNTIME_TEST_FAIL_PRIVATE_WRITE"]
+        == url.lastPathComponent
+      {
+        try runtimeFail("RUNTIME_PRIVATE_PATH_INVALID")
+      }
+    #endif
     let descriptor = Darwin.open(url.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
     guard descriptor >= 0 else { try runtimeFail("RUNTIME_PRIVATE_PATH_INVALID") }
     var offset = 0
@@ -297,6 +307,9 @@ enum RuntimeStorage {
   }
 
   static func atomicWrite(_ data: Data, to url: URL) throws {
+    #if RUNTIME_TESTING
+      try failRuntimeAtomicWriteIfRequested(url)
+    #endif
     let temporary = url.deletingLastPathComponent()
       .appendingPathComponent(".\(url.lastPathComponent).\(try randomToken()).tmp")
     try writeExclusive(data, to: temporary)
@@ -343,16 +356,6 @@ enum RuntimeStorage {
     }
   }
 
-  static func removeBootstrapSecrets(_ root: URL) throws {
-    for name in bootstrapSecrets {
-      let path = root.appendingPathComponent(name).path
-      if Darwin.unlink(path) != 0 && errno != ENOENT {
-        try runtimeFail("RUNTIME_PRIVATE_PATH_INVALID")
-      }
-    }
-    try fsyncDirectory(root)
-  }
-
   static func buildSecrets(_ setup: RuntimeSetup) throws -> [String: String] {
     let postgres = try randomToken()
     let app = try randomToken()
@@ -367,6 +370,11 @@ enum RuntimeStorage {
       "bootstrap-admin-display-name": setup.adminDisplayName,
       "bootstrap-admin-password": setup.adminPassword,
       "bootstrap-admin-pin": setup.adminPin,
+      "bootstrap-approver-username": setup.approverUsername,
+      "bootstrap-approver-display-name": setup.approverDisplayName,
+      "bootstrap-approver-password": setup.approverPassword,
+      "bootstrap-approver-pin": setup.approverPin,
     ]
   }
+
 }

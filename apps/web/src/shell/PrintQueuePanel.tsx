@@ -1,6 +1,6 @@
 /**
  * Small print queue dialog: recent jobs from print.jobs.list.
- * Failed → 重试 (print.ticket.retry); done → 补打 (print.ticket.reprint).
+ * Failed/uncertain → explicit retry; done → explicit reprint.
  */
 
 import { Button, Dialog, useToast } from "@laundry/ui";
@@ -77,18 +77,21 @@ export function PrintQueuePanel({
     async (job: PrintJobView, action: RequeueAction) => {
       setBusyJobId(job.job_id);
       setError(null);
-      const res = await commandClient.execute<unknown>(commandNameFor(action), {
-        job_id: job.job_id,
-      });
-      setBusyJobId(null);
-      if (!res.ok) {
-        const message = res.error.message ?? res.error.code;
-        setError(message);
-        toast.push(message, "error");
-        return;
+      try {
+        const res = await commandClient.execute<unknown>(commandNameFor(action), {
+          job_id: job.job_id,
+        });
+        if (!res.ok) {
+          const message = res.error.message ?? res.error.code;
+          setError(message);
+          toast.push(message, "error");
+          return;
+        }
+        toast.push(successMessage(action, job.ticket_no), "success");
+        await refresh();
+      } finally {
+        setBusyJobId(null);
       }
-      toast.push(successMessage(action, job.ticket_no), "success");
-      await refresh();
     },
     [commandClient, refresh, toast],
   );
@@ -151,18 +154,27 @@ export function PrintQueuePanel({
                   <span className="ld-print-queue__status">{printJobStatusLabel(job.status)}</span>
                 </div>
                 {job.error ? <p className="ld-print-queue__job-error">{job.error}</p> : null}
-                {job.status === "failed" || job.status === "done" ? (
+                {job.status === "uncertain" ? (
+                  <p className="ld-print-queue__job-error" role="alert">
+                    可能已经出纸。请先检查纸张，再决定是否手动重试；系统不会自动重复打印。
+                  </p>
+                ) : null}
+                {job.status === "failed" || job.status === "uncertain" || job.status === "done" ? (
                   <div className="ld-print-queue__actions">
-                    {job.status === "failed" ? (
+                    {job.status !== "done" ? (
                       <Button
                         variant="secondary"
                         size="sm"
                         type="button"
                         data-action="retry"
-                        disabled={busyJobId !== null}
+                        disabled={loading || busyJobId !== null}
                         onClick={() => void onRequeue(job, "retry")}
                       >
-                        {busyJobId === job.job_id ? "重试中…" : "重试"}
+                        {busyJobId === job.job_id
+                          ? "重试中…"
+                          : job.status === "uncertain"
+                            ? "检查纸张后重试"
+                            : "重试"}
                       </Button>
                     ) : (
                       <Button
@@ -170,7 +182,7 @@ export function PrintQueuePanel({
                         size="sm"
                         type="button"
                         data-action="reprint"
-                        disabled={busyJobId !== null}
+                        disabled={loading || busyJobId !== null}
                         onClick={() => void onRequeue(job, "reprint")}
                       >
                         {busyJobId === job.job_id ? "补打中…" : "补打"}

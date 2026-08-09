@@ -1,4 +1,9 @@
-import type { LoginFormValues, PinChallengeRequest, PinVerifyRequest } from "../auth/types.js";
+import type {
+  LoginFormValues,
+  PinChallengeRequest,
+  PinVerifyRequest,
+  StaffCredentialsCompleteInput,
+} from "../auth/types.js";
 import type { PhotoReadVariant, PhotoUploadInput } from "./photo-port.js";
 
 export type DesktopCommandInput =
@@ -31,6 +36,7 @@ export type LaundryDesktopBridge = Readonly<{
     refresh: () => Promise<unknown>;
     pinChallenge: (input: PinChallengeRequest) => Promise<unknown>;
     pinVerify: (input: PinVerifyRequest) => Promise<unknown>;
+    credentialComplete?: (input: StaffCredentialsCompleteInput) => Promise<unknown>;
     logout: () => Promise<unknown>;
   }>;
   command: Readonly<{
@@ -57,6 +63,12 @@ export type LaundryDesktopBridge = Readonly<{
             confirm: "DISCARD";
           }>,
     ) => Promise<unknown>;
+  }>;
+  printer?: Readonly<{
+    discover: () => Promise<unknown>;
+    status: () => Promise<unknown>;
+    configure: (input: Readonly<{ queue: string | null }>) => Promise<unknown>;
+    test: () => Promise<unknown>;
   }>;
   health: Readonly<{
     get: () => Promise<unknown>;

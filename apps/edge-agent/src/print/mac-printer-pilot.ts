@@ -1,8 +1,8 @@
-import { execFile as nodeExecFile, spawn as nodeSpawn } from "node:child_process";
+import { spawn as nodeSpawn } from "node:child_process";
 import { createHash } from "node:crypto";
 
 import { isCupsQueueName } from "./cups-queue.js";
-import { parseCupsJobReference } from "./cups-process.js";
+import { discoverCupsQueues, parseCupsJobReference } from "./cups-process.js";
 import { buildPrinterSmokePayload } from "./printer-smoke.js";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -28,14 +28,6 @@ export type MacPrinterPilotDependencies = Readonly<{
     timeoutMs: number,
   ) => Promise<string>;
 }>;
-
-const capture = async (file: string, args: readonly string[]): Promise<string> =>
-  await new Promise((resolveCapture, rejectCapture) => {
-    nodeExecFile(file, [...args], { encoding: "utf8", maxBuffer: 64 * 1024 }, (error, stdout) => {
-      if (error !== null) rejectCapture(error);
-      else resolveCapture(stdout);
-    });
-  });
 
 const printBytes = async (
   file: string,
@@ -100,8 +92,10 @@ async function discoverQueues(
   if ((dependencies.platform ?? process.platform) !== "darwin") {
     throw new Error("macOS printer pilot requires Darwin");
   }
-  const output = await (dependencies.capture ?? capture)("/usr/bin/lpstat", ["-e"]);
-  return parseQueues(output);
+  if (dependencies.capture !== undefined) {
+    return parseQueues(await dependencies.capture("/usr/bin/lpstat", ["-e"]));
+  }
+  return await discoverCupsQueues();
 }
 
 export async function runMacPrinterPilot(

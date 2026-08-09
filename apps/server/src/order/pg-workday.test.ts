@@ -12,7 +12,8 @@ import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { createPgCatalogStore } from "../catalog/pg-catalog-store.js";
 import { createPgCustomerStore } from "../customer/pg-customer-store.js";
 import { createPgFulfillmentStore } from "../fulfillment/pg-store.js";
-import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
+import { DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
+import { PG_TEST_STAFF_B_ID } from "../local/pg-test-fixture.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
 import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
 import { createPgMemberDeps } from "../member/runtime.js";
@@ -23,52 +24,25 @@ import { processPendingActionStore } from "../pending-actions/process-store.js";
 import { createStepUpProof } from "../policy/step-up.js";
 import { MemoryStepUpProofStore } from "../policy/step-up-proof-store.js";
 import { createPgOrderStore } from "./pg-order-store.js";
+import {
+  ACTOR,
+  CUSTOMER_PHONE,
+  FIXED_BUSINESS_DATE,
+  PAYABLE_CENTS,
+  PRICING,
+  TARGET_CUSTOMER_PHONE,
+  TENANT,
+  UNIT_PRICE_CENTS,
+  fixedNow,
+} from "./pg-workday-test-context.js";
+
+const APPROVER: ActorContext = Object.freeze({ ...ACTOR, staffId: PG_TEST_STAFF_B_ID });
 
 const urls =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true"
     ? resolvePgUrls(process.env)
     : null;
 const maybe = urls === null ? test.skip : test;
-
-const TENANT: TenantContext = Object.freeze({
-  orgId: DEMO_ORG_ID,
-  storeId: DEMO_STORE_ID,
-  staffId: DEMO_STAFF_A_ID,
-});
-
-const ACTOR: ActorContext = Object.freeze({
-  staffId: DEMO_STAFF_A_ID,
-  deviceId: null,
-  via: "ui",
-  permissions: Object.freeze([
-    "customer_write",
-    "order_write",
-    "payment_write",
-    "payment_refund",
-    "shift_close",
-  ]),
-});
-const APPROVER: ActorContext = Object.freeze({ ...ACTOR, staffId: DEMO_STAFF_B_ID });
-
-const UNIT_PRICE_CENTS = 1_000;
-const PRICING = Object.freeze({
-  discount_cents: 100,
-  addon_cents: 200,
-  urgent_cents: 300,
-  freight_cents: 400,
-});
-const PAYABLE_CENTS =
-  2 * UNIT_PRICE_CENTS -
-  PRICING.discount_cents +
-  PRICING.addon_cents +
-  PRICING.urgent_cents +
-  PRICING.freight_cents;
-const FIXED_BUSINESS_DATE = "2026-01-15";
-const CUSTOMER_PHONE = `139${String(Date.parse("2026-07-28") % 100_000_000).padStart(8, "0")}`;
-const TARGET_CUSTOMER_PHONE = `138${CUSTOMER_PHONE.slice(3)}`;
-
-const FIXED_CLOCK_EPOCH_SECONDS = Math.floor(Date.parse("2026-01-15T03:00:00Z") / 1000);
-const fixedNow = (): number => FIXED_CLOCK_EPOCH_SECONDS;
 
 maybe("PG counter workday: receive, repay, pickup and close settle on real ledgers", async () => {
   assert.ok(urls);

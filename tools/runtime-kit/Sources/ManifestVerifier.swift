@@ -10,13 +10,16 @@ enum RuntimeManifestVerifier {
   private static let semver =
     "^(?:0|[1-9][0-9]{0,8})\\.(?:0|[1-9][0-9]{0,8})\\.(?:0|[1-9][0-9]{0,8})(?:-[0-9A-Za-z.-]{1,64})?$"
 
-  private static let payloadKeys: Set<String> = [
+  private static let basePayloadKeys: Set<String> = [
     "schema_version", "product", "release", "contracts_major", "contracts_sha256",
     "server_version", "web_bundle_sha256", "minimum_app_version",
     "database_schema_sha256", "migrations_sha256", "migration_head",
     "maximum_compatible_schema", "rollback_target", "compose_sha256", "server_image",
     "postgres_major", "postgres_image",
   ]
+  private static let v2PayloadKeys = basePayloadKeys.union([
+    "lan_compose_sha256", "owner_spa_sha256",
+  ])
 
   private static func matches(_ value: String, _ pattern: String) -> Bool {
     value.range(of: pattern, options: .regularExpression) != nil
@@ -59,11 +62,13 @@ enum RuntimeManifestVerifier {
   private static func validateStructure(_ root: [String: Any], payload: RuntimeManifestPayload)
     throws
   {
+    let expectedKeys = payload.schemaVersion == 1 ? basePayloadKeys : v2PayloadKeys
     guard Set(root.keys) == ["payload", "signature"],
-      let rawPayload = root["payload"], exactKeys(rawPayload, payloadKeys),
+      [1, 2].contains(payload.schemaVersion),
+      let rawPayload = root["payload"], exactKeys(rawPayload, expectedKeys),
       let server = (rawPayload as? [String: Any])?["server_image"],
       exactKeys(server, ["index", "linux_arm64", "linux_amd64"]),
-      payload.schemaVersion == 1, payload.product == "laundry-desk-runtime",
+      payload.product == "laundry-desk-runtime",
       payload.contractsMajor > 0, payload.postgresMajor == 16,
       matches(payload.release, semver), payload.serverVersion == payload.release,
       matches(payload.minimumAppVersion, semver),
@@ -79,6 +84,17 @@ enum RuntimeManifestVerifier {
       matches(payload.serverImage.linuxAmd64, digest),
       matches(payload.postgresImage, digestReference)
     else { try runtimeFail("RUNTIME_MANIFEST_INVALID") }
+
+    if payload.schemaVersion == 1 {
+      guard payload.lanComposeSHA256 == nil, payload.ownerSPASHA256 == nil else {
+        try runtimeFail("RUNTIME_MANIFEST_INVALID")
+      }
+    } else {
+      guard let lanComposeSHA256 = payload.lanComposeSHA256,
+        let ownerSPASHA256 = payload.ownerSPASHA256,
+        matches(lanComposeSHA256, checksum), matches(ownerSPASHA256, checksum)
+      else { try runtimeFail("RUNTIME_MANIFEST_INVALID") }
+    }
 
     if let rollback = payload.rollbackTarget {
       guard let rawRollback = (rawPayload as? [String: Any])?["rollback_target"],

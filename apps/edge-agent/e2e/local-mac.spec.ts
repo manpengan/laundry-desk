@@ -37,6 +37,12 @@ function requiredEnvironment(name: string): string {
   return value;
 }
 
+function requiredSecretEnvironment(name: string): string {
+  const value = process.env[name];
+  if (value === undefined || value.length === 0) throw new Error(`${name} is required`);
+  return value;
+}
+
 const APP_PATH = requiredEnvironment("LAUNDRY_MAC_APP_PATH");
 const USER_DATA_PATH = requiredEnvironment("LAUNDRY_MAC_USER_DATA_DIR");
 const CONFIG_PATH = requiredEnvironment("LAUNDRY_LOCAL_CONFIG_DIR");
@@ -46,8 +52,8 @@ const LOGIN = Object.freeze({
   storeCode: requiredEnvironment("LAUNDRY_LOCAL_STORE_CODE"),
   username: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_USERNAME"),
   displayName: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME"),
-  password: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD"),
-  pin: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PIN"),
+  password: requiredSecretEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD"),
+  pin: requiredSecretEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PIN"),
 });
 const MAC_CATALOG = Object.freeze({
   code: "mac_wash_shirt",
@@ -591,7 +597,14 @@ test("packaged app recovers from an unavailable local service with a token-free 
           JSON.stringify(Object.keys(bridge).sort()) ===
             JSON.stringify(["auth", "command", "health", "offline", "photo", "query"]) &&
           JSON.stringify(Object.keys(bridge.auth).sort()) ===
-            JSON.stringify(["login", "logout", "pinChallenge", "pinVerify", "refresh"]) &&
+            JSON.stringify([
+              "credentialComplete",
+              "login",
+              "logout",
+              "pinChallenge",
+              "pinVerify",
+              "refresh",
+            ]) &&
           Object.keys(bridge.command).join() === "execute" &&
           Object.keys(bridge.query).join() === "execute" &&
           JSON.stringify(Object.keys(bridge.photo).sort()) ===

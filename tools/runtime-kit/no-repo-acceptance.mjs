@@ -9,7 +9,6 @@ import {
   mkdtemp,
   readFile,
   readdir,
-  rm,
   stat,
   unlink,
   writeFile,
@@ -17,10 +16,12 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-
+import { runLegacyCommissionAcceptance } from "./no-repo-commissioning.mjs";
+import { registerKeyCleanup, setup, waitForFile } from "./no-repo-helpers.mjs";
 const kitRoot = dirname(fileURLToPath(import.meta.url));
 const builtApp = join(kitRoot, "dist/Laundry Desk Runtime Test.app");
 const privateKeyPath = join(kitRoot, "dist/test-signing-private.pem");
+registerKeyCleanup(process.argv.slice(2), privateKeyPath);
 const temporary = await mkdtemp(join(tmpdir(), "laundry-runtime-native-"));
 const emptyCwd = join(temporary, "empty-cwd");
 const copiedApp = join(temporary, "Laundry Desk Runtime Test.app");
@@ -72,7 +73,6 @@ const writeManifest = async (name, value, signature = signPayload(value)) => {
 };
 const signature = signPayload(payload);
 const manifest = await writeManifest("runtime-manifest.json", payload, signature);
-
 const execute = (configRoot, runnerLog, args, input = "", extraEnvironment = {}) =>
   new Promise((resolveRun, rejectRun) => {
     const child = spawn(
@@ -99,26 +99,6 @@ const execute = (configRoot, runnerLog, args, input = "", extraEnvironment = {})
     });
     child.stdin.end(input);
   });
-
-const waitForFile = async (path) => {
-  for (let attempt = 0; attempt < 500; attempt += 1) {
-    try {
-      await stat(path);
-      return;
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-      await new Promise((resolveWait) => setTimeout(resolveWait, 10));
-    }
-  }
-  throw new Error(`timed out waiting for ${path}`);
-};
-
-const setup = JSON.stringify({
-  adminUsername: "owner",
-  adminDisplayName: "店长",
-  adminPassword: "native-acceptance-password",
-  adminPin: "86420987",
-});
 const assertManifestRejected = async (name, candidate, expected) => {
   const configRoot = join(temporary, `config-manifest-${name}`);
   const runnerLog = join(temporary, `manifest-${name}-runner.jsonl`);
@@ -143,7 +123,6 @@ const tamperPhotoVolume = async (runnerLog) => {
   await writeFile(path, JSON.stringify(volumes), { mode: 0o600 });
   return async () => writeFile(path, original, { mode: 0o600 });
 };
-
 const tamperedManifest = await writeManifest(
   "runtime-manifest-tampered.json",
   { ...payload, web_bundle_sha256: repeated("9") },
@@ -215,7 +194,6 @@ const belowAcceptedFloorManifest = await writeManifest("runtime-manifest-0.1.5.j
   release: "0.1.5",
   server_version: "0.1.5",
 });
-
 for (const [name, candidate, expected] of [
   ["tampered", tamperedManifest, /RUNTIME_MANIFEST_SIGNATURE_INVALID/u],
   ["newer-app", newerAppManifest, /RUNTIME_MANIFEST_INCOMPATIBLE/u],
@@ -225,7 +203,6 @@ for (const [name, candidate, expected] of [
 ]) {
   await assertManifestRejected(name, candidate, expected);
 }
-
 const preexistingRoot = join(temporary, "config-preexisting-photo");
 const preexistingLog = join(temporary, "preexisting-runner.jsonl");
 await writeFile(
@@ -248,7 +225,6 @@ let result = await execute(
 assert.equal(result.code, 1);
 assert.match(result.stderr, /RUNTIME_RECOVERY_REQUIRED/u);
 await assert.rejects(() => stat(join(preexistingRoot, "state.json")), { code: "ENOENT" });
-
 const wrongDigestRoot = join(temporary, "config-wrong-index");
 const wrongDigestLog = join(temporary, "wrong-index-runner.jsonl");
 await writeFile(
@@ -259,7 +235,6 @@ await writeFile(
 result = await execute(wrongDigestRoot, wrongDigestLog, ["install", "--manifest", manifest], setup);
 assert.equal(result.code, 1);
 assert.match(result.stderr, /RUNTIME_IMAGE_METADATA_INVALID/u);
-
 const primaryRoot = join(temporary, "config-primary");
 const primaryLog = join(temporary, "primary-runner.jsonl");
 result = await execute(primaryRoot, primaryLog, ["install", "--manifest", manifest], setup);
@@ -270,6 +245,7 @@ assert.equal(result.code, 0, result.stderr);
 result = await execute(primaryRoot, primaryLog, ["status"]);
 assert.equal(result.code, 0, result.stderr);
 assert.equal(JSON.parse(result.stdout).ok, true);
+assert.equal(JSON.parse(result.stdout).commission_required, false);
 const restorePrimaryVolumes = await tamperPhotoVolume(primaryLog);
 result = await execute(primaryRoot, primaryLog, ["start"]);
 assert.equal(result.code, 1);
@@ -291,7 +267,13 @@ assert.deepEqual((await readdir(join(primaryRoot, "secrets"))).sort(), [
   "database-url",
   "postgres-password",
 ]);
-
+await runLegacyCommissionAcceptance({
+  execute,
+  manifest,
+  temporary,
+  upgradeManifest,
+  upgradeRelease: upgradePayload.release,
+});
 result = await execute(primaryRoot, primaryLog, ["backup", "list"]);
 assert.equal(result.code, 0, result.stderr);
 assert.deepEqual(JSON.parse(result.stdout).backups, []);
@@ -337,7 +319,6 @@ result = await execute(
 );
 assert.equal(result.code, 1);
 assert.match(result.stderr, /RUNTIME_BACKUP_STDIN_INVALID/u);
-
 const originalDatabaseBackup = await readFile(databaseBackup);
 await writeFile(databaseBackup, "corrupt", { mode: 0o600 });
 result = await execute(
@@ -349,7 +330,6 @@ result = await execute(
 assert.equal(result.code, 1);
 assert.match(result.stderr, /RUNTIME_BACKUP_INVALID/u);
 await writeFile(databaseBackup, originalDatabaseBackup, { mode: 0o600 });
-
 const outsideHardlink = join(temporary, "database-hardlink");
 await link(databaseBackup, outsideHardlink);
 result = await execute(
@@ -361,7 +341,6 @@ result = await execute(
 assert.equal(result.code, 1);
 assert.match(result.stderr, /RUNTIME_BACKUP_INVALID/u);
 await unlink(outsideHardlink);
-
 await chmod(photoBackup, 0o644);
 result = await execute(
   primaryRoot,
@@ -399,8 +378,10 @@ assert.equal(result.code, 1);
 assert.match(result.stderr, /RUNTIME_RESTORE_CONFIRMATION_INVALID/u);
 assert.deepEqual((await readdir(backupRoot)).sort(), [manualBackup.backup_id]);
 
-await writeFile(`${primaryLog}.fake-database`, "database-mutated-before-restore", { mode: 0o600 });
-await writeFile(`${primaryLog}.fake-photos`, "photos-mutated-before-restore", { mode: 0o600 });
+await writeFile(`${primaryLog}.fake-database`, "database-mutated-before-restore", {
+  mode: 0o600,
+});
+await writeFile(`${primaryLog}.fake-photos`, "fake-photo-tar-v2", { mode: 0o600 });
 result = await execute(
   primaryRoot,
   primaryLog,
@@ -414,10 +395,7 @@ assert.equal(result.code, 0, result.stderr);
 const successfulRestore = JSON.parse(result.stdout);
 assert.equal(successfulRestore.backup_id, manualBackup.backup_id);
 assert.match(successfulRestore.safety_backup_id, /^safety-/u);
-assert.equal(
-  await readFile(`${primaryLog}.restored-database`, "utf8"),
-  "fake-postgres-custom-dump-v1",
-);
+assert.equal(await readFile(`${primaryLog}.restored-database`, "utf8"), "BEGIN;\nCOMMIT;\n");
 assert.equal(await readFile(`${primaryLog}.restored-photos`, "utf8"), "fake-photo-tar-v1");
 result = await execute(primaryRoot, primaryLog, ["backup", "list"]);
 assert.equal(result.code, 0, result.stderr);
@@ -429,9 +407,9 @@ assert.equal(
 );
 
 await writeFile(`${primaryLog}.fake-database`, "database-before-failed-restore", { mode: 0o600 });
-await writeFile(`${primaryLog}.fake-photos`, "photos-before-failed-restore", { mode: 0o600 });
+await writeFile(`${primaryLog}.fake-photos`, "fake-photo-tar-v2", { mode: 0o600 });
 const logCountBeforeFailure = (await readFile(primaryLog, "utf8")).trim().split("\n").length;
-await writeFile(`${primaryLog}.fail-once`, "--clean", { mode: 0o600 });
+await writeFile(`${primaryLog}.fail-once`, "--username=laundry_restore", { mode: 0o600 });
 result = await execute(
   primaryRoot,
   primaryLog,
@@ -448,21 +426,42 @@ const failureCommands = (await readFile(primaryLog, "utf8"))
   .split("\n")
   .slice(logCountBeforeFailure)
   .map((line) => JSON.parse(line));
-assert.ok(failureCommands.some((entry) => entry.arguments.includes("--clean")));
+assert.ok(failureCommands.some((entry) => entry.arguments.includes("--username=laundry_restore")));
 const restoreFailureIndex = failureCommands.findIndex((entry) =>
-  entry.arguments.includes("--clean"),
+  entry.arguments.includes("--username=laundry_restore"),
 );
-assert.equal(
-  failureCommands
-    .slice(restoreFailureIndex + 1)
-    .some((entry) => entry.arguments.includes("server")),
-  false,
+const postRestoreFailure = failureCommands.slice(restoreFailureIndex + 1);
+const serverStopIndex = postRestoreFailure.findLastIndex(
+  (entry) =>
+    entry.arguments.slice(-2).join(" ") === "stop server" &&
+    entry.arguments.filter((argument) => argument === "--file").length === 1,
+);
+assert.ok(
+  serverStopIndex >= 0 &&
+    !postRestoreFailure
+      .slice(serverStopIndex + 1)
+      .some((entry) => entry.arguments.includes("up") && entry.arguments.includes("server")),
 );
 result = await execute(primaryRoot, primaryLog, ["backup", "list"]);
 assert.equal(result.code, 0, result.stderr);
 listedBackups = JSON.parse(result.stdout).backups;
 assert.equal(listedBackups.length, 3);
 assert.equal(listedBackups.filter((entry) => entry.kind === "pre_restore").length, 2);
+const failedRestoreSafety = listedBackups.find(
+  (entry) => entry.kind === "pre_restore" && entry.backup_id !== successfulRestore.safety_backup_id,
+);
+assert.ok(failedRestoreSafety);
+result = await execute(
+  primaryRoot,
+  primaryLog,
+  ["backup", "restore"],
+  JSON.stringify({
+    backup_id: failedRestoreSafety.backup_id,
+    confirmation: failedRestoreSafety.confirmation,
+  }),
+);
+assert.equal(result.code, 0, result.stderr);
+await assert.rejects(() => stat(join(primaryRoot, "transfer-state.json")), { code: "ENOENT" });
 
 await writeFile(`${primaryLog}.pause-once`, "pg_dump", { mode: 0o600 });
 const concurrentBackup = execute(primaryRoot, primaryLog, ["backup", "create"]);
@@ -745,7 +744,7 @@ await assertRecoveredPreState(
 const runnerText = await readFile(primaryLog, "utf8");
 assert.doesNotMatch(
   runnerText,
-  /native-acceptance-password|86420987|RESTORE-[0-9A-F]{12}|\.dump|\.tar|backup_id|pnpm/u,
+  /native-acceptance-password|86420987|independent-approver-password|97531864|legacy-approver-password|753186|RESTORE-[0-9A-F]{12}|\.dump|\.tar|backup_id|pnpm/u,
 );
 
 const statePath = join(primaryRoot, "state.json");
@@ -795,5 +794,4 @@ assert.equal(result.code, 1);
 assert.match(result.stderr, /RUNTIME_SETUP_STDIN_INVALID/u);
 await assert.rejects(() => stat(oversizedRoot), { code: "ENOENT" });
 
-await rm(privateKeyPath, { force: true });
-process.stdout.write("RUNTIME_NATIVE_NO_REPO_ACCEPTANCE_OK scenarios=62 manifest_negatives=8\n");
+process.stdout.write("RUNTIME_NATIVE_NO_REPO_ACCEPTANCE_OK scenarios=73 manifest_negatives=8\n");

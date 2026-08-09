@@ -13,6 +13,8 @@ import type {
   PinChallengeResponse,
   PinVerifyRequest,
   SessionView,
+  StaffCredentialsCompleteInput,
+  StaffCredentialsCompleteResult,
   StepUpProofResult,
   SwitchableStaff,
 } from "./types.js";
@@ -23,6 +25,8 @@ import type {
  */
 export type AuthPort = Readonly<{
   login: (values: LoginFormValues) => Promise<AuthResult<SessionView>>;
+  /** Rotate the current access projection and atomically refresh the host-owned staff directory. */
+  refreshSession: () => Promise<AuthResult<SessionView>>;
   /** Revoke the server session when possible and always clear host-local credentials. */
   logout: () => Promise<void>;
   createPinChallenge: (request: PinChallengeRequest) => Promise<AuthResult<PinChallengeResponse>>;
@@ -30,6 +34,9 @@ export type AuthPort = Readonly<{
   verifyPin: (request: PinVerifyRequest) => Promise<AuthResult<SessionView>>;
   /** step_up: issues proof without switching actor. */
   verifyStepUpPin: (request: PinVerifyRequest) => Promise<AuthResult<StepUpProofResult>>;
+  completeStaffCredentials: (
+    request: StaffCredentialsCompleteInput,
+  ) => Promise<AuthResult<StaffCredentialsCompleteResult>>;
   listSwitchableStaff: () => readonly SwitchableStaff[];
 }>;
 
@@ -152,12 +159,37 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthP
   const challenges = new Map<string, ChallengeRow>();
   let lastLogin: LoginFormValues | null = null;
   let sessionVersion = 1;
+  let currentSession: SessionView | null = null;
 
   return {
     listSwitchableStaff: () => staffList,
 
+    async refreshSession(): Promise<AuthResult<SessionView>> {
+      return currentSession === null
+        ? { ok: false, error: { code: "AUTHENTICATION_FAILED", message: "未登录" } }
+        : { ok: true, data: currentSession };
+    },
+
+    async completeStaffCredentials(): Promise<AuthResult<StaffCredentialsCompleteResult>> {
+      if (currentSession === null) {
+        return { ok: false, error: { code: "AUTHENTICATION_FAILED", message: "未登录" } };
+      }
+      const targetStaffId =
+        staffList.find((staff) => staff.staff_id !== currentSession?.session.staff_id)?.staff_id ??
+        currentSession.session.staff_id;
+      return {
+        ok: true,
+        data: Object.freeze({
+          target_staff_id: targetStaffId,
+          permission_version: 1,
+          status: "active" as const,
+        }),
+      };
+    },
+
     async logout(): Promise<void> {
       lastLogin = null;
+      currentSession = null;
       challenges.clear();
     },
 
@@ -212,6 +244,7 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthP
         features,
         sessionVersion,
       );
+      currentSession = session;
       return { ok: true, data: session };
     },
 
@@ -309,6 +342,7 @@ export function createMockAuthClient(options: MockAuthClientOptions = {}): AuthP
         features,
         sessionVersion,
       );
+      currentSession = session;
       return { ok: true, data: session };
     },
 

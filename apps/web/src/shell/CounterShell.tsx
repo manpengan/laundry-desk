@@ -6,6 +6,7 @@ import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import type { OfflinePort } from "../host/offline-port.js";
+import type { PrinterPort } from "../host/printer-port.js";
 import { createMockConnection, type ConnectionStatus } from "../connection.js";
 import type { NavItemId } from "../nav.js";
 import { PageHost } from "../pages/PageHost.js";
@@ -29,6 +30,7 @@ export type CounterShellProps = {
   queryClient: QueryPort;
   photoPort?: PhotoPort;
   offlinePort?: OfflinePort;
+  printerPort?: PrinterPort;
   onSessionChange: (session: SessionView | null) => void;
   initialConnection?: ConnectionStatus;
   initialTheme?: ThemePreference;
@@ -92,6 +94,7 @@ export function CounterShell({
   queryClient,
   photoPort,
   offlinePort,
+  printerPort,
   readOnly = false,
 }: CounterShellProps) {
   const [expanded, setExpanded] = useState(false);
@@ -174,7 +177,9 @@ export function CounterShell({
             authClient={authClient}
             commandClient={effectiveCommandClient}
             queryClient={queryClient}
+            onSessionChange={onSessionChange}
             {...(offlinePort === undefined ? {} : { offlinePort })}
+            {...(printerPort === undefined || readOnly ? {} : { printerPort })}
             {...(photoPort === undefined || readOnly ? {} : { photoPort })}
           />
         </RouteGate>

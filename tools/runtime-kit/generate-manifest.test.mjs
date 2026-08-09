@@ -43,6 +43,15 @@ function fixturePayload() {
   };
 }
 
+function fixtureV2Payload() {
+  return {
+    ...fixturePayload(),
+    schema_version: 2,
+    lan_compose_sha256: repeated("5"),
+    owner_spa_sha256: repeated("6"),
+  };
+}
+
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), "laundry-runtime-manifest-"));
   t.after(async () => rm(root, { recursive: true }));
@@ -137,5 +146,28 @@ test("manifest signing rejects invalid rollback and non-Ed25519 keys", () => {
     () =>
       signRuntimeManifestPayload(fixturePayload(), rsa.privateKey, createPublicKey(rsa.privateKey)),
     /PRIVATE_KEY_INVALID/u,
+  );
+});
+
+test("manifest v2 binds the LAN compose overlay and Owner SPA while v1 stays exact", () => {
+  const keys = generateKeyPairSync("ed25519");
+  const v2 = signRuntimeManifestPayload(fixtureV2Payload(), keys.privateKey, keys.publicKey);
+  assert.equal(v2.payload.schema_version, 2);
+  assert.equal(v2.payload.lan_compose_sha256, repeated("5"));
+  assert.equal(v2.payload.owner_spa_sha256, repeated("6"));
+  assert.throws(
+    () =>
+      signRuntimeManifestPayload(
+        { ...fixturePayload(), lan_compose_sha256: repeated("5") },
+        keys.privateKey,
+        keys.publicKey,
+      ),
+    /INPUT_INVALID/u,
+  );
+  const { owner_spa_sha256: omitted, ...missingOwnerSpa } = fixtureV2Payload();
+  assert.equal(omitted, repeated("6"));
+  assert.throws(
+    () => signRuntimeManifestPayload(missingOwnerSpa, keys.privateKey, keys.publicKey),
+    /INPUT_INVALID/u,
   );
 });

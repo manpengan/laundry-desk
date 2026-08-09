@@ -128,6 +128,7 @@ test("registers exactly the fixed desktop capability channels", () => {
       DESKTOP_IPC_CHANNELS.auth.refresh,
       DESKTOP_IPC_CHANNELS.auth.pinChallenge,
       DESKTOP_IPC_CHANNELS.auth.pinVerify,
+      DESKTOP_IPC_CHANNELS.auth.credentialComplete,
       DESKTOP_IPC_CHANNELS.auth.logout,
       DESKTOP_IPC_CHANNELS.command.execute,
       DESKTOP_IPC_CHANNELS.query.execute,
@@ -137,6 +138,10 @@ test("registers exactly the fixed desktop capability channels", () => {
       DESKTOP_IPC_CHANNELS.offline.resume,
       DESKTOP_IPC_CHANNELS.offline.status,
       DESKTOP_IPC_CHANNELS.offline.resolve,
+      DESKTOP_IPC_CHANNELS.printer.discover,
+      DESKTOP_IPC_CHANNELS.printer.status,
+      DESKTOP_IPC_CHANNELS.printer.configure,
+      DESKTOP_IPC_CHANNELS.printer.test,
       DESKTOP_IPC_CHANNELS.health.get,
     ],
   );
@@ -214,6 +219,52 @@ test("validates a login before invoking the main-only service", async () => {
   assert.deepEqual(result, SAFE_FAILURE);
   assert.deepEqual(captured, [input]);
   assert.deepEqual(harness.errors, []);
+});
+
+test("credential completion IPC accepts only the dedicated secret input and strips transport controls", async () => {
+  const captured: unknown[] = [];
+  const success = Object.freeze({
+    ok: true as const,
+    data: Object.freeze({
+      target_staff_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      permission_version: 2,
+      status: "active" as const,
+    }),
+  });
+  const harness = createHarness(
+    createService({
+      auth: Object.freeze({
+        login: async () => SAFE_FAILURE,
+        refresh: async () => SAFE_FAILURE,
+        pinChallenge: async () => SAFE_FAILURE,
+        pinVerify: async () => SAFE_FAILURE,
+        credentialComplete: async (input) => {
+          captured.push(input);
+          return success;
+        },
+        logout: async () => SAFE_FAILURE,
+      }),
+    }),
+  );
+  const invoke = getHandler(harness, DESKTOP_IPC_CHANNELS.auth.credentialComplete);
+  const input = Object.freeze({
+    credential_setup_ref: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    password: "correct-horse-battery",
+    pin: "864209",
+  });
+
+  const result = await invoke(sender(), input);
+  assert.deepEqual(result, success);
+  assert.doesNotMatch(
+    JSON.stringify(result),
+    /correct-horse-battery|864209|password|pin|credential_setup_ref/iu,
+  );
+  assert.deepEqual(captured, [input]);
+  await assert.rejects(
+    () => invoke(sender(), { ...input, url: "https://attacker.invalid" }),
+    /Desktop operation rejected/u,
+  );
+  assert.equal(captured.length, 1);
 });
 
 test("rejects foreign windows, child frames, foreign authorities, and non-normalized URLs", async () => {

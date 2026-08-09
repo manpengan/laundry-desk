@@ -1,4 +1,5 @@
 import type { SqlClient, TenantContext } from "../db/types.js";
+import { lockAuthorityRows, lockStaffCredentialLifecycle } from "./sql-credential-support.js";
 
 export type StaffAccessRow = Readonly<{
   staff_id: string;
@@ -22,13 +23,47 @@ export type StaffAccessChangeResult =
   | Readonly<{ ok: true; before: StaffAccessRow; after: StaffAccessRow }>
   | Readonly<{
       ok: false;
-      reason: "not_found" | "stale" | "self_change" | "last_admin" | "last_privacy_admin";
+      reason:
+        | "not_found"
+        | "stale"
+        | "self_change"
+        | "last_admin"
+        | "last_privacy_admin"
+        | "credential_pending";
     }>;
 
 export type StaffAccessStore = Readonly<{
   list: () => Promise<readonly StaffAccessRow[]>;
   set: (actorStaffId: string, change: StaffAccessChange) => Promise<StaffAccessChangeResult>;
 }>;
+
+export type MemoryStaffAccessState = Readonly<{
+  read: () => readonly StaffAccessRow[];
+  replace: (rows: readonly StaffAccessRow[]) => void;
+  hasCredentialPending: (staffId: string) => boolean;
+  markCredentialPending: (staffId: string) => void;
+  clearCredentialPending: (staffId: string) => void;
+}>;
+
+export function createMemoryStaffAccessState(
+  seed: readonly StaffAccessRow[],
+): MemoryStaffAccessState {
+  let rows = Object.freeze(seed.map((row) => Object.freeze({ ...row })));
+  let credentialPending: ReadonlySet<string> = new Set();
+  return Object.freeze({
+    read: () => rows,
+    replace: (next) => {
+      rows = Object.freeze(next.map((row) => Object.freeze({ ...row })));
+    },
+    hasCredentialPending: (staffId) => credentialPending.has(staffId),
+    markCredentialPending: (staffId) => {
+      credentialPending = new Set([...credentialPending, staffId]);
+    },
+    clearCredentialPending: (staffId) => {
+      credentialPending = new Set([...credentialPending].filter((id) => id !== staffId));
+    },
+  });
+}
 
 type StaffAccessDbRow = Readonly<{
   staff_id: string;
@@ -131,19 +166,23 @@ export function createSqlStaffAccessStore(
       if (actorStaffId === change.target_staff_id) {
         return Object.freeze({ ok: false as const, reason: "self_change" as const });
       }
-      await client.query(
-        `SELECT role.staff_id
-           FROM staff_store_roles role
-          WHERE role.org_id = $1::uuid AND role.store_id = $2::uuid
-          FOR UPDATE`,
-        [tenant.orgId, tenant.storeId],
-      );
+      await lockStaffCredentialLifecycle(client, tenant);
+      await lockAuthorityRows(client, tenant);
       const before = (await list()).find((row) => row.staff_id === change.target_staff_id);
       if (before === undefined) {
         return Object.freeze({ ok: false as const, reason: "not_found" as const });
       }
       if (before.permission_version !== change.expected_permission_version) {
         return Object.freeze({ ok: false as const, reason: "stale" as const });
+      }
+      const pending = await client.query(
+        `SELECT 1 FROM staff_credential_setups
+          WHERE org_id = $1::uuid AND store_id = $2::uuid AND staff_id = $3::uuid
+            AND status = 'pending' LIMIT 1`,
+        [tenant.orgId, tenant.storeId, change.target_staff_id],
+      );
+      if (pending.rows.length > 0) {
+        return Object.freeze({ ok: false as const, reason: "credential_pending" as const });
       }
       const other = await countOtherAuthorities(client, tenant, change.target_staff_id);
       if (
@@ -202,20 +241,28 @@ export function createSqlStaffAccessStore(
   });
 }
 
-export function createMemoryStaffAccessStore(seed: readonly StaffAccessRow[]): StaffAccessStore {
-  let rows = Object.freeze(seed.map((row) => Object.freeze({ ...row })));
+export function createMemoryStaffAccessStore(
+  seed: readonly StaffAccessRow[] | MemoryStaffAccessState,
+): StaffAccessStore {
+  const state = Array.isArray(seed)
+    ? createMemoryStaffAccessState(seed)
+    : (seed as MemoryStaffAccessState);
   return Object.freeze({
-    list: async () => rows,
+    list: async () => state.read(),
     set: async (actorStaffId, change) => {
       if (actorStaffId === change.target_staff_id) {
         return Object.freeze({ ok: false as const, reason: "self_change" as const });
       }
+      const rows = state.read();
       const before = rows.find((row) => row.staff_id === change.target_staff_id);
       if (before === undefined) {
         return Object.freeze({ ok: false as const, reason: "not_found" as const });
       }
       if (before.permission_version !== change.expected_permission_version) {
         return Object.freeze({ ok: false as const, reason: "stale" as const });
+      }
+      if (state.hasCredentialPending(change.target_staff_id)) {
+        return Object.freeze({ ok: false as const, reason: "credential_pending" as const });
       }
       const other = rows.filter((row) => row.staff_id !== change.target_staff_id && row.is_active);
       if (
@@ -241,7 +288,7 @@ export function createMemoryStaffAccessStore(seed: readonly StaffAccessRow[]): S
         is_active: change.is_active,
         permission_version: before.permission_version + 1,
       });
-      rows = Object.freeze(rows.map((row) => (row.staff_id === after.staff_id ? after : row)));
+      state.replace(rows.map((row) => (row.staff_id === after.staff_id ? after : row)));
       return Object.freeze({ ok: true as const, before, after });
     },
   });

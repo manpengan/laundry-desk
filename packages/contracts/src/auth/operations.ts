@@ -16,6 +16,10 @@ import {
   PinVerifyResponseSchema,
 } from "./operation-schemas.js";
 import { snapshotPlainData } from "./plain-data.js";
+import {
+  StaffCredentialsCompleteRequestSchema,
+  StaffCredentialsCompleteResponseSchema,
+} from "../commands/staff.js";
 
 export {
   AccessSessionResponseSchema,
@@ -74,7 +78,8 @@ type AuthCookieEffects =
     }>;
 
 type AuthOperationRow = Readonly<{
-  operation: "login" | "refresh" | "logout" | "pin_challenge" | "pin_verify";
+  operation:
+    "login" | "refresh" | "logout" | "pin_challenge" | "pin_verify" | "staff_credentials_complete";
   command?: "identity.login" | "identity.refresh" | "identity.logout";
   method: "POST";
   path: string;
@@ -114,6 +119,16 @@ const PIN_PUBLIC_ERRORS = Object.freeze([
   "INVARIANT_FAILED",
   "TRANSACTION_FAILED",
   "EVENT_DISPATCH_FAILED",
+] as const satisfies readonly CommandErrorCode[]);
+
+const STAFF_CREDENTIAL_PUBLIC_ERRORS = Object.freeze([
+  "VALIDATION_FAILED",
+  "AUTHENTICATION_FAILED",
+  "PERMISSION_DENIED",
+  "RESOURCE_UNAVAILABLE",
+  "CSRF_REJECTED",
+  "RATE_LIMITED",
+  "TRANSACTION_FAILED",
 ] as const satisfies readonly CommandErrorCode[]);
 
 const BROWSER_HTTP_REQUIREMENTS = Object.freeze({
@@ -194,6 +209,19 @@ export const AUTH_OPERATION_MATRIX = Object.freeze([
     allowed_public_errors: LIFECYCLE_PUBLIC_ERRORS,
     auth_error_descriptors: AUTH_ERROR_DESCRIPTORS,
     ...schemaPair(EmptyBodySchema, LogoutResponseSchema),
+  }),
+  Object.freeze({
+    operation: "staff_credentials_complete" as const,
+    method: "POST" as const,
+    path: "/api/v2/auth/staff/credentials/complete" as const,
+    ingress: "browser_session" as const,
+    requirements: PIN_REQUIREMENTS,
+    cookie_effects: Object.freeze({ refresh: "none" as const, csrf: "none" as const }),
+    request_schema_id: "auth.staff_credentials_complete.request" as const,
+    response_schema_id: "auth.staff_credentials_complete.response" as const,
+    allowed_public_errors: STAFF_CREDENTIAL_PUBLIC_ERRORS,
+    auth_error_descriptors: AUTH_ERROR_DESCRIPTORS,
+    ...schemaPair(StaffCredentialsCompleteRequestSchema, StaffCredentialsCompleteResponseSchema),
   }),
   Object.freeze({
     operation: "pin_challenge" as const,

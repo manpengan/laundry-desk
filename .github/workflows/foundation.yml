@@ -45,6 +45,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -54,5 +59,8 @@ jobs:
       - name: Lint native runtime Swift sources
         run: pnpm run runtime:app:lint:swift
 
-      - name: Build, inspect, and run no-repo native acceptance
+      - name: Build, inspect, and run no-repo Runtime and LAN acceptance
         run: pnpm run runtime:app:acceptance
+
+      - name: Verify portable release-candidate evidence and native verifier
+        run: pnpm run release:candidate:swift:check && pnpm run release:candidate:test

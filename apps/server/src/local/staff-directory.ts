@@ -15,6 +15,14 @@ export type LocalStaffDirectoryEntry = Readonly<{
   privacy_admin: boolean;
 }>;
 
+export function freezeStaffDirectory(
+  entries: readonly LocalStaffDirectoryEntry[],
+): readonly LocalStaffDirectoryEntry[] {
+  return Object.freeze(
+    entries.map((entry) => (Object.isFrozen(entry) ? entry : Object.freeze({ ...entry }))),
+  );
+}
+
 type PgStaffDirectoryRow = Readonly<{
   staff_id: string;
   display_name: string;

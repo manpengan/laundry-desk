@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { ToastProvider } from "@laundry/ui";
 import { createMockAuthClient } from "../auth/AuthClient.js";
 import { FULL_STORE_FEATURES } from "../auth/permissions.js";
@@ -13,6 +16,8 @@ import { createMockConnection } from "../connection.js";
 import { CounterShell } from "./CounterShell.js";
 import { PrintQueuePanel } from "./PrintQueuePanel.js";
 import type { PrintJobView, PrintWorkerView } from "./print-jobs.js";
+
+const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const sampleSession: SessionView = Object.freeze({
   session: Object.freeze({
@@ -63,6 +68,16 @@ const SAMPLE_JOBS: readonly PrintJobView[] = Object.freeze([
     created_at: 300,
     updated_at: 310,
     payload_bytes: 128,
+  }),
+  Object.freeze({
+    job_id: "44444444-4444-4444-8444-444444444444",
+    kind: "xp58",
+    status: "uncertain" as const,
+    order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    ticket_no: "20260722-0004",
+    created_at: 400,
+    updated_at: 410,
+    error: "CUPS 提交结果不确定",
   }),
 ]);
 const WORKER: PrintWorkerView = Object.freeze({
@@ -129,6 +144,28 @@ test("PrintQueuePanel shows 重试 for failed and 补打 for done (not for queue
     html.indexOf('data-job-id="22222222-2222-4222-8222-222222222222"'),
   );
   assert.doesNotMatch(queuedSlice, /data-action=/);
+});
+
+test("PrintQueuePanel makes uncertain receipt explicit and never offers automatic reprint", () => {
+  const html = renderPanel();
+  const uncertain = html.slice(html.indexOf('data-status="uncertain"'));
+  assert.match(uncertain, /结果不确定/u);
+  assert.match(uncertain, /可能已经出纸/u);
+  assert.match(uncertain, /系统不会自动重复打印/u);
+  assert.match(uncertain, /检查纸张后重试/u);
+  assert.match(uncertain, /data-action="retry"/u);
+  assert.doesNotMatch(uncertain, /data-action="reprint"/u);
+});
+
+test("PrintQueuePanel keeps a requeue action locked until its refresh settles", () => {
+  const source = readFileSync(join(packageRoot, "src/shell/PrintQueuePanel.tsx"), "utf8");
+  const refresh = source.indexOf("await refresh();", source.indexOf("const onRequeue"));
+  const release = source.indexOf("setBusyJobId(null);", refresh);
+
+  assert.ok(refresh >= 0);
+  assert.ok(release > refresh);
+  assert.match(source.slice(refresh, release), /finally/u);
+  assert.equal(source.match(/disabled=\{loading \|\| busyJobId !== null\}/gu)?.length, 3);
 });
 
 test("PrintQueuePanel closed renders no queue panel (toast host may remain)", () => {

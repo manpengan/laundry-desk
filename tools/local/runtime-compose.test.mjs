@@ -24,12 +24,16 @@ test("installed runtime mounts private files as compose secrets and never secret
     "LAUNDRY_CSRF_PROOF_SECRET_FILE",
     "LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD_FILE",
     "LAUNDRY_BOOTSTRAP_ADMIN_PIN_FILE",
+    "LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD_FILE",
+    "LAUNDRY_BOOTSTRAP_APPROVER_PIN_FILE",
+    "LAUNDRY_COMMISSION_APPROVER_PASSWORD_FILE",
+    "LAUNDRY_COMMISSION_APPROVER_PIN_FILE",
   ]) {
     assert.match(source, new RegExp(`${variable}: /run/secrets/`, "u"));
   }
-  assert.equal([...source.matchAll(/^\s+mode: 0400$/gmu)].length, 14);
-  assert.equal([...source.matchAll(/^\s+uid: "10001"$/gmu)].length, 13);
-  assert.equal([...source.matchAll(/^\s+gid: "10001"$/gmu)].length, 13);
+  assert.equal([...source.matchAll(/^\s+mode: 0400$/gmu)].length, 23);
+  assert.equal([...source.matchAll(/^\s+uid: "10001"$/gmu)].length, 22);
+  assert.equal([...source.matchAll(/^\s+gid: "10001"$/gmu)].length, 22);
   assert.doesNotMatch(
     source,
     /\b(?:DATABASE_URL|DATABASE_ADMIN_URL|POSTGRES_PASSWORD|LAUNDRY_APP_PASSWORD):/u,
@@ -41,9 +45,15 @@ test("stop-safe runtime uses the two controller-bound external persistent volume
   const source = await readFile(composePath, "utf8");
 
   assert.match(source, /^\s{2}pgdata-v2:$/mu);
-  assert.match(source, /^\s{4}name: laundry-desk-runtime_pgdata-v2$/mu);
+  assert.match(
+    source,
+    /^\s{4}name: "\$\{LAUNDRY_RUNTIME_PGDATA_VOLUME:-laundry-desk-runtime_pgdata-v2\}"$/mu,
+  );
   assert.match(source, /^\s{2}photos:$/mu);
-  assert.match(source, /^\s{4}name: laundry-desk-runtime_photos$/mu);
+  assert.match(
+    source,
+    /^\s{4}name: "\$\{LAUNDRY_RUNTIME_PHOTOS_VOLUME:-laundry-desk-runtime_photos\}"$/mu,
+  );
   assert.equal([...source.matchAll(/^\s{4}external: true$/gmu)].length, 2);
   assert.doesNotMatch(source, /down --volumes|volume rm|external:\s*false/u);
 });
@@ -60,7 +70,7 @@ test("all Node runtime services use a read-only least-privilege container profil
     source,
     /^\s{4}- \/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777,uid=10001,gid=10001$/mu,
   );
-  for (const service of ["roles", "migrate", "bootstrap", "verify", "server"]) {
+  for (const service of ["roles", "migrate", "bootstrap", "commission", "verify", "server"]) {
     assert.match(source, new RegExp(`^  ${service}:\\n    <<: \\*runtime-security$`, "mu"));
   }
 });

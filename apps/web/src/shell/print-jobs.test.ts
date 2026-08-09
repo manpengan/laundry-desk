@@ -65,10 +65,10 @@ const WORKER: PrintWorkerView = Object.freeze({
   spool_bytes: 3_456,
 });
 
-test("summarizePrintJobs counts queued+printing and failed; ignores done", () => {
-  const summary = summarizePrintJobs(SAMPLE_JOBS);
+test("summarizePrintJobs counts uncertain as operator attention", () => {
+  const summary = summarizePrintJobs([...SAMPLE_JOBS, { status: "uncertain" }]);
   assert.equal(summary.queued, 2);
-  assert.equal(summary.failed, 1);
+  assert.equal(summary.failed, 2);
 });
 
 test("summarizePrintJobs empty is idle", () => {
@@ -80,6 +80,7 @@ test("printJobStatusLabel uses Chinese-friendly labels", () => {
   assert.equal(printJobStatusLabel("printing"), "打印中");
   assert.equal(printJobStatusLabel("done"), "已完成");
   assert.equal(printJobStatusLabel("failed"), "失败");
+  assert.equal(printJobStatusLabel("uncertain"), "结果不确定");
   assert.equal(printJobStatusLabel("unknown"), "unknown");
 });
 

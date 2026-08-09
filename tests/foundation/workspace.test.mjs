@@ -286,13 +286,20 @@ test("lints each active workspace from its package root", async () => {
 test("builds file-linked workspace dependencies before their consumers test", async () => {
   const turboConfig = await readJson("turbo.json");
   const webPackage = await readJson("apps/web/package.json");
+  const contractsPackage = await readJson("packages/contracts/package.json");
   const uiPackage = await readJson("packages/ui/package.json");
   const domainPackage = await readJson("packages/domain/package.json");
 
-  // web depends on ui + domain dist types; turbo must build them first.
-  const webDepBuild = ["^build", `${uiPackage.name}#build`, `${domainPackage.name}#build`];
+  // web depends on contracts + ui + domain dist types; turbo must build them first.
+  const webDepBuild = [
+    "^build",
+    `${contractsPackage.name}#build`,
+    `${uiPackage.name}#build`,
+    `${domainPackage.name}#build`,
+  ];
   assert.deepEqual(turboConfig.tasks[`${webPackage.name}#test`]?.dependsOn, webDepBuild);
   assert.deepEqual(turboConfig.tasks[`${webPackage.name}#typecheck`]?.dependsOn, webDepBuild);
+  assert.deepEqual(turboConfig.tasks[`${webPackage.name}#build`]?.dependsOn, webDepBuild);
 });
 
 test("publishes shared TypeScript, ESLint, and Prettier configuration", async () => {

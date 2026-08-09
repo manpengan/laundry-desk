@@ -1,0 +1,59 @@
+services:
+  server:
+    environment:
+      LAUNDRY_LAN_ORIGIN: "https://${LAUNDRY_RUNTIME_LAN_BIND_HOST:?explicit RFC1918 bind host required}:${LAUNDRY_RUNTIME_LAN_PORT:?explicit LAN port required}"
+    ports:
+      - "${LAUNDRY_RUNTIME_LAN_BIND_HOST:?explicit RFC1918 bind host required}:${LAUNDRY_RUNTIME_LAN_PORT:?explicit LAN port required}:${LAUNDRY_RUNTIME_LAN_PORT:?explicit LAN port required}"
+
+  lan-gateway:
+    image: "${LAUNDRY_RUNTIME_SERVER_IMAGE:?signed server image digest required}"
+    command: ["lan-gateway"]
+    network_mode: "service:server"
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777,uid=10001,gid=10001
+    environment:
+      LAUNDRY_RUNTIME_RELEASE: "${LAUNDRY_RUNTIME_RELEASE:?signed release required}"
+      LAUNDRY_RUNTIME_CONTRACTS_SHA256: "${LAUNDRY_RUNTIME_CONTRACTS_SHA256:?contracts checksum required}"
+      LAUNDRY_RUNTIME_SCHEMA_SHA256: "${LAUNDRY_RUNTIME_SCHEMA_SHA256:?schema checksum required}"
+      LAUNDRY_RUNTIME_MIGRATIONS_SHA256: "${LAUNDRY_RUNTIME_MIGRATIONS_SHA256:?migrations checksum required}"
+      LAUNDRY_RUNTIME_MIGRATION_HEAD: "${LAUNDRY_RUNTIME_MIGRATION_HEAD:?migration head required}"
+    secrets:
+      - source: lan-config
+        target: lan-config
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: lan-cert
+        target: lan-cert
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: lan-key
+        target: lan-key
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "/opt/laundry/lan-gateway/lan-runtime-healthcheck.mjs"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 2s
+    restart: unless-stopped
+
+secrets:
+  lan-config:
+    file: "${LAUNDRY_RUNTIME_LAN_CONFIG_ROOT:?private LAN generation required}/config.json"
+  lan-cert:
+    file: "${LAUNDRY_RUNTIME_LAN_CONFIG_ROOT:?private LAN generation required}/certificate.pem"
+  lan-key:
+    file: "${LAUNDRY_RUNTIME_LAN_CONFIG_ROOT:?private LAN generation required}/private-key.pem"

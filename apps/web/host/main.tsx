@@ -14,6 +14,8 @@ import "../src/styles/shell.css";
 import "../src/styles/member.css";
 import "../src/styles/owner-dashboard.css";
 import "../src/styles/owner-operations.css";
+import "../src/styles/staff-credentials.css";
+import "../src/styles/printer-settings.css";
 
 const apiBaseUrl = resolveBrowserApiBaseUrl(
   (import.meta as ImportMeta & { env?: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL,

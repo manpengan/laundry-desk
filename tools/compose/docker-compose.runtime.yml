@@ -92,6 +92,10 @@ services:
       LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME_FILE: /run/secrets/bootstrap-admin-display-name
       LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/bootstrap-admin-password
       LAUNDRY_BOOTSTRAP_ADMIN_PIN_FILE: /run/secrets/bootstrap-admin-pin
+      LAUNDRY_BOOTSTRAP_APPROVER_USERNAME_FILE: /run/secrets/bootstrap-approver-username
+      LAUNDRY_BOOTSTRAP_APPROVER_DISPLAY_NAME_FILE: /run/secrets/bootstrap-approver-display-name
+      LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD_FILE: /run/secrets/bootstrap-approver-password
+      LAUNDRY_BOOTSTRAP_APPROVER_PIN_FILE: /run/secrets/bootstrap-approver-pin
     secrets:
       - source: database-admin-url
         target: database-admin-url
@@ -115,6 +119,68 @@ services:
         mode: 0400
       - source: bootstrap-admin-pin
         target: bootstrap-admin-pin
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: bootstrap-approver-username
+        target: bootstrap-approver-username
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: bootstrap-approver-display-name
+        target: bootstrap-approver-display-name
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: bootstrap-approver-password
+        target: bootstrap-approver-password
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: bootstrap-approver-pin
+        target: bootstrap-approver-pin
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  commission:
+    <<: *runtime-security
+    image: *server-image
+    command: ["commission"]
+    environment:
+      <<: *runtime-environment
+      DATABASE_ADMIN_URL_FILE: /run/secrets/database-admin-url
+      LAUNDRY_COMMISSION_APPROVER_USERNAME_FILE: /run/secrets/bootstrap-approver-username
+      LAUNDRY_COMMISSION_APPROVER_DISPLAY_NAME_FILE: /run/secrets/bootstrap-approver-display-name
+      LAUNDRY_COMMISSION_APPROVER_PASSWORD_FILE: /run/secrets/bootstrap-approver-password
+      LAUNDRY_COMMISSION_APPROVER_PIN_FILE: /run/secrets/bootstrap-approver-pin
+    secrets:
+      - source: database-admin-url
+        target: database-admin-url
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: bootstrap-approver-username
+        target: bootstrap-approver-username
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: bootstrap-approver-display-name
+        target: bootstrap-approver-display-name
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: bootstrap-approver-password
+        target: bootstrap-approver-password
+        uid: "10001"
+        gid: "10001"
+        mode: 0400
+      - source: bootstrap-approver-pin
+        target: bootstrap-approver-pin
         uid: "10001"
         gid: "10001"
         mode: 0400
@@ -221,11 +287,19 @@ secrets:
     file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/bootstrap-admin-password"
   bootstrap-admin-pin:
     file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/bootstrap-admin-pin"
+  bootstrap-approver-username:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/bootstrap-approver-username"
+  bootstrap-approver-display-name:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/bootstrap-approver-display-name"
+  bootstrap-approver-password:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/bootstrap-approver-password"
+  bootstrap-approver-pin:
+    file: "${LAUNDRY_RUNTIME_CONFIG_ROOT:?private config root required}/secrets/bootstrap-approver-pin"
 
 volumes:
   pgdata-v2:
-    name: laundry-desk-runtime_pgdata-v2
+    name: "${LAUNDRY_RUNTIME_PGDATA_VOLUME:-laundry-desk-runtime_pgdata-v2}"
     external: true
   photos:
-    name: laundry-desk-runtime_photos
+    name: "${LAUNDRY_RUNTIME_PHOTOS_VOLUME:-laundry-desk-runtime_photos}"
     external: true

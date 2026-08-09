@@ -9,6 +9,10 @@ const ADMIN_ENV = Object.freeze({
   LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME: "Acceptance Administrator",
   LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD: "test-password-not-a-real-secret",
   LAUNDRY_BOOTSTRAP_ADMIN_PIN: "246810",
+  LAUNDRY_BOOTSTRAP_APPROVER_USERNAME: "acceptance-approver",
+  LAUNDRY_BOOTSTRAP_APPROVER_DISPLAY_NAME: "Acceptance Approver",
+  LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD: "independent-approver-secret",
+  LAUNDRY_BOOTSTRAP_APPROVER_PIN: "135790",
 });
 const UUID = "12345678-1234-4123-8123-123456789abc";
 const PROJECT = "laundry-acceptance-123456781234412381231234";
@@ -70,6 +74,8 @@ function createDependencies(overrides = {}) {
       assert.deepEqual(secretValues, [
         ADMIN_ENV.LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD,
         ADMIN_ENV.LAUNDRY_BOOTSTRAP_ADMIN_PIN,
+        ADMIN_ENV.LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD,
+        ADMIN_ENV.LAUNDRY_BOOTSTRAP_APPROVER_PIN,
         ...LOCAL_SECRETS,
       ]);
     },

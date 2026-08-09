@@ -55,7 +55,9 @@ import {
   type AuthorityTrustStore,
 } from "./pairing/authority-trust.js";
 import { discoverCupsQueues } from "./print/cups-process.js";
-import { createSignedPrintRuntime, type SignedPrintRuntime } from "./print/runtime.js";
+import { ConfiguredPrinterRuntime } from "./print/configured-runtime.js";
+import { configuredQueueForHealth, createMainPrinterRuntime } from "./print/main-runtime.js";
+import { createDesktopPrinterService } from "./desktop/printer-operation.js";
 import { OfflineConflictStore } from "./offline/conflict-store.js";
 import { FileGrantSequenceStore } from "./offline/grant-sequence-store.js";
 import { OfflineCommandRuntime } from "./offline/runtime.js";
@@ -74,7 +76,6 @@ import {
   runMacStagedHealth,
   validateMacAppLaunch,
 } from "./upgrade/runtime-controller.js";
-
 const distDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = packageRootFromModuleUrl(import.meta.url);
 const spaResourceRoot = spaRootForRuntime({
@@ -84,17 +85,14 @@ const spaResourceRoot = spaRootForRuntime({
 });
 const manifestPath = manifestPathFromSpaRoot(spaResourceRoot);
 const preloadPath = preloadPathFromDistDir(distDir);
-
 let mainWindow: BrowserWindow | null = null;
 let mainWindowReady: Promise<void> | null = null;
 let activeDesktopSession: Session | null = null;
 let disposeTray: (() => void) | null = null;
-let signedPrintRuntime: SignedPrintRuntime | null = null;
+let printerRuntime: ConfiguredPrinterRuntime | null = null;
 let offlineQueue: PersistentEncryptedQueue | null = null;
 let offlineRuntime: OfflineCommandRuntime | null = null;
-
 type BootMode = "normal" | "recovery";
-
 protocol.registerSchemesAsPrivileged([
   {
     scheme: APP_SCHEME,
@@ -106,7 +104,6 @@ protocol.registerSchemesAsPrivileged([
     },
   },
 ]);
-
 async function showMainWindow(): Promise<void> {
   if (!mainWindow) {
     if (activeDesktopSession === null) return;
@@ -135,7 +132,6 @@ async function showMainWindow(): Promise<void> {
   readyWindow.show();
   readyWindow.focus();
 }
-
 async function boot(mode: BootMode): Promise<void> {
   const { manifest, bundleId } = loadCanonicalManifest(manifestPath);
   const activeSpaRoot = activeBundleRootFromSpaRoot(spaResourceRoot, bundleId);
@@ -204,45 +200,51 @@ async function boot(mode: BootMode): Promise<void> {
     }),
     { recoveryReadOnly: mode === "recovery" },
   );
-  const cupsQueue = process.env.LAUNDRY_CUPS_QUEUE?.trim() ?? "";
-  if (mode === "normal" && cupsQueue.length > 0) {
-    signedPrintRuntime = await createSignedPrintRuntime({
-      stateRoot: join(edgeStateRoot, "print-dispatch"),
-      queue: cupsQueue,
-      deviceId,
-      devicePrivateKey: deviceKey.privateKey,
-      serverPublicKey: () => trustedPrintAuthority,
-      ensureAuthority: async () => {
-        let current = desktopTransport.edge.currentSession();
-        if (current === null) {
-          const refreshed = await desktopTransport.auth.refresh();
-          if (!refreshed.ok) return false;
-          current = desktopTransport.edge.currentSession();
-        }
-        return (
-          current !== null &&
-          (await offlineRuntime!.refreshAuthority(current)) &&
-          trustedPrintAuthority !== null
-        );
-      },
-      transport: desktopTransport.edge.print,
-      onStatus: (status) => console.log("[edge-agent] signed print", status.state, status.message),
-      onError: () => console.error("[edge-agent] signed print poll failed closed"),
-    });
-    await signedPrintRuntime.controller.start();
-  }
+  printerRuntime = await createMainPrinterRuntime({
+    stateRoot: edgeStateRoot,
+    ...(process.env.LAUNDRY_CUPS_QUEUE === undefined
+      ? {}
+      : { bootstrapQueue: process.env.LAUNDRY_CUPS_QUEUE }),
+    runtimeEnabled: mode === "normal",
+    deviceId,
+    devicePrivateKey: deviceKey.privateKey,
+    serverPublicKey: () => trustedPrintAuthority,
+    ensureAuthority: async () => {
+      let current = desktopTransport.edge.currentSession();
+      if (current === null) {
+        const refreshed = await desktopTransport.auth.refresh();
+        if (!refreshed.ok) return false;
+        current = desktopTransport.edge.currentSession();
+      }
+      return (
+        current !== null &&
+        (await offlineRuntime!.refreshAuthority(current)) &&
+        trustedPrintAuthority !== null
+      );
+    },
+    transport: desktopTransport.edge.print,
+  });
   const invalidateContinuity = (): void => {
     offlineRuntime?.invalidateContinuity();
-    signedPrintRuntime?.continuity.invalidate();
+    printerRuntime?.invalidateContinuity();
   };
   powerMonitor.on("suspend", invalidateContinuity);
   powerMonitor.on("resume", invalidateContinuity);
   registerDesktopOperationHandlers({
     ipcMain: ipcMain as unknown as DesktopIpcMainSurface,
-    service: desktopService,
+    service: Object.freeze({
+      ...desktopService,
+      printer: createDesktopPrinterService({
+        manager: printerRuntime,
+        currentSession: async () => {
+          const refreshed = await desktopTransport.auth.refresh();
+          return refreshed.ok ? desktopTransport.edge.currentSession() : null;
+        },
+        mutationsEnabled: mode === "normal",
+      }),
+    }),
     expectedWebContentsId: () => mainWindow?.webContents.id ?? null,
   });
-
   await showMainWindow();
   const tray = createAppTray({
     getWindow: () => mainWindow,
@@ -250,11 +252,13 @@ async function boot(mode: BootMode): Promise<void> {
   });
   disposeTray = tray.dispose;
 }
-
 async function runStagedHealthProbe(): Promise<boolean> {
   if (!safeStorage.isEncryptionAvailable()) return false;
-  const cupsQueue = process.env.LAUNDRY_CUPS_QUEUE?.trim();
-  if (cupsQueue !== undefined && cupsQueue.length > 0) {
+  const cupsQueue = await configuredQueueForHealth(
+    join(app.getPath("userData"), "edge-state"),
+    process.env.LAUNDRY_CUPS_QUEUE,
+  );
+  if (cupsQueue !== null) {
     const queues = await discoverCupsQueues();
     if (!queues.includes(cupsQueue)) return false;
   }
@@ -389,6 +393,6 @@ if (!claimPrimaryInstance(app)) {
     powerMonitor.removeAllListeners("suspend");
     powerMonitor.removeAllListeners("resume");
     disposeTray?.();
-    void signedPrintRuntime?.controller.stop();
+    void printerRuntime?.stop();
   });
 }

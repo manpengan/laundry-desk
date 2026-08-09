@@ -3,6 +3,7 @@ import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { PhotoPort } from "./photo-port.js";
 import type { OfflinePort } from "./offline-port.js";
 import type { ResumePort } from "./desktop-resume-port.js";
+import type { PrinterPort } from "./printer-port.js";
 
 export type HealthReady = Readonly<{
   status: "ready";
@@ -28,5 +29,6 @@ export type AppPorts = Readonly<{
   photo: PhotoPort;
   offline?: OfflinePort;
   resume?: ResumePort;
+  printer?: PrinterPort;
   health: HealthPort;
 }>;

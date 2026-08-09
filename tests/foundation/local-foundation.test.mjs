@@ -357,12 +357,19 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
     "LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME",
     "LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD",
     "LAUNDRY_BOOTSTRAP_ADMIN_PIN",
+    "LAUNDRY_BOOTSTRAP_APPROVER_USERNAME",
+    "LAUNDRY_BOOTSTRAP_APPROVER_DISPLAY_NAME",
+    "LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD",
+    "LAUNDRY_BOOTSTRAP_APPROVER_PIN",
   ]) {
     assert.doesNotMatch(compose, new RegExp(`${name}:`, "u"));
     assert.match(workflow, new RegExp(`${name}=`, "u"));
   }
   assert.match(compose, /LAUNDRY_CONTAINER_RUNTIME:\s*["']?1["']?/u);
-  assert.equal([...workflow.matchAll(/pnpm local:up -- --bootstrap/gu)].length, 2);
+  assert.equal([...workflow.matchAll(/pnpm local:up -- --bootstrap/gu)].length, 5);
+  assert.match(workflow, /pnpm local:web:commissioning:e2e/u);
+  assert.match(workflow, /commissioning-pg-acceptance\.mjs/u);
+  assert.match(workflow, /commissioning_project=.*GITHUB_RUN_ID/u);
   assert.match(workflow, /::add-mask::/u);
   assert.match(workflow, /POSTGRES_PASSWORD:\s*config\.postgresSuperuserPassword/u);
   assert.match(workflow, /LAUNDRY_APP_PASSWORD:\s*config\.postgresAppPassword/u);
@@ -455,7 +462,7 @@ test("registers the guarded local lifecycle in default workspace gates", async (
   assert.match(rootPackage.scripts["workspace:format:check"], /tools\/compose/u);
   assert.match(
     rootPackage.scripts["workspace:lint"],
-    /eslint tools\/local tests\/foundation tools\/runtime-kit\/\*\.mjs --ext \.mjs/u,
+    /eslint tools\/local tools\/release-candidate tests\/foundation tools\/runtime-kit\/\*\.mjs --ext \.mjs/u,
   );
 });
 
@@ -467,13 +474,19 @@ test("keeps browser and Electron acceptance sources inside canonical quality gat
 
   assert.equal(edgePackage.scripts.lint, "eslint . --ext .ts,.tsx,.mjs --max-warnings=0");
   assert.match(edgePackage.scripts.typecheck, /tsconfig\.e2e\.json/u);
-  assert.deepEqual(edgeE2eConfig.include, ["e2e/**/*.ts", "playwright.electron.config.ts"]);
+  assert.deepEqual(edgeE2eConfig.include, [
+    "e2e/**/*.ts",
+    "playwright.electron.commissioning.config.ts",
+    "playwright.electron.config.ts",
+  ]);
 
   assert.equal(webPackage.scripts.lint, "eslint . --ext .ts,.tsx --max-warnings=0");
   assert.match(webPackage.scripts.typecheck, /tsconfig\.e2e\.json/u);
   assert.deepEqual(webE2eConfig.include, [
     "e2e/**/*.ts",
+    "e2e-commissioning/**/*.ts",
     "e2e-lan/**/*.ts",
+    "playwright.commissioning.config.ts",
     "playwright.local.config.ts",
     "playwright.lan.config.ts",
   ]);
@@ -602,7 +615,7 @@ test("scrubs inherited database secrets before invoking RLS smoke subprocesses",
       fakePsql,
       `#!/usr/bin/env bash
 set -euo pipefail
-if env | grep -Eq '^(LAUNDRY_APP_PASSWORD|POSTGRES_PASSWORD|DATABASE_URL|SUPERUSER_DATABASE_URL|PGPASSWORD|PGHOSTADDR|PGSERVICE|PGSERVICEFILE|LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD|LAUNDRY_BOOTSTRAP_ADMIN_PIN|LAUNDRY_ACCESS_TOKEN_SECRET|LAUNDRY_CSRF_PROOF_SECRET|APP_PASSWORD_VALUE|ADMIN_PASSWORD_VALUE)='; then
+if env | grep -Eq '^(LAUNDRY_APP_PASSWORD|POSTGRES_PASSWORD|DATABASE_URL|SUPERUSER_DATABASE_URL|PGPASSWORD|PGHOSTADDR|PGSERVICE|PGSERVICEFILE|LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD|LAUNDRY_BOOTSTRAP_ADMIN_PIN|LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD|LAUNDRY_BOOTSTRAP_APPROVER_PIN|LAUNDRY_ACCESS_TOKEN_SECRET|LAUNDRY_CSRF_PROOF_SECRET|APP_PASSWORD_VALUE|ADMIN_PASSWORD_VALUE)='; then
   exit 91
 fi
 if env | grep -Fq 'exported-app-secret'; then
@@ -648,6 +661,8 @@ exec /bin/chmod "$@"
           PGSERVICEFILE: "",
           LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD: "exported-bootstrap-secret",
           LAUNDRY_BOOTSTRAP_ADMIN_PIN: "482915",
+          LAUNDRY_BOOTSTRAP_APPROVER_PASSWORD: "exported-approver-secret",
+          LAUNDRY_BOOTSTRAP_APPROVER_PIN: "739251",
           LAUNDRY_ACCESS_TOKEN_SECRET: "exported-access-secret",
           LAUNDRY_CSRF_PROOF_SECRET: "exported-csrf-secret",
           password: "preexisting-exported-password",

@@ -49,6 +49,10 @@ async function fakeRuntimeApp(appRoot, publicKey = "A".repeat(43)) {
     "services:\n  postgres:\n    image: postgres:16\n",
   );
   await writeFile(
+    join(appRoot, "Contents", "Resources", "docker-compose.runtime-lan.yml"),
+    "services:\n  lan-gateway:\n    image: laundry/server@sha256:fixture\n",
+  );
+  await writeFile(
     join(appRoot, "Contents", "Resources", "trusted-manifest-public-key.txt"),
     `${publicKey}\n`,
   );
@@ -159,6 +163,10 @@ async function fixture(t) {
   await writeFile(join(kitRoot, "Sources", "main.swift"), "// fixture source\n");
   await writeFile(
     join(repositoryRoot, "tools", "compose", "docker-compose.runtime.yml"),
+    "services: {}\n",
+  );
+  await writeFile(
+    join(repositoryRoot, "tools", "compose", "docker-compose.runtime-lan.yml"),
     "services: {}\n",
   );
   return { root, env, kitRoot, publicKeyPath };
@@ -328,6 +336,15 @@ function successfulReleaseExecutor(setup) {
     if (credential !== undefined) return credential;
     if (file === process.execPath && arguments_.at(-1) === "--release") {
       const stagedKitRoot = dirname(arguments_[0]);
+      const stagedComposeRoot = join(stagedKitRoot, "..", "compose");
+      assert.equal(
+        await readFile(join(stagedComposeRoot, "docker-compose.runtime.yml"), "utf8"),
+        "services: {}\n",
+      );
+      assert.equal(
+        await readFile(join(stagedComposeRoot, "docker-compose.runtime-lan.yml"), "utf8"),
+        "services: {}\n",
+      );
       const appRoot = join(stagedKitRoot, "dist", "Laundry Desk Runtime.app");
       await fakeRuntimeApp(appRoot, (await readFile(setup.publicKeyPath, "utf8")).trim());
     }

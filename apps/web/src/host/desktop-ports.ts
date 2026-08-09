@@ -6,6 +6,7 @@ import type {
   PinChallengeResponse,
   PinVerifyRequest,
   SessionView,
+  StaffCredentialsCompleteInput,
   StepUpProofResult,
   SwitchableStaff,
 } from "../auth/types.js";
@@ -24,7 +25,9 @@ import type {
 import { createDesktopPhotoPort } from "./desktop-photo-port.js";
 import { createDesktopOfflinePort } from "./offline-port.js";
 import { createDesktopResumePort } from "./desktop-resume-port.js";
+import { createDesktopPrinterPort } from "./desktop-printer-port.js";
 import { readDesktopSessionView } from "./desktop-session-view.js";
+import { readStaffCredentialsCompleteResult } from "../auth/http-auth-boundary.js";
 import type { AppPorts, HealthPort, HealthResult } from "./types.js";
 
 export type { LaundryDesktopBridge } from "./desktop-bridge.js";
@@ -168,6 +171,37 @@ function readStaffDirectory(value: unknown): readonly SwitchableStaff[] | null {
     staff.push(parsed);
   }
   return Object.freeze(staff);
+}
+
+function readStaffDirectoryFromAccessResult(value: unknown): readonly SwitchableStaff[] | null {
+  const command = readCommandResult<unknown>(value);
+  if (!command.ok || !isRecord(command.data)) return null;
+  const result = "result" in command.data ? command.data.result : command.data;
+  if (!isRecord(result) || !Array.isArray(result.staff)) return null;
+  const directory: SwitchableStaff[] = [];
+  const seen = new Set<string>();
+  for (const row of result.staff) {
+    if (
+      !isRecord(row) ||
+      !isUuid(row.staff_id) ||
+      !isNonEmptyString(row.display_name) ||
+      (row.role !== "admin" && row.role !== "staff") ||
+      typeof row.is_active !== "boolean"
+    ) {
+      return null;
+    }
+    if (!row.is_active) continue;
+    if (seen.has(row.staff_id) || directory.length >= MAX_STAFF_DIRECTORY_SIZE) return null;
+    seen.add(row.staff_id);
+    directory.push(
+      Object.freeze({
+        staff_id: row.staff_id,
+        display_name: row.display_name,
+        role: row.role,
+      }),
+    );
+  }
+  return Object.freeze(directory);
 }
 
 type ParsedLoginSuccess = Readonly<{
@@ -437,6 +471,51 @@ function readHealthResult(value: unknown): HealthResult {
 function createAuthPort(bridge: LaundryDesktopBridge): AuthPort {
   let staffDirectory = EMPTY_STAFF_DIRECTORY;
   return Object.freeze({
+    async refreshSession(): Promise<AuthResult<SessionView>> {
+      try {
+        const sessionResult = readSessionResult(
+          await bridge.auth.refresh(),
+          "桌面登录刷新响应格式错误",
+        );
+        if (!sessionResult.ok) {
+          staffDirectory = EMPTY_STAFF_DIRECTORY;
+          return sessionResult;
+        }
+        const directory = readStaffDirectoryFromAccessResult(
+          await bridge.query.execute({ name: "staff.access.list", body: EMPTY_BUSINESS_BODY }),
+        );
+        if (directory === null) {
+          staffDirectory = EMPTY_STAFF_DIRECTORY;
+          return authError("桌面员工目录刷新失败");
+        }
+        staffDirectory = directory;
+        return sessionResult;
+      } catch {
+        staffDirectory = EMPTY_STAFF_DIRECTORY;
+        return authError("桌面宿主调用失败");
+      }
+    },
+
+    async completeStaffCredentials(request: StaffCredentialsCompleteInput) {
+      if (bridge.auth.credentialComplete === undefined) {
+        return authError("桌面凭据设置能力不可用");
+      }
+      try {
+        const value = await bridge.auth.credentialComplete(request);
+        const failure = readFailure(value);
+        if (failure !== null) return failure;
+        if (!isRecord(value) || !hasExactKeys(value, ["ok", "data"]) || value.ok !== true) {
+          return authError("桌面凭据设置响应格式错误");
+        }
+        const parsed = readStaffCredentialsCompleteResult(value.data);
+        return parsed === null
+          ? authError("桌面凭据设置响应格式错误")
+          : Object.freeze({ ok: true as const, data: parsed });
+      } catch {
+        return authError("桌面宿主调用失败");
+      }
+    },
+
     async logout(): Promise<void> {
       staffDirectory = EMPTY_STAFF_DIRECTORY;
       try {
@@ -585,6 +664,7 @@ export function createDesktopPorts(bridge: LaundryDesktopBridge): AppPorts {
     query: createQueryPort(bridge),
     photo: createDesktopPhotoPort(bridge),
     offline: createDesktopOfflinePort(bridge.offline),
+    ...(bridge.printer === undefined ? {} : { printer: createDesktopPrinterPort(bridge.printer) }),
     ...(resume === undefined ? {} : { resume }),
     health: createHealthPort(bridge),
   });

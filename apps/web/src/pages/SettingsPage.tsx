@@ -1,6 +1,6 @@
 /**
  * Settings surface — M1 demo: R5 platform.settings.set with step-up PIN resume.
- * M2: printer smoke remains an operator CLI boundary; renderer has no device probe IPC.
+ * Device-local CUPS selection is a narrow desktop capability; raw USB/path smoke stays CLI-only.
  */
 
 import { Button, Input, useToast } from "@laundry/ui";
@@ -10,11 +10,13 @@ import type { SessionView } from "../auth/types.js";
 import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { OfflinePort } from "../host/offline-port.js";
+import type { PrinterPort } from "../host/printer-port.js";
 import { StepUpConfirmDialog } from "../shell/StepUpConfirmDialog.js";
 import { CatalogMaintenancePanel } from "./CatalogMaintenancePanel.js";
 import { StaffAccessPanel } from "./StaffAccessPanel.js";
 import { OfflineConflictPanel } from "./OfflineConflictPanel.js";
 import { MemberBonusRulesPanel } from "./MemberBonusRulesPanel.js";
+import { PrinterSettingsPanel } from "./PrinterSettingsPanel.js";
 
 export type SettingsPageProps = {
   session: SessionView;
@@ -22,6 +24,8 @@ export type SettingsPageProps = {
   commandClient: CommandPort;
   queryClient?: QueryPort;
   offlinePort?: OfflinePort;
+  printerPort?: PrinterPort;
+  onSessionChange?: (session: SessionView | null) => void;
 };
 
 const SETTINGS_KEY = "pricing.min_order_cents";
@@ -35,6 +39,8 @@ export function SettingsPage({
   commandClient,
   queryClient,
   offlinePort,
+  printerPort,
+  onSessionChange,
 }: SettingsPageProps) {
   const toast = useToast();
   const [centsText, setCentsText] = useState("1200");
@@ -125,18 +131,23 @@ export function SettingsPage({
         authClient={authClient}
         commandClient={commandClient}
         {...(queryClient !== undefined ? { queryClient } : {})}
+        {...(onSessionChange !== undefined ? { onSessionChange } : {})}
       />
 
       {offlinePort === undefined ? null : <OfflineConflictPanel offlinePort={offlinePort} />}
 
+      {printerPort === undefined || session.role !== "admin" ? null : (
+        <PrinterSettingsPanel printerPort={printerPort} />
+      )}
+
       <section
         className="ld-settings-printer-smoke"
         data-testid="printer-smoke-section"
-        aria-label="打印机冒烟"
+        aria-label="旧版打印机路径诊断"
       >
-        <h2 className="ld-settings-printer-smoke__title">打印机冒烟</h2>
+        <h2 className="ld-settings-printer-smoke__title">旧版 USB / Windows CLI 诊断</h2>
         <p className="ld-settings-printer-smoke__hint">
-          验证 Edge 打印机 path（env{" "}
+          此入口不属于 macOS CUPS 签名打印；仅验证 Edge 打印机 path（env{" "}
           <code className="ld-settings-printer-smoke__code">{PRINTER_PATH_ENV_NAME}</code>
           ）。Windows 接受 <code className="ld-settings-printer-smoke__code">\\.\COM3</code>、
           <code className="ld-settings-printer-smoke__code">\\.\LPT1</code>、
@@ -145,7 +156,7 @@ export function SettingsPage({
         </p>
         <div className="ld-settings-printer-smoke__static" data-testid="printer-smoke-static">
           <p className="ld-settings-printer-smoke__static-lead">
-            renderer 不提供打印机 smoke IPC。请在装机机 PowerShell /
+            renderer 不提供任意设备 path 或 raw bytes smoke IPC。请在装机机 PowerShell /
             终端先验证配置，再显式执行物理冒烟：
           </p>
           <pre className="ld-settings-printer-smoke__cmd" data-testid="printer-smoke-cli-hint">

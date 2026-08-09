@@ -11,6 +11,7 @@ import { FULL_STORE_FEATURES } from "../auth/permissions.js";
 import type { SessionView } from "../auth/types.js";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
+import type { PrinterPort } from "../host/printer-port.js";
 import { PRINTER_PATH_ENV_NAME, SettingsPage } from "./SettingsPage.js";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -39,7 +40,7 @@ test("PRINTER_PATH_ENV_NAME is LAUNDRY_PRINTER_PATH", () => {
   assert.equal(PRINTER_PATH_ENV_NAME, "LAUNDRY_PRINTER_PATH");
 });
 
-test("SettingsPage SSR shows CLI-only printer instructions", () => {
+test("SettingsPage SSR keeps the legacy path smoke CLI-only", () => {
   const html = renderToStaticMarkup(
     createElement(
       ToastProvider,
@@ -52,7 +53,7 @@ test("SettingsPage SSR shows CLI-only printer instructions", () => {
     ),
   );
 
-  assert.match(html, /打印机冒烟/);
+  assert.match(html, /旧版 USB/);
   assert.match(html, /data-testid="printer-smoke-section"/);
   assert.match(html, /data-testid="printer-smoke-static"/);
   assert.match(html, /LAUNDRY_PRINTER_PATH/);
@@ -70,6 +71,37 @@ test("SettingsPage source cannot reconnect renderer printer smoke", () => {
   const source = readFileSync(join(packageRoot, "src/pages/SettingsPage.tsx"), "utf8");
   assert.doesNotMatch(source, /edgeBridge\.printerSmoke|edgePrinterSmoke|resolveEdgePrinterSmoke/u);
   assert.match(source, /--validate/u);
+});
+
+test("SettingsPage exposes admin CUPS configuration without claiming physical acceptance", () => {
+  const unavailable = Object.freeze({
+    ok: false as const,
+    error: Object.freeze({ code: "UNAVAILABLE", message: "not loaded" }),
+  });
+  const printerPort: PrinterPort = Object.freeze({
+    discover: async () => unavailable,
+    status: async () => unavailable,
+    configure: async () => unavailable,
+    testFixedTicket: async () => unavailable,
+  });
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(SettingsPage, {
+        session: SESSION,
+        authClient: createMockAuthClient(),
+        commandClient: createMockCommandClient(),
+        printerPort,
+      }),
+    ),
+  );
+
+  assert.match(html, /data-testid="printer-settings"/u);
+  assert.match(html, /CUPS 小票打印机/u);
+  assert.match(html, /启用所选队列/u);
+  assert.match(html, /打印固定测试票/u);
+  assert.match(html, /XP-58.*仍须现场验收/u);
 });
 
 test("member feature flag gates the complete bonus-rule settings surface", () => {

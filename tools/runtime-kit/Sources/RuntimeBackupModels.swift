@@ -2,9 +2,11 @@ import Foundation
 
 enum RuntimeBackupKind: String, Codable {
   case manual
+  case scheduled
   case preRestore = "pre_restore"
   case preUpgrade = "pre_upgrade"
   case preRollback = "pre_rollback"
+  case preTransfer = "pre_transfer"
 }
 
 struct RuntimeBackupFile: Codable, Equatable {
@@ -51,6 +53,8 @@ struct RuntimeBackupSummary: Codable, Identifiable, Equatable {
   let confirmation: String?
   let verified: Bool
   let faultCode: String?
+  let lanStatus: String?
+  let lanFaultCode: String?
 
   var id: String { backupID }
 
@@ -60,6 +64,16 @@ struct RuntimeBackupSummary: Codable, Identifiable, Equatable {
     case createdAt = "created_at"
     case manifestSHA256 = "manifest_sha256"
     case faultCode = "fault_code"
+    case lanStatus = "lan_status"
+    case lanFaultCode = "lan_fault_code"
+  }
+
+  func withLanOutcome(status: String, faultCode: String?) -> RuntimeBackupSummary {
+    RuntimeBackupSummary(
+      backupID: backupID, kind: kind, createdAt: createdAt, release: release,
+      bytes: bytes, manifestSHA256: manifestSHA256, confirmation: confirmation,
+      verified: verified, faultCode: self.faultCode, lanStatus: status,
+      lanFaultCode: faultCode)
   }
 }
 
@@ -68,11 +82,15 @@ struct RuntimeRestoreResult: Codable {
   let release: String
   let backupID: String
   let safetyBackupID: String
+  let lanStatus: String
+  let lanFaultCode: String?
 
   enum CodingKeys: String, CodingKey {
     case status, release
     case backupID = "backup_id"
     case safetyBackupID = "safety_backup_id"
+    case lanStatus = "lan_status"
+    case lanFaultCode = "lan_fault_code"
   }
 }
 

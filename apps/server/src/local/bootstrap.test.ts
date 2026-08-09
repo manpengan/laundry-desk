@@ -8,396 +8,126 @@ import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
 import type { PasswordPort } from "../identity/password.js";
 import {
   BOOTSTRAP_ADMIN_ROLE_ID,
+  BOOTSTRAP_APPROVER_ROLE_ID,
+  BOOTSTRAP_APPROVER_STAFF_ID,
+  BOOTSTRAP_COMMISSION_AUDIT_ID,
+  BOOTSTRAP_FEATURE_ROW_ID,
   BootstrapError,
   BootstrapInputSchema,
+  CommissionInputSchema,
   LOCAL_BOOTSTRAP_ADVISORY_LOCK_ID,
   bootstrapLocalIdentity,
+  commissionLocalIdentity,
   computeBootstrapProfileHash,
   type BootstrapInput,
+  type CommissionInput,
 } from "./bootstrap.js";
 import { LOCAL_PROFILE } from "./profile.js";
 
 const PASSWORD_PHC = "$argon2id$v=19$m=19456,t=2,p=1$password$hash";
 const PIN_PHC = "$argon2id$v=19$m=19456,t=2,p=1$pin$hash";
 const serverPackagePath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json");
-type QueryRecord = Readonly<{
-  sql: string;
-  params: readonly unknown[] | undefined;
-}>;
+type QueryRecord = Readonly<{ sql: string; params: readonly unknown[] | undefined }>;
+type QueryResult = Readonly<{ rows: readonly Record<string, unknown>[]; rowCount: number }>;
 
-type OrgState = Readonly<{
-  id: string;
-  code: string;
-  name: string;
-  demoOnly: boolean;
-}>;
-
-type StoreState = Readonly<{
-  id: string;
-  orgId: string;
-  code: string;
-  name: string;
-  timezone: string;
-}>;
-
-type StaffState = Readonly<{
-  id: string;
-  orgId: string;
-  username: string;
-  passwordHash: string;
-  pinHash: string;
-  displayName: string;
-  isActive: boolean;
-  permissionVersion: number;
-}>;
-
-type RoleState = Readonly<{
-  id: string;
-  orgId: string;
-  storeId: string;
-  staffId: string;
-  role: string;
-  isPrivacyAdmin: boolean;
-  isActive: boolean;
-}>;
-
-type MetadataState = Readonly<{
-  orgId: string;
-  storeId: string;
-  adminStaffId: string;
-  profileHash: string;
-  demoOnly: boolean;
-}>;
-
-type FakeDatabaseState = Readonly<{
-  org?: OrgState;
-  store?: StoreState;
-  staff?: StaffState;
-  role?: RoleState;
-  metadata?: MetadataState;
-}>;
-
-type WriteKind = "org" | "store" | "staff" | "role" | "metadata";
-
-type FakeDatabase = Readonly<{
-  pool: PgPool;
-  queries: QueryRecord[];
-  events: string[];
-  snapshot: () => FakeDatabaseState;
-  replaceState: (state: FakeDatabaseState) => void;
-}>;
-
-const emptyState = Object.freeze({}) satisfies FakeDatabaseState;
-
-function createMutex(): Readonly<{ acquire: () => Promise<() => void> }> {
-  let tail = Promise.resolve();
-
-  return Object.freeze({
-    acquire: async (): Promise<() => void> => {
-      let releaseCurrent: (() => void) | undefined;
-      const current = new Promise<void>((resolve) => {
-        releaseCurrent = resolve;
-      });
-      const previous = tail;
-      tail = previous.then(() => current);
-      await previous;
-      return (): void => {
-        releaseCurrent?.();
-      };
-    },
-  });
-}
-
-function createFakeDatabase(
-  options?: Readonly<{
-    initialState?: FakeDatabaseState;
-    failAt?: WriteKind;
-  }>,
-): FakeDatabase {
-  let state: FakeDatabaseState = options?.initialState ?? emptyState;
-  const queries: QueryRecord[] = [];
-  const events: string[] = [];
-  const mutex = createMutex();
-
-  const pool = {
-    connect: async (): Promise<PgPoolClient> => {
-      events.push("connect");
-      let staged: FakeDatabaseState = emptyState;
-      let releaseLock: (() => void) | undefined;
-
-      const query = async (
-        sql: string,
-        params?: readonly unknown[],
-      ): Promise<Readonly<{ rows: readonly unknown[]; rowCount: number }>> => {
-        queries.push(Object.freeze({ sql, params }));
-        const normalized = sql.replace(/\s+/gu, " ").trim();
-
-        if (normalized === "BEGIN") {
-          events.push("begin");
-          return { rows: [], rowCount: 0 };
-        }
-        if (normalized.includes("pg_advisory_xact_lock")) {
-          releaseLock = await mutex.acquire();
-          events.push("locked");
-          return { rows: [], rowCount: 1 };
-        }
-        if (normalized === "SET LOCAL ROLE laundry_owner") {
-          events.push("owner-role");
-          return { rows: [], rowCount: 0 };
-        }
-        if (
-          normalized.includes("FROM local_bootstrap_metadata") &&
-          normalized.includes("FOR UPDATE") &&
-          !normalized.includes("JOIN orgs")
-        ) {
-          const metadata = state.metadata;
-          return {
-            rows:
-              metadata === undefined
-                ? []
-                : [
-                    {
-                      singleton: true,
-                      org_id: metadata.orgId,
-                      store_id: metadata.storeId,
-                      admin_staff_id: metadata.adminStaffId,
-                      profile_hash: metadata.profileHash,
-                      demo_only: metadata.demoOnly,
-                    },
-                  ],
-            rowCount: metadata === undefined ? 0 : 1,
-          };
-        }
-        if (
-          normalized.includes("FROM local_bootstrap_metadata") &&
-          normalized.includes("JOIN orgs")
-        ) {
-          const { metadata, org, store, staff, role } = state;
-          if (
-            metadata === undefined ||
-            org === undefined ||
-            store === undefined ||
-            staff === undefined ||
-            role === undefined
-          ) {
-            return { rows: [], rowCount: 0 };
-          }
-          return {
-            rows: [
-              {
-                metadata_org_id: metadata.orgId,
-                metadata_store_id: metadata.storeId,
-                metadata_admin_staff_id: metadata.adminStaffId,
-                metadata_profile_hash: metadata.profileHash,
-                metadata_demo_only: metadata.demoOnly,
-                org_id: org.id,
-                org_code: org.code,
-                org_name: org.name,
-                org_demo_only: org.demoOnly,
-                store_id: store.id,
-                store_org_id: store.orgId,
-                store_code: store.code,
-                store_name: store.name,
-                store_timezone: store.timezone,
-                admin_staff_id: staff.id,
-                admin_org_id: staff.orgId,
-                admin_username: staff.username,
-                admin_password_hash: staff.passwordHash,
-                admin_pin_hash: staff.pinHash,
-                admin_display_name: staff.displayName,
-                admin_is_active: staff.isActive,
-                admin_permission_version: staff.permissionVersion,
-                role_id: role.id,
-                role_org_id: role.orgId,
-                role_store_id: role.storeId,
-                role_staff_id: role.staffId,
-                role_name: role.role,
-                role_is_active: role.isActive,
-                role_is_privacy_admin: role.isPrivacyAdmin,
-              },
-            ],
-            rowCount: 1,
-          };
-        }
-        if (normalized.includes("AS org_id_exists")) {
-          const requestedOrgId = String(params?.[0]);
-          const requestedOrgCode = String(params?.[1]);
-          const requestedStoreId = String(params?.[2]);
-          const requestedStoreCode = String(params?.[3]);
-          const requestedStaffId = String(params?.[4]);
-          const requestedUsername = String(params?.[5]);
-          const requestedRoleId = String(params?.[6]);
-          const requestedDemoOnly = Boolean(params?.[7]);
-          const demoConflict =
-            !requestedDemoOnly &&
-            state.org !== undefined &&
-            state.org.demoOnly &&
-            (state.org.id === requestedOrgId || state.org.code === requestedOrgCode);
-
-          return {
-            rows: [
-              {
-                org_id_exists: state.org?.id === requestedOrgId,
-                org_code_exists: state.org?.code === requestedOrgCode,
-                store_id_exists: state.store?.id === requestedStoreId,
-                store_code_exists:
-                  state.store?.orgId === requestedOrgId && state.store?.code === requestedStoreCode,
-                staff_id_exists: state.staff?.id === requestedStaffId,
-                staff_username_exists:
-                  state.staff?.orgId === requestedOrgId &&
-                  state.staff?.username === requestedUsername,
-                role_id_exists: state.role?.id === requestedRoleId,
-                demo_only_conflict: demoConflict,
-              },
-            ],
-            rowCount: 1,
-          };
-        }
-
-        const failOrStage = (kind: WriteKind, next: FakeDatabaseState): void => {
-          if (options?.failAt === kind) {
-            throw new Error(`write-failed-${kind}-raw-secret`);
-          }
-          staged = Object.freeze({ ...staged, ...next });
-        };
-
-        if (normalized.startsWith("INSERT INTO orgs")) {
-          failOrStage("org", {
-            org: Object.freeze({
-              id: String(params?.[0]),
-              code: String(params?.[1]),
-              name: String(params?.[2]),
-              demoOnly: Boolean(params?.[3]),
-            }),
-          });
-          return { rows: [], rowCount: 1 };
-        }
-        if (normalized.startsWith("INSERT INTO stores")) {
-          failOrStage("store", {
-            store: Object.freeze({
-              id: String(params?.[0]),
-              orgId: String(params?.[1]),
-              code: String(params?.[2]),
-              name: String(params?.[3]),
-              timezone: String(params?.[4]),
-            }),
-          });
-          return { rows: [], rowCount: 1 };
-        }
-        if (normalized.startsWith("INSERT INTO staffs")) {
-          failOrStage("staff", {
-            staff: Object.freeze({
-              id: String(params?.[0]),
-              orgId: String(params?.[1]),
-              username: String(params?.[2]),
-              passwordHash: String(params?.[3]),
-              pinHash: String(params?.[4]),
-              displayName: String(params?.[5]),
-              isActive: true,
-              permissionVersion: 1,
-            }),
-          });
-          return { rows: [], rowCount: 1 };
-        }
-        if (normalized.startsWith("INSERT INTO staff_store_roles")) {
-          failOrStage("role", {
-            role: Object.freeze({
-              id: String(params?.[0]),
-              orgId: String(params?.[1]),
-              storeId: String(params?.[2]),
-              staffId: String(params?.[3]),
-              role: String(params?.[4]),
-              isPrivacyAdmin: true,
-              isActive: true,
-            }),
-          });
-          return { rows: [], rowCount: 1 };
-        }
-        if (normalized.startsWith("INSERT INTO local_bootstrap_metadata")) {
-          failOrStage("metadata", {
-            metadata: Object.freeze({
-              orgId: String(params?.[0]),
-              storeId: String(params?.[1]),
-              adminStaffId: String(params?.[2]),
-              profileHash: String(params?.[3]),
-              demoOnly: Boolean(params?.[4]),
-            }),
-          });
-          return { rows: [], rowCount: 1 };
-        }
-        if (normalized === "COMMIT") {
-          state = Object.freeze({ ...state, ...staged });
-          staged = emptyState;
-          releaseLock?.();
-          releaseLock = undefined;
-          events.push("commit");
-          return { rows: [], rowCount: 0 };
-        }
-        if (normalized === "ROLLBACK") {
-          staged = emptyState;
-          releaseLock?.();
-          releaseLock = undefined;
-          events.push("rollback");
-          return { rows: [], rowCount: 0 };
-        }
-
-        throw new Error(`unexpected SQL: ${normalized}`);
-      };
-
-      return {
-        query,
-        release(): void {
-          releaseLock?.();
-          events.push("release");
-        },
-      } as unknown as PgPoolClient;
-    },
-  } as unknown as PgPool;
-
-  return Object.freeze({
-    pool,
-    queries,
-    events,
-    snapshot: () => state,
-    replaceState: (nextState: FakeDatabaseState): void => {
-      state = Object.freeze({ ...nextState });
-    },
-  });
-}
-
-function createPasswordPort(events: string[] = []): PasswordPort {
-  return Object.freeze({
-    hashPassword: async (value: string): Promise<string> => {
-      events.push(`hash:${value}`);
-      return /^\d{4,8}$/u.test(value) ? PIN_PHC : PASSWORD_PHC;
-    },
-    verifyPassword: async (value: string, storedHash: string): Promise<boolean> => {
-      if (/^\d{4,8}$/u.test(value)) {
-        return storedHash === PIN_PHC;
-      }
-      return storedHash === PASSWORD_PHC;
-    },
-  });
-}
-
-function input(overrides: Partial<BootstrapInput> = {}): BootstrapInput {
-  return Object.freeze({
+const input = (overrides: Partial<BootstrapInput> = {}): BootstrapInput =>
+  Object.freeze({
     profile: LOCAL_PROFILE,
     adminUsername: "admin",
     adminDisplayName: "店长",
-    adminPassword: "password-sentinel",
-    adminPin: "4321",
+    adminPassword: "primary-password-sentinel",
+    adminPin: "432165",
+    approverUsername: "approver",
+    approverDisplayName: "复核管理员",
+    approverPassword: "approver-password-sentinel",
+    approverPin: "987654",
     demoOnly: false,
     ...overrides,
   });
+
+const commissionInput = (overrides: Partial<CommissionInput> = {}): CommissionInput =>
+  Object.freeze({
+    profile: LOCAL_PROFILE,
+    approverUsername: "approver",
+    approverDisplayName: "复核管理员",
+    approverPassword: "approver-password-sentinel",
+    approverPin: "987654",
+    ...overrides,
+  });
+
+function passwordPort(events: string[] = [], verify = false): PasswordPort {
+  return Object.freeze({
+    hashPassword: async (value: string): Promise<string> => {
+      events.push(`hash:${value}`);
+      return /^\d{6,8}$/u.test(value) ? PIN_PHC : PASSWORD_PHC;
+    },
+    verifyPassword: async (): Promise<boolean> => verify,
+  });
 }
 
-test("builds workspace dependencies before the package-local bootstrap CLI", () => {
-  const serverPackage = JSON.parse(readFileSync(serverPackagePath, "utf8")) as Readonly<{
-    scripts?: Readonly<Record<string, string>>;
-  }>;
+function poolFor(
+  respond: (sql: string, params: readonly unknown[] | undefined) => QueryResult,
+  options: Readonly<{ failOn?: string; rollbackFails?: boolean }> = {},
+): Readonly<{ pool: PgPool; queries: QueryRecord[]; events: string[] }> {
+  const queries: QueryRecord[] = [];
+  const events: string[] = [];
+  const client = {
+    query: async (sql: string, params?: readonly unknown[]): Promise<QueryResult> => {
+      const normalized = sql.replace(/\s+/gu, " ").trim();
+      queries.push(Object.freeze({ sql: normalized, params }));
+      if (normalized === "BEGIN" || normalized === "COMMIT" || normalized === "ROLLBACK") {
+        events.push(normalized.toLowerCase());
+        if (normalized === "ROLLBACK" && options.rollbackFails) throw new Error("rollback failed");
+        return { rows: [], rowCount: 0 };
+      }
+      if (options.failOn !== undefined && normalized.startsWith(options.failOn)) {
+        throw new Error("write failed with raw-secret");
+      }
+      return respond(normalized, params);
+    },
+    release: (): void => {
+      events.push("release");
+    },
+  } as unknown as PgPoolClient;
+  return Object.freeze({
+    pool: Object.freeze({ connect: async () => client }) as unknown as PgPool,
+    queries,
+    events,
+  });
+}
 
-  assert.deepEqual(serverPackage.scripts?.["bootstrap:local"]?.split(" && "), [
+const collisionFree = (): QueryResult => ({
+  rows: [
+    {
+      org_id_exists: false,
+      org_code_exists: false,
+      store_id_exists: false,
+      store_code_exists: false,
+      admin_staff_id_exists: false,
+      approver_staff_id_exists: false,
+      admin_username_exists: false,
+      approver_username_exists: false,
+      admin_role_id_exists: false,
+      approver_role_id_exists: false,
+      feature_id_exists: false,
+      audit_id_exists: false,
+      demo_only_conflict: false,
+    },
+  ],
+  rowCount: 1,
+});
+
+const createResponder = (sql: string): QueryResult => {
+  if (sql.startsWith("SELECT singleton")) return { rows: [], rowCount: 0 };
+  if (sql.includes("AS org_id_exists")) return collisionFree();
+  return { rows: [], rowCount: 1 };
+};
+
+test("builds workspace dependencies before the package-local bootstrap CLI", () => {
+  const packageJson = JSON.parse(readFileSync(serverPackagePath, "utf8")) as {
+    scripts?: Record<string, string>;
+  };
+  assert.deepEqual(packageJson.scripts?.["bootstrap:local"]?.split(" && "), [
     "pnpm --filter @laundry/contracts build",
     "pnpm --filter @laundry/domain build",
     "pnpm run build",
@@ -405,290 +135,330 @@ test("builds workspace dependencies before the package-local bootstrap CLI", () 
   ]);
 });
 
-test("validates the fixed local profile and every external admin boundary", () => {
+test("validates two independent administrators at the owner boundary", () => {
   assert.throws(
-    () => BootstrapInputSchema.parse(input({ adminUsername: "not visible" })),
-    /adminUsername/u,
+    () => BootstrapInputSchema.parse(input({ adminPassword: "short" })),
+    /adminPassword/u,
   );
+  assert.throws(() => BootstrapInputSchema.parse(input({ approverPin: "12345" })), /approverPin/u);
   assert.throws(
-    () => BootstrapInputSchema.parse(input({ adminDisplayName: "   " })),
-    /adminDisplayName/u,
+    () => BootstrapInputSchema.parse(input({ approverUsername: "admin" })),
+    /approverUsername/u,
   );
-  assert.throws(() => BootstrapInputSchema.parse(input({ adminPassword: "" })), /adminPassword/u);
-  assert.throws(() => BootstrapInputSchema.parse(input({ adminPin: "123" })), /adminPin/u);
   assert.throws(
     () =>
       BootstrapInputSchema.parse(
         input({
-          profile: Object.freeze({
-            ...LOCAL_PROFILE,
-            orgName: "other",
-          }) as unknown as typeof LOCAL_PROFILE,
+          approverPassword: "primary-password-sentinel",
         }),
       ),
-    /profile/u,
+    /approverPassword/u,
   );
-
-  const parsed = BootstrapInputSchema.parse(input({ adminDisplayName: "  店长  " }));
-  assert.equal(parsed.adminDisplayName, "店长");
-  assert.equal(Object.isFrozen(parsed), true);
+  assert.throws(() => BootstrapInputSchema.parse(input({ approverPin: "432165" })), /approverPin/u);
+  assert.equal(
+    BootstrapInputSchema.parse(input({ adminDisplayName: " 店长 " })).adminDisplayName,
+    "店长",
+  );
+  assert.equal(CommissionInputSchema.parse(commissionInput()).approverUsername, "approver");
 });
 
-test("computes a stable lowercase SHA-256 over versioned non-secret metadata only", () => {
-  const base = input();
-  const first = computeBootstrapProfileHash(base);
-  const second = computeBootstrapProfileHash(base);
-  const credentialsChanged = computeBootstrapProfileHash(
-    input({ adminPassword: "another-password", adminPin: "8765" }),
-  );
-  const profileChanged = computeBootstrapProfileHash(input({ adminDisplayName: "新店长" }));
-
-  assert.match(first, /^[0-9a-f]{64}$/u);
-  assert.equal(first, second);
-  assert.equal(first, credentialsChanged);
-  assert.notEqual(first, profileChanged);
-});
-
-test("hashes credentials before connecting and creates the four identity rows with metadata last", async () => {
-  const database = createFakeDatabase();
-  const passwordPort = createPasswordPort(database.events);
-
-  const result = await bootstrapLocalIdentity(
-    Object.freeze({ pool: database.pool, passwordPort }),
-    input(),
-  );
-
-  assert.deepEqual(result, {
-    status: "created",
-    orgId: LOCAL_PROFILE.orgId,
-    storeId: LOCAL_PROFILE.storeId,
-    adminStaffId: LOCAL_PROFILE.adminStaffId,
-    demoOnly: false,
-  });
-  assert.deepEqual(database.events.slice(0, 3), ["hash:password-sentinel", "hash:4321", "connect"]);
-
-  const sqlSequence = database.queries.map((query) => query.sql.replace(/\s+/gu, " ").trim());
-  assert.equal(sqlSequence[0], "BEGIN");
-  assert.match(sqlSequence[1] ?? "", /pg_advisory_xact_lock/u);
-  assert.deepEqual(database.queries[1]?.params, [LOCAL_BOOTSTRAP_ADVISORY_LOCK_ID]);
-  assert.equal(sqlSequence[2], "SET LOCAL ROLE laundry_owner");
-  assert.match(sqlSequence[3] ?? "", /local_bootstrap_metadata[\s\S]*FOR UPDATE/u);
-  assert.deepEqual(
-    sqlSequence
-      .filter((sql) => sql.startsWith("INSERT INTO"))
-      .map((sql) => sql.match(/^INSERT INTO ([a-z_]+)/u)?.[1]),
-    ["orgs", "stores", "staffs", "staff_store_roles", "local_bootstrap_metadata"],
-  );
-  assert.equal(sqlSequence.at(-1), "COMMIT");
-
-  const serializedParams = JSON.stringify(database.queries.map((query) => query.params));
-  assert.equal(serializedParams.includes("password-sentinel"), false);
-  assert.equal(serializedParams.includes("4321"), false);
-  assert.equal(serializedParams.includes(PASSWORD_PHC), true);
-  assert.equal(serializedParams.includes(PIN_PHC), true);
-
-  const state = database.snapshot();
-  assert.equal(state.org?.demoOnly, false);
-  assert.equal(state.role?.id, BOOTSTRAP_ADMIN_ROLE_ID);
-  assert.equal(state.role?.role, "admin");
-  assert.equal(state.role?.isPrivacyAdmin, true);
-  assert.equal(state.metadata?.profileHash, computeBootstrapProfileHash(input()));
-});
-
-test("returns unchanged without writes only when metadata and complete actual state match", async () => {
-  const database = createFakeDatabase();
-  const deps = Object.freeze({ pool: database.pool, passwordPort: createPasswordPort() });
-
-  const first = await bootstrapLocalIdentity(deps, input());
-  const insertsAfterCreate = database.queries.filter((query) =>
-    query.sql.replace(/\s+/gu, " ").trim().startsWith("INSERT INTO"),
-  ).length;
-  const second = await bootstrapLocalIdentity(deps, input());
-  const insertsAfterRerun = database.queries.filter((query) =>
-    query.sql.replace(/\s+/gu, " ").trim().startsWith("INSERT INTO"),
-  ).length;
-
-  assert.equal(first.status, "created");
-  assert.equal(second.status, "unchanged");
-  assert.equal(insertsAfterCreate, 5);
-  assert.equal(insertsAfterRerun, insertsAfterCreate);
-  assert.equal(database.events.filter((event) => event === "commit").length, 2);
-});
-
-test("fails closed when stored metadata exists but any actual admin role state drifts", async () => {
-  const database = createFakeDatabase();
-  const deps = Object.freeze({ pool: database.pool, passwordPort: createPasswordPort() });
-  await bootstrapLocalIdentity(deps, input());
-  const created = database.snapshot();
-  assert.notEqual(created.role, undefined);
-  if (created.role === undefined) {
-    throw new Error("created bootstrap must persist an admin role");
-  }
-  database.replaceState(
-    Object.freeze({
-      ...created,
-      role: Object.freeze({ ...created.role, role: "staff" }),
+test("profile hash is stable and excludes all credentials", () => {
+  const first = computeBootstrapProfileHash(input());
+  const changedCredentials = computeBootstrapProfileHash(
+    input({
+      adminPassword: "different-primary-password",
+      adminPin: "123456",
+      approverPassword: "different-approver-password",
+      approverPin: "654321",
     }),
   );
-  const insertsBefore = database.queries.filter((query) =>
-    query.sql.replace(/\s+/gu, " ").trim().startsWith("INSERT INTO"),
-  ).length;
+  assert.match(first, /^[0-9a-f]{64}$/u);
+  assert.equal(first, changedCredentials);
+  assert.notEqual(first, computeBootstrapProfileHash(input({ adminDisplayName: "新店长" })));
+});
 
+test("fresh bootstrap atomically creates two admins, features, marker, and secret-free audit", async () => {
+  const events: string[] = [];
+  const database = poolFor(createResponder);
+  const result = await bootstrapLocalIdentity(
+    { pool: database.pool, passwordPort: passwordPort(events), now: () => new Date(0) },
+    input(),
+  );
+  assert.equal(result.status, "created");
+  assert.equal(result.approverStaffId, BOOTSTRAP_APPROVER_STAFF_ID);
+  assert.deepEqual(
+    events.slice().sort(),
+    [
+      "hash:432165",
+      "hash:987654",
+      "hash:approver-password-sentinel",
+      "hash:primary-password-sentinel",
+    ].sort(),
+  );
+  const inserts = database.queries.filter(({ sql }) => sql.startsWith("INSERT INTO"));
+  assert.deepEqual(
+    inserts.map(({ sql }) => sql.match(/^INSERT INTO ([a-z_]+)/u)?.[1]),
+    [
+      "orgs",
+      "stores",
+      "staffs",
+      "staff_store_roles",
+      "staffs",
+      "staff_store_roles",
+      "store_features",
+      "local_bootstrap_metadata",
+      "audit_log",
+    ],
+  );
+  assert.deepEqual(database.queries[1]?.params, [LOCAL_BOOTSTRAP_ADVISORY_LOCK_ID]);
+  const serialized = JSON.stringify(database.queries);
+  for (const secret of [
+    "primary-password-sentinel",
+    "432165",
+    "approver-password-sentinel",
+    "987654",
+  ])
+    assert.equal(serialized.includes(secret), false);
+  for (const expected of [
+    PASSWORD_PHC,
+    PIN_PHC,
+    BOOTSTRAP_ADMIN_ROLE_ID,
+    BOOTSTRAP_APPROVER_ROLE_ID,
+    BOOTSTRAP_FEATURE_ROW_ID,
+    BOOTSTRAP_COMMISSION_AUDIT_ID,
+  ])
+    assert.equal(serialized.includes(expected), true);
+  assert.deepEqual(database.events, ["begin", "commit", "release"]);
+});
+
+const metadata = (profileHash: string, commissioned = true) => ({
+  singleton: true,
+  org_id: LOCAL_PROFILE.orgId,
+  store_id: LOCAL_PROFILE.storeId,
+  admin_staff_id: LOCAL_PROFILE.adminStaffId,
+  approver_staff_id: commissioned ? BOOTSTRAP_APPROVER_STAFF_ID : null,
+  profile_hash: profileHash,
+  demo_only: false,
+  commissioned_at: commissioned ? new Date(0) : null,
+  feature_profile_version: commissioned ? 1 : 0,
+});
+
+const existingState = (profileHash: string) => ({
+  metadata_org_id: LOCAL_PROFILE.orgId,
+  metadata_store_id: LOCAL_PROFILE.storeId,
+  metadata_admin_staff_id: LOCAL_PROFILE.adminStaffId,
+  metadata_approver_staff_id: BOOTSTRAP_APPROVER_STAFF_ID,
+  metadata_profile_hash: profileHash,
+  metadata_demo_only: false,
+  metadata_commissioned_at: new Date(0),
+  metadata_feature_profile_version: 1,
+  org_id: LOCAL_PROFILE.orgId,
+  org_code: LOCAL_PROFILE.orgCode,
+  org_name: LOCAL_PROFILE.orgName,
+  org_demo_only: false,
+  store_id: LOCAL_PROFILE.storeId,
+  store_org_id: LOCAL_PROFILE.orgId,
+  store_code: LOCAL_PROFILE.storeCode,
+  store_name: LOCAL_PROFILE.storeName,
+  store_timezone: LOCAL_PROFILE.timezone,
+  admin_staff_id: LOCAL_PROFILE.adminStaffId,
+  admin_org_id: LOCAL_PROFILE.orgId,
+  admin_username: "admin",
+  admin_password_hash: PASSWORD_PHC,
+  admin_pin_hash: PIN_PHC,
+  admin_display_name: "店长",
+  admin_is_active: true,
+  admin_permission_version: 1,
+  admin_role_id: BOOTSTRAP_ADMIN_ROLE_ID,
+  admin_role_name: "admin",
+  admin_role_is_active: true,
+  admin_role_is_privacy_admin: true,
+  approver_staff_id: BOOTSTRAP_APPROVER_STAFF_ID,
+  approver_org_id: LOCAL_PROFILE.orgId,
+  approver_username: "approver",
+  approver_password_hash: PASSWORD_PHC,
+  approver_pin_hash: PIN_PHC,
+  approver_display_name: "复核管理员",
+  approver_is_active: true,
+  approver_permission_version: 1,
+  approver_role_id: BOOTSTRAP_APPROVER_ROLE_ID,
+  approver_role_name: "admin",
+  approver_role_is_active: true,
+  approver_role_is_privacy_admin: true,
+  feature_id: BOOTSTRAP_FEATURE_ROW_ID,
+  fulfillment: true,
+  membership: true,
+  shift_closing: true,
+  delivery: false,
+  marketing: false,
+  ai: false,
+  audit_id: BOOTSTRAP_COMMISSION_AUDIT_ID,
+});
+
+test("bootstrap is idempotent only for a complete matching commissioned state", async () => {
+  const hash = computeBootstrapProfileHash(input());
+  const database = poolFor((sql) => {
+    if (sql.startsWith("SELECT singleton")) return { rows: [metadata(hash)], rowCount: 1 };
+    if (sql.includes("JOIN staffs approver")) return { rows: [existingState(hash)], rowCount: 1 };
+    return { rows: [], rowCount: 1 };
+  });
+  const result = await bootstrapLocalIdentity(
+    { pool: database.pool, passwordPort: passwordPort([], true) },
+    input(),
+  );
+  assert.equal(result.status, "unchanged");
+  assert.equal(
+    database.queries.some(({ sql }) => sql.startsWith("INSERT INTO")),
+    false,
+  );
+
+  const legacy = poolFor((sql) =>
+    sql.startsWith("SELECT singleton")
+      ? { rows: [metadata(hash, false)], rowCount: 1 }
+      : { rows: [], rowCount: 0 },
+  );
   await assert.rejects(
-    bootstrapLocalIdentity(deps, input()),
+    bootstrapLocalIdentity({ pool: legacy.pool, passwordPort: passwordPort() }, input()),
     (error: unknown) =>
       error instanceof BootstrapError && error.code === "BOOTSTRAP_STATE_CONFLICT",
   );
-
-  const insertsAfter = database.queries.filter((query) =>
-    query.sql.replace(/\s+/gu, " ").trim().startsWith("INSERT INTO"),
-  ).length;
-  assert.equal(insertsAfter, insertsBefore);
-  assert.equal(database.events.at(-2), "rollback");
 });
 
-test("preflight rejects ID, code, username, or demo-only collisions before every write", async (t) => {
-  const collisions: ReadonlyArray<Readonly<{ name: string; state: FakeDatabaseState }>> = [
-    {
-      name: "org id",
-      state: { org: { id: LOCAL_PROFILE.orgId, code: "other", name: "Other", demoOnly: false } },
-    },
-    {
-      name: "store code",
-      state: {
-        store: {
-          id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-          orgId: LOCAL_PROFILE.orgId,
-          code: LOCAL_PROFILE.storeCode,
-          name: "Other",
-          timezone: LOCAL_PROFILE.timezone,
-        },
-      },
-    },
-    {
-      name: "username",
-      state: {
-        staff: {
-          id: "22222222-2222-4222-8222-222222222222",
-          orgId: LOCAL_PROFILE.orgId,
-          username: "admin",
-          passwordHash: PASSWORD_PHC,
-          pinHash: PIN_PHC,
-          displayName: "Other",
-          isActive: true,
-          permissionVersion: 1,
-        },
-      },
-    },
-  ];
+const legacyCommissionState = (overrides: Record<string, unknown> = {}) => ({
+  metadata_org_id: LOCAL_PROFILE.orgId,
+  metadata_store_id: LOCAL_PROFILE.storeId,
+  metadata_admin_staff_id: LOCAL_PROFILE.adminStaffId,
+  approver_staff_id: null,
+  commissioned_at: null,
+  feature_profile_version: 0,
+  metadata_demo_only: false,
+  org_code: LOCAL_PROFILE.orgCode,
+  org_name: LOCAL_PROFILE.orgName,
+  org_demo_only: false,
+  store_code: LOCAL_PROFILE.storeCode,
+  store_name: LOCAL_PROFILE.storeName,
+  store_timezone: LOCAL_PROFILE.timezone,
+  admin_is_active: true,
+  admin_password_hash: PASSWORD_PHC,
+  admin_pin_hash: PIN_PHC,
+  admin_role_id: BOOTSTRAP_ADMIN_ROLE_ID,
+  admin_role_name: "admin",
+  admin_role_is_active: true,
+  admin_role_is_privacy_admin: true,
+  active_admin_count: 1,
+  target_staff_id_exists: false,
+  target_username_exists: false,
+  target_role_id_exists: false,
+  audit_id_exists: false,
+  ...overrides,
+});
 
-  for (const collision of collisions) {
-    await t.test(collision.name, async () => {
-      const database = createFakeDatabase({ initialState: collision.state });
+test("legacy commission rejects a password or PIN reused from the existing administrator", async (t) => {
+  for (const reused of ["approver-password-sentinel", "987654"] as const) {
+    await t.test(reused === "987654" ? "PIN" : "password", async () => {
+      const database = poolFor((sql) =>
+        sql.startsWith("SELECT metadata.org_id")
+          ? { rows: [legacyCommissionState()], rowCount: 1 }
+          : { rows: [], rowCount: 1 },
+      );
+      const port = Object.freeze({
+        ...passwordPort(),
+        verifyPassword: async (value: string): Promise<boolean> => value === reused,
+      });
       await assert.rejects(
-        bootstrapLocalIdentity(
-          Object.freeze({ pool: database.pool, passwordPort: createPasswordPort() }),
-          input(),
-        ),
-        (error: unknown) => error instanceof BootstrapError && error.code === "BOOTSTRAP_COLLISION",
+        commissionLocalIdentity({ pool: database.pool, passwordPort: port }, commissionInput()),
+        (error: unknown) =>
+          error instanceof BootstrapError && error.code === "COMMISSION_STATE_CONFLICT",
       );
       assert.equal(
-        database.queries.some((query) =>
-          query.sql.replace(/\s+/gu, " ").trim().startsWith("INSERT INTO"),
-        ),
+        database.queries.some(({ sql }) => sql.startsWith("INSERT INTO")),
         false,
       );
     });
   }
+});
 
-  await t.test("non-demo cannot reuse demo organization", async () => {
-    const database = createFakeDatabase({
-      initialState: {
-        org: {
-          id: LOCAL_PROFILE.orgId,
-          code: LOCAL_PROFILE.orgCode,
-          name: LOCAL_PROFILE.orgName,
-          demoOnly: true,
-        },
-      },
-    });
-    await assert.rejects(
-      bootstrapLocalIdentity(
-        Object.freeze({ pool: database.pool, passwordPort: createPasswordPort() }),
-        input({ demoOnly: false }),
-      ),
-      (error: unknown) =>
-        error instanceof BootstrapError && error.code === "BOOTSTRAP_DEMO_CONFLICT",
-    );
+test("Runtime commission closes the exact legacy single-admin state in one transaction", async () => {
+  const database = poolFor((sql) => {
+    if (sql.startsWith("SELECT metadata.org_id")) {
+      return { rows: [legacyCommissionState()], rowCount: 1 };
+    }
+    return { rows: [], rowCount: 1 };
   });
+  const result = await commissionLocalIdentity(
+    { pool: database.pool, passwordPort: passwordPort(), now: () => new Date(0) },
+    commissionInput(),
+  );
+  assert.equal(result.status, "commissioned");
+  assert.deepEqual(
+    database.queries
+      .filter(({ sql }) => /^(INSERT INTO|UPDATE)/u.test(sql))
+      .map(({ sql }) => sql.match(/^(?:INSERT INTO|UPDATE) ([a-z_]+)/u)?.[1]),
+    ["staffs", "staff_store_roles", "store_features", "local_bootstrap_metadata", "audit_log"],
+  );
+  const serialized = JSON.stringify(database.queries);
+  assert.equal(serialized.includes("approver-password-sentinel"), false);
+  assert.equal(serialized.includes("987654"), false);
 });
 
-test("rolls back each partial write failure without commit or persisted metadata", async (t) => {
-  for (const failAt of ["org", "store", "staff", "role", "metadata"] as const) {
-    await t.test(failAt, async () => {
-      const database = createFakeDatabase({ failAt });
-      await assert.rejects(
-        bootstrapLocalIdentity(
-          Object.freeze({ pool: database.pool, passwordPort: createPasswordPort() }),
-          input(),
-        ),
-        new RegExp(`write-failed-${failAt}`, "u"),
+test("Runtime commission fails closed after completion, with multiple admins, or on collision", async (t) => {
+  const cases = [
+    [
+      "closed",
+      legacyCommissionState({
+        commissioned_at: new Date(0),
+        approver_staff_id: BOOTSTRAP_APPROVER_STAFF_ID,
+        feature_profile_version: 1,
+      }),
+      "COMMISSION_ALREADY_COMPLETE",
+    ],
+    [
+      "multiple admins",
+      legacyCommissionState({ active_admin_count: 2 }),
+      "COMMISSION_STATE_CONFLICT",
+    ],
+    [
+      "username collision",
+      legacyCommissionState({ target_username_exists: true }),
+      "COMMISSION_COLLISION",
+    ],
+  ] as const;
+  for (const [name, row, code] of cases) {
+    await t.test(name, async () => {
+      const database = poolFor((sql) =>
+        sql.startsWith("SELECT metadata.org_id")
+          ? { rows: [row], rowCount: 1 }
+          : { rows: [], rowCount: 1 },
       );
-
-      assert.equal(database.events.includes("commit"), false);
-      assert.equal(database.events.includes("rollback"), true);
-      assert.equal(database.snapshot().metadata, undefined);
-      assert.equal(database.queries.at(-1)?.sql, "ROLLBACK");
+      await assert.rejects(
+        commissionLocalIdentity(
+          { pool: database.pool, passwordPort: passwordPort() },
+          commissionInput(),
+        ),
+        (error: unknown) => error instanceof BootstrapError && error.code === code,
+      );
+      assert.equal(
+        database.queries.some(({ sql }) => sql.startsWith("INSERT INTO")),
+        false,
+      );
     });
   }
 });
 
-test("serializes two identical calls into one creation and one unchanged result", async () => {
-  const database = createFakeDatabase();
-  const deps = Object.freeze({ pool: database.pool, passwordPort: createPasswordPort() });
-
-  const results = await Promise.all([
-    bootstrapLocalIdentity(deps, input()),
-    bootstrapLocalIdentity(deps, input()),
-  ]);
-
-  assert.deepEqual(results.map((result) => result.status).sort(), ["created", "unchanged"]);
-  assert.equal(database.events.filter((event) => event === "locked").length, 2);
-  assert.equal(database.events.filter((event) => event === "commit").length, 2);
-  const insertTables = database.queries
-    .map((query) => query.sql.replace(/\s+/gu, " ").trim())
-    .filter((sql) => sql.startsWith("INSERT INTO"))
-    .map((sql) => sql.match(/^INSERT INTO ([a-z_]+)/u)?.[1]);
-  assert.equal(insertTables.length, 5);
-  assert.deepEqual(insertTables, [
-    "orgs",
-    "stores",
-    "staffs",
-    "staff_store_roles",
-    "local_bootstrap_metadata",
-  ]);
-});
-
-test("serializes two different calls into one creation and one safe conflict", async () => {
-  const database = createFakeDatabase();
-  const deps = Object.freeze({ pool: database.pool, passwordPort: createPasswordPort() });
-
-  const results = await Promise.allSettled([
-    bootstrapLocalIdentity(deps, input()),
-    bootstrapLocalIdentity(deps, input({ adminDisplayName: "另一位店长" })),
-  ]);
-
-  assert.equal(
-    results.filter((result) => result.status === "fulfilled" && result.value.status === "created")
-      .length,
-    1,
+test("owner transaction rolls back and sanitizes rollback failures", async () => {
+  const database = poolFor(createResponder, { failOn: "INSERT INTO store_features" });
+  await assert.rejects(
+    bootstrapLocalIdentity({ pool: database.pool, passwordPort: passwordPort() }, input()),
+    /write failed/u,
   );
-  const rejected = results.find((result) => result.status === "rejected");
-  assert.equal(rejected?.status, "rejected");
-  if (rejected?.status === "rejected") {
-    assert.equal(rejected.reason instanceof BootstrapError, true);
-    assert.equal((rejected.reason as BootstrapError).code, "BOOTSTRAP_STATE_CONFLICT");
-  }
-  assert.equal(database.events.filter((event) => event === "commit").length, 1);
-  assert.equal(database.events.filter((event) => event === "rollback").length, 1);
+  assert.deepEqual(database.events, ["begin", "rollback", "release"]);
+  const brokenRollback = poolFor(createResponder, {
+    failOn: "INSERT INTO store_features",
+    rollbackFails: true,
+  });
+  await assert.rejects(
+    bootstrapLocalIdentity({ pool: brokenRollback.pool, passwordPort: passwordPort() }, input()),
+    (error: unknown) =>
+      error instanceof BootstrapError && error.code === "BOOTSTRAP_ROLLBACK_FAILED",
+  );
 });

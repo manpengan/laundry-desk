@@ -14,6 +14,10 @@ import {
   PinVerifyResponseSchema,
   isIdentityLifecycleEnvelope,
 } from "../src/auth/operations.js";
+import {
+  StaffCredentialsCompleteRequestSchema,
+  StaffCredentialsCompleteResponseSchema,
+} from "../src/commands/staff.js";
 
 const ids = {
   request: "10000000-0000-4000-8000-000000000001",
@@ -115,6 +119,16 @@ const expectedPinErrors = [
   "EVENT_DISPATCH_FAILED",
 ] as const;
 
+const expectedStaffCredentialErrors = [
+  "VALIDATION_FAILED",
+  "AUTHENTICATION_FAILED",
+  "PERMISSION_DENIED",
+  "RESOURCE_UNAVAILABLE",
+  "CSRF_REJECTED",
+  "RATE_LIMITED",
+  "TRANSACTION_FAILED",
+] as const;
+
 const expectedOperationMatrix = [
   {
     operation: "login",
@@ -186,6 +200,28 @@ const expectedOperationMatrix = [
     response_schema: "zod",
   },
   {
+    operation: "staff_credentials_complete",
+    method: "POST",
+    path: "/api/v2/auth/staff/credentials/complete",
+    ingress: "browser_session",
+    requirements: {
+      origin: "required",
+      fetch_metadata: "required",
+      access: "active_required",
+      refresh_cookie: "not_required",
+      csrf: "required",
+      allowed_surfaces: ["ui"],
+      offline: false,
+    },
+    cookie_effects: { refresh: "none", csrf: "none" },
+    request_schema_id: "auth.staff_credentials_complete.request",
+    response_schema_id: "auth.staff_credentials_complete.response",
+    allowed_public_errors: expectedStaffCredentialErrors,
+    auth_error_descriptors: expectedAuthErrors,
+    request_schema: "zod",
+    response_schema: "zod",
+  },
+  {
     operation: "pin_challenge",
     method: "POST",
     path: "/api/v2/auth/pin/challenges",
@@ -235,7 +271,7 @@ const expectedOperationMatrix = [
 ] as const;
 
 describe("A5 auth operation matrix", () => {
-  it("freezes the exact five browser operations and transport requirements", () => {
+  it("freezes the exact six browser operations and transport requirements", () => {
     expect(
       AUTH_OPERATION_MATRIX.map(({ request_schema, response_schema, ...row }) => ({
         ...row,
@@ -257,14 +293,15 @@ describe("A5 auth operation matrix", () => {
   });
 
   it("binds every row to its exact browser request and response schema", () => {
-    const exactFiveRows: 5 = AUTH_OPERATION_MATRIX.length;
+    const exactSixRows: 6 = AUTH_OPERATION_MATRIX.length;
     const exactLifecycleErrors: 6 = AUTH_OPERATION_MATRIX[0].allowed_public_errors.length;
     const exactAuthErrorDescriptors: 3 = AUTH_OPERATION_MATRIX[0].auth_error_descriptors.length;
-    expect([exactFiveRows, exactLifecycleErrors, exactAuthErrorDescriptors]).toEqual([5, 6, 3]);
+    expect([exactSixRows, exactLifecycleErrors, exactAuthErrorDescriptors]).toEqual([6, 6, 3]);
     expect(AUTH_OPERATION_MATRIX.map((row) => row.request_schema)).toEqual([
       LoginRequestSchema,
       EmptyBodySchema,
       EmptyBodySchema,
+      StaffCredentialsCompleteRequestSchema,
       PinChallengeRequestSchema,
       PinVerifyRequestSchema,
     ]);
@@ -272,6 +309,7 @@ describe("A5 auth operation matrix", () => {
       AccessSessionResponseSchema,
       AccessSessionResponseSchema,
       LogoutResponseSchema,
+      StaffCredentialsCompleteResponseSchema,
       PinChallengeResponseSchema,
       PinVerifyResponseSchema,
     ]);
@@ -381,6 +419,7 @@ describe("A5 browser auth schemas", () => {
       LogoutResponseSchema,
       PinChallengeResponseSchema,
       PinVerifyResponseSchema,
+      StaffCredentialsCompleteResponseSchema,
     ].forEach((schema) =>
       expect(schema.safeParse({ ...accessSessionResponse, ...forbidden }).success).toBe(false),
     );

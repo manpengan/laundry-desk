@@ -49,6 +49,10 @@ describe("M2 contract surface", () => {
       "garment.mark_lost",
       // M1.5: store-scoped staff access administration with R5 step-up.
       "staff.access.set",
+      // ADR-31: non-secret staff lifecycle commands. Password and PIN only
+      // cross the dedicated authenticated completion boundary.
+      "staff.create",
+      "staff.credentials.reset",
       // ADR-17: member stored value. Top-up is R3 because real money enters an
       // append-only ledger; the balance is SUM(delta), never a stored column.
       "member.account.open",
@@ -86,7 +90,7 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.drilldown");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_portfolio.get");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(39);
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(41);
     expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(25);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,

@@ -3,7 +3,7 @@
  */
 
 import { Button, Dialog, Input, useToast } from "@laundry/ui";
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SwitchableStaff } from "../auth/types.js";
 import { validatePin } from "../auth/validate-pin.js";
@@ -35,18 +35,24 @@ export function StepUpConfirmDialog({
   onApproved,
 }: StepUpConfirmDialogProps) {
   const toast = useToast();
-  const approvers = useMemo(
-    () =>
-      authClient
-        .listSwitchableStaff()
-        .filter((staff) => staff.staff_id !== currentStaffId && staff.role === "admin"),
-    [authClient, currentStaffId],
-  );
+  const approvers = authClient
+    .listSwitchableStaff()
+    .filter((staff) => staff.staff_id !== currentStaffId && staff.role === "admin");
+  const approverIds = approvers.map((staff) => staff.staff_id).join(",");
   const [approverId, setApproverId] = useState<string>(approvers[0]?.staff_id ?? "");
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState<string | undefined>(undefined);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setApproverId((current) =>
+      approvers.some((staff) => staff.staff_id === current)
+        ? current
+        : (approvers[0]?.staff_id ?? ""),
+    );
+  }, [approverIds, open]);
 
   const resetLocal = useCallback(() => {
     setPin("");
