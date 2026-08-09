@@ -4,6 +4,7 @@
 > 状态：**已达成**
 > 裁决依据：[ADR-14 §5](../../adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
 > 设计：[通用 V2 本地优先产品设计](2026-07-25-local-first-v2-product-design.md)
+> 当前状态入口：[ADR-36 Web 产品收口验收记录](2026-08-09-adr36-web-product-convergence-acceptance.md)
 
 本文记录 ADR-14 §5 定义的首个里程碑达成情况：**逐条列出验收口径、支撑证据，以及覆盖到哪一层**。
 不夸大——仍有能力只有服务端覆盖（见 §7），下表如实标注每条到底覆盖到哪一层。
@@ -266,12 +267,12 @@ Web 目前只显式展示本金、渠道并说明执行时由服务端计算，�
 
 ### 10.2 新鲜分层证据
 
-| 门禁 | 结果 |
-| ---- | ---- |
-| 服务端真实 PostgreSQL 全量 | **792/792，0 skipped** |
-| 浏览器真实 Fastify + PostgreSQL | **17/17** |
-| Runtime.app 无仓库升级/回滚 | **62 个场景、8 个签名清单负例** |
-| 统一本地验收 | **`LOCAL_ACCEPTANCE_OK`；packaged macOS 1/1** |
+| 门禁                            | 结果                                          |
+| ------------------------------- | --------------------------------------------- |
+| 服务端真实 PostgreSQL 全量      | **792/792，0 skipped**                        |
+| 浏览器真实 Fastify + PostgreSQL | **17/17**                                     |
+| Runtime.app 无仓库升级/回滚     | **62 个场景、8 个签名清单负例**               |
+| 统一本地验收                    | **`LOCAL_ACCEPTANCE_OK`；packaged macOS 1/1** |
 
 上述软件证据不等于正式发布。Developer ID Application、公证/staple/Gatekeeper、正式
 Ed25519 权威、可访问的双架构 OCI、第二台无仓库 Mac，以及 XP-58 中文、金额、扫码、走纸、
@@ -281,3 +282,21 @@ Ed25519 权威、可访问的双架构 OCI、第二台无仓库 Mac，以及 XP-
 反复重建的测试 App 触发不可自动处理的系统模态框；该参数只存在于 E2E 启动参数，生产入口与
 打包业务代码有静态拒绝门禁。因此 1/1 证明的是打包业务链，不冒充 Developer ID 包在干净 Mac
 上的真实 Keychain/Gatekeeper 证据。
+
+## 11. ADR-36 云测试路线订正（2026-08-09）
+
+§1–§10 记录本地单机里程碑及其后续加固，不改写原时点证据。[ADR-36](../../adr/2026-08-09-adr-36-cloud-test-environment.md)
+此后把 hk-vps 云测试环境提前到当前交付线，因此 §8.1 和 §10.2 中「云部署后置」的表述仅对生产级云部署仍然成立，
+不再包含 ADR-36 定义的合成数据开发测试环境。
+
+`main@ae9808c` 的 P0 新鲜证据已确认：
+
+- GitHub `workspace-check` 与 `real-postgres` 双绿；
+- hk-vps release marker 精确指向 `ae9808ce1f3dc61535dbcc1cb89e618f0350ecf6`；
+- loopback 与公网 HTTPS 均完成健康检查、登录、刷新、查询、合成写入回读与退出；
+- PostgreSQL 仅监听 loopback，`laundry-desk`/`postgresql`/`caddy`/`kb-web` 均为 active。
+
+上述只关闭「精确版本已发布且最小冒烟可用」。双管理员/员工凭据、价目、完整开单收款履约、会员账户生命周期、
+催取人工名单、双口径报表/导出以及剩余 SQL capturing doubles 的真 PostgreSQL 证据复核属于 P2，
+不得从本地历史门禁推导为云端已验收；其后的逐项新鲜状态见
+[Web 产品收口验收记录](2026-08-09-adr36-web-product-convergence-acceptance.md)。

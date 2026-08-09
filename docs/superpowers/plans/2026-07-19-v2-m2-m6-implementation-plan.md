@@ -1,10 +1,12 @@
 # laundry-v2 实施计划：V2-M2 → V2-M6
 
 > 起草：Claude（设计与门禁）　日期：2026-07-19
+> 文档状态：**历史冻结，不再是执行入口**
+> 当前执行：[ADR-36 Web 产品收口计划](2026-08-09-adr36-web-product-convergence-plan.md)
 > 上游：[M0/M1 计划](2026-07-19-v2-m0-m1-implementation-plan.md)（本文件承接其 §4 提要并展开到同粒度）
 > 设计真源：[架构 spec](../specs/2026-07-19-laundry-v2-architecture.md) §14 里程碑表、[ADR-07](../../adr/2026-07-19-adr-07-v1-migration-and-milestones.md)
-> 当前路线：[ADR-13](../../adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)——停止 v1 功能线，直接交付 v2 升级版本。
-> 当前 owner：[ADR-12](../../adr/2026-07-21-adr-12-grok-unified-delivery-ownership.md)——Grok 统一负责设计、实现、集成与门禁；每期独立门禁，设计变更走新增 ADR。
+> 当时路线：[ADR-13](../../adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)——停止 v1 功能线，直接交付 v2 升级版本。
+> 当时 owner：[ADR-12](../../adr/2026-07-21-adr-12-grok-unified-delivery-ownership.md)——该裁决已被 ADR-14 取代。下文的 Grok/宏发分工保留为历史上下文，不代表当前 owner 或产品边界。
 
 ---
 
@@ -191,10 +193,24 @@ Grok 统一负责所有里程碑的 contracts、domain、PG/server、安全、Ed
 
 ---
 
-## 8. 当前下一步（2026-07-23）
+## 8. 当时下一步（2026-07-23）
 
 1. 合入 ADR-13 与所有当前入口的 V2-only 更新。
 2. 从最新 main 重做 `origin/codex/fix-review-blockers` 的有效修复，保护 #99，索引 migration 使用 `0014`。
 3. 用真实 server+PostgreSQL 替换 compose 的 mock Cloud 主路径，新增无 skip 的 v2 integration workflow。
 4. 冻结 contracts v0.2，再按 domain → server/PG → migration/Edge/Web/AI 的纵向链推进。
 5. Windows、三打印机、宏发 v1 只读副本与真实模型 key 继续作为外部门禁条件。
+
+---
+
+## 9. 执行入口交接（2026-08-09）
+
+本计划中 M2–M6 的历史分期已被 ADR-14、ADR-16 及 ADR-17–ADR-36 的实际交付和边界裁决超越。
+自 `main@ae9808c` 起，不再按本文的 Grok/M2–M6 表格判定「下一步」或「已交付」；改用：
+
+1. [ADR-36](../../adr/2026-08-09-adr-36-cloud-test-environment.md) 判定当前环境与安全边界；
+2. [Web 产品收口计划](2026-08-09-adr36-web-product-convergence-plan.md) 判定 P0–P2 执行顺序；
+3. [Web 产品收口验收记录](../specs/2026-08-09-adr36-web-product-convergence-acceptance.md) 判定哪些行为已有新鲜证据。
+
+P0 精确发布与最小冒烟已通过；P2 全业务验收和剩余 SQL capturing doubles 的真库证据
+复核在本记录落绿前一律保持 **pending**。
