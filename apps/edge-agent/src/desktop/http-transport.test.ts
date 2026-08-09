@@ -279,6 +279,7 @@ test("command, confirm, and query use only contract-selected routes with process
           403,
         ),
         executionResponse({ customers: [] }),
+        executionResponse({ updated: 1 }),
       ],
     },
     { name: "__Host-laundry_csrf", value: CSRF_A },
@@ -295,9 +296,16 @@ test("command, confirm, and query use only contract-selected routes with process
     name: "customer.search",
     body: { query: "138", limit: 10 },
   });
+  const settings = await transport.command.execute({
+    name: "platform.settings.set",
+    body: {
+      entries: [{ key: "pricing.min_order_cents", value_json: "1200" }],
+    },
+  });
   assert.equal(direct.ok, true);
   assert.equal(confirm.ok, false);
   assert.equal(query.ok, true);
+  assert.equal(settings.ok, true);
   const expected = [
     {
       index: 2,
@@ -313,6 +321,13 @@ test("command, confirm, and query use only contract-selected routes with process
       index: 4,
       path: "/v1/queries/customer.search",
       body: { query: "138", limit: 10 },
+    },
+    {
+      index: 5,
+      path: "/v1/commands/platform.settings.set",
+      body: {
+        entries: [{ key: "pricing.min_order_cents", value_json: "1200" }],
+      },
     },
   ] as const;
   expected.forEach(({ index, path, body }) => {

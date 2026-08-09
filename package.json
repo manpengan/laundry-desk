@@ -60,6 +60,7 @@
     "runtime:app:build": "node tools/runtime-kit/build-app.mjs",
     "runtime:app:inspect": "node tools/runtime-kit/inspect-app.mjs",
     "runtime:app:acceptance": "node tools/runtime-kit/runtime-app-acceptance.mjs",
+    "runtime:counter:acceptance": "node tools/runtime-kit/runtime-counter-loopback-acceptance.mjs",
     "runtime:lan:no-repo:acceptance": "node tools/runtime-kit/build-app.mjs --testing && node tools/runtime-kit/inspect-app.mjs 'tools/runtime-kit/dist/Laundry Desk Runtime Test.app' && node tools/runtime-kit/no-repo-lan-acceptance.mjs",
     "runtime:lan:container:acceptance": "node tools/runtime-kit/real-container-lan-acceptance.mjs",
     "runtime:lan:acceptance": "pnpm runtime:lan:no-repo:acceptance && pnpm runtime:lan:container:acceptance",

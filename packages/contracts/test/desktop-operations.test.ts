@@ -446,7 +446,7 @@ describe("desktop command/query schemas", () => {
     ).toBe(false);
   });
 
-  it("derives command and query names from the real M2 registries", async () => {
+  it("derives operation names from the real product registries", async () => {
     expect(
       M2_CONTRACT_COMMAND_NAMES.filter(
         (name) => name !== "photo.register" && name !== "photo.delete",
@@ -454,6 +454,20 @@ describe("desktop command/query schemas", () => {
     ).toBe(true);
     expect(DesktopCommandNameSchema.safeParse("photo.register").success).toBe(false);
     expect(DesktopCommandNameSchema.safeParse("photo.delete").success).toBe(false);
+    expect(DesktopCommandNameSchema.safeParse("platform.settings.set").success).toBe(true);
+    await expect(
+      DesktopCommandExecuteInputSchema.parseAsync({
+        name: "platform.settings.set",
+        body: {
+          entries: [{ key: "pricing.min_order_cents", value_json: "1200" }],
+        },
+      }),
+    ).resolves.toEqual({
+      name: "platform.settings.set",
+      body: {
+        entries: [{ key: "pricing.min_order_cents", value_json: "1200" }],
+      },
+    });
     expect(
       M2_CONTRACT_QUERY_NAMES.every((name) => DesktopQueryNameSchema.safeParse(name).success),
     ).toBe(true);

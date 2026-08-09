@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, realpath } from "node:fs/promises";
+import { access, mkdir, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,13 @@ import {
   type ElectronApplication,
   type Page,
 } from "@playwright/test";
+
+import {
+  runPackagedMemberParity,
+  runPackagedOrderParity,
+  runPackagedReportsParity,
+  runPackagedSettingsParity,
+} from "./packaged-counter-parity.js";
 
 const PASSTHROUGH_ENV_KEYS = Object.freeze([
   "PATH",
@@ -26,10 +33,6 @@ const HEALTH_URL = "http://127.0.0.1:8787/health";
 const HEALTH_TIMEOUT_MS = 90_000;
 const COMMAND_TIMEOUT_MS = 180_000;
 const PROCESS_EXIT_GRACE_MS = 5_000;
-const VALID_JPEG = Buffer.from(
-  "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAACAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAABf/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AIgAAaf/2Q==",
-  "base64",
-);
 
 function requiredEnvironment(name: string): string {
   const value = process.env[name]?.trim();
@@ -45,6 +48,7 @@ function requiredSecretEnvironment(name: string): string {
 
 const APP_PATH = requiredEnvironment("LAUNDRY_MAC_APP_PATH");
 const USER_DATA_PATH = requiredEnvironment("LAUNDRY_MAC_USER_DATA_DIR");
+const DOWNLOAD_PATH = join(USER_DATA_PATH, "downloads");
 const CONFIG_PATH = requiredEnvironment("LAUNDRY_LOCAL_CONFIG_DIR");
 const COMPOSE_PROJECT = requiredEnvironment("COMPOSE_PROJECT_NAME");
 const LOGIN = Object.freeze({
@@ -54,19 +58,6 @@ const LOGIN = Object.freeze({
   displayName: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME"),
   password: requiredSecretEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD"),
   pin: requiredSecretEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PIN"),
-});
-const MAC_CATALOG = Object.freeze({
-  code: "mac_wash_shirt",
-  name: "macOS 水洗衬衫",
-  service: "wash",
-  category: "macshirt",
-  priceCents: "1500",
-});
-const MAC_MEMBER = Object.freeze({
-  phone: "13900000042",
-  name: "macOS 顾客",
-  topupYuan: "50",
-  remainingBalance: "¥35.00",
 });
 
 type OfflineAcceptanceBridge = Readonly<{
@@ -102,6 +93,22 @@ function assertAcceptanceInputs(): void {
   ) {
     throw new Error("Electron acceptance inputs are invalid");
   }
+}
+
+async function configurePackagedDownloads(application: ElectronApplication): Promise<void> {
+  await mkdir(DOWNLOAD_PATH, { recursive: true, mode: 0o700 });
+  await application.evaluate(({ BrowserWindow }, outputDirectory) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    if (window === undefined) throw new Error("packaged download window is unavailable");
+    window.webContents.session.on("will-download", (_event, item) => {
+      const filename = item.getFilename();
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/u.test(filename)) {
+        item.cancel();
+        return;
+      }
+      item.setSavePath(`${outputDirectory}/${filename}`);
+    });
+  }, DOWNLOAD_PATH);
 }
 
 function processGroupExists(processId: number): boolean {
@@ -193,10 +200,7 @@ async function healthState(): Promise<"ready" | "reachable" | "down"> {
   }
   if (!response.ok) return "reachable";
   try {
-    const body = (await response.json()) as {
-      ok?: unknown;
-      data?: { status?: unknown };
-    };
+    const body = (await response.json()) as { ok?: unknown; data?: { status?: unknown } };
     return body.ok === true && body.data?.status === "ready" ? "ready" : "reachable";
   } catch {
     return "reachable";
@@ -209,197 +213,33 @@ async function waitForHealth(expected: "ready" | "down"): Promise<void> {
   while (Date.now() < deadline) {
     lastState = await healthState();
     if (lastState === expected) return;
-    await new Promise((resolveWait) => setTimeout(resolveWait, 250));
+    await delay(250);
   }
   throw new Error(`API health ${expected} timed out; last state was ${lastState}`);
 }
 
-/**
- * Same counter money path the browser E2E proves, driven inside the packaged
- * app. The SPA and contracts are shared, so what this adds is evidence that the
- * desktop IPC transport carries a real workday — not just a login.
- *
- * Bootstrapping the price list is part of it: a fresh install ships an empty
- * catalog and order.receive refuses a line that matches no active item.
- */
-async function runCounterWorkday(page: Page): Promise<void> {
-  await page.locator('[data-nav-id="settings"]').click();
-  const catalogPanel = page.locator('[data-testid="catalog-admin"]');
-  await expect(catalogPanel).toBeVisible({ timeout: 15_000 });
-  await page.locator('input[name="catalog-code"]').fill(MAC_CATALOG.code);
-  await page.locator('input[name="catalog-name"]').fill(MAC_CATALOG.name);
-  await page.locator('input[name="catalog-service"]').fill(MAC_CATALOG.service);
-  await page.locator('input[name="catalog-category"]').fill(MAC_CATALOG.category);
-  await page.locator('input[name="catalog-price"]').fill(MAC_CATALOG.priceCents);
-  await page.locator('[data-testid="catalog-save-btn"]').click();
-  await expect(
-    catalogPanel.locator('[data-testid="catalog-admin-row"]', { hasText: MAC_CATALOG.name }),
-  ).toBeVisible({ timeout: 15_000 });
-
-  // Receive two garments at ¥15.00 paying ¥10.00, leaving ¥20.00 owed.
-  await page.locator('[data-nav-id="receive"]').click();
-  const picker = page.locator('[data-testid="catalog-picker"]');
-  await expect(picker).toBeVisible();
-  await picker.getByRole("option", { name: new RegExp(MAC_CATALOG.name, "u") }).click();
-  await page.getByLabel("数量").fill("2");
-  await page.locator('input[name="customer-phone"]').fill(MAC_MEMBER.phone);
-  await page.locator('input[name="customer-name"]').fill(MAC_MEMBER.name);
-  await page.locator('input[name="initial-payment"]').fill("1000");
-  await page.getByRole("button", { name: "确认开单" }).click();
-
-  const ticketCell = page.locator('[data-testid="receive-ticket"]');
-  await expect(ticketCell).toBeVisible({ timeout: 15_000 });
-  const ticketNo = (await ticketCell.innerText()).trim();
-  const receiveResult = page.locator(".ld-order-result");
-  await expect(receiveResult).toContainText("¥30.00");
-  await expect(receiveResult).toContainText("¥20.00");
-
-  // Upload one real photo through the named desktop IPC capability and verify
-  // that reopening the server-backed order shows the durable metadata.
-  await page.locator('[data-nav-id="orders"]').click();
-  await page.locator('[data-testid="debt-load-btn"]').click();
-  const debtRow = page.locator('[data-testid="debt-row"]').filter({ hasText: ticketNo }).first();
-  await expect(debtRow).toBeVisible({ timeout: 15_000 });
-  await debtRow.locator('[data-testid="debt-row-detail-btn"]').click();
-  const drawer = page.locator('[data-testid="order-detail-drawer"]');
-  await drawer.locator('[data-testid="order-detail-register-photo-btn"]').setInputFiles({
-    name: "mac-receive.jpg",
-    mimeType: "image/jpeg",
-    buffer: VALID_JPEG,
-  });
-  await expect(drawer.locator('[data-testid="order-detail-photo-count"]')).toHaveText("1 张", {
-    timeout: 15_000,
-  });
-  await drawer.locator('[data-testid="order-detail-close-btn"]').click();
-
-  // Pick up, collecting the remainder.
-  await page.locator('[data-nav-id="pickup"]').click();
-  await page.locator('input[name="pickup-key"]').fill(ticketNo);
-  await page.getByRole("button", { name: "加载订单" }).click();
-  await expect(page.locator('[data-testid="pickup-loaded-ticket"]')).toHaveText(ticketNo, {
-    timeout: 15_000,
-  });
-  await expect(page.locator('[data-testid="pickup-loaded-balance"]')).toContainText("¥20.00");
-  await page.locator('input[name="collect-cents"]').fill("2000");
-  await page.getByRole("button", { name: "确认取衣" }).click();
-
-  await expect(page.locator('[data-testid="pickup-ticket"]')).toHaveText(ticketNo, {
-    timeout: 15_000,
-  });
-  const pickupResult = page.locator(".ld-order-result").last();
-  await expect(pickupResult).toContainText("¥30.00");
-  await expect(pickupResult).toContainText("¥0.00");
+async function signIn(page: Page): Promise<void> {
+  await page.locator('input[name="org_code"]').fill(LOGIN.orgCode);
+  await page.locator('input[name="store_code"]').fill(LOGIN.storeCode);
+  await page.locator('input[name="username"]').fill(LOGIN.username);
+  await page.locator('input[name="password"]').fill(LOGIN.password);
+  await page.getByRole("button", { name: "登录" }).click();
+  await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(LOGIN.displayName, { exact: true })).toBeVisible();
 }
 
-async function selectMacMember(page: Page): Promise<void> {
-  await page.locator('[data-testid="customers-search-input"]').fill(MAC_MEMBER.name);
-  await page.locator('[data-testid="customers-search-btn"]').click();
-  const customer = page.locator('[data-testid="customers-row"]', { hasText: MAC_MEMBER.name });
-  await expect(customer).toHaveCount(1, { timeout: 15_000 });
-  await customer.click();
-  await expect(page.locator('[aria-label="会员储值"]')).toBeVisible({ timeout: 15_000 });
-}
-
-async function openAndTopupMacMember(page: Page): Promise<void> {
-  await page.locator('[data-nav-id="customers"]').click();
-  await selectMacMember(page);
-  const memberPanel = page.locator('[aria-label="会员储值"]');
-  await expect(memberPanel.getByText("尚未开通会员")).toBeVisible({ timeout: 15_000 });
-  await memberPanel.getByRole("button", { name: "开通会员账户" }).click();
-  await expect(page.locator(".ld-toast").last()).toContainText("会员账户已开通", {
-    timeout: 15_000,
-  });
-  await expect(memberPanel).toContainText("¥0.00", { timeout: 15_000 });
-
-  await memberPanel.getByLabel("充值金额（元）").fill(MAC_MEMBER.topupYuan);
-  await memberPanel.getByRole("button", { name: "充值", exact: true }).click();
-  const confirmation = page.getByRole("dialog", { name: "确认会员充值" });
-  await expect(confirmation).toContainText("充值本金 ¥50.00", { timeout: 15_000 });
-  await confirmation.getByRole("button", { name: "确认充值" }).click();
-  await expect(page.locator(".ld-toast").last()).toContainText("充值已入账", {
-    timeout: 15_000,
-  });
-  await expect(memberPanel).toContainText("¥50.00", { timeout: 15_000 });
-  await expect(memberPanel).toContainText("充值");
-}
-
-async function createUnpaidMacMemberOrder(page: Page): Promise<string> {
-  await page.locator('[data-nav-id="receive"]').click();
-  const picker = page.locator('[data-testid="catalog-picker"]');
-  await picker.getByRole("option", { name: new RegExp(MAC_CATALOG.name, "u") }).click();
-  await page.locator('input[name="customer-phone"]').fill(MAC_MEMBER.phone);
-  await page.locator('input[name="customer-name"]').fill(MAC_MEMBER.name);
-  await page.getByRole("button", { name: "确认开单" }).click();
-  const ticketNo = (await page.locator('[data-testid="receive-ticket"]').innerText()).trim();
-  await expect(page.locator(".ld-order-result")).toContainText("¥15.00");
-  return ticketNo;
-}
-
-async function settleMacOrderFromBalance(page: Page, ticketNo: string): Promise<void> {
-  await page.locator('[data-nav-id="orders"]').click();
-  await page.locator('[data-testid="debt-load-btn"]').click();
-  const debtRow = page.locator('[data-testid="debt-row"]', { hasText: ticketNo });
-  await expect(debtRow).toBeVisible({ timeout: 15_000 });
-  await debtRow.locator('[data-testid="debt-row-detail-btn"]').click();
-  const drawer = page.locator('[data-testid="order-detail-drawer"]');
-  await drawer.locator('[data-testid="order-detail-payment-btn"]').click();
-  const payment = page.locator('[data-testid="payment-collection-dialog"]');
-  const method = payment.getByLabel("付款方式");
-  await expect(method.getByRole("option", { name: "会员余额" })).toHaveCount(1, {
-    timeout: 15_000,
-  });
-  await method.selectOption({ label: "会员余额" });
-  await expect(payment).toContainText("会员可用余额 ¥50.00");
-  await page.getByRole("button", { name: "确认收款" }).click();
-  await expect(page.locator(".ld-toast").last()).toContainText("已从会员余额扣款", {
-    timeout: 15_000,
-  });
-  await expect(drawer.locator('[data-testid="order-detail-balance"]')).toContainText("¥0.00", {
-    timeout: 15_000,
-  });
-  await drawer.locator('[data-testid="order-detail-close-btn"]').click();
-}
-
-async function assertMacMemberSettlement(page: Page): Promise<void> {
-  await page.locator('[data-nav-id="customers"]').click();
-  await selectMacMember(page);
-  await expect(page.locator('[aria-label="会员储值"]')).toContainText(MAC_MEMBER.remainingBalance, {
-    timeout: 15_000,
-  });
-
-  await page.locator('[data-nav-id="stats"]').click();
-  await page.locator('[data-testid="stats-load-btn"]').click();
-  const snapshot = page.locator('[data-testid="reconciliation-snapshot"]');
-  await expect(snapshot).toBeVisible({ timeout: 15_000 });
-  const balanceBucket = snapshot.getByRole("row").filter({ hasText: "会员余额" });
-  await expect(balanceBucket).toHaveCount(1);
-  await expect(balanceBucket).toContainText("收款");
-  await expect(balanceBucket).toContainText("¥15.00");
-}
-
-/** Prove the packaged SPA contains the latest stored-value counter slice. */
-async function runPackagedMemberSettlement(page: Page): Promise<void> {
-  await openAndTopupMacMember(page);
-  const ticketNo = await createUnpaidMacMemberOrder(page);
-  await settleMacOrderFromBalance(page, ticketNo);
-  await assertMacMemberSettlement(page);
-}
-
-/** Prove a packaged Edge queues an ordinary grant command and never widens denied commands. */
 async function runPackagedOfflineGrantReplay(
   page: Page,
   rejectionDiagnostics: readonly string[],
 ): Promise<void> {
-  const suffix = Date.now().toString().slice(-8);
-  const customerName = `macOS 离线 ${suffix}`;
-  const customerPhone = `136${suffix}`;
+  const id = Date.now().toString().slice(-8);
+  const customerName = `macOS 离线 ${id}`;
   const authority = await page.evaluate(async () =>
     (
       window as Window & { laundryDesktop?: OfflineAcceptanceBridge }
     ).laundryDesktop?.offline.resume(),
   );
   expect((authority as { ok?: unknown } | undefined)?.ok).toBe(true);
-
   let offlineEvidence: unknown;
   await runLifecycle("local:down");
   await waitForHealth("down");
@@ -426,13 +266,12 @@ async function runPackagedOfflineGrantReplay(
         });
         return { queued, denied, status: await bridge.offline.status() };
       },
-      { name: customerName, phone: customerPhone, catalogCode: `denied_${suffix}` },
+      { name: customerName, phone: `136${id}`, catalogCode: `denied_${id}` },
     );
   } finally {
     await runLifecycle("local:up");
     await waitForHealth("ready");
   }
-
   await delay(50);
   expect(
     offlineEvidence,
@@ -442,6 +281,16 @@ async function runPackagedOfflineGrantReplay(
     denied: { ok: false, error: { code: "RESOURCE_UNAVAILABLE" } },
     status: { ok: true, data: { pending_count: 1, inflight_count: 0, conflicts: [] } },
   });
+  await expectReplayDrained(page);
+  await page.locator('[data-nav-id="customers"]').click();
+  await page.locator('[data-testid="customers-search-input"]').fill(customerName);
+  await page.locator('[data-testid="customers-search-btn"]').click();
+  await expect(
+    page.locator('[data-testid="customers-row"]', { hasText: customerName }),
+  ).toHaveCount(1, { timeout: 15_000 });
+}
+
+async function expectReplayDrained(page: Page): Promise<void> {
   const resumed = await page.evaluate(async () =>
     (
       window as Window & { laundryDesktop?: OfflineAcceptanceBridge }
@@ -457,65 +306,117 @@ async function runPackagedOfflineGrantReplay(
     ok: true,
     data: { pending_count: 0, inflight_count: 0, conflicts: [] },
   });
-
-  await page.locator('[data-nav-id="customers"]').click();
-  await page.locator('[data-testid="customers-search-input"]').fill(customerName);
-  await page.locator('[data-testid="customers-search-btn"]').click();
-  await expect(
-    page.locator('[data-testid="customers-row"]', { hasText: customerName }),
-  ).toHaveCount(1, { timeout: 15_000 });
 }
 
-async function runPackagedGovernanceSmoke(page: Page): Promise<void> {
-  const suffix = Date.now().toString().slice(-8);
-  const duplicateName = `macOS 合并 ${suffix}`;
-  await page.locator('[data-nav-id="customers"]').click();
-
-  for (const prefix of ["137", "138"]) {
-    await page.locator('[data-testid="customers-phone-input"]').fill(`${prefix}${suffix}`);
-    await page.locator('[data-testid="customers-name-input"]').fill(duplicateName);
-    await page.locator('[data-testid="customers-upsert-btn"]').click();
-    await expect(page.locator(".ld-toast").last()).toContainText("客户已保存", {
-      timeout: 15_000,
-    });
-  }
-
-  await page.locator('[data-testid="customers-search-input"]').fill(duplicateName);
-  await page.locator('[data-testid="customers-search-btn"]').click();
-  const matches = page.locator('[data-testid="customers-row"]', { hasText: duplicateName });
-  await expect(matches).toHaveCount(2, { timeout: 15_000 });
-  await matches.first().click();
-  const governance = page.locator('[aria-label="客户资料治理"]');
-  await governance.getByRole("button", { name: "检查重复" }).click();
-  await expect(governance.getByLabel("保留客户")).toHaveCount(1, { timeout: 15_000 });
-  await governance.locator('input[name="customer-merge-reason"]').fill("packaged macOS E2E");
-  await governance.getByRole("button", { name: "合并到保留客户" }).click();
-  await page.locator(".ld-step-up__select").selectOption({ label: "E2E Staff Two（店长）" });
-  await page.locator('input[name="step-up-pin"]').fill(LOGIN.pin);
-  await page.getByRole("button", { name: "确认 PIN" }).click();
-  await expect(matches).toHaveCount(1, { timeout: 15_000 });
-
-  await page.locator('[data-nav-id="stats"]').click();
-  await page.locator('[data-testid="stats-date-input"]').fill("1999-12-30");
-  await page.locator('[data-testid="stats-load-btn"]').click();
-  const reconciliation = page.locator(
-    '[data-testid="reconciliation-snapshot"][data-business-date="1999-12-30"]',
-  );
-  await expect(reconciliation).toBeVisible({ timeout: 15_000 });
-  await expect(reconciliation.getByRole("heading", { name: "支付账本" })).toBeVisible();
-  await page.getByRole("button", { name: "查询历史" }).click();
-  await expect(page.getByRole("cell", { name: "1999-12-30" })).toBeVisible({ timeout: 15_000 });
+async function auditDesktopBridge(page: Page): Promise<void> {
+  const audit = await page.evaluate(async () => {
+    type Bridge = Readonly<{
+      auth: Readonly<{
+        refresh: () => Promise<unknown>;
+        logout: () => Promise<unknown>;
+      }>;
+      command: Readonly<{ execute: (...args: unknown[]) => Promise<unknown> }>;
+      query: Readonly<{ execute: (...args: unknown[]) => Promise<unknown> }>;
+      photo: Readonly<{
+        upload: (...args: unknown[]) => Promise<unknown>;
+        read: (...args: unknown[]) => Promise<unknown>;
+        delete: (...args: unknown[]) => Promise<unknown>;
+      }>;
+      offline: Readonly<{
+        resume: () => Promise<unknown>;
+        status: () => Promise<unknown>;
+        resolve: (...args: unknown[]) => Promise<unknown>;
+      }>;
+      printer: Readonly<{
+        discover: () => Promise<unknown>;
+        status: () => Promise<unknown>;
+        configure: (...args: unknown[]) => Promise<unknown>;
+        test: () => Promise<unknown>;
+      }>;
+      health: Readonly<{ get: () => Promise<unknown> }>;
+    }>;
+    const bridge = (window as Window & { laundryDesktop?: Bridge }).laundryDesktop;
+    if (bridge === undefined) return { bridgeValid: false };
+    const forbidden = /token|cookie|headers?|authorization/iu;
+    const containsCredentialKey = (value: unknown): boolean => {
+      const pending = [value];
+      const seen = new WeakSet<object>();
+      while (pending.length > 0) {
+        const current = pending.pop();
+        if (current === null || typeof current !== "object" || seen.has(current)) continue;
+        seen.add(current);
+        for (const [key, child] of Object.entries(current)) {
+          if (forbidden.test(key)) return true;
+          pending.push(child);
+        }
+      }
+      return false;
+    };
+    const refresh = await bridge.auth.refresh();
+    const logout = await bridge.auth.logout();
+    return {
+      bridgeValid:
+        JSON.stringify(Object.keys(bridge).sort()) ===
+          JSON.stringify(["auth", "command", "health", "offline", "photo", "printer", "query"]) &&
+        JSON.stringify(Object.keys(bridge.auth).sort()) ===
+          JSON.stringify([
+            "credentialComplete",
+            "login",
+            "logout",
+            "pinChallenge",
+            "pinVerify",
+            "refresh",
+          ]) &&
+        Object.keys(bridge.command).join() === "execute" &&
+        Object.keys(bridge.query).join() === "execute" &&
+        JSON.stringify(Object.keys(bridge.photo).sort()) ===
+          JSON.stringify(["delete", "read", "upload"]) &&
+        JSON.stringify(Object.keys(bridge.offline).sort()) ===
+          JSON.stringify(["resolve", "resume", "status"]) &&
+        JSON.stringify(Object.keys(bridge.printer).sort()) ===
+          JSON.stringify(["configure", "discover", "status", "test"]) &&
+        Object.keys(bridge.health).join() === "get",
+      refreshOk:
+        !containsCredentialKey(refresh) &&
+        JSON.stringify(Object.keys(refresh as object).sort()) === JSON.stringify(["data", "ok"]) &&
+        (refresh as { ok?: unknown }).ok === true,
+      logoutOk:
+        !containsCredentialKey(logout) &&
+        (logout as { ok?: unknown; data?: { logged_out?: unknown } }).ok === true &&
+        (logout as { data?: { logged_out?: unknown } }).data?.logged_out === true,
+    };
+  });
+  expect(audit).toEqual({ bridgeValid: true, refreshOk: true, logoutOk: true });
 }
 
-test("packaged app recovers from an unavailable local service with a token-free bridge", async () => {
-  assertAcceptanceInputs();
-  const canonicalApp = await realpath(APP_PATH);
-  const executablePath = join(canonicalApp, "Contents", "MacOS", "laundry-desk V2");
-  await access(executablePath);
+test.describe.serial("packaged Counter product parity", () => {
   let application: ElectronApplication | null = null;
+  let page: Page | null = null;
+  let lifecycleOwned = false;
   const rejectionDiagnostics: string[] = [];
-  try {
+  const activePage = (): Page => {
+    if (page === null) throw new Error("packaged application is not ready");
+    return page;
+  };
+
+  test.afterAll(async () => {
+    try {
+      await application?.close();
+    } finally {
+      if (lifecycleOwned) {
+        await runLifecycle("local:down");
+        await waitForHealth("down");
+      }
+    }
+  });
+
+  test("recovers from an unavailable local service and signs in", async () => {
+    assertAcceptanceInputs();
+    const canonicalApp = await realpath(APP_PATH);
+    const executablePath = join(canonicalApp, "Contents", "MacOS", "laundry-desk V2");
+    await access(executablePath);
     application = await electron.launch({
+      acceptDownloads: true,
       executablePath,
       args: [`--user-data-dir=${USER_DATA_PATH}`, "--use-mock-keychain"],
       env: {
@@ -530,106 +431,45 @@ test("packaged app recovers from an unavailable local service with a token-free 
     };
     application.process().stdout?.on("data", captureDiagnostics);
     application.process().stderr?.on("data", captureDiagnostics);
-    const page = await application.firstWindow();
-    await expect(page.getByRole("heading", { name: "本地服务尚未就绪" })).toBeVisible({
+    page = await application.firstWindow();
+    await configurePackagedDownloads(application);
+    await expect(activePage().getByRole("heading", { name: "本地服务尚未就绪" })).toBeVisible({
       timeout: 15_000,
     });
-
+    lifecycleOwned = true;
     await runLifecycle("local:up");
     await waitForHealth("ready");
-    await page.getByRole("button", { name: "重试" }).click();
-    await expect(page.locator('[data-page="login"]')).toBeVisible({ timeout: 15_000 });
+    await activePage().getByRole("button", { name: "重试" }).click();
+    await expect(activePage().locator('[data-page="login"]')).toBeVisible({ timeout: 15_000 });
+    await signIn(activePage());
+  });
 
-    await page.locator('input[name="org_code"]').fill(LOGIN.orgCode);
-    await page.locator('input[name="store_code"]').fill(LOGIN.storeCode);
-    await page.locator('input[name="username"]').fill(LOGIN.username);
-    await page.locator('input[name="password"]').fill(LOGIN.password);
-    await page.getByRole("button", { name: "登录" }).click();
-    await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(LOGIN.displayName, { exact: true })).toBeVisible();
+  test("orders cover hold, cancel, repayment and fulfillment barcode verification", async () => {
+    test.setTimeout(300_000);
+    await runPackagedOrderParity(activePage());
+  });
 
-    await runCounterWorkday(page);
-    await runPackagedMemberSettlement(page);
-    await runPackagedOfflineGrantReplay(page, rejectionDiagnostics);
-    await runPackagedGovernanceSmoke(page);
+  test("members cover tiers, refund, freeze, unfreeze, close and privacy", async () => {
+    test.setTimeout(300_000);
+    await runPackagedMemberParity(activePage(), LOGIN, DOWNLOAD_PATH);
+  });
 
-    const audit = await page.evaluate(async () => {
-      const bridge = (
-        window as Window & {
-          laundryDesktop?: {
-            auth: { refresh: () => Promise<unknown>; logout: () => Promise<unknown> };
-            command: { execute: (...args: unknown[]) => Promise<unknown> };
-            query: { execute: (...args: unknown[]) => Promise<unknown> };
-            photo: {
-              upload: (...args: unknown[]) => Promise<unknown>;
-              read: (...args: unknown[]) => Promise<unknown>;
-              delete: (...args: unknown[]) => Promise<unknown>;
-            };
-            offline: {
-              resume: () => Promise<unknown>;
-              status: () => Promise<unknown>;
-              resolve: (...args: unknown[]) => Promise<unknown>;
-            };
-            health: { get: () => Promise<unknown> };
-          };
-        }
-      ).laundryDesktop;
-      if (bridge === undefined) return { bridgeValid: false };
-      const forbidden = /token|cookie|headers?|authorization/iu;
-      const containsCredentialKey = (value: unknown): boolean => {
-        const pending = [value];
-        const seen = new WeakSet<object>();
-        while (pending.length > 0) {
-          const current = pending.pop();
-          if (current === null || typeof current !== "object" || seen.has(current)) continue;
-          seen.add(current);
-          for (const [key, child] of Object.entries(current)) {
-            if (forbidden.test(key)) return true;
-            pending.push(child);
-          }
-        }
-        return false;
-      };
-      const refresh = await bridge.auth.refresh();
-      const logout = await bridge.auth.logout();
-      return {
-        bridgeValid:
-          JSON.stringify(Object.keys(bridge).sort()) ===
-            JSON.stringify(["auth", "command", "health", "offline", "photo", "query"]) &&
-          JSON.stringify(Object.keys(bridge.auth).sort()) ===
-            JSON.stringify([
-              "credentialComplete",
-              "login",
-              "logout",
-              "pinChallenge",
-              "pinVerify",
-              "refresh",
-            ]) &&
-          Object.keys(bridge.command).join() === "execute" &&
-          Object.keys(bridge.query).join() === "execute" &&
-          JSON.stringify(Object.keys(bridge.photo).sort()) ===
-            JSON.stringify(["delete", "read", "upload"]) &&
-          JSON.stringify(Object.keys(bridge.offline).sort()) ===
-            JSON.stringify(["resolve", "resume", "status"]) &&
-          Object.keys(bridge.health).join() === "get",
-        refreshOk:
-          !containsCredentialKey(refresh) &&
-          JSON.stringify(Object.keys(refresh as object).sort()) ===
-            JSON.stringify(["data", "ok"]) &&
-          (refresh as { ok?: unknown }).ok === true,
-        logoutOk:
-          !containsCredentialKey(logout) &&
-          (logout as { ok?: unknown; data?: { logged_out?: unknown } }).ok === true &&
-          (logout as { data?: { logged_out?: unknown } }).data?.logged_out === true,
-      };
-    });
-    expect(audit).toEqual({ bridgeValid: true, refreshOk: true, logoutOk: true });
-  } finally {
-    try {
-      await application?.close();
-    } finally {
-      await runLifecycle("local:down");
-      await waitForHealth("down");
-    }
-  }
+  test("reminders, accounting and shift reports export verified CSV", async () => {
+    test.setTimeout(240_000);
+    await runPackagedReportsParity(activePage(), DOWNLOAD_PATH);
+  });
+
+  test("settings exposes the current packaged product surface", async () => {
+    test.setTimeout(120_000);
+    await runPackagedSettingsParity(activePage(), LOGIN);
+  });
+
+  test("ordinary offline grants replay without widening denied commands", async () => {
+    test.setTimeout(420_000);
+    await runPackagedOfflineGrantReplay(activePage(), rejectionDiagnostics);
+  });
+
+  test("the token-free desktop bridge exposes only named capabilities", async () => {
+    await auditDesktopBridge(activePage());
+  });
 });

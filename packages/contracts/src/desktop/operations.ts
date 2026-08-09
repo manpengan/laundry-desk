@@ -16,6 +16,7 @@ import {
   M2_CONTRACT_DEFINITIONS,
   M2_CONTRACT_QUERY_NAMES,
 } from "../commands/catalog.js";
+import { platformSettingsSetCommand } from "../commands/platform.js";
 import { CommandResponseSchema } from "../envelope/responses.js";
 import { ConfirmReferenceSchema } from "../envelope/wire-payload.js";
 import type { CommandDefinition, QueryDefinition } from "../registry/definitions.js";
@@ -105,12 +106,13 @@ const validateBoundedJson = (
 };
 
 const INTERNAL_DESKTOP_COMMANDS = new Set(["photo.register", "photo.delete"]);
-const commandDefinitions = Object.freeze(
-  M2_CONTRACT_DEFINITIONS.filter(
+const commandDefinitions = Object.freeze([
+  platformSettingsSetCommand,
+  ...M2_CONTRACT_DEFINITIONS.filter(
     (definition): definition is CommandDefinition<z.ZodObject> =>
       definition.kind === "command" && !INTERNAL_DESKTOP_COMMANDS.has(definition.name),
   ),
-);
+]);
 const queryDefinitions = Object.freeze(
   M2_CONTRACT_DEFINITIONS.filter(
     (definition): definition is QueryDefinition<z.ZodObject> => definition.kind === "query",
@@ -135,9 +137,10 @@ const assertRegistryProjection = (
   }
 };
 
-const desktopCommandNames = Object.freeze(
-  M2_CONTRACT_COMMAND_NAMES.filter((name) => !INTERNAL_DESKTOP_COMMANDS.has(name)),
-);
+const desktopCommandNames = Object.freeze([
+  "platform.settings.set",
+  ...M2_CONTRACT_COMMAND_NAMES.filter((name) => !INTERNAL_DESKTOP_COMMANDS.has(name)),
+] as const);
 
 assertRegistryProjection("Desktop command names", desktopCommandNames, commandDefinitions);
 assertRegistryProjection("Desktop query names", M2_CONTRACT_QUERY_NAMES, queryDefinitions);
