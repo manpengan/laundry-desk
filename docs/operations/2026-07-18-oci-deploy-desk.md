@@ -1,5 +1,10 @@
 # laundry-desk 公网部署运维手册（desk.manpengan.xyz）
 
+> **历史记录，禁止继续执行。** 该 OCI/SQLite/Basic Auth 部署已退役；当前
+> `desk.manpengan.xyz` 的 ADR-36 云测试环境位于 hk-vps，使用 PostgreSQL 16、Fastify、
+> systemd 与 Caddy。请改用
+> [2026-08-09 hk-vps 云测试环境运维手册](2026-08-09-hk-vps-cloud-test.md)。
+
 - 部署日期：2026-07-18
 - 节点：OCI 春川 `oci-node-168`（168.107.27.134，Ubuntu 24.04 aarch64）
 - 访问地址：<https://desk.manpengan.xyz>
@@ -18,15 +23,15 @@
 
 ## 服务器组件
 
-| 项 | 位置 |
-| --- | --- |
-| 应用目录 | `/opt/laundry-desk`（属主 `www-data`） |
-| 数据目录 | `/opt/laundry-desk/data`（SQLite + photos + backups） |
-| systemd | `/etc/systemd/system/laundry-desk.service`（enabled，Restart=always） |
-| nginx | `/etc/nginx/conf.d/20-laundry-desk.conf`（:80 跳转 + :8446 TLS） |
-| HAProxy | `/etc/haproxy/haproxy.cfg` 中 `sni_desk` → `nginx_desk_https` |
-| 证书 | `/etc/letsencrypt/live/desk.manpengan.xyz/`（certbot 自动续期，2026-10-16 到期） |
-| 访问凭证 | 服务器 `/root/desk-auth.txt`(600)；Mac `~/.laundry-desk-web-auth.txt`(600) |
+| 项       | 位置                                                                             |
+| -------- | -------------------------------------------------------------------------------- |
+| 应用目录 | `/opt/laundry-desk`（属主 `www-data`）                                           |
+| 数据目录 | `/opt/laundry-desk/data`（SQLite + photos + backups）                            |
+| systemd  | `/etc/systemd/system/laundry-desk.service`（enabled，Restart=always）            |
+| nginx    | `/etc/nginx/conf.d/20-laundry-desk.conf`（:80 跳转 + :8446 TLS）                 |
+| HAProxy  | `/etc/haproxy/haproxy.cfg` 中 `sni_desk` → `nginx_desk_https`                    |
+| 证书     | `/etc/letsencrypt/live/desk.manpengan.xyz/`（certbot 自动续期，2026-10-16 到期） |
+| 访问凭证 | 服务器 `/root/desk-auth.txt`(600)；Mac `~/.laundry-desk-web-auth.txt`(600)       |
 
 **凭证说明**：M4 登录鉴权上线前，用 nginx Basic Auth（用户 `hongfa`）作为唯一访问控制。口令仅存于上述两个 600 文件，不入库、不进仓库。
 

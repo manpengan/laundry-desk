@@ -8,6 +8,17 @@ const LOCAL_BROWSER_ORIGIN = "http://127.0.0.1:5173" as const;
 const LOCAL_HOST_AUTHORITIES = Object.freeze(["127.0.0.1:8787"] as const);
 const PRIVATE_IPV4_ORIGIN =
   /^https:\/\/(?:10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}):\d{1,5}$/u;
+/**
+ * ADR-36 cloud test environment: a registered domain on the default HTTPS port,
+ * terminated by a reverse proxy that holds the certificate. Deliberately a
+ * separate rule from PRIVATE_IPV4_ORIGIN rather than a widening of it — the
+ * LAN profile's private-IPv4 + high-port constraint is load-bearing for ADR-32
+ * and must keep rejecting public names.
+ */
+/* The final label must be alphabetic, which is what separates a domain from a
+ * bare IPv4 literal (`https://127.0.0.1` would otherwise match). */
+const PUBLIC_HTTPS_ORIGIN =
+  /^https:\/\/(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z-]{0,61}[a-z])$/u;
 
 const SecretSchema = z
   .string()
@@ -48,10 +59,47 @@ const LanOriginSchema = z.preprocess(
     .optional(),
 );
 
-const LocalHostEnvironmentSchema = z.object({
-  LAUNDRY_CONTAINER_RUNTIME: ContainerRuntimeSchema,
-  LAUNDRY_LAN_ORIGIN: LanOriginSchema,
-});
+const PublicOriginSchema = z.preprocess(
+  (value) => (typeof value === "string" && value.length === 0 ? undefined : value),
+  z
+    .string()
+    .refine((value) => {
+      if (!PUBLIC_HTTPS_ORIGIN.test(value)) return false;
+      try {
+        const parsed = new URL(value);
+        return (
+          parsed.origin === value &&
+          parsed.port === "" &&
+          parsed.pathname === "/" &&
+          parsed.search === "" &&
+          parsed.hash === "" &&
+          parsed.username === "" &&
+          parsed.password === ""
+        );
+      } catch {
+        return false;
+      }
+    }, "must be an exact HTTPS origin on a public domain at the default port")
+    .optional(),
+);
+
+const LocalHostEnvironmentSchema = z
+  .object({
+    LAUNDRY_CONTAINER_RUNTIME: ContainerRuntimeSchema,
+    LAUNDRY_LAN_ORIGIN: LanOriginSchema,
+    LAUNDRY_PUBLIC_ORIGIN: PublicOriginSchema,
+  })
+  .superRefine((value, context) => {
+    // One server serves one browser origin. Accepting both would leave which of
+    // them the cookie and CSRF policy binds to decided by evaluation order.
+    if (value.LAUNDRY_LAN_ORIGIN !== undefined && value.LAUNDRY_PUBLIC_ORIGIN !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["LAUNDRY_PUBLIC_ORIGIN"],
+        message: "cannot be combined with LAUNDRY_LAN_ORIGIN; a server has one browser origin",
+      });
+    }
+  });
 
 const LocalSigningEnvironmentSchema = z
   .object({
@@ -100,13 +148,16 @@ export function parseLocalHostConfig(env: NodeJS.ProcessEnv): LocalHostConfig {
     throw configError(result.error);
   }
 
-  const lanOrigin = result.data.LAUNDRY_LAN_ORIGIN;
+  // Exactly one of the two may be set (enforced above). Either one makes the
+  // browser reach this server through TLS on its own origin, so both imply
+  // same-origin fetch metadata and Secure cookies.
+  const remoteOrigin = result.data.LAUNDRY_LAN_ORIGIN ?? result.data.LAUNDRY_PUBLIC_ORIGIN;
   return Object.freeze({
     listenHost: result.data.LAUNDRY_CONTAINER_RUNTIME === "1" ? "0.0.0.0" : "127.0.0.1",
     port: LOCAL_PORT,
-    browserOrigin: lanOrigin ?? LOCAL_BROWSER_ORIGIN,
-    browserFetchSite: lanOrigin === undefined ? "same-site" : "same-origin",
-    cookieSecure: lanOrigin !== undefined,
+    browserOrigin: remoteOrigin ?? LOCAL_BROWSER_ORIGIN,
+    browserFetchSite: remoteOrigin === undefined ? "same-site" : "same-origin",
+    cookieSecure: remoteOrigin !== undefined,
     hostAuthorities: LOCAL_HOST_AUTHORITIES,
   });
 }

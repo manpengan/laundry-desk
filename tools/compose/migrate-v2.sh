@@ -104,14 +104,18 @@ run_host_psql() (
   local password
   export -n password 2>/dev/null || true
   password="${ADMIN_PASSWORD_VALUE}"
-  local passfile=""
-  passfile="$(create_pgpass_file "${PGHOST}" "${PGPORT}" "${POSTGRES_USER}" "${password}")" ||
+  LAUNDRY_MIGRATE_HOST_PASSFILE=""
+  LAUNDRY_MIGRATE_HOST_PASSFILE="$(
+    create_pgpass_file "${PGHOST}" "${PGPORT}" "${POSTGRES_USER}" "${password}"
+  )" ||
     exit 1
   cleanup_host_pgpass() {
-    rm -f -- "${passfile}"
+    if [[ -n "${LAUNDRY_MIGRATE_HOST_PASSFILE:-}" ]]; then
+      rm -f -- "${LAUNDRY_MIGRATE_HOST_PASSFILE}"
+    fi
   }
   trap cleanup_host_pgpass EXIT
-  PGPASSFILE="${passfile}" psql --no-password \
+  PGPASSFILE="${LAUNDRY_MIGRATE_HOST_PASSFILE}" psql --no-password \
     -h "${PGHOST}" -p "${PGPORT}" -U "${POSTGRES_USER}" -d "${PGDATABASE}" \
     -v ON_ERROR_STOP=1 -X -q "$@"
 )
@@ -122,20 +126,26 @@ run_container_psql() (
   local password
   export -n password 2>/dev/null || true
   password="${ADMIN_PASSWORD_VALUE}"
-  local host_passfile="" container_passfile=""
-  host_passfile="$(
+  LAUNDRY_MIGRATE_HOST_PASSFILE=""
+  LAUNDRY_MIGRATE_CONTAINER_PASSFILE=""
+  LAUNDRY_MIGRATE_HOST_PASSFILE="$(
     create_pgpass_file "127.0.0.1" "5432" "${POSTGRES_USER}" "${password}"
   )" || exit 1
-  container_passfile="/tmp/$(basename "${host_passfile}")"
+  LAUNDRY_MIGRATE_CONTAINER_PASSFILE="/tmp/$(basename "${LAUNDRY_MIGRATE_HOST_PASSFILE}")"
   cleanup_container_pgpass() {
-    docker exec "${container}" sh -c 'rm -f -- "$1"' sh "${container_passfile}" \
-      >/dev/null 2>&1 || true
-    rm -f -- "${host_passfile}"
+    if [[ -n "${LAUNDRY_MIGRATE_CONTAINER_PASSFILE:-}" ]]; then
+      docker exec "${container}" sh -c 'rm -f -- "$1"' sh \
+        "${LAUNDRY_MIGRATE_CONTAINER_PASSFILE}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${LAUNDRY_MIGRATE_HOST_PASSFILE:-}" ]]; then
+      rm -f -- "${LAUNDRY_MIGRATE_HOST_PASSFILE}"
+    fi
   }
   trap cleanup_container_pgpass EXIT
-  docker cp "${host_passfile}" "${container}:${container_passfile}" >/dev/null
-  docker exec "${container}" chmod 600 "${container_passfile}"
-  docker exec -i -e PGPASSFILE="${container_passfile}" "${container}" \
+  docker cp "${LAUNDRY_MIGRATE_HOST_PASSFILE}" \
+    "${container}:${LAUNDRY_MIGRATE_CONTAINER_PASSFILE}" >/dev/null
+  docker exec "${container}" chmod 600 "${LAUNDRY_MIGRATE_CONTAINER_PASSFILE}"
+  docker exec -i -e PGPASSFILE="${LAUNDRY_MIGRATE_CONTAINER_PASSFILE}" "${container}" \
     psql --no-password -h 127.0.0.1 -p 5432 -U "${POSTGRES_USER}" -d "${PGDATABASE}" \
     -v ON_ERROR_STOP=1 -X -q "$@"
 )

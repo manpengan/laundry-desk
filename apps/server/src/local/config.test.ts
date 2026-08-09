@@ -88,6 +88,55 @@ test("LAN profile requires an exact private HTTPS origin and enables secure brow
   }
 });
 
+test("cloud profile accepts an exact public HTTPS origin on the default port", () => {
+  // ADR-36: the cloud test environment sits behind Caddy on a real domain, so
+  // it needs an origin the LAN schema deliberately rejects (a hostname, and
+  // port 443). It is a separate variable rather than a relaxation of
+  // LAUNDRY_LAN_ORIGIN, whose private-IPv4 + high-port rule is load-bearing for
+  // ADR-32 and must not widen.
+  assert.deepEqual(parseLocalHostConfig({ LAUNDRY_PUBLIC_ORIGIN: "https://desk.manpengan.xyz" }), {
+    listenHost: "127.0.0.1",
+    port: 8787,
+    browserOrigin: "https://desk.manpengan.xyz",
+    browserFetchSite: "same-origin",
+    cookieSecure: true,
+    hostAuthorities: ["127.0.0.1:8787"],
+  });
+  assert.equal(parseLocalHostConfig({ LAUNDRY_PUBLIC_ORIGIN: "" }).cookieSecure, false);
+
+  for (const origin of [
+    "http://desk.manpengan.xyz",
+    "https://192.168.50.12:8443",
+    "https://127.0.0.1",
+    "https://localhost",
+    "https://-desk.manpengan.xyz",
+    "https://desk-.manpengan.xyz",
+    "https://desk.manpengan.xyz:8443",
+    "https://desk.manpengan.xyz/owner",
+    "https://user@desk.manpengan.xyz",
+    " https://desk.manpengan.xyz",
+    "https://desk.manpengan.xyz?a=1",
+  ]) {
+    assert.throws(
+      () => parseLocalHostConfig({ LAUNDRY_PUBLIC_ORIGIN: origin }),
+      /LAUNDRY_PUBLIC_ORIGIN/u,
+      origin,
+    );
+  }
+});
+
+test("the two origin profiles are mutually exclusive", () => {
+  assert.throws(
+    () =>
+      parseLocalHostConfig({
+        LAUNDRY_LAN_ORIGIN: "https://192.168.50.12:8443",
+        LAUNDRY_PUBLIC_ORIGIN: "https://desk.manpengan.xyz",
+      }),
+    /LAUNDRY_PUBLIC_ORIGIN/u,
+    "a server cannot claim two browser origins at once",
+  );
+});
+
 test("allows 0.0.0.0 only for the explicit container runtime", () => {
   const config = parseLocalServerConfig({
     LAUNDRY_ACCESS_TOKEN_SECRET: ACCESS_SECRET,

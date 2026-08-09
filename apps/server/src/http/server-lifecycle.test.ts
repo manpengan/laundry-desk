@@ -166,6 +166,30 @@ test("LAN origin injects secure cookies and same-origin browser metadata policy"
   }
 });
 
+test("cloud origin injects secure cookies and exact public browser policy", async () => {
+  const runtime = await runtimeWithPool(async () => undefined);
+  const captured: CreateAppOptions[] = [];
+  const started = await startLocalHttpServer(
+    Object.freeze({ ...ENV, LAUNDRY_PUBLIC_ORIGIN: "https://desk.manpengan.xyz" }),
+    dependencies(runtime, async (options) => {
+      captured.push(options);
+      return fakeApp({});
+    }),
+  );
+
+  try {
+    const options = captured[0];
+    assert.ok(options);
+    assert.equal(options.cookiePolicy.secure, true);
+    assert.equal(options.cookiePolicy.refreshName, "__Host-laundry_refresh");
+    assert.equal(options.cookiePolicy.csrfName, "__Host-laundry_csrf");
+    assert.equal(options.browserOrigin, "https://desk.manpengan.xyz");
+    assert.equal(options.browserFetchSite, "same-origin");
+  } finally {
+    await started.shutdown();
+  }
+});
+
 test("shutdown drains Fastify before ending the PostgreSQL pool", async () => {
   const calls: string[] = [];
   let finishAppClose: () => void = () => undefined;

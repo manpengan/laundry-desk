@@ -155,13 +155,17 @@ run_host_psql() (
   export -n password 2>/dev/null || true
   password="$2"
   shift 2
-  local passfile=""
-  passfile="$(create_pgpass_file "${PGHOST}" "${PGPORT}" "${user}" "${password}")" || exit 1
+  LAUNDRY_SMOKE_HOST_PASSFILE=""
+  LAUNDRY_SMOKE_HOST_PASSFILE="$(
+    create_pgpass_file "${PGHOST}" "${PGPORT}" "${user}" "${password}"
+  )" || exit 1
   cleanup_host_pgpass() {
-    rm -f -- "${passfile}"
+    if [[ -n "${LAUNDRY_SMOKE_HOST_PASSFILE:-}" ]]; then
+      rm -f -- "${LAUNDRY_SMOKE_HOST_PASSFILE}"
+    fi
   }
   trap cleanup_host_pgpass EXIT
-  PGPASSFILE="${passfile}" psql --no-password \
+  PGPASSFILE="${LAUNDRY_SMOKE_HOST_PASSFILE}" psql --no-password \
     -h "${PGHOST}" -p "${PGPORT}" -U "${user}" -d "${PGDATABASE}" "$@"
 )
 
@@ -172,18 +176,26 @@ run_container_psql() (
   export -n password 2>/dev/null || true
   password="$3"
   shift 3
-  local host_passfile="" container_passfile=""
-  host_passfile="$(create_pgpass_file "127.0.0.1" "5432" "${user}" "${password}")" || exit 1
-  container_passfile="/tmp/$(basename "${host_passfile}")"
+  LAUNDRY_SMOKE_HOST_PASSFILE=""
+  LAUNDRY_SMOKE_CONTAINER_PASSFILE=""
+  LAUNDRY_SMOKE_HOST_PASSFILE="$(
+    create_pgpass_file "127.0.0.1" "5432" "${user}" "${password}"
+  )" || exit 1
+  LAUNDRY_SMOKE_CONTAINER_PASSFILE="/tmp/$(basename "${LAUNDRY_SMOKE_HOST_PASSFILE}")"
   cleanup_container_pgpass() {
-    docker exec "${container}" sh -c 'rm -f -- "$1"' sh "${container_passfile}" \
-      >/dev/null 2>&1 || true
-    rm -f -- "${host_passfile}"
+    if [[ -n "${LAUNDRY_SMOKE_CONTAINER_PASSFILE:-}" ]]; then
+      docker exec "${container}" sh -c 'rm -f -- "$1"' sh \
+        "${LAUNDRY_SMOKE_CONTAINER_PASSFILE}" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "${LAUNDRY_SMOKE_HOST_PASSFILE:-}" ]]; then
+      rm -f -- "${LAUNDRY_SMOKE_HOST_PASSFILE}"
+    fi
   }
   trap cleanup_container_pgpass EXIT
-  docker cp "${host_passfile}" "${container}:${container_passfile}" >/dev/null
-  docker exec "${container}" chmod 600 "${container_passfile}"
-  docker exec -i -e PGPASSFILE="${container_passfile}" "${container}" \
+  docker cp "${LAUNDRY_SMOKE_HOST_PASSFILE}" \
+    "${container}:${LAUNDRY_SMOKE_CONTAINER_PASSFILE}" >/dev/null
+  docker exec "${container}" chmod 600 "${LAUNDRY_SMOKE_CONTAINER_PASSFILE}"
+  docker exec -i -e PGPASSFILE="${LAUNDRY_SMOKE_CONTAINER_PASSFILE}" "${container}" \
     psql --no-password -h 127.0.0.1 -p 5432 -U "${user}" -d "${PGDATABASE}" "$@"
 )
 
