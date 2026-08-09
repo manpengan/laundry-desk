@@ -2,7 +2,7 @@
 
 本项目版本记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 SemVer。
 
-> **当前路线（2026-07-25，2026-08-08 修订）**：按 [ADR-14](adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)，v2 是唯一活动交付线；当前优先推进本地 Web Server/Web 与 macOS App/Runtime 验收。V2-only 基础裁决沿用 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)。宏发 v1 停止功能开发与独立发版，只保留为迁移源和历史行为参考。[ADR-16](adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) 把离线队列、Primary lease 与真实打印机并入当前阶段，[ADR-17](adr/2026-07-31-adr-17-member-stored-value.md)、[ADR-18](adr/2026-08-01-adr-18-stored-value-settlement-reporting.md)、[ADR-24](adr/2026-08-07-adr-24-accounting-dual-basis-reports.md)、[ADR-25](adr/2026-08-07-adr-25-member-account-lifecycle.md)、[ADR-26](adr/2026-08-07-adr-26-lan-owner-dashboard.md)、[ADR-27](adr/2026-08-08-adr-27-owner-drilldown-portfolio.md)、[ADR-28](adr/2026-08-08-adr-28-lan-onboarding-diagnostics.md)、[ADR-29](adr/2026-08-08-adr-29-runtime-managed-backup-restore.md)、[ADR-30](adr/2026-08-08-adr-30-runtime-release-upgrade-rollback.md)、[ADR-31](adr/2026-08-08-adr-31-store-commissioning-staff-credentials.md) 与 [ADR-32](adr/2026-08-08-adr-32-runtime-managed-lan-operations.md) 解冻会员储值、经营账目、账户生命周期、局域网老板运营视图、本机恢复、Runtime 受控升级、新店双管理员投产和 Runtime 托管 LAN 运维；云部署、Windows、AI/BYOK 与 v1 迁移保持后置。
+> **当前路线（2026-08-09 修订）**：按 [ADR-36](adr/2026-08-09-adr-36-cloud-test-environment.md)，v2 当前优先在 hk-vps 云测试环境收敛 Linux Server/Web；macOS/Windows 桌面适配移出当前关键路径。该环境不承载真实顾客 PII，也不等于生产级多租户云部署。V2-only 基础裁决继续由 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 约束，本地安全与能力边界继续沿用 ADR-14/16/17–35。
 
 ---
 
@@ -13,6 +13,8 @@
 _本节记录**面向用户的变化**；纯内部重构与验证性工作不入 CHANGELOG，去向见 `docs/research/` 与 `docs/superpowers/plans/`。_
 
 ### 新增
+
+- hk-vps 云测试环境（[ADR-36](adr/2026-08-09-adr-36-cloud-test-environment.md)）：新增与 `LAUNDRY_LAN_ORIGIN` 互斥的 `LAUNDRY_PUBLIC_ORIGIN`，只接受默认 443 的精确公共 HTTPS 域名；它启用 Secure host-only Cookie 与 same-origin Fetch Metadata，但不放宽 ADR-32 的私网 IPv4 LAN 约束。`desk.manpengan.xyz` 由 Caddy 反代 loopback Fastify，PostgreSQL 16 只监听 localhost，完整柜台写面仍受既有认证、CSRF、Host 与 Origin 门禁保护。部署、回滚、版本标识和双站维护流程见 [hk-vps 运维手册](operations/2026-08-09-hk-vps-cloud-test.md)。
 
 - 独立 loopback PostgreSQL 16 与 Fastify 生命周期，包含迁移、一次性 bootstrap、持久卷保护和真实数据库就绪门禁。
 - 浏览器与 Electron 共用同一 React SPA；桌面端只暴露固定的认证、命令、查询与健康能力，令牌和 cookie 留在主进程。工作区门禁会先构建当前 Web 再只读核对已提交 SPA，落后时直接失败。
@@ -67,6 +69,8 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 修复
 
+- 修复主机 PostgreSQL 迁移与 RLS smoke 在连接失败时可能因 EXIT trap 丢失局部变量而遗留
+  0600 临时 pgpass 文件的问题；失败路径现稳定清理，hk-vps 裸机迁移显式绑定 loopback 5432。
 - 升级 Electron、Electron-Vite/Vite、React Router、PostCSS 及安全传递依赖，当前依赖审计不再包含 high/critical 告警；仅保留两个经调用路径证明不可达并由精确门禁锁定的 moderate 上游告警。
 
 - 修正 `orders` 与 `payments` 的 `business_date` 约束正则（`\\d` → `\d`）。此前该约束拒绝任何合法日期，导致真实 PostgreSQL 上开单与收款全部失败。**已存在的本地数据库需要执行 `pnpm local:reset` 重建**，迁移校验和账本会拒绝直接复用。

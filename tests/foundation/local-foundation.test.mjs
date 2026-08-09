@@ -116,10 +116,10 @@ test("routes every governance entry point to ADR-14", async () => {
   assert.deepEqual(missingLinks, []);
 });
 
-test("leads the README with the generic local Web and macOS route", async () => {
+test("leads the README with the generic v2 hk-vps cloud-test route", async () => {
   const readmeLead = (await readRepositoryFile("README.md")).slice(0, 1500);
 
-  assert.match(readmeLead, /通用 V2.*本地 Web.*macOS/su);
+  assert.match(readmeLead, /通用 V2.*hk-vps.*Linux Web Server\/Web.*桌面 App/su);
 });
 
 test("does not advertise stale Hongfa or Grok delivery ownership in the README lead", async () => {
