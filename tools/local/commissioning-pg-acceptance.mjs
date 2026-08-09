@@ -108,7 +108,7 @@ const migrateLegacyVolume = async () => {
   const migrations = await loadMigrationBundle(
     fileURLToPath(new URL("../../packages/db/src/migrations/", import.meta.url)),
   );
-  assert.equal(migrations.head, "0045_store_commissioning_staff_credentials.sql");
+  assert.equal(migrations.head, "0046_print_job_request_idempotency.sql");
   await applyRuntimeMigrations(adminPool, migrations);
   const result = await adminPool.query(
     "SELECT count(*)::integer AS count FROM laundry_schema_migrations WHERE filename = $1",
