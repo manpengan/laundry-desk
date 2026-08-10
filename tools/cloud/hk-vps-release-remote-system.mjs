@@ -212,23 +212,16 @@ export async function prepareStaging(stagingRoot, candidateSha, migrationHead, s
     "CLOUD_RELEASE_STAGING_CHOWN_RUNTIME",
     signal,
   );
+  const runtimeNodes = [stagingRoot, "-xdev", "(", "-type", "f", "-o", "-type", "d", ")"];
+  await command(
+    "/usr/bin/find",
+    [...runtimeNodes, "-perm", "/022", "-exec", "/usr/bin/chmod", "go-w", "--", "{}", "+"],
+    "CLOUD_RELEASE_STAGING_PERMISSIONS",
+    signal,
+  );
   const writable = await command(
     "/usr/bin/find",
-    [
-      stagingRoot,
-      "-xdev",
-      "(",
-      "-type",
-      "f",
-      "-o",
-      "-type",
-      "d",
-      ")",
-      "-perm",
-      "/022",
-      "-print",
-      "-quit",
-    ],
+    [...runtimeNodes, "-perm", "/022", "-print", "-quit"],
     "CLOUD_RELEASE_STAGING_PERMISSIONS",
     signal,
   );
