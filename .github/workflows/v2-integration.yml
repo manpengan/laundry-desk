@@ -99,10 +99,56 @@ jobs:
           pnpm local:up -- --bootstrap
 
       - name: Verify release catalog and write gate against real PostgreSQL
+        shell: bash
         env:
           LAUNDRY_CLOUD_RELEASE_PG_TEST: "1"
           LAUNDRY_USE_LOCAL_PG: "1"
-        run: node tools/cloud/hk-vps-release-catalog-pg-acceptance.mjs
+        run: |
+          set -euo pipefail
+          health_file="${RUNNER_TEMP}/laundry-write-gate-health-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+          restore_server() {
+            local gate_status="$?"
+            local restart_status=0
+            trap - EXIT
+            set +e
+            pnpm local:up -- --bootstrap
+            restart_status="$?"
+            if (( restart_status == 0 )); then
+              restart_status=1
+              for _ in $(seq 1 30); do
+                if curl --noproxy '*' --fail --silent --show-error --max-time 2 \
+                  --output "${health_file}" http://127.0.0.1:8787/health && \
+                  node -e '
+                    try {
+                      const body = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+                      const exact = body !== null && typeof body === "object" &&
+                        !Array.isArray(body) && body.ok === true &&
+                        Object.keys(body).sort().join(",") === "data,ok" &&
+                        body.data !== null && typeof body.data === "object" &&
+                        !Array.isArray(body.data) && body.data.status === "ready" &&
+                        Object.keys(body.data).sort().join(",") === "status";
+                      process.exit(exact ? 0 : 1);
+                    } catch {
+                      process.exit(1);
+                    }
+                  ' "${health_file}"; then
+                  restart_status=0
+                  break
+                fi
+                sleep 1
+              done
+            fi
+            rm -f -- "${health_file}"
+            if (( restart_status != 0 )); then
+              printf '%s\n' 'server restoration or exact health verification failed' >&2
+              exit "${restart_status}"
+            fi
+            exit "${gate_status}"
+          }
+          trap restore_server EXIT
+          docker compose -p "${COMPOSE_PROJECT_NAME}" \
+            -f tools/compose/docker-compose.yml stop server
+          node tools/cloud/hk-vps-release-catalog-pg-acceptance.mjs
 
       - name: Assert RLS and real server HTTP smoke
         run: |

@@ -369,7 +369,7 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
     assert.match(workflow, new RegExp(`${name}=`, "u"));
   }
   assert.match(compose, /LAUNDRY_CONTAINER_RUNTIME:\s*["']?1["']?/u);
-  assert.equal([...workflow.matchAll(/pnpm local:up -- --bootstrap/gu)].length, 5);
+  assert.equal([...workflow.matchAll(/pnpm local:up -- --bootstrap/gu)].length, 6);
   assert.match(workflow, /pnpm local:web:commissioning:e2e/u);
   assert.match(workflow, /commissioning-pg-acceptance\.mjs/u);
   assert.match(workflow, /commissioning_project=.*GITHUB_RUN_ID/u);
