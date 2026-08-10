@@ -19,7 +19,7 @@ import { releaseControllerLauncherPath } from "./hk-vps-release-controller-contr
 import { collectFinalizeEvidence } from "./hk-vps-release-local-evidence.mjs";
 import { createArchive, withPinnedSshAuthority } from "./hk-vps-release-local-files.mjs";
 import { assertRepositoryCandidate } from "./hk-vps-release-local-repository.mjs";
-import { runCloudCommand } from "./hk-vps-release-process.mjs";
+import { runCloudCommand, runPinnedSshReleaseCommand } from "./hk-vps-release-process.mjs";
 import { parseTransition } from "./hk-vps-release-remote-support.mjs";
 
 export { parseScannedHostKey } from "./hk-vps-release-local-files.mjs";
@@ -93,13 +93,15 @@ function commandOptions(context, label, timeoutMs = 2 * 60_000) {
 }
 
 async function command(context, file, arguments_, label, timeoutMs, extra = {}) {
-  return await runCloudCommand(
+  const { pinnedSshRelease = false, ...commandExtra } = extra;
+  const execute = pinnedSshRelease ? runPinnedSshReleaseCommand : runCloudCommand;
+  return await execute(
     file,
     arguments_,
     Object.freeze({
       ...commandOptions(context, label, timeoutMs),
       environment: selectCommandEnvironment(file, context.environment),
-      ...extra,
+      ...commandExtra,
     }),
   );
 }
@@ -152,13 +154,16 @@ export function remoteStatefulArguments(action, options, knownHostsPath) {
 }
 
 async function remoteAction(context, action, options, knownHostsPath, extra = {}) {
-  const invocation =
-    action === "rollback" ? Object.freeze({ ...extra, input: rollbackRequest(options) }) : extra;
+  const invocation = Object.freeze({
+    ...extra,
+    ...(action === "rollback" ? { input: rollbackRequest(options) } : {}),
+    pinnedSshRelease: true,
+  });
   return await command(
     context,
     SSH,
     remoteStatefulArguments(action, options, knownHostsPath),
-    `CLOUD_RELEASE_REMOTE_${action.toUpperCase()}`,
+    `CLOUD_RELEASE_REMOTE_${action.toUpperCase().replaceAll("-", "_")}`,
     action === "api-evidence" ? 30 * 60_000 : 5 * 60_000,
     invocation,
   );
@@ -224,6 +229,7 @@ export async function deployCandidate(context, input, dependencies = {}) {
     );
     const remotePath = incomingArchivePath(options.candidateSha, options.token);
     let uploadAttempted = false;
+    let operationError;
     try {
       uploadAttempted = true;
       await execute(
@@ -251,7 +257,7 @@ export async function deployCandidate(context, input, dependencies = {}) {
         ),
         "CLOUD_RELEASE_REMOTE_DEPLOY",
         30 * 60_000,
-        { input: releaseBootstrapScript() },
+        { input: releaseBootstrapScript(), pinnedSshRelease: true },
       );
       try {
         await (dependencies.assertExternalHealth ?? assertExternalHealth)(context);
@@ -269,22 +275,31 @@ export async function deployCandidate(context, input, dependencies = {}) {
         }
         throw error;
       }
-      return options;
-    } finally {
-      const cleanupContext = Object.freeze({ ...context, signal: undefined });
-      try {
-        if (uploadAttempted) {
-          await execute(
-            cleanupContext,
-            SSH,
-            sshArguments(["/usr/bin/rm", "-f", "--", remotePath], authority.path),
-            "CLOUD_RELEASE_REMOTE_ARCHIVE_CLEANUP",
-          );
-        }
-      } finally {
-        await (dependencies.rm ?? rm)(archive.temporaryRoot, { recursive: true, force: true });
-      }
+    } catch (error) {
+      operationError = error;
     }
+    const cleanupContext = Object.freeze({ ...context, signal: undefined });
+    let cleanupError;
+    try {
+      if (uploadAttempted) {
+        await execute(
+          cleanupContext,
+          SSH,
+          sshArguments(["/usr/bin/rm", "-f", "--", remotePath], authority.path),
+          "CLOUD_RELEASE_REMOTE_ARCHIVE_CLEANUP",
+        );
+      }
+    } catch (error) {
+      cleanupError = error;
+    }
+    try {
+      await (dependencies.rm ?? rm)(archive.temporaryRoot, { recursive: true, force: true });
+    } catch (error) {
+      cleanupError ??= error;
+    }
+    if (operationError !== undefined) throw operationError;
+    if (cleanupError !== undefined) throw cleanupError;
+    return options;
   });
 }
 

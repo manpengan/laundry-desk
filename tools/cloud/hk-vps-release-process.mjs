@@ -2,13 +2,62 @@ import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { isAbsolute } from "node:path";
 
-import { fail } from "./hk-vps-release-core.mjs";
+import { CloudReleaseError, HK_VPS_ALIAS, fail } from "./hk-vps-release-core.mjs";
+import { parseSafeRemoteReleaseErrorCode } from "./hk-vps-release-remote-error-contract.mjs";
 
 const MAXIMUM_OUTPUT_BYTES = 2 * 1024 * 1024;
 const MAXIMUM_INPUT_BYTES = 64 * 1024;
 const MAXIMUM_TIMEOUT_MS = 30 * 60_000;
 const TERMINATION_GRACE_MS = 2_000;
 const SIGNALS = Object.freeze(["SIGINT", "SIGTERM", "SIGHUP"]);
+const SSH = "/usr/bin/ssh";
+const PINNED_SSH_RELEASE_LABELS = new Set([
+  "CLOUD_RELEASE_REMOTE_API_EVIDENCE",
+  "CLOUD_RELEASE_REMOTE_DEPLOY",
+  "CLOUD_RELEASE_REMOTE_FINALIZE",
+  "CLOUD_RELEASE_REMOTE_ROLLBACK",
+]);
+const PINNED_SSH_ARGUMENTS = Object.freeze([
+  "-o",
+  "BatchMode=yes",
+  "-o",
+  "PasswordAuthentication=no",
+  "-o",
+  "KbdInteractiveAuthentication=no",
+  "-o",
+  "IdentitiesOnly=yes",
+  "-o",
+  "StrictHostKeyChecking=yes",
+  "-o",
+  null,
+  "-o",
+  "GlobalKnownHostsFile=/dev/null",
+  "-o",
+  "HostKeyAlgorithms=ssh-ed25519",
+  HK_VPS_ALIAS,
+]);
+
+function assertPinnedSshReleaseCommand(file, arguments_, label) {
+  const knownHostsOption = arguments_[11];
+  const knownHosts =
+    typeof knownHostsOption === "string" && knownHostsOption.startsWith("UserKnownHostsFile=")
+      ? knownHostsOption.slice("UserKnownHostsFile=".length)
+      : null;
+  const matches = PINNED_SSH_ARGUMENTS.every(
+    (argument, index) => argument === null || arguments_[index] === argument,
+  );
+  if (
+    file !== SSH ||
+    !PINNED_SSH_RELEASE_LABELS.has(label) ||
+    arguments_.length <= PINNED_SSH_ARGUMENTS.length ||
+    !matches ||
+    typeof knownHosts !== "string" ||
+    !isAbsolute(knownHosts) ||
+    knownHosts.includes("\0")
+  ) {
+    fail("CLOUD_RELEASE_COMMAND_INVALID");
+  }
+}
 
 function validateCommand(file, arguments_, options) {
   if (
@@ -59,7 +108,7 @@ function signalGroup(child, signal) {
   }
 }
 
-export function runCloudCommand(file, arguments_, inputOptions = {}) {
+function runCommand(file, arguments_, inputOptions, preserveRemoteFailure) {
   const options = Object.freeze({
     accepting: Object.freeze([...(inputOptions.accepting ?? [0])]),
     cwd: inputOptions.cwd ?? "/",
@@ -119,7 +168,7 @@ export function runCloudCommand(file, arguments_, inputOptions = {}) {
         try {
           signalGroup(child, "SIGKILL");
         } finally {
-          finish(new Error(`${options.label}_${reason}`));
+          finish(new CloudReleaseError(`${options.label}_${reason}`));
         }
       }, TERMINATION_GRACE_MS);
     };
@@ -140,11 +189,18 @@ export function runCloudCommand(file, arguments_, inputOptions = {}) {
     child.stdout.on("data", capture(stdout));
     child.stderr.on("data", capture(stderr));
     child.stdin.on("error", () => undefined);
-    child.once("error", () => finish(new Error(`${options.label}_FAILED`)));
+    child.once("error", () => finish(new CloudReleaseError(`${options.label}_FAILED`)));
     child.once("close", (code, closeSignal) => {
       if (stopReason !== null) return;
       if (code === null || closeSignal !== null || !options.accepting.includes(code)) {
-        finish(new Error(`${options.label}_FAILED`));
+        const remoteCode =
+          preserveRemoteFailure && code !== null && closeSignal === null
+            ? parseSafeRemoteReleaseErrorCode(
+                Buffer.concat(stdout).toString("utf8"),
+                Buffer.concat(stderr).toString("utf8"),
+              )
+            : null;
+        finish(new CloudReleaseError(remoteCode ?? `${options.label}_FAILED`));
         return;
       }
       finish(
@@ -158,6 +214,15 @@ export function runCloudCommand(file, arguments_, inputOptions = {}) {
     });
     child.stdin.end(options.input);
   });
+}
+
+export function runCloudCommand(file, arguments_, inputOptions = {}) {
+  return runCommand(file, arguments_, inputOptions, false);
+}
+
+export function runPinnedSshReleaseCommand(file, arguments_, inputOptions = {}) {
+  assertPinnedSshReleaseCommand(file, arguments_, inputOptions.label);
+  return runCommand(file, arguments_, inputOptions, true);
 }
 
 export async function withCloudSignalCancellation(operation, processObject = process) {

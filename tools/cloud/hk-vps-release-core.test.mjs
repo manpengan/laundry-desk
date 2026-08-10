@@ -5,6 +5,7 @@ import { lstat, readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  CloudReleaseError,
   HK_VPS_ED25519_FINGERPRINT,
   REMOTE_RELEASE_LOCK,
   assertPinnedSshConfig,
@@ -19,6 +20,7 @@ import {
   sshArguments,
 } from "./hk-vps-release-core.mjs";
 import {
+  completeRemoteAction,
   deployCandidate,
   parseScannedHostKey,
   remoteStatefulArguments,
@@ -65,6 +67,21 @@ function runInvalidBootstrap(arguments_) {
     input: releaseBootstrapScript(),
     timeout: 2_000,
   });
+}
+
+function failingAuthorityCleanup(events, cleanupFailure) {
+  return async (execute, operation) =>
+    await withPinnedSshAuthority(execute, operation, {
+      createPinnedSshAuthority: async () =>
+        Object.freeze({
+          path: KNOWN_HOSTS,
+          temporaryRoot: "/private/tmp/laundry-known-hosts-root",
+        }),
+      rm: async (path, options) => {
+        events.push({ label: "AUTHORITY_RM", options, path });
+        throw cleanupFailure;
+      },
+    });
 }
 
 test("release identifiers accept only canonical lowercase fixed-width values", () => {
@@ -301,6 +318,190 @@ test("a partially failed SCP still attempts exact remote archive cleanup", async
     "--",
     incomingArchivePath(CANDIDATE, TOKEN),
   ]);
+});
+
+test("a stable remote deploy error is preserved and still cleans both archives", async () => {
+  const events = [];
+  const remoteFailure = new CloudReleaseError("CLOUD_RELEASE_INSTALL_FAILED");
+  await assert.rejects(
+    () =>
+      deployCandidate(
+        { cwd: "/private/tmp/repository", environment: {}, signal: undefined },
+        {
+          candidateSha: CANDIDATE,
+          expectedSha: EXPECTED,
+          migrationHead: MIGRATION,
+          token: TOKEN,
+        },
+        {
+          assertRepositoryCandidate: async () => undefined,
+          command: async (_context, _file, _arguments, label, _timeoutMs, extra) => {
+            events.push({ extra, label });
+            if (label === "CLOUD_RELEASE_REMOTE_DEPLOY") throw remoteFailure;
+            return { code: 0, stderr: "", stdout: "" };
+          },
+          createArchive: async () => ({
+            archivePath: "/private/tmp/release.tar",
+            digest: DIGEST,
+            temporaryRoot: "/private/tmp/release-archive-root",
+          }),
+          rm: async (path) => events.push({ label: `LOCAL_RM:${path}` }),
+          withPinnedSshAuthority: async (_execute, operation) =>
+            await operation({ path: KNOWN_HOSTS }),
+        },
+      ),
+    (error) => error === remoteFailure,
+  );
+  assert.equal(
+    events.find(({ label }) => label === "CLOUD_RELEASE_REMOTE_DEPLOY")?.extra?.pinnedSshRelease,
+    true,
+  );
+  assert.deepEqual(
+    events.map(({ label }) => label),
+    [
+      "CLOUD_RELEASE_UPLOAD",
+      "CLOUD_RELEASE_REMOTE_DEPLOY",
+      "CLOUD_RELEASE_REMOTE_ARCHIVE_CLEANUP",
+      "LOCAL_RM:/private/tmp/release-archive-root",
+    ],
+  );
+});
+
+test("a real rollback failure overrides the health error with recovery required", async () => {
+  const healthFailure = new CloudReleaseError("CLOUD_RELEASE_EXTERNAL_HEALTH_INVALID");
+  const rollbackFailure = new CloudReleaseError("CLOUD_RELEASE_SERVICE_START_FAILED");
+  for (const failingCleanup of ["remote", "local"]) {
+    const events = [];
+    const cleanupFailure = new CloudReleaseError(
+      `CLOUD_RELEASE_${failingCleanup.toUpperCase()}_CLEANUP_FAILED`,
+    );
+    await assert.rejects(
+      () =>
+        deployCandidate(
+          { cwd: "/private/tmp/repository", environment: {}, signal: undefined },
+          {
+            candidateSha: CANDIDATE,
+            expectedSha: EXPECTED,
+            migrationHead: MIGRATION,
+            token: TOKEN,
+          },
+          {
+            assertExternalHealth: async () => {
+              throw healthFailure;
+            },
+            assertRepositoryCandidate: async () => undefined,
+            command: async (_context, _file, _arguments, label) => {
+              events.push(label);
+              if (failingCleanup === "remote" && label === "CLOUD_RELEASE_REMOTE_ARCHIVE_CLEANUP") {
+                throw cleanupFailure;
+              }
+              return { code: 0, stderr: "", stdout: "" };
+            },
+            createArchive: async () => ({
+              archivePath: "/private/tmp/release.tar",
+              digest: DIGEST,
+              temporaryRoot: "/private/tmp/release-archive-root",
+            }),
+            remoteAction: async () => {
+              throw rollbackFailure;
+            },
+            rm: async () => {
+              events.push("LOCAL_RM");
+              if (failingCleanup === "local") throw cleanupFailure;
+            },
+            withPinnedSshAuthority: async (_execute, operation) =>
+              await operation({ path: KNOWN_HOSTS }),
+          },
+        ),
+      (error) => {
+        assert.equal(error.code, "CLOUD_RELEASE_RECOVERY_REQUIRED");
+        assert.equal(error.cause, rollbackFailure);
+        return true;
+      },
+    );
+    assert.deepEqual(events.slice(-2), ["CLOUD_RELEASE_REMOTE_ARCHIVE_CLEANUP", "LOCAL_RM"]);
+  }
+});
+
+test("deploy recovery required survives a real authority cleanup failure", async () => {
+  const events = [];
+  const rollbackFailure = new CloudReleaseError("CLOUD_RELEASE_SERVICE_START_FAILED");
+  const authorityCleanupFailure = new CloudReleaseError("CLOUD_RELEASE_AUTHORITY_CLEANUP_FAILED");
+  await assert.rejects(
+    () =>
+      deployCandidate(
+        { cwd: "/private/tmp/repository", environment: {}, signal: undefined },
+        {
+          candidateSha: CANDIDATE,
+          expectedSha: EXPECTED,
+          migrationHead: MIGRATION,
+          token: TOKEN,
+        },
+        {
+          assertExternalHealth: async () => {
+            throw new CloudReleaseError("CLOUD_RELEASE_EXTERNAL_HEALTH_INVALID");
+          },
+          assertRepositoryCandidate: async () => undefined,
+          command: async (_context, _file, _arguments, label) => {
+            events.push({ label });
+            return { code: 0, stderr: "", stdout: "" };
+          },
+          createArchive: async () => ({
+            archivePath: "/private/tmp/release.tar",
+            digest: DIGEST,
+            temporaryRoot: "/private/tmp/release-archive-root",
+          }),
+          remoteAction: async () => {
+            throw rollbackFailure;
+          },
+          rm: async (path) => events.push({ label: "ARCHIVE_RM", path }),
+          withPinnedSshAuthority: failingAuthorityCleanup(events, authorityCleanupFailure),
+        },
+      ),
+    (error) => {
+      assert.equal(error.code, "CLOUD_RELEASE_RECOVERY_REQUIRED");
+      assert.equal(error.cause, rollbackFailure);
+      return true;
+    },
+  );
+  assert.ok(events.some(({ label }) => label === "CLOUD_RELEASE_REMOTE_ARCHIVE_CLEANUP"));
+  assert.ok(events.some(({ label }) => label === "ARCHIVE_RM"));
+  assert.deepEqual(events.at(-1), {
+    label: "AUTHORITY_RM",
+    options: { force: true, recursive: true },
+    path: "/private/tmp/laundry-known-hosts-root",
+  });
+});
+
+test("standalone rollback recovery required survives authority cleanup failure", async () => {
+  const events = [];
+  const recoveryFailure = new CloudReleaseError("CLOUD_RELEASE_RECOVERY_REQUIRED");
+  const cleanupFailure = new CloudReleaseError("CLOUD_RELEASE_AUTHORITY_CLEANUP_FAILED");
+  await assert.rejects(
+    () =>
+      completeRemoteAction(
+        { cwd: "/private/tmp/repository", environment: {}, signal: undefined },
+        "rollback",
+        {
+          candidateSha: CANDIDATE,
+          expectedSha: EXPECTED,
+          migrationHead: MIGRATION,
+          token: TOKEN,
+        },
+        {
+          remoteAction: async (_context, action) => {
+            events.push({ label: `REMOTE_${action.toUpperCase()}` });
+            throw recoveryFailure;
+          },
+          withPinnedSshAuthority: failingAuthorityCleanup(events, cleanupFailure),
+        },
+      ),
+    (error) => error === recoveryFailure,
+  );
+  assert.deepEqual(
+    events.map(({ label }) => label),
+    ["REMOTE_ROLLBACK", "AUTHORITY_RM"],
+  );
 });
 
 test("required CI checks use the newest rerun for each required name", () => {
