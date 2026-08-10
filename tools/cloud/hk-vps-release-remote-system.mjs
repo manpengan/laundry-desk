@@ -214,7 +214,21 @@ export async function prepareStaging(stagingRoot, candidateSha, migrationHead, s
   );
   const writable = await command(
     "/usr/bin/find",
-    [stagingRoot, "-xdev", "-perm", "/022", "-print", "-quit"],
+    [
+      stagingRoot,
+      "-xdev",
+      "(",
+      "-type",
+      "f",
+      "-o",
+      "-type",
+      "d",
+      ")",
+      "-perm",
+      "/022",
+      "-print",
+      "-quit",
+    ],
     "CLOUD_RELEASE_STAGING_PERMISSIONS",
     signal,
   );
