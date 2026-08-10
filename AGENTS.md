@@ -2,13 +2,15 @@
 
 仓库通用 agent 入口。
 
-## 当前 owner 与路线（ADR-14）
+## 当前 owner 与路线（ADR-37）
 
 **Codex 为当前交付负责人**（设计、实现、集成与门禁）。详见
-[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)。
+[ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)。
 
 **仅通用 V2 是活动交付线**：宏发版本停止，根 `src/` 只保留为历史行为参考；
-当前优先交付本地 Web Server 与 macOS App，云部署和 Windows 适配后置。
+当前按 1–4 顺序以部署在 hk-vps 的 Cloud Web Server 作为主开发与验收形态。
+Windows、macOS 正式发行、XP-58 实体验收及每个新增 Web 功能的桌面同步适配后置，
+不阻塞当前 Cloud Web 功能开发。ADR-14 继续作为通用 V2 架构基线。
 
 | 角色      | 状态                                         |
 | --------- | -------------------------------------------- |
@@ -20,14 +22,15 @@
 
 ## 入场必读
 
-1. [ADR-14：通用 V2 本地优先交付](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
-2. [ADR-16：边缘运营范围追认与契约面门禁](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md)
+1. [ADR-37：Cloud Web 主交付形态与后续 1–4 顺序](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
+2. [ADR-14：通用 V2 本地优先架构基线](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
+3. [ADR-16：边缘运营范围追认与契约面门禁](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md)
    — **修订 ADR-14 §4 阶段线**，并规定新增命令/查询必须附 ADR
-3. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
-4. [Claude V2 架构 draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
-5. [Claude V2 Web UI draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
-6. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
-7. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
+4. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
+5. [Claude V2 架构 draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
+6. [Claude V2 Web UI draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
+7. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
+8. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
 
 判断"某能力是否已交付"以 `main` 代码与绿灯门禁为准，不以文档为准；发现文档滞后
 按缺陷订正（ADR-16 §4）。

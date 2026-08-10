@@ -25,9 +25,14 @@ module.exports = {
   },
   overrides: [
     {
-      files: ["tools/cloud/**/*.mjs"],
+      files: ["tools/cloud/**/*.mjs", "apps/web/e2e-cloud/**/*.mjs"],
+      env: {
+        es2021: true,
+        node: true,
+      },
       rules: {
         "max-lines": maxLines(400),
+        "no-undef": "error",
       },
     },
     {

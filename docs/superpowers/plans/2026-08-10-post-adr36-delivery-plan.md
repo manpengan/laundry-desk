@@ -1,71 +1,130 @@
-# ADR-36 后续 1–6 交付计划
+# ADR-36 后续 Cloud Web-first 1–4 交付计划
 
 > 日期：2026-08-10
-> 状态：**阶段 1 完成；阶段 2 外部硬件阻塞**
-> 当前阶段验收：[XP-58 实体打印验收](../specs/2026-08-10-xp58-physical-print-acceptance.md)
-> 既有裁决：[ADR-14](../../adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md) · [ADR-16](../../adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-36](../../adr/2026-08-09-adr-36-cloud-test-environment.md)
+> 状态：**阶段 1 执行中**
+> 当前阶段验收：[ADR-36 Web 产品收口验收记录](../specs/2026-08-09-adr36-web-product-convergence-acceptance.md)
+> 当前裁决：[ADR-37](../../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
+> 继承边界：[ADR-16](../../adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-36](../../adr/2026-08-09-adr-36-cloud-test-environment.md)
 
 ## 1. 目标与推进规则
 
-在不改写既有 Accepted ADR 的前提下，把 ADR-36 之后的开发按 1–6 固定顺序收口。每个阶段都要形成独立、可复现且与声明层级相符的证据。
+后续以 hk-vps Linux Fastify/PostgreSQL + Browser Web 为主交付与开发测试形态，按 1–4
+固定顺序补齐剩余功能。Windows、macOS 正式发行、XP-58 实体打印和逐功能桌面适配不在
+当前关键路径。
 
 推进规则：
 
-1. 当前阶段实现完成后，先跑与行为和风险相称的新鲜测试。
-2. 测试通过后提交到阶段分支，通过 PR 合入 `main`，并确认 `main` required CI 绿灯。
-3. 只有上一步全部完成，才开始下一阶段；不得并行把后续能力混进当前阶段。
-4. 硬件、证书、外部账号、真实主机或提供商缺失时，阶段状态明确记为 **阻塞**，不得用 mock、ad-hoc 签名、CI 或其他平台证据替代。
-5. 任何新增命令/查询或对外能力边界变化，继续遵守 ADR-16 的同批 ADR、CHANGELOG 与验收记录门禁。
+1. 当前阶段先完成精确设计、实现和与风险相称的新鲜本地测试。
+2. 测试通过后经 PR 合入 `main`，确认 `workspace-check` 与 `real-postgres` required checks
+   绿灯；不得直接在服务器上开发或形成只存在于服务器的补丁。
+3. 把该 `main` SHA 精确部署到 hk-vps，迁移到目标 schema，并完成公网 Web、loopback、
+   服务端/数据库回读与安全边界验收后，当前阶段才算关闭。
+4. 只有当前阶段全部关闭才开始下一阶段。外部账号、凭据或审批缺失时，相应项标记
+   `blocked_external_provider`，不得用 fake 代替；不会依赖这些外部项的当前阶段工作继续完成。
+5. 新增命令/查询或改变对外能力边界时，继续遵守 ADR-16：实现 PR 同批附精确 ADR、
+   CHANGELOG 和受影响的验收记录，并点名 `m2-freeze.test.ts` 清单变化。
+6. 云端只使用可追踪、可清理的合成数据；任何验收都不得记录秘密或真实顾客 PII。
 
 ## 2. 固定交付顺序
 
-| 阶段 | 状态                          | 范围                                                   | 必须关闭的证据                                                                                                                      |
-| ---: | ----------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-|    1 | completed                     | macOS 当前 Web 产品面 + Runtime.app 托管 loopback 组合 | Browser 与打包 Counter 同产品面；全新投产与凭据切换；Runtime 托管真实 Server OCI 后的 stop/start/restart 与 Counter 桥接；`main` CI |
-|    2 | **blocked_external_hardware** | XP-58 真机                                             | 实际中文、金额、条码、走纸、切刀、断连/恢复和重复打印边界；记录打印机型号、连接方式与现场结果                                       |
-|    3 | pending                       | Developer ID、公证与正式双架构 OCI                     | Developer ID 签名、notary/staple/Gatekeeper；arm64/x86_64 正式 OCI index、签名 manifest、干净机安装/升级/回滚                       |
-|    4 | pending                       | Windows 打包与真实主机                                 | 真实 Windows 主机安装、启动、升级/卸载、持久化、打印与安全基线；不能只依赖 `windows-latest` CI                                      |
-|    5 | pending                       | 生产 SaaS、多门店与运维                                | 正式环境租户隔离、容量/SLA、备份恢复、监控告警、发布回滚、事故与数据运维；hk-vps 合成测试环境不作为生产证据                         |
-|    6 | pending                       | AI/BYOK、v1 迁移与外部提供商                           | 模型密钥隔离与成本/失败降级、真实 v1 只读迁移演练、短信/微信/支付等提供商 sandbox 与正式切换边界                                    |
+| 阶段 | 状态       | 范围                                                                                                                 | 关闭证据                                                                                          |
+| ---: | ---------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+|    1 | **执行中** | 云端基线与既有 Web 收口：路线治理、目标 main 精确部署、schema head、公网安全浏览器验收、30/90/180 天历史催取 fixture | required CI 双绿；marker/schema 精确；服务和监听不回退；HTTP 与远端 UI 通过；fixture 可审计和清理 |
+|    2 | 待开始     | 柜台可信性缺口：服务端权威计价与设置生效、支付流水/退款 Web、衣物详情与挂单刷新恢复                                  | 新/改契约有 ADR；单元/组件/真实 PG/浏览器门禁通过；云端完整旅程可回读且审计一致                   |
+|    3 | 待开始     | 经营增强：价目排序/重新启用/审计、Owner 公网经营与门店管理、会员等级/积分/次卡/券/有效期、顾客扩展档案               | 每个独立切片先有 ADR 与权限/隐私/金额口径；真实 PG、Web、RLS 与公网行为逐片关闭                   |
+|    4 | 待开始     | 大型云端模块：云备份/恢复/监控/联合回滚；自动通知；店厂交接；取送、营销、顾客自助；AI/BYOK                           | 每个模块独立 ADR/威胁边界/回滚；生产性声明另需容量、恢复或 provider 真实证据                      |
 
-## 3. 阶段 1 关闭条件
+## 3. 阶段 1：云端基线与既有 Web 收口
 
-阶段 1 只在以下各项同时满足后关闭：
+### 3.1 交付物
 
-- `pnpm local:acceptance` 在同一轮真实本地栈中完成 Browser 与打包 Counter 产品面对齐，并输出成功 marker。
-- `pnpm local:commissioning:fresh:mac` 从全新卷开始，通过双管理员投产、员工密码与 PIN 重置前后的新旧凭据切换。
-- `pnpm runtime:counter:acceptance` 使用 Runtime.app 托管真实 Server OCI，完成 install/health/Counter probe、stop/down、start、restart、正常桥接与失败路径清理。
-- 验收使用临时且不入库的凭据；退出后无遗留容器、卷、临时密钥、锁或合成下载物。
-- 相关测试、lint、typecheck、build 与 `workspace:check` 新鲜通过。
-- 变更经 PR 合入 `main`，并确认 `main` required CI 绿灯。
+1. 以 ADR-37 修订路线真源，不回改 ADR-36 Accepted 正文；同步 README、ADR 索引、
+   CHANGELOG、本计划与 ADR-36 验收记录。
+2. 部署执行时解析目标 `main` 的完整 Git SHA；服务器 release marker、运行代码和验收记录都
+   精确绑定该 SHA，不使用浮动的「最新版本」描述。
+3. PostgreSQL 应用到该 SHA 的迁移头；Fastify/PostgreSQL 继续只监听 loopback，公网只经
+   Caddy 80/443，认证、Host、Origin、Fetch Metadata、CSRF 与限流不放宽。
+4. 新增专用公网 Playwright 配置与只读 `core_ui_subset`。它不得调用本地 E2E global setup、
+   不得发出产品命令、下载文件、清库或覆盖 fixture；只验证正常登录后核心页面与既有数据的
+   可达性，并断言命令请求数为零。它是独立 UI 证据层，不具备单独关闭阶段的权限。
+5. 新增 opt-in 历史时间 fixture：只为本次 run 创建 30/90/180 天合成订单，记录受控的
+   建立/核对/清理步骤，不关闭当天营业日，不直接改变既有业务数据。
+6. 由 ADR-36 公网 HTTP acceptance 验证双管理员/员工、价目、开单/履约/收退款/取衣/交班、
+   会员生命周期、催取/人工名单与账务导出，并由只读 `core_ui_subset` 验证对应核心 Web 页面
+   可达。HTTP、UI、数据库/审计证据分层记录，任一层不得冒充另一层。
 
-阶段 1 的所有本地包、临时 key 和 Runtime 测试组合均标记 `software_only`。它不关闭阶段 2 的 XP-58 实体门禁，也不关闭阶段 3 的 Developer ID、公证和正式 OCI 门禁。
+### 3.2 关闭条件
 
-## 4. 当前证据与剩余工作
+- 目标 SHA 的 `workspace-check` 与 `real-postgres` required CI 均绿。
+- hk-vps marker 与目标 `main` 完整 SHA 一致，schema 与仓库迁移头一致。
+- `laundry-desk`、`postgresql`、`caddy` 与同机 `kb-web` 健康；failed units 为零；监听、
+  Caddy 与 KB 站点没有非预期变化。
+- ADR-36 HTTP acceptance 不再有 `reminder_history BLOCKED`，安全清理后无本次 run 的临时
+  服务器文件、活动会话、员工、价目、未关闭会员或未清理合成订单。
+- ADR-36 HTTP acceptance 覆盖 §3.1 第 6 条的完整纵向并通过；浏览器
+  `core_ui_subset` 只读通过且确认零产品命令。两者合并才构成公网 Web 证据；截图、日志和
+  报告不包含秘密或真实 PII。
+- [ADR-36 Web 产品收口验收记录](../specs/2026-08-09-adr36-web-product-convergence-acceptance.md)
+  追加新目标 SHA 的证据，P2-1 至 P2-4 全部关闭。
 
-截至 2026-08-10：
+## 4. 阶段 2：柜台可信性缺口
 
-- `pnpm local:acceptance`：Browser 17/17、打包 Counter 7/7，`LOCAL_ACCEPTANCE_OK`。
-- `pnpm local:commissioning:fresh:mac`：1/1，`LOCAL_FRESH_COMMISSIONING_ACCEPTANCE_OK`。
-- `pnpm runtime:counter:acceptance`：**通过**；真实 System runner 完成 install/stop/start/restart、staged/window health 与严格清理，输出 `assurance=software_only` marker。
-- `pnpm workspace:check`：**通过**；format、lint、typecheck、test、build 全绿，Node 本地与 Runtime 276/276。
-- PR #154：workspace 6m19s、Runtime macOS 3m19s、real PostgreSQL 12m23s，全部通过。
-- 已保留两笔分组提交并合入 `main=7e72b57`；push 级 V2 Foundation（workspace 6m03s、Runtime 3m53s）和 V2 PostgreSQL Integration（12m01s）再次通过。
+依次交付：
 
-因此阶段 1 已完成。阶段 2 已按顺序启动，但 2026-08-10 的本机盘点未发现 CUPS 队列、USB Printer class 设备、USB 串口打印桥或局域网 IPP 打印服务；在接入并通电 XP-58、安装启用真实队列前，阶段 2 保持 `blocked_external_hardware`，阶段 3–6 不启动。
+1. **计价与设置权威**：客户端只提交业务选择和允许的输入；服务端验证并计算折扣、附加费、
+   急件费、运费和最终金额。设置必须可读回、可审计，并有实际业务消费者，不能只写不生效。
+2. **支付流水与退款 Web**：提供门店/订单范围内的支付流水入口，让有权用户选择可退款
+   原支付并发起受限退款；继续使用只追加账本、幂等、原因和另一管理员 step-up。
+3. **衣物详情与挂单恢复**：补齐颜色、品牌、瑕疵、附件和件级备注；挂单刷新或重新登录后
+   可由服务端状态安全恢复，不以浏览器内存作为真源。
 
-阶段 2 的软件检查点已新鲜通过 Web 350/350、Edge Agent scripts 56/56 + dist 403/403、数据库静态 68/68、隔离真实 PostgreSQL 的打印迁移/精确重放/并发回归 8/8，以及完整 `workspace:check`（基础/Runtime 276/276、Cloud 32/32、Server 常规 763 pass、全量 build）。严格入队、COMMIT 后响应丢失仍返回同一任务、浏览器打印旁路防护、可见 job UUID 与 schema v3 签名三回执证据入口均已就绪。这些绿灯不替代实体出纸，阶段状态仍由上述硬件 blocker 决定。
+三个切片分别关闭，不因 UI 出现按钮就宣称完成。金额、权限、并发和审计必须有真实
+PostgreSQL 回归，公网 Web 需按正常操作旅程验证。
 
-## 5. 证据边界
+## 5. 阶段 3：经营增强
 
-- Browser/Counter 通过只证明当前 macOS 软件产品面，不证明打印机真实出纸。
-- Runtime 托管回环通过只证明本机测试 Runtime 与真实 Server OCI/Counter 的软件组合，不证明正式分发物。
-- ad-hoc 或临时测试签名不能作为 Developer ID、公证、staple 或 Gatekeeper 放行证据。
-- 双架构源码可构建不等于正式 OCI index 已发布、签名、拉取并在干净机验收。
-- GitHub Actions 的 Windows runner 不等于用户环境中的 Windows 安装、打印和升级验收。
-- hk-vps 只承载合成数据云测试；它不证明生产级多租户、容量、SLA、备份恢复和事故运维。
-- 模拟模型、假短信/支付提供商和合成迁移数据都不能冒充阶段 6 的真实外部集成或 v1 迁移完成。
+按以下顺序拆成独立 ADR 和 PR：
 
-## 6. 历史计划关系
+1. 价目排序、停用项重新启用与管理员审计入口；
+2. Owner 公网只读/受限管理面、完整报表和授权门店管理；
+3. 会员等级、积分、次卡、优惠券与有效期；
+4. 顾客多地址、车辆/标识、服务偏好、免责声明与折扣政策等扩展档案。
 
-[ADR-36 Web 产品收口计划](2026-08-09-adr36-web-product-convergence-plan.md)及其验收记录继续保留当时的 Linux Server/Web 云测试事实和 pending 项，不回写为已经完成。本计划仅定义 ADR-36 后的当前推进顺序与关闭门禁。
+每个切片先冻结数据归属、门店/组织作用域、角色权限、隐私导出/匿名化和历史快照语义。
+Owner 公网化不得直接复用 ADR-26/27 的 LAN 假设；资金和优惠能力不得由客户端计算。
+
+## 6. 阶段 4：大型云端模块
+
+大型模块内部按以下顺序推进：
+
+1. 云端 PostgreSQL + 私有照片一致性备份、离机保留、影子恢复演练、监控告警与代码/迁移/
+   数据联合回滚；在这些证据形成前，hk-vps 仍是可丢弃开发环境。
+2. provider-neutral 通知 outbox、幂等发送、重试、退避、回执和人工降级，再接短信/微信
+   provider。
+3. 店厂交接批次、清点差异、质检/返工与移动交接证据。
+4. 取送、营销/券活动与顾客自助入口。
+5. AI/BYOK 的权限投影、风险确认、成本上限、失败降级与密钥隔离。
+
+第 2、4、5 项若依赖外部平台，fake 只能证明 `software_only`。真实完成至少要求获授权的
+sandbox 或正式账号、独立秘密、限额/成本保护、真实请求、provider 回执/webhook、失败与
+撤销路径；缺任一项即标记 `blocked_external_provider`。
+
+## 7. 明确后置的独立门禁
+
+- Windows 打包与真实主机安装/升级/卸载/打印；
+- macOS Developer ID、公证、staple、Gatekeeper、正式双架构 OCI 和公开更新源；
+- XP-58 中文、金额、条码、走纸、切刀、断连/恢复和补打；
+- 每个新增 Web 功能的 Electron/Runtime/CUPS 同步适配；
+- v1 真实数据迁移。
+
+历史 [macOS Web 产品面对齐验收](../specs/2026-08-10-macos-web-product-parity-acceptance.md)、
+[XP-58 实体打印验收](../specs/2026-08-10-xp58-physical-print-acceptance.md)和正式候选证据继续
+有效，但只证明各自记录的层级。恢复这些门禁时另立当前计划，不回填 Cloud Web 证据。
+
+## 8. 历史计划关系
+
+本计划由 ADR-37 修订 2026-08-10 早先的 macOS/XP-58/Windows 1–6 顺序；旧阶段 1 的
+software-only 绿灯与旧阶段 2 的硬件盘点仍是历史事实，不作为当前阻塞。
+
+[ADR-36 Web 产品收口计划](2026-08-09-adr36-web-product-convergence-plan.md)与其验收记录成为
+当前阶段 1 的既有 Web 基线子计划；历史 `ae9808c` 证据保留，新目标 SHA 必须另行记录。

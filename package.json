@@ -86,7 +86,9 @@
     "local:down": "node tools/local/down.mjs",
     "local:reset": "node tools/local/reset.mjs",
     "cloud:adr36:acceptance": "node tools/cloud/adr36-web-acceptance.mjs",
-    "cloud:adr36:acceptance:test": "node --test tools/cloud/*.test.mjs"
+    "cloud:adr36:acceptance:test": "node --test tools/cloud/*.test.mjs",
+    "cloud:web:e2e": "pnpm exec playwright test -c apps/web/playwright.cloud.config.ts",
+    "cloud:release:hk": "node tools/cloud/hk-vps-release.mjs"
   },
   "build": {
     "appId": "com.laundry-desk",

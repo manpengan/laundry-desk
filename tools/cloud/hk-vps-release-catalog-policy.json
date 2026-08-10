@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "postgres_major": 16,
+  "heads": {
+    "0045_store_commissioning_staff_credentials.sql": {
+      "database_restored_catalog": {
+        "entries": 661,
+        "sha256": "40d534c3a0d6c3ed9719000e14c6851ed2539b545b9a936c2cb538b8d103af72"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0046_print_job_request_idempotency.sql": {
+      "database_restored_catalog": {
+        "entries": 663,
+        "sha256": "2d836d0c9eec5aa3996bf35ea1f7a3fd9f0890d58d9dbb619afb7c83aee03c5d"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    }
+  }
+}

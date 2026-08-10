@@ -1,14 +1,16 @@
 # XP-58 实体打印验收记录
 
 > 日期：2026-08-10
-> 整体状态：**blocked_external_hardware**
+> 历史状态：**原 1–6 计划的阶段 2 为 blocked_external_hardware**
 > 主线基线：`main=7e72b57`
-> 执行计划：[ADR-36 后续 1–6 交付计划](../plans/2026-08-10-post-adr36-delivery-plan.md)
+> 当前路线：本记录保留现场盘点与恢复入口；阶段编号和阻塞关系已由
+> [ADR-37](../../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) 取代，XP-58 不阻塞当前
+> [Cloud Web 1–4 计划](../plans/2026-08-10-post-adr36-delivery-plan.md)
 > 既有裁决：[ADR-34：设备本地 CUPS 打印配置](../../adr/2026-08-08-adr-34-device-local-cups-printer-configuration.md)
 
 ## 1. 本阶段要证明什么
 
-阶段 2 必须让待交付的打包 macOS Counter 经真实订单快照、设备签名 claim、ESC/POS 渲染和本机 CUPS 队列驱动同一台 XP-58，现场证明：
+恢复 XP-58 独立门禁时，必须让待交付的打包 macOS Counter 经真实订单快照、设备签名 claim、ESC/POS 渲染和本机 CUPS 队列驱动同一台 XP-58，现场证明：
 
 1. 中文与全角金额清晰正确；
 2. CODE128 能由实际扫码设备回读；
@@ -62,7 +64,7 @@
 
 ## 5. 恢复条件与现场步骤
 
-继续阶段 2 前必须先满足：
+恢复 XP-58 独立验收前必须先满足：
 
 1. 将已通电 XP-58 通过 USB、以太网或 Wi-Fi 接入这台 Mac；
 2. 安装并启用真实 CUPS 队列，确认 `lpstat -e/-p/-v` 可见且队列 accepting/idle；
@@ -75,4 +77,4 @@
 
 ## 6. 顺序边界
 
-阶段 2 只有在上述实体证据通过、相关软件门禁绿灯、变更合入 `main` 且主线 CI 再次通过后才可标记 completed。在此之前阶段 3–6 均不启动；Developer ID、公证、Windows、生产 SaaS 或 AI 工作不能绕过本硬件门禁并行宣称完成。
+本记录只有在上述实体证据通过、相关软件门禁绿灯、变更合入 `main` 且主线 CI 再次通过后才可标记 completed。它不再阻塞 ADR-37 的 Cloud Web 1–4；Developer ID、公证、Windows 与 XP-58 均在恢复时形成独立阶段。Cloud Web、生产数据保护或外部提供商能力仍必须以各自证据关闭，不能借本记录相互回填。

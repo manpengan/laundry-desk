@@ -98,6 +98,12 @@ jobs:
           pnpm local:up -- --bootstrap
           pnpm local:up -- --bootstrap
 
+      - name: Verify release catalog and write gate against real PostgreSQL
+        env:
+          LAUNDRY_CLOUD_RELEASE_PG_TEST: "1"
+          LAUNDRY_USE_LOCAL_PG: "1"
+        run: node tools/cloud/hk-vps-release-catalog-pg-acceptance.mjs
+
       - name: Assert RLS and real server HTTP smoke
         run: |
           bash tools/compose/smoke-rls.sh

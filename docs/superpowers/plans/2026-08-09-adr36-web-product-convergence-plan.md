@@ -4,6 +4,7 @@
 > 状态：**执行中**
 > 已部署验收基线：`ae9808ce1f3dc61535dbcc1cb89e618f0350ecf6`
 > 裁决：[ADR-14](../../adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md) · [ADR-16](../../adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-36](../../adr/2026-08-09-adr-36-cloud-test-environment.md)
+> 当前路线修订：[ADR-37](../../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)；本计划现为 Cloud Web-first 阶段 1 的既有 Web 基线子计划
 > 验收真源：[ADR-36 Web 产品收口验收记录](../specs/2026-08-09-adr36-web-product-convergence-acceptance.md)
 
 ## 1. 目标
@@ -12,8 +13,9 @@
 Linux Server/Web 产品面。本计划取代历史 [V2-M2 → V2-M6 实施计划](2026-07-19-v2-m2-m6-implementation-plan.md)
 作为当前执行入口，但不改写既有 Accepted ADR。
 
-当前静态盘点为 45 个迁移、41 个命令、25 个查询、436 个 test/spec 文件和 36 份 ADR。
-这些数字只说明契约与证据面规模，不是「产品完成」证据。
+本计划建立时的静态盘点为 45 个迁移、41 个命令、25 个查询、436 个 test/spec 文件和
+36 份 ADR。这些数字是 2026-08-09 的历史快照，只说明契约与证据面规模，不是当前计数或
+「产品完成」证据。
 
 ## 2. 收口定义
 
@@ -36,6 +38,15 @@ Linux Server/Web 产品面。本计划取代历史 [V2-M2 → V2-M6 实施计划
 | P2 全业务云验收       | **执行中** | 公网 HTTP 可安全项已通过员工凭据、价目快照、欠款/退款、会员生命周期、日/月/职员 CSV 与历史空日交班；历史催取阻塞 | 每项均有公网行为、服务端/数据库回读与审计证据                          |
 | P2 真 PG 证据债务     | **已通过** | 36 个剩余 SQL capturing cases 的证据边界表；stats 现金合成和 photo 原子性/orphan sweep 真库补强                  | 没有数据库行为只由 SQL 文本 mock 证明；保留的 doubles 均只负责单元边界 |
 
+ADR-37 不把上述历史证据重写成当前版本已通过。Cloud Web-first 阶段 1 需要在目标 `main` 上
+重新形成以下增量证据：
+
+- release marker、运行代码与仓库完整 SHA 一致，数据库到该 SHA 的迁移头；
+- 不调用本地破坏性 global setup、零产品命令的公网浏览器只读 `core_ui_subset`；完整业务
+  纵向仍由 ADR-36 公网 HTTP acceptance 提供，两层证据共同关闭；
+- 受控、可审计、可清理的 30/90/180 天催取历史 fixture；
+- P2-1 至 P2-4 的新目标 SHA UI/HTTP 证据全部关闭。
+
 ## 4. P2 业务验收顺序
 
 1. **投产与价目**：核对两位独立管理员、员工凭据生命周期和可开单价目。
@@ -47,7 +58,8 @@ Linux Server/Web 产品面。本计划取代历史 [V2-M2 → V2-M6 实施计划
 最新公网运行 `ADR36-20260809T141222752Z-f6c5d218` 已完成步骤 1–3，以及步骤 4 中的今日、
 当月、职员双口径、CSV 原始 UTF-8/SHA-256 和历史空日交班。员工旧 bearer/refresh/password
 撤权、冻结状态资金操作拒绝与解冻后同输入成功、退款和交班幂等重放均有回读证据。当前唯一
-脚本级 blocker 是 30/90/180 天催取正向数据；远端浏览器 UI 仍作为独立证据层 pending。
+脚本级 blocker 是 30/90/180 天催取正向数据；远端浏览器只读 `core_ui_subset` 仍作为独立
+UI 证据层 pending，且不具有单独关闭 P2 的权限。
 
 ## 5. 执行约束
 
@@ -67,4 +79,6 @@ Linux Server/Web 产品面。本计划取代历史 [V2-M2 → V2-M6 实施计划
 - XP-58 中文、金额、扫码、走纸、切刀与断连实体验收；
 - AI/BYOK、短信/微信自动通知、v1 真实数据迁移。
 
-这些门禁仍要分别关闭，但不阻塞 ADR-36 定义的 Linux Server/Web 产品面收口。
+这些门禁仍要分别关闭，但不阻塞 ADR-36 定义的 Linux Server/Web 产品面收口。自
+ADR-37 起，Windows、Apple 正式发行、双架构 OCI 与 XP-58 也不阻塞后续 Cloud Web 1–4
+功能阶段；何时恢复以新的独立计划为准。

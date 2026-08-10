@@ -264,7 +264,7 @@ test("lints each active workspace from its package root", async () => {
   const lintScripts = [
     ["apps/edge-agent/package.json", ".ts,.tsx,.mjs"],
     ["apps/server/package.json", ".ts,.tsx"],
-    ["apps/web/package.json", ".ts,.tsx"],
+    ["apps/web/package.json", ".ts,.tsx,.mjs"],
     ["packages/config/package.json", ".ts,.tsx"],
     ["packages/contracts/package.json", ".ts,.tsx"],
     ["packages/db/package.json", ".ts"],

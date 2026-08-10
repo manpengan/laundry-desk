@@ -17,7 +17,7 @@ const governanceFiles = [
   "GEMINI.md",
   "HERMES.md",
 ];
-const currentDeliveryAdr = "(docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)";
+const currentDeliveryAdr = "(docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)";
 const activeV2ProductEntries = [
   "apps/server/src/local/create-runtime.ts",
   "apps/server/src/http/main.ts",
@@ -107,7 +107,7 @@ function findLocalProfileCopies(source) {
     .map(([label]) => label);
 }
 
-test("routes every governance entry point to ADR-14", async () => {
+test("routes every governance entry point to ADR-37", async () => {
   const contents = await Promise.all(governanceFiles.map(readRepositoryFile));
   const missingLinks = governanceFiles.filter(
     (_file, index) => !contents[index].includes(currentDeliveryAdr),
@@ -473,6 +473,10 @@ test("registers the guarded local lifecycle in default workspace gates", async (
   assert.match(rootPackage.scripts["workspace:format:check"], /tools\/compose/u);
   assert.match(
     rootPackage.scripts["workspace:lint"],
+    /eslint tools\/cloud --ext \.mjs --max-warnings=0/u,
+  );
+  assert.match(
+    rootPackage.scripts["workspace:lint"],
     /eslint tools\/local tools\/release-candidate tests\/foundation tools\/runtime-kit\/\*\.mjs --ext \.mjs/u,
   );
 });
@@ -491,16 +495,30 @@ test("keeps browser and Electron acceptance sources inside canonical quality gat
     "playwright.electron.config.ts",
   ]);
 
-  assert.equal(webPackage.scripts.lint, "eslint . --ext .ts,.tsx --max-warnings=0");
+  assert.equal(webPackage.scripts.lint, "eslint . --ext .ts,.tsx,.mjs --max-warnings=0");
   assert.match(webPackage.scripts.typecheck, /tsconfig\.e2e\.json/u);
   assert.deepEqual(webE2eConfig.include, [
     "e2e/**/*.ts",
     "e2e-commissioning/**/*.ts",
     "e2e-lan/**/*.ts",
+    "playwright.cloud.config.ts",
     "playwright.commissioning.config.ts",
     "playwright.local.config.ts",
     "playwright.lan.config.ts",
   ]);
+});
+
+test("rejects undefined globals in Cloud release and browser JavaScript", async () => {
+  const eslintConfig = (await import(new URL("../../.eslintrc.cjs", import.meta.url))).default;
+  const cloudOverride = eslintConfig.overrides.find(
+    (override) =>
+      override.files.includes("tools/cloud/**/*.mjs") &&
+      override.files.includes("apps/web/e2e-cloud/**/*.mjs"),
+  );
+
+  assert.equal(cloudOverride?.env?.es2021, true);
+  assert.equal(cloudOverride?.env?.node, true);
+  assert.equal(cloudOverride?.rules?.["no-undef"], "error");
 });
 
 test("serializes server test files that mutate shared PostgreSQL roles", async () => {

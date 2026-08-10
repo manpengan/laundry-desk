@@ -37,6 +37,7 @@ const COMMAND_VERSIONS = Object.freeze({
   "payment.repay": "0.2.0",
   "payment.refund": "0.2.0",
   "accounting.report.export": "0.1.0",
+  "notification.manual_list.create": "0.1.0",
   "shift.close": "0.3.0",
 });
 

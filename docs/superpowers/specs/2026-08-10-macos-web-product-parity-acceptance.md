@@ -1,15 +1,17 @@
 # macOS Web 产品面对齐验收记录
 
 > 日期：2026-08-10
-> 整体状态：**阶段 1 完成；已合入 main 且 required CI 通过**
-> 执行计划：[ADR-36 后续 1–6 交付计划](../plans/2026-08-10-post-adr36-delivery-plan.md)
+> 历史状态：**原 1–6 计划的阶段 1 已完成；已合入 main 且 required CI 通过**
+> 当前路线：本记录只保留 software-only 历史证据；阶段编号与阻塞关系已由
+> [ADR-37](../../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) 取代，当前执行
+> [Cloud Web 1–4 计划](../plans/2026-08-10-post-adr36-delivery-plan.md)
 > 证据等级：`software_only`
 
 ## 1. 验收目标
 
 证明当前 Web 柜台的用户可见产品面在 Browser 与 macOS 打包 Counter 中保持一致，并从全新本地数据库走通投产与凭据切换；随后用独立 Runtime.app 托管真实 Server OCI，证明打包 Counter 只通过固定 loopback bridge 工作。
 
-本记录不把软件证据扩大为 XP-58 实体打印、Developer ID/公证、正式双架构 OCI、Windows 真实主机或生产云证据。阶段 1 已在这些边界内完成；后续外部门禁继续按 1–6 计划独立推进。
+本记录不把软件证据扩大为 XP-58 实体打印、Developer ID/公证、正式双架构 OCI、Windows 真实主机或生产云证据。原阶段 1 已在这些边界内完成；上述外部门禁现已移出 Cloud Web 1–4 关键路径，恢复时另立当前计划。
 
 ## 2. 新鲜结果
 
@@ -69,4 +71,4 @@ Browser 17/17 用同一真实本地 Server/PostgreSQL 覆盖当前 Web 行为。
 | 正式双架构 OCI               | 未验证；测试 Server OCI 不等于已发布和签名的 arm64/x86_64 OCI index                          |
 | Windows 真实主机             | 未验证；不以 CI runner 代替                                                                  |
 | 生产 SaaS                    | 未验证；hk-vps 合成数据环境不等于生产多租户/SLA                                              |
-| AI/BYOK/v1 迁移/外部提供商   | 未验证；属于固定顺序的阶段 6                                                                 |
+| AI/BYOK/v1 迁移/外部提供商   | 未验证；按 ADR-37 的 Cloud Web 阶段与 provider 证据边界另行关闭                              |
