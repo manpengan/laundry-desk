@@ -56,6 +56,23 @@ async function postgresCommand(file, arguments_, label, signal, timeoutMs) {
   );
 }
 
+export async function restorePrivateBackup(backupPath, shadow, signal, dependencies = {}) {
+  const run = dependencies.runCloudCommand ?? runCloudCommand;
+  return await run(
+    "/bin/bash",
+    [
+      "--noprofile",
+      "--norc",
+      "-c",
+      'exec /usr/bin/sudo -u postgres -- /usr/bin/pg_restore --dbname "$1" --exit-on-error --single-transaction < "$2"',
+      "laundry-release-shadow-restore",
+      shadow,
+      backupPath,
+    ],
+    commandOptions("CLOUD_RELEASE_SHADOW_RESTORE", signal, 10 * 60_000),
+  );
+}
+
 function psqlArguments(database, sql) {
   return ["--no-psqlrc", "--tuples-only", "--no-align", "--dbname", database, "--command", sql];
 }
@@ -259,13 +276,7 @@ async function drillBackup(backupPath, shadow, evidence, signal) {
       "CLOUD_RELEASE_SHADOW_CREATE",
       signal,
     );
-    await postgresCommand(
-      "/usr/bin/pg_restore",
-      ["--dbname", shadow, "--exit-on-error", "--single-transaction", backupPath],
-      "CLOUD_RELEASE_SHADOW_RESTORE",
-      signal,
-      10 * 60_000,
-    );
+    await restorePrivateBackup(backupPath, shadow, signal);
     assertMigrationLedger(evidence.ledger, await readMigrationLedger(shadow, signal), "exact");
     shadowCatalog = await readCatalogEvidence(shadow, signal);
     if (shadowCatalog.sha256 !== evidence.catalog.sha256) {

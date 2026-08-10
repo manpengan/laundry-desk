@@ -12,6 +12,7 @@ import {
   ensureBackupRoot,
   freezeDatabaseWrites,
   readCatalogEvidence,
+  restorePrivateBackup,
 } from "./hk-vps-release-remote-db.mjs";
 import {
   backupFailureRequiresRecovery,
@@ -182,6 +183,25 @@ test("published backup evidence rejects postgres-owned dump or manifest metadata
   assert.throws(() => assertPrivateBackupFile(fileMetadata({ gid: 777, uid: 999 })), {
     code: "CLOUD_RELEASE_BACKUP_INVALID",
   });
+});
+
+test("shadow restore streams a root-private dump instead of opening it as postgres", async () => {
+  let invocation;
+  await restorePrivateBackup(BACKUP_PATH, `laundry_release_verify_${TOKEN}`, undefined, {
+    runCloudCommand: async (file, arguments_, options) => {
+      invocation = { arguments_, file, options };
+      return { code: 0, stderr: "", stdout: "" };
+    },
+  });
+  assert.equal(invocation.file, "/bin/bash");
+  assert.deepEqual(invocation.arguments_.slice(-3), [
+    "laundry-release-shadow-restore",
+    `laundry_release_verify_${TOKEN}`,
+    BACKUP_PATH,
+  ]);
+  assert.match(invocation.arguments_[3], /pg_restore[^<]+< "\$2"$/u);
+  assert.doesNotMatch(invocation.arguments_[3], /pg_restore[^<]+"\$2"/u);
+  assert.equal(invocation.options.label, "CLOUD_RELEASE_SHADOW_RESTORE");
 });
 
 test("database freeze terminates sessions before reading the final ledger and catalog", async () => {
