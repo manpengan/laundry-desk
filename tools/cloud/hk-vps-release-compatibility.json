@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "transitions": [
+    {
+      "from_migration": "0045_store_commissioning_staff_credentials.sql",
+      "to_migration": "0046_print_job_request_idempotency.sql",
+      "old_code_compatible": true,
+      "decision": "ADR-37"
+    }
+  ]
+}

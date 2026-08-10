@@ -1,10 +1,11 @@
 # ADR-36 Web 产品收口验收记录
 
 > 日期：2026-08-09
-> 整体状态：**执行中（P0/P1 与 P2 真库已完成；P2 公网 HTTP 可安全项通过，历史催取阻塞）**
+> 历史基线状态：**执行中（P0/P1 与 P2 真库已完成；P2 公网 HTTP 可安全项通过，历史催取阻塞）**
 > 已部署验收基线：`ae9808ce1f3dc61535dbcc1cb89e618f0350ecf6`
 > 执行计划：[ADR-36 Web 产品收口计划](../plans/2026-08-09-adr36-web-product-convergence-plan.md)
 > 环境边界：[ADR-36](../../adr/2026-08-09-adr-36-cloud-test-environment.md)
+> 当前路线：[ADR-37](../../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)；本记录继续承接 Cloud Web-first 阶段 1 的增量验收
 
 ## 1. 记录规则
 
@@ -12,6 +13,28 @@
 - **通过**表示本行的所有必验项已具备证据；**pending** 表示尚未执行、证据不全或仍待修复。
 - 整体状态取最弱必验项；P2 任一行 pending 时，不得声称「Web 产品收口完成」。
 - 不记录密码、token、cookie、私钥、数据库口令或真实顾客 PII。
+
+### 1.1 ADR-37 阶段 1 进入快照
+
+2026-08-10 路线切换时，本地 `origin/main` 为 `6609c5e3e132b13b3721b6848920380eb2ab9bb2`，
+仓库迁移头为 `0046`；hk-vps release marker 仍为本记录的 `ae9808c`，数据库停在 `0045`。
+这是阶段进入时的只读差异快照，不是失败或部署完成证据；本次文档治理没有部署、重启或
+写入云数据库。
+
+ADR-37 阶段 1 关闭前，必须在下表之外追加目标 `main` 的独立证据：
+
+| 增量必验项                 | 进入状态    | 关闭条件                                                                |
+| -------------------------- | ----------- | ----------------------------------------------------------------------- |
+| 目标 main 精确发布与迁移   | **pending** | marker/运行 SHA/仓库 SHA 一致；数据库到目标迁移头；服务、监听和 KB 健康 |
+| 安全公网浏览器只读 UI 子集 | **pending** | 唯一 run-id；`core_ui_subset` 通过；零产品命令；无需业务数据清理        |
+| 历史催取正向 fixture       | **pending** | 30/90/180 天候选和名单/导出通过；fixture 可审计、可清理                 |
+| P2-1 至 P2-4 新基线复核    | **pending** | HTTP、UI、数据库/审计证据分层通过                                       |
+
+浏览器子集不执行完整业务纵向，也没有单独关闭阶段的权限；完整业务由 ADR-36 公网 HTTP
+acceptance（含受控历史催取 fixture）证明。两层都通过后才能更新阶段状态。
+
+以下 `ae9808c` 表格保持历史事实。新部署不得覆盖或冒充它；应追加目标 SHA、时间、run-id 与
+边界后再更新阶段状态。
 
 ## 2. 基线与 P0 证据
 
@@ -89,15 +112,18 @@ PostgreSQL 仍只监听 IPv4/IPv6 loopback。
 审计失败原子回滚及文件引用清理。最终隔离 PostgreSQL 套件 828/828、0 skipped；本地
 `pnpm workspace:check` 以及云验收脚本 32/32 均通过；TypeScript、数据库与安全终审均
 `APPROVE`，未发现本轮 Cloud harness 与 #152 真库证据实现中的剩余 P0/P1/P2。P2 产品验收
-仍以 §3 矩阵为准，历史催取和远端浏览器 UI 继续 pending。
+仍以 §3 矩阵为准，历史催取和远端浏览器只读 `core_ui_subset` 继续 pending；UI 子集只证明
+核心页面可达且没有产品命令，不替代 HTTP 纵向。
 
 ## 4. 已知验收约束
 
 1. 现有 Web Playwright 的 global setup 直接依赖本地 PostgreSQL、固定员工/催取/账务 fixtures，不能原样指向 hk-vps 共享库。
 2. 催取候选要求订单已达 30/90/180 天；新建 UI 数据无法立即覆盖，必须先有受控、可审计的时间 fixture 路径。
 3. 共享云库上不关闭当天营业日。当前已在固定保留窗口选择唯一历史空日完成交班与幂等回读；没有受控历史流水 fixture 时不扩大到非零往日交班。
-4. VPS 没有现成 Chromium，且本地 Playwright setup 会改写数据库；公网 API 与既有本地 UI 证据分层记录，不把 API 冒充远端浏览器。
-5. 静态盘点（45 迁移/41 命令/25 查询/436 test-spec 文件）与 CI 双绿都不能替代上述 P2 行为证据。
+4. VPS 没有现成 Chromium，且本地 Playwright setup 会改写数据库；专用公网 Playwright
+   只能运行零命令的只读 `core_ui_subset`。公网 API 与 UI 证据分层记录，不把任一层冒充
+   另一层。
+5. 2026-08-09 静态盘点（45 迁移/41 命令/25 查询/436 test-spec 文件）与 CI 双绿都不能替代上述 P2 行为证据。
 
 ## 5. 外部门禁（不纳入本记录收口）
 
@@ -106,5 +132,5 @@ PostgreSQL 仍只监听 IPv4/IPv6 loopback。
 | Developer ID/公证/Gatekeeper | 未有正式外部证据，不与本地 ad-hoc 包等同    |
 | 正式签名双架构 OCI           | 未发布，不与 hk-vps 裸机测试环境等同        |
 | XP-58 实体打印               | 软件 fake CUPS/ESC-POS 证据不等于真实出纸   |
-| Windows 打包/实机            | 依 ADR-36 后置                              |
+| Windows 打包/实机            | 依 ADR-37 移出 Cloud Web 1–4 关键路径       |
 | 生产级云部署                 | hk-vps 仅是可随时丢弃的合成数据开发测试环境 |

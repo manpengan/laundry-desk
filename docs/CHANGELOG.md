@@ -2,7 +2,7 @@
 
 本项目版本记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 SemVer。
 
-> **当前路线（2026-08-10 修订）**：ADR-36 的 hk-vps Linux Server/Web 云测试证据继续有效；后续按[1–6 交付计划](superpowers/plans/2026-08-10-post-adr36-delivery-plan.md)依次完成 macOS 产品面与 Runtime 托管回环、XP-58 真机、macOS 正式发布、Windows 实机、生产 SaaS 和 AI/迁移。每阶段必须测试通过并合入 `main` 后才进入下一阶段。V2-only 基础裁决继续由 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 约束，本地安全与能力边界继续沿用 ADR-14/16/17–36。
+> **当前路线（2026-08-10 修订）**：[ADR-37](adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) 将 hk-vps Linux Server/Web 确定为当前主交付与开发测试形态，后续按 [Cloud Web-first 1–4 交付计划](superpowers/plans/2026-08-10-post-adr36-delivery-plan.md)依次完成云端基线、柜台可信性缺口、经营增强与大型云端模块。Windows、macOS 正式发行、XP-58 与逐功能桌面适配移出关键路径；外部提供商完成声明必须有真实 sandbox 或正式回执。[ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 的 V2-only 基础、契约面 ADR 门禁及 ADR-36 公网安全边界继续有效。
 
 ---
 
@@ -13,6 +13,12 @@
 _本节记录**面向用户的变化**；纯内部重构与验证性工作不入 CHANGELOG，去向见 `docs/research/` 与 `docs/superpowers/plans/`。_
 
 ### 新增
+
+- Cloud Web-first 后续路线（[ADR-37](adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)）：Linux hk-vps Web 成为当前功能开发与阶段集成验收面；四阶段依次收口现有云端基线、柜台可信性缺口、经营增强与大型云端模块。每阶段仍须 `workspace-check`/真实 PostgreSQL 门禁、PR 合入 `main`、精确部署该 SHA 与公网 Web 新鲜证据；hk-vps 仍只允许合成数据且不等于生产 SaaS。Windows、macOS 正式发行与 XP-58 保留为后置独立门禁；provider fake 只能标记 `software_only`。
+
+- 新增 hk-vps 两阶段发布入口：候选必须是 required CI 双绿的 exact clean `main`，实际 SSH/SCP 固定本轮 Ed25519 authority；迁移窗口以 transition write-ahead 记录和 `laundry_app NOLOGIN` 持续阻断业务重连，只有恢复 LOGIN 并持久化 released 后才启动服务。发布会建立 root-only database dump，使用同集群 shadow restore 比较完整迁移账本，并按 PostgreSQL 16 + migration head 绑定的 golden policy 核对 owner/ACL/RLS/policy/function 与 cluster/bootstrap catalog；后续 preflight 又从 history 精确重验每份 dump/manifest，拒绝缺失、篡改、复用和 orphan。`finalize` 会亲自运行远端 API acceptance 与本地公网 Chromium 只读子集，把两份版本化结果绑定到 candidate、旧 SHA、迁移头和 transition 后才允许提交；缺失、过期、清理失败或 identity 漂移均失败关闭。每轮另保留与候选、归档和 transition 摘要绑定的 root 私有版本化回滚控制器，切换前后及 live rename 崩溃窗口都不依赖可交换的应用目录。该入口尚须在合并后用精确目标 SHA 形成实际部署证据。
+
+- ADR-36 acceptance 新增仅限 hk-vps 测试环境的 30/90/180 天合成催取 fixture，以及固定 `desk.manpengan.xyz`、零产品命令的 `core_ui_subset` Playwright 配置；required `real-postgres` 同时新增发布 catalog 真库探针。HTTP 完整业务纵向、浏览器读面和数据库恢复证据继续分层，不互相冒充。
 
 - macOS 当前 Web 产品面对齐验收：同一真实 PostgreSQL/Server 上的 Browser 17/17 与打包 Counter 7/7 已新鲜通过，覆盖柜台工作日、件级履约与照片、会员资金与生命周期、隐私治理、催取/账务/交班 CSV、离线恢复、设置和本机 CUPS 配置；全新 macOS 投产流程 1/1 通过，并验证员工密码与 PIN 重置前后的新旧凭据切换。验收记录见 [macOS Web 产品面对齐验收](superpowers/specs/2026-08-10-macos-web-product-parity-acceptance.md)。证据标记为 `software_only`，不等于 XP-58 出纸、Developer ID/公证、正式 OCI、Windows 或生产云验收。
 - 新增 Runtime.app → 真实 Server OCI → 打包 Counter 的托管 loopback 组合验收入口，已新鲜覆盖安装、健康检查、停止/启动/重启、Counter 固定桥接与失败路径清理，并输出 `RUNTIME_COUNTER_LOOPBACK_ACCEPTANCE_OK assurance=software_only runner=system ... cleanup=clean`。该结果只证明本机软件组合，不等于正式发布或外部硬件证据。

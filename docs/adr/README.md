@@ -44,6 +44,7 @@
 | [ADR-34](2026-08-08-adr-34-device-local-cups-printer-configuration.md) | 设备本地 CUPS 配置与 XP-58 实体验收边界         | **Accepted** 2026-08-08；实体出纸仍为外部门禁      |
 | [ADR-35](2026-08-08-adr-35-portable-release-candidate-evidence.md)     | 可携带正式候选证据与离线验证权威                | **Accepted** 2026-08-08；正式外部证据失败关闭      |
 | [ADR-36](2026-08-09-adr-36-cloud-test-environment.md)                  | hk-vps 云测试环境与完整柜台面公网暴露           | **Accepted** 2026-08-09；仅限合成数据的开发测试    |
+| [ADR-37](2026-08-10-adr-37-cloud-web-primary-delivery.md)              | Cloud Web-first 主交付线与剩余功能 1–4 顺序     | **Accepted** 2026-08-10；桌面/硬件正式交付后置     |
 
 ## v1 线
 

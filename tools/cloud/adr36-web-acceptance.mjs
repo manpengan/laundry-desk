@@ -2,6 +2,7 @@ import { randomUUID as systemRandomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { createAdr36ApiAcceptanceEvidence } from "./adr36-web-acceptance-evidence.mjs";
 import { createAcceptanceClient } from "./adr36-web-client.mjs";
 import { AcceptanceFailure, failureCode, requireThat, requireUuid } from "./adr36-web-core.mjs";
 import { loadAcceptanceCredentials } from "./adr36-web-credentials.mjs";
@@ -10,7 +11,15 @@ import {
   initialOrderFinanceArtifacts,
   orderFinanceJourney,
 } from "./adr36-web-order-finance-journey.mjs";
-import { reminderHistoryBlockedResult, reportingJourney } from "./adr36-web-reporting-journey.mjs";
+import {
+  reminderHistoryBlockedResult,
+  reminderHistoryJourney,
+  reportingJourney,
+} from "./adr36-web-reporting-journey.mjs";
+import {
+  createReminderHistoryFixture,
+  reminderFixtureRequested,
+} from "./adr36-web-reminder-fixture.mjs";
 import { createStaffCredentialJourney } from "./adr36-web-staff-journey.mjs";
 import {
   MAIN_JOURNEYS,
@@ -43,6 +52,7 @@ const EXTENDED_JOURNEYS = Object.freeze([
   "staff_credentials",
   "order_finance",
   "reporting_exports_shift",
+  "reminder_history",
 ]);
 
 function acceptanceStages(api, credentials, getArtifacts, update, run, extensions) {
@@ -60,10 +70,6 @@ function acceptanceStages(api, credentials, getArtifacts, update, run, extension
   ];
 }
 
-function expectedBlockedResults() {
-  return [reminderHistoryBlockedResult()];
-}
-
 function result(journey, status, code) {
   return Object.freeze({
     journey,
@@ -73,6 +79,8 @@ function result(journey, status, code) {
 }
 
 export async function runAcceptance(options = {}) {
+  const outputMode = options.outputMode ?? "human";
+  requireThat(/^(human|machine-json)$/u.test(outputMode), "OUTPUT_MODE_INVALID");
   const now = options.now?.() ?? new Date();
   requireThat(now instanceof Date && Number.isFinite(now.getTime()), "CLOCK_INVALID");
   const randomUUID = options.randomUUID ?? systemRandomUUID;
@@ -86,11 +94,16 @@ export async function runAcceptance(options = {}) {
   };
   let credentials = null;
   let staffController = null;
+  let reminderController = null;
+  let reminderEnabled = false;
+  let reminderPassed = false;
   let failed = false;
   let primaryCode;
 
   try {
-    credentials = loadAcceptanceCredentials(options.env ?? process.env);
+    const env = options.env ?? process.env;
+    credentials = loadAcceptanceCredentials(env);
+    reminderEnabled = reminderFixtureRequested(env);
     results.push(result("configuration", "PASS"));
   } catch (error) {
     primaryCode = failureCode(error);
@@ -106,6 +119,8 @@ export async function runAcceptance(options = {}) {
   const staffFactory = options.createStaffJourney ?? createStaffCredentialJourney;
   const runOrderFinance = options.orderFinanceJourney ?? orderFinanceJourney;
   const runReporting = options.reportingJourney ?? reportingJourney;
+  const runReminderHistory = options.reminderHistoryJourney ?? reminderHistoryJourney;
+  const reminderFactory = options.createReminderFixture ?? createReminderHistoryFixture;
   const cleanupOrderFinance = options.cleanupOrderFinance ?? cleanupOrderFinanceArtifacts;
   const extensions = Object.freeze({
     staff: async () => {
@@ -152,7 +167,36 @@ export async function runAcceptance(options = {}) {
     }
   }
 
-  results.push(...expectedBlockedResults());
+  if (!reminderEnabled) {
+    results.push(reminderHistoryBlockedResult());
+  } else if (failed) {
+    results.push(result("reminder_history", "FAIL", "DEPENDENCY_FAILED"));
+  } else {
+    try {
+      const current = getArtifacts();
+      reminderController = await reminderFactory({
+        env: options.env ?? process.env,
+        cwd: options.cwd,
+        now,
+        run,
+        session: current.adminSession,
+      });
+      const proof = await reminderController.prepare();
+      const evidence = await runReminderHistory(
+        api,
+        Object.freeze({ session: current.adminSession, runId: run.runId }),
+        proof,
+      );
+      await reminderController.verify(evidence);
+      reminderPassed = true;
+      results.push(result("reminder_history", "PASS"));
+    } catch (error) {
+      primaryCode = failureCode(error);
+      failed = true;
+      results.push(result("reminder_history", "FAIL", primaryCode));
+    }
+  }
+  const reminderCleaned = reminderController === null ? true : await reminderController.cleanup();
   const orderFinanceCleaned =
     credentials === null ? true : await cleanupOrderFinance(api, getArtifacts(), run, update);
   const staffCleaned = staffController === null ? true : await staffController.cleanup();
@@ -161,7 +205,12 @@ export async function runAcceptance(options = {}) {
   const reportingCleaned = !getArtifacts().reportingCleanupUncertain;
   const authCleaned = !getArtifacts().authCleanupUncertain;
   const cleaned =
-    orderFinanceCleaned && staffCleaned && baseCleaned && reportingCleaned && authCleaned;
+    reminderCleaned &&
+    orderFinanceCleaned &&
+    staffCleaned &&
+    baseCleaned &&
+    reportingCleaned &&
+    authCleaned;
   results.push(
     result("safe_cleanup", cleaned ? "PASS" : "FAIL", cleaned ? undefined : "CLEANUP_INCOMPLETE"),
   );
@@ -174,34 +223,42 @@ export async function runAcceptance(options = {}) {
     ),
   );
   failed ||= !cleaned || !loggedOut;
-  results.push(
-    result(
-      "overall",
-      failed ? "FAIL" : "BLOCKED",
-      failed ? (primaryCode ?? "ACCEPTANCE_FAILED") : "PARTIAL_ACCEPTANCE_ONLY",
-    ),
-  );
+  const overallStatus = failed ? "FAIL" : reminderPassed ? "PASS" : "BLOCKED";
+  const overallCode = failed
+    ? (primaryCode ?? "ACCEPTANCE_FAILED")
+    : reminderPassed
+      ? undefined
+      : "PARTIAL_ACCEPTANCE_ONLY";
+  results.push(result("overall", overallStatus, overallCode));
   requireThat(
     [...MAIN_JOURNEYS, ...EXTENDED_JOURNEYS].every((journey) =>
       results.some((entry) => entry.journey === journey),
     ),
     "REPORT_INCOMPLETE",
   );
-  printReport(
-    options.writeLine ?? ((line) => process.stdout.write(`${line}\n`)),
-    run.runId,
-    results,
-  );
-  return Object.freeze({
+  const report = Object.freeze({
     runId: run.runId,
     results: Object.freeze(results),
-    exitCode: failed ? 1 : 2,
+    exitCode: failed ? 1 : reminderPassed ? 0 : 2,
   });
+  const writeLine = options.writeLine ?? ((line) => process.stdout.write(`${line}\n`));
+  if (outputMode === "machine-json") {
+    writeLine(JSON.stringify(createAdr36ApiAcceptanceEvidence(report)));
+  } else {
+    printReport(writeLine, run.runId, results);
+  }
+  return report;
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  if (argv.length > 0) throw new AcceptanceFailure("ARGUMENTS_NOT_SUPPORTED");
-  const report = await runAcceptance();
+  const outputMode =
+    argv.length === 0
+      ? "human"
+      : argv.length === 1 && argv[0] === "--machine-json"
+        ? "machine-json"
+        : null;
+  if (outputMode === null) throw new AcceptanceFailure("ARGUMENTS_NOT_SUPPORTED");
+  const report = await runAcceptance({ outputMode });
   process.exitCode = report.exitCode;
 }
 
@@ -213,8 +270,12 @@ export function isDirectEntrypoint(entry, moduleUrl) {
 const entry = process.argv[1];
 if (isDirectEntrypoint(entry, import.meta.url)) {
   main().catch((error) => {
-    process.stdout.write("ADR36 run-id UNAVAILABLE\n");
-    process.stdout.write(`startup FAIL ${failureCode(error)}\n`);
+    if (process.argv.length === 3 && process.argv[2] === "--machine-json") {
+      process.stderr.write(`${failureCode(error)}\n`);
+    } else {
+      process.stdout.write("ADR36 run-id UNAVAILABLE\n");
+      process.stdout.write(`startup FAIL ${failureCode(error)}\n`);
+    }
     process.exitCode = 1;
   });
 }

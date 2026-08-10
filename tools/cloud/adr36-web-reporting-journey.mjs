@@ -12,6 +12,7 @@ import {
 import { closeHistoricalEmptyDay, selectHistoricalEmptyDay } from "./adr36-web-reporting-shift.mjs";
 
 export { verifyAccountingCsvExport } from "./adr36-web-reporting-csv.mjs";
+export { reminderHistoryJourney } from "./adr36-web-reminder-history.mjs";
 export { selectHistoricalEmptyDay } from "./adr36-web-reporting-shift.mjs";
 
 /**

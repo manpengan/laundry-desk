@@ -2,12 +2,14 @@
 
 Gemini 在本项目中的入场指引。
 
-> **当前状态（ADR-14）**：[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
-> 已覆盖历史 owner 分配，Codex 是通用 V2 本地优先交付 owner。ADR-13 保留为
+> **当前状态（ADR-37）**：[ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
+> 已将 Cloud Web-first 1–4 确定为当前路线，Codex 是通用 V2 交付 owner。ADR-14 保留为
+> 架构基线，ADR-13 保留为
 > V2-only 基础裁决。Gemini 退出关键路径；未合并分支仅可作为 Codex 的候选输入。
 
 当前只按此顺序交付：
-`Local Foundation → Money Integrity → Workday Commands → Counter UI → Mock Print → Acceptance → later cloud/Windows`。
+`云端基线 → 柜台可信性缺口 → 经营增强 → 大型云端模块`。Windows、macOS 正式发行、
+XP-58 与逐功能桌面适配后置。
 
 ## 你在这个项目里的角色
 
@@ -21,11 +23,12 @@ Gemini 在本项目中的入场指引。
 
 ## 入场必读（按顺序）
 
-1. **当前产品裁决**：[`ADR-14`](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
-2. **本地优先设计**：[`docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md`](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
-3. **Claude 架构基线**：[`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
-4. **V2-only 基础**：[`ADR-13`](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
-5. **当前 owner**：[`AGENTS.md`](AGENTS.md)
+1. **当前产品裁决**：[`ADR-37`](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
+2. **V2 架构基线**：[`ADR-14`](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
+3. **产品设计基线**：[`docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md`](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
+4. **Claude 架构基线**：[`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
+5. **V2-only 基础**：[`ADR-13`](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
+6. **当前 owner**：[`AGENTS.md`](AGENTS.md)
 
 ## 代码红线（硬性）
 
