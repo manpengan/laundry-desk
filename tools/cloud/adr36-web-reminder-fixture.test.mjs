@@ -146,6 +146,8 @@ test("fixture apply, database verification and cleanup are transactional and cle
   });
   assert.equal(calls.length, 4);
   assert.ok(calls.every((sql) => sql.startsWith("BEGIN;\nSET LOCAL ROLE laundry_owner;")));
+  assert.match(calls[0], /host\(inet_server_addr\(\)\) NOT IN \('127\.0\.0\.1', '::1'\)/u);
+  assert.doesNotMatch(calls[0], /inet_server_addr\(\)::text/u);
   assert.match(calls[0], /INSERT INTO customers/u);
   assert.match(calls[0], /INSERT INTO audit_log/u);
   assert.match(calls[1], /notification_log/u);

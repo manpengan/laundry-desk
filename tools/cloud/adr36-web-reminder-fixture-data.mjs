@@ -114,7 +114,7 @@ BEGIN
   IF current_database() <> 'laundry_v2' THEN
     RAISE EXCEPTION 'fixture database mismatch';
   END IF;
-  IF inet_server_addr() IS NOT NULL AND inet_server_addr()::text NOT IN ('127.0.0.1', '::1') THEN
+  IF inet_server_addr() IS NOT NULL AND host(inet_server_addr()) NOT IN ('127.0.0.1', '::1') THEN
     RAISE EXCEPTION 'fixture connection is not loopback';
   END IF;
   IF NOT EXISTS (
