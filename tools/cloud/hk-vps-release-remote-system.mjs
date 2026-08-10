@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 import { fail, requireSha } from "./hk-vps-release-core.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
+import { DESK_READINESS_POLICY, awaitDeskReadiness } from "./hk-vps-release-readiness.mjs";
 import {
   assertLoopbackBindings,
   assertSharedInfrastructure,
@@ -260,7 +261,7 @@ export async function startDesk(signal) {
   );
 }
 
-async function curl(url, label, signal, discard = false) {
+async function curl(url, label, signal, discard = false, maxTime = "15", timeoutMs) {
   return await command(
     "/usr/bin/curl",
     [
@@ -268,22 +269,32 @@ async function curl(url, label, signal, discard = false) {
       "--silent",
       "--show-error",
       "--max-time",
-      "15",
+      maxTime,
       ...(discard ? ["--output", "/dev/null"] : []),
       url,
     ],
     label,
     signal,
+    timeoutMs,
   );
 }
 
-export async function assertDeskHealth(expectedSha, signal) {
-  const loopback = await curl(
-    "http://127.0.0.1:8787/health",
-    "CLOUD_RELEASE_LOOPBACK_HEALTH",
+export async function assertDeskHealth(expectedSha, signal, dependencies = {}) {
+  const executeCurl = dependencies.curl ?? curl;
+  const loopback = await awaitDeskReadiness(
+    () =>
+      executeCurl(
+        "http://127.0.0.1:8787/health",
+        "CLOUD_RELEASE_LOOPBACK_HEALTH",
+        signal,
+        false,
+        DESK_READINESS_POLICY.probeMaxTimeSeconds,
+        DESK_READINESS_POLICY.probeTimeoutMs,
+      ),
     signal,
+    { wait: dependencies.waitForReadiness },
   );
-  const publicHealth = await curl(
+  const publicHealth = await executeCurl(
     "https://desk.manpengan.xyz/health",
     "CLOUD_RELEASE_PUBLIC_HEALTH",
     signal,
@@ -299,15 +310,15 @@ export async function assertDeskHealth(expectedSha, signal) {
       fail("CLOUD_RELEASE_HEALTH_INVALID");
     }
   }
-  await curl("https://desk.manpengan.xyz/", "CLOUD_RELEASE_PUBLIC_SPA", signal, true);
-  const sockets = await command(
+  await executeCurl("https://desk.manpengan.xyz/", "CLOUD_RELEASE_PUBLIC_SPA", signal, true);
+  const sockets = await (dependencies.command ?? command)(
     "/usr/bin/ss",
     ["-H", "-ltn", "sport", "=", ":8787"],
     "CLOUD_RELEASE_DESK_BINDING",
     signal,
   );
   assertLoopbackBindings(sockets.stdout, 8787, "CLOUD_RELEASE_DESK_BINDING_INVALID");
-  const marker = await readReleaseMarker(LIVE_ROOT);
+  const marker = await (dependencies.readReleaseMarker ?? readReleaseMarker)(LIVE_ROOT);
   if (marker.git_sha !== requireSha(expectedSha)) fail("CLOUD_RELEASE_MARKER_MISMATCH");
 }
 

@@ -92,13 +92,30 @@ export async function createPinnedSshAuthority(execute) {
   }
 }
 
-export async function withPinnedSshAuthority(execute, operation) {
-  const authority = await createPinnedSshAuthority(execute);
+export async function withPinnedSshAuthority(execute, operation, dependencies = {}) {
+  const authority = await (dependencies.createPinnedSshAuthority ?? createPinnedSshAuthority)(
+    execute,
+  );
+  let operationFailed = false;
+  let operationError;
+  let result;
   try {
-    return await operation(authority);
-  } finally {
-    await rm(authority.temporaryRoot, { recursive: true, force: true });
+    result = await operation(authority);
+  } catch (error) {
+    operationFailed = true;
+    operationError = error;
   }
+  let cleanupFailed = false;
+  let cleanupError;
+  try {
+    await (dependencies.rm ?? rm)(authority.temporaryRoot, { recursive: true, force: true });
+  } catch (error) {
+    cleanupFailed = true;
+    cleanupError = error;
+  }
+  if (operationFailed) throw operationError;
+  if (cleanupFailed) throw cleanupError;
+  return result;
 }
 
 export async function createArchive(candidateSha, execute) {
