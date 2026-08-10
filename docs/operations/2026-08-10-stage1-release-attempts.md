@@ -5,27 +5,29 @@
 - 计划：[Cloud Web-first 1–4 交付计划](../superpowers/plans/2026-08-10-post-adr36-delivery-plan.md)
 - 操作流程：[hk-vps 云测试环境运维手册](2026-08-09-hk-vps-cloud-test.md)
 
-> **本文是尝试记录，不是发布证据。** 截至写作时阶段 1 **未关闭**：线上未切换到候选 SHA，
-> 未产生通过的 API/UI 验收 run。发布结果证据必须按运维手册要求另行记录实际目标 SHA、
-> required CI、transition 与最终状态。
+> **本文是尝试记录，不是发布证据。** 阶段 1 **未关闭**：`prepare` 已把候选代码与 schema
+> 切换上线，但 `finalize` 的外部验证未通过，transition 停在 `awaiting_external_verification`
+> 且 `outcome=null`。发布**结果**证据必须在阶段 1 真正关闭时按运维手册另行记录。
 
 ## 1. 为什么单独记录
 
 两阶段发布入口（`pnpm cloud:release:hk`）由 [#156](https://github.com/manpengan/laundry-desk/pull/156)
-建立后，本日首次对真实 hk-vps 执行。首次执行连续暴露四个只有真连主机才会出现的环境事实，
-每个都以定点修复收敛。这些根因不体现在任何单个 PR 的 diff 里，散落在六个 PR 正文中，
-因此单独归档，供下次重试和后续阶段复用。
+建立后，本日首次对真实 hk-vps 执行。首次执行连续暴露五个只有真连主机才会出现的事实：
+前四个是环境事实，均以定点修复收敛；第五个是产品缺陷，尚未修复，见 §5.5。这些根因不体现在
+任何单个 PR 的 diff 里，散落在多个 PR 正文与一次人工诊断中，因此单独归档。
 
-## 2. 基线与目标
+## 2. 基线与实际部署
 
-| 项                  | 值                                    |
-| ------------------- | ------------------------------------- |
-| 本轮起始 `main`     | `6609c5e`（08-10 05:22）              |
-| 本轮结束 `main`     | `9cc31c4`（08-10 22:21）              |
-| 首个部署候选 SHA    | `f1d7104`（#157 合并点）              |
-| 线上 release marker | `ae9808c` —— 见 §6，本文未经 SSH 复核 |
-| 线上 migration head | `0045` —— 同上                        |
-| 目标 migration head | `0046`                                |
+| 项                    | 值                                                            |
+| --------------------- | ------------------------------------------------------------- |
+| 本轮起始 `main`       | `6609c5e`（08-10 05:22）                                      |
+| 本轮结束 `main`       | `a832bbd`（08-10 22:57，#162 合并点）                         |
+| 首个部署尝试候选      | `f1d7104`（#157 合并点，未成功）                              |
+| **实际部署候选**      | **`a832bbdc5a0ced37be99a9057eab70edbbf5be01`**                |
+| 部署前 release marker | `ae9808ce1f3dc61535dbcc1cb89e618f0350ecf6`（实测）            |
+| 部署前 migration head | `0045`                                                        |
+| 部署后 release marker | **`a832bbd…be01`（实测，已切换）**                            |
+| 部署后 migration head | **`0046_print_job_request_idempotency.sql`（46 条，已迁移）** |
 
 ## 3. 发布入口形状
 
@@ -56,10 +58,11 @@
 
 六个 PR 的 `workspace-check` 与 `real-postgres` required checks 均绿，合并后主线 CI 亦绿。
 
-## 5. 四个真实失败与根因
+## 5. 五个真实失败与根因
 
-以下失败点、诊断与修复口径均引自对应 PR 正文，即执行者的第一手远端观察。四次失败在管线中
-逐级加深，属收敛而非反复。
+①–④ 的失败点、诊断与修复口径引自对应 PR 正文；⑤ 来自 2026-08-10 深夜的人工诊断。
+五次失败在管线中逐级加深，属收敛而非反复。前四个是环境事实且均已修复，第五个是尚未修复的
+产品缺陷。
 
 ### ① staging 可写断言误报 symlink（#158）
 
@@ -101,45 +104,91 @@
 - **教训**：PostgreSQL 的 `inet` 类型转文本自带掩码；网络身份断言应走 `host()`/`inet` 语义比较，
   不做裸字符串相等。
 
+### ⑤ manual_list 在 confirm 重放路径上不幂等（未修复）
+
+- **失败**：候选 `a832bbd` 的 `finalize` 返回 `CLOUD_RELEASE_REMOTE_API_EVIDENCE_FAILED`。
+  绕开两层收敛后取得真实证据：15 条 journey **14 条 PASS**，仅 `reminder_history` FAIL，
+  真实码为 `REMINDER_LIST_REPLAY_INVALID`（`machine-json` 把它归一成了 `ACCEPTANCE_FAILED`）。
+- **失败断言**：`adr36-web-reminder-history.mjs` 的
+  `requireThat(replayed.stable === verified.stable, "REMINDER_LIST_REPLAY_INVALID")`，
+  其中 `stable = JSON.stringify(result)`，即整个响应信封。
+- **根因判断**：`gatedReplayable` 的两次调用使用**同一个 `idempotencyKey` 与同一个
+  `confirmRef`**，因此「重放逐字节相同」是幂等契约的正确预期，不是断言过严。而
+  `apps/server/src/notification/handlers.ts` 的 `createHandler` 每次执行都
+  `const batchId = randomUUID()` 并 `appendManualList` 写入新行。重放结果通过了全部结构
+  校验、只有序列化不同，说明命令被**重新执行**而不是返回存储结果，即重放会产生重复批次。
+  通用 PG 幂等 store 已接线（`createPgIdempotencyStore`），所以缺陷在 confirm 与幂等层的
+  交互，不是未接线。
+- **未确认项**：具体是哪些字段不同（`batch_id`/`filename` 全变，还是仅 `generated_at`）
+  尚未逐字段取证；`notification_log` 已被 fixture cleanup 清空，无法回溯。修复前应先用
+  一次带对比输出的运行确定字段差异。
+- **不采取的做法**：放宽或删除该断言。这会把真实的数据完整性缺陷掩盖成绿灯。
+- **教训**：命令级幂等必须覆盖 confirm/step-up 的二次提交路径，不能只覆盖直接提交路径；
+  验收侧的「逐字节重放相同」是发现这类缺陷的有效探针，应保留。
+
 ## 6. 当前状态
 
-本节区分**直接复核**与**引用**两类证据。
+全部为 2026-08-10 23:2x–23:30 的**直接实测**（本机 HTTPS 只读请求、pinned key-only SSH、本地 Git）：
 
-直接复核（2026-08-10 22:37，本机 HTTPS 只读请求 + 本地 Git）：
+| 项                          | 结果                                                    |
+| --------------------------- | ------------------------------------------------------- |
+| `/opt/laundry-desk` marker  | `a832bbdc5a0ced37be99a9057eab70edbbf5be01` —— 已切换    |
+| 数据库迁移                  | 46 条，head `0046_print_job_request_idempotency.sql`    |
+| transition `phase`          | `awaiting_external_verification`，`outcome=null`        |
+| `write_gate_state`          | `released`（停写窗口已开合，终止会话 0）                |
+| `compatibility_decision`    | `same_migration`；`old_code_compatible=true`            |
+| 回滚树                      | `/opt/laundry-desk.rollback-ae9808c…-before-a832bbd…`   |
+| 恢复点                      | `pre-a832bbd…dump`，含 sha256                           |
+| `desk.manpengan.xyz/health` | `{"ok":true,"data":{"status":"ready"}}`                 |
+| `desk.manpengan.xyz/` SPA   | `200`                                                   |
+| `kb.manpengan.xyz/healthz`  | `200`                                                   |
+| systemd                     | `laundry-desk`/`postgresql`/`caddy` 均 active，failed 0 |
+| 公网 API acceptance         | 15 条 journey：14 PASS，`reminder_history` FAIL         |
+| 工作树 / `main`             | clean；`main` = `origin/main`                           |
 
-| 项                          | 结果                                    |
-| --------------------------- | --------------------------------------- |
-| `desk.manpengan.xyz/health` | `{"ok":true,"data":{"status":"ready"}}` |
-| `desk.manpengan.xyz/` SPA   | `200`                                   |
-| `kb.manpengan.xyz/healthz`  | `200`                                   |
-| 工作树                      | clean                                   |
-| `main` 与 `origin/main`     | 同为 `9cc31c4`，0 ahead / 0 behind      |
-| 全部 `codex/*` 分支         | 逐个 `merge-base` 验证，均已含入 `main` |
-| 本地 release token 目录     | 已清理，无残留                          |
+**这是一个受控的待验证态，不是半损状态**：新代码与新 schema 已在服务真实请求，回滚控制器、
+回滚树与迁移前恢复点均在位，三站健康。缺的是把 transition 提交所需的外部验证证据。
 
-引用而**未**在本文复核（需 SSH 只读读取 `/opt/laundry-desk/.laundry-release.json`）：
+## 7. 接手指引
 
-- 线上 release marker 仍为 `ae9808c`、migration head 仍为 `0045`。依据是 #158 正文的
-  明确记录，加上后续每轮失败均自动回滚为 stable、三站健康未变。**下次重试前必须实测确认。**
+阶段 1 的唯一阻塞项是 §5.5 的幂等缺陷。建议顺序：
 
-## 7. 下次重试前的检查清单
-
-1. 先跑 `--action status`，确认 `phase=stable`、无 stale release lock、无未完成 transition。
-2. 只读解析 `/opt/laundry-desk/.laundry-release.json`，实测当前 marker 与 migration head，
-   用实测值填 `--expected-current-sha`，不沿用本文引用值。
-3. 候选 SHA 用 `9cc31c4`（含四个修复），不是 `f1d7104`；确认其 required CI 双绿。
-4. `prepare` → 检查 token 产出与 shadow restore/catalog 断言 → `finalize`。
-5. 失败时保持定点修复口径：只修本次真实失败的根因，不顺手加固，不放宽 marker、schema、
-   health、清理或安全断言。
-6. 关闭阶段 1 时，按运维手册另建发布结果记录，并在
+1. 先跑 `--action status` 确认 transition 仍是 `awaiting_external_verification`、候选与
+   token 未变；**不要**当成 `phase=stable` 重新开一轮 `prepare`。
+2. 用一次带对比输出的运行确定 `verified.stable` 与 `replayed.stable` 的**逐字段差异**，
+   补齐 §5.5 的未确认项。
+3. 修 `notification.manual_list.create` 在 confirm 重放路径上的幂等性；补真实 PostgreSQL
+   回归，锁定「同 key 同 confirmRef 重放返回存储结果且不新增批次」。
+4. 走 PR、required CI 双绿、合入 `main`。
+5. 用新 `main` SHA 重跑 `finalize`。若因候选 SHA 变化无法复用当前 transition，则先按控制器
+   收束当前 transition，再从 `prepare` 重来。
+6. 关闭阶段 1 时按运维手册另建发布**结果**记录，并在
    [ADR-36 Web 产品收口验收记录](../superpowers/specs/2026-08-09-adr36-web-product-convergence-acceptance.md)
    追加目标 SHA 证据。
 
-## 8. 尚未触达的管线阶段
+纪律不变：只修本次真实失败的根因，不顺手加固，不放宽 marker、schema、health、清理或安全
+断言，**尤其不得放宽 `REMINDER_LIST_REPLAY_INVALID` 断言**。
 
-`finalize` 在 ④ 处中断，以下阶段本轮**从未执行过**，首次执行仍可能暴露同类环境事实：
+## 8. 本轮触达与未触达的管线阶段
 
-- 远端 API acceptance 在 `reminder_history` 之后的其余纵向
-- 本地公网 Chromium `core_ui_subset` 只读子集
-- 迁移窗口（transition write-ahead、`laundry_app NOLOGIN` 停写、恢复 LOGIN）
-- marker 持久化与最终提交发布
+已真实执行并通过：
+
+- 候选门禁、staging 上传与权限归一、备份 dump、shadow restore、golden catalog 比对
+- 迁移窗口：transition write-ahead、停写、`0045 → 0046`、恢复写入
+- 代码切换与 marker 持久化、回滚树与恢复点建立
+- 远端 API acceptance 的 14/15 条业务纵向
+
+本轮**从未执行过**，首次执行仍可能暴露同类事实：
+
+- 本地公网 Chromium `core_ui_subset` 只读子集（在 API 证据之后，未到达）
+- transition 的最终提交与 `outcome` 落定
+
+## 9. 已知遗留
+
+- `/opt/laundry-desk.failed-1a588e791d269cc1153b243776b56f137b130b45`：Codex 上一轮
+  （#160 合并点）失败留下的目录，尚未清理。清理前应确认它不被任何 rollback 控制器引用。
+- 发布失败诊断需要绕开两层收敛才能取得逐 journey 证据：远端
+  `hk-vps-release-remote-evidence.mjs` 在非 PASS 时直接 `fail("CLOUD_RELEASE_API_EVIDENCE_NOT_PASSED")`
+  而不输出它已解析到的证据，本地侧再收敛为 `_FAILED`。本轮靠人工重跑底层 acceptance 才拿到
+  `REMINDER_LIST_REPLAY_INVALID`。这是真实的可观测性缺口，建议后续让失败路径至少输出
+  逐 journey 的 `journey/status/code`（不含秘密与 PII）。
