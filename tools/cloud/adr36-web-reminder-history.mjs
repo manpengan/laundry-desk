@@ -7,6 +7,7 @@ import {
   requireThat,
   requireUuid,
 } from "./adr36-web-core.mjs";
+import { stableJson } from "./adr36-web-journey-support.mjs";
 import { requireReminderFixtureProof } from "./adr36-web-reminder-fixture.mjs";
 
 const TIERS = Object.freeze([30, 90, 180]);
@@ -179,7 +180,7 @@ function verifyManualList(value, candidates) {
   });
   requireThat(byOrder.size === 0, "REMINDER_LIST_INVALID");
   verifyCsvRows(csv, rows);
-  return Object.freeze({ batchId, sha256, stable: JSON.stringify(result) });
+  return Object.freeze({ batchId, sha256, stable: stableJson(result) });
 }
 
 /**
