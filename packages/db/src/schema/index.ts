@@ -3,6 +3,7 @@ export { stores } from "./stores.js";
 export { staffs } from "./staffs.js";
 export { staffStoreRoles } from "./staff-store-roles.js";
 export { settings } from "./settings.js";
+export { storePricingPolicies } from "./store-pricing-policies.js";
 export { storeFeatures } from "./store-features.js";
 export { auditLog } from "./audit-log.js";
 export { sessions } from "./sessions.js";
@@ -27,6 +28,7 @@ import { stores } from "./stores.js";
 import { staffs } from "./staffs.js";
 import { staffStoreRoles } from "./staff-store-roles.js";
 import { settings } from "./settings.js";
+import { storePricingPolicies } from "./store-pricing-policies.js";
 import { storeFeatures } from "./store-features.js";
 import { auditLog } from "./audit-log.js";
 import { sessions } from "./sessions.js";
@@ -77,6 +79,7 @@ export const M2_ORDER_TABLES = Object.freeze({
 /** M2 catalog tables (store-scoped price list). */
 export const M2_CATALOG_TABLES = Object.freeze({
   catalog_items: catalogItems,
+  store_pricing_policies: storePricingPolicies,
 } as const);
 
 /** M2 payments ledger (store-scoped, append-only). */

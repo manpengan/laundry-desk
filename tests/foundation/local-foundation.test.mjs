@@ -384,7 +384,7 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   );
   assert.match(
     commissioningPgAcceptance,
-    /assert\.equal\(migrations\.head, "0046_print_job_request_idempotency\.sql"\)/u,
+    /assert\.equal\(migrations\.head, "0047_cloud_counter_trust\.sql"\)/u,
   );
 });
 

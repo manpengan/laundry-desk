@@ -3,7 +3,8 @@ import { planRefundPayment } from "@laundry/domain";
 import type { SqlClient } from "../db/types.js";
 import { loadGarments, loadOrder, nextOrderStatus } from "./pg-order-data.js";
 import { epochToDate } from "./pg-order-mappers.js";
-import { insertLedgerPayment, listPaymentRows } from "./pg-order-operations.js";
+import { insertLedgerPayment } from "./pg-order-operations.js";
+import { listPaymentRows } from "./pg-payment-rows.js";
 import type { PaymentAppendResult, PaymentRefundAppendInput } from "./types.js";
 
 export async function appendRefundTxn(

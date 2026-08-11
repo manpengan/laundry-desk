@@ -12,6 +12,13 @@ test("runtime roles carry the customer permissions required by member operations
   }
 });
 
+test("only administrators can apply a manual order discount", () => {
+  const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
+  const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });
+  assert.equal(admin.includes("order_discount"), true);
+  assert.equal(staff.includes("order_discount"), false);
+});
+
 test("runtime roles separate protective freeze from lifecycle administration", () => {
   const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
   const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });

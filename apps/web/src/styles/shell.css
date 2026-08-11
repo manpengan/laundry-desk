@@ -307,6 +307,44 @@
   color: var(--lg-ink2);
 }
 
+.ld-settings-pricing {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 20px 0;
+  padding: 16px;
+}
+
+.ld-settings-pricing__addons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ld-settings-pricing__addon {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) auto auto;
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-surface);
+}
+
+.ld-settings-pricing__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+}
+
+@media (max-width: 920px) {
+  .ld-settings-pricing__addon {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .ld-shell-main {
   margin: 20px;
   padding: 20px;
@@ -1402,12 +1440,25 @@
 
 .ld-order-detail__garment {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 10px;
   padding: 8px 10px;
   border-radius: var(--lg-radius-sm);
   border: 1px solid var(--lg-hair);
   background: var(--lg-leaf);
+}
+
+.ld-order-detail__garment-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ld-order-detail__garment-details {
+  color: var(--lg-ink2);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .ld-order-detail__barcode {
@@ -1421,6 +1472,84 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+}
+
+.ld-payment-ledger {
+  padding-top: 12px;
+  border-top: 1px solid var(--lg-hair);
+}
+
+.ld-payment-ledger__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ld-payment-ledger__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  padding: 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-leaf);
+  font-size: 13px;
+}
+
+.ld-payment-ledger__main,
+.ld-payment-ledger__money,
+.ld-payment-ledger__refund {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ld-payment-ledger__main span,
+.ld-payment-ledger__hint,
+.ld-payment-ledger__empty,
+.ld-payment-ledger__note {
+  color: var(--lg-ink2);
+}
+
+.ld-payment-ledger__money {
+  justify-self: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.ld-payment-ledger__note,
+.ld-payment-ledger__refund {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.ld-payment-ledger__refund {
+  justify-content: space-between;
+}
+
+.ld-payment-ledger__hint,
+.ld-payment-ledger__empty,
+.ld-payment-ledger__error {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+
+.ld-payment-ledger__error {
+  color: var(--lg-late-ink);
+}
+
+.ld-payment-ledger__refund-form,
+.ld-payment-ledger__confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ld-payment-ledger__refund-form p,
+.ld-payment-ledger__confirmation p {
+  margin: 0;
 }
 
 /* Customer detail + history orders (M2) */

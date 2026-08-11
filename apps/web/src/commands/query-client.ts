@@ -242,6 +242,41 @@ export function createMockQueryClient(handler?: QueryPort["execute"]): QueryPort
           }) as T,
         });
       }
+      if (name === "payment.ledger.list") {
+        const input = isRecord(body) ? body : {};
+        const orderId = typeof input.order_id === "string" ? input.order_id : "";
+        return Object.freeze({
+          ok: true as const,
+          data: Object.freeze({
+            execution: "executed",
+            result: Object.freeze({
+              order_id: orderId,
+              order_status: "open",
+              payable_cents: 0,
+              paid_cents: 0,
+              balance_cents: 0,
+              payments: Object.freeze([]),
+            }),
+          }) as T,
+        });
+      }
+      if (name === "pricing.policy.get") {
+        return Object.freeze({
+          ok: true as const,
+          data: Object.freeze({
+            execution: "executed",
+            result: Object.freeze({
+              policy: Object.freeze({
+                version: 0,
+                urgent_cents: 0,
+                freight_cents: 0,
+                addons: Object.freeze([]),
+                updated_at: null,
+              }),
+            }),
+          }) as T,
+        });
+      }
       if (name === "print.jobs.list") {
         const input = isRecord(body) ? body : {};
         const limit =

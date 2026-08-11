@@ -15,6 +15,7 @@ export const ACTOR: ActorContext = Object.freeze({
   permissions: Object.freeze([
     "customer_write",
     "order_write",
+    "order_discount",
     "payment_write",
     "payment_refund",
     "shift_close",

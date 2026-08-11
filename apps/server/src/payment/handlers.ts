@@ -1,4 +1,5 @@
-import { createCommandError } from "@laundry/contracts";
+import { PaymentLedgerListInputSchema, createCommandError } from "@laundry/contracts";
+import { projectPaymentLedger } from "@laundry/domain";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
@@ -12,6 +13,7 @@ import {
 } from "../order/server-pricing.js";
 
 const paymentMethods = new Set(["cash", "wechat", "alipay", "other"]);
+const MAX_LEDGER_ROWS = 200;
 
 function requirePaymentMethod(value: unknown): "cash" | "wechat" | "alipay" | "other" {
   const method = requireString(value);
@@ -152,6 +154,71 @@ function refundHandler(deps: OrderHandlerDeps): CommandHandler {
   };
 }
 
+function ledgerListHandler(deps: OrderHandlerDeps): CommandHandler {
+  return async (ctx): Promise<HandlerOutcome> => {
+    if (deps.store.listPayments === undefined) {
+      throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+    }
+    const parsed = PaymentLedgerListInputSchema.safeParse(ctx.parsed);
+    if (!parsed.success) {
+      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    }
+    const order = await deps.store.getOrder(
+      ctx.tenant.orgId,
+      ctx.tenant.storeId,
+      parsed.data.order_id,
+    );
+    if (order === null) {
+      throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+    }
+    const payments = await deps.store.listPayments(
+      ctx.tenant.orgId,
+      ctx.tenant.storeId,
+      order.order_id,
+      MAX_LEDGER_ROWS + 1,
+    );
+    if (payments.length > MAX_LEDGER_ROWS) {
+      throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+    }
+    const ledger = projectPaymentLedger(order.payable_cents, payments);
+    if (!ledger.ok) {
+      throw new Error(`Invalid payment ledger: ${ledger.reason}`);
+    }
+    const projectionMatches =
+      order.status === "cancelled"
+        ? ledger.paid_cents === 0 && order.paid_cents === 0 && order.balance_cents === 0
+        : ledger.paid_cents === order.paid_cents && ledger.balance_cents === order.balance_cents;
+    if (!projectionMatches) {
+      throw new Error("Payment ledger does not match the order projection");
+    }
+    return Object.freeze({
+      result: Object.freeze({
+        order_id: order.order_id,
+        order_status: order.status,
+        payable_cents: order.payable_cents,
+        paid_cents: order.paid_cents,
+        balance_cents: order.balance_cents,
+        payments: Object.freeze(
+          ledger.rows.map((payment) =>
+            Object.freeze({
+              payment_id: payment.payment_id,
+              kind: payment.kind,
+              method: payment.method,
+              amount_cents: payment.amount_cents,
+              signed_cents: payment.signed_cents,
+              ref_payment_id: payment.ref_payment_id,
+              at: payment.at,
+              note: payment.note,
+              active: payment.active,
+              refundable_cents: payment.refundable_cents,
+            }),
+          ),
+        ),
+      }),
+    });
+  };
+}
+
 export function registerPaymentCommandHandlers(
   registry: Readonly<{ registerHandler: (name: string, handler: CommandHandler) => void }>,
   deps: OrderHandlerDeps,
@@ -159,4 +226,11 @@ export function registerPaymentCommandHandlers(
   registry.registerHandler("payment.collect", paymentHandler("pay", deps));
   registry.registerHandler("payment.repay", paymentHandler("repay", deps));
   registry.registerHandler("payment.refund", refundHandler(deps));
+}
+
+export function registerPaymentQueryHandlers(
+  registry: Readonly<{ registerHandler: (name: string, handler: CommandHandler) => void }>,
+  deps: OrderHandlerDeps,
+): void {
+  registry.registerHandler("payment.ledger.list", ledgerListHandler(deps));
 }

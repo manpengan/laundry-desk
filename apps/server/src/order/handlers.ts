@@ -9,42 +9,23 @@ import { randomUUID } from "node:crypto";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
-import type { CustomerStore } from "../customer/types.js";
 import type { OrderHandlerDeps } from "./deps.js";
 import { getHandler } from "./get-handler.js";
 import { listHandler } from "./list-handler.js";
 import { lookupHandler } from "./lookup-handler.js";
 import { parseVerificationBarcodes, requireVerifiedRackBarcodes } from "./pickup-verification.js";
+import { formatPickupCode, formatTicket, upsertCustomerForReceipt } from "./receipt-helpers.js";
 import {
   assertBusinessDayOpen,
   deriveBusinessDate,
   initialPayment,
-  pricingAdjustments,
   requireLines,
   resolveServerPrices,
+  resolveTrustedPricing,
 } from "./server-pricing.js";
 import type { GarmentRecord, OrderLineRecord } from "./types.js";
 
 export type { OrderHandlerDeps } from "./deps.js";
-
-/**
- * Customer archival belongs to the same command transaction as order receipt.
- * A failure rolls back the receipt; a PG connection cannot safely continue
- * after a failed statement, and a visible order without its customer record
- * makes customer history inconsistent.
- */
-async function upsertCustomerForReceipt(
-  customer: CustomerStore,
-  phone: string,
-  name: string | undefined,
-  now: number,
-): ReturnType<CustomerStore["upsert"]> {
-  return customer.upsert({
-    phone,
-    ...(name !== undefined ? { name } : {}),
-    now,
-  });
-}
 
 function asRecord(parsed: unknown): Readonly<Record<string, unknown>> {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
@@ -67,22 +48,21 @@ function requireNumber(value: unknown): number {
   return value;
 }
 
-function formatTicket(dayKey: string, seq: number): string {
-  return `${dayKey}-${String(seq).padStart(4, "0")}`;
-}
-
-/** Ticket numbers are store-unique; derive a compact customer-facing code without a second counter. */
-function formatPickupCode(ticketNo: string): string {
-  return `P${ticketNo.replace("-", "")}`;
-}
-
 function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
-    const lines = await resolveServerPrices(deps.catalog, requireLines(input.lines));
+    const catalogLines = await resolveServerPrices(deps.catalog, requireLines(input.lines));
+    const policy = await deps.pricing?.get(ctx.tenant.orgId, ctx.tenant.storeId);
+    const trustedPricing = resolveTrustedPricing(
+      input,
+      catalogLines,
+      policy,
+      ctx.actor.permissions,
+    );
+    const lines = trustedPricing.lines;
     const paymentInput = initialPayment(input);
     const paidCents = paymentInput?.amount_cents ?? 0;
-    const plan = planReceive(lines, paidCents, pricingAdjustments(input));
+    const plan = planReceive(lines, paidCents, trustedPricing.adjustments);
     if (!plan.ok) {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
@@ -131,11 +111,16 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
         line_total_cents: lineTotalCents(line.unit_price_cents, line.qty),
         color: line.color ?? null,
         brand: line.brand ?? null,
+        garment_details: line.garment_details,
       }),
     );
 
     const garments: GarmentRecord[] = plan.slots.map((slot) => {
       const garmentId = newId();
+      const detail = lines[slot.line_index]?.garment_details[slot.seq - 1];
+      if (detail === undefined) {
+        throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+      }
       return Object.freeze({
         garment_id: garmentId,
         order_id: orderId,
@@ -147,8 +132,11 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
         service_code: slot.service_code,
         category_code: slot.category_code,
         unit_price_cents: slot.unit_price_cents,
-        color: slot.color,
-        brand: slot.brand,
+        color: detail.color,
+        brand: detail.brand,
+        defects: detail.defects,
+        accessories: detail.accessories,
+        note: detail.note,
         status: slot.status,
         rack_zone: null,
         rack_slot: null,
@@ -173,6 +161,9 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
       addon_cents: plan.totals.addon_cents,
       urgent_cents: plan.totals.urgent_cents,
       freight_cents: plan.totals.freight_cents,
+      pricing_policy_version: trustedPricing.pricing_policy_version,
+      urgent_selected: trustedPricing.urgent_selected,
+      freight_selected: trustedPricing.freight_selected,
       payable_cents: plan.totals.payable_cents,
       paid_cents: plan.totals.paid_cents,
       balance_cents: plan.totals.balance_cents,
@@ -201,7 +192,11 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
           });
     if (draftId === undefined || deps.store.replaceDraft === undefined) {
       await deps.store.insertOrder(order, garments, initialLedger);
-    } else if (!(await deps.store.replaceDraft(order, garments, initialLedger))) {
+    } else if (
+      !(await deps.store.replaceDraft(order, garments, initialLedger, {
+        requireExisting: true,
+      }))
+    ) {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
 
@@ -233,6 +228,11 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
           ticket_no: order.ticket_no,
           pickup_code: order.pickup_code,
           payable_cents: order.payable_cents,
+          pricing_policy_version: order.pricing_policy_version,
+          discount_cents: order.discount_cents,
+          addon_cents: order.addon_cents,
+          urgent_cents: order.urgent_cents,
+          freight_cents: order.freight_cents,
           garment_count: garments.length,
         }),
       }),

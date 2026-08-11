@@ -125,3 +125,24 @@ test("member feature flag gates the complete bonus-rule settings surface", () =>
   assert.doesNotMatch(render(false), /data-testid="member-rules"/);
   assert.match(render(true), /data-testid="member-rules"/);
 });
+
+test("settings replaces the inert minimum-order demo with store pricing authority", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(SettingsPage, {
+        session: SESSION,
+        authClient: createMockAuthClient(),
+        commandClient: createMockCommandClient(),
+        queryClient: createMockQueryClient(),
+      }),
+    ),
+  );
+
+  assert.match(html, /data-testid="pricing-settings"/u);
+  assert.match(html, /柜台计价设置/u);
+  assert.match(html, /加急固定费/u);
+  assert.match(html, /添加附加项/u);
+  assert.doesNotMatch(html, /最低消费/u);
+});

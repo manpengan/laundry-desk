@@ -1,12 +1,21 @@
 import { Button, Input, MoneyText } from "@laundry/ui";
 
 import type { CatalogListItem } from "../commands/query-client.js";
-import { newLineDraft, type ReceiveLineDraft } from "./order-form.js";
+import { parsePositiveInt } from "./order-form.js";
+import type { PricingPolicyView } from "./pricing-policy-model.js";
+import { ReceiveGarmentEditor } from "./ReceiveGarmentEditor.js";
+import {
+  newLineDraft,
+  resizeGarmentDrafts,
+  type ReceiveGarmentDraft,
+  type ReceiveLineDraft,
+} from "./receive-garment-form.js";
 
 export type ReceiveLineEditorProps = Readonly<{
   lines: readonly ReceiveLineDraft[];
   focusedLineKey: string | null;
   busy: boolean;
+  activeAddons?: PricingPolicyView["addons"];
   onFocusLine: (key: string) => void;
   onChange: (lines: readonly ReceiveLineDraft[]) => void;
 }>;
@@ -27,11 +36,19 @@ function isBlankLine(line: ReceiveLineDraft): boolean {
 
 function lineFromCatalog(item: CatalogListItem, index: number): ReceiveLineDraft {
   return Object.freeze({
-    key: `line-${index}-${Date.now()}`,
+    ...newLineDraft(index),
     service_code: item.service_code,
     category_code: item.category_code,
     unit_price_cents: item.unit_price_cents,
-    qty: "1",
+  });
+}
+
+function updateGarment(line: ReceiveLineDraft, garment: ReceiveGarmentDraft): ReceiveLineDraft {
+  return Object.freeze({
+    ...line,
+    garments: Object.freeze(
+      line.garments.map((current) => (current.key === garment.key ? garment : current)),
+    ),
   });
 }
 
@@ -45,7 +62,6 @@ export function applyCatalogPick(
     service_code: item.service_code,
     category_code: item.category_code,
     unit_price_cents: item.unit_price_cents,
-    qty: "1",
   };
   const target =
     (focusedKey === null ? undefined : lines.find((line) => line.key === focusedKey)) ??
@@ -61,6 +77,7 @@ export function ReceiveLineEditor({
   lines,
   focusedLineKey,
   busy,
+  activeAddons = Object.freeze([]),
   onFocusLine,
   onChange,
 }: ReceiveLineEditorProps) {
@@ -120,11 +137,38 @@ export function ReceiveLineEditor({
               inputMode="numeric"
               value={line.qty}
               onFocus={() => onFocusLine(line.key)}
-              onChange={(event) =>
-                onChange(updateLine(lines, line.key, { qty: event.target.value }))
-              }
+              onChange={(event) => {
+                const qtyText = event.target.value;
+                const qty = parsePositiveInt(qtyText, 50);
+                onChange(
+                  updateLine(lines, line.key, {
+                    qty: qtyText,
+                    ...(qty === null
+                      ? {}
+                      : { garments: resizeGarmentDrafts(line.garments, qty, line.key) }),
+                  }),
+                );
+              }}
               disabled={busy}
             />
+            <div className="ld-counter-pieces">
+              {line.garments.map((garment, pieceIndex) => (
+                <ReceiveGarmentEditor
+                  key={garment.key}
+                  garment={garment}
+                  pieceIndex={pieceIndex}
+                  busy={busy}
+                  activeAddons={activeAddons}
+                  onChange={(next) =>
+                    onChange(
+                      lines.map((current) =>
+                        current.key === line.key ? updateGarment(current, next) : current,
+                      ),
+                    )
+                  }
+                />
+              ))}
+            </div>
             <Button
               variant="ghost"
               type="button"

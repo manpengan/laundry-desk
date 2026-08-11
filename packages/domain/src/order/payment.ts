@@ -9,7 +9,10 @@ import type { PaymentLedgerRejectReason, PaymentLedgerResult } from "./payment-l
 export {
   activeReversalTargets,
   derivePaymentLedger,
+  projectPaymentLedger,
   type ActiveReversalTargetsResult,
+  type PaymentLedgerProjectionResult,
+  type PaymentLedgerProjectionRow,
   type PaymentLedgerRejectReason,
   type PaymentLedgerResult,
 } from "./payment-ledger.js";

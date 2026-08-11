@@ -45,6 +45,7 @@
 | [ADR-35](2026-08-08-adr-35-portable-release-candidate-evidence.md)     | 可携带正式候选证据与离线验证权威                | **Accepted** 2026-08-08；正式外部证据失败关闭      |
 | [ADR-36](2026-08-09-adr-36-cloud-test-environment.md)                  | hk-vps 云测试环境与完整柜台面公网暴露           | **Accepted** 2026-08-09；仅限合成数据的开发测试    |
 | [ADR-37](2026-08-10-adr-37-cloud-web-primary-delivery.md)              | Cloud Web-first 主交付线与剩余功能 1–4 顺序     | **Accepted** 2026-08-10；桌面/硬件正式交付后置     |
+| [ADR-38](2026-08-11-adr-38-cloud-counter-trust-closure.md)              | 柜台可信计价、支付退款与挂单明细闭环            | **Accepted** 2026-08-11；Cloud Web 阶段 2          |
 
 ## v1 线
 

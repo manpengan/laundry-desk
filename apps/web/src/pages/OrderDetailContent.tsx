@@ -82,6 +82,28 @@ export function OrderDetailContent({
               <MoneyText fen={order.balance_cents} />
             </dd>
           </div>
+          <div>
+            <dt>原价</dt>
+            <dd>
+              <MoneyText fen={order.original_cents} />
+            </dd>
+          </div>
+          <div>
+            <dt>折扣</dt>
+            <dd>
+              −<MoneyText fen={order.discount_cents} />
+            </dd>
+          </div>
+          <div>
+            <dt>附加费用</dt>
+            <dd>
+              <MoneyText fen={order.addon_cents + order.urgent_cents + order.freight_cents} />
+            </dd>
+          </div>
+          <div>
+            <dt>备注</dt>
+            <dd>{order.note ?? "—"}</dd>
+          </div>
         </dl>
       </section>
       <section className="ld-order-detail__photos" aria-label="照片">
@@ -157,11 +179,29 @@ export function OrderDetailContent({
 }
 
 function GarmentRow({ garment }: { garment: OrderGetGarment }) {
+  const details = [
+    garment.color === null ? null : `颜色：${garment.color}`,
+    garment.brand === null ? null : `品牌：${garment.brand}`,
+    garment.defects.length === 0 ? null : `瑕疵：${garment.defects.join("、")}`,
+    garment.accessories.length === 0 ? null : `附件：${garment.accessories.join("、")}`,
+    garment.note === null ? null : `备注：${garment.note}`,
+    garment.addons.length === 0
+      ? null
+      : `附加项：${garment.addons.map((addon) => addon.name).join("、")}`,
+  ].filter((item): item is string => item !== null);
   return (
     <li className="ld-order-detail__garment" data-testid="order-detail-garment">
-      <span className="ld-order-detail__barcode">{garment.barcode}</span>
-      <StatusBadge family="garment" status={garment.status} />
-      <MoneyText fen={garment.unit_price_cents} size="sm" />
+      <div className="ld-order-detail__garment-head">
+        <span className="ld-order-detail__barcode">{garment.barcode}</span>
+        <StatusBadge family="garment" status={garment.status} />
+        <MoneyText fen={garment.unit_price_cents} size="sm" />
+      </div>
+      <span>
+        {garment.service_code || "—"}/{garment.category_code || "—"}
+      </span>
+      {details.length === 0 ? null : (
+        <span className="ld-order-detail__garment-details">{details.join("；")}</span>
+      )}
     </li>
   );
 }

@@ -6,7 +6,7 @@ import type { TicketPreview } from "@laundry/domain";
 import { ToastProvider } from "@laundry/ui";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
-import { enqueueTicketPrint, ReceivePage } from "./ReceivePage.js";
+import { enqueueTicketPrint, notifyReceiveSuccess, ReceivePage } from "./ReceivePage.js";
 import { createTicketPrintAction, TicketPreviewPanel } from "./TicketPreviewPanel.js";
 import { buildReceiveTicketPreview } from "./ticket-preview.js";
 import type { ReceiveOrderResult } from "./order-form.js";
@@ -46,6 +46,30 @@ test("ReceivePage SSR with mock queryClient renders catalog picker shell", () =>
   // useEffect does not run under SSR — chips load client-side only
   assert.doesNotMatch(html, /还没有价目/);
   assert.doesNotMatch(html, /水洗衬衫/);
+});
+
+test("receive exposes fixed fee choices and keeps manual discount admin-only", () => {
+  const commandClient = createMockCommandClient();
+  const admin = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(ReceivePage, { commandClient, role: "admin" }),
+    ),
+  );
+  const staff = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(ReceivePage, { commandClient, role: "staff" }),
+    ),
+  );
+
+  assert.match(admin, /店长折扣（分）/u);
+  assert.match(admin, /加急（/u);
+  assert.match(admin, /运费（/u);
+  assert.doesNotMatch(admin, /附加（分）|加急（分）|运费（分）/u);
+  assert.doesNotMatch(staff, /店长折扣（分）/u);
 });
 
 test("after successful receive, ticket-preview shows ticket_no", () => {
@@ -164,6 +188,27 @@ test("enqueueTicketPrint turns command and transport failures into visible error
   });
   assert.deepEqual(transportNotices, [["无法提交打印任务，请检查本地服务连接", "error"]]);
   assert.equal(transportEnqueued, false);
+});
+
+test("receive success keeps a host ticket callback failure post-commit", () => {
+  const preview: TicketPreview = Object.freeze({
+    lines: Object.freeze(["票单号 T-1"]),
+    total_text: "¥1.00",
+    paid_text: "¥0.00",
+    balance_text: "¥1.00",
+  });
+  const notices: Array<readonly [string, "success" | "error"]> = [];
+  assert.doesNotThrow(() =>
+    notifyReceiveSuccess(
+      () => {
+        throw new Error("host print bridge failed");
+      },
+      preview,
+      "T-1",
+      (message, kind) => notices.push([message, kind]),
+    ),
+  );
+  assert.deepEqual(notices, [["开单成功 T-1；小票联动失败，可从订单详情重试", "error"]]);
 });
 
 test("ticket print action uses enqueue exclusively on success and failure", async () => {

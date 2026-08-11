@@ -4,6 +4,7 @@ import {
   buildPayPayment,
   buildReversalPayment,
   derivePaymentLedger,
+  projectPaymentLedger,
   planCollectPayment,
   planRefundPayment,
   planRepayPayment,
@@ -117,6 +118,85 @@ describe("append-only payment ledger", () => {
       ok: true,
       paid_cents: 800,
       balance_cents: 200,
+    });
+  });
+
+  it("projects signed rows and server-derived remaining refundability", () => {
+    const payment = buildPayPayment({ ...common, payment_id: "pay-1", amount_cents: 800 });
+    const refund = planRefundPayment({
+      ...common,
+      payment_id: "refund-1",
+      amount_cents: 300,
+      at: common.at + 1,
+      payable_cents: 1_000,
+      existing_payments: [payment],
+      ref_payment_id: payment.payment_id,
+      reason: "customer changed service",
+    });
+    expect(refund.ok).toBe(true);
+    if (!refund.ok) return;
+
+    expect(projectPaymentLedger(1_000, [payment, refund.payment])).toEqual({
+      ok: true,
+      paid_cents: 500,
+      balance_cents: 500,
+      rows: [
+        { ...payment, active: true, signed_cents: 800, refundable_cents: 500 },
+        { ...refund.payment, active: true, signed_cents: -300, refundable_cents: 0 },
+      ],
+    });
+  });
+
+  it("restores refundability after reversing a refund and never exposes balance tender", () => {
+    const payment = buildPayPayment({ ...common, payment_id: "pay-1", amount_cents: 800 });
+    const balancePayment = buildPayPayment({
+      ...common,
+      payment_id: "balance-1",
+      amount_cents: 100,
+      method: "balance",
+      at: common.at + 1,
+    });
+    const refund = planRefundPayment({
+      ...common,
+      payment_id: "refund-1",
+      amount_cents: 300,
+      at: common.at + 2,
+      payable_cents: 1_000,
+      existing_payments: [payment, balancePayment],
+      ref_payment_id: payment.payment_id,
+      reason: "customer changed service",
+    });
+    expect(refund.ok).toBe(true);
+    if (!refund.ok) return;
+    const reversal = planReversalPayment({
+      ...common,
+      payment_id: "reversal-1",
+      amount_cents: 300,
+      at: common.at + 3,
+      payable_cents: 1_000,
+      existing_payments: [payment, balancePayment, refund.payment],
+      ref_payment_id: refund.payment.payment_id,
+      reason: "refund entry was mistaken",
+    });
+    expect(reversal.ok).toBe(true);
+    if (!reversal.ok) return;
+
+    const projection = projectPaymentLedger(1_000, [
+      payment,
+      balancePayment,
+      refund.payment,
+      reversal.payment,
+    ]);
+    expect(projection).toMatchObject({
+      ok: true,
+      paid_cents: 900,
+      balance_cents: 100,
+      rows: [
+        { payment_id: "pay-1", active: true, refundable_cents: 800 },
+        { payment_id: "balance-1", active: true, refundable_cents: 0 },
+        { payment_id: "refund-1", active: false, signed_cents: -300 },
+        { payment_id: "reversal-1", active: false, signed_cents: 300 },
+      ],
     });
   });
 

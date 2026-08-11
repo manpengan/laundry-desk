@@ -65,6 +65,32 @@
   gap: 8px;
 }
 
+.ld-counter-drafts {
+  margin-bottom: 16px;
+}
+
+.ld-counter-draft-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ld-counter-draft-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-surface);
+  color: var(--lg-ink2);
+  font-size: 13px;
+}
+
 .ld-counter-line {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) minmax(74px, auto) 70px auto;
@@ -102,6 +128,65 @@
   color: var(--lg-ink3);
   font-size: 11px;
   font-weight: 500;
+}
+
+.ld-counter-line__addons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  color: var(--lg-ink2);
+  font-size: 12px;
+}
+
+.ld-counter-pieces {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ld-counter-piece {
+  padding: 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-leaf);
+}
+
+.ld-counter-piece__title {
+  margin: 0 0 8px;
+  color: var(--lg-ink2);
+  font-size: 13px;
+}
+
+.ld-counter-piece__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ld-counter-piece .ld-counter-line__addons {
+  margin-top: 8px;
+}
+
+.ld-counter-line__addons label,
+.ld-counter-adjustment-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ld-counter-adjustment-toggle {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-surface);
+  color: var(--lg-ink2);
+  font-size: 13px;
 }
 
 .ld-counter-totals {
@@ -260,7 +345,9 @@ button.ld-workbench-customers__row:hover {
   .ld-counter-grid--workbench,
   .ld-counter-line,
   .ld-counter-line__codes,
-  .ld-counter-adjustments {
+  .ld-counter-adjustments,
+  .ld-counter-piece__fields,
+  .ld-counter-draft-list li {
     grid-template-columns: 1fr;
   }
 

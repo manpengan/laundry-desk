@@ -3,42 +3,37 @@
  * Integer cents only; mirrors packages/contracts Order*InputSchema without a hard dep.
  */
 
-import { parsePricingAdjustments } from "./receive-pricing.js";
+import type { OrderGetGarment } from "./order-read-model.js";
+import type { ReceiveGarmentDraft, ReceiveLineDraft } from "./receive-garment-form.js";
+
 export { buildPickupBody, type BuildPickupBodyResult } from "./pickup-form.js";
+export {
+  parseOrderGetResult,
+  type OrderGetGarment,
+  type OrderGetLine,
+  type OrderGetPieceDetail,
+  type OrderGetResult,
+  type PricingAddonSnapshotView,
+} from "./order-read-model.js";
+export {
+  newGarmentDraft,
+  newLineDraft,
+  resizeGarmentDrafts,
+  type ReceiveGarmentDraft,
+  type ReceiveLineDraft,
+} from "./receive-garment-form.js";
+export {
+  parseHoldDraftId,
+  parseReceiveOrderResult,
+  type ReceiveGarmentResult,
+  type ReceiveOrderResult,
+} from "./receive-result-model.js";
 
 const PHONE_RE = /^1[3-9]\d{9}$/u;
 const CODE_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/u;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
-export type ReceiveLineDraft = Readonly<{
-  key: string;
-  service_code: string;
-  category_code: string;
-  /** Catalog display price only. Never sent back as an order.receive input. */
-  unit_price_cents: number | null;
-  qty: string;
-}>;
-
 export type PaymentMethod = "cash" | "wechat" | "alipay" | "other";
-
-export type ReceiveGarmentResult = Readonly<{
-  garment_id: string;
-  barcode: string;
-  status: string;
-  line_index: number;
-  seq: number;
-}>;
-
-export type ReceiveOrderResult = Readonly<{
-  order_id: string;
-  ticket_no: string;
-  pickup_code: string;
-  payable_cents: number;
-  paid_cents: number;
-  balance_cents: number;
-  garment_count: number;
-  garments: readonly ReceiveGarmentResult[];
-}>;
 
 export type PickupOrderResult = Readonly<{
   order_id: string;
@@ -47,32 +42,6 @@ export type PickupOrderResult = Readonly<{
   paid_cents: number;
   balance_cents: number;
   picked_garment_ids: readonly string[];
-}>;
-
-export type OrderGetGarment = Readonly<{
-  garment_id: string;
-  barcode: string;
-  status: string;
-  line_index: number;
-  seq: number;
-  unit_price_cents: number;
-  rack_zone: string | null;
-  rack_slot: string | null;
-}>;
-
-export type OrderGetResult = Readonly<{
-  order_id: string;
-  /** Null for a walk-in order with no customer on file. */
-  customer_id: string | null;
-  ticket_no: string | null;
-  pickup_code: string | null;
-  status: string;
-  customer_phone: string | null;
-  customer_name: string | null;
-  payable_cents: number;
-  paid_cents: number;
-  balance_cents: number;
-  garments: readonly OrderGetGarment[];
 }>;
 
 /** Counter pickup supports direct received/ready pickup and verified racked pickup. */
@@ -102,62 +71,6 @@ export function toggleGarmentSelection(
 
 export function selectAllPickableIds(garments: readonly OrderGetGarment[]): ReadonlySet<string> {
   return new Set(pickableGarmentIds(garments));
-}
-
-function parseOrderGetGarment(row: unknown): OrderGetGarment | null {
-  if (typeof row !== "object" || row === null) return null;
-  const r = row as Record<string, unknown>;
-  if (typeof r.garment_id !== "string" || typeof r.barcode !== "string") return null;
-  if (typeof r.status !== "string") return null;
-  if (typeof r.line_index !== "number" || !Number.isInteger(r.line_index)) return null;
-  if (typeof r.seq !== "number" || !Number.isInteger(r.seq)) return null;
-  if (typeof r.unit_price_cents !== "number" || !Number.isInteger(r.unit_price_cents)) return null;
-  if (r.unit_price_cents < 0) return null;
-  const rackZone = typeof r.rack_zone === "string" ? r.rack_zone : null;
-  const rackSlot = typeof r.rack_slot === "string" ? r.rack_slot : null;
-  return Object.freeze({
-    garment_id: r.garment_id,
-    barcode: r.barcode,
-    status: r.status,
-    line_index: r.line_index,
-    seq: r.seq,
-    unit_price_cents: r.unit_price_cents,
-    rack_zone: rackZone,
-    rack_slot: rackSlot,
-  });
-}
-
-export function parseOrderGetResult(raw: unknown): OrderGetResult | null {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
-  const r = raw as Record<string, unknown>;
-  if (typeof r.order_id !== "string" || (typeof r.ticket_no !== "string" && r.ticket_no !== null)) {
-    return null;
-  }
-  if (typeof r.pickup_code !== "string" && r.pickup_code !== null) return null;
-  if (typeof r.status !== "string") return null;
-  if (typeof r.payable_cents !== "number" || !Number.isInteger(r.payable_cents)) return null;
-  if (typeof r.paid_cents !== "number" || !Number.isInteger(r.paid_cents)) return null;
-  if (typeof r.balance_cents !== "number" || !Number.isInteger(r.balance_cents)) return null;
-  if (!Array.isArray(r.garments)) return null;
-  const garments: OrderGetGarment[] = [];
-  for (const row of r.garments) {
-    const g = parseOrderGetGarment(row);
-    if (g === null) return null;
-    garments.push(g);
-  }
-  return Object.freeze({
-    order_id: r.order_id,
-    ticket_no: r.ticket_no,
-    pickup_code: r.pickup_code,
-    status: r.status,
-    customer_phone: typeof r.customer_phone === "string" ? r.customer_phone : null,
-    customer_name: typeof r.customer_name === "string" ? r.customer_name : null,
-    payable_cents: r.payable_cents,
-    paid_cents: r.paid_cents,
-    balance_cents: r.balance_cents,
-    customer_id: typeof r.customer_id === "string" ? r.customer_id : null,
-    garments: Object.freeze(garments),
-  });
 }
 
 export function parseNonNegCents(text: string): number | null {
@@ -196,22 +109,15 @@ export function unwrapCommandResult<T>(data: unknown): T | null {
   return data as T;
 }
 
-export function newLineDraft(index: number): ReceiveLineDraft {
-  return Object.freeze({
-    key: `line-${index}-${Date.now()}`,
-    service_code: "",
-    category_code: "",
-    unit_price_cents: null,
-    qty: "1",
-  });
-}
-
 export type BuiltReceiveLine = Readonly<{
   service_code: string;
   category_code: string;
   unit_price_cents: number;
   qty: number;
 }>;
+
+type PreparedReceiveLine = BuiltReceiveLine &
+  Readonly<{ garments: readonly Readonly<Record<string, unknown>>[] }>;
 
 export type BuildReceiveBodyResult =
   | Readonly<{
@@ -221,23 +127,66 @@ export type BuildReceiveBodyResult =
     }>
   | Readonly<{ ok: false; message: string }>;
 
+function parseDetailTags(text: string): readonly string[] | null {
+  if (text.trim().length === 0) return Object.freeze([]);
+  const items = text
+    .split(/[,，]/u)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  if (items.length > 12 || items.some((item) => item.length > 32)) return null;
+  return Object.freeze(items);
+}
+
+function buildGarmentDetail(
+  garment: ReceiveGarmentDraft,
+  lineIndex: number,
+  garmentIndex: number,
+): Readonly<Record<string, unknown>> | string {
+  const color = garment.color.trim();
+  const brand = garment.brand.trim();
+  const note = garment.note.trim();
+  const defects = parseDetailTags(garment.defects_text);
+  const accessories = parseDetailTags(garment.accessories_text);
+  const prefix = `第 ${lineIndex + 1} 行第 ${garmentIndex + 1} 件`;
+  if (color.length > 32 || brand.length > 32) return `${prefix}颜色或品牌过长`;
+  if (note.length > 256) return `${prefix}备注过长`;
+  if (defects === null || accessories === null)
+    return `${prefix}瑕疵或附件最多 12 项且每项不超过 32 字`;
+  const addonCodes = garment.addon_codes;
+  if (
+    addonCodes.length > 8 ||
+    addonCodes.some((code) => !isValidCode(code)) ||
+    new Set(addonCodes).size !== addonCodes.length
+  ) {
+    return `${prefix}附加项无效或重复`;
+  }
+  return Object.freeze({
+    ...(color.length === 0 ? {} : { color }),
+    ...(brand.length === 0 ? {} : { brand }),
+    ...(defects.length === 0 ? {} : { defects }),
+    ...(accessories.length === 0 ? {} : { accessories }),
+    ...(note.length === 0 ? {} : { note }),
+    ...(addonCodes.length === 0 ? {} : { addon_codes: Object.freeze([...addonCodes]) }),
+  });
+}
+
 export function buildReceiveBody(input: {
   customer_phone: string;
   customer_name: string;
   initial_payment_cents: string;
   initial_payment_method: PaymentMethod;
   discount_cents: string;
-  addon_cents: string;
-  urgent_cents: string;
-  freight_cents: string;
+  urgent: boolean;
+  freight: boolean;
   note: string;
   lines: readonly ReceiveLineDraft[];
   draft_id?: string;
 }): BuildReceiveBodyResult {
-  if (input.lines.length < 1) {
-    return Object.freeze({ ok: false as const, message: "至少添加一行衣物" });
+  if (input.lines.length < 1 || input.lines.length > 40) {
+    return Object.freeze({ ok: false as const, message: "衣物须为 1–40 行" });
   }
-  const lines: BuiltReceiveLine[] = [];
+  const lines: PreparedReceiveLine[] = [];
+  let originalCents = 0;
   for (let i = 0; i < input.lines.length; i += 1) {
     const line = input.lines[i]!;
     const service = line.service_code.trim();
@@ -249,7 +198,12 @@ export function buildReceiveBody(input: {
       });
     }
     const qty = parsePositiveInt(line.qty, 50);
-    if (line.unit_price_cents === null) {
+    if (
+      line.unit_price_cents === null ||
+      !Number.isSafeInteger(line.unit_price_cents) ||
+      line.unit_price_cents < 0 ||
+      line.unit_price_cents > 2_147_483_647
+    ) {
       return Object.freeze({
         ok: false as const,
         message: `第 ${i + 1} 行请从价目表选择服务`,
@@ -261,50 +215,52 @@ export function buildReceiveBody(input: {
         message: `第 ${i + 1} 行数量须为 1–50 整数`,
       });
     }
+    if (line.garments.length !== qty) {
+      return Object.freeze({
+        ok: false as const,
+        message: `第 ${i + 1} 行逐件信息与数量不一致`,
+      });
+    }
+    const nextOriginal = originalCents + line.unit_price_cents * qty;
+    if (!Number.isSafeInteger(nextOriginal)) {
+      return Object.freeze({ ok: false as const, message: "价目金额超出安全范围" });
+    }
+    originalCents = nextOriginal;
+    const garments: Readonly<Record<string, unknown>>[] = [];
+    for (let garmentIndex = 0; garmentIndex < line.garments.length; garmentIndex += 1) {
+      const detail = buildGarmentDetail(line.garments[garmentIndex]!, i, garmentIndex);
+      if (typeof detail === "string") {
+        return Object.freeze({ ok: false as const, message: detail });
+      }
+      garments.push(detail);
+    }
     lines.push(
       Object.freeze({
         service_code: service,
         category_code: category,
         unit_price_cents: line.unit_price_cents,
         qty,
+        garments: Object.freeze(garments),
       }),
     );
   }
 
-  const pricing = parsePricingAdjustments(input);
-  if (pricing.ok === false) return pricing;
-  const originalCents = lines.reduce((total, line) => total + line.unit_price_cents * line.qty, 0);
-  if (!Number.isSafeInteger(originalCents) || pricing.values.discount_cents > originalCents) {
+  const discountCents = parseNonNegCents(input.discount_cents);
+  if (discountCents === null) {
+    return Object.freeze({ ok: false as const, message: "折扣须为非负整数分" });
+  }
+  if (discountCents > originalCents) {
     return Object.freeze({ ok: false as const, message: "折扣不能超过原价" });
   }
-  const payableCents =
-    originalCents -
-    pricing.values.discount_cents +
-    pricing.values.addon_cents +
-    pricing.values.urgent_cents +
-    pricing.values.freight_cents;
   const initialPayment = parseNonNegCents(input.initial_payment_cents);
-  if (initialPayment === null || initialPayment > payableCents) {
-    return Object.freeze({ ok: false as const, message: "首笔收款须为不超过应收的整数分" });
+  if (initialPayment === null) {
+    return Object.freeze({ ok: false as const, message: "首笔收款须为非负整数分" });
   }
 
-  const body: Record<string, unknown> = {
-    lines: lines.map(({ service_code, category_code, qty }) =>
-      Object.freeze({ service_code, category_code, qty }),
-    ),
-    ...pricing.values,
-  };
-  if (initialPayment > 0) {
-    body.initial_payment = Object.freeze({
-      amount_cents: initialPayment,
-      method: input.initial_payment_method,
-    });
-  }
   if (input.draft_id !== undefined) {
     if (!isValidUuid(input.draft_id)) {
       return Object.freeze({ ok: false as const, message: "挂单标识无效，请重新暂存" });
     }
-    body.draft_id = input.draft_id;
   }
 
   const phone = input.customer_phone.trim();
@@ -315,7 +271,6 @@ export function buildReceiveBody(input: {
         message: "手机号格式无效（11 位 1[3-9]…，种子 13800000xxx）",
       });
     }
-    body.customer_phone = phone;
   }
 
   const name = input.customer_name.trim();
@@ -323,7 +278,6 @@ export function buildReceiveBody(input: {
     if (name.length > 64) {
       return Object.freeze({ ok: false as const, message: "客户姓名过长" });
     }
-    body.customer_name = name;
   }
 
   const note = input.note.trim();
@@ -331,12 +285,38 @@ export function buildReceiveBody(input: {
     if (note.length > 256) {
       return Object.freeze({ ok: false as const, message: "备注过长" });
     }
-    body.note = note;
   }
+
+  const body = Object.freeze({
+    lines: Object.freeze(
+      lines.map(({ service_code, category_code, qty, garments }) =>
+        Object.freeze({ service_code, category_code, qty, garments }),
+      ),
+    ),
+    discount_cents: discountCents,
+    urgent: input.urgent,
+    freight: input.freight,
+    ...(initialPayment > 0
+      ? {
+          initial_payment: Object.freeze({
+            amount_cents: initialPayment,
+            method: input.initial_payment_method,
+          }),
+        }
+      : {}),
+    ...(input.draft_id === undefined ? {} : { draft_id: input.draft_id }),
+    ...(phone.length === 0 ? {} : { customer_phone: phone }),
+    ...(name.length === 0 ? {} : { customer_name: name }),
+    ...(note.length === 0 ? {} : { note }),
+  });
 
   return Object.freeze({
     ok: true as const,
-    body: Object.freeze(body),
-    previewLines: Object.freeze(lines),
+    body,
+    previewLines: Object.freeze(
+      lines.map(({ service_code, category_code, unit_price_cents, qty }) =>
+        Object.freeze({ service_code, category_code, unit_price_cents, qty }),
+      ),
+    ),
   });
 }

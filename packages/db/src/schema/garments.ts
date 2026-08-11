@@ -2,6 +2,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -31,6 +32,9 @@ export const garments = pgTable(
     unitPriceCents: integer("unit_price_cents").notNull(),
     color: text("color"),
     brand: text("brand"),
+    defects: jsonb("defects").notNull().default([]),
+    accessories: jsonb("accessories").notNull().default([]),
+    note: text("note"),
     status: text("status").notNull().default("received"),
   },
   (table) => [

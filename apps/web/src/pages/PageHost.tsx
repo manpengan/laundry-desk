@@ -79,6 +79,7 @@ export function PageHost({
     return (
       <ReceivePage
         commandClient={commandClient}
+        role={session.role}
         queuePrintEnabled={hasLocalPrintQueue(printerPort)}
         {...(offlinePort !== undefined ? { offlinePort } : {})}
         {...(queryClient !== undefined ? { queryClient } : {})}
@@ -184,6 +185,8 @@ export function PageHost({
         queryClient={queryClient}
         memberEnabled={session.features.member_enabled === true}
         {...(commandClient !== undefined ? { commandClient } : {})}
+        {...(authClient !== undefined ? { authClient } : {})}
+        session={session}
         {...(photoPort !== undefined ? { photoPort } : {})}
         onOpenPickup={(orderId) => {
           setPickupOrderId(orderId);

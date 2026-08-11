@@ -97,6 +97,7 @@ const STORE_TABLES = describeTables(
     "service_types",
     "item_catalog",
     "addon_catalog",
+    "store_pricing_policies",
     "color_dict",
     "brand_dict",
     "remark_dict",

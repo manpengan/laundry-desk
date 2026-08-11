@@ -19,6 +19,8 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0010_print_jobs.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0011_customers.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0012_shift_closings.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0045_store_commissioning_staff_credentials.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0046_print_job_request_idempotency.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0047_cloud_counter_trust.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -40,5 +42,7 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **M2 customers** (0011): `customers` org-scoped archive (`SELECT, INSERT, UPDATE`; unique org+phone)
 - **M2 shift** (0012): `shift_closings` store-scoped 日结签字 (`SELECT, INSERT` only; one close per day)
 - **Staff credential lifecycle** (0045, ADR-31): owner-only commissioning markers and store-scoped, non-secret, single-use credential setup references
+- **Signed print request idempotency** (0046): database-derived logical keys make enqueue/retry/reprint exact across lost responses and concurrency
+- **Cloud counter trust** (0047, ADR-38): store-scoped pricing policy, authoritative pricing snapshots, and per-piece draft/formal garment details
 - Still deferred: edge lease, AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

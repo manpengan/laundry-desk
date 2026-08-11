@@ -17,7 +17,18 @@ import {
   M3_FULFILLMENT_QUERY_DEFINITIONS,
 } from "./fulfillment.js";
 import { ORDER_COMMANDS, ORDER_COMMAND_NAMES, ORDER_QUERIES, ORDER_QUERY_NAMES } from "./order.js";
-import { PAYMENT_COMMANDS, PAYMENT_COMMAND_NAMES } from "./payment.js";
+import {
+  PAYMENT_COMMANDS,
+  PAYMENT_COMMAND_NAMES,
+  PAYMENT_QUERIES,
+  PAYMENT_QUERY_NAMES,
+} from "./payment.js";
+import {
+  PRICING_COMMANDS,
+  PRICING_COMMAND_NAMES,
+  PRICING_QUERIES,
+  PRICING_QUERY_NAMES,
+} from "./pricing.js";
 import { ACCOUNTING_COMMANDS, ACCOUNTING_QUERIES } from "./accounting.js";
 import { REPORTING_QUERIES } from "./reporting.js";
 import { EDGE_CONFLICT_COMMANDS } from "./edge-conflict.js";
@@ -67,6 +78,7 @@ export const M1_FIRST_WAVE_QUERY_NAMES = Object.freeze(PLATFORM_QUERIES.map((que
 export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] = Object.freeze([
   ...ORDER_COMMANDS,
   ...PAYMENT_COMMANDS,
+  ...PRICING_COMMANDS,
   ...ACCOUNTING_COMMANDS,
   ...RECONCILIATION_COMMANDS,
   ...EDGE_CONFLICT_COMMANDS,
@@ -86,6 +98,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   ...M2_CUSTOMER_COMMAND_NAMES,
   ...ORDER_COMMAND_NAMES,
   ...PAYMENT_COMMAND_NAMES,
+  ...PRICING_COMMAND_NAMES,
   "accounting.report.export",
   "reconciliation.export",
   "edge.conflict.discard",
@@ -124,6 +137,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "payment.collect",
   "payment.repay",
   "payment.refund",
+  "pricing.policy.set",
   "accounting.report.export",
   "reconciliation.export",
   "edge.conflict.discard",
@@ -186,6 +200,8 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   ...CATALOG_SKELETON_QUERY_NAMES,
   ...M2_CUSTOMER_QUERY_NAMES,
   ...ORDER_QUERY_NAMES,
+  ...PRICING_QUERY_NAMES,
+  ...PAYMENT_QUERY_NAMES,
   ...M2_PRINT_QUERY_NAMES,
   ...M2_STATS_QUERY_NAMES,
   ...M2_SHIFT_QUERY_NAMES,
@@ -209,6 +225,8 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...CATALOG_SKELETON_DEFINITIONS,
   ...M2_CUSTOMER_QUERY_DEFINITIONS,
   ...ORDER_QUERIES,
+  ...PRICING_QUERIES,
+  ...PAYMENT_QUERIES,
   ...M2_PRINT_QUERY_DEFINITIONS,
   ...M2_STATS_QUERY_DEFINITIONS,
   ...M2_SHIFT_QUERY_DEFINITIONS,

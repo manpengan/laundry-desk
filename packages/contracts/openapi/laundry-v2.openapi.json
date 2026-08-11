@@ -9673,6 +9673,9 @@
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
             "type": "string"
           },
+          "freight": {
+            "type": "boolean"
+          },
           "freight_cents": {
             "maximum": 9007199254740991,
             "minimum": 0,
@@ -9693,6 +9696,55 @@
                 "color": {
                   "maxLength": 32,
                   "type": "string"
+                },
+                "garments": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "accessories": {
+                        "items": {
+                          "maxLength": 32,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "maxItems": 12,
+                        "type": "array"
+                      },
+                      "addon_codes": {
+                        "items": {
+                          "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "brand": {
+                        "maxLength": 32,
+                        "type": "string"
+                      },
+                      "color": {
+                        "maxLength": 32,
+                        "type": "string"
+                      },
+                      "defects": {
+                        "items": {
+                          "maxLength": 32,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "maxItems": 12,
+                        "type": "array"
+                      },
+                      "note": {
+                        "maxLength": 256,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "maxItems": 50,
+                  "minItems": 1,
+                  "type": "array"
                 },
                 "qty": {
                   "exclusiveMinimum": 0,
@@ -9723,6 +9775,9 @@
           "note": {
             "maxLength": 256,
             "type": "string"
+          },
+          "urgent": {
+            "type": "boolean"
           },
           "urgent_cents": {
             "maximum": 9007199254740991,
@@ -9801,6 +9856,9 @@
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
             "type": "string"
           },
+          "freight": {
+            "type": "boolean"
+          },
           "freight_cents": {
             "maximum": 9007199254740991,
             "minimum": 0,
@@ -9850,6 +9908,55 @@
                   "maxLength": 32,
                   "type": "string"
                 },
+                "garments": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "accessories": {
+                        "items": {
+                          "maxLength": 32,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "maxItems": 12,
+                        "type": "array"
+                      },
+                      "addon_codes": {
+                        "items": {
+                          "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array"
+                      },
+                      "brand": {
+                        "maxLength": 32,
+                        "type": "string"
+                      },
+                      "color": {
+                        "maxLength": 32,
+                        "type": "string"
+                      },
+                      "defects": {
+                        "items": {
+                          "maxLength": 32,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "maxItems": 12,
+                        "type": "array"
+                      },
+                      "note": {
+                        "maxLength": 256,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "maxItems": 50,
+                  "minItems": 1,
+                  "type": "array"
+                },
                 "qty": {
                   "exclusiveMinimum": 0,
                   "maximum": 50,
@@ -9884,6 +9991,9 @@
             "maximum": 9007199254740991,
             "minimum": 0,
             "type": "integer"
+          },
+          "urgent": {
+            "type": "boolean"
           },
           "urgent_cents": {
             "maximum": 9007199254740991,
@@ -10039,6 +10149,72 @@
         },
         "required": [
           "entries"
+        ],
+        "type": "object"
+      },
+      "input.command.pricing.policy.set": {
+        "additionalProperties": false,
+        "properties": {
+          "addons": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+                  "type": "string"
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "sort_order": {
+                  "maximum": 9999,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "unit_price_cents": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "code",
+                "name",
+                "unit_price_cents",
+                "is_active",
+                "sort_order"
+              ],
+              "type": "object"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "expected_version": {
+            "maximum": 2147483646,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "freight_cents": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "urgent_cents": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version",
+          "urgent_cents",
+          "freight_cents",
+          "addons"
         ],
         "type": "object"
       },
@@ -10577,6 +10753,20 @@
         ],
         "type": "object"
       },
+      "input.query.payment.ledger.list": {
+        "additionalProperties": false,
+        "properties": {
+          "order_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id"
+        ],
+        "type": "object"
+      },
       "input.query.photo.list_by_order": {
         "additionalProperties": false,
         "properties": {
@@ -10647,6 +10837,11 @@
         "required": [
           "store_id"
         ],
+        "type": "object"
+      },
+      "input.query.pricing.policy.get": {
+        "additionalProperties": false,
+        "properties": {},
         "type": "object"
       },
       "input.query.print.jobs.list": {
@@ -12822,7 +13017,7 @@
     },
     "/v1/commands/order.hold": {
       "post": {
-        "description": "Save an unreceived counter draft. It has a server price snapshot but no ticket, garments, payment or revenue until order.receive opens it. Stable command name: `order.hold` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Save an unreceived counter draft with server catalog, pricing-policy and per-piece detail snapshots. It has no ticket, formal garments, payment or revenue until order.receive opens it. Stable command name: `order.hold` @ 0.4.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_order_hold",
         "requestBody": {
           "content": {
@@ -12869,7 +13064,7 @@
         "x-laundry-kind": "command",
         "x-laundry-offline-mode": "grant",
         "x-laundry-risk": "R2",
-        "x-laundry-version": "0.3.0"
+        "x-laundry-version": "0.4.0"
       }
     },
     "/v1/commands/order.pickup": {
@@ -12926,7 +13121,7 @@
     },
     "/v1/commands/order.receive": {
       "post": {
-        "description": "Open a counter order using the active server catalog price; clients cannot submit a unit price. Expand each line qty into garments at received status. Integer cents only. Stable command name: `order.receive` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Open a counter order using active server catalog and pricing policy. Clients select add-on codes and urgent/freight flags but cannot submit their amounts or a unit price. Expand each line qty into garments at received status. Integer cents only. Stable command name: `order.receive` @ 0.4.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_order_receive",
         "requestBody": {
           "content": {
@@ -12965,7 +13160,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "Create an open order from the server catalog, atomically append its first payment, and expand line quantities into garments.",
+        "summary": "Create an open order from server catalog and store pricing policy, atomically append its first payment, and expand line quantities into detailed garments.",
         "tags": [
           "commands"
         ],
@@ -12973,7 +13168,7 @@
         "x-laundry-kind": "command",
         "x-laundry-offline-mode": "grant",
         "x-laundry-risk": "R1",
-        "x-laundry-version": "0.3.0"
+        "x-laundry-version": "0.4.0"
       }
     },
     "/v1/commands/payment.collect": {
@@ -13182,6 +13377,58 @@
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R5",
         "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/pricing.policy.set": {
+      "post": {
+        "description": "Not exposed to AI. R5 store pricing maintenance requires another administrator's step-up approval. All amounts are integer cents. Stable command name: `pricing.policy.set` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_pricing_policy_set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.pricing.policy.set"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Replace one store's counter pricing policy using optimistic version matching.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R5",
+        "x-laundry-version": "0.1.0"
       }
     },
     "/v1/commands/print.ticket.enqueue": {
@@ -14278,7 +14525,7 @@
     },
     "/v1/queries/order.get": {
       "post": {
-        "description": "Fetch order by id with garment list (id, barcode, status, line_index, seq, unit_price_cents). PII may appear. Stable query name: `order.get` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Fetch order by id with pricing components, editable line and piece details, and formal garment status/barcode/rack data. Drafts can be resumed from this server-owned snapshot. PII may appear. Stable query name: `order.get` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "query_order_get",
         "requestBody": {
           "content": {
@@ -14317,7 +14564,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "Load one order summary and its garments for counter pickup.",
+        "summary": "Load one order's complete counter detail or resumable draft snapshot.",
         "tags": [
           "queries"
         ],
@@ -14325,7 +14572,7 @@
         "x-laundry-kind": "query",
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R2",
-        "x-laundry-version": "0.2.0"
+        "x-laundry-version": "0.3.0"
       }
     },
     "/v1/queries/order.list": {
@@ -14422,6 +14669,58 @@
           }
         ],
         "summary": "Find a bounded set of counter pickup candidates by a customer-facing identifier.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "0.1.0"
+      }
+    },
+    "/v1/queries/payment.ledger.list": {
+      "post": {
+        "description": "Return the authenticated store's ordered payment ledger for one order. active and refundable_cents are server-derived; never invent or accept a payment reference from free text. Stable query name: `payment.ledger.list` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_payment_ledger_list",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.payment.ledger.list"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List one order's immutable payment ledger with server-derived refundability.",
         "tags": [
           "queries"
         ],
@@ -14638,6 +14937,58 @@
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R0",
         "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/pricing.policy.get": {
+      "post": {
+        "description": "Return fixed urgent/freight integer cents and the bounded add-on catalog for the authenticated store. The caller cannot select another store. Stable query name: `pricing.policy.get` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_pricing_policy_get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.pricing.policy.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Load the authenticated store's server-authoritative counter pricing policy.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R0",
+        "x-laundry-version": "0.1.0"
       }
     },
     "/v1/queries/print.jobs.list": {

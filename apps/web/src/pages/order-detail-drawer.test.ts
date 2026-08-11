@@ -24,9 +24,49 @@ const SAMPLE_ORDER: OrderGetResult = Object.freeze({
   status: "open",
   customer_phone: "13800000111",
   customer_name: "甲",
+  note: "门店备注",
+  subtotal_cents: 3000,
+  original_cents: 3000,
+  discount_cents: 0,
+  addon_cents: 0,
+  urgent_cents: 0,
+  freight_cents: 0,
+  pricing_policy_version: 1,
+  urgent_selected: false,
+  freight_selected: false,
   payable_cents: 3000,
   paid_cents: 500,
   balance_cents: 2500,
+  lines: Object.freeze([
+    Object.freeze({
+      line_index: 0,
+      service_code: "wash",
+      category_code: "shirt",
+      unit_price_cents: 1500,
+      qty: 2,
+      line_total_cents: 3000,
+      color: null,
+      brand: null,
+      garments: Object.freeze([
+        Object.freeze({
+          color: "白",
+          brand: "甲牌",
+          defects: Object.freeze(["袖口污渍"]),
+          accessories: Object.freeze(["腰带"]),
+          note: "单独去渍",
+          addons: Object.freeze([]),
+        }),
+        Object.freeze({
+          color: "蓝",
+          brand: "乙牌",
+          defects: Object.freeze([]),
+          accessories: Object.freeze([]),
+          note: null,
+          addons: Object.freeze([]),
+        }),
+      ]),
+    }),
+  ]),
   garments: Object.freeze([
     Object.freeze({
       garment_id: "11111111-2222-4333-8444-555555555555",
@@ -34,7 +74,15 @@ const SAMPLE_ORDER: OrderGetResult = Object.freeze({
       status: "received",
       line_index: 0,
       seq: 1,
+      service_code: "wash",
+      category_code: "shirt",
       unit_price_cents: 1500,
+      color: "白",
+      brand: "甲牌",
+      defects: Object.freeze(["袖口污渍"]),
+      accessories: Object.freeze(["腰带"]),
+      note: "单独去渍",
+      addons: Object.freeze([]),
       rack_zone: null,
       rack_slot: null,
     }),
@@ -44,7 +92,15 @@ const SAMPLE_ORDER: OrderGetResult = Object.freeze({
       status: "picked_up",
       line_index: 0,
       seq: 2,
+      service_code: "wash",
+      category_code: "shirt",
       unit_price_cents: 1500,
+      color: "蓝",
+      brand: "乙牌",
+      defects: Object.freeze([]),
+      accessories: Object.freeze([]),
+      note: null,
+      addons: Object.freeze([]),
       rack_zone: null,
       rack_slot: null,
     }),
@@ -176,6 +232,9 @@ test("OrderDetailContent SSR shows ticket, money, garments, photo count and thum
   assert.match(html, /data-fen="2500"/);
   assert.match(html, /TK-001/);
   assert.match(html, /TK-002/);
+  assert.match(html, /颜色：白/);
+  assert.match(html, /瑕疵：袖口污渍/);
+  assert.match(html, /门店备注/);
   assert.match(html, /1 张/);
   assert.match(html, /data-testid="order-detail-photo-count"/);
   assert.match(html, /data-testid="order-detail-photos"/);

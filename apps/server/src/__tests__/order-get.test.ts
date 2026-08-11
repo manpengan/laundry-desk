@@ -75,6 +75,16 @@ test("order.get returns summary and garments with unit_price_cents", async () =>
           category_code: "shirt",
           unit_price_cents: 1500,
           qty: 2,
+          garments: [
+            {
+              color: "白",
+              brand: "甲牌",
+              defects: ["袖口污渍"],
+              accessories: ["腰带"],
+              note: "单独去渍",
+            },
+            { color: "蓝", brand: "乙牌" },
+          ],
         },
       ],
       paid_cents: 500,
@@ -104,6 +114,18 @@ test("order.get returns summary and garments with unit_price_cents", async () =>
     payable_cents: number;
     paid_cents: number;
     balance_cents: number;
+    note: string | null;
+    pricing_policy_version: number;
+    lines: readonly {
+      qty: number;
+      garments: readonly {
+        color: string | null;
+        brand: string | null;
+        defects: readonly string[];
+        accessories: readonly string[];
+        note: string | null;
+      }[];
+    }[];
     garments: readonly {
       garment_id: string;
       barcode: string;
@@ -111,6 +133,11 @@ test("order.get returns summary and garments with unit_price_cents", async () =>
       line_index: number;
       seq: number;
       unit_price_cents: number;
+      color: string | null;
+      brand: string | null;
+      defects: readonly string[];
+      accessories: readonly string[];
+      note: string | null;
     }[];
   };
 
@@ -122,6 +149,17 @@ test("order.get returns summary and garments with unit_price_cents", async () =>
   assert.equal(data.payable_cents, 3000);
   assert.equal(data.paid_cents, 500);
   assert.equal(data.balance_cents, 2500);
+  assert.equal(data.note, null);
+  assert.equal(data.pricing_policy_version, 0);
+  assert.equal(data.lines.length, 1);
+  assert.deepEqual(data.lines[0]?.garments[0], {
+    color: "白",
+    brand: "甲牌",
+    defects: ["袖口污渍"],
+    accessories: ["腰带"],
+    note: "单独去渍",
+    addons: [],
+  });
   assert.equal(data.garments.length, 2);
   for (const g of data.garments) {
     assert.equal(typeof g.garment_id, "string");
@@ -132,6 +170,146 @@ test("order.get returns summary and garments with unit_price_cents", async () =>
     assert.equal(g.unit_price_cents, 1500);
     assert.ok(Number.isInteger(g.unit_price_cents));
   }
+  assert.deepEqual(
+    data.garments.map((garment) => ({
+      color: garment.color,
+      brand: garment.brand,
+      defects: garment.defects,
+      accessories: garment.accessories,
+      note: garment.note,
+    })),
+    [
+      {
+        color: "白",
+        brand: "甲牌",
+        defects: ["袖口污渍"],
+        accessories: ["腰带"],
+        note: "单独去渍",
+      },
+      { color: "蓝", brand: "乙牌", defects: [], accessories: [], note: null },
+    ],
+  );
+});
+
+test("order.get returns a resumable draft snapshot and the same id can open once", async () => {
+  const { registry, queryRegistry, chainHooks, pendingStore } = buildBus();
+  const held = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.hold",
+    {
+      customer_phone: "13800000112",
+      customer_name: "挂单顾客",
+      note: "晚点回来",
+      urgent: true,
+      lines: [
+        {
+          service_code: "dry",
+          category_code: "coat",
+          qty: 1,
+          garments: [
+            {
+              color: "黑",
+              brand: "示例牌",
+              defects: ["左袖破损"],
+              accessories: ["腰带"],
+              note: "保持衣架",
+            },
+          ],
+        },
+      ],
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(held.ok, true, JSON.stringify(held));
+  if (!held.ok) return;
+  const draftId = (held.data.result as { draft_id: string }).draft_id;
+
+  const draft = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "order.get",
+    { order_id: draftId },
+    { registry: queryRegistry, actor: CLERK },
+  );
+  assert.equal(draft.ok, true, JSON.stringify(draft));
+  if (!draft.ok) return;
+  const snapshot = draft.data.result as {
+    status: string;
+    ticket_no: string | null;
+    note: string | null;
+    lines: readonly {
+      garments: readonly {
+        color: string | null;
+        brand: string | null;
+        defects: readonly string[];
+        accessories: readonly string[];
+        note: string | null;
+        addons: readonly { code: string }[];
+      }[];
+    }[];
+    garments: readonly unknown[];
+  };
+  assert.equal(snapshot.status, "draft");
+  assert.equal(snapshot.ticket_no, null);
+  assert.equal(snapshot.note, "晚点回来");
+  assert.deepEqual(snapshot.lines[0]?.garments[0], {
+    color: "黑",
+    brand: "示例牌",
+    defects: ["左袖破损"],
+    accessories: ["腰带"],
+    note: "保持衣架",
+    addons: [],
+  });
+  assert.deepEqual(snapshot.garments, []);
+
+  const opened = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "order.receive",
+    {
+      draft_id: draftId,
+      customer_phone: "13800000112",
+      customer_name: "挂单顾客",
+      note: "晚点回来",
+      lines: [
+        {
+          service_code: "dry",
+          category_code: "coat",
+          qty: 1,
+          garments: snapshot.lines[0]?.garments.map((garment) => ({
+            ...(garment.color === null ? {} : { color: garment.color }),
+            ...(garment.brand === null ? {} : { brand: garment.brand }),
+            defects: garment.defects,
+            accessories: garment.accessories,
+            ...(garment.note === null ? {} : { note: garment.note }),
+            addon_codes: garment.addons.map((addon) => addon.code),
+          })),
+        },
+      ],
+    },
+    { registry, actor: CLERK, chainHooks, pendingStore },
+  );
+  assert.equal(opened.ok, true, JSON.stringify(opened));
+  if (!opened.ok) return;
+  assert.equal((opened.data.result as { order_id: string }).order_id, draftId);
+
+  const formal = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "order.get",
+    { order_id: draftId },
+    { registry: queryRegistry, actor: CLERK },
+  );
+  assert.equal(formal.ok, true, JSON.stringify(formal));
+  if (!formal.ok) return;
+  const formalResult = formal.data.result as {
+    status: string;
+    garments: readonly { defects: readonly string[]; accessories: readonly string[] }[];
+  };
+  assert.equal(formalResult.status, "open");
+  assert.deepEqual(formalResult.garments[0]?.defects, ["左袖破损"]);
+  assert.deepEqual(formalResult.garments[0]?.accessories, ["腰带"]);
 });
 
 test("order.get missing order is RESOURCE_UNAVAILABLE", async () => {

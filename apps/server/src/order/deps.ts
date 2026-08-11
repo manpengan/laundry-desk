@@ -5,12 +5,15 @@
 import type { CustomerStore } from "../customer/types.js";
 import type { CatalogStore } from "../catalog/memory-catalog.js";
 import type { BusinessDayLockPort } from "../workday/business-day-lock.js";
+import type { PricingPolicyStore } from "../pricing/types.js";
 import type { OrderStore } from "./types.js";
 
 export type OrderHandlerDeps = Readonly<{
   store: OrderStore;
   /** Authoritative active price list; received line prices never come from clients. */
   catalog?: CatalogStore;
+  /** Store-scoped urgent/freight/add-on authority shared with pricing.policy.*. */
+  pricing?: PricingPolicyStore;
   /** When set, receive atomically upserts the customer before persisting the order. */
   customer?: CustomerStore;
   now?: () => number;

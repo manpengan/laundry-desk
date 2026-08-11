@@ -7,7 +7,8 @@
 > 执行计划：[ADR-36 Web 产品收口计划](../plans/2026-08-09-adr36-web-product-convergence-plan.md)
 > 环境边界：[ADR-36](../../adr/2026-08-09-adr-36-cloud-test-environment.md)
 > 发布结果：[hk-vps 阶段 1 发布结果](../../operations/2026-08-11-stage1-release-result.md)
-> 当前路线：[ADR-37](../../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)；阶段 1 已关闭，阶段 2 待开始
+> 当前路线：[ADR-37](../../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)；阶段 1 已关闭，阶段 2 实现候选已通过本地 checkpoint，云发布 pending
+> 阶段 2 独立记录：[柜台可信性验收](2026-08-11-stage2-counter-trust-acceptance.md)
 
 ## 1. 记录规则
 

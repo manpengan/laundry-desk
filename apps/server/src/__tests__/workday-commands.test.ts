@@ -464,6 +464,30 @@ test("hold creates a ticketless draft and receive resets its formal created_at",
   assert.equal((await bus.store.listGarments(TENANT.orgId, TENANT.storeId, draftId)).length, 1);
 });
 
+test("receive cannot turn an unknown client-selected draft id into a new order", async () => {
+  const bus = buildBus();
+  const chosenId = randomUUID();
+  const received = await command(bus, "order.receive", {
+    draft_id: chosenId,
+    lines: [{ service_code: "dry", category_code: "coat", qty: 1 }],
+  });
+  assert.equal(received.ok, false, JSON.stringify(received));
+  if (!received.ok) assert.equal(received.error.code, "VALIDATION_FAILED");
+  assert.equal(await bus.store.getOrder(TENANT.orgId, TENANT.storeId, chosenId), null);
+});
+
+test("hold cannot create a new draft under a client-selected replacement id", async () => {
+  const bus = buildBus();
+  const chosenId = randomUUID();
+  const held = await command(bus, "order.hold", {
+    draft_id: chosenId,
+    lines: [{ service_code: "dry", category_code: "coat", qty: 1 }],
+  });
+  assert.equal(held.ok, false, JSON.stringify(held));
+  if (!held.ok) assert.equal(held.error.code, "VALIDATION_FAILED");
+  assert.equal(await bus.store.getOrder(TENANT.orgId, TENANT.storeId, chosenId), null);
+});
+
 test("cancel records append-only reversals instead of deleting the original payment", async () => {
   const bus = buildBus();
   const received = await command(bus, "order.receive", {
