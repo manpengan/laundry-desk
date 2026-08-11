@@ -12,9 +12,9 @@
 ## 1. 为什么单独记录
 
 两阶段发布入口（`pnpm cloud:release:hk`）由 [#156](https://github.com/manpengan/laundry-desk/pull/156)
-建立后，本日首次对真实 hk-vps 执行。首次执行连续暴露五个只有真连主机才会出现的事实：
-前四个是环境事实，均以定点修复收敛；第五个是产品缺陷，尚未修复，见 §5.5。这些根因不体现在
-任何单个 PR 的 diff 里，散落在多个 PR 正文与一次人工诊断中，因此单独归档。
+建立后，本日首次对真实 hk-vps 执行。首次发布连续暴露五个此前未覆盖的事实：
+前四个是环境事实，均以定点修复收敛；第五个后来确认是验收比较的 JSONB 键序误判，见 §5.5。
+这些根因不体现在任何单个 PR 的 diff 里，散落在多个 PR 正文与人工诊断中，因此单独归档。
 
 ## 2. 基线与实际部署
 
@@ -60,9 +60,9 @@
 
 ## 5. 五个真实失败与根因
 
-①–④ 的失败点、诊断与修复口径引自对应 PR 正文；⑤ 来自 2026-08-10 深夜的人工诊断。
-五次失败在管线中逐级加深，属收敛而非反复。前四个是环境事实且均已修复，第五个是尚未修复的
-产品缺陷。
+①–④ 的失败点、诊断与修复口径引自对应 PR 正文；⑤ 的初始现象来自 2026-08-10 深夜的
+人工诊断，最终根因由 2026-08-11 的真实 PostgreSQL 回归确认。五次失败在管线中逐级加深，
+属收敛而非反复；前四个环境事实与第五个验收误判均已完成本地修复。
 
 ### ① staging 可写断言误报 symlink（#158）
 
@@ -104,27 +104,28 @@
 - **教训**：PostgreSQL 的 `inet` 类型转文本自带掩码；网络身份断言应走 `host()`/`inet` 语义比较，
   不做裸字符串相等。
 
-### ⑤ manual_list 在 confirm 重放路径上不幂等（未修复）
+### ⑤ manual_list 重放被 JSONB 键序误判（已修复，待发布复验）
 
 - **失败**：候选 `a832bbd` 的 `finalize` 返回 `CLOUD_RELEASE_REMOTE_API_EVIDENCE_FAILED`。
   绕开两层收敛后取得真实证据：15 条 journey **14 条 PASS**，仅 `reminder_history` FAIL，
   真实码为 `REMINDER_LIST_REPLAY_INVALID`（`machine-json` 把它归一成了 `ACCEPTANCE_FAILED`）。
 - **失败断言**：`adr36-web-reminder-history.mjs` 的
   `requireThat(replayed.stable === verified.stable, "REMINDER_LIST_REPLAY_INVALID")`，
-  其中 `stable = JSON.stringify(result)`，即整个响应信封。
-- **根因判断**：`gatedReplayable` 的两次调用使用**同一个 `idempotencyKey` 与同一个
-  `confirmRef`**，因此「重放逐字节相同」是幂等契约的正确预期，不是断言过严。而
-  `apps/server/src/notification/handlers.ts` 的 `createHandler` 每次执行都
-  `const batchId = randomUUID()` 并 `appendManualList` 写入新行。重放结果通过了全部结构
-  校验、只有序列化不同，说明命令被**重新执行**而不是返回存储结果，即重放会产生重复批次。
-  通用 PG 幂等 store 已接线（`createPgIdempotencyStore`），所以缺陷在 confirm 与幂等层的
-  交互，不是未接线。
-- **未确认项**：具体是哪些字段不同（`batch_id`/`filename` 全变，还是仅 `generated_at`）
-  尚未逐字段取证；`notification_log` 已被 fixture cleanup 清空，无法回溯。修复前应先用
-  一次带对比输出的运行确定字段差异。
-- **不采取的做法**：放宽或删除该断言。这会把真实的数据完整性缺陷掩盖成绿灯。
-- **教训**：命令级幂等必须覆盖 confirm/step-up 的二次提交路径，不能只覆盖直接提交路径；
-  验收侧的「逐字节重放相同」是发现这类缺陷的有效探针，应保留。
+  其中 `stable = JSON.stringify(result)`。
+- **补充取证（2026-08-11）**：按生产接线使用同一个 PG pending store、PG idempotency store、
+  `idempotencyKey`、版本和 `confirmRef` 重放后，首次结果与重放结果深比较完全一致；
+  `batch_id`、`filename`、`generated_at`、CSV、行内容及数组顺序均未变化，数据库也只有一个
+  `notification_log` 批次。唯一差异是首次内存对象与从 `command_idempotency.result_json`
+  (`jsonb`) 读回对象的**键顺序**不同。
+- **根因**：JSON 对象键本来无顺序语义，PostgreSQL `jsonb` 也不保留输入键顺序；裸
+  `JSON.stringify` 却把枚举顺序编码进字符串，因此把正确的持久化重放误判为重新执行。
+- **修复**：复用验收已有的 `stableJson`，递归排序对象键后比较；数组顺序、字段值、CSV 原文
+  和完整结果结构仍逐项受约束。真实 PostgreSQL 回归同时锁定同 key、同 confirmRef 的结果
+  深相等且只写一个批次。
+- **不采取的做法**：不删除重放断言，也不改成只比 `batch_id` 等字段子集；这些做法会掩盖
+  真实结果或数组漂移。
+- **教训**：幂等探针应比较 JSON 语义，而不是依赖对象键的序列化顺序；数据库副作用仍需用
+  独立行数与批次断言证明。
 
 ## 6. 当前状态
 
@@ -151,18 +152,18 @@
 
 ## 7. 接手指引
 
-阶段 1 的唯一阻塞项是 §5.5 的幂等缺陷。建议顺序：
+阶段 1 的唯一阻塞项已定位为 §5.5 的验收误判并完成本地修复，但尚未发布闭环。建议顺序：
 
-1. 先跑 `--action status` 确认 transition 仍是 `awaiting_external_verification`、候选与
-   token 未变；**不要**当成 `phase=stable` 重新开一轮 `prepare`。
-2. 用一次带对比输出的运行确定 `verified.stable` 与 `replayed.stable` 的**逐字段差异**，
-   补齐 §5.5 的未确认项。
-3. 修 `notification.manual_list.create` 在 confirm 重放路径上的幂等性；补真实 PostgreSQL
-   回归，锁定「同 key 同 confirmRef 重放返回存储结果且不新增批次」。
-4. 走 PR、required CI 双绿、合入 `main`。
-5. 用新 `main` SHA 重跑 `finalize`。若因候选 SHA 变化无法复用当前 transition，则先按控制器
-   收束当前 transition，再从 `prepare` 重来。
-6. 关闭阶段 1 时按运维手册另建发布**结果**记录，并在
+1. 先跑 `--action status` 确认 transition 仍是 `awaiting_external_verification`，并核对
+   candidate、expected 与 migration head；token 不由 `status` 回显，须使用 `prepare` 时
+   安全保存的完整 identity，由 `rollback`/`finalize` 做 exact-identity 校验。**不要**把当前
+   transition 当成 `phase=stable` 重新开一轮 `prepare`。
+2. 保留 §5.5 的逐字段与真实 PostgreSQL 取证，不再按“业务重复写入”方向修改 handler。
+3. 走 PR、required CI 双绿、合入 `main`。
+4. 按本次接手时重新核验的 live marker，线上仍是含旧验收脚本的 `a832bbd`，不能用新
+   `main` 直接 finalize；先用原 transition 的完整 identity 受控 rollback，再以新 `main`
+   从 `prepare` 重来。
+5. 关闭阶段 1 时按运维手册另建发布**结果**记录，并在
    [ADR-36 Web 产品收口验收记录](../superpowers/specs/2026-08-09-adr36-web-product-convergence-acceptance.md)
    追加目标 SHA 证据。
 

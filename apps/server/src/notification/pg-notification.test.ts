@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { executeCommand } from "../bus/executor.js";
 import { executeQuery } from "../bus/execute-query.js";
+import { createPgIdempotencyStore } from "../bus/pg-idempotency.js";
 import type { ActorContext } from "../bus/types.js";
 import { createPgPool, resolvePgUrls } from "../db/pg-pool.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
@@ -12,6 +13,7 @@ import type { TenantContext } from "../db/types.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
 import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
+import { createPgPendingActionStore } from "../pending-actions/pg-store.js";
 import { createPgNotificationStore } from "./pg-store.js";
 
 const urls =
@@ -92,7 +94,7 @@ async function seedCandidate(appPool: ReturnType<typeof createPgPool>): Promise<
 }
 
 maybe(
-  "real PG reminder query, R3 confirmation, log and last-contact projection agree",
+  "real PG reminder query, durable R3 replay and exactly one notification batch agree",
   async () => {
     assert.ok(urls);
     const adminPool = createPgPool({ connectionString: urls.admin });
@@ -100,9 +102,15 @@ maybe(
     try {
       await seedPgTestIdentityFixture(adminPool);
       const fixture = await seedCandidate(appPool);
-      const { registry, queryRegistry, chainHooks } = createRegisteredM1Bus({
-        notification: Object.freeze({ store: createPgNotificationStore(), now: () => NOW }),
-      });
+      const pendingStore = createPgPendingActionStore(appPool);
+      const idempotencyStore = createPgIdempotencyStore(appPool);
+      const idempotencyKey = randomUUID();
+      const { registry, queryRegistry, chainHooks } = createRegisteredM1Bus(
+        {
+          notification: Object.freeze({ store: createPgNotificationStore(), now: () => NOW }),
+        },
+        pendingStore,
+      );
       const input = Object.freeze({
         min_age_days: 180,
         unpaid_only: true,
@@ -144,6 +152,10 @@ maybe(
           registry,
           actor: ACTOR,
           chainHooks,
+          pendingStore,
+          idempotencyStore,
+          idempotencyKey,
+          version: "0.1.0",
         }),
       );
       assert.equal(gated.ok, false, JSON.stringify(gated));
@@ -159,22 +171,55 @@ maybe(
             registry,
             actor: ACTOR,
             chainHooks,
+            pendingStore,
+            idempotencyStore,
+            idempotencyKey,
+            version: "0.1.0",
             confirmRef: detail.confirm_ref,
           },
         ),
       );
       assert.equal(created.ok, true, JSON.stringify(created));
-      if (created.ok) {
-        const exported = created.data.result as { status: string; csv: string };
-        assert.equal(exported.status, "list_generated");
-        assert.match(exported.csv, new RegExp(fixture.phone, "u"));
-        assert.match(exported.csv, new RegExp(fixture.ticket, "u"));
-      }
+      if (!created.ok) return;
+      const exported = created.data.result as { status: string; csv: string; batch_id: string };
+      assert.equal(exported.status, "list_generated");
+      assert.match(exported.csv, new RegExp(fixture.phone, "u"));
+      assert.match(exported.csv, new RegExp(fixture.ticket, "u"));
+
+      const replayed = await withPoolClient(appPool, (sql) =>
+        executeCommand(
+          sql,
+          TENANT,
+          "notification.manual_list.create",
+          {},
+          {
+            registry,
+            actor: ACTOR,
+            chainHooks,
+            pendingStore,
+            idempotencyStore,
+            idempotencyKey,
+            version: "0.1.0",
+            confirmRef: detail.confirm_ref,
+          },
+        ),
+      );
+      assert.deepEqual(replayed, created);
 
       const evidence = await withPoolClient(appPool, (sql) =>
         withTenantTransaction(sql, TENANT, (tx) =>
-          tx.query<{ status: string; channel: string; cost_cents: number }>(
-            `SELECT status, channel, cost_cents
+          tx.query<{
+            status: string;
+            channel: string;
+            cost_cents: number;
+            batch_id: string;
+            row_count: number;
+          }>(
+            `SELECT MIN(status) AS status,
+                    MIN(channel) AS channel,
+                    MIN(cost_cents) AS cost_cents,
+                    MIN(batch_id::text) AS batch_id,
+                    COUNT(*)::integer AS row_count
              FROM notification_log
             WHERE org_id = $1::uuid AND store_id = $2::uuid AND order_id = $3::uuid`,
             [TENANT.orgId, TENANT.storeId, fixture.orderId],
@@ -185,6 +230,8 @@ maybe(
         status: "list_generated",
         channel: "manual",
         cost_cents: 0,
+        batch_id: exported.batch_id,
+        row_count: 1,
       });
     } finally {
       await adminPool.end();

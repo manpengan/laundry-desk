@@ -236,6 +236,16 @@ function manualResult(candidates, ageDays) {
   });
 }
 
+function reorderObjectKeys(value) {
+  if (Array.isArray(value)) return value.map(reorderObjectKeys);
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .reverse()
+      .map(([key, entry]) => [key, reorderObjectKeys(entry)]),
+  );
+}
+
 function reminderApi(artifacts, options = {}) {
   const calls = [];
   return Object.freeze({
@@ -280,7 +290,8 @@ function reminderApi(artifacts, options = {}) {
         options.badHash === args.min_age_days
           ? { ...result, content_sha256: "0".repeat(64) }
           : result;
-      return Object.freeze({ result: returned, replay: async () => returned });
+      const replayed = options.reorderReplay === true ? reorderObjectKeys(returned) : returned;
+      return Object.freeze({ result: returned, replay: async () => replayed });
     },
   });
 }
@@ -290,7 +301,7 @@ test("history journey proves 30/90/180 tiers before audited list and raw CSV val
   const controller = await fixture(calls);
   const proof = await controller.prepare();
   const artifacts = buildReminderFixtureArtifacts({ runId: RUN.runId, now: NOW, session: SESSION });
-  const api = reminderApi(artifacts);
+  const api = reminderApi(artifacts, { reorderReplay: true });
   const evidence = await reminderHistoryJourney(api, { session: SESSION, runId: RUN.runId }, proof);
   assert.deepEqual(
     evidence.batches.map((batch) => [batch.ageDays, batch.orderCount]),
