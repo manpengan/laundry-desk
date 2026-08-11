@@ -5,9 +5,10 @@
 - 计划：[Cloud Web-first 1–4 交付计划](../superpowers/plans/2026-08-10-post-adr36-delivery-plan.md)
 - 操作流程：[hk-vps 云测试环境运维手册](2026-08-09-hk-vps-cloud-test.md)
 
-> **本文是尝试记录，不是发布证据。** 阶段 1 **未关闭**：`prepare` 已把候选代码与 schema
-> 切换上线，但 `finalize` 的外部验证未通过，transition 停在 `awaiting_external_verification`
-> 且 `outcome=null`。发布**结果**证据必须在阶段 1 真正关闭时按运维手册另行记录。
+> **本文是 2026-08-10 的历史尝试记录，不是当前发布证据。** 阶段 1 已于 2026-08-11
+> 以 `7989206b3e9748b2a607687466ef2e0775ad528e` 完成 `prepare → finalize` 并关闭；权威结果见
+> [阶段 1 发布结果](2026-08-11-stage1-release-result.md)。下文的部署值、transition 与接手步骤
+> 均描述当时快照，不得当作当前线上状态或操作指引。
 
 ## 1. 为什么单独记录
 
@@ -104,7 +105,7 @@
 - **教训**：PostgreSQL 的 `inet` 类型转文本自带掩码；网络身份断言应走 `host()`/`inet` 语义比较，
   不做裸字符串相等。
 
-### ⑤ manual_list 重放被 JSONB 键序误判（已修复，待发布复验）
+### ⑤ manual_list 重放被 JSONB 键序误判（已修复并发布复验）
 
 - **失败**：候选 `a832bbd` 的 `finalize` 返回 `CLOUD_RELEASE_REMOTE_API_EVIDENCE_FAILED`。
   绕开两层收敛后取得真实证据：15 条 journey **14 条 PASS**，仅 `reminder_history` FAIL，
@@ -127,7 +128,10 @@
 - **教训**：幂等探针应比较 JSON 语义，而不是依赖对象键的序列化顺序；数据库副作用仍需用
   独立行数与批次断言证明。
 
-## 6. 当前状态
+修复由 [#164](https://github.com/manpengan/laundry-desk/pull/164) 合入；最终候选的 API
+acceptance 已以同一 release identity 取得 15/15 PASS，见发布结果记录。
+
+## 6. 当时状态（历史快照）
 
 全部为 2026-08-10 23:2x–23:30 的**直接实测**（本机 HTTPS 只读请求、pinned key-only SSH、本地 Git）：
 
@@ -150,22 +154,21 @@
 **这是一个受控的待验证态，不是半损状态**：新代码与新 schema 已在服务真实请求，回滚控制器、
 回滚树与迁移前恢复点均在位，三站健康。缺的是把 transition 提交所需的外部验证证据。
 
-## 7. 接手指引
+## 7. 后续闭环轨迹
 
-阶段 1 的唯一阻塞项已定位为 §5.5 的验收误判并完成本地修复，但尚未发布闭环。建议顺序：
+2026-08-11 已按失败关闭纪律完成以下顺序；本节不再是待执行指引：
 
-1. 先跑 `--action status` 确认 transition 仍是 `awaiting_external_verification`，并核对
-   candidate、expected 与 migration head；token 不由 `status` 回显，须使用 `prepare` 时
-   安全保存的完整 identity，由 `rollback`/`finalize` 做 exact-identity 校验。**不要**把当前
-   transition 当成 `phase=stable` 重新开一轮 `prepare`。
-2. 保留 §5.5 的逐字段与真实 PostgreSQL 取证，不再按“业务重复写入”方向修改 handler。
-3. 走 PR、required CI 双绿、合入 `main`。
-4. 按本次接手时重新核验的 live marker，线上仍是含旧验收脚本的 `a832bbd`，不能用新
-   `main` 直接 finalize；先用原 transition 的完整 identity 受控 rollback，再以新 `main`
-   从 `prepare` 重来。
-5. 关闭阶段 1 时按运维手册另建发布**结果**记录，并在
-   [ADR-36 Web 产品收口验收记录](../superpowers/specs/2026-08-09-adr36-web-product-convergence-acceptance.md)
-   追加目标 SHA 证据。
+1. 使用原 transition 的完整 identity 受控 rollback，回到 `phase=stable` 与 live marker
+   `ae9808ce1f3dc61535dbcc1cb89e618f0350ecf6`。
+2. [#164](https://github.com/manpengan/laundry-desk/pull/164) 合入 JSONB 键序误判修复；
+   [#165](https://github.com/manpengan/laundry-desk/pull/165) 修正空价目与当前 `orders → 欠款`
+   路由的 Cloud Chromium 读面断言。
+3. 两个 PR 及最终 merge SHA 的 required CI 依次通过；最终候选为
+   `7989206b3e9748b2a607687466ef2e0775ad528e`。
+4. 以旧 marker 作为 `expected-current-sha` 重新执行 `prepare → finalize`，取得 committed、
+   authoritative 的 API/Browser evidence，并将 transition 归档回 stable。
+5. 最终身份、run-id、服务/schema/公网审计见
+   [阶段 1 发布结果](2026-08-11-stage1-release-result.md)。
 
 纪律不变：只修本次真实失败的根因，不顺手加固，不放宽 marker、schema、health、清理或安全
 断言，**尤其不得放宽 `REMINDER_LIST_REPLAY_INVALID` 断言**。
@@ -179,12 +182,14 @@
 - 代码切换与 marker 持久化、回滚树与恢复点建立
 - 远端 API acceptance 的 14/15 条业务纵向
 
-本轮**从未执行过**，首次执行仍可能暴露同类事实：
+截至本次 2026-08-10 快照**尚未执行过**：
 
 - 本地公网 Chromium `core_ui_subset` 只读子集（在 API 证据之后，未到达）
 - transition 的最终提交与 `outcome` 落定
 
-## 9. 已知遗留
+两项均已在 2026-08-11 的最终候选上执行并通过；当前证据见发布结果记录。
+
+## 9. 当时已知遗留
 
 - `/opt/laundry-desk.failed-1a588e791d269cc1153b243776b56f137b130b45`：Codex 上一轮
   （#160 合并点）失败留下的目录，尚未清理。清理前应确认它不被任何 rollback 控制器引用。
