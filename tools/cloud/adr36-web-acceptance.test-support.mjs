@@ -85,6 +85,10 @@ function gate(code, confirmRef) {
   );
 }
 
+function failure(code) {
+  return jsonResponse({ ok: false, error: { code, message: "sensitive response body" } }, 409);
+}
+
 function createFakeCloud(env, fakeOptions = {}) {
   const requests = [];
   const postCommitFailures = [...(fakeOptions.postCommitFailures ?? [])];
@@ -100,6 +104,7 @@ function createFakeCloud(env, fakeOptions = {}) {
   let challengeSequence = 0;
   let pendingSequence = 0;
   let catalog = null;
+  let catalogAudits = Object.freeze([]);
   let bonusRule = null;
   let account = null;
   let financialComplete = false;
@@ -207,8 +212,66 @@ function createFakeCloud(env, fakeOptions = {}) {
   const executeCommand = (name, args) => {
     if (name === "catalog.item.upsert") {
       const created = catalog === null;
-      catalog = { ...args };
-      return success({ code: args.code, created });
+      if (
+        (created && args.expected_version !== undefined && args.expected_version !== 0) ||
+        (!created &&
+          args.expected_version !== undefined &&
+          args.expected_version !== catalog.version)
+      ) {
+        return failure("IDEMPOTENCY_CONFLICT");
+      }
+      const action = created
+        ? "created"
+        : catalog.is_active === false && args.is_active === true
+          ? "reactivated"
+          : catalog.is_active === true && args.is_active === false
+            ? "retired"
+            : "updated";
+      const version = created ? 1 : catalog.version + 1;
+      catalog = {
+        ...args,
+        version,
+        updated_at: 1_700_000_000 + version,
+      };
+      catalogAudits = Object.freeze([
+        {
+          id: `catalog-audit-${catalogAudits.length + 1}`,
+          at_epoch_s: 1_700_000_000 + catalogAudits.length,
+          staff_id: ADMIN_ID,
+          action,
+          codes: [args.code],
+        },
+        ...catalogAudits,
+      ]);
+      return success({ code: args.code, item: catalog, created, action });
+    }
+    if (name === "catalog.items.reorder") {
+      const entry = args.items.find((item) => item.code === catalog?.code);
+      if (
+        catalog?.is_active !== true ||
+        args.items.length !== 1 ||
+        entry?.expected_version !== catalog.version
+      ) {
+        return failure("IDEMPOTENCY_CONFLICT");
+      }
+      const changed = catalog.sort_order !== 0;
+      catalog = {
+        ...catalog,
+        sort_order: 0,
+        version: changed ? catalog.version + 1 : catalog.version,
+      };
+      const action = changed ? "reordered" : "unchanged";
+      catalogAudits = Object.freeze([
+        {
+          id: `catalog-audit-${catalogAudits.length + 1}`,
+          at_epoch_s: 1_700_000_000 + catalogAudits.length,
+          staff_id: ADMIN_ID,
+          action,
+          codes: [catalog.code],
+        },
+        ...catalogAudits,
+      ]);
+      return success({ items: [catalog], action });
     }
     if (name === "customer.upsert") {
       return success({
@@ -354,6 +417,18 @@ function createFakeCloud(env, fakeOptions = {}) {
     if (name === "catalog.items.list") {
       const item = visibleCatalog();
       return success({ items: item === null ? [] : [item], total: item === null ? 0 : 1 });
+    }
+    if (name === "catalog.items.manage.list") {
+      const matches =
+        catalog !== null && (args.query === undefined || catalog.code.includes(args.query));
+      return success({ items: matches ? [catalog] : [], total: matches ? 1 : 0 });
+    }
+    if (name === "catalog.audit.list") {
+      return success({
+        items: catalogAudits
+          .filter((item) => args.code === undefined || item.codes.includes(args.code))
+          .slice(0, args.limit),
+      });
     }
     if (name === "customer.search") return success({ customers: [] });
     if (name === "member.bonus_rules.list")

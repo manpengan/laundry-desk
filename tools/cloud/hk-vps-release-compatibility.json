@@ -12,6 +12,12 @@
       "to_migration": "0047_cloud_counter_trust.sql",
       "old_code_compatible": true,
       "decision": "ADR-38"
+    },
+    {
+      "from_migration": "0047_cloud_counter_trust.sql",
+      "to_migration": "0048_catalog_governance.sql",
+      "old_code_compatible": true,
+      "decision": "ADR-39"
     }
   ]
 }

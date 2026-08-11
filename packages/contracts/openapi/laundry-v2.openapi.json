@@ -8805,6 +8805,11 @@
             "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$",
             "type": "string"
           },
+          "expected_version": {
+            "maximum": 2147483646,
+            "minimum": 0,
+            "type": "integer"
+          },
           "is_active": {
             "type": "boolean"
           },
@@ -8827,7 +8832,7 @@
             "type": "integer"
           },
           "unit_price_cents": {
-            "maximum": 9007199254740991,
+            "maximum": 2147483647,
             "minimum": 0,
             "type": "integer"
           }
@@ -8839,6 +8844,38 @@
           "category_code",
           "unit_price_cents",
           "is_active"
+        ],
+        "type": "object"
+      },
+      "input.command.catalog.items.reorder": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$",
+                  "type": "string"
+                },
+                "expected_version": {
+                  "exclusiveMinimum": 0,
+                  "maximum": 2147483646,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "code",
+                "expected_version"
+              ],
+              "type": "object"
+            },
+            "maxItems": 200,
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -10467,6 +10504,36 @@
         },
         "type": "object"
       },
+      "input.query.catalog.audit.list": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$",
+            "type": "string"
+          },
+          "from_epoch_s": {
+            "maximum": 253402300799,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "limit": {
+            "exclusiveMinimum": 0,
+            "maximum": 200,
+            "type": "integer"
+          },
+          "to_epoch_s": {
+            "maximum": 253402300799,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "from_epoch_s",
+          "to_epoch_s",
+          "limit"
+        ],
+        "type": "object"
+      },
       "input.query.catalog.items.get": {
         "additionalProperties": false,
         "properties": {
@@ -10481,6 +10548,24 @@
         "type": "object"
       },
       "input.query.catalog.items.list": {
+        "additionalProperties": false,
+        "properties": {
+          "limit": {
+            "exclusiveMinimum": 0,
+            "maximum": 200,
+            "type": "integer"
+          },
+          "query": {
+            "maxLength": 64,
+            "type": "string"
+          }
+        },
+        "required": [
+          "limit"
+        ],
+        "type": "object"
+      },
+      "input.query.catalog.items.manage.list": {
         "additionalProperties": false,
         "properties": {
           "limit": {
@@ -11561,7 +11646,7 @@
     },
     "/v1/commands/catalog.item.upsert": {
       "post": {
-        "description": "Not exposed to AI. Counter price maintenance is operator-only under settings_admin. Stable command name: `catalog.item.upsert` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Not exposed to AI. Counter price maintenance is operator-only under settings_admin. Stable command name: `catalog.item.upsert` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "command_catalog_item_upsert",
         "requestBody": {
           "content": {
@@ -11608,7 +11693,59 @@
         "x-laundry-kind": "command",
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R2",
-        "x-laundry-version": "0.2.0"
+        "x-laundry-version": "0.3.0"
+      }
+    },
+    "/v1/commands/catalog.items.reorder": {
+      "post": {
+        "description": "Not exposed to AI. Operator-only catalog governance command. Stable command name: `catalog.items.reorder` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_catalog_items_reorder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.catalog.items.reorder"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Atomically reorder the authenticated store's complete active catalog.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "0.1.0"
       }
     },
     "/v1/commands/customer.anonymize": {
@@ -13951,6 +14088,58 @@
         "x-laundry-version": "0.1.0"
       }
     },
+    "/v1/queries/catalog.audit.list": {
+      "post": {
+        "description": "Not exposed to AI. Does not return raw before/after JSON or credentials. Stable query name: `catalog.audit.list` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_catalog_audit_list",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.catalog.audit.list"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List a safe, catalog-only audit projection for the authenticated store.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "0.1.0"
+      }
+    },
     "/v1/queries/catalog.items.get": {
       "post": {
         "description": "Lookup a single catalog item by code. Return empty when not found. Stable query name: `catalog.items.get` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -14053,6 +14242,58 @@
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R0",
         "x-laundry-version": "0.2.0"
+      }
+    },
+    "/v1/queries/catalog.items.manage.list": {
+      "post": {
+        "description": "Not exposed to AI. Store catalog administration read model. Stable query name: `catalog.items.manage.list` @ 0.1.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_catalog_items_manage_list",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.catalog.items.manage.list"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List active and retired catalog rows with sort and optimistic versions.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R1",
+        "x-laundry-version": "0.1.0"
       }
     },
     "/v1/queries/customer.duplicates": {

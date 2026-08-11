@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0047", () => {
+  it("ships formal SQL migrations ordered 0001 → 0048", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -59,6 +59,7 @@ describe("packages/db migration file inventory", () => {
       "0045_store_commissioning_staff_credentials.sql",
       "0046_print_job_request_idempotency.sql",
       "0047_cloud_counter_trust.sql",
+      "0048_catalog_governance.sql",
     ]);
   });
 
@@ -118,6 +119,7 @@ describe("packages/db migration file inventory", () => {
       "0045",
       "0046",
       "0047",
+      "0048",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -671,6 +673,23 @@ describe("packages/db migration file inventory", () => {
       /ADD COLUMN IF NOT EXISTS accessories jsonb NOT NULL DEFAULT '\[\]'::jsonb/iu,
     );
     expect(sql).not.toMatch(/DROP\s+(?:TABLE|COLUMN)|TRUNCATE/iu);
+  });
+
+  it("adds trigger-owned optimistic catalog versions without destructive DDL", () => {
+    const sql = readFileSync(join(migrationsDir, "0048_catalog_governance.sql"), "utf8");
+
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1/iu);
+    expect(sql).toMatch(/CHECK \(version >= 1\)/iu);
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.catalog_items_bump_version\(\)/iu);
+    expect(sql).toMatch(/NEW\.version := OLD\.version \+ 1/iu);
+    expect(sql).toMatch(/BEFORE UPDATE ON public\.catalog_items/iu);
+    expect(sql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.catalog_items_bump_version\(\) FROM PUBLIC/iu,
+    );
+    expect(sql).toMatch(
+      /REVOKE DELETE, TRUNCATE ON TABLE public\.catalog_items FROM laundry_app/iu,
+    );
+    expect(sql).not.toMatch(/DROP\s+(?:TABLE|COLUMN)|DROP\s+CONSTRAINT|(?:^|\n)\s*TRUNCATE\b/iu);
   });
 
   it("adds a durable monotonic sequence for deterministic payment ledger order", () => {

@@ -6,6 +6,8 @@
 
 import type { CatalogItem } from "@laundry/domain";
 
+import type { CatalogStore } from "./types.js";
+
 /** Seed codes + integer fen prices for local/demo counter. */
 export const DEMO_CATALOG_ITEMS: readonly CatalogItem[] = Object.freeze([
   Object.freeze({
@@ -58,29 +60,6 @@ export const DEMO_CATALOG_ITEMS: readonly CatalogItem[] = Object.freeze([
   }),
 ]);
 
-/** ADR-15 §1: soft retire via is_active; codes are never deleted. */
-export type CatalogUpsertInput = Readonly<{
-  code: string;
-  name: string;
-  service_code: string;
-  category_code: string;
-  unit_price_cents: number;
-  mnemonic?: string;
-  is_active: boolean;
-  sort_order?: number;
-}>;
-
-export type CatalogUpsertResult = Readonly<{
-  code: string;
-  /** True when this call inserted a new code rather than updating one. */
-  created: boolean;
-}>;
-
-export type CatalogStore = Readonly<{
-  listAll: () => Promise<readonly CatalogItem[]>;
-  upsert?: (input: CatalogUpsertInput) => Promise<CatalogUpsertResult>;
-}>;
-
 /** Closed-over seed list (immutable). */
 export function createMemoryCatalogStore(
   items: readonly CatalogItem[] = DEMO_CATALOG_ITEMS,
@@ -92,3 +71,16 @@ export function createMemoryCatalogStore(
     },
   });
 }
+
+export type {
+  CatalogAuditAction,
+  CatalogAuditFilter,
+  CatalogAuditItem,
+  CatalogManagedItem,
+  CatalogManagementList,
+  CatalogReorderChange,
+  CatalogReorderEntry,
+  CatalogStore,
+  CatalogUpsertChange,
+  CatalogUpsertInput,
+} from "./types.js";

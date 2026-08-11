@@ -4,10 +4,11 @@
  */
 
 import { Button, Input, MoneyText, useToast } from "@laundry/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import {
+  buildCatalogReorderBody,
   buildCatalogUpsertBody,
   catalogFormFromRow,
   EMPTY_CATALOG_FORM,
@@ -29,6 +30,7 @@ export function CatalogMaintenancePanel({
   const [form, setForm] = useState<CatalogFormState>(EMPTY_CATALOG_FORM);
   const [items, setItems] = useState<readonly CatalogFormRow[]>([]);
   const [busy, setBusy] = useState(false);
+  const loadGeneration = useRef(0);
 
   const patch = useCallback((next: Partial<CatalogFormState>) => {
     setForm((current) => Object.freeze({ ...current, ...next }));
@@ -36,14 +38,25 @@ export function CatalogMaintenancePanel({
 
   const reload = useCallback(async () => {
     if (queryClient === undefined) return;
-    const res = await queryClient.execute<unknown>("catalog.items.list", { limit: 200 });
+    const generation = loadGeneration.current + 1;
+    loadGeneration.current = generation;
+    const res = await queryClient.execute<unknown>("catalog.items.manage.list", { limit: 200 });
+    if (loadGeneration.current !== generation) return;
     // The query bus wraps handler output in `result`; readCatalogRows also keeps
     // a malformed payload from ever reaching render as a non-array.
-    setItems(res.ok ? readCatalogRows(res.data) : []);
-  }, [queryClient]);
+    if (!res.ok) {
+      toast.push(res.error.message ?? res.error.code, "error");
+      setItems([]);
+      return;
+    }
+    setItems(readCatalogRows(res.data));
+  }, [queryClient, toast]);
 
   useEffect(() => {
     void reload();
+    return () => {
+      loadGeneration.current += 1;
+    };
   }, [reload]);
 
   const onSubmit = useCallback(
@@ -58,7 +71,13 @@ export function CatalogMaintenancePanel({
       try {
         const res = await commandClient.execute("catalog.item.upsert", built.body);
         if (!res.ok) {
-          toast.push(res.error.message ?? res.error.code, "error");
+          if (res.error.code === "IDEMPOTENCY_CONFLICT") {
+            setForm(EMPTY_CATALOG_FORM);
+            toast.push("价目已被其他会话修改，列表已刷新，请重新编辑", "error");
+            await reload();
+          } else {
+            toast.push(res.error.message ?? res.error.code, "error");
+          }
           return;
         }
         toast.push(candidate.is_active ? "价目已保存" : "价目已停用", "success");
@@ -71,15 +90,70 @@ export function CatalogMaintenancePanel({
     [commandClient, form, reload, toast],
   );
 
+  const onMove = useCallback(
+    async (code: string, offset: -1 | 1) => {
+      const active = items
+        .filter((item) => item.is_active)
+        .sort(
+          (left, right) =>
+            left.sort_order - right.sort_order || left.code.localeCompare(right.code),
+        );
+      const index = active.findIndex((item) => item.code === code);
+      const target = index + offset;
+      if (index < 0 || target < 0 || target >= active.length) return;
+      const reordered = active.map((item, itemIndex) =>
+        itemIndex === index ? active[target]! : itemIndex === target ? active[index]! : item,
+      );
+      setBusy(true);
+      try {
+        const res = await commandClient.execute(
+          "catalog.items.reorder",
+          buildCatalogReorderBody(reordered),
+        );
+        if (!res.ok) {
+          if (res.error.code === "IDEMPOTENCY_CONFLICT") {
+            toast.push("价目顺序已被其他会话修改，列表已刷新，请重试", "error");
+            await reload();
+          } else {
+            toast.push(res.error.message ?? res.error.code, "error");
+          }
+          return;
+        }
+        toast.push("价目顺序已保存", "success");
+        await reload();
+      } finally {
+        setBusy(false);
+      }
+    },
+    [commandClient, items, reload, toast],
+  );
+
+  const activeOrder = items
+    .filter((item) => item.is_active)
+    .sort(
+      (left, right) => left.sort_order - right.sort_order || left.code.localeCompare(right.code),
+    );
+  const activeIndex = new Map(activeOrder.map((item, index) => [item.code, index]));
+
   return (
     <section
       className="ld-settings-catalog lg-card"
       aria-label="价目维护"
       data-testid="catalog-admin"
     >
-      <h2 className="ld-shell-main__title">价目维护</h2>
+      <div className="ld-settings-catalog__heading">
+        <h2 className="ld-shell-main__title">价目维护</h2>
+        <Button
+          variant="ghost"
+          type="button"
+          onClick={() => void reload()}
+          disabled={busy || queryClient === undefined}
+        >
+          刷新列表
+        </Button>
+      </div>
       <p className="ld-shell-main__hint">
-        开单按服务 + 品类在在架价目中取价。价目为空时无法开单。停用只下架，不删除历史编码。
+        开单按服务 + 品类从在架价目中取价。停用只下架，不删除历史编码；版本冲突会要求刷新。
       </p>
 
       <div className="ld-settings-form">
@@ -89,7 +163,7 @@ export function CatalogMaintenancePanel({
           value={form.code}
           onChange={(event) => patch({ code: event.target.value })}
           hint="稳定唯一，如 wash_shirt"
-          disabled={busy}
+          disabled={busy || form.expected_version > 0}
         />
         <Input
           name="catalog-name"
@@ -140,6 +214,14 @@ export function CatalogMaintenancePanel({
           >
             {busy ? "提交中…" : "保存价目"}
           </Button>
+          <Button
+            variant="ghost"
+            type="button"
+            onClick={() => setForm(EMPTY_CATALOG_FORM)}
+            disabled={busy}
+          >
+            新建 / 清空
+          </Button>
         </div>
       </div>
 
@@ -149,6 +231,29 @@ export function CatalogMaintenancePanel({
             <span className="ld-settings-catalog__name">{item.name}</span>
             <span className="ld-settings-catalog__code">{item.code}</span>
             <MoneyText fen={item.unit_price_cents} size="sm" />
+            <span className="ld-settings-catalog__meta">
+              {item.is_active ? `在架 · 顺序 ${item.sort_order + 1}` : "已停用"} · v{item.version}
+            </span>
+            <Button
+              variant="ghost"
+              type="button"
+              disabled={busy || !item.is_active || activeIndex.get(item.code) === 0}
+              onClick={() => void onMove(item.code, -1)}
+              aria-label={`上移 ${item.name}`}
+            >
+              ↑
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              disabled={
+                busy || !item.is_active || activeIndex.get(item.code) === activeOrder.length - 1
+              }
+              onClick={() => void onMove(item.code, 1)}
+              aria-label={`下移 ${item.name}`}
+            >
+              ↓
+            </Button>
             <Button
               variant="ghost"
               type="button"
@@ -161,9 +266,11 @@ export function CatalogMaintenancePanel({
               variant="ghost"
               type="button"
               disabled={busy}
-              onClick={() => void onSubmit({ ...catalogFormFromRow(item), is_active: false })}
+              onClick={() =>
+                void onSubmit({ ...catalogFormFromRow(item), is_active: !item.is_active })
+              }
             >
-              停用
+              {item.is_active ? "停用" : "启用"}
             </Button>
           </li>
         ))}

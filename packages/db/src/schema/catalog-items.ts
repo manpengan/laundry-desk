@@ -31,6 +31,7 @@ export const catalogItems = pgTable(
     mnemonic: text("mnemonic"),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
+    version: integer("version").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull(),
   },

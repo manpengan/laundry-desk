@@ -6,6 +6,7 @@ import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { OfflinePort } from "../host/offline-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
 import { CatalogMaintenancePanel } from "./CatalogMaintenancePanel.js";
+import { CatalogAuditPanel } from "./CatalogAuditPanel.js";
 import { MemberBonusRulesPanel } from "./MemberBonusRulesPanel.js";
 import { OfflineConflictPanel } from "./OfflineConflictPanel.js";
 import { PricingSettingsPanel } from "./PricingSettingsPanel.js";
@@ -54,6 +55,8 @@ export function SettingsPage({
         commandClient={commandClient}
         {...(queryClient !== undefined ? { queryClient } : {})}
       />
+
+      {queryClient === undefined ? null : <CatalogAuditPanel queryClient={queryClient} />}
 
       {queryClient === undefined || session.features.member_enabled !== true ? null : (
         <MemberBonusRulesPanel commandClient={commandClient} queryClient={queryClient} />

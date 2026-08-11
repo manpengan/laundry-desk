@@ -140,7 +140,7 @@ export function registerM1Handlers(
   // ADR-15: price maintenance is a command; the query side stays read-only.
   if (deps.catalog !== undefined) {
     registerCatalogCommandHandlers(registry, deps.catalog);
-    registered.push("catalog.item.upsert");
+    registered.push("catalog.item.upsert", "catalog.items.reorder");
   }
 
   if (deps.order !== undefined) {
@@ -273,7 +273,12 @@ export function registerM1QueryHandlers(
 
   if (deps.catalog !== undefined) {
     registerCatalogQueryHandlers(queryRegistry, deps.catalog);
-    names.push("catalog.items.list", "catalog.items.get");
+    names.push(
+      "catalog.items.list",
+      "catalog.items.get",
+      "catalog.items.manage.list",
+      "catalog.audit.list",
+    );
   }
 
   if (deps.order !== undefined) {

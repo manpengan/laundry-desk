@@ -17,6 +17,8 @@ const valid: CatalogFormState = Object.freeze({
   price_text: " 1500 ",
   mnemonic: " xs ",
   is_active: true,
+  sort_order: null,
+  expected_version: 0,
 });
 
 test("buildCatalogUpsertBody trims, lowercases taxonomy and keeps integer fen", () => {
@@ -31,6 +33,7 @@ test("buildCatalogUpsertBody trims, lowercases taxonomy and keeps integer fen", 
     unit_price_cents: 1500,
     mnemonic: "xs",
     is_active: true,
+    expected_version: 0,
   });
 });
 
@@ -41,8 +44,8 @@ test("buildCatalogUpsertBody omits an empty mnemonic rather than sending an empt
   assert.equal("mnemonic" in built.body, false);
 });
 
-test("buildCatalogUpsertBody rejects float, negative and non-numeric prices", () => {
-  for (const priceText of ["15.5", "-1", "", "1e3", "１５００"]) {
+test("buildCatalogUpsertBody rejects out-of-range, float, negative and non-numeric prices", () => {
+  for (const priceText of ["2147483648", "15.5", "-1", "", "1e3", "１５００"]) {
     const built = buildCatalogUpsertBody({ ...valid, price_text: priceText });
     assert.equal(built.ok, false, `price ${priceText} must be rejected`);
   }
@@ -63,9 +66,15 @@ test("catalogFormFromRow round-trips an existing row back into an editable form"
     service_code: "dry",
     category_code: "coat",
     unit_price_cents: 4800,
+    is_active: false,
+    sort_order: 3,
+    version: 7,
+    updated_at: 1_700_000_000,
   });
   assert.equal(form.price_text, "4800");
   assert.equal(form.mnemonic, "");
+  assert.equal(form.is_active, false);
+  assert.equal(form.expected_version, 7);
   const built = buildCatalogUpsertBody(form);
   assert.equal(built.ok, true);
   if (!built.ok) return;
@@ -79,6 +88,10 @@ test("readCatalogRows unwraps result, drops malformed rows and never yields a no
     service_code: "wash",
     category_code: "shirt",
     unit_price_cents: 1500,
+    is_active: true,
+    sort_order: 0,
+    version: 1,
+    updated_at: 1_700_000_000,
   };
   assert.deepEqual(readCatalogRows({ result: { items: [row], total: 1 } }), [row]);
   assert.deepEqual(readCatalogRows({ items: [row] }), [row]);

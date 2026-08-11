@@ -1,6 +1,8 @@
 import type { CommandDefinition, QueryDefinition } from "../registry/definitions.js";
 import { IDENTITY_COMMANDS, IDENTITY_COMMAND_NAMES } from "./identity.js";
 import {
+  CATALOG_ADMIN_QUERY_DEFINITIONS,
+  CATALOG_ADMIN_QUERY_NAMES,
   CATALOG_COMMAND_DEFINITIONS,
   CATALOG_COMMAND_NAMES,
   CATALOG_SKELETON_DEFINITIONS,
@@ -149,6 +151,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "photo.register",
   "photo.delete",
   "catalog.item.upsert",
+  "catalog.items.reorder",
   "garment.transition",
   "garment.bulk_transition",
   "garment.rack.assign",
@@ -185,19 +188,24 @@ export const M2_ORDER_QUERY_NAMES = ORDER_QUERY_NAMES;
  */
 export const M2_CATALOG_DEFINITIONS: readonly QueryDefinition<z.ZodObject>[] = Object.freeze([
   ...CATALOG_SKELETON_DEFINITIONS,
+  ...CATALOG_ADMIN_QUERY_DEFINITIONS,
 ]);
 
 /** ADR-15: the single unfrozen catalog write command. Never in the AI projection. */
 export const M2_CATALOG_COMMAND_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] =
   Object.freeze([...CATALOG_COMMAND_DEFINITIONS]);
 
-export const M2_CATALOG_QUERY_NAMES = CATALOG_SKELETON_QUERY_NAMES;
+export const M2_CATALOG_QUERY_NAMES = Object.freeze([
+  ...CATALOG_SKELETON_QUERY_NAMES,
+  ...CATALOG_ADMIN_QUERY_NAMES,
+] as const);
 
 /** Frozen v0.2 M2 contract surface consumed by server, Web and Edge. */
 export const M2_CONTRACT_COMMAND_NAMES = M2_SKELETON_COMMAND_NAMES;
 
 export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   ...CATALOG_SKELETON_QUERY_NAMES,
+  ...CATALOG_ADMIN_QUERY_NAMES,
   ...M2_CUSTOMER_QUERY_NAMES,
   ...ORDER_QUERY_NAMES,
   ...PRICING_QUERY_NAMES,
@@ -223,6 +231,7 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
 )[] = Object.freeze([
   ...M2_SKELETON_DEFINITIONS,
   ...CATALOG_SKELETON_DEFINITIONS,
+  ...CATALOG_ADMIN_QUERY_DEFINITIONS,
   ...M2_CUSTOMER_QUERY_DEFINITIONS,
   ...ORDER_QUERIES,
   ...PRICING_QUERIES,

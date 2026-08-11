@@ -128,18 +128,7 @@ export {
   M3_PHOTO_QUERY_DEFINITIONS,
   M3_PHOTO_QUERY_NAMES,
 } from "./catalog.js";
-export {
-  CATALOG_COMMAND_DEFINITIONS,
-  CATALOG_COMMAND_NAMES,
-  CATALOG_SKELETON_DEFINITIONS,
-  CATALOG_SKELETON_QUERY_NAMES,
-  CatalogItemUpsertInputSchema,
-  CatalogItemsGetInputSchema,
-  CatalogItemsListInputSchema,
-  catalogItemUpsertCommand,
-  catalogItemsGetQuery,
-  catalogItemsListQuery,
-} from "./catalog-items.js";
+export * from "./catalog-items.js";
 export {
   ORDER_COMMAND_NAMES,
   ORDER_COMMANDS,

@@ -43,6 +43,8 @@ describe("M2 contract surface", () => {
       // ADR-15: deliberate unfreeze so a fresh install can maintain its price
       // list. Further additions still require their own ADR.
       "catalog.item.upsert",
+      // ADR-39: full active-snapshot reorder with optimistic row versions.
+      "catalog.items.reorder",
       "garment.transition",
       "garment.bulk_transition",
       "garment.rack.assign",
@@ -78,6 +80,8 @@ describe("M2 contract surface", () => {
       "notification.manual_list.create",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.audit.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("stats.day.summary");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("photo.list_by_order");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("fulfillment.workbench");
@@ -95,8 +99,8 @@ describe("M2 contract surface", () => {
     // ADR-38: trusted policy read and immutable payment-ledger refund source.
     expect(M2_CONTRACT_QUERY_NAMES).toContain("pricing.policy.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("payment.ledger.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(42);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(27);
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(43);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(29);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
@@ -137,6 +141,12 @@ describe("M2 contract surface", () => {
     );
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "notification.pickup_reminders.list",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "catalog.items.manage.list",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "catalog.audit.list",
     );
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "accounting.report.get",
