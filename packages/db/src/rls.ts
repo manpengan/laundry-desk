@@ -48,7 +48,7 @@ export const M2_ORDER_RLS_TABLES = Object.freeze([
 
 /**
  * M2 catalog tables use store-scope RLS (same predicate as orders / pin_lockouts).
- * Policies live in 0008_catalog_items.sql and 0047_cloud_counter_trust.sql.
+ * Policies live in 0008_catalog_items.sql; 0048 adds optimistic catalog versions.
  */
 export const M2_CATALOG_RLS_TABLES = Object.freeze([
   "catalog_items",

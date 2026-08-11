@@ -224,6 +224,44 @@ export function createMockQueryClient(handler?: QueryPort["execute"]): QueryPort
           }) as T,
         });
       }
+      if (name === "catalog.items.manage.list") {
+        const input = isRecord(body) ? body : {};
+        const query = typeof input.query === "string" ? input.query : "";
+        const limit =
+          typeof input.limit === "number" && Number.isInteger(input.limit) && input.limit > 0
+            ? input.limit
+            : 50;
+        const list = filterDemoCatalog(query, limit);
+        return Object.freeze({
+          ok: true as const,
+          data: Object.freeze({
+            execution: "executed",
+            result: Object.freeze({
+              items: Object.freeze(
+                list.items.map((item, index) =>
+                  Object.freeze({
+                    ...item,
+                    is_active: true,
+                    sort_order: index,
+                    version: 1,
+                    updated_at: 0,
+                  }),
+                ),
+              ),
+              total: list.total,
+            }),
+          }) as T,
+        });
+      }
+      if (name === "catalog.audit.list") {
+        return Object.freeze({
+          ok: true as const,
+          data: Object.freeze({
+            execution: "executed",
+            result: Object.freeze({ items: Object.freeze([]) }),
+          }) as T,
+        });
+      }
       if (name === "order.get") {
         return Object.freeze({
           ok: false as const,

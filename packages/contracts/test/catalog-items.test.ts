@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CATALOG_ADMIN_QUERY_NAMES,
+  CATALOG_AUDIT_MAX_EPOCH_SECONDS,
   CATALOG_COMMAND_NAMES,
   CATALOG_SKELETON_DEFINITIONS,
   CATALOG_SKELETON_QUERY_NAMES,
   M2_READ_ONLY_AI_DEFINITIONS,
+  catalogAuditListQuery,
   catalogItemUpsertCommand,
+  catalogItemsManageListQuery,
+  catalogItemsReorderCommand,
   M1_FIRST_WAVE_DEFINITIONS,
   M2_CATALOG_DEFINITIONS,
   M2_CATALOG_QUERY_NAMES,
@@ -27,8 +32,15 @@ describe("M2 catalog items skeleton queries", () => {
 
   it("exports stable names and M2 catalog alias", () => {
     expect([...CATALOG_SKELETON_QUERY_NAMES]).toEqual(["catalog.items.list", "catalog.items.get"]);
-    expect([...M2_CATALOG_QUERY_NAMES]).toEqual([...CATALOG_SKELETON_QUERY_NAMES]);
-    expect(M2_CATALOG_DEFINITIONS).toHaveLength(2);
+    expect([...CATALOG_ADMIN_QUERY_NAMES]).toEqual([
+      "catalog.items.manage.list",
+      "catalog.audit.list",
+    ]);
+    expect([...M2_CATALOG_QUERY_NAMES]).toEqual([
+      ...CATALOG_SKELETON_QUERY_NAMES,
+      ...CATALOG_ADMIN_QUERY_NAMES,
+    ]);
+    expect(M2_CATALOG_DEFINITIONS).toHaveLength(4);
   });
 
   it("keeps OpenAPI M1 first-wave free of catalog queries", () => {
@@ -65,14 +77,17 @@ describe("M2 catalog items skeleton queries", () => {
   });
 });
 
-describe("ADR-15 catalog maintenance command", () => {
-  it("exposes exactly one idempotent upsert command guarded by settings_admin", () => {
-    expect([...CATALOG_COMMAND_NAMES]).toEqual(["catalog.item.upsert"]);
+describe("ADR-15/39 catalog maintenance commands", () => {
+  it("exposes guarded upsert and atomic reorder commands", () => {
+    expect([...CATALOG_COMMAND_NAMES]).toEqual(["catalog.item.upsert", "catalog.items.reorder"]);
     expect(catalogItemUpsertCommand.kind).toBe("command");
     expect(catalogItemUpsertCommand.risk).toBe("R2");
     expect(catalogItemUpsertCommand.idempotent).toBe(true);
     expect(catalogItemUpsertCommand.offline_mode).toBe("denied");
     expect(catalogItemUpsertCommand.invariants).toContain("rbac.settings_admin");
+    expect(catalogItemUpsertCommand.version).toBe("0.3.0");
+    expect(catalogItemsReorderCommand.invariants).toContain("rbac.settings_admin");
+    expect(catalogItemsReorderCommand.version).toBe("0.1.0");
   });
 
   // ADR-15 §2: the AI projection spreads CATALOG_SKELETON_DEFINITIONS and must
@@ -83,6 +98,8 @@ describe("ADR-15 catalog maintenance command", () => {
     }
     expect(CATALOG_SKELETON_DEFINITIONS).not.toContain(catalogItemUpsertCommand);
     expect(M2_READ_ONLY_AI_DEFINITIONS).not.toContain(catalogItemUpsertCommand);
+    expect(M2_READ_ONLY_AI_DEFINITIONS).not.toContain(catalogItemsManageListQuery);
+    expect(M2_READ_ONLY_AI_DEFINITIONS).not.toContain(catalogAuditListQuery);
   });
 
   it("accepts a valid item and rejects float or negative prices", async () => {
@@ -97,13 +114,48 @@ describe("ADR-15 catalog maintenance command", () => {
     await expect(parseContractInput(catalogItemUpsertCommand, valid)).resolves.toMatchObject({
       code: "wash_shirt",
     });
-    for (const badPrice of [15.5, -1]) {
+    for (const badPrice of [15.5, -1, 2_147_483_648]) {
       await expect(
         parseContractInput(catalogItemUpsertCommand, { ...valid, unit_price_cents: badPrice }),
       ).rejects.toThrow();
     }
     await expect(
       parseContractInput(catalogItemUpsertCommand, { ...valid, code: "bad code!" }),
+    ).rejects.toThrow();
+    await expect(
+      parseContractInput(catalogItemUpsertCommand, { ...valid, expected_version: 2 }),
+    ).resolves.toMatchObject({ expected_version: 2 });
+  });
+
+  it("bounds catalog governance inputs", async () => {
+    await expect(
+      parseContractInput(catalogItemsReorderCommand, {
+        items: [{ code: "wash_shirt", expected_version: 1 }],
+      }),
+    ).resolves.toBeTruthy();
+    await expect(
+      parseContractInput(catalogItemsManageListQuery, { query: "shirt", limit: 200 }),
+    ).resolves.toBeTruthy();
+    await expect(
+      parseContractInput(catalogAuditListQuery, {
+        from_epoch_s: 0,
+        to_epoch_s: 1,
+        limit: 201,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      parseContractInput(catalogAuditListQuery, {
+        from_epoch_s: 0,
+        to_epoch_s: 32 * 24 * 60 * 60,
+        limit: 50,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      parseContractInput(catalogAuditListQuery, {
+        from_epoch_s: CATALOG_AUDIT_MAX_EPOCH_SECONDS + 1,
+        to_epoch_s: CATALOG_AUDIT_MAX_EPOCH_SECONDS + 1,
+        limit: 50,
+      }),
     ).rejects.toThrow();
   });
 });

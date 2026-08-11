@@ -57,11 +57,42 @@ const ACCOUNTING_FIXTURE = Object.freeze({
   bonusRuleId: "77777777-7777-4777-8777-777777777669",
 });
 
+const CATALOG_FIXTURE_CODE_PATTERN = "^e2e_(wash|aux)_";
+
 function adminDatabaseUrl(password) {
   const url = new URL("postgresql://127.0.0.1:8543/laundry_v2");
   url.username = "postgres";
   url.password = password;
   return url.toString();
+}
+
+async function clearCatalogFixtures(client) {
+  await client.query(
+    `DELETE FROM audit_log
+      WHERE org_id = $1::uuid AND store_id = $2::uuid
+        AND command IN ('catalog.item.upsert', 'catalog.items.reorder')
+        AND (
+          entity_id ~ $3
+          OR EXISTS (
+            SELECT 1
+              FROM jsonb_array_elements_text(
+                CASE
+                  WHEN after_json IS JSON
+                    AND jsonb_typeof(after_json::jsonb->'codes') = 'array'
+                    THEN after_json::jsonb->'codes'
+                  ELSE '[]'::jsonb
+                END
+              ) AS audit_code(value)
+             WHERE audit_code.value ~ $3
+          )
+        )`,
+    [ORG_ID, STORE_ID, CATALOG_FIXTURE_CODE_PATTERN],
+  );
+  await client.query(
+    `DELETE FROM catalog_items
+      WHERE org_id = $1::uuid AND store_id = $2::uuid AND code ~ $3`,
+    [ORG_ID, STORE_ID, CATALOG_FIXTURE_CODE_PATTERN],
+  );
 }
 
 async function seedStaff(client, staff) {
@@ -283,6 +314,7 @@ export default async function globalSetup() {
   try {
     await client.query("BEGIN");
     await client.query("SET LOCAL ROLE laundry_owner");
+    await clearCatalogFixtures(client);
     await enableMemberFeature(client);
     for (const staff of FIXTURE_STAFF) {
       await seedStaff(client, staff);

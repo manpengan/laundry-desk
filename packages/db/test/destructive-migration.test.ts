@@ -131,6 +131,7 @@ describe("destructive migration static reject", () => {
       "0045_store_commissioning_staff_credentials.sql",
       "0046_print_job_request_idempotency.sql",
       "0047_cloud_counter_trust.sql",
+      "0048_catalog_governance.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
@@ -186,7 +187,7 @@ describe("destructive migration static reject", () => {
       /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE garments TO laundry_app/iu,
     );
     expect(combined).toMatch(
-      /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE catalog_items TO laundry_app/iu,
+      /REVOKE DELETE, TRUNCATE ON TABLE (?:public\.)?catalog_items FROM laundry_app/iu,
     );
     expect(combined).not.toMatch(/GRANT[^;]*UPDATE[^;]*audit_log/iu);
     expect(combined).not.toMatch(/GRANT[^;]*DELETE[^;]*audit_log/iu);

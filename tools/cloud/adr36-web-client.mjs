@@ -17,7 +17,8 @@ const ORG_CODE = "local";
 const STORE_CODE = "main";
 const REQUEST_TIMEOUT_MS = 15_000;
 const COMMAND_VERSIONS = Object.freeze({
-  "catalog.item.upsert": "0.2.0",
+  "catalog.item.upsert": "0.3.0",
+  "catalog.items.reorder": "0.1.0",
   "customer.upsert": "0.2.0",
   "order.receive": "0.3.0",
   "order.pickup": "0.3.0",

@@ -11,6 +11,8 @@ export type CatalogFormState = Readonly<{
   price_text: string;
   mnemonic: string;
   is_active: boolean;
+  sort_order: number | null;
+  expected_version: number;
 }>;
 
 export const EMPTY_CATALOG_FORM: CatalogFormState = Object.freeze({
@@ -21,6 +23,8 @@ export const EMPTY_CATALOG_FORM: CatalogFormState = Object.freeze({
   price_text: "",
   mnemonic: "",
   is_active: true,
+  sort_order: null,
+  expected_version: 0,
 });
 
 export type CatalogFormRow = Readonly<{
@@ -30,6 +34,10 @@ export type CatalogFormRow = Readonly<{
   category_code: string;
   unit_price_cents: number;
   mnemonic?: string;
+  is_active: boolean;
+  sort_order: number;
+  version: number;
+  updated_at: number;
 }>;
 
 export type CatalogBuildResult =
@@ -38,8 +46,9 @@ export type CatalogBuildResult =
 
 const CODE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/u;
 const TAXONOMY = /^[a-z0-9][a-z0-9_-]{0,31}$/u;
+const POSTGRES_INTEGER_MAX = 2_147_483_647;
 /** Integer fen only — the counter never handles floating money. */
-const CENTS = /^\d{1,15}$/u;
+const CENTS = /^\d{1,10}$/u;
 
 /** Mirror the contract schema so the operator sees the failure before the round trip. */
 export function buildCatalogUpsertBody(form: CatalogFormState): CatalogBuildResult {
@@ -59,6 +68,9 @@ export function buildCatalogUpsertBody(form: CatalogFormState): CatalogBuildResu
     return { ok: false, message: "品类代码只能用小写字母数字与 _ -" };
   if (!CENTS.test(priceText))
     return { ok: false, message: "单价必须是整数分（如 1500 表示 ¥15.00）" };
+  const unitPriceCents = Number(priceText);
+  if (unitPriceCents > POSTGRES_INTEGER_MAX)
+    return { ok: false, message: "单价超出系统支持的整数分范围" };
   if (mnemonic.length > 16) return { ok: false, message: "助记码最多 16 字符" };
 
   return {
@@ -68,9 +80,11 @@ export function buildCatalogUpsertBody(form: CatalogFormState): CatalogBuildResu
       name,
       service_code: serviceCode,
       category_code: categoryCode,
-      unit_price_cents: Number(priceText),
+      unit_price_cents: unitPriceCents,
       ...(mnemonic.length > 0 ? { mnemonic } : {}),
       is_active: form.is_active,
+      ...(form.sort_order === null ? {} : { sort_order: form.sort_order }),
+      expected_version: form.expected_version,
     }),
   };
 }
@@ -81,14 +95,32 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readRow(value: unknown): CatalogFormRow | null {
   if (!isRecord(value)) return null;
-  const { code, name, service_code, category_code, unit_price_cents, mnemonic } = value;
+  const {
+    code,
+    name,
+    service_code,
+    category_code,
+    unit_price_cents,
+    mnemonic,
+    is_active,
+    sort_order,
+    version,
+    updated_at,
+  } = value;
   if (
     typeof code !== "string" ||
     typeof name !== "string" ||
     typeof service_code !== "string" ||
     typeof category_code !== "string" ||
     typeof unit_price_cents !== "number" ||
-    !Number.isInteger(unit_price_cents)
+    !Number.isInteger(unit_price_cents) ||
+    typeof is_active !== "boolean" ||
+    typeof sort_order !== "number" ||
+    !Number.isInteger(sort_order) ||
+    typeof version !== "number" ||
+    !Number.isInteger(version) ||
+    typeof updated_at !== "number" ||
+    !Number.isInteger(updated_at)
   ) {
     return null;
   }
@@ -99,6 +131,10 @@ function readRow(value: unknown): CatalogFormRow | null {
     category_code,
     unit_price_cents,
     ...(typeof mnemonic === "string" && mnemonic.length > 0 ? { mnemonic } : {}),
+    is_active,
+    sort_order,
+    version,
+    updated_at,
   });
 }
 
@@ -124,6 +160,21 @@ export function catalogFormFromRow(row: CatalogFormRow): CatalogFormState {
     category_code: row.category_code,
     price_text: String(row.unit_price_cents),
     mnemonic: row.mnemonic ?? "",
-    is_active: true,
+    is_active: row.is_active,
+    sort_order: row.sort_order,
+    expected_version: row.version,
+  });
+}
+
+/** Full active snapshot required by catalog.items.reorder. */
+export function buildCatalogReorderBody(
+  rows: readonly CatalogFormRow[],
+): Readonly<{ items: readonly Readonly<{ code: string; expected_version: number }>[] }> {
+  return Object.freeze({
+    items: Object.freeze(
+      rows
+        .filter((row) => row.is_active)
+        .map((row) => Object.freeze({ code: row.code, expected_version: row.version })),
+    ),
   });
 }

@@ -21,6 +21,7 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0012_shift_closings.sq
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0045_store_commissioning_staff_credentials.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0046_print_job_request_idempotency.sql
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0047_cloud_counter_trust.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0048_catalog_governance.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -37,6 +38,7 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **M1**: identity/platform + A5 session tables
 - **M2 skeleton** (0007): `orders`, `order_lines`, `garments`, `ticket_counters`
 - **M2 catalog** (0008): `catalog_items` (store-scoped price list; app seeds demo on first list if empty)
+- **Catalog governance** (0048): optimistic row versions, automatic version bump trigger, and app-role physical-delete revocation
 - **M2 payments** (0009): `payments` append-only ledger (`SELECT, INSERT` only for `laundry_app`)
 - **M2 print** (0010): `print_jobs` queue (`SELECT, INSERT, UPDATE` for status transitions; no DELETE)
 - **M2 customers** (0011): `customers` org-scoped archive (`SELECT, INSERT, UPDATE`; unique org+phone)
@@ -44,5 +46,6 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Staff credential lifecycle** (0045, ADR-31): owner-only commissioning markers and store-scoped, non-secret, single-use credential setup references
 - **Signed print request idempotency** (0046): database-derived logical keys make enqueue/retry/reprint exact across lost responses and concurrency
 - **Cloud counter trust** (0047, ADR-38): store-scoped pricing policy, authoritative pricing snapshots, and per-piece draft/formal garment details
+- **Catalog governance** (0048, ADR-39): optimistic versions for safe catalog update, activation, and atomic reorder; catalog retirement is soft-only for `laundry_app`
 - Still deferred: edge lease, AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

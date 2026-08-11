@@ -1,18 +1,18 @@
 {
   "version": 1,
   "entries": {
-    "assets/index-B5_XIa2x.css": {
-      "sha256": "8dd90cdfefff393e8f2a28e3d0414eae6b5fc568a54abfb44e00aff3e85db8e8",
-      "mime": "text/css; charset=utf-8",
-      "bytes": 62345
-    },
-    "assets/index-DWoMh24o.js": {
-      "sha256": "a657d3e316df95f5a7d9b8a458d251f219a3e34c0d1a80d19f5ef896f6f12fb0",
+    "assets/index-Crtx0oPs.js": {
+      "sha256": "f0af89d407f27d31dd604fb0c2740586f70ca261227ac69b34e44ebb30d0652a",
       "mime": "text/javascript; charset=utf-8",
-      "bytes": 727666
+      "bytes": 734935
+    },
+    "assets/index-DZY1xPJv.css": {
+      "sha256": "7b576ea8503fe43e002236d9df91bfb0a91e28f43e3f3c1cbf7884d3702460c7",
+      "mime": "text/css; charset=utf-8",
+      "bytes": 63136
     },
     "index.html": {
-      "sha256": "1fb8dc740cf38bb4dc80be32c1fa418d7b148740cca4d421b290827da3bb8ca6",
+      "sha256": "9b263297d19a327e5aad69a716a541fdd45cfef18c3448ee32a0064d4644d8eb",
       "mime": "text/html; charset=utf-8",
       "bytes": 412
     }

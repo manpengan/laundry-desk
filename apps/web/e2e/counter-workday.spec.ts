@@ -39,20 +39,24 @@ const LOGIN = Object.freeze({
  * Created through the settings UI by this spec — ADR-15. A fresh install ships
  * an empty price list, and order.receive refuses a line that does not match
  * exactly one active item, so bootstrapping the catalog IS part of the workday.
- * The code is stable because catalog.item.upsert is idempotent by code.
+ * The code is unique per run so expected_version=0 proves the create path.
  */
-const CATALOG_CODE = "e2e_wash_shirt";
-const CATALOG_ITEM_NAME = "E2E 水洗衬衫";
+const CATALOG_SUFFIX = `${process.pid.toString(36)}_${Date.now().toString(36)}`;
+const CATALOG_CODE = `e2e_wash_${CATALOG_SUFFIX}`;
+const AUX_CATALOG_CODE = `e2e_aux_${CATALOG_SUFFIX}`;
+const CATALOG_ITEM_NAME = `E2E 水洗衬衫 ${CATALOG_SUFFIX}`;
+const AUX_CATALOG_NAME = `E2E 排序辅助项 ${CATALOG_SUFFIX}`;
 const CATALOG_SERVICE = "wash";
-const CATALOG_CATEGORY = "e2eshirt";
+const CATALOG_CATEGORY = `e2e_${CATALOG_SUFFIX}`;
+const AUX_CATALOG_CATEGORY = `e2e_aux_${CATALOG_SUFFIX}`;
 const CATALOG_PRICE_CENTS = "1500";
 const QTY = 2;
 const POLICY = Object.freeze({
   discountCents: "100",
   urgentCents: "300",
   freightCents: "400",
-  addonCode: "e2e_stain_removal",
-  addonName: "E2E 去渍",
+  addonCode: `e2e_stain_${CATALOG_SUFFIX}`,
+  addonName: `E2E 去渍 ${CATALOG_SUFFIX}`,
   addonUnitCents: "200",
 });
 const PAYABLE_TEXT = "¥40.00";
@@ -127,13 +131,95 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
 
   // The saved row appearing proves the write reached PostgreSQL and came back
   // through catalog.items.list.
-  await expect(
-    catalogPanel.locator('[data-testid="catalog-admin-row"]', { hasText: CATALOG_ITEM_NAME }),
-  ).toBeVisible({ timeout: 15_000 });
+  const catalogRow = catalogPanel.locator('[data-testid="catalog-admin-row"]', {
+    hasText: CATALOG_CODE,
+  });
+  await expect(catalogRow).toBeVisible({ timeout: 15_000 });
+  await expect(catalogRow).toContainText("在架");
+  await expect(catalogRow).toContainText("v1");
+
+  // Two independent browser devices edit the same v1 row. The first wins;
+  // the stale writer is rejected, clears its frozen form and reloads v2.
+  const browser = page.context().browser();
+  if (browser === null) throw new Error("counter workday requires a browser context");
+  const concurrentContext = await browser.newContext();
+  try {
+    const concurrentPage = await concurrentContext.newPage();
+    await signIn(concurrentPage);
+    await concurrentPage.locator('[data-nav-id="settings"]').click();
+    const concurrentPanel = concurrentPage.locator('[data-testid="catalog-admin"]');
+    const concurrentRow = concurrentPanel.locator('[data-testid="catalog-admin-row"]', {
+      hasText: CATALOG_CODE,
+    });
+    await concurrentRow.getByRole("button", { name: "编辑" }).click();
+
+    await catalogRow.getByRole("button", { name: "编辑" }).click();
+    await page.locator('input[name="catalog-mnemonic"]').fill("e2e");
+    await page.locator('[data-testid="catalog-save-btn"]').click();
+    await expect(catalogRow).toContainText("v2", { timeout: 15_000 });
+
+    await concurrentPage.locator('input[name="catalog-name"]').fill("陈旧覆盖不应生效");
+    await concurrentPage.locator('[data-testid="catalog-save-btn"]').click();
+    await expect(concurrentPage.locator(".ld-toast").last()).toContainText(
+      "列表已刷新，请重新编辑",
+      { timeout: 15_000 },
+    );
+    await expect(concurrentPage.locator('input[name="catalog-code"]')).toHaveValue("");
+    await expect(concurrentRow).toContainText(CATALOG_ITEM_NAME);
+    await expect(concurrentRow).toContainText("v2");
+  } finally {
+    await concurrentContext.close();
+  }
+
+  // ADR-39: a retired row remains in the management list and can be restored
+  // with the next optimistic version.
+  await catalogRow.getByRole("button", { name: "停用" }).click();
+  await expect(catalogRow).toContainText("已停用", { timeout: 15_000 });
+  await expect(catalogRow).toContainText("v3");
+  await catalogRow.getByRole("button", { name: "启用" }).click();
+  await expect(catalogRow).toContainText("在架", { timeout: 15_000 });
+  await expect(catalogRow).toContainText("v4");
+
+  // Add a second synthetic row, then prove the full active snapshot can move
+  // and restore the two relative positions atomically.
+  await catalogPanel.getByRole("button", { name: "新建 / 清空" }).click();
+  await page.locator('input[name="catalog-code"]').fill(AUX_CATALOG_CODE);
+  await page.locator('input[name="catalog-name"]').fill(AUX_CATALOG_NAME);
+  await page.locator('input[name="catalog-service"]').fill(CATALOG_SERVICE);
+  await page.locator('input[name="catalog-category"]').fill(AUX_CATALOG_CATEGORY);
+  await page.locator('input[name="catalog-price"]').fill("100");
+  await page.locator('[data-testid="catalog-save-btn"]').click();
+  const auxiliaryRow = catalogPanel.locator('[data-testid="catalog-admin-row"]', {
+    hasText: AUX_CATALOG_CODE,
+  });
+  await expect(auxiliaryRow).toBeVisible({ timeout: 15_000 });
+  const catalogPosition = async () => {
+    const texts = await catalogPanel.locator('[data-testid="catalog-admin-row"]').allTextContents();
+    return texts.findIndex((text) => text.includes(CATALOG_CODE));
+  };
+  const originalPosition = await catalogPosition();
+  expect(originalPosition).toBeGreaterThanOrEqual(0);
+  await catalogRow.getByRole("button", { name: `下移 ${CATALOG_ITEM_NAME}` }).click();
+  await expect.poll(catalogPosition).toBe(originalPosition + 1);
+  await catalogRow.getByRole("button", { name: `上移 ${CATALOG_ITEM_NAME}` }).click();
+  await expect.poll(catalogPosition).toBe(originalPosition);
+
+  const auditPanel = page.locator('[data-testid="catalog-audit"]');
+  await auditPanel.getByLabel("按编码筛选（可选）").fill(CATALOG_CODE);
+  await auditPanel.getByRole("button", { name: "查询审计" }).click();
+  const auditList = auditPanel.locator('[data-testid="catalog-audit-list"]');
+  await expect(auditList).toContainText("新增");
+  await expect(auditList).toContainText("停用");
+  await expect(auditList).toContainText("启用");
+  await expect(auditList).toContainText("排序");
 
   // --- 柜台计价政策（ADR-38）：由另一位店长 R5 复核 -----------------------
   const pricingPanel = page.locator('[data-testid="pricing-settings"]');
   await expect(pricingPanel).toBeVisible();
+  const policyStatus = pricingPanel.getByRole("status");
+  const versionMatch = /当前版本 (\d+)/u.exec((await policyStatus.textContent()) ?? "");
+  expect(versionMatch).not.toBeNull();
+  const expectedPolicyVersion = Number(versionMatch?.[1]) + 1;
   await pricingPanel.getByLabel("加急固定费（分）").fill(POLICY.urgentCents);
   await pricingPanel.getByLabel("运费固定费（分）").fill(POLICY.freightCents);
   await pricingPanel.getByRole("button", { name: "添加附加项" }).click();
@@ -154,7 +240,7 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   await expect(page.locator(".ld-toast").last()).toContainText("计价设置已保存并生效", {
     timeout: 15_000,
   });
-  await expect(pricingPanel.getByRole("status")).toContainText("当前版本 1");
+  await expect(policyStatus).toContainText(`当前版本 ${expectedPolicyVersion}`);
 
   // --- 开单 ---------------------------------------------------------------
   await page.locator('[data-nav-id="receive"]').click();
@@ -267,6 +353,17 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
     ],
   });
 
+  // Reprice only after the order is committed. Order detail must continue to
+  // render the immutable ¥15.00 service snapshot and original payable total.
+  await page.locator('[data-nav-id="settings"]').click();
+  const committedCatalogRow = page.locator('[data-testid="catalog-admin-row"]', {
+    hasText: CATALOG_CODE,
+  });
+  await committedCatalogRow.getByRole("button", { name: "编辑" }).click();
+  await page.locator('input[name="catalog-price"]').fill("1600");
+  await page.locator('[data-testid="catalog-save-btn"]').click();
+  await expect(committedCatalogRow).toContainText("¥16.00", { timeout: 15_000 });
+
   // --- 服务端流水 + R4 原路退款 ------------------------------------------
   await page.locator('[data-nav-id="orders"]').click();
   await page.locator('[data-testid="debt-load-btn"]').click();
@@ -278,6 +375,8 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   await expect(drawer.locator('[data-testid="order-detail-ticket"]')).toHaveText(ticketNo, {
     timeout: 15_000,
   });
+  await expect(drawer.locator('[data-testid="order-detail-payable"]')).toContainText(PAYABLE_TEXT);
+  await expect(drawer.locator('[data-testid="order-detail-garments"]')).toContainText("¥15.00");
   await expect(drawer.locator('[data-testid="order-detail-garments"]')).toContainText("颜色：白");
   await expect(drawer.locator('[data-testid="order-detail-garments"]')).toContainText(
     "瑕疵：下摆磨损",

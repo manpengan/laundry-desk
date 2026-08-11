@@ -80,11 +80,79 @@ export async function catalogJourney(api, artifacts, run, update) {
     await writeMutation(
       update,
       { catalogItem: item },
-      () => api.command(artifacts.adminSession, "catalog.item.upsert", item),
+      () =>
+        api.command(artifacts.adminSession, "catalog.item.upsert", {
+          ...item,
+          expected_version: 0,
+        }),
       (value) => asRecord(value),
     ),
   );
   requireThat(result.code === item.code && result.created === true, "CATALOG_UPSERT_INVALID");
+  const createdItem = asRecord(result.item, "CATALOG_UPSERT_INVALID");
+  requireThat(createdItem.version === 1 && result.action === "created", "CATALOG_UPSERT_INVALID");
+  await api.expectCommandFailure(
+    artifacts.adminSession,
+    "catalog.item.upsert",
+    { ...item, name: `${item.name} stale`, expected_version: 0 },
+    "IDEMPOTENCY_CONFLICT",
+  );
+  const retired = asRecord(
+    await api.command(artifacts.adminSession, "catalog.item.upsert", {
+      ...item,
+      is_active: false,
+      expected_version: createdItem.version,
+    }),
+    "CATALOG_RETIRE_INVALID",
+  );
+  const retiredItem = asRecord(retired.item, "CATALOG_RETIRE_INVALID");
+  requireThat(
+    retired.action === "retired" && retiredItem.is_active === false,
+    "CATALOG_RETIRE_INVALID",
+  );
+  const retiredList = asRecord(
+    await api.query(artifacts.adminSession, "catalog.items.manage.list", {
+      query: item.code,
+      limit: 10,
+    }),
+    "CATALOG_MANAGEMENT_INVALID",
+  );
+  requireThat(
+    Array.isArray(retiredList.items) &&
+      retiredList.items.length === 1 &&
+      asRecord(retiredList.items[0]).is_active === false,
+    "CATALOG_MANAGEMENT_INVALID",
+  );
+  const reactivated = asRecord(
+    await api.command(artifacts.adminSession, "catalog.item.upsert", {
+      ...item,
+      expected_version: retiredItem.version,
+    }),
+    "CATALOG_REACTIVATE_INVALID",
+  );
+  const reactivatedItem = asRecord(reactivated.item, "CATALOG_REACTIVATE_INVALID");
+  requireThat(
+    reactivated.action === "reactivated" && reactivatedItem.version > retiredItem.version,
+    "CATALOG_REACTIVATE_INVALID",
+  );
+  const management = asRecord(
+    await api.query(artifacts.adminSession, "catalog.items.manage.list", { limit: 200 }),
+    "CATALOG_MANAGEMENT_INVALID",
+  );
+  const active = Array.isArray(management.items)
+    ? management.items.filter((value) => asRecord(value).is_active === true)
+    : [];
+  requireThat(active.length > 0 && active.length <= 200, "CATALOG_MANAGEMENT_INVALID");
+  const reordered = asRecord(
+    await api.command(artifacts.adminSession, "catalog.items.reorder", {
+      items: active.map((value) => {
+        const row = asRecord(value, "CATALOG_MANAGEMENT_INVALID");
+        return { code: row.code, expected_version: row.version };
+      }),
+    }),
+    "CATALOG_REORDER_INVALID",
+  );
+  requireThat(reordered.action === "reordered", "CATALOG_REORDER_INVALID");
   const listed = asRecord(
     await api.query(artifacts.adminSession, "catalog.items.list", { query: item.code, limit: 10 }),
   );
@@ -102,6 +170,35 @@ export async function catalogJourney(api, artifacts, run, update) {
       }),
     "CATALOG_LIST_INVALID",
   );
+  const auditNow = Math.floor(Date.now() / 1_000);
+  const audit = asRecord(
+    await api.query(artifacts.adminSession, "catalog.audit.list", {
+      from_epoch_s: auditNow - 30 * 24 * 60 * 60,
+      to_epoch_s: auditNow + 60,
+      code: item.code,
+      limit: 50,
+    }),
+    "CATALOG_AUDIT_INVALID",
+  );
+  const auditRows = Array.isArray(audit.items)
+    ? audit.items.map((value) => asRecord(value, "CATALOG_AUDIT_INVALID"))
+    : [];
+  const safeAuditKeys = ["action", "at_epoch_s", "codes", "id", "staff_id"];
+  requireThat(
+    auditRows.length > 0 &&
+      auditRows.every((row) => {
+        const keys = Object.keys(row).sort();
+        return (
+          keys.length === safeAuditKeys.length &&
+          keys.every((key, index) => key === safeAuditKeys[index])
+        );
+      }),
+    "CATALOG_AUDIT_INVALID",
+  );
+  const actions = auditRows.map((row) => row.action);
+  for (const action of ["created", "retired", "reactivated", "reordered"]) {
+    requireThat(actions.includes(action), "CATALOG_AUDIT_INVALID");
+  }
 }
 
 export async function customerJourney(api, artifacts, run, update) {
