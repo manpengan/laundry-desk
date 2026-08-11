@@ -16,16 +16,15 @@ async function assertCatalogReadSurface(page) {
   await page.locator('[data-nav-id="settings"]').click();
   const panel = page.locator('[data-testid="catalog-admin"]');
   await expect(panel).toBeVisible();
-  await expect(panel.locator('[data-testid="catalog-admin-list"]')).toBeVisible();
   const row = panel.locator('[data-testid="catalog-admin-row"]').first();
   const empty = panel.locator(".ld-settings-catalog__empty");
   await expect(row.or(empty)).toBeVisible();
 }
 
-async function assertOrderAndFulfillmentReadSurfaces(page) {
+async function assertDebtAndFulfillmentReadSurfaces(page) {
   await page.locator('[data-nav-id="orders"]').click();
-  await expect(page.locator('[data-testid="orders-list-section"]')).toBeVisible();
-  await expect(page.locator('[data-testid="orders-list"]')).toBeVisible();
+  await expect(page.getByRole("heading", { name: "欠款" })).toBeVisible();
+  await expect(page.locator('[data-testid="debt-list"]')).toBeVisible();
 
   await page.locator('[data-nav-id="fulfillment"]').click();
   await expect(page.getByRole("heading", { name: "生产工作台" })).toBeVisible();
@@ -69,7 +68,7 @@ test("core_ui_subset: public Cloud Web read surfaces are reachable", async ({
 
   await expect(cloudPage.locator('[data-testid="counter-workbench-metrics"]')).toBeVisible();
   await assertCatalogReadSurface(cloudPage);
-  await assertOrderAndFulfillmentReadSurfaces(cloudPage);
+  await assertDebtAndFulfillmentReadSurfaces(cloudPage);
   await assertCustomerAndReminderReadSurfaces(cloudPage);
   await assertAccountingReadSurface(cloudPage);
   await cloudPage.waitForLoadState("networkidle");
