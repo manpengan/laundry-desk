@@ -12,12 +12,12 @@
 | 项         | 值                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 活动路线   | **Cloud Web-first 1–4 顺序交付**：[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 保留 V2-only 基础裁决，[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md) 保留通用 V2 架构基线，[ADR-16](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) 约束能力边界，[ADR-36](docs/adr/2026-08-09-adr-36-cloud-test-environment.md) 定义公网安全边界，[ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) 定义当前主形态与顺序 |
-| 当前阶段   | **阶段 2 实现候选已按 1→2→3 完成并通过本地完整门禁，PR/required CI/hk-vps 发布仍 pending**。阶段 1 的已部署基线仍为 `7989206b3e9748b2a607687466ef2e0775ad528e` / migration head `0046`；见[阶段 2 验收记录](docs/superpowers/specs/2026-08-11-stage2-counter-trust-acceptance.md)。只有本候选合入、精确 merge SHA 主干 CI 全绿并完成两阶段云发布后，阶段 2 才关闭。 |
-| 设计真源   | [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) · [ADR-16](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-36](docs/adr/2026-08-09-adr-36-cloud-test-environment.md) · [ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) · [ADR-38](docs/adr/2026-08-11-adr-38-cloud-counter-trust-closure.md) · [Cloud Web-first 1–4 交付计划](docs/superpowers/plans/2026-08-10-post-adr36-delivery-plan.md) |
+| 当前阶段   | **阶段 2 已关闭；阶段 3「经营增强」待开始**。阶段 2 按 1→2→3 完成实现、真实 PostgreSQL/Browser、PR #167、精确 merge SHA 主干 CI 与 hk-vps `prepare → finalize`；已部署 marker 为 `6f106076018940eec8fcc9e8c2cfb7842c323f47`，migration head 为 `0047_cloud_counter_trust.sql`。见[阶段 2 验收记录](docs/superpowers/specs/2026-08-11-stage2-counter-trust-acceptance.md)与[发布结果](docs/operations/2026-08-11-stage2-release-result.md)。                                               |
+| 设计真源   | [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) · [ADR-16](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-36](docs/adr/2026-08-09-adr-36-cloud-test-environment.md) · [ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) · [ADR-38](docs/adr/2026-08-11-adr-38-cloud-counter-trust-closure.md) · [Cloud Web-first 1–4 交付计划](docs/superpowers/plans/2026-08-10-post-adr36-delivery-plan.md)           |
 | 当前 owner | **Codex** — 设计、实现、集成与门禁                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | 目标平台   | 当前：`desk.manpengan.xyz` 上的 Linux Fastify/PostgreSQL + 浏览器 Web；后续桌面、操作系统安装包和实体硬件另行恢复                                                                                                                                                                                                                                                                                                                                                                         |
 
-已交付的代码面包括 `Local Foundation → 完整柜台工作日 → 履约/顾客/员工治理 → 本地备份恢复 → 加密离线队列与 Primary → 重放对账 → 会员储值二期 → 催取人工名单 → 双口径账目 → 会员账户生命周期 → LAN Owner → Runtime 数据保护/升级 → 正式候选软件证据`。ADR-36 的 `ae9808c` 云测试记录证明了公网/loopback 最小路径和一批安全可执行的 HTTP 业务纵向，但历史催取正向 fixture 与远端浏览器 UI 仍 pending；该环境禁止真实顾客 PII，也不等于生产 SaaS。当前 macOS 新鲜证据只属于 **software-only**：Browser、打包 Counter 产品面对齐和 Runtime 真实托管回环都已通过。它们不冒充 XP-58 实体打印、Developer ID/公证、正式双架构 OCI、Windows 实机或生产云证据。
+已交付的代码面包括 `Local Foundation → 完整柜台工作日 → 履约/顾客/员工治理 → 本地备份恢复 → 加密离线队列与 Primary → 重放对账 → 会员储值二期 → 催取人工名单 → 双口径账目 → 会员账户生命周期 → LAN Owner → Runtime 数据保护/升级 → 正式候选软件证据 → 服务端权威计价/支付退款/件级挂单恢复`。阶段 2 的 hk-vps 新鲜证据包含 API 15/15、Cloud Chromium PASS、marker/0047 与发布清理；该环境仍禁止真实顾客 PII，也不等于生产 SaaS。当前 macOS 新鲜证据只属于 **software-only**，不冒充 XP-58 实体打印、Developer ID/公证、正式双架构 OCI、Windows 实机或生产云证据。
 
 宏发版本停止开发；根 `src/` 只作为历史行为参考，不作为当前产品入口。
 
@@ -44,6 +44,7 @@ Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 ·
 `1 云端基线与既有 Web 收口 → 2 柜台可信性缺口 → 3 经营增强 → 4 大型云端模块`
 
 当前执行入口是 [Cloud Web-first 1–4 交付计划](docs/superpowers/plans/2026-08-10-post-adr36-delivery-plan.md)。
+阶段 1、2 已依次关闭，下一实现入口是阶段 3 的四个独立经营增强切片。
 每一阶段都必须测试通过、经 PR 合入 `main` 且 required CI 绿灯，再把该 `main` 精确部署并
 完成公网 Web 验收，才能开始下一阶段。Windows、macOS 正式发行和 XP-58 不在这条关键路径；
 真实短信/微信/支付/AI 等提供商集成必须有获授权的 sandbox 或正式回执，软件 fake 只能证明
@@ -83,7 +84,9 @@ pnpm run local:down
 迁移兼容时，再运行根 `lint/test/typecheck/build`。`runtime:counter:acceptance` 只证明本机软件托管组合；没有 Windows、PostgreSQL、真实模型 key、正式签名材料或打印机证据时，只能标记“代码侧通过/待实测”。
 
 hk-vps 云测试部署、回滚、登录 smoke 和维护重启见
-[ADR-36 运维手册](docs/operations/2026-08-09-hk-vps-cloud-test.md)。
+[ADR-36 运维手册](docs/operations/2026-08-09-hk-vps-cloud-test.md)；已完成发布见
+[阶段 1 结果](docs/operations/2026-08-11-stage1-release-result.md)与
+[阶段 2 结果](docs/operations/2026-08-11-stage2-release-result.md)。
 
 ## License
 
