@@ -15,6 +15,7 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 ### 新增
 
 - 价目治理（[ADR-39](adr/2026-08-11-adr-39-catalog-governance.md)）：设置页同时显示在架与停用价目，可按服务端顺序上下调整、停用后重新启用，并以乐观版本拒绝并发覆盖后自动刷新；新增 catalog-only 安全审计列表，只展示动作、编码、时间与脱敏员工标识。应用角色不再具备价目物理删除权限，改价、启停与排序不重估任何历史订单快照。
+- 上述价目治理已随精确 `main` `f276bdbf328ae20aba20c7985c690a63484afdca` 发布到 hk-vps，迁移到 48/head `0048_catalog_governance.sql`；golden catalog 678 entries、API 15/15、Cloud Chromium、marker/schema/health/权限与清理证据均通过。见[阶段 3.1 发布结果](operations/2026-08-11-stage3-catalog-governance-release-result.md)。
 
 - 柜台可信性闭环（[ADR-38](adr/2026-08-11-adr-38-cloud-counter-trust-closure.md)）：新增门店级版本化计价设置与另一管理员 R5 复核；开单/挂单只提交折扣、固定费选择和逐件 add-on code，catalog、附加项与最终应收由服务端统一计算并保存快照。
 - 订单详情新增有界支付流水和服务端剩余可退金额；管理员从原流水发起既有 R4 原路退款，另一管理员复核后续跑只提交冻结 `confirm_ref`，历史账本仍只追加。
