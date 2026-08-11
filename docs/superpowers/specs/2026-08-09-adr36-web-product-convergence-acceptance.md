@@ -1,17 +1,19 @@
 # ADR-36 Web 产品收口验收记录
 
 > 日期：2026-08-09
-> 历史基线状态：**执行中（P0/P1 与 P2 真库已完成；P2 公网 HTTP 可安全项通过，历史催取阻塞）**
-> 已部署验收基线：`ae9808ce1f3dc61535dbcc1cb89e618f0350ecf6`
+> 当前状态：**ADR-37 阶段 1 已通过并关闭（2026-08-11）**
+> 当前已部署验收基线：`7989206b3e9748b2a607687466ef2e0775ad528e`
+> 历史基线：`ae9808ce1f3dc61535dbcc1cb89e618f0350ecf6`
 > 执行计划：[ADR-36 Web 产品收口计划](../plans/2026-08-09-adr36-web-product-convergence-plan.md)
 > 环境边界：[ADR-36](../../adr/2026-08-09-adr-36-cloud-test-environment.md)
-> 当前路线：[ADR-37](../../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)；本记录继续承接 Cloud Web-first 阶段 1 的增量验收
+> 发布结果：[hk-vps 阶段 1 发布结果](../../operations/2026-08-11-stage1-release-result.md)
+> 当前路线：[ADR-37](../../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)；阶段 1 已关闭，阶段 2 待开始
 
 ## 1. 记录规则
 
 - 只记录当前基线上可复现的新鲜证据；历史本地 E2E 不自动等价为云端验收。
 - **通过**表示本行的所有必验项已具备证据；**pending** 表示尚未执行、证据不全或仍待修复。
-- 整体状态取最弱必验项；P2 任一行 pending 时，不得声称「Web 产品收口完成」。
+- 单次基线的整体状态取最弱必验项；历史 `ae9808c` 表格中的 pending 不得冒充新基线证据。
 - 不记录密码、token、cookie、私钥、数据库口令或真实顾客 PII。
 
 ### 1.1 ADR-37 阶段 1 进入快照
@@ -35,6 +37,35 @@ acceptance（含受控历史催取 fixture）证明。两层都通过后才能�
 
 以下 `ae9808c` 表格保持历史事实。新部署不得覆盖或冒充它；应追加目标 SHA、时间、run-id 与
 边界后再更新阶段状态。
+
+### 1.2 ADR-37 阶段 1 关闭证据
+
+2026-08-11，`main` 合并点 `7989206b3e9748b2a607687466ef2e0775ad528e` 的主干
+[V2 Foundation](https://github.com/manpengan/laundry-desk/actions/runs/31457099792) 与
+[V2 PostgreSQL Integration](https://github.com/manpengan/laundry-desk/actions/runs/31457099795)
+均为 success。该 SHA 随后在 hk-vps 完成 `prepare → finalize`，发布后独立审计如下：
+
+| 增量必验项                 | 状态     | 新鲜证据                                                                                                   |
+| -------------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| 目标 main 精确发布与迁移   | **通过** | marker 精确为 `7989206…28e`；46 条迁移，head `0046_print_job_request_idempotency.sql`；transition `stable` |
+| 安全公网浏览器只读 UI 子集 | **通过** | `CLOUD-BROWSER-20260811T041932326Z-5790902a`；`test_status=PASS`、1 test、0 retry、零产品命令              |
+| 历史催取正向 fixture       | **通过** | API run `ADR36-20260811T041909981Z-b1e7b1ac` 的 `reminder_history PASS`；同一 run 的 `safe_cleanup PASS`   |
+| P2-1 至 P2-4 新基线复核    | **通过** | API 15/15 PASS；Browser 读面 PASS；committed evidence authoritative 且 retention valid                     |
+| 服务、路由与同机 KB        | **通过** | Desk/PostgreSQL/Caddy/KB active、failed units 0；Desk 与 PG 仅 loopback；Desk/SPA/KB 公网健康              |
+
+P2-1 至 P2-4 在**阶段 1 定义的分层口径**下全部关闭：
+
+| 行   | 新基线结论                                                                                             |
+| ---- | ------------------------------------------------------------------------------------------------------ |
+| P2-1 | `dual_admin_auth`、`staff_credentials`、`catalog_price` API PASS；工作台、价目与顾客读面可达           |
+| P2-2 | `cash_order_fulfillment`、`accounting_today_delta`、`order_finance` API PASS；欠款、生产与账务读面可达 |
+| P2-3 | `member_lifecycle` API PASS；顾客读面可达                                                              |
+| P2-4 | `reporting_exports_shift`、`reminder_history` API PASS；催取与账务读面可达                             |
+
+Browser subset 仍没有独立关闭权，也不声称逐个 UI 写操作都执行过；完整写纵向、30/90/180 天
+fixture、审计回读与安全清理由 API evidence 提供。两层绑定同一 release identity 后共同构成
+本次公网 Web 证据。发布后 live marker、schema、服务、监听、KB、公网 health、committed history
+及临时凭据清理均复核通过，详见发布结果记录。
 
 ## 2. 基线与 P0 证据
 
@@ -111,9 +142,10 @@ PostgreSQL 仍只监听 IPv4/IPv6 loopback。
 本轮另补 `stats/pg-source` 的现金支付/退款/冲正、会员本金/赠金与跨店隔离真库回归，并补照片
 审计失败原子回滚及文件引用清理。最终隔离 PostgreSQL 套件 828/828、0 skipped；本地
 `pnpm workspace:check` 以及云验收脚本 32/32 均通过；TypeScript、数据库与安全终审均
-`APPROVE`，未发现本轮 Cloud harness 与 #152 真库证据实现中的剩余 P0/P1/P2。P2 产品验收
-仍以 §3 矩阵为准，历史催取和远端浏览器只读 `core_ui_subset` 继续 pending；UI 子集只证明
-核心页面可达且没有产品命令，不替代 HTTP 纵向。
+`APPROVE`，未发现本轮 Cloud harness 与 #152 真库证据实现中的剩余 P0/P1/P2。对历史
+`ae9808c` 基线，P2 产品验收仍以 §3 矩阵为准，当时历史催取和远端浏览器只读
+`core_ui_subset` 均 pending；新基线已按 §1.2 关闭。UI 子集始终只证明核心页面可达且没有
+产品命令，不替代 HTTP 纵向。
 
 ## 4. 已知验收约束
 
