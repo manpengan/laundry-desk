@@ -99,9 +99,10 @@ export async function insertOrderRows(
       customer_id, customer_phone, customer_name, note,
       subtotal_cents, original_cents, discount_cents, addon_cents, urgent_cents, freight_cents,
       payable_cents, paid_cents, balance_cents, business_date,
+      pricing_policy_version, urgent_selected, freight_selected,
       created_at, updated_at, created_by_staff_id
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26
      )`,
     [
       order.order_id,
@@ -124,6 +125,9 @@ export async function insertOrderRows(
       order.paid_cents,
       order.balance_cents,
       order.business_date,
+      order.pricing_policy_version ?? 0,
+      order.urgent_selected ?? false,
+      order.freight_selected ?? false,
       epochToDate(order.created_at),
       epochToDate(order.updated_at),
       order.created_by_staff_id,
@@ -145,8 +149,8 @@ export async function insertOrderChildren(
       `INSERT INTO order_lines (
          id, org_id, store_id, order_id, line_index,
          service_code, category_code, unit_price_cents, qty, line_total_cents,
-         color, brand
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+         color, brand, garment_details_json
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)`,
       [
         lineId,
         order.org_id,
@@ -160,6 +164,7 @@ export async function insertOrderChildren(
         line.line_total_cents,
         line.color,
         line.brand,
+        JSON.stringify(line.garment_details ?? []),
       ],
     );
   }
@@ -173,8 +178,8 @@ export async function insertOrderChildren(
       `INSERT INTO garments (
          id, org_id, store_id, order_id, order_line_id, seq, barcode,
          service_code, category_code, unit_price_cents, color, brand, status,
-         rack_zone, rack_slot
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+         rack_zone, rack_slot, defects, accessories, note
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17::jsonb,$18)`,
       [
         garment.garment_id,
         garment.org_id,
@@ -191,6 +196,9 @@ export async function insertOrderChildren(
         garment.status,
         garment.rack_zone ?? null,
         garment.rack_slot ?? null,
+        JSON.stringify(garment.defects ?? []),
+        JSON.stringify(garment.accessories ?? []),
+        garment.note ?? null,
       ],
     );
   }
@@ -208,6 +216,7 @@ export async function loadOrder(
             customer_id::text, customer_phone, customer_name, note,
             subtotal_cents, original_cents, discount_cents, addon_cents, urgent_cents, freight_cents,
             payable_cents, paid_cents, balance_cents, business_date,
+            pricing_policy_version, urgent_selected, freight_selected,
             created_at, updated_at, created_by_staff_id::text
      FROM orders
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid
@@ -219,7 +228,7 @@ export async function loadOrder(
   const linesResult = await client.query<OrderLineRow>(
     `SELECT id::text, org_id::text, store_id::text, order_id::text, line_index,
             service_code, category_code, unit_price_cents, qty, line_total_cents,
-            color, brand
+            color, brand, garment_details_json
      FROM order_lines
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND order_id = $3::uuid
      ORDER BY line_index ASC`,
@@ -239,7 +248,8 @@ export async function loadGarments(
     `SELECT g.id::text, g.org_id::text, g.store_id::text, g.order_id::text,
             g.order_line_id::text, ol.line_index, g.seq, g.barcode,
             g.service_code, g.category_code, g.unit_price_cents,
-            g.color, g.brand, g.status, g.rack_zone, g.rack_slot
+            g.color, g.brand, g.defects, g.accessories, g.note,
+            g.status, g.rack_zone, g.rack_slot
      FROM garments g
      INNER JOIN order_lines ol
        ON ol.org_id = g.org_id AND ol.store_id = g.store_id

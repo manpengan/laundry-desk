@@ -130,6 +130,7 @@ describe("destructive migration static reject", () => {
       "0044_durable_step_up_proofs.sql",
       "0045_store_commissioning_staff_credentials.sql",
       "0046_print_job_request_idempotency.sql",
+      "0047_cloud_counter_trust.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

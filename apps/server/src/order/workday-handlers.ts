@@ -9,10 +9,10 @@ import {
   assertBusinessDayOpen,
   asRecord,
   deriveBusinessDate,
-  pricingAdjustments,
   requireLines,
   requireString,
   resolveServerPrices,
+  resolveTrustedPricing,
 } from "./server-pricing.js";
 import type { OrderLineRecord, OrderRecord } from "./types.js";
 
@@ -22,8 +22,16 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
       throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
     }
     const input = asRecord(ctx.parsed);
-    const lines = await resolveServerPrices(deps.catalog, requireLines(input.lines));
-    const plan = planReceive(lines, 0, pricingAdjustments(input));
+    const catalogLines = await resolveServerPrices(deps.catalog, requireLines(input.lines));
+    const policy = await deps.pricing?.get(ctx.tenant.orgId, ctx.tenant.storeId);
+    const trustedPricing = resolveTrustedPricing(
+      input,
+      catalogLines,
+      policy,
+      ctx.actor.permissions,
+    );
+    const lines = trustedPricing.lines;
+    const plan = planReceive(lines, 0, trustedPricing.adjustments);
     if (!plan.ok) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
     const businessDate = deriveBusinessDate(now, deps.timeZone, deps.rolloverHour);
@@ -55,6 +63,7 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
           line_total_cents: lineTotalCents(line.unit_price_cents, line.qty),
           color: line.color ?? null,
           brand: line.brand ?? null,
+          garment_details: line.garment_details,
         }),
       ),
     );
@@ -76,6 +85,9 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
       addon_cents: plan.totals.addon_cents,
       urgent_cents: plan.totals.urgent_cents,
       freight_cents: plan.totals.freight_cents,
+      pricing_policy_version: trustedPricing.pricing_policy_version,
+      urgent_selected: trustedPricing.urgent_selected,
+      freight_selected: trustedPricing.freight_selected,
       payable_cents: plan.totals.payable_cents,
       paid_cents: 0,
       balance_cents: plan.totals.payable_cents,
@@ -84,7 +96,11 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
       business_date: businessDate,
       created_by_staff_id: ctx.actor.staffId,
     });
-    if (!(await deps.store.replaceDraft(order, Object.freeze([])))) {
+    if (
+      !(await deps.store.replaceDraft(order, Object.freeze([]), undefined, {
+        requireExisting: input.draft_id !== undefined,
+      }))
+    ) {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
     return Object.freeze({
@@ -92,7 +108,15 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
       audit: Object.freeze({
         entity: "order",
         entityId: order.order_id,
-        afterJson: JSON.stringify({ status: order.status, payable_cents: order.payable_cents }),
+        afterJson: JSON.stringify({
+          status: order.status,
+          payable_cents: order.payable_cents,
+          pricing_policy_version: order.pricing_policy_version,
+          discount_cents: order.discount_cents,
+          addon_cents: order.addon_cents,
+          urgent_cents: order.urgent_cents,
+          freight_cents: order.freight_cents,
+        }),
       }),
       events: Object.freeze([
         Object.freeze({ type: "order.held", payload: Object.freeze({ draft_id: order.order_id }) }),

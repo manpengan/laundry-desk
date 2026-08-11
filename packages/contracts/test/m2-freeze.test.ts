@@ -26,6 +26,8 @@ describe("M2 contract surface", () => {
       "payment.collect",
       "payment.repay",
       "payment.refund",
+      // ADR-38: store-scoped server-authoritative urgent/freight/add-on policy.
+      "pricing.policy.set",
       // ADR-24: audited dual-basis report export. The paired read query remains
       // outside the current AI projection until a later accounting/AI ADR.
       "accounting.report.export",
@@ -90,16 +92,22 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.drilldown");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_portfolio.get");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(41);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(25);
+    // ADR-38: trusted policy read and immutable payment-ledger refund source.
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("pricing.policy.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("payment.ledger.list");
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(42);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(27);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
     expect(
       M2_CONTRACT_DEFINITIONS.find((definition) => definition.name === "order.receive")?.version,
-    ).toBe("0.3.0");
+    ).toBe("0.4.0");
     expect(
       M2_CONTRACT_DEFINITIONS.find((definition) => definition.name === "order.hold")?.version,
+    ).toBe("0.4.0");
+    expect(
+      M2_CONTRACT_DEFINITIONS.find((definition) => definition.name === "order.get")?.version,
     ).toBe("0.3.0");
     expect(
       M2_CONTRACT_DEFINITIONS.find((definition) => definition.name === "order.cancel")?.version,

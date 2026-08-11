@@ -2,6 +2,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -30,6 +31,7 @@ export const orderLines = pgTable(
     lineTotalCents: integer("line_total_cents").notNull(),
     color: text("color"),
     brand: text("brand"),
+    garmentDetailsJson: jsonb("garment_details_json").notNull().default([]),
   },
   (table) => [
     primaryKey({ columns: [table.id], name: "order_lines_pkey" }),

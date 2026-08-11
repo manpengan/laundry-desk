@@ -22,6 +22,7 @@ import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import type { StaffAccessHandlerDeps } from "../staff/handlers.js";
 import type { StatsHandlerDeps } from "../stats/handlers.js";
 import type { PlatformHandlerDeps } from "../platform/handlers.js";
+import type { PricingHandlerDeps } from "../pricing/handlers.js";
 import type { LocalStaffDirectoryEntry } from "./staff-directory.js";
 
 export type LocalRuntimeMode = "memory" | "pg";
@@ -30,6 +31,7 @@ export type LocalRuntime = Readonly<{
   mode: LocalRuntimeMode;
   identity: IdentityHandlerDeps;
   platform: PlatformHandlerDeps;
+  pricing: PricingHandlerDeps;
   order: OrderHandlerDeps;
   catalog: CatalogHandlerDeps;
   print: PrintHandlerDeps;

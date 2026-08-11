@@ -4,6 +4,8 @@
 
 import { Button, MoneyText, StatusBadge, formatMoneyFromFen, useToast } from "@laundry/ui";
 import { useCallback, useState } from "react";
+import type { AuthClient } from "../auth/AuthClient.js";
+import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import { parseOrderListRows, unwrapQueryResult, type OrderListRowView } from "./OrdersList.js";
@@ -16,6 +18,8 @@ export type DebtPageProps = {
   queryClient: QueryPort;
   /** Without this the detail drawer can display but not collect or cancel. */
   commandClient?: CommandPort;
+  authClient?: AuthClient;
+  session?: SessionView;
   photoPort?: PhotoPort;
   memberEnabled?: boolean;
   /** Navigate to pickup with order id prefilled. */
@@ -57,6 +61,8 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
 export function DebtPage({
   queryClient,
   commandClient,
+  authClient,
+  session,
   photoPort,
   memberEnabled = false,
   onOpenPickup,
@@ -193,6 +199,8 @@ export function DebtPage({
         queryClient={queryClient}
         memberEnabled={memberEnabled}
         {...(commandClient === undefined ? {} : { commandClient })}
+        {...(authClient === undefined ? {} : { authClient })}
+        {...(session === undefined ? {} : { session })}
         {...(photoPort === undefined ? {} : { photoPort })}
         onClose={() => setDetailOrderId(null)}
         {...(onOpenPickup !== undefined

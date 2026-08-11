@@ -27,9 +27,28 @@ export type ActiveReversalTargetsResult =
   | Readonly<{ ok: true; targets: readonly PaymentRow[] }>
   | Readonly<{ ok: false; reason: PaymentLedgerRejectReason }>;
 
+export type PaymentLedgerProjectionRow = PaymentRow &
+  Readonly<{
+    /** Whether the row still contributes authority after later reversals. */
+    active: boolean;
+    /** Signed contribution made by this immutable row. */
+    signed_cents: number;
+    /** Remaining refundable amount; non-zero only for active counter payments. */
+    refundable_cents: number;
+  }>;
+
+export type PaymentLedgerProjectionResult =
+  | Readonly<{
+      ok: true;
+      paid_cents: number;
+      balance_cents: number;
+      rows: readonly PaymentLedgerProjectionRow[];
+    }>
+  | Readonly<{ ok: false; reason: PaymentLedgerRejectReason }>;
+
 type PaymentState = {
   readonly row: PaymentRow;
-  active: boolean;
+  readonly active: boolean;
   readonly contribution_cents: number;
 };
 
@@ -39,6 +58,7 @@ type LedgerAnalysis =
       paid_cents: number;
       balance_cents: number;
       states: ReadonlyMap<string, PaymentState>;
+      refunded_cents: ReadonlyMap<string, number>;
     }>
   | Readonly<{ ok: false; reason: PaymentLedgerRejectReason }>;
 
@@ -117,7 +137,10 @@ function appendBasePayment(
 ): LedgerStep {
   const paid = nextPaid(paidCents, row.amount_cents);
   if (paid === null) return Object.freeze({ ok: false, reason: "OVERPAID" });
-  states.set(row.payment_id, { row, active: true, contribution_cents: row.amount_cents });
+  states.set(
+    row.payment_id,
+    Object.freeze({ row, active: true, contribution_cents: row.amount_cents }),
+  );
   return Object.freeze({ ok: true, paid_cents: paid });
 }
 
@@ -140,7 +163,10 @@ function appendRefund(
   const paid = nextPaid(paidCents, -row.amount_cents);
   if (paid === null) return Object.freeze({ ok: false, reason: "NEGATIVE_PAID" });
   refundedCents.set(reference.row.payment_id, nextUsed);
-  states.set(row.payment_id, { row, active: true, contribution_cents: -row.amount_cents });
+  states.set(
+    row.payment_id,
+    Object.freeze({ row, active: true, contribution_cents: -row.amount_cents }),
+  );
   return Object.freeze({ ok: true, paid_cents: paid });
 }
 
@@ -171,17 +197,20 @@ function appendReversal(
   const paid = nextPaid(paidCents, -reference.contribution_cents);
   if (paid === null) return Object.freeze({ ok: false, reason: "NEGATIVE_PAID" });
 
-  reference.active = false;
+  states.set(reference.row.payment_id, Object.freeze({ ...reference, active: false }));
   if (reference.row.kind === "refund") {
     const originalId = reference.row.ref_payment_id;
     const used = refundedCents.get(originalId ?? "") ?? 0;
     refundedCents.set(originalId ?? "", used - reference.row.amount_cents);
   }
-  states.set(row.payment_id, {
-    row,
-    active: false,
-    contribution_cents: -reference.contribution_cents,
-  });
+  states.set(
+    row.payment_id,
+    Object.freeze({
+      row,
+      active: false,
+      contribution_cents: -reference.contribution_cents,
+    }),
+  );
   return Object.freeze({ ok: true, paid_cents: paid });
 }
 
@@ -225,6 +254,7 @@ function analyzePaymentLedger(
     paid_cents: paidCents,
     balance_cents: payableCents - paidCents,
     states,
+    refunded_cents: refundedCents,
   });
 }
 
@@ -241,6 +271,44 @@ export function derivePaymentLedger(
         balance_cents: analysis.balance_cents,
       })
     : Object.freeze({ ok: false, reason: analysis.reason });
+}
+
+/**
+ * Produce the bounded operator read model from the same analysis used by every
+ * payment mutation. Callers do not infer refundability or signed money in UI.
+ */
+export function projectPaymentLedger(
+  payableCents: number,
+  payments: readonly PaymentRow[],
+): PaymentLedgerProjectionResult {
+  const analysis = analyzePaymentLedger(payableCents, payments);
+  if (!analysis.ok) return Object.freeze({ ok: false, reason: analysis.reason });
+
+  const rows: PaymentLedgerProjectionRow[] = [];
+  for (const row of payments) {
+    const state = analysis.states.get(row.payment_id);
+    if (state === undefined) {
+      return Object.freeze({ ok: false, reason: "INVALID_PAYMENT" });
+    }
+    const refundable =
+      state.active && (row.kind === "pay" || row.kind === "repay") && row.method !== "balance"
+        ? row.amount_cents - (analysis.refunded_cents.get(row.payment_id) ?? 0)
+        : 0;
+    rows.push(
+      Object.freeze({
+        ...row,
+        active: state.active,
+        signed_cents: state.contribution_cents,
+        refundable_cents: refundable,
+      }),
+    );
+  }
+  return Object.freeze({
+    ok: true,
+    paid_cents: analysis.paid_cents,
+    balance_cents: analysis.balance_cents,
+    rows: Object.freeze(rows),
+  });
 }
 
 /** Targets are newest-first to make refund reversals precede their source payment. */

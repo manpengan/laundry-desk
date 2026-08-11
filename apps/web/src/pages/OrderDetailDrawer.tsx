@@ -3,14 +3,15 @@
  * Photo section uses the named PhotoPort; transport credentials stay outside React.
  */
 
-import { Button, Drawer, useToast } from "@laundry/ui";
+import { Drawer, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isStepUpRequired } from "../commands/command-client.js";
+import type { AuthClient } from "../auth/AuthClient.js";
+import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { MAX_PHOTO_BYTES, type PhotoContentType, type PhotoPort } from "../host/photo-port.js";
-import { DangerConfirmDialog } from "./DangerConfirmDialog.js";
+import { OrderDetailActions } from "./OrderDetailActions.js";
 import { OrderDetailContent } from "./OrderDetailContent.js";
-import { PaymentCollectionDialog } from "./PaymentCollectionDialog.js";
+import { PaymentLedgerPanel } from "./PaymentLedgerPanel.js";
 import { parsePhotoList, unwrapPhotoResult } from "./photo-list.js";
 import type { PhotoMetaRow } from "./photo-list.js";
 import { parseOrderGetResult, unwrapCommandResult, type OrderGetResult } from "./order-form.js";
@@ -23,6 +24,8 @@ export type OrderDetailDrawerProps = {
   orderId: string | null;
   queryClient: QueryPort;
   commandClient?: CommandPort;
+  authClient?: AuthClient;
+  session?: SessionView;
   photoPort?: PhotoPort;
   /** UI feature mirror only; server remains authoritative. */
   memberEnabled?: boolean;
@@ -37,9 +40,6 @@ export type OrderDetailLoadState =
   | Readonly<{ status: "error"; message: string }>
   | Readonly<{ status: "ready"; order: OrderGetResult }>;
 
-type CancelState =
-  Readonly<{ status: "idle" }> | Readonly<{ status: "server_confirmation"; confirmRef: string }>;
-
 type FailedPhotoUpload = Readonly<{
   file: File;
   uploadId: ReturnType<typeof crypto.randomUUID>;
@@ -51,6 +51,8 @@ export function OrderDetailDrawer({
   orderId,
   queryClient,
   commandClient,
+  authClient,
+  session,
   photoPort,
   memberEnabled = false,
   onClose,
@@ -63,10 +65,6 @@ export function OrderDetailDrawer({
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [failedPhotoUpload, setFailedPhotoUpload] = useState<FailedPhotoUpload | null>(null);
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelBusy, setCancelBusy] = useState(false);
-  const [cancelState, setCancelState] = useState<CancelState>({ status: "idle" });
-  const [paymentOpen, setPaymentOpen] = useState(false);
   const requestRef = useRef(0);
 
   const loadPhotos = useCallback(
@@ -149,15 +147,6 @@ export function OrderDetailDrawer({
 
   const title = load.status === "ready" ? `订单 ${load.order.ticket_no ?? "挂单"}` : "订单详情";
 
-  const handlePickup = useCallback(() => {
-    if (orderId === null || orderId.length === 0) return;
-    if (onPickup === undefined) {
-      toast.push("取衣入口不可用", "error");
-      return;
-    }
-    onPickup(orderId);
-  }, [onPickup, orderId, toast]);
-
   const handleRegisterPhoto = useCallback(
     async (file: File, uploadId = crypto.randomUUID()) => {
       if (photoPort === undefined) {
@@ -231,52 +220,6 @@ export function OrderDetailDrawer({
     [loadPhotos, orderId, photoPort, toast],
   );
 
-  const closeCancel = useCallback(() => {
-    if (cancelBusy) return;
-    setCancelOpen(false);
-    setCancelState({ status: "idle" });
-  }, [cancelBusy]);
-
-  const handleCancel = useCallback(
-    async (reason: string) => {
-      if (commandClient === undefined || orderId === null || load.status !== "ready") return;
-      setCancelBusy(true);
-      try {
-        const res =
-          cancelState.status === "server_confirmation"
-            ? await commandClient.execute<unknown>(
-                "order.cancel",
-                {},
-                { confirmRef: cancelState.confirmRef },
-              )
-            : await commandClient.execute<unknown>("order.cancel", { order_id: orderId, reason });
-        if (res.ok) {
-          toast.push("订单已撤销，相关流水已按规则反向记账", "success");
-          setCancelOpen(false);
-          setCancelState({ status: "idle" });
-          await loadOrder(orderId);
-          return;
-        }
-        if (cancelState.status === "idle" && isStepUpRequired(res)) {
-          if (res.error.code !== "POLICY_CONFIRMATION_REQUIRED") {
-            toast.push("此撤销需要主管二次授权，请由主管在授权入口完成", "error");
-            return;
-          }
-          setCancelState({
-            status: "server_confirmation",
-            confirmRef: res.error.detail.confirm_ref,
-          });
-          toast.push("服务端要求再次确认", "info");
-          return;
-        }
-        toast.push(res.error.message ?? res.error.code, "error");
-      } finally {
-        setCancelBusy(false);
-      }
-    },
-    [cancelState, commandClient, load.status, loadOrder, orderId, toast],
-  );
-
   return (
     <Drawer open={open} title={title} onClose={onClose} className="ld-order-detail-drawer">
       <div className="ld-order-detail" data-testid="order-detail-drawer">
@@ -318,78 +261,27 @@ export function OrderDetailDrawer({
             {...(photoPort === undefined ? {} : { photoPort })}
           />
         ) : null}
-
-        <div className="ld-order-detail__actions">
-          {onPickup !== undefined ? (
-            <Button
-              variant="primary"
-              type="button"
-              onClick={handlePickup}
-              disabled={orderId === null || orderId.length === 0}
-              data-testid="order-detail-pickup-btn"
-            >
-              去取衣
-            </Button>
-          ) : null}
-          <Button
-            variant="ghost"
-            type="button"
-            onClick={onClose}
-            data-testid="order-detail-close-btn"
-          >
-            关闭
-          </Button>
-          {commandClient !== undefined &&
-          load.status === "ready" &&
-          load.order.status === "open" &&
-          load.order.balance_cents > 0 ? (
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => setPaymentOpen(true)}
-              data-testid="order-detail-payment-btn"
-            >
-              补缴 / 收款
-            </Button>
-          ) : null}
-          {commandClient !== undefined &&
-          load.status === "ready" &&
-          load.order.status === "open" ? (
-            <Button
-              variant="danger"
-              type="button"
-              onClick={() => setCancelOpen(true)}
-              disabled={cancelBusy}
-              data-testid="order-detail-cancel-btn"
-            >
-              撤销订单
-            </Button>
-          ) : null}
-        </div>
-      </div>
-      <DangerConfirmDialog
-        open={cancelOpen}
-        title="撤销订单"
-        description="撤销会关闭订单，并按服务端规则生成可审计的反向流水。此操作不能撤回。"
-        confirmLabel={cancelState.status === "server_confirmation" ? "再次确认撤销" : "确认撤销"}
-        busy={cancelBusy}
-        serverConfirmation={cancelState.status === "server_confirmation"}
-        onClose={closeCancel}
-        onConfirm={(reason) => void handleCancel(reason)}
-      />
-      {commandClient !== undefined && load.status === "ready" ? (
-        <PaymentCollectionDialog
-          open={paymentOpen}
-          order={load.order}
-          commandClient={commandClient}
+        {load.status === "ready" ? (
+          <PaymentLedgerPanel
+            orderId={load.order.order_id}
+            queryClient={queryClient}
+            onCompleted={() => loadOrder(load.order.order_id)}
+            {...(commandClient === undefined ? {} : { commandClient })}
+            {...(authClient === undefined ? {} : { authClient })}
+            {...(session === undefined ? {} : { session })}
+          />
+        ) : null}
+        <OrderDetailActions
+          orderId={orderId}
+          order={load.status === "ready" ? load.order : null}
           queryClient={queryClient}
           memberEnabled={memberEnabled}
-          onClose={() => setPaymentOpen(false)}
-          onCompleted={() => {
-            if (orderId !== null) void loadOrder(orderId);
-          }}
+          onClose={onClose}
+          onReload={loadOrder}
+          {...(commandClient === undefined ? {} : { commandClient })}
+          {...(onPickup === undefined ? {} : { onPickup })}
         />
-      ) : null}
+      </div>
     </Drawer>
   );
 }

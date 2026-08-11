@@ -212,6 +212,20 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(columns).toContain("mnemonic");
     expect(columns).toContain("is_active");
     expect(columns).toContain("sort_order");
+
+    const pricingColumns = columnNames(M2_CATALOG_TABLES.store_pricing_policies);
+    expect(pricingColumns).toEqual(
+      expect.arrayContaining([
+        "org_id",
+        "store_id",
+        "urgent_cents",
+        "freight_cents",
+        "addons_json",
+        "version",
+        "updated_at",
+        "updated_by_staff_id",
+      ]),
+    );
   });
 
   it("declares M2 catalog tenant unique layouts", () => {

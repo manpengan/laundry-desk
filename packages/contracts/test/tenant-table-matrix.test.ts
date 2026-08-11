@@ -67,6 +67,7 @@ const EXPECTED_TABLES = Object.freeze([
   "staff_store_roles",
   "staffs",
   "store_features",
+  "store_pricing_policies",
   "stores",
   "ticket_no_blocks",
 ] as const);
@@ -133,6 +134,7 @@ const EXPECTED_STORE_TABLES = Object.freeze([
   "shift_closings",
   "staff_store_roles",
   "store_features",
+  "store_pricing_policies",
   "ticket_no_blocks",
 ] as const);
 

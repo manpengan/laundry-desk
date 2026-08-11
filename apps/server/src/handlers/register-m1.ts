@@ -26,12 +26,20 @@ import {
   registerFulfillmentQueryHandlers,
 } from "../fulfillment/handlers.js";
 import { registerOrderWorkdayCommandHandlers } from "../order/workday-handlers.js";
-import { registerPaymentCommandHandlers } from "../payment/handlers.js";
+import {
+  registerPaymentCommandHandlers,
+  registerPaymentQueryHandlers,
+} from "../payment/handlers.js";
 import type { PhotoHandlerDeps } from "../photo/handlers.js";
 import { registerPhotoCommandHandlers, registerPhotoQueryHandlers } from "../photo/handlers.js";
 import type { PrintHandlerDeps } from "../print/handlers.js";
 import { registerPrintCommandHandlers, registerPrintQueryHandlers } from "../print/handlers.js";
 import type { ReconciliationHandlerDeps } from "../reconciliation/types.js";
+import type { PricingHandlerDeps } from "../pricing/handlers.js";
+import {
+  registerPricingCommandHandlers,
+  registerPricingQueryHandlers,
+} from "../pricing/handlers.js";
 import {
   registerReconciliationCommandHandlers,
   registerReconciliationQueryHandlers,
@@ -60,6 +68,8 @@ import { createDefaultChainHooks } from "./default-chain-hooks.js";
 export type RegisterM1Deps = Readonly<{
   identity?: IdentityHandlerDeps;
   platform?: PlatformHandlerDeps;
+  /** ADR-38 store-scoped authoritative counter pricing policy. */
+  pricing?: PricingHandlerDeps;
   /** M2 skeleton order receive/pickup/get (memory or PG store). */
   order?: OrderHandlerDeps;
   /** M2 catalog price list (memory or PG). */
@@ -120,6 +130,11 @@ export function registerM1Handlers(
   if (deps.platform !== undefined) {
     registerPlatformHandlers(registry, deps.platform);
     registered.push("platform.settings.set");
+  }
+
+  if (deps.pricing !== undefined) {
+    registerPricingCommandHandlers(registry, deps.pricing);
+    registered.push("pricing.policy.set");
   }
 
   // ADR-15: price maintenance is a command; the query side stays read-only.
@@ -251,6 +266,11 @@ export function registerM1QueryHandlers(
     names.push("platform.settings.get", "platform.store_features.get", "platform.audit.list");
   }
 
+  if (deps.pricing !== undefined) {
+    registerPricingQueryHandlers(queryRegistry, deps.pricing);
+    names.push("pricing.policy.get");
+  }
+
   if (deps.catalog !== undefined) {
     registerCatalogQueryHandlers(queryRegistry, deps.catalog);
     names.push("catalog.items.list", "catalog.items.get");
@@ -258,7 +278,8 @@ export function registerM1QueryHandlers(
 
   if (deps.order !== undefined) {
     registerOrderQueryHandlers(queryRegistry, deps.order);
-    names.push("order.get");
+    registerPaymentQueryHandlers(queryRegistry, deps.order);
+    names.push("order.get", "order.list", "order.lookup", "payment.ledger.list");
   }
 
   if (deps.print !== undefined) {

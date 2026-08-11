@@ -26,6 +26,7 @@ import { createFileSpool } from "../print/file-spool.js";
 import { createPgPrintDispatchService } from "../print/pg-print-dispatch.js";
 import { snapshotFromOrder } from "../print/snapshot.js";
 import { createPgOrderStore } from "../order/pg-order-store.js";
+import { createMemoryPricingPolicyStore, createPgPricingPolicyStore } from "../pricing/index.js";
 import { createOrderBackedStatsQuery } from "../stats/memory-source.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
 import { createPgStaffAccessDeps } from "../staff/runtime.js";
@@ -221,12 +222,11 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   seedStaff(DEMO_STAFF_B_ID, "staffb", "店员乙");
 
   const orderStore = createMemoryOrderStore();
-  // Memory runtime has no customer table to consult, so seed the demo
-  // customer set the memory customer store starts from.
+  const pricingStore = createMemoryPricingPolicyStore();
+  // Memory runtime seeds the same demo customers used by the customer store.
   const memberDeps = createMemoryMemberDeps(DEMO_CUSTOMERS.map((row) => row.customer_id));
   const customerStore = createMemoryCustomerStore(DEMO_CUSTOMERS, memberDeps.customerMerge);
-  // Cash top-ups belong to the day's expected cash (ADR-22 §1.2), so stats must
-  // see the same member store the top-up command writes to.
+  // Cash top-ups share the member store so stats include expected cash (ADR-22 §1.2).
   const statsSource = createOrderBackedStatsQuery(orderStore, memberDeps.store);
   const shiftStore = createMemoryShiftStore();
   const printStore = createMemoryPrintJobStore({
@@ -260,8 +260,10 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       resolveMemoryStaffRole,
     ),
     platform: buildPlatform("memory"),
+    pricing: Object.freeze({ store: pricingStore }),
     order: Object.freeze({
       store: orderStore,
+      pricing: pricingStore,
       customer: customerStore,
       catalog: createMemoryCatalogStore(),
       timeZone: LOCAL_PROFILE.timezone,
@@ -335,6 +337,7 @@ export async function createPgLocalRuntime(
   const store = createPgIdentityStore(appPool);
   const passwordPort = createPasswordPort();
   const orderStore = createPgOrderStore(appPool);
+  const pricingStore = createPgPricingPolicyStore(appPool);
   const customerStore = createPgCustomerStore(appPool, { orgId: LOCAL_PROFILE.orgId });
   const statsSource = createPgStatsQuery(appPool);
   const shiftStore = createPgShiftStore(appPool, {
@@ -363,8 +366,10 @@ export async function createPgLocalRuntime(
       createPgStaffRoleResolver(appPool, dependencies.loadStaffDirectory),
     ),
     platform: buildPlatform("sql"),
+    pricing: Object.freeze({ store: pricingStore }),
     order: Object.freeze({
       store: orderStore,
+      pricing: pricingStore,
       customer: customerStore,
       catalog: createPgCatalogStore(appPool, {
         orgId: LOCAL_PROFILE.orgId,

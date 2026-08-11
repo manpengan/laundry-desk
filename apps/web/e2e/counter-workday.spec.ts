@@ -8,7 +8,7 @@
  *
  * Requires local:up + the seeded catalog from global-setup.mjs.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Request } from "@playwright/test";
 
 const exactLocalUrl = (name: "LAUNDRY_WEB_URL" | "LAUNDRY_API_URL", expected: string): string => {
   const configured = process.env[name];
@@ -32,6 +32,7 @@ const LOGIN = Object.freeze({
   storeCode: requiredEnvironment("LAUNDRY_LOCAL_STORE_CODE"),
   username: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_USERNAME"),
   password: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD"),
+  pin: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PIN"),
 });
 
 /**
@@ -46,16 +47,44 @@ const CATALOG_SERVICE = "wash";
 const CATALOG_CATEGORY = "e2eshirt";
 const CATALOG_PRICE_CENTS = "1500";
 const QTY = 2;
-const ADJUSTMENTS = Object.freeze({
+const POLICY = Object.freeze({
   discountCents: "100",
-  addonCents: "200",
   urgentCents: "300",
   freightCents: "400",
+  addonCode: "e2e_stain_removal",
+  addonName: "E2E 去渍",
+  addonUnitCents: "200",
 });
-const PAYABLE_TEXT = "¥38.00";
+const PAYABLE_TEXT = "¥40.00";
 const INITIAL_PAYMENT_CENTS = "1000";
-const DEBT_TEXT = "¥28.00";
+const DEBT_TEXT = "¥30.00";
+const REFUND_CENTS = "200";
+const REFUNDED_DEBT_TEXT = "¥32.00";
+const REMAINING_REFUNDABLE_TEXT = "¥8.00";
 const SETTLED_TEXT = "¥0.00";
+
+type ReceiveRequest = Readonly<Record<string, unknown>>;
+type RefundRequest = Readonly<Record<string, unknown>>;
+
+function captureReceive(request: Request, captures: ReceiveRequest[]): void {
+  if (request.method() !== "POST") return;
+  if (new URL(request.url()).pathname !== "/v1/commands/order.receive") return;
+  const body = request.postDataJSON() as unknown;
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new Error("order.receive request must be a JSON object");
+  }
+  captures.push(body as ReceiveRequest);
+}
+
+function captureRefund(request: Request, captures: RefundRequest[]): void {
+  if (request.method() !== "POST") return;
+  if (new URL(request.url()).pathname !== "/v1/commands/payment.refund") return;
+  const body = request.postDataJSON() as unknown;
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    throw new Error("payment.refund request must be a JSON object");
+  }
+  captures.push(body as RefundRequest);
+}
 
 async function signIn(page: Page): Promise<void> {
   await page.goto(WEB);
@@ -73,7 +102,15 @@ test.beforeAll(async ({ request }) => {
   expect(health.ok(), `API ${API}/health must be up`).toBeTruthy();
 });
 
-test("counter takes an order with a partial payment and settles it at pickup", async ({ page }) => {
+test("counter takes, refunds, and settles an order on the server-owned ledger", async ({
+  page,
+}) => {
+  const receiveRequests: ReceiveRequest[] = [];
+  const refundRequests: RefundRequest[] = [];
+  page.on("request", (request) => {
+    captureReceive(request, receiveRequests);
+    captureRefund(request, refundRequests);
+  });
   await signIn(page);
 
   // --- 价目维护（ADR-15）：没有价目就开不了单 ------------------------------
@@ -94,6 +131,31 @@ test("counter takes an order with a partial payment and settles it at pickup", a
     catalogPanel.locator('[data-testid="catalog-admin-row"]', { hasText: CATALOG_ITEM_NAME }),
   ).toBeVisible({ timeout: 15_000 });
 
+  // --- 柜台计价政策（ADR-38）：由另一位店长 R5 复核 -----------------------
+  const pricingPanel = page.locator('[data-testid="pricing-settings"]');
+  await expect(pricingPanel).toBeVisible();
+  await pricingPanel.getByLabel("加急固定费（分）").fill(POLICY.urgentCents);
+  await pricingPanel.getByLabel("运费固定费（分）").fill(POLICY.freightCents);
+  await pricingPanel.getByRole("button", { name: "添加附加项" }).click();
+  const addon = pricingPanel.locator(".ld-settings-pricing__addon").last();
+  await addon.getByLabel("附加项编码").fill(POLICY.addonCode);
+  await addon.getByLabel("显示名称").fill(POLICY.addonName);
+  await addon.getByLabel("每件金额（分）").fill(POLICY.addonUnitCents);
+  await addon.getByLabel("排序").fill("10");
+  await pricingPanel.getByRole("button", { name: "保存计价设置" }).click();
+
+  const stepUp = page.getByRole("dialog", { name: "需要现场复核" });
+  await expect(stepUp).toContainText("修改柜台计价", { timeout: 15_000 });
+  await stepUp.locator(".ld-step-up__select").selectOption({
+    label: "E2E Staff Two（店长）",
+  });
+  await stepUp.locator('input[name="step-up-pin"]').fill(LOGIN.pin);
+  await stepUp.getByRole("button", { name: "确认 PIN" }).click();
+  await expect(page.locator(".ld-toast").last()).toContainText("计价设置已保存并生效", {
+    timeout: 15_000,
+  });
+  await expect(pricingPanel.getByRole("status")).toContainText("当前版本 1");
+
   // --- 开单 ---------------------------------------------------------------
   await page.locator('[data-nav-id="receive"]').click();
   const picker = page.locator('[data-testid="catalog-picker"]');
@@ -103,13 +165,52 @@ test("counter takes an order with a partial payment and settles it at pickup", a
   await picker.getByRole("option", { name: new RegExp(CATALOG_ITEM_NAME, "u") }).click();
 
   await page.getByLabel("数量").fill(String(QTY));
+  await page.getByLabel("第 1 件颜色").fill("白");
+  await page.getByLabel("第 1 件品牌").fill("甲牌");
+  await page.getByLabel("第 1 件瑕疵").fill("袖口污渍，纽扣松动");
+  await page.getByLabel("第 1 件随衣附件").fill("腰带");
+  await page.getByLabel("第 1 件件级备注").fill("单独去渍");
+  await page.getByLabel("第 2 件颜色").fill("蓝");
+  await page.getByLabel("第 2 件品牌").fill("乙牌");
+  await page.getByLabel("第 2 件瑕疵").fill("下摆磨损");
+  await page.getByLabel("第 2 件随衣附件").fill("衣架");
+  await page.getByLabel("第 2 件件级备注").fill("低温处理");
   const phone = `139${Date.now().toString().slice(-8)}`;
   await page.locator('input[name="customer-phone"]').fill(phone);
   await page.locator('input[name="customer-name"]').fill("E2E 顾客");
-  await page.locator('input[name="discount-cents"]').fill(ADJUSTMENTS.discountCents);
-  await page.locator('input[name="addon-cents"]').fill(ADJUSTMENTS.addonCents);
-  await page.locator('input[name="urgent-cents"]').fill(ADJUSTMENTS.urgentCents);
-  await page.locator('input[name="freight-cents"]').fill(ADJUSTMENTS.freightCents);
+  await page.locator('input[name="discount-cents"]').fill(POLICY.discountCents);
+  await page.getByLabel(`第 1 件${POLICY.addonName}`).check();
+  await page.getByLabel(`第 2 件${POLICY.addonName}`).check();
+  await page.getByLabel(/^加急/u).check();
+  await page.getByLabel(/^运费/u).check();
+  await page.locator('input[name="note"]').fill("E2E 刷新恢复挂单");
+
+  // Save a complete server draft, reload the SPA, then recover only from
+  // order.list + order.get. No browser-local form state may be required.
+  await page.getByRole("button", { name: "暂存挂单" }).click();
+  await expect(page.locator(".ld-toast").last()).toContainText("已暂存挂单", {
+    timeout: 15_000,
+  });
+  await page.reload();
+  // Renderer authority is intentionally memory-only, so a hard refresh must
+  // reauthenticate before loading the server-owned draft.
+  await signIn(page);
+  await page.locator('[data-nav-id="receive"]').click();
+  const draftRow = page.locator('[data-testid="receive-draft-row"]', { hasText: phone });
+  await expect(draftRow).toBeVisible({ timeout: 15_000 });
+  await draftRow.locator('[data-testid="receive-draft-resume"]').click();
+  await expect(page.locator(".ld-toast").last()).toContainText("挂单已完整恢复", {
+    timeout: 15_000,
+  });
+  await expect(page.getByLabel("第 1 件颜色")).toHaveValue("白");
+  await expect(page.getByLabel("第 1 件瑕疵")).toHaveValue("袖口污渍，纽扣松动");
+  await expect(page.getByLabel("第 2 件颜色")).toHaveValue("蓝");
+  await expect(page.getByLabel("第 2 件随衣附件")).toHaveValue("衣架");
+  await expect(page.getByLabel(`第 1 件${POLICY.addonName}`)).toBeChecked();
+  await expect(page.getByLabel(`第 2 件${POLICY.addonName}`)).toBeChecked();
+  await expect(page.locator('input[name="discount-cents"]')).toHaveValue(POLICY.discountCents);
+  await expect(page.getByLabel(/^加急/u)).toBeChecked();
+  await expect(page.getByLabel(/^运费/u)).toBeChecked();
   await page.locator('input[name="initial-payment"]').fill(INITIAL_PAYMENT_CENTS);
 
   const preview = page.locator('[aria-label="本地预览"]');
@@ -117,7 +218,7 @@ test("counter takes an order with a partial payment and settles it at pickup", a
   await expect(preview).toContainText("¥30.00");
   await expect(preview).toContainText(PAYABLE_TEXT);
 
-  await page.getByRole("button", { name: "确认开单" }).click();
+  await page.getByRole("button", { name: "确认挂单并开单" }).click();
 
   const ticketCell = page.locator('[data-testid="receive-ticket"]');
   await expect(ticketCell).toBeVisible({ timeout: 15_000 });
@@ -125,23 +226,121 @@ test("counter takes an order with a partial payment and settles it at pickup", a
   expect(ticketNo.length).toBeGreaterThan(0);
 
   // Server-authoritative pricing:
-  // 2 x ¥15.00 - ¥1.00 + ¥2.00 + ¥3.00 + ¥4.00 = ¥38.00.
-  // ¥10.00 paid leaves ¥28.00 owed.
+  // 2 x ¥15.00 - ¥1.00 + (2 x ¥2.00) + ¥3.00 + ¥4.00 = ¥40.00.
+  // ¥10.00 paid leaves ¥30.00 owed.
   const receiveResult = page.locator(".ld-order-result");
   await expect(receiveResult).toContainText(PAYABLE_TEXT);
   await expect(receiveResult).toContainText(DEBT_TEXT);
 
+  expect(receiveRequests).toHaveLength(1);
+  const receiveBody = receiveRequests[0];
+  expect(receiveBody).not.toHaveProperty("addon_cents");
+  expect(receiveBody).not.toHaveProperty("urgent_cents");
+  expect(receiveBody).not.toHaveProperty("freight_cents");
+  expect(receiveBody).toMatchObject({
+    draft_id: expect.any(String),
+    discount_cents: 100,
+    urgent: true,
+    freight: true,
+    lines: [
+      {
+        qty: 2,
+        garments: [
+          {
+            color: "白",
+            brand: "甲牌",
+            defects: ["袖口污渍", "纽扣松动"],
+            accessories: ["腰带"],
+            note: "单独去渍",
+            addon_codes: [POLICY.addonCode],
+          },
+          {
+            color: "蓝",
+            brand: "乙牌",
+            defects: ["下摆磨损"],
+            accessories: ["衣架"],
+            note: "低温处理",
+            addon_codes: [POLICY.addonCode],
+          },
+        ],
+      },
+    ],
+  });
+
+  // --- 服务端流水 + R4 原路退款 ------------------------------------------
+  await page.locator('[data-nav-id="orders"]').click();
+  await page.locator('[data-testid="debt-load-btn"]').click();
+  const debtRow = page.locator('[data-testid="debt-row"]', { hasText: ticketNo });
+  await expect(debtRow).toBeVisible({ timeout: 15_000 });
+  await debtRow.locator('[data-testid="debt-row-detail-btn"]').click();
+
+  const drawer = page.locator('[data-testid="order-detail-drawer"]');
+  await expect(drawer.locator('[data-testid="order-detail-ticket"]')).toHaveText(ticketNo, {
+    timeout: 15_000,
+  });
+  await expect(drawer.locator('[data-testid="order-detail-garments"]')).toContainText("颜色：白");
+  await expect(drawer.locator('[data-testid="order-detail-garments"]')).toContainText(
+    "瑕疵：下摆磨损",
+  );
+  await expect(drawer.locator('[data-testid="order-detail-garments"]')).toContainText(
+    POLICY.addonName,
+  );
+  const originalPayment = drawer.locator('[data-testid="payment-ledger-row"]', {
+    hasText: "收款",
+  });
+  await expect(originalPayment).toContainText("服务端可退");
+  await expect(originalPayment).toContainText("¥10.00");
+  await originalPayment.locator('[data-testid="payment-refund-open-btn"]').click();
+
+  const refundDialog = page.locator('[data-testid="payment-refund-dialog"]');
+  await refundDialog.locator('[data-testid="payment-refund-amount"]').fill(REFUND_CENTS);
+  await refundDialog.locator('[data-testid="payment-refund-reason"]').fill("E2E 顾客改项退款");
+  await page
+    .getByRole("dialog", { name: "原路退款" })
+    .getByRole("button", { name: "申请退款" })
+    .click();
+
+  const refundStepUp = page.getByRole("dialog", { name: "需要现场复核" });
+  await expect(refundStepUp).toContainText("订单原路退款", { timeout: 15_000 });
+  await refundStepUp.locator(".ld-step-up__select").selectOption({
+    label: "E2E Staff Two（店长）",
+  });
+  await refundStepUp.locator('input[name="step-up-pin"]').fill(LOGIN.pin);
+  await refundStepUp.getByRole("button", { name: "确认 PIN" }).click();
+  await expect(page.locator(".ld-toast").last()).toContainText("退款已追加到支付流水", {
+    timeout: 15_000,
+  });
+  await expect(drawer.locator('[data-testid="order-detail-balance"]')).toContainText(
+    REFUNDED_DEBT_TEXT,
+  );
+  await expect(originalPayment).toContainText(REMAINING_REFUNDABLE_TEXT);
+  const refundRow = drawer.locator('[data-testid="payment-ledger-row"]', { hasText: /^退款/u });
+  await expect(refundRow).toContainText("¥2.00");
+
+  expect(refundRequests).toHaveLength(2);
+  expect(refundRequests[0]).toMatchObject({
+    amount_cents: 200,
+    method: "cash",
+    order_id: expect.any(String),
+    ref_payment_id: expect.any(String),
+    reason: "E2E 顾客改项退款",
+  });
+  expect(Object.keys(refundRequests[1] ?? {}).sort()).toEqual(["confirm_ref"]);
+  expect(refundRequests[1]?.confirm_ref).toEqual(expect.any(String));
+
   // --- 取衣 + 补款 --------------------------------------------------------
-  await page.locator('[data-nav-id="pickup"]').click();
+  await drawer.locator('[data-testid="order-detail-pickup-btn"]').click();
   await page.locator('input[name="pickup-key"]').fill(ticketNo);
   await page.getByRole("button", { name: "加载订单" }).click();
 
   await expect(page.locator('[data-testid="pickup-loaded-ticket"]')).toHaveText(ticketNo, {
     timeout: 15_000,
   });
-  await expect(page.locator('[data-testid="pickup-loaded-balance"]')).toContainText(DEBT_TEXT);
+  await expect(page.locator('[data-testid="pickup-loaded-balance"]')).toContainText(
+    REFUNDED_DEBT_TEXT,
+  );
 
-  await page.locator('input[name="collect-cents"]').fill("2800");
+  await page.locator('input[name="collect-cents"]').fill("3200");
   await page.getByRole("button", { name: "确认取衣" }).click();
 
   await expect(page.locator('[data-testid="pickup-ticket"]')).toHaveText(ticketNo, {

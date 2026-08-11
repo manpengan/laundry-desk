@@ -12,9 +12,9 @@ import {
   applyPickupTxn,
   cancelOrderTxn,
   insertInitialPayment,
-  listPaymentRows,
   replaceDraftTxn,
 } from "./pg-order-operations.js";
+import { listPaymentRows } from "./pg-payment-rows.js";
 import { appendRefundTxn } from "./pg-order-refund.js";
 import type { OrderRecord, OrderStore } from "./types.js";
 
@@ -47,7 +47,7 @@ export function createPgOrderStore(
       );
     },
 
-    replaceDraft: async (order, garments, initialPayment) =>
+    replaceDraft: async (order, garments, initialPayment, options) =>
       withStoreGucOrCurrent(
         pool,
         {
@@ -55,7 +55,15 @@ export function createPgOrderStore(
           storeId: order.store_id,
           staffId: order.created_by_staff_id,
         },
-        async (client) => replaceDraftTxn(client, order, garments, initialPayment, newId),
+        async (client) =>
+          replaceDraftTxn(
+            client,
+            order,
+            garments,
+            initialPayment,
+            newId,
+            options?.requireExisting === true,
+          ),
       ),
 
     getOrder: async (orgId, storeId, orderId) =>
@@ -114,9 +122,9 @@ export function createPgOrderStore(
       );
     },
 
-    listPayments: async (orgId, storeId, orderId) =>
+    listPayments: async (orgId, storeId, orderId, limit) =>
       withStoreGucOrCurrent(pool, { orgId, storeId }, async (client) =>
-        listPaymentRows(client, orgId, storeId, orderId),
+        listPaymentRows(client, orgId, storeId, orderId, limit),
       ),
 
     appendPayment: async (input) =>

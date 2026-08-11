@@ -60,9 +60,11 @@ export class MemoryOrderStore implements OrderStore {
     order: OrderRecord,
     garments: readonly GarmentRecord[],
     initialPayment?: InitialPayment,
+    options?: Readonly<{ requireExisting?: boolean }>,
   ): Promise<boolean> {
     const k = key(order.org_id, order.store_id, order.order_id);
     const existing = this.orders.get(k);
+    if (existing === undefined && options?.requireExisting === true) return false;
     if (existing !== undefined && existing.status !== "draft") return false;
     this.orders.set(k, Object.freeze({ ...order, lines: Object.freeze([...order.lines]) }));
     this.garments.set(
@@ -170,15 +172,15 @@ export class MemoryOrderStore implements OrderStore {
     orgId: string,
     storeId: string,
     orderId?: string,
+    limit?: number,
   ): Promise<readonly LedgerPaymentRow[]> {
-    return Object.freeze(
-      this.payments.filter(
-        (p) =>
-          p.org_id === orgId &&
-          p.store_id === storeId &&
-          (orderId === undefined || p.order_id === orderId),
-      ),
+    const matching = this.payments.filter(
+      (p) =>
+        p.org_id === orgId &&
+        p.store_id === storeId &&
+        (orderId === undefined || p.order_id === orderId),
     );
+    return Object.freeze(limit === undefined ? matching : matching.slice(0, limit));
   }
 
   async appendPayment(input: PaymentAppendInput): Promise<PaymentAppendResult | null> {

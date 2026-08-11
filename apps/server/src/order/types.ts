@@ -72,6 +72,21 @@ export type PaymentRefundAppendInput = Readonly<{
   business_date: string;
 }>;
 
+export type PricingAddonSnapshot = Readonly<{
+  code: string;
+  name: string;
+  unit_price_cents: number;
+}>;
+
+export type GarmentDetailRecord = Readonly<{
+  color: string | null;
+  brand: string | null;
+  defects: readonly string[];
+  accessories: readonly string[];
+  note: string | null;
+  addons: readonly PricingAddonSnapshot[];
+}>;
+
 export type OrderLineRecord = Readonly<{
   line_index: number;
   service_code: string;
@@ -81,6 +96,7 @@ export type OrderLineRecord = Readonly<{
   line_total_cents: number;
   color: string | null;
   brand: string | null;
+  garment_details?: readonly GarmentDetailRecord[];
 }>;
 
 export type GarmentRecord = Readonly<{
@@ -98,6 +114,9 @@ export type GarmentRecord = Readonly<{
   unit_price_cents: number;
   color: string | null;
   brand: string | null;
+  defects?: readonly string[];
+  accessories?: readonly string[];
+  note?: string | null;
   status: GarmentStatus;
   rack_zone?: string | null;
   rack_slot?: string | null;
@@ -123,6 +142,9 @@ export type OrderRecord = Readonly<{
   addon_cents: number;
   urgent_cents: number;
   freight_cents: number;
+  pricing_policy_version?: number;
+  urgent_selected?: boolean;
+  freight_selected?: boolean;
   payable_cents: number;
   paid_cents: number;
   balance_cents: number;
@@ -185,6 +207,7 @@ export type OrderStore = Readonly<{
     order: OrderRecord,
     garments: readonly GarmentRecord[],
     initialPayment?: InitialPayment,
+    options?: Readonly<{ requireExisting?: boolean }>,
   ) => Promise<boolean>;
   getOrder: (orgId: string, storeId: string, orderId: string) => Promise<OrderRecord | null>;
   listGarments: (
@@ -235,5 +258,7 @@ export type OrderStore = Readonly<{
     orgId: string,
     storeId: string,
     orderId?: string,
+    /** Optional fail-closed read cap for operator query surfaces. */
+    limit?: number,
   ) => Promise<readonly LedgerPaymentRow[]>;
 }>;

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0046", () => {
+  it("ships formal SQL migrations ordered 0001 → 0047", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -58,6 +58,7 @@ describe("packages/db migration file inventory", () => {
       "0044_durable_step_up_proofs.sql",
       "0045_store_commissioning_staff_credentials.sql",
       "0046_print_job_request_idempotency.sql",
+      "0047_cloud_counter_trust.sql",
     ]);
   });
 
@@ -116,6 +117,7 @@ describe("packages/db migration file inventory", () => {
       "0044",
       "0045",
       "0046",
+      "0047",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -638,6 +640,37 @@ describe("packages/db migration file inventory", () => {
     );
     expect(sql).toMatch(/print job idempotency authority is ambiguous/iu);
     expect(sql).toMatch(/REVOKE ALL ON FUNCTION guard_print_job_idempotency\(\) FROM PUBLIC/iu);
+  });
+
+  it("adds store pricing authority and resumable per-piece details expand-only", () => {
+    const sql = readFileSync(join(migrationsDir, "0047_cloud_counter_trust.sql"), "utf8");
+
+    expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS public\.store_pricing_policies/iu);
+    expect(sql).toMatch(/PRIMARY KEY \(org_id, store_id\)/iu);
+    expect(sql).toMatch(/addons_json jsonb NOT NULL DEFAULT '\[\]'::jsonb/iu);
+    expect(sql).toMatch(/ENABLE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(/FORCE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(
+      /GRANT SELECT, INSERT, UPDATE ON TABLE public\.store_pricing_policies TO laundry_app/iu,
+    );
+    expect(sql).toMatch(
+      /ADD COLUMN IF NOT EXISTS pricing_policy_version integer NOT NULL DEFAULT 0/iu,
+    );
+    expect(sql).toMatch(
+      /ADD COLUMN IF NOT EXISTS urgent_selected boolean NOT NULL DEFAULT false/iu,
+    );
+    expect(sql).toMatch(
+      /ADD COLUMN IF NOT EXISTS freight_selected boolean NOT NULL DEFAULT false/iu,
+    );
+    expect(sql).toMatch(
+      /ADD COLUMN IF NOT EXISTS garment_details_json jsonb NOT NULL DEFAULT '\[\]'::jsonb/iu,
+    );
+    expect(sql).toMatch(/FROM generate_series\(1, line\.qty\)/iu);
+    expect(sql).toMatch(/ADD COLUMN IF NOT EXISTS defects jsonb NOT NULL DEFAULT '\[\]'::jsonb/iu);
+    expect(sql).toMatch(
+      /ADD COLUMN IF NOT EXISTS accessories jsonb NOT NULL DEFAULT '\[\]'::jsonb/iu,
+    );
+    expect(sql).not.toMatch(/DROP\s+(?:TABLE|COLUMN)|TRUNCATE/iu);
   });
 
   it("adds a durable monotonic sequence for deterministic payment ledger order", () => {

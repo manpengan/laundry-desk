@@ -9,6 +9,9 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "customer_read",
   "customer_write",
   "order_write",
+  // ADR-38: any non-zero manual discount changes store revenue and remains
+  // admin-only even though ordinary counter staff can create full-price orders.
+  "order_discount",
   "accounting_read",
   "ledger_export",
   "payment_refund",
@@ -54,6 +57,7 @@ export function createRuntimeBus(runtime: LocalRuntime) {
     {
       identity: runtime.identity,
       platform: runtime.platform,
+      pricing: runtime.pricing,
       order: runtime.order,
       catalog: runtime.catalog,
       print: runtime.print,

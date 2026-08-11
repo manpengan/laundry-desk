@@ -4,9 +4,28 @@
 
 import type { GarmentStatus } from "@laundry/domain";
 
-import type { GarmentRecord, OrderLineRecord, OrderRecord, OrderStatus } from "./types.js";
+import type {
+  GarmentDetailRecord,
+  GarmentRecord,
+  OrderLineRecord,
+  OrderRecord,
+  OrderStatus,
+  PricingAddonSnapshot,
+} from "./types.js";
 
 export const epochToDate = (epoch: number): Date => new Date(epoch * 1000);
+
+const CODE_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/u;
+const DETAIL_KEYS = Object.freeze(["accessories", "addons", "brand", "color", "defects", "note"]);
+const ADDON_KEYS = Object.freeze(["code", "name", "unit_price_cents"]);
+
+function hasExactKeys(
+  value: Readonly<Record<string, unknown>>,
+  expected: readonly string[],
+): boolean {
+  const keys = Object.keys(value).sort();
+  return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+}
 
 export const dateToEpoch = (value: Date | string): number => {
   const ms = value instanceof Date ? value.getTime() : new Date(value).getTime();
@@ -30,6 +49,9 @@ export type OrderRow = {
   addon_cents: number;
   urgent_cents: number;
   freight_cents: number;
+  pricing_policy_version: number;
+  urgent_selected: boolean;
+  freight_selected: boolean;
   payable_cents: number;
   paid_cents: number;
   balance_cents: number;
@@ -52,6 +74,7 @@ export type OrderLineRow = {
   line_total_cents: number;
   color: string | null;
   brand: string | null;
+  garment_details_json: unknown;
 };
 
 export type GarmentRow = {
@@ -68,6 +91,9 @@ export type GarmentRow = {
   unit_price_cents: number;
   color: string | null;
   brand: string | null;
+  defects: unknown;
+  accessories: unknown;
+  note: string | null;
   status: string;
   rack_zone: string | null;
   rack_slot: string | null;
@@ -110,6 +136,7 @@ export function mapOrderLine(row: OrderLineRow): OrderLineRecord {
     line_total_cents: row.line_total_cents,
     color: row.color,
     brand: row.brand,
+    garment_details: parseGarmentDetails(row.garment_details_json, row.qty, row.color, row.brand),
   });
 }
 
@@ -132,6 +159,9 @@ export function mapOrder(row: OrderRow, lines: readonly OrderLineRecord[]): Orde
     addon_cents: row.addon_cents,
     urgent_cents: row.urgent_cents,
     freight_cents: row.freight_cents,
+    pricing_policy_version: row.pricing_policy_version,
+    urgent_selected: row.urgent_selected,
+    freight_selected: row.freight_selected,
     payable_cents: row.payable_cents,
     paid_cents: row.paid_cents,
     balance_cents: row.balance_cents,
@@ -157,10 +187,118 @@ export function mapGarment(row: GarmentRow): GarmentRecord {
     unit_price_cents: row.unit_price_cents,
     color: row.color,
     brand: row.brand,
+    defects: parseStringArray(row.defects, "garment defects"),
+    accessories: parseStringArray(row.accessories, "garment accessories"),
+    note: row.note,
     status: asGarmentStatus(row.status),
     rack_zone: row.rack_zone,
     rack_slot: row.rack_slot,
   });
+}
+
+function asObject(value: unknown, field: string): Readonly<Record<string, unknown>> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError(`Invalid ${field}`);
+  }
+  return value as Readonly<Record<string, unknown>>;
+}
+
+function parseStringArray(value: unknown, field: string): readonly string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length > 12 ||
+    value.some(
+      (item) =>
+        typeof item !== "string" || item.length < 1 || item.length > 32 || item.trim() !== item,
+    )
+  ) {
+    throw new TypeError(`Invalid ${field}`);
+  }
+  return Object.freeze([...value]);
+}
+
+function nullableText(value: unknown, field: string, max: number): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string" || value.length > max) throw new TypeError(`Invalid ${field}`);
+  return value;
+}
+
+function parseAddonSnapshots(value: unknown): readonly PricingAddonSnapshot[] {
+  if (!Array.isArray(value) || value.length > 8) {
+    throw new TypeError("Invalid garment add-ons");
+  }
+  const addons = Object.freeze(
+    value.map((entry) => {
+      const addon = asObject(entry, "garment add-on");
+      if (
+        !hasExactKeys(addon, ADDON_KEYS) ||
+        typeof addon.code !== "string" ||
+        !CODE_RE.test(addon.code) ||
+        typeof addon.name !== "string" ||
+        addon.name.length < 1 ||
+        addon.name.length > 64 ||
+        typeof addon.unit_price_cents !== "number" ||
+        !Number.isSafeInteger(addon.unit_price_cents) ||
+        addon.unit_price_cents < 0 ||
+        addon.unit_price_cents > 2_147_483_647
+      ) {
+        throw new TypeError("Invalid garment add-on");
+      }
+      return Object.freeze({
+        code: addon.code,
+        name: addon.name,
+        unit_price_cents: addon.unit_price_cents,
+      });
+    }),
+  );
+  if (new Set(addons.map((addon) => addon.code)).size !== addons.length) {
+    throw new TypeError("Duplicate garment add-on");
+  }
+  return addons;
+}
+
+function parseGarmentDetail(value: unknown): GarmentDetailRecord {
+  const detail = asObject(value, "garment detail");
+  if (!hasExactKeys(detail, DETAIL_KEYS)) throw new TypeError("Invalid garment detail");
+  return Object.freeze({
+    color: nullableText(detail.color, "garment color", 32),
+    brand: nullableText(detail.brand, "garment brand", 32),
+    defects: parseStringArray(detail.defects ?? [], "garment defects"),
+    accessories: parseStringArray(detail.accessories ?? [], "garment accessories"),
+    note: nullableText(detail.note, "garment note", 256),
+    addons: parseAddonSnapshots(detail.addons ?? []),
+  });
+}
+
+function legacyGarmentDetails(
+  qty: number,
+  color: string | null,
+  brand: string | null,
+): readonly GarmentDetailRecord[] {
+  return Object.freeze(
+    Array.from({ length: qty }, () =>
+      Object.freeze({
+        color,
+        brand,
+        defects: Object.freeze([]),
+        accessories: Object.freeze([]),
+        note: null,
+        addons: Object.freeze([]),
+      }),
+    ),
+  );
+}
+
+function parseGarmentDetails(
+  value: unknown,
+  qty: number,
+  color: string | null,
+  brand: string | null,
+): readonly GarmentDetailRecord[] {
+  if (!Array.isArray(value)) throw new TypeError("Invalid garment details");
+  if (value.length === 0) return legacyGarmentDetails(qty, color, brand);
+  if (value.length !== qty) throw new TypeError("Garment detail count does not match quantity");
+  return Object.freeze(value.map(parseGarmentDetail));
 }
 
 /** Resolve line_index → order_lines.id for insert (generate UUIDs when missing). */

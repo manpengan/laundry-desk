@@ -4,9 +4,8 @@
  * Kept here, because these are decisions the store itself makes: pure mapping
  * (buildLineIdByIndex, mapOrder, mapOrderLine), which values it sends to the
  * driver, that each garment is wired to one generated order_line, that a draft
- * takes the opening timestamp, that an out-of-range balance threshold short
- * circuits before any SQL, and that the two counter reads stay a single
- * statement instead of fanning out per order.
+ * takes the opening timestamp, and that draft/open write paths preserve the
+ * aggregate. Bounded query decisions live in pg-order-query-store.test.ts.
  *
  * Moved to a real database, because these are decisions PostgreSQL makes:
  * joins, filters, ordering and ledger sequence. Those live in
@@ -24,7 +23,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
-import { createPgPool, resolvePgUrls } from "../db/pg-pool.js";
 import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { buildLineIdByIndex, mapOrder, mapOrderLine } from "./pg-order-mappers.js";
 import { createPgOrderStore } from "./pg-order-store.js";
@@ -99,6 +97,24 @@ const sampleOrder = (): OrderRecord =>
         line_total_cents: 3000,
         color: null,
         brand: null,
+        garment_details: Object.freeze([
+          Object.freeze({
+            color: null,
+            brand: null,
+            defects: Object.freeze([]),
+            accessories: Object.freeze([]),
+            note: null,
+            addons: Object.freeze([]),
+          }),
+          Object.freeze({
+            color: null,
+            brand: null,
+            defects: Object.freeze([]),
+            accessories: Object.freeze([]),
+            note: null,
+            addons: Object.freeze([]),
+          }),
+        ]),
       }),
     ]),
     subtotal_cents: 3000,
@@ -107,6 +123,9 @@ const sampleOrder = (): OrderRecord =>
     addon_cents: 0,
     urgent_cents: 0,
     freight_cents: 0,
+    pricing_policy_version: 0,
+    urgent_selected: false,
+    freight_selected: false,
     payable_cents: 3000,
     paid_cents: 500,
     balance_cents: 2500,
@@ -131,6 +150,9 @@ const sampleGarments = (): readonly GarmentRecord[] =>
       unit_price_cents: 1500,
       color: null,
       brand: null,
+      defects: Object.freeze([]),
+      accessories: Object.freeze([]),
+      note: null,
       status: "received" as const,
     }),
     Object.freeze({
@@ -146,6 +168,9 @@ const sampleGarments = (): readonly GarmentRecord[] =>
       unit_price_cents: 1500,
       color: null,
       brand: null,
+      defects: Object.freeze([]),
+      accessories: Object.freeze([]),
+      note: null,
       status: "received" as const,
     }),
   ]);
@@ -174,9 +199,27 @@ test("mapOrder + mapOrderLine preserve cents and line_index", () => {
     line_total_cents: 4000,
     color: "black",
     brand: null,
+    garment_details_json: [
+      {
+        color: "black",
+        brand: null,
+        defects: ["scratch"],
+        accessories: ["belt"],
+        note: "front",
+        addons: [{ code: "stain", name: "Stain treatment", unit_price_cents: 300 }],
+      },
+    ],
   });
   assert.equal(line.line_index, 2);
   assert.equal(line.unit_price_cents, 4000);
+  assert.deepEqual(line.garment_details?.[0], {
+    color: "black",
+    brand: null,
+    defects: ["scratch"],
+    accessories: ["belt"],
+    note: "front",
+    addons: [{ code: "stain", name: "Stain treatment", unit_price_cents: 300 }],
+  });
 
   const order = mapOrder(
     {
@@ -196,6 +239,9 @@ test("mapOrder + mapOrderLine preserve cents and line_index", () => {
       addon_cents: 0,
       urgent_cents: 0,
       freight_cents: 0,
+      pricing_policy_version: 3,
+      urgent_selected: true,
+      freight_selected: false,
       payable_cents: 4000,
       paid_cents: 0,
       balance_cents: 4000,
@@ -209,7 +255,60 @@ test("mapOrder + mapOrderLine preserve cents and line_index", () => {
   assert.equal(order.order_id, "ord-1");
   assert.equal(order.customer_id, null);
   assert.equal(order.lines[0]?.line_index, 2);
+  assert.equal(order.pricing_policy_version, 3);
+  assert.equal(order.urgent_selected, true);
   assert.equal(order.created_at, Math.floor(Date.parse("2026-07-22T00:00:00Z") / 1000));
+});
+
+test("mapOrderLine rejects malformed persisted per-piece snapshots", () => {
+  const base = {
+    id: "line-1",
+    org_id: DEMO_ORG_ID,
+    store_id: DEMO_STORE_ID,
+    order_id: "ord-1",
+    line_index: 0,
+    service_code: "wash",
+    category_code: "shirt",
+    unit_price_cents: 1_500,
+    qty: 1,
+    line_total_cents: 1_500,
+    color: null,
+    brand: null,
+  };
+  assert.throws(
+    () =>
+      mapOrderLine({
+        ...base,
+        garment_details_json: [
+          {
+            color: null,
+            brand: null,
+            defects: [],
+            accessories: [],
+            note: null,
+            addons: [{ code: "stain", name: "去渍", unit_price_cents: 100, unexpected: true }],
+          },
+        ],
+      }),
+    /Invalid garment add-on/u,
+  );
+  assert.throws(
+    () =>
+      mapOrderLine({
+        ...base,
+        garment_details_json: [
+          {
+            color: null,
+            brand: null,
+            defects: ["x".repeat(33)],
+            accessories: [],
+            note: null,
+            addons: [],
+          },
+        ],
+      }),
+    /Invalid garment defects/u,
+  );
 });
 
 test("nextTicketSeq issues UPSERT on ticket_counters and returns last_seq", async () => {
@@ -305,6 +404,9 @@ test("replaceDraft resets created_at when the draft formally becomes an open ord
             addon_cents: oldDraft.addon_cents,
             urgent_cents: oldDraft.urgent_cents,
             freight_cents: oldDraft.freight_cents,
+            pricing_policy_version: oldDraft.pricing_policy_version,
+            urgent_selected: oldDraft.urgent_selected,
+            freight_selected: oldDraft.freight_selected,
             payable_cents: oldDraft.payable_cents,
             paid_cents: oldDraft.paid_cents,
             balance_cents: oldDraft.balance_cents,
@@ -341,6 +443,20 @@ test("replaceDraft resets created_at when the draft formally becomes an open ord
     sentTimes.some((at) => at.getTime() === oldDraft.created_at * 1_000),
     false,
     "the draft's original created_at must not survive the transition",
+  );
+});
+
+test("replaceDraft requireExisting refuses a missing client-selected draft id", async () => {
+  const { pool, queries } = createCapturingPool();
+  const store = createPgOrderStore(pool);
+  const replaced = await store.replaceDraft?.(sampleOrder(), sampleGarments(), undefined, {
+    requireExisting: true,
+  });
+
+  assert.equal(replaced, false);
+  assert.equal(
+    queries.some((query) => query.sql.includes("INSERT INTO orders")),
+    false,
   );
 });
 
@@ -395,11 +511,20 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
             customer_name: order.customer_name,
             note: order.note,
             subtotal_cents: order.subtotal_cents,
+            original_cents: order.original_cents,
+            discount_cents: order.discount_cents,
+            addon_cents: order.addon_cents,
+            urgent_cents: order.urgent_cents,
+            freight_cents: order.freight_cents,
             payable_cents: order.payable_cents,
             paid_cents: order.paid_cents,
             balance_cents: order.balance_cents,
+            pricing_policy_version: order.pricing_policy_version,
+            urgent_selected: order.urgent_selected,
+            freight_selected: order.freight_selected,
             created_at: new Date(order.created_at * 1000),
             updated_at: new Date(order.updated_at * 1000),
+            business_date: order.business_date,
             created_by_staff_id: order.created_by_staff_id,
           },
         ],
@@ -422,6 +547,7 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
             line_total_cents: 3000,
             color: null,
             brand: null,
+            garment_details_json: order.lines[0]?.garment_details,
           },
         ],
         rowCount: 1,
@@ -443,7 +569,12 @@ test("applyPickup updates garments to picked_up and settles balance", async () =
           unit_price_cents: g.unit_price_cents,
           color: g.color,
           brand: g.brand,
+          defects: g.defects,
+          accessories: g.accessories,
+          note: g.note,
           status: g.status,
+          rack_zone: g.rack_zone ?? null,
+          rack_slot: g.rack_slot ?? null,
         })),
         rowCount: lockedGarments.length,
       };
@@ -528,11 +659,20 @@ test("applyPickup with collectCents 0 skips payments insert", async () => {
             customer_name: order.customer_name,
             note: order.note,
             subtotal_cents: order.subtotal_cents,
+            original_cents: order.original_cents,
+            discount_cents: order.discount_cents,
+            addon_cents: order.addon_cents,
+            urgent_cents: order.urgent_cents,
+            freight_cents: order.freight_cents,
             payable_cents: order.payable_cents,
             paid_cents: order.paid_cents,
             balance_cents: order.balance_cents,
+            pricing_policy_version: order.pricing_policy_version,
+            urgent_selected: order.urgent_selected,
+            freight_selected: order.freight_selected,
             created_at: new Date(order.created_at * 1000),
             updated_at: new Date(order.updated_at * 1000),
+            business_date: order.business_date,
             created_by_staff_id: order.created_by_staff_id,
           },
         ],
@@ -555,6 +695,7 @@ test("applyPickup with collectCents 0 skips payments insert", async () => {
             line_total_cents: 3000,
             color: null,
             brand: null,
+            garment_details_json: order.lines[0]?.garment_details,
           },
         ],
         rowCount: 1,
@@ -576,7 +717,12 @@ test("applyPickup with collectCents 0 skips payments insert", async () => {
           unit_price_cents: g.unit_price_cents,
           color: g.color,
           brand: g.brand,
+          defects: g.defects,
+          accessories: g.accessories,
+          note: g.note,
           status: g.status,
+          rack_zone: g.rack_zone ?? null,
+          rack_slot: g.rack_slot ?? null,
         })),
         rowCount: garments.length,
       };
@@ -600,151 +746,4 @@ test("applyPickup with collectCents 0 skips payments insert", async () => {
     queries.some((q) => q.sql.includes("INTO payments")),
     false,
   );
-});
-
-test("listOrderSummaries issues exactly one aggregate query carrying every filter", async () => {
-  const handler: MockQueryHandler = (sql) => {
-    if (sql.includes("COUNT(g.id)")) {
-      return {
-        rows: [
-          {
-            order_id: sampleOrder().order_id,
-            ticket_no: sampleOrder().ticket_no,
-            status: "open",
-            customer_phone: sampleOrder().customer_phone,
-            customer_name: "甲",
-            payable_cents: 3000,
-            paid_cents: 500,
-            balance_cents: 2500,
-            created_at: new Date("2024-07-22T12:34:56.000Z"),
-            garment_count: 2,
-          },
-        ],
-        rowCount: 1,
-      };
-    }
-    return { rows: [], rowCount: 0 };
-  };
-  const { pool, queries } = createCapturingPool(handler);
-  const store = createPgOrderStore(pool);
-  assert.ok(store.listOrderSummaries);
-
-  const summaries = await store.listOrderSummaries(DEMO_ORG_ID, DEMO_STORE_ID, {
-    businessDate: "2024-07-22",
-    status: "open",
-    customerPhone: "13800000111",
-    minBalanceCents: 1,
-    limit: 7,
-  });
-
-  assert.equal(summaries.length, 1);
-  assert.equal(summaries[0]?.garment_count, 2);
-  assert.equal(summaries[0]?.created_at, Math.floor(Date.parse("2024-07-22T12:34:56.000Z") / 1000));
-  // One statement for the whole page is a property a mock can genuinely prove:
-  // it counts what was executed. Whether that statement joins, filters and
-  // orders correctly is PostgreSQL's business and is covered in
-  // pg-order-summaries.test.ts — the regexes that used to sit here
-  // (/LEFT JOIN garments/, /o\.balance_cents >= \$6/, /ORDER BY .../) asserted
-  // the query string, which stays identical whether or not the results are right.
-  const summaryQueries = queries.filter((query) => query.sql.includes("COUNT(g.id)"));
-  assert.equal(summaryQueries.length, 1, "the list must not fan out into per-order queries");
-  assert.deepEqual(summaryQueries[0]!.params, [
-    DEMO_ORG_ID,
-    DEMO_STORE_ID,
-    "open",
-    "13800000111",
-    "2024-07-22",
-    1,
-    7,
-  ]);
-});
-
-test("listOrderSummaries short-circuits a threshold above PostgreSQL integer before aggregate SQL", async () => {
-  const { pool, queries } = createCapturingPool();
-  const store = createPgOrderStore(pool);
-  assert.ok(store.listOrderSummaries);
-
-  const summaries = await store.listOrderSummaries(DEMO_ORG_ID, DEMO_STORE_ID, {
-    minBalanceCents: 2_147_483_648,
-    limit: 20,
-  });
-  assert.deepEqual(summaries, []);
-  assert.equal(
-    queries.some((query) => query.sql.includes("COUNT(g.id)")),
-    false,
-  );
-  assert.equal(queries[0]?.sql, "BEGIN");
-  assert.equal(queries.at(-1)?.sql, "COMMIT");
-});
-
-test("lookupOrderSummaries stays a single bounded query and maps matched_by", async () => {
-  const handler: MockQueryHandler = (sql) => {
-    if (sql.includes("AS matched_by")) {
-      return {
-        rows: [
-          {
-            order_id: sampleOrder().order_id,
-            ticket_no: sampleOrder().ticket_no,
-            pickup_code: sampleOrder().pickup_code,
-            status: "open",
-            customer_phone: sampleOrder().customer_phone,
-            customer_name: "甲",
-            payable_cents: 3000,
-            paid_cents: 500,
-            balance_cents: 2500,
-            created_at: new Date("2024-07-22T12:34:56.000Z"),
-            garment_count: 2,
-            matched_by: "garment_barcode",
-          },
-        ],
-        rowCount: 1,
-      };
-    }
-    return { rows: [], rowCount: 0 };
-  };
-  const { pool, queries } = createCapturingPool(handler);
-  const store = createPgOrderStore(pool);
-  assert.ok(store.lookupOrderSummaries);
-
-  const summaries = await store.lookupOrderSummaries(DEMO_ORG_ID, DEMO_STORE_ID, {
-    key: "BBBBBBBBBBBBBBBB",
-    status: "open",
-    limit: 20,
-  });
-
-  assert.equal(summaries[0]?.matched_by, "garment_barcode");
-  assert.equal(summaries[0]?.pickup_code, "P202607220001");
-
-  // Bounded means one statement: the counter types one key and must not trigger
-  // a scan per identifier kind. Which identifiers actually resolve, and what
-  // matched_by each yields, is proven against a real database in
-  // pg-order-summaries.test.ts.
-  const lookups = queries.filter((query) => query.sql.includes("AS matched_by"));
-  assert.equal(lookups.length, 1, "the lookup must stay a single bounded query");
-  assert.deepEqual(lookups[0]!.params, [
-    DEMO_ORG_ID,
-    DEMO_STORE_ID,
-    "BBBBBBBBBBBBBBBB",
-    "open",
-    20,
-  ]);
-});
-
-// Live PG smoke; ordinary unit runs remain database-free.
-const pgOptIn =
-  process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true";
-const urls = pgOptIn ? resolvePgUrls(process.env) : null;
-const maybePg = urls === null ? test.skip : test;
-
-maybePg("PG order store smoke", async () => {
-  assert.ok(urls);
-  const pool = createPgPool({ connectionString: urls.app });
-  try {
-    const store = createPgOrderStore(pool);
-    // Probe: nextTicketSeq needs ticket_counters; if missing, test fails loudly under opt-in.
-    const seq = await store.nextTicketSeq(DEMO_ORG_ID, DEMO_STORE_ID, "20990101");
-    assert.ok(seq >= 1);
-  } finally {
-    await pool.end();
-  }
 });

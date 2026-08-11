@@ -5,14 +5,12 @@ import {
   planCancel,
   planCollectPayment,
   planRepayPayment,
-  type PaymentKind,
-  type PaymentMethod,
 } from "@laundry/domain";
 
 import type { SqlClient } from "../db/types.js";
 import { assertPickupPlanMatchesCurrentRows, markGarmentsPickedUp } from "./pg-garment-pickup.js";
 import { requireVerifiedRackBarcodes } from "./pickup-verification.js";
-import { buildLineIdByIndex, dateToEpoch, epochToDate } from "./pg-order-mappers.js";
+import { buildLineIdByIndex, epochToDate } from "./pg-order-mappers.js";
 import {
   insertOrderChildren,
   insertOrderRows,
@@ -20,7 +18,7 @@ import {
   loadOrder,
   nextOrderStatus,
 } from "./pg-order-data.js";
-import { orderPaymentsByReference } from "./payment-reference-order.js";
+import { listPaymentRows } from "./pg-payment-rows.js";
 import type {
   InitialPayment,
   LedgerPaymentRow,
@@ -103,9 +101,11 @@ export async function replaceDraftTxn(
   garments: readonly import("./types.js").GarmentRecord[],
   initialPayment: InitialPayment | undefined,
   newId: () => string,
+  requireExisting = false,
 ): Promise<boolean> {
   const existing = await loadOrder(client, order.org_id, order.store_id, order.order_id, true);
   if (existing === null) {
+    if (requireExisting) return false;
     await insertOrderRows(client, order, garments, buildLineIdByIndex(order.lines, newId));
     await insertInitialPayment(client, initialPayment);
     return true;
@@ -123,7 +123,9 @@ export async function replaceDraftTxn(
          customer_phone = $8, customer_name = $9, note = $10,
          subtotal_cents = $11, original_cents = $12, discount_cents = $13, addon_cents = $14,
          urgent_cents = $15, freight_cents = $16, payable_cents = $17, paid_cents = $18,
-         balance_cents = $19, business_date = $20, created_at = $21, updated_at = $22
+         balance_cents = $19, business_date = $20,
+         pricing_policy_version = $21, urgent_selected = $22, freight_selected = $23,
+         created_at = $24, updated_at = $25
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid`,
     [
       order.org_id,
@@ -146,6 +148,9 @@ export async function replaceDraftTxn(
       order.paid_cents,
       order.balance_cents,
       order.business_date,
+      order.pricing_policy_version ?? 0,
+      order.urgent_selected ?? false,
+      order.freight_selected ?? false,
       epochToDate(order.created_at),
       epochToDate(order.updated_at),
     ],
@@ -234,57 +239,6 @@ export async function applyPickupTxn(
     }),
     garments: Object.freeze(nextGarments),
   });
-}
-
-export async function listPaymentRows(
-  client: SqlClient,
-  orgId: string,
-  storeId: string,
-  orderId?: string,
-): Promise<readonly LedgerPaymentRow[]> {
-  type PaymentSqlRow = Readonly<{
-    id: string;
-    org_id: string;
-    store_id: string;
-    order_id: string;
-    method: PaymentMethod;
-    amount_cents: number;
-    kind: PaymentKind;
-    ref_payment_id: string | null;
-    staff_id: string;
-    at: Date | string;
-    business_date: string;
-    note: string | null;
-  }>;
-  const result = await client.query<PaymentSqlRow>(
-    `SELECT id::text, org_id::text, store_id::text, order_id::text, method,
-            amount_cents, kind, ref_payment_id::text, staff_id::text, at, business_date, note
-     FROM payments
-     WHERE org_id = $1::uuid AND store_id = $2::uuid
-       AND ($3::uuid IS NULL OR order_id = $3::uuid)
-     ORDER BY ledger_seq ASC`,
-    [orgId, storeId, orderId ?? null],
-  );
-  return orderPaymentsByReference(
-    Object.freeze(
-      result.rows.map((row) =>
-        Object.freeze({
-          payment_id: row.id,
-          org_id: row.org_id,
-          store_id: row.store_id,
-          order_id: row.order_id,
-          method: row.method,
-          amount_cents: row.amount_cents,
-          kind: row.kind,
-          ref_payment_id: row.ref_payment_id,
-          staff_id: row.staff_id,
-          at: dateToEpoch(row.at),
-          business_date: row.business_date,
-          note: row.note,
-        }),
-      ),
-    ),
-  );
 }
 
 export async function appendPaymentTxn(

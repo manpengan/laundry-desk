@@ -340,6 +340,8 @@ export function CustomersPage({
         queryClient={queryClient}
         commandClient={commandClient}
         memberEnabled={session?.features.member_enabled === true}
+        {...(authClient === undefined ? {} : { authClient })}
+        {...(session === undefined ? {} : { session })}
         {...(photoPort === undefined ? {} : { photoPort })}
         onClose={() => setDetailOrderId(null)}
         {...(onOpenPickup === undefined

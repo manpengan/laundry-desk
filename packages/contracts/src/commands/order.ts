@@ -13,6 +13,7 @@ import {
 } from "../registry/definitions.js";
 import { BusinessDateSchema } from "./stats.js";
 import { PaymentMethodSchema } from "./payment.js";
+import { PricingAddonCodeSchema } from "./pricing.js";
 
 const ServiceCodeSchema = z
   .string()
@@ -27,21 +28,59 @@ const PhoneSchema = z
 
 export const OrderStatusSchema = z.enum(["draft", "open", "closed", "cancelled"]);
 
-export const OrderReceiveLineSchema = z.strictObject({
-  service_code: ServiceCodeSchema,
-  category_code: CategoryCodeSchema,
-  qty: z.number().int().positive().max(50),
-  color: z.string().max(32).optional(),
-  brand: z.string().max(32).optional(),
-  /**
-   * Compatibility-only field for queued M2 clients. It is validated then
-   * discarded; handlers always resolve the price from the active catalog.
-   */
-  unit_price_cents: NonNegCentsSchema.optional(),
-});
+const GarmentDetailTextSchema = z.string().trim().min(1).max(32);
+
+export const OrderGarmentDetailSchema = z
+  .strictObject({
+    color: z.string().trim().max(32).optional(),
+    brand: z.string().trim().max(32).optional(),
+    defects: z.array(GarmentDetailTextSchema).max(12).optional(),
+    accessories: z.array(GarmentDetailTextSchema).max(12).optional(),
+    note: z.string().trim().max(256).optional(),
+    addon_codes: z.array(PricingAddonCodeSchema).max(8).optional(),
+  })
+  .superRefine((value, ctx) => {
+    const codes = value.addon_codes ?? [];
+    if (new Set(codes).size !== codes.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["addon_codes"],
+        message: "Duplicate addon codes are not allowed",
+      });
+    }
+  });
+
+export const OrderReceiveLineSchema = z
+  .strictObject({
+    service_code: ServiceCodeSchema,
+    category_code: CategoryCodeSchema,
+    qty: z.number().int().positive().max(50),
+    /** Compatibility-only common values used when an old client omits garments. */
+    color: z.string().max(32).optional(),
+    brand: z.string().max(32).optional(),
+    /** New clients submit exactly one bounded detail object per physical piece. */
+    garments: z.array(OrderGarmentDetailSchema).min(1).max(50).optional(),
+    /**
+     * Compatibility-only field for queued M2 clients. It is validated then
+     * discarded; handlers always resolve the price from the active catalog.
+     */
+    unit_price_cents: NonNegCentsSchema.optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.garments !== undefined && value.garments.length !== value.qty) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["garments"],
+        message: "garments length must equal qty",
+      });
+    }
+  });
 
 export const OrderPricingAdjustmentsSchema = z.strictObject({
   discount_cents: NonNegCentsSchema.optional(),
+  urgent: z.boolean().optional(),
+  freight: z.boolean().optional(),
+  /** Compatibility-only amounts. The server validates then ignores them. */
   addon_cents: NonNegCentsSchema.optional(),
   urgent_cents: NonNegCentsSchema.optional(),
   freight_cents: NonNegCentsSchema.optional(),
@@ -178,11 +217,11 @@ type LookupInput = typeof OrderLookupInputSchema;
 /** 开单：生成 order + order_lines 语义 + 按 qty 拆 garments（runtime）。 */
 export const orderReceiveCommand: CommandDefinition<ReceiveInput> = defineCommand({
   name: "order.receive",
-  version: "0.3.0",
+  version: "0.4.0",
   description:
-    "Create an open order from the server catalog, atomically append its first payment, and expand line quantities into garments.",
+    "Create an open order from server catalog and store pricing policy, atomically append its first payment, and expand line quantities into detailed garments.",
   description_llm:
-    "Open a counter order using the active server catalog price; clients cannot submit a unit price. Expand each line qty into garments at received status. Integer cents only.",
+    "Open a counter order using active server catalog and pricing policy. Clients select add-on codes and urgent/freight flags but cannot submit their amounts or a unit price. Expand each line qty into garments at received status. Integer cents only.",
   input: OrderReceiveInputSchema,
   risk: "R1",
   invariants: ["rbac.order_write", "order.lines_nonempty"],
@@ -224,10 +263,10 @@ export const orderPickupCommand: CommandDefinition<PickupInput> = defineCommand(
 /** 挂单：保留当前订单与计价快照，恢复开单不生成第二张票。 */
 export const orderHoldCommand: CommandDefinition<HoldInput> = defineCommand({
   name: "order.hold",
-  version: "0.3.0",
+  version: "0.4.0",
   description: "Create or replace an unreceived priced order draft without a ticket or payment.",
   description_llm:
-    "Save an unreceived counter draft. It has a server price snapshot but no ticket, garments, payment or revenue until order.receive opens it.",
+    "Save an unreceived counter draft with server catalog, pricing-policy and per-piece detail snapshots. It has no ticket, formal garments, payment or revenue until order.receive opens it.",
   input: OrderHoldInputSchema,
   risk: "R2",
   invariants: ["rbac.order_write", "order.hold_allowed", "order.server_pricing"],
@@ -260,10 +299,10 @@ export const orderCancelCommand: CommandDefinition<CancelInput> = defineCommand(
 /** 读单：取衣前加载订单摘要 + 件列表（多选 partial pickup）。 */
 export const orderGetQuery: QueryDefinition<GetInput> = defineQuery({
   name: "order.get",
-  version: "0.2.0",
-  description: "Load one order summary and its garments for counter pickup.",
+  version: "0.3.0",
+  description: "Load one order's complete counter detail or resumable draft snapshot.",
   description_llm:
-    "Fetch order by id with garment list (id, barcode, status, line_index, seq, unit_price_cents). PII may appear.",
+    "Fetch order by id with pricing components, editable line and piece details, and formal garment status/barcode/rack data. Drafts can be resumed from this server-owned snapshot. PII may appear.",
   input: OrderGetInputSchema,
   // PII queries must be ≥ R2 (QueryMetadataSchema); task asked R1, schema wins.
   risk: "R2",

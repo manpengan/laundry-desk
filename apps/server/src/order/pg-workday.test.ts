@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 import { executeCommand } from "../bus/executor.js";
+import { executeQuery } from "../bus/execute-query.js";
 import type { ActorContext } from "../bus/types.js";
 import { createPgPool, resolvePgUrls } from "../db/pg-pool.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
@@ -17,6 +18,7 @@ import { PG_TEST_STAFF_B_ID } from "../local/pg-test-fixture.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
 import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
 import { createPgMemberDeps } from "../member/runtime.js";
+import { createPgPricingPolicyStore } from "../pricing/pg-store.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import { createPgStatsQuery } from "../stats/pg-source.js";
 import { acquirePgBusinessDayLock } from "../workday/business-day-lock.js";
@@ -35,6 +37,14 @@ import {
   UNIT_PRICE_CENTS,
   fixedNow,
 } from "./pg-workday-test-context.js";
+import {
+  clearWorkdayFixture,
+  readClosedWriteCounts,
+  readFulfillment,
+  readGarmentRefs,
+  readOrder,
+  readOrderCustomerLink,
+} from "./pg-workday-test-helpers.js";
 
 const APPROVER: ActorContext = Object.freeze({ ...ACTOR, staffId: PG_TEST_STAFF_B_ID });
 
@@ -70,6 +80,27 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       ],
     );
 
+    const pricingStore = createPgPricingPolicyStore(appPool);
+    const pricingChange = await pricingStore.set({
+      org_id: DEMO_ORG_ID,
+      store_id: DEMO_STORE_ID,
+      staff_id: ACTOR.staffId,
+      expected_version: 0,
+      urgent_cents: PRICING.urgent_cents,
+      freight_cents: PRICING.freight_cents,
+      addons: Object.freeze([
+        Object.freeze({
+          code: "stain",
+          name: "验收去渍",
+          unit_price_cents: PRICING.addon_cents,
+          is_active: true,
+          sort_order: 0,
+        }),
+      ]),
+      updated_at: fixedNow(),
+    });
+    assert.ok(pricingChange);
+
     const orderStore = createPgOrderStore(appPool);
     const customerStore = createPgCustomerStore(appPool, { orgId: DEMO_ORG_ID });
     const fulfillmentStore = createPgFulfillmentStore(appPool);
@@ -78,7 +109,7 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       storeId: DEMO_STORE_ID,
     });
     const statsSource = createPgStatsQuery(appPool);
-    const { registry, chainHooks } = createRegisteredM1Bus({
+    const { registry, queryRegistry, chainHooks } = createRegisteredM1Bus({
       order: Object.freeze({
         store: orderStore,
         customer: customerStore,
@@ -86,6 +117,7 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
           orgId: DEMO_ORG_ID,
           storeId: DEMO_STORE_ID,
         }),
+        pricing: pricingStore,
         timeZone: LOCAL_PROFILE.timezone,
         now: fixedNow,
         lockBusinessDay: acquirePgBusinessDayLock,
@@ -121,6 +153,10 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       );
     const issue = async (name: string, input: unknown, confirmRef?: string) =>
       issueAs(ACTOR, TENANT, name, input, confirmRef);
+    const query = async (name: string, input: unknown) =>
+      withPoolClient(appPool, (sql) =>
+        executeQuery(sql, TENANT, name, input, { registry: queryRegistry, actor: ACTOR }),
+      );
 
     // Replay policy-gated commands with the server-issued frozen confirmation reference.
     const dispatch = async (name: string, input: unknown) => {
@@ -146,8 +182,37 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       await run("order.receive", {
         customer_phone: CUSTOMER_PHONE,
         customer_name: "验收顾客",
-        lines: [{ service_code: serviceCode, category_code: categoryCode, qty: 2 }],
-        ...PRICING,
+        lines: [
+          {
+            service_code: serviceCode,
+            category_code: categoryCode,
+            qty: 2,
+            garments: [
+              {
+                color: "白",
+                brand: "甲牌",
+                defects: ["袖口污渍", "纽扣松动"],
+                accessories: ["腰带"],
+                note: "单独去渍",
+                addon_codes: ["stain"],
+              },
+              {
+                color: "蓝",
+                brand: "乙牌",
+                defects: ["下摆磨损"],
+                accessories: ["衣架"],
+                note: "低温处理",
+              },
+            ],
+          },
+        ],
+        discount_cents: PRICING.discount_cents,
+        urgent: true,
+        freight: true,
+        // Compatibility amounts are accepted then ignored by ADR-38.
+        addon_cents: 999_999,
+        urgent_cents: 999_999,
+        freight_cents: 999_999,
         initial_payment: { amount_cents: 600, method: "cash" },
       })
     ).data as { order_id: string; business_date: string; balance_cents?: number };
@@ -166,11 +231,66 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     assert.equal(afterReceive.addon_cents, PRICING.addon_cents);
     assert.equal(afterReceive.urgent_cents, PRICING.urgent_cents);
     assert.equal(afterReceive.freight_cents, PRICING.freight_cents);
+    assert.equal(afterReceive.pricing_policy_version, 1);
+    assert.equal(afterReceive.urgent_selected, true);
+    assert.equal(afterReceive.freight_selected, true);
     assert.equal(afterReceive.payable_cents, PAYABLE_CENTS, "authoritative catalog pricing");
     assert.equal(afterReceive.paid_cents, 600);
     assert.equal(afterReceive.balance_cents, PAYABLE_CENTS - 600);
     assert.equal(afterReceive.garment_count, 2);
     assert.equal(afterReceive.payment_count, 1, "a single ledger row for the initial payment");
+    const detailedOrder = await query("order.get", { order_id: received.order_id });
+    assert.equal(detailedOrder.ok, true, JSON.stringify(detailedOrder));
+    if (!detailedOrder.ok) assert.fail("order.get must load the received PG order");
+    const detailedResult = detailedOrder.data.result as {
+      lines: readonly {
+        garments: readonly {
+          color: string | null;
+          defects: readonly string[];
+          addons: readonly { code: string; name: string; unit_price_cents: number }[];
+        }[];
+      }[];
+      garments: readonly {
+        color: string | null;
+        brand: string | null;
+        defects: readonly string[];
+        accessories: readonly string[];
+        note: string | null;
+      }[];
+    };
+    assert.deepEqual(detailedResult.lines[0]?.garments[0], {
+      color: "白",
+      brand: "甲牌",
+      defects: ["袖口污渍", "纽扣松动"],
+      accessories: ["腰带"],
+      note: "单独去渍",
+      addons: [{ code: "stain", name: "验收去渍", unit_price_cents: PRICING.addon_cents }],
+    });
+    assert.deepEqual(
+      detailedResult.garments.map((garment) => ({
+        color: garment.color,
+        brand: garment.brand,
+        defects: garment.defects,
+        accessories: garment.accessories,
+        note: garment.note,
+      })),
+      [
+        {
+          color: "白",
+          brand: "甲牌",
+          defects: ["袖口污渍", "纽扣松动"],
+          accessories: ["腰带"],
+          note: "单独去渍",
+        },
+        {
+          color: "蓝",
+          brand: "乙牌",
+          defects: ["下摆磨损"],
+          accessories: ["衣架"],
+          note: "低温处理",
+        },
+      ],
+    );
     assert.deepEqual(
       await statsSource.daySummary({
         orgId: DEMO_ORG_ID,
@@ -275,6 +395,17 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       await orderStore.listPayments?.(DEMO_ORG_ID, DEMO_STORE_ID, received.order_id)
     )?.find((payment) => payment.kind === "repay");
     assert.ok(repayment);
+    const ledgerBeforeRefund = await query("payment.ledger.list", {
+      order_id: received.order_id,
+    });
+    assert.equal(ledgerBeforeRefund.ok, true, JSON.stringify(ledgerBeforeRefund));
+    if (!ledgerBeforeRefund.ok) assert.fail("payment ledger query must succeed before refund");
+    const repaymentProjection = (
+      ledgerBeforeRefund.data.result as {
+        payments: readonly Readonly<{ payment_id: string; refundable_cents: number }>[];
+      }
+    ).payments.find((payment) => payment.payment_id === repayment.payment_id);
+    assert.equal(repaymentProjection?.refundable_cents, PAYABLE_CENTS - 600);
     const refundInput = Object.freeze({
       order_id: received.order_id,
       amount_cents: 100,
@@ -332,6 +463,32 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     assert.equal(refundResult.ref_payment_id, repayment.payment_id);
     assert.equal(refundResult.paid_cents, PAYABLE_CENTS - 100);
     assert.equal(refundResult.balance_cents, 100);
+    const ledgerAfterRefund = await query("payment.ledger.list", {
+      order_id: received.order_id,
+    });
+    assert.equal(ledgerAfterRefund.ok, true, JSON.stringify(ledgerAfterRefund));
+    if (!ledgerAfterRefund.ok) assert.fail("payment ledger query must succeed after refund");
+    const projectedRows = (
+      ledgerAfterRefund.data.result as {
+        payments: readonly Readonly<{
+          payment_id: string;
+          kind: string;
+          signed_cents: number;
+          refundable_cents: number;
+        }>[];
+      }
+    ).payments;
+    assert.equal(
+      projectedRows.find((payment) => payment.payment_id === repayment.payment_id)
+        ?.refundable_cents,
+      PAYABLE_CENTS - 700,
+    );
+    const refundProjection = projectedRows.find(
+      (payment) => payment.payment_id === refundResult.payment_id,
+    );
+    assert.equal(refundProjection?.kind, "refund");
+    assert.equal(refundProjection?.signed_cents, -100);
+    assert.equal(refundProjection?.refundable_cents, 0);
     const refundRows = await withPoolClient(appPool, (sql) =>
       withTenantTransaction(sql, TENANT, (tx) =>
         tx.query<{ after_json: string }>(
@@ -377,9 +534,54 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
       "cash summary must exclude the WeChat repayment",
     );
 
-    await run("order.hold", {
-      lines: [{ service_code: serviceCode, category_code: categoryCode, qty: 1 }],
+    const held = (
+      await run("order.hold", {
+        customer_name: "真实 PG 挂单",
+        note: "刷新后恢复",
+        urgent: true,
+        lines: [
+          {
+            service_code: serviceCode,
+            category_code: categoryCode,
+            qty: 1,
+            garments: [
+              {
+                color: "黑",
+                brand: "挂单牌",
+                defects: ["左袖破损"],
+                accessories: ["衣架"],
+                note: "保持低温",
+                addon_codes: ["stain"],
+              },
+            ],
+          },
+        ],
+      })
+    ).data as { draft_id: string };
+    const heldQuery = await query("order.get", { order_id: held.draft_id });
+    assert.equal(heldQuery.ok, true, JSON.stringify(heldQuery));
+    if (!heldQuery.ok) assert.fail("order.get must load the PG draft snapshot");
+    const heldSnapshot = heldQuery.data.result as {
+      status: string;
+      ticket_no: string | null;
+      paid_cents: number;
+      note: string | null;
+      lines: readonly { garments: readonly Record<string, unknown>[] }[];
+      garments: readonly unknown[];
+    };
+    assert.equal(heldSnapshot.status, "draft");
+    assert.equal(heldSnapshot.ticket_no, null);
+    assert.equal(heldSnapshot.paid_cents, 0);
+    assert.equal(heldSnapshot.note, "刷新后恢复");
+    assert.deepEqual(heldSnapshot.lines[0]?.garments[0], {
+      color: "黑",
+      brand: "挂单牌",
+      defects: ["左袖破损"],
+      accessories: ["衣架"],
+      note: "保持低温",
+      addons: [{ code: "stain", name: "验收去渍", unit_price_cents: PRICING.addon_cents }],
     });
+    assert.deepEqual(heldSnapshot.garments, []);
     const cancelCandidate = (
       await run("order.receive", {
         lines: [{ service_code: serviceCode, category_code: categoryCode, qty: 1 }],
@@ -525,249 +727,3 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
     }
   }
 });
-
-async function clearWorkdayFixture(pool: ReturnType<typeof createPgPool>): Promise<void> {
-  const client = await pool.connect();
-  const scope = [DEMO_ORG_ID, DEMO_STORE_ID, FIXED_BUSINESS_DATE];
-  try {
-    await client.query("BEGIN");
-    await client.query("SET LOCAL ROLE laundry_owner");
-    await client.query(
-      `DELETE FROM audit_log
-        WHERE org_id = $1::uuid AND store_id = $2::uuid
-          AND entity_id IN (
-            SELECT id::text FROM orders
-              WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3
-            UNION SELECT id::text FROM garments
-              WHERE org_id = $1::uuid AND store_id = $2::uuid
-                AND order_id IN (
-                  SELECT id FROM orders
-                    WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3
-                )
-            UNION SELECT id::text FROM payments
-              WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3
-            UNION SELECT id::text FROM shift_closings
-              WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3
-            UNION SELECT id::text FROM customers
-              WHERE org_id = $1::uuid AND phone IN ($4, $5)
-            UNION SELECT id::text FROM member_accounts
-              WHERE org_id = $1::uuid AND customer_id IN (
-                SELECT id FROM customers WHERE org_id = $1::uuid AND phone IN ($4, $5)
-              )
-          )`,
-      [...scope, CUSTOMER_PHONE, TARGET_CUSTOMER_PHONE],
-    );
-    const orderIds = `SELECT id FROM orders
-      WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3`;
-    await client.query(
-      `DELETE FROM member_ledger
-        WHERE org_id = $1::uuid AND account_id IN (
-          SELECT id FROM member_accounts WHERE org_id = $1::uuid AND customer_id IN (
-            SELECT id FROM customers WHERE org_id = $1::uuid AND phone IN ($2, $3)
-          )
-        )`,
-      [DEMO_ORG_ID, CUSTOMER_PHONE, TARGET_CUSTOMER_PHONE],
-    );
-    for (const table of [
-      "garment_rack_log",
-      "garment_incidents",
-      "garment_status_log",
-      "payments",
-      "garments",
-      "order_lines",
-    ]) {
-      await client.query(
-        `DELETE FROM ${table}
-          WHERE org_id = $1::uuid AND store_id = $2::uuid
-            AND order_id IN (${orderIds})`,
-        scope,
-      );
-    }
-    await client.query(
-      "DELETE FROM orders WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3",
-      scope,
-    );
-    await client.query(
-      "DELETE FROM shift_closings WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3",
-      scope,
-    );
-    await client.query(
-      `DELETE FROM member_accounts
-        WHERE org_id = $1::uuid AND customer_id IN (
-          SELECT id FROM customers WHERE org_id = $1::uuid AND phone IN ($2, $3)
-        )`,
-      [DEMO_ORG_ID, CUSTOMER_PHONE, TARGET_CUSTOMER_PHONE],
-    );
-    await client.query(
-      `DELETE FROM customers
-        WHERE org_id = $1::uuid AND phone IN ($2, $3)`,
-      [DEMO_ORG_ID, CUSTOMER_PHONE, TARGET_CUSTOMER_PHONE],
-    );
-    await client.query(
-      `DELETE FROM catalog_items
-        WHERE org_id = $1::uuid AND store_id = $2::uuid AND code LIKE 'acc-shirt-%'`,
-      [DEMO_ORG_ID, DEMO_STORE_ID],
-    );
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-async function readClosedWriteCounts(
-  appPool: ReturnType<typeof createPgPool>,
-): Promise<Readonly<Record<string, number>>> {
-  return withPoolClient(appPool, (sql) =>
-    withTenantTransaction(sql, TENANT, async (tx) => {
-      const result = await tx.query<{
-        orders: string;
-        payments: string;
-        member_ledger: string;
-        audit: string;
-      }>(
-        `SELECT
-           (SELECT count(*) FROM orders WHERE business_date = $1)::text AS orders,
-           (SELECT count(*) FROM payments WHERE business_date = $1)::text AS payments,
-           (SELECT count(*) FROM member_ledger WHERE business_date = $1)::text AS member_ledger,
-           (SELECT count(*) FROM audit_log)::text AS audit`,
-        [FIXED_BUSINESS_DATE],
-      );
-      const row = result.rows[0];
-      assert.ok(row);
-      return Object.freeze({
-        orders: Number(row.orders),
-        payments: Number(row.payments),
-        member_ledger: Number(row.member_ledger),
-        audit: Number(row.audit),
-      });
-    }),
-  );
-}
-
-type OrderSnapshot = Readonly<{
-  business_date: string;
-  original_cents: number;
-  discount_cents: number;
-  addon_cents: number;
-  urgent_cents: number;
-  freight_cents: number;
-  payable_cents: number;
-  paid_cents: number;
-  balance_cents: number;
-  garment_count: number;
-  picked_up_count: number;
-  payment_count: number;
-}>;
-
-async function readGarmentRefs(
-  appPool: ReturnType<typeof createPgPool>,
-  orderId: string,
-): Promise<readonly Readonly<{ id: string; barcode: string }>[]> {
-  return withPoolClient(appPool, (sql) =>
-    withTenantTransaction(sql, TENANT, async (tx) => {
-      const result = await tx.query<{ id: string; barcode: string }>(
-        "SELECT id::text, barcode FROM garments WHERE order_id = $1::uuid ORDER BY id",
-        [orderId],
-      );
-      return Object.freeze(result.rows.map((row) => Object.freeze({ ...row })));
-    }),
-  );
-}
-
-async function readFulfillment(
-  appPool: ReturnType<typeof createPgPool>,
-  orderId: string,
-): Promise<Readonly<{ statuses: readonly string[]; statusLogs: number; incidents: number }>> {
-  return withPoolClient(appPool, (sql) =>
-    withTenantTransaction(sql, TENANT, async (tx) => {
-      const garments = await tx.query<{ status: string }>(
-        "SELECT status FROM garments WHERE order_id = $1::uuid ORDER BY id",
-        [orderId],
-      );
-      const counts = await tx.query<{ status_logs: string; incidents: string }>(
-        `SELECT
-           (SELECT count(*) FROM garment_status_log WHERE order_id = $1::uuid)::text AS status_logs,
-           (SELECT count(*) FROM garment_incidents WHERE order_id = $1::uuid)::text AS incidents`,
-        [orderId],
-      );
-      return Object.freeze({
-        statuses: Object.freeze(garments.rows.map((row) => row.status)),
-        statusLogs: Number(counts.rows[0]?.status_logs ?? "0"),
-        incidents: Number(counts.rows[0]?.incidents ?? "0"),
-      });
-    }),
-  );
-}
-
-async function readOrderCustomerLink(
-  appPool: ReturnType<typeof createPgPool>,
-  orderId: string,
-): Promise<Readonly<{ customer_id: string | null; customer_phone: string | null }>> {
-  return withPoolClient(appPool, (sql) =>
-    withTenantTransaction(sql, TENANT, async (tx) => {
-      const result = await tx.query<{
-        customer_id: string | null;
-        customer_phone: string | null;
-      }>("SELECT customer_id::text, customer_phone FROM orders WHERE id = $1::uuid", [orderId]);
-      return Object.freeze({
-        customer_id: result.rows[0]?.customer_id ?? null,
-        customer_phone: result.rows[0]?.customer_phone ?? null,
-      });
-    }),
-  );
-}
-
-async function readOrder(
-  appPool: ReturnType<typeof createPgPool>,
-  orderId: string,
-): Promise<OrderSnapshot> {
-  return withPoolClient(appPool, (sql) =>
-    withTenantTransaction(sql, TENANT, async (tx) => {
-      const order = await tx.query<{
-        business_date: string;
-        original_cents: number;
-        discount_cents: number;
-        addon_cents: number;
-        urgent_cents: number;
-        freight_cents: number;
-        payable_cents: number;
-        paid_cents: number;
-        balance_cents: number;
-      }>(
-        `SELECT business_date, original_cents, discount_cents, addon_cents,
-                urgent_cents, freight_cents, payable_cents, paid_cents, balance_cents
-           FROM orders WHERE id = $1`,
-        [orderId],
-      );
-      const garments = await tx.query<{ total: string; picked: string }>(
-        `SELECT count(*)::text AS total,
-                count(*) FILTER (WHERE status = 'picked_up')::text AS picked
-           FROM garments WHERE order_id = $1`,
-        [orderId],
-      );
-      const payments = await tx.query<{ count: string }>(
-        "SELECT count(*)::text AS count FROM payments WHERE order_id = $1",
-        [orderId],
-      );
-      const row = order.rows[0];
-      assert.ok(row, "order row must exist");
-      return Object.freeze({
-        business_date: row.business_date,
-        original_cents: row.original_cents,
-        discount_cents: row.discount_cents,
-        addon_cents: row.addon_cents,
-        urgent_cents: row.urgent_cents,
-        freight_cents: row.freight_cents,
-        payable_cents: row.payable_cents,
-        paid_cents: row.paid_cents,
-        balance_cents: row.balance_cents,
-        garment_count: Number(garments.rows[0]?.total ?? "0"),
-        picked_up_count: Number(garments.rows[0]?.picked ?? "0"),
-        payment_count: Number(payments.rows[0]?.count ?? "0"),
-      });
-    }),
-  );
-}

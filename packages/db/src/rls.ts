@@ -48,9 +48,12 @@ export const M2_ORDER_RLS_TABLES = Object.freeze([
 
 /**
  * M2 catalog tables use store-scope RLS (same predicate as orders / pin_lockouts).
- * Policies live in 0008_catalog_items.sql.
+ * Policies live in 0008_catalog_items.sql and 0047_cloud_counter_trust.sql.
  */
-export const M2_CATALOG_RLS_TABLES = Object.freeze(["catalog_items"] as const);
+export const M2_CATALOG_RLS_TABLES = Object.freeze([
+  "catalog_items",
+  "store_pricing_policies",
+] as const);
 
 /**
  * M2 payments ledger uses store-scope RLS (append-only grants in 0009_payments.sql).

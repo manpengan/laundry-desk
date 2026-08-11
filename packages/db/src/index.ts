@@ -93,6 +93,7 @@ export {
   staffStoreRoles,
   staffs,
   storeFeatures,
+  storePricingPolicies,
   stores,
   ticketCounters,
   type M1MatrixTableName,

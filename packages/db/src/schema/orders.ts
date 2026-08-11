@@ -1,4 +1,5 @@
 import {
+  boolean,
   foreignKey,
   integer,
   pgTable,
@@ -38,6 +39,9 @@ export const orders = pgTable(
     addonCents: integer("addon_cents").notNull().default(0),
     urgentCents: integer("urgent_cents").notNull().default(0),
     freightCents: integer("freight_cents").notNull().default(0),
+    pricingPolicyVersion: integer("pricing_policy_version").notNull().default(0),
+    urgentSelected: boolean("urgent_selected").notNull().default(false),
+    freightSelected: boolean("freight_selected").notNull().default(false),
     payableCents: integer("payable_cents").notNull(),
     paidCents: integer("paid_cents").notNull(),
     balanceCents: integer("balance_cents").notNull(),
