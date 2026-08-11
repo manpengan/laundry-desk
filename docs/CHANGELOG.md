@@ -17,6 +17,7 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 - 柜台可信性闭环（[ADR-38](adr/2026-08-11-adr-38-cloud-counter-trust-closure.md)）：新增门店级版本化计价设置与另一管理员 R5 复核；开单/挂单只提交折扣、固定费选择和逐件 add-on code，catalog、附加项与最终应收由服务端统一计算并保存快照。
 - 订单详情新增有界支付流水和服务端剩余可退金额；管理员从原流水发起既有 R4 原路退款，另一管理员复核后续跑只提交冻结 `confirm_ref`，历史账本仍只追加。
 - 开单页可逐件录入颜色、品牌、瑕疵、随衣附件、备注和附加项；挂单保存在 PostgreSQL，硬刷新后重新登录可从有界挂单列表恢复同一服务端草稿并继续开单。
+- 上述柜台可信性闭环已随精确 `main` `6f106076018940eec8fcc9e8c2cfb7842c323f47` 发布到 hk-vps，迁移到 47/head `0047_cloud_counter_trust.sql`，并取得 API 15/15、Cloud Chromium PASS 与独立 marker/schema/health/清理证据；见[阶段 2 发布结果](operations/2026-08-11-stage2-release-result.md)。
 
 - Cloud Web-first 后续路线（[ADR-37](adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)）：Linux hk-vps Web 成为当前功能开发与阶段集成验收面；四阶段依次收口现有云端基线、柜台可信性缺口、经营增强与大型云端模块。每阶段仍须 `workspace-check`/真实 PostgreSQL 门禁、PR 合入 `main`、精确部署该 SHA 与公网 Web 新鲜证据；hk-vps 仍只允许合成数据且不等于生产 SaaS。Windows、macOS 正式发行与 XP-58 保留为后置独立门禁；provider fake 只能标记 `software_only`。
 
