@@ -65,6 +65,86 @@
           "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
         }
       }
+    },
+    "0049_cloud_owner_operations.sql": {
+      "database_restored_catalog": {
+        "entries": 681,
+        "sha256": "9328d6023107cef6a7fb79b30a791237b52f1676852f81260466e97fe67f3460"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0050_member_benefits.sql": {
+      "database_restored_catalog": {
+        "entries": 830,
+        "sha256": "eab22ccf2446e0655020e4394ff6e433af63360f78d72a540c798fb0b6555bb0"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0051_customer_extended_profiles.sql": {
+      "database_restored_catalog": {
+        "entries": 1041,
+        "sha256": "6fd33bd261bde7a304279485364de59a7dbf8140f994a5b9263d5e7ee604b587"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0052_notification_delivery_outbox.sql": {
+      "database_restored_catalog": {
+        "entries": 1116,
+        "sha256": "de12b2776d5284245d2dbe570e74f50572e8cf4cf8952239bcba8506bfbe1311"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0053_factory_handoff_and_qc.sql": {
+      "database_restored_catalog": {
+        "entries": 1238,
+        "sha256": "b175abcb3e4a45872bc497b65c4b84232c8e9d0a4e2df0b5f0cf252e6e870df8"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
     }
   }
 }

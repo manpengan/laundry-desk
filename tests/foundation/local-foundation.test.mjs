@@ -340,6 +340,9 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   const commissioningPgAcceptance = await readRepositoryFile(
     "tools/local/commissioning-pg-acceptance.mjs",
   );
+  const freshCommissioningAcceptance = await readRepositoryFile(
+    "tools/local/commissioning-acceptance.mjs",
+  );
 
   assert.doesNotMatch(workflow, /^\s*-\s+name:\s+Start local Vite Web host\s*$/mu);
   assert.match(workflow, /^\s*-\s+name:\s+Run Playwright against real server and PostgreSQL\s*$/mu);
@@ -369,9 +372,30 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
     assert.match(workflow, new RegExp(`${name}=`, "u"));
   }
   assert.match(compose, /LAUNDRY_CONTAINER_RUNTIME:\s*["']?1["']?/u);
+  assert.match(
+    compose,
+    /LAUNDRY_NOTIFICATION_PROVIDER_MODE:\s*["']?\$\{LAUNDRY_NOTIFICATION_PROVIDER_MODE-disabled\}["']?/u,
+  );
   assert.equal([...workflow.matchAll(/pnpm local:up -- --bootstrap/gu)].length, 6);
   assert.match(workflow, /pnpm local:web:commissioning:e2e/u);
   assert.match(workflow, /commissioning-pg-acceptance\.mjs/u);
+  assert.match(freshCommissioningAcceptance, /member-benefits-pg-acceptance\.mjs/u);
+  assert.match(freshCommissioningAcceptance, /notification-delivery-pg-acceptance\.mjs/u);
+  assert.match(freshCommissioningAcceptance, /factory-handoff-pg-acceptance\.mjs/u);
+  assert.match(freshCommissioningAcceptance, /hk-vps-release-catalog-pg-acceptance\.mjs/u);
+  assert.match(freshCommissioningAcceptance, /hk-vps-data-protection-pg-acceptance\.mjs/u);
+  assert.match(
+    freshCommissioningAcceptance,
+    /hk-vps-data-protection-pg-acceptance\.mjs[\s\S]{0,240}LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED:\s*"1"/u,
+  );
+  assert.match(freshCommissioningAcceptance, /"member-benefits\.spec\.ts"/u);
+  assert.match(freshCommissioningAcceptance, /"customer-profile\.spec\.ts"/u);
+  assert.match(freshCommissioningAcceptance, /"notification-delivery\.spec\.ts"/u);
+  assert.match(freshCommissioningAcceptance, /"factory-handoff\.spec\.ts"/u);
+  assert.match(
+    freshCommissioningAcceptance,
+    /mode === "browser"[\s\S]{0,160}LAUNDRY_NOTIFICATION_PROVIDER_MODE:\s*"software_only"/u,
+  );
   assert.match(workflow, /commissioning_project=.*GITHUB_RUN_ID/u);
   assert.match(workflow, /::add-mask::/u);
   assert.match(workflow, /POSTGRES_PASSWORD:\s*config\.postgresSuperuserPassword/u);
@@ -384,7 +408,7 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   );
   assert.match(
     commissioningPgAcceptance,
-    /assert\.equal\(migrations\.head, "0048_catalog_governance\.sql"\)/u,
+    /assert\.equal\(migrations\.head, "0053_factory_handoff_and_qc\.sql"\)/u,
   );
 });
 

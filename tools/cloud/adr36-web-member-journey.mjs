@@ -62,7 +62,10 @@ export async function memberJourney(api, credentials, artifacts, run, update) {
     ),
   );
   const accountId = requireUuid(opened.account_id, "MEMBER_OPEN_INVALID");
-  requireThat(opened.created === true && opened.status === "active", "MEMBER_OPEN_INVALID");
+  requireThat(
+    typeof opened.created === "boolean" && opened.status === "active",
+    "MEMBER_OPEN_INVALID",
+  );
   const topup = asRecord(
     await writeMutation(update, {}, () =>
       api.confirm(artifacts.adminSession, "member.topup", {

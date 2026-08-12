@@ -1,0 +1,31 @@
+[Unit]
+Description=Laundry Desk verified offsite recovery set copy
+After=network-online.target
+Wants=network-online.target
+ConditionPathIsMountPoint=/mnt/laundry-desk-offsite
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+WorkingDirectory=/opt/laundry-desk
+ExecStart=/usr/bin/flock --no-fork --exclusive --nonblock --conflict-exit-code 73 /run/lock/laundry-desk-cloud-release.lock /opt/nodejs/bin/node /opt/laundry-desk/tools/cloud/hk-vps-data-protection.mjs --lock-held offsite
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectProc=invisible
+ProcSubset=pid
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+ReadWritePaths=/run/lock /var/lib/laundry-desk-data-protection /mnt/laundry-desk-offsite
+TimeoutStartSec=30min

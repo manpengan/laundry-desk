@@ -1,16 +1,21 @@
 import { asRecord, requireString, requireThat } from "./adr36-web-core.mjs";
 
 export const ADR36_API_EVIDENCE_SCHEMA = "laundry.adr36.api-acceptance-evidence";
-export const ADR36_API_EVIDENCE_VERSION = 1;
+export const ADR36_API_EVIDENCE_VERSION = 6;
 
 export const ADR36_API_EVIDENCE_JOURNEYS = Object.freeze([
   "configuration",
   "dual_admin_auth",
+  "owner_store_operations",
   "staff_credentials",
   "accounting_baseline",
   "catalog_price",
   "synthetic_customer",
   "cash_order_fulfillment",
+  "member_benefits",
+  "customer_profile_policy",
+  "notification_delivery_boundary",
+  "factory_handoff_boundary",
   "member_lifecycle",
   "accounting_today_delta",
   "order_finance",

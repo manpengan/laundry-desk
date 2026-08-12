@@ -118,6 +118,7 @@ export async function cleanupArtifacts(api, credentials, artifacts, run) {
     }
   };
   await attempt(() => settleOpenOrder(api, artifacts, artifacts.cashOrderId, run.note));
+  await attempt(() => settleOpenOrder(api, artifacts, artifacts.benefitOrderId, run.note));
   await attempt(() => settleOpenOrder(api, artifacts, artifacts.memberOrderId, run.note));
   await attempt(() => closeOpenMember(api, credentials, artifacts, run.note));
   if (artifacts.bonusRule !== null && !artifacts.bonusRuleRetired) {
@@ -172,6 +173,10 @@ export function initialArtifacts() {
     customerNote: null,
     cashOrderId: null,
     cashOrderLocator: null,
+    benefitOrderId: null,
+    benefitOrderLocator: null,
+    customerProfileTierOrderLocator: null,
+    customerProfileCustomerOrderLocator: null,
     memberOrderId: null,
     memberOrderLocator: null,
     memberAccountId: null,

@@ -52,7 +52,7 @@ test("API evidence rejects schema drift, extra fields, reordered journeys and re
   const evidence = createAdr36ApiAcceptanceEvidence(passedReport());
   for (const invalid of [
     { ...evidence, schema: "wrong" },
-    { ...evidence, version: 2 },
+    { ...evidence, version: 1 },
     { ...evidence, run_id: "ADR36-reused" },
     { ...evidence, candidate_sha: "a".repeat(40) },
     { ...evidence, results: [...evidence.results].reverse() },

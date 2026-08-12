@@ -16,7 +16,10 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
 
-import { ADR36_API_EVIDENCE_JOURNEYS } from "./adr36-web-acceptance-evidence.mjs";
+import {
+  ADR36_API_EVIDENCE_JOURNEYS,
+  ADR36_API_EVIDENCE_VERSION,
+} from "./adr36-web-acceptance-evidence.mjs";
 import { CLOUD_BROWSER_EXPECTED_TEST_TITLE } from "./cloud-web-browser-evidence.mjs";
 import { releaseControllerPath } from "./hk-vps-release-controller-contract.mjs";
 import {
@@ -65,7 +68,7 @@ const NOW = new Date("2026-08-10T02:30:00.000Z");
 function passedApi() {
   return Object.freeze({
     schema: "laundry.adr36.api-acceptance-evidence",
-    version: 1,
+    version: ADR36_API_EVIDENCE_VERSION,
     run_id: "ADR36-20260810T022900Z-12345678",
     results: Object.freeze(
       ADR36_API_EVIDENCE_JOURNEYS.map((journey) => Object.freeze({ journey, status: "PASS" })),
