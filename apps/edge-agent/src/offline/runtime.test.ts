@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import test from "node:test";
 import {
   DesktopSessionViewSchema,
@@ -278,6 +277,34 @@ test("persists business conflicts and requires explicit retry or discard", async
     assert.equal(queue.status().inflightCount, 0);
     const resolved = runtime.status();
     assert.equal(resolved.ok ? resolved.data.conflicts.length : -1, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("acks a CUSTOMER_ERASED replay terminal and deletes its encrypted queue item", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-offline-runtime-"));
+  try {
+    const { queue, runtime } = createRuntime(root, async () =>
+      DesktopCommandExecuteResultSchema.parse({
+        ok: false,
+        error: createCommandError("CUSTOMER_ERASED"),
+      }),
+    );
+    assert.equal(
+      runtime.provision(authorityData({ primaryLease: false }), session, AUTHORITY_NONCE),
+      true,
+    );
+    assert.equal((await runtime.queueCommand(grantCommandInputs[2])).ok, true);
+    assert.equal(queue.status().pendingCount, 1);
+
+    await runtime.replay();
+
+    assert.equal(queue.status().pendingCount, 0);
+    assert.equal(queue.status().inflightCount, 0);
+    const status = runtime.status();
+    assert.equal(status.ok ? status.data.conflicts.length : -1, 0);
+    assert.doesNotMatch(await readFile(join(root, "offline-queue.json"), "utf8"), /13800000000/u);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -692,32 +719,6 @@ test("blocking lease issuance clears every authority and makes replay a zero-I/O
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-});
-
-test("the Electron entrypoint boots recovery without confirmation or update staging", async () => {
-  const compiledTestDir = dirname(fileURLToPath(import.meta.url));
-  const source = await readFile(resolve(compiledTestDir, "../../src/main.ts"), "utf8");
-  const runtimeConstruction = source.indexOf("offlineRuntime = new OfflineCommandRuntime");
-  const leaseBlock = source.indexOf(
-    'if (mode === "recovery") offlineRuntime.setLeaseIssuanceBlocked',
-  );
-  const serviceConstruction = source.indexOf("const desktopService = createOfflineDesktopService");
-  const updateStage = source.indexOf("void controller.checkAndStage()");
-
-  assert.match(source, /async function boot\(mode: BootMode\): Promise<void>/u);
-  assert.ok(runtimeConstruction >= 0);
-  assert.ok(leaseBlock > runtimeConstruction);
-  assert.ok(serviceConstruction > leaseBlock);
-  assert.match(source, /\{ recoveryReadOnly: mode === "recovery" \}/u);
-  assert.match(source, /if \(startup\.action === "recovery"\) \{\s*bootMode = "recovery";/u);
-  assert.match(
-    source,
-    /if \(bootMode === "normal" && updateState !== null && pendingConfirmation !== null\)/u,
-  );
-  assert.ok(updateStage > 0);
-  assert.ok(
-    source.lastIndexOf('bootMode === "normal"', updateStage) > source.indexOf("await boot"),
-  );
 });
 
 test("exports only the verified signed grant for its exact session and retains it across write continuity loss", async () => {

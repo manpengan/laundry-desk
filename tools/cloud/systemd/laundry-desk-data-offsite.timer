@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Laundry Desk offsite verification
+
+[Timer]
+OnCalendar=*-*-* 04:15:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=laundry-desk-data-offsite.service
+
+[Install]
+WantedBy=timers.target

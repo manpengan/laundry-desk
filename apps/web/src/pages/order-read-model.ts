@@ -39,30 +39,31 @@ export type OrderGetGarment = OrderGetPieceDetail &
     rack_slot: string | null;
   }>;
 
-export type OrderGetResult = Readonly<{
-  order_id: string;
-  customer_id: string | null;
-  ticket_no: string | null;
-  pickup_code: string | null;
-  status: string;
-  customer_phone: string | null;
-  customer_name: string | null;
-  note: string | null;
-  subtotal_cents: number;
-  original_cents: number;
-  discount_cents: number;
-  addon_cents: number;
-  urgent_cents: number;
-  freight_cents: number;
-  pricing_policy_version: number;
-  urgent_selected: boolean;
-  freight_selected: boolean;
-  payable_cents: number;
-  paid_cents: number;
-  balance_cents: number;
-  lines: readonly OrderGetLine[];
-  garments: readonly OrderGetGarment[];
-}>;
+export type OrderGetResult = OrderPolicySnapshotView &
+  Readonly<{
+    order_id: string;
+    customer_id: string | null;
+    ticket_no: string | null;
+    pickup_code: string | null;
+    status: string;
+    customer_phone: string | null;
+    customer_name: string | null;
+    note: string | null;
+    subtotal_cents: number;
+    original_cents: number;
+    discount_cents: number;
+    addon_cents: number;
+    urgent_cents: number;
+    freight_cents: number;
+    pricing_policy_version: number;
+    urgent_selected: boolean;
+    freight_selected: boolean;
+    payable_cents: number;
+    paid_cents: number;
+    balance_cents: number;
+    lines: readonly OrderGetLine[];
+    garments: readonly OrderGetGarment[];
+  }>;
 
 const CODE_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/u;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -283,10 +284,12 @@ export function parseOrderGetResult(raw: unknown): OrderGetResult | null {
   const urgent = optionalMoney(row, "urgent_cents", 0);
   const freight = optionalMoney(row, "freight_cents", 0);
   const policyVersion = optionalMoney(row, "pricing_policy_version", 0);
+  const orderPolicy = parseOrderPolicySnapshot(row, discount ?? 0);
   const financialProjectionMatches =
     row.status === "cancelled" ? paid === 0 && balance === 0 : paid + balance === payable;
   if (
     [subtotal, original, discount, addon, urgent, freight, policyVersion].some((v) => v === null) ||
+    orderPolicy === null ||
     !financialProjectionMatches ||
     (original as number) -
       (discount as number) +
@@ -298,6 +301,7 @@ export function parseOrderGetResult(raw: unknown): OrderGetResult | null {
     return null;
   }
   return Object.freeze({
+    ...orderPolicy,
     order_id: row.order_id,
     customer_id: typeof row.customer_id === "string" ? row.customer_id : null,
     ticket_no: ticketNo,
@@ -322,3 +326,7 @@ export function parseOrderGetResult(raw: unknown): OrderGetResult | null {
     garments: Object.freeze(garments as OrderGetGarment[]),
   });
 }
+import {
+  parseOrderPolicySnapshot,
+  type OrderPolicySnapshotView,
+} from "./order-policy-read-model.js";

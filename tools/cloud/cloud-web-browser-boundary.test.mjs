@@ -130,6 +130,8 @@ test("cloud Playwright is a read-only subset and cannot claim standalone complet
   assert.match(reporter, /attachments\.length\s*!==\s*1/u);
   assert.match(reporter, /observation\.retry\s*===\s*0/u);
   assert.match(spec, /core_ui_subset:/u);
+  assert.match(spec, /owner-store-management/u);
+  assert.match(spec, /logoutBrowserContext\(ownerContext\)/u);
   assert.match(spec, /read-only subset must not issue product commands/u);
   assert.doesNotMatch(spec, /catalog-save-btn|确认开单|扫码上架|确认取衣|开通会员账户|确认导出/u);
   assert.doesNotMatch(

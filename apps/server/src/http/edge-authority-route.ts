@@ -12,6 +12,7 @@ import {
   type RouteSecurityContext,
 } from "./auth-route-support.js";
 import { safeErrorContext } from "./local-logger.js";
+import { isConfiguredRuntimeTenant } from "./runtime-surface-policy.js";
 
 export function registerEdgeAuthorityRoute(
   app: FastifyInstance,
@@ -31,6 +32,10 @@ export function registerEdgeAuthorityRoute(
       }
       const csrf = await requireCsrf(context, request, reply, resolved.session);
       if (csrf !== true) return csrf;
+      if (!isConfiguredRuntimeTenant(resolved)) {
+        reply.code(404);
+        return fail("RESOURCE_UNAVAILABLE");
+      }
       const challenge = await context.runtime.edgeAuthority.challenge(resolved, parsed.data);
       if (challenge === null) {
         reply.code(409);
@@ -58,6 +63,10 @@ export function registerEdgeAuthorityRoute(
       }
       const csrf = await requireCsrf(context, request, reply, resolved.session);
       if (csrf !== true) return csrf;
+      if (!isConfiguredRuntimeTenant(resolved)) {
+        reply.code(404);
+        return fail("RESOURCE_UNAVAILABLE");
+      }
       const authority = await context.runtime.edgeAuthority.issue(resolved, parsed.data);
       if (authority === null) {
         reply.code(409);

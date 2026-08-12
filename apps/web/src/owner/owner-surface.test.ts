@@ -77,7 +77,15 @@ test("admin sees the owner shell without counter mutation capabilities", () => {
   const appPorts = ports();
   const onSessionChange = () => undefined;
   const props = ownerShellPropsFrom(session("admin"), appPorts, onSessionChange);
-  assert.deepEqual(Object.keys(props).sort(), ["onLogout", "queryClient", "session"]);
+  assert.deepEqual(Object.keys(props).sort(), [
+    "authClient",
+    "commandClient",
+    "onLogout",
+    "onSelectStore",
+    "onSessionChange",
+    "queryClient",
+    "session",
+  ]);
 
   const html = renderToStaticMarkup(
     createElement(App, {
@@ -88,7 +96,10 @@ test("admin sees the owner shell without counter mutation capabilities", () => {
     }),
   );
   assert.match(html, /data-shell="owner"/u);
-  assert.match(html, /只读经营看板/u);
+  assert.match(html, /云端经营台/u);
+  assert.match(html, /今日经营/u);
+  assert.match(html, /经营报表/u);
+  assert.match(html, /门店管理/u);
   assert.match(html, /退出登录/u);
   assert.doesNotMatch(html, /data-shell="counter"/u);
   assert.doesNotMatch(html, /切换员工|打印队列|收衣开单|取衣核销|name="pin"/u);
@@ -134,11 +145,17 @@ test("host entry selects the pathname surface and loads the isolated owner style
     new URL("../../src/styles/owner-operations.css", import.meta.url),
     "utf8",
   );
+  const managementStyles = await readFile(
+    new URL("../../src/styles/owner-management.css", import.meta.url),
+    "utf8",
+  );
 
   assert.match(source, /appSurfaceFromPathname\(window\.location\.pathname\)/u);
   assert.match(source, /surface=\{surface\}/u);
   assert.match(source, /import\s+["']\.\.\/src\/styles\/owner-dashboard\.css["'];/u);
   assert.match(source, /import\s+["']\.\.\/src\/styles\/owner-operations\.css["'];/u);
+  assert.match(source, /import\s+["']\.\.\/src\/styles\/owner-management\.css["'];/u);
   assert.match(operationsStyles, /\.ld-owner-operations \.ld-btn\s*\{[^}]*min-height: 44px;/su);
   assert.match(operationsStyles, /\.ld-owner-metric__action\s*\{[^}]*min-height: 44px;/su);
+  assert.match(managementStyles, /\.ld-owner-management > \.ld-btn\s*\{[^}]*min-height: 44px;/su);
 });

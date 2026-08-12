@@ -205,7 +205,8 @@ test("PageHost reminder route mounts the explicit manual fallback", () => {
     ),
   );
   assert.match(html, /催取工作台/);
-  assert.match(html, /短信、微信未接入/);
+  assert.match(html, /人工名单只生成联系材料，不会自行发送短信或微信/);
+  assert.match(html, /data-testid="notification-delivery-panel"/);
 });
 
 test("App shell SSR includes skip link, sync bar, print indicator when authenticated", () => {

@@ -200,6 +200,8 @@ function buildBus(pendingStore: MemoryPendingActionStore) {
 test("step-up PIN binds real pending args_hash then creator confirm_ref resumes", async () => {
   const { store, pinStepUp, pendingStore, proofStore, session } = await seedIdentity();
   const { registry, chainHooks, settings } = buildBus(pendingStore);
+  let approverIsActiveAdmin = true;
+  const stepUpApproverAuthority = async () => approverIsActiveAdmin;
 
   // Staff triggers R5 → blocked with confirm_ref
   const first = await executeCommand(
@@ -215,6 +217,7 @@ test("step-up PIN binds real pending args_hash then creator confirm_ref resumes"
       chainHooks,
       pendingStore,
       stepUpProofStore: proofStore,
+      stepUpApproverAuthority,
     },
   );
   assert.equal(first.ok, false);
@@ -300,6 +303,7 @@ test("step-up PIN binds real pending args_hash then creator confirm_ref resumes"
       chainHooks,
       pendingStore,
       stepUpProofStore: proofStore,
+      stepUpApproverAuthority,
       confirmRef,
       sessionBinding: {
         sessionId: newSession.session_id,
@@ -309,6 +313,34 @@ test("step-up PIN binds real pending args_hash then creator confirm_ref resumes"
   );
   assert.equal(reusedFromNewSession.ok, false);
   assert.equal(proofStore.get(proof.step_up_proof_id)?.status, "active");
+
+  // Authority is re-read in the business transaction. A proof issued before
+  // demotion must not authorize or consume either durable record afterwards.
+  approverIsActiveAdmin = false;
+  const deniedAfterDemotion = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "platform.settings.set",
+    {},
+    {
+      registry,
+      actor: STAFF,
+      chainHooks,
+      pendingStore,
+      stepUpProofStore: proofStore,
+      stepUpApproverAuthority,
+      confirmRef,
+      sessionBinding: {
+        sessionId: session.session_id,
+        sessionVersion: session.session_version,
+      },
+    },
+  );
+  assert.equal(deniedAfterDemotion.ok, false);
+  if (!deniedAfterDemotion.ok) assert.equal(deniedAfterDemotion.error.code, "POLICY_DENIED");
+  assert.equal(proofStore.get(proof.step_up_proof_id)?.status, "active");
+  assert.equal(pendingStore.get(confirmRef)?.status, "pending");
+  approverIsActiveAdmin = true;
 
   // The original creator session can resume with its own proof.
   const resumed = await executeCommand(
@@ -322,6 +354,7 @@ test("step-up PIN binds real pending args_hash then creator confirm_ref resumes"
       chainHooks,
       pendingStore,
       stepUpProofStore: proofStore,
+      stepUpApproverAuthority,
       confirmRef,
       sessionBinding: {
         sessionId: session.session_id,
@@ -348,6 +381,7 @@ test("step-up PIN binds real pending args_hash then creator confirm_ref resumes"
       chainHooks,
       pendingStore,
       stepUpProofStore: proofStore,
+      stepUpApproverAuthority,
       confirmRef,
       sessionBinding: {
         sessionId: session.session_id,

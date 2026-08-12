@@ -100,9 +100,13 @@ export async function insertOrderRows(
       subtotal_cents, original_cents, discount_cents, addon_cents, urgent_cents, freight_cents,
       payable_cents, paid_cents, balance_cents, business_date,
       pricing_policy_version, urgent_selected, freight_selected,
+      customer_profile_version, discount_source, discount_bps, membership_version,
+      tier_id, tier_definition_version, tier_code, tier_name, tier_level, tier_discount_bps,
+      skip_ticket_print, skip_label_print, skip_rack_assignment,
       created_at, updated_at, created_by_staff_id
      ) VALUES (
-       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+       $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39
      )`,
     [
       order.order_id,
@@ -128,6 +132,19 @@ export async function insertOrderRows(
       order.pricing_policy_version ?? 0,
       order.urgent_selected ?? false,
       order.freight_selected ?? false,
+      order.customer_profile_version ?? 0,
+      order.discount_source ?? (order.discount_cents > 0 ? "manual" : "none"),
+      order.discount_bps ?? 0,
+      order.membership_version ?? null,
+      order.tier_id ?? null,
+      order.tier_definition_version ?? null,
+      order.tier_code ?? null,
+      order.tier_name ?? null,
+      order.tier_level ?? null,
+      order.tier_discount_bps ?? null,
+      order.skip_ticket_print ?? false,
+      order.skip_label_print ?? false,
+      order.skip_rack_assignment ?? false,
       epochToDate(order.created_at),
       epochToDate(order.updated_at),
       order.created_by_staff_id,
@@ -217,6 +234,9 @@ export async function loadOrder(
             subtotal_cents, original_cents, discount_cents, addon_cents, urgent_cents, freight_cents,
             payable_cents, paid_cents, balance_cents, business_date,
             pricing_policy_version, urgent_selected, freight_selected,
+            customer_profile_version, discount_source, discount_bps, membership_version,
+            tier_id::text, tier_definition_version, tier_code, tier_name, tier_level,
+            tier_discount_bps, skip_ticket_print, skip_label_print, skip_rack_assignment,
             created_at, updated_at, created_by_staff_id::text
      FROM orders
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid
@@ -249,7 +269,8 @@ export async function loadGarments(
             g.order_line_id::text, ol.line_index, g.seq, g.barcode,
             g.service_code, g.category_code, g.unit_price_cents,
             g.color, g.brand, g.defects, g.accessories, g.note,
-            g.status, g.rack_zone, g.rack_slot
+            g.status, g.custody_state, g.active_production_batch_id::text,
+            g.rack_zone, g.rack_slot
      FROM garments g
      INNER JOIN order_lines ol
        ON ol.org_id = g.org_id AND ol.store_id = g.store_id

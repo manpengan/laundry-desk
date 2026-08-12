@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -129,8 +129,9 @@ test("runs non-demo bootstrap only after the exact local confirmation", async ()
   });
 });
 
-test("bootstrap consumes setup credentials only through *_FILE inputs", async () => {
+test("bootstrap consumes setup credentials only through *_FILE inputs", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-bootstrap-files-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
   const values = Object.freeze({
     DATABASE_ADMIN_URL: DATABASE_URL,
     LAUNDRY_BOOTSTRAP_ADMIN_USERNAME: "admin",
@@ -166,8 +167,9 @@ test("bootstrap consumes setup credentials only through *_FILE inputs", async ()
   assert.doesNotMatch(harness.stdout.join(""), new RegExp(`${PASSWORD}|${PIN}`, "u"));
 });
 
-test("commission consumes only the second administrator through private files", async () => {
+test("commission consumes only the second administrator through private files", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-commission-files-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
   const values = Object.freeze({
     DATABASE_ADMIN_URL: DATABASE_URL,
     LAUNDRY_COMMISSION_APPROVER_USERNAME: "legacy-approver",

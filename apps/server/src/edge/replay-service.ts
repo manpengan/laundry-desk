@@ -85,6 +85,7 @@ export async function executeEdgeReplay(
       chainHooks,
       pendingStore: runtime.pendingStore,
       stepUpProofStore: runtime.stepUpProofStore,
+      stepUpApproverAuthority: runtime.stepUpApproverAuthority,
       idempotencyStore: runtime.idempotencyStore,
       version: envelope.payload.version,
       dryRun: envelope.payload.dry_run,

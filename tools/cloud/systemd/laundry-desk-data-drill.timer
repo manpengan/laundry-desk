@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Laundry Desk shadow restore drill
+
+[Timer]
+OnCalendar=Sun *-*-* 05:15:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=laundry-desk-data-drill.service
+
+[Install]
+WantedBy=timers.target

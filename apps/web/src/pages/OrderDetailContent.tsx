@@ -2,6 +2,7 @@ import { MoneyText, StatusBadge } from "@laundry/ui";
 
 import type { PhotoPort } from "../host/photo-port.js";
 import type { OrderGetGarment, OrderGetResult } from "./order-form.js";
+import { discountPolicyLabel, waiverPolicyLabel } from "./order-policy-labels.js";
 import { PhotoGallery } from "./PhotoGallery.js";
 import type { PhotoMetaRow } from "./photo-list.js";
 
@@ -93,6 +94,18 @@ export function OrderDetailContent({
             <dd>
               −<MoneyText fen={order.discount_cents} />
             </dd>
+          </div>
+          <div>
+            <dt>折扣来源</dt>
+            <dd data-testid="order-detail-discount-source">{discountPolicyLabel(order)}</dd>
+          </div>
+          <div>
+            <dt>档案快照</dt>
+            <dd>v{order.customer_profile_version}</dd>
+          </div>
+          <div>
+            <dt>运营豁免</dt>
+            <dd data-testid="order-detail-waivers">{waiverPolicyLabel(order)}</dd>
           </div>
           <div>
             <dt>附加费用</dt>

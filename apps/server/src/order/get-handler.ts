@@ -104,6 +104,26 @@ export function getHandler(deps: OrderHandlerDeps): CommandHandler {
         subtotal_cents: order.subtotal_cents,
         original_cents: order.original_cents,
         discount_cents: order.discount_cents,
+        customer_profile_version: order.customer_profile_version ?? 0,
+        discount_source: order.discount_source ?? (order.discount_cents > 0 ? "manual" : "none"),
+        discount_bps: order.discount_bps ?? 0,
+        membership_version: order.membership_version ?? null,
+        tier:
+          order.tier_id === undefined || order.tier_id === null
+            ? null
+            : Object.freeze({
+                tier_id: order.tier_id,
+                definition_version: order.tier_definition_version,
+                code: order.tier_code,
+                name: order.tier_name,
+                level: order.tier_level,
+                discount_bps: order.tier_discount_bps,
+              }),
+        waivers: Object.freeze({
+          skip_ticket_print: order.skip_ticket_print ?? false,
+          skip_label_print: order.skip_label_print ?? false,
+          skip_rack_assignment: order.skip_rack_assignment ?? false,
+        }),
         addon_cents: order.addon_cents,
         urgent_cents: order.urgent_cents,
         freight_cents: order.freight_cents,

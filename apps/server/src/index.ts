@@ -1,8 +1,3 @@
-/**
- * @laundry/server public surface.
- * C1–C8 skeletons: GUC, bus, audit, policy/pending, identity/auth, tools, platform handlers.
- * Fastify HTTP plugins and full production PG adapters are residual.
- */
 export {
   RLS_BYPASS_CLASSES,
   RlsBypassError,
@@ -67,6 +62,22 @@ export type {
 
 export { INSERT_AUDIT_LOG_SQL, auditWriterIsInsertOnly, writeAudit } from "./audit/write-audit.js";
 export type { AuditWriteRecord } from "./audit/write-audit.js";
+
+export {
+  createMemoryStoreManagementDeps,
+  createMemoryStoreManagementStore,
+  createPgStoreManagementDeps,
+  createPgStoreManagementStore,
+  createStoreManagementHandlers,
+  registerStoreManagementHandlers,
+} from "./store-management/index.js";
+export type {
+  AuthorizedStoreDirectory,
+  StoreManagementHandlerDeps,
+  StoreManagementStore,
+  StoreProfileSnapshot,
+  StoreProfileUpdateResult,
+} from "./store-management/index.js";
 
 export {
   BUS_ONLY_PATH_PREFIXES,
@@ -176,7 +187,6 @@ export type {
   ResolveSessionInput,
 } from "./auth/index.js";
 
-/** C4 — read-only AI tool projection (no model I/O). */
 export {
   AI_PRESET_WHITELISTS,
   listToolNames,
@@ -192,16 +202,8 @@ export type {
   ToolExample,
 } from "./tools/index.js";
 
-/**
- * M2 catalog price list (memory seed or PG catalog_items).
- */
 export * from "./catalog/index.js";
 
-/**
- * C7 — platform bus handlers only on the public write surface.
- * Memory/SQL store factories stay module-local (bootstrap injects them);
- * routes must not import platform/settings|features|audit-query directly.
- */
 export {
   createPlatformHandlers,
   platformHandlerNames,
@@ -220,10 +222,6 @@ export type {
   AuditQueryStore,
 } from "./platform/index.js";
 
-/**
- * M1 integration wiring — register identity + platform handlers on C1 bus.
- * Prefer registerM1Handlers / createRegisteredM1Bus from bootstrap.
- */
 export {
   actorPermissionSet,
   createDefaultChainHooks,
@@ -244,6 +242,7 @@ export {
 export {
   createMemoryFulfillmentStore,
   createPgFulfillmentStore,
+  createFulfillmentConfirmationPreparer,
   registerFulfillmentCommandHandlers,
   registerFulfillmentQueryHandlers,
 } from "./fulfillment/index.js";
@@ -257,6 +256,16 @@ export type {
   FulfillmentTransitionRow,
   FulfillmentWorkbenchOptions,
   FulfillmentWorkbenchRow,
+  FactoryBatchDetailResult,
+  FactoryBatchListResult,
+  FactoryBatchStatus,
+  FactoryCheckpoint,
+  FactoryConfirmationSummary,
+  FactoryCustodyState,
+  FactoryHandoffStore,
+  FactoryManifestRow,
+  FactoryMemberState,
+  FactoryQcStatus,
   MemoryFulfillmentSeed,
 } from "./fulfillment/index.js";
 export type {

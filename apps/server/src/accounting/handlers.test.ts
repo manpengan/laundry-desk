@@ -104,6 +104,25 @@ test("accounting report derives the current server business day and both bases",
   });
 });
 
+test("accounting defaults derive the business day from the authenticated PostgreSQL store", async () => {
+  const resolvedTenants: TenantContext[] = [];
+  const current = createAccountingHandlers({
+    source: createMemoryAccountingSource(MOVEMENTS),
+    timeZone: "UTC",
+    resolveTimeZone: async (_client, tenant) => {
+      resolvedTenants.push(tenant);
+      return "Pacific/Kiritimati";
+    },
+    now: () => new Date("2026-08-07T18:30:00.000Z"),
+  });
+
+  const outcome = await run(current["accounting.report.get"], {}, ["accounting_read"]);
+  const result = outcome.result as Readonly<{ date_from: string; date_to: string }>;
+  assert.equal(result.date_from, "2026-08-08");
+  assert.equal(result.date_to, "2026-08-08");
+  assert.deepEqual(resolvedTenants, [TENANT]);
+});
+
 test("accounting handlers fail closed on direct calls without both permissions", async () => {
   const denied = (code: string) => (error: unknown) => {
     assert.ok(error instanceof HandlerCommandError);

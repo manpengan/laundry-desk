@@ -82,6 +82,67 @@
   border-top: 1px solid var(--lg-hair);
 }
 
+.ld-benefit-definitions,
+.ld-member-benefits,
+.ld-order-benefits {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ld-benefit-form {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ld-benefit-definitions__list,
+.ld-benefit-assets {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ld-benefit-definitions__row,
+.ld-benefit-assets > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-block: 10px;
+  border-top: 1px solid var(--lg-hair);
+}
+
+.ld-benefit-definitions__row > span:first-child {
+  display: flex;
+  flex: 1 1 18rem;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ld-benefit-section {
+  padding-top: 12px;
+  border-top: 1px solid var(--lg-hair);
+}
+
+.ld-benefit-section h4,
+.ld-benefit-section h5,
+.ld-member-benefits h3,
+.ld-order-benefits h3,
+.ld-member-benefits p,
+.ld-order-benefits p {
+  margin-block: 0 8px;
+}
+
 .ld-member-lifecycle__actions {
   justify-content: flex-start;
 }

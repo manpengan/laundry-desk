@@ -1,7 +1,4 @@
-/**
- * M2 skeleton customer archive (search + upsert).
- * Org-scoped profiles; not in OpenAPI freeze snapshot.
- */
+/** M2 org-scoped customer archive contracts; excluded from the OpenAPI freeze snapshot. */
 
 import { z } from "zod";
 
@@ -37,6 +34,7 @@ export const CustomerGetInputSchema = z.strictObject({
 export const CustomerUpdateInputSchema = z
   .strictObject({
     customer_id: z.uuid(),
+    expected_version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
     phone: PhoneSchema.optional(),
     name: z.string().trim().min(1).max(64).nullable().optional(),
     note: z.string().trim().max(256).nullable().optional(),
@@ -81,14 +79,23 @@ export const CustomerPrivacyEventsInputSchema = z.strictObject({
   limit: z.number().int().positive().max(50).optional(),
 });
 
+export const CUSTOMER_PRIVACY_REASON_CODES = [
+  "customer_request",
+  "legal_request",
+  "data_correction",
+  "retention_expiry",
+] as const;
+export const CustomerPrivacyReasonSchema = z.enum(CUSTOMER_PRIVACY_REASON_CODES);
+export type CustomerPrivacyReason = z.infer<typeof CustomerPrivacyReasonSchema>;
+
 export const CustomerPrivacyExportInputSchema = z.strictObject({
   customer_id: z.uuid(),
-  reason: z.string().trim().min(1).max(256),
+  reason: CustomerPrivacyReasonSchema,
 });
 
 export const CustomerAnonymizeInputSchema = z.strictObject({
   customer_id: z.uuid(),
-  reason: z.string().trim().min(1).max(256),
+  reason: CustomerPrivacyReasonSchema,
   confirmation: z.literal("ANONYMIZE"),
 });
 
@@ -114,6 +121,7 @@ export type CustomerSearchRow = Readonly<{
   customer_id: string;
   phone_masked: string;
   name: string | null;
+  version: number;
   updated_at: number;
 }>;
 
@@ -126,6 +134,7 @@ export type CustomerUpsertResult = Readonly<{
   phone: string;
   name: string | null;
   created: boolean;
+  version: number;
 }>;
 
 export type CustomerDetailResult = Readonly<{
@@ -133,6 +142,7 @@ export type CustomerDetailResult = Readonly<{
   phone: string;
   name: string | null;
   note: string | null;
+  version: number;
   updated_at: number;
 }>;
 
@@ -140,6 +150,7 @@ export type CustomerDuplicateRow = Readonly<{
   customer_id: string;
   phone_masked: string;
   name: string | null;
+  version: number;
   updated_at: number;
 }>;
 
@@ -152,7 +163,7 @@ export const customerSearchQuery: QueryDefinition<SearchInput> = defineQuery({
     "Return org-scoped active customer rows with a masked phone and no note. Match phone prefix or name substring. max 50 rows; default limit 20.",
   input: CustomerSearchInputSchema,
   risk: "R2",
-  invariants: [],
+  invariants: ["rbac.customer_read"],
   idempotent: true,
   sideEffects: [],
   offline_mode: "denied",
@@ -171,7 +182,7 @@ export const customerUpsertCommand: CommandDefinition<UpsertInput> = defineComma
     "Upsert customer by org+phone. Optional name/note. Returns customer_id, phone, name, created flag. Integer timestamps only.",
   input: CustomerUpsertInputSchema,
   risk: "R2",
-  invariants: ["rbac.order_write"],
+  invariants: ["rbac.customer_write"],
   idempotent: true,
   sideEffects: ["customer.upserted", "audit.customer_event"],
   offline_mode: "grant",
@@ -188,7 +199,7 @@ export const customerGetQuery: QueryDefinition<GetInput> = defineQuery({
     "Return one active org-scoped customer profile with full phone and note for an authorized detail view.",
   input: CustomerGetInputSchema,
   risk: "R2",
-  invariants: [],
+  invariants: ["rbac.customer_read"],
   idempotent: true,
   sideEffects: [],
   offline_mode: "denied",
@@ -206,7 +217,7 @@ export const customerDuplicatesQuery: QueryDefinition<DuplicatesInput> = defineQ
     "Return up to 20 same-name active customer candidates with masked phones; never return the source row.",
   input: CustomerDuplicatesInputSchema,
   risk: "R2",
-  invariants: [],
+  invariants: ["rbac.customer_read"],
   idempotent: true,
   sideEffects: [],
   offline_mode: "denied",
@@ -218,13 +229,13 @@ export const customerDuplicatesQuery: QueryDefinition<DuplicatesInput> = defineQ
 
 export const customerUpdateCommand: CommandDefinition<UpdateInput> = defineCommand({
   name: "customer.update",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Edit one active customer profile by id.",
   description_llm:
-    "Update an active org-scoped customer phone, name, or note. At least one field is required.",
+    "Update an active org-scoped customer phone, name, or note using the exact current version. At least one editable field is required.",
   input: CustomerUpdateInputSchema,
   risk: "R3",
-  invariants: ["rbac.order_write"],
+  invariants: ["rbac.customer_write", "customer.version"],
   idempotent: true,
   sideEffects: ["customer.updated", "audit.customer_event"],
   offline_mode: "denied",
@@ -241,7 +252,7 @@ export const customerMergeCommand: CommandDefinition<MergeInput> = defineCommand
     "High-risk merge: redirect the source profile to a distinct active target and relink this store's order snapshots. The source id remains as an auditable redirect.",
   input: CustomerMergeInputSchema,
   risk: "R4",
-  invariants: ["rbac.order_write"],
+  invariants: ["rbac.customer_write"],
   idempotent: true,
   sideEffects: ["customer.merged", "audit.customer_event"],
   offline_mode: "denied",
@@ -258,7 +269,7 @@ export const customerPrivacyStatusQuery: QueryDefinition<PrivacyStatusInput> = d
     "Return bounded org-wide active/retained order and photo counts for one active customer. Direct PII is excluded.",
   input: CustomerPrivacyStatusInputSchema,
   risk: "R2",
-  invariants: [],
+  invariants: ["rbac.privacy_admin"],
   idempotent: true,
   sideEffects: [],
   offline_mode: "denied",
@@ -276,7 +287,7 @@ export const customerPrivacyEventsQuery: QueryDefinition<PrivacyEventsInput> = d
     "Return up to 50 exported/anonymized event rows without customer PII or credential material.",
   input: CustomerPrivacyEventsInputSchema,
   risk: "R2",
-  invariants: [],
+  invariants: ["rbac.privacy_admin"],
   idempotent: true,
   sideEffects: [],
   offline_mode: "denied",
@@ -288,10 +299,10 @@ export const customerPrivacyEventsQuery: QueryDefinition<PrivacyEventsInput> = d
 
 export const customerPrivacyExportCommand: CommandDefinition<PrivacyExportInput> = defineCommand({
   name: "customer.privacy.export",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Create an audited, bounded JSON export for one active customer.",
   description_llm:
-    "High-risk org-wide export of one customer profile, at most 1000 related order snapshots, and up to 1000 signed print snapshots per order. The operation appends a privacy event and audit row in the same transaction.",
+    "High-risk version-2 org-wide export of every profile in the canonical merge group, up to 1000 subject-scoped narrative rows, at most 1000 related order snapshots, up to 1000 signed print snapshots per order, and bounded safe notification delivery evidence without recipient, message or provider-reference hashes. It discloses the count of retained garment-photo evidence. The reason is a controlled non-PII code. The operation appends a privacy event and audit row in the same transaction.",
   input: CustomerPrivacyExportInputSchema,
   risk: "R4",
   invariants: ["rbac.privacy_admin"],
@@ -304,6 +315,14 @@ export const customerPrivacyExportCommand: CommandDefinition<PrivacyExportInput>
     { path: "/customer/phone", strategy: "mask" },
     { path: "/customer/name", strategy: "mask" },
     { path: "/customer/note", strategy: "mask" },
+    { path: "/canonical_customers/*/phone", strategy: "mask" },
+    { path: "/canonical_customers/*/name", strategy: "mask" },
+    { path: "/canonical_customers/*/note", strategy: "mask" },
+    { path: "/profile/service_note", strategy: "mask" },
+    { path: "/profiles/*/service_note", strategy: "mask" },
+    { path: "/addresses", strategy: "remove" },
+    { path: "/identifiers", strategy: "remove" },
+    { path: "/related_narratives", strategy: "remove" },
     { path: "/orders/*/customer_phone", strategy: "mask" },
     { path: "/orders/*/customer_name", strategy: "mask" },
     { path: "/orders/*/note", strategy: "mask" },
@@ -315,10 +334,10 @@ export const customerPrivacyExportCommand: CommandDefinition<PrivacyExportInput>
 
 export const customerAnonymizeCommand: CommandDefinition<AnonymizeInput> = defineCommand({
   name: "customer.anonymize",
-  version: "0.1.0",
+  version: "0.2.0",
   description: "Irreversibly remove direct PII while retaining accounting records.",
   description_llm:
-    "R5 org-wide anonymization. Reject while any draft/open order or queued/in-flight PII print snapshot exists; otherwise clear customer PII, terminal order name/phone/note fields, and terminal print snapshot JSON while retaining opaque accounting rows, snapshot hashes, receipts, and immutable privacy/audit events.",
+    "R5 org-wide anonymization using a controlled non-PII reason code. Reject while any draft/open order or queued/in-flight PII print snapshot exists; otherwise clear customer PII, terminal order name/phone/note fields, and terminal print snapshot JSON while retaining opaque accounting rows, snapshot hashes, receipts, and immutable privacy/audit events.",
   input: CustomerAnonymizeInputSchema,
   risk: "R5",
   invariants: ["rbac.privacy_admin"],

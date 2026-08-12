@@ -7,6 +7,8 @@ import { ToastProvider } from "@laundry/ui";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
 import { enqueueTicketPrint, notifyReceiveSuccess, ReceivePage } from "./ReceivePage.js";
+import { ReceiveResult } from "./ReceiveResult.js";
+import { TicketPrintWaiverNotice } from "./TicketPrintWaiverNotice.js";
 import { createTicketPrintAction, TicketPreviewPanel } from "./TicketPreviewPanel.js";
 import { buildReceiveTicketPreview } from "./ticket-preview.js";
 import type { ReceiveOrderResult } from "./order-form.js";
@@ -80,6 +82,14 @@ test("after successful receive, ticket-preview shows ticket_no", () => {
     payable_cents: 1500,
     paid_cents: 0,
     balance_cents: 1500,
+    discount_cents: 250,
+    discount_source: "customer",
+    discount_bps: 1_250,
+    waivers: Object.freeze({
+      skip_ticket_print: true,
+      skip_label_print: false,
+      skip_rack_assignment: true,
+    }),
     garment_count: 1,
     garments: Object.freeze([
       Object.freeze({
@@ -115,6 +125,42 @@ test("after successful receive, ticket-preview shows ticket_no", () => {
   assert.match(html, /打印小票/);
   assert.match(html, /wash\/shirt/);
   assert.match(html, /¥15\.00/);
+});
+
+test("ReceiveResult shows the authoritative discount policy and operational waivers", () => {
+  const result: ReceiveOrderResult = Object.freeze({
+    order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    ticket_no: "20260812-0042",
+    pickup_code: "P202608120042",
+    payable_cents: 1_750,
+    paid_cents: 0,
+    balance_cents: 1_750,
+    discount_cents: 250,
+    discount_source: "customer",
+    discount_bps: 1_250,
+    waivers: Object.freeze({
+      skip_ticket_print: true,
+      skip_label_print: false,
+      skip_rack_assignment: true,
+    }),
+    garment_count: 0,
+    garments: Object.freeze([]),
+  });
+
+  const html = renderToStaticMarkup(createElement(ReceiveResult, { result }));
+
+  assert.match(html, /data-testid="receive-discount-source"/u);
+  assert.match(html, /顾客专属 12\.5%/u);
+  assert.match(html, /data-testid="receive-waivers"/u);
+  assert.match(html, /跳过小票打印、跳过上挂分配/u);
+});
+
+test("ticket print waiver notice preserves its accessible status", () => {
+  const html = renderToStaticMarkup(createElement(TicketPrintWaiverNotice));
+
+  assert.match(html, /role="status"/u);
+  assert.match(html, /data-testid="ticket-print-waiver"/u);
+  assert.match(html, /小票打印已按顾客档案豁免跳过/u);
 });
 
 test("TicketPreviewPanel print button is present for browser print", () => {
@@ -205,10 +251,35 @@ test("receive success keeps a host ticket callback failure post-commit", () => {
       },
       preview,
       "T-1",
+      false,
       (message, kind) => notices.push([message, kind]),
     ),
   );
   assert.deepEqual(notices, [["开单成功 T-1；小票联动失败，可从订单详情重试", "error"]]);
+});
+
+test("receive success suppresses the host ticket callback when the server freezes a waiver", () => {
+  const preview: TicketPreview = Object.freeze({
+    lines: Object.freeze(["票单号 T-2"]),
+    total_text: "¥1.00",
+    paid_text: "¥0.00",
+    balance_text: "¥1.00",
+  });
+  const notices: Array<readonly [string, "success" | "error"]> = [];
+  let callbackCalls = 0;
+
+  notifyReceiveSuccess(
+    () => {
+      callbackCalls += 1;
+    },
+    preview,
+    "T-2",
+    true,
+    (message, kind) => notices.push([message, kind]),
+  );
+
+  assert.equal(callbackCalls, 0);
+  assert.deepEqual(notices, [["开单成功 T-2", "success"]]);
 });
 
 test("ticket print action uses enqueue exclusively on success and failure", async () => {

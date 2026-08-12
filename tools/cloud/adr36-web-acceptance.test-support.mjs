@@ -108,6 +108,14 @@ function createFakeCloud(env, fakeOptions = {}) {
   let bonusRule = null;
   let account = null;
   let financialComplete = false;
+  let storeProfile = Object.freeze({
+    store_code: "main",
+    store_name: "ADR36 UAT Store",
+    timezone: "Asia/Taipei",
+    profile_version: 1,
+    updated_at: "2026-08-09T12:34:51.000Z",
+    is_current: true,
+  });
 
   const staffByUsername = Object.freeze({
     [env.LAUNDRY_BOOTSTRAP_ADMIN_USERNAME]: Object.freeze({
@@ -153,7 +161,7 @@ function createFakeCloud(env, fakeOptions = {}) {
       role: "admin",
       features: { membership: true, accounting: true },
       display: {
-        store_name: "ADR36 UAT Store",
+        store_name: storeProfile.store_name,
         staff_name: staff.displayName,
         org_code: "local",
         store_code: "main",
@@ -408,10 +416,30 @@ function createFakeCloud(env, fakeOptions = {}) {
       financialComplete = true;
       return success({ ...account, balance_cents: 0 });
     }
+    if (name === "store.profile.set") {
+      if (
+        args.expected_profile_version !== storeProfile.profile_version ||
+        args.store_name === storeProfile.store_name
+      ) {
+        return failure("IDEMPOTENCY_CONFLICT");
+      }
+      const nextVersion = storeProfile.profile_version + 1;
+      storeProfile = Object.freeze({
+        ...storeProfile,
+        store_name: args.store_name,
+        profile_version: nextVersion,
+        updated_at: new Date(Date.UTC(2026, 7, 9, 12, 34, 50 + nextVersion)).toISOString(),
+      });
+      return success({ store: storeProfile });
+    }
     assert.fail(`unexpected command ${name}`);
   };
 
   const executeQuery = (name, args) => {
+    if (name === "store.authorized.list") {
+      assert.deepEqual(args, {});
+      return success({ returned_store_count: 1, truncated: false, stores: [storeProfile] });
+    }
     if (name === "accounting.report.get") return success(accounting(args.group_by));
     if (name === "catalog.items.get") return success({ item: visibleCatalog() });
     if (name === "catalog.items.list") {
@@ -562,10 +590,14 @@ function createFakeCloud(env, fakeOptions = {}) {
         "member.account.freeze",
         "member.account.unfreeze",
         "member.account.close",
+        "store.profile.set",
       ];
       if (gated.includes(name)) {
         const confirmRef = `88888888-8888-4888-8888-${String(++pendingSequence).padStart(12, "0")}`;
-        const stepUp = name === "member.refund" || name === "member.account.close";
+        const stepUp =
+          name === "member.refund" ||
+          name === "member.account.close" ||
+          name === "store.profile.set";
         pending.set(confirmRef, {
           name,
           args: body.args,
@@ -593,6 +625,18 @@ const TEST_EXTENSIONS = Object.freeze({
   orderFinanceJourney: async () => {},
   reportingJourney: async () => {},
   cleanupOrderFinance: async () => true,
+  createMemberBenefitsJourney: () =>
+    Object.freeze({
+      execute: async () => {},
+      cleanup: async () => true,
+    }),
+  createCustomerProfileJourney: () =>
+    Object.freeze({
+      execute: async () => {},
+      cleanup: async () => true,
+    }),
+  notificationDeliveryJourney: async () => {},
+  factoryHandoffJourney: async () => {},
 });
 
 export {

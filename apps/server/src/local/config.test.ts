@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import { createLocalRuntime, createMemoryLocalRuntime } from "./create-runtime.js";
-import { parseLocalHostConfig, parseLocalPhotoStoreDir, parseLocalServerConfig } from "./config.js";
+import {
+  parseLocalHostConfig,
+  parseLocalPhotoStoreDir,
+  parseLocalServerConfig,
+  parseNotificationProviderMode,
+} from "./config.js";
 
 const ACCESS_SECRET = "access-secret-is-at-least-32-bytes";
 const CSRF_SECRET = "csrf-proof-secret-is-at-least-32-bytes";
@@ -202,8 +207,9 @@ test("measures signing secret strength in UTF-8 bytes", () => {
   assert.equal(config.accessTokenSecret, "台".repeat(11));
 });
 
-test("loads signing secrets from container secret files", async () => {
+test("loads signing secrets from container secret files", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-signing-files-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
   const accessPath = join(root, "access");
   const csrfPath = join(root, "csrf");
   await writeFile(accessPath, ACCESS_SECRET, { mode: 0o600 });
@@ -244,6 +250,28 @@ test("photo storage accepts only the dedicated compose mount", () => {
     assert.throws(
       () => parseLocalPhotoStoreDir({ LAUNDRY_PHOTO_STORE_DIR: candidate }),
       /must be \/var\/lib\/laundry\/photos/u,
+    );
+  }
+});
+
+test("notification provider stays disabled unless software-only mode is explicit", () => {
+  assert.equal(parseNotificationProviderMode({}), "disabled");
+  assert.equal(
+    parseNotificationProviderMode({ LAUNDRY_NOTIFICATION_PROVIDER_MODE: "" }),
+    "disabled",
+  );
+  assert.equal(
+    parseNotificationProviderMode({ LAUNDRY_NOTIFICATION_PROVIDER_MODE: "disabled" }),
+    "disabled",
+  );
+  assert.equal(
+    parseNotificationProviderMode({ LAUNDRY_NOTIFICATION_PROVIDER_MODE: "software_only" }),
+    "software_only",
+  );
+  for (const invalid of ["external", "fake", "software-only", " software_only", "1"]) {
+    assert.throws(
+      () => parseNotificationProviderMode({ LAUNDRY_NOTIFICATION_PROVIDER_MODE: invalid }),
+      /LAUNDRY_NOTIFICATION_PROVIDER_MODE/u,
     );
   }
 });

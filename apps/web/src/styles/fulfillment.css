@@ -3,6 +3,153 @@
   gap: 16px;
 }
 
+.ld-fulfillment-hub {
+  display: grid;
+  gap: 12px;
+}
+
+.ld-fulfillment-hub__tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 24px;
+}
+
+.ld-factory,
+.ld-factory-overview,
+.ld-factory-detail,
+.ld-factory-card,
+.ld-factory-batches,
+.ld-factory-garments,
+.ld-factory-manifest {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ld-fulfillment-hub__tabs,
+.ld-factory-garment,
+.ld-factory-checkpoints li {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.ld-factory-overview {
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+}
+
+.ld-factory-card,
+.ld-factory-discrepancy {
+  padding: 16px;
+  border: 1px solid var(--lg-border);
+  border-radius: 12px;
+  background: var(--lg-surface);
+}
+
+.ld-factory-discrepancy {
+  border-color: var(--lg-danger);
+  color: var(--lg-danger);
+}
+
+.ld-factory-card h2,
+.ld-factory-card h3,
+.ld-factory-detail h2,
+.ld-factory-detail h3,
+.ld-factory-discrepancy h3 {
+  margin: 0;
+}
+
+.ld-factory-garment {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) minmax(140px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px;
+  border: 1px solid var(--lg-border);
+  border-radius: 10px;
+}
+
+.ld-factory-garment input {
+  width: 22px;
+  height: 22px;
+}
+
+.ld-factory-batch {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  min-height: 64px;
+  padding: 12px;
+  border: 1px solid var(--lg-border);
+  border-radius: 10px;
+  background: var(--lg-surface);
+  color: var(--lg-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ld-factory-detail__header,
+.ld-factory-scan,
+.ld-factory-scan-list,
+.ld-factory-confirmation {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ld-factory-detail__header > div {
+  flex: 1;
+}
+
+.ld-factory-detail__header p,
+.ld-factory-card p,
+.ld-factory-discrepancy p {
+  margin: 4px 0;
+}
+
+.ld-factory-scan > label {
+  flex: 1;
+  min-width: 220px;
+}
+
+.ld-factory-scan-list button {
+  min-height: 44px;
+  border: 1px solid var(--lg-border);
+  border-radius: 999px;
+  background: var(--lg-surface-elevated);
+  color: var(--lg-text);
+  padding: 6px 12px;
+}
+
+.ld-factory-checkpoints {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ld-factory-checkpoints li {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) repeat(3, auto);
+  gap: 8px;
+  padding: 10px;
+  border-left: 4px solid var(--lg-success);
+  background: var(--lg-surface-elevated);
+}
+
+.ld-factory-confirmation {
+  align-items: start;
+  flex-direction: column;
+}
+
+.ld-factory-confirmation details,
+.ld-factory-confirmation code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .ld-fulfillment__header,
 .ld-fulfillment__filters,
 .ld-fulfillment__actions,
@@ -89,5 +236,42 @@
 @media (max-width: 900px) {
   .ld-fulfillment__row {
     grid-template-columns: auto 1fr 1fr;
+  }
+
+  .ld-factory-overview {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .ld-fulfillment-hub__tabs {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 8px 12px;
+    background: var(--lg-background);
+  }
+
+  .ld-fulfillment-hub__tabs > button {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .ld-factory-garment,
+  .ld-factory-checkpoints li {
+    grid-template-columns: auto 1fr;
+  }
+
+  .ld-factory-garment > *,
+  .ld-factory-checkpoints li > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ld-factory-detail__header > button,
+  .ld-factory-scan > button,
+  .ld-factory-card > button,
+  .ld-factory-discrepancy > button {
+    width: 100%;
   }
 }

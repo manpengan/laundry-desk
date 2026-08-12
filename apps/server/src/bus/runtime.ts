@@ -6,6 +6,7 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "settings_admin",
   "staff_read",
   "staff_write",
+  "store_manage",
   "customer_read",
   "customer_write",
   "order_write",
@@ -28,6 +29,12 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "member_freeze",
   // ADR-25: unfreeze and terminal closure change access to customer value.
   "member_lifecycle_manage",
+  // ADR-44: automatic provider dispatch is admin-only; ordinary staff retain
+  // the explicit ADR-23 manual-list fallback.
+  "notification_send",
+  "fulfillment_handoff",
+  "fulfillment_qc",
+  "fulfillment_reconcile",
 ]);
 const STAFF_PERMISSIONS = Object.freeze([
   "staff_read",
@@ -37,6 +44,8 @@ const STAFF_PERMISSIONS = Object.freeze([
   // A counter worker may immediately protect a reported-lost account; restoring
   // or closing it remains admin-only.
   "member_freeze",
+  "fulfillment_handoff",
+  "fulfillment_qc",
 ]);
 const NO_PERMISSIONS = Object.freeze([] as string[]);
 
@@ -63,6 +72,7 @@ export function createRuntimeBus(runtime: LocalRuntime) {
       print: runtime.print,
       stats: runtime.stats,
       customer: runtime.customer,
+      customerProfile: runtime.customerProfile,
       shift: runtime.shift,
       reconciliation: runtime.reconciliation,
       accounting: runtime.accounting,
@@ -70,7 +80,9 @@ export function createRuntimeBus(runtime: LocalRuntime) {
       photo: runtime.photo,
       fulfillment: runtime.fulfillment,
       staffAccess: runtime.staffAccess,
+      storeManagement: runtime.storeManagement,
       member: runtime.member,
+      memberBenefits: runtime.memberBenefits,
       notification: runtime.notification,
     },
     runtime.pendingStore,

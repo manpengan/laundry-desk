@@ -4,8 +4,6 @@
 
 import {
   buildPayPayment,
-  buildReversalPayment,
-  planCancel,
   planCollectPayment,
   planRefundPayment,
   planRepayPayment,
@@ -13,6 +11,8 @@ import {
 import { randomUUID } from "node:crypto";
 
 import type {
+  FixedCouponDiscountInput,
+  FixedCouponDiscountResult,
   GarmentRecord,
   InitialPayment,
   LedgerPaymentRow,
@@ -24,6 +24,8 @@ import type {
   PickupApplyOptions,
   PickupApplyResult,
 } from "./types.js";
+import { planMemoryOrderCancellation } from "./memory-order-cancel.js";
+import { isGarmentAvailableAtStore } from "./garment-custody.js";
 import { requireVerifiedRackBarcodes } from "./pickup-verification.js";
 
 const key = (orgId: string, storeId: string, orderId: string): string =>
@@ -118,6 +120,11 @@ export class MemoryOrderStore implements OrderStore {
 
     const idSet = new Set(garmentIds);
     if (list.filter((garment) => idSet.has(garment.garment_id)).length !== idSet.size) return null;
+    if (
+      list.some((garment) => idSet.has(garment.garment_id) && !isGarmentAvailableAtStore(garment))
+    ) {
+      return null;
+    }
     requireVerifiedRackBarcodes(list, garmentIds, options?.verificationBarcodes ?? []);
     const nextGarments = list.map((g) =>
       idSet.has(g.garment_id)
@@ -270,6 +277,35 @@ export class MemoryOrderStore implements OrderStore {
     return Object.freeze({ order: next, payment });
   }
 
+  async applyFixedCouponDiscount(
+    input: FixedCouponDiscountInput,
+  ): Promise<FixedCouponDiscountResult | null> {
+    const k = key(input.org_id, input.store_id, input.order_id);
+    const order = this.orders.get(k);
+    if (
+      order === undefined ||
+      order.status !== "open" ||
+      order.customer_id !== input.customer_id ||
+      order.paid_cents !== 0 ||
+      order.discount_cents !== 0 ||
+      order.original_cents < input.min_order_cents
+    ) {
+      return null;
+    }
+    const applied = Math.min(input.discount_cents, order.original_cents);
+    if (!Number.isSafeInteger(applied) || applied <= 0 || applied > order.payable_cents)
+      return null;
+    const next = Object.freeze({
+      ...order,
+      discount_cents: applied,
+      payable_cents: order.payable_cents - applied,
+      balance_cents: order.payable_cents - applied,
+      updated_at: input.at,
+    });
+    this.orders.set(k, next);
+    return Object.freeze({ order: next, applied_discount_cents: applied });
+  }
+
   async cancelOpenOrder(
     orgId: string,
     storeId: string,
@@ -277,55 +313,37 @@ export class MemoryOrderStore implements OrderStore {
     reason: string,
     staffId: string,
     at: number,
-    _businessDate: string,
+    businessDate: string,
+    beforeCommit?: () => Promise<void>,
   ): Promise<OrderRecord | null> {
     const k = key(orgId, storeId, orderId);
     const order = this.orders.get(k);
     const garments = this.garments.get(k);
     if (order === undefined || garments === undefined || order.status !== "open") return null;
     if (
-      garments.some((garment) => garment.status === "picked_up" || garment.status === "delivered")
+      garments.some(
+        (garment) =>
+          !isGarmentAvailableAtStore(garment) ||
+          garment.status === "picked_up" ||
+          garment.status === "delivered",
+      )
     ) {
       return null;
     }
     const existing = await this.listPayments(orgId, storeId, orderId);
-    const plan = planCancel({
-      status: order.status,
-      reason,
-      payable_cents: order.payable_cents,
+    const cancellation = planMemoryOrderCancellation({
+      order,
       payments: existing,
+      reason,
+      staffId,
+      at,
+      businessDate,
     });
-    if (!plan.ok) return null;
-    for (const target of plan.reversal_targets) {
-      const source = existing.find((payment) => payment.payment_id === target.payment_id);
-      if (source === undefined) return null;
-      this.payments.push(
-        Object.freeze({
-          ...buildReversalPayment({
-            payment_id: randomUUID(),
-            org_id: orgId,
-            store_id: storeId,
-            order_id: orderId,
-            amount_cents: target.amount_cents,
-            staff_id: staffId,
-            at,
-            method: source.method,
-            ref_payment_id: source.payment_id,
-            reason: plan.reason,
-          }),
-          business_date: _businessDate,
-        }),
-      );
-    }
-    const cancelled = Object.freeze({
-      ...order,
-      status: "cancelled" as const,
-      paid_cents: 0,
-      balance_cents: 0,
-      updated_at: at,
-    });
-    this.orders.set(k, cancelled);
-    return cancelled;
+    if (cancellation === null) return null;
+    await beforeCommit?.();
+    this.payments.push(...cancellation.reversals);
+    this.orders.set(k, cancellation.order);
+    return cancellation.order;
   }
 
   async nextTicketSeq(orgId: string, storeId: string, dayKey: string): Promise<number> {

@@ -5,7 +5,7 @@ import { FakeSqlClient } from "../db/fake-client.js";
 import type { TenantContext } from "../db/types.js";
 import { HandlerCommandError, type ActorContext, type CommandHandler } from "../bus/types.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
-import type { PaymentAppendInput, PaymentAppendResult } from "../order/types.js";
+import type { OrderRecord, PaymentAppendInput, PaymentAppendResult } from "../order/types.js";
 import { createMemberHandlers } from "./handlers.js";
 import { createMemoryMemberStore } from "./memory-store.js";
 import type { MemberStore } from "./types.js";
@@ -33,7 +33,7 @@ function actor(permissions: readonly string[]): ActorContext {
 
 type Recorded = { calls: PaymentAppendInput[] };
 
-function makeDeps(options: { paymentFails?: boolean } = {}): {
+function makeDeps(options: { paymentFails?: boolean; orderCustomerId?: string } = {}): {
   handlers: ReturnType<typeof createMemberHandlers>;
   recorded: Recorded;
   store: MemberStore;
@@ -59,7 +59,11 @@ function makeDeps(options: { paymentFails?: boolean } = {}): {
   };
 
   const order = Object.freeze({
-    store: Object.freeze({ appendPayment }),
+    store: Object.freeze({
+      appendPayment,
+      getOrder: async () =>
+        Object.freeze({ customer_id: options.orderCustomerId ?? CUSTOMER_ID }) as OrderRecord,
+    }),
     timeZone: "UTC",
     rolloverHour: 0,
     now: () => 1_780_000_000,
@@ -185,6 +189,32 @@ test("an overdraw is refused before the order side is touched", async () => {
   );
 
   // The order must never see a payment for money the member did not have.
+  assert.equal(recorded.calls.length, 0);
+});
+
+test("balance.pay refuses an account owned by a different customer", async () => {
+  const { handlers, recorded } = makeDeps({
+    orderCustomerId: "99999999-9999-4999-8999-999999999999",
+  });
+  const opened = await run(handlers["member.account.open"], { customer_id: CUSTOMER_ID }, [
+    "customer_write",
+  ]);
+  const accountId = asRecord(opened.result).account_id as string;
+  await run(
+    handlers["member.topup"],
+    { account_id: accountId, amount_cents: 1_000, method: "cash" },
+    ["customer_write"],
+  );
+
+  await assert.rejects(
+    () =>
+      run(
+        handlers["member.balance.pay"],
+        { account_id: accountId, order_id: ORDER_ID, amount_cents: 100 },
+        ["order_write"],
+      ),
+    hasCode("INVARIANT_FAILED"),
+  );
   assert.equal(recorded.calls.length, 0);
 });
 

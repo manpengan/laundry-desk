@@ -18,6 +18,36 @@
       "to_migration": "0048_catalog_governance.sql",
       "old_code_compatible": true,
       "decision": "ADR-39"
+    },
+    {
+      "from_migration": "0048_catalog_governance.sql",
+      "to_migration": "0049_cloud_owner_operations.sql",
+      "old_code_compatible": true,
+      "decision": "ADR-40"
+    },
+    {
+      "from_migration": "0049_cloud_owner_operations.sql",
+      "to_migration": "0050_member_benefits.sql",
+      "old_code_compatible": true,
+      "decision": "ADR-41"
+    },
+    {
+      "from_migration": "0050_member_benefits.sql",
+      "to_migration": "0051_customer_extended_profiles.sql",
+      "old_code_compatible": true,
+      "decision": "ADR-42"
+    },
+    {
+      "from_migration": "0051_customer_extended_profiles.sql",
+      "to_migration": "0052_notification_delivery_outbox.sql",
+      "old_code_compatible": true,
+      "decision": "ADR-44"
+    },
+    {
+      "from_migration": "0052_notification_delivery_outbox.sql",
+      "to_migration": "0053_factory_handoff_and_qc.sql",
+      "old_code_compatible": true,
+      "decision": "ADR-45"
     }
   ]
 }

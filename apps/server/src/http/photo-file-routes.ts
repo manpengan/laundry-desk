@@ -15,6 +15,7 @@ import {
 } from "./auth-route-support.js";
 import { applyCommandErrorStatus, executeTrustedSessionCommand } from "./bus-routes.js";
 import { safeErrorContext } from "./local-logger.js";
+import { isConfiguredRuntimeTenant } from "./runtime-surface-policy.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const CONTENT_TYPES = Object.freeze(["image/jpeg", "image/png", "image/webp"] as const);
@@ -93,6 +94,11 @@ async function findAuthorizedPhoto(
     void reply.send(fail("AUTHENTICATION_FAILED"));
     return null;
   }
+  if (!isConfiguredRuntimeTenant(resolved)) {
+    reply.code(404);
+    void reply.send(fail("RESOURCE_UNAVAILABLE"));
+    return null;
+  }
   const params = request.params as Readonly<{ photoId?: unknown }>;
   const photoId = typeof params.photoId === "string" ? params.photoId : "";
   if (!UUID_RE.test(photoId)) {
@@ -149,6 +155,10 @@ export function registerPhotoFileRoutes(
       }
       const csrf = await requireCsrf(context, request, reply, resolved.session);
       if (csrf !== true) return csrf;
+      if (!isConfiguredRuntimeTenant(resolved)) {
+        reply.code(404);
+        return fail("RESOURCE_UNAVAILABLE");
+      }
       if (!allowMutation(resolved.session.session_id, Date.now())) {
         reply.code(429);
         return fail("RATE_LIMITED");
@@ -220,6 +230,10 @@ export function registerPhotoFileRoutes(
       }
       const csrf = await requireCsrf(context, request, reply, resolved.session);
       if (csrf !== true) return csrf;
+      if (!isConfiguredRuntimeTenant(resolved)) {
+        reply.code(404);
+        return fail("RESOURCE_UNAVAILABLE");
+      }
       if (!allowMutation(resolved.session.session_id, Date.now())) {
         reply.code(429);
         return fail("RATE_LIMITED");

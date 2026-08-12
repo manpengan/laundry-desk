@@ -31,7 +31,7 @@ const CLERK: ActorContext = Object.freeze({
   staffId: DEMO_STAFF_A_ID,
   deviceId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   via: "ui" as const,
-  permissions: Object.freeze(["order_write", "staff_read"]),
+  permissions: Object.freeze(["order_write", "staff_read", "customer_read", "customer_write"]),
 });
 
 const PRIVACY_ADMIN: ActorContext = Object.freeze({
@@ -178,7 +178,7 @@ test("customer.upsert creates then updates by phone", async () => {
   assert.equal(found?.name, "王五改");
 });
 
-test("customer.upsert without order_write is PERMISSION_DENIED", async () => {
+test("customer.upsert without customer_write is PERMISSION_DENIED", async () => {
   const { registry, chainHooks } = buildBus();
   const noWrite: ActorContext = Object.freeze({
     ...CLERK,
@@ -226,6 +226,7 @@ test("customer detail, duplicate merge and old-phone redirect preserve one autho
     source_customer_id: source.customer.customer_id,
     target_customer_id: target.customer.customer_id,
     store_id: DEMO_STORE_ID,
+    staff_id: DEMO_STAFF_A_ID,
     now: 300,
   });
   assert.deepEqual(merged, {
@@ -233,7 +234,10 @@ test("customer detail, duplicate merge and old-phone redirect preserve one autho
     target_customer_id: target.customer.customer_id,
     relinked_order_count: 0,
   });
-  assert.equal(await store.getById(source.customer.customer_id), null);
+  assert.equal(
+    (await store.getById(source.customer.customer_id))?.customer_id,
+    target.customer.customer_id,
+  );
   assert.equal(
     (await store.getByPhone(source.customer.phone))?.customer_id,
     target.customer.customer_id,
@@ -256,6 +260,7 @@ test("customer.update and customer.merge fail closed at R3/R4 policy gates", asy
     "customer.update",
     {
       customer_id: DEMO_CUSTOMERS[0]!.customer_id,
+      expected_version: DEMO_CUSTOMERS[0]!.version,
       note: "仅详情可见",
     },
     {
@@ -310,7 +315,7 @@ test("customer privacy lifecycle exports before irreversible anonymization", asy
     customer_id: created.customer.customer_id,
     store_id: DEMO_STORE_ID,
     staff_id: DEMO_STAFF_A_ID,
-    reason: "客户主动申请",
+    reason: "customer_request",
     event_id: "44444444-4444-4444-8444-444444444444",
     now: 200,
   });
@@ -321,7 +326,7 @@ test("customer privacy lifecycle exports before irreversible anonymization", asy
     customer_id: created.customer.customer_id,
     store_id: DEMO_STORE_ID,
     staff_id: DEMO_STAFF_A_ID,
-    reason: "客户确认删除直接身份信息",
+    reason: "customer_request",
     event_id: "55555555-5555-4555-8555-555555555555",
     now: 300,
   });
@@ -343,13 +348,13 @@ test("customer privacy R4/R5 commands require privacy admin and step-up", async 
   for (const [name, input] of [
     [
       "customer.privacy.export",
-      { customer_id: DEMO_CUSTOMERS[0]!.customer_id, reason: "客户主动申请" },
+      { customer_id: DEMO_CUSTOMERS[0]!.customer_id, reason: "customer_request" },
     ],
     [
       "customer.anonymize",
       {
         customer_id: DEMO_CUSTOMERS[0]!.customer_id,
-        reason: "客户确认匿名化",
+        reason: "customer_request",
         confirmation: "ANONYMIZE",
       },
     ],

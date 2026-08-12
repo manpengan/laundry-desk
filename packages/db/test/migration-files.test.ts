@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "src", "migrations");
 
 describe("packages/db migration file inventory", () => {
-  it("ships formal SQL migrations ordered 0001 → 0048", () => {
+  it("ships formal SQL migrations ordered 0001 → 0053", () => {
     const sqlFiles = readdirSync(migrationsDir)
       .filter((name) => name.endsWith(".sql"))
       .sort();
@@ -60,6 +60,11 @@ describe("packages/db migration file inventory", () => {
       "0046_print_job_request_idempotency.sql",
       "0047_cloud_counter_trust.sql",
       "0048_catalog_governance.sql",
+      "0049_cloud_owner_operations.sql",
+      "0050_member_benefits.sql",
+      "0051_customer_extended_profiles.sql",
+      "0052_notification_delivery_outbox.sql",
+      "0053_factory_handoff_and_qc.sql",
     ]);
   });
 
@@ -120,6 +125,11 @@ describe("packages/db migration file inventory", () => {
       "0046",
       "0047",
       "0048",
+      "0049",
+      "0050",
+      "0051",
+      "0052",
+      "0053",
     ]);
     expect([...prefixes].sort()).toEqual(prefixes);
   });
@@ -690,6 +700,50 @@ describe("packages/db migration file inventory", () => {
       /REVOKE DELETE, TRUNCATE ON TABLE public\.catalog_items FROM laundry_app/iu,
     );
     expect(sql).not.toMatch(/DROP\s+(?:TABLE|COLUMN)|DROP\s+CONSTRAINT|(?:^|\n)\s*TRUNCATE\b/iu);
+  });
+
+  it("adds server-owned optimistic versions for current-store profile writes", () => {
+    const sql = readFileSync(join(migrationsDir, "0049_cloud_owner_operations.sql"), "utf8");
+
+    expect(sql).toMatch(
+      /ALTER TABLE public\.stores[\s\S]*profile_version integer NOT NULL DEFAULT 1/iu,
+    );
+    expect(sql).toMatch(/CHECK \(profile_version >= 1\)/iu);
+    expect(sql).toMatch(/NEW\.profile_version := OLD\.profile_version/iu);
+    expect(sql).toMatch(/NEW\.profile_version := OLD\.profile_version \+ 1/iu);
+    expect(sql).toMatch(/ROW\(NEW\.code, NEW\.name, NEW\.timezone\)/iu);
+    expect(sql).toMatch(/BEFORE UPDATE ON public\.stores/iu);
+    expect(sql).not.toMatch(/DROP\s+(?:TABLE|COLUMN)|DROP\s+CONSTRAINT|(?:^|\n)\s*TRUNCATE\b/iu);
+  });
+
+  it("adds versioned definitions and append-only, independently expiring member assets", () => {
+    const sql = readFileSync(join(migrationsDir, "0050_member_benefits.sql"), "utf8");
+    for (const table of [
+      "member_tiers",
+      "member_points_policies",
+      "member_memberships",
+      "points_ledger",
+      "points_allocations",
+      "member_punch_types",
+      "punch_cards",
+      "punch_card_ledger",
+      "coupons",
+      "coupon_grants",
+      "coupon_redemptions",
+      "coupon_redemption_reversals",
+    ]) {
+      expect(sql).toMatch(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`, "iu"));
+    }
+    expect(sql).toMatch(/points_ledger_order_earn_uidx/iu);
+    expect(sql).toMatch(/coupon_redemptions_grant_idx/iu);
+    expect(sql).toMatch(/coupon_redemptions_order_uidx/iu);
+    expect(sql).toMatch(/coupon_redemption_reversals_redemption_uidx/iu);
+    expect(sql).toMatch(/coupon_redemption_reversals_redemption_fk/iu);
+    expect(sql).toMatch(/ALTER TABLE points_ledger FORCE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(/ALTER TABLE coupon_redemptions FORCE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(/ALTER TABLE coupon_redemption_reversals FORCE ROW LEVEL SECURITY/iu);
+    expect(sql).toMatch(/REVOKE UPDATE, DELETE, TRUNCATE ON TABLE[\s\S]*points_ledger/iu);
+    expect(sql).not.toMatch(/ALTER TABLE member_ledger[\s\S]*(expires|valid_until)/iu);
   });
 
   it("adds a durable monotonic sequence for deterministic payment ledger order", () => {

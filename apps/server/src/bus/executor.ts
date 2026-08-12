@@ -1,29 +1,35 @@
-/** C1 command executor with transactional confirmation, audit, and idempotency. */
-
-import { createCommandError, type CommandError } from "@laundry/contracts";
+import { createCommandError } from "@laundry/contracts";
 
 import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
-import { verifyStepUpProof, type StepUpSessionBinding } from "../policy/step-up.js";
+import type { StepUpSessionBinding } from "../policy/step-up.js";
 import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
 import {
   chainFailureToResult,
   createChainPorts,
   runCommandChain,
-  type BusChainData,
   type ChainPortHooks,
 } from "./chain-adapter.js";
 import { writeAuditForOutcome, type ApprovalAuditEvidence } from "./audit-outcome.js";
 import { buildResolvedCommandRequest, resolveConfirmInput } from "./confirm-input.js";
 import {
+  abortIdempotencyClaim,
   asTransactionalIdempotencyStore,
   durableLookupResult,
   hashIdempotencyRequest,
   readReplayCandidate,
 } from "./durable-idempotency.js";
+import {
+  CommandBusTxnError,
+  executed,
+  fail,
+  preview,
+  publishAfterCommit,
+} from "./execution-result.js";
 import { bindTransactionClient, createHandlerContext } from "./handler-context.js";
+import { consumeCreatorStepUpProof } from "./step-up-confirmation.js";
 import type {
   ActorContext,
   BusContext,
@@ -35,9 +41,9 @@ import type {
   CommandTransactionGuard,
   DomainEvent,
   EventBus,
-  HandlerOutcome,
   IdempotencyStore,
   TransactionalIdempotencyStore,
+  StepUpApproverAuthority,
 } from "./types.js";
 import { HandlerCommandError } from "./types.js";
 
@@ -52,15 +58,11 @@ export type ExecuteCommandOptions = Readonly<{
   handler?: CommandHandler;
   eventBus?: EventBus;
   idempotencyStore?: CommandIdempotencyStore;
-  /** Defaults to process-local MemoryPendingActionStore. */
   pendingStore?: PendingActionStore;
-  /** Defaults to process-local MemoryStepUpProofStore. */
   stepUpProofStore?: StepUpProofStore;
-  /** Current authenticated session; required when consuming a step-up proof. */
+  stepUpApproverAuthority?: StepUpApproverAuthority;
   sessionBinding?: StepUpSessionBinding;
-  /** Trusted server-side authority that participates in the command transaction. */
   transactionGuard?: CommandTransactionGuard;
-  /** Private boundary diagnostics; never copy the error into the public command envelope. */
   onUnexpectedError?: (error: unknown) => void;
   now?: () => Date;
   newId?: () => string;
@@ -70,6 +72,7 @@ type TxnBody = Readonly<{
   result: CommandResult;
   events: readonly DomainEvent[];
   cacheable: boolean;
+  privacySubjectCustomerId?: string;
 }>;
 
 type TxnOutcome = TxnBody & Readonly<{ request: CommandRequest }>;
@@ -79,9 +82,8 @@ const REPEATABLE_READ_COMMANDS: ReadonlySet<string> = new Set([
   "print.ticket.enqueue",
 ]);
 
-/**
- * Execute one named command under tenant GUC transaction.
- */
+const NON_DURABLE_RESULT_COMMANDS: ReadonlySet<string> = new Set(["customer.privacy.export"]);
+
 export async function executeCommand(
   client: SqlClient,
   tenantCtx: TenantContext,
@@ -95,11 +97,15 @@ export async function executeCommand(
   }
 
   const pendingStore = opts.pendingStore ?? processPendingActionStore;
-  const durableIdempotency = asTransactionalIdempotencyStore(opts.idempotencyStore);
+  const persistedIdempotencyStore = NON_DURABLE_RESULT_COMMANDS.has(name)
+    ? undefined
+    : opts.idempotencyStore;
+  const durableIdempotency = asTransactionalIdempotencyStore(persistedIdempotencyStore);
   const handler = opts.handler ?? registered.handler;
   const ports = createChainPorts(registered.definition, opts.chainHooks);
 
   let txnOutcome: TxnOutcome;
+  let activeClaim: Readonly<{ key: string; requestHash: string }> | null = null;
   try {
     txnOutcome = await withTenantTransaction(
       client,
@@ -132,7 +138,7 @@ export async function executeCommand(
             ? await readReplayCandidate(
                 tenantCtx,
                 request,
-                opts.idempotencyStore,
+                persistedIdempotencyStore,
                 durableIdempotency,
                 requestHash,
               )
@@ -149,6 +155,9 @@ export async function executeCommand(
                 confirmAuthorization: Object.freeze({
                   confirmRef: resolved.confirmRef,
                   argsHash: resolved.argsHash,
+                  effectiveRisk: resolved.effectiveRisk,
+                  policyOutcome: resolved.policyOutcome,
+                  requiresOtherApprover: resolved.requiresOtherApprover,
                   ...(resolved.authority === undefined ? {} : { authority: resolved.authority }),
                 }),
               }
@@ -164,12 +173,22 @@ export async function executeCommand(
           durableIdempotency,
           requestHash,
           replay,
+          (key, hash) => {
+            activeClaim = Object.freeze({ key, requestHash: hash });
+          },
         );
         return Object.freeze({ ...outcome, request });
       },
       REPEATABLE_READ_COMMANDS.has(name) ? { isolation: "repeatable_read" } : {},
     );
   } catch (error) {
+    await abortIdempotencyClaim(
+      durableIdempotency,
+      tenantCtx,
+      name,
+      activeClaim,
+      opts.onUnexpectedError,
+    );
     if (error instanceof CommandBusTxnError) return fail(error.commandError);
     if (error instanceof HandlerCommandError) return fail(error.commandError);
     opts.onUnexpectedError?.(error);
@@ -182,9 +201,9 @@ export async function executeCommand(
     durableIdempotency === null &&
     txnOutcome.cacheable &&
     txnOutcome.request.idempotencyKey !== undefined &&
-    opts.idempotencyStore
+    persistedIdempotencyStore
   ) {
-    await (opts.idempotencyStore as IdempotencyStore).put(
+    await (persistedIdempotencyStore as IdempotencyStore).put(
       tenantCtx,
       name,
       txnOutcome.request.idempotencyKey,
@@ -205,6 +224,7 @@ async function runInsideTransaction(
   durableIdempotency: TransactionalIdempotencyStore | null,
   requestHash: string | undefined,
   replay: CommandResult | null,
+  onClaim: (key: string, requestHash: string) => void,
 ): Promise<TxnBody> {
   const transactionBusCtx = bindTransactionClient(busCtx, tx);
   let guardState: unknown;
@@ -217,7 +237,13 @@ async function runInsideTransaction(
   }
   const settle = async (body: TxnBody): Promise<TxnBody> => {
     if (opts.transactionGuard !== undefined) {
-      await opts.transactionGuard.settle(tx, transactionBusCtx, guardState, body.result);
+      await opts.transactionGuard.settle(
+        tx,
+        transactionBusCtx,
+        guardState,
+        body.result,
+        body.privacySubjectCustomerId,
+      );
     }
     return body;
   };
@@ -263,6 +289,7 @@ async function runInsideTransaction(
     if (replay !== null) {
       return settle({ result: replay, events: Object.freeze([]), cacheable: false });
     }
+    onClaim(transactionBusCtx.request.idempotencyKey, requestHash);
   }
 
   let approvalAudit: ApprovalAuditEvidence | undefined;
@@ -270,6 +297,8 @@ async function runInsideTransaction(
   if (transactionBusCtx.confirmAuthorization !== undefined) {
     const nowEpochSeconds = Math.floor((opts.now?.() ?? new Date()).getTime() / 1000);
     const confirmRef = transactionBusCtx.confirmAuthorization.confirmRef;
+    const pendingTransaction = Object.freeze({ tenant: transactionBusCtx.tenant, client: tx });
+    await pendingStore.lockPrivacy(pendingTransaction);
     const pending = await pendingStore.get(confirmRef, {
       tenant: transactionBusCtx.tenant,
       client: tx,
@@ -283,31 +312,23 @@ async function runInsideTransaction(
       pending.requiresOtherApprover &&
       transactionBusCtx.actor.staffId === pending.creatorStaffId
     ) {
-      const proofStore = opts.stepUpProofStore ?? processStepUpProofStore;
-      const proofTransaction = Object.freeze({ tenant: transactionBusCtx.tenant, client: tx });
-      const proof = await proofStore.findActiveByPendingRef(confirmRef, proofTransaction);
-      if (proof === null) {
-        throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
-      }
-      const verified = verifyStepUpProof(
-        proof,
+      approverStaffId = await consumeCreatorStepUpProof({
+        confirmRef,
         pending,
         nowEpochSeconds,
-        opts.sessionBinding ?? null,
-      );
-      if (verified.ok === false) {
-        throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
-      }
-      if (!(await proofStore.atomicConsume(proof.proofId, nowEpochSeconds, proofTransaction))) {
-        throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
-      }
-      approverStaffId = proof.approverStaffId;
+        sessionBinding: opts.sessionBinding ?? null,
+        transaction: pendingTransaction,
+        proofStore: opts.stepUpProofStore ?? processStepUpProofStore,
+        ...(opts.stepUpApproverAuthority === undefined
+          ? {}
+          : { approverAuthority: opts.stepUpApproverAuthority }),
+      });
     }
 
     const consume = await pendingStore.atomicConsume(confirmRef, approverStaffId, {
       expectedArgsHash: transactionBusCtx.confirmAuthorization.argsHash,
       nowEpochSeconds,
-      transaction: Object.freeze({ tenant: transactionBusCtx.tenant, client: tx }),
+      transaction: pendingTransaction,
     });
     if (consume.ok === false) {
       throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
@@ -320,7 +341,34 @@ async function runInsideTransaction(
     }
   }
 
-  const outcome = await handler(createHandlerContext(tx, transactionBusCtx, chain.data.parsed));
+  let outcome: import("./types.js").HandlerOutcome;
+  try {
+    outcome = await handler(createHandlerContext(tx, transactionBusCtx, chain.data.parsed));
+  } catch (error) {
+    if (!(error instanceof HandlerCommandError) || error.commandError.code !== "CUSTOMER_ERASED") {
+      throw error;
+    }
+    const terminalResult = fail(error.commandError);
+    if (
+      durableIdempotency !== null &&
+      transactionBusCtx.request.idempotencyKey !== undefined &&
+      requestHash !== undefined
+    ) {
+      await durableIdempotency.complete(
+        tx,
+        transactionBusCtx.tenant,
+        transactionBusCtx.request.name,
+        transactionBusCtx.request.idempotencyKey,
+        requestHash,
+        terminalResult,
+      );
+    }
+    return settle({
+      result: terminalResult,
+      events: Object.freeze([]),
+      cacheable: true,
+    });
+  }
 
   await writeAuditForOutcome(tx, transactionBusCtx, outcome.audit, opts, approvalAudit);
   const result = executed(outcome.result);
@@ -336,6 +384,7 @@ async function runInsideTransaction(
       transactionBusCtx.request.idempotencyKey,
       requestHash,
       result,
+      outcome.privacySubjectCustomerId,
     );
   }
 
@@ -343,51 +392,8 @@ async function runInsideTransaction(
     result,
     events: Object.freeze([...(outcome.events ?? [])]),
     cacheable: true,
+    ...(outcome.privacySubjectCustomerId === undefined
+      ? {}
+      : { privacySubjectCustomerId: outcome.privacySubjectCustomerId }),
   });
 }
-
-async function publishAfterCommit(
-  eventBus: EventBus | undefined,
-  events: readonly DomainEvent[],
-): Promise<void> {
-  if (eventBus === undefined || events.length === 0) return;
-  await eventBus.publish(events);
-}
-
-function preview(data: BusChainData): CommandResult {
-  return Object.freeze({
-    ok: true as const,
-    data: Object.freeze({
-      execution: "preview" as const,
-      result: Object.freeze({
-        parsed: data.parsed,
-        policy: data.policy,
-        invariants: data.invariants,
-      }),
-    }),
-  });
-}
-
-function executed(result: unknown): CommandResult {
-  return Object.freeze({
-    ok: true as const,
-    data: Object.freeze({ execution: "executed" as const, result }),
-  });
-}
-
-function fail(error: CommandError): CommandResult {
-  return Object.freeze({ ok: false as const, error });
-}
-
-/** Internal: convert post-chain hard failures into CommandResult without leaking stack. */
-class CommandBusTxnError extends Error {
-  readonly commandError: CommandError;
-
-  constructor(commandError: CommandError) {
-    super(commandError.message);
-    this.name = "CommandBusTxnError";
-    this.commandError = commandError;
-  }
-}
-
-export type { HandlerOutcome };

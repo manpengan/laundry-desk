@@ -38,7 +38,7 @@ test("manual pickup list is confirmed, downloaded and recorded without claiming 
 }) => {
   await signIn(page);
   await page.locator('[data-nav-id="reminders"]').click();
-  await expect(page.getByText("短信、微信未接入")).toBeVisible();
+  await expect(page.getByText("人工名单只生成联系材料，不会自行发送短信或微信。")).toBeVisible();
 
   const row = page.locator('[data-testid="pickup-reminder-row"]', {
     hasText: "E2E 催取顾客",

@@ -12,6 +12,10 @@ type RackGarmentRow = Readonly<{
   rack_zone: string | null;
   rack_slot: string | null;
   racked_at: Date | string | null;
+  custody_state: string;
+  active_production_batch_id: string | null;
+  garment_purged_at: Date | string | null;
+  order_purged_at: Date | string | null;
 }>;
 
 const toEpoch = (value: Date | string): number =>
@@ -23,20 +27,58 @@ async function assignRackRow(
   input: FulfillmentRackAssignInput,
   newId: () => string,
 ): Promise<FulfillmentRackAssignResult | null> {
+  const relatedOrder = await client.query<Readonly<{ order_id: string }>>(
+    `SELECT g.order_id::text
+       FROM garments g
+      WHERE g.org_id = $1::uuid AND g.store_id = $2::uuid
+        AND upper(g.barcode) = upper($3)
+      LIMIT 1`,
+    [input.org_id, input.store_id, input.barcode],
+  );
+  const orderId = relatedOrder.rows[0]?.order_id;
+  if (orderId === undefined) return null;
+  const lockedOrder = await client.query<
+    Readonly<{ order_status: string; customer_pii_purged_at: Date | string | null }>
+  >(
+    `SELECT o.status AS order_status, o.customer_pii_purged_at
+       FROM orders o
+      WHERE o.org_id = $1::uuid AND o.store_id = $2::uuid AND o.id = $3::uuid
+      FOR UPDATE`,
+    [input.org_id, input.store_id, orderId],
+  );
+  if (
+    lockedOrder.rows[0]?.order_status !== "open" ||
+    lockedOrder.rows[0]?.customer_pii_purged_at !== null
+  ) {
+    return null;
+  }
   const result = await client.query<RackGarmentRow>(
     `SELECT g.id::text AS garment_id, g.order_id::text, g.status, o.status AS order_status,
-            g.barcode, g.rack_zone, g.rack_slot, g.racked_at
+            g.barcode, g.rack_zone, g.rack_slot, g.racked_at,
+            g.custody_state, g.active_production_batch_id::text,
+            g.customer_pii_purged_at AS garment_purged_at,
+            o.customer_pii_purged_at AS order_purged_at
        FROM garments g
        JOIN orders o
          ON o.org_id = g.org_id AND o.store_id = g.store_id AND o.id = g.order_id
       WHERE g.org_id = $1::uuid AND g.store_id = $2::uuid
         AND upper(g.barcode) = upper($3)
+        AND g.order_id = $4::uuid
       LIMIT 1
-      FOR UPDATE OF g, o`,
-    [input.org_id, input.store_id, input.barcode],
+      FOR UPDATE OF g`,
+    [input.org_id, input.store_id, input.barcode, orderId],
   );
   const row = result.rows[0];
-  if (row === undefined || row.order_status !== "open") return null;
+  if (
+    row === undefined ||
+    row.order_status !== "open" ||
+    row.order_purged_at !== null ||
+    row.garment_purged_at !== null ||
+    row.custody_state !== "store" ||
+    row.active_production_batch_id !== null
+  ) {
+    return null;
+  }
   if (
     row.status === "racked" &&
     row.rack_zone === input.rack_zone &&

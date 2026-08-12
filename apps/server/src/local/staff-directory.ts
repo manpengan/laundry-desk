@@ -15,6 +15,12 @@ export type LocalStaffDirectoryEntry = Readonly<{
   privacy_admin: boolean;
 }>;
 
+export type StaffDirectoryScope = Readonly<{
+  orgId: string;
+  storeId: string;
+  staffId: string;
+}>;
+
 export function freezeStaffDirectory(
   entries: readonly LocalStaffDirectoryEntry[],
 ): readonly LocalStaffDirectoryEntry[] {
@@ -68,13 +74,18 @@ const PgStaffDirectoryRowSchema = z
 
 export async function loadPgStaffDirectory(
   pool: PgPool,
+  scope: StaffDirectoryScope = Object.freeze({
+    orgId: LOCAL_PROFILE.orgId,
+    storeId: LOCAL_PROFILE.storeId,
+    staffId: LOCAL_PROFILE.adminStaffId,
+  }),
 ): Promise<readonly LocalStaffDirectoryEntry[]> {
   const rows = await withStoreGuc(
     pool,
     {
-      orgId: LOCAL_PROFILE.orgId,
-      storeId: LOCAL_PROFILE.storeId,
-      staffId: LOCAL_PROFILE.adminStaffId,
+      orgId: scope.orgId,
+      storeId: scope.storeId,
+      staffId: scope.staffId,
     },
     async (client) => {
       const result = await client.query<PgStaffDirectoryRow>(
@@ -89,7 +100,7 @@ export async function loadPgStaffDirectory(
             AND staff.is_active = true
             AND role.is_active = true
           ORDER BY staff.username, staff.id`,
-        [LOCAL_PROFILE.orgId, LOCAL_PROFILE.storeId],
+        [scope.orgId, scope.storeId],
       );
       return result.rows.map((row) => PgStaffDirectoryRowSchema.parse(row));
     },

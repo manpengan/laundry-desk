@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
-import { DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
+import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { createPgCustomerStore } from "./pg-customer-store.js";
 
 type RecordedQuery = Readonly<{
@@ -160,9 +160,9 @@ test("upsert insert path uses ON CONFLICT and reports created=true", async () =>
             phone: "13800000333",
             name: "王五",
             note: null,
+            version: 1,
             created_at: AT,
             updated_at: AT,
-            was_inserted: true,
           },
         ],
         rowCount: 1,
@@ -187,21 +187,29 @@ test("upsert insert path uses ON CONFLICT and reports created=true", async () =>
 
   const insert = queries.find((q) => q.sql.includes("INSERT INTO customers"));
   assert.ok(insert);
-  assert.ok(insert?.sql.includes("ON CONFLICT (org_id, phone)"));
+  assert.ok(insert?.sql.includes("ON CONFLICT (org_id, phone) DO NOTHING"));
   assert.equal(insert?.params?.[0], FIXED_ID);
   assert.equal(insert?.params?.[2], "13800000333");
   assert.equal(insert?.params?.[3], "王五");
-  // updateName true, updateNote false
-  assert.equal(insert?.params?.[6], true);
-  assert.equal(insert?.params?.[7], false);
+  assert.equal(insert?.params?.[4], null);
 });
 
-test("upsert conflict path reports created=false and preserves optional fields", async () => {
+test("upsert conflict path resolves the canonical row and preserves optional fields", async () => {
+  let rootLookupCount = 0;
   const { pool, queries } = createCapturingPool((sql) => {
     if (sql.includes("set_config") || sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
       return { rows: [], rowCount: 0 };
     }
+    if (sql.includes("customer_canonical_root(id)")) {
+      rootLookupCount += 1;
+      return rootLookupCount === 1
+        ? { rows: [], rowCount: 0 }
+        : { rows: [{ root_id: FIXED_ID }], rowCount: 1 };
+    }
     if (sql.includes("INSERT INTO customers")) {
+      return { rows: [], rowCount: 0 };
+    }
+    if (sql.includes("UPDATE customers")) {
       return {
         rows: [
           {
@@ -209,9 +217,10 @@ test("upsert conflict path reports created=false and preserves optional fields",
             phone: "13800000333",
             name: "王五改",
             note: "keep",
+            version: 2,
             created_at: AT,
             updated_at: new Date("2024-02-01T00:00:00.000Z"),
-            was_inserted: false,
+            merged_into_id: null,
           },
         ],
         rowCount: 1,
@@ -231,14 +240,104 @@ test("upsert conflict path reports created=false and preserves optional fields",
   assert.equal(outcome.customer.name, "王五改");
   assert.equal(outcome.customer.note, "keep");
 
-  const insert = queries.find((q) => q.sql.includes("ON CONFLICT"));
-  assert.ok(insert);
-  assert.equal(insert?.params?.[6], true);
-  assert.equal(insert?.params?.[7], false);
+  const update = queries.find((q) => q.sql.includes("UPDATE customers"));
+  assert.ok(update);
+  assert.equal(update?.params?.[3], true);
+  assert.equal(update?.params?.[5], false);
 });
 
-test("merge sets the store GUC before relinking store orders by stable customer id", async () => {
+test("metadata-only update never enters the phone trigger lock order", async () => {
   const { pool, queries } = createCapturingPool((sql) => {
+    if (sql.includes("UPDATE customers")) {
+      return {
+        rows: [
+          {
+            id: FIXED_ID,
+            phone: "13800000333",
+            name: "仅改姓名",
+            note: null,
+            version: 2,
+            created_at: AT,
+            updated_at: AT,
+            merged_into_id: null,
+          },
+        ],
+        rowCount: 1,
+      };
+    }
+    return { rows: [], rowCount: 0 };
+  });
+
+  const updated = await createPgCustomerStore(pool, { orgId: DEMO_ORG_ID }).update({
+    customer_id: FIXED_ID,
+    expected_version: 1,
+    name: "仅改姓名",
+    now: Math.floor(AT.getTime() / 1000),
+  });
+
+  assert.equal(updated?.name, "仅改姓名");
+  const update = queries.find((query) => query.sql.includes("UPDATE customers"));
+  assert.ok(update);
+  assert.doesNotMatch(update.sql, /SET\s+phone\b/u);
+  assert.equal(
+    queries.some((query) => query.sql.includes("customer_phone_erased")),
+    false,
+  );
+});
+
+test("phone update acquires erasure authority before naming the phone column", async () => {
+  const { pool, queries } = createCapturingPool((sql) => {
+    if (sql.includes("customer_phone_erased")) {
+      return { rows: [{ erased: false }], rowCount: 1 };
+    }
+    if (sql.includes("UPDATE customers")) {
+      return {
+        rows: [
+          {
+            id: FIXED_ID,
+            phone: "13900000333",
+            name: "改号",
+            note: null,
+            version: 2,
+            created_at: AT,
+            updated_at: AT,
+            merged_into_id: null,
+          },
+        ],
+        rowCount: 1,
+      };
+    }
+    return { rows: [], rowCount: 0 };
+  });
+
+  await createPgCustomerStore(pool, { orgId: DEMO_ORG_ID }).update({
+    customer_id: FIXED_ID,
+    expected_version: 1,
+    phone: "13900000333",
+    now: Math.floor(AT.getTime() / 1000),
+  });
+
+  const erasureIndex = queries.findIndex((query) => query.sql.includes("customer_phone_erased"));
+  const updateIndex = queries.findIndex((query) => query.sql.includes("UPDATE customers"));
+  assert.ok(erasureIndex >= 0);
+  assert.ok(updateIndex > erasureIndex);
+  assert.match(queries[updateIndex]!.sql, /SET\s+phone\s*=\s*\$3/u);
+});
+
+test("merge sets the store GUC and delegates to the canonical database primitive", async () => {
+  const { pool, queries } = createCapturingPool((sql) => {
+    if (sql.includes("customer_merge_canonical")) {
+      return {
+        rows: [
+          {
+            source_customer_id: FIXED_ID,
+            target_customer_id: TARGET_ID,
+            relinked_order_count: 1,
+          },
+        ],
+        rowCount: 1,
+      };
+    }
     if (sql.includes("FROM customers") && sql.includes("FOR UPDATE")) {
       return {
         rows: [
@@ -276,6 +375,7 @@ test("merge sets the store GUC before relinking store orders by stable customer 
     source_customer_id: FIXED_ID,
     target_customer_id: TARGET_ID,
     store_id: DEMO_STORE_ID,
+    staff_id: DEMO_ADMIN_ID,
     now: Math.floor(AT.getTime() / 1000),
   });
 
@@ -289,16 +389,25 @@ test("merge sets the store GUC before relinking store orders by stable customer 
       (query) => query.sql.includes("app.store_id") && query.params?.[0] === DEMO_STORE_ID,
     ),
   );
-  const relink = queries.find((query) => query.sql.includes("UPDATE orders"));
-  assert.ok(relink?.sql.includes("customer_id = $4::uuid"));
-  assert.ok(relink?.sql.includes("customer_id = $3::uuid"));
-  assert.equal(relink?.sql.includes("customer_phone = $3"), false);
-  assert.deepEqual(relink?.params?.slice(0, 4), [DEMO_ORG_ID, DEMO_STORE_ID, FIXED_ID, TARGET_ID]);
+  const merge = queries.find((query) => query.sql.includes("customer_merge_canonical"));
+  assert.deepEqual(merge?.params?.slice(0, 2), [FIXED_ID, TARGET_ID]);
+  assert.ok(merge?.params?.[2] instanceof Date);
 });
 
-test("merge moves a source-only member account to the surviving customer first", async () => {
-  const accountId = "a5555555-5555-4555-8555-555555555555";
+test("merge maps a numeric-string relink count from the canonical primitive", async () => {
   const { pool, queries } = createCapturingPool((sql) => {
+    if (sql.includes("customer_merge_canonical")) {
+      return {
+        rows: [
+          {
+            source_customer_id: FIXED_ID,
+            target_customer_id: TARGET_ID,
+            relinked_order_count: "2",
+          },
+        ],
+        rowCount: 1,
+      };
+    }
     if (sql.includes("FROM customers") && sql.includes("FOR UPDATE")) {
       return {
         rows: [
@@ -327,7 +436,10 @@ test("merge moves a source-only member account to the surviving customer first",
       };
     }
     if (sql.includes("FROM member_accounts") && sql.includes("FOR UPDATE")) {
-      return { rows: [{ id: accountId, customer_id: FIXED_ID }], rowCount: 1 };
+      return {
+        rows: [{ id: "a5555555-5555-4555-8555-555555555555", customer_id: FIXED_ID }],
+        rowCount: 1,
+      };
     }
     if (sql.includes("UPDATE orders")) return { rows: [], rowCount: 2 };
     return { rows: [], rowCount: 1 };
@@ -338,25 +450,28 @@ test("merge moves a source-only member account to the surviving customer first",
     source_customer_id: FIXED_ID,
     target_customer_id: TARGET_ID,
     store_id: DEMO_STORE_ID,
+    staff_id: DEMO_ADMIN_ID,
     now: Math.floor(AT.getTime() / 1000),
   });
 
   assert.equal(result?.relinked_order_count, 2);
-  const accountUpdate = queries.find((query) => query.sql.includes("UPDATE member_accounts"));
-  assert.deepEqual(accountUpdate?.params, [DEMO_ORG_ID, accountId, FIXED_ID, TARGET_ID]);
-  const accountUpdateIndex = queries.findIndex((query) =>
-    query.sql.includes("UPDATE member_accounts"),
-  );
-  const orderUpdateIndex = queries.findIndex((query) => query.sql.includes("UPDATE orders"));
-  const sourceUpdateIndex = queries.findIndex((query) => query.sql.includes("UPDATE customers"));
-  assert.ok(accountUpdateIndex >= 0);
-  assert.ok(accountUpdateIndex < orderUpdateIndex);
-  assert.ok(orderUpdateIndex < sourceUpdateIndex);
+  assert.equal(queries.filter((query) => query.sql.includes("customer_merge_canonical")).length, 1);
 });
 
-test("merge keeps a target-only member account and still retires the source", async () => {
-  const targetAccountId = "a6666666-6666-4666-8666-666666666666";
+test("merge returns a zero-order canonical result without issuing direct table updates", async () => {
   const { pool, queries } = createCapturingPool((sql) => {
+    if (sql.includes("customer_merge_canonical")) {
+      return {
+        rows: [
+          {
+            source_customer_id: FIXED_ID,
+            target_customer_id: TARGET_ID,
+            relinked_order_count: 0,
+          },
+        ],
+        rowCount: 1,
+      };
+    }
     if (sql.includes("FROM customers") && sql.includes("FOR UPDATE")) {
       return {
         rows: [
@@ -379,7 +494,10 @@ test("merge keeps a target-only member account and still retires the source", as
       };
     }
     if (sql.includes("FROM member_accounts") && sql.includes("FOR UPDATE")) {
-      return { rows: [{ id: targetAccountId, customer_id: TARGET_ID }], rowCount: 1 };
+      return {
+        rows: [{ id: "a6666666-6666-4666-8666-666666666666", customer_id: TARGET_ID }],
+        rowCount: 1,
+      };
     }
     if (sql.includes("UPDATE orders")) return { rows: [], rowCount: 0 };
     if (sql.includes("UPDATE customers")) return { rows: [], rowCount: 1 };
@@ -391,6 +509,7 @@ test("merge keeps a target-only member account and still retires the source", as
     source_customer_id: FIXED_ID,
     target_customer_id: TARGET_ID,
     store_id: DEMO_STORE_ID,
+    staff_id: DEMO_ADMIN_ID,
     now: Math.floor(AT.getTime() / 1000),
   });
 
@@ -401,11 +520,11 @@ test("merge keeps a target-only member account and still retires the source", as
   );
   assert.equal(
     queries.some((query) => query.sql.includes("UPDATE customers")),
-    true,
+    false,
   );
 });
 
-test("merge refuses two member accounts before changing either customer", async () => {
+test("merge maps an empty canonical primitive result to null", async () => {
   const { pool, queries } = createCapturingPool((sql) => {
     if (sql.includes("FROM customers") && sql.includes("FOR UPDATE")) {
       return {
@@ -451,6 +570,7 @@ test("merge refuses two member accounts before changing either customer", async 
     source_customer_id: FIXED_ID,
     target_customer_id: TARGET_ID,
     store_id: DEMO_STORE_ID,
+    staff_id: DEMO_ADMIN_ID,
     now: Math.floor(AT.getTime() / 1000),
   });
 

@@ -35,6 +35,7 @@ describe("A2 command responses", () => {
   it("covers every validation-chain stage and every Policy branch", () => {
     const codes: readonly CommandErrorCode[] = [
       "VALIDATION_FAILED",
+      "CUSTOMER_ERASED",
       "PERMISSION_DENIED",
       "RESOURCE_UNAVAILABLE",
       "POLICY_CONFIRMATION_REQUIRED",
@@ -173,7 +174,7 @@ describe("A2 command responses", () => {
     const error = createCommandError("POLICY_CONFIRMATION_REQUIRED", detail);
     expect(error.detail).toEqual(detail);
     expect(Object.isFrozen(error.detail)).toBe(true);
-    if (error.detail?.kind === "confirmation" && error.detail.summary !== undefined) {
+    if (error.detail?.kind === "confirmation" && error.detail.summary?.kind === "member_topup") {
       expect(Object.isFrozen(error.detail.summary)).toBe(true);
       expect(Object.isFrozen(error.detail.summary.matched_rule)).toBe(true);
     }
@@ -195,6 +196,52 @@ describe("A2 command responses", () => {
         detail: {
           ...detail,
           summary: { ...detail.summary, bonus_cents: 9_999 },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts and freezes a privacy-safe notification delivery confirmation summary", () => {
+    const detail = {
+      kind: "confirmation" as const,
+      confirm_ref: "d5a92f5a-653a-4b06-b014-e4a5e0d91f0c",
+      summary: {
+        kind: "notification_delivery_batch" as const,
+        order_count: 1,
+        risk_window_order_count: 11,
+        ticket_nos: ["OUTBOX-001"],
+        channel: "sms" as const,
+        assurance: "software_only" as const,
+        provider_code: "software_only_fake",
+        template_code: "pickup_reminder_v1" as const,
+        template_version: 2,
+        estimated_cost_cents: 0,
+        max_cost_cents: 0,
+        min_age_days: 30 as const,
+        unpaid_only: true,
+        garment_statuses: ["ready", "racked"] as const,
+      },
+    };
+
+    const error = createCommandError("POLICY_STEP_UP_REQUIRED", detail);
+    expect(error.detail).toEqual(detail);
+    expect(Object.isFrozen(error.detail)).toBe(true);
+    if (
+      error.detail?.kind === "confirmation" &&
+      error.detail.summary?.kind === "notification_delivery_batch"
+    ) {
+      expect(Object.isFrozen(error.detail.summary)).toBe(true);
+      expect(Object.isFrozen(error.detail.summary.ticket_nos)).toBe(true);
+      expect(Object.isFrozen(error.detail.summary.garment_statuses)).toBe(true);
+    }
+
+    expect(
+      CommandErrorSchema.safeParse({
+        code: "POLICY_STEP_UP_REQUIRED",
+        message: "Step-up verification is required",
+        detail: {
+          ...detail,
+          summary: { ...detail.summary, estimated_cost_cents: 1 },
         },
       }).success,
     ).toBe(false);

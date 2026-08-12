@@ -139,6 +139,7 @@ test("spend debits the balance and names the order it settled", async () => {
     account_id: accountId,
     store_id: STORE_B,
     order_id: ORDER,
+    order_customer_id: CUSTOMER,
     amount_cents: 4_200,
     staff_id: STAFF,
     at: 1002,
@@ -159,6 +160,28 @@ test("spend debits the balance and names the order it settled", async () => {
   assert.equal(view?.recent[0]?.store_id, STORE_B);
 });
 
+test("spend refuses an order owned by a different customer", async () => {
+  const { store } = makeStore();
+  const accountId = await openAndTopup(store, 10_000);
+
+  const outcome = await store.spend({
+    account_id: accountId,
+    store_id: STORE_A,
+    order_id: ORDER,
+    order_customer_id: OTHER_CUSTOMER,
+    amount_cents: 1_000,
+    staff_id: STAFF,
+    at: 1002,
+    business_date: "2026-08-01",
+    note: null,
+  });
+
+  assert.deepEqual(outcome, { ok: false, reason: "account_customer_mismatch" });
+  const view = await store.getByCustomer(CUSTOMER, 10);
+  assert.equal(view?.balance.total_cents, 10_000);
+  assert.equal(view?.recent.length, 1);
+});
+
 test("spend refuses to overdraw by a single fen", async () => {
   const { store } = makeStore();
   const accountId = await openAndTopup(store, 1_000);
@@ -167,6 +190,7 @@ test("spend refuses to overdraw by a single fen", async () => {
     account_id: accountId,
     store_id: STORE_A,
     order_id: ORDER,
+    order_customer_id: CUSTOMER,
     amount_cents: 1_001,
     staff_id: STAFF,
     at: 1002,
@@ -190,6 +214,7 @@ test("repeated spends cannot drive the balance below zero", async () => {
       account_id: accountId,
       store_id: STORE_A,
       order_id: ORDER,
+      order_customer_id: CUSTOMER,
       amount_cents: 300,
       staff_id: STAFF,
       at: 1002 + index,
@@ -210,6 +235,7 @@ test("the balance always equals the sum of the ledger it exposes", async () => {
     account_id: accountId,
     store_id: STORE_A,
     order_id: ORDER,
+    order_customer_id: CUSTOMER,
     amount_cents: 2_500,
     staff_id: STAFF,
     at: 1002,
@@ -313,6 +339,7 @@ test("balance spend never moves cash: it carries no tender (ADR-18 §1, ADR-22 �
     account_id: accountId,
     store_id: STORE_A,
     order_id: ORDER,
+    order_customer_id: CUSTOMER,
     amount_cents: 40_000,
     staff_id: STAFF,
     at: 1002,
@@ -470,6 +497,7 @@ test("a spend eats the bonus first, leaving principal refundable (ADR-22 §4.2)"
     account_id: accountId,
     store_id: STORE_A,
     order_id: ORDER,
+    order_customer_id: CUSTOMER,
     amount_cents: 10_000,
     staff_id: STAFF,
     at: 1002,
@@ -571,6 +599,7 @@ test("a spend first, then a refund, returns exactly the untouched principal (ADR
     account_id: accountId,
     store_id: STORE_A,
     order_id: ORDER,
+    order_customer_id: CUSTOMER,
     amount_cents: 10_000,
     staff_id: STAFF,
     at: 1002,

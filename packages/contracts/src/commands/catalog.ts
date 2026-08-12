@@ -13,11 +13,20 @@ import {
   M2_CUSTOMER_COMMAND_NAMES,
   M2_CUSTOMER_QUERY_DEFINITIONS,
   M2_CUSTOMER_QUERY_NAMES,
+  customerDuplicatesQuery,
+  customerSearchQuery,
 } from "./customer.js";
+import {
+  CUSTOMER_PROFILE_COMMANDS,
+  CUSTOMER_PROFILE_COMMAND_NAMES,
+  CUSTOMER_PROFILE_QUERIES,
+  CUSTOMER_PROFILE_QUERY_NAMES,
+} from "./customer-profile.js";
 import {
   M3_FULFILLMENT_COMMAND_DEFINITIONS,
   M3_FULFILLMENT_QUERY_DEFINITIONS,
 } from "./fulfillment.js";
+import { FACTORY_HANDOFF_COMMANDS, FACTORY_HANDOFF_QUERIES } from "./factory-handoff.js";
 import { ORDER_COMMANDS, ORDER_COMMAND_NAMES, ORDER_QUERIES, ORDER_QUERY_NAMES } from "./order.js";
 import {
   PAYMENT_COMMANDS,
@@ -37,9 +46,15 @@ import { EDGE_CONFLICT_COMMANDS } from "./edge-conflict.js";
 import { RECONCILIATION_COMMANDS, RECONCILIATION_QUERIES } from "./reconciliation.js";
 import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./platform.js";
 import { MEMBER_COMMANDS, MEMBER_QUERIES } from "./member.js";
+import { MEMBER_BENEFIT_COMMANDS, MEMBER_BENEFIT_QUERIES } from "./member-benefits.js";
 import { MEMBER_LIFECYCLE_COMMANDS } from "./member-lifecycle.js";
 import { NOTIFICATION_COMMANDS, NOTIFICATION_QUERIES } from "./notification.js";
+import {
+  NOTIFICATION_DELIVERY_COMMANDS,
+  NOTIFICATION_DELIVERY_QUERIES,
+} from "./notification-delivery.js";
 import { STAFF_COMMANDS, STAFF_QUERIES } from "./staff.js";
+import { STORE_MANAGEMENT_COMMANDS, STORE_MANAGEMENT_QUERIES } from "./store-management.js";
 import {
   M2_PRINT_COMMAND_DEFINITIONS,
   M2_PRINT_COMMAND_NAMES,
@@ -86,18 +101,24 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
   ...EDGE_CONFLICT_COMMANDS,
   ...M2_PRINT_COMMAND_DEFINITIONS,
   ...M2_CUSTOMER_COMMAND_DEFINITIONS,
+  ...CUSTOMER_PROFILE_COMMANDS,
   ...M2_SHIFT_COMMAND_DEFINITIONS,
   ...M3_PHOTO_COMMAND_DEFINITIONS,
   ...CATALOG_COMMAND_DEFINITIONS,
   ...M3_FULFILLMENT_COMMAND_DEFINITIONS,
+  ...FACTORY_HANDOFF_COMMANDS,
   ...STAFF_COMMANDS,
+  ...STORE_MANAGEMENT_COMMANDS,
   ...MEMBER_COMMANDS,
   ...MEMBER_LIFECYCLE_COMMANDS,
+  ...MEMBER_BENEFIT_COMMANDS,
   ...NOTIFICATION_COMMANDS,
+  ...NOTIFICATION_DELIVERY_COMMANDS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   ...M2_CUSTOMER_COMMAND_NAMES,
+  ...CUSTOMER_PROFILE_COMMAND_NAMES,
   ...ORDER_COMMAND_NAMES,
   ...PAYMENT_COMMAND_NAMES,
   ...PRICING_COMMAND_NAMES,
@@ -114,9 +135,15 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "garment.rework",
   "garment.incident.record",
   "garment.mark_lost",
+  "fulfillment.batch.create",
+  "fulfillment.batch.cancel",
+  "fulfillment.handoff.checkpoint.record",
+  "fulfillment.handoff.discrepancy.resolve",
+  "fulfillment.quality_check.record",
   "staff.access.set",
   "staff.create",
   "staff.credentials.reset",
+  "store.profile.set",
   "member.account.open",
   "member.topup",
   "member.balance.pay",
@@ -125,13 +152,24 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.account.freeze",
   "member.account.unfreeze",
   "member.account.close",
+  // ADR-41: virtual tier and append-only benefit assets. All calculations and
+  // expiry decisions remain server-authoritative and online-only.
+  "member.benefit_definition.upsert",
+  "member.membership.set",
+  "member.points.earn",
+  "member.points.redeem",
+  "member.asset.grant",
+  "member.asset.consume",
   "notification.manual_list.create",
+  "notification.delivery_batch.enqueue",
 ] as const) as readonly [
   "customer.upsert",
   "customer.update",
   "customer.merge",
   "customer.privacy.export",
   "customer.anonymize",
+  "customer.profile.set",
+  "customer.discount_policy.set",
   "order.receive",
   "order.hold",
   "order.cancel",
@@ -158,9 +196,15 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "garment.rework",
   "garment.incident.record",
   "garment.mark_lost",
+  "fulfillment.batch.create",
+  "fulfillment.batch.cancel",
+  "fulfillment.handoff.checkpoint.record",
+  "fulfillment.handoff.discrepancy.resolve",
+  "fulfillment.quality_check.record",
   "staff.access.set",
   "staff.create",
   "staff.credentials.reset",
+  "store.profile.set",
   "member.account.open",
   "member.topup",
   "member.balance.pay",
@@ -169,7 +213,14 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.account.freeze",
   "member.account.unfreeze",
   "member.account.close",
+  "member.benefit_definition.upsert",
+  "member.membership.set",
+  "member.points.earn",
+  "member.points.redeem",
+  "member.asset.grant",
+  "member.asset.consume",
   "notification.manual_list.create",
+  "notification.delivery_batch.enqueue",
 ];
 
 /**
@@ -207,6 +258,7 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   ...CATALOG_SKELETON_QUERY_NAMES,
   ...CATALOG_ADMIN_QUERY_NAMES,
   ...M2_CUSTOMER_QUERY_NAMES,
+  ...CUSTOMER_PROFILE_QUERY_NAMES,
   ...ORDER_QUERY_NAMES,
   ...PRICING_QUERY_NAMES,
   ...PAYMENT_QUERY_NAMES,
@@ -220,10 +272,18 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   "reporting.owner_portfolio.get",
   "reconciliation.day.get",
   "fulfillment.workbench",
+  "fulfillment.batches.list",
+  "fulfillment.batch.get",
   "staff.access.list",
+  "store.authorized.list",
   "member.account.get",
   "member.bonus_rules.list",
+  "member.benefit_catalog.get",
+  "member.benefits.get",
   "notification.pickup_reminders.list",
+  "notification.delivery.capability.get",
+  "notification.delivery_batches.list",
+  "notification.delivery_batch.get",
 ] as const);
 
 export const M2_CONTRACT_DEFINITIONS: readonly (
@@ -233,6 +293,7 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...CATALOG_SKELETON_DEFINITIONS,
   ...CATALOG_ADMIN_QUERY_DEFINITIONS,
   ...M2_CUSTOMER_QUERY_DEFINITIONS,
+  ...CUSTOMER_PROFILE_QUERIES,
   ...ORDER_QUERIES,
   ...PRICING_QUERIES,
   ...PAYMENT_QUERIES,
@@ -244,15 +305,22 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...REPORTING_QUERIES,
   ...RECONCILIATION_QUERIES,
   ...M3_FULFILLMENT_QUERY_DEFINITIONS,
+  ...FACTORY_HANDOFF_QUERIES,
   ...STAFF_QUERIES,
+  ...STORE_MANAGEMENT_QUERIES,
   ...MEMBER_QUERIES,
+  ...MEMBER_BENEFIT_QUERIES,
   ...NOTIFICATION_QUERIES,
+  ...NOTIFICATION_DELIVERY_QUERIES,
 ]);
 
 /** M2 AI presets are read-only: no command is exposed to the tool projection. */
 export const M2_READ_ONLY_AI_DEFINITIONS: readonly QueryDefinition<z.ZodObject>[] = Object.freeze([
   ...CATALOG_SKELETON_DEFINITIONS,
-  ...M2_CUSTOMER_QUERY_DEFINITIONS,
+  // ADR-42: explicit safe allowlist. Full profile/detail/privacy queries are
+  // intentionally PII-bearing and must never enter the AI tool projection.
+  customerSearchQuery,
+  customerDuplicatesQuery,
   ...ORDER_QUERIES,
   ...M2_PRINT_QUERY_DEFINITIONS,
   ...M2_STATS_QUERY_DEFINITIONS,

@@ -20,7 +20,7 @@ function safeStatus(machineJson, runId, label, status) {
   if (!machineJson) process.stdout.write(`${runId} ${label} ${status}\n`);
 }
 
-async function logoutBrowserContext(context) {
+export async function logoutBrowserContext(context) {
   const cookies = await context.cookies(CLOUD_WEB_ORIGIN);
   const refresh = cookies.find((cookie) => cookie.name === REFRESH_COOKIE);
   const csrf = cookies.find((cookie) => cookie.name === CSRF_COOKIE);
@@ -56,8 +56,9 @@ export const test = base.extend({
         safeStatus(machineJson, runId, "configuration", "FAIL");
         throw error;
       }
-      const signIn = async (page) => {
-        await page.goto("/");
+      const signIn = async (page, surface = "counter") => {
+        requireThat(surface === "counter" || surface === "owner", "CLOUD_BROWSER_SURFACE_INVALID");
+        await page.goto(surface === "owner" ? "/owner" : "/");
         requireThat(
           new URL(page.url()).origin === CLOUD_WEB_ORIGIN,
           "CLOUD_BROWSER_REDIRECT_REJECTED",
@@ -67,7 +68,7 @@ export const test = base.extend({
         await page.locator('input[name="username"]').fill(environment.credentials.admin.username);
         await page.locator('input[name="password"]').fill(environment.credentials.admin.password);
         await page.getByRole("button", { name: "登录" }).click();
-        await expect(page.locator('[data-shell="counter"]')).toBeVisible();
+        await expect(page.locator(`[data-shell="${surface}"]`)).toBeVisible();
       };
       await use(Object.freeze({ machineJson, runId, signIn }));
     },

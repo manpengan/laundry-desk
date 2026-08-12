@@ -81,6 +81,7 @@ export type {
   PickupReminderCandidate,
   PickupReminderListResult,
 } from "./notification.js";
+export * from "./notification-delivery.js";
 export {
   PLATFORM_COMMANDS,
   PLATFORM_DEFINITIONS,
@@ -240,6 +241,10 @@ export type {
   OwnerDashboardTrendPoint,
   OwnerTodayPickupRow,
 } from "./reporting.js";
+export * from "./store-management.js";
+export * from "./member-benefits.js";
+export * from "./member-benefit-results.js";
+export * from "./customer-profile.js";
 export {
   RECONCILIATION_COMMANDS,
   RECONCILIATION_QUERIES,
@@ -296,6 +301,7 @@ export type { StatsDaySummaryResult } from "./stats.js";
 export {
   CUSTOMER_COMMAND_NAMES,
   CUSTOMER_COMMANDS,
+  CUSTOMER_PRIVACY_REASON_CODES,
   CUSTOMER_QUERY_NAMES,
   CUSTOMER_QUERIES,
   CustomerSearchInputSchema,
@@ -306,6 +312,7 @@ export {
   CustomerAnonymizeInputSchema,
   CustomerPrivacyEventsInputSchema,
   CustomerPrivacyExportInputSchema,
+  CustomerPrivacyReasonSchema,
   CustomerPrivacyStatusInputSchema,
   CustomerUpsertInputSchema,
   PhoneSchema,
@@ -321,6 +328,7 @@ export {
   customerUpsertCommand,
 } from "./customer.js";
 export type {
+  CustomerPrivacyReason,
   CustomerDetailResult,
   CustomerDuplicateRow,
   CustomerSearchResult,
@@ -380,6 +388,8 @@ export {
   garmentTransitionCommand,
 } from "./fulfillment.js";
 export type { FulfillmentWorkbenchResult, FulfillmentWorkbenchRow } from "./fulfillment.js";
+export * from "./factory-handoff.js";
+export * from "./factory-handoff-results.js";
 export type {
   PhotoListByOrderResult,
   PhotoRegisterResult,

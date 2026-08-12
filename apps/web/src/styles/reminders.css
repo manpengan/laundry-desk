@@ -60,11 +60,115 @@
   resize: vertical;
 }
 
+.ld-notification-delivery {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-leaf);
+}
+
+.ld-notification-delivery__header,
+.ld-notification-delivery__enqueue,
+.ld-notification-delivery__detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ld-notification-delivery__header h2,
+.ld-notification-delivery__detail h3,
+.ld-notification-delivery__header p,
+.ld-notification-delivery__detail p {
+  margin: 0;
+}
+
+.ld-notification-delivery__banner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-inline-start: 4px solid var(--lg-warn-ink);
+  background: var(--lg-warn-bg);
+}
+
+.ld-notification-delivery__banner[data-state="disabled"] {
+  border-inline-start-color: var(--lg-done-ink);
+  background: var(--lg-done-bg);
+}
+
+.ld-notification-delivery__banner[data-state="external"] {
+  border-inline-start-color: var(--lg-ok-ink);
+  background: var(--lg-ok-bg);
+}
+
+.ld-notification-delivery__staff-note {
+  margin: 0;
+  color: var(--lg-ink2);
+}
+
+.ld-notification-delivery__table-wrap {
+  overflow-x: auto;
+}
+
+.ld-notification-delivery__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ld-notification-delivery__table th,
+.ld-notification-delivery__table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--lg-hair);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.ld-notification-delivery__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+}
+
+.ld-notification-delivery__deliveries,
+.ld-notification-delivery__summary {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ld-notification-delivery__deliveries li {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(190px, 1.4fr) auto minmax(140px, 1fr);
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--lg-hair);
+}
+
+.ld-notification-delivery__summary {
+  display: grid;
+  gap: 6px;
+}
+
 @media (max-width: 760px) {
   .ld-reminders__header,
   .ld-reminders__filters,
-  .ld-reminders__composer {
+  .ld-reminders__composer,
+  .ld-notification-delivery__header,
+  .ld-notification-delivery__enqueue,
+  .ld-notification-delivery__detail-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ld-notification-delivery__deliveries li {
+    grid-template-columns: 1fr;
   }
 }

@@ -138,6 +138,14 @@ export function createMemberHandlers(
     if (amountCents === 0) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     const { now, businessDate } = await openBusinessDate(deps, context);
     const note = optionalNote(input);
+    const order = await deps.order.store.getOrder(
+      context.tenant.orgId,
+      context.tenant.storeId,
+      orderId,
+    );
+    if (order?.customer_id === null || order === null) {
+      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    }
 
     // Ledger first: it takes the account lock and refuses an overdraw before any
     // order row moves. Both writes share this transaction, so a later order-side
@@ -146,6 +154,7 @@ export function createMemberHandlers(
       account_id: accountId,
       store_id: context.tenant.storeId,
       order_id: orderId,
+      order_customer_id: order.customer_id,
       amount_cents: amountCents,
       staff_id: context.actor.staffId,
       at: now,

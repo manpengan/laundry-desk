@@ -104,6 +104,8 @@ export type MemberSpendInput = Readonly<{
   account_id: string;
   store_id: string;
   order_id: string;
+  /** Server-read order owner; the store rechecks it against the locked account. */
+  order_customer_id: string;
   amount_cents: number;
   staff_id: string;
   at: number;
@@ -192,6 +194,7 @@ export type MemberOutcome<TValue> =
 export type MemberStore = Readonly<{
   openAccount: (input: MemberOpenInput) => Promise<MemberOutcome<MemberOpenResult>>;
   getByCustomer: (customerId: string, limit: number) => Promise<MemberAccountView | null>;
+  getById: (accountId: string, limit: number) => Promise<MemberAccountView | null>;
   topup: (input: MemberTopupInput) => Promise<MemberOutcome<MemberLedgerAppendResult>>;
   /**
    * Debit the balance for an order.

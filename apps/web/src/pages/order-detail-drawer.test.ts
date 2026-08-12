@@ -28,6 +28,23 @@ const SAMPLE_ORDER: OrderGetResult = Object.freeze({
   subtotal_cents: 3000,
   original_cents: 3000,
   discount_cents: 0,
+  customer_profile_version: 3,
+  discount_source: "tier",
+  discount_bps: 800,
+  membership_version: 2,
+  tier: Object.freeze({
+    tier_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    definition_version: 4,
+    code: "gold",
+    name: "金卡",
+    level: 2,
+    discount_bps: 800,
+  }),
+  waivers: Object.freeze({
+    skip_ticket_print: true,
+    skip_label_print: false,
+    skip_rack_assignment: true,
+  }),
   addon_cents: 0,
   urgent_cents: 0,
   freight_cents: 0,
@@ -235,6 +252,12 @@ test("OrderDetailContent SSR shows ticket, money, garments, photo count and thum
   assert.match(html, /颜色：白/);
   assert.match(html, /瑕疵：袖口污渍/);
   assert.match(html, /门店备注/);
+  assert.match(html, /data-testid="order-detail-discount-source"/);
+  assert.match(html, /金卡 8%/);
+  assert.match(html, /档案快照/);
+  assert.match(html, />v3</);
+  assert.match(html, /data-testid="order-detail-waivers"/);
+  assert.match(html, /跳过小票打印、跳过上挂分配/);
   assert.match(html, /1 张/);
   assert.match(html, /data-testid="order-detail-photo-count"/);
   assert.match(html, /data-testid="order-detail-photos"/);

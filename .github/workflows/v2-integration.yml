@@ -267,7 +267,11 @@ jobs:
           ! rg -q '^# skipped [1-9][0-9]*$' /tmp/laundry-server-pg-tests.log
 
       - name: Run Playwright against real server and PostgreSQL
-        run: pnpm run local:web:e2e
+        env:
+          LAUNDRY_NOTIFICATION_PROVIDER_MODE: "software_only"
+        run: |
+          pnpm local:up -- --bootstrap
+          pnpm run local:web:e2e
 
       - name: Capture integration diagnostics
         if: failure()

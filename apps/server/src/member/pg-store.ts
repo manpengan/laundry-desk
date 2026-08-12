@@ -146,6 +146,32 @@ export function createPgMemberStore(
       });
     },
 
+    getById: async (accountId: string, limit: number): Promise<MemberAccountView | null> => {
+      const accountResult = await client.query<AccountRow>(
+        `SELECT ${ACCOUNT_SELECT}
+           FROM member_accounts
+          WHERE org_id = $1::uuid AND id = $2::uuid`,
+        [tenant.orgId, accountId],
+      );
+      const accountRow = accountResult.rows[0];
+      if (accountRow === undefined) return null;
+      const account = toAccount(accountRow);
+      const rows = await client.query<LedgerDbRow>(
+        `SELECT id, kind, principal_delta_cents, bonus_delta_cents, order_id,
+                store_id, tender, bonus_rule_id, at, business_date, note
+           FROM member_ledger
+          WHERE org_id = $1::uuid AND account_id = $2::uuid
+          ORDER BY ledger_seq DESC
+          LIMIT $3`,
+        [tenant.orgId, account.account_id, limit],
+      );
+      return Object.freeze({
+        account,
+        balance: await readMemberBalance(client, tenant, account.account_id),
+        recent: Object.freeze(rows.rows.map(toLedgerRow)),
+      });
+    },
+
     topup: async (input: MemberTopupInput): Promise<MemberOutcome<MemberLedgerAppendResult>> => {
       if (!Number.isSafeInteger(input.amount_cents) || input.amount_cents <= 0) {
         return reject("invalid_amount");
@@ -177,6 +203,22 @@ export function createPgMemberStore(
     spend: async (input: MemberSpendInput): Promise<MemberOutcome<MemberLedgerAppendResult>> => {
       const locked = await lockAccount(input.account_id);
       if (!locked.ok) return locked as MemberOutcome<MemberLedgerAppendResult>;
+      const orderResult = await client.query<Readonly<{ customer_id: string | null }>>(
+        `SELECT customer_id
+           FROM orders
+          WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid
+          FOR UPDATE`,
+        [tenant.orgId, input.store_id, input.order_id],
+      );
+      const orderCustomerId = orderResult.rows[0]?.customer_id;
+      if (
+        orderCustomerId === null ||
+        orderCustomerId === undefined ||
+        orderCustomerId !== locked.value.customer_id ||
+        orderCustomerId !== input.order_customer_id
+      ) {
+        return reject("account_customer_mismatch");
+      }
       // Re-read under the lock: a balance fetched before FOR UPDATE would let
       // two concurrent spends both pass the sufficiency check.
       const balance = await readMemberBalance(client, tenant, input.account_id);

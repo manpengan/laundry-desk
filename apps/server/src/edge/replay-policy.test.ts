@@ -33,6 +33,16 @@ test("keeps ordinary grant and Primary command allowlists exact and disjoint", (
   assert.equal(replayCommandAllowed("grant", "payment.collect"), false);
   assert.equal(replayCommandAllowed("primary_lease", "payment.collect"), true);
   assert.equal(replayCommandAllowed("primary_lease", "order.receive"), false);
+  for (const name of [
+    "fulfillment.batch.create",
+    "fulfillment.batch.cancel",
+    "fulfillment.handoff.checkpoint.record",
+    "fulfillment.handoff.discrepancy.resolve",
+    "fulfillment.quality_check.record",
+  ]) {
+    assert.equal(replayCommandAllowed("grant", name), false, name);
+    assert.equal(replayCommandAllowed("primary_lease", name), false, name);
+  }
 });
 
 test("ordinary order.receive permits only debt or cash", () => {

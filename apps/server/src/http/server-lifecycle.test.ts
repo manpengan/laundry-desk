@@ -220,7 +220,7 @@ test("shutdown drains Fastify before ending the PostgreSQL pool", async () => {
   assert.deepEqual(calls, ["app.close:start", "app.close:end", "pool.end"]);
 });
 
-test("configured print worker starts after listen and stops before the pool", async () => {
+test("configured background workers start after listen and stop before the pool", async () => {
   const calls: string[] = [];
   const base = await runtimeWithPool(async () => {
     calls.push("pool.end");
@@ -250,6 +250,29 @@ test("configured print worker starts after listen and stops before the pool", as
           }),
       }),
     }),
+    notification: Object.freeze({
+      ...base.notification,
+      worker: Object.freeze({
+        start: () => {
+          calls.push("notification.start");
+        },
+        stop: async () => {
+          calls.push("notification.stop");
+        },
+        runNow: async () => undefined,
+        status: () =>
+          Object.freeze({
+            state: "running" as const,
+            worker_id: "notification:test",
+            assurance: "software_only" as const,
+            processed_deliveries: 0,
+            attention_required: 0,
+            consecutive_failures: 0,
+            last_cycle_at: null,
+            last_error_code: null,
+          }),
+      }),
+    }),
   });
   const app = fakeApp({
     listen: async () => {
@@ -265,9 +288,17 @@ test("configured print worker starts after listen and stops before the pool", as
     ENV,
     dependencies(runtime, async () => app),
   );
-  assert.deepEqual(calls, ["app.listen", "worker.start"]);
+  assert.deepEqual(calls, ["app.listen", "worker.start", "notification.start"]);
   await started.shutdown();
-  assert.deepEqual(calls, ["app.listen", "worker.start", "app.close", "worker.stop", "pool.end"]);
+  assert.deepEqual(calls, [
+    "app.listen",
+    "worker.start",
+    "notification.start",
+    "app.close",
+    "worker.stop",
+    "notification.stop",
+    "pool.end",
+  ]);
 });
 
 test("startup cleanup reports every resource failure without replacing the startup cause", async () => {

@@ -7,28 +7,28 @@ import {
   type CommandDefinition,
   type QueryDefinition,
 } from "../registry/definitions.js";
+import {
+  PickupReminderAgeDaysSchema,
+  PickupReminderStatusesSchema,
+} from "./notification-shared.js";
+
+export {
+  PickupReminderAgeDaysSchema,
+  PickupReminderGarmentStatusSchema,
+  PickupReminderStatusesSchema,
+} from "./notification-shared.js";
 
 const PhoneSchema = z.string().regex(/^1[3-9]\d{9}$/u);
 const NonNegativeSafeIntegerSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const PositiveSafeIntegerSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const Sha256Schema = z.string().regex(/^[0-9a-f]{64}$/u);
 
-export const PickupReminderAgeDaysSchema = z.union([z.literal(30), z.literal(90), z.literal(180)]);
-export const PickupReminderGarmentStatusSchema = z.enum(["ready", "racked"]);
 export const PickupReminderGroupingSchema = z.enum(["order", "customer"]);
-
-const ReminderStatusesSchema = z
-  .array(PickupReminderGarmentStatusSchema)
-  .min(1)
-  .max(2)
-  .refine((statuses) => new Set(statuses).size === statuses.length, {
-    message: "Garment statuses must be unique",
-  });
 
 export const PickupReminderListInputSchema = z.strictObject({
   min_age_days: PickupReminderAgeDaysSchema.optional(),
   unpaid_only: z.boolean().optional(),
-  garment_statuses: ReminderStatusesSchema.optional(),
+  garment_statuses: PickupReminderStatusesSchema.optional(),
   limit: z.number().int().positive().max(200).optional(),
 });
 
@@ -56,7 +56,7 @@ export const NotificationManualListCreateInputSchema = z.strictObject({
   format: z.literal("csv"),
   min_age_days: PickupReminderAgeDaysSchema,
   unpaid_only: z.boolean(),
-  garment_statuses: ReminderStatusesSchema,
+  garment_statuses: PickupReminderStatusesSchema,
 });
 
 export const PickupReminderCandidateSchema = z.strictObject({
@@ -69,7 +69,7 @@ export const PickupReminderCandidateSchema = z.strictObject({
   balance_cents: NonNegativeSafeIntegerSchema,
   received_at: ExactUtcTimestampSchema,
   overdue_days: NonNegativeSafeIntegerSchema,
-  garment_statuses: ReminderStatusesSchema,
+  garment_statuses: PickupReminderStatusesSchema,
   last_contact_at: ExactUtcTimestampSchema.nullable(),
 });
 

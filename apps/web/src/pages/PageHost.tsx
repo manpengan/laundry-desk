@@ -15,7 +15,7 @@ import { PickupPage } from "./PickupPage.js";
 import { ReceivePage } from "./ReceivePage.js";
 import { SettingsPage } from "./SettingsPage.js";
 import { StatsPage } from "./StatsPage.js";
-import { FulfillmentPage } from "./FulfillmentPage.js";
+import { FulfillmentHubPage } from "./FulfillmentHubPage.js";
 import { PickupRemindersPage } from "./PickupRemindersPage.js";
 
 export type PageHostProps = {
@@ -116,7 +116,14 @@ export function PageHost({
     commandClient !== undefined &&
     queryClient !== undefined
   ) {
-    return <PickupRemindersPage commandClient={commandClient} queryClient={queryClient} />;
+    return (
+      <PickupRemindersPage
+        commandClient={commandClient}
+        queryClient={queryClient}
+        session={session}
+        {...(authClient === undefined ? {} : { authClient })}
+      />
+    );
   }
 
   if (
@@ -127,7 +134,7 @@ export function PageHost({
     queryClient !== undefined
   ) {
     return (
-      <FulfillmentPage
+      <FulfillmentHubPage
         queryClient={queryClient}
         commandClient={commandClient}
         authClient={authClient}

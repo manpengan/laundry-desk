@@ -46,6 +46,7 @@ test("createM1QueryRegistry lists platform query names", () => {
   assert.ok(names.includes("platform.store_features.get"));
   assert.ok(names.includes("platform.audit.list"));
   assert.ok(names.includes("member.account.get"));
+  assert.ok(names.includes("store.authorized.list"));
   assert.ok(!names.includes("platform.settings.set"));
 });
 

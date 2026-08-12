@@ -21,6 +21,11 @@ import {
   reminderFixtureRequested,
 } from "./adr36-web-reminder-fixture.mjs";
 import { createStaffCredentialJourney } from "./adr36-web-staff-journey.mjs";
+import { createOwnerOperationsJourney } from "./adr40-owner-journey.mjs";
+import { createMemberBenefitsJourney } from "./adr41-member-benefits-journey.mjs";
+import { createCustomerProfileJourney } from "./adr42-customer-profile-journey.mjs";
+import { notificationDeliveryBoundaryJourney } from "./adr44-notification-delivery-journey.mjs";
+import { factoryHandoffBoundaryJourney } from "./adr45-factory-handoff-journey.mjs";
 import {
   MAIN_JOURNEYS,
   accountingDeltaJourney,
@@ -49,7 +54,12 @@ function printReport(writeLine, runId, results) {
 }
 
 const EXTENDED_JOURNEYS = Object.freeze([
+  "owner_store_operations",
   "staff_credentials",
+  "member_benefits",
+  "customer_profile_policy",
+  "notification_delivery_boundary",
+  "factory_handoff_boundary",
   "order_finance",
   "reporting_exports_shift",
   "reminder_history",
@@ -58,11 +68,16 @@ const EXTENDED_JOURNEYS = Object.freeze([
 function acceptanceStages(api, credentials, getArtifacts, update, run, extensions) {
   return [
     ["dual_admin_auth", () => authJourney(api, credentials, update)],
+    ["owner_store_operations", extensions.owner],
     ["staff_credentials", extensions.staff],
     ["accounting_baseline", () => baselineJourney(api, getArtifacts(), update)],
     ["catalog_price", () => catalogJourney(api, getArtifacts(), run, update)],
     ["synthetic_customer", () => customerJourney(api, getArtifacts(), run, update)],
     ["cash_order_fulfillment", () => cashOrderJourney(api, getArtifacts(), run, update)],
+    ["member_benefits", extensions.memberBenefits],
+    ["customer_profile_policy", extensions.customerProfile],
+    ["notification_delivery_boundary", extensions.notificationDelivery],
+    ["factory_handoff_boundary", extensions.factoryHandoff],
     ["member_lifecycle", () => memberJourney(api, credentials, getArtifacts(), run, update)],
     ["accounting_today_delta", () => accountingDeltaJourney(api, getArtifacts())],
     ["order_finance", extensions.orderFinance],
@@ -94,6 +109,9 @@ export async function runAcceptance(options = {}) {
   };
   let credentials = null;
   let staffController = null;
+  let ownerController = null;
+  let memberBenefitsController = null;
+  let customerProfileController = null;
   let reminderController = null;
   let reminderEnabled = false;
   let reminderPassed = false;
@@ -117,12 +135,31 @@ export async function runAcceptance(options = {}) {
     timeoutMs: options.timeoutMs,
   });
   const staffFactory = options.createStaffJourney ?? createStaffCredentialJourney;
+  const ownerFactory = options.createOwnerJourney ?? createOwnerOperationsJourney;
+  const memberBenefitsFactory = options.createMemberBenefitsJourney ?? createMemberBenefitsJourney;
+  const customerProfileFactory =
+    options.createCustomerProfileJourney ?? createCustomerProfileJourney;
   const runOrderFinance = options.orderFinanceJourney ?? orderFinanceJourney;
   const runReporting = options.reportingJourney ?? reportingJourney;
   const runReminderHistory = options.reminderHistoryJourney ?? reminderHistoryJourney;
+  const runNotificationDelivery =
+    options.notificationDeliveryJourney ?? notificationDeliveryBoundaryJourney;
+  const runFactoryHandoff = options.factoryHandoffJourney ?? factoryHandoffBoundaryJourney;
   const reminderFactory = options.createReminderFixture ?? createReminderHistoryFixture;
   const cleanupOrderFinance = options.cleanupOrderFinance ?? cleanupOrderFinanceArtifacts;
   const extensions = Object.freeze({
+    owner: async () => {
+      const current = getArtifacts();
+      ownerController = ownerFactory({
+        api,
+        adminSession: current.adminSession,
+        approverSession: current.approverSession,
+        approverPin: credentials.approver.pin,
+        run,
+        updateSession: (adminSession) => update({ adminSession }),
+      });
+      await ownerController.execute();
+    },
     staff: async () => {
       const current = getArtifacts();
       staffController = staffFactory({
@@ -133,6 +170,38 @@ export async function runAcceptance(options = {}) {
         run,
       });
       await staffController.execute();
+    },
+    memberBenefits: async () => {
+      const current = getArtifacts();
+      memberBenefitsController = memberBenefitsFactory({
+        api,
+        adminSession: current.adminSession,
+        artifacts: current,
+        run,
+        update,
+      });
+      await memberBenefitsController.execute();
+    },
+    customerProfile: async () => {
+      const current = getArtifacts();
+      customerProfileController = customerProfileFactory({
+        api,
+        adminSession: current.adminSession,
+        approverSession: current.approverSession,
+        approverPin: credentials.approver.pin,
+        artifacts: current,
+        run,
+        update,
+      });
+      await customerProfileController.execute();
+    },
+    notificationDelivery: () => {
+      const current = getArtifacts();
+      return runNotificationDelivery(api, { session: current.adminSession });
+    },
+    factoryHandoff: () => {
+      const current = getArtifacts();
+      return runFactoryHandoff(api, { session: current.adminSession });
     },
     orderFinance: () => runOrderFinance(api, credentials, getArtifacts(), run, update),
     reporting: () => {
@@ -200,6 +269,11 @@ export async function runAcceptance(options = {}) {
   const orderFinanceCleaned =
     credentials === null ? true : await cleanupOrderFinance(api, getArtifacts(), run, update);
   const staffCleaned = staffController === null ? true : await staffController.cleanup();
+  const memberBenefitsCleaned =
+    memberBenefitsController === null ? true : await memberBenefitsController.cleanup();
+  const customerProfileCleaned =
+    customerProfileController === null ? true : await customerProfileController.cleanup();
+  const ownerCleaned = ownerController === null ? true : await ownerController.cleanup();
   const baseCleaned =
     credentials === null ? true : await cleanupArtifacts(api, credentials, getArtifacts(), run);
   const reportingCleaned = !getArtifacts().reportingCleanupUncertain;
@@ -208,6 +282,9 @@ export async function runAcceptance(options = {}) {
     reminderCleaned &&
     orderFinanceCleaned &&
     staffCleaned &&
+    customerProfileCleaned &&
+    memberBenefitsCleaned &&
+    ownerCleaned &&
     baseCleaned &&
     reportingCleaned &&
     authCleaned;

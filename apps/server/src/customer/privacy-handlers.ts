@@ -4,7 +4,9 @@ import { createCommandError } from "@laundry/contracts";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
+import type { CustomerProfileView } from "../customer-profile/types.js";
 import type { CustomerHandlerDeps } from "./handlers.js";
+import type { CustomerPrivacyExport } from "./types.js";
 
 const DEFAULT_EVENT_LIMIT = 20;
 const MAX_EVENT_LIMIT = 50;
@@ -33,6 +35,42 @@ function eventLimit(value: unknown): number {
 
 function unavailable(): never {
   throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+}
+
+function exportProfile(profile: CustomerProfileView): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    customer_id: profile.customer_id,
+    version: profile.version,
+    gender: profile.gender,
+    preferred_contact: profile.preferred_contact,
+    service_note: profile.service_note,
+    discount_bps: profile.discount_bps,
+    waivers: profile.waivers,
+    updated_at: profile.updated_at,
+  });
+}
+
+function attachProfiles(
+  exported: CustomerPrivacyExport,
+  profiles: readonly CustomerProfileView[],
+): CustomerPrivacyExport {
+  if (profiles.length === 0) return exported;
+  const snapshots = Object.freeze(profiles.map(exportProfile));
+  const addresses = Object.freeze(profiles.flatMap((profile) => profile.addresses));
+  const identifiers = Object.freeze(profiles.flatMap((profile) => profile.identifiers));
+  return Object.freeze({
+    ...exported,
+    profile: snapshots[0] ?? null,
+    profiles: snapshots,
+    profile_count: snapshots.length,
+    profiles_truncated: false,
+    addresses,
+    address_count: addresses.length,
+    addresses_truncated: false,
+    identifiers,
+    identifier_count: identifiers.length,
+    identifiers_truncated: false,
+  });
 }
 
 function statusHandler(deps: CustomerHandlerDeps): CommandHandler {
@@ -72,23 +110,34 @@ function exportHandler(deps: CustomerHandlerDeps): CommandHandler {
       now: deps.now?.() ?? Math.floor(Date.now() / 1000),
     });
     if (exported === null) unavailable();
+    let privacyProfiles: readonly CustomerProfileView[] = Object.freeze([]);
+    if (exported.profile === null && deps.profile !== undefined) {
+      if (deps.profile.listPrivacyProfiles !== undefined) {
+        privacyProfiles = await deps.profile.listPrivacyProfiles(exported.customer.customer_id);
+      } else {
+        const profile = await deps.profile.get(exported.customer.customer_id);
+        if (profile !== null) privacyProfiles = Object.freeze([profile]);
+      }
+    }
+    const result = attachProfiles(exported, privacyProfiles);
     return Object.freeze({
-      result: exported,
+      result,
+      privacySubjectCustomerId: exported.customer.customer_id,
       audit: Object.freeze({
         entity: "customer_privacy",
-        entityId: customerId,
+        entityId: exported.customer.customer_id,
         afterJson: JSON.stringify({
           action: "exported",
-          order_count: exported.order_count,
-          truncated: exported.truncated,
+          order_count: result.order_count,
+          truncated: result.truncated,
         }),
       }),
       events: Object.freeze([
         Object.freeze({
           type: "customer.privacy_exported",
           payload: Object.freeze({
-            customer_id: customerId,
-            order_count: exported.order_count,
+            customer_id: exported.customer.customer_id,
+            order_count: result.order_count,
           }),
         }),
       ]),
@@ -103,6 +152,7 @@ function anonymizeHandler(deps: CustomerHandlerDeps): CommandHandler {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
     const customerId = requiredString(input.customer_id);
+    const canonicalGroupIds = await deps.store.listCanonicalGroup?.(customerId);
     const result = await deps.store.anonymize({
       customer_id: customerId,
       store_id: ctx.tenant.storeId,
@@ -114,11 +164,13 @@ function anonymizeHandler(deps: CustomerHandlerDeps): CommandHandler {
     if (result === null) {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
+    await deps.profile?.purgeCustomerPii?.(result.customer_id, canonicalGroupIds);
     return Object.freeze({
       result,
+      privacySubjectCustomerId: result.customer_id,
       audit: Object.freeze({
         entity: "customer_privacy",
-        entityId: customerId,
+        entityId: result.customer_id,
         afterJson: JSON.stringify({
           action: "anonymized",
           affected_order_count: result.affected_order_count,
@@ -128,7 +180,7 @@ function anonymizeHandler(deps: CustomerHandlerDeps): CommandHandler {
         Object.freeze({
           type: "customer.anonymized",
           payload: Object.freeze({
-            customer_id: customerId,
+            customer_id: result.customer_id,
             affected_order_count: result.affected_order_count,
           }),
         }),

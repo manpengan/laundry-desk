@@ -76,10 +76,18 @@ test("memory lifecycle freezes, blocks money, unfreezes and prevents status ABA"
     await store.refund({ ...common, amount_cents: 1, tender: "cash", reason: "no" }),
     { ok: false, reason: "account_frozen" },
   );
-  assert.deepEqual(await store.spend({ ...common, amount_cents: 1, order_id: "order-1" }), {
-    ok: false,
-    reason: "account_frozen",
-  });
+  assert.deepEqual(
+    await store.spend({
+      ...common,
+      amount_cents: 1,
+      order_id: "order-1",
+      order_customer_id: CUSTOMER,
+    }),
+    {
+      ok: false,
+      reason: "account_frozen",
+    },
+  );
 
   assert.deepEqual(
     await store.transitionStatus({

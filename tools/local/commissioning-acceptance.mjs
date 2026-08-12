@@ -62,26 +62,44 @@ const capture = (file, args, environment, accepting = new Set([0])) =>
   });
 
 const cleanup = async ({ project, configRoot, userDataRoot, environment }) => {
-  await run(process.execPath, ["tools/local/down.mjs"], environment, new Set([0, 1]));
-  const volume = `${project}_pgdata-v2`;
-  const inspected = await capture(
-    "docker",
-    ["volume", "inspect", "--format", "{{json .Labels}}", volume],
-    environment,
-    new Set([0, 1]),
-  );
-  if (inspected.code === 0) {
-    const labels = JSON.parse(inspected.stdout.toString("utf8"));
-    if (
-      labels?.["com.laundry-desk.managed"] !== "true" ||
-      labels?.["com.laundry-desk.project"] !== project
-    ) {
-      throw new Error("COMMISSIONING_ACCEPTANCE_VOLUME_UNOWNED");
-    }
-    await run("docker", ["volume", "rm", volume], environment);
+  const failures = [];
+  try {
+    await run(process.execPath, ["tools/local/down.mjs"], environment);
+  } catch (error) {
+    failures.push(error);
   }
-  await rm(configRoot, { recursive: true, force: true });
-  if (userDataRoot !== undefined) await rm(userDataRoot, { recursive: true, force: true });
+  try {
+    const volume = `${project}_pgdata-v2`;
+    const inspected = await capture(
+      "docker",
+      ["volume", "inspect", "--format", "{{json .Labels}}", volume],
+      environment,
+      new Set([0, 1]),
+    );
+    if (inspected.code === 0) {
+      const labels = JSON.parse(inspected.stdout.toString("utf8"));
+      if (
+        labels?.["com.laundry-desk.managed"] !== "true" ||
+        labels?.["com.laundry-desk.project"] !== project
+      ) {
+        throw new Error("COMMISSIONING_ACCEPTANCE_VOLUME_UNOWNED");
+      }
+      await run("docker", ["volume", "rm", volume], environment);
+    }
+  } catch (error) {
+    failures.push(error);
+  } finally {
+    for (const root of [configRoot, userDataRoot].filter(Boolean)) {
+      try {
+        await rm(root, { recursive: true, force: true });
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "COMMISSIONING_ACCEPTANCE_CLEANUP_FAILED");
+  }
 };
 
 for (const mode of modes) {
@@ -95,6 +113,7 @@ for (const mode of modes) {
     ...generatedSetup(),
     COMPOSE_PROJECT_NAME: project,
     LAUNDRY_LOCAL_CONFIG_DIR: configRoot,
+    ...(mode === "browser" ? { LAUNDRY_NOTIFICATION_PROVIDER_MODE: "software_only" } : {}),
     ...(userDataRoot === undefined
       ? {}
       : {
@@ -107,6 +126,11 @@ for (const mode of modes) {
         }),
   };
   try {
+    if (mode === "pg") {
+      // The PostgreSQL acceptance runners execute compiled Node tests on the
+      // host, so make their dist tree part of this self-contained gate.
+      await run("pnpm", ["--filter", "@laundry/server", "build"], environment);
+    }
     await run(process.execPath, ["tools/local/up.mjs", "--bootstrap"], environment);
     await run(process.execPath, ["tools/local/commissioning-proof.mjs"], environment);
     if (mode === "pg") {
@@ -119,14 +143,55 @@ for (const mode of modes) {
         ...environment,
         LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
       });
+      await run(process.execPath, ["tools/local/member-benefits-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+      });
+      await run(process.execPath, ["tools/local/customer-profile-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+      });
+      await run(process.execPath, ["tools/local/notification-delivery-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+      });
+      await run(process.execPath, ["tools/local/factory-handoff-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+      });
+      await run(process.execPath, ["tools/cloud/hk-vps-release-catalog-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_CLOUD_RELEASE_PG_TEST: "1",
+        LAUNDRY_USE_LOCAL_PG: "1",
+      });
+      await run(process.execPath, ["tools/cloud/hk-vps-data-protection-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+        LAUNDRY_CLOUD_DATA_PG_TEST: "1",
+        LAUNDRY_USE_LOCAL_PG: "1",
+      });
       await run(process.execPath, ["tools/local/up.mjs"], environment);
       await run(process.execPath, ["tools/local/commissioning-proof.mjs"], environment);
-    } else {
+    } else if (mode === "browser") {
+      await run("pnpm", ["local:web:commissioning:e2e"], environment);
       await run(
         "pnpm",
-        [mode === "browser" ? "local:web:commissioning:e2e" : "local:mac:commissioning:e2e"],
+        [
+          "exec",
+          "playwright",
+          "test",
+          "-c",
+          "apps/web/playwright.local.config.ts",
+          "member-benefits.spec.ts",
+          "customer-profile.spec.ts",
+          "notification-delivery.spec.ts",
+          "factory-handoff.spec.ts",
+          "--workers=1",
+        ],
         environment,
       );
+    } else {
+      await run("pnpm", ["local:mac:commissioning:e2e"], environment);
     }
   } finally {
     await cleanup({ project, configRoot, userDataRoot, environment });

@@ -1,49 +1,22 @@
 /** PostgreSQL-backed WYSIWYS confirmation authority. */
 
-import type { RiskLevel } from "@laundry/domain";
-
 import type { PgPool } from "../db/pg-pool.js";
 import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
-import type { PolicyOutcome } from "../policy/types.js";
-import { freezeCanonical, hashCanonical } from "./canonical.js";
-import { createPendingActionSnapshot, freezeEntityVersions, freezePendingAction } from "./store.js";
+import { lockPendingAuthorities, measureNotificationRisk } from "./pg-risk-reservation.js";
+import {
+  actionFromRow,
+  pendingEpoch,
+  SELECT_COLUMNS,
+  type PendingActionRow,
+  type PendingActionWithClockRow,
+} from "./pg-row.js";
+import { createPendingActionSnapshot, freezePendingAction } from "./store.js";
 import type {
-  EntityVersion,
   PendingAction,
-  PendingActionStatus,
   PendingActionStore,
   PendingActionTransactionContext,
 } from "./types.js";
-
-type PendingActionRow = Readonly<{
-  nonce: string;
-  command: string;
-  command_version: string;
-  args_json: unknown;
-  authority_json: unknown | null;
-  authority_present: boolean;
-  args_hash: string;
-  entity_versions_json: unknown;
-  creator_staff_id: string;
-  org_id: string;
-  store_id: string;
-  idempotency_key: string;
-  created_at_epoch: string | number;
-  expires_at_epoch: string | number;
-  status: string;
-  effective_risk: string;
-  policy_outcome: string;
-  requires_other_approver: boolean;
-  consumed_by_staff_id: string | null;
-  consumed_at_epoch: string | number | null;
-}>;
-
-const SELECT_COLUMNS = `nonce::text, command, command_version, args_json,
-  authority_json, authority_present, args_hash, entity_versions_json,
-  creator_staff_id::text, org_id::text, store_id::text, idempotency_key::text,
-  created_at_epoch, expires_at_epoch, status, effective_risk, policy_outcome,
-  requires_other_approver, consumed_by_staff_id::text, consumed_at_epoch`;
 
 /**
  * Invalid cards remain available for operational diagnosis for 30 days.
@@ -52,109 +25,6 @@ const SELECT_COLUMNS = `nonce::text, command, command_version, args_json,
  */
 export const PENDING_ACTION_RETENTION_SECONDS = 30 * 24 * 60 * 60;
 export const PENDING_ACTION_CLEANUP_BATCH_SIZE = 100;
-
-function epoch(value: string | number, field: string): number {
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
-    throw new Error(`Persisted pending action ${field} is invalid`);
-  }
-  return parsed;
-}
-
-function status(value: string): PendingActionStatus {
-  if (value === "pending" || value === "consumed" || value === "expired" || value === "denied") {
-    return value;
-  }
-  throw new Error("Persisted pending action status is invalid");
-}
-
-function risk(value: string): RiskLevel {
-  if (
-    value === "R0" ||
-    value === "R1" ||
-    value === "R2" ||
-    value === "R3" ||
-    value === "R4" ||
-    value === "R5"
-  ) {
-    return value;
-  }
-  throw new Error("Persisted pending action risk is invalid");
-}
-
-function policyOutcome(value: string): Extract<PolicyOutcome, "confirm" | "step_up"> {
-  if (value === "confirm" || value === "step_up") return value;
-  throw new Error("Persisted pending action policy outcome is invalid");
-}
-
-function entityVersions(value: unknown): readonly EntityVersion[] {
-  if (!Array.isArray(value)) {
-    throw new Error("Persisted pending action entity versions are invalid");
-  }
-  return freezeEntityVersions(
-    value.map((entry) => {
-      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
-        throw new Error("Persisted pending action entity version is invalid");
-      }
-      const record = entry as Readonly<Record<string, unknown>>;
-      if (
-        typeof record.entityType !== "string" ||
-        typeof record.entityId !== "string" ||
-        typeof record.version !== "number" ||
-        !Number.isSafeInteger(record.version) ||
-        record.version < 0
-      ) {
-        throw new Error("Persisted pending action entity version is invalid");
-      }
-      return Object.freeze({
-        entityType: record.entityType,
-        entityId: record.entityId,
-        version: record.version,
-      });
-    }),
-  );
-}
-
-function actionFromRow(row: PendingActionRow): PendingAction {
-  const args = freezeCanonical(row.args_json);
-  const authority = row.authority_present ? freezeCanonical(row.authority_json) : undefined;
-  const calculatedHash = hashCanonical(
-    authority === undefined ? args : Object.freeze({ args, authority }),
-  );
-  if (calculatedHash !== row.args_hash) {
-    throw new Error("Persisted pending action hash is invalid");
-  }
-  const parsedStatus = status(row.status);
-  const consumedAt =
-    row.consumed_at_epoch === null ? null : epoch(row.consumed_at_epoch, "consumed_at_epoch");
-  if (
-    (parsedStatus === "consumed" && (row.consumed_by_staff_id === null || consumedAt === null)) ||
-    (parsedStatus !== "consumed" && (row.consumed_by_staff_id !== null || consumedAt !== null))
-  ) {
-    throw new Error("Persisted pending action consumption state is invalid");
-  }
-  return freezePendingAction({
-    nonce: row.nonce,
-    command: row.command,
-    commandVersion: row.command_version,
-    args,
-    ...(authority === undefined ? {} : { authority }),
-    argsHash: row.args_hash,
-    entityVersions: entityVersions(row.entity_versions_json),
-    creatorStaffId: row.creator_staff_id,
-    orgId: row.org_id,
-    storeId: row.store_id,
-    idempotencyKey: row.idempotency_key,
-    createdAt: epoch(row.created_at_epoch, "created_at_epoch"),
-    expiresAt: epoch(row.expires_at_epoch, "expires_at_epoch"),
-    status: parsedStatus,
-    effectiveRisk: risk(row.effective_risk),
-    policyOutcome: policyOutcome(row.policy_outcome),
-    requiresOtherApprover: row.requires_other_approver,
-    consumedByStaffId: row.consumed_by_staff_id,
-    consumedAt,
-  });
-}
 
 function assertScope(
   action: Pick<PendingAction, "orgId" | "storeId">,
@@ -171,14 +41,46 @@ async function selectAction(
   nonce: string,
   forUpdate: boolean,
 ): Promise<PendingAction | null> {
-  const result = await client.query<PendingActionRow>(
-    `SELECT ${SELECT_COLUMNS}
+  const result = await client.query<PendingActionWithClockRow>(
+    `SELECT ${SELECT_COLUMNS},
+            floor(extract(epoch FROM statement_timestamp()))::bigint AS database_now_epoch
      FROM ai_pending_actions
      WHERE nonce = $1::uuid AND org_id = $2::uuid AND store_id = $3::uuid
      ${forUpdate ? "FOR UPDATE" : ""}`,
     [nonce, tenant.orgId, tenant.storeId],
   );
-  return result.rows[0] === undefined ? null : actionFromRow(result.rows[0]);
+  const row = result.rows[0];
+  if (row === undefined) return null;
+  const action = actionFromRow(row);
+  return action.status === "pending" &&
+    pendingEpoch(row.database_now_epoch, "database_now_epoch") >= action.expiresAt
+    ? freezePendingAction({ ...action, status: "expired" })
+    : action;
+}
+
+async function selectActionByIdempotency(
+  client: SqlClient,
+  tenant: TenantContext,
+  command: string,
+  idempotencyKey: string,
+): Promise<PendingAction | null> {
+  const result = await client.query<PendingActionWithClockRow>(
+    `SELECT ${SELECT_COLUMNS},
+            floor(extract(epoch FROM statement_timestamp()))::bigint AS database_now_epoch
+       FROM ai_pending_actions
+      WHERE org_id = $1::uuid AND store_id = $2::uuid
+        AND command = $3 AND idempotency_key = $4::uuid
+      ORDER BY created_at_epoch, nonce
+      LIMIT 1`,
+    [tenant.orgId, tenant.storeId, command, idempotencyKey],
+  );
+  const row = result.rows[0];
+  if (row === undefined) return null;
+  const action = actionFromRow(row);
+  return action.status === "pending" &&
+    pendingEpoch(row.database_now_epoch, "database_now_epoch") >= action.expiresAt
+    ? freezePendingAction({ ...action, status: "expired" })
+    : action;
 }
 
 function requireTransaction(
@@ -197,12 +99,12 @@ async function insertAction(client: SqlClient, action: PendingAction): Promise<v
        authority_json, authority_present, args_hash, entity_versions_json,
        creator_staff_id, idempotency_key, created_at_epoch, expires_at_epoch,
        status, effective_risk, policy_outcome, requires_other_approver,
-       consumed_by_staff_id, consumed_at_epoch
+       consumed_by_staff_id, consumed_at_epoch, privacy_subject_customer_id
      ) VALUES (
        $1::uuid, $2::uuid, $3::uuid, $4, $5, $6::jsonb,
        $7::jsonb, $8, $9, $10::jsonb,
        $11::uuid, $12::uuid, $13::bigint, $14::bigint,
-       'pending', $15, $16, $17, NULL, NULL
+       'pending', $15, $16, $17, NULL, NULL, $18::uuid
      )`,
     [
       action.nonce,
@@ -222,6 +124,7 @@ async function insertAction(client: SqlClient, action: PendingAction): Promise<v
       action.effectiveRisk,
       action.policyOutcome,
       action.requiresOtherApprover,
+      action.privacySubjectCustomerId,
     ],
   );
   if (inserted.rowCount !== 1) throw new Error("Unable to persist pending action");
@@ -231,9 +134,9 @@ async function pruneInvalidActions(
   client: SqlClient,
   tenant: TenantContext,
   nowEpochSeconds: number,
-): Promise<void> {
+): Promise<number> {
   const retentionCutoff = nowEpochSeconds - PENDING_ACTION_RETENTION_SECONDS;
-  await client.query(
+  const deleted = await client.query(
     `WITH candidates AS (
        SELECT pending.nonce
        FROM ai_pending_actions AS pending
@@ -266,11 +169,22 @@ async function pruneInvalidActions(
      WHERE pending.nonce = candidates.nonce`,
     [tenant.orgId, tenant.storeId, retentionCutoff, PENDING_ACTION_CLEANUP_BATCH_SIZE],
   );
+  return deleted.rowCount ?? 0;
 }
 
 /** Create a durable store whose writes must join the bus transaction explicitly. */
 export function createPgPendingActionStore(pool: PgPool): PendingActionStore {
   return Object.freeze({
+    lockPrivacy: async (transaction) => {
+      await lockPendingAuthorities(transaction.client, transaction.tenant);
+    },
+
+    measureRiskReservation: async (request, context) => {
+      const transaction = requireTransaction(context);
+      await lockPendingAuthorities(transaction.client, transaction.tenant);
+      return measureNotificationRisk(request, transaction);
+    },
+
     create: async (input, context) => {
       const transaction = requireTransaction(context);
       const action = createPendingActionSnapshot(input);
@@ -278,9 +192,22 @@ export function createPgPendingActionStore(pool: PgPool): PendingActionStore {
       if (action.creatorStaffId !== transaction.tenant.staffId) {
         throw new Error("Pending action creator does not match authenticated actor");
       }
+      await lockPendingAuthorities(transaction.client, transaction.tenant);
       await insertAction(transaction.client, action);
       await pruneInvalidActions(transaction.client, transaction.tenant, action.createdAt);
       return action;
+    },
+
+    findByIdempotency: async (command, idempotencyKey, context) => {
+      if (context === undefined) {
+        throw new Error("PostgreSQL pending action read requires an authenticated tenant");
+      }
+      if ("client" in context) {
+        return selectActionByIdempotency(context.client, context.tenant, command, idempotencyKey);
+      }
+      return withStoreGucOrCurrent(pool, context.tenant, (client) =>
+        selectActionByIdempotency(client, context.tenant, command, idempotencyKey),
+      );
     },
 
     get: async (nonce, context) => {
@@ -297,22 +224,20 @@ export function createPgPendingActionStore(pool: PgPool): PendingActionStore {
 
     atomicConsume: async (nonce, approverStaffId, options = {}) => {
       const transaction = requireTransaction(options.transaction);
+      await lockPendingAuthorities(transaction.client, transaction.tenant);
       const current = await selectAction(transaction.client, transaction.tenant, nonce, true);
       if (current === null) return Object.freeze({ ok: false, reason: "NOT_FOUND" });
-      const now = options.nowEpochSeconds ?? Math.floor(Date.now() / 1000);
       if (current.status === "consumed") {
         return Object.freeze({ ok: false, reason: "ALREADY_CONSUMED" });
       }
       if (current.status === "denied") return Object.freeze({ ok: false, reason: "DENIED" });
-      if (current.status === "expired" || now >= current.expiresAt) {
-        if (current.status === "pending") {
-          await transaction.client.query(
-            `UPDATE ai_pending_actions SET status = 'expired'
-             WHERE nonce = $1::uuid AND org_id = $2::uuid AND store_id = $3::uuid
-               AND status = 'pending'`,
-            [nonce, transaction.tenant.orgId, transaction.tenant.storeId],
-          );
-        }
+      if (current.status === "expired") {
+        await transaction.client.query(
+          `UPDATE ai_pending_actions SET status = 'expired'
+           WHERE nonce = $1::uuid AND org_id = $2::uuid AND store_id = $3::uuid
+             AND status = 'pending'`,
+          [nonce, transaction.tenant.orgId, transaction.tenant.storeId],
+        );
         return Object.freeze({ ok: false, reason: "EXPIRED" });
       }
       if (current.requiresOtherApprover && approverStaffId === current.creatorStaffId) {
@@ -324,16 +249,18 @@ export function createPgPendingActionStore(pool: PgPool): PendingActionStore {
 
       const consumed = await transaction.client.query<PendingActionRow>(
         `UPDATE ai_pending_actions
-         SET status = 'consumed', consumed_by_staff_id = $4::uuid, consumed_at_epoch = $5::bigint
+         SET status = 'consumed', consumed_by_staff_id = $4::uuid,
+             consumed_at_epoch = floor(extract(epoch FROM statement_timestamp()))::bigint
          WHERE nonce = $1::uuid AND org_id = $2::uuid AND store_id = $3::uuid
-           AND status = 'pending' AND args_hash = $6
+           AND status = 'pending'
+           AND expires_at_epoch > floor(extract(epoch FROM statement_timestamp()))::bigint
+           AND args_hash = $5
          RETURNING ${SELECT_COLUMNS}`,
         [
           nonce,
           transaction.tenant.orgId,
           transaction.tenant.storeId,
           approverStaffId,
-          now,
           current.argsHash,
         ],
       );
@@ -341,6 +268,19 @@ export function createPgPendingActionStore(pool: PgPool): PendingActionStore {
       return row === undefined
         ? Object.freeze({ ok: false, reason: "ALREADY_CONSUMED" })
         : Object.freeze({ ok: true, action: actionFromRow(row) });
+    },
+
+    pruneExpired: async (nowEpochSeconds, context) =>
+      withStoreGucOrCurrent(pool, context.tenant, (client) =>
+        pruneInvalidActions(client, context.tenant, nowEpochSeconds),
+      ),
+
+    pruneExpiredGlobally: async () => {
+      const result = await pool.query<Readonly<{ deleted_count: string | number }>>(
+        "SELECT public.prune_expired_pending_actions_global($1)::text AS deleted_count",
+        [PENDING_ACTION_CLEANUP_BATCH_SIZE],
+      );
+      return Number(result.rows[0]?.deleted_count ?? 0);
     },
   });
 }

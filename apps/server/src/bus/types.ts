@@ -8,7 +8,7 @@ import type {
   CommandError,
 } from "@laundry/contracts";
 import type { z } from "zod";
-import type { CanonicalJson } from "../pending-actions/types.js";
+import type { CanonicalJson, PendingAction } from "../pending-actions/types.js";
 import type { SqlClient, TenantContext, Uuid } from "../db/types.js";
 
 /** M1 bus registers classic ZodObject command definitions only. */
@@ -75,6 +75,8 @@ export type HandlerOutcome = Readonly<{
   result: unknown;
   audit?: AuditWriteInput;
   events?: readonly DomainEvent[];
+  /** Opaque ownership link used only for bounded privacy-copy purge. */
+  privacySubjectCustomerId?: string;
 }>;
 
 export type HandlerContext = Readonly<{
@@ -158,6 +160,13 @@ export type TransactionalIdempotencyStore = Readonly<{
     key: string,
     requestHash: string,
     result: CommandResult,
+    privacySubjectCustomerId?: string,
+  ) => Promise<void>;
+  abort?: (
+    tenant: TenantContext,
+    command: string,
+    key: string,
+    requestHash: string,
   ) => Promise<void>;
 }>;
 
@@ -172,6 +181,9 @@ export type ConfirmAuthorization = Readonly<{
   confirmRef: string;
   /** SHA-256 hex of frozen args plus optional authority (WYSIWYS re-check at consume). */
   argsHash: string;
+  effectiveRisk: PendingAction["effectiveRisk"];
+  policyOutcome: PendingAction["policyOutcome"];
+  requiresOtherApprover: boolean;
   authority?: CanonicalJson;
 }>;
 
@@ -206,8 +218,16 @@ export type CommandTransactionGuard = Readonly<{
     context: BusContext,
     state: unknown,
     result: CommandResult,
+    privacySubjectCustomerId?: string,
   ) => Promise<void>;
 }>;
+
+/** Revalidates the other approver inside the command transaction before proof consumption. */
+export type StepUpApproverAuthority = (
+  client: SqlClient,
+  tenant: TenantContext,
+  approverStaffId: Uuid,
+) => Promise<boolean>;
 
 export type ChainError = CommandError;
 

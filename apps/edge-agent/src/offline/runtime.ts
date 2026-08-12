@@ -48,6 +48,7 @@ const RETRYABLE_REPLAY_CODES = new Set([
   "RESOURCE_UNAVAILABLE",
   "TRANSACTION_FAILED",
 ]);
+const TERMINAL_ACK_REPLAY_CODES = new Set(["CUSTOMER_ERASED"]);
 const MAX_REPLAY_BATCH = 20;
 
 const commandVersions = new Map(
@@ -337,6 +338,11 @@ export class OfflineCommandRuntime {
       if (item === null || this.conflicts.has(item.id)) return;
       const result = await this.transport.edge.replay(item.envelope);
       if (result.ok) {
+        this.queue.ack(item.id);
+        this.conflicts.remove(item.id);
+        continue;
+      }
+      if (TERMINAL_ACK_REPLAY_CODES.has(result.error.code)) {
         this.queue.ack(item.id);
         this.conflicts.remove(item.id);
         continue;

@@ -6,6 +6,12 @@ import {
 
 export type PickupReminderStatus = "ready" | "racked";
 
+export type PickupReminderFilterState = Readonly<{
+  minAgeDays: 30 | 90 | 180;
+  unpaidOnly: boolean;
+  statuses: readonly PickupReminderStatus[];
+}>;
+
 export type PickupReminderView = Readonly<{
   order_id: string;
   ticket_no: string;

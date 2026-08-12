@@ -10,20 +10,32 @@
 
 import { randomUUID } from "node:crypto";
 
-import {
-  createCommandError,
-  type CommandError,
-  type MemberTopupConfirmationSummary,
-} from "@laundry/contracts";
-import type { StepResult } from "@laundry/domain";
+import { createCommandError, type CommandError } from "@laundry/contracts";
+import { measureInput, type SizeMeasures, type StepResult, type Thresholds } from "@laundry/domain";
 
 import type { BusChainPorts, ChainPortHooks } from "../bus/chain-adapter.js";
 import type { BusContext } from "../bus/types.js";
 import { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";
 import { evaluatePolicy } from "../policy/evaluate-policy.js";
-import type { PolicyActor, PolicyCommandMeta, PolicyDecision } from "../policy/types.js";
+import type {
+  PolicyActor,
+  PolicyCommandMeta,
+  PolicyDecision,
+  PolicyRiskInput,
+} from "../policy/types.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
+import { freezeCanonical } from "../pending-actions/canonical.js";
+import { customerPrivacySubjectFromCommand } from "../pending-actions/privacy-subject.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
+import {
+  bindRiskReservation,
+  existingNotificationSummary,
+  measurePendingRisk,
+  pendingResponse,
+  sameRiskRequest,
+  type PendingActionPreparer,
+  type PendingRiskPreparer,
+} from "./pending-policy.js";
 
 const okVoid = (): StepResult<void, CommandError> => ({ ok: true, data: undefined });
 
@@ -39,17 +51,12 @@ const okPolicy = (): StepResult<Readonly<{ allowed: true }>, CommandError> => ({
 
 export { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";
 
-export type PendingActionPreparation = Readonly<{
-  /** Trusted server-derived snapshot, hash-bound to the pending card. */
-  authority: unknown;
-  /** Public money-only confirmation summary derived from the same snapshot. */
-  summary: MemberTopupConfirmationSummary;
-}>;
-
-export type PendingActionPreparer = (
-  parsed: unknown,
-  context: BusContext,
-) => Promise<PendingActionPreparation | null>;
+export {
+  combinePendingActionPreparers,
+  type PendingActionPreparation,
+  type PendingActionPreparer,
+  type PendingRiskPreparer,
+} from "./pending-policy.js";
 
 export const defaultCheckRbac: BusChainPorts["checkRbac"] = async (_parsed, context) => {
   const bus = context.meta as BusContext;
@@ -87,6 +94,116 @@ function commandMetaFrom(bus: BusContext): PolicyCommandMeta {
   });
 }
 
+function normalizedThresholds(
+  value: BusContext["definition"]["hard_limits"],
+): Thresholds | undefined {
+  if (value === undefined) return undefined;
+  const maxBatch = value.max_batch;
+  const maxAmountCents = value.max_amount_cents;
+  if (maxBatch === undefined && maxAmountCents === undefined) return undefined;
+  return Object.freeze({
+    ...(maxBatch === undefined ? {} : { max_batch: maxBatch }),
+    ...(maxAmountCents === undefined ? {} : { max_amount_cents: maxAmountCents }),
+  });
+}
+
+function normalizedSizeMeasures(value: NonNullable<BusContext["definition"]["size_measures"]>) {
+  const result: SizeMeasures = Object.freeze({
+    ...(value.batch === undefined ? {} : { batch: value.batch }),
+    ...(value.amount === undefined ? {} : { amount: value.amount }),
+  });
+  return result;
+}
+
+function policyRiskInputFrom(bus: BusContext, parsed: unknown): PolicyRiskInput | null | undefined {
+  const sizeMeasures = bus.definition.size_measures;
+  if (sizeMeasures === undefined) {
+    return bus.definition.hard_limits === undefined && bus.definition.risk_escalation === undefined
+      ? undefined
+      : null;
+  }
+  const measured = measureInput(parsed, normalizedSizeMeasures(sizeMeasures));
+  if (!measured.ok) return null;
+  const hardLimits = normalizedThresholds(bus.definition.hard_limits);
+  const riskEscalation = normalizedThresholds(bus.definition.risk_escalation);
+  if (
+    (bus.definition.hard_limits !== undefined && hardLimits === undefined) ||
+    (bus.definition.risk_escalation !== undefined && riskEscalation === undefined)
+  ) {
+    return null;
+  }
+  const hasFactoryLimits = hardLimits !== undefined || riskEscalation !== undefined;
+  return Object.freeze({
+    measures: measured.measures,
+    ...(hasFactoryLimits
+      ? {
+          factoryLimits: Object.freeze({
+            ...(hardLimits === undefined ? {} : { hard_limits: hardLimits }),
+            ...(riskEscalation === undefined ? {} : { risk_escalation: riskEscalation }),
+          }),
+        }
+      : {}),
+  });
+}
+
+function frozenMinimumRisk(authority: unknown): "R4" | undefined {
+  if (typeof authority !== "object" || authority === null || Array.isArray(authority)) {
+    return undefined;
+  }
+  const risk = (authority as Readonly<Record<string, unknown>>).risk_reservation;
+  if (typeof risk !== "object" || risk === null || Array.isArray(risk)) return undefined;
+  const record = risk as Readonly<Record<string, unknown>>;
+  return record.kind === "notification_delivery_rolling_24h" &&
+    record.threshold === 10 &&
+    typeof record.aggregate_units === "number" &&
+    record.aggregate_units > 10
+    ? "R4"
+    : undefined;
+}
+
+function enforceMinimumRisk(decision: PolicyDecision, authority: unknown): PolicyDecision {
+  if (decision.outcome === "deny" || frozenMinimumRisk(authority) !== "R4") return decision;
+  if (decision.effectiveRisk === "R4" || decision.effectiveRisk === "R5") return decision;
+  return Object.freeze({
+    outcome: "step_up" as const,
+    effectiveRisk: "R4" as const,
+    escalated: true,
+    requiresOtherApprover: true as const,
+  });
+}
+
+function policyDecisionFrom(
+  bus: BusContext,
+  parsed: unknown,
+  authority: unknown = bus.confirmAuthorization?.authority,
+): PolicyDecision | null {
+  const riskInput = policyRiskInputFrom(bus, parsed);
+  if (riskInput === null) return null;
+  return enforceMinimumRisk(
+    evaluatePolicy({
+      actor: policyActorFrom(bus),
+      command: commandMetaFrom(bus),
+      ...(riskInput === undefined ? {} : { riskInput }),
+    }),
+    authority,
+  );
+}
+
+function confirmationMatchesCurrentPolicy(bus: BusContext, decision: PolicyDecision): boolean {
+  const authorization = bus.confirmAuthorization;
+  if (
+    authorization === undefined ||
+    (decision.outcome !== "confirm" && decision.outcome !== "step_up")
+  ) {
+    return false;
+  }
+  return (
+    authorization.effectiveRisk === decision.effectiveRisk &&
+    authorization.policyOutcome === decision.outcome &&
+    authorization.requiresOtherApprover === decision.requiresOtherApprover
+  );
+}
+
 /**
  * Enforce C5 risk gates:
  * - allow → continue
@@ -97,16 +214,21 @@ function commandMetaFrom(bus: BusContext): PolicyCommandMeta {
 export function createEnforcingPolicyCheck(
   pendingStore: PendingActionStore = processPendingActionStore,
   preparePendingAction?: PendingActionPreparer,
+  preparePendingRisk?: PendingRiskPreparer,
 ): BusChainPorts["checkPolicy"] {
   return async (parsed, context) => {
     const bus = context.meta as BusContext;
+    let decision = policyDecisionFrom(bus, parsed);
+
+    if (decision === null) {
+      return {
+        ok: false,
+        error: createCommandError("POLICY_DENIED"),
+      };
+    }
 
     if (bus.idempotentReplay === true) {
-      const replayDecision = evaluatePolicy({
-        actor: policyActorFrom(bus),
-        command: commandMetaFrom(bus),
-      });
-      return replayDecision.outcome === "deny"
+      return decision.outcome === "deny"
         ? {
             ok: false,
             error: createCommandError("POLICY_DENIED"),
@@ -116,13 +238,13 @@ export function createEnforcingPolicyCheck(
 
     // Confirm path: executeCommand pre-validated the card and rewrote input to frozen args.
     if (bus.confirmAuthorized === true) {
-      return okPolicy();
+      return confirmationMatchesCurrentPolicy(bus, decision)
+        ? okPolicy()
+        : {
+            ok: false,
+            error: createCommandError("POLICY_DENIED"),
+          };
     }
-
-    const decision: PolicyDecision = evaluatePolicy({
-      actor: policyActorFrom(bus),
-      command: commandMetaFrom(bus),
-    });
 
     if (decision.outcome === "deny") {
       return {
@@ -136,13 +258,77 @@ export function createEnforcingPolicyCheck(
     }
 
     // confirm | step_up — create WYSIWYS card and refuse direct execution.
-    const preparation =
-      preparePendingAction === undefined ? null : await preparePendingAction(parsed, bus);
-    const nonce = randomUUID();
-    const now = Math.floor(Date.now() / 1000);
     if (bus.transactionClient === undefined) {
       throw new Error("Pending action creation requires the command transaction");
     }
+    const transaction = Object.freeze({ tenant: bus.tenant, client: bus.transactionClient });
+    await pendingStore.lockPrivacy(transaction);
+    const idempotencyKey = bus.request.idempotencyKey;
+    if (
+      idempotencyKey !== undefined &&
+      bus.definition.name === "notification.delivery_batch.enqueue"
+    ) {
+      const existing = await pendingStore.findByIdempotency(
+        bus.definition.name,
+        idempotencyKey,
+        transaction,
+      );
+      if (existing !== null) {
+        const argsMatch = JSON.stringify(existing.args) === JSON.stringify(freezeCanonical(parsed));
+        if (
+          !argsMatch ||
+          existing.commandVersion !== bus.definition.version ||
+          existing.creatorStaffId !== bus.actor.staffId ||
+          (existing.status !== "pending" && existing.status !== "consumed")
+        ) {
+          return { ok: false, error: createCommandError("POLICY_DENIED") };
+        }
+        const summary = existingNotificationSummary(existing);
+        if (summary === undefined) return { ok: false, error: createCommandError("POLICY_DENIED") };
+        return pendingResponse(existing, summary);
+      }
+    }
+    const earlyRiskRequest = preparePendingRisk?.(parsed, bus) ?? null;
+    const earlyRiskReservation =
+      earlyRiskRequest === null
+        ? undefined
+        : await measurePendingRisk(pendingStore, earlyRiskRequest, transaction);
+    if (earlyRiskReservation === null) {
+      return { ok: false, error: createCommandError("POLICY_DENIED") };
+    }
+    let preparation =
+      preparePendingAction === undefined ? null : await preparePendingAction(parsed, bus);
+    if (preparation?.riskReservation !== undefined) {
+      let reservation;
+      if (earlyRiskRequest !== null) {
+        if (!sameRiskRequest(earlyRiskRequest, preparation.riskReservation)) {
+          return { ok: false, error: createCommandError("POLICY_DENIED") };
+        }
+        reservation = earlyRiskReservation;
+      } else {
+        reservation = await measurePendingRisk(
+          pendingStore,
+          preparation.riskReservation,
+          transaction,
+        );
+        if (reservation === null) {
+          return { ok: false, error: createCommandError("POLICY_DENIED") };
+        }
+      }
+      if (reservation === undefined) throw new Error("Pending risk reservation is missing");
+      preparation = bindRiskReservation(preparation, reservation);
+      decision = policyDecisionFrom(bus, parsed, preparation.authority);
+      if (decision === null || decision.outcome === "deny" || decision.outcome === "allow") {
+        return {
+          ok: false,
+          error: createCommandError("POLICY_DENIED"),
+        };
+      }
+    } else if (earlyRiskRequest !== null) {
+      return { ok: false, error: createCommandError("POLICY_DENIED") };
+    }
+    const nonce = randomUUID();
+    const now = preparation?.createdAtEpoch ?? Math.floor(Date.now() / 1000);
     await pendingStore.create(
       {
         nonce,
@@ -154,13 +340,14 @@ export function createEnforcingPolicyCheck(
         creatorStaffId: bus.actor.staffId,
         orgId: bus.tenant.orgId,
         storeId: bus.tenant.storeId,
-        idempotencyKey: bus.request.idempotencyKey ?? nonce,
+        idempotencyKey: idempotencyKey ?? nonce,
+        privacySubjectCustomerId: customerPrivacySubjectFromCommand(bus.definition.name, parsed),
         createdAt: now,
         effectiveRisk: decision.effectiveRisk,
         policyOutcome: decision.outcome,
         requiresOtherApprover: decision.requiresOtherApprover,
       },
-      Object.freeze({ tenant: bus.tenant, client: bus.transactionClient }),
+      transaction,
     );
 
     const code =
@@ -173,7 +360,7 @@ export function createEnforcingPolicyCheck(
       error: createCommandError(code, {
         kind: "confirmation",
         confirm_ref: nonce,
-        ...(preparation === null ? {} : { summary: preparation.summary }),
+        ...(preparation?.summary === undefined ? {} : { summary: preparation.summary }),
       }),
     };
   };
@@ -187,12 +374,14 @@ export function createDefaultChainHooks(
   overrides: ChainPortHooks = {},
   pendingStore: PendingActionStore = processPendingActionStore,
   preparePendingAction?: PendingActionPreparer,
+  preparePendingRisk?: PendingRiskPreparer,
 ): ChainPortHooks {
   return Object.freeze({
     checkRbac: overrides.checkRbac ?? defaultCheckRbac,
     checkTenant: overrides.checkTenant ?? defaultCheckTenant,
     checkPolicy:
-      overrides.checkPolicy ?? createEnforcingPolicyCheck(pendingStore, preparePendingAction),
+      overrides.checkPolicy ??
+      createEnforcingPolicyCheck(pendingStore, preparePendingAction, preparePendingRisk),
     checkInvariants: overrides.checkInvariants ?? defaultCheckInvariants,
   });
 }

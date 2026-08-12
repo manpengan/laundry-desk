@@ -175,7 +175,7 @@ test("customer export is audited before irreversible anonymization", async ({ pa
     "活动订单 0",
     { timeout: 15_000 },
   );
-  await privacy.locator('[data-testid="customer-privacy-reason"]').fill("E2E 客户数据请求");
+  await privacy.locator('[data-testid="customer-privacy-reason"]').selectOption("customer_request");
   await privacy.locator('[data-testid="customer-privacy-export"]').click();
   await expect(page.getByRole("dialog", { name: "需要现场复核" })).toBeVisible({
     timeout: 15_000,
@@ -202,7 +202,7 @@ test("customer export is audited before irreversible anonymization", async ({ pa
     timeout: 15_000,
   });
 
-  await privacy.locator('[data-testid="customer-privacy-reason"]').fill("E2E 客户确认匿名化");
+  await privacy.locator('[data-testid="customer-privacy-reason"]').selectOption("customer_request");
   await privacy.locator('[data-testid="customer-privacy-confirmation"]').fill("ANONYMIZE");
   await privacy.locator('[data-testid="customer-privacy-anonymize"]').click();
   await expect(page.getByRole("dialog", { name: "需要现场复核" })).toBeVisible({

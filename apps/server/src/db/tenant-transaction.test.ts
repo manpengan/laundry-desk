@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { FakeSqlClient } from "./fake-client.js";
+import { MemoryPendingActionStore } from "../pending-actions/store.js";
+import { MemoryStepUpProofStore } from "../policy/step-up-proof-store.js";
+import type { StepUpProof } from "../policy/step-up.js";
 import { getActiveTenantTransaction } from "./active-tenant-transaction.js";
 import { TENANT_GUC_KEYS, TenantGucError } from "./guc.js";
 import type { PgPool } from "./pg-pool.js";
@@ -120,6 +123,62 @@ test("withTenantTransaction rolls back when COMMIT fails after fn", async () => 
     /forced failure on: COMMIT/,
   );
   assert.equal(client.sqlSequence().includes("ROLLBACK"), true);
+});
+
+test("memory pending and step-up CAS changes roll back when COMMIT fails", async () => {
+  const pending = new MemoryPendingActionStore();
+  const action = pending.create({
+    nonce: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    command: "garment.mark_lost",
+    commandVersion: "0.1.0",
+    args: Object.freeze({ garment_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" }),
+    entityVersions: Object.freeze([]),
+    creatorStaffId: VALID_CTX.staffId,
+    orgId: VALID_CTX.orgId,
+    storeId: VALID_CTX.storeId,
+    idempotencyKey: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+    createdAt: 1_700_000_000,
+    effectiveRisk: "R4",
+    policyOutcome: "step_up",
+    requiresOtherApprover: true,
+  });
+  const proof: StepUpProof = Object.freeze({
+    proofId: "11111111-1111-4111-8111-111111111111",
+    status: "active",
+    pendingActionRef: action.nonce,
+    argsHash: action.argsHash,
+    entityVersions: action.entityVersions,
+    idempotencyKey: action.idempotencyKey,
+    requesterStaffId: action.creatorStaffId,
+    approverStaffId: "22222222-2222-4222-8222-222222222222",
+    orgId: action.orgId,
+    storeId: action.storeId,
+    sessionId: "33333333-3333-4333-8333-333333333333",
+    sessionVersion: 1,
+    issuedAt: action.createdAt,
+    expiresAt: action.expiresAt,
+  });
+  const proofs = new MemoryStepUpProofStore();
+  proofs.insert(proof);
+  const client = new FakeSqlClient();
+  client.failOn("COMMIT");
+
+  await assert.rejects(
+    () =>
+      withTenantTransaction(client, VALID_CTX, async () => {
+        assert.equal(
+          pending.atomicConsume(action.nonce, proof.approverStaffId, {
+            nowEpochSeconds: action.createdAt + 1,
+          }).ok,
+          true,
+        );
+        assert.equal(proofs.atomicConsume(proof.proofId, action.createdAt + 1), true);
+      }),
+    /forced failure on: COMMIT/u,
+  );
+
+  assert.equal(pending.get(action.nonce)?.status, "pending");
+  assert.equal(proofs.get(proof.proofId)?.status, "active");
 });
 
 test("invalid tenant context is rejected before BEGIN", async () => {

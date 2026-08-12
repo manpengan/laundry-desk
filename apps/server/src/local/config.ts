@@ -131,6 +131,7 @@ export type LocalSigningSecrets = Readonly<{
 }>;
 
 export type LocalServerConfig = Readonly<LocalHostConfig & LocalSigningSecrets>;
+export type NotificationProviderMode = "disabled" | "software_only";
 
 function configError(error: z.ZodError): Error {
   const details = error.issues
@@ -183,6 +184,15 @@ export function parseLocalServerConfig(env: NodeJS.ProcessEnv): LocalServerConfi
     ...parseLocalHostConfig(env),
     ...parseLocalSigningSecrets(env),
   });
+}
+
+export function parseNotificationProviderMode(env: NodeJS.ProcessEnv): NotificationProviderMode {
+  const raw = env.LAUNDRY_NOTIFICATION_PROVIDER_MODE;
+  if (raw === undefined || raw === "" || raw === "disabled") return "disabled";
+  if (raw === "software_only") return "software_only";
+  throw new Error(
+    "Invalid local server configuration: LAUNDRY_NOTIFICATION_PROVIDER_MODE must be disabled or software_only",
+  );
 }
 
 /**

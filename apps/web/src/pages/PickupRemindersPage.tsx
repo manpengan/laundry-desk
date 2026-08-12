@@ -1,10 +1,14 @@
 import { DEFAULT_PICKUP_REMINDER_TEMPLATE, isPickupReminderTemplate } from "@laundry/domain";
-import { Button, Dialog, MoneyText, useToast } from "@laundry/ui";
+import { Button, MoneyText, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import type { AuthClient } from "../auth/AuthClient.js";
+import type { SessionView } from "../auth/types.js";
 import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { unwrapQueryResult } from "./customer-model.js";
+import { ManualNotificationConfirmDialog } from "./ManualNotificationConfirmDialog.js";
+import { NotificationDeliveryPanel } from "./NotificationDeliveryPanel.js";
 import {
   copyManualListPhones,
   downloadManualList,
@@ -14,15 +18,10 @@ import {
   parseManualListResult,
   parsePickupReminderList,
   previewPickupReminderMessages,
+  type PickupReminderFilterState,
   type PickupReminderStatus,
   type PickupReminderView,
 } from "./pickup-reminder-model.js";
-
-type FilterState = Readonly<{
-  minAgeDays: 30 | 90 | 180;
-  unpaidOnly: boolean;
-  statuses: readonly PickupReminderStatus[];
-}>;
 
 type ManualBody = Readonly<{
   order_ids: readonly string[];
@@ -36,16 +35,18 @@ type ManualBody = Readonly<{
 
 type Pending = Readonly<{
   confirmRef: string;
-  body: ManualBody;
+  orderCount: number;
   messages: readonly string[];
 }>;
 
 export type PickupRemindersPageProps = Readonly<{
   commandClient: CommandPort;
   queryClient: QueryPort;
+  session?: SessionView;
+  authClient?: AuthClient;
 }>;
 
-const INITIAL_FILTERS: FilterState = Object.freeze({
+const INITIAL_FILTERS: PickupReminderFilterState = Object.freeze({
   minAgeDays: 90,
   unpaidOnly: false,
   statuses: Object.freeze(["ready", "racked"] as const),
@@ -63,9 +64,14 @@ export function resumeManualNotification(commandClient: CommandPort, confirmRef:
   return commandClient.execute("notification.manual_list.create", {}, { confirmRef });
 }
 
-export function PickupRemindersPage({ commandClient, queryClient }: PickupRemindersPageProps) {
+export function PickupRemindersPage({
+  commandClient,
+  queryClient,
+  session,
+  authClient,
+}: PickupRemindersPageProps) {
   const toast = useToast();
-  const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
+  const [filters, setFilters] = useState<PickupReminderFilterState>(INITIAL_FILTERS);
   const [rows, setRows] = useState<readonly PickupReminderView[]>([]);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [groupBy, setGroupBy] = useState<"order" | "customer">("order");
@@ -180,7 +186,7 @@ export function PickupRemindersPage({ commandClient, queryClient }: PickupRemind
         setPending(
           Object.freeze({
             confirmRef: result.error.detail.confirm_ref,
-            body,
+            orderCount: body.order_ids.length,
             messages: Object.freeze(preview.map((row) => row.message)),
           }),
         );
@@ -208,12 +214,31 @@ export function PickupRemindersPage({ commandClient, queryClient }: PickupRemind
     }
   }, [commandClient, finish, pending, toast]);
 
+  const selectedOrderIds = useMemo(() => Object.freeze([...selected]), [selected]);
+  const restoreManualFallback = useCallback(
+    (orderIds: readonly string[]) => {
+      const visible = orderIds.filter((id) => rows.some((row) => row.order_id === id));
+      setSelected(new Set(visible));
+      if (visible.length === 0) {
+        toast.push("这些订单不在当前筛选中；请调整超期、欠款或衣物状态后重试", "error");
+        return;
+      }
+      toast.push(
+        visible.length === orderIds.length
+          ? `已将 ${visible.length} 单带回人工名单`
+          : `已带回 ${visible.length} 单；其余订单不在当前筛选中`,
+        "success",
+      );
+    },
+    [rows, toast],
+  );
+
   return (
     <main className="ld-shell-main lg-card ld-reminders" id="main-content" tabIndex={-1}>
       <header className="ld-reminders__header">
         <div>
           <h1 className="ld-shell-main__title">催取工作台</h1>
-          <p className="ld-shell-main__hint">短信、微信未接入；这里只生成供人工联系的名单。</p>
+          <p className="ld-shell-main__hint">人工名单只生成联系材料，不会自行发送短信或微信。</p>
         </div>
         <Button type="button" onClick={() => void load()} disabled={busy}>
           刷新候选
@@ -313,6 +338,18 @@ export function PickupRemindersPage({ commandClient, queryClient }: PickupRemind
         </table>
       </div>
 
+      {session === undefined ? null : (
+        <NotificationDeliveryPanel
+          commandClient={commandClient}
+          queryClient={queryClient}
+          session={session}
+          {...(authClient === undefined ? {} : { authClient })}
+          filters={filters}
+          selectedOrderIds={selectedOrderIds}
+          onManualFallback={restoreManualFallback}
+        />
+      )}
+
       <section className="ld-reminders__composer" aria-label="人工名单设置">
         <label>
           分组方式
@@ -346,35 +383,16 @@ export function PickupRemindersPage({ commandClient, queryClient }: PickupRemind
         </Button>
       </section>
 
-      <Dialog
-        open={pending !== null}
-        title="确认生成催取名单"
-        onClose={() => setPending(null)}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setPending(null)} disabled={busy}>
-              取消
-            </Button>
-            <Button variant="primary" onClick={() => void confirm()} disabled={busy}>
-              确认生成名单
-            </Button>
-          </>
+      <ManualNotificationConfirmDialog
+        confirmation={
+          pending === null
+            ? null
+            : Object.freeze({ orderCount: pending.orderCount, messages: pending.messages })
         }
-      >
-        {pending === null ? null : (
-          <>
-            <p>
-              将为 {pending.body.order_ids.length} 个订单生成 {pending.messages.length}{" "}
-              条人工联系记录。此操作不会发送短信或微信。
-            </p>
-            <ol>
-              {pending.messages.map((message, index) => (
-                <li key={`${index}-${message}`}>{message}</li>
-              ))}
-            </ol>
-          </>
-        )}
-      </Dialog>
+        busy={busy}
+        onClose={() => setPending(null)}
+        onConfirm={() => void confirm()}
+      />
     </main>
   );
 }

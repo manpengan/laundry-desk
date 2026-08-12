@@ -1,6 +1,7 @@
 import type { OwnerDashboardDrilldownKind } from "@laundry/contracts";
 import type { AccountingReadPort } from "../accounting/types.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
+import type { StoreTimeZoneResolver } from "../store-management/time-zone.js";
 
 export type OwnerDashboardOperations = Readonly<{
   pickedUpGarmentCount: number;
@@ -98,6 +99,7 @@ export type ReportingHandlerDeps = Readonly<{
   accounting: AccountingReadPort;
   source: OwnerDashboardReadPort;
   timeZone: string;
+  resolveTimeZone?: StoreTimeZoneResolver;
   rolloverHour?: number;
   now?: () => Date;
 }>;

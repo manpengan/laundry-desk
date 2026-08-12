@@ -270,7 +270,9 @@ test(
       const repriced = await seedAccount(singleConnectionPool);
       customerIds.push(repriced.customerId);
       accountIds.push(repriced.accountId);
-      const amount = 1_500_000_000 + randomInt(1_000_000);
+      // Stay below the command's 50,000 yuan hard limit now that size measures
+      // are enforced by the production policy hook.
+      const amount = 1_500_000 + randomInt(1_000_000);
       const ruleId = await upsertBonusRule(singleConnectionPool, {
         ruleId: null,
         threshold: amount,
@@ -435,6 +437,9 @@ type RawPendingFixture = Readonly<{
   createdAt: number;
   expiresAt: number;
   consumedAt?: number;
+  orgId?: string;
+  storeId?: string;
+  staffId?: string;
 }>;
 
 async function insertRawPendingFixture(pool: PgPool, fixture: RawPendingFixture): Promise<void> {
@@ -454,16 +459,16 @@ async function insertRawPendingFixture(pool: PgPool, fixture: RawPendingFixture)
      )`,
     [
       fixture.nonce,
-      TENANT.orgId,
-      TENANT.storeId,
+      fixture.orgId ?? TENANT.orgId,
+      fixture.storeId ?? TENANT.storeId,
       JSON.stringify(args),
       hashCanonical(args),
-      TENANT.staffId,
+      fixture.staffId ?? TENANT.staffId,
       fixture.idempotencyKey,
       fixture.createdAt,
       fixture.expiresAt,
       fixture.status,
-      fixture.status === "consumed" ? TENANT.staffId : null,
+      fixture.status === "consumed" ? (fixture.staffId ?? TENANT.staffId) : null,
       fixture.status === "consumed" ? fixture.consumedAt : null,
     ],
   );
@@ -501,6 +506,8 @@ test(
       replayProtected: randomUUID(),
       replayExpired: randomUUID(),
       trigger: randomUUID(),
+      otherStoreExpired: randomUUID(),
+      otherOrgExpired: randomUUID(),
     });
     const fixtureRefs = Object.freeze(Object.values(fixtures));
     const idempotencyKeys = Object.freeze(fixtureRefs.map(() => randomUUID()));
@@ -573,6 +580,24 @@ test(
         expiresAt: old,
         consumedAt: old,
       });
+      await insertRawPendingFixture(adminPool, {
+        nonce: fixtures.otherStoreExpired,
+        idempotencyKey: idempotencyKeys[6]!,
+        status: "expired",
+        createdAt: 0,
+        expiresAt: 1,
+        storeId: otherStoreId,
+      });
+      await insertRawPendingFixture(adminPool, {
+        nonce: fixtures.otherOrgExpired,
+        idempotencyKey: idempotencyKeys[7]!,
+        status: "expired",
+        createdAt: 0,
+        expiresAt: 1,
+        orgId: otherOrgId,
+        storeId: otherOrgStoreId,
+        staffId: otherStaffId,
+      });
       await adminPool.query(
         `INSERT INTO command_idempotency (
            org_id, store_id, command, idempotency_key, request_hash,
@@ -643,6 +668,26 @@ test(
         ),
       );
 
+      const globalStore = createPgPendingActionStore(appPool);
+      const beforeNullBatch = await adminPool.query<Readonly<{ count: string }>>(
+        "SELECT count(*)::text AS count FROM ai_pending_actions WHERE nonce = ANY($1::uuid[])",
+        [fixtureRefs],
+      );
+      await assert.rejects(
+        () => appPool.query("SELECT public.prune_expired_pending_actions_global(NULL::integer)"),
+        (error: unknown) => {
+          assert.equal((error as Readonly<{ code?: string }>).code, "22023");
+          return true;
+        },
+      );
+      const afterNullBatch = await adminPool.query<Readonly<{ count: string }>>(
+        "SELECT count(*)::text AS count FROM ai_pending_actions WHERE nonce = ANY($1::uuid[])",
+        [fixtureRefs],
+      );
+      assert.equal(afterNullBatch.rows[0]?.count, beforeNullBatch.rows[0]?.count);
+      assert.equal(await globalStore.pruneExpiredGlobally?.(), 1);
+      assert.equal(await globalStore.pruneExpiredGlobally?.(), 1);
+
       const remaining = await adminPool.query<Readonly<{ nonce: string }>>(
         "SELECT nonce::text FROM ai_pending_actions WHERE nonce = ANY($1::uuid[])",
         [fixtureRefs],
@@ -662,6 +707,9 @@ test(
       await adminPool.query("DELETE FROM staffs WHERE id = $1::uuid", [otherStaffId]);
       await adminPool.query("DELETE FROM stores WHERE id = ANY($1::uuid[])", [
         [otherStoreId, otherOrgStoreId],
+      ]);
+      await adminPool.query("DELETE FROM customer_privacy_hmac_keys WHERE org_id = $1::uuid", [
+        otherOrgId,
       ]);
       await adminPool.query("DELETE FROM orgs WHERE id = $1::uuid", [otherOrgId]);
       await appPool.end();

@@ -190,6 +190,7 @@ async function executeRefundWithProof(
       chainHooks: bus.chainHooks,
       pendingStore: bus.pendingStore,
       stepUpProofStore: proofStore,
+      stepUpApproverAuthority: async () => true,
       idempotencyStore: bus.idempotencyStore,
       confirmRef,
       sessionBinding: SESSION_BINDING,
@@ -310,15 +311,40 @@ test("refund appends a referenced ledger row and idempotent replay cannot double
     status: "open",
   });
 
-  const replayed = await executeCommand(new FakeSqlClient(), TENANT, "payment.refund", input, {
-    registry: bus.registry,
-    actor: CLERK,
-    chainHooks: bus.chainHooks,
-    pendingStore: bus.pendingStore,
-    idempotencyStore: bus.idempotencyStore,
-    idempotencyKey,
-  });
+  const replayed = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "payment.refund",
+    {},
+    {
+      registry: bus.registry,
+      actor: CLERK,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+      idempotencyStore: bus.idempotencyStore,
+      confirmRef: detail.confirm_ref,
+    },
+  );
   assert.deepEqual(replayed, executed);
+
+  const conflictingFirstHop = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "payment.refund",
+    input,
+    {
+      registry: bus.registry,
+      actor: CLERK,
+      chainHooks: bus.chainHooks,
+      pendingStore: bus.pendingStore,
+      idempotencyStore: bus.idempotencyStore,
+      idempotencyKey,
+    },
+  );
+  assert.equal(conflictingFirstHop.ok, false);
+  if (!conflictingFirstHop.ok) {
+    assert.equal(conflictingFirstHop.error.code, "IDEMPOTENCY_CONFLICT");
+  }
   const payments = await bus.store.listPayments?.(TENANT.orgId, TENANT.storeId, orderId);
   assert.equal(payments?.length, 2);
   assert.equal(payments?.[1]?.kind, "refund");
@@ -380,6 +406,7 @@ test("refund audit persists PIN approver when initiator resumes with proof", asy
       chainHooks: bus.chainHooks,
       pendingStore: bus.pendingStore,
       stepUpProofStore: proofStore,
+      stepUpApproverAuthority: async () => true,
       confirmRef: challenge.confirmRef,
       sessionBinding: SESSION_BINDING,
     },
@@ -510,6 +537,35 @@ test("cancel records append-only reversals instead of deleting the original paym
   assert.equal(payments?.[0]?.kind, "pay");
   assert.equal(payments?.[1]?.kind, "reversal");
   assert.equal(payments?.[1]?.ref_payment_id, payments?.[0]?.payment_id);
+});
+
+test("cancel callback failure leaves the memory order and payment ledger unchanged", async () => {
+  let cancellationAttempts = 0;
+  const bus = buildBus({
+    couponCancellation: async () => {
+      cancellationAttempts += 1;
+      throw new Error("forced coupon reversal failure");
+    },
+  });
+  const received = await command(bus, "order.receive", {
+    lines: [{ service_code: "wash", category_code: "shirt", qty: 1 }],
+    initial_payment: { amount_cents: 1_500, method: "cash" },
+  });
+  assert.equal(received.ok, true, JSON.stringify(received));
+  if (!received.ok) return;
+  const orderId = (received.data.result as { order_id: string }).order_id;
+
+  const cancelled = await confirmedCommand(bus, "order.cancel", {
+    order_id: orderId,
+    reason: "force rollback",
+  });
+  assert.equal(cancelled.ok, false, JSON.stringify(cancelled));
+  if (!cancelled.ok) assert.equal(cancelled.error.code, "TRANSACTION_FAILED");
+  assert.equal(cancellationAttempts, 1);
+  assert.equal((await bus.store.getOrder(TENANT.orgId, TENANT.storeId, orderId))?.status, "open");
+  const payments = await bus.store.listPayments?.(TENANT.orgId, TENANT.storeId, orderId);
+  assert.equal(payments?.length, 1);
+  assert.equal(payments?.[0]?.kind, "pay");
 });
 
 test("closed business days reject new counter writes with SHIFT_CLOSED", async () => {

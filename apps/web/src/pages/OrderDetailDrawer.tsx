@@ -12,6 +12,7 @@ import { MAX_PHOTO_BYTES, type PhotoContentType, type PhotoPort } from "../host/
 import { OrderDetailActions } from "./OrderDetailActions.js";
 import { OrderDetailContent } from "./OrderDetailContent.js";
 import { PaymentLedgerPanel } from "./PaymentLedgerPanel.js";
+import { MemberOrderBenefitsPanel } from "./MemberOrderBenefitsPanel.js";
 import { parsePhotoList, unwrapPhotoResult } from "./photo-list.js";
 import type { PhotoMetaRow } from "./photo-list.js";
 import { parseOrderGetResult, unwrapCommandResult, type OrderGetResult } from "./order-form.js";
@@ -269,6 +270,14 @@ export function OrderDetailDrawer({
             {...(commandClient === undefined ? {} : { commandClient })}
             {...(authClient === undefined ? {} : { authClient })}
             {...(session === undefined ? {} : { session })}
+          />
+        ) : null}
+        {load.status === "ready" && memberEnabled && commandClient !== undefined ? (
+          <MemberOrderBenefitsPanel
+            order={load.order}
+            queryClient={queryClient}
+            commandClient={commandClient}
+            onOrderReload={() => loadOrder(load.order.order_id)}
           />
         ) : null}
         <OrderDetailActions

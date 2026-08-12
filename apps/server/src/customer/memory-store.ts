@@ -1,8 +1,3 @@
-/**
- * Process-local customer archive (M2).
- * Org-scoped in production; memory store is single-tenant for local/demo.
- */
-
 import { randomUUID } from "node:crypto";
 
 import type {
@@ -18,6 +13,7 @@ import type {
   CustomerUpsertOutcome,
   CustomerUpdateInput,
 } from "./types.js";
+import { CustomerErasedError as ErasedCustomer } from "./types.js";
 
 /** Demo seed phones (seed range 13800000xxx — never real PII). */
 export const DEMO_CUSTOMERS: readonly CustomerRecord[] = Object.freeze([
@@ -26,6 +22,7 @@ export const DEMO_CUSTOMERS: readonly CustomerRecord[] = Object.freeze([
     phone: "13800000111",
     name: "张三",
     note: null,
+    version: 1,
     created_at: 1_700_000_000,
     updated_at: 1_700_000_100,
     merged_into_id: null,
@@ -35,6 +32,7 @@ export const DEMO_CUSTOMERS: readonly CustomerRecord[] = Object.freeze([
     phone: "13800000222",
     name: "李四",
     note: "常客",
+    version: 1,
     created_at: 1_700_000_000,
     updated_at: 1_700_000_200,
     merged_into_id: null,
@@ -47,6 +45,7 @@ function toSearchRow(row: CustomerRecord): CustomerSearchRow {
     phone: row.phone,
     name: row.name,
     note: row.note,
+    version: row.version,
     updated_at: row.updated_at,
   });
 }
@@ -60,14 +59,39 @@ function matchesQuery(row: CustomerRecord, query: string): boolean {
 }
 
 export class MemoryCustomerStore implements CustomerStore {
-  private readonly rows: CustomerRecord[];
-  private readonly privacyEvents: CustomerPrivacyEvent[] = [];
+  private rows: readonly CustomerRecord[];
+  private privacyEvents: readonly CustomerPrivacyEvent[] = Object.freeze([]);
+  private erasedPhones: ReadonlySet<string> = new Set();
 
   constructor(
     seed: readonly CustomerRecord[] = DEMO_CUSTOMERS,
     private readonly memberAccounts?: CustomerMemberAccountMergePort,
   ) {
-    this.rows = seed.map((row) => Object.freeze({ ...row }));
+    this.rows = Object.freeze(seed.map((row) => Object.freeze({ ...row })));
+  }
+
+  private rootFor(customerId: string): CustomerRecord | null {
+    let currentId = customerId;
+    const visited = new Set<string>();
+    for (let depth = 0; depth <= 64; depth += 1) {
+      if (visited.has(currentId)) throw new Error("customer merge cycle detected");
+      visited.add(currentId);
+      const current = this.rows.find((row) => row.customer_id === currentId);
+      if (current === undefined) return null;
+      if (current.merged_into_id === null) return current;
+      currentId = current.merged_into_id;
+    }
+    throw new Error("customer merge depth exceeded");
+  }
+
+  private groupFor(customerId: string): readonly CustomerRecord[] {
+    const root = this.rootFor(customerId);
+    if (root === null) return Object.freeze([]);
+    const group = this.rows.filter(
+      (candidate) => this.rootFor(candidate.customer_id)?.customer_id === root.customer_id,
+    );
+    if (group.length > 1000) throw new Error("customer merge group size exceeded");
+    return Object.freeze(group);
   }
 
   async search(query: string | undefined, limit: number): Promise<readonly CustomerSearchRow[]> {
@@ -85,42 +109,51 @@ export class MemoryCustomerStore implements CustomerStore {
       (candidate) => candidate.phone === phone && candidate.anonymized_at == null,
     );
     if (row === undefined) return null;
-    if (row.merged_into_id === null) return row;
-    return this.rows.find((candidate) => candidate.customer_id === row.merged_into_id) ?? null;
+    const root = this.rootFor(row.customer_id);
+    return root?.anonymized_at == null ? root : null;
   }
 
   async getById(customerId: string): Promise<CustomerRecord | null> {
-    return (
-      this.rows.find(
-        (row) =>
-          row.customer_id === customerId &&
-          row.merged_into_id === null &&
-          row.anonymized_at == null,
-      ) ?? null
-    );
+    const root = this.rootFor(customerId);
+    return root?.anonymized_at == null ? root : null;
+  }
+
+  async resolveCanonicalId(customerId: string): Promise<string | null> {
+    const root = this.rootFor(customerId);
+    return root !== null && root.anonymized_at == null ? root.customer_id : null;
+  }
+
+  async listCanonicalGroup(customerId: string): Promise<readonly string[]> {
+    const root = this.rootFor(customerId);
+    if (root === null || root.anonymized_at != null) return Object.freeze([]);
+    return Object.freeze(this.groupFor(customerId).map((row) => row.customer_id));
   }
 
   async upsert(input: CustomerUpsertInput): Promise<CustomerUpsertOutcome> {
+    if (this.erasedPhones.has(input.phone)) throw new ErasedCustomer();
     const now = input.now ?? Math.floor(Date.now() / 1000);
     const phoneIndex = this.rows.findIndex((row) => row.phone === input.phone);
-    const redirectedId = phoneIndex >= 0 ? (this.rows[phoneIndex]?.merged_into_id ?? null) : null;
+    const source = phoneIndex < 0 ? null : this.rows[phoneIndex]!;
+    const root = source === null ? null : this.rootFor(source.customer_id);
     const existingIndex =
-      redirectedId === null
-        ? phoneIndex
-        : this.rows.findIndex((row) => row.customer_id === redirectedId);
+      root === null ? -1 : this.rows.findIndex((row) => row.customer_id === root.customer_id);
 
     if (existingIndex >= 0) {
       const current = this.rows[existingIndex]!;
+      if (current.anonymized_at != null) throw new ErasedCustomer();
       const next: CustomerRecord = Object.freeze({
         customer_id: current.customer_id,
         phone: current.phone,
         name: input.name !== undefined ? input.name : current.name,
         note: input.note !== undefined ? input.note : current.note,
+        version: current.version + 1,
         created_at: current.created_at,
         updated_at: now,
         merged_into_id: null,
       });
-      this.rows[existingIndex] = next;
+      this.rows = Object.freeze(
+        this.rows.map((row, index) => (index === existingIndex ? next : row)),
+      );
       return Object.freeze({ customer: next, created: false });
     }
 
@@ -129,21 +162,23 @@ export class MemoryCustomerStore implements CustomerStore {
       phone: input.phone,
       name: input.name ?? null,
       note: input.note ?? null,
+      version: 1,
       created_at: now,
       updated_at: now,
       merged_into_id: null,
     });
-    this.rows.push(created);
+    this.rows = Object.freeze([...this.rows, created]);
     return Object.freeze({ customer: created, created: true });
   }
 
   async update(input: CustomerUpdateInput): Promise<CustomerRecord | null> {
-    const index = this.rows.findIndex(
-      (row) => row.customer_id === input.customer_id && row.merged_into_id === null,
-    );
+    const root = this.rootFor(input.customer_id);
+    const index = this.rows.findIndex((row) => row.customer_id === root?.customer_id);
     if (index < 0) return null;
     const current = this.rows[index]!;
+    if (current.anonymized_at != null || current.version !== input.expected_version) return null;
     const nextPhone = input.phone ?? current.phone;
+    if (this.erasedPhones.has(nextPhone)) throw new ErasedCustomer();
     if (this.rows.some((row, rowIndex) => rowIndex !== index && row.phone === nextPhone)) {
       return null;
     }
@@ -152,46 +187,50 @@ export class MemoryCustomerStore implements CustomerStore {
       phone: nextPhone,
       name: input.name !== undefined ? input.name : current.name,
       note: input.note !== undefined ? input.note : current.note,
+      version: current.version + 1,
       updated_at: input.now,
     });
-    this.rows[index] = next;
+    this.rows = Object.freeze(this.rows.map((row, rowIndex) => (rowIndex === index ? next : row)));
     return next;
   }
 
   async merge(input: CustomerMergeInput): Promise<CustomerMergeResult | null> {
-    const sourceIndex = this.rows.findIndex(
-      (row) =>
-        row.customer_id === input.source_customer_id &&
-        row.merged_into_id === null &&
-        row.anonymized_at == null,
-    );
-    const target = this.rows.find(
-      (row) =>
-        row.customer_id === input.target_customer_id &&
-        row.merged_into_id === null &&
-        row.anonymized_at == null,
-    );
+    const source = this.rootFor(input.source_customer_id);
+    const target = this.rootFor(input.target_customer_id);
     if (
-      sourceIndex < 0 ||
-      target === undefined ||
-      input.source_customer_id === input.target_customer_id
+      source === null ||
+      target === null ||
+      source.customer_id === target.customer_id ||
+      source.anonymized_at != null ||
+      target.anonymized_at != null
     ) {
       return null;
     }
-    const source = this.rows[sourceIndex]!;
+    const affectedIds = new Set(
+      [...this.groupFor(source.customer_id), ...this.groupFor(target.customer_id)].map(
+        (row) => row.customer_id,
+      ),
+    );
+    if (affectedIds.size > 1000) return null;
     const memberOutcome = this.memberAccounts?.mergeCustomerMemberAccount(
       source.customer_id,
       target.customer_id,
     );
     if (memberOutcome === "conflict") return null;
-
     // There is deliberately no await between the domain-specific member port
-    // and this assignment: both in-memory stores commit in one JS turn.
-    this.rows[sourceIndex] = Object.freeze({
-      ...source,
-      merged_into_id: target.customer_id,
-      updated_at: input.now,
-    });
+    // and this replacement: both in-memory stores commit in one JS turn.
+    this.rows = Object.freeze(
+      this.rows.map((row) =>
+        affectedIds.has(row.customer_id)
+          ? Object.freeze({
+              ...row,
+              merged_into_id: row.customer_id === target.customer_id ? null : target.customer_id,
+              version: row.version + 1,
+              updated_at: input.now,
+            })
+          : row,
+      ),
+    );
     return Object.freeze({
       source_customer_id: source.customer_id,
       target_customer_id: target.customer_id,
@@ -235,9 +274,11 @@ export class MemoryCustomerStore implements CustomerStore {
     customerId: string,
     limit: number,
   ): Promise<readonly CustomerPrivacyEvent[]> {
+    const groupIds = new Set(this.groupFor(customerId).map((row) => row.customer_id));
+    if (groupIds.size === 0) return Object.freeze([]);
     return Object.freeze(
       this.privacyEvents
-        .filter((event) => event.customer_id === customerId)
+        .filter((event) => groupIds.has(event.customer_id))
         .slice(-Math.min(limit, 50))
         .reverse()
         .map((event) => Object.freeze({ ...event })),
@@ -247,7 +288,9 @@ export class MemoryCustomerStore implements CustomerStore {
   async exportPrivacy(input: CustomerPrivacyActionInput) {
     const customer = await this.getById(input.customer_id);
     if (customer === null) return null;
-    this.privacyEvents.push(
+    const canonicalCustomers = this.groupFor(customer.customer_id);
+    this.privacyEvents = Object.freeze([
+      ...this.privacyEvents,
       Object.freeze({
         event_id: input.event_id,
         customer_id: customer.customer_id,
@@ -256,9 +299,9 @@ export class MemoryCustomerStore implements CustomerStore {
         affected_order_count: 0,
         created_at: input.now,
       }),
-    );
+    ]);
     return Object.freeze({
-      format_version: 1 as const,
+      format_version: 2 as const,
       exported_at: input.now,
       customer: Object.freeze({
         customer_id: customer.customer_id,
@@ -268,6 +311,42 @@ export class MemoryCustomerStore implements CustomerStore {
         created_at: customer.created_at,
         updated_at: customer.updated_at,
       }),
+      canonical_customers: Object.freeze(
+        canonicalCustomers.map((row) =>
+          Object.freeze({
+            customer_id: row.customer_id,
+            phone: row.phone,
+            name: row.name,
+            note: row.note,
+            merged_into_id: row.merged_into_id,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+          }),
+        ),
+      ),
+      canonical_customer_count: canonicalCustomers.length,
+      profile: null,
+      profiles: Object.freeze([]),
+      profile_count: 0,
+      profiles_truncated: false,
+      addresses: Object.freeze([]),
+      address_count: 0,
+      addresses_truncated: false,
+      retired_address_count: 0,
+      identifiers: Object.freeze([]),
+      identifier_count: 0,
+      identifiers_truncated: false,
+      retired_identifier_count: 0,
+      related_narratives: Object.freeze([]),
+      related_narrative_count: 0,
+      related_narratives_truncated: false,
+      retained_garment_photo_count: 0,
+      notification_deliveries: Object.freeze([]),
+      notification_delivery_count: 0,
+      notification_deliveries_truncated: false,
+      factory_handoff_evidence: Object.freeze([]),
+      factory_handoff_evidence_count: 0,
+      factory_handoff_evidence_truncated: false,
       orders: Object.freeze([]),
       order_count: 0,
       truncated: false,
@@ -275,23 +354,31 @@ export class MemoryCustomerStore implements CustomerStore {
   }
 
   async anonymize(input: CustomerPrivacyActionInput) {
-    const index = this.rows.findIndex(
-      (row) =>
-        row.customer_id === input.customer_id &&
-        row.merged_into_id === null &&
-        row.anonymized_at == null,
+    const current = this.rootFor(input.customer_id);
+    if (current === null || current.anonymized_at != null) return null;
+    const group = this.groupFor(current.customer_id);
+    const groupIds = new Set(group.map((row) => row.customer_id));
+    this.erasedPhones = new Set([
+      ...this.erasedPhones,
+      ...group.map((row) => row.phone).filter((phone) => /^1[3-9]\d{9}$/u.test(phone)),
+    ]);
+    this.rows = Object.freeze(
+      this.rows.map((row) =>
+        groupIds.has(row.customer_id)
+          ? Object.freeze({
+              ...row,
+              phone: `anon-${row.customer_id.replaceAll("-", "")}`,
+              name: null,
+              note: null,
+              version: row.version + 1,
+              updated_at: input.now,
+              anonymized_at: input.now,
+            })
+          : row,
+      ),
     );
-    if (index < 0) return null;
-    const current = this.rows[index]!;
-    this.rows[index] = Object.freeze({
-      ...current,
-      phone: `anon-${current.customer_id.replaceAll("-", "")}`,
-      name: null,
-      note: null,
-      updated_at: input.now,
-      anonymized_at: input.now,
-    });
-    this.privacyEvents.push(
+    this.privacyEvents = Object.freeze([
+      ...this.privacyEvents,
       Object.freeze({
         event_id: input.event_id,
         customer_id: current.customer_id,
@@ -300,7 +387,7 @@ export class MemoryCustomerStore implements CustomerStore {
         affected_order_count: 0,
         created_at: input.now,
       }),
-    );
+    ]);
     return Object.freeze({ customer_id: current.customer_id, affected_order_count: 0 });
   }
 }

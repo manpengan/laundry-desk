@@ -1,4 +1,7 @@
 import type { CustomerStore } from "../customer/types.js";
+import { CustomerErasedError } from "../customer/types.js";
+import { createCommandError } from "@laundry/contracts";
+import { HandlerCommandError } from "../bus/types.js";
 
 /** Customer archival is transaction-bound to receipt creation. */
 export async function upsertCustomerForReceipt(
@@ -7,11 +10,18 @@ export async function upsertCustomerForReceipt(
   name: string | undefined,
   now: number,
 ): ReturnType<CustomerStore["upsert"]> {
-  return customer.upsert({
-    phone,
-    ...(name === undefined ? {} : { name }),
-    now,
-  });
+  return customer
+    .upsert({
+      phone,
+      ...(name === undefined ? {} : { name }),
+      now,
+    })
+    .catch((error: unknown) => {
+      if (error instanceof CustomerErasedError) {
+        throw new HandlerCommandError(createCommandError("CUSTOMER_ERASED"));
+      }
+      throw error;
+    });
 }
 
 export function formatTicket(dayKey: string, seq: number): string {

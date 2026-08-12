@@ -188,6 +188,56 @@ CLOUD_RELEASE_AWAITING_EXTERNAL_VERIFICATION candidate_sha=<sha> expected_sha=<s
 这里的恢复点只包含数据库，且只在同一 PostgreSQL 集群做过影子恢复；它不包含私有照片，
 不等于 ADR-33 完整数据保护、离机备份、生产灾备或 SLA 证据。
 
+### ADR-43 周期数据保护（软件候选，尚未安装）
+
+[ADR-43](../adr/2026-08-12-adr-43-cloud-data-protection-and-joint-recovery.md) 新增的 root-only
+runner 会把 PostgreSQL、迁移/catalog 权威和 `/var/lib/laundry/photos` 组成同一恢复集，并与
+发布控制器共用 `/run/lock/laundry-desk-cloud-release.lock`。本节记录安装后的标准入口，**不表示
+这些 unit、离机挂载或告警接收端已在 hk-vps 安装或验收**：
+
+```bash
+sudo /opt/nodejs/bin/node /opt/laundry-desk/tools/cloud/hk-vps-data-protection.mjs status
+sudo /opt/nodejs/bin/node /opt/laundry-desk/tools/cloud/hk-vps-data-protection.mjs backup
+sudo /opt/nodejs/bin/node /opt/laundry-desk/tools/cloud/hk-vps-data-protection.mjs drill
+sudo /opt/nodejs/bin/node /opt/laundry-desk/tools/cloud/hk-vps-data-protection.mjs offsite
+```
+
+`status` 每次重新验证恢复集、离机副本、最近演练、服务、marker、迁移和 write gate；在没有
+26 小时内本机备份/离机副本或 8 天内演练时按设计返回非零。`offsite` 只接受精确挂载在
+`/mnt/laundry-desk-offsite` 的 `nfs4`、`cifs` 或 `fuse.sshfs`，并要求
+`rw,nodev,nosuid,noexec,nosymfollow`、独立设备和独立 marker。普通本地目录或同盘 bind mount
+不能冒充离机完成。
+
+真实离机状态还依赖固定的
+`/etc/laundry-desk/data-protection-offsite-authority.json`。该文件必须是 root-owned、0600、单链接
+普通文件，采用严格 canonical JSON，精确包含 `schema`、`version`、`target_id`、`mount_source`、
+`mount_fstype`、`failure_domain`、`remote_identity`、`attested_at` 与 `expires_at`。其中 source/fstype
+必须与 `findmnt` 一致，failure domain 不能是 hk-vps/local，remote identity 必须来自已核验的远端
+存储身份，过期时间最长一年。凭据、私钥和口令不得放进这个文件。没有这份部署证明，或证明与
+挂载不一致/已过期时，`status` 必须保持 `delivery_state=software_only`、
+`blocked_external_offsite` 且非健康；不要为了让指标变绿而手工伪造证明。
+
+安装候选 unit 前，先核对目标 checkout 的精确 SHA、以 `systemd-analyze verify` 验证
+`tools/cloud/systemd/laundry-desk-data-*`，再由单独获权的主机变更把 root-owned `0644` unit
+安装到 `/etc/systemd/system` 并启用 timer。候选 oneshot unit 使用 `ProtectSystem=strict`、精确
+`ReadWritePaths`、受限 proc/device/kernel 面，并为 status 设置 10 分钟、其余维护动作设置 30 分钟
+超时。真实关闭条件还包括至少一次本机恢复集、离机复制、独立演练、阈值失败和告警送达；只有
+unit 文件或 journal 输出不算完成。
+
+联合恢复是独立破坏性操作，不由 timer 触发。它只接受 runner 列出的 set id，并从 stdin 读取
+`RECOVER-<manifest SHA-256 前12位>`；执行前还会创建 `pre_recovery` 集并验证目标代码树。必须在
+明确的数据损失窗口与恢复授权下另行执行：
+
+```bash
+printf '%s\n' 'RECOVER-<12-hex>' | \
+  sudo /opt/nodejs/bin/node /opt/laundry-desk/tools/cloud/hk-vps-data-protection.mjs \
+    recover --set-id '<verified-set-id>'
+```
+
+恢复开始改写后的任一失败会保持 Desk 停止、`laundry_app NOLOGIN` 和 `recovery_required`；不要
+手工恢复 LOGIN、只切代码或只换照片。先保留 operation/state、目标 set 和 pre-recovery 证据，
+再制定显式恢复或回退动作。
+
 ### Transition 与恢复点权限
 
 - `/var/lib/laundry-desk-release` 及 history 必须是 `root:root`、`0700`；活动

@@ -13,9 +13,11 @@ import { runPrintJob } from "./worker.js";
 import { HandlerCommandError } from "../bus/types.js";
 import { processXp58PrintJob, type ProcessXp58Result } from "./process-xp58.js";
 import type { PrintJobKind, PrintJobRecord, PrintJobStatus, PrintJobStore } from "./types.js";
+import type { OrderStore } from "../order/types.js";
 
 export type PrintHandlerDeps = Readonly<{
   store: PrintJobStore;
+  order?: Pick<OrderStore, "getOrder">;
   now?: () => number;
   newId?: () => string;
   /**
@@ -166,6 +168,16 @@ function enqueueHandler(deps: PrintHandlerDeps): CommandHandler {
     const enqueueFromOrder = deps.store.enqueueFromOrder;
     if (enqueueFromOrder === undefined) {
       throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+    }
+    if (deps.order !== undefined) {
+      const order = await deps.order.getOrder(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
+      if (order === null) {
+        throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+      }
+      const waived =
+        (kind === "xp58" && order.skip_ticket_print === true) ||
+        (kind !== "xp58" && order.skip_label_print === true);
+      if (waived) throw new HandlerCommandError(createCommandError("INVARIANT_FAILED"));
     }
 
     let job: PrintJobRecord;

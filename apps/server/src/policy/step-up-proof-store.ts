@@ -1,6 +1,7 @@
 /** Step-up proof authority. Production uses PostgreSQL; memory is test-only. */
 
 import type { PendingActionTransactionContext } from "../pending-actions/types.js";
+import { registerMemoryRollback } from "../db/memory-unit-of-work.js";
 import type { StepUpProof } from "./step-up.js";
 
 export type StepUpProofReadContext = Readonly<{
@@ -39,7 +40,11 @@ export class MemoryStepUpProofStore implements StepUpProofStore {
     if (this.byId.has(proof.proofId)) {
       throw new Error(`Step-up proof already exists: ${proof.proofId}`);
     }
-    this.byId.set(proof.proofId, freezeProof(proof));
+    const frozen = freezeProof(proof);
+    this.byId.set(proof.proofId, frozen);
+    registerMemoryRollback(() => {
+      if (this.byId.get(proof.proofId) === frozen) this.byId.delete(proof.proofId);
+    });
   }
 
   get(proofId: string): StepUpProof | null {
@@ -60,13 +65,23 @@ export class MemoryStepUpProofStore implements StepUpProofStore {
     if (current === undefined || current.status !== "active") return false;
     if (nowEpochSeconds >= current.expiresAt) return false;
     if (this.byId.get(proofId) !== current) return false;
-    this.byId.set(proofId, freezeProof({ ...current, status: "consumed" }));
+    const consumed = freezeProof({ ...current, status: "consumed" });
+    this.byId.set(proofId, consumed);
+    registerMemoryRollback(() => {
+      if (this.byId.get(proofId) === consumed) this.byId.set(proofId, current);
+    });
     return true;
   }
 
   /** Test helper. */
   clear(): void {
+    const previous = new Map(this.byId);
     this.byId.clear();
+    registerMemoryRollback(() => {
+      if (this.byId.size === 0) {
+        for (const [proofId, proof] of previous) this.byId.set(proofId, proof);
+      }
+    });
   }
 
   size(): number {

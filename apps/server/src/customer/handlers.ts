@@ -4,14 +4,16 @@ import { createCommandError } from "@laundry/contracts";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
+import type { CustomerProfileStore } from "../customer-profile/types.js";
 import {
   registerCustomerPrivacyCommandHandlers,
   registerCustomerPrivacyQueryHandlers,
 } from "./privacy-handlers.js";
-import type { CustomerStore } from "./types.js";
+import { CustomerErasedError, type CustomerStore } from "./types.js";
 
 export type CustomerHandlerDeps = Readonly<{
   store: CustomerStore;
+  profile?: CustomerProfileStore;
   now?: () => number;
 }>;
 
@@ -61,6 +63,7 @@ function detailResult(customer: Awaited<ReturnType<CustomerStore["getById"]>>) {
     phone: customer.phone,
     name: customer.name,
     note: customer.note,
+    version: customer.version,
     updated_at: customer.updated_at,
   });
 }
@@ -78,7 +81,23 @@ function searchHandler(deps: CustomerHandlerDeps): CommandHandler {
     const input = asRecord(ctx.parsed);
     const query = typeof input.query === "string" ? input.query : undefined;
     const limit = parseLimit(input.limit);
-    const customers = await deps.store.search(query, limit);
+    let customers = await deps.store.search(query, limit);
+    if (
+      query !== undefined &&
+      query.trim().length > 0 &&
+      deps.profile?.findCustomerIdsByIdentifier
+    ) {
+      const identifierCustomerIds = await deps.profile.findCustomerIdsByIdentifier(query);
+      const existingIds = new Set(customers.map((customer) => customer.customer_id));
+      const identifierCustomers = (
+        await Promise.all(
+          identifierCustomerIds
+            .filter((customerId) => !existingIds.has(customerId))
+            .map((customerId) => deps.store.getById(customerId)),
+        )
+      ).filter((customer): customer is NonNullable<typeof customer> => customer !== null);
+      customers = Object.freeze([...identifierCustomers, ...customers]).slice(0, limit);
+    }
     return Object.freeze({
       result: Object.freeze({
         customers: Object.freeze(
@@ -87,6 +106,7 @@ function searchHandler(deps: CustomerHandlerDeps): CommandHandler {
               customer_id: row.customer_id,
               phone_masked: maskPhone(row.phone),
               name: row.name,
+              version: row.version,
               updated_at: row.updated_at,
             }),
           ),
@@ -119,6 +139,7 @@ function duplicatesHandler(deps: CustomerHandlerDeps): CommandHandler {
               customer_id: row.customer_id,
               phone_masked: maskPhone(row.phone),
               name: row.name,
+              version: row.version,
               updated_at: row.updated_at,
             }),
           ),
@@ -136,12 +157,20 @@ function upsertHandler(deps: CustomerHandlerDeps): CommandHandler {
     const note = typeof input.note === "string" ? input.note : undefined;
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
 
-    const outcome = await deps.store.upsert({
-      phone,
-      ...(name !== undefined ? { name } : {}),
-      ...(note !== undefined ? { note } : {}),
-      now,
-    });
+    let outcome: Awaited<ReturnType<CustomerStore["upsert"]>>;
+    try {
+      outcome = await deps.store.upsert({
+        phone,
+        ...(name !== undefined ? { name } : {}),
+        ...(note !== undefined ? { note } : {}),
+        now,
+      });
+    } catch (error) {
+      if (error instanceof CustomerErasedError) {
+        throw new HandlerCommandError(createCommandError("CUSTOMER_ERASED"));
+      }
+      throw error;
+    }
 
     const { customer, created } = outcome;
     return Object.freeze({
@@ -150,14 +179,16 @@ function upsertHandler(deps: CustomerHandlerDeps): CommandHandler {
         phone: customer.phone,
         name: customer.name,
         created,
+        version: customer.version,
       }),
+      privacySubjectCustomerId: customer.customer_id,
       audit: Object.freeze({
         entity: "customer",
         entityId: customer.customer_id,
         afterJson: JSON.stringify({
           phone_masked: maskPhone(customer.phone),
-          name: customer.name,
           created,
+          version: customer.version,
         }),
       }),
       events: Object.freeze([
@@ -179,15 +210,24 @@ function updateHandler(deps: CustomerHandlerDeps): CommandHandler {
     const phone = input.phone === undefined ? undefined : requirePhone(input.phone);
     const name = nullableString(input.name);
     const note = nullableString(input.note);
-    const updated = await deps.store.update({
-      customer_id: requireString(input.customer_id),
-      ...(phone === undefined ? {} : { phone }),
-      ...(name === undefined ? {} : { name }),
-      ...(note === undefined ? {} : { note }),
-      now: deps.now?.() ?? Math.floor(Date.now() / 1000),
-    });
+    let updated: Awaited<ReturnType<CustomerStore["update"]>>;
+    try {
+      updated = await deps.store.update({
+        customer_id: requireString(input.customer_id),
+        expected_version: Number(input.expected_version),
+        ...(phone === undefined ? {} : { phone }),
+        ...(name === undefined ? {} : { name }),
+        ...(note === undefined ? {} : { note }),
+        now: deps.now?.() ?? Math.floor(Date.now() / 1000),
+      });
+    } catch (error) {
+      if (error instanceof CustomerErasedError) {
+        throw new HandlerCommandError(createCommandError("CUSTOMER_ERASED"));
+      }
+      throw error;
+    }
     if (updated === null) {
-      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+      throw new HandlerCommandError(createCommandError("INVARIANT_FAILED"));
     }
     const changedFields = Object.freeze([
       ...(phone === undefined ? [] : ["phone"]),
@@ -196,6 +236,7 @@ function updateHandler(deps: CustomerHandlerDeps): CommandHandler {
     ]);
     return Object.freeze({
       result: detailResult(updated),
+      privacySubjectCustomerId: updated.customer_id,
       audit: Object.freeze({
         entity: "customer",
         entityId: updated.customer_id,
@@ -224,6 +265,7 @@ function mergeHandler(deps: CustomerHandlerDeps): CommandHandler {
       source_customer_id: sourceCustomerId,
       target_customer_id: targetCustomerId,
       store_id: ctx.tenant.storeId,
+      staff_id: ctx.actor.staffId,
       now: deps.now?.() ?? Math.floor(Date.now() / 1000),
     });
     if (result === null) {
@@ -231,6 +273,7 @@ function mergeHandler(deps: CustomerHandlerDeps): CommandHandler {
     }
     return Object.freeze({
       result: Object.freeze({ ...result }),
+      privacySubjectCustomerId: result.source_customer_id,
       audit: Object.freeze({
         entity: "customer",
         entityId: sourceCustomerId,

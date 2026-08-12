@@ -232,7 +232,10 @@ test("full ADR-36 API journey is canonical, synthetic, blocked where unsafe, and
   const output = lines.join("\n");
   assert.match(output, /^ADR36 run-id ADR36-20260809T123456Z-/mu);
   assert.match(output, /catalog_price PASS/u);
+  assert.match(output, /owner_store_operations PASS/u);
   assert.match(output, /staff_credentials PASS/u);
+  assert.match(output, /member_benefits PASS/u);
+  assert.match(output, /customer_profile_policy PASS/u);
   assert.match(output, /order_finance PASS/u);
   assert.match(output, /reporting_exports_shift PASS/u);
   assert.match(output, /safe_cleanup PASS/u);
@@ -274,6 +277,12 @@ test("full ADR-36 API journey is canonical, synthetic, blocked where unsafe, and
   );
   assert.equal(memberBalancePays.length, 2);
   assert.deepEqual(memberBalancePays[0].body.args, memberBalancePays[1].body.args);
+  const storeRenames = commandRequests.filter(
+    (request) => request.body.command === "store.profile.set" && request.body.mode === "direct",
+  );
+  assert.equal(storeRenames.length, 2);
+  assert.match(storeRenames[0].body.args.store_name, /^ADR40 ADR36 UAT /u);
+  assert.equal(storeRenames[1].body.args.store_name, "ADR36 UAT Store");
 });
 
 test("remote failure bodies and credentials never enter failure output", async () => {
@@ -341,8 +350,35 @@ test("step-up proof must be a UUID before confirmation", async () => {
   });
   const output = lines.join("\n");
   assert.equal(report.exitCode, 1);
-  assert.match(output, /member_lifecycle FAIL PIN_PROOF_INVALID/u);
+  assert.match(output, /owner_store_operations FAIL PIN_PROOF_INVALID/u);
   assert.doesNotMatch(output, /proof-not-a-uuid/u);
+});
+
+test("owner rename post-commit response failure is detected and safely restored", async () => {
+  const env = acceptanceEnvironment();
+  const privateBody = `${env.LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD} owner-private-response`;
+  const cloud = createFakeCloud(env, {
+    postCommitFailures: [{ command: "store.profile.set", kind: "bad-json", privateBody }],
+  });
+  const lines = [];
+  const report = await runAcceptance({
+    ...TEST_EXTENSIONS,
+    env,
+    fetchImpl: cloud.fetchImpl,
+    randomUUID: sequentialUuid(),
+    now: () => new Date("2026-08-09T12:34:56.000Z"),
+    writeLine: (line) => lines.push(line),
+  });
+  const output = lines.join("\n");
+  assert.equal(report.exitCode, 1);
+  assert.match(output, /owner_store_operations FAIL RESPONSE_JSON_INVALID/u);
+  assert.match(output, /safe_cleanup PASS/u);
+  assert.doesNotMatch(output, /owner-private-response|Admin-Secret/u);
+  const writes = cloud.requests.filter(
+    (request) => request.body?.command === "store.profile.set" && request.body.mode === "direct",
+  );
+  assert.equal(writes.length, 2);
+  assert.equal(writes[1].body.args.store_name, "ADR36 UAT Store");
 });
 
 test("catalog post-commit bad JSON preserves cleanup intent without leaking the body", async () => {

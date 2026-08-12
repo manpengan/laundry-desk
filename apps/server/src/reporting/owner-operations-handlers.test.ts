@@ -123,6 +123,39 @@ test("owner drilldown derives tenant, business day and fixed bounds on the serve
   });
 });
 
+test("owner dashboard derives its date boundary from the authenticated store timezone", async () => {
+  const requests: OwnerDashboardReadRequest[] = [];
+  const deps: ReportingHandlerDeps = Object.freeze({
+    accounting: Object.freeze({ readReport: async () => aggregateAccountingReport([], "day") }),
+    source: Object.freeze({
+      readOperations: async (request: OwnerDashboardReadRequest) => {
+        requests.push(request);
+        return Object.freeze({
+          pickedUpGarmentCount: 0,
+          newReceivableCents: 0,
+          newReceivableOrderCount: 0,
+          overdueGarmentCount: 0,
+          overdueOrderCount: 0,
+        });
+      },
+      readDrilldown: async () => Promise.reject(new Error("unexpected")),
+      listPortfolioStores: async () => Object.freeze([]),
+      withAuthorizedPortfolioStore: async () => null,
+    }),
+    timeZone: "UTC",
+    resolveTimeZone: async (_client, tenant) => {
+      assert.deepEqual(tenant, TENANT);
+      return "Pacific/Kiritimati";
+    },
+    now: () => NOW,
+  });
+
+  const { outcome } = await run(createReportingHandlers(deps)["reporting.owner_dashboard.get"], {});
+  assert.equal(requests[0]?.businessDate, "2026-08-08");
+  assert.equal(requests[0]?.dayStartedAt.toISOString(), "2026-08-07T10:00:00.000Z");
+  assert.equal((outcome.result as { business_date: string }).business_date, "2026-08-08");
+});
+
 test("owner drilldown fails closed on permission and client scope fields", async () => {
   const deps = Object.freeze({
     accounting: Object.freeze({ readReport: async () => aggregateAccountingReport([], "day") }),

@@ -3,10 +3,12 @@
  */
 
 import type { CommandFailure, CommandPort, CommandResult } from "./types.js";
-import { readMemberTopupConfirmationSummary } from "./member-topup-confirmation.js";
+import { readConfirmationSummary } from "./confirmation-summary.js";
 
 /** Matches packages/contracts CSRF_HEADER_NAME. */
 const CSRF_HEADER_NAME = "x-csrf-token";
+const IDEMPOTENCY_HEADER_NAME = "idempotency-key";
+const MAX_PENDING_IDEMPOTENCY_KEYS = 128;
 
 export type HttpCommandClientOptions = Readonly<{
   apiBaseUrl: string;
@@ -15,6 +17,8 @@ export type HttpCommandClientOptions = Readonly<{
   fetchImpl?: typeof fetch;
   /** Optional CSRF reader (defaults to document.cookie). */
   readCsrf?: () => string | null;
+  /** Deterministic UUID source for tests; browser crypto is the production default. */
+  newIdempotencyKey?: () => string;
 }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -27,6 +31,22 @@ function defaultReadCsrf(): string | null {
   return match?.[1] ?? null;
 }
 
+function defaultIdempotencyKey(): string {
+  return crypto.randomUUID();
+}
+
+function requestFingerprint(name: string, body: unknown): string {
+  return `${name}\n${JSON.stringify(body ?? {})}`;
+}
+
+function rememberBounded(map: Map<string, string>, key: string, value: string): void {
+  if (!map.has(key) && map.size >= MAX_PENDING_IDEMPOTENCY_KEYS) {
+    const oldest = map.keys().next().value;
+    if (typeof oldest === "string") map.delete(oldest);
+  }
+  map.set(key, value);
+}
+
 function parseFailure(body: unknown): CommandFailure {
   if (!isRecord(body) || !isRecord(body.error)) {
     return Object.freeze({ code: "COMMAND_FAILED", message: "命令失败" });
@@ -37,9 +57,7 @@ function parseFailure(body: unknown): CommandFailure {
   let detail: CommandFailure["detail"];
   if (isRecord(err.detail)) {
     const summary =
-      err.detail.summary === undefined
-        ? undefined
-        : readMemberTopupConfirmationSummary(err.detail.summary);
+      err.detail.summary === undefined ? undefined : readConfirmationSummary(err.detail.summary);
     if (summary !== null) {
       detail = Object.freeze({
         ...(typeof err.detail.kind === "string" ? { kind: err.detail.kind } : {}),
@@ -56,6 +74,22 @@ function parseFailure(body: unknown): CommandFailure {
     ...(message !== undefined ? { message } : {}),
     ...(detail !== undefined ? { detail } : {}),
   });
+}
+
+function isDefinitiveFailure(status: number, body: unknown, failure: CommandFailure): boolean {
+  if (
+    status >= 500 ||
+    failure.code === "TRANSACTION_FAILED" ||
+    failure.code === "EVENT_DISPATCH_FAILED"
+  ) {
+    return false;
+  }
+  return (
+    isRecord(body) &&
+    body.ok === false &&
+    isRecord(body.error) &&
+    typeof body.error.code === "string"
+  );
 }
 
 /** True when policy wants a WYSIWYS confirm_ref second hop. */
@@ -76,6 +110,9 @@ export function createHttpCommandClient(options: HttpCommandClientOptions): Comm
   const base = options.apiBaseUrl.replace(/\/$/u, "");
   const fetchImpl = options.fetchImpl ?? fetch;
   const readCsrf = options.readCsrf ?? defaultReadCsrf;
+  const newIdempotencyKey = options.newIdempotencyKey ?? defaultIdempotencyKey;
+  const uncertainDirectKeys = new Map<string, string>();
+  const confirmationKeys = new Map<string, string>();
 
   return Object.freeze({
     async execute<T = unknown>(
@@ -102,6 +139,14 @@ export function createHttpCommandClient(options: HttpCommandClientOptions): Comm
           ? Object.freeze({ confirm_ref: execOptions.confirmRef })
           : body;
       try {
+        const fingerprint =
+          execOptions.confirmRef === undefined
+            ? requestFingerprint(name, body)
+            : `confirm\n${execOptions.confirmRef}`;
+        const pendingKeys =
+          execOptions.confirmRef === undefined ? uncertainDirectKeys : confirmationKeys;
+        const idempotencyKey = pendingKeys.get(fingerprint) ?? newIdempotencyKey();
+        rememberBounded(pendingKeys, fingerprint, idempotencyKey);
         const res = await fetchImpl(`${base}/v1/commands/${encodeURIComponent(name)}`, {
           method: "POST",
           credentials: "include",
@@ -109,14 +154,23 @@ export function createHttpCommandClient(options: HttpCommandClientOptions): Comm
             "content-type": "application/json",
             authorization: `Bearer ${token}`,
             [CSRF_HEADER_NAME]: csrf,
+            [IDEMPOTENCY_HEADER_NAME]: idempotencyKey,
           },
           body: JSON.stringify(payload ?? {}),
         });
         const json: unknown = await res.json();
-        if (isRecord(json) && json.ok === true) {
+        if (res.ok && isRecord(json) && json.ok === true) {
+          pendingKeys.delete(fingerprint);
           return Object.freeze({ ok: true as const, data: json.data as T });
         }
-        return Object.freeze({ ok: false as const, error: parseFailure(json) });
+        const failure = parseFailure(json);
+        const confirmRef = failure.detail?.confirm_ref;
+        const definitive = isDefinitiveFailure(res.status, json, failure);
+        if (definitive) pendingKeys.delete(fingerprint);
+        if (definitive && typeof confirmRef === "string" && confirmRef.length > 0) {
+          rememberBounded(confirmationKeys, `confirm\n${confirmRef}`, idempotencyKey);
+        }
+        return Object.freeze({ ok: false as const, error: failure });
       } catch {
         return Object.freeze({
           ok: false as const,

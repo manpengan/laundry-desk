@@ -13,7 +13,6 @@ import {
 } from "../identity/session.js";
 import { IdentityError } from "../identity/types.js";
 import { loadPgStaffDirectory } from "../local/staff-directory.js";
-import { LOCAL_PROFILE } from "../local/profile.js";
 import { registerStaffCredentialRoute } from "../staff/credential-route.js";
 import {
   clearAuthCookies,
@@ -36,17 +35,17 @@ function registerStaffRoute(app: FastifyInstance, context: AuthRouteContext): vo
   app.get("/api/v2/local/staff", async (request, reply) => {
     try {
       const resolved = await resolveSession(context.runtime, request);
-      if (
-        resolved === null ||
-        resolved.session.org_id !== LOCAL_PROFILE.orgId ||
-        resolved.session.store_id !== LOCAL_PROFILE.storeId
-      ) {
+      if (resolved === null) {
         reply.code(401);
         return fail("AUTHENTICATION_FAILED");
       }
       const data =
         context.runtime.mode === "pg" && context.runtime.pool !== null
-          ? await loadPgStaffDirectory(context.runtime.pool)
+          ? await loadPgStaffDirectory(context.runtime.pool, {
+              orgId: resolved.session.org_id,
+              storeId: resolved.session.store_id,
+              staffId: resolved.session.staff_id,
+            })
           : context.runtime.staffDirectory;
       return Object.freeze({ ok: true as const, data });
     } catch (error) {

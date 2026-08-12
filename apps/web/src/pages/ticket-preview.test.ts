@@ -17,6 +17,14 @@ const result: ReceiveOrderResult = Object.freeze({
   payable_cents: 3000,
   paid_cents: 1000,
   balance_cents: 2000,
+  discount_cents: 0,
+  discount_source: "none",
+  discount_bps: 0,
+  waivers: Object.freeze({
+    skip_ticket_print: false,
+    skip_label_print: false,
+    skip_rack_assignment: false,
+  }),
   garment_count: 2,
   garments: Object.freeze([
     Object.freeze({

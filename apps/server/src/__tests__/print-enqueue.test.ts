@@ -19,6 +19,7 @@ import {
   createMemorySettingsStore,
 } from "../platform/index.js";
 import { MemoryPendingActionStore } from "../pending-actions/store.js";
+import type { OrderRecord, OrderStore } from "../order/types.js";
 import { createMemoryPrintJobStore } from "../print/memory-store.js";
 import type { PrintJobStore } from "../print/types.js";
 
@@ -98,7 +99,10 @@ function sequentialIds(ids: readonly string[]): () => string {
 
 function buildBus(
   printStore: PrintJobStore = createAuthorityPrintStore(),
-  options: Readonly<{ newId?: () => string }> = {},
+  options: Readonly<{
+    newId?: () => string;
+    order?: Pick<OrderStore, "getOrder">;
+  }> = {},
 ) {
   const { registry, queryRegistry } = createRegisteredM1Bus({
     platform: Object.freeze({
@@ -108,6 +112,7 @@ function buildBus(
     }),
     print: Object.freeze({
       store: printStore,
+      ...(options.order === undefined ? {} : { order: options.order }),
       now: FIXED_NOW,
       newId: options.newId ?? FIXED_JOB_ID,
     }),
@@ -115,6 +120,38 @@ function buildBus(
   const pendingStore = new MemoryPendingActionStore();
   const chainHooks = createDefaultChainHooks({}, pendingStore);
   return { registry, queryRegistry, chainHooks, pendingStore, printStore };
+}
+
+function orderWithPrintWaivers(
+  waivers: Pick<OrderRecord, "skip_ticket_print" | "skip_label_print">,
+): OrderRecord {
+  return Object.freeze({
+    order_id: ORDER_ID,
+    org_id: DEMO_ORG_ID,
+    store_id: DEMO_STORE_ID,
+    ticket_no: "20260722-0001",
+    pickup_code: "P202607220001",
+    status: "open",
+    customer_id: null,
+    customer_phone: null,
+    customer_name: null,
+    note: null,
+    lines: Object.freeze([]),
+    subtotal_cents: 500,
+    original_cents: 500,
+    discount_cents: 0,
+    addon_cents: 0,
+    urgent_cents: 0,
+    freight_cents: 0,
+    payable_cents: 500,
+    paid_cents: 500,
+    balance_cents: 0,
+    created_at: FIXED_NOW(),
+    updated_at: FIXED_NOW(),
+    business_date: "2026-07-22",
+    created_by_staff_id: DEMO_STAFF_A_ID,
+    ...waivers,
+  });
 }
 
 test("command + query registries include print skeleton names", () => {
@@ -200,6 +237,38 @@ test("print.ticket.enqueue accepts explicit kind", async () => {
   const data = result.data.result as { kind: string; status: string };
   assert.equal(data.kind, "gp3120");
   assert.equal(data.status, "queued");
+});
+
+test("order print waiver snapshot blocks only the matching new enqueue kinds", async () => {
+  for (const scenario of [
+    Object.freeze({ kind: "xp58" as const, skipTicket: true, skipLabel: false }),
+    Object.freeze({ kind: "dl206" as const, skipTicket: false, skipLabel: true }),
+    Object.freeze({ kind: "gp3120" as const, skipTicket: false, skipLabel: true }),
+  ]) {
+    const printStore = createAuthorityPrintStore();
+    const order = orderWithPrintWaivers({
+      skip_ticket_print: scenario.skipTicket,
+      skip_label_print: scenario.skipLabel,
+    });
+    const bus = buildBus(printStore, {
+      order: Object.freeze({ getOrder: async () => order }),
+    });
+    const result = await executeCommand(
+      new FakeSqlClient(),
+      TENANT,
+      "print.ticket.enqueue",
+      { order_id: ORDER_ID, kind: scenario.kind },
+      {
+        registry: bus.registry,
+        actor: CLERK,
+        chainHooks: bus.chainHooks,
+        pendingStore: bus.pendingStore,
+      },
+    );
+    assert.equal(result.ok, false, JSON.stringify(result));
+    if (!result.ok) assert.equal(result.error.code, "INVARIANT_FAILED");
+    assert.deepEqual(await printStore.list(10), []);
+  }
 });
 
 test("print.jobs.list returns newest first and respects limit", async () => {

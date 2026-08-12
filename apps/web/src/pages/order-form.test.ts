@@ -222,6 +222,14 @@ test("parseReceiveOrderResult validates financials, garments and uniqueness", ()
     payable_cents: 3_000,
     paid_cents: 500,
     balance_cents: 2_500,
+    discount_cents: 300,
+    discount_source: "customer",
+    discount_bps: 1_000,
+    waivers: {
+      skip_ticket_print: true,
+      skip_label_print: false,
+      skip_rack_assignment: true,
+    },
     garment_count: 1,
     garments: [
       {
@@ -236,6 +244,11 @@ test("parseReceiveOrderResult validates financials, garments and uniqueness", ()
   assert.deepEqual(parseReceiveOrderResult(valid), valid);
   assert.equal(parseReceiveOrderResult({ ...valid, balance_cents: 2_499 }), null);
   assert.equal(parseReceiveOrderResult({ ...valid, garment_count: 2 }), null);
+  assert.equal(parseReceiveOrderResult({ ...valid, discount_source: "browser" }), null);
+  assert.equal(
+    parseReceiveOrderResult({ ...valid, waivers: { ...valid.waivers, skip_ticket_print: 1 } }),
+    null,
+  );
   assert.equal(
     parseReceiveOrderResult({ ...valid, garments: [valid.garments[0], valid.garments[0]] }),
     null,
@@ -331,6 +344,16 @@ test("parseOrderGetResult accepts summary + garments", () => {
     status: "open",
     customer_phone: "13800000111",
     customer_name: "张三",
+    customer_profile_version: 4,
+    discount_source: "customer",
+    discount_bps: 0,
+    membership_version: null,
+    tier: null,
+    waivers: {
+      skip_ticket_print: true,
+      skip_label_print: false,
+      skip_rack_assignment: true,
+    },
     payable_cents: 3500,
     paid_cents: 500,
     balance_cents: 3000,
@@ -340,6 +363,12 @@ test("parseOrderGetResult accepts summary + garments", () => {
   assert.equal(parsed?.ticket_no, "20260722-0001");
   assert.equal(parsed?.balance_cents, 3000);
   assert.equal(parsed?.garments.length, 3);
+  assert.equal(parsed?.customer_profile_version, 4);
+  assert.equal(parsed?.discount_source, "customer");
+  assert.equal(parsed?.discount_bps, 0);
+  assert.equal(parsed?.waivers.skip_ticket_print, true);
+  assert.equal(parsed?.waivers.skip_label_print, false);
+  assert.equal(parsed?.waivers.skip_rack_assignment, true);
   assert.equal(parseOrderGetResult({ ticket_no: "x" }), null);
   assert.equal(
     parseOrderGetResult({
@@ -364,6 +393,39 @@ test("parseOrderGetResult accepts summary + garments", () => {
         },
       ],
       garments: [],
+    }),
+    null,
+  );
+});
+
+test("parseOrderGetResult rejects malformed policy snapshots", () => {
+  const valid = {
+    order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    ticket_no: "20260722-0001",
+    pickup_code: "P202607220001",
+    status: "open",
+    payable_cents: 3500,
+    paid_cents: 500,
+    balance_cents: 3000,
+    garments: SAMPLE_GARMENTS,
+    customer_profile_version: 4,
+    discount_source: "customer",
+    discount_bps: 0,
+    membership_version: null,
+    tier: null,
+    waivers: {
+      skip_ticket_print: true,
+      skip_label_print: false,
+      skip_rack_assignment: true,
+    },
+  };
+  assert.ok(parseOrderGetResult(valid));
+  assert.equal(parseOrderGetResult({ ...valid, discount_source: "unknown" }), null);
+  assert.equal(parseOrderGetResult({ ...valid, discount_bps: 10_001 }), null);
+  assert.equal(
+    parseOrderGetResult({
+      ...valid,
+      waivers: { ...valid.waivers, skip_ticket_print: "yes" },
     }),
     null,
   );
