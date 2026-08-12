@@ -19,6 +19,9 @@ describe("M2 contract surface", () => {
       "customer.merge",
       "customer.privacy.export",
       "customer.anonymize",
+      // ADR-42: bounded customer profile and separate high-risk discount policy.
+      "customer.profile.set",
+      "customer.discount_policy.set",
       "order.receive",
       "order.hold",
       "order.cancel",
@@ -51,12 +54,20 @@ describe("M2 contract surface", () => {
       "garment.rework",
       "garment.incident.record",
       "garment.mark_lost",
+      // ADR-45: store-scoped online custody, discrepancy and QC evidence.
+      "fulfillment.batch.create",
+      "fulfillment.batch.cancel",
+      "fulfillment.handoff.checkpoint.record",
+      "fulfillment.handoff.discrepancy.resolve",
+      "fulfillment.quality_check.record",
       // M1.5: store-scoped staff access administration with R5 step-up.
       "staff.access.set",
       // ADR-31: non-secret staff lifecycle commands. Password and PIN only
       // cross the dedicated authenticated completion boundary.
       "staff.create",
       "staff.credentials.reset",
+      // ADR-40: current authenticated store only; R5 step-up + optimistic profile version.
+      "store.profile.set",
       // ADR-17: member stored value. Top-up is R3 because real money enters an
       // append-only ledger; the balance is SUM(delta), never a stored column.
       "member.account.open",
@@ -75,9 +86,19 @@ describe("M2 contract surface", () => {
       "member.account.freeze",
       "member.account.unfreeze",
       "member.account.close",
+      // ADR-41: virtual tier, points, punch-card and coupon surfaces. The
+      // browser never submits computed point awards or coupon discounts.
+      "member.benefit_definition.upsert",
+      "member.membership.set",
+      "member.points.earn",
+      "member.points.redeem",
+      "member.asset.grant",
+      "member.asset.consume",
       // ADR-23: manual fallback only. The R3 command creates an audited CSV;
       // it does not send a message and is hard-capped below the R4 threshold.
       "notification.manual_list.create",
+      // ADR-44: explicit admin enqueue; 11-50 recipients escalate R3 to R4.
+      "notification.delivery_batch.enqueue",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
@@ -85,13 +106,22 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("stats.day.summary");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("photo.list_by_order");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("fulfillment.workbench");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("fulfillment.batches.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("fulfillment.batch.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.duplicates");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.profile.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("staff.access.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("store.authorized.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("member.account.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("member.bonus_rules.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("member.benefit_catalog.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("member.benefits.get");
     // ADR-23: PII-bearing manual counter worklist, deliberately not in AI tools.
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.pickup_reminders.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.delivery.capability.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.delivery_batches.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.delivery_batch.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("accounting.report.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.drilldown");
@@ -99,8 +129,8 @@ describe("M2 contract surface", () => {
     // ADR-38: trusted policy read and immutable payment-ledger refund source.
     expect(M2_CONTRACT_QUERY_NAMES).toContain("pricing.policy.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("payment.ledger.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(43);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(29);
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(58);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(38);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
@@ -143,6 +173,15 @@ describe("M2 contract surface", () => {
       "notification.pickup_reminders.list",
     );
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "notification.delivery.capability.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "notification.delivery_batches.list",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "notification.delivery_batch.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "catalog.items.manage.list",
     );
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
@@ -159,6 +198,33 @@ describe("M2 contract surface", () => {
     );
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "reporting.owner_portfolio.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "store.authorized.list",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "member.benefit_catalog.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "member.benefits.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "customer.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "customer.privacy.status",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "customer.privacy.events",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "customer.profile.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "fulfillment.batches.list",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "fulfillment.batch.get",
     );
   });
 

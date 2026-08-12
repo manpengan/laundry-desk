@@ -1,11 +1,18 @@
 import { z } from "zod";
 
 import { JsonPointerSchema } from "../registry/primitives.js";
+import {
+  FactoryHandoffConfirmationSummarySchema,
+  FulfillmentOperationConfirmationSummarySchema,
+  type FactoryHandoffConfirmationSummary,
+  type FulfillmentOperationConfirmationSummary,
+} from "./fulfillment-confirmation.js";
 import { ConfirmReferenceSchema } from "./wire-payload.js";
 
 /** Architecture §6.5: externally safe outcomes for each C1 validation-chain stage. */
 export const CommandErrorCodeSchema = z.enum([
   "VALIDATION_FAILED",
+  "CUSTOMER_ERASED",
   "SHIFT_CLOSED",
   "PERMISSION_DENIED",
   "RESOURCE_UNAVAILABLE",
@@ -28,6 +35,7 @@ export type CommandErrorCode = z.infer<typeof CommandErrorCodeSchema>;
 
 const PublicErrorMessages = {
   VALIDATION_FAILED: "Request validation failed",
+  CUSTOMER_ERASED: "Customer data was erased and cannot be recreated",
   SHIFT_CLOSED: "Business day is already closed",
   PERMISSION_DENIED: "Permission denied",
   RESOURCE_UNAVAILABLE: "Resource is unavailable",
@@ -127,6 +135,59 @@ export const MemberTopupConfirmationSummarySchema = z
     }
   });
 
+export const NotificationDeliveryConfirmationSummarySchema = z
+  .object({
+    kind: z.literal("notification_delivery_batch"),
+    order_count: z.number().int().min(1).max(50),
+    risk_window_order_count: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    ticket_nos: z.array(z.string().min(1).max(64)).min(1).max(50),
+    channel: z.literal("sms"),
+    assurance: z.enum(["software_only", "external"]),
+    provider_code: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/u),
+    template_code: z.literal("pickup_reminder_v1"),
+    template_version: z.number().int().positive().max(1_000_000),
+    estimated_cost_cents: ConfirmationCentsSchema.max(100_000),
+    max_cost_cents: ConfirmationCentsSchema.max(100_000),
+    min_age_days: z.union([z.literal(30), z.literal(90), z.literal(180)]),
+    unpaid_only: z.boolean(),
+    garment_statuses: z
+      .array(z.enum(["ready", "racked"]))
+      .min(1)
+      .max(2)
+      .refine((statuses) => new Set(statuses).size === statuses.length),
+  })
+  .strict()
+  .superRefine((summary, context) => {
+    if (summary.estimated_cost_cents > summary.max_cost_cents) {
+      context.addIssue({
+        code: "custom",
+        path: ["max_cost_cents"],
+        message: "cost limit must cover the frozen estimate",
+      });
+    }
+    if (summary.ticket_nos.length !== summary.order_count) {
+      context.addIssue({
+        code: "custom",
+        path: ["ticket_nos"],
+        message: "ticket count must equal the frozen order count",
+      });
+    }
+    if (summary.risk_window_order_count < summary.order_count) {
+      context.addIssue({
+        code: "custom",
+        path: ["risk_window_order_count"],
+        message: "risk window cannot contain fewer orders than this request",
+      });
+    }
+  });
+
+const ConfirmationSummarySchema = z.union([
+  MemberTopupConfirmationSummarySchema,
+  NotificationDeliveryConfirmationSummarySchema,
+  FactoryHandoffConfirmationSummarySchema,
+  FulfillmentOperationConfirmationSummarySchema,
+]);
+
 const ErrorDetailSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("field"), path: JsonPointerSchema }).strict(),
   z
@@ -139,7 +200,7 @@ const ErrorDetailSchema = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("confirmation"),
       confirm_ref: ConfirmReferenceSchema,
-      summary: MemberTopupConfirmationSummarySchema.optional(),
+      summary: ConfirmationSummarySchema.optional(),
     })
     .strict(),
   z.object({ kind: z.literal("step_up"), methods: z.array(z.enum(["pin", "qr"])).min(1) }).strict(),
@@ -156,6 +217,14 @@ export type CommandErrorDetail = DeepReadonly<z.output<typeof ErrorDetailSchema>
 export type MemberTopupConfirmationSummary = DeepReadonly<
   z.output<typeof MemberTopupConfirmationSummarySchema>
 >;
+export type NotificationDeliveryConfirmationSummary = DeepReadonly<
+  z.output<typeof NotificationDeliveryConfirmationSummarySchema>
+>;
+export type ConfirmationSummary =
+  | MemberTopupConfirmationSummary
+  | NotificationDeliveryConfirmationSummary
+  | FactoryHandoffConfirmationSummary
+  | FulfillmentOperationConfirmationSummary;
 
 const createErrorSchema = <TCode extends CommandErrorCode, TMessage extends string>(
   code: TCode,
@@ -181,6 +250,7 @@ const createFixedAuthErrorSchema = <TCode extends AuthPublicErrorCode, TMessage 
  */
 export const CommandErrorSchema = z.discriminatedUnion("code", [
   createErrorSchema("VALIDATION_FAILED", PublicErrorMessages.VALIDATION_FAILED),
+  createErrorSchema("CUSTOMER_ERASED", PublicErrorMessages.CUSTOMER_ERASED),
   createErrorSchema("SHIFT_CLOSED", PublicErrorMessages.SHIFT_CLOSED),
   createErrorSchema("PERMISSION_DENIED", PublicErrorMessages.PERMISSION_DENIED),
   createErrorSchema("RESOURCE_UNAVAILABLE", PublicErrorMessages.RESOURCE_UNAVAILABLE),
@@ -216,13 +286,45 @@ const freezeCommandError = (error: CommandError): CommandError => {
       return { ...error.detail, methods: [...error.detail.methods] };
     }
     if (error.detail.kind === "confirmation" && error.detail.summary !== undefined) {
-      const matchedRule =
-        error.detail.summary.matched_rule === null
-          ? null
-          : Object.freeze({ ...error.detail.summary.matched_rule });
+      if (error.detail.summary.kind === "notification_delivery_batch") {
+        return {
+          ...error.detail,
+          summary: Object.freeze({
+            ...error.detail.summary,
+            ticket_nos: Object.freeze([...error.detail.summary.ticket_nos]),
+            garment_statuses: Object.freeze([...error.detail.summary.garment_statuses]),
+          }),
+        };
+      }
+      if (error.detail.summary.kind === "member_topup") {
+        const matchedRule =
+          error.detail.summary.matched_rule === null
+            ? null
+            : Object.freeze({ ...error.detail.summary.matched_rule });
+        return {
+          ...error.detail,
+          summary: Object.freeze({ ...error.detail.summary, matched_rule: matchedRule }),
+        };
+      }
+      if (error.detail.summary.kind === "factory_handoff") {
+        return {
+          ...error.detail,
+          summary: Object.freeze({
+            ...error.detail.summary,
+            ticket_nos: Object.freeze([...error.detail.summary.ticket_nos]),
+            barcodes: Object.freeze([...error.detail.summary.barcodes]),
+            counts: Object.freeze({ ...error.detail.summary.counts }),
+          }),
+        };
+      }
       return {
         ...error.detail,
-        summary: Object.freeze({ ...error.detail.summary, matched_rule: matchedRule }),
+        summary: Object.freeze({
+          ...error.detail.summary,
+          garment_ids: Object.freeze([...error.detail.summary.garment_ids]),
+          ticket_nos: Object.freeze([...error.detail.summary.ticket_nos]),
+          barcodes: Object.freeze([...error.detail.summary.barcodes]),
+        }),
       };
     }
     return { ...error.detail };

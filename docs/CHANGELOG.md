@@ -14,6 +14,41 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
+- 店厂交接与质检返工（[ADR-45](adr/2026-08-12-adr-45-factory-handoff-and-qc.md)）：新增当前门店
+  内部员工使用的批次建单、门店出库、工厂收件、工厂出库和门店收件四节点完整扫码证据；服务端计算
+  missing/unexpected 并阻断普通推进，只有另一管理员 R4 处置才可隔离异常件，且不会自动把衣物判丢。
+  工厂收件后逐件 QC pass/rework，未全部合格不能出厂；保管状态与既有衣物生命周期保持独立。当前
+  为 online-only Cloud Web 软件切片，不包含外部工厂账号、跨店联邦、离线/原生移动 App、照片、
+  GPS 或真实扫码设备验收。五条写命令和两条 PII-adjacent 查询均按会话、组织和门店独立限流，
+  超限在领域读取/写入前返回 `429` 与 `Retry-After`。
+
+- Provider-neutral 通知 outbox（[ADR-44](adr/2026-08-12-adr-44-provider-neutral-notification-outbox.md)）：
+  在既有人工催取名单之外新增服务端版本化模板、受控批次、租约、同一 delivery id 幂等重试、回执状态、
+  整数费用上限和人工降级；新 outbox 不保存手机号、消息正文或 provider payload，并与顾客匿名化
+  串行。当前只实现明确标注、无网络且费用为 0 的 software-only adapter；真实短信/微信仍需独立
+  secret、模板审批、额度、请求和验签 webhook 证据。
+
+- Cloud 数据保护与联合恢复（[ADR-43](adr/2026-08-12-adr-43-cloud-data-protection-and-joint-recovery.md)）：
+  新增不经过 Web/HTTP 的 root-only 主机维护面，把精确代码 SHA、迁移账本/catalog、PostgreSQL dump
+  与私有衣物照片绑定为同一恢复集；恢复集必须通过影子库与照片摘要重验。离机 adapter 只接受
+  独立网络文件系统并在目标端重验，监控按备份/离机 26 小时和演练 8 天阈值失败关闭；联合恢复
+  先建立 pre-recovery 安全点，再按同一 manifest 恢复代码、迁移、数据库和照片。真实远端存储、
+  加密介质、告警接收与 hk-vps 恢复演练仍需独立外部证据。
+
+- 会员权益与有效期（[ADR-41](adr/2026-08-11-adr-41-member-benefits-and-expiry.md)）：新增虚拟
+  等级、服务端订单积分、次卡与固定金额优惠券；权益按组织共享并保留独立到期快照，券只在服务端
+  原子核销到同顾客的未收款订单。取消订单会保留核销历史并冲正返还券；闭店后会员业务写入拒绝，
+  浏览器在响应结果不确定时沿用同一幂等键。会员有效期不会自动清空储值本金或赠款。
+- 顾客扩展档案与折扣政策（[ADR-42](adr/2026-08-12-adr-42-customer-extended-profiles-and-discount-policy.md)）：
+  新增组织级多地址、车辆/标签/外部标识、联系与服务偏好、三类运营豁免、顾客覆盖折扣与会员等级
+  折扣；订单和打印保存当时的政策快照，不随后续档案变更重算。隐私导出、匿名化、递归合并、审计、
+  确认卡、幂等缓存和 Edge replay 统一覆盖扩展资料及历史手机号，退役自由文本与匿名化后复写均在
+  PostgreSQL 边界失败关闭。
+- Owner 公网经营与授权门店管理（[ADR-40](adr/2026-08-11-adr-40-cloud-owner-operations.md)）：
+  `/owner` 升级为 Cloud Web 正式 mobile-first 经营入口，复用既有双口径今日/范围/月结/职员/
+  渠道报表及校验导出；新增逐店重新证明 active admin 的授权门店目录，以及当前会话门店名称的
+  R5 乐观并发更新。跨店管理必须先注销并按目标门店重新认证，浏览器不能把 org/store 注入
+  命令租户；员工治理继续复用既有双管理员 R5 边界。
 - 价目治理（[ADR-39](adr/2026-08-11-adr-39-catalog-governance.md)）：设置页同时显示在架与停用价目，可按服务端顺序上下调整、停用后重新启用，并以乐观版本拒绝并发覆盖后自动刷新；新增 catalog-only 安全审计列表，只展示动作、编码、时间与脱敏员工标识。应用角色不再具备价目物理删除权限，改价、启停与排序不重估任何历史订单快照。
 - 上述价目治理已随精确 `main` `f276bdbf328ae20aba20c7985c690a63484afdca` 发布到 hk-vps，迁移到 48/head `0048_catalog_governance.sql`；golden catalog 678 entries、API 15/15、Cloud Chromium、marker/schema/health/权限与清理证据均通过。见[阶段 3.1 发布结果](operations/2026-08-11-stage3-catalog-governance-release-result.md)。
 

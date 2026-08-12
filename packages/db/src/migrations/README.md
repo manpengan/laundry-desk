@@ -6,54 +6,59 @@ Formal v2 PostgreSQL migrations for `@laundry/db`.
 
 ```bash
 export DATABASE_URL=postgresql://laundry_owner@localhost:5432/laundry_v2
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0001_roles.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0002_m1_identity_platform.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0003_rls_and_grants.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0004_auth_lookup_functions.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0005_pin_lockouts.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0006_pin_challenge_stepup_binding.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0007_m2_orders.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0008_catalog_items.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0009_payments.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0010_print_jobs.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0011_customers.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0012_shift_closings.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0013_garment_photos.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0014_order_list_summary_indexes.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0015_m2_counter_production_hardening.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0016_local_bootstrap.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0017_local_runtime_readiness.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0018_identity_lifecycle_indexes.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0019_money_integrity_workday.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0020_counter_lookup_codes.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0021_print_job_lease.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0022_print_job_artifact.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0023_photo_file_integrity.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0024_photo_delete_grant.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0025_fulfillment_operations.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0026_customer_profile_governance.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0027_garment_rack_operations.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0028_customer_privacy_lifecycle.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0029_staff_access_governance.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0030_edge_replay_authority.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0031_payment_ledger_sequence.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0032_member_stored_value.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0033_offline_grant_replay.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0034_signed_print_dispatch.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0035_member_tender_cash_reconciliation.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0036_member_bonus_rules.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0037_member_refund.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0038_notification_manual_list.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0039_accounting_report_indexes.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0040_member_account_lifecycle.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0041_owner_dashboard_indexes.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0042_durable_pending_actions.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0043_receipt_and_member_bonus_integrity.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0044_durable_step_up_proofs.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0045_store_commissioning_staff_credentials.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0046_print_job_request_idempotency.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0047_cloud_counter_trust.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f src/migrations/0048_catalog_governance.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0001_roles.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0002_m1_identity_platform.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0003_rls_and_grants.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0004_auth_lookup_functions.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0005_pin_lockouts.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0006_pin_challenge_stepup_binding.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0007_m2_orders.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0008_catalog_items.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0009_payments.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0010_print_jobs.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0011_customers.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0012_shift_closings.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0013_garment_photos.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0014_order_list_summary_indexes.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0015_m2_counter_production_hardening.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0016_local_bootstrap.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0017_local_runtime_readiness.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0018_identity_lifecycle_indexes.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0019_money_integrity_workday.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0020_counter_lookup_codes.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0021_print_job_lease.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0022_print_job_artifact.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0023_photo_file_integrity.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0024_photo_delete_grant.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0025_fulfillment_operations.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0026_customer_profile_governance.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0027_garment_rack_operations.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0028_customer_privacy_lifecycle.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0029_staff_access_governance.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0030_edge_replay_authority.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0031_payment_ledger_sequence.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0032_member_stored_value.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0033_offline_grant_replay.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0034_signed_print_dispatch.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0035_member_tender_cash_reconciliation.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0036_member_bonus_rules.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0037_member_refund.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0038_notification_manual_list.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0039_accounting_report_indexes.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0040_member_account_lifecycle.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0041_owner_dashboard_indexes.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0042_durable_pending_actions.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0043_receipt_and_member_bonus_integrity.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0044_durable_step_up_proofs.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0045_store_commissioning_staff_credentials.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0046_print_job_request_idempotency.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0047_cloud_counter_trust.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0048_catalog_governance.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0049_cloud_owner_operations.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0050_member_benefits.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0051_customer_extended_profiles.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0052_notification_delivery_outbox.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0053_factory_handoff_and_qc.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -71,6 +76,11 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **M2 skeleton** (0007): `orders`, `order_lines`, `garments`, `ticket_counters`
 - **M2 catalog** (0008): `catalog_items` (store-scoped price list; app seeds demo on first list if empty)
 - **Catalog governance** (0048, [ADR-39](../../../../docs/adr/2026-08-11-adr-39-catalog-governance.md)): optimistic row versions, automatic version bumps, atomic reorder, and app-role physical-delete revocation
+- **Cloud Owner operations** (0049, [ADR-40](../../../../docs/adr/2026-08-11-adr-40-cloud-owner-operations.md)): optimistic current-store profile versions for audited public Owner management
+- **Member benefits** (0050, [ADR-41](../../../../docs/adr/2026-08-11-adr-41-member-benefits-and-expiry.md)): versioned tier/points/punch/coupon definitions, independent expiry snapshots, append-only usage/reversal evidence, and atomic coupon/order cancellation support
+- **Customer extended profiles** (0051, [ADR-42](../../../../docs/adr/2026-08-12-adr-42-customer-extended-profiles-and-discount-policy.md)): bounded org-scoped profile/address/identifier rows, recursive canonical groups, owner-only HMAC erasure tombstones, privacy-copy purge metadata, tier/customer discount snapshots, and order waiver snapshots
+- **Provider-neutral notification outbox** (0052, [ADR-44](../../../../docs/adr/2026-08-12-adr-44-provider-neutral-notification-outbox.md)): approved org templates, bounded store batches, leased delivery state, append-only attempt/receipt evidence, integer cost guards, and privacy-safe fingerprints
+- **Factory handoff and QC** (0053, [ADR-45](../../../../docs/adr/2026-08-12-adr-45-factory-handoff-and-qc.md)): store-scoped garment manifests, four immutable handoff checkpoints, discrepancy reconciliation, custody anchors, and append-only quality evidence
 - **M2 payments** (0009): `payments` append-only ledger (`SELECT, INSERT` only for `laundry_app`)
 - **M2 print** (0010): `print_jobs` queue (`SELECT, INSERT, UPDATE` for status transitions; no DELETE)
 - **M2 customers** (0011): `customers` org-scoped archive (`SELECT, INSERT, UPDATE`; unique org+phone)

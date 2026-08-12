@@ -132,6 +132,11 @@ describe("destructive migration static reject", () => {
       "0046_print_job_request_idempotency.sql",
       "0047_cloud_counter_trust.sql",
       "0048_catalog_governance.sql",
+      "0049_cloud_owner_operations.sql",
+      "0050_member_benefits.sql",
+      "0051_customer_extended_profiles.sql",
+      "0052_notification_delivery_outbox.sql",
+      "0053_factory_handoff_and_qc.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

@@ -24,6 +24,7 @@ export {
   CommandErrorSchema,
   CommandResponseSchema,
   MemberTopupConfirmationSummarySchema,
+  NotificationDeliveryConfirmationSummarySchema,
   createCommandError,
 } from "./responses.js";
 export type {
@@ -34,4 +35,14 @@ export type {
   CommandErrorDetail,
   CommandResponse,
   MemberTopupConfirmationSummary,
+  NotificationDeliveryConfirmationSummary,
+  ConfirmationSummary,
 } from "./responses.js";
+export {
+  FactoryHandoffConfirmationSummarySchema,
+  FulfillmentOperationConfirmationSummarySchema,
+} from "./fulfillment-confirmation.js";
+export type {
+  FactoryHandoffConfirmationSummary,
+  FulfillmentOperationConfirmationSummary,
+} from "./fulfillment-confirmation.js";

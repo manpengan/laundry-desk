@@ -124,35 +124,64 @@ describe("M2 customer archive skeleton", () => {
     expect(customerUpsertCommand.name).toBe("customer.upsert");
     expect(customerUpsertCommand.risk).toBe("R2");
     expect(customerUpsertCommand.offline_mode).toBe("grant");
-    expect(customerUpsertCommand.invariants).toContain("rbac.order_write");
+    expect(customerUpsertCommand.invariants).toContain("rbac.customer_write");
     expect(customerUpsertCommand.input_redaction).toEqual([{ path: "/phone", strategy: "mask" }]);
     expect(customerGetQuery.max_result_rows).toBe(1);
     expect(customerDuplicatesQuery.max_result_rows).toBe(20);
     expect(customerUpdateCommand.risk).toBe("R3");
+    expect(customerUpdateCommand.invariants).toEqual(["rbac.customer_write", "customer.version"]);
     expect(customerMergeCommand.risk).toBe("R4");
     expect(customerMergeCommand.offline_mode).toBe("denied");
     expect(customerPrivacyStatusQuery.data_classification).toBe("internal");
     expect(customerPrivacyStatusQuery.max_result_rows).toBe(1);
+    expect(customerPrivacyStatusQuery.invariants).toEqual(["rbac.privacy_admin"]);
     expect(customerPrivacyEventsQuery.data_classification).toBe("internal");
     expect(customerPrivacyEventsQuery.max_result_rows).toBe(50);
     expect(customerPrivacyExportCommand.risk).toBe("R4");
+    expect(customerPrivacyExportCommand.version).toBe("0.2.0");
     expect(customerPrivacyExportCommand.idempotent).toBe(false);
     expect(customerPrivacyExportCommand.invariants).toContain("rbac.privacy_admin");
+    expect(customerPrivacyExportCommand.result_redaction).toContainEqual({
+      path: "/profiles/*/service_note",
+      strategy: "mask",
+    });
     expect(customerAnonymizeCommand.risk).toBe("R5");
+    expect(customerAnonymizeCommand.version).toBe("0.2.0");
     expect(customerAnonymizeCommand.idempotent).toBe(false);
     expect(customerAnonymizeCommand.invariants).toContain("rbac.privacy_admin");
+  });
+
+  it("requires optimistic versioning for direct customer edits", async () => {
+    const input = {
+      customer_id: "11111111-1111-4111-8111-111111111111",
+      expected_version: 2,
+      name: "新名称",
+    };
+    await expect(parseContractInput(customerUpdateCommand, input)).resolves.toEqual(input);
+    await expect(
+      parseContractInput(customerUpdateCommand, {
+        customer_id: input.customer_id,
+        name: input.name,
+      }),
+    ).rejects.toBeTruthy();
   });
 
   it("requires an explicit exact phrase before anonymization", async () => {
     const base = {
       customer_id: "11111111-1111-4111-8111-111111111111",
-      reason: "客户主动申请",
+      reason: "customer_request",
     };
     await expect(
       parseContractInput(customerAnonymizeCommand, { ...base, confirmation: "ANONYMIZE" }),
     ).resolves.toEqual({ ...base, confirmation: "ANONYMIZE" });
     await expect(
       parseContractInput(customerAnonymizeCommand, { ...base, confirmation: "anonymize" }),
+    ).rejects.toBeTruthy();
+    await expect(
+      parseContractInput(customerPrivacyExportCommand, {
+        customer_id: base.customer_id,
+        reason: "张三申请导出 13800000111",
+      }),
     ).rejects.toBeTruthy();
   });
 });
