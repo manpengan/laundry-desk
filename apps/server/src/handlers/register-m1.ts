@@ -22,6 +22,10 @@ import {
   registerDeliveryAppointmentCommandHandlers,
   registerDeliveryAppointmentQueryHandlers,
 } from "../delivery-appointments/handlers.js";
+import {
+  registerDeliveryOrderCommandHandlers,
+  registerDeliveryOrderQueryHandlers,
+} from "../delivery-orders/handlers.js";
 import { registerOrderCommandHandlers, registerOrderQueryHandlers } from "../order/handlers.js";
 import {
   registerFulfillmentCommandHandlers,
@@ -109,6 +113,11 @@ export function registerM1Handlers(
       "delivery.appointment.reschedule",
       "delivery.appointment.cancel",
     );
+  }
+
+  if (deps.deliveryOrders !== undefined) {
+    registerDeliveryOrderCommandHandlers(registry, deps.deliveryOrders);
+    registered.push("delivery.order.create", "delivery.order.transition");
   }
 
   // ADR-15: price maintenance is a command; the query side stays read-only.
@@ -247,6 +256,11 @@ export function registerM1QueryHandlers(
       "delivery.appointment.addresses.list",
       "delivery.appointments.list",
     );
+  }
+
+  if (deps.deliveryOrders !== undefined) {
+    registerDeliveryOrderQueryHandlers(queryRegistry, deps.deliveryOrders);
+    names.push("delivery.order.get", "delivery.orders.list");
   }
 
   if (deps.catalog !== undefined) {

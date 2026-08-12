@@ -5,6 +5,8 @@ import {
   CSRF_HEADER_NAME,
   DELIVERY_APPOINTMENT_COMMAND_NAMES,
   DELIVERY_APPOINTMENT_QUERY_NAMES,
+  DELIVERY_ORDER_COMMAND_NAMES,
+  DELIVERY_ORDER_QUERY_NAMES,
   DELIVERY_POLICY_COMMAND_NAMES,
   DELIVERY_POLICY_QUERY_NAMES,
 } from "@laundry/contracts";
@@ -90,7 +92,7 @@ test("delivery policy limiter separates commands and queries and bounds buckets"
   );
 });
 
-test("every delivery policy and appointment route passes through the dedicated limiter", async () => {
+test("every delivery policy, appointment and order route passes through the dedicated limiter", async () => {
   const observed: DeliveryPolicyOperationKind[] = [];
   const limiter: DeliveryPolicyRateLimiter = Object.freeze({
     check: (kind) => {
@@ -141,11 +143,29 @@ test("every delivery policy and appointment route passes through the dedicated l
       payload: Object.freeze({}),
     });
   }
+  for (const name of DELIVERY_ORDER_COMMAND_NAMES) {
+    await app.inject({
+      method: "POST",
+      url: `/v1/commands/${name}`,
+      headers: Object.freeze({ ...browserHeaders, ...authorization }),
+      payload: Object.freeze({}),
+    });
+  }
+  for (const name of DELIVERY_ORDER_QUERY_NAMES) {
+    await app.inject({
+      method: "POST",
+      url: `/v1/queries/${name}`,
+      headers: Object.freeze({ ...browserHeaders, ...authorization }),
+      payload: Object.freeze({}),
+    });
+  }
   assert.deepEqual(observed, [
     ...DELIVERY_POLICY_COMMAND_NAMES.map(() => "command" as const),
     ...DELIVERY_POLICY_QUERY_NAMES.map(() => "query" as const),
     ...DELIVERY_APPOINTMENT_COMMAND_NAMES.map(() => "command" as const),
     ...DELIVERY_APPOINTMENT_QUERY_NAMES.map(() => "query" as const),
+    ...DELIVERY_ORDER_COMMAND_NAMES.map(() => "command" as const),
+    ...DELIVERY_ORDER_QUERY_NAMES.map(() => "query" as const),
   ]);
   await app.close();
 });

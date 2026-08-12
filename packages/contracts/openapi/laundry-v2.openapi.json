@@ -27619,6 +27619,330 @@
         ],
         "type": "object"
       },
+      "input.command.delivery.appointment.cancel": {
+        "additionalProperties": false,
+        "properties": {
+          "appointment_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "expected_version": {
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647,
+            "type": "integer"
+          },
+          "reason": {
+            "enum": [
+              "customer_request",
+              "store_request",
+              "unreachable",
+              "duplicate",
+              "other"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "appointment_id",
+          "customer_id",
+          "expected_version",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "input.command.delivery.appointment.create": {
+        "additionalProperties": false,
+        "properties": {
+          "address_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "direction": {
+            "enum": [
+              "pickup",
+              "return"
+            ],
+            "type": "string"
+          },
+          "expected_policy_version": {
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647,
+            "type": "integer"
+          },
+          "requested_start_at": {
+            "maximum": 4294967295,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "service_area_code": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id",
+          "address_id",
+          "direction",
+          "service_area_code",
+          "requested_start_at",
+          "expected_policy_version"
+        ],
+        "type": "object"
+      },
+      "input.command.delivery.appointment.reschedule": {
+        "additionalProperties": false,
+        "properties": {
+          "appointment_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "expected_policy_version": {
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647,
+            "type": "integer"
+          },
+          "expected_version": {
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647,
+            "type": "integer"
+          },
+          "requested_start_at": {
+            "maximum": 4294967295,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "appointment_id",
+          "customer_id",
+          "expected_version",
+          "expected_policy_version",
+          "requested_start_at"
+        ],
+        "type": "object"
+      },
+      "input.command.delivery.order.create": {
+        "additionalProperties": false,
+        "properties": {
+          "collection_method": {
+            "enum": [
+              "pickup",
+              "store_dropoff"
+            ],
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "laundry_order_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "pickup_appointment_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "return_appointment_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "return_method": {
+            "enum": [
+              "delivery",
+              "self_pickup"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "laundry_order_id",
+          "customer_id",
+          "collection_method",
+          "return_method"
+        ],
+        "type": "object"
+      },
+      "input.command.delivery.order.transition": {
+        "additionalProperties": false,
+        "properties": {
+          "cancellation_reason": {
+            "enum": [
+              "customer_request",
+              "store_request",
+              "appointment_cancelled",
+              "duplicate",
+              "other"
+            ],
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "delivery_order_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "expected_version": {
+            "exclusiveMinimum": 0,
+            "maximum": 2147483647,
+            "type": "integer"
+          },
+          "target_status": {
+            "enum": [
+              "pickup_scheduled",
+              "pickup_in_progress",
+              "picked_up",
+              "at_store",
+              "return_scheduled",
+              "return_in_progress",
+              "self_pickup_ready",
+              "completed",
+              "cancelled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery_order_id",
+          "customer_id",
+          "expected_version",
+          "target_status"
+        ],
+        "type": "object"
+      },
+      "input.command.delivery.policy.set": {
+        "additionalProperties": false,
+        "properties": {
+          "accepting_appointments": {
+            "type": "boolean"
+          },
+          "expected_version": {
+            "maximum": 2147483646,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "max_appointments_per_slot": {
+            "exclusiveMinimum": 0,
+            "maximum": 100,
+            "type": "integer"
+          },
+          "maximum_advance_days": {
+            "exclusiveMinimum": 0,
+            "maximum": 365,
+            "type": "integer"
+          },
+          "minimum_lead_minutes": {
+            "maximum": 10080,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "service_areas": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+                  "type": "string"
+                },
+                "fee_cents": {
+                  "maximum": 2147483647,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "is_active": {
+                  "type": "boolean"
+                },
+                "name": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "name",
+                "fee_cents",
+                "is_active"
+              ],
+              "type": "object"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "slot_minutes": {
+            "maximum": 240,
+            "minimum": 15,
+            "type": "integer"
+          },
+          "weekly_windows": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "end_minute": {
+                  "exclusiveMinimum": 0,
+                  "maximum": 1440,
+                  "type": "integer"
+                },
+                "start_minute": {
+                  "maximum": 1439,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "weekday": {
+                  "maximum": 7,
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "weekday",
+                "start_minute",
+                "end_minute"
+              ],
+              "type": "object"
+            },
+            "maxItems": 28,
+            "type": "array"
+          }
+        },
+        "required": [
+          "expected_version",
+          "accepting_appointments",
+          "minimum_lead_minutes",
+          "maximum_advance_days",
+          "slot_minutes",
+          "max_appointments_per_slot",
+          "service_areas",
+          "weekly_windows"
+        ],
+        "type": "object"
+      },
       "input.command.edge.conflict.discard": {
         "additionalProperties": false,
         "properties": {
@@ -30050,6 +30374,148 @@
         },
         "type": "object"
       },
+      "input.query.delivery.appointment.addresses.list": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id"
+        ],
+        "type": "object"
+      },
+      "input.query.delivery.appointment.get": {
+        "additionalProperties": false,
+        "properties": {
+          "appointment_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "appointment_id"
+        ],
+        "type": "object"
+      },
+      "input.query.delivery.appointments.list": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "from_start_at": {
+            "maximum": 4294967295,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "limit": {
+            "exclusiveMinimum": 0,
+            "maximum": 100,
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "scheduled",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "to_start_at": {
+            "maximum": 4294967295,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "input.query.delivery.availability.quote": {
+        "additionalProperties": false,
+        "properties": {
+          "direction": {
+            "enum": [
+              "pickup",
+              "return"
+            ],
+            "type": "string"
+          },
+          "requested_start_at": {
+            "maximum": 4294967295,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "service_area_code": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "direction",
+          "service_area_code",
+          "requested_start_at"
+        ],
+        "type": "object"
+      },
+      "input.query.delivery.order.get": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery_order_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "delivery_order_id"
+        ],
+        "type": "object"
+      },
+      "input.query.delivery.orders.list": {
+        "additionalProperties": false,
+        "properties": {
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "laundry_order_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "limit": {
+            "exclusiveMinimum": 0,
+            "maximum": 100,
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pickup_scheduled",
+              "pickup_in_progress",
+              "picked_up",
+              "at_store",
+              "return_scheduled",
+              "return_in_progress",
+              "self_pickup_ready",
+              "completed",
+              "cancelled"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "input.query.delivery.policy.get": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
       "input.query.fulfillment.batch.get": {
         "additionalProperties": false,
         "properties": {
@@ -31598,6 +32064,318 @@
         "x-laundry-offline-mode": "grant",
         "x-laundry-risk": "R2",
         "x-laundry-version": "0.2.0"
+      }
+    },
+    "/v1/commands/delivery.appointment.cancel": {
+      "post": {
+        "description": "Internal counter operation. Cancellation remains available when delivery or appointment intake is paused. Stable command name: `delivery.appointment.cancel` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_delivery_appointment_cancel",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.delivery.appointment.cancel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Cancel one scheduled delivery appointment with a controlled reason code.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/delivery.appointment.create": {
+      "post": {
+        "description": "Internal counter operation. Revalidates the current feature, policy version, address ownership and slot capacity in one transaction. Stable command name: `delivery.appointment.create` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_delivery_appointment_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.delivery.appointment.create"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Reserve one delivery slot for an active customer address in the current store.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/delivery.appointment.reschedule": {
+      "post": {
+        "description": "Internal counter operation. Uses optimistic appointment and policy versions and atomically moves the capacity hold. Stable command name: `delivery.appointment.reschedule` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_delivery_appointment_reschedule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.delivery.appointment.reschedule"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Move one scheduled delivery appointment to another policy-valid slot.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/delivery.order.create": {
+      "post": {
+        "description": "Internal online logistics operation. Tenant, customer, fees and initial state are derived and revalidated by the server. Stable command name: `delivery.order.create` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_delivery_order_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.delivery.order.create"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Bind one authoritative delivery lifecycle to a laundry order and its appointments.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/delivery.order.transition": {
+      "post": {
+        "description": "Internal online logistics operation. It never substitutes for task assignment, garment fulfillment or delivery evidence. Stable command name: `delivery.order.transition` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_delivery_order_transition",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.delivery.order.transition"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Advance one delivery order through its server-enforced optimistic lifecycle.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/delivery.policy.set": {
+      "post": {
+        "description": "Not exposed to AI. R5 configuration requires another administrator's step-up approval and never enables the delivery feature flag. Stable command name: `delivery.policy.set` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_delivery_policy_set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.delivery.policy.set"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Replace the authenticated store's delivery policy using optimistic concurrency.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R5",
+        "x-laundry-version": "1.0.0"
       }
     },
     "/v1/commands/edge.conflict.discard": {
@@ -34874,6 +35652,370 @@
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R2",
         "x-laundry-version": "0.2.0"
+      }
+    },
+    "/v1/queries/delivery.appointment.addresses.list": {
+      "post": {
+        "description": "PII delivery address data. Never exposed to AI tools. Stable query name: `delivery.appointment.addresses.list` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_delivery_appointment_addresses_list",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.delivery.appointment.addresses.list"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List bounded active addresses across one customer's canonical merge group.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/delivery.appointment.get": {
+      "post": {
+        "description": "PII-linked internal record. Never exposed to AI tools. Stable query name: `delivery.appointment.get` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_delivery_appointment_get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.delivery.appointment.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Load one current-store delivery appointment by opaque id.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/delivery.appointments.list": {
+      "post": {
+        "description": "PII-linked internal worklist. Never exposed to AI tools. Stable query name: `delivery.appointments.list` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_delivery_appointments_list",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.delivery.appointments.list"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List a bounded current-store delivery appointment worklist.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/delivery.availability.quote": {
+      "post": {
+        "description": "Internal policy quote only. It does not create or hold an appointment, check occupied capacity, accept an address, or identify a customer. Stable query name: `delivery.availability.quote` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_delivery_availability_quote",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.delivery.availability.quote"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Evaluate one policy-only delivery appointment quote for the authenticated store.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R1",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/delivery.order.get": {
+      "post": {
+        "description": "PII-linked internal logistics record. Never exposed to AI tools. Stable query name: `delivery.order.get` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_delivery_order_get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.delivery.order.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read one current-store authoritative delivery order.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/delivery.orders.list": {
+      "post": {
+        "description": "PII-linked internal logistics worklist. Never exposed to AI tools. Stable query name: `delivery.orders.list` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_delivery_orders_list",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.delivery.orders.list"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List a bounded current-store delivery order worklist.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/delivery.policy.get": {
+      "post": {
+        "description": "Internal booking and configuration read. The authenticated session supplies the only store scope; mutation remains administrator-only. Stable query name: `delivery.policy.get` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_delivery_policy_get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.delivery.policy.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Load the authenticated store's delivery coverage and appointment policy.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R0",
+        "x-laundry-version": "1.0.0"
       }
     },
     "/v1/queries/fulfillment.batch.get": {

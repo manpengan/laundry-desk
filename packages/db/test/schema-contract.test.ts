@@ -271,7 +271,7 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(hasCodeUnique).toBe(true);
   });
 
-  it("exports the store-scoped delivery appointment projection", () => {
+  it("exports store-scoped delivery booking and order projections", () => {
     expect(Object.keys(M2_DELIVERY_TABLES)).toEqual([...M2_DELIVERY_TABLE_NAMES]);
     expect([...M2_DELIVERY_RLS_TABLES]).toEqual([...M2_DELIVERY_TABLE_NAMES]);
     expect(columnNames(M2_DELIVERY_TABLES.delivery_appointments)).toEqual(
@@ -294,6 +294,28 @@ describe("M1 schema contract vs A3 matrix", () => {
       ]),
     );
     expect(getTenantTableScope("delivery_appointments")).toBe("store");
+    expect(columnNames(M2_DELIVERY_TABLES.delivery_orders)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "org_id",
+        "store_id",
+        "laundry_order_id",
+        "customer_id",
+        "collection_method",
+        "return_method",
+        "pickup_appointment_id",
+        "return_appointment_id",
+        "pickup_fee_cents",
+        "return_fee_cents",
+        "total_fee_cents",
+        "status",
+        "version",
+        "completed_at",
+        "cancelled_at",
+        "cancellation_reason",
+      ]),
+    );
+    expect(getTenantTableScope("delivery_orders")).toBe("store");
   });
 
   it("exports M2 payments tables with store tenant columns and ledger fields", () => {

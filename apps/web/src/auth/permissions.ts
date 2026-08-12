@@ -49,6 +49,8 @@ export const NAV_ACCESS_RULES: Readonly<Record<NavItemId, NavAccessRule>> = Obje
   workbench: Object.freeze({}),
   receive: Object.freeze({}),
   pickup: Object.freeze({}),
+  // Existing in-flight orders stay operable when delivery_enabled is turned off.
+  delivery: Object.freeze({}),
   fulfillment: Object.freeze({ features: Object.freeze(["fulfillment_enabled"] as const) }),
   orders: Object.freeze({}),
   customers: Object.freeze({}),

@@ -31,12 +31,17 @@ test("staff hides restricted routes (stats, settings)", () => {
   assert.ok(keys.includes("workbench"));
   assert.ok(keys.includes("receive"));
   assert.ok(keys.includes("pickup"));
+  assert.ok(keys.includes("delivery"));
   assert.ok(keys.includes("customers"));
   assert.ok(keys.includes("reminders"));
   assert.equal(keys.includes("stats"), false);
   assert.equal(keys.includes("settings"), false);
   assert.equal(isNavAllowed(staffCtx, "stats"), false);
   assert.equal(isNavAllowed(staffCtx, "settings"), false);
+});
+
+test("delivery worklist remains visible when new delivery intake is disabled", () => {
+  assert.equal(isNavAllowed(staffCtx, "delivery"), true);
 });
 
 test("filterNavItems drops denied sidebar entries for staff", () => {

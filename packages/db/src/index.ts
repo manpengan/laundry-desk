@@ -79,6 +79,7 @@ export {
   catalogItems,
   deliveryPolicies,
   deliveryAppointments,
+  deliveryOrders,
   customers,
   garmentPhotos,
   commandIdempotency,

@@ -6,6 +6,7 @@ export { settings } from "./settings.js";
 export { storePricingPolicies } from "./store-pricing-policies.js";
 export { deliveryPolicies } from "./delivery-policies.js";
 export { deliveryAppointments } from "./delivery-appointments.js";
+export { deliveryOrders } from "./delivery-orders.js";
 export { storeFeatures } from "./store-features.js";
 export { auditLog } from "./audit-log.js";
 export { sessions } from "./sessions.js";
@@ -33,6 +34,7 @@ import { settings } from "./settings.js";
 import { storePricingPolicies } from "./store-pricing-policies.js";
 import { deliveryPolicies } from "./delivery-policies.js";
 import { deliveryAppointments } from "./delivery-appointments.js";
+import { deliveryOrders } from "./delivery-orders.js";
 import { storeFeatures } from "./store-features.js";
 import { auditLog } from "./audit-log.js";
 import { sessions } from "./sessions.js";
@@ -90,6 +92,7 @@ export const M2_CATALOG_TABLES = Object.freeze({
 /** Store-scoped delivery booking projections. */
 export const M2_DELIVERY_TABLES = Object.freeze({
   delivery_appointments: deliveryAppointments,
+  delivery_orders: deliveryOrders,
 } as const);
 
 /** M2 payments ledger (store-scoped, append-only). */

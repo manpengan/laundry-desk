@@ -57,7 +57,10 @@ export const M2_CATALOG_RLS_TABLES = Object.freeze([
 ] as const);
 
 /** Delivery appointments use the authenticated org + store scope (ADR-47). */
-export const M2_DELIVERY_RLS_TABLES = Object.freeze(["delivery_appointments"] as const);
+export const M2_DELIVERY_RLS_TABLES = Object.freeze([
+  "delivery_appointments",
+  "delivery_orders",
+] as const);
 
 /**
  * M2 payments ledger uses store-scope RLS (append-only grants in 0009_payments.sql).

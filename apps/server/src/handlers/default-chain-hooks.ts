@@ -12,6 +12,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   DELIVERY_APPOINTMENT_COMMAND_NAMES,
+  DELIVERY_ORDER_COMMAND_NAMES,
   createCommandError,
   type CommandError,
 } from "@laundry/contracts";
@@ -57,6 +58,7 @@ const REUSABLE_PENDING_COMMANDS: ReadonlySet<string> = new Set([
   "notification.delivery_batch.enqueue",
   "delivery.policy.set",
   ...DELIVERY_APPOINTMENT_COMMAND_NAMES,
+  ...DELIVERY_ORDER_COMMAND_NAMES,
 ]);
 
 export { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";

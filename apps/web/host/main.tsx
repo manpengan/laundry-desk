@@ -13,6 +13,7 @@ import "@laundry/ui/styles/components.css";
 import "../src/styles/shell.css";
 import "../src/styles/delivery-policy.css";
 import "../src/styles/delivery-appointments.css";
+import "../src/styles/delivery-orders.css";
 import "../src/styles/member.css";
 import "../src/styles/owner-dashboard.css";
 import "../src/styles/owner-operations.css";

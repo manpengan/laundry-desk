@@ -12,8 +12,10 @@
 取消。创建/改期在服务端重新校验 feature、策略版本、地址归属、时间规则、重复与实际每格容量；
 取消保留历史并在 feature/policy 暂停时仍可释放容量。
 
-不包含顾客本人认证、小程序/公开自助入口、地址新增/地理编码、`delivery_order`、任务分派、司机接单、
-路线、GPS、照片、签名、通知、离线/Edge 或第三方 provider。
+不包含顾客本人认证、小程序/公开自助入口、地址新增/地理编码、任务分派、司机接单、路线、GPS、照片、
+签名、通知、离线/Edge 或第三方 provider。本记录形成时 `delivery_order` 尚未实现；该历史结论后由
+[ADR-48](../../adr/2026-08-13-adr-48-authoritative-delivery-orders.md) 与 Item 3 验收记录推翻，不回填为
+Item 2 证据。
 
 ## 2. 关闭矩阵
 
@@ -31,7 +33,8 @@
 - ADR-46 报价可用不等于名额已锁；只有 `delivery.appointment.create` 事务成功才形成容量占位。
 - memory 容量测试不等于 PostgreSQL 同槽并发安全；必须另行证明 advisory lock 下不会超卖。
 - Web 显示的 canonical 地址不等于预约表保存了地址；迁移、审计和事件必须保持只有 opaque ID/运营快照。
-- 创建成功不等于已产生 `delivery_order` 或配送任务；Item 3 状态机仍未实现。
+- 创建成功本身不等于已产生 `delivery_order` 或配送任务；后续 Item 3 已新增独立配送订单状态机，
+  预约仍不会自动冒充配送订单或任务。
 - 取消成功只释放预约容量，不代表退款、通知或任务撤回；本轮不存在这些副作用。
 - UI feature gate 不是授权边界；命令总线权限、会话租户和数据库 FORCE RLS 必须分别成立。
 - focused test/build 不等于 required CI、真实 Browser、合入或 hk-vps 发布。

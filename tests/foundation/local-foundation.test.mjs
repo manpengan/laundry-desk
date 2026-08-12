@@ -383,6 +383,7 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
     /name: Run Playwright against real server and PostgreSQL[\s\S]{0,160}LAUNDRY_NOTIFICATION_PROVIDER_MODE:\s*["']software_only["'][\s\S]{0,160}pnpm local:up -- --bootstrap[\s\S]{0,120}pnpm run local:web:e2e/u,
   );
   assert.match(workflow, /commissioning-pg-acceptance\.mjs/u);
+  assert.match(freshCommissioningAcceptance, /"--filter", "@laundry\/server\.\.\."/u);
   assert.match(freshCommissioningAcceptance, /delivery-policy-pg-acceptance\.mjs/u);
   assert.match(freshCommissioningAcceptance, /member-benefits-pg-acceptance\.mjs/u);
   assert.match(freshCommissioningAcceptance, /notification-delivery-pg-acceptance\.mjs/u);
@@ -413,7 +414,7 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   );
   assert.match(
     commissioningPgAcceptance,
-    /assert\.equal\(migrations\.head, "0054_delivery_policy\.sql"\)/u,
+    /assert\.equal\(migrations\.head, "0056_delivery_orders\.sql"\)/u,
   );
 });
 

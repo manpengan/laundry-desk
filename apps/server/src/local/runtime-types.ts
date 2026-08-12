@@ -6,6 +6,7 @@ import type { CustomerHandlerDeps } from "../customer/handlers.js";
 import type { CustomerProfileHandlerDeps } from "../customer-profile/handlers.js";
 import type { DeliveryPolicyHandlerDeps } from "../delivery-policy/handlers.js";
 import type { DeliveryAppointmentHandlerDeps } from "../delivery-appointments/handlers.js";
+import type { DeliveryOrderHandlerDeps } from "../delivery-orders/handlers.js";
 import type { PgPool } from "../db/pg-pool.js";
 import type { EdgeAuthorityService } from "../edge/authority-service.js";
 import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
@@ -39,6 +40,7 @@ export type LocalRuntime = Readonly<{
   pricing: PricingHandlerDeps;
   deliveryPolicy: DeliveryPolicyHandlerDeps;
   deliveryAppointments: DeliveryAppointmentHandlerDeps;
+  deliveryOrders: DeliveryOrderHandlerDeps;
   order: OrderHandlerDeps;
   catalog: CatalogHandlerDeps;
   print: PrintHandlerDeps;

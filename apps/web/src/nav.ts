@@ -4,6 +4,7 @@ export type NavItemId =
   | "workbench"
   | "receive"
   | "pickup"
+  | "delivery"
   | "fulfillment"
   | "orders"
   | "customers"
@@ -21,6 +22,7 @@ export const COUNTER_NAV: readonly NavItem[] = [
   { id: "workbench", label: "工作台", icon: "⌂" },
   { id: "receive", label: "开单", icon: "＋" },
   { id: "pickup", label: "取衣", icon: "↓" },
+  { id: "delivery", label: "取送订单", icon: "↔" },
   { id: "fulfillment", label: "生产", icon: "⇄" },
   { id: "orders", label: "订单与欠款", icon: "≡" },
   { id: "customers", label: "客户", icon: "人" },

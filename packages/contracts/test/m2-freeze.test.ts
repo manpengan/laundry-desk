@@ -105,6 +105,9 @@ describe("M2 contract surface", () => {
       "delivery.appointment.create",
       "delivery.appointment.reschedule",
       "delivery.appointment.cancel",
+      // ADR-48: authoritative route linkage and DB-enforced optimistic logistics lifecycle.
+      "delivery.order.create",
+      "delivery.order.transition",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
@@ -142,8 +145,10 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.appointment.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.appointment.addresses.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.appointments.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(62);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(43);
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.order.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.orders.list");
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(64);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(45);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
@@ -250,6 +255,12 @@ describe("M2 contract surface", () => {
     );
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "delivery.appointments.list",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.order.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.orders.list",
     );
   });
 

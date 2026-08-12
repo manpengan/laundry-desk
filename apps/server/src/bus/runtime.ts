@@ -73,6 +73,7 @@ export function createRuntimeBus(runtime: LocalRuntime) {
       pricing: runtime.pricing,
       deliveryPolicy: runtime.deliveryPolicy,
       deliveryAppointments: runtime.deliveryAppointments,
+      deliveryOrders: runtime.deliveryOrders,
       order: runtime.order,
       catalog: runtime.catalog,
       print: runtime.print,
