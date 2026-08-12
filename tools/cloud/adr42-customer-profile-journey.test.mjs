@@ -271,8 +271,6 @@ test("ADR-42 cloud journey proves profile search, tier/customer pricing, waivers
     customerId: CUSTOMER_ID,
     customerPhone: "13800000123",
     memberAccountId: ACCOUNT_ID,
-    serviceCode: "wash",
-    categoryCode: "coat",
     cleanupUncertain: false,
   });
   const controller = createCustomerProfileJourney({
@@ -285,6 +283,8 @@ test("ADR-42 cloud journey proves profile search, tier/customer pricing, waivers
       catalogCode: "uat_20260812_deadbeef",
       note: "ADR42 synthetic test",
       label: "ADR42 UAT",
+      serviceCode: "wash",
+      categoryCode: "coat",
     },
     update: (patch) => {
       artifacts = Object.freeze({ ...artifacts, ...patch });
