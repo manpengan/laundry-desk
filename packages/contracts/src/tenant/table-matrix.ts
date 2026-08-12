@@ -133,6 +133,8 @@ const STORE_TABLES = describeTables(
     "campaigns",
     "campaign_audience_snapshots",
     "campaign_budget_ledger",
+    "campaign_coupon_batches",
+    "campaign_coupon_grants",
     "print_jobs",
     "print_device_receipt_heads",
     "print_templates",

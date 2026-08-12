@@ -29,6 +29,7 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0053_factory_handoff_and_qc.sql
 # 0054-0058 are populated by Stage 4.4 Items 1-6 on integration.
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0059_marketing_campaigns.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0060_campaign_coupon_batches.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -61,5 +62,6 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Provider-neutral notification outbox** (0052, ADR-44): approved templates, bounded batches, leased deliveries, append-only attempts/receipts, cost evidence, and privacy-safe recipient/message fingerprints
 - **Factory handoff and QC** (0053, ADR-45): store-scoped garment manifests, four immutable handoff checkpoints, discrepancy reconciliation, custody anchors, and append-only quality evidence
 - **Marketing campaigns** (0059, ADR-52): store-scoped campaign windows, strict audience rules, digest-only freezes, and an append-only integer-cent budget authority; no benefit issuance
+- **Campaign coupon batches** (0060, ADR-53): server-qualified bounded grants, immutable campaign-to-coupon provenance, exact budget debits, and append-only redemption reversal support
 - Still deferred: edge lease, AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

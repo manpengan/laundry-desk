@@ -33,7 +33,7 @@ import { createPgStatsQuery } from "../stats/pg-source.js";
 import { createPgStaffAccessDeps } from "../staff/runtime.js";
 import * as ownerOperations from "./runtime-owner-operations.js";
 import * as notificationRuntime from "./runtime-notification.js";
-import * as marketingRuntime from "./runtime-marketing.js";
+import { createMemoryMarketingRuntime, createPgMarketingRuntime } from "./runtime-marketing.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import { acquirePgBusinessDayLock } from "../workday/business-day-lock.js";
@@ -223,7 +223,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     member: memberRuntimes.member,
     memberBenefits: memberRuntimes.memberBenefits,
     notification: notificationRuntime.createMemoryNotificationRuntime(orderStore),
-    marketing: marketingRuntime.createMemoryMarketingRuntime(platform.features, DEMO_CUSTOMERS),
+    marketing: createMemoryMarketingRuntime(platform.features, DEMO_CUSTOMERS, memberRuntimes),
     edgeAuthority: edgeRuntime.createMemoryRuntimeAuthority(accessTokenSecret),
     accessTokenSecret,
     csrfProofSigner,
@@ -363,7 +363,7 @@ export async function createPgLocalRuntime(
     member: memberRuntimes.member,
     memberBenefits: memberRuntimes.memberBenefits,
     notification: notificationRuntime.createPgNotificationRuntime(appPool, notificationMode),
-    marketing: marketingRuntime.createPgMarketingRuntime(platform.features),
+    marketing: createPgMarketingRuntime(platform.features),
     edgeAuthority: edgeRuntime.createPgRuntimeAuthority(appPool, config.accessTokenSecret),
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSigner,

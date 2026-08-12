@@ -6,13 +6,14 @@ import {
   FACTORY_HANDOFF_QUERY_NAMES,
   IdempotencyKeySchema,
   MARKETING_COMMAND_NAMES,
+  MARKETING_COUPON_COMMAND_NAMES,
+  MARKETING_COUPON_QUERY_NAMES,
   MARKETING_QUERY_NAMES,
   parseCommandWirePayload,
 } from "@laundry/contracts";
 
 import type { AuthorizedSession } from "../auth/session-view.js";
 import { executeCommand } from "../bus/executor.js";
-import { executeQuery } from "../bus/execute-query.js";
 import { createRuntimeBus } from "../bus/runtime.js";
 import type { CommandResult } from "../bus/types.js";
 import {
@@ -27,6 +28,7 @@ import {
   applyCommandErrorStatus,
   createSqlRunner,
   executeTrustedSessionCommand,
+  executeTrustedSessionQuery,
   tenantFromSession,
   type SqlRunner,
 } from "./bus-route-execution.js";
@@ -41,8 +43,14 @@ const IDEMPOTENCY_HEADER_NAME = "idempotency-key";
 const NOTIFICATION_ENQUEUE_COMMAND = "notification.delivery_batch.enqueue";
 const FACTORY_COMMANDS: ReadonlySet<string> = new Set(FACTORY_HANDOFF_COMMAND_NAMES);
 const FACTORY_QUERIES: ReadonlySet<string> = new Set(FACTORY_HANDOFF_QUERY_NAMES);
-const MARKETING_COMMANDS: ReadonlySet<string> = new Set(MARKETING_COMMAND_NAMES);
-const MARKETING_QUERIES: ReadonlySet<string> = new Set(MARKETING_QUERY_NAMES);
+const MARKETING_COMMANDS: ReadonlySet<string> = new Set([
+  ...MARKETING_COMMAND_NAMES,
+  ...MARKETING_COUPON_COMMAND_NAMES,
+]);
+const MARKETING_QUERIES: ReadonlySet<string> = new Set([
+  ...MARKETING_QUERY_NAMES,
+  ...MARKETING_COUPON_QUERY_NAMES,
+]);
 
 function enforceOperationLimit(
   limiter: MarketingOperationRateLimiter,
@@ -286,7 +294,6 @@ function registerCommandRoute(
 function registerQueryRoute(
   app: FastifyInstance,
   context: RouteSecurityContext,
-  runWithSql: SqlRunner,
   factoryLimiter: FactoryOperationRateLimiter,
   marketingLimiter: MarketingOperationRateLimiter,
 ): void {
@@ -327,14 +334,12 @@ function registerQueryRoute(
         reply.code(400);
         return fail("VALIDATION_FAILED");
       }
-      const { queryRegistry } = createRuntimeBus(context.runtime);
-      const result = await runWithSql((sql) =>
-        executeQuery(sql, tenantFromSession(resolved), name, request.body, {
-          registry: queryRegistry,
-          actor: actorFromSession(resolved),
-          onUnexpectedError: (error) =>
-            request.log.error(safeErrorContext(error), "query execution failed"),
-        }),
+      const result = await executeTrustedSessionQuery(
+        context.runtime,
+        resolved,
+        name,
+        request.body,
+        (error) => request.log.error(safeErrorContext(error), "query execution failed"),
       );
       if (!result.ok) applyCommandErrorStatus(reply, result.error.code);
       return result;
@@ -362,5 +367,5 @@ export function registerBusRoutes(
     factoryLimiter,
     marketingLimiter,
   );
-  registerQueryRoute(app, context, runWithSql, factoryLimiter, marketingLimiter);
+  registerQueryRoute(app, context, factoryLimiter, marketingLimiter);
 }

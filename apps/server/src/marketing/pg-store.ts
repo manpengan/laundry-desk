@@ -4,8 +4,11 @@ import { MarketingAudienceRuleSchema } from "@laundry/contracts";
 
 import type { SqlClient, TenantContext } from "../db/types.js";
 import { audienceDigest } from "./audience.js";
+import { createPgMarketingCouponOperations } from "./pg-coupons.js";
 import type {
   MarketingAudienceSnapshotRecord,
+  MarketingAudienceEvaluation,
+  MarketingAudienceSelection,
   MarketingCampaignRecord,
   MarketingStore,
 } from "./types.js";
@@ -21,7 +24,7 @@ type CampaignRow = Readonly<{
   audience_rule_sha256: string;
   recipient_limit: number;
   budget_limit_cents: number;
-  budget_used_cents: number;
+  budget_used_cents: number | string;
   version: number;
   updated_at: Date | string;
 }>;
@@ -35,20 +38,28 @@ type SnapshotRow = Readonly<{
   created_at: Date | string;
 }>;
 
-const CAMPAIGN_SELECT = `
+const CAMPAIGN_BASE_SELECT = `
   SELECT campaign.id, campaign.code, campaign.name, campaign.status,
          campaign.starts_at, campaign.ends_at, campaign.audience_rule,
          campaign.audience_rule_sha256, campaign.recipient_limit,
-         campaign.budget_limit_cents, campaign.version, campaign.updated_at,
+         campaign.budget_limit_cents, campaign.version, campaign.updated_at`;
+
+const CAMPAIGN_SELECT = `${CAMPAIGN_BASE_SELECT},
          COALESCE((SELECT sum(ledger.amount_cents)
                      FROM campaign_budget_ledger ledger
                     WHERE ledger.org_id = campaign.org_id
                       AND ledger.store_id = campaign.store_id
-                      AND ledger.campaign_id = campaign.id), 0)::integer AS budget_used_cents
+                      AND ledger.campaign_id = campaign.id), 0)::bigint AS budget_used_cents
     FROM campaigns campaign`;
 
 function date(value: Date | string): Date {
   return value instanceof Date ? new Date(value) : new Date(value);
+}
+
+function integer(value: number | string, label: string): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(parsed)) throw new Error(`${label} must be a safe integer`);
+  return parsed;
 }
 
 function campaign(row: CampaignRow): MarketingCampaignRecord {
@@ -63,7 +74,7 @@ function campaign(row: CampaignRow): MarketingCampaignRecord {
     audienceRuleSha256: row.audience_rule_sha256,
     recipientLimit: row.recipient_limit,
     budgetLimitCents: row.budget_limit_cents,
-    budgetUsedCents: row.budget_used_cents,
+    budgetUsedCents: integer(row.budget_used_cents, "campaign budget used"),
     version: row.version,
     updatedAt: date(row.updated_at),
   });
@@ -80,27 +91,50 @@ function snapshot(row: SnapshotRow): MarketingAudienceSnapshotRecord {
   });
 }
 
-async function loadCampaign(
+export async function loadCampaign(
   client: SqlClient,
   tenant: TenantContext,
   campaignId: string,
   lock: boolean,
 ): Promise<MarketingCampaignRecord | null> {
+  if (lock) {
+    const locked = await client.query<Omit<CampaignRow, "budget_used_cents">>(
+      `${CAMPAIGN_BASE_SELECT}
+         FROM campaigns campaign
+        WHERE campaign.org_id = $1 AND campaign.store_id = $2 AND campaign.id = $3
+        FOR UPDATE OF campaign`,
+      [tenant.orgId, tenant.storeId, campaignId],
+    );
+    const row = locked.rows[0];
+    if (row === undefined) return null;
+    const budget = await client.query<Readonly<{ budget_used_cents: number | string }>>(
+      `SELECT COALESCE(sum(amount_cents), 0)::bigint AS budget_used_cents
+         FROM campaign_budget_ledger
+        WHERE org_id=$1::uuid AND store_id=$2::uuid AND campaign_id=$3::uuid`,
+      [tenant.orgId, tenant.storeId, campaignId],
+    );
+    return campaign(
+      Object.freeze({
+        ...row,
+        budget_used_cents: budget.rows[0]?.budget_used_cents ?? 0,
+      }),
+    );
+  }
   const result = await client.query<CampaignRow>(
     `${CAMPAIGN_SELECT}
       WHERE campaign.org_id = $1 AND campaign.store_id = $2 AND campaign.id = $3
-      ${lock ? "FOR UPDATE OF campaign" : ""}`,
+      `,
     [tenant.orgId, tenant.storeId, campaignId],
   );
   return result.rows[0] === undefined ? null : campaign(result.rows[0]);
 }
 
-async function evaluate(
+export async function evaluateAudienceSelection(
   client: SqlClient,
   tenant: TenantContext,
   value: MarketingCampaignRecord,
   at: Date,
-) {
+): Promise<MarketingAudienceSelection> {
   const rule = value.audienceRule;
   const ageDays = rule.customer_age.kind === "within_days" ? rule.customer_age.days : null;
   const activityDays = rule.order_activity.kind === "within_days" ? rule.order_activity.days : null;
@@ -166,9 +200,20 @@ async function evaluate(
       value.audienceRuleSha256,
       customerIds,
     ),
+    customerIds: Object.freeze(customerIds),
     recipientCount: customerIds.length,
     matchedCount: result.rows[0]?.matched_count ?? 0,
     evaluatedAt: new Date(at),
+  });
+}
+
+function publicEvaluation(value: MarketingAudienceSelection): MarketingAudienceEvaluation {
+  return Object.freeze({
+    campaign: value.campaign,
+    audienceDigest: value.audienceDigest,
+    recipientCount: value.recipientCount,
+    matchedCount: value.matchedCount,
+    evaluatedAt: value.evaluatedAt,
   });
 }
 
@@ -186,6 +231,10 @@ export function createPgMarketingStore(
 ): MarketingStore {
   const newId = options.newId ?? randomUUID;
   return Object.freeze({
+    ...createPgMarketingCouponOperations(
+      Object.freeze({ load: loadCampaign, evaluate: evaluateAudienceSelection }),
+      newId,
+    ),
     async setCampaign(client, tenant, input) {
       const id = input.campaign_id ?? newId();
       const before =
@@ -284,7 +333,7 @@ export function createPgMarketingStore(
       const value = await loadCampaign(client, tenant, campaignId, false);
       return value === null || value.version !== expectedVersion
         ? null
-        : await evaluate(client, tenant, value, at);
+        : publicEvaluation(await evaluateAudienceSelection(client, tenant, value, at));
     },
     async freezeAudience(client, tenant, input) {
       const value = await loadCampaign(client, tenant, input.campaignId, true);
@@ -292,7 +341,7 @@ export function createPgMarketingStore(
       if (value.version !== input.expectedVersion) {
         return Object.freeze({ ok: false as const, reason: "stale" as const });
       }
-      const evaluated = await evaluate(client, tenant, value, input.at);
+      const evaluated = await evaluateAudienceSelection(client, tenant, value, input.at);
       if (
         evaluated.audienceDigest !== input.previewDigest ||
         evaluated.recipientCount !== input.expectedRecipientCount

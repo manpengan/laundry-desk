@@ -59,7 +59,7 @@ export type CreateAppOptions = Readonly<{
   notificationCommandRateLimiter?: NotificationCommandRateLimiter;
   /** Dedicated factory handoff command/query limiter. */
   factoryOperationRateLimiter?: FactoryOperationRateLimiter;
-  /** Dedicated marketing campaign command/query limiter. */
+  /** Dedicated marketing command/query limiter. */
   marketingOperationRateLimiter?: MarketingOperationRateLimiter;
   /** Mock print spool; when absent the artifact download route is not mounted. */
   printSpool?: FileSpool;

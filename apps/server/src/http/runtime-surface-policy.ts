@@ -9,6 +9,8 @@ const OWNER_CLOUD_COMMANDS: ReadonlySet<string> = new Set([
   "store.profile.set",
   "marketing.campaign.set",
   "marketing.campaign.audience.freeze",
+  "marketing.campaign.coupons.issue",
+  "marketing.coupon.redemption.reverse",
 ]);
 
 const OWNER_CLOUD_QUERIES: ReadonlySet<string> = new Set([
@@ -18,9 +20,12 @@ const OWNER_CLOUD_QUERIES: ReadonlySet<string> = new Set([
   "reporting.owner_portfolio.get",
   "staff.access.list",
   "store.authorized.list",
+  "member.benefit_catalog.get",
   "marketing.campaigns.list",
   "marketing.campaign.get",
   "marketing.campaign.audience.preview",
+  "marketing.campaign.coupons.preview",
+  "marketing.campaign.coupon_batch.get",
 ]);
 
 export type RuntimeBusSurface = "command" | "query";

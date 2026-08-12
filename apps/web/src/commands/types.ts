@@ -7,6 +7,8 @@ import type {
   FulfillmentOperationConfirmationSummary,
   MarketingAudienceFreezeConfirmationSummary,
   MarketingCampaignSetConfirmationSummary,
+  MarketingCouponIssueConfirmationSummary,
+  MarketingCouponReversalConfirmationSummary,
 } from "@laundry/contracts";
 
 export type MemberTopupMatchedRule = Readonly<{
@@ -46,7 +48,9 @@ export type ConfirmationSummary =
   | MarketingCampaignSetConfirmationSummary
   | MarketingAudienceFreezeConfirmationSummary
   | FactoryHandoffConfirmationSummary
-  | FulfillmentOperationConfirmationSummary;
+  | FulfillmentOperationConfirmationSummary
+  | MarketingCouponIssueConfirmationSummary
+  | MarketingCouponReversalConfirmationSummary;
 
 export type CommandErrorDetail = Readonly<{
   kind?: string;

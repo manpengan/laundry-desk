@@ -49,6 +49,7 @@ import { MEMBER_COMMANDS, MEMBER_QUERIES } from "./member.js";
 import { MEMBER_BENEFIT_COMMANDS, MEMBER_BENEFIT_QUERIES } from "./member-benefits.js";
 import { MEMBER_LIFECYCLE_COMMANDS } from "./member-lifecycle.js";
 import { MARKETING_COMMANDS, MARKETING_QUERIES } from "./marketing.js";
+import { MARKETING_COUPON_COMMANDS, MARKETING_COUPON_QUERIES } from "./marketing-coupons.js";
 import { NOTIFICATION_COMMANDS, NOTIFICATION_QUERIES } from "./notification.js";
 import {
   NOTIFICATION_DELIVERY_COMMANDS,
@@ -116,6 +117,7 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
   ...NOTIFICATION_COMMANDS,
   ...NOTIFICATION_DELIVERY_COMMANDS,
   ...MARKETING_COMMANDS,
+  ...MARKETING_COUPON_COMMANDS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
@@ -166,6 +168,8 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "notification.delivery_batch.enqueue",
   "marketing.campaign.set",
   "marketing.campaign.audience.freeze",
+  "marketing.campaign.coupons.issue",
+  "marketing.coupon.redemption.reverse",
 ] as const) as readonly [
   "customer.upsert",
   "customer.update",
@@ -227,6 +231,8 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "notification.delivery_batch.enqueue",
   "marketing.campaign.set",
   "marketing.campaign.audience.freeze",
+  "marketing.campaign.coupons.issue",
+  "marketing.coupon.redemption.reverse",
 ];
 
 /**
@@ -293,6 +299,8 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   "marketing.campaigns.list",
   "marketing.campaign.get",
   "marketing.campaign.audience.preview",
+  "marketing.campaign.coupons.preview",
+  "marketing.campaign.coupon_batch.get",
 ] as const);
 
 export const M2_CONTRACT_DEFINITIONS: readonly (
@@ -322,6 +330,7 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...NOTIFICATION_QUERIES,
   ...NOTIFICATION_DELIVERY_QUERIES,
   ...MARKETING_QUERIES,
+  ...MARKETING_COUPON_QUERIES,
 ]);
 
 /** M2 AI presets are read-only: no command is exposed to the tool projection. */
@@ -339,61 +348,4 @@ export const M2_READ_ONLY_AI_DEFINITIONS: readonly QueryDefinition<z.ZodObject>[
   ...M3_FULFILLMENT_QUERY_DEFINITIONS,
 ]);
 
-export { M3_FULFILLMENT_COMMAND_DEFINITIONS, M3_FULFILLMENT_QUERY_DEFINITIONS };
-export {
-  ACCOUNTING_COMMANDS,
-  ACCOUNTING_QUERIES,
-  RECONCILIATION_COMMANDS,
-  RECONCILIATION_QUERIES,
-  EDGE_CONFLICT_COMMANDS,
-};
-
-/**
- * M2 print job status queries (print.jobs.list). Memory-first skeleton;
- * not in OpenAPI freeze. Re-exported for registry loaders.
- */
-export {
-  M2_PRINT_QUERY_DEFINITIONS,
-  M2_PRINT_QUERY_NAMES,
-  M2_PRINT_COMMAND_DEFINITIONS,
-  M2_PRINT_COMMAND_NAMES,
-};
-
-/**
- * M2 daily revenue queries (stats.day.summary). Order-backed skeleton;
- * not in OpenAPI freeze. Re-exported for registry loaders.
- */
-export { M2_STATS_QUERY_DEFINITIONS, M2_STATS_QUERY_NAMES };
-
-/**
- * M2 customer archive (customer.search + customer.upsert). Memory-first;
- * not in OpenAPI freeze. Re-exported for registry loaders.
- */
-export {
-  M2_CUSTOMER_COMMAND_DEFINITIONS,
-  M2_CUSTOMER_COMMAND_NAMES,
-  M2_CUSTOMER_QUERY_DEFINITIONS,
-  M2_CUSTOMER_QUERY_NAMES,
-};
-
-/**
- * M2 shift closing (shift.close + shift.get). Memory-first 日结签字;
- * not in OpenAPI freeze. Re-exported for registry loaders.
- */
-export {
-  M2_SHIFT_COMMAND_DEFINITIONS,
-  M2_SHIFT_COMMAND_NAMES,
-  M2_SHIFT_QUERY_DEFINITIONS,
-  M2_SHIFT_QUERY_NAMES,
-};
-
-/**
- * M3 garment photo metadata (photo.register + photo.list_by_order). Memory-first;
- * not in OpenAPI freeze. Re-exported for registry loaders.
- */
-export {
-  M3_PHOTO_COMMAND_DEFINITIONS,
-  M3_PHOTO_COMMAND_NAMES,
-  M3_PHOTO_QUERY_DEFINITIONS,
-  M3_PHOTO_QUERY_NAMES,
-};
+export * from "./catalog-exports.js";

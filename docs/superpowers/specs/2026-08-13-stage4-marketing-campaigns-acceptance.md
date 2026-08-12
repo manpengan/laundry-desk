@@ -35,7 +35,9 @@
 
 ## 明确保留
 
-- Item 8 的批量发券资格、grant、核销、冲正及其真实 PostgreSQL 验收。
+- Item 8 的代码候选现由 [ADR-53](../../adr/2026-08-13-adr-53-campaign-coupon-issuance.md) 与
+  [独立验收记录](2026-08-13-stage4-campaign-coupons-acceptance.md)承接；在其真实 PostgreSQL、CI 和
+  部署证据形成前，本记录仍不能把 Item 7 的冻结摘要称为已发券。
 - Item 9 的推荐奖励与团购。
 - 定时投放、短信/微信/provider、AI/automation/Edge/offline。
 - hk-vps 正式部署、远端 migration marker、public Browser 与 exact-SHA CI。

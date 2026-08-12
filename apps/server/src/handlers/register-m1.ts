@@ -55,6 +55,7 @@ import * as memberRegistration from "../member/registration.js";
 import type { MemberBenefitsRuntimeDeps } from "../member-benefits/types.js";
 import { withMemberBenefitCouponCancellation } from "../member-benefits/order-cancellation.js";
 import { createMemberTopupConfirmationPreparer } from "../member/topup-confirmation.js";
+import { createMarketingCouponConfirmationPreparer } from "../marketing/coupon-confirmation.js";
 import {
   createNotificationDeliveryConfirmationPreparer,
   prepareNotificationDeliveryRisk,
@@ -389,6 +390,9 @@ export function createRegisteredM1Bus(
           ? undefined
           : createFulfillmentConfirmationPreparer(deps.fulfillment),
         ...createStage4PendingActionPreparers(deps),
+        deps.marketing === undefined
+          ? undefined
+          : createMarketingCouponConfirmationPreparer(deps.marketing),
       ]),
       deps.notification === undefined ? undefined : prepareNotificationDeliveryRisk,
     ),

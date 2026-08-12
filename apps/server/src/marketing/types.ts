@@ -1,4 +1,13 @@
-import type { MarketingAudienceRule, MarketingCampaignSetInput } from "@laundry/contracts";
+import type {
+  MarketingAudienceRule,
+  MarketingCampaignSetInput,
+  MarketingCouponBatch,
+  MarketingCouponIssueAuthorityInput,
+  MarketingCouponIssueInput,
+  MarketingCouponIssuePreview,
+  MarketingCouponIssueConfirmationSummary,
+  MarketingCouponReversalConfirmationSummary,
+} from "@laundry/contracts";
 
 import type { SqlClient, TenantContext } from "../db/types.js";
 import type { FeaturesStore } from "../platform/features.js";
@@ -36,6 +45,9 @@ export type MarketingAudienceEvaluation = Readonly<{
   evaluatedAt: Date;
 }>;
 
+export type MarketingAudienceSelection = MarketingAudienceEvaluation &
+  Readonly<{ customerIds: readonly string[] }>;
+
 export type MarketingSetResult =
   | Readonly<{ ok: true; before: MarketingCampaignRecord | null; after: MarketingCampaignRecord }>
   | Readonly<{ ok: false; reason: "missing" | "stale" | "terminal" | "conflict" }>;
@@ -43,6 +55,69 @@ export type MarketingSetResult =
 export type MarketingFreezeResult =
   | Readonly<{ ok: true; snapshot: MarketingAudienceSnapshotRecord }>
   | Readonly<{ ok: false; reason: "missing" | "stale" | "preview_drift" }>;
+
+export type MarketingCouponRejectReason =
+  | "missing"
+  | "stale"
+  | "campaign_inactive"
+  | "campaign_outside_window"
+  | "snapshot_stale"
+  | "audience_drift"
+  | "coupon_missing"
+  | "coupon_retired"
+  | "eligibility_empty"
+  | "budget_exceeded"
+  | "redemption_missing"
+  | "not_campaign_coupon"
+  | "order_invalid"
+  | "authority_drift";
+
+export type MarketingCouponPreviewResult =
+  | Readonly<{ ok: true; preview: MarketingCouponIssuePreview }>
+  | Readonly<{ ok: false; reason: MarketingCouponRejectReason }>;
+
+export type MarketingCouponBatchResult =
+  | Readonly<{ ok: true; batch: MarketingCouponBatch }>
+  | Readonly<{ ok: false; reason: MarketingCouponRejectReason }>;
+
+export type MarketingCouponIssueStoreInput = MarketingCouponIssueInput &
+  Readonly<{
+    at: Date;
+    frozenAuthority: MarketingCouponIssueConfirmationSummary;
+  }>;
+
+export type MarketingCouponReversalPreview = Readonly<{
+  redemptionId: string;
+  grantId: string;
+  orderId: string;
+  discountCents: number;
+  alreadyReversed: boolean;
+}>;
+
+export type MarketingCouponReversalPreviewResult =
+  | Readonly<{ ok: true; preview: MarketingCouponReversalPreview }>
+  | Readonly<{ ok: false; reason: MarketingCouponRejectReason }>;
+
+export type MarketingCouponReversalStoreInput = Readonly<{
+  redemptionId: string;
+  reason: string;
+  at: Date;
+  frozenAuthority: MarketingCouponReversalConfirmationSummary;
+}>;
+
+export type MarketingCouponReversalRecord = Readonly<{
+  reversal_id: string;
+  redemption_id: string;
+  grant_id: string;
+  order_id: string;
+  reversed_discount_cents: number;
+  changed: boolean;
+  at: string;
+}>;
+
+export type MarketingCouponReversalResult =
+  | Readonly<{ ok: true; reversal: MarketingCouponReversalRecord }>
+  | Readonly<{ ok: false; reason: MarketingCouponRejectReason }>;
 
 export type MarketingStore = Readonly<{
   setCampaign: (
@@ -81,6 +156,31 @@ export type MarketingStore = Readonly<{
       at: Date;
     }>,
   ) => Promise<MarketingFreezeResult>;
+  previewCouponIssue: (
+    client: SqlClient,
+    tenant: TenantContext,
+    input: MarketingCouponIssueAuthorityInput & Readonly<{ at: Date }>,
+  ) => Promise<MarketingCouponPreviewResult>;
+  issueCoupons: (
+    client: SqlClient,
+    tenant: TenantContext,
+    input: MarketingCouponIssueStoreInput,
+  ) => Promise<MarketingCouponBatchResult>;
+  getCouponBatch: (
+    client: SqlClient,
+    tenant: TenantContext,
+    batchId: string,
+  ) => Promise<MarketingCouponBatch | null>;
+  previewCouponRedemptionReversal: (
+    client: SqlClient,
+    tenant: TenantContext,
+    redemptionId: string,
+  ) => Promise<MarketingCouponReversalPreviewResult>;
+  reverseCouponRedemption: (
+    client: SqlClient,
+    tenant: TenantContext,
+    input: MarketingCouponReversalStoreInput,
+  ) => Promise<MarketingCouponReversalResult>;
 }>;
 
 export type MarketingHandlerDeps = Readonly<{

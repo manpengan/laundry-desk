@@ -54,3 +54,11 @@ export type {
   FactoryHandoffConfirmationSummary,
   FulfillmentOperationConfirmationSummary,
 } from "./fulfillment-confirmation.js";
+export {
+  MarketingCouponIssueConfirmationSummarySchema,
+  MarketingCouponReversalConfirmationSummarySchema,
+} from "./marketing-confirmation.js";
+export type {
+  MarketingCouponIssueConfirmationSummary,
+  MarketingCouponReversalConfirmationSummary,
+} from "./marketing-confirmation.js";

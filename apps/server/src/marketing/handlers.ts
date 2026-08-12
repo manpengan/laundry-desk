@@ -16,6 +16,7 @@ import type { CommandHandler, HandlerContext, HandlerOutcome } from "../bus/type
 import { HandlerCommandError } from "../bus/types.js";
 import { createSqlFeaturesStore } from "../platform/features.js";
 import { requireFrozenMarketingCampaign } from "./confirmation.js";
+import { createMarketingCouponHandlers } from "./coupon-handlers.js";
 import type {
   MarketingAudienceEvaluation,
   MarketingAudienceSnapshotRecord,
@@ -29,6 +30,10 @@ const HANDLER_NAMES = [
   "marketing.campaigns.list",
   "marketing.campaign.get",
   "marketing.campaign.audience.preview",
+  "marketing.campaign.coupons.preview",
+  "marketing.campaign.coupons.issue",
+  "marketing.campaign.coupon_batch.get",
+  "marketing.coupon.redemption.reverse",
 ] as const;
 
 function error(
@@ -243,7 +248,12 @@ function freezeHandler(deps: MarketingHandlerDeps): CommandHandler {
 export function createMarketingHandlers(
   deps: MarketingHandlerDeps,
 ): Readonly<Record<(typeof HANDLER_NAMES)[number], CommandHandler>> {
+  const coupons = createMarketingCouponHandlers(deps);
   return Object.freeze({
+    "marketing.campaign.coupons.preview": coupons["marketing.campaign.coupons.preview"]!,
+    "marketing.campaign.coupons.issue": coupons["marketing.campaign.coupons.issue"]!,
+    "marketing.campaign.coupon_batch.get": coupons["marketing.campaign.coupon_batch.get"]!,
+    "marketing.coupon.redemption.reverse": coupons["marketing.coupon.redemption.reverse"]!,
     "marketing.campaign.set": setHandler(deps),
     "marketing.campaign.audience.freeze": freezeHandler(deps),
     "marketing.campaigns.list": listHandler(deps),

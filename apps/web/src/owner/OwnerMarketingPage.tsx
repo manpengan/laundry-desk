@@ -9,6 +9,8 @@ import type { StepUpAttemptToken } from "../shell/step-up-attempt-authority.js";
 import { OwnerMarketingEditor } from "./OwnerMarketingEditor.js";
 import { OwnerMarketingCampaignList } from "./OwnerMarketingCampaignList.js";
 import { OwnerMarketingConfirmationDialogs } from "./OwnerMarketingConfirmationDialogs.js";
+import { OwnerMarketingCouponReversal } from "./OwnerMarketingCouponReversal.js";
+import { OwnerMarketingCoupons } from "./OwnerMarketingCoupons.js";
 import {
   createMarketingRequestToken,
   createMarketingPendingAuthority,
@@ -378,6 +380,21 @@ export function OwnerMarketingPage({
         onPreview={() => void runPreview()}
         onFreeze={freeze}
       />
+      <OwnerMarketingCoupons
+        campaign={selected}
+        session={session}
+        authClient={authClient}
+        commandClient={commandClient}
+        queryClient={queryClient}
+        onChanged={load}
+      />
+
+      <OwnerMarketingCouponReversal
+        session={session}
+        authClient={authClient}
+        commandClient={commandClient}
+      />
+
       <OwnerMarketingConfirmationDialogs
         pending={pending}
         busy={busy}

@@ -3,8 +3,13 @@ import { randomUUID } from "node:crypto";
 import { MarketingAudienceRuleSchema } from "@laundry/contracts";
 
 import { audienceDigest, evaluateMemoryAudience, sha256Canonical } from "./audience.js";
+import { createMemoryMarketingCouponOperations } from "./memory-coupons.js";
+import type { MemberBenefitsStore } from "../member-benefits/types.js";
+import type { MemberStore } from "../member/types.js";
 import type {
   MarketingAudienceSnapshotRecord,
+  MarketingAudienceEvaluation,
+  MarketingAudienceSelection,
   MarketingCampaignRecord,
   MarketingStore,
   MemoryAudienceCustomer,
@@ -13,6 +18,8 @@ import type {
 export type MemoryMarketingStoreOptions = Readonly<{
   customers?: readonly MemoryAudienceCustomer[];
   newId?: () => string;
+  memberStore?: MemberStore;
+  memberBenefits?: MemberBenefitsStore;
 }>;
 
 function copyCampaign(
@@ -47,7 +54,11 @@ export function createMemoryMarketingStore(
   let campaigns = new Map<string, MarketingCampaignRecord>();
   let snapshots = new Map<string, readonly MarketingAudienceSnapshotRecord[]>();
 
-  const preview = (campaign: MarketingCampaignRecord, expectedVersion: number, at: Date) => {
+  const preview = (
+    campaign: MarketingCampaignRecord,
+    expectedVersion: number,
+    at: Date,
+  ): MarketingAudienceSelection | null => {
     if (campaign.version !== expectedVersion) return null;
     const selection = evaluateMemoryAudience(
       customers,
@@ -63,13 +74,52 @@ export function createMemoryMarketingStore(
         campaign.audienceRuleSha256,
         selection.customerIds,
       ),
+      customerIds: selection.customerIds,
       recipientCount: selection.customerIds.length,
       matchedCount: selection.matchedCount,
       evaluatedAt: new Date(at),
     });
   };
 
+  const publicPreview = (
+    campaign: MarketingCampaignRecord,
+    expectedVersion: number,
+    at: Date,
+  ): MarketingAudienceEvaluation | null => {
+    const value = preview(campaign, expectedVersion, at);
+    return value === null
+      ? null
+      : Object.freeze({
+          campaign: value.campaign,
+          audienceDigest: value.audienceDigest,
+          recipientCount: value.recipientCount,
+          matchedCount: value.matchedCount,
+          evaluatedAt: value.evaluatedAt,
+        });
+  };
+
+  const coupons = createMemoryMarketingCouponOperations({
+    newId,
+    ...(options.memberStore === undefined ? {} : { memberStore: options.memberStore }),
+    ...(options.memberBenefits === undefined ? {} : { memberBenefits: options.memberBenefits }),
+    getCampaign: (campaignId) => campaigns.get(campaignId),
+    getSnapshot: (campaignId, snapshotId) =>
+      snapshots.get(campaignId)?.find((value) => value.snapshotId === snapshotId),
+    preview,
+    commitBudget: (campaignId, amountCents) => {
+      const current = campaigns.get(campaignId);
+      if (current === undefined) throw new Error("campaign disappeared during coupon issue");
+      const next = new Map(campaigns);
+      next.set(
+        campaignId,
+        Object.freeze({ ...current, budgetUsedCents: current.budgetUsedCents + amountCents }),
+      );
+      campaigns = next;
+    },
+  });
+
   return Object.freeze({
+    ...coupons,
     async setCampaign(_client, _tenant, input) {
       const id = input.campaign_id ?? newId();
       const before = campaigns.get(id) ?? null;
@@ -121,7 +171,7 @@ export function createMemoryMarketingStore(
     },
     async previewAudience(_client, _tenant, campaignId, expectedVersion, at) {
       const campaign = campaigns.get(campaignId);
-      return campaign === undefined ? null : preview(campaign, expectedVersion, at);
+      return campaign === undefined ? null : publicPreview(campaign, expectedVersion, at);
     },
     async freezeAudience(_client, _tenant, input) {
       const campaign = campaigns.get(input.campaignId);

@@ -102,6 +102,10 @@ describe("M2 contract surface", () => {
       // ADR-52: store-scoped campaign definition and digest-only audience freeze.
       "marketing.campaign.set",
       "marketing.campaign.audience.freeze",
+      // ADR-53: frozen audience is re-evaluated server-side; recipient ids and
+      // coupon values never enter the command body. Both writes are R4.
+      "marketing.campaign.coupons.issue",
+      "marketing.coupon.redemption.reverse",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
@@ -128,6 +132,8 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaigns.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.audience.preview");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.coupons.preview");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.coupon_batch.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("accounting.report.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.drilldown");
@@ -135,8 +141,8 @@ describe("M2 contract surface", () => {
     // ADR-38: trusted policy read and immutable payment-ledger refund source.
     expect(M2_CONTRACT_QUERY_NAMES).toContain("pricing.policy.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("payment.ledger.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(60);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(41);
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(62);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(43);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );

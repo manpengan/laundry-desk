@@ -14,7 +14,20 @@ export function registerMarketingCommands(
     "marketing.campaign.audience.freeze",
     handlers["marketing.campaign.audience.freeze"],
   );
-  return Object.freeze(["marketing.campaign.set", "marketing.campaign.audience.freeze"]);
+  registry.registerHandler(
+    "marketing.campaign.coupons.issue",
+    handlers["marketing.campaign.coupons.issue"]!,
+  );
+  registry.registerHandler(
+    "marketing.coupon.redemption.reverse",
+    handlers["marketing.coupon.redemption.reverse"]!,
+  );
+  return Object.freeze([
+    "marketing.campaign.set",
+    "marketing.campaign.audience.freeze",
+    "marketing.campaign.coupons.issue",
+    "marketing.coupon.redemption.reverse",
+  ]);
 }
 
 export function registerMarketingQueries(
@@ -29,9 +42,19 @@ export function registerMarketingQueries(
     "marketing.campaign.audience.preview",
     handlers["marketing.campaign.audience.preview"],
   );
+  registry.registerHandler(
+    "marketing.campaign.coupons.preview",
+    handlers["marketing.campaign.coupons.preview"]!,
+  );
+  registry.registerHandler(
+    "marketing.campaign.coupon_batch.get",
+    handlers["marketing.campaign.coupon_batch.get"]!,
+  );
   return Object.freeze([
     "marketing.campaigns.list",
     "marketing.campaign.get",
     "marketing.campaign.audience.preview",
+    "marketing.campaign.coupons.preview",
+    "marketing.campaign.coupon_batch.get",
   ]);
 }

@@ -87,9 +87,13 @@ test("runtime bus registers the complete member command and query surface", asyn
   assert.ok(bus.registeredQueries.includes("notification.delivery_batch.get"));
   assert.ok(bus.registered.includes("marketing.campaign.set"));
   assert.ok(bus.registered.includes("marketing.campaign.audience.freeze"));
+  assert.ok(bus.registered.includes("marketing.campaign.coupons.issue"));
+  assert.ok(bus.registered.includes("marketing.coupon.redemption.reverse"));
   assert.ok(bus.registeredQueries.includes("marketing.campaigns.list"));
   assert.ok(bus.registeredQueries.includes("marketing.campaign.get"));
   assert.ok(bus.registeredQueries.includes("marketing.campaign.audience.preview"));
+  assert.ok(bus.registeredQueries.includes("marketing.campaign.coupons.preview"));
+  assert.ok(bus.registeredQueries.includes("marketing.campaign.coupon_batch.get"));
   for (const name of [
     "fulfillment.batch.create",
     "fulfillment.batch.cancel",

@@ -13,6 +13,12 @@ import {
   type MarketingAudienceFreezeConfirmationSummary,
   type MarketingCampaignSetConfirmationSummary,
 } from "./marketing-campaign-confirmation.js";
+import {
+  MarketingCouponIssueConfirmationSummarySchema,
+  MarketingCouponReversalConfirmationSummarySchema,
+  type MarketingCouponIssueConfirmationSummary,
+  type MarketingCouponReversalConfirmationSummary,
+} from "./marketing-confirmation.js";
 import { ConfirmReferenceSchema } from "./wire-payload.js";
 
 /** Architecture §6.5: externally safe outcomes for each C1 validation-chain stage. */
@@ -83,7 +89,6 @@ export type AuthPublicErrorDescriptor =
 export type AuthPublicErrorCode = keyof typeof AUTH_PUBLIC_ERROR_DESCRIPTORS;
 
 const ConfirmationCentsSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-
 const MemberTopupMatchedRuleSchema = z
   .object({
     rule_id: z.uuid(),
@@ -194,6 +199,8 @@ const ConfirmationSummarySchema = z.union([
   MarketingAudienceFreezeConfirmationSummarySchema,
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
+  MarketingCouponIssueConfirmationSummarySchema,
+  MarketingCouponReversalConfirmationSummarySchema,
 ]);
 
 const ErrorDetailSchema = z.discriminatedUnion("kind", [
@@ -234,7 +241,9 @@ export type ConfirmationSummary =
   | MarketingCampaignSetConfirmationSummary
   | MarketingAudienceFreezeConfirmationSummary
   | FactoryHandoffConfirmationSummary
-  | FulfillmentOperationConfirmationSummary;
+  | FulfillmentOperationConfirmationSummary
+  | MarketingCouponIssueConfirmationSummary
+  | MarketingCouponReversalConfirmationSummary;
 
 const createErrorSchema = <TCode extends CommandErrorCode, TMessage extends string>(
   code: TCode,
@@ -336,6 +345,15 @@ const freezeCommandError = (error: CommandError): CommandError => {
             ticket_nos: Object.freeze([...error.detail.summary.ticket_nos]),
             barcodes: Object.freeze([...error.detail.summary.barcodes]),
           }),
+        };
+      }
+      if (
+        error.detail.summary.kind === "marketing_coupon_issue" ||
+        error.detail.summary.kind === "marketing_coupon_redemption_reversal"
+      ) {
+        return {
+          ...error.detail,
+          summary: Object.freeze({ ...error.detail.summary }),
         };
       }
       return {

@@ -4,6 +4,7 @@ import type { CommandErrorCode } from "@laundry/contracts";
 
 import type { AuthorizedSession } from "../auth/session-view.js";
 import { executeCommand } from "../bus/executor.js";
+import { executeQuery } from "../bus/execute-query.js";
 import { createRuntimeBus, permissionsForAuthority } from "../bus/runtime.js";
 import type { ActorContext, CommandResult } from "../bus/types.js";
 import { FakeSqlClient } from "../db/fake-client.js";
@@ -89,6 +90,27 @@ export async function executeTrustedSessionCommand(
         sessionVersion: resolved.session.session_version,
       }),
       ...(options.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey }),
+    }),
+  );
+}
+
+export async function executeTrustedSessionQuery(
+  runtime: LocalRuntime,
+  resolved: AuthorizedSession,
+  name: string,
+  input: Readonly<Record<string, unknown>>,
+  onUnexpectedError?: (error: unknown) => void,
+): Promise<CommandResult> {
+  if (!isRuntimeBusOperationAvailable(resolved, "query", name)) {
+    return fail("RESOURCE_UNAVAILABLE");
+  }
+  const { queryRegistry } = createRuntimeBus(runtime);
+  const runWithSql = createSqlRunner(runtime);
+  return runWithSql((sql) =>
+    executeQuery(sql, tenantFromSession(resolved), name, input, {
+      registry: queryRegistry,
+      actor: actorFromSession(resolved),
+      ...(onUnexpectedError === undefined ? {} : { onUnexpectedError }),
     }),
   );
 }
