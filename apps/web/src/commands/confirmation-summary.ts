@@ -1,6 +1,8 @@
 import {
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
+  MarketingAudienceFreezeConfirmationSummarySchema,
+  MarketingCampaignSetConfirmationSummarySchema,
   NotificationDeliveryConfirmationSummarySchema,
 } from "@laundry/contracts";
 
@@ -27,6 +29,10 @@ export function readConfirmationSummary(value: unknown): ConfirmationSummary | n
       counts: Object.freeze({ ...factory.data.counts }),
     });
   }
+  const campaignSet = MarketingCampaignSetConfirmationSummarySchema.safeParse(value);
+  if (campaignSet.success) return Object.freeze(campaignSet.data);
+  const audienceFreeze = MarketingAudienceFreezeConfirmationSummarySchema.safeParse(value);
+  if (audienceFreeze.success) return Object.freeze(audienceFreeze.data);
   const fulfillment = FulfillmentOperationConfirmationSummarySchema.safeParse(value);
   if (!fulfillment.success) return null;
   return Object.freeze({

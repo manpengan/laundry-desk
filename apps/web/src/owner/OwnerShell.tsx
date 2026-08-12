@@ -7,6 +7,7 @@ import type { CommandPort, QueryPort } from "../commands/types.js";
 import { OwnerDashboardPage } from "./OwnerDashboardPage.js";
 import { OwnerDrilldownPanel } from "./OwnerDrilldownPanel.js";
 import { OwnerReportsPage } from "./OwnerReportsPage.js";
+import { OwnerMarketingPage } from "./OwnerMarketingPage.js";
 import { OwnerStoreManagementPage, type OwnerStoreSelection } from "./OwnerStoreManagementPage.js";
 import type { OwnerDrilldownKind } from "./owner-operations-model.js";
 import { OwnerPortfolioPanel } from "./OwnerPortfolioPanel.js";
@@ -21,7 +22,7 @@ export type OwnerShellProps = Readonly<{
   onLogout: () => Promise<void>;
 }>;
 
-type OwnerSection = "today" | "reports" | "stores";
+type OwnerSection = "today" | "reports" | "stores" | "marketing";
 
 const OWNER_SECTIONS: readonly Readonly<{ id: OwnerSection; label: string }>[] = Object.freeze([
   Object.freeze({ id: "today", label: "今日经营" }),
@@ -39,6 +40,7 @@ export function OwnerShell({
   onLogout,
 }: OwnerShellProps) {
   const allowed = session.role === "admin";
+  const marketingEnabled = allowed && session.features.marketing_enabled === true;
   const [loggingOut, setLoggingOut] = useState(false);
   const [drilldownKind, setDrilldownKind] = useState<OwnerDrilldownKind | null>(null);
   const [section, setSection] = useState<OwnerSection>("today");
@@ -76,7 +78,10 @@ export function OwnerShell({
       </header>
       {allowed ? (
         <nav className="ld-owner-nav" aria-label="店主功能">
-          {OWNER_SECTIONS.map((item) => (
+          {[
+            ...OWNER_SECTIONS,
+            ...(marketingEnabled ? [{ id: "marketing" as const, label: "营销活动" }] : []),
+          ].map((item) => (
             <button
               key={item.id}
               type="button"
@@ -102,7 +107,7 @@ export function OwnerShell({
             </>
           ) : section === "reports" ? (
             <OwnerReportsPage queryClient={queryClient} commandClient={commandClient} />
-          ) : (
+          ) : section === "stores" ? (
             <OwnerStoreManagementPage
               session={session}
               authClient={authClient}
@@ -111,6 +116,15 @@ export function OwnerShell({
               onSessionChange={onSessionChange}
               onSelectStore={onSelectStore}
             />
+          ) : marketingEnabled ? (
+            <OwnerMarketingPage
+              session={session}
+              authClient={authClient}
+              commandClient={commandClient}
+              queryClient={queryClient}
+            />
+          ) : (
+            <OwnerDashboardPage queryClient={queryClient} onOpenDrilldown={setDrilldownKind} />
           )
         ) : (
           <section className="ld-owner-denied lg-card" role="alert">

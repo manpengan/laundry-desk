@@ -32,6 +32,7 @@ const ADMIN_PERMISSIONS = Object.freeze([
   // ADR-44: automatic provider dispatch is admin-only; ordinary staff retain
   // the explicit ADR-23 manual-list fallback.
   "notification_send",
+  "marketing_manage",
   "fulfillment_handoff",
   "fulfillment_qc",
   "fulfillment_reconcile",
@@ -84,6 +85,7 @@ export function createRuntimeBus(runtime: LocalRuntime) {
       member: runtime.member,
       memberBenefits: runtime.memberBenefits,
       notification: runtime.notification,
+      marketing: runtime.marketing,
     },
     runtime.pendingStore,
   );

@@ -7,6 +7,12 @@ import {
   type FactoryHandoffConfirmationSummary,
   type FulfillmentOperationConfirmationSummary,
 } from "./fulfillment-confirmation.js";
+import {
+  MarketingAudienceFreezeConfirmationSummarySchema,
+  MarketingCampaignSetConfirmationSummarySchema,
+  type MarketingAudienceFreezeConfirmationSummary,
+  type MarketingCampaignSetConfirmationSummary,
+} from "./marketing-campaign-confirmation.js";
 import { ConfirmReferenceSchema } from "./wire-payload.js";
 
 /** Architecture §6.5: externally safe outcomes for each C1 validation-chain stage. */
@@ -184,6 +190,8 @@ export const NotificationDeliveryConfirmationSummarySchema = z
 const ConfirmationSummarySchema = z.union([
   MemberTopupConfirmationSummarySchema,
   NotificationDeliveryConfirmationSummarySchema,
+  MarketingCampaignSetConfirmationSummarySchema,
+  MarketingAudienceFreezeConfirmationSummarySchema,
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
 ]);
@@ -223,6 +231,8 @@ export type NotificationDeliveryConfirmationSummary = DeepReadonly<
 export type ConfirmationSummary =
   | MemberTopupConfirmationSummary
   | NotificationDeliveryConfirmationSummary
+  | MarketingCampaignSetConfirmationSummary
+  | MarketingAudienceFreezeConfirmationSummary
   | FactoryHandoffConfirmationSummary
   | FulfillmentOperationConfirmationSummary;
 
@@ -317,14 +327,20 @@ const freezeCommandError = (error: CommandError): CommandError => {
           }),
         };
       }
+      if (error.detail.summary.kind === "fulfillment_operation") {
+        return {
+          ...error.detail,
+          summary: Object.freeze({
+            ...error.detail.summary,
+            garment_ids: Object.freeze([...error.detail.summary.garment_ids]),
+            ticket_nos: Object.freeze([...error.detail.summary.ticket_nos]),
+            barcodes: Object.freeze([...error.detail.summary.barcodes]),
+          }),
+        };
+      }
       return {
         ...error.detail,
-        summary: Object.freeze({
-          ...error.detail.summary,
-          garment_ids: Object.freeze([...error.detail.summary.garment_ids]),
-          ticket_nos: Object.freeze([...error.detail.summary.ticket_nos]),
-          barcodes: Object.freeze([...error.detail.summary.barcodes]),
-        }),
+        summary: Object.freeze({ ...error.detail.summary }),
       };
     }
     return { ...error.detail };

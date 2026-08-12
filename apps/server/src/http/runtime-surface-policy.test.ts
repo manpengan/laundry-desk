@@ -54,6 +54,8 @@ test("another store is restricted to the Stage 3.2 Owner bus surface", () => {
     "staff.create",
     "staff.credentials.reset",
     "store.profile.set",
+    "marketing.campaign.set",
+    "marketing.campaign.audience.freeze",
   ]) {
     assert.equal(isRuntimeBusOperationAvailable(resolved, "command", name), true, name);
   }
@@ -64,6 +66,9 @@ test("another store is restricted to the Stage 3.2 Owner bus surface", () => {
     "reporting.owner_portfolio.get",
     "staff.access.list",
     "store.authorized.list",
+    "marketing.campaigns.list",
+    "marketing.campaign.get",
+    "marketing.campaign.audience.preview",
   ]) {
     assert.equal(isRuntimeBusOperationAvailable(resolved, "query", name), true, name);
   }

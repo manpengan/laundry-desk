@@ -24,14 +24,14 @@ import type {
   PolicyRiskInput,
 } from "../policy/types.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
-import { freezeCanonical } from "../pending-actions/canonical.js";
 import { customerPrivacySubjectFromCommand } from "../pending-actions/privacy-subject.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import {
   bindRiskReservation,
-  existingNotificationSummary,
   measurePendingRisk,
+  notificationPendingRetrySummary,
   pendingResponse,
+  preparedPendingRetryMatches,
   sameRiskRequest,
   type PendingActionPreparer,
   type PendingRiskPreparer,
@@ -48,6 +48,11 @@ const okPolicy = (): StepResult<Readonly<{ allowed: true }>, CommandError> => ({
   ok: true,
   data: Object.freeze({ allowed: true as const }),
 });
+
+const MARKETING_PENDING_COMMANDS: ReadonlySet<string> = new Set([
+  "marketing.campaign.set",
+  "marketing.campaign.audience.freeze",
+]);
 
 export { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";
 
@@ -274,18 +279,10 @@ export function createEnforcingPolicyCheck(
         transaction,
       );
       if (existing !== null) {
-        const argsMatch = JSON.stringify(existing.args) === JSON.stringify(freezeCanonical(parsed));
-        if (
-          !argsMatch ||
-          existing.commandVersion !== bus.definition.version ||
-          existing.creatorStaffId !== bus.actor.staffId ||
-          (existing.status !== "pending" && existing.status !== "consumed")
-        ) {
-          return { ok: false, error: createCommandError("POLICY_DENIED") };
-        }
-        const summary = existingNotificationSummary(existing);
-        if (summary === undefined) return { ok: false, error: createCommandError("POLICY_DENIED") };
-        return pendingResponse(existing, summary);
+        const summary = notificationPendingRetrySummary(existing, parsed, bus);
+        return summary === null
+          ? { ok: false, error: createCommandError("POLICY_DENIED") }
+          : pendingResponse(existing, summary);
       }
     }
     const earlyRiskRequest = preparePendingRisk?.(parsed, bus) ?? null;
@@ -298,6 +295,18 @@ export function createEnforcingPolicyCheck(
     }
     let preparation =
       preparePendingAction === undefined ? null : await preparePendingAction(parsed, bus);
+    if (idempotencyKey !== undefined && MARKETING_PENDING_COMMANDS.has(bus.definition.name)) {
+      const existing = await pendingStore.findByIdempotency(
+        bus.definition.name,
+        idempotencyKey,
+        transaction,
+      );
+      if (existing !== null) {
+        return preparedPendingRetryMatches(existing, parsed, bus, preparation, decision)
+          ? pendingResponse(existing, preparation?.summary)
+          : { ok: false, error: createCommandError("POLICY_DENIED") };
+      }
+    }
     if (preparation?.riskReservation !== undefined) {
       let reservation;
       if (earlyRiskRequest !== null) {

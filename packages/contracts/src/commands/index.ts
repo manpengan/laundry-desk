@@ -82,6 +82,7 @@ export type {
   PickupReminderListResult,
 } from "./notification.js";
 export * from "./notification-delivery.js";
+export * from "./marketing.js";
 export {
   PLATFORM_COMMANDS,
   PLATFORM_DEFINITIONS,

@@ -32,6 +32,10 @@ import {
   type NotificationCommandRateLimiter,
 } from "./notification-command-rate-limit.js";
 import {
+  createMarketingOperationRateLimiter,
+  type MarketingOperationRateLimiter,
+} from "./marketing-operation-rate-limit.js";
+import {
   registerRequestSecurityHooks,
   type LocalRequestSecurityPolicy,
 } from "./request-security.js";
@@ -55,6 +59,8 @@ export type CreateAppOptions = Readonly<{
   notificationCommandRateLimiter?: NotificationCommandRateLimiter;
   /** Dedicated factory handoff command/query limiter. */
   factoryOperationRateLimiter?: FactoryOperationRateLimiter;
+  /** Dedicated marketing campaign command/query limiter. */
+  marketingOperationRateLimiter?: MarketingOperationRateLimiter;
   /** Mock print spool; when absent the artifact download route is not mounted. */
   printSpool?: FileSpool;
   /** Structured redacted auth-security events (tests may capture). */
@@ -174,6 +180,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     context,
     options.notificationCommandRateLimiter ?? createNotificationCommandRateLimiter(),
     options.factoryOperationRateLimiter ?? createFactoryOperationRateLimiter(),
+    options.marketingOperationRateLimiter ?? createMarketingOperationRateLimiter(),
   );
   registerEdgeAuthorityRoute(app, context);
   registerEdgeReplayRoute(app, context);

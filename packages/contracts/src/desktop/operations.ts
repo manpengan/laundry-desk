@@ -36,6 +36,7 @@ import {
   DesktopPhotoUploadInputSchema,
   DesktopPhotoUploadResultSchema,
 } from "./photo-operations.js";
+import type { DesktopOperationSchema, DesktopOperationSchemas } from "./operation-schema-types.js";
 export {
   DESKTOP_MAX_PHOTO_BYTES,
   DesktopPhotoDeleteInputSchema,
@@ -320,9 +321,9 @@ export const DesktopOfflineResumeResultSchema = createDesktopResultSchema(
 const operation = <TInput extends z.ZodType, TResult extends z.ZodType>(
   input: TInput,
   result: TResult,
-) => Object.freeze({ input, result });
+): DesktopOperationSchema<TInput, TResult> => Object.freeze({ input, result });
 
-export const DESKTOP_OPERATION_SCHEMAS = Object.freeze({
+export const DESKTOP_OPERATION_SCHEMAS: DesktopOperationSchemas = Object.freeze({
   auth: Object.freeze({
     login: operation(DesktopLoginInputSchema, DesktopLoginResultSchema),
     refresh: operation(DesktopRefreshInputSchema, DesktopRefreshResultSchema),

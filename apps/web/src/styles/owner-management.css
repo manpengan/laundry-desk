@@ -149,6 +149,53 @@
   min-height: 44px;
 }
 
+.ld-marketing-page {
+  display: grid;
+  gap: 18px;
+}
+
+.ld-marketing-link {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.ld-marketing-field {
+  display: grid;
+  gap: 6px;
+  color: var(--lg-ink2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ld-marketing-field select {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface);
+  color: var(--lg-ink);
+  font-size: 16px;
+}
+
+.ld-marketing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ld-marketing-preview {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-accent-soft);
+  color: var(--lg-accent);
+  font-size: 13px;
+}
+
 @media (max-width: 560px) {
   .ld-owner-nav {
     top: 62px;

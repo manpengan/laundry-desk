@@ -137,6 +137,7 @@ describe("destructive migration static reject", () => {
       "0051_customer_extended_profiles.sql",
       "0052_notification_delivery_outbox.sql",
       "0053_factory_handoff_and_qc.sql",
+      "0059_marketing_campaigns.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

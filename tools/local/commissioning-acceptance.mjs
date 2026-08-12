@@ -159,6 +159,10 @@ for (const mode of modes) {
         ...environment,
         LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
       });
+      await run(process.execPath, ["tools/local/marketing-campaigns-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+      });
       await run(process.execPath, ["tools/cloud/hk-vps-release-catalog-pg-acceptance.mjs"], {
         ...environment,
         LAUNDRY_CLOUD_RELEASE_PG_TEST: "1",

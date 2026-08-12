@@ -59,6 +59,8 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0051_customer_extended_profiles.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0052_notification_delivery_outbox.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0053_factory_handoff_and_qc.sql
+# 0054-0058 are populated by Stage 4.4 Items 1-6 on integration.
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0059_marketing_campaigns.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -81,6 +83,7 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Customer extended profiles** (0051, [ADR-42](../../../../docs/adr/2026-08-12-adr-42-customer-extended-profiles-and-discount-policy.md)): bounded org-scoped profile/address/identifier rows, recursive canonical groups, owner-only HMAC erasure tombstones, privacy-copy purge metadata, tier/customer discount snapshots, and order waiver snapshots
 - **Provider-neutral notification outbox** (0052, [ADR-44](../../../../docs/adr/2026-08-12-adr-44-provider-neutral-notification-outbox.md)): approved org templates, bounded store batches, leased delivery state, append-only attempt/receipt evidence, integer cost guards, and privacy-safe fingerprints
 - **Factory handoff and QC** (0053, [ADR-45](../../../../docs/adr/2026-08-12-adr-45-factory-handoff-and-qc.md)): store-scoped garment manifests, four immutable handoff checkpoints, discrepancy reconciliation, custody anchors, and append-only quality evidence
+- **Marketing campaigns** (0059, [ADR-52](../../../../docs/adr/2026-08-13-adr-52-store-marketing-campaigns.md)): store-scoped campaign windows, strict audience rules, digest-only freezes, and an append-only integer-cent budget authority; no benefit issuance
 - **M2 payments** (0009): `payments` append-only ledger (`SELECT, INSERT` only for `laundry_app`)
 - **M2 print** (0010): `print_jobs` queue (`SELECT, INSERT, UPDATE` for status transitions; no DELETE)
 - **M2 customers** (0011): `customers` org-scoped archive (`SELECT, INSERT, UPDATE`; unique org+phone)

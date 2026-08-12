@@ -60,8 +60,6 @@ import {
   prepareNotificationDeliveryRisk,
 } from "../notification/delivery-confirmation.js";
 import { combinePendingActionPreparers } from "./default-chain-hooks.js";
-import type { NotificationHandlerDeps } from "../notification/types.js";
-import * as notificationRegistration from "../notification/registration.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import { createStaffAccessHandlers, type StaffAccessHandlerDeps } from "../staff/handlers.js";
@@ -70,6 +68,12 @@ import { registerIdentityCommandHandlers, type IdentityHandlerDeps } from "./ide
 import type { PlatformHandlerDeps } from "./platform-handlers.js";
 import { registerPlatformHandlers, registerPlatformQueryHandlers } from "./platform-handlers.js";
 import { createDefaultChainHooks } from "./default-chain-hooks.js";
+import {
+  createStage4PendingActionPreparers,
+  registerStage4Commands,
+  registerStage4Queries,
+  type Stage4RegistrationDeps,
+} from "./stage4-registration.js";
 
 export type RegisterM1Deps = Readonly<{
   identity?: IdentityHandlerDeps;
@@ -104,8 +108,8 @@ export type RegisterM1Deps = Readonly<{
   storeManagement?: storeManagement.HandlerDeps;
   member?: MemberRuntimeDeps;
   memberBenefits?: MemberBenefitsRuntimeDeps;
-  notification?: NotificationHandlerDeps;
-}>;
+}> &
+  Stage4RegistrationDeps;
 
 export type RegisterM1Result = Readonly<{
   registry: MutableCommandRegistry;
@@ -247,9 +251,7 @@ export function registerM1Handlers(
 
   registered.push(...memberRegistration.registerCommands(registry, deps));
 
-  registered.push(
-    ...notificationRegistration.registerNotificationCommands(registry, deps.notification),
-  );
+  registered.push(...registerStage4Commands(registry, deps));
 
   return Object.freeze(registered);
 }
@@ -357,9 +359,7 @@ export function registerM1QueryHandlers(
 
   names.push(...memberRegistration.registerQueries(queryRegistry, deps));
 
-  names.push(
-    ...notificationRegistration.registerNotificationQueries(queryRegistry, deps.notification),
-  );
+  names.push(...registerStage4Queries(queryRegistry, deps));
 
   return Object.freeze(names);
 }
@@ -388,6 +388,7 @@ export function createRegisteredM1Bus(
         deps.fulfillment === undefined
           ? undefined
           : createFulfillmentConfirmationPreparer(deps.fulfillment),
+        ...createStage4PendingActionPreparers(deps),
       ]),
       deps.notification === undefined ? undefined : prepareNotificationDeliveryRisk,
     ),

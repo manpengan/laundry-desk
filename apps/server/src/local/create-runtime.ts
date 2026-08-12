@@ -33,6 +33,7 @@ import { createPgStatsQuery } from "../stats/pg-source.js";
 import { createPgStaffAccessDeps } from "../staff/runtime.js";
 import * as ownerOperations from "./runtime-owner-operations.js";
 import * as notificationRuntime from "./runtime-notification.js";
+import * as marketingRuntime from "./runtime-marketing.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import { acquirePgBusinessDayLock } from "../workday/business-day-lock.js";
@@ -51,7 +52,6 @@ import {
   createPgPool,
   resolveRuntimeDatabaseUrl,
   RUNTIME_DATABASE_URL_REQUIRED,
-  type CreatePoolOptions,
   type PgPool,
 } from "../db/pg-pool.js";
 import { DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./demo-ids.js";
@@ -76,7 +76,7 @@ import {
 } from "./staff-directory.js";
 import { createMemoryStaffRoleResolver, createPgStaffRoleResolver } from "./staff-role-resolver.js";
 import * as recon from "./runtime-reconciliation.js";
-import type { LocalRuntime } from "./runtime-types.js";
+import type { CreatePgLocalRuntimeDependencies, LocalRuntime } from "./runtime-types.js";
 import { createMemoryMemberRuntimes, createPgMemberRuntimes } from "./runtime-member-benefits.js";
 import { buildIdentityDeps } from "./runtime-identity.js";
 export {
@@ -88,14 +88,8 @@ export {
   DEMO_STAFF_B_ID,
   DEMO_STORE_ID,
 } from "./demo-ids.js";
-export type { LocalStaffDirectoryEntry } from "./staff-directory.js";
-export { loadPgStaffDirectory } from "./staff-directory.js";
+export { loadPgStaffDirectory, type LocalStaffDirectoryEntry } from "./staff-directory.js";
 export type { LocalRuntime, LocalRuntimeMode } from "./runtime-types.js";
-export type CreatePgLocalRuntimeDependencies = Readonly<{
-  createPool: (options: CreatePoolOptions) => PgPool;
-  assertReady: (pool: PgPool, expectedDemoOnly: boolean) => Promise<void>;
-  loadStaffDirectory: typeof loadPgStaffDirectory;
-}>;
 const defaultPgRuntimeDependencies: CreatePgLocalRuntimeDependencies = Object.freeze({
   createPool: createPgPool,
   assertReady: assertLocalBootstrapReady,
@@ -229,6 +223,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     member: memberRuntimes.member,
     memberBenefits: memberRuntimes.memberBenefits,
     notification: notificationRuntime.createMemoryNotificationRuntime(orderStore),
+    marketing: marketingRuntime.createMemoryMarketingRuntime(platform.features, DEMO_CUSTOMERS),
     edgeAuthority: edgeRuntime.createMemoryRuntimeAuthority(accessTokenSecret),
     accessTokenSecret,
     csrfProofSigner,
@@ -291,6 +286,7 @@ export async function createPgLocalRuntime(
   const accountingSource = createPgAccountingSource();
   const pendingStore = createPgPendingActionStore(appPool);
   const stepUpProofStore = createPgStepUpProofStore(appPool);
+  const platform = buildPlatform("sql");
   const isBusinessDayClosed = async (businessDate: string): Promise<boolean> =>
     (await shiftStore.getByBusinessDate(
       LOCAL_PROFILE.orgId,
@@ -308,7 +304,7 @@ export async function createPgLocalRuntime(
       stepUpProofStore,
       createPgStaffRoleResolver(appPool, dependencies.loadStaffDirectory),
     ),
-    platform: buildPlatform("sql"),
+    platform,
     pricing: Object.freeze({ store: pricingStore }),
     order: Object.freeze({
       store: orderStore,
@@ -367,6 +363,7 @@ export async function createPgLocalRuntime(
     member: memberRuntimes.member,
     memberBenefits: memberRuntimes.memberBenefits,
     notification: notificationRuntime.createPgNotificationRuntime(appPool, notificationMode),
+    marketing: marketingRuntime.createPgMarketingRuntime(platform.features),
     edgeAuthority: edgeRuntime.createPgRuntimeAuthority(appPool, config.accessTokenSecret),
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSigner,

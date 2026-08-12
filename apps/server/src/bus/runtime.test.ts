@@ -50,6 +50,13 @@ test("automatic notification delivery remains admin-only", () => {
   assert.equal(staff.includes("notification_send"), false);
 });
 
+test("marketing campaign management remains admin-only", () => {
+  const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
+  const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });
+  assert.equal(admin.includes("marketing_manage"), true);
+  assert.equal(staff.includes("marketing_manage"), false);
+});
+
 test("factory handoff and QC are internal staff capabilities while reconciliation is admin-only", () => {
   const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
   const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });
@@ -78,6 +85,11 @@ test("runtime bus registers the complete member command and query surface", asyn
   assert.ok(bus.registeredQueries.includes("notification.delivery.capability.get"));
   assert.ok(bus.registeredQueries.includes("notification.delivery_batches.list"));
   assert.ok(bus.registeredQueries.includes("notification.delivery_batch.get"));
+  assert.ok(bus.registered.includes("marketing.campaign.set"));
+  assert.ok(bus.registered.includes("marketing.campaign.audience.freeze"));
+  assert.ok(bus.registeredQueries.includes("marketing.campaigns.list"));
+  assert.ok(bus.registeredQueries.includes("marketing.campaign.get"));
+  assert.ok(bus.registeredQueries.includes("marketing.campaign.audience.preview"));
   for (const name of [
     "fulfillment.batch.create",
     "fulfillment.batch.cancel",

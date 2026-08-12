@@ -48,6 +48,7 @@ import { PLATFORM_COMMANDS, PLATFORM_DEFINITIONS, PLATFORM_QUERIES } from "./pla
 import { MEMBER_COMMANDS, MEMBER_QUERIES } from "./member.js";
 import { MEMBER_BENEFIT_COMMANDS, MEMBER_BENEFIT_QUERIES } from "./member-benefits.js";
 import { MEMBER_LIFECYCLE_COMMANDS } from "./member-lifecycle.js";
+import { MARKETING_COMMANDS, MARKETING_QUERIES } from "./marketing.js";
 import { NOTIFICATION_COMMANDS, NOTIFICATION_QUERIES } from "./notification.js";
 import {
   NOTIFICATION_DELIVERY_COMMANDS,
@@ -114,6 +115,7 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
   ...MEMBER_BENEFIT_COMMANDS,
   ...NOTIFICATION_COMMANDS,
   ...NOTIFICATION_DELIVERY_COMMANDS,
+  ...MARKETING_COMMANDS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
@@ -162,6 +164,8 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.asset.consume",
   "notification.manual_list.create",
   "notification.delivery_batch.enqueue",
+  "marketing.campaign.set",
+  "marketing.campaign.audience.freeze",
 ] as const) as readonly [
   "customer.upsert",
   "customer.update",
@@ -221,6 +225,8 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.asset.consume",
   "notification.manual_list.create",
   "notification.delivery_batch.enqueue",
+  "marketing.campaign.set",
+  "marketing.campaign.audience.freeze",
 ];
 
 /**
@@ -284,6 +290,9 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   "notification.delivery.capability.get",
   "notification.delivery_batches.list",
   "notification.delivery_batch.get",
+  "marketing.campaigns.list",
+  "marketing.campaign.get",
+  "marketing.campaign.audience.preview",
 ] as const);
 
 export const M2_CONTRACT_DEFINITIONS: readonly (
@@ -312,6 +321,7 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...MEMBER_BENEFIT_QUERIES,
   ...NOTIFICATION_QUERIES,
   ...NOTIFICATION_DELIVERY_QUERIES,
+  ...MARKETING_QUERIES,
 ]);
 
 /** M2 AI presets are read-only: no command is exposed to the tool projection. */

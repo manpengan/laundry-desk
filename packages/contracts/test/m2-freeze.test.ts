@@ -99,6 +99,9 @@ describe("M2 contract surface", () => {
       "notification.manual_list.create",
       // ADR-44: explicit admin enqueue; 11-50 recipients escalate R3 to R4.
       "notification.delivery_batch.enqueue",
+      // ADR-52: store-scoped campaign definition and digest-only audience freeze.
+      "marketing.campaign.set",
+      "marketing.campaign.audience.freeze",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
@@ -122,6 +125,9 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.delivery.capability.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.delivery_batches.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.delivery_batch.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaigns.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.audience.preview");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("accounting.report.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.drilldown");
@@ -129,8 +135,8 @@ describe("M2 contract surface", () => {
     // ADR-38: trusted policy read and immutable payment-ledger refund source.
     expect(M2_CONTRACT_QUERY_NAMES).toContain("pricing.policy.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("payment.ledger.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(58);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(38);
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(60);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(41);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
@@ -225,6 +231,9 @@ describe("M2 contract surface", () => {
     );
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "fulfillment.batch.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "marketing.campaigns.list",
     );
   });
 

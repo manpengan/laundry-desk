@@ -42,6 +42,14 @@ export {
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
 } from "./fulfillment-confirmation.js";
+export {
+  MarketingAudienceFreezeConfirmationSummarySchema,
+  MarketingCampaignSetConfirmationSummarySchema,
+} from "./marketing-campaign-confirmation.js";
+export type {
+  MarketingAudienceFreezeConfirmationSummary,
+  MarketingCampaignSetConfirmationSummary,
+} from "./marketing-campaign-confirmation.js";
 export type {
   FactoryHandoffConfirmationSummary,
   FulfillmentOperationConfirmationSummary,

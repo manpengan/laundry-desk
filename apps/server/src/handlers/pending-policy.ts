@@ -5,6 +5,7 @@ import {
 } from "@laundry/contracts";
 
 import type { BusContext } from "../bus/types.js";
+import type { PolicyDecision } from "../policy/types.js";
 import { freezeCanonical } from "../pending-actions/canonical.js";
 import type {
   PendingAction,
@@ -118,6 +119,19 @@ export function existingNotificationSummary(
   return parsed.success ? Object.freeze(parsed.data) : undefined;
 }
 
+export function notificationPendingRetrySummary(
+  existing: PendingAction,
+  parsed: unknown,
+  bus: BusContext,
+): ConfirmationSummary | null {
+  const matches =
+    JSON.stringify(existing.args) === JSON.stringify(freezeCanonical(parsed)) &&
+    existing.commandVersion === bus.definition.version &&
+    existing.creatorStaffId === bus.actor.staffId &&
+    (existing.status === "pending" || existing.status === "consumed");
+  return matches ? (existingNotificationSummary(existing) ?? null) : null;
+}
+
 export function pendingResponse(existing: PendingAction, summary?: ConfirmationSummary) {
   const code =
     existing.policyOutcome === "confirm"
@@ -131,4 +145,25 @@ export function pendingResponse(existing: PendingAction, summary?: ConfirmationS
       ...(summary === undefined ? {} : { summary }),
     }),
   };
+}
+
+export function preparedPendingRetryMatches(
+  existing: PendingAction,
+  parsed: unknown,
+  bus: BusContext,
+  preparation: PendingActionPreparation | null,
+  decision: PolicyDecision,
+): boolean {
+  if (preparation === null) return false;
+  return (
+    JSON.stringify(existing.args) === JSON.stringify(freezeCanonical(parsed)) &&
+    existing.authority !== undefined &&
+    JSON.stringify(existing.authority) === JSON.stringify(freezeCanonical(preparation.authority)) &&
+    existing.commandVersion === bus.definition.version &&
+    existing.creatorStaffId === bus.actor.staffId &&
+    existing.status === "pending" &&
+    existing.effectiveRisk === decision.effectiveRisk &&
+    existing.policyOutcome === decision.outcome &&
+    existing.requiresOtherApprover === decision.requiresOtherApprover
+  );
 }
