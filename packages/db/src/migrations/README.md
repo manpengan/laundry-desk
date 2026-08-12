@@ -64,6 +64,7 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0060_campaign_coupon_batches.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0061_customer_self_service.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0062_customer_wallet_and_preferences.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0063_referral_and_group_buy.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -90,6 +91,7 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Campaign coupon batches** (0060, [ADR-53](../../../../docs/adr/2026-08-13-adr-53-campaign-coupon-issuance.md)): bounded server-side eligibility, existing coupon-ledger grants, exact campaign budget evidence, and auditable redemption correction
 - **Customer self-service orders** (0061, [ADR-55](../../../../docs/adr/2026-08-13-adr-55-customer-self-service-orders.md)): short-lived customer session authority and canonical order/receipt/garment projections
 - **Customer wallet and preferences** (0062, [ADR-56](../../../../docs/adr/2026-08-13-adr-56-customer-wallet-and-preferences.md)): existing wallet/benefit projections plus canonical CAS over portal-owned addresses and notification preference
+- **Referral and group-buy** (0063, [ADR-54](../../../../docs/adr/2026-08-13-adr-54-referral-and-group-buy.md)): active-member referral rewards tied to settled orders and exact campaign budget evidence, plus digest-only external vouchers with single-use order redemption
 - **M2 payments** (0009): `payments` append-only ledger (`SELECT, INSERT` only for `laundry_app`)
 - **M2 print** (0010): `print_jobs` queue (`SELECT, INSERT, UPDATE` for status transitions; no DELETE)
 - **M2 customers** (0011): `customers` org-scoped archive (`SELECT, INSERT, UPDATE`; unique org+phone)

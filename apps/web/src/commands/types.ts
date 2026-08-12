@@ -9,6 +9,9 @@ import type {
   MarketingCampaignSetConfirmationSummary,
   MarketingCouponIssueConfirmationSummary,
   MarketingCouponReversalConfirmationSummary,
+  MarketingGroupBuyRedemptionConfirmationSummary,
+  MarketingGroupBuyRegistrationConfirmationSummary,
+  MarketingReferralRewardConfirmationSummary,
 } from "@laundry/contracts";
 
 export type MemberTopupMatchedRule = Readonly<{
@@ -50,7 +53,10 @@ export type ConfirmationSummary =
   | FactoryHandoffConfirmationSummary
   | FulfillmentOperationConfirmationSummary
   | MarketingCouponIssueConfirmationSummary
-  | MarketingCouponReversalConfirmationSummary;
+  | MarketingCouponReversalConfirmationSummary
+  | MarketingReferralRewardConfirmationSummary
+  | MarketingGroupBuyRegistrationConfirmationSummary
+  | MarketingGroupBuyRedemptionConfirmationSummary;
 
 export type CommandErrorDetail = Readonly<{
   kind?: string;

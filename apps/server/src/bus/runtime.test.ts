@@ -89,6 +89,9 @@ test("runtime bus registers the complete member command and query surface", asyn
   assert.ok(bus.registered.includes("marketing.campaign.audience.freeze"));
   assert.ok(bus.registered.includes("marketing.campaign.coupons.issue"));
   assert.ok(bus.registered.includes("marketing.coupon.redemption.reverse"));
+  assert.ok(bus.registered.includes("marketing.referral.reward.issue"));
+  assert.ok(bus.registered.includes("marketing.group_buy.voucher.register"));
+  assert.ok(bus.registered.includes("marketing.group_buy.voucher.redeem"));
   assert.ok(bus.registeredQueries.includes("marketing.campaigns.list"));
   assert.ok(bus.registeredQueries.includes("marketing.campaign.get"));
   assert.ok(bus.registeredQueries.includes("marketing.campaign.audience.preview"));

@@ -6,6 +6,9 @@ import { audienceDigest, evaluateMemoryAudience, sha256Canonical } from "./audie
 import { createMemoryMarketingCouponOperations } from "./memory-coupons.js";
 import type { MemberBenefitsStore } from "../member-benefits/types.js";
 import type { MemberStore } from "../member/types.js";
+import type { OrderStore } from "../order/types.js";
+import { createMemoryMarketingExtensionOperations } from "./memory-extensions.js";
+import type { MarketingExtensionStore } from "./extension-types.js";
 import type {
   MarketingAudienceSnapshotRecord,
   MarketingAudienceEvaluation,
@@ -20,6 +23,7 @@ export type MemoryMarketingStoreOptions = Readonly<{
   newId?: () => string;
   memberStore?: MemberStore;
   memberBenefits?: MemberBenefitsStore;
+  orderStore?: OrderStore;
 }>;
 
 function copyCampaign(
@@ -48,7 +52,7 @@ function copyCampaign(
 
 export function createMemoryMarketingStore(
   options: MemoryMarketingStoreOptions = {},
-): MarketingStore {
+): MarketingStore & MarketingExtensionStore {
   const customers = Object.freeze([...(options.customers ?? [])]);
   const newId = options.newId ?? randomUUID;
   let campaigns = new Map<string, MarketingCampaignRecord>();
@@ -117,9 +121,28 @@ export function createMemoryMarketingStore(
       campaigns = next;
     },
   });
+  const extensions = createMemoryMarketingExtensionOperations({
+    newId,
+    customers,
+    ...(options.memberStore === undefined ? {} : { memberStore: options.memberStore }),
+    ...(options.memberBenefits === undefined ? {} : { memberBenefits: options.memberBenefits }),
+    ...(options.orderStore === undefined ? {} : { orderStore: options.orderStore }),
+    getCampaign: (campaignId) => campaigns.get(campaignId),
+    commitBudget: (campaignId, amountCents) => {
+      const current = campaigns.get(campaignId);
+      if (current === undefined) throw new Error("campaign disappeared during marketing write");
+      const next = new Map(campaigns);
+      next.set(
+        campaignId,
+        Object.freeze({ ...current, budgetUsedCents: current.budgetUsedCents + amountCents }),
+      );
+      campaigns = next;
+    },
+  });
 
   return Object.freeze({
     ...coupons,
+    ...extensions,
     async setCampaign(_client, _tenant, input) {
       const id = input.campaign_id ?? newId();
       const before = campaigns.get(id) ?? null;

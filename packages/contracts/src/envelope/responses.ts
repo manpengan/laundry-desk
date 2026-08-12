@@ -4,8 +4,6 @@ import { JsonPointerSchema } from "../registry/primitives.js";
 import {
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
-  type FactoryHandoffConfirmationSummary,
-  type FulfillmentOperationConfirmationSummary,
 } from "./fulfillment-confirmation.js";
 import {
   MarketingAudienceFreezeConfirmationSummarySchema,
@@ -16,9 +14,12 @@ import {
 import {
   MarketingCouponIssueConfirmationSummarySchema,
   MarketingCouponReversalConfirmationSummarySchema,
-  type MarketingCouponIssueConfirmationSummary,
-  type MarketingCouponReversalConfirmationSummary,
 } from "./marketing-confirmation.js";
+import {
+  MarketingGroupBuyRedemptionConfirmationSummarySchema,
+  MarketingGroupBuyRegistrationConfirmationSummarySchema,
+  MarketingReferralRewardConfirmationSummarySchema,
+} from "./marketing-extension-confirmation.js";
 import { ConfirmReferenceSchema } from "./wire-payload.js";
 
 /** Architecture §6.5: externally safe outcomes for each C1 validation-chain stage. */
@@ -201,6 +202,9 @@ const ConfirmationSummarySchema = z.union([
   FulfillmentOperationConfirmationSummarySchema,
   MarketingCouponIssueConfirmationSummarySchema,
   MarketingCouponReversalConfirmationSummarySchema,
+  MarketingReferralRewardConfirmationSummarySchema,
+  MarketingGroupBuyRegistrationConfirmationSummarySchema,
+  MarketingGroupBuyRedemptionConfirmationSummarySchema,
 ]);
 
 const ErrorDetailSchema = z.discriminatedUnion("kind", [
@@ -235,15 +239,7 @@ export type MemberTopupConfirmationSummary = DeepReadonly<
 export type NotificationDeliveryConfirmationSummary = DeepReadonly<
   z.output<typeof NotificationDeliveryConfirmationSummarySchema>
 >;
-export type ConfirmationSummary =
-  | MemberTopupConfirmationSummary
-  | NotificationDeliveryConfirmationSummary
-  | MarketingCampaignSetConfirmationSummary
-  | MarketingAudienceFreezeConfirmationSummary
-  | FactoryHandoffConfirmationSummary
-  | FulfillmentOperationConfirmationSummary
-  | MarketingCouponIssueConfirmationSummary
-  | MarketingCouponReversalConfirmationSummary;
+export type ConfirmationSummary = DeepReadonly<z.output<typeof ConfirmationSummarySchema>>;
 
 const createErrorSchema = <TCode extends CommandErrorCode, TMessage extends string>(
   code: TCode,
@@ -349,7 +345,10 @@ const freezeCommandError = (error: CommandError): CommandError => {
       }
       if (
         error.detail.summary.kind === "marketing_coupon_issue" ||
-        error.detail.summary.kind === "marketing_coupon_redemption_reversal"
+        error.detail.summary.kind === "marketing_coupon_redemption_reversal" ||
+        error.detail.summary.kind === "marketing_referral_reward" ||
+        error.detail.summary.kind === "marketing_group_buy_registration" ||
+        error.detail.summary.kind === "marketing_group_buy_redemption"
       ) {
         return {
           ...error.detail,

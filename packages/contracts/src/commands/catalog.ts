@@ -50,6 +50,7 @@ import { MEMBER_BENEFIT_COMMANDS, MEMBER_BENEFIT_QUERIES } from "./member-benefi
 import { MEMBER_LIFECYCLE_COMMANDS } from "./member-lifecycle.js";
 import { MARKETING_COMMANDS, MARKETING_QUERIES } from "./marketing.js";
 import { MARKETING_COUPON_COMMANDS, MARKETING_COUPON_QUERIES } from "./marketing-coupons.js";
+import { MARKETING_EXTENSION_COMMANDS } from "./marketing-extensions.js";
 import {
   CUSTOMER_SELF_SERVICE_QUERIES,
   CUSTOMER_SELF_SERVICE_QUERY_NAMES,
@@ -122,6 +123,7 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
   ...NOTIFICATION_DELIVERY_COMMANDS,
   ...MARKETING_COMMANDS,
   ...MARKETING_COUPON_COMMANDS,
+  ...MARKETING_EXTENSION_COMMANDS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
@@ -174,6 +176,9 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "marketing.campaign.audience.freeze",
   "marketing.campaign.coupons.issue",
   "marketing.coupon.redemption.reverse",
+  "marketing.referral.reward.issue",
+  "marketing.group_buy.voucher.register",
+  "marketing.group_buy.voucher.redeem",
 ] as const) as readonly [
   "customer.upsert",
   "customer.update",
@@ -237,6 +242,9 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "marketing.campaign.audience.freeze",
   "marketing.campaign.coupons.issue",
   "marketing.coupon.redemption.reverse",
+  "marketing.referral.reward.issue",
+  "marketing.group_buy.voucher.register",
+  "marketing.group_buy.voucher.redeem",
 ];
 
 /**

@@ -5,6 +5,9 @@ import {
   MarketingCampaignSetConfirmationSummarySchema,
   MarketingCouponIssueConfirmationSummarySchema,
   MarketingCouponReversalConfirmationSummarySchema,
+  MarketingGroupBuyRedemptionConfirmationSummarySchema,
+  MarketingGroupBuyRegistrationConfirmationSummarySchema,
+  MarketingReferralRewardConfirmationSummarySchema,
   NotificationDeliveryConfirmationSummarySchema,
 } from "@laundry/contracts";
 
@@ -39,6 +42,12 @@ export function readConfirmationSummary(value: unknown): ConfirmationSummary | n
   if (couponIssue.success) return Object.freeze(couponIssue.data);
   const couponReversal = MarketingCouponReversalConfirmationSummarySchema.safeParse(value);
   if (couponReversal.success) return Object.freeze(couponReversal.data);
+  const referral = MarketingReferralRewardConfirmationSummarySchema.safeParse(value);
+  if (referral.success) return Object.freeze(referral.data);
+  const registration = MarketingGroupBuyRegistrationConfirmationSummarySchema.safeParse(value);
+  if (registration.success) return Object.freeze(registration.data);
+  const redemption = MarketingGroupBuyRedemptionConfirmationSummarySchema.safeParse(value);
+  if (redemption.success) return Object.freeze(redemption.data);
   const fulfillment = FulfillmentOperationConfirmationSummarySchema.safeParse(value);
   if (!fulfillment.success) return null;
   return Object.freeze({

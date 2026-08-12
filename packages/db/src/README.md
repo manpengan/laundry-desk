@@ -30,6 +30,8 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 # 0054-0058 are populated by Stage 4.4 Items 1-6 on integration.
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0059_marketing_campaigns.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0060_campaign_coupon_batches.sql
+# 0061-0062 are reserved for Stage 4.4 Items 10-11 and arrive during integration.
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0063_referral_and_group_buy.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -65,5 +67,6 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Campaign coupon batches** (0060, ADR-53): server-qualified bounded grants, immutable campaign-to-coupon provenance, exact budget debits, and append-only redemption reversal support
 - **Customer self-service orders** (0061, ADR-55): hashed customer sessions and canonical order/receipt/garment read projections
 - **Customer wallet and preferences** (0062, ADR-56): read-only stored-value/benefit projections and bounded portal-owned address/preference CAS
+- **Referral and group-buy** (0063, ADR-54): qualified referral coupon grants with exact campaign budget evidence, digest-only external vouchers, and single-use order redemption
 - Still deferred: edge lease, AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

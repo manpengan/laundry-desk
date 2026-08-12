@@ -60,6 +60,9 @@ test("another store is restricted to the Stage 3.2 Owner bus surface", () => {
     "marketing.campaign.audience.freeze",
     "marketing.campaign.coupons.issue",
     "marketing.coupon.redemption.reverse",
+    "marketing.referral.reward.issue",
+    "marketing.group_buy.voucher.register",
+    "marketing.group_buy.voucher.redeem",
   ]) {
     assert.equal(isRuntimeBusOperationAvailable(resolved, "command", name), true, name);
   }

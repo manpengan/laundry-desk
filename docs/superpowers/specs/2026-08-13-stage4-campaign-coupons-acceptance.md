@@ -33,7 +33,8 @@
 
 ## 明确保留
 
-- Item 9 推荐奖励、团购核销及反作弊。
+- Item 9 推荐奖励与团购核销已由 [ADR-54](../../adr/2026-08-13-adr-54-referral-and-group-buy.md)
+  独立承接；推荐采集、provider 联网验真与反作弊评分仍保留。
 - Items 10–11 顾客自助订单/票据/钱包/券包/地址/偏好。
 - 定时投放、短信/微信/provider、AI/automation/Edge/offline。
 - hk-vps 正式部署、远端 migration marker、public Browser 与 exact-SHA CI。

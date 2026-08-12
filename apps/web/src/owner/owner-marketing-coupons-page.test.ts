@@ -12,6 +12,8 @@ import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
 import { OwnerMarketingCouponReversal } from "./OwnerMarketingCouponReversal.js";
 import { OwnerMarketingCoupons } from "./OwnerMarketingCoupons.js";
+import { OwnerMarketingGroupBuy } from "./OwnerMarketingGroupBuy.js";
+import { OwnerMarketingReferral } from "./OwnerMarketingReferral.js";
 
 const session: SessionView = Object.freeze({
   session: Object.freeze({
@@ -83,6 +85,20 @@ test("Owner marketing exposes bounded issuance and audited correction without a 
             authClient,
             commandClient,
           }),
+          createElement(OwnerMarketingReferral, {
+            key: "referral",
+            campaign,
+            session,
+            authClient,
+            commandClient,
+            onChanged: async () => undefined,
+          }),
+          createElement(OwnerMarketingGroupBuy, {
+            key: "group-buy",
+            session,
+            authClient,
+            commandClient,
+          }),
         ],
       }),
     }),
@@ -92,6 +108,10 @@ test("Owner marketing exposes bounded issuance and audited correction without a 
   assert.match(html, /服务端资格/u);
   assert.match(html, /核销冲正/u);
   assert.match(html, /发起冲正复核/u);
+  assert.match(html, /推荐奖励/u);
+  assert.match(html, /发起推荐奖励复核/u);
+  assert.match(html, /团购券/u);
+  assert.match(html, /原始券码仅在本机/u);
   assert.match(html, /maxLength="256"/u);
   assert.doesNotMatch(html, /recipient_ids|customer_id|account_id/iu);
 });

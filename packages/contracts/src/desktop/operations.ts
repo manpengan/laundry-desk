@@ -227,17 +227,22 @@ export const DesktopQueryExecuteInputSchema = DesktopQueryExecuteInputBaseSchema
   },
 );
 
-const DesktopBoundedCommandResponseSchema = z.preprocess((value, context) => {
-  try {
-    return snapshotBoundedJson(value, "desktop command result");
-  } catch {
-    context.addIssue({
-      code: "custom",
-      message: "Desktop command result exceeds the complexity limit",
-    });
-    return z.NEVER;
-  }
-}, CommandResponseSchema);
+export type DesktopCommandResponse = z.output<typeof CommandResponseSchema>;
+
+const DesktopBoundedCommandResponseSchema: z.ZodType<DesktopCommandResponse> = z.preprocess(
+  (value, context) => {
+    try {
+      return snapshotBoundedJson(value, "desktop command result");
+    } catch {
+      context.addIssue({
+        code: "custom",
+        message: "Desktop command result exceeds the complexity limit",
+      });
+      return z.NEVER;
+    }
+  },
+  CommandResponseSchema,
+);
 
 export const DesktopCommandExecuteResultSchema = DesktopBoundedCommandResponseSchema;
 export const DesktopQueryExecuteResultSchema = DesktopBoundedCommandResponseSchema;

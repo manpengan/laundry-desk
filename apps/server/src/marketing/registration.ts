@@ -22,11 +22,26 @@ export function registerMarketingCommands(
     "marketing.coupon.redemption.reverse",
     handlers["marketing.coupon.redemption.reverse"]!,
   );
+  registry.registerHandler(
+    "marketing.referral.reward.issue",
+    handlers["marketing.referral.reward.issue"]!,
+  );
+  registry.registerHandler(
+    "marketing.group_buy.voucher.register",
+    handlers["marketing.group_buy.voucher.register"]!,
+  );
+  registry.registerHandler(
+    "marketing.group_buy.voucher.redeem",
+    handlers["marketing.group_buy.voucher.redeem"]!,
+  );
   return Object.freeze([
     "marketing.campaign.set",
     "marketing.campaign.audience.freeze",
     "marketing.campaign.coupons.issue",
     "marketing.coupon.redemption.reverse",
+    "marketing.referral.reward.issue",
+    "marketing.group_buy.voucher.register",
+    "marketing.group_buy.voucher.redeem",
   ]);
 }
 

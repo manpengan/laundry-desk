@@ -11,6 +11,9 @@ const OWNER_CLOUD_COMMANDS: ReadonlySet<string> = new Set([
   "marketing.campaign.audience.freeze",
   "marketing.campaign.coupons.issue",
   "marketing.coupon.redemption.reverse",
+  "marketing.referral.reward.issue",
+  "marketing.group_buy.voucher.register",
+  "marketing.group_buy.voucher.redeem",
 ]);
 
 const OWNER_CLOUD_QUERIES: ReadonlySet<string> = new Set([

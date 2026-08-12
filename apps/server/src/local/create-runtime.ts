@@ -79,6 +79,7 @@ import * as recon from "./runtime-reconciliation.js";
 import type { CreatePgLocalRuntimeDependencies, LocalRuntime } from "./runtime-types.js";
 import { createMemoryMemberRuntimes, createPgMemberRuntimes } from "./runtime-member-benefits.js";
 import { buildIdentityDeps } from "./runtime-identity.js";
+
 export {
   DEMO_ADMIN_ID,
   DEMO_ORG_ID,
@@ -90,6 +91,7 @@ export {
 } from "./demo-ids.js";
 export { loadPgStaffDirectory, type LocalStaffDirectoryEntry } from "./staff-directory.js";
 export type { LocalRuntime, LocalRuntimeMode } from "./runtime-types.js";
+
 const defaultPgRuntimeDependencies: CreatePgLocalRuntimeDependencies = Object.freeze({
   createPool: createPgPool,
   assertReady: assertLocalBootstrapReady,
@@ -138,10 +140,10 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   seedStaff(DEMO_STAFF_B_ID, "staffb", "店员乙");
   const orderStore = createMemoryOrderStore();
   const pricingStore = createMemoryPricingPolicyStore();
-  const memberRuntimes = createMemoryMemberRuntimes(DEMO_CUSTOMERS, orderStore);
-  const customerStore = createMemoryCustomerStore(DEMO_CUSTOMERS, memberRuntimes.customerMerge);
+  const members = createMemoryMemberRuntimes(DEMO_CUSTOMERS, orderStore);
+  const customerStore = createMemoryCustomerStore(DEMO_CUSTOMERS, members.customerMerge);
   const customerProfileStore = createMemoryCustomerProfileStore(customerStore);
-  const statsSource = createOrderBackedStatsQuery(orderStore, memberRuntimes.member.store);
+  const statsSource = createOrderBackedStatsQuery(orderStore, members.member.store);
   const shiftStore = createMemoryShiftStore();
   const printStore = createMemoryPrintJobStore({
     loadSnapshot: async (orderId) => {
@@ -188,7 +190,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       customer: customerStore,
       customerPolicy: createCustomerOrderPolicyResolver(
         customerProfileStore,
-        memberRuntimes.memberBenefits,
+        members.memberBenefits,
       ),
       catalog: createMemoryCatalogStore(),
       timeZone: LOCAL_PROFILE.timezone,
@@ -220,10 +222,10 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     }),
     staffAccess,
     storeManagement: ownerOperations.createMemoryStoreManagementDeps(),
-    member: memberRuntimes.member,
-    memberBenefits: memberRuntimes.memberBenefits,
+    member: members.member,
+    memberBenefits: members.memberBenefits,
     notification: notificationRuntime.createMemoryNotificationRuntime(orderStore),
-    marketing: createMemoryMarketingRuntime(platform.features, DEMO_CUSTOMERS, memberRuntimes),
+    marketing: createMemoryMarketingRuntime(platform.features, DEMO_CUSTOMERS, members, orderStore),
     edgeAuthority: edgeRuntime.createMemoryRuntimeAuthority(accessTokenSecret),
     accessTokenSecret,
     csrfProofSigner,

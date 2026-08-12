@@ -62,3 +62,19 @@ export type {
   MarketingCouponIssueConfirmationSummary,
   MarketingCouponReversalConfirmationSummary,
 } from "./marketing-confirmation.js";
+export {
+  MarketingGroupBuyRedemptionAuthoritySchema,
+  MarketingGroupBuyRedemptionConfirmationSummarySchema,
+  MarketingGroupBuyRegistrationAuthoritySchema,
+  MarketingGroupBuyRegistrationConfirmationSummarySchema,
+  MarketingReferralRewardAuthoritySchema,
+  MarketingReferralRewardConfirmationSummarySchema,
+} from "./marketing-extension-confirmation.js";
+export type {
+  MarketingGroupBuyRedemptionAuthority,
+  MarketingGroupBuyRedemptionConfirmationSummary,
+  MarketingGroupBuyRegistrationAuthority,
+  MarketingGroupBuyRegistrationConfirmationSummary,
+  MarketingReferralRewardAuthority,
+  MarketingReferralRewardConfirmationSummary,
+} from "./marketing-extension-confirmation.js";

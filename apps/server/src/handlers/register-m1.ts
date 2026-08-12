@@ -25,7 +25,6 @@ import {
   registerFulfillmentCommandHandlers,
   registerFulfillmentQueryHandlers,
 } from "../fulfillment/handlers.js";
-import { createFulfillmentConfirmationPreparer } from "../fulfillment/confirmation.js";
 import { registerOrderWorkdayCommandHandlers } from "../order/workday-handlers.js";
 import {
   registerPaymentCommandHandlers,
@@ -54,13 +53,7 @@ import type { MemberRuntimeDeps } from "../member/handlers.js";
 import * as memberRegistration from "../member/registration.js";
 import type { MemberBenefitsRuntimeDeps } from "../member-benefits/types.js";
 import { withMemberBenefitCouponCancellation } from "../member-benefits/order-cancellation.js";
-import { createMemberTopupConfirmationPreparer } from "../member/topup-confirmation.js";
-import { createMarketingCouponConfirmationPreparer } from "../marketing/coupon-confirmation.js";
-import {
-  createNotificationDeliveryConfirmationPreparer,
-  prepareNotificationDeliveryRisk,
-} from "../notification/delivery-confirmation.js";
-import { combinePendingActionPreparers } from "./default-chain-hooks.js";
+import { prepareNotificationDeliveryRisk } from "../notification/delivery-confirmation.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import { createStaffAccessHandlers, type StaffAccessHandlerDeps } from "../staff/handlers.js";
@@ -75,6 +68,7 @@ import {
   registerStage4Queries,
   type Stage4RegistrationDeps,
 } from "./stage4-registration.js";
+import { createM1PendingActionPreparer } from "./m1-pending-preparer.js";
 
 export type RegisterM1Deps = Readonly<{
   identity?: IdentityHandlerDeps;
@@ -379,21 +373,7 @@ export function createRegisteredM1Bus(
     chainHooks: createDefaultChainHooks(
       {},
       pendingStore,
-      combinePendingActionPreparers([
-        deps.member === undefined || deps.order === undefined
-          ? undefined
-          : createMemberTopupConfirmationPreparer(deps.member),
-        deps.notification === undefined
-          ? undefined
-          : createNotificationDeliveryConfirmationPreparer(deps.notification),
-        deps.fulfillment === undefined
-          ? undefined
-          : createFulfillmentConfirmationPreparer(deps.fulfillment),
-        ...createStage4PendingActionPreparers(deps),
-        deps.marketing === undefined
-          ? undefined
-          : createMarketingCouponConfirmationPreparer(deps.marketing),
-      ]),
+      createM1PendingActionPreparer(deps),
       deps.notification === undefined ? undefined : prepareNotificationDeliveryRisk,
     ),
     registered,

@@ -17,6 +17,7 @@ import { HandlerCommandError } from "../bus/types.js";
 import { createSqlFeaturesStore } from "../platform/features.js";
 import { requireFrozenMarketingCampaign } from "./confirmation.js";
 import { createMarketingCouponHandlers } from "./coupon-handlers.js";
+import { createMarketingExtensionHandlers } from "./extension-handlers.js";
 import type {
   MarketingAudienceEvaluation,
   MarketingAudienceSnapshotRecord,
@@ -34,6 +35,9 @@ const HANDLER_NAMES = [
   "marketing.campaign.coupons.issue",
   "marketing.campaign.coupon_batch.get",
   "marketing.coupon.redemption.reverse",
+  "marketing.referral.reward.issue",
+  "marketing.group_buy.voucher.register",
+  "marketing.group_buy.voucher.redeem",
 ] as const;
 
 function error(
@@ -249,11 +253,15 @@ export function createMarketingHandlers(
   deps: MarketingHandlerDeps,
 ): Readonly<Record<(typeof HANDLER_NAMES)[number], CommandHandler>> {
   const coupons = createMarketingCouponHandlers(deps);
+  const extensions = createMarketingExtensionHandlers(deps);
   return Object.freeze({
     "marketing.campaign.coupons.preview": coupons["marketing.campaign.coupons.preview"]!,
     "marketing.campaign.coupons.issue": coupons["marketing.campaign.coupons.issue"]!,
     "marketing.campaign.coupon_batch.get": coupons["marketing.campaign.coupon_batch.get"]!,
     "marketing.coupon.redemption.reverse": coupons["marketing.coupon.redemption.reverse"]!,
+    "marketing.referral.reward.issue": extensions["marketing.referral.reward.issue"]!,
+    "marketing.group_buy.voucher.register": extensions["marketing.group_buy.voucher.register"]!,
+    "marketing.group_buy.voucher.redeem": extensions["marketing.group_buy.voucher.redeem"]!,
     "marketing.campaign.set": setHandler(deps),
     "marketing.campaign.audience.freeze": freezeHandler(deps),
     "marketing.campaigns.list": listHandler(deps),

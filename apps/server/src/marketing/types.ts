@@ -11,6 +11,7 @@ import type {
 
 import type { SqlClient, TenantContext } from "../db/types.js";
 import type { FeaturesStore } from "../platform/features.js";
+import type { MarketingExtensionStore } from "./extension-types.js";
 
 export type MarketingCampaignRecord = Readonly<{
   campaignId: string;
@@ -181,7 +182,8 @@ export type MarketingStore = Readonly<{
     tenant: TenantContext,
     input: MarketingCouponReversalStoreInput,
   ) => Promise<MarketingCouponReversalResult>;
-}>;
+}> &
+  Partial<MarketingExtensionStore>;
 
 export type MarketingHandlerDeps = Readonly<{
   store: MarketingStore;

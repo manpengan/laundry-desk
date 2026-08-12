@@ -106,6 +106,10 @@ describe("M2 contract surface", () => {
       // coupon values never enter the command body. Both writes are R4.
       "marketing.campaign.coupons.issue",
       "marketing.coupon.redemption.reverse",
+      // ADR-54: referral rewards and group-buy vouchers are bounded R4 writes.
+      "marketing.referral.reward.issue",
+      "marketing.group_buy.voucher.register",
+      "marketing.group_buy.voucher.redeem",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
@@ -149,7 +153,7 @@ describe("M2 contract surface", () => {
     // ADR-38: trusted policy read and immutable payment-ledger refund source.
     expect(M2_CONTRACT_QUERY_NAMES).toContain("pricing.policy.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("payment.ledger.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(62);
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(65);
     expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(51);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,

@@ -41,7 +41,7 @@ function createdTables(sql: string): readonly string[] {
 }
 
 function referencedTables(sql: string): readonly string[] {
-  const matches = sql.matchAll(/REFERENCES\s+(?:"?public"?\.)?"?(\w+)"?/giu);
+  const matches = sql.matchAll(/\bREFERENCES\b\s+(?:"?public"?\.)?"?(\w+)"?/giu);
   return [...matches].map((match) => match[1]!.toLowerCase());
 }
 
@@ -75,6 +75,11 @@ describe("packages/db migration relation references", () => {
 
   it("ignores a relation named only inside a comment", () => {
     const sql = "-- REFERENCES ghost_table explains why\nCREATE TABLE a (id uuid PRIMARY KEY);";
+    expect(referencedTables(stripComments(sql))).toEqual([]);
+  });
+
+  it("ignores references as a suffix inside a relation name", () => {
+    const sql = "SELECT * FROM public.customer_portal_preferences preference;";
     expect(referencedTables(stripComments(sql))).toEqual([]);
   });
 });

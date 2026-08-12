@@ -55,6 +55,7 @@
 | [ADR-45](2026-08-12-adr-45-factory-handoff-and-qc.md)                         | 店厂四节点交接、清点差异与质检返工              | **Proposed** 2026-08-12；实现候选待 manpengan 签署 |
 | [ADR-52](2026-08-13-adr-52-store-marketing-campaigns.md)                      | 当前门店营销活动、受众摘要与预算上限            | **Proposed** 2026-08-13；Stage 4.4 Item 7 候选     |
 | [ADR-53](2026-08-13-adr-53-campaign-coupon-issuance.md)                       | 活动批量发券、服务端资格与核销冲正              | **Proposed** 2026-08-13；Stage 4.4 Item 8 候选     |
+| [ADR-54](2026-08-13-adr-54-referral-and-group-buy.md)                         | 推荐奖励、团购券登记与单次核销                  | **Proposed** 2026-08-13；Stage 4.4 Item 9 候选     |
 | [ADR-55](2026-08-13-adr-55-customer-self-service-orders.md)                   | 顾客自助订单、票据与件级洗护进度                | **Proposed** 2026-08-13；Stage 4.4 Item 10 候选    |
 | [ADR-56](2026-08-13-adr-56-customer-wallet-and-preferences.md)                | 顾客钱包、权益、地址与通知偏好                  | **Proposed** 2026-08-13；Stage 4.4 Item 11 候选    |
 

@@ -5,6 +5,10 @@ import { MarketingAudienceRuleSchema } from "@laundry/contracts";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import { audienceDigest } from "./audience.js";
 import { createPgMarketingCouponOperations } from "./pg-coupons.js";
+import { createPgMarketingGroupBuyRedemptionOperations } from "./pg-group-buy.js";
+import { createPgMarketingGroupBuyRegistrationOperations } from "./pg-group-buy-registration.js";
+import { createPgMarketingReferralOperations } from "./pg-referrals.js";
+import type { MarketingExtensionStore } from "./extension-types.js";
 import type {
   MarketingAudienceSnapshotRecord,
   MarketingAudienceEvaluation,
@@ -228,13 +232,16 @@ function errorText(error: unknown): string {
 
 export function createPgMarketingStore(
   options: Readonly<{ newId?: () => string }> = {},
-): MarketingStore {
+): MarketingStore & MarketingExtensionStore {
   const newId = options.newId ?? randomUUID;
   return Object.freeze({
     ...createPgMarketingCouponOperations(
       Object.freeze({ load: loadCampaign, evaluate: evaluateAudienceSelection }),
       newId,
     ),
+    ...createPgMarketingReferralOperations(loadCampaign, newId),
+    ...createPgMarketingGroupBuyRegistrationOperations(newId),
+    ...createPgMarketingGroupBuyRedemptionOperations(newId),
     async setCampaign(client, tenant, input) {
       const id = input.campaign_id ?? newId();
       const before =

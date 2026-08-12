@@ -141,6 +141,7 @@ describe("destructive migration static reject", () => {
       "0060_campaign_coupon_batches.sql",
       "0061_customer_self_service.sql",
       "0062_customer_wallet_and_preferences.sql",
+      "0063_referral_and_group_buy.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

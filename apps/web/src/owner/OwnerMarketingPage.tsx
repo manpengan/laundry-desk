@@ -11,6 +11,8 @@ import { OwnerMarketingCampaignList } from "./OwnerMarketingCampaignList.js";
 import { OwnerMarketingConfirmationDialogs } from "./OwnerMarketingConfirmationDialogs.js";
 import { OwnerMarketingCouponReversal } from "./OwnerMarketingCouponReversal.js";
 import { OwnerMarketingCoupons } from "./OwnerMarketingCoupons.js";
+import { OwnerMarketingGroupBuy } from "./OwnerMarketingGroupBuy.js";
+import { OwnerMarketingReferral } from "./OwnerMarketingReferral.js";
 import {
   createMarketingRequestToken,
   createMarketingPendingAuthority,
@@ -390,6 +392,20 @@ export function OwnerMarketingPage({
       />
 
       <OwnerMarketingCouponReversal
+        session={session}
+        authClient={authClient}
+        commandClient={commandClient}
+      />
+
+      <OwnerMarketingReferral
+        campaign={selected}
+        session={session}
+        authClient={authClient}
+        commandClient={commandClient}
+        onChanged={load}
+      />
+
+      <OwnerMarketingGroupBuy
         session={session}
         authClient={authClient}
         commandClient={commandClient}

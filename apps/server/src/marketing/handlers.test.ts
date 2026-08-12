@@ -121,6 +121,31 @@ test("marketing is fail-closed unless both feature and admin permission are pres
   );
 });
 
+test("marketing extensions keep the same feature-off and permission boundary", async () => {
+  const input = Object.freeze({
+    campaign_id: CAMPAIGN_ID,
+    expected_version: 1,
+    referrer_customer_id: CUSTOMER_A,
+    referred_customer_id: CUSTOMER_B,
+    qualifying_order_id: SNAPSHOT_ID,
+    coupon_definition_id: STORE_ID,
+    reason: "boundary check",
+  });
+  await assert.rejects(
+    () => handlers(false)["marketing.referral.reward.issue"](context(input)),
+    (error: unknown) =>
+      error instanceof HandlerCommandError && error.commandError.code === "RESOURCE_UNAVAILABLE",
+  );
+  await assert.rejects(
+    () =>
+      handlers(true)["marketing.referral.reward.issue"](
+        context(input, Object.freeze({ ...ACTOR, permissions: Object.freeze([] as string[]) })),
+      ),
+    (error: unknown) =>
+      error instanceof HandlerCommandError && error.commandError.code === "PERMISSION_DENIED",
+  );
+});
+
 test("campaign set, aggregate preview and digest-only freeze form one audited slice", async () => {
   const api = handlers(true);
   const created = await api["marketing.campaign.set"](context(SET_INPUT));
