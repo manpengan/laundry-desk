@@ -52,6 +52,7 @@ const COMMAND_VERSIONS = Object.freeze({
   "notification.delivery_batch.enqueue": "0.1.0",
   "shift.close": "0.3.0",
   "store.profile.set": "0.1.0",
+  "fulfillment.batch.create": "1.0.0",
 });
 
 export function createAcceptanceClient(options = {}) {

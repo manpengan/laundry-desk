@@ -182,6 +182,34 @@ test("logout requires both the old bearer and old refresh family to be revoked",
   await assert.rejects(() => api.logout(session), { code: "EXPECTED_STAFF_FAILURE_MISSING" });
 });
 
+test("factory handoff boundary uses the frozen command version before validation", async () => {
+  let requestBody;
+  const api = createAcceptanceClient({
+    fetchImpl: async (_url, init) => {
+      requestBody = JSON.parse(init.body);
+      return jsonResponse(
+        { ok: false, error: { code: "VALIDATION_FAILED", message: "redacted" } },
+        400,
+      );
+    },
+    randomUUID: sequentialUuid(),
+  });
+  await api.expectCommandFailure(
+    {
+      accessToken: "acceptance-access-token",
+      cookies: Object.freeze({
+        "__Host-laundry_csrf": `v1.${"A".repeat(96)}`,
+        "__Host-laundry_refresh": "acceptance-refresh-token",
+      }),
+    },
+    "fulfillment.batch.create",
+    { factory_code: "FACTORY_UAT", garment_ids: [] },
+    "VALIDATION_FAILED",
+  );
+  assert.equal(requestBody.command, "fulfillment.batch.create");
+  assert.equal(requestBody.version, "1.0.0");
+});
+
 test("admin and approver support exclusive direct or protected _FILE sources", async () => {
   const root = await mkdtemp(join(tmpdir(), "adr36-principals-"));
   try {
