@@ -15,11 +15,11 @@ async function loadLockedGarments(
   input: FulfillmentTransitionInput,
 ): Promise<readonly LockedFulfillmentGarment[]> {
   const relatedOrders = await client.query<Readonly<{ order_id: string }>>(
-    `SELECT DISTINCT g.order_id::text
+    `SELECT DISTINCT g.order_id::text AS order_id
        FROM garments g
       WHERE g.org_id = $1::uuid AND g.store_id = $2::uuid
         AND g.id = ANY($3::uuid[])
-      ORDER BY g.order_id`,
+      ORDER BY order_id`,
     [input.org_id, input.store_id, [...input.garment_ids]],
   );
   const orderIds = relatedOrders.rows.map((row) => row.order_id);
@@ -132,7 +132,8 @@ export async function transitionPgGarments(
           ? input.target_status
           : null,
       incident_kind: null,
-      compensation_cents: input.incident?.compensation_cents ?? null,
+      compensation_cents:
+        operation === "mark_lost" ? (input.incident?.compensation_cents ?? null) : null,
       reason: operation === "bulk_transition" ? null : input.reason,
       note: operation === "bulk_transition" ? (input.note ?? null) : null,
     },

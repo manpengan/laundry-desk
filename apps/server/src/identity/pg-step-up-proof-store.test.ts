@@ -325,7 +325,7 @@ test(
 
       await adminPool.query(
         `UPDATE staff_store_roles
-            SET role = 'staff', updated_at = NOW()
+            SET role = 'staff', is_privacy_admin = false, updated_at = NOW()
           WHERE org_id = $1::uuid AND store_id = $2::uuid AND staff_id = $3::uuid`,
         [TENANT.orgId, TENANT.storeId, DEMO_ADMIN_ID],
       );
@@ -346,7 +346,7 @@ test(
       );
       await adminPool.query(
         `UPDATE staff_store_roles
-            SET role = 'admin', updated_at = NOW()
+            SET role = 'admin', is_privacy_admin = true, updated_at = NOW()
           WHERE org_id = $1::uuid AND store_id = $2::uuid AND staff_id = $3::uuid`,
         [TENANT.orgId, TENANT.storeId, DEMO_ADMIN_ID],
       );

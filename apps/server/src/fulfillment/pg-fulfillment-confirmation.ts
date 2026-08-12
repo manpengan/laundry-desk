@@ -27,11 +27,11 @@ export async function preparePgFulfillmentConfirmation(
   const uniqueIds = [...new Set(request.garment_ids)].sort();
   if (uniqueIds.length !== request.garment_ids.length) return null;
   const related = await client.query<Readonly<{ order_id: string }>>(
-    `SELECT DISTINCT g.order_id::text
+    `SELECT DISTINCT g.order_id::text AS order_id
        FROM garments g
       WHERE g.org_id = $1::uuid AND g.store_id = $2::uuid
         AND g.id = ANY($3::uuid[])
-      ORDER BY g.order_id`,
+      ORDER BY order_id`,
     [request.org_id, request.store_id, uniqueIds],
   );
   const orderIds = related.rows.map((row) => row.order_id);

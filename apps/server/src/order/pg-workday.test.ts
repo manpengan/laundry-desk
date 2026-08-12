@@ -132,7 +132,11 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
         lockBusinessDay: acquirePgBusinessDayLock,
       }),
       stats: Object.freeze({ source: statsSource, timeZone: LOCAL_PROFILE.timezone }),
-      fulfillment: Object.freeze({ store: fulfillmentStore, now: fixedNow }),
+      fulfillment: Object.freeze({
+        store: fulfillmentStore,
+        now: fixedNow,
+        featureEnabled: async () => true,
+      }),
       member: createPgMemberDeps(),
     });
 

@@ -151,3 +151,23 @@ test("confirmed fulfillment execution rejects authority that changed after prepa
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.error.code, "VALIDATION_FAILED");
 });
+
+test("confirmed rework execution preserves its frozen authority", async () => {
+  const target = runtime([garment(G1, "BC-001", "ready")]);
+  const input = Object.freeze({ garment_ids: [G1], reason: "visible stain" });
+  const detail = await firstHop(target, "garment.rework", input);
+  const result = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "garment.rework",
+    {},
+    {
+      registry: target.registry,
+      actor: ACTOR,
+      chainHooks: target.chainHooks,
+      pendingStore: target.pending,
+      confirmRef: detail.confirm_ref,
+    },
+  );
+  assert.equal(result.ok, true);
+});

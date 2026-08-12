@@ -112,7 +112,8 @@ export function createMemoryFulfillmentStore(
                 ? input.target_status
                 : null,
             incident_kind: null,
-            compensation_cents: input.incident?.compensation_cents ?? null,
+            compensation_cents:
+              operation === "mark_lost" ? (input.incident?.compensation_cents ?? null) : null,
             reason: operation === "bulk_transition" ? null : input.reason,
             note: operation === "bulk_transition" ? (input.note ?? null) : null,
           },
