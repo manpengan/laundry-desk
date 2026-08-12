@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import { readSecretValue } from "./secret-file.js";
 
-test("reads an absolute regular secret file without exposing it through process env", async () => {
+test("reads an absolute regular secret file without exposing it through process env", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-secret-file-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
   const path = join(root, "access-token");
   const secret = "secret-file-value-is-at-least-thirty-two-bytes";
   await writeFile(path, secret, { mode: 0o600 });
@@ -18,8 +19,9 @@ test("reads an absolute regular secret file without exposing it through process 
   );
 });
 
-test("fails closed for ambiguous, linked, multiline, and oversized secret sources", async () => {
+test("fails closed for ambiguous, linked, multiline, and oversized secret sources", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-secret-invalid-"));
+  t.after(() => rm(root, { force: true, recursive: true }));
   const regular = join(root, "regular");
   const linked = join(root, "linked");
   const multiline = join(root, "multiline");

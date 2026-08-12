@@ -10,6 +10,7 @@ import {
   type RouteSecurityContext,
 } from "./auth-route-support.js";
 import { safeErrorContext } from "./local-logger.js";
+import { isConfiguredRuntimeTenant } from "./runtime-surface-policy.js";
 
 export function registerEdgeReplayRoute(app: FastifyInstance, context: RouteSecurityContext): void {
   app.post("/api/v2/edge/replay", async (request, reply) => {
@@ -26,6 +27,10 @@ export function registerEdgeReplayRoute(app: FastifyInstance, context: RouteSecu
       }
       const csrf = await requireCsrf(context, request, reply, resolved.session);
       if (csrf !== true) return csrf;
+      if (!isConfiguredRuntimeTenant(resolved)) {
+        reply.code(404);
+        return fail("RESOURCE_UNAVAILABLE");
+      }
       const result = await executeEdgeReplay(context.runtime, resolved, parsed.data);
       if (!result.ok) {
         reply.code(

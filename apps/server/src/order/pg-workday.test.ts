@@ -363,6 +363,7 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
         source_customer_id: sourceCustomer.customer_id,
         target_customer_id: targetCustomer.customer_id,
         store_id: DEMO_STORE_ID,
+        staff_id: PG_TEST_STAFF_B_ID,
         now: fixedNow(),
       }),
       {
@@ -445,6 +446,7 @@ maybe("PG counter workday: receive, repay, pickup and close settle on real ledge
           actor: ACTOR,
           chainHooks,
           stepUpProofStore: proofStore,
+          stepUpApproverAuthority: async () => true,
           confirmRef: refundDetail.confirm_ref,
           sessionBinding,
         },

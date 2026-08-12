@@ -36,6 +36,31 @@ test("owner dashboard accounting authority remains admin-only", () => {
   assert.equal(staff.includes("accounting_read"), false);
 });
 
+test("authorized store management remains admin-only", () => {
+  const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
+  const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });
+  assert.ok(admin.includes("store_manage"));
+  assert.equal(staff.includes("store_manage"), false);
+});
+
+test("automatic notification delivery remains admin-only", () => {
+  const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
+  const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });
+  assert.equal(admin.includes("notification_send"), true);
+  assert.equal(staff.includes("notification_send"), false);
+});
+
+test("factory handoff and QC are internal staff capabilities while reconciliation is admin-only", () => {
+  const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
+  const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });
+  for (const permissions of [admin, staff]) {
+    assert.equal(permissions.includes("fulfillment_handoff"), true);
+    assert.equal(permissions.includes("fulfillment_qc"), true);
+  }
+  assert.equal(admin.includes("fulfillment_reconcile"), true);
+  assert.equal(staff.includes("fulfillment_reconcile"), false);
+});
+
 test("runtime bus registers the complete member command and query surface", async () => {
   const runtime = await createMemoryLocalRuntime();
   const bus = createRuntimeBus(runtime);
@@ -48,6 +73,37 @@ test("runtime bus registers the complete member command and query surface", asyn
   assert.ok(bus.registered.includes("member.account.close"));
   assert.ok(bus.registeredQueries.includes("member.account.get"));
   assert.ok(bus.registered.includes("notification.manual_list.create"));
+  assert.ok(bus.registered.includes("notification.delivery_batch.enqueue"));
   assert.ok(bus.registeredQueries.includes("notification.pickup_reminders.list"));
+  assert.ok(bus.registeredQueries.includes("notification.delivery.capability.get"));
+  assert.ok(bus.registeredQueries.includes("notification.delivery_batches.list"));
+  assert.ok(bus.registeredQueries.includes("notification.delivery_batch.get"));
+  for (const name of [
+    "fulfillment.batch.create",
+    "fulfillment.batch.cancel",
+    "fulfillment.handoff.checkpoint.record",
+    "fulfillment.handoff.discrepancy.resolve",
+    "fulfillment.quality_check.record",
+  ]) {
+    assert.ok(bus.registered.includes(name), name);
+  }
+  for (const name of ["fulfillment.batches.list", "fulfillment.batch.get"]) {
+    assert.ok(bus.registeredQueries.includes(name), name);
+  }
   assert.ok(bus.registeredQueries.includes("reporting.owner_dashboard.get"));
+  assert.ok(bus.registered.includes("store.profile.set"));
+  assert.ok(bus.registeredQueries.includes("store.authorized.list"));
+  for (const name of [
+    "member.benefit_definition.upsert",
+    "member.membership.set",
+    "member.points.earn",
+    "member.points.redeem",
+    "member.asset.grant",
+    "member.asset.consume",
+  ]) {
+    assert.ok(bus.registered.includes(name), name);
+  }
+  for (const name of ["member.benefit_catalog.get", "member.benefits.get"]) {
+    assert.ok(bus.registeredQueries.includes(name), name);
+  }
 });

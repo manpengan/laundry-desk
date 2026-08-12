@@ -1,6 +1,7 @@
 import type { AccountingReadPort } from "../accounting/types.js";
 import { createMemoryOwnerDashboardSource } from "./memory-source.js";
 import { createPgOwnerDashboardSource } from "./pg-source.js";
+import { readPgStoreTimeZone } from "../store-management/time-zone.js";
 import type { ReportingHandlerDeps } from "./types.js";
 
 export function createMemoryReportingDeps(
@@ -18,5 +19,10 @@ export function createPgReportingDeps(
   accounting: AccountingReadPort,
   timeZone: string,
 ): ReportingHandlerDeps {
-  return Object.freeze({ accounting, source: createPgOwnerDashboardSource(), timeZone });
+  return Object.freeze({
+    accounting,
+    source: createPgOwnerDashboardSource(),
+    timeZone,
+    resolveTimeZone: readPgStoreTimeZone,
+  });
 }

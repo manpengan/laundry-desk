@@ -18,6 +18,7 @@ import {
   loadOrder,
   nextOrderStatus,
 } from "./pg-order-data.js";
+import { isGarmentAvailableAtStore } from "./garment-custody.js";
 import { listPaymentRows } from "./pg-payment-rows.js";
 import type {
   InitialPayment,
@@ -125,7 +126,11 @@ export async function replaceDraftTxn(
          urgent_cents = $15, freight_cents = $16, payable_cents = $17, paid_cents = $18,
          balance_cents = $19, business_date = $20,
          pricing_policy_version = $21, urgent_selected = $22, freight_selected = $23,
-         created_at = $24, updated_at = $25
+         customer_profile_version = $24, discount_source = $25, discount_bps = $26,
+         membership_version = $27, tier_id = $28::uuid, tier_definition_version = $29,
+         tier_code = $30, tier_name = $31, tier_level = $32, tier_discount_bps = $33,
+         skip_ticket_print = $34, skip_label_print = $35, skip_rack_assignment = $36,
+         created_at = $37, updated_at = $38
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid`,
     [
       order.org_id,
@@ -151,6 +156,19 @@ export async function replaceDraftTxn(
       order.pricing_policy_version ?? 0,
       order.urgent_selected ?? false,
       order.freight_selected ?? false,
+      order.customer_profile_version ?? 0,
+      order.discount_source ?? (order.discount_cents > 0 ? "manual" : "none"),
+      order.discount_bps ?? 0,
+      order.membership_version ?? null,
+      order.tier_id ?? null,
+      order.tier_definition_version ?? null,
+      order.tier_code ?? null,
+      order.tier_name ?? null,
+      order.tier_level ?? null,
+      order.tier_discount_bps ?? null,
+      order.skip_ticket_print ?? false,
+      order.skip_label_print ?? false,
+      order.skip_rack_assignment ?? false,
       epochToDate(order.created_at),
       epochToDate(order.updated_at),
     ],
@@ -183,9 +201,10 @@ export async function applyPickupTxn(
     garments.some(
       (garment) =>
         idSet.has(garment.garment_id) &&
-        garment.status !== "received" &&
-        garment.status !== "racked" &&
-        garment.status !== "ready",
+        (!isGarmentAvailableAtStore(garment) ||
+          (garment.status !== "received" &&
+            garment.status !== "racked" &&
+            garment.status !== "ready")),
     )
   ) {
     return null;
@@ -304,12 +323,18 @@ export async function cancelOrderTxn(
   at: number,
   businessDate: string,
   newId: () => string,
+  beforeCommit?: () => Promise<void>,
 ): Promise<OrderRecord | null> {
   const order = await loadOrder(client, orgId, storeId, orderId, true);
   if (order === null || order.status !== "open") return null;
   const garments = await loadGarments(client, orgId, storeId, orderId, true);
   if (
-    garments.some((garment) => garment.status === "picked_up" || garment.status === "delivered")
+    garments.some(
+      (garment) =>
+        !isGarmentAvailableAtStore(garment) ||
+        garment.status === "picked_up" ||
+        garment.status === "delivered",
+    )
   ) {
     return null;
   }
@@ -321,21 +346,30 @@ export async function cancelOrderTxn(
     payments,
   });
   if (!plan.ok) return null;
+  const reversals: LedgerPaymentRow[] = [];
   for (const target of plan.reversal_targets) {
     const source = payments.find((payment) => payment.payment_id === target.payment_id);
     if (source === undefined) return null;
-    const reversal = buildReversalPayment({
-      payment_id: newId(),
-      org_id: orgId,
-      store_id: storeId,
-      order_id: orderId,
-      amount_cents: target.amount_cents,
-      staff_id: staffId,
-      at,
-      method: source.method,
-      ref_payment_id: source.payment_id,
-      reason: plan.reason,
-    });
+    reversals.push(
+      Object.freeze({
+        ...buildReversalPayment({
+          payment_id: newId(),
+          org_id: orgId,
+          store_id: storeId,
+          order_id: orderId,
+          amount_cents: target.amount_cents,
+          staff_id: staffId,
+          at,
+          method: source.method,
+          ref_payment_id: source.payment_id,
+          reason: plan.reason,
+        }),
+        business_date: businessDate,
+      }),
+    );
+  }
+  await beforeCommit?.();
+  for (const reversal of reversals) {
     await insertLedgerPayment(client, reversal, businessDate);
   }
   await client.query(

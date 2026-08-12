@@ -4,7 +4,7 @@
  */
 
 import { createCommandError } from "@laundry/contracts";
-import { buildPayPayment, lineTotalCents, planPickup, planReceive } from "@laundry/domain";
+import { buildPayPayment, lineTotalCents, planReceive } from "@laundry/domain";
 import { randomUUID } from "node:crypto";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
@@ -13,14 +13,16 @@ import type { OrderHandlerDeps } from "./deps.js";
 import { getHandler } from "./get-handler.js";
 import { listHandler } from "./list-handler.js";
 import { lookupHandler } from "./lookup-handler.js";
-import { parseVerificationBarcodes, requireVerifiedRackBarcodes } from "./pickup-verification.js";
+import { pickupHandler } from "./pickup-handler.js";
 import { formatPickupCode, formatTicket, upsertCustomerForReceipt } from "./receipt-helpers.js";
 import {
   assertBusinessDayOpen,
+  assertReplayCustomerPolicy,
   deriveBusinessDate,
   initialPayment,
   requireLines,
   resolveServerPrices,
+  resolveCustomerPolicyPricing,
   resolveTrustedPricing,
 } from "./server-pricing.js";
 import type { GarmentRecord, OrderLineRecord } from "./types.js";
@@ -32,20 +34,6 @@ function asRecord(parsed: unknown): Readonly<Record<string, unknown>> {
     throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
   }
   return parsed as Readonly<Record<string, unknown>>;
-}
-
-function requireString(value: unknown): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-  }
-  return value;
-}
-
-function requireNumber(value: unknown): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
-    throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-  }
-  return value;
 }
 
 function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
@@ -62,8 +50,8 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
     const lines = trustedPricing.lines;
     const paymentInput = initialPayment(input);
     const paidCents = paymentInput?.amount_cents ?? 0;
-    const plan = planReceive(lines, paidCents, trustedPricing.adjustments);
-    if (!plan.ok) {
+    const initialPlan = planReceive(lines, paidCents, trustedPricing.adjustments);
+    if (!initialPlan.ok) {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
 
@@ -95,6 +83,17 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
       customerId = customer.customer.customer_id;
       customerPhone = customer.customer.phone;
       customerName = customer.customer.name;
+    }
+
+    const customerPolicy =
+      customerId === null || deps.customerPolicy === undefined
+        ? null
+        : await deps.customerPolicy(ctx.client, ctx.tenant, customerId, businessDate);
+    assertReplayCustomerPolicy(ctx.actor.via, customerPolicy);
+    const appliedPricing = resolveCustomerPolicyPricing(trustedPricing, customerPolicy);
+    const plan = planReceive(lines, paidCents, appliedPricing.adjustments);
+    if (!plan.ok) {
+      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
 
     const seq = await deps.store.nextTicketSeq(ctx.tenant.orgId, ctx.tenant.storeId, dayKey);
@@ -158,6 +157,19 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
       subtotal_cents: plan.totals.subtotal_cents,
       original_cents: plan.totals.original_cents,
       discount_cents: plan.totals.discount_cents,
+      customer_profile_version: customerPolicy?.customer_profile_version ?? 0,
+      discount_source: appliedPricing.discount_source,
+      discount_bps: appliedPricing.discount_bps,
+      membership_version: customerPolicy?.membership_version ?? null,
+      tier_id: customerPolicy?.tier?.tier_id ?? null,
+      tier_definition_version: customerPolicy?.tier?.definition_version ?? null,
+      tier_code: customerPolicy?.tier?.code ?? null,
+      tier_name: customerPolicy?.tier?.name ?? null,
+      tier_level: customerPolicy?.tier?.level ?? null,
+      tier_discount_bps: customerPolicy?.tier?.discount_bps ?? null,
+      skip_ticket_print: customerPolicy?.waivers.skip_ticket_print ?? false,
+      skip_label_print: customerPolicy?.waivers.skip_label_print ?? false,
+      skip_rack_assignment: customerPolicy?.waivers.skip_rack_assignment ?? false,
       addon_cents: plan.totals.addon_cents,
       urgent_cents: plan.totals.urgent_cents,
       freight_cents: plan.totals.freight_cents,
@@ -208,6 +220,14 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
         payable_cents: order.payable_cents,
         paid_cents: order.paid_cents,
         balance_cents: order.balance_cents,
+        discount_cents: order.discount_cents,
+        discount_source: order.discount_source,
+        discount_bps: order.discount_bps,
+        waivers: Object.freeze({
+          skip_ticket_print: order.skip_ticket_print,
+          skip_label_print: order.skip_label_print,
+          skip_rack_assignment: order.skip_rack_assignment,
+        }),
         garment_count: garments.length,
         garments: Object.freeze(
           garments.map((g) =>
@@ -221,6 +241,7 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
           ),
         ),
       }),
+      ...(customerId === null ? {} : { privacySubjectCustomerId: customerId }),
       audit: Object.freeze({
         entity: "order",
         entityId: order.order_id,
@@ -230,6 +251,11 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
           payable_cents: order.payable_cents,
           pricing_policy_version: order.pricing_policy_version,
           discount_cents: order.discount_cents,
+          discount_source: order.discount_source,
+          discount_bps: order.discount_bps,
+          customer_profile_version: order.customer_profile_version,
+          membership_version: order.membership_version,
+          tier_id: order.tier_id,
           addon_cents: order.addon_cents,
           urgent_cents: order.urgent_cents,
           freight_cents: order.freight_cents,
@@ -240,99 +266,6 @@ function receiveHandler(deps: OrderHandlerDeps): CommandHandler {
         Object.freeze({
           type: "order.created",
           payload: Object.freeze({ order_id: order.order_id, ticket_no: order.ticket_no }),
-        }),
-      ]),
-    });
-  };
-}
-
-function pickupHandler(deps: OrderHandlerDeps): CommandHandler {
-  return async (ctx): Promise<HandlerOutcome> => {
-    const input = asRecord(ctx.parsed);
-    const orderId = requireString(input.order_id);
-    const collectCents = requireNumber(input.collect_cents);
-    const garmentIdsRaw = input.garment_ids;
-    if (!Array.isArray(garmentIdsRaw)) {
-      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-    }
-    const selectedIds = garmentIdsRaw.map((id) => requireString(id));
-    const verificationBarcodes = parseVerificationBarcodes(input.verification_barcodes);
-
-    const order = await deps.store.getOrder(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
-    if (order === null) {
-      throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
-    }
-    const garments = await deps.store.listGarments(ctx.tenant.orgId, ctx.tenant.storeId, orderId);
-    if (order.status !== "open") {
-      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-    }
-    const plan = planPickup({
-      garments: garments.map((g) => Object.freeze({ garment_id: g.garment_id, status: g.status })),
-      selected_garment_ids: selectedIds,
-      balance_cents: order.balance_cents,
-      collect_cents: collectCents,
-      order_status: "open",
-      fulfillment_enabled: true,
-    });
-    if (!plan.ok) {
-      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-    }
-    const requiredBarcodes = requireVerifiedRackBarcodes(
-      garments,
-      plan.garment_ids,
-      verificationBarcodes,
-    );
-
-    const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
-    const businessDate = deriveBusinessDate(now, deps.timeZone, deps.rolloverHour);
-    await deps.lockBusinessDay?.(ctx.client, ctx.tenant, businessDate);
-    await assertBusinessDayOpen(deps.isBusinessDayClosed, businessDate);
-    const applied = await deps.store.applyPickup(
-      ctx.tenant.orgId,
-      ctx.tenant.storeId,
-      orderId,
-      plan.garment_ids,
-      plan.collect_cents,
-      now,
-      Object.freeze({
-        staffId: ctx.actor.staffId,
-        method: "cash" as const,
-        businessDate,
-        verificationBarcodes,
-        nextOrderStatus: plan.next_order_status,
-        nextBalanceCents: plan.next_balance_cents,
-      }),
-    );
-    if (applied === null) {
-      throw new HandlerCommandError(createCommandError("TRANSACTION_FAILED"));
-    }
-
-    return Object.freeze({
-      result: Object.freeze({
-        order_id: applied.order.order_id,
-        ticket_no: applied.order.ticket_no,
-        status: applied.order.status,
-        paid_cents: applied.order.paid_cents,
-        balance_cents: applied.order.balance_cents,
-        picked_garment_ids: plan.garment_ids,
-      }),
-      audit: Object.freeze({
-        entity: "order",
-        entityId: applied.order.order_id,
-        afterJson: JSON.stringify({
-          picked: plan.garment_ids.length,
-          collect_cents: plan.collect_cents,
-          balance_cents: applied.order.balance_cents,
-          verified_racked_count: requiredBarcodes.length,
-        }),
-      }),
-      events: Object.freeze([
-        Object.freeze({
-          type: "garment.picked_up",
-          payload: Object.freeze({
-            order_id: applied.order.order_id,
-            garment_ids: plan.garment_ids,
-          }),
         }),
       ]),
     });

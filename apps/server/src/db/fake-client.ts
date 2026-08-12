@@ -10,6 +10,7 @@ export type RecordedQuery = Readonly<{
  * Not exported from the public db barrel (test helper only).
  */
 export class FakeSqlClient implements SqlClient {
+  readonly memoryTransaction = true as const;
   readonly queries: RecordedQuery[] = [];
   private failNextSql: string | null = null;
 

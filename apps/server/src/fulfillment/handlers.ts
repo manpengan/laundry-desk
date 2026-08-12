@@ -1,14 +1,28 @@
-import { createCommandError, FulfillmentGarmentStatusSchema } from "@laundry/contracts";
+import {
+  createCommandError,
+  FulfillmentGarmentStatusSchema,
+  FulfillmentOperationConfirmationSummarySchema,
+} from "@laundry/contracts";
 import type { GarmentStatus } from "@laundry/domain";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
-import type { FulfillmentIncidentKind, FulfillmentStore } from "./types.js";
+import type { FulfillmentIncidentKind } from "./types.js";
+import type { OrderStore } from "../order/types.js";
+import {
+  assertFulfillmentEnabled,
+  prepareFulfillmentWrite,
+  type FulfillmentRuntimeDeps,
+} from "./handler-support.js";
+import {
+  registerFactoryCommandHandlers,
+  registerFactoryQueryHandlers,
+} from "./factory-handlers.js";
 
-export type FulfillmentHandlerDeps = Readonly<{
-  store: FulfillmentStore;
-  now?: () => number;
-}>;
+export type FulfillmentHandlerDeps = FulfillmentRuntimeDeps &
+  Readonly<{
+    order?: Pick<OrderStore, "getOrder" | "lookupOrderSummaries">;
+  }>;
 
 const NORMAL_TARGETS = new Set<GarmentStatus>(["washing", "ready"]);
 
@@ -62,15 +76,44 @@ function transitionHandler(
       mode === "lost" && typeof input.compensation_cents === "number"
         ? input.compensation_cents
         : 0;
-    const at = deps.now?.() ?? Math.floor(Date.now() / 1000);
+    const at = await prepareFulfillmentWrite(deps, ctx);
+    let expectedManifestDigest: string | undefined;
+    if (mode === "bulk" || mode === "rework" || mode === "lost") {
+      if (ctx.request.confirmRef !== undefined) {
+        const operation =
+          mode === "bulk" ? "bulk_transition" : mode === "rework" ? "rework" : "mark_lost";
+        const frozen = FulfillmentOperationConfirmationSummarySchema.safeParse(
+          ctx.confirmationAuthority,
+        );
+        if (!frozen.success || frozen.data.operation !== operation) {
+          throw new HandlerCommandError(createCommandError("POLICY_DENIED"));
+        }
+        expectedManifestDigest = frozen.data.manifest_digest;
+      }
+    }
     const changes = await deps.store.transition({
       org_id: ctx.tenant.orgId,
       store_id: ctx.tenant.storeId,
       garment_ids: garmentIds,
       target_status: targetStatus,
       staff_id: ctx.actor.staffId,
+      ...(mode === "lost" ? { device_id: ctx.actor.deviceId } : {}),
       at,
       reason,
+      ...(mode === "bulk" ? { note: reason } : {}),
+      ...(mode === "bulk" || mode === "rework" || mode === "lost"
+        ? {
+            confirmation_operation:
+              mode === "bulk"
+                ? ("bulk_transition" as const)
+                : mode === "rework"
+                  ? ("rework" as const)
+                  : ("mark_lost" as const),
+          }
+        : {}),
+      ...(expectedManifestDigest === undefined
+        ? {}
+        : { expected_manifest_digest: expectedManifestDigest }),
       ...(mode === "rework"
         ? {
             incident: Object.freeze({
@@ -136,6 +179,17 @@ function incidentHandler(deps: FulfillmentHandlerDeps): CommandHandler {
     const note = requireString(input.note);
     const compensation =
       typeof input.compensation_cents === "number" ? input.compensation_cents : 0;
+    const at = await prepareFulfillmentWrite(deps, ctx);
+    let expectedManifestDigest: string | undefined;
+    if (ctx.request.confirmRef !== undefined) {
+      const frozen = FulfillmentOperationConfirmationSummarySchema.safeParse(
+        ctx.confirmationAuthority,
+      );
+      if (!frozen.success || frozen.data.operation !== "incident_record") {
+        throw new HandlerCommandError(createCommandError("POLICY_DENIED"));
+      }
+      expectedManifestDigest = frozen.data.manifest_digest;
+    }
     const result = await deps.store.recordIncident({
       org_id: ctx.tenant.orgId,
       store_id: ctx.tenant.storeId,
@@ -144,7 +198,10 @@ function incidentHandler(deps: FulfillmentHandlerDeps): CommandHandler {
       note,
       compensation_cents: compensation,
       staff_id: ctx.actor.staffId,
-      at: deps.now?.() ?? Math.floor(Date.now() / 1000),
+      at,
+      ...(expectedManifestDigest === undefined
+        ? {}
+        : { expected_manifest_digest: expectedManifestDigest }),
     });
     if (result === null) {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
@@ -176,15 +233,35 @@ function incidentHandler(deps: FulfillmentHandlerDeps): CommandHandler {
 
 function rackAssignHandler(deps: FulfillmentHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
+    const at = await prepareFulfillmentWrite(deps, ctx);
     const input = asRecord(ctx.parsed);
+    const barcode = requireString(input.barcode).trim();
+    if (deps.order?.lookupOrderSummaries !== undefined) {
+      const matches = await deps.order.lookupOrderSummaries(ctx.tenant.orgId, ctx.tenant.storeId, {
+        key: barcode,
+        status: "open",
+        limit: 2,
+      });
+      if (matches.length !== 1) {
+        throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+      }
+      const order = await deps.order.getOrder(
+        ctx.tenant.orgId,
+        ctx.tenant.storeId,
+        matches[0]!.order_id,
+      );
+      if (order?.skip_rack_assignment === true) {
+        throw new HandlerCommandError(createCommandError("INVARIANT_FAILED"));
+      }
+    }
     const result = await deps.store.assignRack({
       org_id: ctx.tenant.orgId,
       store_id: ctx.tenant.storeId,
-      barcode: requireString(input.barcode).trim(),
+      barcode,
       rack_zone: requireString(input.rack_zone).trim().toUpperCase(),
       rack_slot: requireString(input.rack_slot).trim().toUpperCase(),
       staff_id: ctx.actor.staffId,
-      at: deps.now?.() ?? Math.floor(Date.now() / 1000),
+      at,
     });
     if (result === null) {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
@@ -216,6 +293,7 @@ function rackAssignHandler(deps: FulfillmentHandlerDeps): CommandHandler {
 
 function workbenchHandler(deps: FulfillmentHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
+    await assertFulfillmentEnabled(deps, ctx);
     const input = asRecord(ctx.parsed);
     const statuses = Array.isArray(input.statuses)
       ? Object.freeze(input.statuses.map((status) => FulfillmentGarmentStatusSchema.parse(status)))
@@ -243,6 +321,7 @@ export function registerFulfillmentCommandHandlers(
   registry.registerHandler("garment.rework", transitionHandler(deps, "rework"));
   registry.registerHandler("garment.incident.record", incidentHandler(deps));
   registry.registerHandler("garment.mark_lost", transitionHandler(deps, "lost"));
+  registerFactoryCommandHandlers(registry, deps);
 }
 
 export function registerFulfillmentQueryHandlers(
@@ -250,4 +329,5 @@ export function registerFulfillmentQueryHandlers(
   deps: FulfillmentHandlerDeps,
 ): void {
   registry.registerHandler("fulfillment.workbench", workbenchHandler(deps));
+  registerFactoryQueryHandlers(registry, deps);
 }

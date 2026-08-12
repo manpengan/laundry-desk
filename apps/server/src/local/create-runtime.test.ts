@@ -94,6 +94,44 @@ test("PG staff directory reads the active bootstrap administrator under tenant G
   assert.equal(database.released(), true);
 });
 
+test("PG staff directory derives tenant GUCs and filters from the authenticated session", async () => {
+  const scope = Object.freeze({
+    orgId: "11111111-1111-4111-8111-111111111111",
+    storeId: "22222222-2222-4222-8222-222222222222",
+    staffId: "33333333-3333-4333-8333-333333333333",
+  });
+  const database = createStaffDirectoryPool([
+    {
+      staff_id: scope.staffId,
+      display_name: "分店管理员",
+      role: "admin",
+      username: "branch-admin",
+      privacy_admin: true,
+    },
+  ]);
+
+  const directory = await loadPgStaffDirectory(database.pool, scope);
+
+  assert.equal(directory[0]?.username, "branch-admin");
+  const select = database.queries.find((query) => query.sql.includes("FROM staffs staff"));
+  assert.deepEqual(select?.values, [scope.orgId, scope.storeId]);
+  assert.ok(
+    database.queries.some(
+      (query) => query.sql.includes("app.org_id") && query.values[0] === scope.orgId,
+    ),
+  );
+  assert.ok(
+    database.queries.some(
+      (query) => query.sql.includes("app.store_id") && query.values[0] === scope.storeId,
+    ),
+  );
+  assert.ok(
+    database.queries.some(
+      (query) => query.sql.includes("app.staff_id") && query.values[0] === scope.staffId,
+    ),
+  );
+});
+
 test("PG staff directory rejects active database roles outside admin and staff", async () => {
   const database = createStaffDirectoryPool([
     {
@@ -225,11 +263,64 @@ test("PG runtime opens one app pool and verifies readiness without an admin conn
   assert.equal(runtime.identity.sessions.csrfProofMinter, runtime.csrfProofSigner);
   assert.notEqual(runtime.printDispatch, null);
   assert.equal("worker" in runtime.print, false, "production must not auto-start mock printing");
+  assert.equal(runtime.notification.delivery, undefined);
+  assert.equal(runtime.notification.worker, undefined);
   assert.equal("csrfProofSecret" in runtime, false);
   assert.notEqual(runtime.staffDirectory, loadedDirectory);
   assert.equal(Object.isFrozen(runtime.staffDirectory), true);
   assert.equal(Object.isFrozen(runtime.staffDirectory[0]), true);
   assert.equal(poolDouble.endCalls(), 0);
+});
+
+test("PG runtime starts no-network notification support only in explicit software mode", async () => {
+  const poolDouble = createPoolDouble();
+  const runtime = await createPgLocalRuntime(
+    "postgresql://laundry_app:secret@localhost:5432/laundry_v2",
+    false,
+    SERVER_CONFIG,
+    {
+      createPool: () => poolDouble.pool,
+      assertReady: async () => undefined,
+      loadStaffDirectory: async () => [
+        {
+          staff_id: LOCAL_PROFILE.adminStaffId,
+          display_name: "管理员",
+          role: "admin",
+          username: "owner",
+          privacy_admin: true,
+        },
+      ],
+    },
+    { LAUNDRY_NOTIFICATION_PROVIDER_MODE: "software_only" },
+  );
+
+  assert.equal(runtime.notification.delivery?.capability.state, "software_only");
+  assert.equal(runtime.notification.delivery?.capability.provider_code, "software_only_fake");
+  assert.equal(runtime.notification.worker?.status().state, "stopped");
+  assert.equal(runtime.notification.worker?.status().assurance, "software_only");
+});
+
+test("PG runtime rejects an unknown notification provider before opening the pool", async () => {
+  let opened = 0;
+  await assert.rejects(
+    () =>
+      createPgLocalRuntime(
+        "postgresql://laundry_app:secret@localhost:5432/laundry_v2",
+        false,
+        SERVER_CONFIG,
+        {
+          createPool: () => {
+            opened += 1;
+            return createPoolDouble().pool;
+          },
+          assertReady: async () => undefined,
+          loadStaffDirectory: async () => [],
+        },
+        { LAUNDRY_NOTIFICATION_PROVIDER_MODE: "external" },
+      ),
+    /LAUNDRY_NOTIFICATION_PROVIDER_MODE/u,
+  );
+  assert.equal(opened, 0);
 });
 
 test("PG runtime closes its only pool when app-role readiness fails", async () => {

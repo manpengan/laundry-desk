@@ -102,6 +102,7 @@ type RecordInput = Readonly<{
   reason: string;
   accepted: boolean;
   result: CommandResult;
+  privacySubjectCustomerId?: string;
 }>;
 
 function replaySequence(prepared: PreparedPgReplay): number {
@@ -131,13 +132,13 @@ async function insertRecord(
        reported_per_lease_seq, accepted_per_lease_seq,
        reported_per_grant_seq, accepted_per_grant_seq,
        envelope_sha256, command, idempotency_key, decision, reason,
-       result_json, recorded_at
+       result_json, privacy_subject_customer_id, recorded_at
      ) VALUES (
        $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
        $6, $7::uuid, $8::uuid, $9::uuid,
        $10::uuid, $11::uuid, $12,
        $13, $14, $15, $16,
-       $17, $18, $19::uuid, $20, $21, $22::jsonb,
+       $17, $18, $19::uuid, $20, $21, $22::jsonb, $23::uuid,
        clock_timestamp()
      )`,
     [
@@ -163,6 +164,7 @@ async function insertRecord(
       input.decision,
       input.reason,
       JSON.stringify(input.result),
+      input.privacySubjectCustomerId ?? null,
     ],
   );
 }
@@ -277,13 +279,14 @@ export function createPgReplayGuard(
       }
       return Object.freeze({ kind: "continue" as const, state: continueState });
     },
-    settle: async (client, _context, state, result) => {
+    settle: async (client, _context, state, result, privacySubjectCustomerId) => {
       if (state !== continueState) throw new Error("Replay guard state mismatch");
       await insertRecord(client, prepared, newId, {
         decision: result.ok ? "applied" : "arbitration",
         reason: result.ok ? "applied" : result.error.code,
         accepted: true,
         result,
+        ...(privacySubjectCustomerId === undefined ? {} : { privacySubjectCustomerId }),
       });
       await advanceSequence(client, prepared);
     },

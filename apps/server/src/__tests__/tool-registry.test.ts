@@ -38,6 +38,21 @@ test("projection excludes secret-classified commands (login / pin_verify)", () =
   );
 });
 
+test("factory custody and QC operations are never AI-projectable", () => {
+  const names = new Set(projectCatalogToTools(M1_FIRST_WAVE_DEFINITIONS).map((tool) => tool.name));
+  for (const name of [
+    "fulfillment.batch.create",
+    "fulfillment.batch.cancel",
+    "fulfillment.handoff.checkpoint.record",
+    "fulfillment.handoff.discrepancy.resolve",
+    "fulfillment.quality_check.record",
+    "fulfillment.batches.list",
+    "fulfillment.batch.get",
+  ]) {
+    assert.equal(names.has(name), false, name);
+  }
+});
+
 test("projected names are a subset of the M1 first-wave catalog", () => {
   const catalogNames = new Set<string>([
     ...M1_FIRST_WAVE_COMMAND_NAMES,

@@ -30,6 +30,23 @@ export function asTransactionalIdempotencyStore(
   return null;
 }
 
+export type ActiveIdempotencyClaim = Readonly<{ key: string; requestHash: string }>;
+
+export async function abortIdempotencyClaim(
+  store: TransactionalIdempotencyStore | null,
+  tenant: TenantContext,
+  command: string,
+  claim: ActiveIdempotencyClaim | null,
+  onError?: (error: unknown) => void,
+): Promise<void> {
+  if (store?.abort === undefined || claim === null) return;
+  try {
+    await store.abort(tenant, command, claim.key, claim.requestHash);
+  } catch (error) {
+    onError?.(error);
+  }
+}
+
 export async function readIdempotentReplay(
   tenant: TenantContext,
   request: CommandRequest,

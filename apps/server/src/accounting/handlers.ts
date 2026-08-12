@@ -42,13 +42,14 @@ function resolveFilters(
   input: ParsedFilters,
   deps: AccountingHandlerDeps,
   now: Date,
+  timeZone: string,
 ): Readonly<{
   dateFrom: string;
   dateTo: string;
   groupBy: AccountingGroupBy;
   staffId: string | null;
 }> {
-  const current = businessDayAt(now, deps.timeZone, deps.rolloverHour ?? 0).business_date;
+  const current = businessDayAt(now, timeZone, deps.rolloverHour ?? 0).business_date;
   return Object.freeze({
     dateFrom: input.date_from ?? current,
     dateTo: input.date_to ?? current,
@@ -63,7 +64,11 @@ async function readReport(
   input: ParsedFilters,
   now: Date,
 ): Promise<AccountingReportResult> {
-  const filters = resolveFilters(input, deps, now);
+  const timeZone =
+    deps.resolveTimeZone === undefined
+      ? deps.timeZone
+      : await deps.resolveTimeZone(ctx.client, ctx.tenant);
+  const filters = resolveFilters(input, deps, now, timeZone);
   const report = await deps.source.readReport({
     client: ctx.client,
     tenant: ctx.tenant,

@@ -20,6 +20,9 @@ export type ConfirmResolve =
       argsHash: string;
       commandVersion: string;
       idempotencyKey: string;
+      effectiveRisk: PendingAction["effectiveRisk"];
+      policyOutcome: PendingAction["policyOutcome"];
+      requiresOtherApprover: boolean;
       authority?: CanonicalJson;
     }>
   | Readonly<{ ok: false; error: CommandError }>;
@@ -57,6 +60,9 @@ export async function resolveConfirmInput(
     argsHash: gate.pending.argsHash,
     commandVersion: gate.pending.commandVersion,
     idempotencyKey: gate.pending.idempotencyKey,
+    effectiveRisk: gate.pending.effectiveRisk,
+    policyOutcome: gate.pending.policyOutcome,
+    requiresOtherApprover: gate.pending.requiresOtherApprover,
     ...(gate.pending.authority === undefined ? {} : { authority: gate.pending.authority }),
   });
 }

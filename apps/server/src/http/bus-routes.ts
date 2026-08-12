@@ -1,20 +1,18 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 
 import {
   ConfirmReferenceSchema,
+  FACTORY_HANDOFF_COMMAND_NAMES,
+  FACTORY_HANDOFF_QUERY_NAMES,
+  IdempotencyKeySchema,
   parseCommandWirePayload,
-  type CommandErrorCode,
 } from "@laundry/contracts";
 
 import type { AuthorizedSession } from "../auth/session-view.js";
 import { executeCommand } from "../bus/executor.js";
 import { executeQuery } from "../bus/execute-query.js";
-import { createRuntimeBus, permissionsForAuthority } from "../bus/runtime.js";
-import type { ActorContext, CommandResult } from "../bus/types.js";
-import { FakeSqlClient } from "../db/fake-client.js";
-import { withPoolClient } from "../db/pg-sql-client.js";
-import type { SqlClient, TenantContext } from "../db/types.js";
-import type { LocalRuntime } from "../local/demo-seed.js";
+import { createRuntimeBus } from "../bus/runtime.js";
+import type { CommandResult } from "../bus/types.js";
 import {
   fail,
   isRecord,
@@ -22,90 +20,31 @@ import {
   resolveSession,
   type RouteSecurityContext,
 } from "./auth-route-support.js";
+import {
+  actorFromSession,
+  applyCommandErrorStatus,
+  createSqlRunner,
+  executeTrustedSessionCommand,
+  tenantFromSession,
+  type SqlRunner,
+} from "./bus-route-execution.js";
 import { safeErrorContext } from "./local-logger.js";
+import type { FactoryOperationRateLimiter } from "./factory-operation-rate-limit.js";
+import type { NotificationCommandRateLimiter } from "./notification-command-rate-limit.js";
+import { isRuntimeBusOperationAvailable } from "./runtime-surface-policy.js";
 
 const INTERNAL_ONLY_COMMANDS: ReadonlySet<string> = new Set(["photo.register", "photo.delete"]);
-
-function tenantFromSession(resolved: AuthorizedSession): TenantContext {
-  return Object.freeze({
-    orgId: resolved.session.org_id,
-    storeId: resolved.session.store_id,
-    staffId: resolved.session.staff_id,
-  });
-}
-
-function actorFromSession(resolved: AuthorizedSession): ActorContext {
-  const { session, authority } = resolved;
-  return Object.freeze({
-    staffId: session.staff_id,
-    deviceId: session.device_id,
-    via: "ui" as const,
-    permissions: permissionsForAuthority(authority),
-  });
-}
+const IDEMPOTENCY_HEADER_NAME = "idempotency-key";
+const NOTIFICATION_ENQUEUE_COMMAND = "notification.delivery_batch.enqueue";
+const FACTORY_COMMANDS: ReadonlySet<string> = new Set(FACTORY_HANDOFF_COMMAND_NAMES);
+const FACTORY_QUERIES: ReadonlySet<string> = new Set(FACTORY_HANDOFF_QUERY_NAMES);
 
 function routeName(params: unknown): string {
   if (!isRecord(params)) return "";
   return typeof params.name === "string" ? params.name : "";
 }
 
-export function applyCommandErrorStatus(reply: FastifyReply, code: CommandErrorCode): void {
-  if (code === "TRANSACTION_FAILED" || code === "EVENT_DISPATCH_FAILED") {
-    reply.code(500);
-    return;
-  }
-  const authorizationOutcome =
-    code === "POLICY_STEP_UP_REQUIRED" ||
-    code === "POLICY_CONFIRMATION_REQUIRED" ||
-    code === "POLICY_APPROVAL_REQUIRED" ||
-    code === "POLICY_DENIED" ||
-    code === "PERMISSION_DENIED";
-  reply.code(authorizationOutcome ? 403 : 400);
-}
-
-function createSqlRunner(runtime: LocalRuntime) {
-  const memorySql = new FakeSqlClient();
-  return async <T>(operation: (sql: SqlClient) => Promise<T>): Promise<T> => {
-    if (runtime.mode === "pg" && runtime.pool !== null) {
-      return withPoolClient(runtime.pool, operation);
-    }
-    return operation(memorySql);
-  };
-}
-
-type SqlRunner = ReturnType<typeof createSqlRunner>;
-
-export async function executeTrustedSessionCommand(
-  context: RouteSecurityContext,
-  resolved: AuthorizedSession,
-  name: string,
-  input: Readonly<Record<string, unknown>>,
-  options: Readonly<{
-    idempotencyKey?: string;
-    onUnexpectedError?: (error: unknown) => void;
-  }> = {},
-): Promise<CommandResult> {
-  const { registry, chainHooks } = createRuntimeBus(context.runtime);
-  const runWithSql = createSqlRunner(context.runtime);
-  return runWithSql((sql) =>
-    executeCommand(sql, tenantFromSession(resolved), name, input, {
-      registry,
-      actor: actorFromSession(resolved),
-      chainHooks,
-      pendingStore: context.runtime.pendingStore,
-      stepUpProofStore: context.runtime.stepUpProofStore,
-      idempotencyStore: context.runtime.idempotencyStore,
-      ...(options.onUnexpectedError === undefined
-        ? {}
-        : { onUnexpectedError: options.onUnexpectedError }),
-      sessionBinding: Object.freeze({
-        sessionId: resolved.session.session_id,
-        sessionVersion: resolved.session.session_version,
-      }),
-      ...(options.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey }),
-    }),
-  );
-}
+export { applyCommandErrorStatus, executeTrustedSessionCommand };
 
 type RouteCommandPayload = Readonly<{
   input: Readonly<Record<string, unknown>>;
@@ -116,9 +55,9 @@ type RouteCommandPayload = Readonly<{
 }>;
 
 /**
- * New callers use the branded A2 wire envelope. The direct-args fallback is
- * intentionally retained for already-installed local shells, but it cannot
- * opt into idempotency without the canonical envelope.
+ * New callers may use the branded A2 wire envelope. The direct-args fallback
+ * remains for installed shells and binds its replay key through a validated
+ * HTTP header so no idempotency metadata can collide with command arguments.
  */
 function isBareConfirmation(
   body: Record<string, unknown>,
@@ -135,6 +74,7 @@ function isBareConfirmation(
 function parseRouteCommandPayload(
   name: string,
   body: Record<string, unknown>,
+  headerIdempotencyKey: string | undefined,
 ): RouteCommandPayload | null {
   if (
     "command" in body ||
@@ -146,6 +86,9 @@ function parseRouteCommandPayload(
     try {
       const payload = parseCommandWirePayload(body);
       if (payload.command !== name) return null;
+      if (headerIdempotencyKey !== undefined && headerIdempotencyKey !== payload.idempotency_key) {
+        return null;
+      }
       if (payload.mode === "confirm") {
         return Object.freeze({
           input: Object.freeze({}),
@@ -170,9 +113,24 @@ function parseRouteCommandPayload(
   // as raw args it is validated against the command schema and fails, which
   // made every R3 confirmation unfinishable over HTTP.
   if (isBareConfirmation(body)) {
-    return Object.freeze({ input: Object.freeze({}), confirmRef: body.confirm_ref });
+    return Object.freeze({
+      input: Object.freeze({}),
+      confirmRef: body.confirm_ref,
+      ...(headerIdempotencyKey === undefined ? {} : { idempotencyKey: headerIdempotencyKey }),
+    });
   }
-  return Object.freeze({ input: body });
+  return Object.freeze({
+    input: body,
+    ...(headerIdempotencyKey === undefined ? {} : { idempotencyKey: headerIdempotencyKey }),
+  });
+}
+
+function readIdempotencyHeader(
+  value: string | readonly string[] | undefined,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !IdempotencyKeySchema.safeParse(value).success) return null;
+  return value;
 }
 
 async function executeCommandRoute(
@@ -181,9 +139,10 @@ async function executeCommandRoute(
   resolved: AuthorizedSession,
   name: string,
   body: Record<string, unknown>,
+  headerIdempotencyKey: string | undefined,
   onUnexpectedError: (error: unknown) => void,
 ) {
-  const payload = parseRouteCommandPayload(name, body);
+  const payload = parseRouteCommandPayload(name, body, headerIdempotencyKey);
   if (payload === null) {
     return Object.freeze({
       ok: false,
@@ -198,6 +157,7 @@ async function executeCommandRoute(
       chainHooks,
       pendingStore: context.runtime.pendingStore,
       stepUpProofStore: context.runtime.stepUpProofStore,
+      stepUpApproverAuthority: context.runtime.stepUpApproverAuthority,
       idempotencyStore: context.runtime.idempotencyStore,
       onUnexpectedError,
       sessionBinding: Object.freeze({
@@ -216,6 +176,8 @@ function registerCommandRoute(
   app: FastifyInstance,
   context: RouteSecurityContext,
   runWithSql: SqlRunner,
+  notificationLimiter: NotificationCommandRateLimiter,
+  factoryLimiter: FactoryOperationRateLimiter,
 ): void {
   app.post("/v1/commands/:name", async (request, reply) => {
     try {
@@ -235,13 +197,53 @@ function registerCommandRoute(
         reply.code(404);
         return fail("RESOURCE_UNAVAILABLE");
       }
+      if (!isRuntimeBusOperationAvailable(resolved, "command", name)) {
+        reply.code(404);
+        return fail("RESOURCE_UNAVAILABLE");
+      }
+      if (FACTORY_COMMANDS.has(name)) {
+        const decision = factoryLimiter.check(
+          "command",
+          resolved.session.session_id,
+          resolved.session.org_id,
+          resolved.session.store_id,
+        );
+        if (!decision.allowed) {
+          reply.header("Retry-After", String(decision.retryAfterSeconds));
+          reply.code(429);
+          return fail("RATE_LIMITED");
+        }
+      }
       if (!isRecord(request.body)) {
         reply.code(400);
         return fail("VALIDATION_FAILED");
       }
+      const headerIdempotencyKey = readIdempotencyHeader(request.headers[IDEMPOTENCY_HEADER_NAME]);
+      if (headerIdempotencyKey === null) {
+        reply.code(400);
+        return fail("VALIDATION_FAILED");
+      }
+      if (name === NOTIFICATION_ENQUEUE_COMMAND) {
+        const decision = notificationLimiter.check(
+          resolved.session.session_id,
+          resolved.session.org_id,
+          resolved.session.store_id,
+        );
+        if (!decision.allowed) {
+          reply.header("Retry-After", String(decision.retryAfterSeconds));
+          reply.code(429);
+          return fail("RATE_LIMITED");
+        }
+      }
       const body = request.body;
-      const result = await executeCommandRoute(context, runWithSql, resolved, name, body, (error) =>
-        request.log.error(safeErrorContext(error), "command execution failed"),
+      const result = await executeCommandRoute(
+        context,
+        runWithSql,
+        resolved,
+        name,
+        body,
+        headerIdempotencyKey,
+        (error) => request.log.error(safeErrorContext(error), "command execution failed"),
       );
       if (!result.ok) applyCommandErrorStatus(reply, result.error.code);
       return result;
@@ -257,6 +259,7 @@ function registerQueryRoute(
   app: FastifyInstance,
   context: RouteSecurityContext,
   runWithSql: SqlRunner,
+  factoryLimiter: FactoryOperationRateLimiter,
 ): void {
   app.post("/v1/queries/:name", async (request, reply) => {
     try {
@@ -269,6 +272,23 @@ function registerQueryRoute(
       if (name.length === 0) {
         reply.code(400);
         return fail("VALIDATION_FAILED");
+      }
+      if (!isRuntimeBusOperationAvailable(resolved, "query", name)) {
+        reply.code(404);
+        return fail("RESOURCE_UNAVAILABLE");
+      }
+      if (FACTORY_QUERIES.has(name)) {
+        const decision = factoryLimiter.check(
+          "query",
+          resolved.session.session_id,
+          resolved.session.org_id,
+          resolved.session.store_id,
+        );
+        if (!decision.allowed) {
+          reply.header("Retry-After", String(decision.retryAfterSeconds));
+          reply.code(429);
+          return fail("RATE_LIMITED");
+        }
       }
       if (!isRecord(request.body)) {
         reply.code(400);
@@ -293,8 +313,13 @@ function registerQueryRoute(
   });
 }
 
-export function registerBusRoutes(app: FastifyInstance, context: RouteSecurityContext): void {
+export function registerBusRoutes(
+  app: FastifyInstance,
+  context: RouteSecurityContext,
+  notificationLimiter: NotificationCommandRateLimiter,
+  factoryLimiter: FactoryOperationRateLimiter,
+): void {
   const runWithSql = createSqlRunner(context.runtime);
-  registerCommandRoute(app, context, runWithSql);
-  registerQueryRoute(app, context, runWithSql);
+  registerCommandRoute(app, context, runWithSql, notificationLimiter, factoryLimiter);
+  registerQueryRoute(app, context, runWithSql, factoryLimiter);
 }

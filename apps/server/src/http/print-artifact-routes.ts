@@ -16,6 +16,7 @@ import type { FastifyInstance } from "fastify";
 import type { FileSpool } from "../print/file-spool.js";
 import { fail, resolveSession, type RouteSecurityContext } from "./auth-route-support.js";
 import { safeErrorContext } from "./local-logger.js";
+import { isConfiguredRuntimeTenant } from "./runtime-surface-policy.js";
 
 /** Must match what the spool produces and what 0022 allows to be stored. */
 const ARTIFACT_NAME = /^[0-9a-f-]{36}-[a-z0-9]{1,16}-[0-9]{4}\.txt$/u;
@@ -51,6 +52,10 @@ export function registerPrintArtifactRoutes(
       if (resolved === null) {
         reply.code(401);
         return fail("AUTHENTICATION_FAILED");
+      }
+      if (!isConfiguredRuntimeTenant(resolved)) {
+        reply.code(404);
+        return fail("RESOURCE_UNAVAILABLE");
       }
 
       const params = request.params as Readonly<{ jobId?: unknown }>;

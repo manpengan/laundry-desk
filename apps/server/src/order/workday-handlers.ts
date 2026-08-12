@@ -7,14 +7,17 @@ import { HandlerCommandError } from "../bus/types.js";
 import type { OrderHandlerDeps } from "./deps.js";
 import {
   assertBusinessDayOpen,
+  assertReplayCustomerPolicy,
   asRecord,
   deriveBusinessDate,
   requireLines,
   requireString,
   resolveServerPrices,
+  resolveCustomerPolicyPricing,
   resolveTrustedPricing,
 } from "./server-pricing.js";
 import type { OrderLineRecord, OrderRecord } from "./types.js";
+import { upsertCustomerForReceipt } from "./receipt-helpers.js";
 
 function holdHandler(deps: OrderHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
@@ -31,8 +34,8 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
       ctx.actor.permissions,
     );
     const lines = trustedPricing.lines;
-    const plan = planReceive(lines, 0, trustedPricing.adjustments);
-    if (!plan.ok) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    const initialPlan = planReceive(lines, 0, trustedPricing.adjustments);
+    if (!initialPlan.ok) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
     const businessDate = deriveBusinessDate(now, deps.timeZone, deps.rolloverHour);
     await deps.lockBusinessDay?.(ctx.client, ctx.tenant, businessDate);
@@ -43,15 +46,19 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
     let name = typeof input.customer_name === "string" ? input.customer_name : null;
     let customerId: string | null = null;
     if (phone !== null && deps.customer !== undefined) {
-      const customer = await deps.customer.upsert({
-        phone,
-        ...(name !== null ? { name } : {}),
-        now,
-      });
+      const customer = await upsertCustomerForReceipt(deps.customer, phone, name ?? undefined, now);
       customerId = customer.customer.customer_id;
       phone = customer.customer.phone;
       name = customer.customer.name;
     }
+    const customerPolicy =
+      customerId === null || deps.customerPolicy === undefined
+        ? null
+        : await deps.customerPolicy(ctx.client, ctx.tenant, customerId, businessDate);
+    assertReplayCustomerPolicy(ctx.actor.via, customerPolicy);
+    const appliedPricing = resolveCustomerPolicyPricing(trustedPricing, customerPolicy);
+    const plan = planReceive(lines, 0, appliedPricing.adjustments);
+    if (!plan.ok) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     const orderLines: readonly OrderLineRecord[] = Object.freeze(
       lines.map((line, lineIndex) =>
         Object.freeze({
@@ -82,6 +89,19 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
       subtotal_cents: plan.totals.subtotal_cents,
       original_cents: plan.totals.original_cents,
       discount_cents: plan.totals.discount_cents,
+      customer_profile_version: customerPolicy?.customer_profile_version ?? 0,
+      discount_source: appliedPricing.discount_source,
+      discount_bps: appliedPricing.discount_bps,
+      membership_version: customerPolicy?.membership_version ?? null,
+      tier_id: customerPolicy?.tier?.tier_id ?? null,
+      tier_definition_version: customerPolicy?.tier?.definition_version ?? null,
+      tier_code: customerPolicy?.tier?.code ?? null,
+      tier_name: customerPolicy?.tier?.name ?? null,
+      tier_level: customerPolicy?.tier?.level ?? null,
+      tier_discount_bps: customerPolicy?.tier?.discount_bps ?? null,
+      skip_ticket_print: customerPolicy?.waivers.skip_ticket_print ?? false,
+      skip_label_print: customerPolicy?.waivers.skip_label_print ?? false,
+      skip_rack_assignment: customerPolicy?.waivers.skip_rack_assignment ?? false,
       addon_cents: plan.totals.addon_cents,
       urgent_cents: plan.totals.urgent_cents,
       freight_cents: plan.totals.freight_cents,
@@ -104,7 +124,19 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
       throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     }
     return Object.freeze({
-      result: Object.freeze({ draft_id: order.order_id, payable_cents: order.payable_cents }),
+      result: Object.freeze({
+        draft_id: order.order_id,
+        payable_cents: order.payable_cents,
+        discount_cents: order.discount_cents,
+        discount_source: order.discount_source,
+        discount_bps: order.discount_bps,
+        waivers: Object.freeze({
+          skip_ticket_print: order.skip_ticket_print,
+          skip_label_print: order.skip_label_print,
+          skip_rack_assignment: order.skip_rack_assignment,
+        }),
+      }),
+      ...(customerId === null ? {} : { privacySubjectCustomerId: customerId }),
       audit: Object.freeze({
         entity: "order",
         entityId: order.order_id,
@@ -113,6 +145,11 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
           payable_cents: order.payable_cents,
           pricing_policy_version: order.pricing_policy_version,
           discount_cents: order.discount_cents,
+          discount_source: order.discount_source,
+          discount_bps: order.discount_bps,
+          customer_profile_version: order.customer_profile_version,
+          membership_version: order.membership_version,
+          tier_id: order.tier_id,
           addon_cents: order.addon_cents,
           urgent_cents: order.urgent_cents,
           freight_cents: order.freight_cents,
@@ -146,6 +183,17 @@ function cancelHandler(deps: OrderHandlerDeps): CommandHandler {
       ctx.actor.staffId,
       now,
       businessDate,
+      deps.couponCancellation === undefined
+        ? undefined
+        : async () => {
+            await deps.couponCancellation!(ctx.client, ctx.tenant, {
+              order_id: orderId,
+              store_id: ctx.tenant.storeId,
+              staff_id: ctx.actor.staffId,
+              at: now,
+              reason,
+            });
+          },
     );
     if (order === null) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     return Object.freeze({

@@ -30,6 +30,8 @@ export type QueryResult<TRow = unknown> = Readonly<{
  * Identifiers in `sql` must be fixed literals from this package; values go in `params`.
  */
 export type SqlClient = Readonly<{
+  /** Process-local test/runtime clients opt into the memory unit-of-work coordinator. */
+  memoryTransaction?: true;
   query: <TRow = unknown>(sql: string, params?: readonly unknown[]) => Promise<QueryResult<TRow>>;
 }>;
 

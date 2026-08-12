@@ -72,6 +72,21 @@ export type PaymentRefundAppendInput = Readonly<{
   business_date: string;
 }>;
 
+export type FixedCouponDiscountInput = Readonly<{
+  org_id: string;
+  store_id: string;
+  order_id: string;
+  customer_id: string;
+  discount_cents: number;
+  min_order_cents: number;
+  at: number;
+}>;
+
+export type FixedCouponDiscountResult = Readonly<{
+  order: OrderRecord;
+  applied_discount_cents: number;
+}>;
+
 export type PricingAddonSnapshot = Readonly<{
   code: string;
   name: string;
@@ -118,6 +133,10 @@ export type GarmentRecord = Readonly<{
   accessories?: readonly string[];
   note?: string | null;
   status: GarmentStatus;
+  /** Physical custody is independent from the processing lifecycle status. */
+  custody_state?: "store" | "to_factory" | "factory" | "to_store" | "exception";
+  /** A non-null value reserves the garment for one active factory handoff batch. */
+  active_production_batch_id?: string | null;
   rack_zone?: string | null;
   rack_slot?: string | null;
 }>;
@@ -139,6 +158,19 @@ export type OrderRecord = Readonly<{
   subtotal_cents: number;
   original_cents: number;
   discount_cents: number;
+  customer_profile_version?: number;
+  discount_source?: "none" | "manual" | "customer" | "tier";
+  discount_bps?: number;
+  membership_version?: number | null;
+  tier_id?: string | null;
+  tier_definition_version?: number | null;
+  tier_code?: string | null;
+  tier_name?: string | null;
+  tier_level?: number | null;
+  tier_discount_bps?: number | null;
+  skip_ticket_print?: boolean;
+  skip_label_print?: boolean;
+  skip_rack_assignment?: boolean;
   addon_cents: number;
   urgent_cents: number;
   freight_cents: number;
@@ -226,6 +258,9 @@ export type OrderStore = Readonly<{
   ) => Promise<PickupApplyResult | null>;
   appendPayment?: (input: PaymentAppendInput) => Promise<PaymentAppendResult | null>;
   appendRefund?: (input: PaymentRefundAppendInput) => Promise<PaymentAppendResult | null>;
+  applyFixedCouponDiscount?: (
+    input: FixedCouponDiscountInput,
+  ) => Promise<FixedCouponDiscountResult | null>;
   cancelOpenOrder?: (
     orgId: string,
     storeId: string,
@@ -234,6 +269,7 @@ export type OrderStore = Readonly<{
     staffId: string,
     at: number,
     businessDate: string,
+    beforeCommit?: () => Promise<void>,
   ) => Promise<OrderRecord | null>;
   nextTicketSeq: (orgId: string, storeId: string, dayKey: string) => Promise<number>;
   /**

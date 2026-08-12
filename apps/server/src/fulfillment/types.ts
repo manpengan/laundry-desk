@@ -1,5 +1,7 @@
 import type { GarmentStatus } from "@laundry/domain";
 
+import type { FactoryCustodyState, FactoryHandoffStore } from "./factory-types.js";
+
 export type FulfillmentIncidentKind = "rework" | "damage" | "lost" | "other";
 
 export type FulfillmentTransitionInput = Readonly<{
@@ -8,8 +10,12 @@ export type FulfillmentTransitionInput = Readonly<{
   garment_ids: readonly string[];
   target_status: GarmentStatus;
   staff_id: string;
+  device_id?: string | null;
   at: number;
   reason: string | null;
+  note?: string | null;
+  confirmation_operation?: Exclude<FulfillmentConfirmationOperation, "incident_record">;
+  expected_manifest_digest?: string;
   incident?: Readonly<{
     kind: FulfillmentIncidentKind;
     note: string;
@@ -53,6 +59,7 @@ export type FulfillmentIncidentInput = Readonly<{
   compensation_cents: number;
   staff_id: string;
   at: number;
+  expected_manifest_digest?: string;
 }>;
 
 export type FulfillmentIncidentResult = Readonly<{
@@ -71,6 +78,10 @@ export type FulfillmentWorkbenchOptions = Readonly<{
 }>;
 
 export type FulfillmentWorkbenchRow = Readonly<{
+  /** Server-only tenant authority; memory seeds without it remain inaccessible. */
+  org_id?: string;
+  /** Server-only tenant authority; memory seeds without it remain inaccessible. */
+  store_id?: string;
   garment_id: string;
   order_id: string;
   ticket_no: string;
@@ -86,17 +97,58 @@ export type FulfillmentWorkbenchRow = Readonly<{
   rack_slot: string | null;
   updated_at: number;
   incident_count: number;
+  /** Server-only custody authority; omitted by older seeds and normalized to store. */
+  custody_state?: FactoryCustodyState;
+  /** Server-only active production batch anchor; never projected by workbench handlers. */
+  active_production_batch_id?: string | null;
+  /** Test-only mirror of the PostgreSQL privacy tombstone used for fail-closed parity. */
+  customer_pii_purged_at?: number | null;
+  /** Server-only order lifecycle authority; memory seeds default to open. */
+  order_status?: "open" | "closed";
 }>;
 
-export type FulfillmentStore = Readonly<{
-  transition: (
-    input: FulfillmentTransitionInput,
-  ) => Promise<readonly FulfillmentTransitionRow[] | null>;
-  assignRack: (input: FulfillmentRackAssignInput) => Promise<FulfillmentRackAssignResult | null>;
-  recordIncident: (input: FulfillmentIncidentInput) => Promise<FulfillmentIncidentResult | null>;
-  listWorkbench: (
-    orgId: string,
-    storeId: string,
-    options: FulfillmentWorkbenchOptions,
-  ) => Promise<readonly FulfillmentWorkbenchRow[]>;
+export type FulfillmentConfirmationOperation =
+  "bulk_transition" | "rework" | "incident_record" | "mark_lost";
+
+export type FulfillmentConfirmationRequest = Readonly<{
+  operation: FulfillmentConfirmationOperation;
+  org_id: string;
+  store_id: string;
+  garment_ids: readonly string[];
+  target_status: GarmentStatus | null;
+  incident_kind: "damage" | "other" | null;
+  compensation_cents: number | null;
+  reason: string | null;
+  note: string | null;
 }>;
+
+export type FulfillmentOperationConfirmationSummary = Readonly<{
+  kind: "fulfillment_operation";
+  operation: FulfillmentConfirmationOperation;
+  garment_ids: readonly string[];
+  ticket_nos: readonly string[];
+  barcodes: readonly string[];
+  target_status: "washing" | "ready" | null;
+  incident_kind: "damage" | "other" | null;
+  compensation_cents: number | null;
+  reason: string | null;
+  note: string | null;
+  manifest_digest: string;
+}>;
+
+export type FulfillmentStore = FactoryHandoffStore &
+  Readonly<{
+    prepareFulfillmentConfirmation: (
+      request: FulfillmentConfirmationRequest,
+    ) => Promise<FulfillmentOperationConfirmationSummary | null>;
+    transition: (
+      input: FulfillmentTransitionInput,
+    ) => Promise<readonly FulfillmentTransitionRow[] | null>;
+    assignRack: (input: FulfillmentRackAssignInput) => Promise<FulfillmentRackAssignResult | null>;
+    recordIncident: (input: FulfillmentIncidentInput) => Promise<FulfillmentIncidentResult | null>;
+    listWorkbench: (
+      orgId: string,
+      storeId: string,
+      options: FulfillmentWorkbenchOptions,
+    ) => Promise<readonly FulfillmentWorkbenchRow[]>;
+  }>;

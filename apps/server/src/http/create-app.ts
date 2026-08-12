@@ -14,6 +14,10 @@ import type { AuthRouteContext, RouteSecurityContext } from "./auth-route-suppor
 import { registerBusRoutes } from "./bus-routes.js";
 import { registerEdgeAuthorityRoute } from "./edge-authority-route.js";
 import { registerEdgeReplayRoute } from "./edge-replay-route.js";
+import {
+  createFactoryOperationRateLimiter,
+  type FactoryOperationRateLimiter,
+} from "./factory-operation-rate-limit.js";
 import { registerEdgePrintRoute } from "./edge-print-route.js";
 import { createEdgePrintRateLimiter, type EdgePrintRateLimiter } from "./edge-print-rate-limit.js";
 import { registerPhotoFileRoutes } from "./photo-file-routes.js";
@@ -24,10 +28,16 @@ import { installPublicErrorHandlers } from "./error-policy.js";
 import { createLocalLoggerOptions } from "./local-logger.js";
 import { createLoginRateLimiter, type LoginRateLimiter } from "./login-rate-limit.js";
 import {
+  createNotificationCommandRateLimiter,
+  type NotificationCommandRateLimiter,
+} from "./notification-command-rate-limit.js";
+import {
   registerRequestSecurityHooks,
   type LocalRequestSecurityPolicy,
 } from "./request-security.js";
 import { createSecurityEventSink, type SecurityEventSink } from "./security-events.js";
+import { LOCAL_PROFILE } from "../local/profile.js";
+import type { PendingActionStore } from "../pending-actions/types.js";
 
 export type CreateAppOptions = Readonly<{
   runtime: LocalRuntime;
@@ -41,6 +51,10 @@ export type CreateAppOptions = Readonly<{
   loginRateLimiter?: LoginRateLimiter;
   /** Dedicated main-process print transport limiter. */
   edgePrintRateLimiter?: EdgePrintRateLimiter;
+  /** Dedicated automatic-notification command limiter. */
+  notificationCommandRateLimiter?: NotificationCommandRateLimiter;
+  /** Dedicated factory handoff command/query limiter. */
+  factoryOperationRateLimiter?: FactoryOperationRateLimiter;
   /** Mock print spool; when absent the artifact download route is not mounted. */
   printSpool?: FileSpool;
   /** Structured redacted auth-security events (tests may capture). */
@@ -52,6 +66,40 @@ export type CreateAppOptions = Readonly<{
 const DEFAULT_HOST_AUTHORITIES = Object.freeze(["127.0.0.1:8787"]);
 const DEFAULT_BROWSER_ORIGIN = "http://127.0.0.1:5173";
 const DEFAULT_DESKTOP_ORIGIN = "http://127.0.0.1:8787";
+const PENDING_ACTION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+function installPendingActionCleanup(app: FastifyInstance, store: PendingActionStore): void {
+  const tenant = Object.freeze({
+    orgId: LOCAL_PROFILE.orgId,
+    storeId: LOCAL_PROFILE.storeId,
+    staffId: LOCAL_PROFILE.adminStaffId,
+  });
+  const prune =
+    store.pruneExpiredGlobally !== undefined
+      ? () => store.pruneExpiredGlobally?.() ?? 0
+      : store.pruneExpired === undefined
+        ? undefined
+        : () => store.pruneExpired?.(Math.floor(Date.now() / 1000), { tenant }) ?? 0;
+  if (prune === undefined) return;
+
+  let timer: NodeJS.Timeout | null = null;
+  app.addHook("onReady", async () => {
+    await prune();
+    timer = setInterval(() => {
+      void Promise.resolve(prune()).catch((error: unknown) => {
+        app.log.error(
+          { error_type: error instanceof Error ? error.name : typeof error },
+          "pending action cleanup failed",
+        );
+      });
+    }, PENDING_ACTION_CLEANUP_INTERVAL_MS);
+    timer.unref();
+  });
+  app.addHook("onClose", async () => {
+    if (timer !== null) clearInterval(timer);
+    timer = null;
+  });
+}
 
 function createFastifyApp(options: CreateAppOptions): FastifyInstance {
   return Fastify({
@@ -78,6 +126,7 @@ async function installCoreHttp(
   app.addHook("onSend", async (request, reply, payload) => {
     if (
       request.url.startsWith("/api/v2/auth/") ||
+      request.url.startsWith("/api/v2/local/staff") ||
       request.url.startsWith("/api/v2/edge/authority") ||
       request.url.startsWith("/api/v2/edge/print/") ||
       request.url.startsWith("/v1/commands/") ||
@@ -118,8 +167,14 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   const app = createFastifyApp(options);
   const requestSecurity = await installCoreHttp(app, options);
   const context = createRouteContext(options, requestSecurity);
+  installPendingActionCleanup(app, options.runtime.pendingStore);
   registerAuthRoutes(app, context);
-  registerBusRoutes(app, context);
+  registerBusRoutes(
+    app,
+    context,
+    options.notificationCommandRateLimiter ?? createNotificationCommandRateLimiter(),
+    options.factoryOperationRateLimiter ?? createFactoryOperationRateLimiter(),
+  );
   registerEdgeAuthorityRoute(app, context);
   registerEdgeReplayRoute(app, context);
   registerEdgePrintRoute(

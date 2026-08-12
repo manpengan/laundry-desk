@@ -29,6 +29,7 @@ import { createPasswordPort } from "./password.js";
 import { createStepUpChallenge, verifyStepUpPin } from "./pin-step-up.js";
 import { createPgIdentityStore } from "./pg-store.js";
 import { createPgStepUpProofStore } from "./pg-step-up-proof-store.js";
+import { verifyPgStepUpApproverAuthority } from "./step-up-approver-authority.js";
 import type { SessionRecord } from "./types.js";
 
 const urls =
@@ -226,6 +227,7 @@ async function executeConfirmed(
         chainHooks: bus.chainHooks,
         pendingStore,
         stepUpProofStore,
+        stepUpApproverAuthority: verifyPgStepUpApproverAuthority,
         idempotencyStore: createPgIdempotencyStore(pool),
         confirmRef: fixture.confirmRef,
         sessionBinding: Object.freeze({ sessionId, sessionVersion: 1 }),
@@ -321,7 +323,35 @@ test(
       );
       assert.deepEqual(rolledBack.rows[0], { settings: "0", audit: "0" });
 
-      const succeeded = await executeConfirmed(singlePool, sessionId, fixture, now + 2);
+      await adminPool.query(
+        `UPDATE staff_store_roles
+            SET role = 'staff', updated_at = NOW()
+          WHERE org_id = $1::uuid AND store_id = $2::uuid AND staff_id = $3::uuid`,
+        [TENANT.orgId, TENANT.storeId, DEMO_ADMIN_ID],
+      );
+      const deniedAfterDemotion = await executeConfirmed(singlePool, sessionId, fixture, now + 2);
+      assert.equal(deniedAfterDemotion.ok, false);
+      if (!deniedAfterDemotion.ok) {
+        assert.equal(deniedAfterDemotion.error.code, "POLICY_DENIED");
+      }
+      assert.equal(
+        (await createPgStepUpProofStore(singlePool).get(fixture.proofId, { tenant: TENANT }))
+          ?.status,
+        "active",
+      );
+      assert.equal(
+        (await createPgPendingActionStore(singlePool).get(fixture.confirmRef, { tenant: TENANT }))
+          ?.status,
+        "pending",
+      );
+      await adminPool.query(
+        `UPDATE staff_store_roles
+            SET role = 'admin', updated_at = NOW()
+          WHERE org_id = $1::uuid AND store_id = $2::uuid AND staff_id = $3::uuid`,
+        [TENANT.orgId, TENANT.storeId, DEMO_ADMIN_ID],
+      );
+
+      const succeeded = await executeConfirmed(singlePool, sessionId, fixture, now + 3);
       assert.equal(succeeded.ok, true, JSON.stringify(succeeded));
       assert.equal(
         (await createPgStepUpProofStore(singlePool).get(fixture.proofId, { tenant: TENANT }))

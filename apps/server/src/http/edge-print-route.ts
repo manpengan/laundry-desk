@@ -15,6 +15,7 @@ import {
 } from "./auth-route-support.js";
 import type { EdgePrintRateLimiter } from "./edge-print-rate-limit.js";
 import { safeErrorContext } from "./local-logger.js";
+import { isConfiguredRuntimeTenant } from "./runtime-surface-policy.js";
 
 function isMainProcessRequest(request: FastifyRequest, context: RouteSecurityContext): boolean {
   return (
@@ -60,6 +61,11 @@ async function authorizeMainRequest(
   const csrf = await requireCsrf(context, request, reply, resolved.session);
   if (csrf !== true) {
     await reply.send(csrf);
+    return null;
+  }
+  if (!isConfiguredRuntimeTenant(resolved)) {
+    reply.code(404);
+    await reply.send(fail("RESOURCE_UNAVAILABLE"));
     return null;
   }
   const decision = limiter.check(resolved.session.session_id, resolved.session.device_id);

@@ -12,6 +12,9 @@ import type { StoreFeatureFlags } from "../platform/features.js";
 import { buildAccessSessionResponse, prepareAccessSessionProjection } from "./session-view.js";
 
 const DEVICE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const OTHER_ORG_ID = "11111111-1111-4111-8111-111111111111";
+const OTHER_STORE_ID = "22222222-2222-4222-8222-222222222222";
+const OTHER_STAFF_ID = "33333333-3333-4333-8333-333333333333";
 
 const DATABASE_FEATURES: StoreFeatureFlags = Object.freeze({
   fulfillment: false,
@@ -35,6 +38,7 @@ async function issueAdmin(runtime: LocalRuntime): Promise<SessionIssueResult> {
 function createFeaturePool(
   features: StoreFeatureFlags,
   events: Array<Readonly<{ sql: string; params: readonly unknown[] }>>,
+  authorityRole: "admin" | "staff" = "staff",
 ): PgPool {
   const client = Object.freeze({
     async query(sql: string, params: readonly unknown[] = []) {
@@ -46,11 +50,24 @@ function createFeaturePool(
         return Object.freeze({
           rows: Object.freeze([
             Object.freeze({
-              staff_id: LOCAL_PROFILE.adminStaffId,
+              staff_id: typeof params[2] === "string" ? params[2] : LOCAL_PROFILE.adminStaffId,
               display_name: "数据库店长",
               permission_version: 1,
-              role: "staff",
+              role: authorityRole,
               is_privacy_admin: false,
+            }),
+          ]),
+          rowCount: 1,
+        });
+      }
+      if (/FROM orgs AS org/u.test(sql)) {
+        const other = params[0] === OTHER_ORG_ID;
+        return Object.freeze({
+          rows: Object.freeze([
+            Object.freeze({
+              org_code: other ? "network" : LOCAL_PROFILE.orgCode,
+              store_code: other ? "branch-2" : LOCAL_PROFILE.storeCode,
+              store_name: other ? "城北分店" : LOCAL_PROFILE.storeName,
             }),
           ]),
           rowCount: 1,
@@ -156,6 +173,66 @@ test("PG session projection reads real SQL store_features instead of the memory 
         event.params[0] === issued.session.store_id,
     ),
     "expected authenticated store GUC",
+  );
+});
+
+test("PG session projection accepts an authenticated non-bootstrap store and reads its display", async () => {
+  const runtime = await createMemoryLocalRuntime();
+  const events: Array<Readonly<{ sql: string; params: readonly unknown[] }>> = [];
+  const pgRuntime: LocalRuntime = Object.freeze({
+    ...runtime,
+    mode: "pg",
+    pool: createFeaturePool(DATABASE_FEATURES, events, "admin"),
+  });
+
+  const projection = await prepareAccessSessionProjection(pgRuntime, {
+    org_id: OTHER_ORG_ID,
+    store_id: OTHER_STORE_ID,
+    staff_id: OTHER_STAFF_ID,
+    permission_version: 1,
+  });
+
+  assert.ok(projection);
+  assert.deepEqual(projection.display, {
+    store_name: "城北分店",
+    staff_name: "数据库店长",
+    org_code: "network",
+    store_code: "branch-2",
+  });
+  assert.equal(projection.org_id, OTHER_ORG_ID);
+  assert.equal(projection.store_id, OTHER_STORE_ID);
+  assert.equal(projection.staff_id, OTHER_STAFF_ID);
+  assert.ok(
+    events.some(
+      (event) =>
+        /FROM orgs AS org/u.test(event.sql) &&
+        event.params[0] === OTHER_ORG_ID &&
+        event.params[1] === OTHER_STORE_ID,
+    ),
+  );
+});
+
+test("PG session projection rejects a non-bootstrap staff authority", async () => {
+  const runtime = await createMemoryLocalRuntime();
+  const events: Array<Readonly<{ sql: string; params: readonly unknown[] }>> = [];
+  const pgRuntime: LocalRuntime = Object.freeze({
+    ...runtime,
+    mode: "pg",
+    pool: createFeaturePool(DATABASE_FEATURES, events, "staff"),
+  });
+
+  assert.equal(
+    await prepareAccessSessionProjection(pgRuntime, {
+      org_id: OTHER_ORG_ID,
+      store_id: OTHER_STORE_ID,
+      staff_id: OTHER_STAFF_ID,
+      permission_version: 1,
+    }),
+    null,
+  );
+  assert.equal(
+    events.some((event) => /FROM store_features/u.test(event.sql)),
+    false,
   );
 });
 

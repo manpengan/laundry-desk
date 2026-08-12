@@ -39,12 +39,24 @@ export type AccessSessionProjection = Readonly<{
   display: AccessSessionResponse["display"];
 }>;
 
+type SessionStoreProfile = Readonly<{
+  org_code: string;
+  store_code: string;
+  store_name: string;
+}>;
+
 const StaffAuthorityRowSchema = z.strictObject({
   staff_id: z.uuid(),
   display_name: z.string().trim().min(1),
   role: z.enum(["admin", "staff"]),
   permission_version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
   is_privacy_admin: z.boolean(),
+});
+
+const SessionStoreProfileRowSchema = z.strictObject({
+  org_code: z.string().regex(/^[\x21-\x7e]{1,128}$/u),
+  store_code: z.string().regex(/^[\x21-\x7e]{1,128}$/u),
+  store_name: z.string().trim().min(1).max(128),
 });
 
 const projectFeatureFlags = (flags: StoreFeatureFlags): Readonly<Record<string, boolean>> =>
@@ -82,6 +94,24 @@ async function readPgStaffAuthority(
   return Object.freeze(parsed.data);
 }
 
+async function readPgStoreProfile(
+  client: SqlClient,
+  binding: StaffAuthorityBinding,
+): Promise<SessionStoreProfile | null> {
+  const result = await client.query<z.input<typeof SessionStoreProfileRowSchema>>(
+    `SELECT org.code AS org_code, store.code AS store_code, store.name AS store_name
+       FROM orgs AS org
+       JOIN stores AS store ON store.org_id = org.id
+      WHERE org.id = $1::uuid
+        AND store.id = $2::uuid
+      LIMIT 2`,
+    [binding.org_id, binding.store_id],
+  );
+  if (result.rows.length !== 1) return null;
+  const parsed = SessionStoreProfileRowSchema.safeParse(result.rows[0]);
+  return parsed.success ? Object.freeze(parsed.data) : null;
+}
+
 async function readMemoryStaffAuthority(
   runtime: LocalRuntime,
   binding: StaffAuthorityBinding,
@@ -114,11 +144,17 @@ function isLocalBinding(binding: StaffAuthorityBinding): boolean {
   return binding.org_id === LOCAL_PROFILE.orgId && binding.store_id === LOCAL_PROFILE.storeId;
 }
 
+function authorityMayEnterRuntime(
+  binding: StaffAuthorityBinding,
+  authority: SessionStaffAuthority,
+): boolean {
+  return isLocalBinding(binding) || authority.role === "admin";
+}
+
 export async function loadSessionStaffAuthority(
   runtime: LocalRuntime,
   binding: StaffAuthorityBinding,
 ): Promise<SessionStaffAuthority | null> {
-  if (!isLocalBinding(binding)) return null;
   if (runtime.mode === "pg") {
     if (runtime.pool === null) {
       throw new Error("PostgreSQL staff authority requires an active application pool");
@@ -132,8 +168,12 @@ export async function loadSessionStaffAuthority(
       },
       (client) => readPgStaffAuthority(createSessionSqlClient(client), binding),
     );
-    return authorityMatchesBinding(authority, binding) ? authority : null;
+    return authorityMatchesBinding(authority, binding) &&
+      authorityMayEnterRuntime(binding, authority)
+      ? authority
+      : null;
   }
+  if (!isLocalBinding(binding)) return null;
   const authority = await readMemoryStaffAuthority(runtime, binding);
   return authorityMatchesBinding(authority, binding) ? authority : null;
 }
@@ -142,6 +182,7 @@ function buildProjection(
   binding: StaffAuthorityBinding,
   authority: SessionStaffAuthority,
   flags: StoreFeatureFlags,
+  profile: SessionStoreProfile,
 ): AccessSessionProjection {
   return Object.freeze({
     org_id: binding.org_id,
@@ -151,10 +192,10 @@ function buildProjection(
     role: authority.role,
     features: projectFeatureFlags(flags),
     display: Object.freeze({
-      store_name: LOCAL_PROFILE.storeName,
+      store_name: profile.store_name,
       staff_name: authority.display_name,
-      org_code: LOCAL_PROFILE.orgCode,
-      store_code: LOCAL_PROFILE.storeCode,
+      org_code: profile.org_code,
+      store_code: profile.store_code,
     }),
   });
 }
@@ -167,7 +208,6 @@ export async function prepareAccessSessionProjection(
   runtime: LocalRuntime,
   binding: StaffAuthorityBinding,
 ): Promise<AccessSessionProjection | null> {
-  if (!isLocalBinding(binding)) return null;
   if (runtime.mode === "pg") {
     if (runtime.pool === null) {
       throw new Error("PostgreSQL session projection requires an active application pool");
@@ -182,7 +222,14 @@ export async function prepareAccessSessionProjection(
       async (client) => {
         const sql = createSessionSqlClient(client);
         const authority = await readPgStaffAuthority(sql, binding);
-        if (!authorityMatchesBinding(authority, binding)) return null;
+        if (
+          !authorityMatchesBinding(authority, binding) ||
+          !authorityMayEnterRuntime(binding, authority)
+        ) {
+          return null;
+        }
+        const profile = await readPgStoreProfile(sql, binding);
+        if (profile === null) return null;
         const flags = await createSqlFeaturesStore(
           sql,
           Object.freeze({
@@ -191,15 +238,20 @@ export async function prepareAccessSessionProjection(
             staffId: binding.staff_id,
           }),
         ).get(binding.store_id);
-        return buildProjection(binding, authority, flags);
+        return buildProjection(binding, authority, flags, profile);
       },
     );
   }
 
+  if (!isLocalBinding(binding)) return null;
   const authority = await readMemoryStaffAuthority(runtime, binding);
   if (!authorityMatchesBinding(authority, binding)) return null;
   const flags = await runtime.platform.features.get(binding.store_id);
-  return buildProjection(binding, authority, flags);
+  return buildProjection(binding, authority, flags, {
+    org_code: LOCAL_PROFILE.orgCode,
+    store_code: LOCAL_PROFILE.storeCode,
+    store_name: LOCAL_PROFILE.storeName,
+  });
 }
 
 const freezeResponse = (response: AccessSessionResponse): AccessSessionResponse =>

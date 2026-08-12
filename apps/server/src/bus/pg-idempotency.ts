@@ -90,15 +90,25 @@ async function complete(
   key: string,
   requestHash: string,
   result: CommandResult,
+  privacySubjectCustomerId?: string,
 ): Promise<void> {
   const resultJson = JSON.stringify(result);
   const updated = await client.query(
     `UPDATE command_idempotency
-     SET status = 'completed', result_json = $6::jsonb, completed_at = now()
+     SET status = 'completed', result_json = $6::jsonb, completed_at = now(),
+         privacy_subject_customer_id = $7::uuid
      WHERE org_id = $1::uuid AND store_id = $2::uuid
        AND command = $3 AND idempotency_key = $4::uuid
        AND request_hash = $5 AND status = 'in_progress'`,
-    [tenant.orgId, tenant.storeId, command, key, requestHash, resultJson],
+    [
+      tenant.orgId,
+      tenant.storeId,
+      command,
+      key,
+      requestHash,
+      resultJson,
+      privacySubjectCustomerId ?? null,
+    ],
   );
   if (updated.rowCount !== 1) throw new Error("Unable to complete idempotency claim");
 }

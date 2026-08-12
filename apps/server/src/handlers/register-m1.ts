@@ -1,8 +1,3 @@
-/**
- * M1 handler registration — loads A6 command/query definitions and attaches handlers.
- * Optional M2 order/catalog/print/stats/customer/shift + M3 photo when deps provided.
- */
-
 import type { ChainPortHooks } from "../bus/chain-adapter.js";
 import type { AccountingHandlerDeps } from "../accounting/types.js";
 import { createAccountingHandlers } from "../accounting/handlers.js";
@@ -18,6 +13,11 @@ import {
   registerCustomerCommandHandlers,
   registerCustomerQueryHandlers,
 } from "../customer/handlers.js";
+import type { CustomerProfileHandlerDeps } from "../customer-profile/handlers.js";
+import {
+  registerCustomerProfileCommandHandlers,
+  registerCustomerProfileQueryHandlers,
+} from "../customer-profile/handlers.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import { registerOrderCommandHandlers, registerOrderQueryHandlers } from "../order/handlers.js";
 import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
@@ -25,6 +25,7 @@ import {
   registerFulfillmentCommandHandlers,
   registerFulfillmentQueryHandlers,
 } from "../fulfillment/handlers.js";
+import { createFulfillmentConfirmationPreparer } from "../fulfillment/confirmation.js";
 import { registerOrderWorkdayCommandHandlers } from "../order/workday-handlers.js";
 import {
   registerPaymentCommandHandlers,
@@ -48,19 +49,24 @@ import type { ReportingHandlerDeps } from "../reporting/types.js";
 import { registerReportingQueryHandlers } from "../reporting/handlers.js";
 import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import { registerShiftCommandHandlers, registerShiftQueryHandlers } from "../shift/handlers.js";
-import type { StatsHandlerDeps } from "../stats/handlers.js";
-import { registerStatsQueryHandlers } from "../stats/handlers.js";
+import { registerStatsQueryHandlers, type StatsHandlerDeps } from "../stats/handlers.js";
 import type { MemberRuntimeDeps } from "../member/handlers.js";
-import { createMemberHandlers } from "../member/handlers.js";
+import * as memberRegistration from "../member/registration.js";
+import type { MemberBenefitsRuntimeDeps } from "../member-benefits/types.js";
+import { withMemberBenefitCouponCancellation } from "../member-benefits/order-cancellation.js";
 import { createMemberTopupConfirmationPreparer } from "../member/topup-confirmation.js";
+import {
+  createNotificationDeliveryConfirmationPreparer,
+  prepareNotificationDeliveryRisk,
+} from "../notification/delivery-confirmation.js";
+import { combinePendingActionPreparers } from "./default-chain-hooks.js";
 import type { NotificationHandlerDeps } from "../notification/types.js";
+import * as notificationRegistration from "../notification/registration.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
-import { createNotificationHandlers } from "../notification/handlers.js";
-import type { StaffAccessHandlerDeps } from "../staff/handlers.js";
-import { createStaffAccessHandlers } from "../staff/handlers.js";
-import type { IdentityHandlerDeps } from "./identity-handlers.js";
-import { registerIdentityCommandHandlers } from "./identity-handlers.js";
+import { createStaffAccessHandlers, type StaffAccessHandlerDeps } from "../staff/handlers.js";
+import * as storeManagement from "../store-management/registration.js";
+import { registerIdentityCommandHandlers, type IdentityHandlerDeps } from "./identity-handlers.js";
 import type { PlatformHandlerDeps } from "./platform-handlers.js";
 import { registerPlatformHandlers, registerPlatformQueryHandlers } from "./platform-handlers.js";
 import { createDefaultChainHooks } from "./default-chain-hooks.js";
@@ -80,6 +86,8 @@ export type RegisterM1Deps = Readonly<{
   stats?: StatsHandlerDeps;
   /** M2 customer archive (memory or PG). */
   customer?: CustomerHandlerDeps;
+  /** ADR-42 org-wide extended profile and discount override. */
+  customerProfile?: CustomerProfileHandlerDeps;
   /** M2 shift closing / 日结签字 (memory). */
   shift?: ShiftHandlerDeps;
   /** Store-day accounting reconciliation, audited export and Edge conflict resolution. */
@@ -93,8 +101,9 @@ export type RegisterM1Deps = Readonly<{
   /** M3 garment production, incidents and loss handling. */
   fulfillment?: FulfillmentHandlerDeps;
   staffAccess?: StaffAccessHandlerDeps;
+  storeManagement?: storeManagement.HandlerDeps;
   member?: MemberRuntimeDeps;
-  /** ADR-23 manual pickup-reminder worklist and append-only generation log. */
+  memberBenefits?: MemberBenefitsRuntimeDeps;
   notification?: NotificationHandlerDeps;
 }>;
 
@@ -144,8 +153,12 @@ export function registerM1Handlers(
   }
 
   if (deps.order !== undefined) {
+    const orderWithCouponCancellation = withMemberBenefitCouponCancellation(
+      deps.order,
+      deps.memberBenefits,
+    );
     registerOrderCommandHandlers(registry, deps.order);
-    registerOrderWorkdayCommandHandlers(registry, deps.order);
+    registerOrderWorkdayCommandHandlers(registry, orderWithCouponCancellation);
     registerPaymentCommandHandlers(registry, deps.order);
     registered.push(
       "order.receive",
@@ -179,6 +192,11 @@ export function registerM1Handlers(
     );
   }
 
+  if (deps.customerProfile !== undefined) {
+    registerCustomerProfileCommandHandlers(registry, deps.customerProfile);
+    registered.push("customer.profile.set", "customer.discount_policy.set");
+  }
+
   if (deps.shift !== undefined) {
     registerShiftCommandHandlers(registry, deps.shift);
     registered.push("shift.close");
@@ -209,6 +227,11 @@ export function registerM1Handlers(
       "garment.rework",
       "garment.incident.record",
       "garment.mark_lost",
+      "fulfillment.batch.create",
+      "fulfillment.batch.cancel",
+      "fulfillment.handoff.checkpoint.record",
+      "fulfillment.handoff.discrepancy.resolve",
+      "fulfillment.quality_check.record",
     );
   }
 
@@ -220,37 +243,13 @@ export function registerM1Handlers(
     registered.push("staff.access.set", "staff.create", "staff.credentials.reset");
   }
 
-  if (deps.member !== undefined && deps.order !== undefined) {
-    const memberOrder = deps.order;
-    const handlers = createMemberHandlers({ ...deps.member, order: memberOrder });
-    registry.registerHandler("member.account.open", handlers["member.account.open"]);
-    registry.registerHandler("member.topup", handlers["member.topup"]);
-    registry.registerHandler("member.balance.pay", handlers["member.balance.pay"]);
-    registry.registerHandler("member.bonus_rule.upsert", handlers["member.bonus_rule.upsert"]);
-    registry.registerHandler("member.refund", handlers["member.refund"]);
-    registry.registerHandler("member.account.freeze", handlers["member.account.freeze"]);
-    registry.registerHandler("member.account.unfreeze", handlers["member.account.unfreeze"]);
-    registry.registerHandler("member.account.close", handlers["member.account.close"]);
-    registered.push(
-      "member.account.open",
-      "member.topup",
-      "member.balance.pay",
-      "member.bonus_rule.upsert",
-      "member.refund",
-      "member.account.freeze",
-      "member.account.unfreeze",
-      "member.account.close",
-    );
-  }
+  registered.push(...storeManagement.registerCommands(registry, deps.storeManagement));
 
-  if (deps.notification !== undefined) {
-    const handlers = createNotificationHandlers(deps.notification);
-    registry.registerHandler(
-      "notification.manual_list.create",
-      handlers["notification.manual_list.create"],
-    );
-    registered.push("notification.manual_list.create");
-  }
+  registered.push(...memberRegistration.registerCommands(registry, deps));
+
+  registered.push(
+    ...notificationRegistration.registerNotificationCommands(registry, deps.notification),
+  );
 
   return Object.freeze(registered);
 }
@@ -308,6 +307,11 @@ export function registerM1QueryHandlers(
     );
   }
 
+  if (deps.customerProfile !== undefined) {
+    registerCustomerProfileQueryHandlers(queryRegistry, deps.customerProfile);
+    names.push("customer.profile.get");
+  }
+
   if (deps.shift !== undefined) {
     registerShiftQueryHandlers(queryRegistry, deps.shift);
     names.push("shift.get", "shift.history");
@@ -340,7 +344,7 @@ export function registerM1QueryHandlers(
 
   if (deps.fulfillment !== undefined) {
     registerFulfillmentQueryHandlers(queryRegistry, deps.fulfillment);
-    names.push("fulfillment.workbench");
+    names.push("fulfillment.workbench", "fulfillment.batches.list", "fulfillment.batch.get");
   }
 
   if (deps.staffAccess !== undefined) {
@@ -349,31 +353,17 @@ export function registerM1QueryHandlers(
     names.push("staff.access.list");
   }
 
-  if (deps.member !== undefined && deps.order !== undefined) {
-    const memberOrder = deps.order;
-    const handlers = createMemberHandlers({ ...deps.member, order: memberOrder });
-    queryRegistry.registerHandler("member.account.get", handlers["member.account.get"]);
-    queryRegistry.registerHandler("member.bonus_rules.list", handlers["member.bonus_rules.list"]);
-    names.push("member.account.get", "member.bonus_rules.list");
-  }
+  names.push(...storeManagement.registerQueries(queryRegistry, deps.storeManagement));
 
-  if (deps.notification !== undefined) {
-    const handlers = createNotificationHandlers(deps.notification);
-    queryRegistry.registerHandler(
-      "notification.pickup_reminders.list",
-      handlers["notification.pickup_reminders.list"],
-    );
-    names.push("notification.pickup_reminders.list");
-  }
+  names.push(...memberRegistration.registerQueries(queryRegistry, deps));
+
+  names.push(
+    ...notificationRegistration.registerNotificationQueries(queryRegistry, deps.notification),
+  );
 
   return Object.freeze(names);
 }
 
-/**
- * Convenience: fresh M1 command + query registries + handlers + default chain hooks.
- * Query registry includes M2 catalog + order + print + stats + customer + shift + M3 photo;
- * handlers attach when deps set.
- */
 export function createRegisteredM1Bus(
   deps: RegisterM1Deps,
   pendingStore: PendingActionStore = processPendingActionStore,
@@ -388,9 +378,18 @@ export function createRegisteredM1Bus(
     chainHooks: createDefaultChainHooks(
       {},
       pendingStore,
-      deps.member === undefined || deps.order === undefined
-        ? undefined
-        : createMemberTopupConfirmationPreparer(deps.member),
+      combinePendingActionPreparers([
+        deps.member === undefined || deps.order === undefined
+          ? undefined
+          : createMemberTopupConfirmationPreparer(deps.member),
+        deps.notification === undefined
+          ? undefined
+          : createNotificationDeliveryConfirmationPreparer(deps.notification),
+        deps.fulfillment === undefined
+          ? undefined
+          : createFulfillmentConfirmationPreparer(deps.fulfillment),
+      ]),
+      deps.notification === undefined ? undefined : prepareNotificationDeliveryRisk,
     ),
     registered,
     registeredQueries,

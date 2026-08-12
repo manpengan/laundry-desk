@@ -7,6 +7,7 @@ export type CustomerRecord = Readonly<{
   phone: string;
   name: string | null;
   note: string | null;
+  version: number;
   created_at: number;
   updated_at: number;
   merged_into_id: string | null;
@@ -18,11 +19,13 @@ export type CustomerSearchRow = Readonly<{
   phone: string;
   name: string | null;
   note: string | null;
+  version: number;
   updated_at: number;
 }>;
 
 export type CustomerUpdateInput = Readonly<{
   customer_id: string;
+  expected_version: number;
   phone?: string;
   name?: string | null;
   note?: string | null;
@@ -33,6 +36,7 @@ export type CustomerMergeInput = Readonly<{
   source_customer_id: string;
   target_customer_id: string;
   store_id: string;
+  staff_id: string;
   now: number;
 }>;
 
@@ -74,7 +78,7 @@ export type CustomerPrivacyEvent = Readonly<{
 }>;
 
 export type CustomerPrivacyExport = Readonly<{
-  format_version: 1;
+  format_version: 2;
   exported_at: number;
   customer: Readonly<{
     customer_id: string;
@@ -84,6 +88,38 @@ export type CustomerPrivacyExport = Readonly<{
     created_at: number;
     updated_at: number;
   }>;
+  canonical_customers: readonly Readonly<{
+    customer_id: string;
+    phone: string;
+    name: string | null;
+    note: string | null;
+    merged_into_id: string | null;
+    created_at: number;
+    updated_at: number;
+  }>[];
+  canonical_customer_count: number;
+  profile: Readonly<Record<string, unknown>> | null;
+  profiles: readonly Readonly<Record<string, unknown>>[];
+  profile_count: number;
+  profiles_truncated: boolean;
+  addresses: readonly Readonly<Record<string, unknown>>[];
+  address_count: number;
+  addresses_truncated: boolean;
+  retired_address_count: number;
+  identifiers: readonly Readonly<Record<string, unknown>>[];
+  identifier_count: number;
+  identifiers_truncated: boolean;
+  retired_identifier_count: number;
+  related_narratives: readonly Readonly<Record<string, unknown>>[];
+  related_narrative_count: number;
+  related_narratives_truncated: boolean;
+  retained_garment_photo_count: number;
+  notification_deliveries: readonly Readonly<Record<string, unknown>>[];
+  notification_delivery_count: number;
+  notification_deliveries_truncated: boolean;
+  factory_handoff_evidence: readonly Readonly<Record<string, unknown>>[];
+  factory_handoff_evidence_count: number;
+  factory_handoff_evidence_truncated: boolean;
   orders: readonly Readonly<Record<string, unknown>>[];
   order_count: number;
   truncated: boolean;
@@ -121,6 +157,9 @@ export type CustomerStore = Readonly<{
   upsert: (input: CustomerUpsertInput) => Promise<CustomerUpsertOutcome>;
   getByPhone: (phone: string) => Promise<CustomerRecord | null>;
   getById: (customerId: string) => Promise<CustomerRecord | null>;
+  /** Canonical helpers are optional only for legacy test doubles. */
+  resolveCanonicalId?: (customerId: string) => Promise<string | null>;
+  listCanonicalGroup?: (customerId: string) => Promise<readonly string[]>;
   update: (input: CustomerUpdateInput) => Promise<CustomerRecord | null>;
   merge: (input: CustomerMergeInput) => Promise<CustomerMergeResult | null>;
   findDuplicates: (customerId: string, limit: number) => Promise<readonly CustomerSearchRow[]>;
@@ -136,3 +175,11 @@ export type CustomerStore = Readonly<{
   exportPrivacy: (input: CustomerPrivacyActionInput) => Promise<CustomerPrivacyExport | null>;
   anonymize: (input: CustomerPrivacyActionInput) => Promise<CustomerAnonymizeResult | null>;
 }>;
+
+/** Stable internal signal translated to the public non-retryable CUSTOMER_ERASED error. */
+export class CustomerErasedError extends Error {
+  constructor() {
+    super("CUSTOMER_ERASED");
+    this.name = "CustomerErasedError";
+  }
+}

@@ -41,6 +41,7 @@ const LIST_SQL = `
       AND o.store_id = $2::uuid
       AND o.status = 'open'
       AND o.ticket_no IS NOT NULL
+      AND o.customer_pii_purged_at IS NULL
       AND o.customer_phone ~ '^1[3-9][0-9]{9}$'
       AND o.created_at <= $3::timestamptz
       AND ($4::boolean = false OR o.balance_cents > 0)

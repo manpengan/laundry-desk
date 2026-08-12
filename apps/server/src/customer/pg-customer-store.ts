@@ -4,7 +4,14 @@ import type { PgPool } from "../db/pg-pool.js";
 import { withOrgGucOrCurrent, withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
 import type { SqlClient } from "../db/types.js";
 import { mergeCustomerRows } from "./pg-customer-merge.js";
+import {
+  findCustomerDuplicateRows,
+  getCustomerByIdRow,
+  getCustomerByPhoneRow,
+  searchCustomerRows,
+} from "./pg-customer-read.js";
 import { createPgCustomerPrivacyOperations } from "./pg-customer-privacy-store.js";
+import { CustomerErasedError } from "./types.js";
 import type {
   CustomerMergeInput,
   CustomerMergeResult,
@@ -27,6 +34,7 @@ type CustomerRow = Readonly<{
   phone: string;
   name: string | null;
   note: string | null;
+  version: number | string;
   created_at: Date | string;
   updated_at: Date | string;
   merged_into_id?: string | null;
@@ -48,119 +56,76 @@ function mapRecord(row: CustomerRow): CustomerRecord {
     phone: row.phone,
     name: row.name,
     note: row.note,
+    version: Number(row.version),
     created_at: dateToEpoch(row.created_at),
     updated_at: dateToEpoch(row.updated_at),
     merged_into_id: row.merged_into_id ?? null,
   });
 }
 
-function mapSearchRow(row: CustomerRow): CustomerSearchRow {
-  return Object.freeze({
-    customer_id: row.id,
-    phone: row.phone,
-    name: row.name,
-    note: row.note,
-    updated_at: dateToEpoch(row.updated_at),
-  });
-}
-
-async function searchRows(
-  client: SqlClient,
-  orgId: string,
-  query: string,
-  limit: number,
-): Promise<readonly CustomerSearchRow[]> {
-  const capped = Math.max(0, Math.min(limit, 50));
-  if (capped === 0) return Object.freeze([]);
-
-  const q = query.trim();
-  if (q.length === 0) {
-    const result = await client.query<CustomerRow>(
-      `SELECT id, phone, name, note, created_at, updated_at
-       FROM customers
-       WHERE org_id = $1::uuid AND merged_into_id IS NULL AND anonymized_at IS NULL
-       ORDER BY updated_at DESC
-       LIMIT $2`,
-      [orgId, capped],
-    );
-    return Object.freeze(result.rows.map(mapSearchRow));
-  }
-
-  const contains = `%${q}%`;
-  const result = await client.query<CustomerRow>(
-    `SELECT id, phone, name, note, created_at, updated_at
-     FROM customers
-     WHERE org_id = $1::uuid AND merged_into_id IS NULL AND anonymized_at IS NULL
-       AND (
-         phone LIKE $2
-         OR phone ILIKE $3
-         OR (name IS NOT NULL AND name ILIKE $3)
-       )
-     ORDER BY updated_at DESC
-     LIMIT $4`,
-    [orgId, `${q}%`, contains, capped],
-  );
-  return Object.freeze(result.rows.map(mapSearchRow));
-}
-
-async function getByPhoneRow(
-  client: SqlClient,
-  orgId: string,
-  phone: string,
-): Promise<CustomerRecord | null> {
-  const result = await client.query<CustomerRow>(
-    `SELECT CASE WHEN source.merged_into_id IS NULL THEN source.id ELSE target.id END AS id,
-            CASE WHEN source.merged_into_id IS NULL THEN source.phone ELSE target.phone END AS phone,
-            CASE WHEN source.merged_into_id IS NULL THEN source.name ELSE target.name END AS name,
-            CASE WHEN source.merged_into_id IS NULL THEN source.note ELSE target.note END AS note,
-            CASE WHEN source.merged_into_id IS NULL
-              THEN source.created_at ELSE target.created_at END AS created_at,
-            CASE WHEN source.merged_into_id IS NULL
-              THEN source.updated_at ELSE target.updated_at END AS updated_at,
-            CASE WHEN source.merged_into_id IS NULL
-              THEN source.merged_into_id ELSE target.merged_into_id END AS merged_into_id
-     FROM customers source
-     LEFT JOIN customers target
-       ON target.org_id = source.org_id AND target.id = source.merged_into_id
-     WHERE source.org_id = $1::uuid AND source.phone = $2
-       AND source.anonymized_at IS NULL
-     LIMIT 1`,
-    [orgId, phone],
-  );
-  const row = result.rows[0];
-  return row === undefined ? null : mapRecord(row);
-}
-
-async function getByIdRow(
-  client: SqlClient,
-  orgId: string,
-  customerId: string,
-): Promise<CustomerRecord | null> {
-  const result = await client.query<CustomerRow>(
-    `SELECT id, phone, name, note, created_at, updated_at, merged_into_id
-       FROM customers
-      WHERE org_id = $1::uuid AND id = $2::uuid
-        AND merged_into_id IS NULL AND anonymized_at IS NULL
-      LIMIT 1`,
-    [orgId, customerId],
-  );
-  const row = result.rows[0];
-  return row === undefined ? null : mapRecord(row);
-}
-
-async function resolveMergeRedirect(
+async function resolvePhoneRoot(
   client: SqlClient,
   orgId: string,
   phone: string,
 ): Promise<string | null> {
-  const result = await client.query<Readonly<{ merged_into_id: string | null }>>(
-    `SELECT merged_into_id::text
+  const result = await client.query<Readonly<{ root_id: string | null }>>(
+    `SELECT customer_canonical_root(id)::text AS root_id
        FROM customers
       WHERE org_id = $1::uuid AND phone = $2 AND anonymized_at IS NULL
       LIMIT 1`,
     [orgId, phone],
   );
-  return result.rows[0]?.merged_into_id ?? null;
+  return result.rows[0]?.root_id ?? null;
+}
+
+async function assertPhoneNotErased(client: SqlClient, phone: string): Promise<void> {
+  const result = await client.query<Readonly<{ erased: boolean }>>(
+    "SELECT customer_phone_erased($1) AS erased",
+    [phone],
+  );
+  if (result.rows[0]?.erased === true) throw new CustomerErasedError();
+}
+
+function isErasedDatabaseError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "P0001" &&
+    "message" in error &&
+    error.message === "CUSTOMER_ERASED"
+  );
+}
+
+async function updateCanonicalByPhone(
+  client: SqlClient,
+  orgId: string,
+  rootId: string,
+  input: CustomerUpsertInput,
+  at: Date,
+): Promise<CustomerUpsertOutcome> {
+  const updated = await client.query<CustomerRow>(
+    `UPDATE customers
+        SET name = CASE WHEN $4::boolean THEN $3 ELSE name END,
+            note = CASE WHEN $6::boolean THEN $5 ELSE note END,
+            version = version + 1,
+            updated_at = $7
+      WHERE org_id = $1::uuid AND id = $2::uuid
+        AND merged_into_id IS NULL AND anonymized_at IS NULL
+      RETURNING id, phone, name, note, version, created_at, updated_at, merged_into_id`,
+    [
+      orgId,
+      rootId,
+      input.name ?? null,
+      input.name !== undefined,
+      input.note ?? null,
+      input.note !== undefined,
+      at,
+    ],
+  );
+  const target = updated.rows[0];
+  if (target === undefined) throw new Error("customer merge redirect target is unavailable");
+  return Object.freeze({ customer: mapRecord(target), created: false });
 }
 
 async function upsertRow(
@@ -171,53 +136,34 @@ async function upsertRow(
 ): Promise<CustomerUpsertOutcome> {
   const nowEpoch = input.now ?? Math.floor(Date.now() / 1000);
   const at = epochToDate(nowEpoch);
-  const updateName = input.name !== undefined;
-  const updateNote = input.note !== undefined;
   const name = input.name ?? null;
   const note = input.note ?? null;
   const id = input.customer_id ?? newId();
-  const redirectedId = await resolveMergeRedirect(client, orgId, input.phone);
-  if (redirectedId !== null) {
-    const redirected = await client.query<CustomerRow>(
-      `UPDATE customers
-          SET name = CASE WHEN $4::boolean THEN $3 ELSE name END,
-              note = CASE WHEN $6::boolean THEN $5 ELSE note END,
-              updated_at = $7
-        WHERE org_id = $1::uuid AND id = $2::uuid
-          AND merged_into_id IS NULL AND anonymized_at IS NULL
-        RETURNING id, phone, name, note, created_at, updated_at, merged_into_id`,
-      [orgId, redirectedId, name, updateName, note, updateNote, at],
-    );
-    const target = redirected.rows[0];
-    if (target === undefined) throw new Error("customer merge redirect target is unavailable");
-    return Object.freeze({ customer: mapRecord(target), created: false });
-  }
+  await assertPhoneNotErased(client, input.phone);
+  const redirectedId = await resolvePhoneRoot(client, orgId, input.phone);
+  if (redirectedId !== null) return updateCanonicalByPhone(client, orgId, redirectedId, input, at);
 
-  type UpsertRow = CustomerRow & { was_inserted: boolean };
-  const result = await client.query<UpsertRow>(
+  const result = await client.query<CustomerRow>(
     `INSERT INTO customers (
-       id, org_id, phone, name, note, created_at, updated_at
+       id, org_id, phone, name, note, version, created_at, updated_at
      ) VALUES (
-       $1::uuid, $2::uuid, $3, $4, $5, $6, $6
+       $1::uuid, $2::uuid, $3, $4, $5, 1, $6, $6
      )
-     ON CONFLICT (org_id, phone) DO UPDATE SET
-       name = CASE WHEN $7::boolean THEN EXCLUDED.name ELSE customers.name END,
-       note = CASE WHEN $8::boolean THEN EXCLUDED.note ELSE customers.note END,
-       updated_at = EXCLUDED.updated_at
-     RETURNING
-       id, phone, name, note, created_at, updated_at, merged_into_id,
-       (xmax = 0) AS was_inserted`,
-    [id, orgId, input.phone, name, note, at, updateName, updateNote],
+     ON CONFLICT (org_id, phone) DO NOTHING
+     RETURNING id, phone, name, note, version, created_at, updated_at, merged_into_id`,
+    [id, orgId, input.phone, name, note, at],
   );
 
   const row = result.rows[0];
   if (row === undefined) {
-    throw new Error("customer upsert returned no row");
+    const racedRoot = await resolvePhoneRoot(client, orgId, input.phone);
+    if (racedRoot === null) throw new Error("customer upsert conflict has no canonical row");
+    return updateCanonicalByPhone(client, orgId, racedRoot, input, at);
   }
 
   return Object.freeze({
     customer: mapRecord(row),
-    created: row.was_inserted === true,
+    created: true,
   });
 }
 
@@ -227,30 +173,14 @@ async function updateRow(
   input: CustomerUpdateInput,
 ): Promise<CustomerRecord | null> {
   try {
-    const result = await client.query<CustomerRow>(
-      `UPDATE customers
-        SET phone = CASE WHEN $4::boolean THEN $3 ELSE phone END,
-            name = CASE WHEN $6::boolean THEN $5 ELSE name END,
-            note = CASE WHEN $8::boolean THEN $7 ELSE note END,
-            updated_at = $9
-      WHERE org_id = $1::uuid AND id = $2::uuid
-        AND merged_into_id IS NULL AND anonymized_at IS NULL
-      RETURNING id, phone, name, note, created_at, updated_at, merged_into_id`,
-      [
-        orgId,
-        input.customer_id,
-        input.phone ?? null,
-        input.phone !== undefined,
-        input.name ?? null,
-        input.name !== undefined,
-        input.note ?? null,
-        input.note !== undefined,
-        epochToDate(input.now),
-      ],
-    );
+    const result =
+      input.phone === undefined
+        ? await updateCustomerMetadata(client, orgId, input)
+        : await updateCustomerPhoneAndMetadata(client, orgId, input, input.phone);
     const row = result.rows[0];
     return row === undefined ? null : mapRecord(row);
   } catch (error) {
+    if (isErasedDatabaseError(error)) throw new CustomerErasedError();
     if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
       return null;
     }
@@ -258,31 +188,64 @@ async function updateRow(
   }
 }
 
-async function findDuplicateRows(
+async function updateCustomerMetadata(
   client: SqlClient,
   orgId: string,
-  customerId: string,
-  limit: number,
-): Promise<readonly CustomerSearchRow[]> {
-  const result = await client.query<CustomerRow>(
-    `SELECT candidate.id, candidate.phone, candidate.name, candidate.note,
-            candidate.created_at, candidate.updated_at, candidate.merged_into_id
-       FROM customers source
-       JOIN customers candidate
-         ON candidate.org_id = source.org_id
-        AND candidate.id <> source.id
-        AND candidate.merged_into_id IS NULL
-        AND candidate.anonymized_at IS NULL
-        AND source.name IS NOT NULL
-        AND lower(btrim(candidate.name)) = lower(btrim(source.name))
-      WHERE source.org_id = $1::uuid AND source.id = $2::uuid
-        AND source.merged_into_id IS NULL
-        AND source.anonymized_at IS NULL
-      ORDER BY candidate.updated_at DESC
-      LIMIT $3`,
-    [orgId, customerId, Math.min(limit, 20)],
+  input: CustomerUpdateInput,
+) {
+  return client.query<CustomerRow>(
+    `UPDATE customers
+        SET name = CASE WHEN $4::boolean THEN $3 ELSE name END,
+            note = CASE WHEN $6::boolean THEN $5 ELSE note END,
+            version = version + 1,
+            updated_at = $7
+      WHERE org_id = $1::uuid AND id = customer_canonical_root($2::uuid)
+        AND version = $8
+        AND merged_into_id IS NULL AND anonymized_at IS NULL
+      RETURNING id, phone, name, note, version, created_at, updated_at, merged_into_id`,
+    [
+      orgId,
+      input.customer_id,
+      input.name ?? null,
+      input.name !== undefined,
+      input.note ?? null,
+      input.note !== undefined,
+      epochToDate(input.now),
+      input.expected_version,
+    ],
   );
-  return Object.freeze(result.rows.map(mapSearchRow));
+}
+
+async function updateCustomerPhoneAndMetadata(
+  client: SqlClient,
+  orgId: string,
+  input: CustomerUpdateInput,
+  phone: string,
+) {
+  await assertPhoneNotErased(client, phone);
+  return client.query<CustomerRow>(
+    `UPDATE customers
+        SET phone = $3,
+            name = CASE WHEN $5::boolean THEN $4 ELSE name END,
+            note = CASE WHEN $7::boolean THEN $6 ELSE note END,
+            version = version + 1,
+            updated_at = $8
+      WHERE org_id = $1::uuid AND id = customer_canonical_root($2::uuid)
+        AND version = $9
+        AND merged_into_id IS NULL AND anonymized_at IS NULL
+      RETURNING id, phone, name, note, version, created_at, updated_at, merged_into_id`,
+    [
+      orgId,
+      input.customer_id,
+      phone,
+      input.name ?? null,
+      input.name !== undefined,
+      input.note ?? null,
+      input.note !== undefined,
+      epochToDate(input.now),
+      input.expected_version,
+    ],
+  );
 }
 
 export function createPgCustomerStore(
@@ -298,26 +261,55 @@ export function createPgCustomerStore(
       limit: number,
     ): Promise<readonly CustomerSearchRow[]> =>
       withOrgGucOrCurrent(pool, { orgId }, async (client) =>
-        searchRows(client, orgId, typeof query === "string" ? query : "", limit),
+        searchCustomerRows(client, orgId, typeof query === "string" ? query : "", limit),
       ),
 
     getByPhone: async (phone: string): Promise<CustomerRecord | null> =>
-      withOrgGucOrCurrent(pool, { orgId }, async (client) => getByPhoneRow(client, orgId, phone)),
+      withOrgGucOrCurrent(pool, { orgId }, async (client) =>
+        getCustomerByPhoneRow(client, orgId, phone),
+      ),
 
     getById: async (customerId: string): Promise<CustomerRecord | null> =>
-      withOrgGucOrCurrent(pool, { orgId }, async (client) => getByIdRow(client, orgId, customerId)),
+      withOrgGucOrCurrent(pool, { orgId }, async (client) =>
+        getCustomerByIdRow(client, orgId, customerId),
+      ),
+
+    resolveCanonicalId: async (customerId: string): Promise<string | null> =>
+      withOrgGucOrCurrent(pool, { orgId }, async (client) => {
+        const result = await client.query<Readonly<{ root_id: string | null }>>(
+          "SELECT customer_canonical_root($1::uuid)::text AS root_id",
+          [customerId],
+        );
+        return result.rows[0]?.root_id ?? null;
+      }),
+
+    listCanonicalGroup: async (customerId: string): Promise<readonly string[]> =>
+      withOrgGucOrCurrent(pool, { orgId }, async (client) => {
+        const result = await client.query<Readonly<{ group_customer_id: string }>>(
+          "SELECT group_customer_id::text FROM customer_canonical_group($1::uuid)",
+          [customerId],
+        );
+        return Object.freeze(result.rows.map((row) => row.group_customer_id));
+      }),
 
     upsert: async (input: CustomerUpsertInput): Promise<CustomerUpsertOutcome> =>
-      withOrgGucOrCurrent(pool, { orgId }, async (client) =>
-        upsertRow(client, orgId, input, newId),
-      ),
+      withOrgGucOrCurrent(pool, { orgId }, async (client) => {
+        try {
+          return await upsertRow(client, orgId, input, newId);
+        } catch (error) {
+          if (isErasedDatabaseError(error)) throw new CustomerErasedError();
+          throw error;
+        }
+      }),
 
     update: async (input: CustomerUpdateInput): Promise<CustomerRecord | null> =>
       withOrgGucOrCurrent(pool, { orgId }, async (client) => updateRow(client, orgId, input)),
 
     merge: async (input: CustomerMergeInput): Promise<CustomerMergeResult | null> =>
-      withStoreGucOrCurrent(pool, { orgId, storeId: input.store_id }, async (client) =>
-        mergeCustomerRows(client, orgId, input),
+      withStoreGucOrCurrent(
+        pool,
+        { orgId, storeId: input.store_id, staffId: input.staff_id },
+        async (client) => mergeCustomerRows(client, orgId, input),
       ),
 
     findDuplicates: async (
@@ -325,7 +317,7 @@ export function createPgCustomerStore(
       limit: number,
     ): Promise<readonly CustomerSearchRow[]> =>
       withOrgGucOrCurrent(pool, { orgId }, async (client) =>
-        findDuplicateRows(client, orgId, customerId, limit),
+        findCustomerDuplicateRows(client, orgId, customerId, limit),
       ),
     ...createPgCustomerPrivacyOperations(pool, orgId),
   });

@@ -141,9 +141,29 @@ export function createPgOrderStore(
         async (client) => appendRefundTxn(client, input, newId),
       ),
 
-    cancelOpenOrder: async (orgId, storeId, orderId, reason, staffId, at, businessDate) =>
+    cancelOpenOrder: async (
+      orgId,
+      storeId,
+      orderId,
+      reason,
+      staffId,
+      at,
+      businessDate,
+      beforeCommit,
+    ) =>
       withStoreGucOrCurrent(pool, { orgId, storeId, staffId }, async (client) =>
-        cancelOrderTxn(client, orgId, storeId, orderId, reason, staffId, at, businessDate, newId),
+        cancelOrderTxn(
+          client,
+          orgId,
+          storeId,
+          orderId,
+          reason,
+          staffId,
+          at,
+          businessDate,
+          newId,
+          beforeCommit,
+        ),
       ),
 
     nextTicketSeq: async (orgId, storeId, dayKey) =>

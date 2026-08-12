@@ -1,6 +1,7 @@
 import type { AccountingAggregation, AccountingGroupBy, AccountingMovement } from "@laundry/domain";
 
 import type { SqlClient, TenantContext } from "../db/types.js";
+import type { StoreTimeZoneResolver } from "../store-management/time-zone.js";
 
 export type AccountingReadRequest = Readonly<{
   client: SqlClient;
@@ -18,6 +19,7 @@ export type AccountingReadPort = Readonly<{
 export type AccountingHandlerDeps = Readonly<{
   source: AccountingReadPort;
   timeZone: string;
+  resolveTimeZone?: StoreTimeZoneResolver;
   rolloverHour?: number;
   now?: () => Date;
 }>;

@@ -5,6 +5,7 @@ import { HandlerCommandError } from "../bus/types.js";
 import { createCommandError } from "@laundry/contracts";
 import { EMPTY_PRICING_POLICY, type StorePricingPolicy } from "../pricing/types.js";
 import type { GarmentDetailRecord, PricingAddonSnapshot } from "./types.js";
+import type { CustomerOrderPolicySnapshot } from "../customer-profile/order-policy.js";
 
 type ParsedGarmentDetail = Readonly<{
   color: string | null;
@@ -43,6 +44,12 @@ export type TrustedPricingPlan = Readonly<{
   urgent_selected: boolean;
   freight_selected: boolean;
 }>;
+
+export type CustomerPolicyPricing = TrustedPricingPlan &
+  Readonly<{
+    discount_source: "none" | "manual" | "customer" | "tier";
+    discount_bps: number;
+  }>;
 
 const paymentMethods = new Set(["cash", "wechat", "alipay", "other"]);
 
@@ -200,6 +207,56 @@ export function resolveTrustedPricing(
     urgent_selected: urgentSelected,
     freight_selected: freightSelected,
   });
+}
+
+function basisPointDiscount(lines: readonly ServerPricedLine[], discountBps: number): number {
+  const original = lines.reduce(
+    (total, line) => total + BigInt(line.unit_price_cents) * BigInt(line.qty),
+    0n,
+  );
+  const discount = (original * BigInt(discountBps)) / 10_000n;
+  if (discount > BigInt(Number.MAX_SAFE_INTEGER)) throw invalid();
+  return Number(discount);
+}
+
+export function resolveCustomerPolicyPricing(
+  trusted: TrustedPricingPlan,
+  policy: CustomerOrderPolicySnapshot | null,
+): CustomerPolicyPricing {
+  if ((trusted.adjustments.discount_cents ?? 0) > 0) {
+    return Object.freeze({ ...trusted, discount_source: "manual", discount_bps: 0 });
+  }
+  const customerBps = policy?.customer_discount_bps ?? null;
+  const tierBps = policy?.tier?.discount_bps ?? 0;
+  const source =
+    customerBps !== null
+      ? ("customer" as const)
+      : tierBps > 0
+        ? ("tier" as const)
+        : ("none" as const);
+  const discountBps = source === "customer" ? (customerBps ?? 0) : source === "tier" ? tierBps : 0;
+  return Object.freeze({
+    ...trusted,
+    adjustments: Object.freeze({
+      ...trusted.adjustments,
+      discount_cents: basisPointDiscount(trusted.lines, discountBps),
+    }),
+    discount_source: source,
+    discount_bps: discountBps,
+  });
+}
+
+export function assertReplayCustomerPolicy(
+  via: string,
+  policy: CustomerOrderPolicySnapshot | null,
+): void {
+  if (
+    via === "edge_replay" &&
+    policy !== null &&
+    (policy.customer_profile_version > 0 || policy.tier !== null)
+  ) {
+    throw new HandlerCommandError(createCommandError("REPLAY_ARBITRATION_REQUIRED"));
+  }
 }
 
 export function deriveBusinessDate(

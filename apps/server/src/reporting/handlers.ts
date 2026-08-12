@@ -49,7 +49,11 @@ function queryHandler(deps: ReportingHandlerDeps): CommandHandler {
     OwnerDashboardInputSchema.parse(ctx.parsed);
     const now = validNow(deps);
     const rolloverHour = deps.rolloverHour ?? 0;
-    const businessDate = businessDayAt(now, deps.timeZone, rolloverHour).business_date;
+    const timeZone =
+      deps.resolveTimeZone === undefined
+        ? deps.timeZone
+        : await deps.resolveTimeZone(ctx.client, ctx.tenant);
+    const businessDate = businessDayAt(now, timeZone, rolloverHour).business_date;
     const dateFrom = shiftBusinessDate(businessDate, -(OWNER_DASHBOARD_TREND_DAYS - 1));
     const accounting = await deps.accounting.readReport({
       client: ctx.client,
@@ -63,10 +67,10 @@ function queryHandler(deps: ReportingHandlerDeps): CommandHandler {
       client: ctx.client,
       tenant: ctx.tenant,
       businessDate,
-      dayStartedAt: businessDayStart(businessDate, deps.timeZone, rolloverHour),
+      dayStartedAt: businessDayStart(businessDate, timeZone, rolloverHour),
       nextDayStartedAt: businessDayStart(
         shiftBusinessDate(businessDate, 1),
-        deps.timeZone,
+        timeZone,
         rolloverHour,
       ),
       overdueCutoff: ownerDashboardOverdueCutoff(now),
@@ -102,7 +106,11 @@ function drilldownHandler(deps: ReportingHandlerDeps): CommandHandler {
     requireAccountingRead(ctx.actor.permissions);
     const input = OwnerDashboardDrilldownInputSchema.parse(ctx.parsed);
     const now = validNow(deps);
-    const scope = readScope(deps, now, deps.timeZone);
+    const timeZone =
+      deps.resolveTimeZone === undefined
+        ? deps.timeZone
+        : await deps.resolveTimeZone(ctx.client, ctx.tenant);
+    const scope = readScope(deps, now, timeZone);
     const snapshot = await deps.source.readDrilldown({
       client: ctx.client,
       tenant: ctx.tenant,

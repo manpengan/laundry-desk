@@ -47,6 +47,8 @@ export type PendingAction = Readonly<{
   orgId: string;
   storeId: string;
   idempotencyKey: string;
+  /** Non-PII relation used to purge frozen args during subject erasure. */
+  privacySubjectCustomerId: string | null;
   /** Epoch seconds. */
   createdAt: number;
   /** Epoch seconds. */
@@ -75,6 +77,7 @@ export type CreatePendingActionInput = Readonly<{
   orgId: string;
   storeId: string;
   idempotencyKey: string;
+  privacySubjectCustomerId?: string | null;
   createdAt: number;
   /** Override TTL; default PENDING_ACTION_TTL_SECONDS. */
   ttlSeconds?: number;
@@ -114,11 +117,52 @@ export type PendingActionTransactionContext = PendingActionReadContext &
 
 type MaybePromise<T> = T | Promise<T>;
 
+export const NOTIFICATION_ACTIVE_PENDING_LIMIT = 100;
+export const NOTIFICATION_ROLLING_PENDING_LIMIT = 100;
+
+export class PendingRiskCapacityExceededError extends Error {
+  override readonly name = "PendingRiskCapacityExceededError";
+}
+
+export type PendingRiskReservationRequest = Readonly<{
+  kind: "notification_delivery_rolling_24h";
+  command: "notification.delivery_batch.enqueue";
+  commandVersion: "0.1.0";
+  units: number;
+  threshold: 10;
+  windowSeconds: 86_400;
+  activePendingLimit: typeof NOTIFICATION_ACTIVE_PENDING_LIMIT;
+  rollingPendingLimit: typeof NOTIFICATION_ROLLING_PENDING_LIMIT;
+  nowEpochSeconds: number;
+}>;
+
+export type PendingRiskReservation = Readonly<{
+  kind: PendingRiskReservationRequest["kind"];
+  units: number;
+  prior_units: number;
+  aggregate_units: number;
+  threshold: 10;
+  window_started_at_epoch: number;
+}>;
+
 export type PendingActionStore = Readonly<{
+  /** Acquire the transaction-local privacy ordering lock before any card/proof row lock. */
+  lockPrivacy: (transaction: PendingActionTransactionContext) => MaybePromise<void>;
+  /** Measure a store-wide rolling risk reservation while the policy lock is held. */
+  measureRiskReservation: (
+    request: PendingRiskReservationRequest,
+    transaction?: PendingActionTransactionContext,
+  ) => MaybePromise<PendingRiskReservation>;
   create: (
     input: CreatePendingActionInput,
     transaction?: PendingActionTransactionContext,
   ) => MaybePromise<PendingAction>;
+  /** Resolve a prior first-hop card for the same command idempotency key. */
+  findByIdempotency: (
+    command: string,
+    idempotencyKey: string,
+    context?: PendingActionReadContext | PendingActionTransactionContext,
+  ) => MaybePromise<PendingAction | null>;
   get: (
     nonce: string,
     context?: PendingActionReadContext | PendingActionTransactionContext,
@@ -138,4 +182,11 @@ export type PendingActionStore = Readonly<{
       transaction?: PendingActionTransactionContext;
     }>,
   ) => MaybePromise<ConsumeResult>;
+  /** Bounded retention cleanup for this authenticated tenant/store. */
+  pruneExpired?: (
+    nowEpochSeconds: number,
+    context: PendingActionReadContext,
+  ) => MaybePromise<number>;
+  /** Bounded cross-store maintenance; PostgreSQL owns scope and current time. */
+  pruneExpiredGlobally?: () => MaybePromise<number>;
 }>;

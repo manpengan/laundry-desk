@@ -1,9 +1,6 @@
 /**
  * Real PostgreSQL regressions for the stored-value ledger.
- *
- * Deliberately NOT a capturing mock pool. Asserting SQL text would have passed
- * against migration 0019's broken business_date regex too; money paths only
- * count when a real row lands in a real table (milestone 1 record §3).
+ * SQL-text mocks would miss database constraints; money paths require real rows.
  */
 
 import assert from "node:assert/strict";
@@ -66,7 +63,10 @@ async function seedCustomer(): Promise<string> {
 }
 
 /** A real order for the ledger's order FK to point at. */
-async function seedOrder(businessDate: string = BUSINESS_DATE): Promise<string> {
+async function seedOrder(
+  customerId: string,
+  businessDate: string = BUSINESS_DATE,
+): Promise<string> {
   const orderId = randomUUID();
   const pool = createPgPool({ connectionString: urls!.app });
   try {
@@ -74,14 +74,14 @@ async function seedOrder(businessDate: string = BUSINESS_DATE): Promise<string> 
       withTenantTransaction(client, TENANT, async (tx) => {
         await tx.query(
           `INSERT INTO orders (
-             id, org_id, store_id, status, subtotal_cents, payable_cents,
+             id, org_id, store_id, customer_id, status, subtotal_cents, payable_cents,
              paid_cents, balance_cents, created_at, updated_at,
              created_by_staff_id, business_date
            ) VALUES (
-             $1::uuid, $2::uuid, $3::uuid, 'open', 5000, 5000,
-             0, 5000, now(), now(), $4::uuid, $5
+             $1::uuid, $2::uuid, $3::uuid, $4::uuid, 'open', 5000, 5000,
+             0, 5000, now(), now(), $5::uuid, $6
            )`,
-          [orderId, TENANT.orgId, TENANT.storeId, TENANT.staffId, businessDate],
+          [orderId, TENANT.orgId, TENANT.storeId, customerId, TENANT.staffId, businessDate],
         );
       }),
     );
@@ -182,12 +182,13 @@ maybe("a spend beyond the balance is refused and leaves no ledger row", async ()
     }),
   );
 
-  const orderId = await seedOrder();
+  const orderId = await seedOrder(customerId);
   const outcome = await withStore((store) =>
     store.spend({
       account_id: accountId,
       store_id: TENANT.storeId,
       order_id: orderId,
+      order_customer_id: customerId,
       amount_cents: 1_001,
       staff_id: TENANT.staffId,
       at: 1_780_000_300,
@@ -204,7 +205,7 @@ maybe("a spend beyond the balance is refused and leaves no ledger row", async ()
 
 maybe("a successful spend writes a real ledger row against the order", async () => {
   const customerId = await seedCustomer();
-  const orderId = await seedOrder();
+  const orderId = await seedOrder(customerId);
   const opened = await withStore((store) =>
     store.openAccount({ customer_id: customerId, store_id: TENANT.storeId, at: 1_780_000_000 }),
   );
@@ -229,6 +230,7 @@ maybe("a successful spend writes a real ledger row against the order", async () 
       account_id: accountId,
       store_id: TENANT.storeId,
       order_id: orderId,
+      order_customer_id: customerId,
       amount_cents: 4_200,
       staff_id: TENANT.staffId,
       at: 1_780_000_300,
@@ -252,6 +254,44 @@ maybe("a successful spend writes a real ledger row against the order", async () 
     0,
   );
   assert.equal(summed, view?.balance.total_cents);
+});
+
+maybe("a member account cannot settle another customer's order", async () => {
+  const accountCustomerId = await seedCustomer();
+  const orderCustomerId = await seedCustomer();
+  const orderId = await seedOrder(orderCustomerId);
+  const accountId = await openAccountFor(accountCustomerId);
+  await withStore((store) =>
+    store.topup({
+      account_id: accountId,
+      store_id: TENANT.storeId,
+      amount_cents: 10_000,
+      tender: "cash",
+      staff_id: TENANT.staffId,
+      at: 1_780_000_200,
+      business_date: BUSINESS_DATE,
+      note: null,
+    }),
+  );
+
+  const outcome = await withStore((store) =>
+    store.spend({
+      account_id: accountId,
+      store_id: TENANT.storeId,
+      order_id: orderId,
+      order_customer_id: orderCustomerId,
+      amount_cents: 1_000,
+      staff_id: TENANT.staffId,
+      at: 1_780_000_300,
+      business_date: BUSINESS_DATE,
+      note: "must not cross customer boundary",
+    }),
+  );
+
+  assert.deepEqual(outcome, { ok: false, reason: "account_customer_mismatch" });
+  const view = await withStore((store) => store.getByCustomer(accountCustomerId, 10));
+  assert.equal(view?.balance.total_cents, 10_000);
+  assert.equal(view?.recent.length, 1);
 });
 
 maybe("two concurrent spends cannot both take the same money", async () => {
@@ -278,13 +318,14 @@ maybe("two concurrent spends cannot both take the same money", async () => {
   // Each spend runs in its own transaction on its own connection, both asking
   // for the whole balance. Without FOR UPDATE both would read 1000 and both
   // would succeed, leaving -1000.
-  const orderId = await seedOrder();
+  const orderId = await seedOrder(customerId);
   const spendWhole = (): Promise<{ ok: boolean }> =>
     withStore((store) =>
       store.spend({
         account_id: accountId,
         store_id: TENANT.storeId,
         order_id: orderId,
+        order_customer_id: customerId,
         amount_cents: 1_000,
         staff_id: TENANT.staffId,
         at: 1_780_000_400,
@@ -563,7 +604,7 @@ maybe("a settlement carries no tender, so it never double-counts the drawer", as
   const customerId = await seedCustomer();
   const accountId = await openAccountFor(customerId);
   const isolatedDate = "2026-08-12";
-  const orderId = await seedOrder(isolatedDate);
+  const orderId = await seedOrder(customerId, isolatedDate);
 
   const toppedUp = await withStore((store) =>
     store.topup({
@@ -589,6 +630,7 @@ maybe("a settlement carries no tender, so it never double-counts the drawer", as
       account_id: accountId,
       store_id: TENANT.storeId,
       order_id: orderId,
+      order_customer_id: customerId,
       amount_cents: 20_000,
       staff_id: TENANT.staffId,
       at: 1_780_000_400,
@@ -612,7 +654,7 @@ maybe("PostgreSQL refuses a settlement row that claims a tender", async () => {
   const customerId = await seedCustomer();
   const accountId = await openAccountFor(customerId);
   const isolatedDate = "2026-08-13";
-  const orderId = await seedOrder(isolatedDate);
+  const orderId = await seedOrder(customerId, isolatedDate);
 
   await assert.rejects(
     insertRawLedger({
@@ -671,7 +713,7 @@ maybe("PostgreSQL permits a reversal to restore previously consumed bonus", asyn
     kind: "pay",
     principal: 0,
     bonus: -1,
-    orderId: await seedOrder(businessDate),
+    orderId: await seedOrder(customerId, businessDate),
     tender: null,
     businessDate,
   });

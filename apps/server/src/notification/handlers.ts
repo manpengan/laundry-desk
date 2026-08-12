@@ -14,6 +14,7 @@ import type { MutableCommandRegistry } from "../bus/registry.js";
 import type { MutableQueryRegistry } from "../bus/query-registry.js";
 import { HandlerCommandError, type CommandHandler, type HandlerOutcome } from "../bus/types.js";
 import { buildNotificationCsv } from "./csv.js";
+import { createNotificationDeliveryHandlers } from "./delivery-handlers.js";
 import type { NotificationHandlerDeps, PickupReminderFilters } from "./types.js";
 
 function requireCustomerRead(permissions: readonly string[] | undefined): void {
@@ -200,12 +201,29 @@ export function registerNotificationHandlers(
   deps: NotificationHandlerDeps,
 ): void {
   const handlers = createNotificationHandlers(deps);
+  const deliveryHandlers = createNotificationDeliveryHandlers(deps);
   commandRegistry.registerHandler(
     "notification.manual_list.create",
     handlers["notification.manual_list.create"],
   );
+  commandRegistry.registerHandler(
+    "notification.delivery_batch.enqueue",
+    deliveryHandlers["notification.delivery_batch.enqueue"],
+  );
   queryRegistry?.registerHandler(
     "notification.pickup_reminders.list",
     handlers["notification.pickup_reminders.list"],
+  );
+  queryRegistry?.registerHandler(
+    "notification.delivery.capability.get",
+    deliveryHandlers["notification.delivery.capability.get"],
+  );
+  queryRegistry?.registerHandler(
+    "notification.delivery_batches.list",
+    deliveryHandlers["notification.delivery_batches.list"],
+  );
+  queryRegistry?.registerHandler(
+    "notification.delivery_batch.get",
+    deliveryHandlers["notification.delivery_batch.get"],
   );
 }

@@ -2,7 +2,8 @@
  * R3 confirmation over HTTP.
  *
  * A policy-gated command answers the first call with a confirm_ref, and the
- * direct-args client replies with a bare `{ confirm_ref }` body. That body
+ * direct-args client replies with a bare `{ confirm_ref }` body and a stable
+ * idempotency header. That body
  * carries none of the branded envelope keys, so it used to fall through to the
  * raw-args path and get validated against the command schema — every R3
  * confirmation was unfinishable from the browser. Server-side tests missed it
@@ -18,6 +19,7 @@ import { resolveCookiePolicy } from "./cookie-policy.js";
 import { createLocalApp } from "./create-app.js";
 
 const DEVICE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const IDEMPOTENCY_KEY = "10000000-0000-4000-8000-000000000001";
 const localCookies = resolveCookiePolicy({ secure: false });
 const browserHeaders = Object.freeze({
   host: "127.0.0.1:8787",
@@ -62,6 +64,7 @@ test("a bare confirm_ref body is treated as a confirmation, not as command args"
       authorization: `Bearer ${token}`,
       cookie: cookies,
       "x-csrf-token": csrf,
+      "idempotency-key": IDEMPOTENCY_KEY,
     };
 
     const first = await app.inject({
@@ -91,6 +94,67 @@ test("a bare confirm_ref body is treated as a confirmation, not as command args"
       secondBody.error?.code,
       "VALIDATION_FAILED",
       "a confirmation must never be validated as command args",
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test("direct HTTP command retries are replayed by their validated header key", async () => {
+  const app = await buildApp();
+  try {
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/v2/auth/login",
+      headers: browserHeaders,
+      payload: {
+        org_code: "local",
+        store_code: "main",
+        username: "admin",
+        password: DEMO_PASSWORD,
+        device_id: DEVICE,
+      },
+    });
+    assert.equal(login.statusCode, 200, login.body);
+    const token = (login.json() as { data: { access_token: string } }).data.access_token;
+    const cookies = readCookies(login.headers as Record<string, unknown>);
+    const csrf = /(?:__Host-)?laundry_csrf=([^;]+)/u.exec(cookies)?.[1] ?? "";
+    const headers = {
+      ...browserHeaders,
+      authorization: `Bearer ${token}`,
+      cookie: cookies,
+      "x-csrf-token": csrf,
+      "idempotency-key": "10000000-0000-4000-8000-000000000002",
+    };
+    const payload = {
+      lines: [{ service_code: "wash", category_code: "shirt", qty: 1 }],
+    };
+    const first = await app.inject({
+      method: "POST",
+      url: "/v1/commands/order.receive",
+      headers,
+      payload,
+    });
+    const replay = await app.inject({
+      method: "POST",
+      url: "/v1/commands/order.receive",
+      headers,
+      payload,
+    });
+    assert.equal(first.statusCode, 200, first.body);
+    assert.equal(replay.statusCode, 200, replay.body);
+    assert.deepEqual(replay.json(), first.json());
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/v1/commands/order.receive",
+      headers: { ...headers, "idempotency-key": "not-a-uuid" },
+      payload,
+    });
+    assert.equal(invalid.statusCode, 400, invalid.body);
+    assert.equal(
+      (invalid.json() as { error?: { code?: string } }).error?.code,
+      "VALIDATION_FAILED",
     );
   } finally {
     await app.close();

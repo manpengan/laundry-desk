@@ -24,6 +24,9 @@ const baseInput = (overrides: Partial<CreatePendingActionInput> = {}): CreatePen
     orgId: overrides.orgId ?? ORG,
     storeId: overrides.storeId ?? STORE,
     idempotencyKey: overrides.idempotencyKey ?? "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    ...(overrides.privacySubjectCustomerId === undefined
+      ? {}
+      : { privacySubjectCustomerId: overrides.privacySubjectCustomerId }),
     createdAt: overrides.createdAt ?? 1_700_000_000,
     effectiveRisk: overrides.effectiveRisk ?? "R4",
     policyOutcome: overrides.policyOutcome ?? "step_up",
@@ -126,4 +129,42 @@ test("expired card cannot be consumed", () => {
 test("get returns null for unknown nonce", () => {
   const store = new MemoryPendingActionStore();
   assert.equal(store.get("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"), null);
+});
+
+test("pending card freezes a non-PII privacy subject relation", () => {
+  const store = new MemoryPendingActionStore();
+  const customerId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+  const action = store.create(
+    baseInput({
+      privacySubjectCustomerId: customerId,
+      args: { customer_id: customerId, service_note: "synthetic private note" },
+    }),
+  );
+  assert.equal(action.privacySubjectCustomerId, customerId);
+});
+
+test("pending card cleanup retains 30 days after expiry and is bounded by time", () => {
+  const store = new MemoryPendingActionStore();
+  const now = 2_000_000_000;
+  const retention = 30 * 24 * 60 * 60;
+  const ttlSeconds = 60;
+  const expiredAtCutoff = now - retention;
+  const deleted = store.create(
+    baseInput({
+      nonce: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1",
+      createdAt: expiredAtCutoff - ttlSeconds,
+      ttlSeconds,
+    }),
+  );
+  const retained = store.create(
+    baseInput({
+      nonce: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee2",
+      createdAt: expiredAtCutoff - ttlSeconds + 1,
+      ttlSeconds,
+    }),
+  );
+
+  assert.equal(store.pruneExpired(now), 1);
+  assert.equal(store.get(deleted.nonce), null);
+  assert.ok(store.get(retained.nonce));
 });

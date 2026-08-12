@@ -1,5 +1,6 @@
 import { buildSetLocalGucStatements, parseTenantContext } from "./guc.js";
 import { runWithActiveTenantTransaction } from "./active-tenant-transaction.js";
+import { runWithMemoryUnitOfWork } from "./memory-unit-of-work.js";
 import type { SqlClient, TenantContext, TenantTransactionFn } from "./types.js";
 
 export type TenantTransactionOptions = Readonly<{
@@ -36,14 +37,17 @@ export async function withTenantTransaction<TResult>(
 
   await client.query(beginSql(options));
   try {
-    for (const statement of statements) {
-      await client.query(statement.sql, statement.values);
-    }
-    const result = await runWithActiveTenantTransaction(Object.freeze({ client, tenant }), () =>
-      fn(client),
-    );
-    await client.query("COMMIT");
-    return result;
+    const execute = async () => {
+      for (const statement of statements) {
+        await client.query(statement.sql, statement.values);
+      }
+      const result = await runWithActiveTenantTransaction(Object.freeze({ client, tenant }), () =>
+        fn(client),
+      );
+      await client.query("COMMIT");
+      return result;
+    };
+    return await (client.memoryTransaction === true ? runWithMemoryUnitOfWork(execute) : execute());
   } catch (error) {
     await rollbackQuietly(client);
     throw error;

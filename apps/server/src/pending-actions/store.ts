@@ -5,13 +5,19 @@
  */
 
 import { freezeCanonical, hashCanonical } from "./canonical.js";
+import { registerMemoryRollback } from "../db/memory-unit-of-work.js";
 import {
   PENDING_ACTION_TTL_SECONDS,
   type ConsumeResult,
   type CreatePendingActionInput,
   type EntityVersion,
   type PendingAction,
+  type PendingActionReadContext,
   type PendingActionStore,
+  type PendingActionTransactionContext,
+  type PendingRiskReservation,
+  type PendingRiskReservationRequest,
+  PendingRiskCapacityExceededError,
 } from "./types.js";
 
 export const freezeEntityVersions = (
@@ -50,6 +56,7 @@ export function createPendingActionSnapshot(input: CreatePendingActionInput): Pe
     orgId: input.orgId,
     storeId: input.storeId,
     idempotencyKey: input.idempotencyKey,
+    privacySubjectCustomerId: input.privacySubjectCustomerId ?? null,
     createdAt: input.createdAt,
     expiresAt: input.createdAt + ttl,
     status: "pending",
@@ -67,6 +74,41 @@ export function createPendingActionSnapshot(input: CreatePendingActionInput): Pe
 export class MemoryPendingActionStore implements PendingActionStore {
   private readonly records = new Map<string, PendingAction>();
 
+  lockPrivacy(): void {
+    // The process-local map has no independent row locks to order.
+  }
+
+  measureRiskReservation(
+    request: PendingRiskReservationRequest,
+    transaction?: PendingActionTransactionContext,
+  ): PendingRiskReservation {
+    const windowStart = request.nowEpochSeconds - request.windowSeconds;
+    const scoped = [...this.records.values()].filter(
+      (action) =>
+        (transaction === undefined ||
+          (action.orgId === transaction.tenant.orgId &&
+            action.storeId === transaction.tenant.storeId)) &&
+        action.command === request.command &&
+        action.commandVersion === request.commandVersion,
+    );
+    const activeCount = scoped.filter(
+      (action) => action.status === "pending" && action.expiresAt > request.nowEpochSeconds,
+    ).length;
+    const rollingCount = scoped.filter((action) => action.createdAt >= windowStart).length;
+    if (activeCount >= request.activePendingLimit || rollingCount >= request.rollingPendingLimit) {
+      throw new PendingRiskCapacityExceededError("Active notification pending limit reached");
+    }
+    const priorUnits = scoped
+      .filter(
+        (action) =>
+          action.createdAt >= windowStart &&
+          (action.status === "consumed" ||
+            (action.status === "pending" && action.expiresAt > request.nowEpochSeconds)),
+      )
+      .reduce((total, action) => total + notificationUnits(action.args), 0);
+    return freezeRiskReservation(request, windowStart, priorUnits);
+  }
+
   create(input: CreatePendingActionInput): PendingAction {
     if (this.records.has(input.nonce)) {
       throw new Error(`Pending action nonce already exists: ${input.nonce}`);
@@ -75,7 +117,26 @@ export class MemoryPendingActionStore implements PendingActionStore {
     const action = createPendingActionSnapshot(input);
 
     this.records.set(action.nonce, action);
+    registerMemoryRollback(() => {
+      if (this.records.get(action.nonce) === action) this.records.delete(action.nonce);
+    });
     return action;
+  }
+
+  findByIdempotency(
+    command: string,
+    idempotencyKey: string,
+    context?: PendingActionReadContext | PendingActionTransactionContext,
+  ): PendingAction | null {
+    return (
+      [...this.records.values()].find(
+        (action) =>
+          action.command === command &&
+          action.idempotencyKey === idempotencyKey &&
+          (context === undefined ||
+            (action.orgId === context.tenant.orgId && action.storeId === context.tenant.storeId)),
+      ) ?? null
+    );
   }
 
   get(nonce: string): PendingAction | null {
@@ -109,7 +170,9 @@ export class MemoryPendingActionStore implements PendingActionStore {
     }
     if (current.status === "expired" || now >= current.expiresAt) {
       if (current.status === "pending") {
-        this.records.set(nonce, freezePendingAction({ ...current, status: "expired" }));
+        const expired = freezePendingAction({ ...current, status: "expired" });
+        this.records.set(nonce, expired);
+        this.restoreOnRollback(nonce, current, expired);
       }
       return Object.freeze({ ok: false as const, reason: "EXPIRED" as const });
     }
@@ -134,7 +197,24 @@ export class MemoryPendingActionStore implements PendingActionStore {
       consumedAt: now,
     });
     this.records.set(nonce, consumed);
+    this.restoreOnRollback(nonce, current, consumed);
     return Object.freeze({ ok: true as const, action: consumed });
+  }
+
+  pruneExpired(nowEpochSeconds: number): number {
+    const retentionCutoff = nowEpochSeconds - 30 * 24 * 60 * 60;
+    const expiredNonces = [...this.records.values()]
+      .filter((action) => action.expiresAt <= retentionCutoff)
+      .map((action) => action.nonce);
+    for (const nonce of expiredNonces) {
+      const current = this.records.get(nonce);
+      if (current === undefined) continue;
+      this.records.delete(nonce);
+      registerMemoryRollback(() => {
+        if (!this.records.has(nonce)) this.records.set(nonce, current);
+      });
+    }
+    return expiredNonces.length;
   }
 
   /** Test helper: number of stored cards. */
@@ -144,6 +224,48 @@ export class MemoryPendingActionStore implements PendingActionStore {
 
   /** Test helper: wipe all cards. */
   clear(): void {
+    const previous = new Map(this.records);
     this.records.clear();
+    registerMemoryRollback(() => {
+      if (this.records.size === 0) {
+        for (const [nonce, action] of previous) this.records.set(nonce, action);
+      }
+    });
   }
+
+  private restoreOnRollback(nonce: string, before: PendingAction, after: PendingAction): void {
+    registerMemoryRollback(() => {
+      if (this.records.get(nonce) === after) this.records.set(nonce, before);
+    });
+  }
+}
+
+function notificationUnits(args: unknown): number {
+  if (typeof args !== "object" || args === null || Array.isArray(args)) {
+    throw new Error("Notification risk reservation args are invalid");
+  }
+  const orderIds = (args as Readonly<Record<string, unknown>>).order_ids;
+  if (!Array.isArray(orderIds) || orderIds.length < 1 || orderIds.length > 50) {
+    throw new Error("Notification risk reservation order ids are invalid");
+  }
+  return orderIds.length;
+}
+
+function freezeRiskReservation(
+  request: PendingRiskReservationRequest,
+  windowStart: number,
+  priorUnits: number,
+): PendingRiskReservation {
+  const aggregateUnits = priorUnits + request.units;
+  if (!Number.isSafeInteger(aggregateUnits) || aggregateUnits < request.units) {
+    throw new Error("Notification risk reservation total is invalid");
+  }
+  return Object.freeze({
+    kind: request.kind,
+    units: request.units,
+    prior_units: priorUnits,
+    aggregate_units: aggregateUnits,
+    threshold: request.threshold,
+    window_started_at_epoch: windowStart,
+  });
 }

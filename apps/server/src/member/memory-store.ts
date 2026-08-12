@@ -161,6 +161,18 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemoryMemberSto
       });
     },
 
+    getById: async (accountId: string, limit: number): Promise<MemberAccountView | null> => {
+      const account = accounts.get(accountId);
+      if (account === undefined) return null;
+      const rows = ledger.get(accountId) ?? [];
+      const recent = rows.slice(Math.max(0, rows.length - limit)).reverse();
+      return Object.freeze({
+        account,
+        balance: balanceOf(accountId),
+        recent: Object.freeze(recent),
+      });
+    },
+
     topup: async (input: MemberTopupInput): Promise<MemberOutcome<MemberLedgerAppendResult>> => {
       const found = activeAccount(input.account_id);
       if (!found.ok) return found as MemberOutcome<MemberLedgerAppendResult>;
@@ -191,6 +203,9 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemoryMemberSto
     spend: async (input: MemberSpendInput): Promise<MemberOutcome<MemberLedgerAppendResult>> => {
       const found = activeAccount(input.account_id);
       if (!found.ok) return found as MemberOutcome<MemberLedgerAppendResult>;
+      if (found.value.customer_id !== input.order_customer_id) {
+        return reject("account_customer_mismatch");
+      }
       const outcome = allocateSpend(balanceOf(input.account_id), input.amount_cents);
       if (!outcome.ok) return reject(outcome.reason);
       return append(

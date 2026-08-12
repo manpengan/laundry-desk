@@ -2,6 +2,8 @@ import type { PickupReminderCandidate } from "@laundry/contracts";
 
 import type { SqlClient, TenantContext } from "../db/types.js";
 import type { OrderStore } from "../order/types.js";
+import type { NotificationDeliveryHandlerDeps } from "./delivery-types.js";
+import type { NotificationWorkerController } from "./delivery-worker-controller.js";
 
 export type PickupReminderFilters = Readonly<{
   minAgeDays: 30 | 90 | 180;
@@ -48,6 +50,8 @@ export type NotificationStore = Readonly<{
 
 export type NotificationHandlerDeps = Readonly<{
   store: NotificationStore;
+  delivery?: NotificationDeliveryHandlerDeps;
+  worker?: NotificationWorkerController;
   now?: () => Date;
 }>;
 

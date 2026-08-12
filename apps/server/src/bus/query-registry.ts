@@ -10,6 +10,8 @@ import {
   M1_FIRST_WAVE_DEFINITIONS,
   M2_CATALOG_DEFINITIONS,
   M2_CUSTOMER_QUERY_DEFINITIONS,
+  CUSTOMER_PROFILE_QUERIES,
+  FACTORY_HANDOFF_QUERIES,
   M2_ORDER_QUERY_DEFINITIONS,
   M2_PRINT_QUERY_DEFINITIONS,
   M2_SHIFT_QUERY_DEFINITIONS,
@@ -17,12 +19,15 @@ import {
   M3_PHOTO_QUERY_DEFINITIONS,
   M3_FULFILLMENT_QUERY_DEFINITIONS,
   MEMBER_QUERIES,
+  MEMBER_BENEFIT_QUERIES,
   NOTIFICATION_QUERIES,
+  NOTIFICATION_DELIVERY_QUERIES,
   PAYMENT_QUERIES,
   PRICING_QUERIES,
   REPORTING_QUERIES,
   RECONCILIATION_QUERIES,
   STAFF_QUERIES,
+  STORE_MANAGEMENT_QUERIES,
 } from "@laundry/contracts";
 import type { QueryDefinition } from "@laundry/contracts";
 import type { z } from "zod";
@@ -60,15 +65,20 @@ export const DEFAULT_BUS_QUERY_DEFINITIONS: readonly AnyDefinition[] = Object.fr
   ...(M2_PRINT_QUERY_DEFINITIONS as readonly AnyDefinition[]),
   ...(M2_STATS_QUERY_DEFINITIONS as readonly AnyDefinition[]),
   ...(M2_CUSTOMER_QUERY_DEFINITIONS as readonly AnyDefinition[]),
+  ...(CUSTOMER_PROFILE_QUERIES as readonly AnyDefinition[]),
   ...(M2_SHIFT_QUERY_DEFINITIONS as readonly AnyDefinition[]),
   ...(M3_PHOTO_QUERY_DEFINITIONS as readonly AnyDefinition[]),
   ...(M3_FULFILLMENT_QUERY_DEFINITIONS as readonly AnyDefinition[]),
+  ...(FACTORY_HANDOFF_QUERIES as readonly AnyDefinition[]),
   ...(MEMBER_QUERIES as readonly AnyDefinition[]),
+  ...(MEMBER_BENEFIT_QUERIES as readonly AnyDefinition[]),
   ...(NOTIFICATION_QUERIES as readonly AnyDefinition[]),
+  ...(NOTIFICATION_DELIVERY_QUERIES as readonly AnyDefinition[]),
   ...(ACCOUNTING_QUERIES as readonly AnyDefinition[]),
   ...(REPORTING_QUERIES as readonly AnyDefinition[]),
   ...(RECONCILIATION_QUERIES as readonly AnyDefinition[]),
   ...(STAFF_QUERIES as readonly AnyDefinition[]),
+  ...(STORE_MANAGEMENT_QUERIES as readonly AnyDefinition[]),
 ]);
 
 /**

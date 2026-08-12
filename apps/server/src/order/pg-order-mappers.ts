@@ -52,6 +52,19 @@ export type OrderRow = {
   pricing_policy_version: number;
   urgent_selected: boolean;
   freight_selected: boolean;
+  customer_profile_version?: number;
+  discount_source?: "none" | "manual" | "customer" | "tier";
+  discount_bps?: number;
+  membership_version?: number | null;
+  tier_id?: string | null;
+  tier_definition_version?: number | null;
+  tier_code?: string | null;
+  tier_name?: string | null;
+  tier_level?: number | null;
+  tier_discount_bps?: number | null;
+  skip_ticket_print?: boolean;
+  skip_label_print?: boolean;
+  skip_rack_assignment?: boolean;
   payable_cents: number;
   paid_cents: number;
   balance_cents: number;
@@ -95,6 +108,8 @@ export type GarmentRow = {
   accessories: unknown;
   note: string | null;
   status: string;
+  custody_state?: string;
+  active_production_batch_id?: string | null;
   rack_zone: string | null;
   rack_slot: string | null;
 };
@@ -162,6 +177,19 @@ export function mapOrder(row: OrderRow, lines: readonly OrderLineRecord[]): Orde
     pricing_policy_version: row.pricing_policy_version,
     urgent_selected: row.urgent_selected,
     freight_selected: row.freight_selected,
+    customer_profile_version: row.customer_profile_version ?? 0,
+    discount_source: row.discount_source ?? (row.discount_cents > 0 ? "manual" : "none"),
+    discount_bps: row.discount_bps ?? 0,
+    membership_version: row.membership_version ?? null,
+    tier_id: row.tier_id ?? null,
+    tier_definition_version: row.tier_definition_version ?? null,
+    tier_code: row.tier_code ?? null,
+    tier_name: row.tier_name ?? null,
+    tier_level: row.tier_level ?? null,
+    tier_discount_bps: row.tier_discount_bps ?? null,
+    skip_ticket_print: row.skip_ticket_print ?? false,
+    skip_label_print: row.skip_label_print ?? false,
+    skip_rack_assignment: row.skip_rack_assignment ?? false,
     payable_cents: row.payable_cents,
     paid_cents: row.paid_cents,
     balance_cents: row.balance_cents,
@@ -191,6 +219,14 @@ export function mapGarment(row: GarmentRow): GarmentRecord {
     accessories: parseStringArray(row.accessories, "garment accessories"),
     note: row.note,
     status: asGarmentStatus(row.status),
+    custody_state:
+      row.custody_state === "to_factory" ||
+      row.custody_state === "factory" ||
+      row.custody_state === "to_store" ||
+      row.custody_state === "exception"
+        ? row.custody_state
+        : "store",
+    active_production_batch_id: row.active_production_batch_id ?? null,
     rack_zone: row.rack_zone,
     rack_slot: row.rack_slot,
   });

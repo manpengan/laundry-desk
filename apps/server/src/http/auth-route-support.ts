@@ -113,9 +113,6 @@ export async function resolveSession(
 
   const session = await runtime.identity.sessions.sessions.get(context.session_id);
   if (session === null || !sessionMatchesAuthContext(session, context)) return null;
-  if (session.org_id !== LOCAL_PROFILE.orgId || session.store_id !== LOCAL_PROFILE.storeId) {
-    return null;
-  }
   const authority = await loadSessionStaffAuthority(runtime, {
     org_id: session.org_id,
     store_id: session.store_id,
@@ -196,14 +193,16 @@ function validRefreshBinding(
   token: KnownRefreshToken,
   activeTokenOnly: boolean,
 ): boolean {
+  const bindingIsSupported =
+    runtime.mode === "pg" ||
+    (session.org_id === LOCAL_PROFILE.orgId && session.store_id === LOCAL_PROFILE.storeId);
   if (
     session.status !== "active" ||
     family.status !== "active" ||
     session.session_id !== token.session_id ||
     session.family_id !== token.family_id ||
     family.session_id !== token.session_id ||
-    session.org_id !== LOCAL_PROFILE.orgId ||
-    session.store_id !== LOCAL_PROFILE.storeId
+    !bindingIsSupported
   ) {
     return false;
   }

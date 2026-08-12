@@ -1,26 +1,24 @@
-import { canTransition, type GarmentStatus } from "@laundry/domain";
+import type { GarmentStatus } from "@laundry/domain";
 import { randomUUID } from "node:crypto";
 
 import type { PgPool } from "../db/pg-pool.js";
 import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
 import type { SqlClient } from "../db/types.js";
 import type {
-  FulfillmentIncidentInput,
-  FulfillmentIncidentResult,
   FulfillmentStore,
-  FulfillmentTransitionInput,
-  FulfillmentTransitionRow,
   FulfillmentWorkbenchOptions,
   FulfillmentWorkbenchRow,
 } from "./types.js";
 import { assignPgRack } from "./pg-rack-store.js";
-
-type LockedGarmentRow = Readonly<{
-  garment_id: string;
-  order_id: string;
-  status: GarmentStatus;
-  order_status: string;
-}>;
+import { preparePgFactoryConfirmation } from "./pg-factory-confirmation.js";
+import { createPgFactoryBatch, cancelPgFactoryBatch } from "./pg-factory-batch-write.js";
+import { recordPgFactoryCheckpoint } from "./pg-factory-checkpoint-write.js";
+import { resolvePgFactoryDiscrepancy } from "./pg-factory-resolve-write.js";
+import { recordPgFactoryQuality } from "./pg-factory-quality-write.js";
+import { getPgFactoryBatch, listPgFactoryBatches } from "./pg-factory-read.js";
+import { preparePgFulfillmentConfirmation } from "./pg-fulfillment-confirmation.js";
+import { recordPgFulfillmentIncident } from "./pg-fulfillment-incident.js";
+import { transitionPgGarments } from "./pg-fulfillment-transition.js";
 
 type WorkbenchSqlRow = Readonly<{
   garment_id: string;
@@ -42,187 +40,10 @@ type WorkbenchSqlRow = Readonly<{
 
 const toEpoch = (value: Date | string): number =>
   Math.floor((value instanceof Date ? value.getTime() : new Date(value).getTime()) / 1000);
-const toDate = (epoch: number): Date => new Date(epoch * 1000);
 const maskPhone = (phone: string | null): string | null =>
   phone === null ? null : `${phone.slice(0, 3)}****${phone.slice(-4)}`;
 const escapeLike = (value: string): string =>
   value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
-
-async function loadLockedGarments(
-  client: SqlClient,
-  input: FulfillmentTransitionInput,
-): Promise<readonly LockedGarmentRow[]> {
-  const result = await client.query<LockedGarmentRow>(
-    `SELECT g.id::text AS garment_id, g.order_id::text, g.status, o.status AS order_status
-       FROM garments g
-       JOIN orders o
-         ON o.org_id = g.org_id AND o.store_id = g.store_id AND o.id = g.order_id
-      WHERE g.org_id = $1::uuid AND g.store_id = $2::uuid
-        AND g.id = ANY($3::uuid[])
-      ORDER BY g.id
-      FOR UPDATE OF g, o`,
-    [input.org_id, input.store_id, [...input.garment_ids]],
-  );
-  return Object.freeze(result.rows);
-}
-
-async function insertStatusLog(
-  client: SqlClient,
-  input: FulfillmentTransitionInput,
-  row: LockedGarmentRow,
-  newId: () => string,
-): Promise<void> {
-  await client.query(
-    `INSERT INTO garment_status_log (
-       id, org_id, store_id, order_id, garment_id,
-       from_status, to_status, reason, staff_id, at
-     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7, $8, $9::uuid, $10)`,
-    [
-      newId(),
-      input.org_id,
-      input.store_id,
-      row.order_id,
-      row.garment_id,
-      row.status,
-      input.target_status,
-      input.reason,
-      input.staff_id,
-      toDate(input.at),
-    ],
-  );
-}
-
-async function insertIncident(
-  client: SqlClient,
-  input: FulfillmentTransitionInput,
-  row: LockedGarmentRow,
-  newId: () => string,
-): Promise<void> {
-  if (input.incident === undefined) return;
-  await client.query(
-    `INSERT INTO garment_incidents (
-       id, org_id, store_id, order_id, garment_id, kind, note,
-       compensation_cents, staff_id, created_at
-     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7, $8, $9::uuid, $10)`,
-    [
-      newId(),
-      input.org_id,
-      input.store_id,
-      row.order_id,
-      row.garment_id,
-      input.incident.kind,
-      input.incident.note,
-      input.incident.compensation_cents,
-      input.staff_id,
-      toDate(input.at),
-    ],
-  );
-}
-
-async function transitionRows(
-  client: SqlClient,
-  input: FulfillmentTransitionInput,
-  newId: () => string,
-): Promise<readonly FulfillmentTransitionRow[] | null> {
-  const uniqueIds = new Set(input.garment_ids);
-  if (uniqueIds.size !== input.garment_ids.length) return null;
-  const rows = await loadLockedGarments(client, input);
-  if (
-    rows.length !== input.garment_ids.length ||
-    rows.some(
-      (row) => row.order_status !== "open" || !canTransition(row.status, input.target_status),
-    )
-  ) {
-    return null;
-  }
-  await client.query(
-    `UPDATE garments
-        SET status = $4, rack_zone = NULL, rack_slot = NULL,
-            racked_at = NULL, racked_by_staff_id = NULL
-      WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = ANY($3::uuid[])`,
-    [input.org_id, input.store_id, [...input.garment_ids], input.target_status],
-  );
-  for (const row of rows) {
-    await insertStatusLog(client, input, row, newId);
-    await insertIncident(client, input, row, newId);
-  }
-  const orderIds = [...new Set(rows.map((row) => row.order_id))];
-  await client.query(
-    `UPDATE orders o
-        SET status = 'closed', updated_at = $4
-      WHERE o.org_id = $1::uuid AND o.store_id = $2::uuid
-        AND o.id = ANY($3::uuid[]) AND o.status = 'open' AND o.balance_cents = 0
-        AND NOT EXISTS (
-          SELECT 1 FROM garments g
-           WHERE g.org_id = o.org_id AND g.store_id = o.store_id AND g.order_id = o.id
-             AND g.status NOT IN ('picked_up', 'delivered', 'lost')
-        )`,
-    [input.org_id, input.store_id, orderIds, toDate(input.at)],
-  );
-  return Object.freeze(
-    rows.map((row) =>
-      Object.freeze({
-        garment_id: row.garment_id,
-        order_id: row.order_id,
-        from_status: row.status,
-        to_status: input.target_status,
-      }),
-    ),
-  );
-}
-
-async function recordIncidentRow(
-  client: SqlClient,
-  input: FulfillmentIncidentInput,
-  newId: () => string,
-): Promise<FulfillmentIncidentResult | null> {
-  const lookup = await client.query<Readonly<{ order_id: string; status: GarmentStatus }>>(
-    `SELECT g.order_id::text, g.status
-       FROM garments g
-       JOIN orders o
-         ON o.org_id = g.org_id AND o.store_id = g.store_id AND o.id = g.order_id
-      WHERE g.org_id = $1::uuid AND g.store_id = $2::uuid AND g.id = $3::uuid
-        AND o.status = 'open'
-      LIMIT 1 FOR UPDATE OF g`,
-    [input.org_id, input.store_id, input.garment_id],
-  );
-  const garment = lookup.rows[0];
-  if (
-    garment === undefined ||
-    garment.status === "picked_up" ||
-    garment.status === "delivered" ||
-    garment.status === "lost"
-  ) {
-    return null;
-  }
-  const incidentId = newId();
-  await client.query(
-    `INSERT INTO garment_incidents (
-       id, org_id, store_id, order_id, garment_id, kind, note,
-       compensation_cents, staff_id, created_at
-     ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7, $8, $9::uuid, $10)`,
-    [
-      incidentId,
-      input.org_id,
-      input.store_id,
-      garment.order_id,
-      input.garment_id,
-      input.kind,
-      input.note,
-      input.compensation_cents,
-      input.staff_id,
-      toDate(input.at),
-    ],
-  );
-  return Object.freeze({
-    incident_id: incidentId,
-    garment_id: input.garment_id,
-    order_id: garment.order_id,
-    kind: input.kind,
-    compensation_cents: input.compensation_cents,
-    created_at: input.at,
-  });
-}
 
 async function listWorkbenchRows(
   client: SqlClient,
@@ -291,18 +112,70 @@ export function createPgFulfillmentStore(
   newId: () => string = randomUUID,
 ): FulfillmentStore {
   return Object.freeze({
+    prepareFulfillmentConfirmation: async (request) =>
+      withStoreGucOrCurrent(pool, { orgId: request.org_id, storeId: request.store_id }, (client) =>
+        preparePgFulfillmentConfirmation(client, request),
+      ),
+    prepareFactoryConfirmation: async (request) =>
+      withStoreGucOrCurrent(
+        pool,
+        {
+          orgId: request.input.org_id,
+          storeId: request.input.store_id,
+          staffId: request.input.staff_id,
+        },
+        (client) => preparePgFactoryConfirmation(client, request),
+      ),
+    createFactoryBatch: async (input) =>
+      withStoreGucOrCurrent(
+        pool,
+        { orgId: input.org_id, storeId: input.store_id, staffId: input.staff_id },
+        (client) => createPgFactoryBatch(client, input, newId),
+      ),
+    cancelFactoryBatch: async (input) =>
+      withStoreGucOrCurrent(
+        pool,
+        { orgId: input.org_id, storeId: input.store_id, staffId: input.staff_id },
+        (client) => cancelPgFactoryBatch(client, input),
+      ),
+    recordFactoryCheckpoint: async (input) =>
+      withStoreGucOrCurrent(
+        pool,
+        { orgId: input.org_id, storeId: input.store_id, staffId: input.staff_id },
+        (client) => recordPgFactoryCheckpoint(client, input, newId),
+      ),
+    resolveFactoryDiscrepancy: async (input) =>
+      withStoreGucOrCurrent(
+        pool,
+        { orgId: input.org_id, storeId: input.store_id, staffId: input.staff_id },
+        (client) => resolvePgFactoryDiscrepancy(client, input, newId),
+      ),
+    recordFactoryQuality: async (input) =>
+      withStoreGucOrCurrent(
+        pool,
+        { orgId: input.org_id, storeId: input.store_id, staffId: input.staff_id },
+        (client) => recordPgFactoryQuality(client, input, newId),
+      ),
+    listFactoryBatches: async (orgId, storeId, options) =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, (client) =>
+        listPgFactoryBatches(client, orgId, storeId, options),
+      ),
+    getFactoryBatch: async (orgId, storeId, batchId) =>
+      withStoreGucOrCurrent(pool, { orgId, storeId }, (client) =>
+        getPgFactoryBatch(client, orgId, storeId, batchId),
+      ),
     transition: async (input) =>
       withStoreGucOrCurrent(
         pool,
         { orgId: input.org_id, storeId: input.store_id, staffId: input.staff_id },
-        (client) => transitionRows(client, input, newId),
+        (client) => transitionPgGarments(client, input, newId),
       ),
     assignRack: async (input) => assignPgRack(pool, input, newId),
     recordIncident: async (input) =>
       withStoreGucOrCurrent(
         pool,
         { orgId: input.org_id, storeId: input.store_id, staffId: input.staff_id },
-        (client) => recordIncidentRow(client, input, newId),
+        (client) => recordPgFulfillmentIncident(client, input, newId),
       ),
     listWorkbench: async (orgId, storeId, options) =>
       withStoreGucOrCurrent(pool, { orgId, storeId }, (client) =>

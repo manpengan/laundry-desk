@@ -47,6 +47,14 @@ function setupRegistry(handler: CommandHandler = logoutHandler) {
   return registry;
 }
 
+function deferred(): Readonly<{ promise: Promise<void>; resolve: () => void }> {
+  let resolve = (): void => undefined;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return Object.freeze({ promise, resolve });
+}
+
 class TestTransactionalIdempotencyStore implements TransactionalIdempotencyStore {
   private readonly rows = new Map<
     string,
@@ -343,13 +351,134 @@ test("idempotent replay returns cached result without re-exec", async () => {
       idempotencyStore: store,
     },
   );
+  const conflict = await executeCommand(
+    client,
+    TENANT,
+    "identity.logout",
+    {},
+    {
+      actor: ACTOR,
+      registry,
+      version: "1.0.1",
+      idempotencyKey: key,
+      idempotencyStore: store,
+    },
+  );
 
   assert.equal(runs, 1);
   assert.deepEqual(first, second);
   assert.equal(first.ok, true);
+  assert.equal(conflict.ok, false);
+  if (!conflict.ok) assert.equal(conflict.error.code, "IDEMPOTENCY_CONFLICT");
   // Replays still cross the authorization chain inside a transaction.
   const begins = client.sqlSequence().filter((s) => s === "BEGIN");
-  assert.equal(begins.length, 2);
+  assert.equal(begins.length, 3);
+});
+
+test("memory idempotency permits only one concurrent execution per request", async () => {
+  const started = deferred();
+  const release = deferred();
+  let runs = 0;
+  const registry = setupRegistry(async () => {
+    runs += 1;
+    started.resolve();
+    await release.promise;
+    return { result: { n: runs } };
+  });
+  const store = new MemoryIdempotencyStore();
+  const key = "fafafafa-fafa-4afa-8afa-fafafafafafa";
+  const options = Object.freeze({
+    actor: ACTOR,
+    registry,
+    idempotencyKey: key,
+    idempotencyStore: store,
+  });
+  const firstWork = executeCommand(new FakeSqlClient(), TENANT, "identity.logout", {}, options);
+  await started.promise;
+  const concurrent = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "identity.logout",
+    {},
+    options,
+  );
+  assert.equal(concurrent.ok, false);
+  if (!concurrent.ok) assert.equal(concurrent.error.code, "RESOURCE_UNAVAILABLE");
+  release.resolve();
+  assert.equal((await firstWork).ok, true);
+  assert.equal(runs, 1);
+});
+
+test("memory idempotency does not expose completed replay before COMMIT", async () => {
+  const commitReached = deferred();
+  const releaseCommit = deferred();
+  class CommitBarrierClient extends FakeSqlClient {
+    override async query<TRow>(sql: string, params?: readonly unknown[]) {
+      const result = await super.query<TRow>(sql, params);
+      if (sql === "COMMIT") {
+        commitReached.resolve();
+        await releaseCommit.promise;
+        throw new Error("injected commit failure");
+      }
+      return result;
+    }
+  }
+  const store = new MemoryIdempotencyStore();
+  const options = Object.freeze({
+    actor: ACTOR,
+    registry: setupRegistry(),
+    idempotencyKey: "fdfdfdfd-fdfd-4dfd-8dfd-fdfdfdfdfdfd",
+    idempotencyStore: store,
+  });
+  const firstWork = executeCommand(
+    new CommitBarrierClient(),
+    TENANT,
+    "identity.logout",
+    {},
+    options,
+  );
+  await commitReached.promise;
+
+  const concurrent = await executeCommand(
+    new FakeSqlClient(),
+    TENANT,
+    "identity.logout",
+    {},
+    options,
+  );
+  assert.equal(concurrent.ok, false);
+  if (!concurrent.ok) assert.equal(concurrent.error.code, "RESOURCE_UNAVAILABLE");
+
+  releaseCommit.resolve();
+  const failed = await firstWork;
+  assert.equal(failed.ok, false);
+  if (!failed.ok) assert.equal(failed.error.code, "TRANSACTION_FAILED");
+  assert.equal(store.size(), 0);
+});
+
+test("memory idempotency releases an uncommitted claim after handler failure", async () => {
+  let runs = 0;
+  const registry = setupRegistry(async () => {
+    runs += 1;
+    if (runs === 1) throw new Error("injected handler failure");
+    return { result: { n: runs } };
+  });
+  const store = new MemoryIdempotencyStore();
+  const options = Object.freeze({
+    actor: ACTOR,
+    registry,
+    idempotencyKey: "fbfbfbfb-fbfb-4bfb-8bfb-fbfbfbfbfbfb",
+    idempotencyStore: store,
+  });
+  const first = await executeCommand(new FakeSqlClient(), TENANT, "identity.logout", {}, options);
+  assert.equal(first.ok, false);
+  if (!first.ok) assert.equal(first.error.code, "TRANSACTION_FAILED");
+  assert.equal(store.size(), 0);
+  assert.equal(
+    (await executeCommand(new FakeSqlClient(), TENANT, "identity.logout", {}, options)).ok,
+    true,
+  );
+  assert.equal(runs, 2);
 });
 
 test("durable idempotency replays the committed result and rejects changed requests", async () => {
