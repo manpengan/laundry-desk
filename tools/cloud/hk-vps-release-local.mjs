@@ -16,6 +16,7 @@ import {
 } from "./hk-vps-release-core.mjs";
 import { assertNoDirectAcceptanceSecrets } from "./hk-vps-release-acceptance-secrets.mjs";
 import { releaseControllerLauncherPath } from "./hk-vps-release-controller-contract.mjs";
+import { classifyRemoteDeployError } from "./hk-vps-release-local-errors.mjs";
 import { collectFinalizeEvidence } from "./hk-vps-release-local-evidence.mjs";
 import { createArchive, withPinnedSshAuthority } from "./hk-vps-release-local-files.mjs";
 import { assertRepositoryCandidate } from "./hk-vps-release-local-repository.mjs";
@@ -239,26 +240,30 @@ export async function deployCandidate(context, input, dependencies = {}) {
         "CLOUD_RELEASE_UPLOAD",
         5 * 60_000,
       );
-      await execute(
-        context,
-        SSH,
-        sshArguments(
-          [
-            "/usr/bin/bash",
-            "-s",
-            "--",
-            options.candidateSha,
-            options.expectedSha,
-            archive.digest,
-            options.token,
-            options.migrationHead,
-          ],
-          authority.path,
-        ),
-        "CLOUD_RELEASE_REMOTE_DEPLOY",
-        30 * 60_000,
-        { input: releaseBootstrapScript(), pinnedSshRelease: true },
-      );
+      try {
+        await execute(
+          context,
+          SSH,
+          sshArguments(
+            [
+              "/usr/bin/bash",
+              "-s",
+              "--",
+              options.candidateSha,
+              options.expectedSha,
+              archive.digest,
+              options.token,
+              options.migrationHead,
+            ],
+            authority.path,
+          ),
+          "CLOUD_RELEASE_REMOTE_DEPLOY",
+          30 * 60_000,
+          { input: releaseBootstrapScript(), pinnedSshRelease: true },
+        );
+      } catch (error) {
+        throw classifyRemoteDeployError(error);
+      }
       try {
         await (dependencies.assertExternalHealth ?? assertExternalHealth)(context);
       } catch (error) {
