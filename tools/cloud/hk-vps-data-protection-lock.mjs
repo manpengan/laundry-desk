@@ -38,14 +38,7 @@ async function spawnIndependentProbe(handle, dependencies) {
   await new Promise((resolveProbe, rejectProbe) => {
     const child = spawnProcess(
       "/usr/bin/flock",
-      [
-        "--exclusive",
-        "--nonblock",
-        "--conflict-exit-code",
-        "73",
-        String(DATA_PROTECTION_LOCK_FD),
-        "/usr/bin/true",
-      ],
+      ["--exclusive", "--nonblock", "--conflict-exit-code", "73", String(DATA_PROTECTION_LOCK_FD)],
       {
         cwd: "/",
         env: Object.freeze({

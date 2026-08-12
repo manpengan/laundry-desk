@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import test from "node:test";
 
 import {
   DATA_PROTECTION_LOCK_FD,
   assertDataProtectionLockRecord,
   assertDataProtectionLockHeld,
+  runDataProtectionLockProbe,
 } from "./hk-vps-data-protection-lock.mjs";
 
 const ordinary = (changes = {}) => ({
@@ -51,6 +53,34 @@ test("the inherited descriptor record must own one exclusive flock in this proce
       code: "CLOUD_DATA_LOCK_REQUIRED",
     });
   }
+});
+
+test("the independent probe uses descriptor-only flock syntax", async () => {
+  let invocation = null;
+  const child = new EventEmitter();
+  await runDataProtectionLockProbe(ordinary(), {
+    lstat: async () => ordinary(),
+    lockPath: "/run/lock/laundry-desk-cloud-release.lock",
+    open: async () => ({
+      close: async () => undefined,
+      fd: 17,
+      stat: async () => ordinary(),
+    }),
+    spawn: (command, args, options) => {
+      invocation = { args, command, options };
+      queueMicrotask(() => child.emit("close", 73, null));
+      return child;
+    },
+  });
+  assert.deepEqual(invocation?.args, [
+    "--exclusive",
+    "--nonblock",
+    "--conflict-exit-code",
+    "73",
+    String(DATA_PROTECTION_LOCK_FD),
+  ]);
+  assert.equal(invocation?.command, "/usr/bin/flock");
+  assert.equal(invocation?.options.stdio[DATA_PROTECTION_LOCK_FD], 17);
 });
 
 test("forged lock-held execution fails on missing, replaced or writable lock authority", async () => {
