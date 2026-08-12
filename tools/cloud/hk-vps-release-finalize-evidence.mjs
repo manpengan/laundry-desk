@@ -9,6 +9,10 @@ import {
   requireCloudBrowserEvidence,
 } from "./cloud-web-browser-evidence.mjs";
 import { fail, requireMigrationHead, requireSha, requireToken } from "./hk-vps-release-core.mjs";
+import {
+  isLegacyFinalizeEvidenceProfile,
+  requireLegacyFinalizeEvidencePassed,
+} from "./hk-vps-release-finalize-evidence-compat.mjs";
 
 export const FINALIZE_EVIDENCE_SCHEMA = "laundry.cloud-release.finalize-evidence";
 export const FINALIZE_EVIDENCE_VERSION = 1;
@@ -58,8 +62,11 @@ function requireCreatedAt(value, now) {
   return value;
 }
 
-function requireNestedEvidence(api, browser) {
+function requireNestedEvidence(api, browser, allowLegacy = false) {
   try {
+    if (allowLegacy && isLegacyFinalizeEvidenceProfile(api, browser)) {
+      return requireLegacyFinalizeEvidencePassed(api, browser);
+    }
     return Object.freeze({
       api: assertAdr36ApiAcceptancePassed(requireAdr36ApiAcceptanceEvidence(api)),
       browser: assertCloudBrowserEvidencePassed(requireCloudBrowserEvidence(browser)),
@@ -118,7 +125,7 @@ export function isTransitionEvidenceStateValid(record) {
   );
 }
 
-export function requireFinalizeEvidence(value, binding = {}, now = new Date()) {
+function requireFinalizeEvidenceWithProfile(value, binding, now, allowLegacyNestedEvidence) {
   if (!exactKeys(value, OUTER_KEYS)) fail("CLOUD_RELEASE_EVIDENCE_INVALID");
   if (value.schema !== FINALIZE_EVIDENCE_SCHEMA || value.version !== FINALIZE_EVIDENCE_VERSION) {
     fail("CLOUD_RELEASE_EVIDENCE_SCHEMA_INVALID");
@@ -133,7 +140,7 @@ export function requireFinalizeEvidence(value, binding = {}, now = new Date()) {
     fail("CLOUD_RELEASE_EVIDENCE_ID_INVALID");
   }
   const createdAt = requireCreatedAt(value.created_at, now);
-  const nested = requireNestedEvidence(value.api, value.browser);
+  const nested = requireNestedEvidence(value.api, value.browser, allowLegacyNestedEvidence);
   if (
     (binding.candidateSha !== undefined && candidateSha !== binding.candidateSha) ||
     (binding.expectedSha !== undefined && expectedSha !== binding.expectedSha) ||
@@ -154,6 +161,10 @@ export function requireFinalizeEvidence(value, binding = {}, now = new Date()) {
     browser: nested.browser,
     created_at: createdAt,
   });
+}
+
+export function requireFinalizeEvidence(value, binding = {}, now = new Date()) {
+  return requireFinalizeEvidenceWithProfile(value, binding, now, false);
 }
 
 export function createFinalizeEvidence(input, options = {}) {
@@ -206,7 +217,7 @@ export function finalizeEvidenceDigest(value, binding = {}, now = new Date()) {
     .digest("hex");
 }
 
-export function parseCanonicalFinalizeEvidence(text, binding = {}, now = new Date()) {
+function parseCanonicalFinalizeEvidenceWithProfile(text, binding, now, allowLegacyNestedEvidence) {
   if (
     typeof text !== "string" ||
     text.length === 0 ||
@@ -220,9 +231,18 @@ export function parseCanonicalFinalizeEvidence(text, binding = {}, now = new Dat
   } catch (error) {
     fail("CLOUD_RELEASE_EVIDENCE_JSON_INVALID", error);
   }
-  const evidence = requireFinalizeEvidence(parsed, binding, now);
+  const evidence = requireFinalizeEvidenceWithProfile(
+    parsed,
+    binding,
+    now,
+    allowLegacyNestedEvidence,
+  );
   if (text !== canonicalValue(evidence)) fail("CLOUD_RELEASE_EVIDENCE_NOT_CANONICAL");
   return evidence;
+}
+
+export function parseCanonicalFinalizeEvidence(text, binding = {}, now = new Date()) {
+  return parseCanonicalFinalizeEvidenceWithProfile(text, binding, now, false);
 }
 
 export function parseRetainedFinalizeEvidence(text, binding = {}) {
@@ -232,7 +252,7 @@ export function parseRetainedFinalizeEvidence(text, binding = {}) {
   } catch (error) {
     fail("CLOUD_RELEASE_EVIDENCE_JSON_INVALID", error);
   }
-  return parseCanonicalFinalizeEvidence(text, binding, new Date(createdAt));
+  return parseCanonicalFinalizeEvidenceWithProfile(text, binding, new Date(createdAt), true);
 }
 
 export function parseSingleJsonLine(text, maximumBytes, code) {

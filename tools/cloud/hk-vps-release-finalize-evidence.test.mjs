@@ -12,6 +12,7 @@ import {
   createFinalizeEvidence,
   finalizeEvidenceDigest,
   parseCanonicalFinalizeEvidence,
+  parseRetainedFinalizeEvidence,
   releaseTokenDigest,
   requireFinalizeEvidence,
   verificationEvidencePath,
@@ -23,6 +24,32 @@ const MIGRATION = "0046_cloud_primary.sql";
 const TOKEN = "c".repeat(32);
 const NOW = new Date("2026-08-10T02:30:00.000Z");
 const UUID = "12345678-1234-4123-8123-123456789abc";
+const LEGACY_API_JOURNEYS = Object.freeze([
+  "configuration",
+  "dual_admin_auth",
+  "staff_credentials",
+  "accounting_baseline",
+  "catalog_price",
+  "synthetic_customer",
+  "cash_order_fulfillment",
+  "member_lifecycle",
+  "accounting_today_delta",
+  "order_finance",
+  "reporting_exports_shift",
+  "reminder_history",
+  "safe_cleanup",
+  "session_logout",
+  "overall",
+]);
+
+function canonicalJson(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+    .join(",")}}`;
+}
 
 export function passedApiEvidence() {
   return Object.freeze({
@@ -62,6 +89,29 @@ export function evidenceInput(overrides = {}) {
     expectedSha: EXPECTED,
     migrationHead: MIGRATION,
     token: TOKEN,
+    ...overrides,
+  });
+}
+
+function legacyRetainedEvidence(overrides = {}) {
+  return Object.freeze({
+    schema: "laundry.cloud-release.finalize-evidence",
+    version: 1,
+    candidate_sha: CANDIDATE,
+    expected_sha: EXPECTED,
+    migration_head: MIGRATION,
+    token_sha256: releaseTokenDigest(TOKEN),
+    verification_id: UUID,
+    api: Object.freeze({
+      schema: "laundry.adr36.api-acceptance-evidence",
+      version: 1,
+      run_id: "ADR36-20260810T022900Z-12345678",
+      results: Object.freeze(
+        LEGACY_API_JOURNEYS.map((journey) => Object.freeze({ journey, status: "PASS" })),
+      ),
+    }),
+    browser: passedBrowserEvidence(),
+    created_at: NOW.toISOString(),
     ...overrides,
   });
 }
@@ -152,6 +202,45 @@ test("finalize evidence freshness allows only the bounded canonical window", () 
       parseCanonicalFinalizeEvidence(canonical, evidenceInput(), new Date(NOW.getTime() - 60_001)),
     { code: "CLOUD_RELEASE_EVIDENCE_STALE" },
   );
+});
+
+test("retained evidence accepts the exact committed v1 profile without weakening finalize", () => {
+  const legacy = legacyRetainedEvidence();
+  const canonical = canonicalJson(legacy);
+  assert.deepEqual(parseRetainedFinalizeEvidence(canonical, evidenceInput()), legacy);
+  assert.throws(() => parseCanonicalFinalizeEvidence(canonical, evidenceInput(), NOW), {
+    code: "CLOUD_RELEASE_EVIDENCE_NOT_PASSED",
+  });
+
+  const current = createFinalizeEvidence(evidenceInput(), {
+    now: () => NOW,
+    randomUUID: () => UUID,
+  });
+  const currentCanonical = canonicalFinalizeEvidence(current, evidenceInput(), NOW);
+  assert.deepEqual(parseRetainedFinalizeEvidence(currentCanonical, evidenceInput()), current);
+});
+
+test("retained evidence rejects drift from the exact committed v1 profile", () => {
+  const legacy = legacyRetainedEvidence();
+  const failedResults = legacy.api.results.map((entry) =>
+    entry.journey === "overall"
+      ? { journey: entry.journey, status: "FAIL", code: "ACCEPTANCE_FAILED" }
+      : entry,
+  );
+  const reversedResults = [...legacy.api.results].reverse();
+  for (const invalid of [
+    { ...legacy, api: { ...legacy.api, version: 2 } },
+    { ...legacy, api: { ...legacy.api, extra: true } },
+    { ...legacy, api: { ...legacy.api, results: legacy.api.results.slice(0, -1) } },
+    { ...legacy, api: { ...legacy.api, results: reversedResults } },
+    { ...legacy, api: { ...legacy.api, results: failedResults } },
+    { ...legacy, browser: { ...legacy.browser, version: 2 } },
+    { ...legacy, browser: { ...legacy.browser, retries: 1 } },
+  ]) {
+    assert.throws(() => parseRetainedFinalizeEvidence(canonicalJson(invalid), evidenceInput()), {
+      code: "CLOUD_RELEASE_EVIDENCE_NOT_PASSED",
+    });
+  }
 });
 
 test("remote input accepts canonical JSON only, without trailing text or whitespace", () => {
