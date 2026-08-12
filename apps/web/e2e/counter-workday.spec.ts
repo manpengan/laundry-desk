@@ -8,7 +8,7 @@
  *
  * Requires local:up + the seeded catalog from global-setup.mjs.
  */
-import { expect, test, type Page, type Request } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Request } from "@playwright/test";
 
 const exactLocalUrl = (name: "LAUNDRY_WEB_URL" | "LAUNDRY_API_URL", expected: string): string => {
   const configured = process.env[name];
@@ -66,9 +66,54 @@ const REFUND_CENTS = "200";
 const REFUNDED_DEBT_TEXT = "¥32.00";
 const REMAINING_REFUNDABLE_TEXT = "¥8.00";
 const SETTLED_TEXT = "¥0.00";
+const CATALOG_REORDER_PATH = "/v1/commands/catalog.items.reorder";
+const MAX_CATALOG_REORDER_ATTEMPTS = 3;
 
 type ReceiveRequest = Readonly<Record<string, unknown>>;
 type RefundRequest = Readonly<Record<string, unknown>>;
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isCatalogReorderConflict(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    value.ok === false &&
+    isRecord(value.error) &&
+    value.error.code === "IDEMPOTENCY_CONFLICT"
+  );
+}
+
+async function moveCatalogRow(
+  page: Page,
+  row: Locator,
+  buttonName: string,
+  position: () => Promise<number>,
+  expectedPosition: number,
+): Promise<void> {
+  for (let attempt = 1; attempt <= MAX_CATALOG_REORDER_ATTEMPTS; attempt += 1) {
+    const responsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === CATALOG_REORDER_PATH,
+    );
+    await row.getByRole("button", { name: buttonName }).click();
+    const response = await responsePromise;
+    const body = (await response.json()) as unknown;
+    if (response.ok()) {
+      await expect.poll(position).toBe(expectedPosition);
+      return;
+    }
+    if (!isCatalogReorderConflict(body) || attempt === MAX_CATALOG_REORDER_ATTEMPTS) {
+      throw new Error(`catalog reorder failed with HTTP ${response.status()}`);
+    }
+    await expect(page.locator(".ld-toast").last()).toContainText(
+      "价目顺序已被其他会话修改，列表已刷新，请重试",
+    );
+    await expect(row.getByRole("button", { name: buttonName })).toBeEnabled();
+  }
+}
 
 function captureReceive(request: Request, captures: ReceiveRequest[]): void {
   if (request.method() !== "POST") return;
@@ -199,10 +244,20 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   };
   const originalPosition = await catalogPosition();
   expect(originalPosition).toBeGreaterThanOrEqual(0);
-  await catalogRow.getByRole("button", { name: `下移 ${CATALOG_ITEM_NAME}` }).click();
-  await expect.poll(catalogPosition).toBe(originalPosition + 1);
-  await catalogRow.getByRole("button", { name: `上移 ${CATALOG_ITEM_NAME}` }).click();
-  await expect.poll(catalogPosition).toBe(originalPosition);
+  await moveCatalogRow(
+    page,
+    catalogRow,
+    `下移 ${CATALOG_ITEM_NAME}`,
+    catalogPosition,
+    originalPosition + 1,
+  );
+  await moveCatalogRow(
+    page,
+    catalogRow,
+    `上移 ${CATALOG_ITEM_NAME}`,
+    catalogPosition,
+    originalPosition,
+  );
 
   const auditPanel = page.locator('[data-testid="catalog-audit"]');
   await auditPanel.getByLabel("按编码筛选（可选）").fill(CATALOG_CODE);
