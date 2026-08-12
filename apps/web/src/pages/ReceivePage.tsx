@@ -10,7 +10,7 @@ import { recoverDraftForm } from "./draft-recovery.js";
 import { parseOrderListRows, unwrapQueryResult, type OrderListRowView } from "./OrdersList.js";
 import { applyCatalogPick, ReceiveLineEditor } from "./ReceiveLineEditor.js";
 import { ReceiveDraftPanel } from "./ReceiveDraftPanel.js";
-import { ReceiveResult } from "./ReceiveResult.js";
+import { ReceiveTicketResult } from "./ReceiveTicketResult.js";
 import {
   buildReceiveBody,
   newLineDraft,
@@ -34,14 +34,12 @@ import {
   type PricingSelection,
 } from "./receive-pricing-selection.js";
 import { ReceiveSettlementPanel } from "./ReceiveSettlementPanel.js";
-import { TicketPrintWaiverNotice } from "./TicketPrintWaiverNotice.js";
-import { TicketPreviewPanel } from "./TicketPreviewPanel.js";
 import {
   buildReceiveTicketPreview,
   formatReceiveDateLabel,
   type TicketPreviewLineDraft,
 } from "./ticket-preview.js";
-import { enqueueTicketPrint, notifyReceiveSuccess } from "./ticket-print-enqueue.js";
+import { notifyReceiveSuccess } from "./ticket-print-enqueue.js";
 
 export { enqueueTicketPrint, notifyReceiveSuccess } from "./ticket-print-enqueue.js";
 
@@ -320,11 +318,6 @@ export function ReceivePage({
     setTicketPreview(null);
   }, []);
 
-  const onEnqueuePrint = useCallback(async () => {
-    if (result === null) return false;
-    return enqueueTicketPrint(commandClient, result.order_id, result.ticket_no, toast.push);
-  }, [commandClient, result, toast]);
-
   return (
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">开单</h1>
@@ -391,19 +384,15 @@ export function ReceivePage({
           onReset={onReset}
         />
       </div>
-      {result === null ? null : <ReceiveResult result={result} />}
-      {ticketPreview === null || result === null ? null : (
-        <>
-          <TicketPreviewPanel
-            key={result.order_id}
-            preview={ticketPreview}
-            onTicketReady={onTicketReady}
-            {...(queuePrintEnabled ? { onEnqueuePrint } : {})}
-            disabled={busy || result.waivers.skip_ticket_print}
-          />
-          {result.waivers.skip_ticket_print ? <TicketPrintWaiverNotice /> : null}
-        </>
-      )}
+      <ReceiveTicketResult
+        busy={busy}
+        commandClient={commandClient}
+        notify={toast.push}
+        {...(onTicketReady === undefined ? {} : { onTicketReady })}
+        preview={ticketPreview}
+        queuePrintEnabled={queuePrintEnabled}
+        result={result}
+      />
     </main>
   );
 }
