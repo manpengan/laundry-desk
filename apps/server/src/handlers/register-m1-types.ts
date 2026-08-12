@@ -6,6 +6,7 @@ import type { CatalogHandlerDeps } from "../catalog/handlers.js";
 import type { CustomerProfileHandlerDeps } from "../customer-profile/handlers.js";
 import type { CustomerHandlerDeps } from "../customer/handlers.js";
 import type { DeliveryPolicyHandlerDeps } from "../delivery-policy/handlers.js";
+import type { DeliveryAppointmentHandlerDeps } from "../delivery-appointments/handlers.js";
 import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
 import type { MemberBenefitsRuntimeDeps } from "../member-benefits/types.js";
 import type { MemberRuntimeDeps } from "../member/handlers.js";
@@ -28,6 +29,7 @@ export type RegisterM1Deps = Readonly<{
   platform?: PlatformHandlerDeps;
   pricing?: PricingHandlerDeps;
   deliveryPolicy?: DeliveryPolicyHandlerDeps;
+  deliveryAppointments?: DeliveryAppointmentHandlerDeps;
   order?: OrderHandlerDeps;
   catalog?: CatalogHandlerDeps;
   print?: PrintHandlerDeps;

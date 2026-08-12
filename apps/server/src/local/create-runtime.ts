@@ -20,10 +20,6 @@ import { createPgCustomerStore } from "../customer/pg-customer-store.js";
 import { createMemoryCustomerProfileStore } from "../customer-profile/memory-store.js";
 import { createPgCustomerProfileStore } from "../customer-profile/pg-store.js";
 import { createCustomerOrderPolicyResolver } from "../customer-profile/order-policy.js";
-import {
-  createMemoryDeliveryPolicyRuntime,
-  createPgDeliveryPolicyRuntime,
-} from "../delivery-policy/runtime.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
 import { createMemoryPrintJobStore } from "../print/memory-store.js";
 import { createPgPrintJobStore } from "../print/pg-print-store.js";
@@ -75,6 +71,7 @@ import * as recon from "./runtime-reconciliation.js";
 import type { LocalRuntime } from "./runtime-types.js";
 import { createMemoryMemberRuntimes, createPgMemberRuntimes } from "./runtime-member-benefits.js";
 import { buildIdentityDeps } from "./runtime-identity.js";
+import { createMemoryDeliveryRuntimes, createPgDeliveryRuntimes } from "./runtime-delivery.js";
 import {
   closeFailedPgPool,
   defaultPgRuntimeDependencies,
@@ -127,6 +124,12 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const memberRuntimes = createMemoryMemberRuntimes(DEMO_CUSTOMERS, orderStore);
   const customerStore = createMemoryCustomerStore(DEMO_CUSTOMERS, memberRuntimes.customerMerge);
   const customerProfileStore = createMemoryCustomerProfileStore(customerStore);
+  const platform = buildPlatform("memory");
+  const delivery = createMemoryDeliveryRuntimes(
+    platform.features,
+    LOCAL_PROFILE.timezone,
+    customerProfileStore,
+  );
   const statsSource = createOrderBackedStatsQuery(orderStore, memberRuntimes.member.store);
   const shiftStore = createMemoryShiftStore();
   const printStore = createMemoryPrintJobStore({
@@ -148,7 +151,6 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const photoStore = createMemoryPhotoStore();
   const accountingSource = createMemoryAccountingSource();
   const staffAccess = createLocalMemoryStaffAccessDeps(store);
-  const platform = buildPlatform("memory");
   const isBusinessDayClosed = async (businessDate: string): Promise<boolean> =>
     (await shiftStore.getByBusinessDate(
       LOCAL_PROFILE.orgId,
@@ -168,7 +170,8 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     ),
     platform,
     pricing: Object.freeze({ store: pricingStore }),
-    deliveryPolicy: createMemoryDeliveryPolicyRuntime(platform.features, LOCAL_PROFILE.timezone),
+    deliveryPolicy: delivery.policy,
+    deliveryAppointments: delivery.appointments,
     order: Object.freeze({
       store: orderStore,
       pricing: pricingStore,
@@ -257,6 +260,7 @@ export async function createPgLocalRuntime(
   const customerProfileStore = createPgCustomerProfileStore(appPool, {
     orgId: LOCAL_PROFILE.orgId,
   });
+  const delivery = createPgDeliveryRuntimes(appPool);
   const statsSource = createPgStatsQuery(appPool);
   const shiftStore = createPgShiftStore(appPool, {
     orgId: LOCAL_PROFILE.orgId,
@@ -291,7 +295,8 @@ export async function createPgLocalRuntime(
     ),
     platform: buildPlatform("sql"),
     pricing: Object.freeze({ store: pricingStore }),
-    deliveryPolicy: createPgDeliveryPolicyRuntime(appPool),
+    deliveryPolicy: delivery.policy,
+    deliveryAppointments: delivery.appointments,
     order: Object.freeze({
       store: orderStore,
       pricing: pricingStore,

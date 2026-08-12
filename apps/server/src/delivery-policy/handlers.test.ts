@@ -184,6 +184,17 @@ test("query bus enforces dedicated delivery read permission and registers both q
     { registry: queryRegistry, actor: actor(["delivery_read"]) },
   );
   assert.equal(allowed.ok, true);
+  const policy = await executeQuery(
+    new FakeSqlClient(),
+    TENANT,
+    "delivery.policy.get",
+    {},
+    {
+      registry: queryRegistry,
+      actor: actor(["delivery_read"]),
+    },
+  );
+  assert.equal(policy.ok, true);
 });
 
 test("R5 first-hop retry reuses one frozen card and leaves policy unchanged", async () => {

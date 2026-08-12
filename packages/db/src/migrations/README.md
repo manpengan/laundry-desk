@@ -60,6 +60,7 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0052_notification_delivery_outbox.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0053_factory_handoff_and_qc.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0054_delivery_policy.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0055_delivery_appointments.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -83,6 +84,7 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Provider-neutral notification outbox** (0052, [ADR-44](../../../../docs/adr/2026-08-12-adr-44-provider-neutral-notification-outbox.md)): approved org templates, bounded store batches, leased delivery state, append-only attempt/receipt evidence, integer cost guards, and privacy-safe fingerprints
 - **Factory handoff and QC** (0053, [ADR-45](../../../../docs/adr/2026-08-12-adr-45-factory-handoff-and-qc.md)): store-scoped garment manifests, four immutable handoff checkpoints, discrepancy reconciliation, custody anchors, and append-only quality evidence
 - **Delivery policy and policy-only quote** (0054, [ADR-46](../../../../docs/adr/2026-08-13-adr-46-delivery-policy-and-policy-only-availability.md)): store-scoped bounded areas, integer-cent fees, weekly windows, booking rules, optimistic versions, forced RLS, and no reservation or feature enablement
+- **Customer delivery appointments** (0055, [ADR-47](../../../../docs/adr/2026-08-13-adr-47-customer-delivery-appointments.md)): opaque customer/address references, integer-cent fee snapshots, serialized slot capacity, database-enforced terminal reschedule/cancel lifecycle, immutable identity, and forced store RLS
 - **M2 payments** (0009): `payments` append-only ledger (`SELECT, INSERT` only for `laundry_app`)
 - **M2 print** (0010): `print_jobs` queue (`SELECT, INSERT, UPDATE` for status transitions; no DELETE)
 - **M2 customers** (0011): `customers` org-scoped archive (`SELECT, INSERT, UPDATE`; unique org+phone)

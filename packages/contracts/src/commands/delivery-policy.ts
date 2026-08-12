@@ -123,10 +123,10 @@ export const deliveryPolicyGetQuery: QueryDefinition<GetInput> = defineQuery({
   version: "1.0.0",
   description: "Load the authenticated store's delivery coverage and appointment policy.",
   description_llm:
-    "Internal administrator configuration. The authenticated session supplies the only store scope.",
+    "Internal booking and configuration read. The authenticated session supplies the only store scope; mutation remains administrator-only.",
   input: DeliveryPolicyGetInputSchema,
   risk: "R0",
-  invariants: ["rbac.settings_admin"],
+  invariants: ["rbac.delivery_read"],
   idempotent: true,
   sideEffects: [],
   offline_mode: "denied",

@@ -16,14 +16,14 @@ GPS、移动 App、离线/Edge 或第三方 provider。
 
 ## 2. 关闭矩阵
 
-| 层级             | Item 1 目标                                               | 候选状态                                      |
-| ---------------- | --------------------------------------------------------- | --------------------------------------------- |
-| ADR/Contracts    | 1 command + 2 queries、59/40、R5/R0/R1、严格边界、非 AI   | 已实现；ADR 待产品签署                        |
-| Schema/RLS       | 0054 当前门店策略、FORCE RLS、有界 JSON、禁物理删除       | 静态与真实应用角色门禁已通过                  |
-| Server           | memory/PG、乐观版本、审计、幂等、权限、时区报价、独立限流 | focused 单元/HTTP 已通过                      |
-| Web              | 策略编辑、R5 复核、功能关闭提示、不占位报价               | focused model/page 与 production build 已通过 |
-| Privacy          | 无顾客/地址/坐标/自由文本，当前门店会话注入               | 契约、迁移与处理器负向断言已覆盖              |
-| External/release | 顾客自助、真实地址/地理、真实容量、生产发布               | 明确非范围，未宣称已交付                      |
+| 层级             | Item 1 目标                                               | 候选状态                                       |
+| ---------------- | --------------------------------------------------------- | ---------------------------------------------- |
+| ADR/Contracts    | 1 command + 2 queries、59/40、R5/R0/R1、严格边界、非 AI   | 已实现；get 权限由 ADR-47 修订为 delivery_read |
+| Schema/RLS       | 0054 当前门店策略、FORCE RLS、有界 JSON、禁物理删除       | 静态与真实应用角色门禁已通过                   |
+| Server           | memory/PG、乐观版本、审计、幂等、权限、时区报价、独立限流 | focused 单元/HTTP 已通过                       |
+| Web              | 策略编辑、R5 复核、功能关闭提示、不占位报价               | focused model/page 与 production build 已通过  |
+| Privacy          | 无顾客/地址/坐标/自由文本，当前门店会话注入               | 契约、迁移与处理器负向断言已覆盖               |
+| External/release | 顾客自助、真实地址/地理、真实容量、生产发布               | 明确非范围，未宣称已交付                       |
 
 ## 3. 不可替代的验收证据
 
@@ -41,7 +41,9 @@ GPS、移动 App、离线/Edge 或第三方 provider。
 
 - 严格拒绝未知字段、非小写区域 code、重复 code、越界数组/整数和客户端租户字段。
 - 拒绝重叠时段、不足一格或不能整分的时段，且不就地修改输入数组。
-- 冻结精确的 59 commands / 40 queries；一写两读都是 online-only、internal 且不进入 AI 面。
+- 冻结精确的 59 commands / 40 queries；一写两读都是 online-only、internal 且不进入 AI 面。ADR-47
+  为员工预约读取区域/版本，把 `delivery.policy.get` 的只读权限从 `settings_admin` 修订为
+  `delivery_read`；`delivery.policy.set` 仍保持管理员 R5。
 - feature-off 在已配置策略前失败关闭；其他不可用原因和可用时运费/结束时间可稳定重现。
 
 ### 4.2 数据库与 Server

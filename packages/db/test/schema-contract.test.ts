@@ -18,6 +18,9 @@ import {
   M2_CATALOG_RLS_TABLES,
   M2_CATALOG_TABLE_NAMES,
   M2_CATALOG_TABLES,
+  M2_DELIVERY_RLS_TABLES,
+  M2_DELIVERY_TABLE_NAMES,
+  M2_DELIVERY_TABLES,
   M2_COMMAND_IDEMPOTENCY_RLS_TABLES,
   M2_COMMAND_IDEMPOTENCY_TABLE_NAMES,
   M2_COMMAND_IDEMPOTENCY_TABLES,
@@ -268,6 +271,31 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(hasCodeUnique).toBe(true);
   });
 
+  it("exports the store-scoped delivery appointment projection", () => {
+    expect(Object.keys(M2_DELIVERY_TABLES)).toEqual([...M2_DELIVERY_TABLE_NAMES]);
+    expect([...M2_DELIVERY_RLS_TABLES]).toEqual([...M2_DELIVERY_TABLE_NAMES]);
+    expect(columnNames(M2_DELIVERY_TABLES.delivery_appointments)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "org_id",
+        "store_id",
+        "customer_id",
+        "address_id",
+        "direction",
+        "service_area_code",
+        "scheduled_start_at",
+        "scheduled_end_at",
+        "fee_cents",
+        "status",
+        "version",
+        "policy_version",
+        "cancellation_reason",
+        "cancelled_at",
+      ]),
+    );
+    expect(getTenantTableScope("delivery_appointments")).toBe("store");
+  });
+
   it("exports M2 payments tables with store tenant columns and ledger fields", () => {
     expect(Object.keys(M2_PAYMENT_TABLES).sort()).toEqual([...M2_PAYMENT_TABLE_NAMES].sort());
     expect([...M2_PAYMENT_RLS_TABLES].sort()).toEqual([...M2_PAYMENT_TABLE_NAMES].sort());
@@ -516,6 +544,7 @@ describe("M1 schema contract vs A3 matrix", () => {
       ...M1_ALL_TABLE_NAMES,
       ...M2_ORDER_TABLE_NAMES,
       ...M2_CATALOG_TABLE_NAMES,
+      ...M2_DELIVERY_TABLE_NAMES,
       ...M2_PAYMENT_TABLE_NAMES,
       ...M2_PRINT_TABLE_NAMES,
       ...M2_CUSTOMER_TABLE_NAMES,

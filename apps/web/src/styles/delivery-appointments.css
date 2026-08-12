@@ -1,0 +1,83 @@
+.ld-delivery-appointments {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-leaf);
+}
+
+.ld-delivery-appointments h3,
+.ld-delivery-appointments h4,
+.ld-delivery-appointments p {
+  margin: 0;
+}
+
+.ld-delivery-appointments__head,
+.ld-delivery-appointments__row,
+.ld-delivery-appointments__actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ld-delivery-appointments__head p,
+.ld-delivery-appointments__row p,
+.ld-delivery-appointments__row span,
+.ld-delivery-appointments > p {
+  margin-top: 4px;
+  color: var(--lg-ink2);
+  font-size: 13px;
+}
+
+.ld-delivery-appointments__create {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.ld-delivery-appointments label > span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--lg-ink2);
+  font-size: 13px;
+}
+
+.ld-delivery-appointments select,
+.ld-delivery-appointments input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-paper);
+  color: var(--lg-ink);
+  font: inherit;
+}
+
+.ld-delivery-appointments__list {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--lg-hair);
+}
+
+.ld-delivery-appointments__row {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+}
+
+.ld-delivery-appointments__actions {
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+  .ld-delivery-appointments__head,
+  .ld-delivery-appointments__row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

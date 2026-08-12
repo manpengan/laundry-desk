@@ -18,6 +18,10 @@ import {
   registerDeliveryPolicyQueryHandlers,
 } from "../delivery-policy/handlers.js";
 import { createDeliveryPolicyConfirmationPreparer } from "../delivery-policy/confirmation.js";
+import {
+  registerDeliveryAppointmentCommandHandlers,
+  registerDeliveryAppointmentQueryHandlers,
+} from "../delivery-appointments/handlers.js";
 import { registerOrderCommandHandlers, registerOrderQueryHandlers } from "../order/handlers.js";
 import {
   registerFulfillmentCommandHandlers,
@@ -96,6 +100,15 @@ export function registerM1Handlers(
   if (deps.deliveryPolicy !== undefined) {
     registerDeliveryPolicyCommandHandlers(registry, deps.deliveryPolicy);
     registered.push("delivery.policy.set");
+  }
+
+  if (deps.deliveryAppointments !== undefined) {
+    registerDeliveryAppointmentCommandHandlers(registry, deps.deliveryAppointments);
+    registered.push(
+      "delivery.appointment.create",
+      "delivery.appointment.reschedule",
+      "delivery.appointment.cancel",
+    );
   }
 
   // ADR-15: price maintenance is a command; the query side stays read-only.
@@ -225,6 +238,15 @@ export function registerM1QueryHandlers(
   if (deps.deliveryPolicy !== undefined) {
     registerDeliveryPolicyQueryHandlers(queryRegistry, deps.deliveryPolicy);
     names.push("delivery.policy.get", "delivery.availability.quote");
+  }
+
+  if (deps.deliveryAppointments !== undefined) {
+    registerDeliveryAppointmentQueryHandlers(queryRegistry, deps.deliveryAppointments);
+    names.push(
+      "delivery.appointment.get",
+      "delivery.appointment.addresses.list",
+      "delivery.appointments.list",
+    );
   }
 
   if (deps.catalog !== undefined) {

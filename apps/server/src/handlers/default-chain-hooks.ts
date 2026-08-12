@@ -10,7 +10,11 @@
 
 import { randomUUID } from "node:crypto";
 
-import { createCommandError, type CommandError } from "@laundry/contracts";
+import {
+  DELIVERY_APPOINTMENT_COMMAND_NAMES,
+  createCommandError,
+  type CommandError,
+} from "@laundry/contracts";
 import { measureInput, type SizeMeasures, type StepResult, type Thresholds } from "@laundry/domain";
 
 import type { BusChainPorts, ChainPortHooks } from "../bus/chain-adapter.js";
@@ -52,6 +56,7 @@ const okPolicy = (): StepResult<Readonly<{ allowed: true }>, CommandError> => ({
 const REUSABLE_PENDING_COMMANDS: ReadonlySet<string> = new Set([
   "notification.delivery_batch.enqueue",
   "delivery.policy.set",
+  ...DELIVERY_APPOINTMENT_COMMAND_NAMES,
 ]);
 
 export { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";

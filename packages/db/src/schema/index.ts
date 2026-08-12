@@ -5,6 +5,7 @@ export { staffStoreRoles } from "./staff-store-roles.js";
 export { settings } from "./settings.js";
 export { storePricingPolicies } from "./store-pricing-policies.js";
 export { deliveryPolicies } from "./delivery-policies.js";
+export { deliveryAppointments } from "./delivery-appointments.js";
 export { storeFeatures } from "./store-features.js";
 export { auditLog } from "./audit-log.js";
 export { sessions } from "./sessions.js";
@@ -31,6 +32,7 @@ import { staffStoreRoles } from "./staff-store-roles.js";
 import { settings } from "./settings.js";
 import { storePricingPolicies } from "./store-pricing-policies.js";
 import { deliveryPolicies } from "./delivery-policies.js";
+import { deliveryAppointments } from "./delivery-appointments.js";
 import { storeFeatures } from "./store-features.js";
 import { auditLog } from "./audit-log.js";
 import { sessions } from "./sessions.js";
@@ -85,6 +87,11 @@ export const M2_CATALOG_TABLES = Object.freeze({
   delivery_policies: deliveryPolicies,
 } as const);
 
+/** Store-scoped delivery booking projections. */
+export const M2_DELIVERY_TABLES = Object.freeze({
+  delivery_appointments: deliveryAppointments,
+} as const);
+
 /** M2 payments ledger (store-scoped, append-only). */
 export const M2_PAYMENT_TABLES = Object.freeze({
   payments,
@@ -121,6 +128,7 @@ export const schema = Object.freeze({
   ...M1_SESSION_TABLES,
   ...M2_ORDER_TABLES,
   ...M2_CATALOG_TABLES,
+  ...M2_DELIVERY_TABLES,
   ...M2_PAYMENT_TABLES,
   ...M2_PRINT_TABLES,
   ...M2_CUSTOMER_TABLES,
@@ -133,6 +141,7 @@ export type M1MatrixTableName = keyof typeof M1_MATRIX_TABLES;
 export type M1SessionTableName = keyof typeof M1_SESSION_TABLES;
 export type M2OrderTableName = keyof typeof M2_ORDER_TABLES;
 export type M2CatalogTableName = keyof typeof M2_CATALOG_TABLES;
+export type M2DeliveryTableName = keyof typeof M2_DELIVERY_TABLES;
 export type M2PaymentTableName = keyof typeof M2_PAYMENT_TABLES;
 export type M2PrintTableName = keyof typeof M2_PRINT_TABLES;
 export type M2CustomerTableName = keyof typeof M2_CUSTOMER_TABLES;

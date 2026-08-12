@@ -61,13 +61,21 @@ test("factory handoff and QC are internal staff capabilities while reconciliatio
   assert.equal(staff.includes("fulfillment_reconcile"), false);
 });
 
-test("delivery policy quotes are readable by staff while configuration remains admin-only", () => {
+test("delivery policy reads are available to staff while configuration remains admin-only", () => {
   const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
   const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });
   assert.equal(admin.includes("delivery_read"), true);
   assert.equal(staff.includes("delivery_read"), true);
   assert.equal(admin.includes("settings_admin"), true);
   assert.equal(staff.includes("settings_admin"), false);
+});
+
+test("customer appointment reads and writes are available to counter staff", () => {
+  for (const role of ["admin", "staff"] as const) {
+    const permissions = permissionsForAuthority({ role, is_privacy_admin: false });
+    assert.equal(permissions.includes("delivery_read"), true, role);
+    assert.equal(permissions.includes("delivery_write"), true, role);
+  }
 });
 
 test("runtime bus registers the complete member command and query surface", async () => {
@@ -105,6 +113,20 @@ test("runtime bus registers the complete member command and query surface", asyn
   assert.ok(bus.registered.includes("delivery.policy.set"));
   assert.ok(bus.registeredQueries.includes("delivery.policy.get"));
   assert.ok(bus.registeredQueries.includes("delivery.availability.quote"));
+  for (const name of [
+    "delivery.appointment.create",
+    "delivery.appointment.reschedule",
+    "delivery.appointment.cancel",
+  ]) {
+    assert.ok(bus.registered.includes(name), name);
+  }
+  for (const name of [
+    "delivery.appointment.get",
+    "delivery.appointment.addresses.list",
+    "delivery.appointments.list",
+  ]) {
+    assert.ok(bus.registeredQueries.includes(name), name);
+  }
   for (const name of [
     "member.benefit_definition.upsert",
     "member.membership.set",

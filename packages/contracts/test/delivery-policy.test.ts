@@ -39,7 +39,7 @@ describe("delivery policy contracts", () => {
       idempotent: true,
       invariants: ["rbac.settings_admin", "delivery.policy_version_matches"],
     });
-    expect(deliveryPolicyGetQuery.invariants).toEqual(["rbac.settings_admin"]);
+    expect(deliveryPolicyGetQuery.invariants).toEqual(["rbac.delivery_read"]);
     expect(deliveryAvailabilityQuoteQuery).toMatchObject({
       risk: "R1",
       max_result_rows: 1,

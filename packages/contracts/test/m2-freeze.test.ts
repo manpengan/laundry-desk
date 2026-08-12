@@ -101,6 +101,10 @@ describe("M2 contract surface", () => {
       "notification.delivery_batch.enqueue",
       // ADR-46: current-store policy only; does not enable delivery or create bookings.
       "delivery.policy.set",
+      // ADR-47: customer/address references, real slot capacity and optimistic lifecycle.
+      "delivery.appointment.create",
+      "delivery.appointment.reschedule",
+      "delivery.appointment.cancel",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
@@ -135,8 +139,11 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_COMMAND_NAMES).toContain("delivery.policy.set");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.policy.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.availability.quote");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(59);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(40);
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.appointment.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.appointment.addresses.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.appointments.list");
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(62);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(43);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
@@ -234,6 +241,15 @@ describe("M2 contract surface", () => {
     );
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "delivery.availability.quote",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.appointment.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.appointment.addresses.list",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.appointments.list",
     );
   });
 
