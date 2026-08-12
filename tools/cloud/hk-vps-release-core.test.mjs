@@ -367,6 +367,52 @@ test("a stable remote deploy error is preserved and still cleans both archives",
   );
 });
 
+test("ambiguous SSH deploy exits require reconciliation before any retry", async () => {
+  for (const code of [
+    "CLOUD_RELEASE_REMOTE_DEPLOY_ABORTED",
+    "CLOUD_RELEASE_REMOTE_DEPLOY_FAILED",
+    "CLOUD_RELEASE_REMOTE_DEPLOY_OUTPUT_TOO_LARGE",
+    "CLOUD_RELEASE_REMOTE_DEPLOY_TIMEOUT",
+  ]) {
+    const events = [];
+    const remoteFailure = new CloudReleaseError(code);
+    await assert.rejects(
+      () =>
+        deployCandidate(
+          { cwd: "/private/tmp/repository", environment: {}, signal: undefined },
+          {
+            candidateSha: CANDIDATE,
+            expectedSha: EXPECTED,
+            migrationHead: MIGRATION,
+            token: TOKEN,
+          },
+          {
+            assertRepositoryCandidate: async () => undefined,
+            command: async (_context, _file, _arguments, label) => {
+              events.push(label);
+              if (label === "CLOUD_RELEASE_REMOTE_DEPLOY") throw remoteFailure;
+              return { code: 0, stderr: "", stdout: "" };
+            },
+            createArchive: async () => ({
+              archivePath: "/private/tmp/release.tar",
+              digest: DIGEST,
+              temporaryRoot: "/private/tmp/release-archive-root",
+            }),
+            rm: async () => events.push("LOCAL_RM"),
+            withPinnedSshAuthority: async (_execute, operation) =>
+              await operation({ path: KNOWN_HOSTS }),
+          },
+        ),
+      (error) => {
+        assert.equal(error.code, "CLOUD_RELEASE_RECOVERY_REQUIRED");
+        assert.equal(error.cause, remoteFailure);
+        return true;
+      },
+    );
+    assert.deepEqual(events.slice(-2), ["CLOUD_RELEASE_REMOTE_ARCHIVE_CLEANUP", "LOCAL_RM"]);
+  }
+});
+
 test("a real rollback failure overrides the health error with recovery required", async () => {
   const healthFailure = new CloudReleaseError("CLOUD_RELEASE_EXTERNAL_HEALTH_INVALID");
   const rollbackFailure = new CloudReleaseError("CLOUD_RELEASE_SERVICE_START_FAILED");
