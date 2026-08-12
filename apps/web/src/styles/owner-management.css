@@ -1,0 +1,174 @@
+/* ADR-40 public Owner reports and current-store administration. */
+
+.ld-owner-nav {
+  position: sticky;
+  top: 68px;
+  z-index: 9;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 8px max(18px, env(safe-area-inset-right)) 8px max(18px, env(safe-area-inset-left));
+  border-bottom: 1px solid var(--lg-hair);
+  background: var(--lg-surface);
+}
+
+.ld-owner-nav button {
+  min-height: 38px;
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lg-ink2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.ld-owner-nav button[aria-current="page"] {
+  border-color: var(--lg-hair);
+  background: var(--lg-accent-soft);
+  color: var(--lg-accent);
+}
+
+.ld-owner-section-heading {
+  margin-bottom: 18px;
+}
+
+.ld-owner-section-heading h1,
+.ld-owner-section-heading p {
+  margin: 0;
+}
+
+.ld-owner-section-heading h1 {
+  margin-top: 3px;
+  font-size: clamp(25px, 5vw, 36px);
+}
+
+.ld-owner-section-heading p {
+  margin-top: 5px;
+  color: var(--lg-ink2);
+  font-size: 13px;
+}
+
+.ld-owner-reports__panel {
+  padding: 18px;
+}
+
+.ld-owner-management-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ld-owner-management {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  overflow: hidden;
+}
+
+.ld-owner-management__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ld-owner-management__header h2,
+.ld-owner-management__header p {
+  margin: 0;
+}
+
+.ld-owner-management__header h2 {
+  margin: 3px 0 5px;
+  font-size: 18px;
+}
+
+.ld-owner-management__header p,
+.ld-owner-management__header > span {
+  color: var(--lg-ink2);
+  font-size: 12px;
+}
+
+.ld-owner-management__header > span {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: var(--lg-leaf);
+}
+
+.ld-owner-management__table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+}
+
+.ld-owner-management__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ld-owner-management__table th,
+.ld-owner-management__table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--lg-hair);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ld-owner-management__table thead th {
+  color: var(--lg-ink2);
+  font-size: 11px;
+}
+
+.ld-owner-management__table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.ld-owner-management__table small {
+  display: block;
+  margin-top: 3px;
+  color: var(--lg-ink3);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.ld-owner-management__form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ld-owner-management > .ld-btn {
+  align-self: flex-start;
+  min-height: 44px;
+}
+
+@media (max-width: 560px) {
+  .ld-owner-nav {
+    top: 62px;
+    justify-content: flex-start;
+  }
+
+  .ld-owner-management,
+  .ld-owner-reports__panel {
+    padding: 14px;
+  }
+
+  .ld-owner-management__header {
+    flex-direction: column;
+  }
+
+  .ld-owner-management__form {
+    grid-template-columns: 1fr;
+  }
+
+  .ld-owner-management > .ld-btn {
+    width: 100%;
+  }
+}

@@ -8,6 +8,7 @@ import type { PrinterPort } from "../host/printer-port.js";
 import { CatalogMaintenancePanel } from "./CatalogMaintenancePanel.js";
 import { CatalogAuditPanel } from "./CatalogAuditPanel.js";
 import { MemberBonusRulesPanel } from "./MemberBonusRulesPanel.js";
+import { MemberBenefitDefinitionsPanel } from "./MemberBenefitDefinitionsPanel.js";
 import { OfflineConflictPanel } from "./OfflineConflictPanel.js";
 import { PricingSettingsPanel } from "./PricingSettingsPanel.js";
 import { PrinterSettingsPanel } from "./PrinterSettingsPanel.js";
@@ -60,6 +61,12 @@ export function SettingsPage({
 
       {queryClient === undefined || session.features.member_enabled !== true ? null : (
         <MemberBonusRulesPanel commandClient={commandClient} queryClient={queryClient} />
+      )}
+
+      {queryClient === undefined ||
+      session.features.member_enabled !== true ||
+      session.role !== "admin" ? null : (
+        <MemberBenefitDefinitionsPanel commandClient={commandClient} queryClient={queryClient} />
       )}
 
       <StaffAccessPanel

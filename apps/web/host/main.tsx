@@ -14,6 +14,7 @@ import "../src/styles/shell.css";
 import "../src/styles/member.css";
 import "../src/styles/owner-dashboard.css";
 import "../src/styles/owner-operations.css";
+import "../src/styles/owner-management.css";
 import "../src/styles/staff-credentials.css";
 import "../src/styles/printer-settings.css";
 

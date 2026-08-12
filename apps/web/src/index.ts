@@ -25,6 +25,23 @@ export { App, type AppProps } from "./App.js";
 export { appSurfaceFromPathname, type AppSurface } from "./host/app-surface.js";
 export { CounterShell, type CounterShellProps } from "./shell/CounterShell.js";
 export { OwnerShell, type OwnerShellProps } from "./owner/OwnerShell.js";
+export { OwnerReportsPage, type OwnerReportsPageProps } from "./owner/OwnerReportsPage.js";
+export {
+  OwnerStoreDirectoryView,
+  OwnerStoreManagementPage,
+  type OwnerStoreManagementPageProps,
+  type OwnerStoreSelection,
+} from "./owner/OwnerStoreManagementPage.js";
+export {
+  buildStoreProfileInput,
+  loadOwnerStoreDirectory,
+  parseOwnerStoreDirectory,
+  parseUpdatedOwnerStore,
+  requestStoreProfileSet,
+  resumeStoreProfileSet,
+  type OwnerAuthorizedStore,
+  type OwnerStoreDirectory,
+} from "./owner/owner-store-management-model.js";
 export {
   OwnerDashboardPage,
   OwnerDashboardView,

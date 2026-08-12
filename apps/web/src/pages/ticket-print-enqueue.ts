@@ -9,10 +9,11 @@ export function notifyReceiveSuccess(
   onTicketReady: ((preview: TicketPreview) => void) | undefined,
   preview: TicketPreview,
   ticketNo: string,
+  skipTicketPrint: boolean,
   notify: PrintNotification,
 ): void {
   try {
-    onTicketReady?.(preview);
+    if (!skipTicketPrint) onTicketReady?.(preview);
     notify(`开单成功 ${ticketNo}`, "success");
   } catch {
     notify(`开单成功 ${ticketNo}；小票联动失败，可从订单详情重试`, "error");

@@ -15,6 +15,14 @@ export type ReceiveOrderResult = Readonly<{
   payable_cents: number;
   paid_cents: number;
   balance_cents: number;
+  discount_cents: number;
+  discount_source: "none" | "manual" | "customer" | "tier";
+  discount_bps: number;
+  waivers: Readonly<{
+    skip_ticket_print: boolean;
+    skip_label_print: boolean;
+    skip_rack_assignment: boolean;
+  }>;
   garment_count: number;
   garments: readonly ReceiveGarmentResult[];
 }>;
@@ -44,7 +52,11 @@ export function parseReceiveOrderResult(raw: unknown): ReceiveOrderResult | null
   const payable = nonNegativeInt(row.payable_cents, 2_147_483_647);
   const paid = nonNegativeInt(row.paid_cents, 2_147_483_647);
   const balance = nonNegativeInt(row.balance_cents, 2_147_483_647);
+  const discount = nonNegativeInt(row.discount_cents, 2_147_483_647);
+  const discountBps = nonNegativeInt(row.discount_bps, 10_000);
   const count = nonNegativeInt(row.garment_count, 2_000);
+  const waivers = record(row.waivers);
+  const discountSources = new Set(["none", "manual", "customer", "tier"]);
   if (
     typeof row.ticket_no !== "string" ||
     row.ticket_no.length < 1 ||
@@ -55,6 +67,14 @@ export function parseReceiveOrderResult(raw: unknown): ReceiveOrderResult | null
     payable === null ||
     paid === null ||
     balance === null ||
+    discount === null ||
+    typeof row.discount_source !== "string" ||
+    !discountSources.has(row.discount_source) ||
+    discountBps === null ||
+    waivers === null ||
+    typeof waivers.skip_ticket_print !== "boolean" ||
+    typeof waivers.skip_label_print !== "boolean" ||
+    typeof waivers.skip_rack_assignment !== "boolean" ||
     count === null ||
     paid + balance !== payable ||
     !Array.isArray(row.garments) ||
@@ -106,6 +126,14 @@ export function parseReceiveOrderResult(raw: unknown): ReceiveOrderResult | null
     payable_cents: payable,
     paid_cents: paid,
     balance_cents: balance,
+    discount_cents: discount,
+    discount_source: row.discount_source as ReceiveOrderResult["discount_source"],
+    discount_bps: discountBps,
+    waivers: Object.freeze({
+      skip_ticket_print: waivers.skip_ticket_print as boolean,
+      skip_label_print: waivers.skip_label_print as boolean,
+      skip_rack_assignment: waivers.skip_rack_assignment as boolean,
+    }),
     garment_count: count,
     garments: Object.freeze(garments),
   });

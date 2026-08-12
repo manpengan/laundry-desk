@@ -12,7 +12,9 @@ import type { PrintJobView } from "../shell/print-jobs.js";
 import { CustomerDetail } from "./CustomerDetail.js";
 import { CustomerGovernancePanel } from "./CustomerGovernancePanel.js";
 import { MemberBalancePanel } from "./MemberBalancePanel.js";
+import { MemberBenefitsPanel } from "./MemberBenefitsPanel.js";
 import { CustomerPrivacyPanel } from "./CustomerPrivacyPanel.js";
+import { CustomerProfilePanel } from "./CustomerProfilePanel.js";
 import { loadCustomerHistory } from "./customer-history.js";
 import {
   parseCustomerDetail,
@@ -202,14 +204,14 @@ export function CustomersPage({
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">客户</h1>
       <p className="ld-shell-main__hint">
-        组织级客户档案：按手机号前缀或姓名搜索；点击行查看详情与历史订单。
+        组织级客户档案：按手机号、姓名、车辆或外部标识搜索；点击行查看详情与历史订单。
       </p>
 
       <div className="ld-customers-search">
         <Input
           name="customer-query"
           label="搜索"
-          placeholder="手机号前缀或姓名"
+          placeholder="手机号、姓名、车辆或外部标识"
           value={queryText}
           onChange={(event) => setQueryText(event.target.value)}
           disabled={busy}
@@ -299,15 +301,31 @@ export function CustomersPage({
             onOpenOrder={setDetailOrderId}
             {...(onOpenPickup === undefined ? {} : { onOpenPickup })}
           />
+          <CustomerProfilePanel
+            customer={selected}
+            queryClient={queryClient}
+            commandClient={commandClient}
+            {...(authClient === undefined ? {} : { authClient })}
+            {...(session === undefined ? {} : { session })}
+          />
           {session?.features.member_enabled === true ? (
-            <MemberBalancePanel
-              customer={selected}
-              queryClient={queryClient}
-              commandClient={commandClient}
-              {...(authClient === undefined ? {} : { authClient })}
-              session={session}
-              toast={toast}
-            />
+            <>
+              <MemberBalancePanel
+                customer={selected}
+                queryClient={queryClient}
+                commandClient={commandClient}
+                {...(authClient === undefined ? {} : { authClient })}
+                session={session}
+                toast={toast}
+              />
+              <MemberBenefitsPanel
+                customer={selected}
+                queryClient={queryClient}
+                commandClient={commandClient}
+                session={session}
+                toast={toast}
+              />
+            </>
           ) : null}
           <CustomerGovernancePanel
             customer={selected}

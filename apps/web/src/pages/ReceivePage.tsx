@@ -34,6 +34,7 @@ import {
   type PricingSelection,
 } from "./receive-pricing-selection.js";
 import { ReceiveSettlementPanel } from "./ReceiveSettlementPanel.js";
+import { TicketPrintWaiverNotice } from "./TicketPrintWaiverNotice.js";
 import { TicketPreviewPanel } from "./TicketPreviewPanel.js";
 import {
   buildReceiveTicketPreview,
@@ -281,7 +282,13 @@ export function ReceivePage({
       setTicketPreview(preview);
       setDraftId(null);
       await reloadDrafts();
-      notifyReceiveSuccess(onTicketReady, preview, payload.ticket_no, toast.push);
+      notifyReceiveSuccess(
+        onTicketReady,
+        preview,
+        payload.ticket_no,
+        payload.waivers.skip_ticket_print,
+        toast.push,
+      );
     } catch {
       toast.push("无法提交开单，请检查服务连接", "error");
     } finally {
@@ -386,13 +393,16 @@ export function ReceivePage({
       </div>
       {result === null ? null : <ReceiveResult result={result} />}
       {ticketPreview === null || result === null ? null : (
-        <TicketPreviewPanel
-          key={result.order_id}
-          preview={ticketPreview}
-          onTicketReady={onTicketReady}
-          {...(queuePrintEnabled ? { onEnqueuePrint } : {})}
-          disabled={busy}
-        />
+        <>
+          <TicketPreviewPanel
+            key={result.order_id}
+            preview={ticketPreview}
+            onTicketReady={onTicketReady}
+            {...(queuePrintEnabled ? { onEnqueuePrint } : {})}
+            disabled={busy || result.waivers.skip_ticket_print}
+          />
+          {result.waivers.skip_ticket_print ? <TicketPrintWaiverNotice /> : null}
+        </>
       )}
     </main>
   );

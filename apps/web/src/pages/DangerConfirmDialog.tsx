@@ -1,12 +1,13 @@
 /** Reusable confirmation gate for counter actions that cannot be undone. */
 
 import { Button, Dialog, Input } from "@laundry/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 export type DangerConfirmDialogProps = Readonly<{
   open: boolean;
   title: string;
   description: string;
+  summary?: ReactNode;
   confirmLabel: string;
   busy?: boolean;
   /** The policy challenge is a second explicit confirmation, so the reason is retained. */
@@ -19,6 +20,7 @@ export function DangerConfirmDialog({
   open,
   title,
   description,
+  summary,
   confirmLabel,
   busy = false,
   serverConfirmation = false,
@@ -54,6 +56,7 @@ export function DangerConfirmDialog({
       }
     >
       <p className="ld-danger-confirm__description">{description}</p>
+      {summary}
       {serverConfirmation ? (
         <p className="ld-danger-confirm__challenge" role="alert">
           服务端要求再次确认。继续后会立即执行，且不能撤回。

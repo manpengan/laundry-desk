@@ -1,3 +1,4 @@
+import type { CustomerPrivacyReason } from "@laundry/contracts";
 import { Button, Input, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -17,6 +18,21 @@ import {
 import type { CustomerRowView } from "./customer-model.js";
 
 type PrivacyCommand = "customer.privacy.export" | "customer.anonymize";
+
+const PRIVACY_REASONS: readonly Readonly<{
+  value: CustomerPrivacyReason;
+  label: string;
+}>[] = Object.freeze([
+  Object.freeze({ value: "customer_request", label: "客户本人申请" }),
+  Object.freeze({ value: "legal_request", label: "法定请求" }),
+  Object.freeze({ value: "data_correction", label: "数据纠正" }),
+  Object.freeze({ value: "retention_expiry", label: "留存期届满" }),
+]);
+
+function privacyReasonLabel(reason: CustomerPrivacyEventView["reason"]): string {
+  if (reason === "legacy_request") return "历史请求";
+  return PRIVACY_REASONS.find((option) => option.value === reason)?.label ?? "隐私请求";
+}
 
 type PendingAction = Readonly<{
   command: PrivacyCommand;
@@ -44,7 +60,7 @@ export function CustomerPrivacyPanel({
   const toast = useToast();
   const [status, setStatus] = useState<CustomerPrivacyStatusView | null>(null);
   const [events, setEvents] = useState<readonly CustomerPrivacyEventView[]>([]);
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState<CustomerPrivacyReason>("customer_request");
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingAction | null>(null);
@@ -82,7 +98,7 @@ export function CustomerPrivacyPanel({
     loadGenerationRef.current += 1;
     setStatus(null);
     setEvents([]);
-    setReason("");
+    setReason("customer_request");
     setConfirmation("");
     setPending(null);
     void load();
@@ -163,29 +179,23 @@ export function CustomerPrivacyPanel({
   }, [commandClient, finish, pending, toast]);
 
   const exportData = useCallback(() => {
-    const trimmedReason = reason.trim();
-    if (trimmedReason.length === 0) {
-      toast.push("请填写隐私操作原因", "error");
-      return;
-    }
     void execute(
       "customer.privacy.export",
-      { customer_id: customer.customer_id, reason: trimmedReason },
+      { customer_id: customer.customer_id, reason },
       "导出客户数据",
     );
-  }, [customer.customer_id, execute, reason, toast]);
+  }, [customer.customer_id, execute, reason]);
 
   const anonymize = useCallback(() => {
-    const trimmedReason = reason.trim();
-    if (trimmedReason.length === 0 || confirmation !== "ANONYMIZE") {
-      toast.push("请填写原因并准确输入 ANONYMIZE", "error");
+    if (confirmation !== "ANONYMIZE") {
+      toast.push("请准确输入 ANONYMIZE", "error");
       return;
     }
     void execute(
       "customer.anonymize",
       {
         customer_id: customer.customer_id,
-        reason: trimmedReason,
+        reason,
         confirmation,
       },
       "不可逆匿名化",
@@ -213,14 +223,21 @@ export function CustomerPrivacyPanel({
       ) : null}
 
       <div className="ld-customer-privacy__fields">
-        <Input
-          name="customer-privacy-reason"
-          label="操作原因"
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          disabled={busy}
-          data-testid="customer-privacy-reason"
-        />
+        <label>
+          <span>操作原因</span>
+          <select
+            value={reason}
+            disabled={busy}
+            data-testid="customer-privacy-reason"
+            onChange={(event) => setReason(event.target.value as CustomerPrivacyReason)}
+          >
+            {PRIVACY_REASONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <Input
           name="customer-privacy-confirmation"
           label="匿名化确认短语"
@@ -260,8 +277,8 @@ export function CustomerPrivacyPanel({
           <ul>
             {events.map((event) => (
               <li key={event.event_id}>
-                {event.action === "exported" ? "已导出" : "已匿名化"} · {event.reason} ·{" "}
-                {event.affected_order_count} 笔订单
+                {event.action === "exported" ? "已导出" : "已匿名化"} ·{" "}
+                {privacyReasonLabel(event.reason)} · {event.affected_order_count} 笔订单
               </li>
             ))}
           </ul>

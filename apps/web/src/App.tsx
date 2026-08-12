@@ -27,21 +27,27 @@ export type AppProps = {
 
 export function ownerShellPropsFrom(
   session: SessionView,
-  ports: Pick<AppPorts, "auth" | "query">,
+  ports: Pick<AppPorts, "auth" | "command" | "query">,
   onSessionChange: (session: SessionView | null) => void,
+  onSelectStore?: OwnerShellProps["onSelectStore"],
 ): OwnerShellProps {
+  const logout = async (): Promise<void> => {
+    try {
+      await ports.auth.logout();
+    } catch {
+      // Logout is fail-closed for the renderer: a host failure must not retain the UI session.
+    } finally {
+      onSessionChange(null);
+    }
+  };
   return Object.freeze({
     session,
+    authClient: ports.auth,
+    commandClient: ports.command,
     queryClient: ports.query,
-    onLogout: async () => {
-      try {
-        await ports.auth.logout();
-      } catch {
-        // Logout is fail-closed for the renderer: a host failure must not retain the UI session.
-      } finally {
-        onSessionChange(null);
-      }
-    },
+    onSessionChange,
+    onSelectStore: onSelectStore ?? (async () => logout()),
+    onLogout: logout,
   });
 }
 
@@ -88,6 +94,9 @@ export function App({
   loginInitialForm,
 }: AppProps) {
   const [session, setSession] = useState<SessionView | null>(initialSession);
+  const [activeLoginInitialForm, setActiveLoginInitialForm] = useState<
+    Partial<LoginFormValues> | undefined
+  >(loginInitialForm);
 
   useEffect(() => {
     if (enableLiquidGlass && typeof document !== "undefined") {
@@ -99,7 +108,23 @@ export function App({
     <ToastProvider>
       {session ? (
         surface === "owner" ? (
-          <OwnerShell {...ownerShellPropsFrom(session, ports, setSession)} />
+          <OwnerShell
+            {...ownerShellPropsFrom(session, ports, setSession, async (selection) => {
+              setActiveLoginInitialForm(
+                Object.freeze({
+                  org_code: selection.orgCode,
+                  store_code: selection.storeCode,
+                  username: "",
+                  password: "",
+                }),
+              );
+              try {
+                await ports.auth.logout();
+              } finally {
+                setSession(null);
+              }
+            })}
+          />
         ) : (
           <CounterShell
             {...shellPropsFrom(connection, themePreference, session, ports, setSession)}
@@ -113,7 +138,7 @@ export function App({
           {...(surface === "owner"
             ? { title: "店主登录", hint: "使用管理员账号进入经营看板" }
             : {})}
-          {...(loginInitialForm !== undefined ? { initialForm: loginInitialForm } : {})}
+          {...(activeLoginInitialForm !== undefined ? { initialForm: activeLoginInitialForm } : {})}
         />
       )}
     </ToastProvider>

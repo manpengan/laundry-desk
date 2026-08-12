@@ -1,6 +1,7 @@
 import { MoneyText, StatusBadge } from "@laundry/ui";
 
 import type { ReceiveOrderResult } from "./order-form.js";
+import { discountPolicyLabel, waiverPolicyLabel } from "./order-policy-labels.js";
 
 export function ReceiveResult({ result }: { result: ReceiveOrderResult }) {
   return (
@@ -32,6 +33,20 @@ export function ReceiveResult({ result }: { result: ReceiveOrderResult }) {
           <dd>
             <MoneyText fen={result.balance_cents} />
           </dd>
+        </div>
+        <div>
+          <dt>折扣</dt>
+          <dd>
+            −<MoneyText fen={result.discount_cents} />
+          </dd>
+        </div>
+        <div>
+          <dt>折扣来源</dt>
+          <dd data-testid="receive-discount-source">{discountPolicyLabel(result)}</dd>
+        </div>
+        <div>
+          <dt>运营豁免</dt>
+          <dd data-testid="receive-waivers">{waiverPolicyLabel(result)}</dd>
         </div>
         <div>
           <dt>衣物</dt>

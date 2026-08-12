@@ -154,6 +154,34 @@
   flex-wrap: wrap;
 }
 
+@media (max-width: 600px) {
+  .ld-shell-topbar {
+    box-sizing: border-box;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .ld-shell-topbar__store,
+  .ld-shell-topbar__status {
+    min-width: 0;
+    flex: 1 1 140px;
+  }
+
+  .ld-shell-topbar__store {
+    overflow-wrap: anywhere;
+  }
+
+  .ld-shell-topbar__actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .ld-shell-topbar__actions > * {
+    min-width: 0;
+  }
+}
+
 /* —— Login (E1) —— */
 
 .ld-login {

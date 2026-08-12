@@ -12,7 +12,7 @@ export default defineConfig({
   globalSetup: "./e2e/global-setup.mjs",
   timeout: 30_000,
   fullyParallel: false,
-  // Six suites reuse the bootstrap administrator. Keep concurrent password
+  // Seven suites reuse the bootstrap administrator. Keep concurrent password
   // attempts below the server's fail-closed per-account reservation limit (5).
   workers: 4,
   forbidOnly: !!process.env.CI,

@@ -10,7 +10,7 @@ import type {
   StepUpProofResult,
   SwitchableStaff,
 } from "../auth/types.js";
-import { readMemberTopupConfirmationSummary } from "../commands/member-topup-confirmation.js";
+import { readConfirmationSummary } from "../commands/confirmation-summary.js";
 import type {
   CommandErrorDetail,
   CommandPort,
@@ -379,8 +379,7 @@ function readCommandDetail(value: unknown): CommandErrorDetail | null {
   for (const key of ["kind", "confirm_ref", "message"] as const) {
     if (value[key] !== undefined && typeof value[key] !== "string") return null;
   }
-  const summary =
-    value.summary === undefined ? undefined : readMemberTopupConfirmationSummary(value.summary);
+  const summary = value.summary === undefined ? undefined : readConfirmationSummary(value.summary);
   if (summary === null) return null;
   return Object.freeze({
     ...(typeof value.kind === "string" ? { kind: value.kind } : {}),

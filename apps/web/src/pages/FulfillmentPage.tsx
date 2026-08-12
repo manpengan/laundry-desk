@@ -1,3 +1,4 @@
+import type { FulfillmentOperationConfirmationSummary } from "@laundry/contracts";
 import { Button, Input, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -8,6 +9,10 @@ import type { CommandPort, QueryPort } from "../commands/types.js";
 import { StepUpConfirmDialog } from "../shell/StepUpConfirmDialog.js";
 import { DangerConfirmDialog } from "./DangerConfirmDialog.js";
 import { FulfillmentRackPanel } from "./FulfillmentRackPanel.js";
+import {
+  FulfillmentOperationConfirmation,
+  readFulfillmentOperationSummary,
+} from "./FulfillmentOperationConfirmation.js";
 import { FulfillmentWorkbenchRow } from "./FulfillmentWorkbenchRow.js";
 import {
   FULFILLMENT_STATUS_LABELS,
@@ -30,6 +35,7 @@ type PendingAction = Readonly<{
   command: string;
   label: string;
   kind: "confirm" | "step_up";
+  summary: FulfillmentOperationConfirmationSummary;
 }>;
 
 const ACTIVE_STATUSES: readonly FulfillmentStatus[] = Object.freeze([
@@ -120,12 +126,18 @@ export function FulfillmentPage({
           return;
         }
         if (isStepUpRequired(result)) {
+          const summary = readFulfillmentOperationSummary(result.error.detail.summary);
+          if (summary === null) {
+            toast.push("服务端未返回可核对的生产操作摘要", "error");
+            return;
+          }
           setPending(
             Object.freeze({
               confirmRef: result.error.detail.confirm_ref,
               command,
               label,
               kind: result.error.code === "POLICY_STEP_UP_REQUIRED" ? "step_up" : "confirm",
+              summary,
             }),
           );
           return;
@@ -357,6 +369,11 @@ export function FulfillmentPage({
         open={pending?.kind === "confirm"}
         title="确认批量生产操作"
         description={pending === null ? "" : `服务端已冻结「${pending.label}」的件清单。`}
+        summary={
+          pending === null ? undefined : (
+            <FulfillmentOperationConfirmation summary={pending.summary} />
+          )
+        }
         confirmLabel="确认执行"
         serverConfirmation
         busy={busy}
@@ -371,6 +388,7 @@ export function FulfillmentPage({
           confirmRef={pending.confirmRef}
           currentStaffId={session.session.staff_id}
           commandLabel={pending.label}
+          summary={<FulfillmentOperationConfirmation summary={pending.summary} />}
           onApproved={() => void resumePending()}
         />
       ) : null}

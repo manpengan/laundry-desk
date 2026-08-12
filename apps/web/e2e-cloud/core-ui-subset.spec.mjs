@@ -1,6 +1,6 @@
 import { CLOUD_WEB_ORIGIN } from "../../../tools/cloud/cloud-web-browser-boundary.mjs";
 
-import { expect, test } from "./cloud-fixture.mjs";
+import { expect, logoutBrowserContext, test } from "./cloud-fixture.mjs";
 
 test.skip(
   process.env.LAUNDRY_CLOUD_WEB_E2E !== "1",
@@ -39,6 +39,11 @@ async function assertCustomerAndReminderReadSurfaces(page) {
   await page.locator('[data-nav-id="reminders"]').click();
   await expect(page.getByRole("heading", { name: "催取工作台" })).toBeVisible();
   await expect(page.getByRole("button", { name: "刷新候选" })).toBeVisible();
+  const delivery = page.locator('[data-testid="notification-delivery-panel"]');
+  await expect(delivery).toBeVisible();
+  await expect(delivery.getByText(/自动通知未启用|软件模拟模式/u, { exact: true })).toBeVisible();
+  await expect(delivery).not.toContainText(/已发送|送达|通知成功/u);
+  await expect(delivery).not.toContainText(/1\d{10}/u);
 }
 
 async function assertAccountingReadSurface(page) {
@@ -49,7 +54,40 @@ async function assertAccountingReadSurface(page) {
   await expect(page.locator('[data-testid="accounting-export"]')).toBeVisible();
 }
 
+async function assertOwnerReadSurfaces(page) {
+  await expect(page.locator('[data-shell="owner"]')).toHaveAttribute(
+    "data-owner-access",
+    "allowed",
+  );
+  await expect(page.locator('[data-testid="owner-dashboard"]')).toHaveAttribute(
+    "data-state",
+    "ready",
+  );
+  await expect(page.getByText("云端经营台", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "经营报表" }).click();
+  await expect(page.locator('[data-testid="owner-reports"]')).toBeVisible();
+  await expect(page.locator('[data-testid="accounting-report-result"]')).toBeVisible();
+
+  await page.getByRole("button", { name: "门店管理" }).click();
+  const management = page.locator('[data-testid="owner-store-management"]');
+  await expect(management).toBeVisible();
+  await expect(management.getByRole("heading", { name: "授权门店" })).toBeVisible();
+  await expect(management.getByText("当前登录", { exact: true })).toHaveCount(1);
+  await expect(management.locator('input[name="owner-store-code"]')).toBeDisabled();
+  await expect(management.locator('input[name="owner-store-timezone"]')).toBeDisabled();
+  await expect(
+    management
+      .getByRole("row")
+      .filter({ hasText: "当前登录" })
+      .getByRole("button", { name: "切换登录" }),
+  ).toBeDisabled();
+  await expect(page.locator('[data-testid="staff-access"]')).toBeVisible();
+  await expect(page.locator('[data-testid="staff-access-list"]')).toBeVisible();
+}
+
 test("core_ui_subset: public Cloud Web read surfaces are reachable", async ({
+  browser,
   cloudPage,
   cloudRun,
 }) => {
@@ -72,6 +110,22 @@ test("core_ui_subset: public Cloud Web read surfaces are reachable", async ({
   await assertCustomerAndReminderReadSurfaces(cloudPage);
   await assertAccountingReadSurface(cloudPage);
   await cloudPage.waitForLoadState("networkidle");
+
+  const ownerContext = await browser.newContext({ baseURL: CLOUD_WEB_ORIGIN });
+  const ownerPage = await ownerContext.newPage();
+  ownerPage.on("request", (request) => {
+    if (isBusinessCommand(request)) {
+      businessCommands = Object.freeze([...businessCommands, new URL(request.url()).pathname]);
+    }
+  });
+  try {
+    await cloudRun.signIn(ownerPage, "owner");
+    await assertOwnerReadSurfaces(ownerPage);
+    await ownerPage.waitForLoadState("networkidle");
+  } finally {
+    await logoutBrowserContext(ownerContext);
+    await ownerContext.close();
+  }
 
   expect(businessCommands, "read-only subset must not issue product commands").toEqual([]);
 });

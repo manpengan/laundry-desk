@@ -1,23 +1,47 @@
 import { EmptyState } from "@laundry/ui";
 import { useState } from "react";
 
+import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
-import type { QueryPort } from "../commands/types.js";
+import type { CommandPort, QueryPort } from "../commands/types.js";
 import { OwnerDashboardPage } from "./OwnerDashboardPage.js";
 import { OwnerDrilldownPanel } from "./OwnerDrilldownPanel.js";
+import { OwnerReportsPage } from "./OwnerReportsPage.js";
+import { OwnerStoreManagementPage, type OwnerStoreSelection } from "./OwnerStoreManagementPage.js";
 import type { OwnerDrilldownKind } from "./owner-operations-model.js";
 import { OwnerPortfolioPanel } from "./OwnerPortfolioPanel.js";
 
 export type OwnerShellProps = Readonly<{
   session: SessionView;
+  authClient: AuthClient;
+  commandClient: CommandPort;
   queryClient: QueryPort;
+  onSessionChange: (session: SessionView | null) => void;
+  onSelectStore: (selection: OwnerStoreSelection) => Promise<void>;
   onLogout: () => Promise<void>;
 }>;
 
-export function OwnerShell({ session, queryClient, onLogout }: OwnerShellProps) {
+type OwnerSection = "today" | "reports" | "stores";
+
+const OWNER_SECTIONS: readonly Readonly<{ id: OwnerSection; label: string }>[] = Object.freeze([
+  Object.freeze({ id: "today", label: "今日经营" }),
+  Object.freeze({ id: "reports", label: "经营报表" }),
+  Object.freeze({ id: "stores", label: "门店管理" }),
+]);
+
+export function OwnerShell({
+  session,
+  authClient,
+  commandClient,
+  queryClient,
+  onSessionChange,
+  onSelectStore,
+  onLogout,
+}: OwnerShellProps) {
   const allowed = session.role === "admin";
   const [loggingOut, setLoggingOut] = useState(false);
   const [drilldownKind, setDrilldownKind] = useState<OwnerDrilldownKind | null>(null);
+  const [section, setSection] = useState<OwnerSection>("today");
   const logout = async (): Promise<void> => {
     if (loggingOut) return;
     setLoggingOut(true);
@@ -39,7 +63,7 @@ export function OwnerShell({ session, queryClient, onLogout }: OwnerShellProps) 
           <span>{session.display.staff_name}</span>
         </div>
         <div className="ld-owner-header__actions">
-          <span className="ld-owner-header__badge">只读经营看板</span>
+          <span className="ld-owner-header__badge">云端经营台</span>
           <button
             className="ld-owner-logout"
             type="button"
@@ -50,17 +74,44 @@ export function OwnerShell({ session, queryClient, onLogout }: OwnerShellProps) 
           </button>
         </div>
       </header>
+      {allowed ? (
+        <nav className="ld-owner-nav" aria-label="店主功能">
+          {OWNER_SECTIONS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-current={section === item.id ? "page" : undefined}
+              onClick={() => setSection(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      ) : null}
       <main className="ld-owner-main" id="owner-main" tabIndex={-1}>
         {allowed ? (
-          <>
-            <OwnerDashboardPage queryClient={queryClient} onOpenDrilldown={setDrilldownKind} />
-            <OwnerDrilldownPanel
+          section === "today" ? (
+            <>
+              <OwnerDashboardPage queryClient={queryClient} onOpenDrilldown={setDrilldownKind} />
+              <OwnerDrilldownPanel
+                queryClient={queryClient}
+                kind={drilldownKind}
+                onClose={() => setDrilldownKind(null)}
+              />
+              <OwnerPortfolioPanel queryClient={queryClient} />
+            </>
+          ) : section === "reports" ? (
+            <OwnerReportsPage queryClient={queryClient} commandClient={commandClient} />
+          ) : (
+            <OwnerStoreManagementPage
+              session={session}
+              authClient={authClient}
+              commandClient={commandClient}
               queryClient={queryClient}
-              kind={drilldownKind}
-              onClose={() => setDrilldownKind(null)}
+              onSessionChange={onSessionChange}
+              onSelectStore={onSelectStore}
             />
-            <OwnerPortfolioPanel queryClient={queryClient} />
-          </>
+          )
         ) : (
           <section className="ld-owner-denied lg-card" role="alert">
             <EmptyState
@@ -71,9 +122,9 @@ export function OwnerShell({ session, queryClient, onLogout }: OwnerShellProps) 
         )}
       </main>
       <footer className="ld-owner-footer">
-        <span>局域网只读</span>
+        <span>同源会话保护</span>
         <span aria-hidden>·</span>
-        <span>不提供开单、收款或打印操作</span>
+        <span>高风险变更需另一位店长现场复核</span>
       </footer>
     </div>
   );

@@ -196,6 +196,33 @@ test("two isolated browser devices read the HTTPS Owner Dashboard without mutati
   await expect(page.locator('[data-testid="owner-portfolio"] [role="alert"]')).toHaveCount(0);
   await expect(page.getByLabel("授权门店总计")).toBeVisible();
 
+  const accountingResponse = waitForOwnerQuery(page, "accounting.report.get");
+  await page.getByRole("button", { name: "经营报表" }).click();
+  expect((await accountingResponse).status()).toBe(200);
+  await expect(page.locator('[data-testid="owner-reports"]')).toBeVisible();
+  await expect(page.locator('[data-testid="accounting-report-result"]')).toBeVisible();
+
+  const storeDirectoryResponse = waitForOwnerQuery(page, "store.authorized.list");
+  const staffAccessResponse = waitForOwnerQuery(page, "staff.access.list");
+  await page.getByRole("button", { name: "门店管理" }).click();
+  expect((await storeDirectoryResponse).status()).toBe(200);
+  expect((await staffAccessResponse).status()).toBe(200);
+  const management = page.locator('[data-testid="owner-store-management"]');
+  await expect(management).toBeVisible();
+  await expect(management.getByText("当前登录", { exact: true })).toHaveCount(1);
+  await expect(management.locator('input[name="owner-store-code"]')).toBeDisabled();
+  await expect(management.locator('input[name="owner-store-timezone"]')).toBeDisabled();
+  await expect(
+    management
+      .getByRole("row")
+      .filter({ hasText: "当前登录" })
+      .getByRole("button", { name: "切换登录" }),
+  ).toBeDisabled();
+  await expect(page.locator('[data-testid="staff-access"]')).toBeVisible();
+
+  await page.getByRole("button", { name: "今日经营" }).click();
+  await expect(page.locator('[data-testid="owner-dashboard"]')).toBeVisible();
+
   for (const [button, title] of [
     ["查看取衣明细", "今日取衣明细"],
     ["查看欠款明细", "今日新增欠款明细"],
