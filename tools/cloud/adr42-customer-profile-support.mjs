@@ -116,8 +116,8 @@ export function customerProfileJourneyContext(options) {
     orderRun: Object.freeze({
       label,
       note,
-      serviceCode: requireString(artifacts.serviceCode, "CUSTOMER_PROFILE_ARTIFACTS_INVALID"),
-      categoryCode: requireString(artifacts.categoryCode, "CUSTOMER_PROFILE_ARTIFACTS_INVALID"),
+      serviceCode: requireString(run.serviceCode, "CUSTOMER_PROFILE_RUN_INVALID"),
+      categoryCode: requireString(run.categoryCode, "CUSTOMER_PROFILE_RUN_INVALID"),
     }),
   });
 }
