@@ -14,6 +14,19 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
+- 顾客自助订单与洗护进度（[ADR-55](adr/2026-08-13-adr-55-customer-self-service-orders.md)）：新增
+  独立 `/customer` 响应式 Web 入口，顾客用门店信息、手机号和已有取件码建立最长 15 分钟的哈希会话，
+  可查询自身 canonical group 在当前门店的正式订单、整数分票据、件级当前状态和既有状态节点。服务端
+  对猜 ID、不存在资源和跨顾客访问统一失败，查询 strict 校验且不返回内部备注、员工、条码、架位、
+  原因或照片；票据兼容生产账本五种支付方式（含余额）。除 HttpOnly Cookie/CSRF 外，每个 tab 还持有
+  独立 256-bit authority，服务端仅存哈希并在所有读取前常量时间核验；authority 同时选择独立的
+  session/CSRF Cookie，因此迟到登录、resume 或 logout 不会覆盖/清除另一 tab，会话到期也会主动清空页面
+  数据；Web Locks 独占租约还会让 opener/duplicate 复制出的 tab 失败关闭。Caddy preflight 绑定唯一实际
+  Desk route、loopback upstream、Host、forwarding 删除与真实来源覆盖，应用只信任 loopback peer，轮换手机号
+  仍受同一 spray 桶限制；logout 不受共享读取桶阻断。canonical merge 两列对 app role 只读，merge/login
+  统一先取组织锁，事务内 active 会话总数立即收敛到五个。feature 默认关闭。本片不含钱包、次卡、积分、券包、
+  地址、通知偏好或微信小程序。
+
 - 活动批量发券与核销冲正（[ADR-53](adr/2026-08-13-adr-53-campaign-coupon-issuance.md)）：店主从已冻结
   受众和既有优惠券定义发起服务端资格预览；系统只给 active 会员账户发券，按券面额乘人数的最坏值
   原子占用 campaign 预算，并用语义批次防止重试重复发放。活动券继续使用既有不可变 grant/核销账本；

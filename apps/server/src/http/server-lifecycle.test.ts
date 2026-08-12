@@ -161,6 +161,7 @@ test("LAN origin injects secure cookies and same-origin browser metadata policy"
     assert.equal(options.cookiePolicy.csrfName, "__Host-laundry_csrf");
     assert.equal(options.browserOrigin, "https://192.168.50.12:8443");
     assert.equal(options.browserFetchSite, "same-origin");
+    assert.equal(options.trustedProxyClientIpRequired, false);
   } finally {
     await started.shutdown();
   }
@@ -185,6 +186,7 @@ test("cloud origin injects secure cookies and exact public browser policy", asyn
     assert.equal(options.cookiePolicy.csrfName, "__Host-laundry_csrf");
     assert.equal(options.browserOrigin, "https://desk.manpengan.xyz");
     assert.equal(options.browserFetchSite, "same-origin");
+    assert.equal(options.trustedProxyClientIpRequired, true);
   } finally {
     await started.shutdown();
   }

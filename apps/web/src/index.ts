@@ -22,6 +22,22 @@ export {
 } from "./theme.js";
 export { COUNTER_NAV, navLabel, type NavItem, type NavItemId } from "./nav.js";
 export { App, type AppProps } from "./App.js";
+export {
+  CustomerPortalApp,
+  type CustomerPortalAppProps,
+} from "./customer-portal/CustomerPortalApp.js";
+export {
+  createHttpCustomerPortalClient,
+  type CustomerPortalClient,
+  type CustomerPortalFailure,
+  type CustomerPortalResult,
+} from "./customer-portal/client.js";
+export {
+  customerPortalStatusLabel,
+  formatCustomerPortalCents,
+  newestOrderFirst,
+  progressLabels,
+} from "./customer-portal/model.js";
 export { appSurfaceFromPathname, type AppSurface } from "./host/app-surface.js";
 export { CounterShell, type CounterShellProps } from "./shell/CounterShell.js";
 export { OwnerShell, type OwnerShellProps } from "./owner/OwnerShell.js";

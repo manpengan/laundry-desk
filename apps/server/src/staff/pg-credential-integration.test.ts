@@ -44,6 +44,7 @@ const TEST_CONFIG: LocalServerConfig = Object.freeze({
   browserFetchSite: "same-site",
   cookieSecure: false,
   hostAuthorities: Object.freeze(["127.0.0.1:8787"] as const),
+  trustedProxyClientIpRequired: false,
   accessTokenSecret: "staff-pg-access-token-secret-32-bytes-minimum",
   csrfProofSecret: "staff-pg-csrf-proof-secret-independent-value",
 });

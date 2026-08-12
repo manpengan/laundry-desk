@@ -50,6 +50,10 @@ import { MEMBER_BENEFIT_COMMANDS, MEMBER_BENEFIT_QUERIES } from "./member-benefi
 import { MEMBER_LIFECYCLE_COMMANDS } from "./member-lifecycle.js";
 import { MARKETING_COMMANDS, MARKETING_QUERIES } from "./marketing.js";
 import { MARKETING_COUPON_COMMANDS, MARKETING_COUPON_QUERIES } from "./marketing-coupons.js";
+import {
+  CUSTOMER_SELF_SERVICE_QUERIES,
+  CUSTOMER_SELF_SERVICE_QUERY_NAMES,
+} from "./customer-self-service.js";
 import { NOTIFICATION_COMMANDS, NOTIFICATION_QUERIES } from "./notification.js";
 import {
   NOTIFICATION_DELIVERY_COMMANDS,
@@ -301,6 +305,7 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   "marketing.campaign.audience.preview",
   "marketing.campaign.coupons.preview",
   "marketing.campaign.coupon_batch.get",
+  ...CUSTOMER_SELF_SERVICE_QUERY_NAMES,
 ] as const);
 
 export const M2_CONTRACT_DEFINITIONS: readonly (
@@ -331,6 +336,7 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...NOTIFICATION_DELIVERY_QUERIES,
   ...MARKETING_QUERIES,
   ...MARKETING_COUPON_QUERIES,
+  ...CUSTOMER_SELF_SERVICE_QUERIES,
 ]);
 
 /** M2 AI presets are read-only: no command is exposed to the tool projection. */

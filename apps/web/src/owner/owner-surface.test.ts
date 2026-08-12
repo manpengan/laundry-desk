@@ -57,6 +57,8 @@ function ports(): AppPorts {
 test("appSurfaceFromPathname selects only the explicit owner route", () => {
   assert.equal(appSurfaceFromPathname("/owner"), "owner");
   assert.equal(appSurfaceFromPathname("/owner/"), "owner");
+  assert.equal(appSurfaceFromPathname("/customer"), "customer");
+  assert.equal(appSurfaceFromPathname("/customer/"), "customer");
   assert.equal(appSurfaceFromPathname("/"), "counter");
   assert.equal(appSurfaceFromPathname("/owner/settings"), "counter");
   assert.equal(appSurfaceFromPathname("/OWNER"), "counter");

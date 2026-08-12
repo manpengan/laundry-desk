@@ -83,6 +83,7 @@ export type {
 } from "./notification.js";
 export * from "./notification-delivery.js";
 export * from "./marketing-all.js";
+export * from "./customer-self-service.js";
 export {
   PLATFORM_COMMANDS,
   PLATFORM_DEFINITIONS,

@@ -134,6 +134,11 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.audience.preview");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.coupons.preview");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.coupon_batch.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.orders.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.order.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.receipt.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.garments.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.garment.progress");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("accounting.report.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.drilldown");
@@ -142,7 +147,7 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("pricing.policy.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("payment.ledger.list");
     expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(62);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(43);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(48);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
@@ -241,6 +246,11 @@ describe("M2 contract surface", () => {
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "marketing.campaigns.list",
     );
+    expect(
+      M2_READ_ONLY_AI_DEFINITIONS.some((definition) =>
+        definition.name.startsWith("customer.self_service."),
+      ),
+    ).toBe(false);
   });
 
   it("projects the frozen M2 surface into deterministic OpenAPI", { timeout: 10_000 }, () => {

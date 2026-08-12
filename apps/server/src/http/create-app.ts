@@ -42,6 +42,19 @@ import {
 import { createSecurityEventSink, type SecurityEventSink } from "./security-events.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
+import {
+  createPgCustomerPortalStore,
+  type CustomerPortalStore,
+} from "../customer-self-service/index.js";
+import {
+  createCustomerPortalQueryRateLimiter,
+  type CustomerPortalQueryRateLimiter,
+} from "../customer-self-service/query-rate-limit.js";
+import {
+  createCustomerPortalLoginTimingGuard,
+  type CustomerPortalLoginTimingGuard,
+} from "../customer-self-service/login-timing.js";
+import { registerCustomerPortalRoutes } from "./customer-portal-routes.js";
 
 export type CreateAppOptions = Readonly<{
   runtime: LocalRuntime;
@@ -51,6 +64,7 @@ export type CreateAppOptions = Readonly<{
   browserOrigin?: string;
   browserFetchSite?: "same-site" | "same-origin";
   desktopOrigin?: string;
+  trustedProxyClientIpRequired?: boolean;
   /** Deterministic limiter injection for focused tests. */
   loginRateLimiter?: LoginRateLimiter;
   /** Dedicated main-process print transport limiter. */
@@ -61,6 +75,11 @@ export type CreateAppOptions = Readonly<{
   factoryOperationRateLimiter?: FactoryOperationRateLimiter;
   /** Dedicated marketing command/query limiter. */
   marketingOperationRateLimiter?: MarketingOperationRateLimiter;
+  /** Customer-only browser authority; production derives it from the PG runtime. */
+  customerPortalStore?: CustomerPortalStore;
+  customerPortalLoginRateLimiter?: LoginRateLimiter;
+  customerPortalLoginTimingGuard?: CustomerPortalLoginTimingGuard;
+  customerPortalQueryRateLimiter?: CustomerPortalQueryRateLimiter;
   /** Mock print spool; when absent the artifact download route is not mounted. */
   printSpool?: FileSpool;
   /** Structured redacted auth-security events (tests may capture). */
@@ -123,6 +142,7 @@ async function installCoreHttp(
     browserOrigin: options.browserOrigin ?? DEFAULT_BROWSER_ORIGIN,
     browserFetchSite: options.browserFetchSite ?? "same-site",
     desktopOrigin: options.desktopOrigin ?? DEFAULT_DESKTOP_ORIGIN,
+    trustedProxyClientIpRequired: options.trustedProxyClientIpRequired ?? false,
   });
   await app.register(cors, {
     origin: requestSecurity.corsOrigin,
@@ -133,6 +153,7 @@ async function installCoreHttp(
     if (
       request.url.startsWith("/api/v2/auth/") ||
       request.url.startsWith("/api/v2/local/staff") ||
+      request.url.startsWith("/api/v2/customer/") ||
       request.url.startsWith("/api/v2/edge/authority") ||
       request.url.startsWith("/api/v2/edge/print/") ||
       request.url.startsWith("/v1/commands/") ||
@@ -175,6 +196,9 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   const context = createRouteContext(options, requestSecurity);
   installPendingActionCleanup(app, options.runtime.pendingStore);
   registerAuthRoutes(app, context);
+  const customerPortalStore =
+    options.customerPortalStore ??
+    (options.runtime.pool === null ? undefined : createPgCustomerPortalStore(options.runtime.pool));
   registerBusRoutes(
     app,
     context,
@@ -182,6 +206,18 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     options.factoryOperationRateLimiter ?? createFactoryOperationRateLimiter(),
     options.marketingOperationRateLimiter ?? createMarketingOperationRateLimiter(),
   );
+  if (customerPortalStore !== undefined) {
+    registerCustomerPortalRoutes(app, {
+      store: customerPortalStore,
+      cookiePolicy: options.cookiePolicy,
+      loginRateLimiter: options.customerPortalLoginRateLimiter ?? createLoginRateLimiter(),
+      loginTimingGuard:
+        options.customerPortalLoginTimingGuard ?? createCustomerPortalLoginTimingGuard(),
+      queryRateLimiter:
+        options.customerPortalQueryRateLimiter ?? createCustomerPortalQueryRateLimiter(),
+      requestSecurity,
+    });
+  }
   registerEdgeAuthorityRoute(app, context);
   registerEdgeReplayRoute(app, context);
   registerEdgePrintRoute(
