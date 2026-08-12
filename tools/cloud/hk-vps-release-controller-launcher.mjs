@@ -40,6 +40,7 @@ const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^[0-9a-f]{64}$/u;
 const TOKEN = /^[0-9a-f]{32}$/u;
 const MIGRATION = /^\d{4}_[a-z0-9_]+\.sql$/u;
+const CONTROLLER_FILE_PATH = /^tools\/cloud(?:\/[a-z0-9][a-z0-9.-]*)+$/u;
 
 function fail(code, cause) {
   const error = new Error(code, cause === undefined ? undefined : { cause });
@@ -209,7 +210,7 @@ export async function validateControllerDirectory(path, options = {}) {
   for (const item of manifest) {
     if (
       !exactKeys(item, ITEM_KEYS) ||
-      !/^tools\/cloud\/[a-z0-9][a-z0-9.-]*$/u.test(item.path) ||
+      !CONTROLLER_FILE_PATH.test(item.path) ||
       item.path <= previous ||
       !DIGEST.test(item.sha256) ||
       !Number.isSafeInteger(item.size) ||
@@ -239,7 +240,7 @@ export async function validateControllerDirectory(path, options = {}) {
   if (basename(path) !== `${metadata.candidate_sha}-${metadata.token_sha256}.controller`) {
     fail("CLOUD_RELEASE_CONTROLLER_IDENTITY_MISMATCH");
   }
-  const actual = await inventory(path, "", authority);
+  const actual = (await inventory(path, "", authority)).sort();
   const expected = ["controller.json", "files.json", ...manifest.map((item) => item.path)].sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected))
     fail("CLOUD_RELEASE_CONTROLLER_INVENTORY_INVALID");

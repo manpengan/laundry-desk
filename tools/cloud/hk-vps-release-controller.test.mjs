@@ -14,7 +14,8 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
@@ -48,6 +49,7 @@ const TOKEN_2 = "f".repeat(32);
 const ARCHIVE = "1".repeat(64);
 const ARCHIVE_2 = "2".repeat(64);
 const MIGRATION = "0046_cloud_primary.sql";
+const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 function input(overrides = {}) {
   return Object.freeze({
@@ -79,6 +81,9 @@ async function fixture() {
   await mkdir(sourceCloud, { mode: 0o755, recursive: true });
   await chmod(join(sourceRoot, "tools"), 0o755);
   await chmod(sourceCloud, 0o755);
+  const sourceSystemd = join(sourceCloud, "systemd");
+  await mkdir(sourceSystemd, { mode: 0o755 });
+  await chmod(sourceSystemd, 0o755);
   await mkdir(controllerRoot, { mode: 0o700 });
   await chmod(controllerRoot, 0o700);
   for (const [name, source] of [
@@ -88,7 +93,13 @@ async function fixture() {
     await writeFile(join(sourceCloud, name), source, { mode: 0o644 });
     await chmod(join(sourceCloud, name), 0o644);
   }
-  return Object.freeze({ controllerRoot, root, sourceCloud, sourceRoot });
+  await writeFile(
+    join(sourceSystemd, "laundry-desk-data-status.service"),
+    "[Service]\nType=oneshot\n",
+    { mode: 0o644 },
+  );
+  await chmod(join(sourceSystemd, "laundry-desk-data-status.service"), 0o644);
+  return Object.freeze({ controllerRoot, root, sourceCloud, sourceRoot, sourceSystemd });
 }
 
 async function install(files, options = input()) {
@@ -163,10 +174,19 @@ test("controller publish is private, recursive, digest-bound, idempotent and con
     });
     assert.equal(validated.path, localPath);
     assert.equal(validated.digest, first.artifact.digest);
+    const inventory = JSON.parse(await readFile(join(localPath, "files.json"), "utf8"));
+    assert.ok(inventory.some((item) => item.path === CONTROLLER_ENTRY));
     assert.ok(
-      JSON.parse(await readFile(join(localPath, "files.json"), "utf8")).some(
-        (item) => item.path === CONTROLLER_ENTRY,
+      inventory.some(
+        (item) => item.path === "tools/cloud/systemd/laundry-desk-data-status.service",
       ),
+    );
+    assert.equal(
+      await readFile(
+        join(localPath, "tools/cloud/systemd/laundry-desk-data-status.service"),
+        "utf8",
+      ),
+      "[Service]\nType=oneshot\n",
     );
     assert.equal((await lstat(localPath)).mode & 0o7777, 0o700);
 
@@ -191,6 +211,72 @@ test("controller publish is private, recursive, digest-bound, idempotent and con
     assert.equal((await readdir(files.controllerRoot)).length, 2);
   } finally {
     await rm(files.root, { force: true, recursive: true });
+  }
+});
+
+test("controller source recursion rejects symlinked directories", async () => {
+  const files = await fixture();
+  try {
+    await symlink("systemd", join(files.sourceCloud, "linked-systemd"));
+    await assert.rejects(() => install(files), {
+      code: "CLOUD_RELEASE_CONTROLLER_SOURCE_INVALID",
+    });
+  } finally {
+    await rm(files.root, { force: true, recursive: true });
+  }
+});
+
+test("controller inventory uses one global order across files and directories", async () => {
+  const files = await fixture();
+  try {
+    const prefixDirectory = join(files.sourceCloud, "a");
+    await mkdir(prefixDirectory, { mode: 0o755 });
+    await chmod(prefixDirectory, 0o755);
+    await writeFile(join(prefixDirectory, "child.mjs"), "export const child = true;\n", {
+      mode: 0o644,
+    });
+    await chmod(join(prefixDirectory, "child.mjs"), 0o644);
+    await writeFile(join(files.sourceCloud, "a.mjs"), "export const sibling = true;\n", {
+      mode: 0o644,
+    });
+    await chmod(join(files.sourceCloud, "a.mjs"), 0o644);
+
+    const installed = await install(files);
+    await validateController(request(), {
+      gid: installed.gid,
+      root: files.controllerRoot,
+      uid: installed.uid,
+    });
+  } finally {
+    await rm(files.root, { force: true, recursive: true });
+  }
+});
+
+test("controller freezes the repository cloud tree including systemd units", async () => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), "release-controller-repo-test-")));
+  const controllerRoot = join(root, "controllers");
+  try {
+    await mkdir(controllerRoot, { mode: 0o700 });
+    await chmod(controllerRoot, 0o700);
+    const installed = await installReleaseController(REPOSITORY_ROOT, input(), {
+      gid: process.getgid(),
+      root: controllerRoot,
+      uid: process.getuid(),
+    });
+    const localPath = join(controllerRoot, basename(installed.path));
+    const inventory = JSON.parse(await readFile(join(localPath, "files.json"), "utf8"));
+    assert.ok(
+      inventory.some(
+        (item) => item.path === "tools/cloud/systemd/laundry-desk-data-status.service",
+      ),
+    );
+    await validateController(request(), {
+      gid: process.getgid(),
+      root: controllerRoot,
+      uid: process.getuid(),
+    });
+  } finally {
+    await rm(root, { force: true, recursive: true });
   }
 });
 

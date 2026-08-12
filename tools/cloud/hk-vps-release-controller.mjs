@@ -124,21 +124,32 @@ async function writePrivate(path, buffer) {
   }
 }
 
-async function copyCloudFiles(sourceRoot, temporary, uid, gid) {
-  const source = join(sourceRoot, "tools/cloud");
+async function copyCloudDirectory(source, target, relative, uid, gid, inventory) {
   await assertDirectory(source, uid, gid, 0o755);
-  const target = join(temporary, "tools/cloud");
   await mkdir(target, { mode: 0o700, recursive: true });
+  await assertDirectory(target, uid, gid, 0o700);
   const names = (await readdir(source)).sort();
-  const inventory = [];
   for (const name of names) {
     if (!/^[a-z0-9][a-z0-9.-]*$/u.test(name)) fail("CLOUD_RELEASE_CONTROLLER_SOURCE_INVALID");
-    const buffer = await readSource(join(source, name), uid, gid);
+    const sourcePath = join(source, name);
+    const targetPath = join(target, name);
+    const relativePath = `${relative}/${name}`;
+    const metadata = await lstat(sourcePath).catch((error) => {
+      fail("CLOUD_RELEASE_CONTROLLER_SOURCE_INVALID", error);
+    });
+    if (metadata.isDirectory() && !metadata.isSymbolicLink()) {
+      await copyCloudDirectory(sourcePath, targetPath, relativePath, uid, gid, inventory);
+      continue;
+    }
+    if (!metadata.isFile() || metadata.isSymbolicLink()) {
+      fail("CLOUD_RELEASE_CONTROLLER_SOURCE_INVALID");
+    }
+    const buffer = await readSource(sourcePath, uid, gid);
     try {
-      await writePrivate(join(target, name), buffer);
+      await writePrivate(targetPath, buffer);
       inventory.push(
         Object.freeze({
-          path: `tools/cloud/${name}`,
+          path: relativePath,
           sha256: createHash("sha256").update(buffer).digest("hex"),
           size: buffer.byteLength,
         }),
@@ -147,6 +158,15 @@ async function copyCloudFiles(sourceRoot, temporary, uid, gid) {
       buffer.fill(0);
     }
   }
+  await syncDirectory(target);
+}
+
+async function copyCloudFiles(sourceRoot, temporary, uid, gid) {
+  const source = join(sourceRoot, "tools/cloud");
+  const target = join(temporary, "tools/cloud");
+  const inventory = [];
+  await copyCloudDirectory(source, target, "tools/cloud", uid, gid, inventory);
+  inventory.sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
   for (const path of [target, dirname(target), temporary]) {
     await assertDirectory(path, uid, gid, 0o700);
     await syncDirectory(path);
