@@ -99,6 +99,8 @@ describe("M2 contract surface", () => {
       "notification.manual_list.create",
       // ADR-44: explicit admin enqueue; 11-50 recipients escalate R3 to R4.
       "notification.delivery_batch.enqueue",
+      // ADR-46: current-store policy only; does not enable delivery or create bookings.
+      "delivery.policy.set",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
@@ -129,8 +131,12 @@ describe("M2 contract surface", () => {
     // ADR-38: trusted policy read and immutable payment-ledger refund source.
     expect(M2_CONTRACT_QUERY_NAMES).toContain("pricing.policy.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("payment.ledger.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(58);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(38);
+    // ADR-46: store delivery policy plus a feature-gated, policy-only quote.
+    expect(M2_CONTRACT_COMMAND_NAMES).toContain("delivery.policy.set");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.policy.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.availability.quote");
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(59);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(40);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
@@ -225,6 +231,9 @@ describe("M2 contract surface", () => {
     );
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "fulfillment.batch.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.availability.quote",
     );
   });
 

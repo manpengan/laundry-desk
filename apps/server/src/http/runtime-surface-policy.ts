@@ -7,6 +7,7 @@ const OWNER_CLOUD_COMMANDS: ReadonlySet<string> = new Set([
   "staff.create",
   "staff.credentials.reset",
   "store.profile.set",
+  "delivery.policy.set",
 ]);
 
 const OWNER_CLOUD_QUERIES: ReadonlySet<string> = new Set([
@@ -16,6 +17,8 @@ const OWNER_CLOUD_QUERIES: ReadonlySet<string> = new Set([
   "reporting.owner_portfolio.get",
   "staff.access.list",
   "store.authorized.list",
+  "delivery.policy.get",
+  "delivery.availability.quote",
 ]);
 
 export type RuntimeBusSurface = "command" | "query";

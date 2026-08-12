@@ -53,6 +53,7 @@ export const M2_ORDER_RLS_TABLES = Object.freeze([
 export const M2_CATALOG_RLS_TABLES = Object.freeze([
   "catalog_items",
   "store_pricing_policies",
+  "delivery_policies",
 ] as const);
 
 /**

@@ -61,6 +61,15 @@ test("factory handoff and QC are internal staff capabilities while reconciliatio
   assert.equal(staff.includes("fulfillment_reconcile"), false);
 });
 
+test("delivery policy quotes are readable by staff while configuration remains admin-only", () => {
+  const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
+  const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });
+  assert.equal(admin.includes("delivery_read"), true);
+  assert.equal(staff.includes("delivery_read"), true);
+  assert.equal(admin.includes("settings_admin"), true);
+  assert.equal(staff.includes("settings_admin"), false);
+});
+
 test("runtime bus registers the complete member command and query surface", async () => {
   const runtime = await createMemoryLocalRuntime();
   const bus = createRuntimeBus(runtime);
@@ -93,6 +102,9 @@ test("runtime bus registers the complete member command and query surface", asyn
   assert.ok(bus.registeredQueries.includes("reporting.owner_dashboard.get"));
   assert.ok(bus.registered.includes("store.profile.set"));
   assert.ok(bus.registeredQueries.includes("store.authorized.list"));
+  assert.ok(bus.registered.includes("delivery.policy.set"));
+  assert.ok(bus.registeredQueries.includes("delivery.policy.get"));
+  assert.ok(bus.registeredQueries.includes("delivery.availability.quote"));
   for (const name of [
     "member.benefit_definition.upsert",
     "member.membership.set",

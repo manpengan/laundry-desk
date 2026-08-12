@@ -23,6 +23,7 @@ export {
   CommandErrorCodeSchema,
   CommandErrorSchema,
   CommandResponseSchema,
+  ConfirmationSummarySchema,
   MemberTopupConfirmationSummarySchema,
   NotificationDeliveryConfirmationSummarySchema,
   createCommandError,
@@ -38,6 +39,8 @@ export type {
   NotificationDeliveryConfirmationSummary,
   ConfirmationSummary,
 } from "./responses.js";
+export { DeliveryPolicyConfirmationSummarySchema } from "./delivery-policy-confirmation.js";
+export type { DeliveryPolicyConfirmationSummary } from "./delivery-policy-confirmation.js";
 export {
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,

@@ -35,6 +35,7 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "fulfillment_handoff",
   "fulfillment_qc",
   "fulfillment_reconcile",
+  "delivery_read",
 ]);
 const STAFF_PERMISSIONS = Object.freeze([
   "staff_read",
@@ -46,6 +47,7 @@ const STAFF_PERMISSIONS = Object.freeze([
   "member_freeze",
   "fulfillment_handoff",
   "fulfillment_qc",
+  "delivery_read",
 ]);
 const NO_PERMISSIONS = Object.freeze([] as string[]);
 
@@ -67,6 +69,7 @@ export function createRuntimeBus(runtime: LocalRuntime) {
       identity: runtime.identity,
       platform: runtime.platform,
       pricing: runtime.pricing,
+      deliveryPolicy: runtime.deliveryPolicy,
       order: runtime.order,
       catalog: runtime.catalog,
       print: runtime.print,

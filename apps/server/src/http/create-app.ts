@@ -13,6 +13,10 @@ import { registerAuthRoutes } from "./auth-routes.js";
 import type { AuthRouteContext, RouteSecurityContext } from "./auth-route-support.js";
 import { registerBusRoutes } from "./bus-routes.js";
 import { registerEdgeAuthorityRoute } from "./edge-authority-route.js";
+import {
+  createDeliveryPolicyRateLimiter,
+  type DeliveryPolicyRateLimiter,
+} from "./delivery-policy-rate-limit.js";
 import { registerEdgeReplayRoute } from "./edge-replay-route.js";
 import {
   createFactoryOperationRateLimiter,
@@ -55,6 +59,8 @@ export type CreateAppOptions = Readonly<{
   notificationCommandRateLimiter?: NotificationCommandRateLimiter;
   /** Dedicated factory handoff command/query limiter. */
   factoryOperationRateLimiter?: FactoryOperationRateLimiter;
+  /** Dedicated delivery policy command/query limiter. */
+  deliveryPolicyRateLimiter?: DeliveryPolicyRateLimiter;
   /** Mock print spool; when absent the artifact download route is not mounted. */
   printSpool?: FileSpool;
   /** Structured redacted auth-security events (tests may capture). */
@@ -174,6 +180,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     context,
     options.notificationCommandRateLimiter ?? createNotificationCommandRateLimiter(),
     options.factoryOperationRateLimiter ?? createFactoryOperationRateLimiter(),
+    options.deliveryPolicyRateLimiter ?? createDeliveryPolicyRateLimiter(),
   );
   registerEdgeAuthorityRoute(app, context);
   registerEdgeReplayRoute(app, context);

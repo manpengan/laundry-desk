@@ -4,6 +4,7 @@ import type { CommandIdempotencyStore, StepUpApproverAuthority } from "../bus/ty
 import type { CatalogHandlerDeps } from "../catalog/handlers.js";
 import type { CustomerHandlerDeps } from "../customer/handlers.js";
 import type { CustomerProfileHandlerDeps } from "../customer-profile/handlers.js";
+import type { DeliveryPolicyHandlerDeps } from "../delivery-policy/handlers.js";
 import type { PgPool } from "../db/pg-pool.js";
 import type { EdgeAuthorityService } from "../edge/authority-service.js";
 import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
@@ -35,6 +36,7 @@ export type LocalRuntime = Readonly<{
   identity: IdentityHandlerDeps;
   platform: PlatformHandlerDeps;
   pricing: PricingHandlerDeps;
+  deliveryPolicy: DeliveryPolicyHandlerDeps;
   order: OrderHandlerDeps;
   catalog: CatalogHandlerDeps;
   print: PrintHandlerDeps;

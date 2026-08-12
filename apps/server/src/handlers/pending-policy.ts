@@ -1,6 +1,6 @@
 import {
+  ConfirmationSummarySchema,
   createCommandError,
-  NotificationDeliveryConfirmationSummarySchema,
   type ConfirmationSummary,
 } from "@laundry/contracts";
 
@@ -105,16 +105,15 @@ export function bindRiskReservation(
   });
 }
 
-export function existingNotificationSummary(
+export function existingConfirmationSummary(
   existing: PendingAction,
 ): ConfirmationSummary | undefined {
   const authority = existing.authority;
   if (typeof authority !== "object" || authority === null || Array.isArray(authority)) {
     return undefined;
   }
-  const parsed = NotificationDeliveryConfirmationSummarySchema.safeParse(
-    (authority as Readonly<Record<string, unknown>>).confirmation_summary,
-  );
+  const record = authority as Readonly<Record<string, unknown>>;
+  const parsed = ConfirmationSummarySchema.safeParse(record.confirmation_summary ?? authority);
   return parsed.success ? Object.freeze(parsed.data) : undefined;
 }
 

@@ -29,7 +29,7 @@ import { customerPrivacySubjectFromCommand } from "../pending-actions/privacy-su
 import type { PendingActionStore } from "../pending-actions/types.js";
 import {
   bindRiskReservation,
-  existingNotificationSummary,
+  existingConfirmationSummary,
   measurePendingRisk,
   pendingResponse,
   sameRiskRequest,
@@ -48,6 +48,11 @@ const okPolicy = (): StepResult<Readonly<{ allowed: true }>, CommandError> => ({
   ok: true,
   data: Object.freeze({ allowed: true as const }),
 });
+
+const REUSABLE_PENDING_COMMANDS: ReadonlySet<string> = new Set([
+  "notification.delivery_batch.enqueue",
+  "delivery.policy.set",
+]);
 
 export { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";
 
@@ -264,10 +269,7 @@ export function createEnforcingPolicyCheck(
     const transaction = Object.freeze({ tenant: bus.tenant, client: bus.transactionClient });
     await pendingStore.lockPrivacy(transaction);
     const idempotencyKey = bus.request.idempotencyKey;
-    if (
-      idempotencyKey !== undefined &&
-      bus.definition.name === "notification.delivery_batch.enqueue"
-    ) {
+    if (idempotencyKey !== undefined && REUSABLE_PENDING_COMMANDS.has(bus.definition.name)) {
       const existing = await pendingStore.findByIdempotency(
         bus.definition.name,
         idempotencyKey,
@@ -283,8 +285,10 @@ export function createEnforcingPolicyCheck(
         ) {
           return { ok: false, error: createCommandError("POLICY_DENIED") };
         }
-        const summary = existingNotificationSummary(existing);
-        if (summary === undefined) return { ok: false, error: createCommandError("POLICY_DENIED") };
+        const summary = existingConfirmationSummary(existing);
+        if (REUSABLE_PENDING_COMMANDS.has(existing.command) && summary === undefined) {
+          return { ok: false, error: createCommandError("POLICY_DENIED") };
+        }
         return pendingResponse(existing, summary);
       }
     }

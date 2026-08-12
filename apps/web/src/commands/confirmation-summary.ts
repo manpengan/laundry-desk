@@ -2,6 +2,7 @@ import {
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
   NotificationDeliveryConfirmationSummarySchema,
+  DeliveryPolicyConfirmationSummarySchema,
 } from "@laundry/contracts";
 
 import { readMemberTopupConfirmationSummary } from "./member-topup-confirmation.js";
@@ -16,6 +17,18 @@ export function readConfirmationSummary(value: unknown): ConfirmationSummary | n
       ...notification.data,
       ticket_nos: Object.freeze([...notification.data.ticket_nos]),
       garment_statuses: Object.freeze([...notification.data.garment_statuses]),
+    });
+  }
+  const deliveryPolicy = DeliveryPolicyConfirmationSummarySchema.safeParse(value);
+  if (deliveryPolicy.success) {
+    return Object.freeze({
+      ...deliveryPolicy.data,
+      service_areas: Object.freeze(
+        deliveryPolicy.data.service_areas.map((area) => Object.freeze({ ...area })),
+      ),
+      weekly_windows: Object.freeze(
+        deliveryPolicy.data.weekly_windows.map((window) => Object.freeze({ ...window })),
+      ),
     });
   }
   const factory = FactoryHandoffConfirmationSummarySchema.safeParse(value);

@@ -1,26 +1,24 @@
-import type { ChainPortHooks } from "../bus/chain-adapter.js";
-import type { AccountingHandlerDeps } from "../accounting/types.js";
 import { createAccountingHandlers } from "../accounting/handlers.js";
 import { createM1CommandRegistry, type MutableCommandRegistry } from "../bus/registry.js";
 import { createM1QueryRegistry, type MutableQueryRegistry } from "../bus/query-registry.js";
-import type { CatalogHandlerDeps } from "../catalog/handlers.js";
 import {
   registerCatalogCommandHandlers,
   registerCatalogQueryHandlers,
 } from "../catalog/handlers.js";
-import type { CustomerHandlerDeps } from "../customer/handlers.js";
 import {
   registerCustomerCommandHandlers,
   registerCustomerQueryHandlers,
 } from "../customer/handlers.js";
-import type { CustomerProfileHandlerDeps } from "../customer-profile/handlers.js";
 import {
   registerCustomerProfileCommandHandlers,
   registerCustomerProfileQueryHandlers,
 } from "../customer-profile/handlers.js";
-import type { OrderHandlerDeps } from "../order/handlers.js";
+import {
+  registerDeliveryPolicyCommandHandlers,
+  registerDeliveryPolicyQueryHandlers,
+} from "../delivery-policy/handlers.js";
+import { createDeliveryPolicyConfirmationPreparer } from "../delivery-policy/confirmation.js";
 import { registerOrderCommandHandlers, registerOrderQueryHandlers } from "../order/handlers.js";
-import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
 import {
   registerFulfillmentCommandHandlers,
   registerFulfillmentQueryHandlers,
@@ -31,12 +29,8 @@ import {
   registerPaymentCommandHandlers,
   registerPaymentQueryHandlers,
 } from "../payment/handlers.js";
-import type { PhotoHandlerDeps } from "../photo/handlers.js";
 import { registerPhotoCommandHandlers, registerPhotoQueryHandlers } from "../photo/handlers.js";
-import type { PrintHandlerDeps } from "../print/handlers.js";
 import { registerPrintCommandHandlers, registerPrintQueryHandlers } from "../print/handlers.js";
-import type { ReconciliationHandlerDeps } from "../reconciliation/types.js";
-import type { PricingHandlerDeps } from "../pricing/handlers.js";
 import {
   registerPricingCommandHandlers,
   registerPricingQueryHandlers,
@@ -45,14 +39,10 @@ import {
   registerReconciliationCommandHandlers,
   registerReconciliationQueryHandlers,
 } from "../reconciliation/handlers.js";
-import type { ReportingHandlerDeps } from "../reporting/types.js";
 import { registerReportingQueryHandlers } from "../reporting/handlers.js";
-import type { ShiftHandlerDeps } from "../shift/handlers.js";
 import { registerShiftCommandHandlers, registerShiftQueryHandlers } from "../shift/handlers.js";
-import { registerStatsQueryHandlers, type StatsHandlerDeps } from "../stats/handlers.js";
-import type { MemberRuntimeDeps } from "../member/handlers.js";
+import { registerStatsQueryHandlers } from "../stats/handlers.js";
 import * as memberRegistration from "../member/registration.js";
-import type { MemberBenefitsRuntimeDeps } from "../member-benefits/types.js";
 import { withMemberBenefitCouponCancellation } from "../member-benefits/order-cancellation.js";
 import { createMemberTopupConfirmationPreparer } from "../member/topup-confirmation.js";
 import {
@@ -60,60 +50,17 @@ import {
   prepareNotificationDeliveryRisk,
 } from "../notification/delivery-confirmation.js";
 import { combinePendingActionPreparers } from "./default-chain-hooks.js";
-import type { NotificationHandlerDeps } from "../notification/types.js";
 import * as notificationRegistration from "../notification/registration.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
-import { createStaffAccessHandlers, type StaffAccessHandlerDeps } from "../staff/handlers.js";
+import { createStaffAccessHandlers } from "../staff/handlers.js";
 import * as storeManagement from "../store-management/registration.js";
-import { registerIdentityCommandHandlers, type IdentityHandlerDeps } from "./identity-handlers.js";
-import type { PlatformHandlerDeps } from "./platform-handlers.js";
+import { registerIdentityCommandHandlers } from "./identity-handlers.js";
 import { registerPlatformHandlers, registerPlatformQueryHandlers } from "./platform-handlers.js";
 import { createDefaultChainHooks } from "./default-chain-hooks.js";
+import type { RegisterM1Deps, RegisterM1Result } from "./register-m1-types.js";
 
-export type RegisterM1Deps = Readonly<{
-  identity?: IdentityHandlerDeps;
-  platform?: PlatformHandlerDeps;
-  /** ADR-38 store-scoped authoritative counter pricing policy. */
-  pricing?: PricingHandlerDeps;
-  /** M2 skeleton order receive/pickup/get (memory or PG store). */
-  order?: OrderHandlerDeps;
-  /** M2 catalog price list (memory or PG). */
-  catalog?: CatalogHandlerDeps;
-  /** M2 print ticket job queue (memory or PG). */
-  print?: PrintHandlerDeps;
-  /** M2 day stats (order-backed or seeded). */
-  stats?: StatsHandlerDeps;
-  /** M2 customer archive (memory or PG). */
-  customer?: CustomerHandlerDeps;
-  /** ADR-42 org-wide extended profile and discount override. */
-  customerProfile?: CustomerProfileHandlerDeps;
-  /** M2 shift closing / 日结签字 (memory). */
-  shift?: ShiftHandlerDeps;
-  /** Store-day accounting reconciliation, audited export and Edge conflict resolution. */
-  reconciliation?: ReconciliationHandlerDeps;
-  /** ADR-24 dual-basis day/month/staff accounting reports. */
-  accounting?: AccountingHandlerDeps;
-  /** ADR-26 owner dashboard; financial rows reuse the ADR-24 read port. */
-  reporting?: ReportingHandlerDeps;
-  /** M3 garment photo metadata (memory). */
-  photo?: PhotoHandlerDeps;
-  /** M3 garment production, incidents and loss handling. */
-  fulfillment?: FulfillmentHandlerDeps;
-  staffAccess?: StaffAccessHandlerDeps;
-  storeManagement?: storeManagement.HandlerDeps;
-  member?: MemberRuntimeDeps;
-  memberBenefits?: MemberBenefitsRuntimeDeps;
-  notification?: NotificationHandlerDeps;
-}>;
-
-export type RegisterM1Result = Readonly<{
-  registry: MutableCommandRegistry;
-  queryRegistry: MutableQueryRegistry;
-  chainHooks: ChainPortHooks;
-  registered: readonly string[];
-  registeredQueries: readonly string[];
-}>;
+export type { RegisterM1Deps, RegisterM1Result } from "./register-m1-types.js";
 
 /**
  * Create an M1 registry, attach available identity/platform handlers, and
@@ -144,6 +91,11 @@ export function registerM1Handlers(
   if (deps.pricing !== undefined) {
     registerPricingCommandHandlers(registry, deps.pricing);
     registered.push("pricing.policy.set");
+  }
+
+  if (deps.deliveryPolicy !== undefined) {
+    registerDeliveryPolicyCommandHandlers(registry, deps.deliveryPolicy);
+    registered.push("delivery.policy.set");
   }
 
   // ADR-15: price maintenance is a command; the query side stays read-only.
@@ -270,6 +222,11 @@ export function registerM1QueryHandlers(
     names.push("pricing.policy.get");
   }
 
+  if (deps.deliveryPolicy !== undefined) {
+    registerDeliveryPolicyQueryHandlers(queryRegistry, deps.deliveryPolicy);
+    names.push("delivery.policy.get", "delivery.availability.quote");
+  }
+
   if (deps.catalog !== undefined) {
     registerCatalogQueryHandlers(queryRegistry, deps.catalog);
     names.push(
@@ -379,6 +336,7 @@ export function createRegisteredM1Bus(
       {},
       pendingStore,
       combinePendingActionPreparers([
+        deps.deliveryPolicy === undefined ? undefined : createDeliveryPolicyConfirmationPreparer(),
         deps.member === undefined || deps.order === undefined
           ? undefined
           : createMemberTopupConfirmationPreparer(deps.member),

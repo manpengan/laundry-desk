@@ -27,6 +27,7 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0051_customer_extended_profiles.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0052_notification_delivery_outbox.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0053_factory_handoff_and_qc.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0054_delivery_policy.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -58,5 +59,6 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Customer extended profiles** (0051, ADR-42): bounded customer profile children, canonical merge groups, HMAC erasure tombstones, durable PII purge ownership, and customer/tier discount plus operational-waiver order snapshots
 - **Provider-neutral notification outbox** (0052, ADR-44): approved templates, bounded batches, leased deliveries, append-only attempts/receipts, cost evidence, and privacy-safe recipient/message fingerprints
 - **Factory handoff and QC** (0053, ADR-45): store-scoped garment manifests, four immutable handoff checkpoints, discrepancy reconciliation, custody anchors, and append-only quality evidence
+- **Delivery policy and policy-only quote** (0054, ADR-46): store-scoped bounded areas, integer-cent fees, weekly windows, booking rules, optimistic versions, forced RLS, and no reservation or feature enablement
 - Still deferred: edge lease, AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

@@ -14,6 +14,7 @@ export const M2_ORDER_TABLE_NAMES = Object.freeze([
 export const M2_CATALOG_TABLE_NAMES = Object.freeze([
   "catalog_items",
   "store_pricing_policies",
+  "delivery_policies",
 ] as const);
 
 export const M2_PAYMENT_TABLE_NAMES = Object.freeze(["payments"] as const);

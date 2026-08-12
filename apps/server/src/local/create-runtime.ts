@@ -20,6 +20,10 @@ import { createPgCustomerStore } from "../customer/pg-customer-store.js";
 import { createMemoryCustomerProfileStore } from "../customer-profile/memory-store.js";
 import { createPgCustomerProfileStore } from "../customer-profile/pg-store.js";
 import { createCustomerOrderPolicyResolver } from "../customer-profile/order-policy.js";
+import {
+  createMemoryDeliveryPolicyRuntime,
+  createPgDeliveryPolicyRuntime,
+} from "../delivery-policy/runtime.js";
 import { createMemoryOrderStore } from "../order/memory-store.js";
 import { createMemoryPrintJobStore } from "../print/memory-store.js";
 import { createPgPrintJobStore } from "../print/pg-print-store.js";
@@ -47,15 +51,8 @@ import {
   createPgFulfillmentRuntime,
 } from "../fulfillment/runtime.js";
 import { deriveEdgeAuthorityKeyPair } from "../edge/authority-key.js";
-import {
-  createPgPool,
-  resolveRuntimeDatabaseUrl,
-  RUNTIME_DATABASE_URL_REQUIRED,
-  type CreatePoolOptions,
-  type PgPool,
-} from "../db/pg-pool.js";
+import { resolveRuntimeDatabaseUrl, RUNTIME_DATABASE_URL_REQUIRED } from "../db/pg-pool.js";
 import { DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./demo-ids.js";
-import { assertLocalBootstrapReady } from "./bootstrap.js";
 import {
   parseLocalHostConfig,
   parseLocalPhotoStoreDir,
@@ -70,7 +67,6 @@ import { createLocalMemoryStaffAccessDeps } from "./memory-staff-access.js";
 import { buildPlatform, mintRuntimeSecret } from "./runtime-support.js";
 import {
   freezeStaffDirectory,
-  loadPgStaffDirectory,
   LOCAL_MEMORY_STAFF_DIRECTORY,
   type LocalStaffDirectoryEntry,
 } from "./staff-directory.js";
@@ -79,6 +75,11 @@ import * as recon from "./runtime-reconciliation.js";
 import type { LocalRuntime } from "./runtime-types.js";
 import { createMemoryMemberRuntimes, createPgMemberRuntimes } from "./runtime-member-benefits.js";
 import { buildIdentityDeps } from "./runtime-identity.js";
+import {
+  closeFailedPgPool,
+  defaultPgRuntimeDependencies,
+  type CreatePgLocalRuntimeDependencies,
+} from "./runtime-pg-dependencies.js";
 export {
   DEMO_ADMIN_ID,
   DEMO_ORG_ID,
@@ -91,28 +92,7 @@ export {
 export type { LocalStaffDirectoryEntry } from "./staff-directory.js";
 export { loadPgStaffDirectory } from "./staff-directory.js";
 export type { LocalRuntime, LocalRuntimeMode } from "./runtime-types.js";
-export type CreatePgLocalRuntimeDependencies = Readonly<{
-  createPool: (options: CreatePoolOptions) => PgPool;
-  assertReady: (pool: PgPool, expectedDemoOnly: boolean) => Promise<void>;
-  loadStaffDirectory: typeof loadPgStaffDirectory;
-}>;
-const defaultPgRuntimeDependencies: CreatePgLocalRuntimeDependencies = Object.freeze({
-  createPool: createPgPool,
-  assertReady: assertLocalBootstrapReady,
-  loadStaffDirectory: loadPgStaffDirectory,
-});
-async function closeFailedPgPool(pool: PgPool, initializationError: unknown): Promise<never> {
-  try {
-    await pool.end();
-  } catch (cleanupError) {
-    throw new AggregateError(
-      [initializationError, cleanupError],
-      "PostgreSQL runtime initialization and pool cleanup both failed",
-      { cause: initializationError },
-    );
-  }
-  throw initializationError;
-}
+export type { CreatePgLocalRuntimeDependencies } from "./runtime-pg-dependencies.js";
 export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const store = createMemoryIdentityStore();
   const passwordPort = createPasswordPort();
@@ -188,6 +168,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     ),
     platform,
     pricing: Object.freeze({ store: pricingStore }),
+    deliveryPolicy: createMemoryDeliveryPolicyRuntime(platform.features, LOCAL_PROFILE.timezone),
     order: Object.freeze({
       store: orderStore,
       pricing: pricingStore,
@@ -310,6 +291,7 @@ export async function createPgLocalRuntime(
     ),
     platform: buildPlatform("sql"),
     pricing: Object.freeze({ store: pricingStore }),
+    deliveryPolicy: createPgDeliveryPolicyRuntime(appPool),
     order: Object.freeze({
       store: orderStore,
       pricing: pricingStore,

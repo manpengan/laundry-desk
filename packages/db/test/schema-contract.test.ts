@@ -226,6 +226,24 @@ describe("M1 schema contract vs A3 matrix", () => {
         "updated_by_staff_id",
       ]),
     );
+
+    const deliveryColumns = columnNames(M2_CATALOG_TABLES.delivery_policies);
+    expect(deliveryColumns).toEqual(
+      expect.arrayContaining([
+        "org_id",
+        "store_id",
+        "accepting_appointments",
+        "minimum_lead_minutes",
+        "maximum_advance_days",
+        "slot_minutes",
+        "max_appointments_per_slot",
+        "service_areas_json",
+        "weekly_windows_json",
+        "version",
+        "updated_at",
+        "updated_by_staff_id",
+      ]),
+    );
   });
 
   it("declares M2 catalog tenant unique layouts", () => {

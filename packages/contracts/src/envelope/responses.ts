@@ -2,6 +2,10 @@ import { z } from "zod";
 
 import { JsonPointerSchema } from "../registry/primitives.js";
 import {
+  DeliveryPolicyConfirmationSummarySchema,
+  type DeliveryPolicyConfirmationSummary,
+} from "./delivery-policy-confirmation.js";
+import {
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
   type FactoryHandoffConfirmationSummary,
@@ -181,9 +185,10 @@ export const NotificationDeliveryConfirmationSummarySchema = z
     }
   });
 
-const ConfirmationSummarySchema = z.union([
+export const ConfirmationSummarySchema = z.union([
   MemberTopupConfirmationSummarySchema,
   NotificationDeliveryConfirmationSummarySchema,
+  DeliveryPolicyConfirmationSummarySchema,
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
 ]);
@@ -223,6 +228,7 @@ export type NotificationDeliveryConfirmationSummary = DeepReadonly<
 export type ConfirmationSummary =
   | MemberTopupConfirmationSummary
   | NotificationDeliveryConfirmationSummary
+  | DeliveryPolicyConfirmationSummary
   | FactoryHandoffConfirmationSummary
   | FulfillmentOperationConfirmationSummary;
 
@@ -304,6 +310,18 @@ const freezeCommandError = (error: CommandError): CommandError => {
         return {
           ...error.detail,
           summary: Object.freeze({ ...error.detail.summary, matched_rule: matchedRule }),
+        };
+      }
+      if (error.detail.summary.kind === "delivery_policy") {
+        const freezeRecords = <T extends object>(records: readonly T[]) =>
+          Object.freeze(records.map((record) => Object.freeze({ ...record })));
+        return {
+          ...error.detail,
+          summary: Object.freeze({
+            ...error.detail.summary,
+            service_areas: freezeRecords(error.detail.summary.service_areas),
+            weekly_windows: freezeRecords(error.detail.summary.weekly_windows),
+          }),
         };
       }
       if (error.detail.summary.kind === "factory_handoff") {

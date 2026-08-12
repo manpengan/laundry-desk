@@ -145,6 +145,22 @@
           "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
         }
       }
+    },
+    "0054_delivery_policy.sql": {
+      "database_restored_catalog": {
+        "entries": 1265,
+        "sha256": "0164edb4318816c3e7e42718e66311ecfcc6b26ec14c4a40dba2a801467c31d2"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
     }
   }
 }

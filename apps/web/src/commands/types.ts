@@ -5,6 +5,7 @@
 import type {
   FactoryHandoffConfirmationSummary,
   FulfillmentOperationConfirmationSummary,
+  DeliveryPolicyConfirmationSummary,
 } from "@laundry/contracts";
 
 export type MemberTopupMatchedRule = Readonly<{
@@ -41,6 +42,7 @@ export type NotificationDeliveryConfirmationSummary = Readonly<{
 export type ConfirmationSummary =
   | MemberTopupConfirmationSummary
   | NotificationDeliveryConfirmationSummary
+  | DeliveryPolicyConfirmationSummary
   | FactoryHandoffConfirmationSummary
   | FulfillmentOperationConfirmationSummary;
 

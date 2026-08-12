@@ -73,6 +73,7 @@ export {
   M3_PHOTO_TABLES,
   auditLog,
   catalogItems,
+  deliveryPolicies,
   customers,
   garmentPhotos,
   commandIdempotency,

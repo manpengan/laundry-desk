@@ -53,6 +53,7 @@
 | [ADR-43](2026-08-12-adr-43-cloud-data-protection-and-joint-recovery.md)       | Cloud 数据保护、离机副本与联合恢复              | **Accepted** 2026-08-12；Cloud Web 阶段 4.1        |
 | [ADR-44](2026-08-12-adr-44-provider-neutral-notification-outbox.md)           | Provider-neutral 通知 outbox、回执与人工降级    | **Accepted** 2026-08-12；Cloud Web 阶段 4.2        |
 | [ADR-45](2026-08-12-adr-45-factory-handoff-and-qc.md)                         | 店厂四节点交接、清点差异与质检返工              | **Proposed** 2026-08-12；实现候选待 manpengan 签署 |
+| [ADR-46](2026-08-13-adr-46-delivery-policy-and-policy-only-availability.md)   | 门店取送策略与不占位可预约报价                  | **Proposed** 2026-08-13；实现候选待 manpengan 签署 |
 
 ## v1 线
 

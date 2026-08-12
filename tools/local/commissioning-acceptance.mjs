@@ -143,6 +143,10 @@ for (const mode of modes) {
         ...environment,
         LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
       });
+      await run(process.execPath, ["tools/local/delivery-policy-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+      });
       await run(process.execPath, ["tools/local/member-benefits-pg-acceptance.mjs"], {
         ...environment,
         LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",

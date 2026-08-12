@@ -126,6 +126,7 @@ const STORE_TABLES = describeTables(
     "production_handoff_checkpoints",
     "production_handoff_discrepancy_resolutions",
     "garment_qc_log",
+    "delivery_policies",
     "delivery_orders",
     "notification_delivery_batches",
     "notification_deliveries",
