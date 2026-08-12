@@ -33,6 +33,8 @@ const ADMIN_PERMISSIONS = Object.freeze([
   // the explicit ADR-23 manual-list fallback.
   "notification_send",
   "marketing_manage",
+  // ADR-57: provider credential custody is an R5, admin-only management surface.
+  "ai_key_manage",
   "fulfillment_handoff",
   "fulfillment_qc",
   "fulfillment_reconcile",

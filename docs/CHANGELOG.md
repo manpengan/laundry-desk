@@ -88,6 +88,11 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
   不占位也不创建预约。保存策略不会打开 `store_features.delivery`，功能关闭或 feature 行缺失时
   所有报价都明确不可预约。当前为 online-only Cloud Web 内部员工切片，不包含顾客自助、地址管理、
   实际容量、预约/任务状态、路线、GPS 或第三方 provider。
+- BYOK 凭据托管与模型注册表（[ADR-57](adr/2026-08-13-adr-57-byok-custody-model-registry.md)）：
+  新增组织隔离的 envelope 加密凭据生命周期，replace/revoke 只经 admin、CSRF、限流与另一管理员 R5
+  proof 的专用 secret ingress；API 只返回 last4 与 metadata。模型注册表初始为空且应用只读，必须由
+  官方文档核验后另行登记。当前不含生产 KMS adapter、provider 网络/SDK、模型选择、推理、UI 或
+  自动化，`ai` feature 继续关闭；0064 需在集成 0054–0063 后才可进入连续迁移与发布门禁。
 
 - 店厂交接与质检返工（[ADR-45](adr/2026-08-12-adr-45-factory-handoff-and-qc.md)）：新增当前门店
   内部员工使用的批次建单、门店出库、工厂收件、工厂出库和门店收件四节点完整扫码证据；服务端计算

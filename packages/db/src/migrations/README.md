@@ -69,6 +69,8 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0061_customer_self_service.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0062_customer_wallet_and_preferences.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0063_referral_and_group_buy.sql
+# 0064 只能在集成分支已具备并应用 0054–0063 后执行；本 Item 不伪造占位迁移。
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0064_byok_model_registry.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -101,6 +103,7 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Customer self-service orders** (0061, [ADR-55](../../../../docs/adr/2026-08-13-adr-55-customer-self-service-orders.md)): short-lived customer authority and canonical order/receipt/garment projections
 - **Customer wallet and preferences** (0062, [ADR-56](../../../../docs/adr/2026-08-13-adr-56-customer-wallet-and-preferences.md)): wallet/benefit projections plus canonical CAS over portal-owned addresses and notification preferences
 - **Referral and group-buy** (0063, [ADR-54](../../../../docs/adr/2026-08-13-adr-54-referral-and-group-buy.md)): active-member referral rewards and digest-only external vouchers with single-use order redemption
+- **BYOK custody and model registry** (0064, [ADR-57](../../../../docs/adr/2026-08-13-adr-57-byok-custody-model-registry.md)): org-RLS AES-256-GCM envelopes with KMS-wrapped per-credential DEKs, fail-closed lifecycle transitions, and an empty owner-verified global model registry; requires the integrated 0054–0063 chain first
 - **M2 payments** (0009): `payments` append-only ledger (`SELECT, INSERT` only for `laundry_app`)
 - **M2 print** (0010): `print_jobs` queue (`SELECT, INSERT, UPDATE` for status transitions; no DELETE)
 - **M2 customers** (0011): `customers` org-scoped archive (`SELECT, INSERT, UPDATE`; unique org+phone)
@@ -132,5 +135,5 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Store commissioning and staff credentials** (0045, ADR-31): permanent dual-admin commissioning metadata plus tenant-scoped, expiring, single-use credential setup references with no retained secrets
 - **Signed print request idempotency** (0046): database-derived logical keys make original enqueue and source-bound retry/reprint exact across lost responses and concurrent clients; unambiguous legacy rows are backfilled while duplicate history remains fail-closed
 - **Cloud counter trust** (0047, [ADR-38](../../../../docs/adr/2026-08-11-adr-38-cloud-counter-trust-closure.md)): store-scoped pricing policy with RLS, authoritative order pricing selections/snapshots, and persistent per-piece draft/formal garment details
-- Still deferred: AI matrix tables
+- Still deferred: remaining AI workflow and automation matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

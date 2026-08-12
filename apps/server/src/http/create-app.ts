@@ -60,6 +60,12 @@ import {
   type CustomerPortalLoginTimingGuard,
 } from "../customer-self-service/login-timing.js";
 import { registerCustomerPortalRoutes } from "./customer-portal-routes.js";
+import type { ByokKmsPort } from "../ai/byok-kms.js";
+import { createByokRuntime } from "../ai/byok-runtime.js";
+import { createByokService } from "../ai/byok-service.js";
+import type { ByokStore } from "../ai/byok-types.js";
+import { registerByokRoutes } from "./byok-routes.js";
+import { createByokMutationRateLimiter, type ByokMutationRateLimiter } from "./byok-rate-limit.js";
 
 export type CreateAppOptions = Readonly<{
   runtime: LocalRuntime;
@@ -91,6 +97,11 @@ export type CreateAppOptions = Readonly<{
   printSpool?: FileSpool;
   /** Structured redacted auth-security events (tests may capture). */
   securityEventSink?: SecurityEventSink;
+  /** Production injects a non-exportable KMS/OS secret-store adapter; never a raw KEK. */
+  byokKms?: ByokKmsPort;
+  /** Focused tests may replace persistence without weakening route policy. */
+  byokStore?: ByokStore;
+  byokMutationRateLimiter?: ByokMutationRateLimiter;
   /** Tests may silence request logs; runtime defaults to the redacted structured logger. */
   logger?: false;
 }>;
@@ -164,6 +175,7 @@ async function installCoreHttp(
       request.url.startsWith("/api/v2/edge/authority") ||
       request.url.startsWith("/api/v2/edge/print/") ||
       request.url.startsWith("/api/v2/delivery-evidence/") ||
+      request.url.startsWith("/api/v2/ai/") ||
       request.url.startsWith("/v1/commands/") ||
       request.url.startsWith("/v1/queries/")
     ) {
@@ -236,6 +248,14 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   );
   registerPhotoFileRoutes(app, context, options.runtime.photo);
   registerDeliveryEvidenceFileRoutes(app, context, options.runtime.deliveryEvidence);
+  registerByokRoutes(
+    app,
+    context,
+    createByokService(
+      createByokRuntime(options.runtime, options.byokKms ?? null, options.byokStore),
+    ),
+    options.byokMutationRateLimiter ?? createByokMutationRateLimiter(),
+  );
 
   // Artifact download only exists when a spool is configured; the memory
   // runtime has nothing on disk to serve.

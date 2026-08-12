@@ -36,7 +36,6 @@ export const DEFERRED_V2_TABLES_NOTE = Object.freeze({
     "primary_lease_heads",
     "primary_leases",
     "ticket_no_blocks",
-    "ai_model_registry",
   ] as const),
 } as const);
 
