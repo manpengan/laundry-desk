@@ -8,6 +8,8 @@ import { createDatabaseBackup, LocalDataError, verifyBackupFile } from "./data-t
 
 const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
+const PHOTO_STORE_MARKER = ".laundry-photo-store-v1";
+const PHOTO_NAMESPACE = "delivery-evidence";
 const PHOTO_NAME =
   /^(?:\.laundry-photo-store-v1|[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp))$/u;
 const SNAPSHOT_NAME = /^laundry-v2-(?:backup|pre-restore)-\d{8}T\d{6}Z-[0-9a-f]{8}\.dump\.photos$/u;
@@ -73,15 +75,61 @@ async function copyPrivateFile(source, destination) {
   });
 }
 
-async function inspectPrivateFile(path) {
+async function inspectPrivateFile(path, code) {
   const metadata = await lstat(path);
   if (metadata.isSymbolicLink() || !metadata.isFile() || (metadata.mode & 0o7777) !== FILE_MODE) {
-    fail("LOCAL_PHOTO_BACKUP_SOURCE_INVALID");
+    fail(code);
   }
   return Object.freeze({
     bytes: metadata.size,
     sha256: await sha256File(path),
   });
+}
+
+function isPhotoPath(path) {
+  if (typeof path !== "string") return false;
+  if (PHOTO_NAME.test(path)) return true;
+  const prefix = `${PHOTO_NAMESPACE}/`;
+  return path.startsWith(prefix) && PHOTO_NAME.test(path.slice(prefix.length));
+}
+
+function photoFileCount(files) {
+  return files.filter((file) => basename(file.name) !== PHOTO_STORE_MARKER).length;
+}
+
+async function inspectPhotoTree(rootPath, code) {
+  const files = [];
+  let hasNamespace = false;
+  for (const name of (await readdir(rootPath)).sort()) {
+    if (PHOTO_NAME.test(name)) {
+      files.push(
+        Object.freeze({ name, ...(await inspectPrivateFile(join(rootPath, name), code)) }),
+      );
+      continue;
+    }
+    if (name !== PHOTO_NAMESPACE) fail(code);
+    hasNamespace = true;
+    const namespacePath = join(rootPath, name);
+    await assertPrivateDirectory(namespacePath, code);
+    for (const child of (await readdir(namespacePath)).sort()) {
+      if (!PHOTO_NAME.test(child)) fail(code);
+      const relativePath = `${PHOTO_NAMESPACE}/${child}`;
+      files.push(
+        Object.freeze({
+          name: relativePath,
+          ...(await inspectPrivateFile(join(namespacePath, child), code)),
+        }),
+      );
+    }
+  }
+  if (
+    !files.some((file) => file.name === PHOTO_STORE_MARKER) ||
+    (hasNamespace &&
+      !files.some((file) => file.name === `${PHOTO_NAMESPACE}/${PHOTO_STORE_MARKER}`))
+  ) {
+    fail(code);
+  }
+  return Object.freeze(files);
 }
 
 async function createPhotoSnapshot(context, dumpPath, options, dependencies) {
@@ -98,19 +146,11 @@ async function createPhotoSnapshot(context, dumpPath, options, dependencies) {
       Object.freeze({ cwd: options.cwd, env: context.env }),
     );
     await assertPrivateDirectory(snapshotPath, "LOCAL_PHOTO_BACKUP_DIRECTORY_INVALID");
-    for (const name of (await readdir(snapshotPath)).sort()) {
-      if (!PHOTO_NAME.test(name)) fail("LOCAL_PHOTO_BACKUP_SOURCE_INVALID");
-      const inspected = await inspectPrivateFile(join(snapshotPath, name));
-      files.push(Object.freeze({ name, ...inspected }));
-    }
+    files.push(...(await inspectPhotoTree(snapshotPath, "LOCAL_PHOTO_BACKUP_SOURCE_INVALID")));
   } catch (error) {
     await rm(snapshotPath, { recursive: true, force: true });
     if (error instanceof LocalDataError) throw error;
     fail("LOCAL_PHOTO_BACKUP_FAILED", error);
-  }
-  if (!files.some((file) => file.name === ".laundry-photo-store-v1")) {
-    await rm(snapshotPath, { recursive: true, force: true });
-    fail("LOCAL_PHOTO_BACKUP_SOURCE_INVALID");
   }
   return Object.freeze({
     path: snapshotPath,
@@ -146,7 +186,7 @@ export async function createDisasterRecoveryBackup(context, options, dependencie
       sha256: await sha256File(manifestPath),
       database_sha256: database.sha256,
       bytes: database.bytes + photos.bytes,
-      photo_files: photos.files.length - 1,
+      photo_files: photoFileCount(photos.files),
     });
   } catch (error) {
     if (photos !== undefined) await rm(photos.path, { recursive: true, force: true });
@@ -224,42 +264,35 @@ export async function verifyDisasterRecoveryBackup(context, inputPath, expectedS
     fail("LOCAL_RESTORE_PHOTOS_INVALID");
   }
   await assertPrivateDirectory(snapshotPath, "LOCAL_RESTORE_PHOTOS_INVALID");
-  const names = await readdir(snapshotPath);
+  const actualFiles = await inspectPhotoTree(snapshotPath, "LOCAL_RESTORE_PHOTOS_INVALID");
   if (
     new Set(manifest.photos.files.map((entry) => entry?.name)).size !==
       manifest.photos.files.length ||
-    names.length !== manifest.photos.files.length
+    actualFiles.length !== manifest.photos.files.length
   ) {
     fail("LOCAL_RESTORE_PHOTOS_INVALID");
   }
+  const actualByName = new Map(actualFiles.map((entry) => [entry.name, entry]));
   let totalBytes = 0;
   for (const entry of manifest.photos.files) {
     if (
       !exactKeys(entry, ["name", "bytes", "sha256"]) ||
-      !PHOTO_NAME.test(entry.name) ||
+      !isPhotoPath(entry.name) ||
       !Number.isSafeInteger(entry.bytes) ||
       entry.bytes < 1 ||
       !/^[0-9a-f]{64}$/u.test(entry.sha256)
     ) {
       fail("LOCAL_RESTORE_PHOTOS_INVALID");
     }
-    const path = join(snapshotPath, entry.name);
-    const metadata = await lstat(path).catch(() => null);
-    if (
-      metadata === null ||
-      metadata.isSymbolicLink() ||
-      !metadata.isFile() ||
-      metadata.size !== entry.bytes ||
-      (metadata.mode & 0o7777) !== FILE_MODE ||
-      (await sha256File(path)) !== entry.sha256
-    ) {
+    const actual = actualByName.get(entry.name);
+    if (actual === undefined || actual.bytes !== entry.bytes || actual.sha256 !== entry.sha256) {
       fail("LOCAL_RESTORE_PHOTOS_INVALID");
     }
     totalBytes += entry.bytes;
   }
   if (
     totalBytes !== manifest.photos.bytes ||
-    !manifest.photos.files.some((entry) => entry.name === ".laundry-photo-store-v1")
+    !manifest.photos.files.some((entry) => entry.name === PHOTO_STORE_MARKER)
   ) {
     fail("LOCAL_RESTORE_PHOTOS_INVALID");
   }
@@ -268,7 +301,7 @@ export async function verifyDisasterRecoveryBackup(context, inputPath, expectedS
     sha256: expectedSha256,
     database_sha256: database.sha256,
     snapshotPath,
-    photo_files: manifest.photos.files.length - 1,
+    photo_files: photoFileCount(manifest.photos.files),
   });
 }
 
@@ -280,9 +313,12 @@ export async function restorePhotoSnapshot(context, source) {
   const previous = `${photoRoot}.previous-${suffix}`;
   await mkdir(staging, { mode: DIRECTORY_MODE });
   try {
-    for (const name of await readdir(source.snapshotPath)) {
-      if (!PHOTO_NAME.test(name)) fail("LOCAL_RESTORE_PHOTOS_INVALID");
-      await copyPrivateFile(join(source.snapshotPath, name), join(staging, name));
+    const files = await inspectPhotoTree(source.snapshotPath, "LOCAL_RESTORE_PHOTOS_INVALID");
+    if (files.some((file) => file.name.startsWith(`${PHOTO_NAMESPACE}/`))) {
+      await mkdir(join(staging, PHOTO_NAMESPACE), { mode: DIRECTORY_MODE });
+    }
+    for (const file of files) {
+      await copyPrivateFile(join(source.snapshotPath, file.name), join(staging, file.name));
     }
     await rename(photoRoot, previous);
     try {
