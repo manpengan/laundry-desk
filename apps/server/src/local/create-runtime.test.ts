@@ -17,6 +17,7 @@ const SERVER_CONFIG = Object.freeze({
   browserFetchSite: "same-site",
   cookieSecure: false,
   hostAuthorities: Object.freeze(["127.0.0.1:8787"] as const),
+  trustedProxyClientIpRequired: false,
   accessTokenSecret: "a".repeat(32),
   csrfProofSecret: "b".repeat(32),
 }) satisfies LocalServerConfig;

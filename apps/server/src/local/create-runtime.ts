@@ -7,10 +7,7 @@ import { createPgIdempotencyStore } from "../bus/pg-idempotency.js";
 import { createMemoryIdentityStore } from "../identity/memory-store.js";
 import { createPgIdentityStore } from "../identity/pg-store.js";
 import { createPgStepUpProofStore } from "../identity/pg-step-up-proof-store.js";
-import {
-  createMemoryStepUpApproverAuthority,
-  verifyPgStepUpApproverAuthority,
-} from "../identity/step-up-approver-authority.js";
+import * as stepUpAuthority from "../identity/step-up-approver-authority.js";
 import { createPasswordPort } from "../identity/password.js";
 import type { StaffRecord, Uuid } from "../identity/types.js";
 import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
@@ -33,6 +30,7 @@ import { createPgStatsQuery } from "../stats/pg-source.js";
 import { createPgStaffAccessDeps } from "../staff/runtime.js";
 import * as ownerOperations from "./runtime-owner-operations.js";
 import * as notificationRuntime from "./runtime-notification.js";
+import { createMemoryMarketingRuntime, createPgMarketingRuntime } from "./runtime-marketing.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import { acquirePgBusinessDayLock } from "../workday/business-day-lock.js";
@@ -79,15 +77,7 @@ import {
   defaultPgRuntimeDependencies,
   type CreatePgLocalRuntimeDependencies,
 } from "./runtime-pg-dependencies.js";
-export {
-  DEMO_ADMIN_ID,
-  DEMO_ORG_ID,
-  DEMO_PASSWORD,
-  DEMO_PIN,
-  DEMO_STAFF_A_ID,
-  DEMO_STAFF_B_ID,
-  DEMO_STORE_ID,
-} from "./demo-ids.js";
+export * from "./demo-ids.js";
 export type { LocalStaffDirectoryEntry } from "./staff-directory.js";
 export { loadPgStaffDirectory } from "./staff-directory.js";
 export type { LocalRuntime, LocalRuntimeMode } from "./runtime-types.js";
@@ -221,13 +211,19 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     member: memberRuntimes.member,
     memberBenefits: memberRuntimes.memberBenefits,
     notification: notificationRuntime.createMemoryNotificationRuntime(orderStore),
+    marketing: createMemoryMarketingRuntime(
+      platform.features,
+      DEMO_CUSTOMERS,
+      memberRuntimes,
+      orderStore,
+    ),
     edgeAuthority: edgeRuntime.createMemoryRuntimeAuthority(accessTokenSecret),
     accessTokenSecret,
     csrfProofSigner,
     staffDirectory: LOCAL_MEMORY_STAFF_DIRECTORY,
     pendingStore: processPendingActionStore,
     stepUpProofStore: processStepUpProofStore,
-    stepUpApproverAuthority: createMemoryStepUpApproverAuthority(staffAccess.store),
+    stepUpApproverAuthority: stepUpAuthority.createMemoryStepUpApproverAuthority(staffAccess.store),
     idempotencyStore: new MemoryIdempotencyStore(),
     pool: null,
     store,
@@ -286,6 +282,7 @@ export async function createPgLocalRuntime(
   const accountingSource = createPgAccountingSource();
   const pendingStore = createPgPendingActionStore(appPool);
   const stepUpProofStore = createPgStepUpProofStore(appPool);
+  const platform = buildPlatform("sql");
   const isBusinessDayClosed = async (businessDate: string): Promise<boolean> =>
     (await shiftStore.getByBusinessDate(
       LOCAL_PROFILE.orgId,
@@ -367,13 +364,14 @@ export async function createPgLocalRuntime(
     member: memberRuntimes.member,
     memberBenefits: memberRuntimes.memberBenefits,
     notification: notificationRuntime.createPgNotificationRuntime(appPool, notificationMode),
+    marketing: createPgMarketingRuntime(platform.features),
     edgeAuthority: edgeRuntime.createPgRuntimeAuthority(appPool, config.accessTokenSecret),
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSigner,
     staffDirectory: pgStaffDirectory,
     pendingStore,
     stepUpProofStore,
-    stepUpApproverAuthority: verifyPgStepUpApproverAuthority,
+    stepUpApproverAuthority: stepUpAuthority.verifyPgStepUpApproverAuthority,
     idempotencyStore: createPgIdempotencyStore(appPool),
     pool: appPool,
     store: null,

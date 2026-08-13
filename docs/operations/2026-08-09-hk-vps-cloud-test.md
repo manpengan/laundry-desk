@@ -32,6 +32,21 @@ browser → Caddy :443 → 127.0.0.1:8787 Fastify
 | 发布验收配置    | `/etc/laundry-desk/adr36-acceptance.env` 与 `acceptance-secrets/`      |
 | 发布验收证据    | `/var/lib/laundry-desk-release/verification-<sha>-<token-sha256>.json` |
 
+`desk.manpengan.xyz` 在 `:443` 的唯一实际 handler 必须只把 `/health`、`/api/*`、`/v1/*` 送入以下
+Desk upstream/header contract；`header_up` 是覆盖而非追加，故浏览器同名伪造值不能穿透。release preflight
+用唯一权威 parser 读取 `caddy adapt` JSON；缺 Host/source 覆盖、任一 forwarding 删除、唯一 upstream，或
+仅有安全 decoy 而真实 route 不安全时都拒绝候选：
+
+```caddyfile
+reverse_proxy 127.0.0.1:8787 {
+	header_up Host 127.0.0.1:8787
+	header_up -Forwarded
+	header_up -X-Forwarded-*
+	header_up -X-Real-IP
+	header_up X-Laundry-Proxy-Client-Ip {remote_host}
+}
+```
+
 禁止在命令、终端输出、Git、工件或支持包中复制 `server.env`、验收凭据或数据库 URL 的值。
 发布只上传目标 Git commit 的 `git archive`；不得把服务器密钥拉回本地，也不得继续使用旧的
 手工 rsync/rename 流程。

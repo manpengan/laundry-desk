@@ -5,6 +5,13 @@ import {
   FulfillmentOperationConfirmationSummarySchema,
   NotificationDeliveryConfirmationSummarySchema,
   DeliveryPolicyConfirmationSummarySchema,
+  MarketingAudienceFreezeConfirmationSummarySchema,
+  MarketingCampaignSetConfirmationSummarySchema,
+  MarketingCouponIssueConfirmationSummarySchema,
+  MarketingCouponReversalConfirmationSummarySchema,
+  MarketingGroupBuyRedemptionConfirmationSummarySchema,
+  MarketingGroupBuyRegistrationConfirmationSummarySchema,
+  MarketingReferralRewardConfirmationSummarySchema,
 } from "@laundry/contracts";
 
 import { readMemberTopupConfirmationSummary } from "./member-topup-confirmation.js";
@@ -46,6 +53,20 @@ export function readConfirmationSummary(value: unknown): ConfirmationSummary | n
   if (deliveryTask.success) return Object.freeze({ ...deliveryTask.data });
   const deliveryEvidence = DeliveryEvidenceConfirmationSummarySchema.safeParse(value);
   if (deliveryEvidence.success) return Object.freeze({ ...deliveryEvidence.data });
+  const campaignSet = MarketingCampaignSetConfirmationSummarySchema.safeParse(value);
+  if (campaignSet.success) return Object.freeze(campaignSet.data);
+  const audienceFreeze = MarketingAudienceFreezeConfirmationSummarySchema.safeParse(value);
+  if (audienceFreeze.success) return Object.freeze(audienceFreeze.data);
+  const couponIssue = MarketingCouponIssueConfirmationSummarySchema.safeParse(value);
+  if (couponIssue.success) return Object.freeze(couponIssue.data);
+  const couponReversal = MarketingCouponReversalConfirmationSummarySchema.safeParse(value);
+  if (couponReversal.success) return Object.freeze(couponReversal.data);
+  const referral = MarketingReferralRewardConfirmationSummarySchema.safeParse(value);
+  if (referral.success) return Object.freeze(referral.data);
+  const registration = MarketingGroupBuyRegistrationConfirmationSummarySchema.safeParse(value);
+  if (registration.success) return Object.freeze(registration.data);
+  const redemption = MarketingGroupBuyRedemptionConfirmationSummarySchema.safeParse(value);
+  if (redemption.success) return Object.freeze(redemption.data);
   const fulfillment = FulfillmentOperationConfirmationSummarySchema.safeParse(value);
   if (!fulfillment.success) return null;
   return Object.freeze({

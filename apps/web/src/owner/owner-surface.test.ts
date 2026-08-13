@@ -13,7 +13,10 @@ import { createMockQueryClient } from "../commands/query-client.js";
 import type { AppPorts } from "../host/types.js";
 import { appSurfaceFromPathname } from "../host/app-surface.js";
 
-function session(role: "admin" | "staff"): SessionView {
+function session(
+  role: "admin" | "staff",
+  features: SessionView["features"] = FULL_STORE_FEATURES,
+): SessionView {
   return Object.freeze({
     session: Object.freeze({
       session_id: "aaaaaaaa-bbbb-4ccc-8ddd-111111111111",
@@ -25,7 +28,7 @@ function session(role: "admin" | "staff"): SessionView {
       permission_version: 1,
     }),
     role,
-    features: FULL_STORE_FEATURES,
+    features,
     display: Object.freeze({
       store_name: "测试洗衣店",
       staff_name: role === "admin" ? "店主" : "店员",
@@ -54,6 +57,8 @@ function ports(): AppPorts {
 test("appSurfaceFromPathname selects only the explicit owner route", () => {
   assert.equal(appSurfaceFromPathname("/owner"), "owner");
   assert.equal(appSurfaceFromPathname("/owner/"), "owner");
+  assert.equal(appSurfaceFromPathname("/customer"), "customer");
+  assert.equal(appSurfaceFromPathname("/customer/"), "customer");
   assert.equal(appSurfaceFromPathname("/"), "counter");
   assert.equal(appSurfaceFromPathname("/owner/settings"), "counter");
   assert.equal(appSurfaceFromPathname("/OWNER"), "counter");
@@ -100,9 +105,25 @@ test("admin sees the owner shell without counter mutation capabilities", () => {
   assert.match(html, /今日经营/u);
   assert.match(html, /经营报表/u);
   assert.match(html, /门店管理/u);
+  assert.match(html, /营销活动/u);
   assert.match(html, /退出登录/u);
   assert.doesNotMatch(html, /data-shell="counter"/u);
   assert.doesNotMatch(html, /切换员工|打印队列|收衣开单|取衣核销|name="pin"/u);
+});
+
+test("owner marketing navigation stays hidden when the store feature is off", () => {
+  const html = renderToStaticMarkup(
+    createElement(App, {
+      ports: ports(),
+      surface: "owner",
+      enableLiquidGlass: false,
+      initialSession: session(
+        "admin",
+        Object.freeze({ ...FULL_STORE_FEATURES, marketing_enabled: false }),
+      ),
+    }),
+  );
+  assert.doesNotMatch(html, /营销活动/u);
 });
 
 test("owner logout clears the renderer session even when host revocation rejects", async () => {

@@ -4,15 +4,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
 import { createMockAuthClient } from "../auth/AuthClient.js";
-import { createStepUpAttemptAuthority } from "./step-up-attempt-authority.js";
 import { StepUpConfirmDialog } from "./StepUpConfirmDialog.js";
+import { createStepUpAttemptAuthority } from "./step-up-attempt-authority.js";
 
 function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((complete) => {
-    resolve = complete;
+  let resolvePromise: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
   });
-  return Object.freeze({ promise, resolve });
+  return Object.freeze({ promise, resolve: resolvePromise });
 }
 
 test("StepUpConfirmDialog SSR shows approver PIN copy", () => {
@@ -65,26 +65,30 @@ test("StepUpConfirmDialog exposes only other administrators for every step-up", 
   assert.doesNotMatch(html, /店员乙/u);
 });
 
-test("a closed or scope-replaced step-up attempt cannot approve after verification resolves", async () => {
+test("a closed or scope-replaced step-up attempt cannot approve after PIN verification", async () => {
+  for (const closeKind of ["Escape", "backdrop", "header close"] as const) {
+    const authority = createStepUpAttemptAuthority();
+    const verification = deferred<string>();
+    const token = authority.begin(`scope-a:${closeKind}`);
+    const submitted: string[] = [];
+    const completion = verification.promise.then((value) => {
+      if (authority.isCurrent(token, `scope-a:${closeKind}`)) submitted.push(value);
+    });
+    authority.invalidate();
+    verification.resolve("must-not-submit-confirm-command");
+    await completion;
+    assert.deepEqual(submitted, [], closeKind);
+  }
+
   const authority = createStepUpAttemptAuthority();
-  const closedVerification = deferred<string>();
-  const closedToken = authority.begin("scope-a:confirm-a");
+  const verification = deferred<string>();
+  const token = authority.begin("scope-a:confirm-a");
   const submitted: string[] = [];
-  const closedAttempt = closedVerification.promise.then((value) => {
-    if (authority.isCurrent(closedToken, "scope-a:confirm-a")) submitted.push(value);
+  const completion = verification.promise.then((value) => {
+    if (authority.isCurrent(token, "scope-a:confirm-a")) submitted.push(value);
   });
-
-  authority.invalidate(); // Escape, backdrop, header close, or explicit cancel.
-  closedVerification.resolve("cancelled-confirm");
-  await closedAttempt;
-
-  const switchedVerification = deferred<string>();
-  const switchedToken = authority.begin("scope-a:confirm-b");
-  const switchedAttempt = switchedVerification.promise.then((value) => {
-    if (authority.isCurrent(switchedToken, "scope-a:confirm-b")) submitted.push(value);
-  });
-  authority.begin("scope-b:confirm-c");
-  switchedVerification.resolve("old-scope-confirm");
-  await switchedAttempt;
+  authority.begin("scope-b:confirm-b");
+  verification.resolve("must-not-cross-scope");
+  await completion;
   assert.deepEqual(submitted, []);
 });

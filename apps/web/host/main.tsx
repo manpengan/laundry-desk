@@ -6,6 +6,8 @@ import { appSurfaceFromPathname, shouldResumeHostSession } from "../src/host/app
 import { resolveBrowserApiBaseUrl } from "../src/host/browser-api-base.js";
 import { createBrowserPorts } from "../src/host/browser-ports.js";
 import { createDesktopPorts, type LaundryDesktopBridge } from "../src/host/desktop-ports.js";
+import { createHttpCustomerPortalClient } from "../src/customer-portal/client.js";
+import { CustomerPortalApp } from "../src/customer-portal/CustomerPortalApp.js";
 import { selectHost } from "../src/host/select-ports.js";
 import { ServiceGate } from "../src/host/ServiceGate.js";
 import "@laundry/ui/styles.css";
@@ -22,6 +24,7 @@ import "../src/styles/owner-operations.css";
 import "../src/styles/owner-management.css";
 import "../src/styles/staff-credentials.css";
 import "../src/styles/printer-settings.css";
+import "../src/styles/customer-portal.css";
 
 const apiBaseUrl = resolveBrowserApiBaseUrl(
   (import.meta as ImportMeta & { env?: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL,
@@ -46,6 +49,14 @@ const ports =
   host.kind === "desktop" ? createDesktopPorts(host.bridge) : createBrowserPorts({ apiBaseUrl });
 
 async function start(): Promise<void> {
+  if (surface === "customer" && host.kind === "browser") {
+    createRoot(hostRoot).render(
+      <ServiceGate health={ports.health}>
+        <CustomerPortalApp client={createHttpCustomerPortalClient({ apiBaseUrl })} />
+      </ServiceGate>,
+    );
+    return;
+  }
   const shouldResume = shouldResumeHostSession(host.kind, surface);
   const resumed = shouldResume
     ? ((await ports.resume?.resume()) ?? Object.freeze({ ok: false as const }))

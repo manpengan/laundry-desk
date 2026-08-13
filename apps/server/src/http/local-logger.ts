@@ -7,6 +7,8 @@ export const LOCAL_LOG_REDACTION_PATHS = Object.freeze([
   "req.headers.authorization",
   "req.headers.cookie",
   'req.headers["x-csrf-token"]',
+  'req.headers["x-customer-portal-authority"]',
+  'req.headers["x-laundry-proxy-client-ip"]',
   'res.headers["set-cookie"]',
   "body.password",
   "body.pin",

@@ -49,7 +49,39 @@ export {
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
 } from "./fulfillment-confirmation.js";
+export {
+  MarketingAudienceFreezeConfirmationSummarySchema,
+  MarketingCampaignSetConfirmationSummarySchema,
+} from "./marketing-campaign-confirmation.js";
+export type {
+  MarketingAudienceFreezeConfirmationSummary,
+  MarketingCampaignSetConfirmationSummary,
+} from "./marketing-campaign-confirmation.js";
 export type {
   FactoryHandoffConfirmationSummary,
   FulfillmentOperationConfirmationSummary,
 } from "./fulfillment-confirmation.js";
+export {
+  MarketingCouponIssueConfirmationSummarySchema,
+  MarketingCouponReversalConfirmationSummarySchema,
+} from "./marketing-confirmation.js";
+export type {
+  MarketingCouponIssueConfirmationSummary,
+  MarketingCouponReversalConfirmationSummary,
+} from "./marketing-confirmation.js";
+export {
+  MarketingGroupBuyRedemptionAuthoritySchema,
+  MarketingGroupBuyRedemptionConfirmationSummarySchema,
+  MarketingGroupBuyRegistrationAuthoritySchema,
+  MarketingGroupBuyRegistrationConfirmationSummarySchema,
+  MarketingReferralRewardAuthoritySchema,
+  MarketingReferralRewardConfirmationSummarySchema,
+} from "./marketing-extension-confirmation.js";
+export type {
+  MarketingGroupBuyRedemptionAuthority,
+  MarketingGroupBuyRedemptionConfirmationSummary,
+  MarketingGroupBuyRegistrationAuthority,
+  MarketingGroupBuyRegistrationConfirmationSummary,
+  MarketingReferralRewardAuthority,
+  MarketingReferralRewardConfirmationSummary,
+} from "./marketing-extension-confirmation.js";

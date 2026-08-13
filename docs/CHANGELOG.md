@@ -14,6 +14,26 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
+- 推荐奖励与团购核销（[ADR-54](adr/2026-08-13-adr-54-referral-and-group-buy.md)）：推荐奖励绑定已结清
+  订单、active 会员、券版本和活动预算；外部团购券只保存域分离摘要与末四位，并只能核销一次。三条
+  R4 写入口均使用服务端冻结 authority、整数分计算、专用限流、持久幂等及同事务审计。
+
+- 顾客钱包、权益与自助偏好（[ADR-56](adr/2026-08-13-adr-56-customer-wallet-and-preferences.md)）：
+  `/customer` 新增储值账本、等级、积分、次卡和券包只读投影，以及最多十条 portal-owned 地址与通知
+  偏好的 CAS 更新；资金和权益继续以既有账本为权威，不开放充值、支付、兑换或核销入口。
+
+- 顾客自助订单与洗护进度（[ADR-55](adr/2026-08-13-adr-55-customer-self-service-orders.md)）：新增
+  独立顾客登录、短会话和 `/customer` 响应式入口，可查询自身 canonical group 的订单、整数分票据及
+  件级进度；tab authority、CSRF、限流和反枚举边界阻止跨顾客与迟到响应泄露。
+
+- 活动批量发券与核销冲正（[ADR-53](adr/2026-08-13-adr-53-campaign-coupon-issuance.md)）：基于冻结受众
+  和既有券定义批量发券，按最坏券面额原子占用活动预算；误核销只可在未付款订单上由另一管理员 R4
+  复核后追加冲正，原核销与 grant 证据保持不可变。
+
+- 门店营销活动基础（[ADR-52](adr/2026-08-13-adr-52-store-marketing-campaigns.md)）：新增活动时间窗、
+  严格受众规则、摘要冻结与整数分预算上限；活动定义、预算和快照均为门店 RLS、乐观版本、持久幂等
+  与同事务审计，高预算操作升级另一管理员复核。
+
 - 取件、送达、异常与现场交付证据（[ADR-51](adr/2026-08-13-adr-51-delivery-evidence.md)）：
   新增 `delivery.evidence.record` 与 `delivery.evidence.list`，把当前 accepted 任务受派人的 GPS 定点、现场
   照片、签名图片和受控异常原因绑定到精确组织、门店、配送订单、任务、腿、任务版本与员工。取件完成

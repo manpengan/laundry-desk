@@ -6,3 +6,6 @@ export * from "./delivery-appointments.js";
 export * from "./delivery-orders.js";
 export * from "./delivery-tasks.js";
 export * from "./delivery-evidence.js";
+export * from "./marketing-all.js";
+export * from "./customer-self-service.js";
+export * from "./customer-self-service-account.js";

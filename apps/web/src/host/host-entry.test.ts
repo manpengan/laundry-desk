@@ -26,8 +26,12 @@ test("host entry delegates selection and gates App behind ServiceGate", async ()
     /<ServiceGate\s+health=\{ports\.health\}>[\s\S]*<App\s+ports=\{ports\}[\s\S]*<\/ServiceGate>/u,
   );
   const resumeAt = source.indexOf("await ports.resume?.resume()");
-  const renderAt = source.indexOf("createRoot(hostRoot).render");
+  const renderAt = source.lastIndexOf("createRoot(hostRoot).render");
   assert.ok(resumeAt >= 0 && renderAt > resumeAt);
   assert.match(source, /initialSession=\{resumed\.ok\s*\?\s*resumed\.session\s*:\s*null\}/u);
   assert.match(source, /readOnly=\{readOnly\}/u);
+  assert.match(
+    source,
+    /surface === ["']customer["'][\s\S]*<CustomerPortalApp\s+client=\{createHttpCustomerPortalClient\(\{ apiBaseUrl \}\)\}/u,
+  );
 });

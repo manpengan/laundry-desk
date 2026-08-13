@@ -391,3 +391,6 @@ export type {
   PickupReminderFilters,
   PickupReminderListRequest,
 } from "./notification/index.js";
+
+export * from "./marketing/index.js";
+export * from "./customer-self-service/index.js";

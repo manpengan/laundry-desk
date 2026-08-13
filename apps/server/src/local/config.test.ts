@@ -27,6 +27,7 @@ test("explicit memory runtime stays isolated from the strict host configuration"
     browserFetchSite: "same-site",
     cookieSecure: false,
     hostAuthorities: ["127.0.0.1:8787"],
+    trustedProxyClientIpRequired: false,
   });
   assert.equal(runtime.mode, "memory");
   assert.ok(Buffer.byteLength(runtime.accessTokenSecret, "utf8") >= 32);
@@ -55,6 +56,7 @@ test("parses the fixed loopback local server boundary", () => {
     browserFetchSite: "same-site",
     cookieSecure: false,
     hostAuthorities: ["127.0.0.1:8787"],
+    trustedProxyClientIpRequired: false,
     accessTokenSecret: ACCESS_SECRET,
     csrfProofSecret: CSRF_SECRET,
   });
@@ -70,6 +72,7 @@ test("LAN profile requires an exact private HTTPS origin and enables secure brow
     browserFetchSite: "same-origin",
     cookieSecure: true,
     hostAuthorities: ["127.0.0.1:8787"],
+    trustedProxyClientIpRequired: false,
   });
   assert.equal(parseLocalHostConfig({ LAUNDRY_LAN_ORIGIN: "" }).cookieSecure, false);
 
@@ -106,6 +109,7 @@ test("cloud profile accepts an exact public HTTPS origin on the default port", (
     browserFetchSite: "same-origin",
     cookieSecure: true,
     hostAuthorities: ["127.0.0.1:8787"],
+    trustedProxyClientIpRequired: true,
   });
   assert.equal(parseLocalHostConfig({ LAUNDRY_PUBLIC_ORIGIN: "" }).cookieSecure, false);
 
@@ -228,6 +232,7 @@ test("loads signing secrets from container secret files", async (t) => {
       browserFetchSite: "same-site",
       cookieSecure: false,
       hostAuthorities: ["127.0.0.1:8787"],
+      trustedProxyClientIpRequired: false,
       accessTokenSecret: ACCESS_SECRET,
       csrfProofSecret: CSRF_SECRET,
     },

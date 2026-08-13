@@ -8,6 +8,13 @@ import type {
   FactoryHandoffConfirmationSummary,
   FulfillmentOperationConfirmationSummary,
   DeliveryPolicyConfirmationSummary,
+  MarketingAudienceFreezeConfirmationSummary,
+  MarketingCampaignSetConfirmationSummary,
+  MarketingCouponIssueConfirmationSummary,
+  MarketingCouponReversalConfirmationSummary,
+  MarketingGroupBuyRedemptionConfirmationSummary,
+  MarketingGroupBuyRegistrationConfirmationSummary,
+  MarketingReferralRewardConfirmationSummary,
 } from "@laundry/contracts";
 
 export type MemberTopupMatchedRule = Readonly<{
@@ -48,7 +55,14 @@ export type ConfirmationSummary =
   | FactoryHandoffConfirmationSummary
   | FulfillmentOperationConfirmationSummary
   | DeliveryTaskConfirmationSummary
-  | DeliveryEvidenceConfirmationSummary;
+  | DeliveryEvidenceConfirmationSummary
+  | MarketingCampaignSetConfirmationSummary
+  | MarketingAudienceFreezeConfirmationSummary
+  | MarketingCouponIssueConfirmationSummary
+  | MarketingCouponReversalConfirmationSummary
+  | MarketingReferralRewardConfirmationSummary
+  | MarketingGroupBuyRegistrationConfirmationSummary
+  | MarketingGroupBuyRedemptionConfirmationSummary;
 
 export type CommandErrorDetail = Readonly<{
   kind?: string;

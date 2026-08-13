@@ -31,6 +31,12 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0055_delivery_appointments.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0056_delivery_orders.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0057_delivery_tasks.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0058_delivery_evidence.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0059_marketing_campaigns.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0060_campaign_coupon_batches.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0061_customer_self_service.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0062_customer_wallet_and_preferences.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0063_referral_and_group_buy.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -66,5 +72,11 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Customer delivery appointments** (0055, ADR-47): opaque customer/address references, integer-cent fee snapshots, serialized slot capacity, database-enforced terminal reschedule/cancel lifecycle, immutable identity, and forced store RLS
 - **Authoritative delivery orders** (0056, ADR-48): store-scoped laundry-order/appointment authority, integer-cent fee snapshots, database-enforced pickup/return lifecycle, optimistic CAS, irreversible terminal states, and forced store RLS
 - **Authoritative delivery tasks** (0057, ADR-49): order-leg assignment custody, active-store staff authority, immutable transfer/takeover successor chains, optimistic CAS, order-owned completion/cancellation, and forced store RLS
+- **Delivery evidence** (0058, ADR-51): append-only pickup/delivery evidence and attachment metadata with atomic task/order completion
+- **Marketing campaigns** (0059, ADR-52): store-scoped campaign windows, strict audience rules, digest-only freezes, and integer-cent budget authority
+- **Campaign coupon batches** (0060, ADR-53): bounded server-side eligibility, immutable grant provenance, exact budget debits, and auditable redemption reversals
+- **Customer self-service orders** (0061, ADR-55): hashed customer sessions and canonical order/receipt/garment read projections
+- **Customer wallet and preferences** (0062, ADR-56): existing wallet/benefit projections and bounded portal-owned address/preference CAS
+- **Referral and group-buy** (0063, ADR-54): qualified referral grants, digest-only external vouchers, and single-use order redemption
 - Still deferred: edge lease, AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

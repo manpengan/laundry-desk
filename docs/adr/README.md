@@ -58,6 +58,12 @@
 | [ADR-48](2026-08-13-adr-48-authoritative-delivery-orders.md)                  | 权威配送订单与取送生命周期                      | **Proposed** 2026-08-13；实现候选开发中            |
 | [ADR-49](2026-08-13-adr-49-authoritative-delivery-tasks.md)                   | 配送任务分派、接单、转派与人工接管              | **Proposed** 2026-08-13；实现候选开发中            |
 | [ADR-50](2026-08-13-adr-50-mobile-delivery-task-h5.md)                        | 配送员/员工移动 H5 我的任务工作台               | **Proposed** 2026-08-13；实现候选本地门禁已通过    |
+| [ADR-51](2026-08-13-adr-51-delivery-evidence.md)                              | 取送现场证据与原子腿完成                        | **Proposed** 2026-08-13；Stage 4.4 Item 6 候选     |
+| [ADR-52](2026-08-13-adr-52-store-marketing-campaigns.md)                      | 当前门店营销活动、受众摘要与预算上限            | **Proposed** 2026-08-13；Stage 4.4 Item 7 候选     |
+| [ADR-53](2026-08-13-adr-53-campaign-coupon-issuance.md)                       | 活动批量发券、服务端资格与核销冲正              | **Proposed** 2026-08-13；Stage 4.4 Item 8 候选     |
+| [ADR-54](2026-08-13-adr-54-referral-and-group-buy.md)                         | 推荐奖励、团购券登记与单次核销                  | **Proposed** 2026-08-13；Stage 4.4 Item 9 候选     |
+| [ADR-55](2026-08-13-adr-55-customer-self-service-orders.md)                   | 顾客自助订单、票据与件级洗护进度                | **Proposed** 2026-08-13；Stage 4.4 Item 10 候选    |
+| [ADR-56](2026-08-13-adr-56-customer-wallet-and-preferences.md)                | 顾客钱包、权益、地址与通知偏好                  | **Proposed** 2026-08-13；Stage 4.4 Item 11 候选    |
 
 ## v1 线
 

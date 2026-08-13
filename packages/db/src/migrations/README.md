@@ -63,6 +63,12 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0055_delivery_appointments.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0056_delivery_orders.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0057_delivery_tasks.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0058_delivery_evidence.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0059_marketing_campaigns.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0060_campaign_coupon_batches.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0061_customer_self_service.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0062_customer_wallet_and_preferences.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0063_referral_and_group_buy.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -89,6 +95,12 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Customer delivery appointments** (0055, [ADR-47](../../../../docs/adr/2026-08-13-adr-47-customer-delivery-appointments.md)): opaque customer/address references, integer-cent fee snapshots, serialized slot capacity, database-enforced terminal reschedule/cancel lifecycle, immutable identity, and forced store RLS
 - **Authoritative delivery orders** (0056, [ADR-48](../../../../docs/adr/2026-08-13-adr-48-authoritative-delivery-orders.md)): store-scoped laundry-order/appointment authority, integer-cent fee snapshots, database-enforced pickup/return lifecycle, optimistic CAS, irreversible terminal states, and forced store RLS
 - **Authoritative delivery tasks** (0057, [ADR-49](../../../../docs/adr/2026-08-13-adr-49-authoritative-delivery-tasks.md)): order-leg assignment custody, active-store staff authority, immutable transfer/takeover successor chains, optimistic CAS, order-owned completion/cancellation, and forced store RLS
+- **Delivery evidence** (0058, [ADR-51](../../../../docs/adr/2026-08-13-adr-51-delivery-evidence.md)): append-only pickup/delivery evidence and attachment metadata with atomic task/order completion
+- **Marketing campaigns** (0059, [ADR-52](../../../../docs/adr/2026-08-13-adr-52-store-marketing-campaigns.md)): store-scoped campaign windows, strict audience rules, digest-only freezes, and integer-cent budget authority
+- **Campaign coupon batches** (0060, [ADR-53](../../../../docs/adr/2026-08-13-adr-53-campaign-coupon-issuance.md)): bounded server-side eligibility, immutable grant provenance, exact budget debits, and auditable redemption reversals
+- **Customer self-service orders** (0061, [ADR-55](../../../../docs/adr/2026-08-13-adr-55-customer-self-service-orders.md)): short-lived customer authority and canonical order/receipt/garment projections
+- **Customer wallet and preferences** (0062, [ADR-56](../../../../docs/adr/2026-08-13-adr-56-customer-wallet-and-preferences.md)): wallet/benefit projections plus canonical CAS over portal-owned addresses and notification preferences
+- **Referral and group-buy** (0063, [ADR-54](../../../../docs/adr/2026-08-13-adr-54-referral-and-group-buy.md)): active-member referral rewards and digest-only external vouchers with single-use order redemption
 - **M2 payments** (0009): `payments` append-only ledger (`SELECT, INSERT` only for `laundry_app`)
 - **M2 print** (0010): `print_jobs` queue (`SELECT, INSERT, UPDATE` for status transitions; no DELETE)
 - **M2 customers** (0011): `customers` org-scoped archive (`SELECT, INSERT, UPDATE`; unique org+phone)

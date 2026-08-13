@@ -1,8 +1,9 @@
-export type AppSurface = "counter" | "owner" | "mobile_delivery_tasks";
+export type AppSurface = "counter" | "owner" | "customer" | "mobile_delivery_tasks";
 
 /** Select explicit browser-only surfaces without creating wildcard sub-routes. */
 export function appSurfaceFromPathname(pathname: string): AppSurface {
   if (pathname === "/owner" || pathname === "/owner/") return "owner";
+  if (pathname === "/customer" || pathname === "/customer/") return "customer";
   if (pathname === "/mobile/tasks" || pathname === "/mobile/tasks/") {
     return "mobile_delivery_tasks";
   }

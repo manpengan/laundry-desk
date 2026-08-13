@@ -158,6 +158,7 @@ export async function startLocalHttpServer(
       hostAuthorities: config.hostAuthorities,
       browserOrigin: config.browserOrigin,
       browserFetchSite: config.browserFetchSite,
+      trustedProxyClientIpRequired: config.trustedProxyClientIpRequired,
     });
     await app.listen({ port: config.port, host: config.listenHost });
     runtime.print.worker?.start();

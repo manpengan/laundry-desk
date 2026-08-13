@@ -9,13 +9,14 @@ import type { DeliveryAppointmentHandlerDeps } from "../delivery-appointments/ha
 import type { DeliveryOrderHandlerDeps } from "../delivery-orders/handlers.js";
 import type { DeliveryTaskHandlerDeps } from "../delivery-tasks/handlers.js";
 import type { DeliveryEvidenceHandlerDeps } from "../delivery-evidence/handlers.js";
-import type { PgPool } from "../db/pg-pool.js";
+import type { CreatePoolOptions, PgPool } from "../db/pg-pool.js";
 import type { EdgeAuthorityService } from "../edge/authority-service.js";
 import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
 import type { createMemoryIdentityStore } from "../identity/memory-store.js";
 import type { MemberRuntimeDeps } from "../member/handlers.js";
 import type { MemberBenefitsRuntimeDeps } from "../member-benefits/types.js";
+import type { MarketingHandlerDeps } from "../marketing/types.js";
 import type { NotificationHandlerDeps } from "../notification/types.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
@@ -34,6 +35,12 @@ import type { PricingHandlerDeps } from "../pricing/handlers.js";
 import type { LocalStaffDirectoryEntry } from "./staff-directory.js";
 
 export type LocalRuntimeMode = "memory" | "pg";
+
+export type CreatePgLocalRuntimeDependencies = Readonly<{
+  createPool: (options: CreatePoolOptions) => PgPool;
+  assertReady: (pool: PgPool, expectedDemoOnly: boolean) => Promise<void>;
+  loadStaffDirectory: (pool: PgPool) => Promise<readonly LocalStaffDirectoryEntry[]>;
+}>;
 
 export type LocalRuntime = Readonly<{
   mode: LocalRuntimeMode;
@@ -64,6 +71,7 @@ export type LocalRuntime = Readonly<{
   member: MemberRuntimeDeps;
   memberBenefits: MemberBenefitsRuntimeDeps;
   notification: NotificationHandlerDeps;
+  marketing: MarketingHandlerDeps;
   edgeAuthority: EdgeAuthorityService;
   accessTokenSecret: string;
   csrfProofSigner: CsrfProofSigner;

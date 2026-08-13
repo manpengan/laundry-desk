@@ -1,20 +1,12 @@
-/**
- * Default C1 chain port hooks for M1 integration wiring.
- *
- * - parse: always definition-bound in createChainPorts (not overridden here)
- * - rbac: allow when every `rbac.*` invariant permission is present on actor
- * - tenant: always allow (unit/integration tests; production GUC still scopes rows)
- * - policy: C5 evaluatePolicy — confirm/step_up fail-closed unless confirm_ref path
- * - invariants: allow (concrete invariant runners land later)
- */
+/** Default C1 chain hooks; production row scope remains enforced by PostgreSQL GUC/RLS. */
 
 import { randomUUID } from "node:crypto";
 
 import {
   DELIVERY_APPOINTMENT_COMMAND_NAMES,
+  DELIVERY_EVIDENCE_COMMAND_NAMES,
   DELIVERY_ORDER_COMMAND_NAMES,
   DELIVERY_TASK_COMMAND_NAMES,
-  DELIVERY_EVIDENCE_COMMAND_NAMES,
   createCommandError,
   type CommandError,
 } from "@laundry/contracts";
@@ -31,36 +23,39 @@ import type {
   PolicyRiskInput,
 } from "../policy/types.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
-import { freezeCanonical } from "../pending-actions/canonical.js";
 import { customerPrivacySubjectFromCommand } from "../pending-actions/privacy-subject.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import {
   bindRiskReservation,
-  existingConfirmationSummary,
   measurePendingRisk,
+  notificationPendingRetrySummary,
   pendingResponse,
+  preparedPendingRetryMatches,
   sameRiskRequest,
   type PendingActionPreparer,
   type PendingRiskPreparer,
 } from "./pending-policy.js";
 
 const okVoid = (): StepResult<void, CommandError> => ({ ok: true, data: undefined });
+
 const okInvariants = (): StepResult<Readonly<{ preview: true }>, CommandError> => ({
   ok: true,
   data: Object.freeze({ preview: true as const }),
 });
+
 const okPolicy = (): StepResult<Readonly<{ allowed: true }>, CommandError> => ({
   ok: true,
   data: Object.freeze({ allowed: true as const }),
 });
 
 const REUSABLE_PENDING_COMMANDS: ReadonlySet<string> = new Set([
-  "notification.delivery_batch.enqueue",
   "delivery.policy.set",
   ...DELIVERY_APPOINTMENT_COMMAND_NAMES,
   ...DELIVERY_ORDER_COMMAND_NAMES,
   ...DELIVERY_TASK_COMMAND_NAMES,
   ...DELIVERY_EVIDENCE_COMMAND_NAMES,
+  "marketing.campaign.set",
+  "marketing.campaign.audience.freeze",
 ]);
 
 export { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";
@@ -278,27 +273,20 @@ export function createEnforcingPolicyCheck(
     const transaction = Object.freeze({ tenant: bus.tenant, client: bus.transactionClient });
     await pendingStore.lockPrivacy(transaction);
     const idempotencyKey = bus.request.idempotencyKey;
-    if (idempotencyKey !== undefined && REUSABLE_PENDING_COMMANDS.has(bus.definition.name)) {
+    if (
+      idempotencyKey !== undefined &&
+      bus.definition.name === "notification.delivery_batch.enqueue"
+    ) {
       const existing = await pendingStore.findByIdempotency(
         bus.definition.name,
         idempotencyKey,
         transaction,
       );
       if (existing !== null) {
-        const argsMatch = JSON.stringify(existing.args) === JSON.stringify(freezeCanonical(parsed));
-        if (
-          !argsMatch ||
-          existing.commandVersion !== bus.definition.version ||
-          existing.creatorStaffId !== bus.actor.staffId ||
-          (existing.status !== "pending" && existing.status !== "consumed")
-        ) {
-          return { ok: false, error: createCommandError("POLICY_DENIED") };
-        }
-        const summary = existingConfirmationSummary(existing);
-        if (REUSABLE_PENDING_COMMANDS.has(existing.command) && summary === undefined) {
-          return { ok: false, error: createCommandError("POLICY_DENIED") };
-        }
-        return pendingResponse(existing, summary);
+        const summary = notificationPendingRetrySummary(existing, parsed, bus);
+        return summary === null
+          ? { ok: false, error: createCommandError("POLICY_DENIED") }
+          : pendingResponse(existing, summary);
       }
     }
     const earlyRiskRequest = preparePendingRisk?.(parsed, bus) ?? null;
@@ -311,6 +299,18 @@ export function createEnforcingPolicyCheck(
     }
     let preparation =
       preparePendingAction === undefined ? null : await preparePendingAction(parsed, bus);
+    if (idempotencyKey !== undefined && REUSABLE_PENDING_COMMANDS.has(bus.definition.name)) {
+      const existing = await pendingStore.findByIdempotency(
+        bus.definition.name,
+        idempotencyKey,
+        transaction,
+      );
+      if (existing !== null) {
+        return preparedPendingRetryMatches(existing, parsed, bus, preparation, decision)
+          ? pendingResponse(existing, preparation?.summary)
+          : { ok: false, error: createCommandError("POLICY_DENIED") };
+      }
+    }
     if (preparation?.riskReservation !== undefined) {
       let reservation;
       if (earlyRiskRequest !== null) {
@@ -354,9 +354,7 @@ export function createEnforcingPolicyCheck(
         orgId: bus.tenant.orgId,
         storeId: bus.tenant.storeId,
         idempotencyKey: idempotencyKey ?? nonce,
-        privacySubjectCustomerId:
-          preparation?.privacySubjectCustomerId ??
-          customerPrivacySubjectFromCommand(bus.definition.name, parsed),
+        privacySubjectCustomerId: customerPrivacySubjectFromCommand(bus.definition.name, parsed),
         createdAt: now,
         effectiveRisk: decision.effectiveRisk,
         policyOutcome: decision.outcome,
@@ -383,6 +381,8 @@ export function createEnforcingPolicyCheck(
 
 export const defaultCheckPolicy: BusChainPorts["checkPolicy"] =
   createEnforcingPolicyCheck(processPendingActionStore);
+
+/** Build default hooks; callers may override individual steps. */
 export function createDefaultChainHooks(
   overrides: ChainPortHooks = {},
   pendingStore: PendingActionStore = processPendingActionStore,

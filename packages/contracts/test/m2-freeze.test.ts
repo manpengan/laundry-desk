@@ -115,6 +115,13 @@ describe("M2 contract surface", () => {
       "delivery.task.takeover",
       // ADR-51: accepted-assignee evidence, with optional atomic leg completion.
       "delivery.evidence.record",
+      "marketing.campaign.set",
+      "marketing.campaign.audience.freeze",
+      "marketing.campaign.coupons.issue",
+      "marketing.coupon.redemption.reverse",
+      "marketing.referral.reward.issue",
+      "marketing.group_buy.voucher.register",
+      "marketing.group_buy.voucher.redeem",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
@@ -138,6 +145,19 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.delivery.capability.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.delivery_batches.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.delivery_batch.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaigns.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.audience.preview");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.coupons.preview");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.coupon_batch.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.orders.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.order.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.receipt.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.garments.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.garment.progress");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.wallet.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.benefits.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.profile.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("accounting.report.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.drilldown");
@@ -157,8 +177,8 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.task.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.tasks.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.evidence.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(69);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(48);
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(76);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(61);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );

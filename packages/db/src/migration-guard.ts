@@ -41,6 +41,12 @@ const COMPATIBLE_CONSTRAINT_REPLACEMENTS: readonly Readonly<{
   { table: "member_ledger", constraint: "member_ledger_kind_chk" },
   // ADR-25: terminal account closure extends active/frozen with `closed`.
   { table: "member_accounts", constraint: "member_accounts_status_chk" },
+  // ADR-56: extends the append-only portal evidence vocabulary for wallet,
+  // benefits and bounded self-service profile access.
+  {
+    table: "customer_portal_access_log",
+    constraint: "customer_portal_access_log_operation_chk",
+  },
 ];
 
 const isCompatibleConstraintReplacement = (statement: string): boolean =>

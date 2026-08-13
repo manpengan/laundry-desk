@@ -1,0 +1,329 @@
+.ld-customer-portal {
+  min-height: 100vh;
+  padding: 20px;
+  color: #18211d;
+  background: linear-gradient(145deg, #edf6f1 0%, #f8f4ea 100%);
+}
+
+.ld-customer-header,
+.ld-customer-section-heading,
+.ld-customer-order-list button,
+.ld-customer-lines li,
+.ld-customer-garments > li > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ld-customer-header {
+  max-width: 1120px;
+  margin: 0 auto 18px;
+}
+
+.ld-customer-header h1,
+.ld-customer-card h1,
+.ld-customer-card h2,
+.ld-customer-card h3 {
+  margin: 0;
+}
+
+.ld-customer-eyebrow {
+  margin: 0 0 4px;
+  color: #317258;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.ld-customer-card {
+  padding: 20px;
+  border: 1px solid rgb(49 114 88 / 16%);
+  border-radius: 20px;
+  background: rgb(255 255 255 / 88%);
+  box-shadow: 0 14px 44px rgb(31 64 50 / 8%);
+}
+
+.ld-customer-layout {
+  display: grid;
+  max-width: 1120px;
+  margin: 0 auto;
+  gap: 16px;
+}
+
+.ld-customer-account {
+  display: grid;
+  max-width: 1120px;
+  margin: 0 auto 16px;
+  gap: 16px;
+}
+
+.ld-customer-wallet-balance {
+  margin: 12px 0;
+  color: #205f47;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.ld-customer-benefit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ld-customer-benefit-grid span {
+  display: grid;
+  padding: 10px;
+  border-radius: 12px;
+  background: #f2f7f4;
+}
+
+.ld-customer-benefit-grid small,
+.ld-customer-address-list small {
+  color: #66736d;
+}
+
+.ld-customer-profile-form,
+.ld-customer-profile-form fieldset {
+  display: grid;
+  gap: 10px;
+}
+
+.ld-customer-profile-form > label,
+.ld-customer-profile-form fieldset > label:not(.ld-customer-check) {
+  display: grid;
+  gap: 5px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ld-customer-profile-form input,
+.ld-customer-profile-form select {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid #b8c9c0;
+  border-radius: 10px;
+  background: white;
+  font: inherit;
+}
+
+.ld-customer-profile-form fieldset {
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid #d7e3dd;
+  border-radius: 12px;
+}
+
+.ld-customer-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ld-customer-check input {
+  min-height: auto;
+}
+
+.ld-customer-profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ld-customer-profile-form button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #8caf9f;
+  border-radius: 10px;
+  background: white;
+  font: inherit;
+  font-weight: 700;
+}
+
+.ld-customer-profile-form button[type="submit"] {
+  color: white;
+  background: #266a50;
+}
+
+.ld-customer-address-list {
+  padding-left: 20px;
+}
+
+.ld-customer-address-list li {
+  margin: 6px 0;
+}
+
+.ld-customer-address-list small {
+  display: block;
+}
+
+.ld-customer-login {
+  display: grid;
+  place-items: center;
+}
+
+.ld-customer-login-card {
+  width: min(100%, 440px);
+}
+
+.ld-customer-form {
+  display: grid;
+  margin-top: 20px;
+  gap: 14px;
+}
+
+.ld-customer-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ld-customer-form input {
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid #b8c9c0;
+  border-radius: 12px;
+  background: #fff;
+  font: inherit;
+}
+
+.ld-customer-form button,
+.ld-customer-header > button {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 12px;
+  color: white;
+  background: #266a50;
+  font: inherit;
+  font-weight: 700;
+}
+
+.ld-customer-muted,
+.ld-customer-privacy,
+.ld-customer-order-list small {
+  color: #66736d;
+}
+
+.ld-customer-privacy {
+  margin-bottom: 0;
+  font-size: 12px;
+}
+
+.ld-customer-error {
+  max-width: 1120px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: #802b2b;
+  background: #fff0ef;
+}
+
+.ld-customer-order-list ul,
+.ld-customer-lines,
+.ld-customer-garments {
+  padding: 0;
+  list-style: none;
+}
+
+.ld-customer-order-list li + li {
+  border-top: 1px solid #e1e9e5;
+}
+
+.ld-customer-order-list li > button {
+  width: 100%;
+  padding: 14px 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.ld-customer-order-list li > button.is-selected {
+  border-radius: 12px;
+  background: #e8f4ee;
+}
+
+.ld-customer-order-list button span {
+  display: grid;
+  gap: 4px;
+}
+
+.ld-customer-order-list button span:last-child {
+  text-align: right;
+}
+
+.ld-customer-order-list em,
+.ld-customer-status {
+  color: #286c51;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.ld-customer-link-button {
+  padding: 6px 0;
+  border: 0;
+  color: #286c51;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+}
+
+.ld-customer-detail section {
+  margin-top: 24px;
+}
+
+.ld-customer-totals {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.ld-customer-totals div {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f2f7f4;
+}
+
+.ld-customer-totals dt {
+  color: #66736d;
+  font-size: 12px;
+}
+
+.ld-customer-totals dd {
+  margin: 4px 0 0;
+  font-weight: 750;
+}
+
+.ld-customer-lines li,
+.ld-customer-garments > li {
+  padding: 12px 0;
+  border-bottom: 1px solid #e1e9e5;
+}
+
+.ld-customer-garments ol {
+  margin: 10px 0 0;
+  color: #53625b;
+  font-size: 13px;
+}
+
+@media (min-width: 900px) {
+  .ld-customer-portal {
+    padding: 36px;
+  }
+
+  .ld-customer-layout {
+    grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.65fr);
+    align-items: start;
+  }
+
+  .ld-customer-account {
+    grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.65fr);
+    align-items: start;
+  }
+
+  .ld-customer-order-list {
+    position: sticky;
+    top: 24px;
+  }
+}
