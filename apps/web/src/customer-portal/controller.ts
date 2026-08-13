@@ -1,7 +1,11 @@
 import type {
+  CustomerPortalBenefitsResult,
   CustomerPortalGarmentProgressResult,
   CustomerPortalLoginInput,
   CustomerPortalOrderSummary,
+  CustomerPortalProfileResult,
+  CustomerPortalProfileUpdateInput,
+  CustomerPortalWalletResult,
 } from "@laundry/contracts";
 
 import type { CustomerPortalClient } from "./client.js";
@@ -14,6 +18,9 @@ export type CustomerPortalState = Readonly<{
   selectedOrderId: string | null;
   detail: CustomerPortalDetail | null;
   progress: Readonly<Record<string, CustomerPortalGarmentProgressResult>>;
+  wallet: CustomerPortalWalletResult["wallet"];
+  benefits: CustomerPortalBenefitsResult["benefits"];
+  profile: CustomerPortalProfileResult | null;
   busy: boolean;
   error: string | null;
 }>;
@@ -25,6 +32,8 @@ export type CustomerPortalController = Readonly<{
   login(input: CustomerPortalLoginInput): Promise<void>;
   logout(): Promise<void>;
   loadOrders(): Promise<void>;
+  loadAccount(): Promise<void>;
+  updateProfile(input: CustomerPortalProfileUpdateInput): Promise<void>;
   selectOrder(orderId: string): Promise<void>;
   loadProgress(orderId: string, garmentId: string): Promise<void>;
   dispose(): void;
@@ -55,6 +64,9 @@ function clearedState(authenticated: boolean | null): CustomerPortalState {
     selectedOrderId: null,
     detail: null,
     progress: EMPTY_PROGRESS,
+    wallet: null,
+    benefits: null,
+    profile: null,
     busy: false,
     error: null,
   });
@@ -164,6 +176,32 @@ export function createCustomerPortalController(
     complete(operation, { orders: newestOrderFirst(result.data), error: null });
   };
 
+  const loadAccountForGeneration = async (expectedGeneration: number): Promise<void> => {
+    if (state.authenticated !== true) return;
+    const operation = begin("account", expectedGeneration);
+    if (operation === null) return;
+    const [wallet, benefits, profile] = await Promise.all([
+      client.getWallet(operation.controller.signal),
+      client.getBenefits(operation.controller.signal),
+      client.getProfile(operation.controller.signal),
+    ]);
+    if (!isCurrent(operation)) return;
+    if (!wallet.ok || !benefits.ok || !profile.ok) {
+      const authenticationFailed = [wallet, benefits, profile].some(
+        (result) => !result.ok && result.error.code === "AUTHENTICATION_FAILED",
+      );
+      if (authenticationFailed) advanceSession(false);
+      else complete(operation, { error: "钱包与个人资料暂时无法读取" });
+      return;
+    }
+    complete(operation, {
+      wallet: wallet.data.wallet,
+      benefits: benefits.data.benefits,
+      profile: profile.data,
+      error: null,
+    });
+  };
+
   const resume = async (): Promise<void> => {
     const expectedGeneration = advanceSession(null);
     const operation = begin("session", expectedGeneration);
@@ -176,7 +214,10 @@ export function createCustomerPortalController(
     }
     complete(operation, { authenticated: true, error: null });
     if (!armExpiry(result.data.expires_at, expectedGeneration)) return;
-    await loadOrdersForGeneration(expectedGeneration);
+    await Promise.all([
+      loadOrdersForGeneration(expectedGeneration),
+      loadAccountForGeneration(expectedGeneration),
+    ]);
   };
 
   const login = async (input: CustomerPortalLoginInput): Promise<void> => {
@@ -191,7 +232,10 @@ export function createCustomerPortalController(
     }
     complete(operation, { authenticated: true, error: null });
     if (!armExpiry(result.data.expires_at, expectedGeneration)) return;
-    await loadOrdersForGeneration(expectedGeneration);
+    await Promise.all([
+      loadOrdersForGeneration(expectedGeneration),
+      loadAccountForGeneration(expectedGeneration),
+    ]);
   };
 
   const logout = async (): Promise<void> => {
@@ -263,6 +307,26 @@ export function createCustomerPortalController(
     });
   };
 
+  const updateProfile = async (input: CustomerPortalProfileUpdateInput): Promise<void> => {
+    if (state.authenticated !== true || state.profile === null) return;
+    const operation = begin("profile");
+    if (operation === null) return;
+    const result = await client.updateProfile(input, operation.controller.signal);
+    if (!isCurrent(operation)) return;
+    if (!result.ok) {
+      if (result.error.code === "AUTHENTICATION_FAILED") advanceSession(false);
+      else
+        complete(operation, {
+          error:
+            result.error.code === "IDEMPOTENCY_CONFLICT"
+              ? "资料已被更新，请刷新后再保存"
+              : result.error.message,
+        });
+      return;
+    }
+    complete(operation, { profile: result.data, error: null });
+  };
+
   const dispose = (): void => {
     generation += 1;
     clearExpiry();
@@ -283,6 +347,8 @@ export function createCustomerPortalController(
     login,
     logout,
     loadOrders: () => loadOrdersForGeneration(generation),
+    loadAccount: () => loadAccountForGeneration(generation),
+    updateProfile,
     selectOrder,
     loadProgress,
     dispose,

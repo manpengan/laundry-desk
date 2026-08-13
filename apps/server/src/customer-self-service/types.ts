@@ -1,10 +1,14 @@
 import type {
+  CustomerPortalBenefitsResult,
   CustomerPortalGarmentProgressResult,
   CustomerPortalGarmentsListResult,
   CustomerPortalLoginInput,
   CustomerPortalOrderGetResult,
   CustomerPortalOrderSummary,
   CustomerPortalReceiptResult,
+  CustomerPortalProfileResult,
+  CustomerPortalProfileUpdateInput,
+  CustomerPortalWalletResult,
 } from "@laundry/contracts";
 
 export type CustomerPortalSessionIdentity = Readonly<{
@@ -28,14 +32,20 @@ export type CustomerPortalQueryName =
   | "customer.self_service.order.get"
   | "customer.self_service.receipt.get"
   | "customer.self_service.garments.list"
-  | "customer.self_service.garment.progress";
+  | "customer.self_service.garment.progress"
+  | "customer.self_service.wallet.get"
+  | "customer.self_service.benefits.get"
+  | "customer.self_service.profile.get";
 
 export type CustomerPortalQueryResult =
   | Readonly<{ orders: readonly CustomerPortalOrderSummary[] }>
   | CustomerPortalOrderGetResult
   | CustomerPortalReceiptResult
   | CustomerPortalGarmentsListResult
-  | CustomerPortalGarmentProgressResult;
+  | CustomerPortalGarmentProgressResult
+  | CustomerPortalWalletResult
+  | CustomerPortalBenefitsResult
+  | CustomerPortalProfileResult;
 
 export type CustomerPortalStore = Readonly<{
   createSession(
@@ -50,6 +60,11 @@ export type CustomerPortalStore = Readonly<{
     name: CustomerPortalQueryName,
     input: Readonly<Record<string, unknown>>,
   ): Promise<CustomerPortalQueryResult | null>;
+  updateProfile(
+    identity: CustomerPortalSessionIdentity,
+    sessionHash: string,
+    input: CustomerPortalProfileUpdateInput,
+  ): Promise<CustomerPortalProfileResult>;
 }>;
 
 export class CustomerPortalSessionInvalidError extends Error {
@@ -58,5 +73,14 @@ export class CustomerPortalSessionInvalidError extends Error {
   constructor() {
     super("Customer portal session is no longer active");
     this.name = "CustomerPortalSessionInvalidError";
+  }
+}
+
+export class CustomerPortalProfileConflictError extends Error {
+  readonly code = "CUSTOMER_PORTAL_PROFILE_CONFLICT";
+
+  constructor() {
+    super("Customer portal profile changed or conflicts with preserved addresses");
+    this.name = "CustomerPortalProfileConflictError";
   }
 }

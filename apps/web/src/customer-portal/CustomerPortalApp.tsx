@@ -2,6 +2,7 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import type { CustomerPortalClient } from "./client.js";
 import { createCustomerPortalController } from "./controller.js";
+import { CustomerPortalAccount } from "./CustomerPortalAccount.js";
 import { CustomerPortalLogin } from "./CustomerPortalLogin.js";
 import { CustomerPortalOrders } from "./CustomerPortalOrders.js";
 
@@ -32,6 +33,16 @@ export function CustomerPortalApp({ client }: CustomerPortalAppProps) {
   }
   return (
     <CustomerPortalOrders
+      account={
+        <CustomerPortalAccount
+          wallet={state.wallet}
+          benefits={state.benefits}
+          profile={state.profile}
+          busy={state.busy}
+          onRefresh={() => void controller.loadAccount()}
+          onSave={(input) => void controller.updateProfile(input)}
+        />
+      }
       orders={state.orders}
       selectedOrderId={state.selectedOrderId}
       detail={state.detail}

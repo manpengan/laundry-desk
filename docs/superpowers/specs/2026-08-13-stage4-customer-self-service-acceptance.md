@@ -2,7 +2,7 @@
 
 - 日期：2026-08-13
 - ADR：[ADR-55](../../adr/2026-08-13-adr-55-customer-self-service-orders.md)
-- 状态：实现候选；部署、公网浏览器与 exact-SHA CI 仍须另行刷新
+- 状态：Item 10 只读订单范围仍有效；其 Item 11 保留边界已由 ADR-56 / Item 11 验收记录取代
 
 ## 本片验收口径
 
@@ -49,9 +49,13 @@
     各状态 `Cache-Control: no-store` 与实际 Set/Clear-Cookie 副作用；login/session 的 429 与
     `Retry-After` 必须存在，logout 的严格 `{}` body 必须由 route 解析，且共享 read 桶耗尽后仍须 revoke。
 
-## 明确保留
+## 已被 Item 11 取代的保留边界
 
-- Item 11 钱包、次卡、积分、券包、地址与通知偏好。
+- 钱包、次卡、积分、券包、地址与通知偏好现按
+  [Item 11 验收记录](2026-08-13-stage4-customer-wallet-acceptance.md) 独立验收；不得继续引用本记录声称其未实现。
+
+## 仍明确保留
+
 - 微信小程序、微信身份、短信/微信通知、支付机构、AI、automation、Edge/offline。
 - 公网浏览器实跑、hk-vps migration/marker 与 exact-main CI/部署证据。
 

@@ -175,6 +175,7 @@ async function retireProfilePii(
         SET label = NULL, recipient = NULL, contact_phone = NULL, address_body = NULL,
             retired_at = $3, pii_purged_at = $3, updated_at = $3
       WHERE address_row.org_id = $1::uuid AND address_row.retired_at IS NULL
+        AND NOT address_row.portal_managed
         AND address_row.customer_id IN (
           SELECT group_customer_id FROM customer_canonical_group($2::uuid)
         )`,

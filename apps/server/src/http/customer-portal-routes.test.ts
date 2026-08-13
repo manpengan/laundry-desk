@@ -135,6 +135,15 @@ function fakeStore(options: FakeOptions = {}): CustomerPortalStore {
         ]),
       });
     }
+    if (name === "customer.self_service.wallet.get") {
+      return Object.freeze({ wallet: null });
+    }
+    if (name === "customer.self_service.benefits.get") {
+      return Object.freeze({ benefits: null });
+    }
+    if (name === "customer.self_service.profile.get") {
+      return Object.freeze({ version: 0, preferred_contact: "none" as const, addresses: [] });
+    }
     return Object.freeze({
       garment: Object.freeze({
         garment_id: GARMENT,
@@ -177,6 +186,17 @@ function fakeStore(options: FakeOptions = {}): CustomerPortalStore {
       const id = typeof input.order_id === "string" ? input.order_id : "";
       if (options.unavailableIds?.has(id) === true) return null;
       return resultFor(name) as never;
+    },
+    async updateProfile(_identity, _sessionHash, input) {
+      return Object.freeze({
+        version: input.expected_version + 1,
+        preferred_contact: input.preferred_contact,
+        addresses: Object.freeze(
+          input.addresses.map((address) =>
+            Object.freeze({ ...address, address_id: randomUUID(), source: "portal" as const }),
+          ),
+        ),
+      });
     },
   });
 }
@@ -248,6 +268,13 @@ function raceStore(): CustomerPortalStore {
         });
       }
       return null;
+    },
+    async updateProfile(_identity, _sessionHash, input) {
+      return Object.freeze({
+        version: input.expected_version + 1,
+        preferred_contact: input.preferred_contact,
+        addresses: Object.freeze([]),
+      });
     },
   });
 }
@@ -535,6 +562,26 @@ test("customer portal queries require CSRF and return only strict customer-safe 
   const body = response.json() as { data: { result: { orders: readonly unknown[] } } };
   assert.deepEqual(body.data.result.orders, [summary]);
   assert.doesNotMatch(response.body, /customer_phone|customer_name|note|staff|barcode|reason/iu);
+  const rejectedProfile = await app.inject({
+    method: "POST",
+    url: "/api/v2/customer/profile",
+    headers: Object.freeze({ ...browserHeaders, ...auth }),
+    payload: {
+      expected_version: 0,
+      preferred_contact: "sms",
+      addresses: [],
+      customer_id: CUSTOMER,
+    },
+  });
+  assert.equal(rejectedProfile.statusCode, 400);
+  const savedProfile = await app.inject({
+    method: "POST",
+    url: "/api/v2/customer/profile",
+    headers: Object.freeze({ ...browserHeaders, ...auth }),
+    payload: { expected_version: 0, preferred_contact: "sms", addresses: [] },
+  });
+  assert.equal(savedProfile.statusCode, 200, savedProfile.body);
+  assert.equal(savedProfile.headers["cache-control"], "no-store");
   await app.close();
 });
 

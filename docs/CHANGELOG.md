@@ -14,6 +14,15 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
+- 顾客钱包、权益与自助偏好（[ADR-56](adr/2026-08-13-adr-56-customer-wallet-and-preferences.md)）：
+  在既有 15 分钟顾客 session 内新增储值本金/赠款/余额与最近流水、会员等级、可用积分、次卡和券包
+  只读投影，全部复用现有资金及权益账本，不开放顾客充值、支付、退款、兑换、使用或核销入口。顾客只可
+  通过独立 CAS HTTP 路由维护最多十条 portal-owned 地址和 `none/phone/sms/wechat` 联系偏好；服务端从
+  session 派生 canonical customer，strict body 不接受 customer id。canonical group 内门店及合并来源地址
+  始终保留，普通 app DML 不能伪造/修改 portal row；日志只记地址数量、偏好和版本，不保存地址、收件人
+  或联系电话。Web 在 logout、过期和重新登录时以 generation + Abort 同步清空钱包、权益、地址和订单 PII。
+  保存通知偏好不表示任何 provider 已发送或送达。
+
 - 顾客自助订单与洗护进度（[ADR-55](adr/2026-08-13-adr-55-customer-self-service-orders.md)）：新增
   独立 `/customer` 响应式 Web 入口，顾客用门店信息、手机号和已有取件码建立最长 15 分钟的哈希会话，
   可查询自身 canonical group 在当前门店的正式订单、整数分票据、件级当前状态和既有状态节点。服务端
@@ -24,8 +33,8 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
   数据；Web Locks 独占租约还会让 opener/duplicate 复制出的 tab 失败关闭。Caddy preflight 绑定唯一实际
   Desk route、loopback upstream、Host、forwarding 删除与真实来源覆盖，应用只信任 loopback peer，轮换手机号
   仍受同一 spray 桶限制；logout 不受共享读取桶阻断。canonical merge 两列对 app role 只读，merge/login
-  统一先取组织锁，事务内 active 会话总数立即收敛到五个。feature 默认关闭。本片不含钱包、次卡、积分、券包、
-  地址、通知偏好或微信小程序。
+  统一先取组织锁，事务内 active 会话总数立即收敛到五个。feature 默认关闭。该 Item 10 原先保留的钱包、
+  次卡、积分、券包、地址与通知偏好已由 ADR-56 / Item 11 取代；微信小程序仍未包含。
 
 - 活动批量发券与核销冲正（[ADR-53](adr/2026-08-13-adr-53-campaign-coupon-issuance.md)）：店主从已冻结
   受众和既有优惠券定义发起服务端资格预览；系统只给 active 会员账户发券，按券面额乘人数的最坏值

@@ -139,6 +139,9 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.receipt.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.garments.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.garment.progress");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.wallet.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.benefits.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.profile.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("accounting.report.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.drilldown");
@@ -147,7 +150,7 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("pricing.policy.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("payment.ledger.list");
     expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(62);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(48);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(51);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );

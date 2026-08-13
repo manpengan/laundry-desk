@@ -9,6 +9,8 @@ import {
   CustomerPortalGarmentProgressResultSchema,
   CustomerPortalEmptyInputSchema,
   CustomerPortalLoginInputSchema,
+  CustomerPortalProfileUpdateInputSchema,
+  CustomerPortalWalletResultSchema,
   CustomerPortalReceiptResultSchema,
   buildLaundryOpenApiDocument,
 } from "../src/index.js";
@@ -17,15 +19,18 @@ const ORDER = "11111111-1111-4111-8111-111111111111";
 const GARMENT = "22222222-2222-4222-8222-222222222222";
 
 describe("customer self-service contracts", () => {
-  it("freezes five customer-session-only, PII-aware read queries", () => {
+  it("freezes eight customer-session-only, PII-aware read queries", () => {
     expect(CUSTOMER_SELF_SERVICE_QUERY_NAMES).toEqual([
       "customer.self_service.orders.list",
       "customer.self_service.order.get",
       "customer.self_service.receipt.get",
       "customer.self_service.garments.list",
       "customer.self_service.garment.progress",
+      "customer.self_service.wallet.get",
+      "customer.self_service.benefits.get",
+      "customer.self_service.profile.get",
     ]);
-    expect(CUSTOMER_SELF_SERVICE_QUERIES).toHaveLength(5);
+    expect(CUSTOMER_SELF_SERVICE_QUERIES).toHaveLength(8);
     expect(
       CUSTOMER_SELF_SERVICE_QUERIES.every(
         (query) =>
@@ -36,6 +41,54 @@ describe("customer self-service contracts", () => {
           query.result_redaction.length > 0,
       ),
     ).toBe(true);
+  });
+
+  it("keeps wallet amounts integral and the profile write customer-id free", () => {
+    expect(
+      CustomerPortalWalletResultSchema.safeParse({
+        wallet: {
+          account_status: "active",
+          principal_cents: 1_000,
+          bonus_cents: 200,
+          balance_cents: 1_200,
+          recent: [],
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      CustomerPortalWalletResultSchema.safeParse({
+        wallet: {
+          account_status: "active",
+          principal_cents: 1_000,
+          bonus_cents: 200,
+          balance_cents: 1_201,
+          recent: [],
+        },
+      }).success,
+    ).toBe(false);
+    const profile = {
+      expected_version: 0,
+      preferred_contact: "sms",
+      addresses: [
+        {
+          label: "家",
+          recipient: "王女士",
+          contact_phone: "13800000001",
+          address: "示例路 1 号",
+          is_default: true,
+        },
+      ],
+    };
+    expect(CustomerPortalProfileUpdateInputSchema.safeParse(profile).success).toBe(true);
+    expect(
+      CustomerPortalProfileUpdateInputSchema.safeParse({ ...profile, customer_id: ORDER }).success,
+    ).toBe(false);
+    expect(
+      CustomerPortalProfileUpdateInputSchema.safeParse({
+        ...profile,
+        addresses: [...profile.addresses, { ...profile.addresses[0], label: "公司" }],
+      }).success,
+    ).toBe(false);
   });
 
   it("strictly validates the anti-enumeration login boundary", () => {
@@ -234,5 +287,25 @@ describe("customer self-service contracts", () => {
     expect(session?.responses["401"]?.headers?.["Set-Cookie"]).toBeDefined();
     expect(logout?.responses["200"]?.headers?.["Set-Cookie"]).toBeDefined();
     expect(logout?.responses["415"]?.headers?.["Set-Cookie"]).toBeUndefined();
+  });
+
+  it("publishes the dedicated profile CAS mutation with no-store conflict semantics", () => {
+    const operation = buildLaundryOpenApiDocument().paths["/api/v2/customer/profile"]?.post;
+    expect(operation?.requestBody?.content["application/json"]?.schema).toEqual({
+      $ref: "#/components/schemas/CustomerPortalProfileUpdateInput",
+    });
+    expect(operation?.security).toEqual([
+      {
+        customerSession: [],
+        customerTabAuthority: [],
+        customerCsrfCookie: [],
+        csrfHeader: [],
+      },
+    ]);
+    expect(operation?.responses["409"]).toBeDefined();
+    expect(operation?.responses["429"]?.headers?.["Retry-After"]).toBeDefined();
+    for (const response of Object.values(operation?.responses ?? {})) {
+      expect(response.headers?.["Cache-Control"]?.schema).toMatchObject({ const: "no-store" });
+    }
   });
 });

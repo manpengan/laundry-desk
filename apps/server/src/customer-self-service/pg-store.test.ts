@@ -2,14 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type {
+  CustomerPortalBenefitsResult,
   CustomerPortalGarmentProgressResult,
   CustomerPortalOrderGetResult,
   CustomerPortalReceiptResult,
+  CustomerPortalProfileResult,
+  CustomerPortalWalletResult,
 } from "@laundry/contracts";
 
 import { createPgPool, resolvePgUrls, type PgPoolClient } from "../db/pg-pool.js";
 import { createPgCustomerPortalStore } from "./pg-store.js";
-import { CustomerPortalSessionInvalidError } from "./types.js";
+import { CustomerPortalProfileConflictError, CustomerPortalSessionInvalidError } from "./types.js";
 
 const enabled =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true";
@@ -33,6 +36,17 @@ const IDS = Object.freeze({
   payment: "a9000000-0000-4000-8000-000000000001",
   feature: "aa000000-0000-4000-8000-000000000001",
   otherFeature: "aa000000-0000-4000-8000-000000000002",
+  account: "ab000000-0000-4000-8000-000000000001",
+  walletLedger: "ac000000-0000-4000-8000-000000000001",
+  tier: "ad000000-0000-4000-8000-000000000001",
+  pointsPolicy: "ae000000-0000-4000-8000-000000000001",
+  pointsEarn: "af000000-0000-4000-8000-000000000001",
+  punchType: "b0000000-0000-4000-8000-000000000001",
+  punchCard: "b1000000-0000-4000-8000-000000000001",
+  coupon: "b2000000-0000-4000-8000-000000000001",
+  couponGrant: "b3000000-0000-4000-8000-000000000001",
+  rootAddress: "b4000000-0000-4000-8000-000000000001",
+  sourceAddress: "b4000000-0000-4000-8000-000000000002",
 });
 
 async function waitForAdvisoryWait(admin: PgPoolClient, pid: number, label: string): Promise<void> {
@@ -93,6 +107,85 @@ async function seed(client: PgPoolClient): Promise<void> {
       [IDS.customer, IDS.mergedCustomer, IDS.otherCustomer, IDS.org, NOW],
     );
     await client.query(
+      `INSERT INTO member_accounts (id, org_id, customer_id, status, opened_at, opened_store_id)
+       VALUES ($1,$2,$3,'active',$4,$5)`,
+      [IDS.account, IDS.org, IDS.customer, NOW, IDS.store],
+    );
+    await client.query(
+      `INSERT INTO member_ledger (
+         id, org_id, store_id, account_id, kind, principal_delta_cents,
+         bonus_delta_cents, staff_id, at, business_date, tender
+       ) VALUES ($1,$2,$3,$4,'topup',5000,0,$5,$6,'2026-08-13','cash')`,
+      [IDS.walletLedger, IDS.org, IDS.store, IDS.account, IDS.staff, NOW],
+    );
+    await client.query(
+      `INSERT INTO member_tiers (
+         id, org_id, code, name, level, status, version, updated_at, updated_by_staff_id,
+         discount_bps
+       ) VALUES ($1,$2,'gold','金卡',3,'active',1,$3,$4,500)`,
+      [IDS.tier, IDS.org, NOW, IDS.staff],
+    );
+    await client.query(
+      `INSERT INTO member_memberships (
+         org_id, account_id, tier_id, tier_code, tier_name, tier_level, valid_until,
+         version, updated_at, updated_store_id, updated_by_staff_id, reason,
+         tier_definition_version, tier_discount_bps
+       ) VALUES ($1,$2,$3,'gold','金卡',3,'2099-12-31',1,$4,$5,$6,'test',1,500)`,
+      [IDS.org, IDS.account, IDS.tier, NOW, IDS.store, IDS.staff],
+    );
+    await client.query(
+      `INSERT INTO member_points_policies (
+         id, org_id, unit_cents, points_per_unit, valid_days, status, version,
+         updated_at, updated_by_staff_id
+       ) VALUES ($1,$2,100,1,365,'active',1,$3,$4)`,
+      [IDS.pointsPolicy, IDS.org, NOW, IDS.staff],
+    );
+    await client.query(
+      `INSERT INTO member_punch_types (
+         id, org_id, code, name, total_uses, valid_days, status, version,
+         updated_at, updated_by_staff_id
+       ) VALUES ($1,$2,'wash10','洗衣次卡',10,365,'active',1,$3,$4)`,
+      [IDS.punchType, IDS.org, NOW, IDS.staff],
+    );
+    await client.query(
+      `INSERT INTO punch_cards (
+         id, org_id, account_id, definition_id, code, name, total_uses, issued_on,
+         expires_on, issued_at, issued_store_id, issued_by_staff_id, reason
+       ) VALUES ($1,$2,$3,$4,'wash10','洗衣次卡',10,'2026-08-13','2099-12-31',$5,$6,$7,'test')`,
+      [IDS.punchCard, IDS.org, IDS.account, IDS.punchType, NOW, IDS.store, IDS.staff],
+    );
+    await client.query(
+      `INSERT INTO coupons (
+         id, org_id, code, name, discount_cents, min_order_cents, valid_days,
+         status, version, updated_at, updated_by_staff_id
+       ) VALUES ($1,$2,'less500','满减券',500,2000,365,'active',1,$3,$4)`,
+      [IDS.coupon, IDS.org, NOW, IDS.staff],
+    );
+    await client.query(
+      `INSERT INTO coupon_grants (
+         id, org_id, account_id, definition_id, code, name, discount_cents,
+         min_order_cents, granted_on, expires_on, granted_at, granted_store_id,
+         granted_by_staff_id, reason
+       ) VALUES ($1,$2,$3,$4,'less500','满减券',500,2000,'2026-08-13','2099-12-31',$5,$6,$7,'test')`,
+      [IDS.couponGrant, IDS.org, IDS.account, IDS.coupon, NOW, IDS.store, IDS.staff],
+    );
+    await client.query(
+      `INSERT INTO customer_profiles (
+         org_id, customer_id, version, gender, preferred_contact, service_note,
+         origin_store_id, updated_by_staff_id, created_at, updated_at
+       ) VALUES ($1,$2,1,'unspecified','sms','staff-only-note',$3,$4,$5,$5)`,
+      [IDS.org, IDS.mergedCustomer, IDS.store, IDS.staff, NOW],
+    );
+    await client.query(
+      `INSERT INTO customer_addresses (
+         id, org_id, customer_id, profile_version, label, recipient, contact_phone,
+         address_body, is_default, created_at, updated_at
+       ) VALUES
+         ($1,$2,$3,1,'门店地址','顾客','13800001001','根地址',true,$4,$4),
+         ($5,$2,$6,1,'来源地址','顾客','13800001002','合并来源地址',false,$4,$4)`,
+      [IDS.rootAddress, IDS.org, IDS.customer, NOW, IDS.sourceAddress, IDS.mergedCustomer],
+    );
+    await client.query(
       `INSERT INTO orders (
          id, org_id, store_id, ticket_no, status, customer_phone, customer_name, note,
          subtotal_cents, original_cents, discount_cents, addon_cents, urgent_cents,
@@ -125,6 +218,23 @@ async function seed(client: PgPoolClient): Promise<void> {
           unit_price_cents, qty, line_total_cents, color, brand)
        VALUES ($1,$2,$3,$4,0,'wash','shirt',2500,1,2500,'blue','Safe Brand')`,
       [IDS.line, IDS.org, IDS.store, IDS.order],
+    );
+    await client.query(
+      `INSERT INTO points_ledger (
+         id, org_id, store_id, account_id, kind, points_delta, order_id, policy_id,
+         source_paid_cents, policy_unit_cents, policy_points_per_unit, expires_on,
+         staff_id, at
+       ) VALUES ($1,$2,$3,$4,'earn',50,$5,$6,5000,100,1,'2099-12-31',$7,$8)`,
+      [
+        IDS.pointsEarn,
+        IDS.org,
+        IDS.store,
+        IDS.account,
+        IDS.order,
+        IDS.pointsPolicy,
+        IDS.staff,
+        NOW,
+      ],
     );
     await client.query(
       `INSERT INTO garments
@@ -162,6 +272,23 @@ async function cleanup(client: PgPoolClient): Promise<void> {
     for (const table of [
       "customer_portal_access_log",
       "customer_portal_sessions",
+      "customer_portal_preferences",
+      "coupon_redemption_reversals",
+      "coupon_redemptions",
+      "coupon_grants",
+      "coupons",
+      "punch_card_ledger",
+      "punch_cards",
+      "member_punch_types",
+      "points_allocations",
+      "points_ledger",
+      "member_points_policies",
+      "member_memberships",
+      "member_tiers",
+      "member_ledger",
+      "member_accounts",
+      "customer_addresses",
+      "customer_profiles",
       "garment_status_log",
       "payments",
       "garments",
@@ -277,6 +404,100 @@ test(
         ["washing"],
       );
       assert.doesNotMatch(JSON.stringify(progress), /barcode|reason|staff|private|internal/iu);
+      const wallet = (await store.executeQuery(
+        identity,
+        sessionHash,
+        "customer.self_service.wallet.get",
+        {},
+      )) as CustomerPortalWalletResult;
+      assert.equal(wallet.wallet?.balance_cents, 5000);
+      assert.equal(wallet.wallet?.recent[0]?.kind, "topup");
+      const benefits = (await store.executeQuery(
+        identity,
+        sessionHash,
+        "customer.self_service.benefits.get",
+        {},
+      )) as CustomerPortalBenefitsResult;
+      assert.equal(benefits.benefits?.tier?.name, "金卡");
+      assert.equal(benefits.benefits?.available_points, 50);
+      assert.equal(benefits.benefits?.punch_cards[0]?.remaining_uses, 10);
+      assert.equal(benefits.benefits?.coupons[0]?.status, "active");
+      const initialProfile = (await store.executeQuery(
+        identity,
+        sessionHash,
+        "customer.self_service.profile.get",
+        {},
+      )) as CustomerPortalProfileResult;
+      assert.equal(initialProfile.version, 0);
+      assert.equal(initialProfile.preferred_contact, "sms");
+      assert.deepEqual(
+        initialProfile.addresses.map((address) => address.address).sort(),
+        ["合并来源地址", "根地址"].sort(),
+      );
+      const updatedProfile = await store.updateProfile(identity, sessionHash, {
+        expected_version: 0,
+        preferred_contact: "wechat",
+        addresses: [
+          {
+            label: "自助地址",
+            recipient: null,
+            contact_phone: null,
+            address: "门户新增地址",
+            is_default: false,
+          },
+        ],
+      });
+      assert.equal(updatedProfile.version, 1);
+      assert.equal(updatedProfile.preferred_contact, "wechat");
+      assert.deepEqual(
+        updatedProfile.addresses.map((address) => address.address).sort(),
+        ["合并来源地址", "根地址", "门户新增地址"].sort(),
+        "A -> B canonical reads and portal replacement must retain store/source addresses",
+      );
+      await assert.rejects(
+        store.updateProfile(identity, sessionHash, {
+          expected_version: 0,
+          preferred_contact: "none",
+          addresses: [],
+        }),
+        CustomerPortalProfileConflictError,
+      );
+      const portalAddress = updatedProfile.addresses.find((address) => address.source === "portal");
+      assert.ok(portalAddress);
+      const directAddressClient = await appPool.connect();
+      try {
+        await directAddressClient.query("BEGIN");
+        await directAddressClient.query("SELECT set_config('app.org_id',$1,true)", [IDS.org]);
+        await assert.rejects(
+          directAddressClient.query(
+            "UPDATE customer_addresses SET address_body='forged' WHERE org_id=$1 AND id=$2",
+            [IDS.org, portalAddress.address_id],
+          ),
+          (error: unknown) =>
+            typeof error === "object" &&
+            error !== null &&
+            "code" in error &&
+            error.code === "42501",
+        );
+      } finally {
+        await directAddressClient.query("ROLLBACK");
+        directAddressClient.release();
+      }
+      const profileEvidence = await admin.query<{
+        address_count: number;
+        preference: string;
+        profile_version: number;
+      }>(
+        `SELECT address_count, preference, profile_version
+           FROM customer_portal_access_log
+          WHERE org_id=$1 AND operation='profile.update'`,
+        [IDS.org],
+      );
+      assert.deepEqual(profileEvidence.rows[0], {
+        address_count: 3,
+        preference: "wechat",
+        profile_version: 1,
+      });
       const noContext = await appPool.query<{ count: string }>("SELECT count(*) FROM orders");
       assert.equal(
         noContext.rows[0]?.count,

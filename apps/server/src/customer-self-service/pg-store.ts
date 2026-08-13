@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import type {
   CustomerPortalGarmentProgressResult,
   CustomerPortalGarmentsListResult,
@@ -10,8 +8,10 @@ import type {
 } from "@laundry/contracts";
 
 import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
+import { withPortalTransaction } from "./pg-context.js";
+import { updatePortalProfile } from "./pg-profile.js";
+import { readPortalBenefits, readPortalProfile, readPortalWallet } from "./pg-projections.js";
 import {
-  CustomerPortalSessionInvalidError,
   type CustomerPortalQueryResult,
   type CustomerPortalSessionIdentity,
   type CustomerPortalSessionSecrets,
@@ -64,64 +64,6 @@ function summaryFrom(row: OrderRow): CustomerPortalOrderSummary {
     created_at: iso(row.created_at),
     updated_at: iso(row.updated_at),
   });
-}
-
-async function setCustomerContext(
-  client: PgPoolClient,
-  identity: CustomerPortalSessionIdentity,
-): Promise<void> {
-  await client.query("SELECT set_config('app.org_id', $1, true)", [identity.orgId]);
-  await client.query("SELECT set_config('app.store_id', $1, true)", [identity.storeId]);
-  await client.query("SELECT set_config('app.customer_id', $1, true)", [identity.customerId]);
-}
-
-async function withPortalTransaction<T>(
-  pool: PgPool,
-  identity: CustomerPortalSessionIdentity,
-  sessionHash: string,
-  operation: string,
-  resourceId: string | null,
-  run: (client: PgPoolClient) => Promise<T | null>,
-): Promise<T | null> {
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    await setCustomerContext(client, identity);
-    const valid = await client.query<{ valid: boolean }>(
-      "SELECT customer_portal_session_validate($1::uuid, $2::text, $3::text) AS valid",
-      [identity.sessionId, sessionHash, identity.authorityHash],
-    );
-    if (valid.rows[0]?.valid !== true) throw new CustomerPortalSessionInvalidError();
-    const result = await run(client);
-    if (result !== null) {
-      await client.query(
-        `INSERT INTO customer_portal_access_log (
-           id, org_id, store_id, customer_id, session_id, operation, resource_id, at
-         ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6, $7::uuid,
-                   statement_timestamp())`,
-        [
-          randomUUID(),
-          identity.orgId,
-          identity.storeId,
-          identity.customerId,
-          identity.sessionId,
-          operation,
-          resourceId,
-        ],
-      );
-    }
-    await client.query("COMMIT");
-    return result;
-  } catch (error) {
-    try {
-      await client.query("ROLLBACK");
-    } catch {
-      // Preserve the query/authentication failure; rollback failure is secondary.
-    }
-    throw error;
-  } finally {
-    client.release();
-  }
 }
 
 async function orderById(client: PgPoolClient, orderId: string): Promise<OrderRow | null> {
@@ -294,9 +236,14 @@ export function createPgCustomerPortalStore(pool: PgPool): CustomerPortalStore {
         pool,
         identity,
         sessionHash,
-        name.slice("customer.self_service.".length),
-        resourceId,
+        Object.freeze({
+          operation: name.slice("customer.self_service.".length),
+          resourceId,
+        }),
         async (client) => {
+          if (name === "customer.self_service.wallet.get") return readPortalWallet(client);
+          if (name === "customer.self_service.benefits.get") return readPortalBenefits(client);
+          if (name === "customer.self_service.profile.get") return readPortalProfile(client);
           if (name === "customer.self_service.orders.list") {
             return listOrders(client, typeof input.limit === "number" ? input.limit : 20);
           }
@@ -308,6 +255,9 @@ export function createPgCustomerPortalStore(pool: PgPool): CustomerPortalStore {
           return garmentId === null ? null : garmentProgress(client, orderId, garmentId);
         },
       );
+    },
+    async updateProfile(identity, sessionHash, input) {
+      return updatePortalProfile(pool, identity, sessionHash, input);
     },
   });
 }

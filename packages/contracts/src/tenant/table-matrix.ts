@@ -66,6 +66,7 @@ const ORG_TABLES = describeTables(
     "customer_identifiers",
     "customer_privacy_hmac_keys",
     "customer_profiles",
+    "customer_portal_preferences",
     "card_types",
     "member_cards",
     "member_ledger",

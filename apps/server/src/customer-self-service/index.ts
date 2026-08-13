@@ -14,4 +14,4 @@ export type {
   CustomerPortalSessionSecrets,
   CustomerPortalStore,
 } from "./types.js";
-export { CustomerPortalSessionInvalidError } from "./types.js";
+export { CustomerPortalProfileConflictError, CustomerPortalSessionInvalidError } from "./types.js";

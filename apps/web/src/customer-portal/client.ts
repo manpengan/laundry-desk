@@ -1,20 +1,29 @@
 import {
   CUSTOMER_PORTAL_AUTHORITY_HEADER_NAME,
+  CustomerPortalBenefitsResultSchema,
   CustomerPortalGarmentProgressResultSchema,
   CustomerPortalGarmentsListResultSchema,
   CustomerPortalLoginInputSchema,
   CustomerPortalOrderGetResultSchema,
   CustomerPortalOrdersListResultSchema,
+  CustomerPortalProfileMutationResultSchema,
+  CustomerPortalProfileResultSchema,
+  CustomerPortalProfileUpdateInputSchema,
   CustomerPortalReceiptResultSchema,
   CustomerPortalSessionSchema,
+  CustomerPortalWalletResultSchema,
   customerPortalCookieNames,
   type CustomerPortalGarmentProgressResult,
+  type CustomerPortalBenefitsResult,
   type CustomerPortalGarmentsListResult,
   type CustomerPortalLoginInput,
   type CustomerPortalOrderGetResult,
   type CustomerPortalOrderSummary,
+  type CustomerPortalProfileResult,
+  type CustomerPortalProfileUpdateInput,
   type CustomerPortalReceiptResult,
   type CustomerPortalSession,
+  type CustomerPortalWalletResult,
 } from "@laundry/contracts";
 
 import {
@@ -39,6 +48,13 @@ export type CustomerPortalClient = Readonly<{
     limit?: number,
     signal?: AbortSignal,
   ): Promise<CustomerPortalResult<readonly CustomerPortalOrderSummary[]>>;
+  getWallet(signal?: AbortSignal): Promise<CustomerPortalResult<CustomerPortalWalletResult>>;
+  getBenefits(signal?: AbortSignal): Promise<CustomerPortalResult<CustomerPortalBenefitsResult>>;
+  getProfile(signal?: AbortSignal): Promise<CustomerPortalResult<CustomerPortalProfileResult>>;
+  updateProfile(
+    input: CustomerPortalProfileUpdateInput,
+    signal?: AbortSignal,
+  ): Promise<CustomerPortalResult<CustomerPortalProfileResult>>;
   getOrder(
     orderId: string,
     signal?: AbortSignal,
@@ -287,6 +303,55 @@ export function createHttpCustomerPortalClient(options: HttpOptions): CustomerPo
         (value) => Object.freeze([...CustomerPortalOrdersListResultSchema.parse(value).orders]),
         signal,
       );
+    },
+    async getWallet(signal) {
+      return query(
+        "customer.self_service.wallet.get",
+        {},
+        (value) => CustomerPortalWalletResultSchema.parse(value),
+        signal,
+      );
+    },
+    async getBenefits(signal) {
+      return query(
+        "customer.self_service.benefits.get",
+        {},
+        (value) => CustomerPortalBenefitsResultSchema.parse(value),
+        signal,
+      );
+    },
+    async getProfile(signal) {
+      return query(
+        "customer.self_service.profile.get",
+        {},
+        (value) => CustomerPortalProfileResultSchema.parse(value),
+        signal,
+      );
+    },
+    async updateProfile(input, signal) {
+      const parsed = CustomerPortalProfileUpdateInputSchema.safeParse(input);
+      const authority = authorityStore.current();
+      if (!parsed.success) {
+        return Object.freeze({
+          ok: false as const,
+          error: Object.freeze({ code: "VALIDATION_FAILED", message: "请检查地址和通知偏好" }),
+        });
+      }
+      if (authority === null) return authenticationFailure();
+      const result = parseData(
+        await request("/api/v2/customer/profile", {
+          method: "POST",
+          body: parsed.data,
+          csrf: true,
+          authority,
+          ...(signal === undefined ? {} : { signal }),
+        }),
+        (value) => CustomerPortalProfileMutationResultSchema.parse(value),
+      );
+      if (!result.ok && result.error.code === "AUTHENTICATION_FAILED") {
+        authorityStore.clear(authority);
+      }
+      return result;
     },
     async getOrder(orderId, signal) {
       return query(

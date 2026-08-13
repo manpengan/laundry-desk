@@ -27,6 +27,9 @@ const rejectingStore: CustomerPortalStore = Object.freeze({
   async executeQuery() {
     return null;
   },
+  async updateProfile() {
+    throw new Error("unreachable");
+  },
 });
 
 test("Caddy source authority blocks rotating-number spray and rejects spoofed metadata", async () => {

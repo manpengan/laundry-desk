@@ -63,5 +63,7 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Factory handoff and QC** (0053, ADR-45): store-scoped garment manifests, four immutable handoff checkpoints, discrepancy reconciliation, custody anchors, and append-only quality evidence
 - **Marketing campaigns** (0059, ADR-52): store-scoped campaign windows, strict audience rules, digest-only freezes, and an append-only integer-cent budget authority; no benefit issuance
 - **Campaign coupon batches** (0060, ADR-53): server-qualified bounded grants, immutable campaign-to-coupon provenance, exact budget debits, and append-only redemption reversal support
+- **Customer self-service orders** (0061, ADR-55): hashed customer sessions and canonical order/receipt/garment read projections
+- **Customer wallet and preferences** (0062, ADR-56): read-only stored-value/benefit projections and bounded portal-owned address/preference CAS
 - Still deferred: edge lease, AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

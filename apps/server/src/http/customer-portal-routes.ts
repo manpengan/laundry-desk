@@ -3,17 +3,18 @@ import { randomBytes } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import {
-  CUSTOMER_PORTAL_AUTHORITY_HEADER_NAME,
   CUSTOMER_SELF_SERVICE_QUERY_NAMES,
-  CustomerPortalAuthoritySchema,
+  CustomerPortalBenefitsResultSchema,
   CustomerPortalEmptyInputSchema,
   CustomerPortalGarmentProgressResultSchema,
   CustomerPortalGarmentsListResultSchema,
   CustomerPortalLoginInputSchema,
   CustomerPortalOrderGetResultSchema,
   CustomerPortalOrdersListResultSchema,
+  CustomerPortalProfileResultSchema,
   CustomerPortalReceiptResultSchema,
   CustomerPortalSessionSchema,
+  CustomerPortalWalletResultSchema,
   CustomerSelfServiceGarmentProgressInputSchema,
   CustomerSelfServiceOrderInputSchema,
   CustomerSelfServiceOrdersListInputSchema,
@@ -23,36 +24,26 @@ import {
 import {
   CustomerPortalSessionInvalidError,
   type CustomerPortalQueryName,
-  type CustomerPortalQueryRateLimiter,
   type CustomerPortalQueryResult,
-  type CustomerPortalSessionIdentity,
-  type CustomerPortalStore,
 } from "../customer-self-service/index.js";
-import type { CustomerPortalLoginTimingGuard } from "../customer-self-service/login-timing.js";
-import type { LoginRateLimiter } from "./login-rate-limit.js";
 import { fail, isRecord } from "./auth-route-support.js";
-import type { CookiePolicy } from "./cookie-policy.js";
 import {
   clearCustomerPortalCookies,
   customerPortalCsrfAllowed,
-  customerPortalHashMatches,
-  customerPortalSessionSecret,
   hashCustomerPortalSecret,
   setCustomerPortalCookies,
   setCustomerPortalNoStore,
 } from "./customer-portal-cookie.js";
+import { registerCustomerPortalProfileRoute } from "./customer-portal-profile-route.js";
+import {
+  customerPortalTabAuthority,
+  resolveCustomerPortalIdentity,
+  type CustomerPortalRouteDeps,
+} from "./customer-portal-route-support.js";
 import { safeErrorContext } from "./local-logger.js";
-import type { LocalRequestSecurityPolicy } from "./request-security.js";
 import { trustedClientSource } from "./request-security.js";
 
-export type CustomerPortalRouteDeps = Readonly<{
-  store: CustomerPortalStore;
-  cookiePolicy: CookiePolicy;
-  loginRateLimiter: LoginRateLimiter;
-  loginTimingGuard: CustomerPortalLoginTimingGuard;
-  queryRateLimiter: CustomerPortalQueryRateLimiter;
-  requestSecurity: LocalRequestSecurityPolicy;
-}>;
+export type { CustomerPortalRouteDeps } from "./customer-portal-route-support.js";
 
 function loginRateInput(request: FastifyRequest, source: string) {
   const body = isRecord(request.body) ? request.body : {};
@@ -71,38 +62,19 @@ function loginRateInput(request: FastifyRequest, source: string) {
   });
 }
 
-function tabAuthority(request: FastifyRequest): string | null {
-  const value = request.headers[CUSTOMER_PORTAL_AUTHORITY_HEADER_NAME];
-  const parsed = CustomerPortalAuthoritySchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
-}
-
-async function resolveIdentity(
-  request: FastifyRequest,
-  deps: CustomerPortalRouteDeps,
-): Promise<Readonly<{
-  identity: CustomerPortalSessionIdentity;
-  secret: string;
-  source: string;
-}> | null> {
-  const source = trustedClientSource(request, deps.requestSecurity);
-  if (source === null) return null;
-  const authority = tabAuthority(request);
-  if (authority === null) return null;
-  const secret = customerPortalSessionSecret(request, deps.cookiePolicy, authority);
-  if (secret === null) return null;
-  const identity = await deps.store.resolveSession(hashCustomerPortalSecret(secret));
-  return identity === null || !customerPortalHashMatches(authority, identity.authorityHash)
-    ? null
-    : Object.freeze({ identity, secret, source });
-}
-
 function parseQueryInput(name: CustomerPortalQueryName, body: unknown) {
   if (name === "customer.self_service.orders.list") {
     return CustomerSelfServiceOrdersListInputSchema.safeParse(body);
   }
   if (name === "customer.self_service.garment.progress") {
     return CustomerSelfServiceGarmentProgressInputSchema.safeParse(body);
+  }
+  if (
+    name === "customer.self_service.wallet.get" ||
+    name === "customer.self_service.benefits.get" ||
+    name === "customer.self_service.profile.get"
+  ) {
+    return CustomerPortalEmptyInputSchema.safeParse(body);
   }
   return CustomerSelfServiceOrderInputSchema.safeParse(body);
 }
@@ -119,6 +91,15 @@ function parseQueryResult(name: CustomerPortalQueryName, result: CustomerPortalQ
   }
   if (name === "customer.self_service.garments.list") {
     return CustomerPortalGarmentsListResultSchema.parse(result);
+  }
+  if (name === "customer.self_service.wallet.get") {
+    return CustomerPortalWalletResultSchema.parse(result);
+  }
+  if (name === "customer.self_service.benefits.get") {
+    return CustomerPortalBenefitsResultSchema.parse(result);
+  }
+  if (name === "customer.self_service.profile.get") {
+    return CustomerPortalProfileResultSchema.parse(result);
   }
   return CustomerPortalGarmentProgressResultSchema.parse(result);
 }
@@ -140,7 +121,7 @@ function registerLogin(app: FastifyInstance, deps: CustomerPortalRouteDeps): voi
     let settled = false;
     try {
       const parsed = CustomerPortalLoginInputSchema.safeParse(request.body);
-      const authority = tabAuthority(request);
+      const authority = customerPortalTabAuthority(request);
       if (!parsed.success || authority === null) {
         settled = true;
         attempt.reservation.fail();
@@ -189,9 +170,9 @@ function registerSessionRoutes(app: FastifyInstance, deps: CustomerPortalRouteDe
   app.get("/api/v2/customer/auth/session", async (request, reply) => {
     setCustomerPortalNoStore(reply);
     try {
-      const resolved = await resolveIdentity(request, deps);
+      const resolved = await resolveCustomerPortalIdentity(request, deps);
       if (resolved === null) {
-        const authority = tabAuthority(request);
+        const authority = customerPortalTabAuthority(request);
         if (authority !== null) clearCustomerPortalCookies(reply, deps.cookiePolicy, authority);
         reply.code(401);
         return fail("AUTHENTICATION_FAILED");
@@ -221,12 +202,12 @@ function registerSessionRoutes(app: FastifyInstance, deps: CustomerPortalRouteDe
         reply.code(400);
         return fail("VALIDATION_FAILED");
       }
-      const resolved = await resolveIdentity(request, deps);
+      const resolved = await resolveCustomerPortalIdentity(request, deps);
       if (resolved === null) {
         reply.code(401);
         return fail("AUTHENTICATION_FAILED");
       }
-      const authority = tabAuthority(request);
+      const authority = customerPortalTabAuthority(request);
       if (
         authority === null ||
         !customerPortalCsrfAllowed(request, deps.cookiePolicy, authority, resolved.identity)
@@ -249,7 +230,7 @@ function registerSessionRoutes(app: FastifyInstance, deps: CustomerPortalRouteDe
       reply.code(500);
       return fail("TRANSACTION_FAILED");
     } finally {
-      const authority = tabAuthority(request);
+      const authority = customerPortalTabAuthority(request);
       if (authority !== null) clearCustomerPortalCookies(reply, deps.cookiePolicy, authority);
     }
   });
@@ -260,12 +241,12 @@ function registerQueries(app: FastifyInstance, deps: CustomerPortalRouteDeps): v
     const name = queryName as CustomerPortalQueryName;
     app.post(`/v1/queries/${name}`, async (request, reply) => {
       try {
-        const resolved = await resolveIdentity(request, deps);
+        const resolved = await resolveCustomerPortalIdentity(request, deps);
         if (resolved === null) {
           reply.code(401);
           return fail("AUTHENTICATION_FAILED");
         }
-        const authority = tabAuthority(request);
+        const authority = customerPortalTabAuthority(request);
         if (
           authority === null ||
           !customerPortalCsrfAllowed(request, deps.cookiePolicy, authority, resolved.identity)
@@ -320,4 +301,5 @@ export function registerCustomerPortalRoutes(
   registerLogin(app, deps);
   registerSessionRoutes(app, deps);
   registerQueries(app, deps);
+  registerCustomerPortalProfileRoute(app, deps);
 }

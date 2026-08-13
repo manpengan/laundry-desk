@@ -38,6 +38,29 @@ function success<T>(data: T): CustomerPortalResult<T> {
   return Object.freeze({ ok: true as const, data });
 }
 
+const ACCOUNT_CLIENT = Object.freeze({
+  async getWallet() {
+    return success(Object.freeze({ wallet: null }));
+  },
+  async getBenefits() {
+    return success(Object.freeze({ benefits: null }));
+  },
+  async getProfile() {
+    return success(
+      Object.freeze({ version: 0, preferred_contact: "none" as const, addresses: [] }),
+    );
+  },
+  async updateProfile(input: Parameters<CustomerPortalClient["updateProfile"]>[0]) {
+    return success(
+      Object.freeze({
+        version: input.expected_version + 1,
+        preferred_contact: input.preferred_contact,
+        addresses: [],
+      }),
+    );
+  },
+});
+
 function failure<T>(): CustomerPortalResult<T> {
   return Object.freeze({
     ok: false as const,
@@ -66,6 +89,7 @@ test("logout and another customer login cannot revive deferred prior-session PII
   let listCalls = 0;
   let invalidations = 0;
   const client: CustomerPortalClient = Object.freeze({
+    ...ACCOUNT_CLIENT,
     invalidateLocalSession() {
       invalidations += 1;
     },
@@ -204,6 +228,7 @@ test("server expiry atomically clears customer PII, authority and in-flight work
   const refreshSignals: AbortSignal[] = [];
   let listCalls = 0;
   const client: CustomerPortalClient = Object.freeze({
+    ...ACCOUNT_CLIENT,
     invalidateLocalSession() {
       invalidations += 1;
     },
@@ -322,6 +347,9 @@ test("server expiry atomically clears customer PII, authority and in-flight work
     selectedOrderId: null,
     detail: null,
     progress: {},
+    wallet: null,
+    benefits: null,
+    profile: null,
     busy: false,
     error: null,
   });

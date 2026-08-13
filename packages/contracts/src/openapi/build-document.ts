@@ -19,7 +19,7 @@ import {
 export const OPENAPI_VERSION = "3.1.0" as const;
 
 /** Contract package API surface version projected into info.version (no timestamps). */
-export const OPENAPI_INFO_VERSION = "0.2.0" as const;
+export const OPENAPI_INFO_VERSION = "0.3.0" as const;
 
 /** Path of the committed snapshot relative to packages/contracts. */
 export const OPENAPI_SNAPSHOT_RELATIVE_PATH = "openapi/laundry-v2.openapi.json" as const;

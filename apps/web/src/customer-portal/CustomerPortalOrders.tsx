@@ -5,6 +5,7 @@ import type {
   CustomerPortalOrderSummary,
   CustomerPortalReceiptResult,
 } from "@laundry/contracts";
+import type { ReactNode } from "react";
 
 import { customerPortalStatusLabel, formatCustomerPortalCents, progressLabels } from "./model.js";
 
@@ -21,6 +22,7 @@ export type CustomerPortalOrdersProps = Readonly<{
   progress: Readonly<Record<string, CustomerPortalGarmentProgressResult>>;
   busy: boolean;
   error: string | null;
+  account: ReactNode;
   onSelect(orderId: string): void;
   onProgress(orderId: string, garmentId: string): void;
   onRefresh(): void;
@@ -142,7 +144,7 @@ export function CustomerPortalOrders(props: CustomerPortalOrdersProps) {
       <header className="ld-customer-header">
         <div>
           <p className="ld-customer-eyebrow">顾客自助</p>
-          <h1>订单与洗护进度</h1>
+          <h1>我的洗护服务</h1>
         </div>
         <button type="button" onClick={props.onLogout}>
           退出
@@ -153,6 +155,7 @@ export function CustomerPortalOrders(props: CustomerPortalOrdersProps) {
           {props.error}
         </p>
       )}
+      {props.account}
       <div className="ld-customer-layout" aria-busy={props.busy}>
         <OrderList {...props} />
         <article className="ld-customer-card ld-customer-detail">

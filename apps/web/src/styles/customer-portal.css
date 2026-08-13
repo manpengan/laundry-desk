@@ -52,6 +52,112 @@
   gap: 16px;
 }
 
+.ld-customer-account {
+  display: grid;
+  max-width: 1120px;
+  margin: 0 auto 16px;
+  gap: 16px;
+}
+
+.ld-customer-wallet-balance {
+  margin: 12px 0;
+  color: #205f47;
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.ld-customer-benefit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ld-customer-benefit-grid span {
+  display: grid;
+  padding: 10px;
+  border-radius: 12px;
+  background: #f2f7f4;
+}
+
+.ld-customer-benefit-grid small,
+.ld-customer-address-list small {
+  color: #66736d;
+}
+
+.ld-customer-profile-form,
+.ld-customer-profile-form fieldset {
+  display: grid;
+  gap: 10px;
+}
+
+.ld-customer-profile-form > label,
+.ld-customer-profile-form fieldset > label:not(.ld-customer-check) {
+  display: grid;
+  gap: 5px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ld-customer-profile-form input,
+.ld-customer-profile-form select {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid #b8c9c0;
+  border-radius: 10px;
+  background: white;
+  font: inherit;
+}
+
+.ld-customer-profile-form fieldset {
+  margin: 8px 0;
+  padding: 12px;
+  border: 1px solid #d7e3dd;
+  border-radius: 12px;
+}
+
+.ld-customer-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ld-customer-check input {
+  min-height: auto;
+}
+
+.ld-customer-profile-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ld-customer-profile-form button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #8caf9f;
+  border-radius: 10px;
+  background: white;
+  font: inherit;
+  font-weight: 700;
+}
+
+.ld-customer-profile-form button[type="submit"] {
+  color: white;
+  background: #266a50;
+}
+
+.ld-customer-address-list {
+  padding-left: 20px;
+}
+
+.ld-customer-address-list li {
+  margin: 6px 0;
+}
+
+.ld-customer-address-list small {
+  display: block;
+}
+
 .ld-customer-login {
   display: grid;
   place-items: center;
@@ -207,6 +313,11 @@
   }
 
   .ld-customer-layout {
+    grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.65fr);
+    align-items: start;
+  }
+
+  .ld-customer-account {
     grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.65fr);
     align-items: start;
   }

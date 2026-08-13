@@ -69,6 +69,7 @@ test("customer portal login is a mobile-friendly semantic form", () => {
 test("customer portal desktop view exposes receipt and authoritative piece progress controls", () => {
   const markup = renderToStaticMarkup(
     <CustomerPortalOrders
+      account={null}
       orders={[summary]}
       selectedOrderId={ORDER}
       detail={detail}

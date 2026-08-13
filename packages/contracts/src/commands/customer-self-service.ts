@@ -5,6 +5,9 @@ import {
   ReconciliationPaymentKindSchema,
   ReconciliationPaymentMethodSchema,
 } from "./reconciliation.js";
+import { CUSTOMER_SELF_SERVICE_ACCOUNT_QUERIES } from "./customer-self-service-account.js";
+
+export * from "./customer-self-service-account.js";
 
 const CentsSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const EpochSecondsSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -176,7 +179,7 @@ function customerPortalQuery<T extends z.ZodObject>(definition: {
   });
 }
 
-export const CUSTOMER_SELF_SERVICE_QUERIES = Object.freeze([
+const CUSTOMER_SELF_SERVICE_ORDER_QUERIES = Object.freeze([
   customerPortalQuery({
     name: "customer.self_service.orders.list",
     description: "List the signed-in customer's recent formal orders.",
@@ -214,6 +217,11 @@ export const CUSTOMER_SELF_SERVICE_QUERIES = Object.freeze([
   }),
 ] as const);
 
+export const CUSTOMER_SELF_SERVICE_QUERIES = Object.freeze([
+  ...CUSTOMER_SELF_SERVICE_ORDER_QUERIES,
+  ...CUSTOMER_SELF_SERVICE_ACCOUNT_QUERIES,
+] as const);
+
 export const CUSTOMER_SELF_SERVICE_QUERY_NAMES = Object.freeze(
   CUSTOMER_SELF_SERVICE_QUERIES.map((query) => query.name),
 ) as readonly [
@@ -222,6 +230,9 @@ export const CUSTOMER_SELF_SERVICE_QUERY_NAMES = Object.freeze(
   "customer.self_service.receipt.get",
   "customer.self_service.garments.list",
   "customer.self_service.garment.progress",
+  "customer.self_service.wallet.get",
+  "customer.self_service.benefits.get",
+  "customer.self_service.profile.get",
 ];
 
 type DeepReadonly<T> = T extends readonly (infer Item)[]

@@ -5,6 +5,8 @@ import {
   CUSTOMER_PORTAL_AUTHORITY_HEADER_NAME,
   CustomerPortalEmptyInputSchema,
   CustomerPortalLoginInputSchema,
+  CustomerPortalProfileMutationResultSchema,
+  CustomerPortalProfileUpdateInputSchema,
   CustomerPortalSessionSchema,
 } from "../commands/customer-self-service.js";
 
@@ -130,6 +132,11 @@ export const CUSTOMER_PORTAL_AUTH_SCHEMAS = Object.freeze({
     ok: z.literal(true),
     data: z.strictObject({ logged_out: z.literal(true) }),
   }),
+  CustomerPortalProfileUpdateInput: CustomerPortalProfileUpdateInputSchema,
+  CustomerPortalProfileMutationResponse: z.strictObject({
+    ok: z.literal(true),
+    data: CustomerPortalProfileMutationResultSchema,
+  }),
 });
 
 export const CUSTOMER_PORTAL_AUTH_PATHS = Object.freeze({
@@ -185,6 +192,33 @@ export const CUSTOMER_PORTAL_AUTH_PATHS = Object.freeze({
         "415": failure("JSON media type required"),
         "500": failure("Logout transaction failed", "clear"),
         default: failure("Unified failure envelope", "clear"),
+      }),
+      security: mutationSecurity,
+    }),
+  }),
+  "/api/v2/customer/profile": Object.freeze({
+    post: Object.freeze({
+      operationId: "customer_profile_update",
+      summary: "Update customer-owned addresses and notification preference",
+      description:
+        "Dedicated customer-session CAS. The server derives the canonical customer, preserves store-managed addresses, and records only count, preference and version evidence. It does not claim a notification was sent.",
+      tags: Object.freeze(["customer-profile"]),
+      "x-laundry-kind": "auth" as const,
+      parameters: Object.freeze([authorityParameter, csrfParameter]),
+      requestBody: Object.freeze({
+        required: true as const,
+        content: content("CustomerPortalProfileUpdateInput"),
+      }),
+      responses: Object.freeze({
+        "200": success("CustomerPortalProfileMutationResponse", "Profile preference updated"),
+        "400": failure("Strict profile body or request metadata rejected"),
+        "401": failure("Customer session unavailable or expired"),
+        "403": failure("Browser origin or CSRF rejected"),
+        "409": failure("Profile version or preserved-address constraint changed"),
+        "415": failure("JSON media type required"),
+        "429": rateLimited,
+        "500": failure("Profile transaction failed"),
+        default: failure("Unified failure envelope"),
       }),
       security: mutationSecurity,
     }),

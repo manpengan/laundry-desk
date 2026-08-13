@@ -47057,6 +47057,194 @@
         ],
         "type": "object"
       },
+      "CustomerPortalProfileMutationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "addresses": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "address": {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "address_id": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    "contact_phone": {
+                      "anyOf": [
+                        {
+                          "maxLength": 32,
+                          "minLength": 1,
+                          "pattern": "^[+0-9() -]+$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "is_default": {
+                      "type": "boolean"
+                    },
+                    "label": {
+                      "maxLength": 32,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "recipient": {
+                      "anyOf": [
+                        {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "source": {
+                      "enum": [
+                        "store",
+                        "portal"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "recipient",
+                    "contact_phone",
+                    "address",
+                    "is_default",
+                    "address_id",
+                    "source"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              "preferred_contact": {
+                "enum": [
+                  "none",
+                  "phone",
+                  "sms",
+                  "wechat"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "version",
+              "preferred_contact",
+              "addresses"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "CustomerPortalProfileUpdateInput": {
+        "additionalProperties": false,
+        "properties": {
+          "addresses": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "address": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "contact_phone": {
+                  "anyOf": [
+                    {
+                      "maxLength": 32,
+                      "minLength": 1,
+                      "pattern": "^[+0-9() -]+$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "is_default": {
+                  "type": "boolean"
+                },
+                "label": {
+                  "maxLength": 32,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "recipient": {
+                  "anyOf": [
+                    {
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "label",
+                "recipient",
+                "contact_phone",
+                "address",
+                "is_default"
+              ],
+              "type": "object"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "preferred_contact": {
+            "enum": [
+              "none",
+              "phone",
+              "sms",
+              "wechat"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_version",
+          "preferred_contact",
+          "addresses"
+        ],
+        "type": "object"
+      },
       "CustomerPortalSessionResponse": {
         "additionalProperties": false,
         "properties": {
@@ -50302,6 +50490,11 @@
         },
         "type": "object"
       },
+      "input.query.customer.self_service.benefits.get": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
       "input.query.customer.self_service.garment.progress": {
         "additionalProperties": false,
         "properties": {
@@ -50361,6 +50554,11 @@
         },
         "type": "object"
       },
+      "input.query.customer.self_service.profile.get": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
       "input.query.customer.self_service.receipt.get": {
         "additionalProperties": false,
         "properties": {
@@ -50373,6 +50571,11 @@
         "required": [
           "order_id"
         ],
+        "type": "object"
+      },
+      "input.query.customer.self_service.wallet.get": {
+        "additionalProperties": false,
+        "properties": {},
         "type": "object"
       },
       "input.query.fulfillment.batch.get": {
@@ -50969,7 +51172,7 @@
   "info": {
     "description": "Contract-first OpenAPI 3.1 projection for frozen M1 and M2 counter contracts. Auth paths come solely from AUTH_OPERATION_MATRIX. Bus commands/queries come from M1_FIRST_WAVE_DEFINITIONS and M2_CONTRACT_DEFINITIONS. Errors use the A2 CommandResponse / CommandFailureResponse envelope.",
     "title": "Laundry Desk v2 API",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -52119,6 +52322,237 @@
         "summary": "Resume customer portal session",
         "tags": [
           "customer-auth"
+        ],
+        "x-laundry-kind": "auth"
+      }
+    },
+    "/api/v2/customer/profile": {
+      "post": {
+        "description": "Dedicated customer-session CAS. The server derives the canonical customer, preserves store-managed addresses, and records only count, preference and version evidence. It does not claim a notification was sent.",
+        "operationId": "customer_profile_update",
+        "parameters": [
+          {
+            "description": "Per-tab 256-bit customer authority from sessionStorage; selects and must match the bound customer cookie.",
+            "in": "header",
+            "name": "x-customer-portal-authority",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Double-submit CSRF proof; must match the authority-selected readable cookie.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerPortalProfileUpdateInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerPortalProfileMutationResponse"
+                }
+              }
+            },
+            "description": "Profile preference updated",
+            "headers": {
+              "Cache-Control": {
+                "description": "Every customer authentication response is non-cacheable.",
+                "schema": {
+                  "const": "no-store",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Strict profile body or request metadata rejected",
+            "headers": {
+              "Cache-Control": {
+                "description": "Every customer authentication response is non-cacheable.",
+                "schema": {
+                  "const": "no-store",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Customer session unavailable or expired",
+            "headers": {
+              "Cache-Control": {
+                "description": "Every customer authentication response is non-cacheable.",
+                "schema": {
+                  "const": "no-store",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Browser origin or CSRF rejected",
+            "headers": {
+              "Cache-Control": {
+                "description": "Every customer authentication response is non-cacheable.",
+                "schema": {
+                  "const": "no-store",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Profile version or preserved-address constraint changed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Every customer authentication response is non-cacheable.",
+                "schema": {
+                  "const": "no-store",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "JSON media type required",
+            "headers": {
+              "Cache-Control": {
+                "description": "Every customer authentication response is non-cacheable.",
+                "schema": {
+                  "const": "no-store",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded",
+            "headers": {
+              "Cache-Control": {
+                "description": "Every customer authentication response is non-cacheable.",
+                "schema": {
+                  "const": "no-store",
+                  "type": "string"
+                }
+              },
+              "Retry-After": {
+                "description": "Seconds until this bounded source/session bucket may retry.",
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Profile transaction failed",
+            "headers": {
+              "Cache-Control": {
+                "description": "Every customer authentication response is non-cacheable.",
+                "schema": {
+                  "const": "no-store",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified failure envelope",
+            "headers": {
+              "Cache-Control": {
+                "description": "Every customer authentication response is non-cacheable.",
+                "schema": {
+                  "const": "no-store",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": [],
+            "customerCsrfCookie": [],
+            "customerSession": [],
+            "customerTabAuthority": []
+          }
+        ],
+        "summary": "Update customer-owned addresses and notification preference",
+        "tags": [
+          "customer-profile"
         ],
         "x-laundry-kind": "auth"
       }
@@ -56127,6 +56561,83 @@
         "x-laundry-version": "0.2.0"
       }
     },
+    "/v1/queries/customer.self_service.benefits.get": {
+      "post": {
+        "description": "Customer-owned membership projection behind a dedicated customer session; never expose it as an AI tool. Stable query name: `customer.self_service.benefits.get` @ 1.0.0. HTTP body is the strict query input. The dedicated customer cookie and matching CSRF proof select the server-owned canonical customer; staff bearer tokens cannot authorize this route. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_customer_self_service_benefits_get",
+        "parameters": [
+          {
+            "description": "Double-submit CSRF proof; must match the authority-selected readable cookie.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Per-tab 256-bit customer authority from sessionStorage; selects and must match the bound customer cookie.",
+            "in": "header",
+            "name": "x-customer-portal-authority",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.customer.self_service.benefits.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": [],
+            "customerCsrfCookie": [],
+            "customerSession": [],
+            "customerTabAuthority": []
+          }
+        ],
+        "summary": "Read the signed-in customer's tier, points, punch cards and coupon bag.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
     "/v1/queries/customer.self_service.garment.progress": {
       "post": {
         "description": "Customer-owned receipt and garment data behind a dedicated customer session; never expose it as an AI tool. Stable query name: `customer.self_service.garment.progress` @ 0.1.0. HTTP body is the strict query input. The dedicated customer cookie and matching CSRF proof select the server-owned canonical customer; staff bearer tokens cannot authorize this route. Responses use the unified A2 CommandResponse envelope.",
@@ -56435,6 +56946,83 @@
         "x-laundry-version": "0.1.0"
       }
     },
+    "/v1/queries/customer.self_service.profile.get": {
+      "post": {
+        "description": "Customer-owned membership projection behind a dedicated customer session; never expose it as an AI tool. Stable query name: `customer.self_service.profile.get` @ 1.0.0. HTTP body is the strict query input. The dedicated customer cookie and matching CSRF proof select the server-owned canonical customer; staff bearer tokens cannot authorize this route. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_customer_self_service_profile_get",
+        "parameters": [
+          {
+            "description": "Double-submit CSRF proof; must match the authority-selected readable cookie.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Per-tab 256-bit customer authority from sessionStorage; selects and must match the bound customer cookie.",
+            "in": "header",
+            "name": "x-customer-portal-authority",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.customer.self_service.profile.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": [],
+            "customerCsrfCookie": [],
+            "customerSession": [],
+            "customerTabAuthority": []
+          }
+        ],
+        "summary": "Read the signed-in customer's bounded addresses and notification preference.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
     "/v1/queries/customer.self_service.receipt.get": {
       "post": {
         "description": "Customer-owned receipt and garment data behind a dedicated customer session; never expose it as an AI tool. Stable query name: `customer.self_service.receipt.get` @ 0.1.0. HTTP body is the strict query input. The dedicated customer cookie and matching CSRF proof select the server-owned canonical customer; staff bearer tokens cannot authorize this route. Responses use the unified A2 CommandResponse envelope.",
@@ -56510,6 +57098,83 @@
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R2",
         "x-laundry-version": "0.1.0"
+      }
+    },
+    "/v1/queries/customer.self_service.wallet.get": {
+      "post": {
+        "description": "Customer-owned membership projection behind a dedicated customer session; never expose it as an AI tool. Stable query name: `customer.self_service.wallet.get` @ 1.0.0. HTTP body is the strict query input. The dedicated customer cookie and matching CSRF proof select the server-owned canonical customer; staff bearer tokens cannot authorize this route. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_customer_self_service_wallet_get",
+        "parameters": [
+          {
+            "description": "Double-submit CSRF proof; must match the authority-selected readable cookie.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Per-tab 256-bit customer authority from sessionStorage; selects and must match the bound customer cookie.",
+            "in": "header",
+            "name": "x-customer-portal-authority",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.customer.self_service.wallet.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "csrfHeader": [],
+            "customerCsrfCookie": [],
+            "customerSession": [],
+            "customerTabAuthority": []
+          }
+        ],
+        "summary": "Read the signed-in customer's stored-value balance and recent ledger.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
       }
     },
     "/v1/queries/fulfillment.batch.get": {
