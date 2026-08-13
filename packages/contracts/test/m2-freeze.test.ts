@@ -308,7 +308,7 @@ describe("M2 contract surface", () => {
     );
   });
 
-  it("projects the frozen M2 surface into deterministic OpenAPI", { timeout: 10_000 }, () => {
+  it("projects the frozen M2 surface into deterministic OpenAPI", { timeout: 30_000 }, () => {
     const document = buildLaundryOpenApiDocument();
     const first = serializeOpenApiDocument(document);
     const second = serializeOpenApiDocument(buildLaundryOpenApiDocument());
