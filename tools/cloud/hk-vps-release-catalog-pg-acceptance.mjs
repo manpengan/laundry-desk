@@ -13,8 +13,8 @@ const REQUIRED_ENVIRONMENT = Object.freeze({
   LAUNDRY_USE_LOCAL_PG: "1",
 });
 const MIGRATION = /^\d{4}_[a-z0-9_]+\.sql$/u;
-const FROM_HEAD = "0055_delivery_appointments.sql";
-const TO_HEAD = "0056_delivery_orders.sql";
+const FROM_HEAD = "0056_delivery_orders.sql";
+const TO_HEAD = "0057_delivery_tasks.sql";
 const MIGRATIONS_ROOT = join(
   dirname(fileURLToPath(import.meta.url)),
   "../../packages/db/src/migrations",

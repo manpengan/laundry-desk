@@ -126,6 +126,10 @@ Browser、marker/schema、服务、清理及保留证据均已闭环；详见[�
 4. 取送、营销/券活动与顾客自助入口。
 5. AI/BYOK 的权限投影、风险确认、成本上限、失败降级与密钥隔离。
 
+阶段 4.4 当前按独立权威层推进：Item 1 门店策略、Item 2 顾客预约、Item 3 配送订单之后，
+Item 4 由 [ADR-49](../../adr/2026-08-13-adr-49-authoritative-delivery-tasks.md)冻结配送任务分派、接单、
+转派和人工接管；移动 H5 与照片/GPS/签名证据仍留给 Item 5/6，不能在任务记录中提前混入。
+
 第 2、4、5 项若依赖外部平台，fake 只能证明 `software_only`。真实完成至少要求获授权的
 sandbox 或正式账号、独立秘密、限额/成本保护、真实请求、provider 回执/webhook、失败与
 撤销路径；缺任一项即标记 `blocked_external_provider`。

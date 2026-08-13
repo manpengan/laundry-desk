@@ -15,6 +15,12 @@ import {
   createMemoryDeliveryOrderRuntime,
   createPgDeliveryOrderRuntime,
 } from "../delivery-orders/runtime.js";
+import { bindMemoryDeliveryTaskOrderAuthority } from "../delivery-tasks/order-authority.js";
+import {
+  createMemoryDeliveryTaskRuntime,
+  createPgDeliveryTaskRuntime,
+} from "../delivery-tasks/runtime.js";
+import type { LocalStaffDirectoryEntry } from "./staff-directory.js";
 
 export function createMemoryDeliveryRuntimes(
   features: FeaturesStore,
@@ -22,27 +28,33 @@ export function createMemoryDeliveryRuntimes(
   customerProfile: CustomerProfileStore,
   customers: CustomerStore,
   orders: OrderStore,
+  staffDirectory: readonly LocalStaffDirectoryEntry[],
 ) {
   const policy = createMemoryDeliveryPolicyRuntime(features, timeZone);
   const appointments = createMemoryDeliveryAppointmentRuntime(policy, customerProfile);
+  const deliveryOrders = createMemoryDeliveryOrderRuntime(
+    features,
+    orders,
+    appointments.store,
+    customerProfile,
+    customers,
+  );
+  const tasks = createMemoryDeliveryTaskRuntime(deliveryOrders, staffDirectory);
   return Object.freeze({
     policy,
     appointments,
-    orders: createMemoryDeliveryOrderRuntime(
-      features,
-      orders,
-      appointments.store,
-      customerProfile,
-      customers,
-    ),
+    orders: bindMemoryDeliveryTaskOrderAuthority(deliveryOrders, tasks.store),
+    tasks,
   });
 }
 
 export function createPgDeliveryRuntimes(pool: PgPool) {
   const policy = createPgDeliveryPolicyRuntime(pool);
+  const orders = createPgDeliveryOrderRuntime(pool);
   return Object.freeze({
     policy,
     appointments: createPgDeliveryAppointmentRuntime(pool, policy),
-    orders: createPgDeliveryOrderRuntime(pool),
+    orders,
+    tasks: createPgDeliveryTaskRuntime(pool, orders),
   });
 }

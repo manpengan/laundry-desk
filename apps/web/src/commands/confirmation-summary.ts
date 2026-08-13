@@ -1,4 +1,5 @@
 import {
+  DeliveryTaskConfirmationSummarySchema,
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
   NotificationDeliveryConfirmationSummarySchema,
@@ -40,6 +41,8 @@ export function readConfirmationSummary(value: unknown): ConfirmationSummary | n
       counts: Object.freeze({ ...factory.data.counts }),
     });
   }
+  const deliveryTask = DeliveryTaskConfirmationSummarySchema.safeParse(value);
+  if (deliveryTask.success) return Object.freeze({ ...deliveryTask.data });
   const fulfillment = FulfillmentOperationConfirmationSummarySchema.safeParse(value);
   if (!fulfillment.success) return null;
   return Object.freeze({

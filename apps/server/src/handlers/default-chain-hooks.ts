@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import {
   DELIVERY_APPOINTMENT_COMMAND_NAMES,
   DELIVERY_ORDER_COMMAND_NAMES,
+  DELIVERY_TASK_COMMAND_NAMES,
   createCommandError,
   type CommandError,
 } from "@laundry/contracts";
@@ -59,6 +60,7 @@ const REUSABLE_PENDING_COMMANDS: ReadonlySet<string> = new Set([
   "delivery.policy.set",
   ...DELIVERY_APPOINTMENT_COMMAND_NAMES,
   ...DELIVERY_ORDER_COMMAND_NAMES,
+  ...DELIVERY_TASK_COMMAND_NAMES,
 ]);
 
 export { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";
@@ -352,7 +354,9 @@ export function createEnforcingPolicyCheck(
         orgId: bus.tenant.orgId,
         storeId: bus.tenant.storeId,
         idempotencyKey: idempotencyKey ?? nonce,
-        privacySubjectCustomerId: customerPrivacySubjectFromCommand(bus.definition.name, parsed),
+        privacySubjectCustomerId:
+          preparation?.privacySubjectCustomerId ??
+          customerPrivacySubjectFromCommand(bus.definition.name, parsed),
         createdAt: now,
         effectiveRisk: decision.effectiveRisk,
         policyOutcome: decision.outcome,
@@ -379,8 +383,6 @@ export function createEnforcingPolicyCheck(
 
 export const defaultCheckPolicy: BusChainPorts["checkPolicy"] =
   createEnforcingPolicyCheck(processPendingActionStore);
-
-/** Build default hooks; callers may override individual steps. */
 export function createDefaultChainHooks(
   overrides: ChainPortHooks = {},
   pendingStore: PendingActionStore = processPendingActionStore,

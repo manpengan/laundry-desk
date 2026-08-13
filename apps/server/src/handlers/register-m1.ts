@@ -17,7 +17,6 @@ import {
   registerDeliveryPolicyCommandHandlers,
   registerDeliveryPolicyQueryHandlers,
 } from "../delivery-policy/handlers.js";
-import { createDeliveryPolicyConfirmationPreparer } from "../delivery-policy/confirmation.js";
 import {
   registerDeliveryAppointmentCommandHandlers,
   registerDeliveryAppointmentQueryHandlers,
@@ -26,12 +25,15 @@ import {
   registerDeliveryOrderCommandHandlers,
   registerDeliveryOrderQueryHandlers,
 } from "../delivery-orders/handlers.js";
+import {
+  registerDeliveryTaskCommandHandlers,
+  registerDeliveryTaskQueryHandlers,
+} from "../delivery-tasks/handlers.js";
 import { registerOrderCommandHandlers, registerOrderQueryHandlers } from "../order/handlers.js";
 import {
   registerFulfillmentCommandHandlers,
   registerFulfillmentQueryHandlers,
 } from "../fulfillment/handlers.js";
-import { createFulfillmentConfirmationPreparer } from "../fulfillment/confirmation.js";
 import { registerOrderWorkdayCommandHandlers } from "../order/workday-handlers.js";
 import {
   registerPaymentCommandHandlers,
@@ -52,12 +54,6 @@ import { registerShiftCommandHandlers, registerShiftQueryHandlers } from "../shi
 import { registerStatsQueryHandlers } from "../stats/handlers.js";
 import * as memberRegistration from "../member/registration.js";
 import { withMemberBenefitCouponCancellation } from "../member-benefits/order-cancellation.js";
-import { createMemberTopupConfirmationPreparer } from "../member/topup-confirmation.js";
-import {
-  createNotificationDeliveryConfirmationPreparer,
-  prepareNotificationDeliveryRisk,
-} from "../notification/delivery-confirmation.js";
-import { combinePendingActionPreparers } from "./default-chain-hooks.js";
 import * as notificationRegistration from "../notification/registration.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
@@ -65,7 +61,7 @@ import { createStaffAccessHandlers } from "../staff/handlers.js";
 import * as storeManagement from "../store-management/registration.js";
 import { registerIdentityCommandHandlers } from "./identity-handlers.js";
 import { registerPlatformHandlers, registerPlatformQueryHandlers } from "./platform-handlers.js";
-import { createDefaultChainHooks } from "./default-chain-hooks.js";
+import { createM1ChainHooks } from "./register-m1-chain-hooks.js";
 import type { RegisterM1Deps, RegisterM1Result } from "./register-m1-types.js";
 
 export type { RegisterM1Deps, RegisterM1Result } from "./register-m1-types.js";
@@ -118,6 +114,16 @@ export function registerM1Handlers(
   if (deps.deliveryOrders !== undefined) {
     registerDeliveryOrderCommandHandlers(registry, deps.deliveryOrders);
     registered.push("delivery.order.create", "delivery.order.transition");
+  }
+
+  if (deps.deliveryTasks !== undefined) {
+    registerDeliveryTaskCommandHandlers(registry, deps.deliveryTasks);
+    registered.push(
+      "delivery.task.assign",
+      "delivery.task.respond",
+      "delivery.task.transfer",
+      "delivery.task.takeover",
+    );
   }
 
   // ADR-15: price maintenance is a command; the query side stays read-only.
@@ -263,6 +269,11 @@ export function registerM1QueryHandlers(
     names.push("delivery.order.get", "delivery.orders.list");
   }
 
+  if (deps.deliveryTasks !== undefined) {
+    registerDeliveryTaskQueryHandlers(queryRegistry, deps.deliveryTasks);
+    names.push("delivery.task.get", "delivery.tasks.list");
+  }
+
   if (deps.catalog !== undefined) {
     registerCatalogQueryHandlers(queryRegistry, deps.catalog);
     names.push(
@@ -368,23 +379,7 @@ export function createRegisteredM1Bus(
   return Object.freeze({
     registry,
     queryRegistry,
-    chainHooks: createDefaultChainHooks(
-      {},
-      pendingStore,
-      combinePendingActionPreparers([
-        deps.deliveryPolicy === undefined ? undefined : createDeliveryPolicyConfirmationPreparer(),
-        deps.member === undefined || deps.order === undefined
-          ? undefined
-          : createMemberTopupConfirmationPreparer(deps.member),
-        deps.notification === undefined
-          ? undefined
-          : createNotificationDeliveryConfirmationPreparer(deps.notification),
-        deps.fulfillment === undefined
-          ? undefined
-          : createFulfillmentConfirmationPreparer(deps.fulfillment),
-      ]),
-      deps.notification === undefined ? undefined : prepareNotificationDeliveryRisk,
-    ),
+    chainHooks: createM1ChainHooks(deps, pendingStore),
     registered,
     registeredQueries,
   });

@@ -131,6 +131,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     customerProfileStore,
     customerStore,
     orderStore,
+    LOCAL_MEMORY_STAFF_DIRECTORY,
   );
   const statsSource = createOrderBackedStatsQuery(orderStore, memberRuntimes.member.store);
   const shiftStore = createMemoryShiftStore();
@@ -175,6 +176,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     deliveryPolicy: delivery.policy,
     deliveryAppointments: delivery.appointments,
     deliveryOrders: delivery.orders,
+    deliveryTasks: delivery.tasks,
     order: Object.freeze({
       store: orderStore,
       pricing: pricingStore,
@@ -301,6 +303,7 @@ export async function createPgLocalRuntime(
     deliveryPolicy: delivery.policy,
     deliveryAppointments: delivery.appointments,
     deliveryOrders: delivery.orders,
+    deliveryTasks: delivery.tasks,
     order: Object.freeze({
       store: orderStore,
       pricing: pricingStore,

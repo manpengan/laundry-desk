@@ -56,6 +56,7 @@
 | [ADR-46](2026-08-13-adr-46-delivery-policy-and-policy-only-availability.md)   | 门店取送策略与不占位可预约报价                  | **Proposed** 2026-08-13；实现候选待 manpengan 签署 |
 | [ADR-47](2026-08-13-adr-47-customer-delivery-appointments.md)                 | 顾客取送预约、改期与取消                        | **Proposed** 2026-08-13；实现候选待 manpengan 签署 |
 | [ADR-48](2026-08-13-adr-48-authoritative-delivery-orders.md)                  | 权威配送订单与取送生命周期                      | **Proposed** 2026-08-13；实现候选开发中            |
+| [ADR-49](2026-08-13-adr-49-authoritative-delivery-tasks.md)                   | 配送任务分派、接单、转派与人工接管              | **Proposed** 2026-08-13；实现候选开发中            |
 
 ## v1 线
 

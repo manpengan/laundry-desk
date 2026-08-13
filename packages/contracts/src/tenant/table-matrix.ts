@@ -129,6 +129,7 @@ const STORE_TABLES = describeTables(
     "delivery_policies",
     "delivery_appointments",
     "delivery_orders",
+    "delivery_tasks",
     "notification_delivery_batches",
     "notification_deliveries",
     "notification_delivery_attempts",

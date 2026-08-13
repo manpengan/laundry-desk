@@ -9,7 +9,7 @@ import type { PrinterPort } from "../host/printer-port.js";
 import type { NavItemId } from "../nav.js";
 import { CustomersPage } from "./CustomersPage.js";
 import { DebtPage } from "./DebtPage.js";
-import { DeliveryOrdersPage } from "./DeliveryOrdersPage.js";
+import { DeliveryOperationsPage } from "./DeliveryOperationsPage.js";
 import { CounterWorkbench } from "./CounterWorkbench.js";
 import { pageCopy } from "./page-copy.js";
 import { PickupPage } from "./PickupPage.js";
@@ -119,7 +119,7 @@ export function PageHost({
     queryClient !== undefined
   ) {
     return (
-      <DeliveryOrdersPage
+      <DeliveryOperationsPage
         queryClient={queryClient}
         commandClient={commandClient}
         authClient={authClient}

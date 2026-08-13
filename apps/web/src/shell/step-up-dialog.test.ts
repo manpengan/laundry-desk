@@ -4,7 +4,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
 import { createMockAuthClient } from "../auth/AuthClient.js";
+import { createStepUpAttemptAuthority } from "./step-up-attempt-authority.js";
 import { StepUpConfirmDialog } from "./StepUpConfirmDialog.js";
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return Object.freeze({ promise, resolve });
+}
 
 test("StepUpConfirmDialog SSR shows approver PIN copy", () => {
   const authClient = createMockAuthClient();
@@ -54,4 +63,28 @@ test("StepUpConfirmDialog exposes only other administrators for every step-up", 
   assert.match(html, /另一位.*店长.*输入 PIN/su);
   assert.match(html, /店长（店长）/u);
   assert.doesNotMatch(html, /店员乙/u);
+});
+
+test("a closed or scope-replaced step-up attempt cannot approve after verification resolves", async () => {
+  const authority = createStepUpAttemptAuthority();
+  const closedVerification = deferred<string>();
+  const closedToken = authority.begin("scope-a:confirm-a");
+  const submitted: string[] = [];
+  const closedAttempt = closedVerification.promise.then((value) => {
+    if (authority.isCurrent(closedToken, "scope-a:confirm-a")) submitted.push(value);
+  });
+
+  authority.invalidate(); // Escape, backdrop, header close, or explicit cancel.
+  closedVerification.resolve("cancelled-confirm");
+  await closedAttempt;
+
+  const switchedVerification = deferred<string>();
+  const switchedToken = authority.begin("scope-a:confirm-b");
+  const switchedAttempt = switchedVerification.promise.then((value) => {
+    if (authority.isCurrent(switchedToken, "scope-a:confirm-b")) submitted.push(value);
+  });
+  authority.begin("scope-b:confirm-c");
+  switchedVerification.resolve("old-scope-confirm");
+  await switchedAttempt;
+  assert.deepEqual(submitted, []);
 });

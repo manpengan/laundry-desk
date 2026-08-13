@@ -37,6 +37,8 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "fulfillment_reconcile",
   "delivery_read",
   "delivery_write",
+  "delivery_assign",
+  "delivery_takeover",
 ]);
 const STAFF_PERMISSIONS = Object.freeze([
   "staff_read",
@@ -74,6 +76,7 @@ export function createRuntimeBus(runtime: LocalRuntime) {
       deliveryPolicy: runtime.deliveryPolicy,
       deliveryAppointments: runtime.deliveryAppointments,
       deliveryOrders: runtime.deliveryOrders,
+      deliveryTasks: runtime.deliveryTasks,
       order: runtime.order,
       catalog: runtime.catalog,
       print: runtime.print,

@@ -80,6 +80,7 @@ export {
   deliveryPolicies,
   deliveryAppointments,
   deliveryOrders,
+  deliveryTasks,
   customers,
   garmentPhotos,
   commandIdempotency,

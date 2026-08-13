@@ -24,6 +24,8 @@ export type PendingActionPreparation = Readonly<{
   riskReservation?: PendingRiskReservationRequest;
   /** Database-owned epoch returned with a durable risk measurement. */
   createdAtEpoch?: number;
+  /** Server-derived customer owner when the public command body carries only an indirect id. */
+  privacySubjectCustomerId?: string;
 }>;
 
 export type PendingActionPreparer = (

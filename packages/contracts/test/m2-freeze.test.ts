@@ -108,6 +108,11 @@ describe("M2 contract surface", () => {
       // ADR-48: authoritative route linkage and DB-enforced optimistic logistics lifecycle.
       "delivery.order.create",
       "delivery.order.transition",
+      // ADR-49: current-store assignment custody, successor chain and R4 takeover.
+      "delivery.task.assign",
+      "delivery.task.respond",
+      "delivery.task.transfer",
+      "delivery.task.takeover",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
@@ -147,8 +152,10 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.appointments.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.order.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.orders.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(64);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(45);
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.task.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.tasks.list");
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(68);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(47);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );

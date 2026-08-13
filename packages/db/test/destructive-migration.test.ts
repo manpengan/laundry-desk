@@ -140,6 +140,7 @@ describe("destructive migration static reject", () => {
       "0054_delivery_policy.sql",
       "0055_delivery_appointments.sql",
       "0056_delivery_orders.sql",
+      "0057_delivery_tasks.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

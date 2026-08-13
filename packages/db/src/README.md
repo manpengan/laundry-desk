@@ -30,6 +30,7 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0054_delivery_policy.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0055_delivery_appointments.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0056_delivery_orders.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0057_delivery_tasks.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -64,5 +65,6 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Delivery policy and policy-only quote** (0054, ADR-46): store-scoped bounded areas, integer-cent fees, weekly windows, booking rules, optimistic versions, forced RLS, and no reservation or feature enablement
 - **Customer delivery appointments** (0055, ADR-47): opaque customer/address references, integer-cent fee snapshots, serialized slot capacity, database-enforced terminal reschedule/cancel lifecycle, immutable identity, and forced store RLS
 - **Authoritative delivery orders** (0056, ADR-48): store-scoped laundry-order/appointment authority, integer-cent fee snapshots, database-enforced pickup/return lifecycle, optimistic CAS, irreversible terminal states, and forced store RLS
+- **Authoritative delivery tasks** (0057, ADR-49): order-leg assignment custody, active-store staff authority, immutable transfer/takeover successor chains, optimistic CAS, order-owned completion/cancellation, and forced store RLS
 - Still deferred: edge lease, AI matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

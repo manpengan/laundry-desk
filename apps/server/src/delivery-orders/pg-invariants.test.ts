@@ -6,8 +6,9 @@ import { createPgPool, resolvePgUrls, type PgPool } from "../db/pg-pool.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
 import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
-import { DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
+import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
+import { createPgDeliveryTaskStore } from "../delivery-tasks/pg-store.js";
 import { createPgDeliveryOrderStore } from "./pg-store.js";
 
 const pgUrls =
@@ -34,6 +35,7 @@ type Fixture = Readonly<{
   appointmentId: string;
   badAppointmentId: string;
   deliveryOrderId: string;
+  deliveryTaskId: string;
 }>;
 
 function fixture(): Fixture {
@@ -50,6 +52,7 @@ function fixture(): Fixture {
     appointmentId: randomUUID(),
     badAppointmentId: randomUUID(),
     deliveryOrderId: randomUUID(),
+    deliveryTaskId: randomUUID(),
   });
 }
 
@@ -195,6 +198,9 @@ async function cleanup(adminPool: PgPool, rows: Fixture, deliveryBefore: boolean
   try {
     await client.query("BEGIN");
     await client.query("SET LOCAL session_replication_role = 'replica'");
+    await client.query("DELETE FROM delivery_tasks WHERE delivery_order_id = $1::uuid", [
+      rows.deliveryOrderId,
+    ]);
     await client.query("DELETE FROM delivery_orders WHERE laundry_order_id = $1::uuid", [
       rows.orderId,
     ]);
@@ -266,6 +272,7 @@ test(
       await seed(adminPool, rows);
       fixtureSeeded = true;
       const store = createPgDeliveryOrderStore(appPool);
+      const taskStore = createPgDeliveryTaskStore(appPool);
 
       const badAddress = await store.create({
         ...createRequest(rows, rows.badAppointmentId),
@@ -389,6 +396,34 @@ test(
         concurrent.filter((result) => !result.ok && result.reason === "state_conflict").length,
         1,
       );
+      const assigned = await taskStore.mutate({
+        operation: "assign",
+        org_id: DEMO_ORG_ID,
+        store_id: DEMO_STORE_ID,
+        staff_id: DEMO_ADMIN_ID,
+        delivery_task_id: rows.deliveryTaskId,
+        delivery_order_id: rows.deliveryOrderId,
+        leg: "return",
+        expected_delivery_order_version: 2,
+        assignee_staff_id: DEMO_STAFF_A_ID,
+        at: Math.floor(Date.now() / 1_000),
+      });
+      assert.equal(assigned.ok, true, "feature-off must not strand the scheduled return leg");
+      const accepted = await taskStore.mutate({
+        operation: "respond",
+        org_id: DEMO_ORG_ID,
+        store_id: DEMO_STORE_ID,
+        staff_id: DEMO_STAFF_A_ID,
+        delivery_order_id: rows.deliveryOrderId,
+        leg: "return",
+        delivery_task_id: rows.deliveryTaskId,
+        expected_version: 1,
+        expected_delivery_order_version: 2,
+        decision: "accept",
+        resolution_reason: null,
+        at: Math.floor(Date.now() / 1_000),
+      });
+      assert.equal(accepted.ok, true);
       const inProgress = await store.transition({
         org_id: DEMO_ORG_ID,
         store_id: DEMO_STORE_ID,
@@ -447,6 +482,10 @@ test(
         at: Math.floor(Date.now() / 1_000),
       });
       assert.equal(completed.ok && completed.delivery_order.status, "completed");
+      assert.equal(
+        (await taskStore.get(DEMO_ORG_ID, DEMO_STORE_ID, rows.deliveryTaskId))?.status,
+        "completed",
+      );
       await assert.rejects(
         () =>
           withAppTransaction(appPool, (client) =>

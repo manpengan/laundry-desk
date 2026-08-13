@@ -193,6 +193,22 @@
           "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
         }
       }
+    },
+    "0057_delivery_tasks.sql": {
+      "database_restored_catalog": {
+        "entries": 1322,
+        "sha256": "6805b93cbfe5649eaeac9d43fb03d9212e2d93092a944e6b53c8363df0dc15e7"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
     }
   }
 }
