@@ -35,6 +35,9 @@ const ADMIN_PERMISSIONS = Object.freeze([
   "marketing_manage",
   // ADR-57: provider credential custody is an R5, admin-only management surface.
   "ai_key_manage",
+  // ADR-58: authenticated staff may use the provider-neutral AI panel. The
+  // runtime is independently hard-off unless an explicit adapter is injected.
+  "ai_use",
   "fulfillment_handoff",
   "fulfillment_qc",
   "fulfillment_reconcile",
@@ -51,6 +54,7 @@ const STAFF_PERMISSIONS = Object.freeze([
   // A counter worker may immediately protect a reported-lost account; restoring
   // or closing it remains admin-only.
   "member_freeze",
+  "ai_use",
   "fulfillment_handoff",
   "fulfillment_qc",
   "delivery_read",

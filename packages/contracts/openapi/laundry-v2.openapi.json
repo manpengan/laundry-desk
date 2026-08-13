@@ -1,6 +1,681 @@
 {
   "components": {
     "schemas": {
+      "AiEventReplayResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "events": {
+                "items": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "at": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                          "type": "string"
+                        },
+                        "cursor": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "text": {
+                          "maxLength": 4096,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "turn_id": {
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "type": "string"
+                        },
+                        "type": {
+                          "const": "content_delta",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "cursor",
+                        "turn_id",
+                        "at",
+                        "type",
+                        "text"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "at": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                          "type": "string"
+                        },
+                        "cursor": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "step": {
+                          "maximum": 4,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "tool": {
+                          "const": "synthetic.lookup",
+                          "type": "string"
+                        },
+                        "turn_id": {
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "type": "string"
+                        },
+                        "type": {
+                          "const": "tool_call",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "cursor",
+                        "turn_id",
+                        "at",
+                        "type",
+                        "tool",
+                        "step"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "at": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                          "type": "string"
+                        },
+                        "cursor": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "outcome": {
+                          "enum": [
+                            "succeeded",
+                            "failed",
+                            "timed_out",
+                            "cancelled"
+                          ],
+                          "type": "string"
+                        },
+                        "step": {
+                          "maximum": 4,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "tool": {
+                          "const": "synthetic.lookup",
+                          "type": "string"
+                        },
+                        "turn_id": {
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "type": "string"
+                        },
+                        "type": {
+                          "const": "tool_result",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "cursor",
+                        "turn_id",
+                        "at",
+                        "type",
+                        "tool",
+                        "step",
+                        "outcome"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "at": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                          "type": "string"
+                        },
+                        "cursor": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "finish_reason": {
+                          "enum": [
+                            "stop",
+                            "limit"
+                          ],
+                          "type": "string"
+                        },
+                        "input_tokens": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "output_tokens": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "turn_id": {
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "type": "string"
+                        },
+                        "type": {
+                          "const": "done",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "cursor",
+                        "turn_id",
+                        "at",
+                        "type",
+                        "finish_reason",
+                        "input_tokens",
+                        "output_tokens"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "at": {
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                          "type": "string"
+                        },
+                        "code": {
+                          "enum": [
+                            "AI_UNAVAILABLE",
+                            "AI_ABORTED",
+                            "AI_DEADLINE_EXCEEDED",
+                            "AI_OUTPUT_LIMIT",
+                            "AI_TOOL_LIMIT",
+                            "AI_TOOL_TIMEOUT",
+                            "AI_PROVIDER_FAILED"
+                          ],
+                          "type": "string"
+                        },
+                        "cursor": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "turn_id": {
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "type": "string"
+                        },
+                        "type": {
+                          "const": "error",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "cursor",
+                        "turn_id",
+                        "at",
+                        "type",
+                        "code"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "maxItems": 256,
+                "type": "array"
+              },
+              "next_cursor": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "session": {
+                "additionalProperties": false,
+                "properties": {
+                  "created_at": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                    "type": "string"
+                  },
+                  "session_id": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "open",
+                      "running",
+                      "completed",
+                      "failed",
+                      "cancelled"
+                    ],
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "session_id",
+                  "status",
+                  "created_at",
+                  "updated_at"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "session",
+              "events",
+              "next_cursor"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AiSessionCreateRequest": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "AiSessionCreateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "created_at": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "session_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "open",
+                  "running",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "session_id",
+              "status",
+              "created_at",
+              "updated_at"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AiStreamEvent": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "cursor": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "text": {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              "turn_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "type": {
+                "const": "content_delta",
+                "type": "string"
+              }
+            },
+            "required": [
+              "cursor",
+              "turn_id",
+              "at",
+              "type",
+              "text"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "cursor": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "step": {
+                "maximum": 4,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "tool": {
+                "const": "synthetic.lookup",
+                "type": "string"
+              },
+              "turn_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "type": {
+                "const": "tool_call",
+                "type": "string"
+              }
+            },
+            "required": [
+              "cursor",
+              "turn_id",
+              "at",
+              "type",
+              "tool",
+              "step"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "cursor": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "outcome": {
+                "enum": [
+                  "succeeded",
+                  "failed",
+                  "timed_out",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              "step": {
+                "maximum": 4,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "tool": {
+                "const": "synthetic.lookup",
+                "type": "string"
+              },
+              "turn_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "type": {
+                "const": "tool_result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "cursor",
+              "turn_id",
+              "at",
+              "type",
+              "tool",
+              "step",
+              "outcome"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "cursor": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "finish_reason": {
+                "enum": [
+                  "stop",
+                  "limit"
+                ],
+                "type": "string"
+              },
+              "input_tokens": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "output_tokens": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "turn_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "type": {
+                "const": "done",
+                "type": "string"
+              }
+            },
+            "required": [
+              "cursor",
+              "turn_id",
+              "at",
+              "type",
+              "finish_reason",
+              "input_tokens",
+              "output_tokens"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "code": {
+                "enum": [
+                  "AI_UNAVAILABLE",
+                  "AI_ABORTED",
+                  "AI_DEADLINE_EXCEEDED",
+                  "AI_OUTPUT_LIMIT",
+                  "AI_TOOL_LIMIT",
+                  "AI_TOOL_TIMEOUT",
+                  "AI_PROVIDER_FAILED"
+                ],
+                "type": "string"
+              },
+              "cursor": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "turn_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "type": {
+                "const": "error",
+                "type": "string"
+              }
+            },
+            "required": [
+              "cursor",
+              "turn_id",
+              "at",
+              "type",
+              "code"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "AiTurnCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "idempotency_key": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "max_output_tokens": {
+            "default": 512,
+            "maximum": 1024,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "prompt": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "idempotency_key",
+          "prompt",
+          "max_output_tokens"
+        ],
+        "type": "object"
+      },
+      "AiTurnCreateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "created_at": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "replayed": {
+                "type": "boolean"
+              },
+              "session_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              "stream_url": {
+                "maxLength": 256,
+                "pattern": "^\\/api\\/v2\\/ai\\/sessions\\/.*",
+                "type": "string"
+              },
+              "turn_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "turn_id",
+              "session_id",
+              "status",
+              "stream_url",
+              "replayed",
+              "created_at"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "auth.access_session.response": {
         "additionalProperties": false,
         "properties": {
@@ -79744,12 +80419,461 @@
     }
   },
   "info": {
-    "description": "Contract-first OpenAPI 3.1 projection for frozen M1 and M2 counter contracts. Auth paths come solely from AUTH_OPERATION_MATRIX. Bus commands/queries come from M1_FIRST_WAVE_DEFINITIONS and M2_CONTRACT_DEFINITIONS. Errors use the A2 CommandResponse / CommandFailureResponse envelope.",
+    "description": "Contract-first OpenAPI 3.1 projection for frozen M1/M2 counter contracts and dedicated AI HTTP schemas. Auth paths come solely from AUTH_OPERATION_MATRIX. Bus commands/queries come from M1_FIRST_WAVE_DEFINITIONS and M2_CONTRACT_DEFINITIONS. Errors use the A2 CommandResponse / CommandFailureResponse envelope.",
     "title": "Laundry Desk v2 API",
     "version": "0.3.0"
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v2/ai/sessions": {
+      "post": {
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",
+        "operationId": "ai_session_create",
+        "parameters": [
+          {
+            "description": "Double-submit CSRF proof; must match the readable CSRF cookie value.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiSessionCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSessionCreateResponse"
+                }
+              }
+            },
+            "description": "Successful AI operation"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSessionCreateResponse"
+                }
+              }
+            },
+            "description": "Successful AI operation"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Active turn or idempotency conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "AI is not configured"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "AI session_create",
+        "tags": [
+          "ai"
+        ],
+        "x-laundry-classification": "confidential",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R0"
+      }
+    },
+    "/api/v2/ai/sessions/{session_id}/events": {
+      "get": {
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",
+        "operationId": "ai_events_replay",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 128,
+              "maximum": 256,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiEventReplayResponse"
+                }
+              }
+            },
+            "description": "Successful AI operation"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Active turn or idempotency conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "AI is not configured"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "AI events_replay",
+        "tags": [
+          "ai"
+        ],
+        "x-laundry-classification": "confidential",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R0"
+      }
+    },
+    "/api/v2/ai/sessions/{session_id}/stream": {
+      "get": {
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",
+        "operationId": "ai_events_stream",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Durable cursor; replay is bounded to 256 persisted events.",
+            "in": "header",
+            "name": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "description": "SSE frames carrying AiStreamEvent JSON",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Bounded SSE stream of persisted AI events"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Active turn or idempotency conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "AI is not configured"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "AI events_stream",
+        "tags": [
+          "ai"
+        ],
+        "x-laundry-classification": "confidential",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R0"
+      }
+    },
+    "/api/v2/ai/sessions/{session_id}/turns": {
+      "post": {
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",
+        "operationId": "ai_turn_create",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Double-submit CSRF proof; must match the readable CSRF cookie value.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiTurnCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTurnCreateResponse"
+                }
+              }
+            },
+            "description": "Successful AI operation"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTurnCreateResponse"
+                }
+              }
+            },
+            "description": "Successful AI operation"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Active turn or idempotency conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "AI is not configured"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "AI turn_create",
+        "tags": [
+          "ai"
+        ],
+        "x-laundry-classification": "confidential",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R0"
+      }
+    },
     "/api/v2/auth/login": {
       "post": {
         "description": "Browser auth operation `login` (ingress: lifecycle_http). Registry command: `identity.login`. Allowed public errors: VALIDATION_FAILED, AUTHENTICATION_FAILED, CSRF_REJECTED, RATE_LIMITED, TRANSACTION_FAILED, EVENT_DISPATCH_FAILED. Projection source: AUTH_OPERATION_MATRIX (A5/A7). Server-only hashes and factories are omitted.",

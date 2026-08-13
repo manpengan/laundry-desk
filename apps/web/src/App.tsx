@@ -71,6 +71,7 @@ export function shellPropsFrom(
     commandClient: ports.command,
     queryClient: ports.query,
     photoPort: ports.photo,
+    ...(ports.ai === undefined ? {} : { aiPort: ports.ai }),
     ...(ports.offline === undefined ? {} : { offlinePort: ports.offline }),
     ...(ports.printer === undefined ? {} : { printerPort: ports.printer }),
     onSessionChange,

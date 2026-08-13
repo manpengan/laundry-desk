@@ -66,6 +66,14 @@ import { createByokService } from "../ai/byok-service.js";
 import type { ByokStore } from "../ai/byok-types.js";
 import { registerByokRoutes } from "./byok-routes.js";
 import { createByokMutationRateLimiter, type ByokMutationRateLimiter } from "./byok-rate-limit.js";
+import type { AiProviderPort, SyntheticToolPort } from "../ai/streaming-provider.js";
+import { deterministicSyntheticTool } from "../ai/streaming-provider.js";
+import type { AiConversationStore } from "../ai/streaming-store.js";
+import { MemoryAiConversationStore } from "../ai/streaming-memory-store.js";
+import { createPgAiConversationStore } from "../ai/streaming-pg-store.js";
+import { createAiStreamingService } from "../ai/streaming-service.js";
+import { createAiRateLimiter, type AiRateLimiter } from "../ai/streaming-rate-limit.js";
+import { registerAiStreamingRoutes } from "./ai-streaming-routes.js";
 
 export type CreateAppOptions = Readonly<{
   runtime: LocalRuntime;
@@ -102,6 +110,11 @@ export type CreateAppOptions = Readonly<{
   /** Focused tests may replace persistence without weakening route policy. */
   byokStore?: ByokStore;
   byokMutationRateLimiter?: ByokMutationRateLimiter;
+  /** Explicit tests only. Omitted means hard-off and performs no provider/network work. */
+  aiProvider?: AiProviderPort;
+  aiConversationStore?: AiConversationStore;
+  aiSyntheticTool?: SyntheticToolPort;
+  aiRateLimiter?: AiRateLimiter;
   /** Tests may silence request logs; runtime defaults to the redacted structured logger. */
   logger?: false;
 }>;
@@ -255,6 +268,21 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       createByokRuntime(options.runtime, options.byokKms ?? null, options.byokStore),
     ),
     options.byokMutationRateLimiter ?? createByokMutationRateLimiter(),
+  );
+  const aiStore =
+    options.aiConversationStore ??
+    (options.runtime.pool === null
+      ? new MemoryAiConversationStore()
+      : createPgAiConversationStore(options.runtime.pool));
+  registerAiStreamingRoutes(
+    app,
+    context,
+    createAiStreamingService({
+      store: aiStore,
+      provider: options.aiProvider ?? null,
+      tool: options.aiSyntheticTool ?? deterministicSyntheticTool,
+    }),
+    options.aiRateLimiter ?? createAiRateLimiter(),
   );
 
   // Artifact download only exists when a spool is configured; the memory

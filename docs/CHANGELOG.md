@@ -88,6 +88,13 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
   不占位也不创建预约。保存策略不会打开 `store_features.delivery`，功能关闭或 feature 行缺失时
   所有报价都明确不可预约。当前为 online-only Cloud Web 内部员工切片，不包含顾客自助、地址管理、
   实际容量、预约/任务状态、路线、GPS 或第三方 provider。
+- Provider-neutral 流式 AI 会话（[ADR-58](adr/2026-08-13-adr-58-bounded-ai-streaming-runtime.md)）：
+  新增 staff/admin 专用 HTTP 会话、幂等 turn、持久事件 cursor、可取消 SSE 与纯文本 AI 面板；provider
+  port 不接受 URL、header、credential 或 SDK 对象，默认 runtime 保持 hard-off 且不发网络。隔离测试只
+  可显式注入 deterministic fake，并把 tool-use 限定为最多四步的只读 `synthetic.lookup`；真实 provider、
+  BYOK 解密、业务查询/写工具和生产启用均不在本 Item。0065 保存最小会话/message/usage/tool-attempt
+  状态，以 FORCE RLS、closed function、无 app 直接 DML 与 metadata/hash-only 审计约束数据边界。
+
 - BYOK 凭据托管与模型注册表（[ADR-57](adr/2026-08-13-adr-57-byok-custody-model-registry.md)）：
   新增组织隔离的 envelope 加密凭据生命周期，replace/revoke 只经 admin、CSRF、限流与另一管理员 R5
   proof 的专用 secret ingress；API 只返回 last4 与 metadata。模型注册表初始为空且应用只读，必须由

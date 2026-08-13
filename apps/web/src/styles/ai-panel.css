@@ -1,0 +1,62 @@
+.ld-ai-panel {
+  position: fixed;
+  inset: 0 0 0 auto;
+  z-index: 60;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  width: min(400px, 100vw);
+  padding: 16px;
+  color: var(--lg-text, #1d1d1f);
+  background: var(--lg-card-bg, rgba(255, 255, 255, 0.96));
+  border-left: 1px solid var(--lg-border, rgba(60, 60, 67, 0.2));
+  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.16);
+}
+
+.ld-ai-panel__header,
+.ld-ai-panel__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ld-ai-panel__header small,
+.ld-ai-panel__message span {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ld-ai-panel__messages {
+  overflow: auto;
+  padding-block: 12px;
+}
+
+.ld-ai-panel__message {
+  margin: 8px 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(120, 120, 128, 0.12);
+}
+
+.ld-ai-panel__message--user {
+  margin-left: 24px;
+  background: rgba(0, 122, 255, 0.12);
+}
+
+.ld-ai-panel__message--system,
+.ld-ai-panel__empty {
+  color: var(--lg-muted, #6e6e73);
+  font-size: 0.85rem;
+}
+
+.ld-ai-panel__error {
+  color: var(--lg-danger, #b42318);
+}
+
+.ld-ai-panel__form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  margin-block: 6px 10px;
+  resize: vertical;
+}

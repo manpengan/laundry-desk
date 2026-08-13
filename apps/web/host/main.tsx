@@ -18,6 +18,7 @@ import "../src/styles/delivery-appointments.css";
 import "../src/styles/delivery-orders.css";
 import "../src/styles/delivery-tasks.css";
 import "../src/styles/mobile-delivery-tasks.css";
+import "../src/styles/ai-panel.css";
 import "../src/styles/member.css";
 import "../src/styles/owner-dashboard.css";
 import "../src/styles/owner-operations.css";

@@ -3,17 +3,10 @@ import { z } from "zod";
 import { CSRF_HEADER_NAME } from "../auth/csrf.js";
 import { AUTH_OPERATION_MATRIX, type AuthOperationDescriptor } from "../auth/operations.js";
 import { M1_FIRST_WAVE_DEFINITIONS, M2_CONTRACT_DEFINITIONS } from "../commands/catalog.js";
-import {
-  CommandErrorSchema,
-  CommandResponseSchema,
-  createCommandError,
-} from "../envelope/responses.js";
+import * as responseSchemas from "../envelope/responses.js";
 import type { CommandDefinition, QueryDefinition } from "../registry/definitions.js";
-import {
-  CUSTOMER_PORTAL_AUTH_PATHS,
-  CUSTOMER_PORTAL_AUTH_SCHEMAS,
-  CUSTOMER_PORTAL_OPENAPI,
-} from "./customer-portal-security.js";
+import * as customerPortalSecurity from "./customer-portal-security.js";
+import { collectAiOpenApiProjection } from "./ai-projection.js";
 
 /** OpenAPI document version field (must stay 3.1.x for A7). */
 export const OPENAPI_VERSION = "3.1.0" as const;
@@ -29,19 +22,19 @@ type JsonValue = JsonPrimitive | readonly JsonValue[] | { readonly [key: string]
 
 export type OpenApiSchemaObject = { readonly [key: string]: JsonValue };
 
-type OpenApiMediaType = Readonly<{
+export type OpenApiMediaType = Readonly<{
   schema: OpenApiSchemaObject;
 }>;
 
-type OpenApiResponse = Readonly<{
+export type OpenApiResponse = Readonly<{
   description: string;
-  content?: Readonly<{ readonly "application/json": OpenApiMediaType }>;
+  content?: Readonly<Record<string, OpenApiMediaType>>;
   headers?: Readonly<
     Record<string, Readonly<{ description: string; schema: OpenApiSchemaObject }>>
   >;
 }>;
 
-type OpenApiParameter = Readonly<{
+export type OpenApiParameter = Readonly<{
   name: string;
   in: "header" | "path" | "query" | "cookie";
   required: boolean;
@@ -49,7 +42,7 @@ type OpenApiParameter = Readonly<{
   schema: OpenApiSchemaObject;
 }>;
 
-type OpenApiOperation = Readonly<{
+export type OpenApiOperation = Readonly<{
   operationId: string;
   summary: string;
   description: string;
@@ -65,10 +58,10 @@ type OpenApiOperation = Readonly<{
   "x-laundry-classification"?: string;
   "x-laundry-offline-mode"?: string;
   "x-laundry-version"?: string;
-  "x-laundry-kind"?: "command" | "query" | "auth";
+  "x-laundry-kind"?: "command" | "query" | "auth" | "ai";
 }>;
 
-type OpenApiPathItem = Readonly<{
+export type OpenApiPathItem = Readonly<{
   get?: OpenApiOperation;
   post?: OpenApiOperation;
 }>;
@@ -164,14 +157,14 @@ const successSchemaResponse = (schemaId: string, description: string): OpenApiRe
 
 const CommandFailureResponseSchema = z.strictObject({
   ok: z.literal(false),
-  error: CommandErrorSchema,
+  error: responseSchemas.CommandErrorSchema,
 });
 
 const buildEnvelopeSchemas = (): Record<string, OpenApiSchemaObject> =>
   Object.freeze({
-    CommandError: zodToOpenApiSchema(CommandErrorSchema),
+    CommandError: zodToOpenApiSchema(responseSchemas.CommandErrorSchema),
     CommandFailureResponse: zodToOpenApiSchema(CommandFailureResponseSchema),
-    CommandResponse: zodToOpenApiSchema(CommandResponseSchema),
+    CommandResponse: zodToOpenApiSchema(responseSchemas.CommandResponseSchema),
   });
 
 const pathParametersFromTemplate = (path: string): readonly OpenApiParameter[] => {
@@ -204,7 +197,7 @@ const authSecurity = (
 const authParameters = (row: AuthOperationDescriptor): readonly OpenApiParameter[] | undefined => {
   const parameters: OpenApiParameter[] = [...pathParametersFromTemplate(row.path)];
   if (row.requirements.csrf === "required") {
-    parameters.push(CUSTOMER_PORTAL_OPENAPI.csrfParameter);
+    parameters.push(customerPortalSecurity.CUSTOMER_PORTAL_OPENAPI.csrfParameter);
   }
   return parameters.length === 0 ? undefined : Object.freeze(parameters);
 };
@@ -238,9 +231,9 @@ const buildAuthOperation = (row: AuthOperationDescriptor): OpenApiOperation => {
     }),
     responses: Object.freeze({
       "200": successSchemaResponse(row.response_schema_id, "Successful browser auth response"),
-      "401": failureResponse(createCommandError("AUTHENTICATION_FAILED").message),
-      "403": failureResponse(createCommandError("CSRF_REJECTED").message),
-      "429": failureResponse(createCommandError("RATE_LIMITED").message),
+      "401": failureResponse(responseSchemas.createCommandError("AUTHENTICATION_FAILED").message),
+      "403": failureResponse(responseSchemas.createCommandError("CSRF_REJECTED").message),
+      "429": failureResponse(responseSchemas.createCommandError("RATE_LIMITED").message),
       default: failureResponse("Unified A2 command failure envelope"),
     }),
     ...(security === undefined ? {} : { security }),
@@ -291,8 +284,8 @@ const buildBusOperation = (
     ...(customerSelfService
       ? {
           parameters: Object.freeze([
-            CUSTOMER_PORTAL_OPENAPI.csrfParameter,
-            CUSTOMER_PORTAL_OPENAPI.authorityParameter,
+            customerPortalSecurity.CUSTOMER_PORTAL_OPENAPI.csrfParameter,
+            customerPortalSecurity.CUSTOMER_PORTAL_OPENAPI.authorityParameter,
           ]),
         }
       : {}),
@@ -336,10 +329,12 @@ const collectPathsAndSchemas = (): {
     paths[row.path] = Object.freeze({ post: buildAuthOperation(row) });
   }
 
-  for (const [name, schema] of Object.entries(CUSTOMER_PORTAL_AUTH_SCHEMAS)) {
+  for (const [name, schema] of Object.entries(
+    customerPortalSecurity.CUSTOMER_PORTAL_AUTH_SCHEMAS,
+  )) {
     schemas[name] = zodToOpenApiSchema(schema);
   }
-  Object.assign(paths, CUSTOMER_PORTAL_AUTH_PATHS);
+  Object.assign(paths, customerPortalSecurity.CUSTOMER_PORTAL_AUTH_PATHS);
 
   for (const definition of [...M1_FIRST_WAVE_DEFINITIONS, ...M2_CONTRACT_DEFINITIONS]) {
     if (definition.name === "photo.register" || definition.name === "photo.delete") continue;
@@ -348,6 +343,10 @@ const collectPathsAndSchemas = (): {
     const path = busPathFor(definition.kind, definition.name);
     paths[path] = Object.freeze({ post: buildBusOperation(definition) });
   }
+
+  const aiProjection = collectAiOpenApiProjection(zodToOpenApiSchema);
+  Object.assign(paths, aiProjection.paths);
+  Object.assign(schemas, aiProjection.schemas);
 
   return { paths, schemas };
 };
@@ -366,7 +365,7 @@ export const buildLaundryOpenApiDocument = (): OpenApiDocument => {
       title: "Laundry Desk v2 API",
       version: OPENAPI_INFO_VERSION,
       description: [
-        "Contract-first OpenAPI 3.1 projection for frozen M1 and M2 counter contracts.",
+        "Contract-first OpenAPI 3.1 projection for frozen M1/M2 counter contracts and dedicated AI HTTP schemas.",
         "Auth paths come solely from AUTH_OPERATION_MATRIX.",
         "Bus commands/queries come from M1_FIRST_WAVE_DEFINITIONS and M2_CONTRACT_DEFINITIONS.",
         "Errors use the A2 CommandResponse / CommandFailureResponse envelope.",
@@ -388,9 +387,9 @@ export const buildLaundryOpenApiDocument = (): OpenApiDocument => {
           name: CSRF_HEADER_NAME,
           description: "Double-submit CSRF header paired with the readable CSRF cookie.",
         }),
-        customerSession: CUSTOMER_PORTAL_OPENAPI.sessionScheme,
-        customerTabAuthority: CUSTOMER_PORTAL_OPENAPI.authorityScheme,
-        customerCsrfCookie: CUSTOMER_PORTAL_OPENAPI.csrfCookieScheme,
+        customerSession: customerPortalSecurity.CUSTOMER_PORTAL_OPENAPI.sessionScheme,
+        customerTabAuthority: customerPortalSecurity.CUSTOMER_PORTAL_OPENAPI.authorityScheme,
+        customerCsrfCookie: customerPortalSecurity.CUSTOMER_PORTAL_OPENAPI.csrfCookieScheme,
       }),
     }),
   });

@@ -5,6 +5,7 @@ import type { OfflinePort } from "./offline-port.js";
 import type { ResumePort } from "./desktop-resume-port.js";
 import type { PrinterPort } from "./printer-port.js";
 import type { DeliveryEvidenceMediaPort } from "./delivery-evidence-port.js";
+import type { AiPanelPort } from "./ai-port.js";
 
 export type HealthReady = Readonly<{
   status: "ready";
@@ -32,5 +33,6 @@ export type AppPorts = Readonly<{
   offline?: OfflinePort;
   resume?: ResumePort;
   printer?: PrinterPort;
+  ai?: AiPanelPort;
   health: HealthPort;
 }>;

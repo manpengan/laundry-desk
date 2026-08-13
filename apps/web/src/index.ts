@@ -82,6 +82,14 @@ export {
 } from "./owner/owner-dashboard-model.js";
 export { Sidebar, type SidebarProps } from "./shell/Sidebar.js";
 export { TopBar, type TopBarProps } from "./shell/TopBar.js";
+export { AiPanel, type AiPanelProps } from "./shell/AiPanel.js";
+export {
+  createHttpAiPanelPort,
+  createUnavailableAiPanelPort,
+  type AiPanelFailure,
+  type AiPanelPort,
+  type AiPanelResult,
+} from "./host/ai-port.js";
 export { PinSwitchDialog, type PinSwitchDialogProps } from "./shell/PinSwitchDialog.js";
 export { StepUpConfirmDialog, type StepUpConfirmDialogProps } from "./shell/StepUpConfirmDialog.js";
 export { PrintQueuePanel, type PrintQueuePanelProps } from "./shell/PrintQueuePanel.js";

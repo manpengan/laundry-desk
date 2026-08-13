@@ -5,6 +5,7 @@ import type { AppPorts, HealthResult } from "./types.js";
 import { createBrowserResumePort } from "./browser-resume-port.js";
 import { createHttpPhotoPort } from "./photo-port.js";
 import { createHttpDeliveryEvidenceMediaPort } from "./delivery-evidence-port.js";
+import { createHttpAiPanelPort } from "./ai-port.js";
 
 export type BrowserPortsOptions = Readonly<{
   apiBaseUrl: string;
@@ -93,6 +94,12 @@ export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
       readCsrf: credentialStore.readCsrf,
     }),
     deliveryEvidence: createHttpDeliveryEvidenceMediaPort({
+      apiBaseUrl: base,
+      fetchImpl,
+      getAccessToken: credentialStore.getAccessToken,
+      readCsrf: credentialStore.readCsrf,
+    }),
+    ai: createHttpAiPanelPort({
       apiBaseUrl: base,
       fetchImpl,
       getAccessToken: credentialStore.getAccessToken,

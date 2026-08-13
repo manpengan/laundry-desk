@@ -7,6 +7,7 @@ import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import type { OfflinePort } from "../host/offline-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
+import type { AiPanelPort } from "../host/ai-port.js";
 import { createMockConnection, type ConnectionStatus } from "../connection.js";
 import type { NavItemId } from "../nav.js";
 import { PageHost } from "../pages/PageHost.js";
@@ -22,6 +23,7 @@ import { PrintQueuePanel } from "./PrintQueuePanel.js";
 import { Sidebar } from "./Sidebar.js";
 import { TopBar } from "./TopBar.js";
 import { usePrintJobSummary } from "./use-print-job-summary.js";
+import { AiPanel } from "./AiPanel.js";
 
 export type CounterShellProps = {
   session: SessionView;
@@ -31,6 +33,7 @@ export type CounterShellProps = {
   photoPort?: PhotoPort;
   offlinePort?: OfflinePort;
   printerPort?: PrinterPort;
+  aiPort?: AiPanelPort;
   onSessionChange: (session: SessionView | null) => void;
   initialConnection?: ConnectionStatus;
   initialTheme?: ThemePreference;
@@ -95,6 +98,7 @@ export function CounterShell({
   photoPort,
   offlinePort,
   printerPort,
+  aiPort,
   readOnly = false,
 }: CounterShellProps) {
   const [expanded, setExpanded] = useState(false);
@@ -103,6 +107,7 @@ export function CounterShell({
   const [loading, setLoading] = useState(initialLoadingMs > 0);
   const [pinOpen, setPinOpen] = useState(false);
   const [printQueueOpen, setPrintQueueOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
 
   const connection = useMemo(
     () => connectionFromSession(session, initialConnection),
@@ -160,6 +165,7 @@ export function CounterShell({
           onCycleTheme={() => setThemePref((p) => cycleThemePreference(p))}
           printSummary={printSummary}
           onOpenPrintQueue={() => setPrintQueueOpen(true)}
+          {...(readOnly || aiPort === undefined ? {} : { onOpenAi: () => setAiOpen(true) })}
           {...(readOnly ? {} : { onSwitchStaff: () => setPinOpen(true) })}
           readOnly={readOnly}
         />
@@ -200,6 +206,14 @@ export function CounterShell({
         queryClient={queryClient}
         commandClient={effectiveCommandClient}
       />
+      {aiPort === undefined ? null : (
+        <AiPanel
+          open={aiOpen}
+          onClose={() => setAiOpen(false)}
+          authSessionId={session.session.session_id}
+          aiPort={aiPort}
+        />
+      )}
     </div>
   );
 }

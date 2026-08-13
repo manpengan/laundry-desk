@@ -29,6 +29,8 @@ export type {
   Uuid,
 } from "./db/index.js";
 
+export * from "./ai/index.js";
+
 export {
   createM1CommandRegistry,
   createChainPorts,

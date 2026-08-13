@@ -10,6 +10,7 @@ export type TopBarProps = {
   onOpenPrintQueue?: () => void;
   /** Open PIN quick-switch when session is present. */
   onSwitchStaff?: () => void;
+  onOpenAi?: () => void;
   readOnly?: boolean;
 };
 
@@ -20,6 +21,7 @@ export function TopBar({
   printSummary = { queued: 0, failed: 0 },
   onOpenPrintQueue,
   onSwitchStaff,
+  onOpenAi,
   readOnly = false,
 }: TopBarProps) {
   return (
@@ -36,6 +38,11 @@ export function TopBar({
         {onSwitchStaff ? (
           <Button variant="secondary" size="sm" type="button" onClick={onSwitchStaff}>
             切换员工
+          </Button>
+        ) : null}
+        {onOpenAi ? (
+          <Button variant="secondary" size="sm" type="button" onClick={onOpenAi}>
+            ✨ AI
           </Button>
         ) : null}
         {onOpenPrintQueue ? (
