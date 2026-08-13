@@ -201,6 +201,7 @@ test("GitHub credentials are scoped to gh and never inherited by SSH, SCP, git, 
     HOME: "/Users/test",
     LANG: "C.UTF-8",
     PATH: "/usr/bin:/bin",
+    SSH_AUTH_SOCK: "/private/tmp/agent.sock",
   };
   assert.equal(selectCommandEnvironment("/opt/homebrew/bin/gh", source).GH_TOKEN, "secret-gh");
   assert.equal(selectCommandEnvironment("/opt/homebrew/bin/gh", source).GH_HOST, undefined);
@@ -215,6 +216,16 @@ test("GitHub credentials are scoped to gh and never inherited by SSH, SCP, git, 
     assert.equal(selected.GH_TOKEN, undefined);
     assert.equal(selected.GITHUB_TOKEN, undefined);
   }
+  assert.equal(
+    selectCommandEnvironment("/usr/bin/ssh", source).SSH_AUTH_SOCK,
+    source.SSH_AUTH_SOCK,
+  );
+  assert.equal(
+    selectCommandEnvironment("/usr/bin/scp", source).SSH_AUTH_SOCK,
+    source.SSH_AUTH_SOCK,
+  );
+  assert.equal(selectCommandEnvironment("/usr/bin/git", source).SSH_AUTH_SOCK, undefined);
+  assert.equal(selectCommandEnvironment("/usr/bin/curl", source).SSH_AUTH_SOCK, undefined);
 });
 
 test("repository and GitHub check authority are pinned before fetching", async () => {

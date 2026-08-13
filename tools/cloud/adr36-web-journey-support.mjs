@@ -10,14 +10,18 @@ const BASIS_FIELDS = Object.freeze([
   "ledger_row_count",
 ]);
 const ZERO_BASIS = Object.freeze(Object.fromEntries(BASIS_FIELDS.map((field) => [field, 0])));
-export const EXPECTED_DELTA = Object.freeze({
-  real_income_cents: 4_200,
-  performance_income_cents: 5_200,
-  order_cashflow_cents: 2_600,
-  stored_value_cashflow_cents: 1_600,
-  stored_value_consumption_cents: 2_600,
-  ledger_row_count: 6,
-});
+export function expectedAccountingDelta(memberOrderChargeCents) {
+  const charge = requireInteger(memberOrderChargeCents, "ACCOUNTING_DELTA_INVALID");
+  requireThat(charge > 0, "ACCOUNTING_DELTA_INVALID");
+  return Object.freeze({
+    real_income_cents: charge + 1_600,
+    performance_income_cents: charge + 2_600,
+    order_cashflow_cents: 2_600,
+    stored_value_cashflow_cents: charge - 1_000,
+    stored_value_consumption_cents: charge,
+    ledger_row_count: 6,
+  });
+}
 
 function basis(value) {
   const record = asRecord(value, "ACCOUNTING_RESULT_INVALID");

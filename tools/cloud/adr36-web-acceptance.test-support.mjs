@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { ADR36_PUBLIC_ORIGIN } from "./adr36-web-acceptance.mjs";
+import { expectedAccountingDelta } from "./adr36-web-journey-support.mjs";
 
 const ADMIN_ID = "11111111-1111-4111-8111-111111111101";
 const APPROVER_ID = "11111111-1111-4111-8111-111111111102";
@@ -18,14 +19,8 @@ const GARMENT_IDS = [
   "66666666-6666-4666-8666-666666666601",
   "66666666-6666-4666-8666-666666666602",
 ];
-const EXPECTED_DELTA = Object.freeze({
-  real_income_cents: 4_200,
-  performance_income_cents: 5_200,
-  order_cashflow_cents: 2_600,
-  stored_value_cashflow_cents: 1_600,
-  stored_value_consumption_cents: 2_600,
-  ledger_row_count: 6,
-});
+const DEFAULT_MEMBER_ORDER_CHARGE_CENTS = 2_600;
+const EXPECTED_DELTA = expectedAccountingDelta(DEFAULT_MEMBER_ORDER_CHARGE_CENTS);
 const ZERO_BASIS = Object.freeze(
   Object.fromEntries(Object.keys(EXPECTED_DELTA).map((key) => [key, 0])),
 );
@@ -90,6 +85,9 @@ function failure(code) {
 }
 
 function createFakeCloud(env, fakeOptions = {}) {
+  const memberOrderChargeCents =
+    fakeOptions.memberOrderChargeCents ?? DEFAULT_MEMBER_ORDER_CHARGE_CENTS;
+  const expectedDelta = expectedAccountingDelta(memberOrderChargeCents);
   const requests = [];
   const postCommitFailures = [...(fakeOptions.postCommitFailures ?? [])];
   const pending = new Map();
@@ -171,7 +169,7 @@ function createFakeCloud(env, fakeOptions = {}) {
   };
 
   const accounting = (groupBy) => {
-    const totals = financialComplete ? EXPECTED_DELTA : ZERO_BASIS;
+    const totals = financialComplete ? expectedDelta : ZERO_BASIS;
     return {
       date_from: "2026-08-09",
       date_to: "2026-08-09",
@@ -292,12 +290,13 @@ function createFakeCloud(env, fakeOptions = {}) {
     if (name === "order.receive") {
       const index = orders.size;
       const paid = args.initial_payment?.amount_cents ?? 0;
+      const payableCents = index === 1 ? memberOrderChargeCents : 2_600;
       const order = {
         order_id: ORDER_IDS[index],
         status: "open",
-        payable_cents: 2_600,
+        payable_cents: payableCents,
         paid_cents: paid,
-        balance_cents: 2_600 - paid,
+        balance_cents: payableCents - paid,
         garments: [
           { garment_id: GARMENT_IDS[index], barcode: `UATBARCODE${index}`, status: "received" },
         ],

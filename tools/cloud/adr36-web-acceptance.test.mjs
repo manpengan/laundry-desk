@@ -313,6 +313,29 @@ test("full ADR-36 API journey is canonical, synthetic, blocked where unsafe, and
   assert.equal(storeRenames[1].body.args.store_name, "ADR36 UAT Store");
 });
 
+test("member journey pays the authoritative discounted balance and derives accounting evidence", async () => {
+  const env = acceptanceEnvironment();
+  const cloud = createFakeCloud(env, { memberOrderChargeCents: 2_275 });
+  const lines = [];
+  const report = await runAcceptance({
+    ...TEST_EXTENSIONS,
+    env,
+    fetchImpl: cloud.fetchImpl,
+    randomUUID: sequentialUuid(),
+    now: () => new Date("2026-08-09T12:34:56.000Z"),
+    writeLine: (line) => lines.push(line),
+  });
+  assert.equal(report.exitCode, 2);
+  const output = lines.join("\n");
+  assert.match(output, /member_lifecycle PASS/u);
+  assert.match(output, /accounting_today_delta PASS/u);
+  const payments = cloud.requests.filter(
+    (request) => request.body?.command === "member.balance.pay" && request.body.mode === "direct",
+  );
+  assert.equal(payments.length, 2);
+  assert.ok(payments.every((request) => request.body.args.amount_cents === 2_275));
+});
+
 test("remote failure bodies and credentials never enter failure output", async () => {
   const env = acceptanceEnvironment();
   const lines = [];
