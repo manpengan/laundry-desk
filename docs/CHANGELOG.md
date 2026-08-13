@@ -14,6 +14,8 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
+- 上述 ADR-40 至 ADR-63 的全部能力（Owner 云端经营与门店管理、会员权益与有效期、顾客扩展档案与折扣政策、云数据保护与联合恢复、provider-neutral 通知 outbox、店厂交接与质检、取送全链、营销与顾客自助、AI/BYOK）已随精确 `main` `65bd8210c824037d4c871a46ce3eaf3e3dc1c314` 一次性发布到 hk-vps，迁移由 48/head `0048_catalog_governance.sql` 推进到 69/head `0069_bounded_automation.sql`；公网 API 19/19 journey PASS、Cloud Chromium PASS，marker/schema/服务/健康与保留证据均通过。首个候选 `53b012c` 的两次尝试均失败关闭并回滚，经 PR #179–#181 修复后重新发布。本轮 `old_code_compatible=false`，代码回滚必须走保留的 controller 与 pre-release dump。见[阶段 3.2–4.5 发布结果](operations/2026-08-13-stage32-45-release-result.md)。
+
 - 有来源的只读 AI 助手（[ADR-62](adr/2026-08-13-adr-62-readonly-ai-assistant.md)）：柜台和
   Owner 共用经营汇总、订单/顾客检索与内置规程排障三个闭合只读工具。业务读取
   继续经既有 Query Bus、tenant GUC 和 RBAC，顾客信息在模型前脱敏，回答必须带

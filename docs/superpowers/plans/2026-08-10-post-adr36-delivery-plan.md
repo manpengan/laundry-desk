@@ -1,13 +1,15 @@
 # ADR-36 后续 Cloud Web-first 1–4 交付计划
 
 > 日期：2026-08-10
-> 状态：**阶段 1、2 与阶段 3.1「价目治理」已关闭；下一顺序切片为阶段 3.2**
+> 状态：**阶段 1 – 4.5 全部切片已关闭并完成云端发布**（2026-08-13 以
+> `65bd8210…c314` 一次性发布阶段 3.2 – 4.5，迁移推进到 69/head `0069_bounded_automation.sql`）
 > 阶段 1 验收：[ADR-36 Web 产品收口验收记录](../specs/2026-08-09-adr36-web-product-convergence-acceptance.md)
 > 阶段 1 结果：[hk-vps 阶段 1 发布结果](../../operations/2026-08-11-stage1-release-result.md)
 > 阶段 2 验收：[柜台可信性验收记录](../specs/2026-08-11-stage2-counter-trust-acceptance.md)
 > 阶段 2 结果：[hk-vps 阶段 2 发布结果](../../operations/2026-08-11-stage2-release-result.md)
 > 阶段 3.1 验收：[价目治理验收记录](../specs/2026-08-11-stage3-catalog-governance-acceptance.md)
 > 阶段 3.1 结果：[hk-vps 阶段 3.1 发布结果](../../operations/2026-08-11-stage3-catalog-governance-release-result.md)
+> 阶段 3.2–4.5 结果：[hk-vps 阶段 3.2–4.5 发布结果](../../operations/2026-08-13-stage32-45-release-result.md)
 > 当前裁决：[ADR-37](../../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
 > 继承边界：[ADR-16](../../adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-36](../../adr/2026-08-09-adr-36-cloud-test-environment.md)
 
@@ -36,8 +38,8 @@
 | ---: | ---------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 |    1 | **已关闭** | 云端基线与既有 Web 收口：路线治理、目标 main 精确部署、schema head、公网安全浏览器验收、30/90/180 天历史催取 fixture | 2026-08-11 以 `7989206…28e` 完成 required CI、marker/schema、HTTP/Browser 与清理证据 |
 |    2 | **已关闭** | 柜台可信性缺口：服务端权威计价与设置生效、支付流水/退款 Web、衣物详情与挂单刷新恢复                                  | `6f106076…3f47` 完成 PR/主干 CI、marker/0047、API 15/15、Cloud Chromium 与清理证据   |
-|    3 | **进行中** | 经营增强：价目排序/重新启用/审计、Owner 公网经营与门店管理、会员等级/积分/次卡/券/有效期、顾客扩展档案               | 3.1 已按 ADR-39 关闭；下一顺序切片为 3.2 Owner 公网经营与门店管理                    |
-|    4 | 待开始     | 大型云端模块：云备份/恢复/监控/联合回滚；自动通知；店厂交接；取送、营销、顾客自助；AI/BYOK                           | 每个模块独立 ADR/威胁边界/回滚；生产性声明另需容量、恢复或 provider 真实证据         |
+|    3 | **已关闭** | 经营增强：价目排序/重新启用/审计、Owner 公网经营与门店管理、会员等级/积分/次卡/券/有效期、顾客扩展档案               | 3.1 以 `f276bdbf…afdca` 关闭；3.2–3.4 按 ADR-40/41/42 随 `65bd8210…c314` 发布       |
+|    4 | **已关闭** | 大型云端模块：云备份/恢复/监控/联合回滚；自动通知；店厂交接；取送、营销、顾客自助；AI/BYOK                           | 4.1–4.5 按 ADR-43 – ADR-63 随 `65bd8210…c314` 发布；真实 provider 仍为 `software_only` |
 
 ## 3. 阶段 1：云端基线与既有 Web 收口（已关闭）
 
@@ -102,9 +104,9 @@ Foundation/PostgreSQL、hk-vps `prepare → finalize`、47/head 0047、API 15/15
 
 1. **已关闭：**价目排序、停用项重新启用与管理员审计入口；ADR-39、本地真实 PG、
    Chromium 17/17、PR/精确主线 CI、hk-vps marker/0048、API 15/15 与 Cloud Chromium 已通过；
-2. **下一步：**Owner 公网只读/受限管理面、完整报表和授权门店管理；
-3. 会员等级、积分、次卡、优惠券与有效期；
-4. 顾客多地址、车辆/标识、服务偏好、免责声明与折扣政策等扩展档案。
+2. **已关闭：**Owner 公网只读/受限管理面、完整报表和授权门店管理（[ADR-40](../../adr/2026-08-11-adr-40-cloud-owner-operations.md)）；
+3. **已关闭：**会员等级、积分、次卡、优惠券与有效期（[ADR-41](../../adr/2026-08-11-adr-41-member-benefits-and-expiry.md)）；
+4. **已关闭：**顾客多地址、车辆/标识、服务偏好、免责声明与折扣政策等扩展档案（[ADR-42](../../adr/2026-08-12-adr-42-customer-extended-profiles-and-discount-policy.md)）。
 
 每个切片先冻结数据归属、门店/组织作用域、角色权限、隐私导出/匿名化和历史快照语义。
 Owner 公网化不得直接复用 ADR-26/27 的 LAN 假设；资金和优惠能力不得由客户端计算。
@@ -126,7 +128,12 @@ Browser、marker/schema、服务、清理及保留证据均已闭环；详见[�
 4. 取送、营销/券活动与顾客自助入口。
 5. AI/BYOK 的权限投影、风险确认、成本上限、失败降级与密钥隔离。
 
-阶段 4.4 当前按独立权威层推进：Item 1 门店策略、Item 2 顾客预约、Item 3 配送订单之后，
+阶段 4.1 – 4.5 的全部切片已由 ADR-43 – ADR-63 冻结、实现并随 `65bd8210…c314` 发布到 hk-vps；
+公网 API 新增 `notification_delivery_boundary` 与 `factory_handoff_boundary` 两条边界纵向并 PASS。
+第 2、5 项的真实 provider 仍未取得凭据，保持 `software_only` / `blocked_external_provider`，
+发布证据不声称已发送、已送达或已产生真实模型调用。详见[阶段 3.2–4.5 发布结果](../../operations/2026-08-13-stage32-45-release-result.md)。
+
+阶段 4.4 按独立权威层推进：Item 1 门店策略、Item 2 顾客预约、Item 3 配送订单之后，
 Item 4 由 [ADR-49](../../adr/2026-08-13-adr-49-authoritative-delivery-tasks.md)冻结配送任务分派、接单、
 转派和人工接管；Item 5 由
 [ADR-50](../../adr/2026-08-13-adr-50-mobile-delivery-task-h5.md)增加独立 `/mobile/tasks` 当前员工任务面，
