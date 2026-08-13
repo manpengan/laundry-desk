@@ -209,6 +209,198 @@
           "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
         }
       }
+    },
+    "0058_delivery_evidence.sql": {
+      "database_restored_catalog": {
+        "entries": 1374,
+        "sha256": "fd60a3d70cf50d16b2ac6762d6363a2e6f0f2eaf427a744ae86d3a0c98c47f92"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0059_marketing_campaigns.sql": {
+      "database_restored_catalog": {
+        "entries": 1425,
+        "sha256": "9938499c649a81aaf00f97195c6f0eaa57a9d5af279d972f92fda3780d0ef90c"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0060_campaign_coupon_batches.sql": {
+      "database_restored_catalog": {
+        "entries": 1455,
+        "sha256": "0f41f3af1a63132d642fd6c54d8f8dd6e59a61f17326dc28f953cd20465e9795"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0061_customer_self_service.sql": {
+      "database_restored_catalog": {
+        "entries": 1542,
+        "sha256": "810d794dff6179eac548b8b56f7f1e3d1e2b7348c69d1477cc43d1b583954aba"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0062_customer_wallet_and_preferences.sql": {
+      "database_restored_catalog": {
+        "entries": 1632,
+        "sha256": "bac7dbda3865afd280cac652fd8afad6d5a27be5bdd097e9d6463164375f137d"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0063_referral_and_group_buy.sql": {
+      "database_restored_catalog": {
+        "entries": 1676,
+        "sha256": "76ab7d22d37192c773a8c7772501fa743f60597b0ffb87e801002e803484d5fc"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0064_byok_model_registry.sql": {
+      "database_restored_catalog": {
+        "entries": 1712,
+        "sha256": "efa9d6f3efecc84df7262494118d5f8fb15f47510b5f13676df02d6f05bb5298"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0065_ai_streaming_sessions.sql": {
+      "database_restored_catalog": {
+        "entries": 1798,
+        "sha256": "138e168a4083656ed068c7e0b70a48a928915724b44ef941709ad7f9730f93fb"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0066_ai_safety_metering.sql": {
+      "database_restored_catalog": {
+        "entries": 1855,
+        "sha256": "766c6962e9aaf8a79e8cae81f826fabe37765185d16bc96c21cfc022d0fe1e90"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0067_readonly_ai_assistant.sql": {
+      "database_restored_catalog": {
+        "entries": 1858,
+        "sha256": "c895e1a57d3c76d1e20db68a98906f1ce398c3b8514157a648db0b0153849ead"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0068_ai_approval_center.sql": {
+      "database_restored_catalog": {
+        "entries": 1881,
+        "sha256": "47e9a3c9402a956f42c0335a4bf3e4b15d0c6829eb6bac8e0c0d9ae6f61a7840"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
+    },
+    "0069_bounded_automation.sql": {
+      "database_restored_catalog": {
+        "entries": 1932,
+        "sha256": "50b01b0beb8ef0a539bd8ed778e0fcd962105b068fbb0fa5bb3c715374f68f15"
+      },
+      "cluster_bootstrap_contract": {
+        "stable": {
+          "entries": 8,
+          "sha256": "911d17a2b58d98efab05ce48f269833978e9fd674e2e4eb3971dad1223ff1f92"
+        },
+        "write_frozen": {
+          "entries": 8,
+          "sha256": "24412b153c62a71b457c87581604b1c73c639a0d70373ea3f892e069253a5e03"
+        }
+      }
     }
   }
 }
