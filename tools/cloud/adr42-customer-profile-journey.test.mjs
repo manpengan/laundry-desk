@@ -197,6 +197,9 @@ function fakeJourneyApi() {
       ...profile,
       version: profile.version + 1,
       discount_bps: input.discount_bps,
+      // PostgreSQL projects profile-version-scoped PII as empty after a discount-only version bump.
+      addresses: Object.freeze([]),
+      identifiers: Object.freeze([]),
     });
     return {
       customer_id: CUSTOMER_ID,
