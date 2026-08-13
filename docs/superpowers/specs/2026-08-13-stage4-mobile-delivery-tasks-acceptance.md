@@ -1,10 +1,26 @@
 # 阶段 4.4 Item 5 配送员/员工移动 H5 验收记录
 
 > 日期：2026-08-13
-> 状态：**隔离工作树候选实现与本地 Web 门禁已通过；本批未执行独立安全审查，合入与发布尚未形成证据**
+> 状态：**历史验收记录；交付证据边界与直接完成行为已被 ADR-51 / Item 6 推翻**
 > 决策：[ADR-50](../../adr/2026-08-13-adr-50-mobile-delivery-task-h5.md)（Proposed，待 manpengan 签署）
 > 前置提交：Item 4 `58bb10eb3f8fc9a4630ed50a0053c0eb87ffc545`
-> 实现基线：本记录与 Item 5 候选 diff 同批，未提交
+> 实现基线：Item 5 exact commit `3791cb778c11177801ade12de15fefeac6c7bfcb`
+
+## 0. Item 6 推翻说明
+
+本记录只证明上列 Item 5 exact commit 的历史边界，不再代表当前候选产品面。ADR-51 / Item 6 同批新增
+69/48 契约、`0058`、专用私有交付附件和移动 H5 证据采集，并推翻以下旧结论：
+
+- accepted 任务不再可由客户端分两次“先完成订单腿、后补现场证据”；`pickup_in_progress -> picked_up`
+  与 `return_in_progress -> completed` 只通过 `delivery.evidence.record` 的受控 `complete_leg` 原子完成。
+- Item 5 的“无 GPS/照片/签名/证据字段”“Contracts/Server/DB 无 diff”和冻结 68/47 只属于历史
+  commit；当前 Item 6 是 69/48 与迁移头 `0058`。
+- 原有接单、拒绝和“开始取件/开始送回”仍有效；任务、会话、generation/AbortSignal、断网只读与完整
+  authority 原则继续成立。路线导航、后台定位、顾客公开自助和第三方配送 provider 仍未交付。
+
+Item 6 当前候选验收以
+[阶段 4.4 Item 6 验收记录](2026-08-13-stage4-delivery-evidence-acceptance.md)为准；本文件后续章节保留为
+不可改写的历史测试证据。
 
 ## 1. 范围
 

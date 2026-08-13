@@ -1,4 +1,5 @@
 import { createDeliveryTaskConfirmationPreparer } from "../delivery-tasks/confirmation.js";
+import { createDeliveryEvidenceConfirmationPreparer } from "../delivery-evidence/confirmation.js";
 import { createDeliveryPolicyConfirmationPreparer } from "../delivery-policy/confirmation.js";
 import { createFulfillmentConfirmationPreparer } from "../fulfillment/confirmation.js";
 import { createMemberTopupConfirmationPreparer } from "../member/topup-confirmation.js";
@@ -28,6 +29,14 @@ export function createM1ChainHooks(deps: RegisterM1Deps, pendingStore: PendingAc
       deps.deliveryTasks === undefined
         ? undefined
         : createDeliveryTaskConfirmationPreparer(deps.deliveryTasks),
+      deps.deliveryEvidence === undefined
+        ? undefined
+        : createDeliveryEvidenceConfirmationPreparer(
+            deps.deliveryEvidence.store,
+            async (orgId, storeId, orderId) =>
+              (await deps.deliveryEvidence?.orders.get(orgId, storeId, orderId))?.customer_id ??
+              null,
+          ),
     ]),
     deps.notification === undefined ? undefined : prepareNotificationDeliveryRisk,
   );

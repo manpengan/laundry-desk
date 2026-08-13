@@ -14,6 +14,7 @@ import {
   DELIVERY_APPOINTMENT_COMMAND_NAMES,
   DELIVERY_ORDER_COMMAND_NAMES,
   DELIVERY_TASK_COMMAND_NAMES,
+  DELIVERY_EVIDENCE_COMMAND_NAMES,
   createCommandError,
   type CommandError,
 } from "@laundry/contracts";
@@ -44,12 +45,10 @@ import {
 } from "./pending-policy.js";
 
 const okVoid = (): StepResult<void, CommandError> => ({ ok: true, data: undefined });
-
 const okInvariants = (): StepResult<Readonly<{ preview: true }>, CommandError> => ({
   ok: true,
   data: Object.freeze({ preview: true as const }),
 });
-
 const okPolicy = (): StepResult<Readonly<{ allowed: true }>, CommandError> => ({
   ok: true,
   data: Object.freeze({ allowed: true as const }),
@@ -61,6 +60,7 @@ const REUSABLE_PENDING_COMMANDS: ReadonlySet<string> = new Set([
   ...DELIVERY_APPOINTMENT_COMMAND_NAMES,
   ...DELIVERY_ORDER_COMMAND_NAMES,
   ...DELIVERY_TASK_COMMAND_NAMES,
+  ...DELIVERY_EVIDENCE_COMMAND_NAMES,
 ]);
 
 export { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";

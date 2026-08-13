@@ -1,5 +1,6 @@
 import {
   DeliveryTaskConfirmationSummarySchema,
+  DeliveryEvidenceConfirmationSummarySchema,
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
   NotificationDeliveryConfirmationSummarySchema,
@@ -43,6 +44,8 @@ export function readConfirmationSummary(value: unknown): ConfirmationSummary | n
   }
   const deliveryTask = DeliveryTaskConfirmationSummarySchema.safeParse(value);
   if (deliveryTask.success) return Object.freeze({ ...deliveryTask.data });
+  const deliveryEvidence = DeliveryEvidenceConfirmationSummarySchema.safeParse(value);
+  if (deliveryEvidence.success) return Object.freeze({ ...deliveryEvidence.data });
   const fulfillment = FulfillmentOperationConfirmationSummarySchema.safeParse(value);
   if (!fulfillment.success) return null;
   return Object.freeze({

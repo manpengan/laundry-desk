@@ -6,13 +6,13 @@
       "mime": "text/css; charset=utf-8",
       "bytes": 90194
     },
-    "assets/index-CNReYwG1.js": {
-      "sha256": "f7b51b7b3a9b115dc7d1bb5039523fd2d903a6288165221a1b2be97496248f31",
+    "assets/index-C7kc6Nbu.js": {
+      "sha256": "b85f977e38c0e0f68d6e290f1bbb966819a87922d883acbe5444460bbafa8125",
       "mime": "text/javascript; charset=utf-8",
-      "bytes": 959293
+      "bytes": 979981
     },
     "index.html": {
-      "sha256": "48c4daa3951ee752872a2041d4c58d74ed2d6772dacced5f09bf7fed55c50584",
+      "sha256": "b43b8bfb584c7db7ab18e265cd98883942c3a33ce09946d6f832b0fed1ebe7af",
       "mime": "text/html; charset=utf-8",
       "bytes": 412
     }

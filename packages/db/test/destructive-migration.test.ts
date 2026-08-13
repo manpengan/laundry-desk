@@ -39,6 +39,13 @@ describe("destructive migration static reject", () => {
         "ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_chk;",
       ),
     ).toHaveLength(0);
+    const evidenceTruncateGuard =
+      "'CREATE TRIGGER %I BEFORE TRUNCATE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.reject_delivery_evidence_mutation()',";
+    expect(findDestructiveSql("0058_delivery_evidence.sql", evidenceTruncateGuard)).toHaveLength(0);
+    expect(findDestructiveSql("other.sql", evidenceTruncateGuard)).toHaveLength(1);
+    expect(
+      findDestructiveSql("0058_delivery_evidence.sql", "TRUNCATE delivery_evidence_events;"),
+    ).toHaveLength(1);
     expect(
       findDestructiveSql(
         "0032_member_stored_value.sql",
@@ -141,6 +148,7 @@ describe("destructive migration static reject", () => {
       "0055_delivery_appointments.sql",
       "0056_delivery_orders.sql",
       "0057_delivery_tasks.sql",
+      "0058_delivery_evidence.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

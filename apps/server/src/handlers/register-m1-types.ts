@@ -9,6 +9,7 @@ import type { DeliveryPolicyHandlerDeps } from "../delivery-policy/handlers.js";
 import type { DeliveryAppointmentHandlerDeps } from "../delivery-appointments/handlers.js";
 import type { DeliveryOrderHandlerDeps } from "../delivery-orders/handlers.js";
 import type { DeliveryTaskHandlerDeps } from "../delivery-tasks/handlers.js";
+import type { DeliveryEvidenceHandlerDeps } from "../delivery-evidence/handlers.js";
 import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
 import type { MemberBenefitsRuntimeDeps } from "../member-benefits/types.js";
 import type { MemberRuntimeDeps } from "../member/handlers.js";
@@ -34,6 +35,7 @@ export type RegisterM1Deps = Readonly<{
   deliveryAppointments?: DeliveryAppointmentHandlerDeps;
   deliveryOrders?: DeliveryOrderHandlerDeps;
   deliveryTasks?: DeliveryTaskHandlerDeps;
+  deliveryEvidence?: DeliveryEvidenceHandlerDeps;
   order?: OrderHandlerDeps;
   catalog?: CatalogHandlerDeps;
   print?: PrintHandlerDeps;

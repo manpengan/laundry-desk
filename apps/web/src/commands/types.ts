@@ -4,6 +4,7 @@
 
 import type {
   DeliveryTaskConfirmationSummary,
+  DeliveryEvidenceConfirmationSummary,
   FactoryHandoffConfirmationSummary,
   FulfillmentOperationConfirmationSummary,
   DeliveryPolicyConfirmationSummary,
@@ -46,7 +47,8 @@ export type ConfirmationSummary =
   | DeliveryPolicyConfirmationSummary
   | FactoryHandoffConfirmationSummary
   | FulfillmentOperationConfirmationSummary
-  | DeliveryTaskConfirmationSummary;
+  | DeliveryTaskConfirmationSummary
+  | DeliveryEvidenceConfirmationSummary;
 
 export type CommandErrorDetail = Readonly<{
   kind?: string;

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { SessionView } from "../auth/types.js";
 import type { CommandFailure, CommandPort, QueryPort } from "../commands/types.js";
+import type { DeliveryEvidenceMediaPort } from "../host/delivery-evidence-port.js";
 import { buildDeliveryTaskListInput, type DeliveryTaskView } from "../pages/delivery-task-model.js";
 import {
   parseMobileTaskDetail,
@@ -15,6 +16,7 @@ import {
   type MobileTaskRequestAuthority,
 } from "./mobile-task-request-authority.js";
 import { useMobileTaskMutations } from "./use-mobile-task-mutations.js";
+import { useMobileDeliveryEvidence } from "./use-mobile-delivery-evidence.js";
 
 export type MobileTaskWorkbenchError = Readonly<{ title: string; message: string }>;
 
@@ -40,11 +42,12 @@ export function useMobileTaskWorkbench(
     session: SessionView;
     queryClient: QueryPort;
     commandClient: CommandPort;
+    mediaPort?: DeliveryEvidenceMediaPort;
     onSessionExpired(): void;
     onSuccess(message: string): void;
   }>,
 ) {
-  const { session, queryClient, commandClient, onSessionExpired, onSuccess } = options;
+  const { session, queryClient, commandClient, mediaPort, onSessionExpired, onSuccess } = options;
   const scope = mobileTaskSessionScope(session);
   const authorityRef = useRef<MobileTaskRequestAuthority>(createMobileTaskRequestAuthority(scope));
   if (authorityRef.current.scope !== scope) {
@@ -202,10 +205,25 @@ export function useMobileTaskWorkbench(
     onSuccess,
     reload: reloadAfterMutation,
   });
+  const evidence = useMobileDeliveryEvidence({
+    authority: authorityRef.current,
+    commandClient,
+    queryClient,
+    ...(mediaPort === undefined ? {} : { mediaPort }),
+    currentStaffId: session.session.staff_id,
+    detail,
+    online,
+    scope,
+    onFailure: handleFailure,
+    onError: setError,
+    onSuccess,
+    reload: reloadAfterMutation,
+  });
 
   const clearSensitiveState = useCallback(() => {
     authorityRef.current.invalidateAll();
     mutations.reset();
+    evidence.reset();
     setTasks([]);
     setSelectedId(null);
     setDetail(null);
@@ -213,13 +231,14 @@ export function useMobileTaskWorkbench(
     setLoaded(false);
     setListLoading(false);
     setDetailLoading(false);
-  }, [mutations.reset]);
+  }, [evidence.reset, mutations.reset]);
 
   useEffect(() => {
     const handleOnline = () => setOnline(true);
     const handleOffline = () => {
       authorityRef.current.invalidateAll();
       mutations.reset();
+      evidence.reset();
       setOnline(false);
     };
     window.addEventListener("online", handleOnline);
@@ -228,7 +247,7 @@ export function useMobileTaskWorkbench(
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [mutations.reset]);
+  }, [evidence.reset, mutations.reset]);
 
   useEffect(() => {
     clearSensitiveState();
@@ -260,19 +279,21 @@ export function useMobileTaskWorkbench(
   const refresh = useCallback(() => {
     authorityRef.current.invalidate("detail");
     mutations.reset();
+    evidence.reset();
     setDetail(null);
     setDetailLoading(false);
     void loadList();
-  }, [loadList, mutations.reset]);
+  }, [evidence.reset, loadList, mutations.reset]);
 
   const selectTask = useCallback(
     (taskId: string | null) => {
       authorityRef.current.invalidate("detail");
       mutations.reset();
+      evidence.reset();
       setDetail(null);
       setSelectedId(taskId);
     },
-    [mutations.reset],
+    [evidence.reset, mutations.reset],
   );
 
   const setActiveOnly = useCallback(
@@ -305,10 +326,11 @@ export function useMobileTaskWorkbench(
     detail,
     listLoading,
     detailLoading,
-    mutationBusy: mutations.busy,
+    mutationBusy: mutations.busy || evidence.busy,
     loaded,
     reason,
-    pending: mutations.pending,
+    pending: evidence.pending ?? mutations.pending,
+    evidence,
     error,
     refresh,
     selectTask,
@@ -316,8 +338,8 @@ export function useMobileTaskWorkbench(
     setReason,
     respond: mutations.respond,
     transition: mutations.transition,
-    confirmPending: mutations.confirm,
-    closePending: mutations.reset,
+    confirmPending: evidence.pending === null ? mutations.confirm : evidence.confirm,
+    closePending: evidence.pending === null ? mutations.reset : evidence.reset,
     clearSensitiveState,
   });
 }

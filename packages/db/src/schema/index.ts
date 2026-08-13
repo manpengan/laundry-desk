@@ -8,6 +8,11 @@ export { deliveryPolicies } from "./delivery-policies.js";
 export { deliveryAppointments } from "./delivery-appointments.js";
 export { deliveryOrders } from "./delivery-orders.js";
 export { deliveryTasks } from "./delivery-tasks.js";
+export {
+  deliveryEvidenceAttachments,
+  deliveryEvidenceEvents,
+  deliveryEvidenceAttachmentLinks,
+} from "./delivery-evidence.js";
 export { storeFeatures } from "./store-features.js";
 export { auditLog } from "./audit-log.js";
 export { sessions } from "./sessions.js";
@@ -37,6 +42,11 @@ import { deliveryPolicies } from "./delivery-policies.js";
 import { deliveryAppointments } from "./delivery-appointments.js";
 import { deliveryOrders } from "./delivery-orders.js";
 import { deliveryTasks } from "./delivery-tasks.js";
+import {
+  deliveryEvidenceAttachments,
+  deliveryEvidenceEvents,
+  deliveryEvidenceAttachmentLinks,
+} from "./delivery-evidence.js";
 import { storeFeatures } from "./store-features.js";
 import { auditLog } from "./audit-log.js";
 import { sessions } from "./sessions.js";
@@ -96,6 +106,9 @@ export const M2_DELIVERY_TABLES = Object.freeze({
   delivery_appointments: deliveryAppointments,
   delivery_orders: deliveryOrders,
   delivery_tasks: deliveryTasks,
+  delivery_evidence_attachments: deliveryEvidenceAttachments,
+  delivery_evidence_events: deliveryEvidenceEvents,
+  delivery_evidence_attachment_links: deliveryEvidenceAttachmentLinks,
 } as const);
 
 /** M2 payments ledger (store-scoped, append-only). */

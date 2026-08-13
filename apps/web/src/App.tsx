@@ -134,6 +134,7 @@ export function App({
             authClient={ports.auth}
             commandClient={ports.command}
             queryClient={ports.query}
+            {...(ports.deliveryEvidence === undefined ? {} : { mediaPort: ports.deliveryEvidence })}
             onSessionChange={setSession}
           />
         ) : (

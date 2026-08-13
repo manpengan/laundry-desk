@@ -31,16 +31,23 @@ import {
   DELIVERY_TASK_QUERIES,
   DELIVERY_TASK_QUERY_NAMES,
 } from "./delivery-tasks.js";
+import {
+  DELIVERY_EVIDENCE_COMMAND_NAMES,
+  DELIVERY_EVIDENCE_COMMANDS,
+  DELIVERY_EVIDENCE_QUERIES,
+  DELIVERY_EVIDENCE_QUERY_NAMES,
+} from "./delivery-evidence.js";
 
 export * from "./catalog-base.js";
 
-/** ADR-46 through ADR-49 extend the frozen surface while keeping the historical catalog bounded. */
+/** ADR-46 through ADR-51 extend the frozen surface while keeping the historical catalog bounded. */
 export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] = Object.freeze([
   ...BASE_SKELETON_DEFINITIONS,
   ...DELIVERY_POLICY_COMMANDS,
   ...DELIVERY_APPOINTMENT_COMMANDS,
   ...DELIVERY_ORDER_COMMANDS,
   ...DELIVERY_TASK_COMMANDS,
+  ...DELIVERY_EVIDENCE_COMMANDS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
@@ -49,6 +56,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   ...DELIVERY_APPOINTMENT_COMMAND_NAMES,
   ...DELIVERY_ORDER_COMMAND_NAMES,
   ...DELIVERY_TASK_COMMAND_NAMES,
+  ...DELIVERY_EVIDENCE_COMMAND_NAMES,
 ] as const);
 
 export const M2_CONTRACT_COMMAND_NAMES = Object.freeze([
@@ -57,6 +65,7 @@ export const M2_CONTRACT_COMMAND_NAMES = Object.freeze([
   ...DELIVERY_APPOINTMENT_COMMAND_NAMES,
   ...DELIVERY_ORDER_COMMAND_NAMES,
   ...DELIVERY_TASK_COMMAND_NAMES,
+  ...DELIVERY_EVIDENCE_COMMAND_NAMES,
 ] as const);
 
 export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
@@ -65,6 +74,7 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   ...DELIVERY_APPOINTMENT_QUERY_NAMES,
   ...DELIVERY_ORDER_QUERY_NAMES,
   ...DELIVERY_TASK_QUERY_NAMES,
+  ...DELIVERY_EVIDENCE_QUERY_NAMES,
 ] as const);
 
 export const M2_CONTRACT_DEFINITIONS: readonly (
@@ -79,4 +89,6 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...DELIVERY_ORDER_QUERIES,
   ...DELIVERY_TASK_COMMANDS,
   ...DELIVERY_TASK_QUERIES,
+  ...DELIVERY_EVIDENCE_COMMANDS,
+  ...DELIVERY_EVIDENCE_QUERIES,
 ]);

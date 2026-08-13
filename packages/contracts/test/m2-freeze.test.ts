@@ -113,6 +113,8 @@ describe("M2 contract surface", () => {
       "delivery.task.respond",
       "delivery.task.transfer",
       "delivery.task.takeover",
+      // ADR-51: accepted-assignee evidence, with optional atomic leg completion.
+      "delivery.evidence.record",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
@@ -154,8 +156,9 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.orders.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.task.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.tasks.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(68);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(47);
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.evidence.list");
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(69);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(48);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
@@ -268,6 +271,9 @@ describe("M2 contract surface", () => {
     );
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "delivery.orders.list",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.evidence.list",
     );
   });
 

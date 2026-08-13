@@ -51,6 +51,12 @@ const isCompatibleConstraintReplacement = (statement: string): boolean =>
     ).test(statement),
   );
 
+const DELIVERY_EVIDENCE_TRUNCATE_GUARD =
+  "'CREATE TRIGGER %I BEFORE TRUNCATE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.reject_delivery_evidence_mutation()',";
+
+const isDeliveryEvidenceTruncateGuard = (file: string, statement: string): boolean =>
+  file === "0058_delivery_evidence.sql" && statement === DELIVERY_EVIDENCE_TRUNCATE_GUARD;
+
 export type DestructiveMigrationFinding = Readonly<{
   file: string;
   rule: string;
@@ -75,7 +81,12 @@ export const findDestructiveSql = (
       // This is a privilege revocation, not a TRUNCATE statement. Keep the
       // expand-only guard strict for actual data-removal SQL while allowing
       // append-only ledgers to explicitly revoke the TRUNCATE privilege.
-      if (rule.name === "TRUNCATE" && /^REVOKE\b/iu.test(stripped)) continue;
+      if (
+        rule.name === "TRUNCATE" &&
+        (/^REVOKE\b/iu.test(stripped) || isDeliveryEvidenceTruncateGuard(file, stripped))
+      ) {
+        continue;
+      }
       if (
         rule.name === "ALTER ... DROP CONSTRAINT (data-loss style)" &&
         isCompatibleConstraintReplacement(stripped)

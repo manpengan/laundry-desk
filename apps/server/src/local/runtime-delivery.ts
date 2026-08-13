@@ -20,6 +20,13 @@ import {
   createMemoryDeliveryTaskRuntime,
   createPgDeliveryTaskRuntime,
 } from "../delivery-tasks/runtime.js";
+import {
+  createMemoryDeliveryEvidenceRuntime,
+  createPgDeliveryEvidenceRuntime,
+} from "../delivery-evidence/runtime.js";
+import type { DeliveryEvidenceHandlerDeps } from "../delivery-evidence/handlers.js";
+import { prepareDeliveryEvidenceFiles } from "../delivery-evidence/runtime-files.js";
+import { preparePgPhotoDeps } from "../photo/runtime-files.js";
 import type { LocalStaffDirectoryEntry } from "./staff-directory.js";
 
 export function createMemoryDeliveryRuntimes(
@@ -40,21 +47,40 @@ export function createMemoryDeliveryRuntimes(
     customers,
   );
   const tasks = createMemoryDeliveryTaskRuntime(deliveryOrders, staffDirectory);
+  const boundOrders = bindMemoryDeliveryTaskOrderAuthority(deliveryOrders, tasks.store);
   return Object.freeze({
     policy,
     appointments,
-    orders: bindMemoryDeliveryTaskOrderAuthority(deliveryOrders, tasks.store),
+    orders: boundOrders,
     tasks,
+    evidence: createMemoryDeliveryEvidenceRuntime(boundOrders, tasks),
   });
 }
 
 export function createPgDeliveryRuntimes(pool: PgPool) {
   const policy = createPgDeliveryPolicyRuntime(pool);
   const orders = createPgDeliveryOrderRuntime(pool);
+  const tasks = createPgDeliveryTaskRuntime(pool, orders);
   return Object.freeze({
     policy,
     appointments: createPgDeliveryAppointmentRuntime(pool, policy),
     orders,
-    tasks: createPgDeliveryTaskRuntime(pool, orders),
+    tasks,
+    evidence: createPgDeliveryEvidenceRuntime(pool, orders),
+  });
+}
+
+export async function preparePgDeliveryMedia(
+  pool: PgPool,
+  photoRootPath: string | null,
+  evidence: DeliveryEvidenceHandlerDeps,
+  orgId: string,
+  storeId: string,
+) {
+  const photo = await preparePgPhotoDeps(pool, photoRootPath, orgId, storeId);
+  const files = await prepareDeliveryEvidenceFiles(photoRootPath, evidence, orgId, storeId);
+  return Object.freeze({
+    photo,
+    evidence: files === undefined ? evidence : Object.freeze({ ...evidence, files }),
   });
 }

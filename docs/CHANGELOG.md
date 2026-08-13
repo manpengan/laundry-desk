@@ -14,6 +14,16 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
+- 取件、送达、异常与现场交付证据（[ADR-51](adr/2026-08-13-adr-51-delivery-evidence.md)）：
+  新增 `delivery.evidence.record` 与 `delivery.evidence.list`，把当前 accepted 任务受派人的 GPS 定点、现场
+  照片、签名图片和受控异常原因绑定到精确组织、门店、配送订单、任务、腿、任务版本与员工。取件完成
+  必须同时有 GPS 和照片，送达完成还必须有签名；证据追加、订单推进和任务收口在同一事务完成，移动端
+  不再先完成任务再补证据。专用私有附件路由只保存 opaque key、摘要、类型和整数大小，上传失败会清理
+  文件，下载每次重新验证 tenant/store/task/assignee；媒体、坐标、存储 key 和 PII 不进入 audit、event 或
+  AI 投影。移动 H5 只在员工明确点击后触发单次定位或文件选择，旧 generation、AbortSignal、scope/
+  selection 与断网全部阻断旧响应和离线写。隐私导出仅增加证据/附件计数及保留、过期孤儿清理裁决，
+  不导出坐标或媒体。冻结面从 68/47 增至 **69 commands / 48 queries**，数据库迁移头为 `0058`。
+
 - 配送员/员工移动 H5 我的任务工作台（[ADR-50](adr/2026-08-13-adr-50-mobile-delivery-task-h5.md)）：
   Cloud Web 新增精确 `/mobile/tasks` browser-only 入口，复用安全登录，并只在该入口使用 refresh/CSRF
   cookie 冷恢复；access token 继续只驻留 host 私有内存。当前员工可读取自己的有界任务与订单详情、接受或
@@ -21,8 +31,8 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
   留在桌面员工面。R3 确认绑定完整 task/order/laundry ID、腿、路线、当前→目标状态和任务/订单版本；
   session/store/staff/permission、选择或详情变化会 abort transport、递增 generation 并使旧确认失效。
   断网只保留同会话最后读取供核对，所有写停用且恢复后重读；feature-off 不冻结既有任务。没有新增
-  Contracts、Server、数据库或迁移，冻结面仍为 68/47；不包含 Item 6 的路线导航、GPS、照片、签名或
-  交付证据。
+  Contracts、Server、数据库或迁移，冻结面当时仍为 68/47；该历史 Item 5 边界及“直接完成后补证据”
+  行为现已由 ADR-51/Item 6 推翻，路线导航仍未包含。
 
 - 配送任务分派、接单、转派与人工接管（[ADR-49](adr/2026-08-13-adr-49-authoritative-delivery-tasks.md)）：
   在权威 `delivery_order` 之下新增一腿一条活动任务的员工保管链。管理员可把待执行取件/送回腿分派给

@@ -77,6 +77,7 @@ export function createRuntimeBus(runtime: LocalRuntime) {
       deliveryAppointments: runtime.deliveryAppointments,
       deliveryOrders: runtime.deliveryOrders,
       deliveryTasks: runtime.deliveryTasks,
+      deliveryEvidence: runtime.deliveryEvidence,
       order: runtime.order,
       catalog: runtime.catalog,
       print: runtime.print,

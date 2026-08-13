@@ -25,6 +25,7 @@ import {
 import { registerEdgePrintRoute } from "./edge-print-route.js";
 import { createEdgePrintRateLimiter, type EdgePrintRateLimiter } from "./edge-print-rate-limit.js";
 import { registerPhotoFileRoutes } from "./photo-file-routes.js";
+import { registerDeliveryEvidenceFileRoutes } from "./delivery-evidence-file-routes.js";
 import { registerPrintArtifactRoutes } from "./print-artifact-routes.js";
 import type { FileSpool } from "../print/file-spool.js";
 import type { CookiePolicy } from "./cookie-policy.js";
@@ -135,6 +136,7 @@ async function installCoreHttp(
       request.url.startsWith("/api/v2/local/staff") ||
       request.url.startsWith("/api/v2/edge/authority") ||
       request.url.startsWith("/api/v2/edge/print/") ||
+      request.url.startsWith("/api/v2/delivery-evidence/") ||
       request.url.startsWith("/v1/commands/") ||
       request.url.startsWith("/v1/queries/")
     ) {
@@ -190,6 +192,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     options.edgePrintRateLimiter ?? createEdgePrintRateLimiter(),
   );
   registerPhotoFileRoutes(app, context, options.runtime.photo);
+  registerDeliveryEvidenceFileRoutes(app, context, options.runtime.deliveryEvidence);
 
   // Artifact download only exists when a spool is configured; the memory
   // runtime has nothing on disk to serve.

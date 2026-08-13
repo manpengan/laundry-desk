@@ -1,6 +1,7 @@
 import type { SessionView } from "../auth/types.js";
 
-export type MobileTaskRequestChannel = "list" | "detail" | "mutation";
+export type MobileTaskRequestChannel =
+  "list" | "detail" | "mutation" | "evidence" | "media" | "evidenceMutation";
 
 export type MobileTaskRequestToken = Readonly<{
   scope: string;
@@ -48,6 +49,9 @@ export function createMobileTaskRequestAuthority(scope: string): MobileTaskReque
     list: channelState(),
     detail: channelState(),
     mutation: channelState(),
+    evidence: channelState(),
+    media: channelState(),
+    evidenceMutation: channelState(),
   };
 
   const invalidate = (channel: MobileTaskRequestChannel): void => {
@@ -79,6 +83,9 @@ export function createMobileTaskRequestAuthority(scope: string): MobileTaskReque
       invalidate("list");
       invalidate("detail");
       invalidate("mutation");
+      invalidate("evidence");
+      invalidate("media");
+      invalidate("evidenceMutation");
     },
     isCurrent(token) {
       const current = state[token.channel];

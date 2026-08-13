@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
+import type { DeliveryEvidenceMediaPort } from "../host/delivery-evidence-port.js";
 import { DangerConfirmDialog } from "../pages/DangerConfirmDialog.js";
 import { DeliveryTaskPendingSummary } from "../pages/DeliveryTaskPendingSummary.js";
 import {
@@ -12,12 +13,17 @@ import {
   MobileTaskTransitionSummary,
 } from "./MobileTaskCards.js";
 import { useMobileTaskWorkbench } from "./use-mobile-task-workbench.js";
+import {
+  MobileDeliveryEvidenceCard,
+  MobileDeliveryEvidenceSummary,
+} from "./MobileDeliveryEvidenceCard.js";
 
 export type MobileTaskShellProps = Readonly<{
   session: SessionView;
   authClient: Pick<AuthClient, "logout">;
   commandClient: CommandPort;
   queryClient: QueryPort;
+  mediaPort?: DeliveryEvidenceMediaPort;
   onSessionChange(session: SessionView | null): void;
 }>;
 
@@ -26,6 +32,7 @@ export function MobileTaskShell({
   authClient,
   commandClient,
   queryClient,
+  mediaPort,
   onSessionChange,
 }: MobileTaskShellProps) {
   const toast = useToast();
@@ -38,6 +45,7 @@ export function MobileTaskShell({
     session,
     queryClient,
     commandClient,
+    ...(mediaPort === undefined ? {} : { mediaPort }),
     onSessionExpired: closeHostSession,
     onSuccess: announceSuccess,
   });
@@ -84,7 +92,7 @@ export function MobileTaskShell({
           <div>
             <span>当前员工 · 当前门店</span>
             <h1 id="mobile-task-title">我的配送任务</h1>
-            <p>在线接单、拒绝并推进既有配送腿；不采集定位、照片或签名。</p>
+            <p>在线接单、推进配送腿，并由当前接单员工采集受控现场证据。</p>
           </div>
           <Button
             variant="secondary"
@@ -161,9 +169,16 @@ export function MobileTaskShell({
             onTransition={() => void workbench.transition()}
           />
         </div>
+        <MobileDeliveryEvidenceCard
+          detail={workbench.detail}
+          evidence={workbench.evidence}
+          online={workbench.online}
+        />
       </main>
 
-      <footer className="ld-mobile-task-footer">在线任务面 · 订单状态为权威 · 现场证据后置</footer>
+      <footer className="ld-mobile-task-footer">
+        在线任务面 · 订单状态为权威 · 证据与完成原子提交
+      </footer>
 
       <DangerConfirmDialog
         open={pending !== null}
@@ -172,7 +187,9 @@ export function MobileTaskShell({
             ? pending.body.decision === "accept"
               ? "确认接受任务"
               : "确认拒绝任务"
-            : (pending?.action.label ?? "确认配送状态")
+            : pending?.kind === "evidence"
+              ? "确认交付证据"
+              : (pending?.action.label ?? "确认配送状态")
         }
         description="以下内容绑定服务端当前任务与订单版本；确认前请核对。"
         summary={
@@ -180,6 +197,8 @@ export function MobileTaskShell({
             <DeliveryTaskPendingSummary summary={pending.summary} />
           ) : pending?.kind === "transition" ? (
             <MobileTaskTransitionSummary pending={pending} />
+          ) : pending?.kind === "evidence" ? (
+            <MobileDeliveryEvidenceSummary pending={pending} />
           ) : undefined
         }
         confirmLabel="确认执行"

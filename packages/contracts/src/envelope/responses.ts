@@ -15,6 +15,10 @@ import {
   DeliveryTaskConfirmationSummarySchema,
   type DeliveryTaskConfirmationSummary,
 } from "./delivery-task-confirmation.js";
+import {
+  DeliveryEvidenceConfirmationSummarySchema,
+  type DeliveryEvidenceConfirmationSummary,
+} from "./delivery-evidence-confirmation.js";
 import { ConfirmReferenceSchema } from "./wire-payload.js";
 
 /** Architecture §6.5: externally safe outcomes for each C1 validation-chain stage. */
@@ -196,6 +200,7 @@ export const ConfirmationSummarySchema = z.union([
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
   DeliveryTaskConfirmationSummarySchema,
+  DeliveryEvidenceConfirmationSummarySchema,
 ]);
 
 const ErrorDetailSchema = z.discriminatedUnion("kind", [
@@ -236,7 +241,8 @@ export type ConfirmationSummary =
   | DeliveryPolicyConfirmationSummary
   | FactoryHandoffConfirmationSummary
   | FulfillmentOperationConfirmationSummary
-  | DeliveryTaskConfirmationSummary;
+  | DeliveryTaskConfirmationSummary
+  | DeliveryEvidenceConfirmationSummary;
 
 const createErrorSchema = <TCode extends CommandErrorCode, TMessage extends string>(
   code: TCode,
@@ -341,7 +347,8 @@ const freezeCommandError = (error: CommandError): CommandError => {
           }),
         };
       }
-      if (error.detail.summary.kind === "delivery_task_operation") {
+      const summaryKind = error.detail.summary.kind;
+      if (summaryKind === "delivery_task_operation" || summaryKind === "delivery_evidence_record") {
         return {
           ...error.detail,
           summary: Object.freeze({ ...error.detail.summary }),

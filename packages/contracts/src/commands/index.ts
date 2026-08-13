@@ -5,3 +5,4 @@ export * from "./delivery-policy.js";
 export * from "./delivery-appointments.js";
 export * from "./delivery-orders.js";
 export * from "./delivery-tasks.js";
+export * from "./delivery-evidence.js";

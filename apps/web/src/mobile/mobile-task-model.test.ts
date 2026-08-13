@@ -118,7 +118,7 @@ test("detail parsing binds task, order and current employee without expanding ev
   );
 });
 
-test("accepted pickup and return tasks expose only their route-safe next action", () => {
+test("accepted pickup and return tasks expose only start actions; evidence owns completion", () => {
   const pickup = Object.freeze({
     task: Object.freeze({ ...TASK, status: "accepted" as const }),
     order: ORDER,
@@ -137,9 +137,23 @@ test("accepted pickup and return tasks expose only their route-safe next action"
 
   const returnDetail = Object.freeze({
     task: Object.freeze({ ...TASK, status: "accepted" as const, leg: "return" as const }),
-    order: Object.freeze({ ...ORDER, status: "return_in_progress" as const }),
+    order: Object.freeze({ ...ORDER, status: "return_scheduled" as const }),
   });
-  assert.equal(mobileTaskExecutionAction(returnDetail)?.targetStatus, "completed");
+  assert.equal(mobileTaskExecutionAction(returnDetail)?.targetStatus, "return_in_progress");
+  assert.equal(
+    mobileTaskExecutionAction({
+      ...returnDetail,
+      order: { ...returnDetail.order, status: "return_in_progress" },
+    }),
+    null,
+  );
+  assert.equal(
+    mobileTaskExecutionAction({
+      ...pickup,
+      order: { ...ORDER, status: "pickup_in_progress" },
+    }),
+    null,
+  );
   assert.equal(
     mobileTaskExecutionAction({ ...pickup, order: { ...ORDER, status: "at_store" } }),
     null,

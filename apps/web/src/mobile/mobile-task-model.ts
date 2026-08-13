@@ -56,22 +56,12 @@ const EXECUTION_ACTIONS: Readonly<
       label: "开始上门取件",
       hint: "仅记录配送状态，不采集定位或现场证据。",
     }),
-    pickup_in_progress: Object.freeze({
-      targetStatus: "picked_up",
-      label: "确认已取到衣物",
-      hint: "确认后该取件任务将按订单真源完成。",
-    }),
   }),
   return: Object.freeze({
     return_scheduled: Object.freeze({
       targetStatus: "return_in_progress",
       label: "开始送回",
       hint: "仅记录配送状态，不采集定位或现场证据。",
-    }),
-    return_in_progress: Object.freeze({
-      targetStatus: "completed",
-      label: "确认已送回",
-      hint: "确认后订单与当前返件任务将按服务端规则收口。",
     }),
   }),
 });

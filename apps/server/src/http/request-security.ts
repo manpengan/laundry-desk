@@ -168,7 +168,7 @@ function hasAllowedContentType(input: RequestSecurityInput): boolean {
   const path = input.url?.split("?", 1)[0];
   return (
     input.method === "POST" &&
-    path === "/api/v2/photos" &&
+    (path === "/api/v2/photos" || path === "/api/v2/delivery-evidence/attachments") &&
     (type === "image/jpeg" || type === "image/png" || type === "image/webp")
   );
 }

@@ -144,6 +144,8 @@ test("runtime bus registers the complete member command and query surface", asyn
   for (const name of ["delivery.task.get", "delivery.tasks.list"]) {
     assert.ok(bus.registeredQueries.includes(name), name);
   }
+  assert.ok(bus.registered.includes("delivery.evidence.record"));
+  assert.ok(bus.registeredQueries.includes("delivery.evidence.list"));
   for (const name of [
     "member.benefit_definition.upsert",
     "member.membership.set",

@@ -4,6 +4,7 @@ import { createHttpQueryClient } from "../commands/query-client.js";
 import type { AppPorts, HealthResult } from "./types.js";
 import { createBrowserResumePort } from "./browser-resume-port.js";
 import { createHttpPhotoPort } from "./photo-port.js";
+import { createHttpDeliveryEvidenceMediaPort } from "./delivery-evidence-port.js";
 
 export type BrowserPortsOptions = Readonly<{
   apiBaseUrl: string;
@@ -86,6 +87,12 @@ export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
     command,
     query,
     photo: createHttpPhotoPort({
+      apiBaseUrl: base,
+      fetchImpl,
+      getAccessToken: credentialStore.getAccessToken,
+      readCsrf: credentialStore.readCsrf,
+    }),
+    deliveryEvidence: createHttpDeliveryEvidenceMediaPort({
       apiBaseUrl: base,
       fetchImpl,
       getAccessToken: credentialStore.getAccessToken,

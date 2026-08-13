@@ -36,9 +36,7 @@ import * as notificationRuntime from "./runtime-notification.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import { acquirePgBusinessDayLock } from "../workday/business-day-lock.js";
-import type { PhotoHandlerDeps } from "../photo/handlers.js";
 import { createMemoryPhotoStore } from "../photo/memory-store.js";
-import { preparePgPhotoDeps } from "../photo/runtime-files.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import { createPgPendingActionStore } from "../pending-actions/pg-store.js";
 import { processStepUpProofStore } from "../policy/step-up-proof-store.js";
@@ -71,7 +69,11 @@ import * as recon from "./runtime-reconciliation.js";
 import type { LocalRuntime } from "./runtime-types.js";
 import { createMemoryMemberRuntimes, createPgMemberRuntimes } from "./runtime-member-benefits.js";
 import { buildIdentityDeps } from "./runtime-identity.js";
-import { createMemoryDeliveryRuntimes, createPgDeliveryRuntimes } from "./runtime-delivery.js";
+import {
+  createMemoryDeliveryRuntimes,
+  createPgDeliveryRuntimes,
+  preparePgDeliveryMedia,
+} from "./runtime-delivery.js";
 import {
   closeFailedPgPool,
   defaultPgRuntimeDependencies,
@@ -177,6 +179,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     deliveryAppointments: delivery.appointments,
     deliveryOrders: delivery.orders,
     deliveryTasks: delivery.tasks,
+    deliveryEvidence: delivery.evidence,
     order: Object.freeze({
       store: orderStore,
       pricing: pricingStore,
@@ -242,14 +245,17 @@ export async function createPgLocalRuntime(
   const spoolDir = parseLocalPrintSpoolDir(env);
   const printSpool = spoolDir === null ? null : await createFileSpool({ rootPath: spoolDir });
   const appPool = dependencies.createPool({ connectionString });
+  const photoRootPath = parseLocalPhotoStoreDir(env);
+  const delivery = createPgDeliveryRuntimes(appPool);
   let pgStaffDirectory: readonly LocalStaffDirectoryEntry[];
-  let photo: PhotoHandlerDeps;
+  let deliveryMedia: Awaited<ReturnType<typeof preparePgDeliveryMedia>>;
   try {
     await dependencies.assertReady(appPool, expectedDemoOnly);
     pgStaffDirectory = freezeStaffDirectory(await dependencies.loadStaffDirectory(appPool));
-    photo = await preparePgPhotoDeps(
+    deliveryMedia = await preparePgDeliveryMedia(
       appPool,
-      parseLocalPhotoStoreDir(env),
+      photoRootPath,
+      delivery.evidence,
       LOCAL_PROFILE.orgId,
       LOCAL_PROFILE.storeId,
     );
@@ -265,7 +271,6 @@ export async function createPgLocalRuntime(
   const customerProfileStore = createPgCustomerProfileStore(appPool, {
     orgId: LOCAL_PROFILE.orgId,
   });
-  const delivery = createPgDeliveryRuntimes(appPool);
   const statsSource = createPgStatsQuery(appPool);
   const shiftStore = createPgShiftStore(appPool, {
     orgId: LOCAL_PROFILE.orgId,
@@ -304,6 +309,7 @@ export async function createPgLocalRuntime(
     deliveryAppointments: delivery.appointments,
     deliveryOrders: delivery.orders,
     deliveryTasks: delivery.tasks,
+    deliveryEvidence: deliveryMedia.evidence,
     order: Object.freeze({
       store: orderStore,
       pricing: pricingStore,
@@ -350,7 +356,7 @@ export async function createPgLocalRuntime(
     reconciliation: recon.createPgReconciliationDeps(),
     accounting: ownerOperations.createPgAccountingDeps(accountingSource),
     reporting: createPgReportingDeps(accountingSource, LOCAL_PROFILE.timezone),
-    photo,
+    photo: deliveryMedia.photo,
     fulfillment: createPgFulfillmentRuntime(appPool, {
       order: orderStore,
       timeZone: LOCAL_PROFILE.timezone,

@@ -43,6 +43,8 @@ export { DeliveryPolicyConfirmationSummarySchema } from "./delivery-policy-confi
 export type { DeliveryPolicyConfirmationSummary } from "./delivery-policy-confirmation.js";
 export { DeliveryTaskConfirmationSummarySchema } from "./delivery-task-confirmation.js";
 export type { DeliveryTaskConfirmationSummary } from "./delivery-task-confirmation.js";
+export { DeliveryEvidenceConfirmationSummarySchema } from "./delivery-evidence-confirmation.js";
+export type { DeliveryEvidenceConfirmationSummary } from "./delivery-evidence-confirmation.js";
 export {
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,

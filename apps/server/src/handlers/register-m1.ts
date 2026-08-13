@@ -29,6 +29,10 @@ import {
   registerDeliveryTaskCommandHandlers,
   registerDeliveryTaskQueryHandlers,
 } from "../delivery-tasks/handlers.js";
+import {
+  registerDeliveryEvidenceCommandHandlers,
+  registerDeliveryEvidenceQueryHandlers,
+} from "../delivery-evidence/handlers.js";
 import { registerOrderCommandHandlers, registerOrderQueryHandlers } from "../order/handlers.js";
 import {
   registerFulfillmentCommandHandlers,
@@ -124,6 +128,11 @@ export function registerM1Handlers(
       "delivery.task.transfer",
       "delivery.task.takeover",
     );
+  }
+
+  if (deps.deliveryEvidence !== undefined) {
+    registerDeliveryEvidenceCommandHandlers(registry, deps.deliveryEvidence);
+    registered.push("delivery.evidence.record");
   }
 
   // ADR-15: price maintenance is a command; the query side stays read-only.
@@ -272,6 +281,11 @@ export function registerM1QueryHandlers(
   if (deps.deliveryTasks !== undefined) {
     registerDeliveryTaskQueryHandlers(queryRegistry, deps.deliveryTasks);
     names.push("delivery.task.get", "delivery.tasks.list");
+  }
+
+  if (deps.deliveryEvidence !== undefined) {
+    registerDeliveryEvidenceQueryHandlers(queryRegistry, deps.deliveryEvidence);
+    names.push("delivery.evidence.list");
   }
 
   if (deps.catalog !== undefined) {

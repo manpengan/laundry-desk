@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD-}"
       LAUNDRY_APP_PASSWORD: "${LAUNDRY_APP_PASSWORD-}"
     ports:
-      - "127.0.0.1:8543:5432"
+      - "127.0.0.1:${LAUNDRY_PG_HOST_PORT-8543}:5432"
     volumes:
       - ./bootstrap-roles.sh:/docker-entrypoint-initdb.d/00-bootstrap-roles.sh:ro
       - pgdata-v2:/var/lib/postgresql/data

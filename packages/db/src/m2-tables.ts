@@ -21,6 +21,9 @@ export const M2_DELIVERY_TABLE_NAMES = Object.freeze([
   "delivery_appointments",
   "delivery_orders",
   "delivery_tasks",
+  "delivery_evidence_attachments",
+  "delivery_evidence_events",
+  "delivery_evidence_attachment_links",
 ] as const);
 
 export const M2_PAYMENT_TABLE_NAMES = Object.freeze(["payments"] as const);
