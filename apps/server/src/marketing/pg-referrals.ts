@@ -318,21 +318,10 @@ async function issueReferral(
       input.at.toISOString(),
     ],
   );
-  await client.query(
-    `INSERT INTO campaign_budget_ledger
-         (id, org_id, store_id, campaign_id, kind, source_id, amount_cents, staff_id, at)
-       VALUES ($1,$2,$3,$4,'coupon_issue',$5,$6,$7,$8)`,
-    [
-      newId(),
-      tenant.orgId,
-      tenant.storeId,
-      input.campaign_id,
-      rewardId,
-      resolved.authority.coupon_discount_cents,
-      tenant.staffId,
-      input.at.toISOString(),
-    ],
-  );
+  await client.query("SELECT public.append_referral_budget_ledger($1::uuid, $2::uuid)", [
+    newId(),
+    rewardId,
+  ]);
   const row = inserted.rows[0];
   if (row === undefined) throw new Error("referral reward insert returned no row");
   return Object.freeze({ ok: true, reward: wireReferralReward(row, false) });

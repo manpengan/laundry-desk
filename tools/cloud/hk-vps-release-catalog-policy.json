@@ -292,8 +292,8 @@
     },
     "0063_referral_and_group_buy.sql": {
       "database_restored_catalog": {
-        "entries": 1676,
-        "sha256": "76ab7d22d37192c773a8c7772501fa743f60597b0ffb87e801002e803484d5fc"
+        "entries": 1679,
+        "sha256": "30d1be851def20787905e08b56648a6a26bc57b84e5aa2c4ec0ffcb14b850b11"
       },
       "cluster_bootstrap_contract": {
         "stable": {
@@ -308,8 +308,8 @@
     },
     "0064_byok_model_registry.sql": {
       "database_restored_catalog": {
-        "entries": 1712,
-        "sha256": "efa9d6f3efecc84df7262494118d5f8fb15f47510b5f13676df02d6f05bb5298"
+        "entries": 1715,
+        "sha256": "84807a7b2574c5532f0e7b42880c93eb899dccb28fd9f6118e4a2f5853d0e6bd"
       },
       "cluster_bootstrap_contract": {
         "stable": {
@@ -324,8 +324,8 @@
     },
     "0065_ai_streaming_sessions.sql": {
       "database_restored_catalog": {
-        "entries": 1798,
-        "sha256": "138e168a4083656ed068c7e0b70a48a928915724b44ef941709ad7f9730f93fb"
+        "entries": 1801,
+        "sha256": "afd86d3002d3722f1f310b67ffd71d2d1c52c7f8f93015fcce035071df3685be"
       },
       "cluster_bootstrap_contract": {
         "stable": {
@@ -340,8 +340,8 @@
     },
     "0066_ai_safety_metering.sql": {
       "database_restored_catalog": {
-        "entries": 1855,
-        "sha256": "766c6962e9aaf8a79e8cae81f826fabe37765185d16bc96c21cfc022d0fe1e90"
+        "entries": 1858,
+        "sha256": "6c0497f8ec295207ab4bdb0582774cfff0b614217b5d75531df200546720de8f"
       },
       "cluster_bootstrap_contract": {
         "stable": {
@@ -356,8 +356,8 @@
     },
     "0067_readonly_ai_assistant.sql": {
       "database_restored_catalog": {
-        "entries": 1858,
-        "sha256": "c895e1a57d3c76d1e20db68a98906f1ce398c3b8514157a648db0b0153849ead"
+        "entries": 1861,
+        "sha256": "2f1d42088d6fd30b5f347c9d0045eee0165bdad64c7513044dddd639c0b8e995"
       },
       "cluster_bootstrap_contract": {
         "stable": {
@@ -372,8 +372,8 @@
     },
     "0068_ai_approval_center.sql": {
       "database_restored_catalog": {
-        "entries": 1881,
-        "sha256": "47e9a3c9402a956f42c0335a4bf3e4b15d0c6829eb6bac8e0c0d9ae6f61a7840"
+        "entries": 1884,
+        "sha256": "353eef4e1ece499d1d6e7aeabdef346b0382128087fa07f24a84566f40dfd4b1"
       },
       "cluster_bootstrap_contract": {
         "stable": {
@@ -388,8 +388,8 @@
     },
     "0069_bounded_automation.sql": {
       "database_restored_catalog": {
-        "entries": 1932,
-        "sha256": "50b01b0beb8ef0a539bd8ed778e0fcd962105b068fbb0fa5bb3c715374f68f15"
+        "entries": 1935,
+        "sha256": "fec12c686ebfa2437aeb628ca62e5c309d612e6315287f7577e7f9a1eebeae9a"
       },
       "cluster_bootstrap_contract": {
         "stable": {

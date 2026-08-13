@@ -33,6 +33,8 @@ type Fixture = Readonly<{
   taskId: string;
   successorTaskId: string;
   cancelTaskId: string;
+  deliveryEvidenceId: string;
+  deliveryPhotoId: string;
 }>;
 
 function fixture(): Fixture {
@@ -48,6 +50,8 @@ function fixture(): Fixture {
     taskId: randomUUID(),
     successorTaskId: randomUUID(),
     cancelTaskId: randomUUID(),
+    deliveryEvidenceId: randomUUID(),
+    deliveryPhotoId: randomUUID(),
   });
 }
 
@@ -69,6 +73,62 @@ function rejectsWith(code: string, message: RegExp) {
     assert.match(String(pgError.message), message);
     return true;
   };
+}
+
+async function seedPickupCompletionEvidence(pool: PgPool, rows: Fixture): Promise<void> {
+  await withAppTransaction(pool, PG_TEST_STAFF_B_ID, async (client) => {
+    await client.query(
+      `INSERT INTO delivery_evidence_attachments (
+         id, org_id, store_id, delivery_order_id, delivery_task_id, leg,
+         delivery_task_version, assignee_staff_id, kind, storage_key, content_type,
+         content_sha256, byte_size, captured_at, expires_at, created_at, created_by_staff_id
+       ) VALUES (
+         $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,'pickup',2,$6::uuid,'photo',$7,
+         'image/jpeg',$8,1,now(),now(),now(),$6::uuid
+       )`,
+      [
+        rows.deliveryPhotoId,
+        DEMO_ORG_ID,
+        DEMO_STORE_ID,
+        rows.pickupOrderId,
+        rows.successorTaskId,
+        PG_TEST_STAFF_B_ID,
+        `delivery-${rows.deliveryPhotoId}.jpg`,
+        "a".repeat(64),
+      ],
+    );
+    await client.query(
+      `INSERT INTO delivery_evidence_events (
+         id, org_id, store_id, delivery_order_id, delivery_task_id, leg,
+         delivery_task_version, assignee_staff_id, event_kind, outcome, captured_at,
+         latitude_e7, longitude_e7, accuracy_mm, gps_captured_at, recorded_at,
+         recorded_by_staff_id
+       ) VALUES (
+         $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,'pickup',2,$6::uuid,
+         'pickup','complete_leg',now(),251234567,1215678901,3000,now(),now(),$6::uuid
+       )`,
+      [
+        rows.deliveryEvidenceId,
+        DEMO_ORG_ID,
+        DEMO_STORE_ID,
+        rows.pickupOrderId,
+        rows.successorTaskId,
+        PG_TEST_STAFF_B_ID,
+      ],
+    );
+    await client.query(
+      `INSERT INTO delivery_evidence_attachment_links (
+         org_id, store_id, delivery_evidence_id, attachment_id, linked_at, linked_by_staff_id
+       ) VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,now(),$5::uuid)`,
+      [
+        DEMO_ORG_ID,
+        DEMO_STORE_ID,
+        rows.deliveryEvidenceId,
+        rows.deliveryPhotoId,
+        PG_TEST_STAFF_B_ID,
+      ],
+    );
+  });
 }
 
 async function seed(adminPool: PgPool, rows: Fixture): Promise<void> {
@@ -132,6 +192,16 @@ async function cleanup(adminPool: PgPool, rows: Fixture): Promise<void> {
   try {
     await client.query("BEGIN");
     await client.query("SET LOCAL session_replication_role = 'replica'");
+    await client.query(
+      "DELETE FROM delivery_evidence_attachment_links WHERE delivery_evidence_id = $1::uuid",
+      [rows.deliveryEvidenceId],
+    );
+    await client.query("DELETE FROM delivery_evidence_events WHERE id = $1::uuid", [
+      rows.deliveryEvidenceId,
+    ]);
+    await client.query("DELETE FROM delivery_evidence_attachments WHERE id = $1::uuid", [
+      rows.deliveryPhotoId,
+    ]);
     await client.query("DELETE FROM delivery_tasks WHERE delivery_order_id = ANY($1::uuid[])", [
       [rows.pickupOrderId, rows.cancelOrderId],
     ]);
@@ -280,17 +350,25 @@ test(
           }),
         rejectsWith("23514", /requires accepted assignee task/iu),
       );
-      for (const status of ["pickup_in_progress", "picked_up"] as const) {
-        await withAppTransaction(appPool, PG_TEST_STAFF_B_ID, async (client) => {
-          const updated = await client.query(
-            `UPDATE delivery_orders SET status = $4, version = version + 1,
-               updated_by_staff_id = $5::uuid
-             WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid`,
-            [DEMO_ORG_ID, DEMO_STORE_ID, rows.pickupOrderId, status, PG_TEST_STAFF_B_ID],
-          );
-          assert.equal(updated.rowCount, 1);
-        });
-      }
+      await withAppTransaction(appPool, PG_TEST_STAFF_B_ID, async (client) => {
+        const updated = await client.query(
+          `UPDATE delivery_orders SET status = 'pickup_in_progress', version = version + 1,
+             updated_by_staff_id = $4::uuid
+           WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid`,
+          [DEMO_ORG_ID, DEMO_STORE_ID, rows.pickupOrderId, PG_TEST_STAFF_B_ID],
+        );
+        assert.equal(updated.rowCount, 1);
+      });
+      await seedPickupCompletionEvidence(appPool, rows);
+      await withAppTransaction(appPool, PG_TEST_STAFF_B_ID, async (client) => {
+        const updated = await client.query(
+          `UPDATE delivery_orders SET status = 'picked_up', version = version + 1,
+             updated_by_staff_id = $4::uuid
+           WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid`,
+          [DEMO_ORG_ID, DEMO_STORE_ID, rows.pickupOrderId, PG_TEST_STAFF_B_ID],
+        );
+        assert.equal(updated.rowCount, 1);
+      });
       const completed = await store.get(DEMO_ORG_ID, DEMO_STORE_ID, rows.successorTaskId);
       assert.equal(completed?.status, "completed");
       assert.notEqual(completed?.completed_at, null);

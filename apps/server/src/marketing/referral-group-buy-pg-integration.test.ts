@@ -13,6 +13,7 @@ const ID = Object.freeze({
   org: "91000000-0000-4000-8000-000000000001",
   store: "91000000-0000-4000-8000-000000000002",
   staff: "91000000-0000-4000-8000-000000000003",
+  staffRole: "91000000-0000-4000-8000-000000000017",
   referrer: "91000000-0000-4000-8000-000000000004",
   referred: "91000000-0000-4000-8000-000000000005",
   referrerAccount: "91000000-0000-4000-8000-000000000006",
@@ -48,6 +49,7 @@ async function cleanup(client: PgPoolClient): Promise<void> {
     await client.query("DELETE FROM coupons WHERE org_id=$1::uuid", [ID.org]);
     await client.query("DELETE FROM member_accounts WHERE org_id=$1::uuid", [ID.org]);
     await client.query("DELETE FROM customers WHERE org_id=$1::uuid", [ID.org]);
+    await client.query("DELETE FROM staff_store_roles WHERE org_id=$1::uuid", [ID.org]);
     await client.query("DELETE FROM staffs WHERE org_id=$1::uuid", [ID.org]);
     await client.query("DELETE FROM stores WHERE org_id=$1::uuid", [ID.org]);
     await client.query("DELETE FROM orgs WHERE id=$1::uuid", [ID.org]);
@@ -76,6 +78,12 @@ async function seed(client: PgPoolClient, now: Date): Promise<void> {
      VALUES ($1,$2,'item9-admin','test-only-not-authenticated',NULL,
              'Item 9 Admin',true,1,$3,$3)`,
     [ID.staff, ID.org, now],
+  );
+  await client.query(
+    `INSERT INTO staff_store_roles
+       (id, org_id, store_id, staff_id, role, is_active, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,'admin',true,$5,$5)`,
+    [ID.staffRole, ID.org, ID.store, ID.staff, now],
   );
   await client.query(
     `INSERT INTO customers (id, org_id, phone, name, note, created_at, updated_at)

@@ -318,6 +318,41 @@ BEGIN
 END;
 $$;
 
+-- The application cannot write the shared budget ledger directly. This exact
+-- capability derives every authority field from the just-created referral row;
+-- callers provide only the server-generated ledger and reward identifiers.
+CREATE OR REPLACE FUNCTION public.append_referral_budget_ledger(
+  requested_ledger_id uuid,
+  requested_reward_id uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  actor_id uuid := NULLIF(current_setting('app.staff_id', true), '')::uuid;
+  tenant_org_id uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
+  tenant_store_id uuid := NULLIF(current_setting('app.store_id', true), '')::uuid;
+  reward_row public.referral_rewards%ROWTYPE;
+BEGIN
+  PERFORM public.assert_marketing_actor(tenant_org_id, tenant_store_id, actor_id);
+  SELECT * INTO reward_row
+    FROM public.referral_rewards reward
+   WHERE reward.org_id = tenant_org_id AND reward.store_id = tenant_store_id
+     AND reward.id = requested_reward_id AND reward.created_by_staff_id = actor_id
+   FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE insufficient_privilege USING MESSAGE = 'MARKETING_REFERRAL_LEDGER_UNAVAILABLE';
+  END IF;
+  INSERT INTO public.campaign_budget_ledger
+    (id, org_id, store_id, campaign_id, kind, source_id, amount_cents, staff_id, at)
+  VALUES
+    (requested_ledger_id, reward_row.org_id, reward_row.store_id, reward_row.campaign_id,
+     'coupon_issue', reward_row.id, reward_row.reward_cents, actor_id, statement_timestamp());
+END;
+$$;
+
 CREATE TRIGGER referral_rewards_guard_trg BEFORE INSERT ON public.referral_rewards
   FOR EACH ROW EXECUTE FUNCTION public.guard_referral_reward();
 CREATE CONSTRAINT TRIGGER referral_rewards_complete_trg AFTER INSERT ON public.referral_rewards
@@ -373,3 +408,5 @@ REVOKE ALL ON FUNCTION public.guard_referral_reward_complete() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.guard_group_buy_voucher() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.guard_group_buy_redemption() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.guard_marketing_budget_ledger() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.append_referral_budget_ledger(uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.append_referral_budget_ledger(uuid, uuid) TO laundry_app;

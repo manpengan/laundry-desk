@@ -29,6 +29,18 @@ describe("0063 referral and group-buy migration", () => {
     );
     expect(migration).toMatch(/source_count <> 1/iu);
     expect(migration).toMatch(/COALESCE\(batch_amount, referral_amount\)/iu);
+    expect(migration).toMatch(
+      /CREATE OR REPLACE FUNCTION public\.append_referral_budget_ledger\([\s\S]*SECURITY DEFINER/iu,
+    );
+    expect(migration).toMatch(
+      /reward\.created_by_staff_id = actor_id[\s\S]*INSERT INTO public\.campaign_budget_ledger/iu,
+    );
+    expect(migration).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.append_referral_budget_ledger\(uuid, uuid\) TO laundry_app/iu,
+    );
+    expect(migration).not.toMatch(
+      /GRANT[^;]*INSERT[^;]*campaign_budget_ledger[^;]*TO laundry_app/iu,
+    );
   });
 
   it("stores no bearer code and atomically binds one voucher to one order", () => {

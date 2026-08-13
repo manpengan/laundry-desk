@@ -36,6 +36,9 @@ type Fixture = Readonly<{
   badAppointmentId: string;
   deliveryOrderId: string;
   deliveryTaskId: string;
+  deliveryEvidenceId: string;
+  deliveryPhotoId: string;
+  deliverySignatureId: string;
 }>;
 
 function fixture(): Fixture {
@@ -53,6 +56,9 @@ function fixture(): Fixture {
     badAppointmentId: randomUUID(),
     deliveryOrderId: randomUUID(),
     deliveryTaskId: randomUUID(),
+    deliveryEvidenceId: randomUUID(),
+    deliveryPhotoId: randomUUID(),
+    deliverySignatureId: randomUUID(),
   });
 }
 
@@ -68,6 +74,69 @@ function rejectsWith(code: string, message: RegExp) {
     assert.match(String(pgError.message), message);
     return true;
   };
+}
+
+async function seedReturnCompletionEvidence(pool: PgPool, rows: Fixture): Promise<void> {
+  await withAppTransaction(pool, async (client) => {
+    for (const [attachmentId, kind] of [
+      [rows.deliveryPhotoId, "photo"],
+      [rows.deliverySignatureId, "signature"],
+    ] as const) {
+      await client.query(
+        `INSERT INTO delivery_evidence_attachments (
+           id, org_id, store_id, delivery_order_id, delivery_task_id, leg,
+           delivery_task_version, assignee_staff_id, kind, storage_key, content_type,
+           content_sha256, byte_size, captured_at, expires_at, created_at, created_by_staff_id
+         ) VALUES (
+           $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,'return',2,$6::uuid,$7,$8,
+           'image/jpeg',$9,1,now(),now(),now(),$6::uuid
+         )`,
+        [
+          attachmentId,
+          DEMO_ORG_ID,
+          DEMO_STORE_ID,
+          rows.deliveryOrderId,
+          rows.deliveryTaskId,
+          DEMO_STAFF_A_ID,
+          kind,
+          `delivery-${attachmentId}.jpg`,
+          kind === "photo" ? "a".repeat(64) : "b".repeat(64),
+        ],
+      );
+    }
+    await client.query(
+      `INSERT INTO delivery_evidence_events (
+         id, org_id, store_id, delivery_order_id, delivery_task_id, leg,
+         delivery_task_version, assignee_staff_id, event_kind, outcome, captured_at,
+         latitude_e7, longitude_e7, accuracy_mm, gps_captured_at, recorded_at,
+         recorded_by_staff_id
+       ) VALUES (
+         $1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::uuid,'return',2,$6::uuid,
+         'delivered','complete_leg',now(),251234567,1215678901,3000,now(),now(),$6::uuid
+       )`,
+      [
+        rows.deliveryEvidenceId,
+        DEMO_ORG_ID,
+        DEMO_STORE_ID,
+        rows.deliveryOrderId,
+        rows.deliveryTaskId,
+        DEMO_STAFF_A_ID,
+      ],
+    );
+    await client.query(
+      `INSERT INTO delivery_evidence_attachment_links (
+         org_id, store_id, delivery_evidence_id, attachment_id, linked_at, linked_by_staff_id
+       ) SELECT $1::uuid,$2::uuid,$3::uuid,attachment_id,now(),$4::uuid
+           FROM unnest($5::uuid[]) AS attachment_id`,
+      [
+        DEMO_ORG_ID,
+        DEMO_STORE_ID,
+        rows.deliveryEvidenceId,
+        DEMO_STAFF_A_ID,
+        [rows.deliveryPhotoId, rows.deliverySignatureId],
+      ],
+    );
+  });
 }
 
 async function seed(adminPool: PgPool, rows: Fixture): Promise<void> {
@@ -198,6 +267,16 @@ async function cleanup(adminPool: PgPool, rows: Fixture, deliveryBefore: boolean
   try {
     await client.query("BEGIN");
     await client.query("SET LOCAL session_replication_role = 'replica'");
+    await client.query(
+      "DELETE FROM delivery_evidence_attachment_links WHERE delivery_evidence_id = $1::uuid",
+      [rows.deliveryEvidenceId],
+    );
+    await client.query("DELETE FROM delivery_evidence_events WHERE id = $1::uuid", [
+      rows.deliveryEvidenceId,
+    ]);
+    await client.query("DELETE FROM delivery_evidence_attachments WHERE id = ANY($1::uuid[])", [
+      [rows.deliveryPhotoId, rows.deliverySignatureId],
+    ]);
     await client.query("DELETE FROM delivery_tasks WHERE delivery_order_id = $1::uuid", [
       rows.deliveryOrderId,
     ]);
@@ -436,6 +515,8 @@ test(
         at: Math.floor(Date.now() / 1_000),
       });
       assert.equal(inProgress.ok && inProgress.delivery_order.status, "return_in_progress");
+
+      await seedReturnCompletionEvidence(appPool, rows);
 
       await assert.rejects(
         () =>

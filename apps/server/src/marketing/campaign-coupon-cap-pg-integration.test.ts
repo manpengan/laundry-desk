@@ -3,7 +3,6 @@ import test from "node:test";
 
 import { createPgPool, resolvePgUrls, type PgPoolClient } from "../db/pg-pool.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
-import { LOCAL_PROFILE } from "../local/profile.js";
 import { audienceDigest } from "./audience.js";
 import { couponIssueConfirmationSummary } from "./coupon-authority.js";
 import { createPgMarketingStore } from "./pg-store.js";
@@ -13,6 +12,9 @@ const enabled =
 const urls = enabled ? resolvePgUrls(process.env) : null;
 
 const IDS = Object.freeze({
+  org: "80000000-0000-4000-8000-000000000001",
+  store: "80000000-0000-4000-8000-000000000002",
+  staff: "80000000-0000-4000-8000-000000000003",
   customerA: "81000000-0000-4000-8000-000000000001",
   customerB: "81000000-0000-4000-8000-000000000002",
   accountA: "82000000-0000-4000-8000-000000000001",
@@ -29,9 +31,9 @@ const IDS = Object.freeze({
   budget: "89000000-0000-4000-8000-000000000001",
 });
 const TENANT: TenantContext = Object.freeze({
-  orgId: LOCAL_PROFILE.orgId,
-  storeId: LOCAL_PROFILE.storeId,
-  staffId: LOCAL_PROFILE.adminStaffId,
+  orgId: IDS.org,
+  storeId: IDS.store,
+  staffId: IDS.staff,
 });
 
 async function seedTenant(client: PgPoolClient): Promise<void> {
@@ -40,13 +42,13 @@ async function seedTenant(client: PgPoolClient): Promise<void> {
     `INSERT INTO orgs (id, code, name, created_at, updated_at)
      VALUES ($1,'item8_pg','Item 8 PG',$2,$2)
      ON CONFLICT DO NOTHING`,
-    [LOCAL_PROFILE.orgId, now],
+    [IDS.org, now],
   );
   await client.query(
     `INSERT INTO stores (id, org_id, code, name, timezone, created_at, updated_at)
      VALUES ($1,$2,'main','Item 8 PG','Asia/Taipei',$3,$3)
      ON CONFLICT DO NOTHING`,
-    [LOCAL_PROFILE.storeId, LOCAL_PROFILE.orgId, now],
+    [IDS.store, IDS.org, now],
   );
   await client.query(
     `INSERT INTO staffs
@@ -54,7 +56,7 @@ async function seedTenant(client: PgPoolClient): Promise<void> {
         is_active, permission_version, created_at, updated_at)
      VALUES ($1,$2,'item8-admin','test-only-not-authenticated',NULL,'Item 8 Admin',true,1,$3,$3)
      ON CONFLICT DO NOTHING`,
-    [LOCAL_PROFILE.adminStaffId, LOCAL_PROFILE.orgId, now],
+    [IDS.staff, IDS.org, now],
   );
 }
 
@@ -64,20 +66,12 @@ async function seedAuthority(client: PgPoolClient): Promise<string> {
     `INSERT INTO customers (id, org_id, phone, name, note, created_at, updated_at)
      VALUES ($1,$3,'19900000081','Campaign Cap A',NULL,$4,$4),
             ($2,$3,'19900000082','Campaign Cap B',NULL,$4,$4)`,
-    [IDS.customerA, IDS.customerB, LOCAL_PROFILE.orgId, now],
+    [IDS.customerA, IDS.customerB, IDS.org, now],
   );
   await client.query(
     `INSERT INTO member_accounts (id, org_id, customer_id, status, opened_at, opened_store_id)
      VALUES ($1,$3,$4,'active',$7,$6), ($2,$3,$5,'active',$7,$6)`,
-    [
-      IDS.accountA,
-      IDS.accountB,
-      LOCAL_PROFILE.orgId,
-      IDS.customerA,
-      IDS.customerB,
-      LOCAL_PROFILE.storeId,
-      now,
-    ],
+    [IDS.accountA, IDS.accountB, IDS.org, IDS.customerA, IDS.customerB, IDS.store, now],
   );
   await client.query(
     `INSERT INTO coupons
@@ -87,7 +81,7 @@ async function seedAuthority(client: PgPoolClient): Promise<string> {
              'active',1,$5,$3,NULL),
             ($4,$2,'campaign_cap_pg_b','Campaign cap PG B',500,0,30,
              'active',1,$5,$3,NULL)`,
-    [IDS.coupon, LOCAL_PROFILE.orgId, LOCAL_PROFILE.adminStaffId, IDS.couponB, now],
+    [IDS.coupon, IDS.org, IDS.staff, IDS.couponB, now],
   );
   await client.query(
     `INSERT INTO campaigns
@@ -98,19 +92,12 @@ async function seedAuthority(client: PgPoolClient): Promise<string> {
              $5::timestamptz - interval '1 day', $5::timestamptz + interval '1 day',
              '{"customer_age":{"kind":"any"},"membership":{"kind":"any"},"order_activity":{"kind":"any"}}'::jsonb,
              $6,2,1000,1,$4,$5,$4,$5)`,
-    [
-      IDS.campaign,
-      LOCAL_PROFILE.orgId,
-      LOCAL_PROFILE.storeId,
-      LOCAL_PROFILE.adminStaffId,
-      now,
-      "a".repeat(64),
-    ],
+    [IDS.campaign, IDS.org, IDS.store, IDS.staff, now, "a".repeat(64)],
   );
   const campaignAuthority = await client.query<Readonly<{ audience_rule_sha256: string }>>(
     `SELECT audience_rule_sha256 FROM campaigns
       WHERE org_id=$1::uuid AND store_id=$2::uuid AND id=$3::uuid`,
-    [LOCAL_PROFILE.orgId, LOCAL_PROFILE.storeId, IDS.campaign],
+    [IDS.org, IDS.store, IDS.campaign],
   );
   const ruleDigest = campaignAuthority.rows[0]?.audience_rule_sha256;
   if (ruleDigest === undefined) throw new Error("campaign rule digest unavailable");
@@ -126,15 +113,7 @@ async function seedAuthority(client: PgPoolClient): Promise<string> {
              (SELECT audience_rule_sha256 FROM campaigns
                WHERE org_id=$2 AND store_id=$3 AND id=$4),
              $7,2,$5,$6)`,
-    [
-      IDS.snapshot,
-      LOCAL_PROFILE.orgId,
-      LOCAL_PROFILE.storeId,
-      IDS.campaign,
-      LOCAL_PROFILE.adminStaffId,
-      now,
-      frozenAudienceDigest,
-    ],
+    [IDS.snapshot, IDS.org, IDS.store, IDS.campaign, IDS.staff, now, frozenAudienceDigest],
   );
   await client.query(
     `INSERT INTO coupon_grants
@@ -148,11 +127,11 @@ async function seedAuthority(client: PgPoolClient): Promise<string> {
     [
       IDS.grantA,
       IDS.grantB,
-      LOCAL_PROFILE.orgId,
+      IDS.org,
       IDS.accountA,
-      LOCAL_PROFILE.adminStaffId,
+      IDS.staff,
       IDS.coupon,
-      LOCAL_PROFILE.storeId,
+      IDS.store,
       now,
       IDS.accountB,
     ],
@@ -176,13 +155,13 @@ async function insertCompleteBatch(
              500,0,30,2,1,1,500,'cap test',$8,$9)`,
     [
       IDS.batch,
-      LOCAL_PROFILE.orgId,
-      LOCAL_PROFILE.storeId,
+      IDS.org,
+      IDS.store,
       IDS.campaign,
       IDS.snapshot,
       frozenAudienceDigest,
       IDS.coupon,
-      LOCAL_PROFILE.adminStaffId,
+      IDS.staff,
       now,
     ],
   );
@@ -193,8 +172,8 @@ async function insertCompleteBatch(
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
     [
       IDS.mappingA,
-      LOCAL_PROFILE.orgId,
-      LOCAL_PROFILE.storeId,
+      IDS.org,
+      IDS.store,
       IDS.batch,
       IDS.campaign,
       IDS.snapshot,
@@ -207,15 +186,7 @@ async function insertCompleteBatch(
     `INSERT INTO campaign_budget_ledger
        (id, org_id, store_id, campaign_id, kind, source_id, amount_cents, staff_id, at)
      VALUES ($1,$2,$3,$4,'coupon_issue',$5,500,$6,$7)`,
-    [
-      IDS.budget,
-      LOCAL_PROFILE.orgId,
-      LOCAL_PROFILE.storeId,
-      IDS.campaign,
-      IDS.batch,
-      LOCAL_PROFILE.adminStaffId,
-      now,
-    ],
+    [IDS.budget, IDS.org, IDS.store, IDS.campaign, IDS.batch, IDS.staff, now],
   );
   await client.query("SET CONSTRAINTS ALL IMMEDIATE");
 }
@@ -276,6 +247,9 @@ async function cleanupConcurrencyFixture(client: PgPoolClient): Promise<void> {
     await client.query("DELETE FROM customers WHERE id=ANY($1::uuid[])", [
       [IDS.customerA, IDS.customerB],
     ]);
+    await client.query("DELETE FROM staffs WHERE org_id=$1::uuid", [IDS.org]);
+    await client.query("DELETE FROM stores WHERE org_id=$1::uuid", [IDS.org]);
+    await client.query("DELETE FROM orgs WHERE id=$1::uuid", [IDS.org]);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
@@ -307,8 +281,8 @@ test(
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,statement_timestamp())`,
             [
               IDS.mappingB,
-              LOCAL_PROFILE.orgId,
-              LOCAL_PROFILE.storeId,
+              IDS.org,
+              IDS.store,
               IDS.batch,
               IDS.campaign,
               IDS.snapshot,
