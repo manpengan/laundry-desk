@@ -1,4 +1,5 @@
 import { createHttpAuthClient, type HttpAuthCredentialStore } from "../auth/HttpAuthClient.js";
+import { createHttpApprovalPort } from "../ai/approval-port.js";
 import { createHttpCommandClient } from "../commands/command-client.js";
 import { createHttpQueryClient } from "../commands/query-client.js";
 import type { AppPorts, HealthResult } from "./types.js";
@@ -100,6 +101,12 @@ export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
       readCsrf: credentialStore.readCsrf,
     }),
     ai: createHttpAiPanelPort({
+      apiBaseUrl: base,
+      fetchImpl,
+      getAccessToken: credentialStore.getAccessToken,
+      readCsrf: credentialStore.readCsrf,
+    }),
+    approval: createHttpApprovalPort({
       apiBaseUrl: base,
       fetchImpl,
       getAccessToken: credentialStore.getAccessToken,

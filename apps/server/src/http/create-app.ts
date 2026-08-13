@@ -9,6 +9,10 @@ import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance } from "fastify";
 
 import type { LocalRuntime } from "../local/demo-seed.js";
+import { createApprovalRuntime } from "../approvals/runtime.js";
+import { createApprovalService } from "../approvals/service.js";
+import { registerApprovalRoutes } from "./approval-routes.js";
+import { createApprovalRateLimiter, type ApprovalRateLimiter } from "./approval-rate-limit.js";
 import { registerAuthRoutes } from "./auth-routes.js";
 import type { AuthRouteContext, RouteSecurityContext } from "./auth-route-support.js";
 import { registerBusRoutes } from "./bus-routes.js";
@@ -115,6 +119,7 @@ export type CreateAppOptions = Readonly<{
   aiConversationStore?: AiConversationStore;
   aiSyntheticTool?: SyntheticToolPort;
   aiRateLimiter?: AiRateLimiter;
+  approvalRateLimiter?: ApprovalRateLimiter;
   /** Tests may silence request logs; runtime defaults to the redacted structured logger. */
   logger?: false;
 }>;
@@ -283,6 +288,12 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       tool: options.aiSyntheticTool ?? deterministicSyntheticTool,
     }),
     options.aiRateLimiter ?? createAiRateLimiter(),
+  );
+  registerApprovalRoutes(
+    app,
+    context,
+    createApprovalService(createApprovalRuntime(options.runtime)),
+    options.approvalRateLimiter ?? createApprovalRateLimiter(),
   );
 
   // Artifact download only exists when a spool is configured; the memory

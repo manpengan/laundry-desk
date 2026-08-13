@@ -101,6 +101,11 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
   可显式注入 deterministic fake，并把 tool-use 限定为最多四步的只读 `synthetic.lookup`；真实 provider、
   BYOK 解密、业务查询/写工具和生产启用均不在本 Item。0065 保存最小会话/message/usage/tool-attempt
   状态，以 FORCE RLS、closed function、无 app 直接 DML 与 metadata/hash-only 审计约束数据边界。
+- R4 异步审批中心（[ADR-61](adr/2026-08-13-adr-61-r4-asynchronous-approval-center.md)）：在既有
+  WYSIWYS 确认卡和现场 step-up 之外，新增 store-scoped 单级异步待办。另一 active admin 可在
+  Owner Web 查看完整冻结参数后批准并通过同一命令总线执行，或填写原因驳回；发起人不可自批，
+  hash、实体版本、幂等键、权限版本和有效期任一漂移都会失败关闭。R3 原确认路径保持不变，R5
+  不进入异步审批或 AI 执行；0068 需在统一集成分支的 0065–0067 之后验证和发布。
 
 - BYOK 凭据托管与模型注册表（[ADR-57](adr/2026-08-13-adr-57-byok-custody-model-registry.md)）：
   新增组织隔离的 envelope 加密凭据生命周期，replace/revoke 只经 admin、CSRF、限流与另一管理员 R5

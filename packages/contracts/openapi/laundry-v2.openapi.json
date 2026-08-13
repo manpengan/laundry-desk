@@ -1,6 +1,778 @@
 {
   "components": {
     "schemas": {
+      "AiApprovalDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "type": "object"
+      },
+      "AiApprovalDenial": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_version",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "AiApprovalExecutionResponse": {
+        "additionalProperties": false,
+        "definitions": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "items": {
+                  "$ref": "#/definitions/__schema0"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": {
+                  "$ref": "#/definitions/__schema0"
+                },
+                "type": "object"
+              }
+            ]
+          },
+          "__schema1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "items": {
+                  "$ref": "#/definitions/__schema1"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": {
+                  "$ref": "#/definitions/__schema1"
+                },
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "approval": {
+                "additionalProperties": false,
+                "properties": {
+                  "approval_ref": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "args": {
+                    "$ref": "#/definitions/__schema0"
+                  },
+                  "args_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "command": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[a-z][a-z0-9_.-]*$",
+                    "type": "string"
+                  },
+                  "command_version": {
+                    "maxLength": 32,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "confirm_ref": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "consumed_at_epoch": {
+                    "anyOf": [
+                      {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "created_at_epoch": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "decided_at_epoch": {
+                    "anyOf": [
+                      {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "decided_by_permission_version": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "decided_by_staff_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "decision_reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 500,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "entity_versions": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "entity_id": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "entity_type": {
+                          "maxLength": 64,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "entity_type",
+                        "entity_id",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 100,
+                    "type": "array"
+                  },
+                  "expires_at_epoch": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "idempotency_key": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "requester_staff_id": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "row_version": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "status": {
+                    "enum": [
+                      "pending",
+                      "approved",
+                      "denied",
+                      "expired",
+                      "consumed"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "approval_ref",
+                  "confirm_ref",
+                  "command",
+                  "command_version",
+                  "args",
+                  "args_hash",
+                  "entity_versions",
+                  "idempotency_key",
+                  "requester_staff_id",
+                  "status",
+                  "row_version",
+                  "created_at_epoch",
+                  "expires_at_epoch",
+                  "decided_by_staff_id",
+                  "decided_by_permission_version",
+                  "decided_at_epoch",
+                  "decision_reason",
+                  "consumed_at_epoch"
+                ],
+                "type": "object"
+              },
+              "execution": {
+                "const": "executed",
+                "type": "string"
+              },
+              "result": {
+                "$ref": "#/definitions/__schema1"
+              }
+            },
+            "required": [
+              "approval",
+              "execution",
+              "result"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AiApprovalItemResponse": {
+        "additionalProperties": false,
+        "definitions": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "items": {
+                  "$ref": "#/definitions/__schema0"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": {
+                  "$ref": "#/definitions/__schema0"
+                },
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "approval_ref": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "args": {
+                "$ref": "#/definitions/__schema0"
+              },
+              "args_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "command": {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.-]*$",
+                "type": "string"
+              },
+              "command_version": {
+                "maxLength": 32,
+                "minLength": 1,
+                "type": "string"
+              },
+              "confirm_ref": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "consumed_at_epoch": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "created_at_epoch": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decided_at_epoch": {
+                "anyOf": [
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "decided_by_permission_version": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "decided_by_staff_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "decision_reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "entity_versions": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "entity_id": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "entity_type": {
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "version": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "entity_type",
+                    "entity_id",
+                    "version"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              "expires_at_epoch": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "idempotency_key": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "requester_staff_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "row_version": {
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              "status": {
+                "enum": [
+                  "pending",
+                  "approved",
+                  "denied",
+                  "expired",
+                  "consumed"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "approval_ref",
+              "confirm_ref",
+              "command",
+              "command_version",
+              "args",
+              "args_hash",
+              "entity_versions",
+              "idempotency_key",
+              "requester_staff_id",
+              "status",
+              "row_version",
+              "created_at_epoch",
+              "expires_at_epoch",
+              "decided_by_staff_id",
+              "decided_by_permission_version",
+              "decided_at_epoch",
+              "decision_reason",
+              "consumed_at_epoch"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AiApprovalListResponse": {
+        "additionalProperties": false,
+        "definitions": {
+          "__schema0": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              },
+              {
+                "items": {
+                  "$ref": "#/definitions/__schema0"
+                },
+                "type": "array"
+              },
+              {
+                "additionalProperties": {
+                  "$ref": "#/definitions/__schema0"
+                },
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "items": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "approval_ref": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    "args": {
+                      "$ref": "#/definitions/__schema0"
+                    },
+                    "args_hash": {
+                      "pattern": "^[0-9a-f]{64}$",
+                      "type": "string"
+                    },
+                    "command": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "pattern": "^[a-z][a-z0-9_.-]*$",
+                      "type": "string"
+                    },
+                    "command_version": {
+                      "maxLength": 32,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "confirm_ref": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    "consumed_at_epoch": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "created_at_epoch": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "decided_at_epoch": {
+                      "anyOf": [
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "decided_by_permission_version": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "decided_by_staff_id": {
+                      "anyOf": [
+                        {
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "decision_reason": {
+                      "anyOf": [
+                        {
+                          "maxLength": 500,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "entity_versions": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "entity_id": {
+                            "maxLength": 128,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "entity_type": {
+                            "maxLength": 64,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "version": {
+                            "maximum": 9007199254740991,
+                            "minimum": 0,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "entity_type",
+                          "entity_id",
+                          "version"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 100,
+                      "type": "array"
+                    },
+                    "expires_at_epoch": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "idempotency_key": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    "requester_staff_id": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    "row_version": {
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991,
+                      "type": "integer"
+                    },
+                    "status": {
+                      "enum": [
+                        "pending",
+                        "approved",
+                        "denied",
+                        "expired",
+                        "consumed"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "approval_ref",
+                    "confirm_ref",
+                    "command",
+                    "command_version",
+                    "args",
+                    "args_hash",
+                    "entity_versions",
+                    "idempotency_key",
+                    "requester_staff_id",
+                    "status",
+                    "row_version",
+                    "created_at_epoch",
+                    "expires_at_epoch",
+                    "decided_by_staff_id",
+                    "decided_by_permission_version",
+                    "decided_at_epoch",
+                    "decision_reason",
+                    "consumed_at_epoch"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "items"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AiApprovalRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_ref": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirm_ref"
+        ],
+        "type": "object"
+      },
       "AiEventReplayResponse": {
         "additionalProperties": false,
         "properties": {
@@ -80517,6 +81289,329 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v2/ai/approval-requests": {
+      "get": {
+        "description": "Tenant/store-scoped R4 approval bound to server-frozen args, versions, idempotency and expiry. R5 is excluded.",
+        "operationId": "ai_approval_list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "pending",
+                "history"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiApprovalListResponse"
+                }
+              }
+            },
+            "description": "Successful approval operation"
+          },
+          "403": {
+            "description": "Approval authority denied"
+          },
+          "409": {
+            "description": "Frozen authority or version changed"
+          },
+          "429": {
+            "description": "Approval rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "AI approval list",
+        "tags": [
+          "ai-approval"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "auth",
+        "x-laundry-offline-mode": "forbidden",
+        "x-laundry-risk": "R0",
+        "x-laundry-version": "1.0.0"
+      },
+      "post": {
+        "description": "Tenant/store-scoped R4 approval bound to server-frozen args, versions, idempotency and expiry. R5 is excluded.",
+        "operationId": "ai_approval_submit",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiApprovalItemResponse"
+                }
+              }
+            },
+            "description": "Successful approval operation"
+          },
+          "403": {
+            "description": "Approval authority denied"
+          },
+          "409": {
+            "description": "Frozen authority or version changed"
+          },
+          "429": {
+            "description": "Approval rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "AI approval submit",
+        "tags": [
+          "ai-approval"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "auth",
+        "x-laundry-offline-mode": "forbidden",
+        "x-laundry-risk": "R4",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/api/v2/ai/approval-requests/{approval_ref}": {
+      "get": {
+        "description": "Tenant/store-scoped R4 approval bound to server-frozen args, versions, idempotency and expiry. R5 is excluded.",
+        "operationId": "ai_approval_detail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "approval_ref",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiApprovalItemResponse"
+                }
+              }
+            },
+            "description": "Successful approval operation"
+          },
+          "403": {
+            "description": "Approval authority denied"
+          },
+          "409": {
+            "description": "Frozen authority or version changed"
+          },
+          "429": {
+            "description": "Approval rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "AI approval detail",
+        "tags": [
+          "ai-approval"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "auth",
+        "x-laundry-offline-mode": "forbidden",
+        "x-laundry-risk": "R0",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/api/v2/ai/approval-requests/{approval_ref}/approve": {
+      "post": {
+        "description": "Tenant/store-scoped R4 approval bound to server-frozen args, versions, idempotency and expiry. R5 is excluded.",
+        "operationId": "ai_approval_approve",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "approval_ref",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiApprovalDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiApprovalExecutionResponse"
+                }
+              }
+            },
+            "description": "Successful approval operation"
+          },
+          "403": {
+            "description": "Approval authority denied"
+          },
+          "409": {
+            "description": "Frozen authority or version changed"
+          },
+          "429": {
+            "description": "Approval rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "AI approval approve",
+        "tags": [
+          "ai-approval"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "auth",
+        "x-laundry-offline-mode": "forbidden",
+        "x-laundry-risk": "R4",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/api/v2/ai/approval-requests/{approval_ref}/deny": {
+      "post": {
+        "description": "Tenant/store-scoped R4 approval bound to server-frozen args, versions, idempotency and expiry. R5 is excluded.",
+        "operationId": "ai_approval_deny",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "approval_ref",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiApprovalDenial"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiApprovalItemResponse"
+                }
+              }
+            },
+            "description": "Successful approval operation"
+          },
+          "403": {
+            "description": "Approval authority denied"
+          },
+          "409": {
+            "description": "Frozen authority or version changed"
+          },
+          "429": {
+            "description": "Approval rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "AI approval deny",
+        "tags": [
+          "ai-approval"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "auth",
+        "x-laundry-offline-mode": "forbidden",
+        "x-laundry-risk": "R4",
+        "x-laundry-version": "1.0.0"
+      }
+    },
     "/api/v2/ai/safety": {
       "get": {
         "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",

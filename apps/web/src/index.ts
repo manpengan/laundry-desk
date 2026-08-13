@@ -46,6 +46,14 @@ export {
 export { CounterShell, type CounterShellProps } from "./shell/CounterShell.js";
 export { OwnerShell, type OwnerShellProps } from "./owner/OwnerShell.js";
 export { MobileTaskShell, type MobileTaskShellProps } from "./mobile/MobileTaskShell.js";
+export { ApprovalCenterPage, type ApprovalCenterPageProps } from "./owner/ApprovalCenterPage.js";
+export {
+  createHttpApprovalPort,
+  type ApprovalExecutionView,
+  type ApprovalFailure,
+  type ApprovalPort,
+  type ApprovalResult,
+} from "./ai/approval-port.js";
 export { OwnerReportsPage, type OwnerReportsPageProps } from "./owner/OwnerReportsPage.js";
 export {
   OwnerStoreDirectoryView,

@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 import { CSRF_HEADER_NAME } from "../auth/csrf.js";
 import { AUTH_OPERATION_MATRIX, type AuthOperationDescriptor } from "../auth/operations.js";
 import { M1_FIRST_WAVE_DEFINITIONS, M2_CONTRACT_DEFINITIONS } from "../commands/catalog.js";
@@ -7,13 +6,11 @@ import * as responseSchemas from "../envelope/responses.js";
 import type { CommandDefinition, QueryDefinition } from "../registry/definitions.js";
 import * as customerPortalSecurity from "./customer-portal-security.js";
 import { collectAiOpenApiProjection } from "./ai-projection.js";
-
+import { buildApprovalOpenApiProjection } from "./approval-document.js";
 /** OpenAPI document version field (must stay 3.1.x for A7). */
 export const OPENAPI_VERSION = "3.1.0" as const;
-
 /** Contract package API surface version projected into info.version (no timestamps). */
 export const OPENAPI_INFO_VERSION = "0.3.0" as const;
-
 /** Path of the committed snapshot relative to packages/contracts. */
 export const OPENAPI_SNAPSHOT_RELATIVE_PATH = "openapi/laundry-v2.openapi.json" as const;
 
@@ -347,6 +344,9 @@ const collectPathsAndSchemas = (): {
   const aiProjection = collectAiOpenApiProjection(zodToOpenApiSchema);
   Object.assign(paths, aiProjection.paths);
   Object.assign(schemas, aiProjection.schemas);
+  const approval = buildApprovalOpenApiProjection();
+  Object.assign(schemas, approval.schemas as Record<string, OpenApiSchemaObject>);
+  Object.assign(paths, approval.paths as unknown as Record<string, OpenApiPathItem>);
 
   return { paths, schemas };
 };

@@ -1,0 +1,121 @@
+.ld-approval-center {
+  display: grid;
+  gap: 1rem;
+}
+
+.ld-approval-center__header {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+}
+
+.ld-approval-center__header h1,
+.ld-approval-center__header p {
+  margin: 0;
+}
+
+.ld-approval-center__header p {
+  color: var(--ld-text-muted, #64748b);
+  margin-top: 0.35rem;
+}
+
+.ld-approval-center__tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ld-approval-center__tabs button[aria-selected="true"] {
+  background: #155eef;
+  color: #fff;
+}
+
+.ld-approval-center__layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(15rem, 0.8fr) minmax(20rem, 1.2fr);
+}
+
+.ld-approval-center__queue,
+.ld-approval-center__detail {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 1rem;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.ld-approval-center__queue {
+  align-content: start;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.ld-approval-center__card {
+  align-items: start;
+  background: #fff;
+  border: 1px solid #dbe4f0;
+  border-radius: 0.75rem;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.8rem;
+  text-align: left;
+}
+
+.ld-approval-center__card[aria-pressed="true"] {
+  border-color: #155eef;
+  box-shadow: 0 0 0 2px rgba(21, 94, 239, 0.12);
+}
+
+.ld-approval-center__card small,
+.ld-approval-center__card span {
+  color: #64748b;
+  overflow-wrap: anywhere;
+}
+
+.ld-approval-center__detail dl {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.ld-approval-center__detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ld-approval-center__detail pre {
+  background: #0f172a;
+  border-radius: 0.75rem;
+  color: #e2e8f0;
+  max-height: 24rem;
+  overflow: auto;
+  padding: 0.85rem;
+  white-space: pre-wrap;
+}
+
+.ld-approval-center__actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.ld-approval-center__actions textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.ld-approval-center__error {
+  color: #b42318;
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .ld-approval-center__header {
+    align-items: stretch;
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .ld-approval-center__layout {
+    grid-template-columns: 1fr;
+  }
+}

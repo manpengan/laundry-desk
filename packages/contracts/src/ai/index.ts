@@ -56,3 +56,18 @@ export type {
   AiTurnCreateRequest,
   AiTurnView,
 } from "./streaming.js";
+export {
+  AI_APPROVAL_OPERATION_MATRIX,
+  AiApprovalDecisionSchema,
+  AiApprovalDenialSchema,
+  AiApprovalEntityVersionSchema,
+  AiApprovalExecutionResponseSchema,
+  AiApprovalItemResponseSchema,
+  AiApprovalListQuerySchema,
+  AiApprovalListResponseSchema,
+  AiApprovalRequestSchema,
+  AiApprovalRefSchema,
+  AiApprovalStatusSchema,
+  AiApprovalViewSchema,
+} from "./approval.js";
+export type { AiApprovalListQuery, AiApprovalView } from "./approval.js";

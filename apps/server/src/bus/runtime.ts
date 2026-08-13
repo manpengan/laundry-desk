@@ -38,6 +38,7 @@ const ADMIN_PERMISSIONS = Object.freeze([
   // ADR-58: authenticated staff may use the provider-neutral AI panel. The
   // runtime is independently hard-off unless an explicit adapter is injected.
   "ai_use",
+  "approval_manage",
   "fulfillment_handoff",
   "fulfillment_qc",
   "fulfillment_reconcile",

@@ -1,4 +1,5 @@
 import { createMemoryAccountingSource, createPgAccountingSource } from "../accounting/index.js";
+import { MemoryApprovalStore, createPgApprovalStore } from "../approvals/index.js";
 import { createMemoryReportingDeps, createPgReportingDeps } from "../reporting/index.js";
 import { createCsrfProofSigner } from "../auth/csrf.js";
 import * as edgeRuntime from "../edge/runtime-authority.js";
@@ -38,10 +39,7 @@ import { createMemoryPhotoStore } from "../photo/memory-store.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import { createPgPendingActionStore } from "../pending-actions/pg-store.js";
 import { processStepUpProofStore } from "../policy/step-up-proof-store.js";
-import {
-  createMemoryFulfillmentRuntime,
-  createPgFulfillmentRuntime,
-} from "../fulfillment/runtime.js";
+import * as fulfillmentRuntime from "../fulfillment/runtime.js";
 import { deriveEdgeAuthorityKeyPair } from "../edge/authority-key.js";
 import { resolveRuntimeDatabaseUrl, RUNTIME_DATABASE_URL_REQUIRED } from "../db/pg-pool.js";
 import { DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./demo-ids.js";
@@ -146,6 +144,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const photoStore = createMemoryPhotoStore();
   const accountingSource = createMemoryAccountingSource();
   const staffAccess = createLocalMemoryStaffAccessDeps(store);
+  const approvalStore = new MemoryApprovalStore();
   const isBusinessDayClosed = async (businessDate: string): Promise<boolean> =>
     (await shiftStore.getByBusinessDate(
       LOCAL_PROFILE.orgId,
@@ -200,7 +199,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     }),
     reporting: createMemoryReportingDeps(accountingSource, LOCAL_PROFILE.timezone),
     photo: Object.freeze({ store: photoStore }),
-    fulfillment: createMemoryFulfillmentRuntime({
+    fulfillment: fulfillmentRuntime.createMemoryFulfillmentRuntime({
       order: orderStore,
       timeZone: LOCAL_PROFILE.timezone,
       isBusinessDayClosed,
@@ -222,6 +221,7 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     csrfProofSigner,
     staffDirectory: LOCAL_MEMORY_STAFF_DIRECTORY,
     pendingStore: processPendingActionStore,
+    approvalStore,
     stepUpProofStore: processStepUpProofStore,
     stepUpApproverAuthority: stepUpAuthority.createMemoryStepUpApproverAuthority(staffAccess.store),
     idempotencyStore: new MemoryIdempotencyStore(),
@@ -281,6 +281,7 @@ export async function createPgLocalRuntime(
   });
   const accountingSource = createPgAccountingSource();
   const pendingStore = createPgPendingActionStore(appPool);
+  const approvalStore = createPgApprovalStore(appPool);
   const stepUpProofStore = createPgStepUpProofStore(appPool);
   const platform = buildPlatform("sql");
   const isBusinessDayClosed = async (businessDate: string): Promise<boolean> =>
@@ -300,7 +301,7 @@ export async function createPgLocalRuntime(
       stepUpProofStore,
       createPgStaffRoleResolver(appPool, dependencies.loadStaffDirectory),
     ),
-    platform: buildPlatform("sql"),
+    platform,
     pricing: Object.freeze({ store: pricingStore }),
     deliveryPolicy: delivery.policy,
     deliveryAppointments: delivery.appointments,
@@ -354,7 +355,7 @@ export async function createPgLocalRuntime(
     accounting: ownerOperations.createPgAccountingDeps(accountingSource),
     reporting: createPgReportingDeps(accountingSource, LOCAL_PROFILE.timezone),
     photo: deliveryMedia.photo,
-    fulfillment: createPgFulfillmentRuntime(appPool, {
+    fulfillment: fulfillmentRuntime.createPgFulfillmentRuntime(appPool, {
       order: orderStore,
       timeZone: LOCAL_PROFILE.timezone,
       isBusinessDayClosed,
@@ -370,6 +371,7 @@ export async function createPgLocalRuntime(
     csrfProofSigner,
     staffDirectory: pgStaffDirectory,
     pendingStore,
+    approvalStore,
     stepUpProofStore,
     stepUpApproverAuthority: stepUpAuthority.verifyPgStepUpApproverAuthority,
     idempotencyStore: createPgIdempotencyStore(appPool),

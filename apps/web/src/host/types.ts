@@ -1,4 +1,5 @@
 import type { AuthPort } from "../auth/AuthClient.js";
+import type { ApprovalPort } from "../ai/approval-port.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { PhotoPort } from "./photo-port.js";
 import type { OfflinePort } from "./offline-port.js";
@@ -34,5 +35,6 @@ export type AppPorts = Readonly<{
   resume?: ResumePort;
   printer?: PrinterPort;
   ai?: AiPanelPort;
+  approval?: ApprovalPort;
   health: HealthPort;
 }>;

@@ -21,6 +21,7 @@ import "../src/styles/mobile-delivery-tasks.css";
 import "../src/styles/ai-panel.css";
 import "../src/styles/member.css";
 import "../src/styles/owner-dashboard.css";
+import "../src/styles/approval-center.css";
 import "../src/styles/owner-operations.css";
 import "../src/styles/owner-management.css";
 import "../src/styles/staff-credentials.css";

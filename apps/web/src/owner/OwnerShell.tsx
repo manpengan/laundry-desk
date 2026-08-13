@@ -6,6 +6,8 @@ import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { AiPanelPort } from "../host/ai-port.js";
 import { OwnerAiSafetyCard } from "./OwnerAiSafetyCard.js";
+import type { ApprovalPort } from "../ai/approval-port.js";
+import { ApprovalCenterPage } from "./ApprovalCenterPage.js";
 import { OwnerDashboardPage } from "./OwnerDashboardPage.js";
 import { OwnerDrilldownPanel } from "./OwnerDrilldownPanel.js";
 import { OwnerReportsPage } from "./OwnerReportsPage.js";
@@ -23,14 +25,16 @@ export type OwnerShellProps = Readonly<{
   onSelectStore: (selection: OwnerStoreSelection) => Promise<void>;
   onLogout: () => Promise<void>;
   aiPort?: AiPanelPort;
+  approvalPort?: ApprovalPort;
 }>;
 
-type OwnerSection = "today" | "reports" | "stores" | "marketing";
+type OwnerSection = "today" | "reports" | "stores" | "marketing" | "approvals";
 
 const OWNER_SECTIONS: readonly Readonly<{ id: OwnerSection; label: string }>[] = Object.freeze([
   Object.freeze({ id: "today", label: "今日经营" }),
   Object.freeze({ id: "reports", label: "经营报表" }),
   Object.freeze({ id: "stores", label: "门店管理" }),
+  Object.freeze({ id: "approvals", label: "审批中心" }),
 ]);
 
 export function OwnerShell({
@@ -42,6 +46,7 @@ export function OwnerShell({
   onSelectStore,
   onLogout,
   aiPort,
+  approvalPort,
 }: OwnerShellProps) {
   const allowed = session.role === "admin";
   const marketingEnabled = allowed && session.features.marketing_enabled === true;
@@ -123,15 +128,22 @@ export function OwnerShell({
               onSessionChange={onSessionChange}
               onSelectStore={onSelectStore}
             />
-          ) : marketingEnabled ? (
+          ) : section === "marketing" && marketingEnabled ? (
             <OwnerMarketingPage
               session={session}
               authClient={authClient}
               commandClient={commandClient}
               queryClient={queryClient}
             />
+          ) : approvalPort === undefined ? (
+            <section className="ld-owner-denied lg-card" role="alert">
+              <EmptyState title="审批服务不可用" description="当前宿主未提供异步审批能力。" />
+            </section>
           ) : (
-            <OwnerDashboardPage queryClient={queryClient} onOpenDrilldown={setDrilldownKind} />
+            <ApprovalCenterPage
+              approvalPort={approvalPort}
+              currentStaffId={session.session.staff_id}
+            />
           )
         ) : (
           <section className="ld-owner-denied lg-card" role="alert">

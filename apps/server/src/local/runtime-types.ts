@@ -1,4 +1,5 @@
 import type { CsrfProofSigner } from "../auth/csrf.js";
+import type { ApprovalStore } from "../approvals/types.js";
 import type { AccountingHandlerDeps } from "../accounting/types.js";
 import type { CommandIdempotencyStore, StepUpApproverAuthority } from "../bus/types.js";
 import type { CatalogHandlerDeps } from "../catalog/handlers.js";
@@ -77,6 +78,7 @@ export type LocalRuntime = Readonly<{
   csrfProofSigner: CsrfProofSigner;
   staffDirectory: readonly LocalStaffDirectoryEntry[];
   pendingStore: PendingActionStore;
+  approvalStore?: ApprovalStore;
   stepUpProofStore: StepUpProofStore;
   stepUpApproverAuthority: StepUpApproverAuthority;
   idempotencyStore: CommandIdempotencyStore;

@@ -1,18 +1,19 @@
 import { createCommandError } from "@laundry/contracts";
 
+import type { ApprovalStore } from "../approvals/types.js";
 import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { SqlClient, TenantContext } from "../db/types.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import type { StepUpSessionBinding } from "../policy/step-up.js";
-import { processStepUpProofStore, type StepUpProofStore } from "../policy/step-up-proof-store.js";
+import type { StepUpProofStore } from "../policy/step-up-proof-store.js";
 import {
   chainFailureToResult,
   createChainPorts,
   runCommandChain,
   type ChainPortHooks,
 } from "./chain-adapter.js";
-import { writeAuditForOutcome, type ApprovalAuditEvidence } from "./audit-outcome.js";
+import { writeAuditForOutcome } from "./audit-outcome.js";
 import { buildResolvedCommandRequest, resolveConfirmInput } from "./confirm-input.js";
 import {
   abortIdempotencyClaim,
@@ -29,7 +30,7 @@ import {
   publishAfterCommit,
 } from "./execution-result.js";
 import { bindTransactionClient, createHandlerContext } from "./handler-context.js";
-import { consumeCreatorStepUpProof } from "./step-up-confirmation.js";
+import { consumeConfirmation } from "./consume-confirmation.js";
 import type {
   ActorContext,
   BusContext,
@@ -59,6 +60,9 @@ export type ExecuteCommandOptions = Readonly<{
   eventBus?: EventBus;
   idempotencyStore?: CommandIdempotencyStore;
   pendingStore?: PendingActionStore;
+  /** Trusted dedicated approval route only; never parsed from the generic command wire body. */
+  approvalStore?: ApprovalStore;
+  approvalRef?: string;
   stepUpProofStore?: StepUpProofStore;
   stepUpApproverAuthority?: StepUpApproverAuthority;
   sessionBinding?: StepUpSessionBinding;
@@ -292,54 +296,17 @@ async function runInsideTransaction(
     onClaim(transactionBusCtx.request.idempotencyKey, requestHash);
   }
 
-  let approvalAudit: ApprovalAuditEvidence | undefined;
-  // Consume pending card after chain pass, before mutation (CAS fail-closed).
-  if (transactionBusCtx.confirmAuthorization !== undefined) {
-    const nowEpochSeconds = Math.floor((opts.now?.() ?? new Date()).getTime() / 1000);
-    const confirmRef = transactionBusCtx.confirmAuthorization.confirmRef;
-    const pendingTransaction = Object.freeze({ tenant: transactionBusCtx.tenant, client: tx });
-    await pendingStore.lockPrivacy(pendingTransaction);
-    const pending = await pendingStore.get(confirmRef, {
-      tenant: transactionBusCtx.tenant,
-      client: tx,
-    });
-    let approverStaffId = transactionBusCtx.actor.staffId;
-
-    // Creator resume path: active step-up proof (from other staff PIN) stands in for
-    // other-approver identity. Consume proof first (single-use), then pending.
-    if (
-      pending !== null &&
-      pending.requiresOtherApprover &&
-      transactionBusCtx.actor.staffId === pending.creatorStaffId
-    ) {
-      approverStaffId = await consumeCreatorStepUpProof({
-        confirmRef,
-        pending,
-        nowEpochSeconds,
-        sessionBinding: opts.sessionBinding ?? null,
-        transaction: pendingTransaction,
-        proofStore: opts.stepUpProofStore ?? processStepUpProofStore,
-        ...(opts.stepUpApproverAuthority === undefined
-          ? {}
-          : { approverAuthority: opts.stepUpApproverAuthority }),
-      });
-    }
-
-    const consume = await pendingStore.atomicConsume(confirmRef, approverStaffId, {
-      expectedArgsHash: transactionBusCtx.confirmAuthorization.argsHash,
-      nowEpochSeconds,
-      transaction: pendingTransaction,
-    });
-    if (consume.ok === false) {
-      throw new CommandBusTxnError(createCommandError("POLICY_DENIED"));
-    }
-    if (consume.action.requiresOtherApprover && consume.action.consumedByStaffId !== null) {
-      approvalAudit = Object.freeze({
-        initiatedByStaffId: consume.action.creatorStaffId,
-        approvedByStaffId: consume.action.consumedByStaffId,
-      });
-    }
-  }
+  const approvalAudit = await consumeConfirmation(tx, transactionBusCtx, {
+    pendingStore,
+    now: opts.now?.() ?? new Date(),
+    ...(opts.approvalStore === undefined ? {} : { approvalStore: opts.approvalStore }),
+    ...(opts.approvalRef === undefined ? {} : { approvalRef: opts.approvalRef }),
+    ...(opts.stepUpProofStore === undefined ? {} : { stepUpProofStore: opts.stepUpProofStore }),
+    ...(opts.stepUpApproverAuthority === undefined
+      ? {}
+      : { stepUpApproverAuthority: opts.stepUpApproverAuthority }),
+    ...(opts.sessionBinding === undefined ? {} : { sessionBinding: opts.sessionBinding }),
+  });
 
   let outcome: import("./types.js").HandlerOutcome;
   try {
