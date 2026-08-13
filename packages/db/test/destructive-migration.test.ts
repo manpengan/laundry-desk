@@ -157,7 +157,7 @@ describe("destructive migration static reject", () => {
       "0064_byok_model_registry.sql",
       "0065_ai_streaming_sessions.sql",
       "0066_ai_safety_metering.sql",
-      // 0067 remains reserved; do not add a placeholder migration.
+      "0067_readonly_ai_assistant.sql",
       "0068_ai_approval_center.sql",
       "0069_bounded_automation.sql",
     ]);

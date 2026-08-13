@@ -1,4 +1,9 @@
-import { AiStreamEventSchema, type AiSessionView, type AiStreamEvent } from "@laundry/contracts";
+import {
+  AiStreamEventSchema,
+  type AiSessionView,
+  type AiStreamEvent,
+  type AiStreamToolName,
+} from "@laundry/contracts";
 
 import type { PgPool } from "../db/pg-pool.js";
 import { createPgAiSafetyMethods } from "./safety-pg-store.js";
@@ -34,7 +39,7 @@ type EventRow = Readonly<{
   turn_id: string;
   event_type: AiStreamEvent["type"];
   text_delta: string | null;
-  tool_name: "synthetic.lookup" | null;
+  tool_name: AiStreamToolName | null;
   tool_step: number | null;
   tool_outcome: "succeeded" | "failed" | "timed_out" | "cancelled" | null;
   finish_reason: "stop" | "limit" | null;
@@ -270,19 +275,43 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
 
     appendToolAttempt: async (input) =>
       withAiContext(pool, input.context, async (client) => {
+        if (input.attempt.toolName === "synthetic.lookup") {
+          await client.query(
+            `SELECT public.ai_tool_attempt_append(
+              $1::uuid, $2::uuid, $3::uuid, $4, $5::char(64), $6::char(64), $7, $8
+            )`,
+            [
+              input.attempt.id,
+              input.attempt.turnId,
+              input.context.authSessionId,
+              input.attempt.step,
+              input.attempt.requestSha256,
+              input.attempt.resultSha256,
+              input.attempt.outcome,
+              input.attempt.durationMs,
+            ],
+          );
+          return;
+        }
         await client.query(
-          `SELECT public.ai_tool_attempt_append(
-            $1::uuid, $2::uuid, $3::uuid, $4, $5::char(64), $6::char(64), $7, $8
+          `SELECT public.ai_readonly_tool_attempt_append(
+            $1::uuid, $2::uuid, $3::uuid, $4, $5, $6::char(64), $7::char(64),
+            $8, $9, $10, $11, $12, $13::uuid
           )`,
           [
             input.attempt.id,
             input.attempt.turnId,
             input.context.authSessionId,
             input.attempt.step,
+            input.attempt.toolName,
             input.attempt.requestSha256,
             input.attempt.resultSha256,
             input.attempt.outcome,
             input.attempt.durationMs,
+            input.attempt.resultCount,
+            input.attempt.sourceCount,
+            input.attempt.filterCount,
+            input.attempt.auditId,
           ],
         );
       }),

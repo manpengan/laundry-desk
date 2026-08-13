@@ -14,6 +14,13 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
+- 有来源的只读 AI 助手（[ADR-62](adr/2026-08-13-adr-62-readonly-ai-assistant.md)）：柜台和
+  Owner 共用经营汇总、订单/顾客检索与内置规程排障三个闭合只读工具。业务读取
+  继续经既有 Query Bus、tenant GUC 和 RBAC，顾客信息在模型前脱敏，回答必须带
+  来源与筛选条件。0067 只保存工具名、耗时、结果/来源/筛选计数和 hash。当前
+  仍是 provider-neutral deterministic fake，无真实 key、外网、写工具、自由 SQL 或任意
+  URL/header。
+
 - 推荐奖励与团购核销（[ADR-54](adr/2026-08-13-adr-54-referral-and-group-buy.md)）：推荐奖励绑定已结清
   订单、active 会员、券版本和活动预算；外部团购券只保存域分离摘要与末四位，并只能核销一次。三条
   R4 写入口均使用服务端冻结 authority、整数分计算、专用限流、持久幂等及同事务审计。

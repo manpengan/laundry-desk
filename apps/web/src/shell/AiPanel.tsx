@@ -11,6 +11,12 @@ type PanelMessage = Readonly<{
   text: string;
 }>;
 
+const SUGGESTIONS = Object.freeze([
+  "查询今天的经营汇总，并列出来源和筛选条件",
+  "按票号或顾客线索检索订单/顾客，隐去个人信息",
+  "帮我按内置规程排查打印问题",
+]);
+
 export type AiPanelProps = Readonly<{
   open: boolean;
   onClose: () => void;
@@ -23,8 +29,9 @@ function nextId(): string {
 }
 
 function systemText(event: AiStreamEvent): string | null {
-  if (event.type === "tool_call") return `正在执行只读工具：${event.tool}`;
-  if (event.type === "tool_result") return `只读工具 ${event.tool}：${event.outcome}`;
+  if (event.type === "tool_call") return `正在执行有界只读工具：${event.tool}`;
+  if (event.type === "tool_result")
+    return `只读工具 ${event.tool}：${event.outcome}（回答须附来源与筛选条件）`;
   if (event.type === "error") return `AI 已停止（${event.code}）`;
   return null;
 }
@@ -139,7 +146,7 @@ export function AiPanel({ open, onClose, authSessionId, aiPort }: AiPanelProps) 
       <header className="ld-ai-panel__header">
         <div>
           <strong>AI 助手</strong>
-          <small>流式生成 · 仅限有界只读工具</small>
+          <small>经营 / 检索 / 规程 · 流式生成 · 仅限有界只读工具</small>
         </div>
         <Button type="button" size="sm" variant="ghost" onClick={onClose}>
           关闭
@@ -147,7 +154,17 @@ export function AiPanel({ open, onClose, authSessionId, aiPort }: AiPanelProps) 
       </header>
       <div className="ld-ai-panel__messages" aria-live="polite">
         {messages.length === 0 ? (
-          <p className="ld-ai-panel__empty">输入问题开始。未配置 AI 时会明确失败关闭。</p>
+          <div className="ld-ai-panel__empty">
+            <p>回答会附只读来源与筛选条件，顾客资料默认脱敏。</p>
+            <div className="ld-ai-panel__suggestions" aria-label="示例问题">
+              {SUGGESTIONS.map((suggestion) => (
+                <button key={suggestion} type="button" onClick={() => setPrompt(suggestion)}>
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+            <p>未配置 AI 时会明确失败关闭。</p>
+          </div>
         ) : (
           messages.map((message) => (
             <p

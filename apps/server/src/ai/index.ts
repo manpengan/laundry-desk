@@ -1,6 +1,7 @@
 export {
   createDeterministicFakeProvider,
   deterministicSyntheticTool,
+  ASSISTANT_TOOL_DESCRIPTORS,
   SYNTHETIC_TOOL_DESCRIPTOR,
   SyntheticLookupArgsSchema,
 } from "./streaming-provider.js";
@@ -11,9 +12,11 @@ export type {
   AiProviderRequest,
   FakeProviderStep,
   SyntheticToolPort,
+  ReadonlyAssistantToolPort,
 } from "./streaming-provider.js";
 export { MemoryAiConversationStore } from "./streaming-memory-store.js";
 export { createPgAiConversationStore } from "./streaming-pg-store.js";
+export { createReadonlyAssistantTool } from "./readonly-assistant-tool.js";
 export { AI_STREAM_LIMITS, AiServiceError, createAiStreamingService } from "./streaming-service.js";
 export type { AiStreamingService } from "./streaming-service.js";
 export { AiStoreError } from "./streaming-store.js";

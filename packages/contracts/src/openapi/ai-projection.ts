@@ -15,6 +15,7 @@ import {
   AiProviderValidationIntentResponseSchema,
   AiProviderValidationResponseSchema,
 } from "../ai/provider-connections.js";
+import { AiAssistantToolCallSchema, AiAssistantToolResultSchema } from "../ai/assistant.js";
 import type {
   OpenApiMediaType,
   OpenApiOperation,
@@ -142,7 +143,7 @@ function buildAiOperation(row: (typeof AI_STREAMING_OPERATION_MATRIX)[number]): 
     operationId: `ai_${row.operation}`,
     summary: `AI ${row.operation}`,
     description:
-      "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",
+      "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Item 15 exposes only business.summary, records.search, and procedure.troubleshoot through the server registry; no write, free SQL, URL, header, credential, or provider escape hatch.",
     tags: Object.freeze(["ai"]),
     ...(parameters.length === 0 ? {} : { parameters: Object.freeze(parameters) }),
     ...(requestSchema === null
@@ -218,6 +219,8 @@ export function collectAiOpenApiProjection(toSchema: SchemaConverter): Readonly<
   schemas: Record<string, OpenApiSchemaObject>;
 }> {
   const schemas = {
+    AiAssistantToolCall: toSchema(AiAssistantToolCallSchema),
+    AiAssistantToolResult: toSchema(AiAssistantToolResultSchema),
     AiEventReplayResponse: toSchema(AiEventReplayResponseSchema),
     AiSafetyStatusResponse: toSchema(AiSafetyStatusResponseSchema),
     AiSessionCreateRequest: toSchema(AiSessionCreateRequestSchema),

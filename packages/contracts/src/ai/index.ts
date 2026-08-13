@@ -57,6 +57,7 @@ export {
   AiSessionStatusSchema,
   AiSessionViewSchema,
   AiStreamEventSchema,
+  AiStreamToolNameSchema,
   AiTurnCreateRequestSchema,
   AiTurnCreateResponseSchema,
   AiTurnIdSchema,
@@ -68,6 +69,7 @@ export type {
   AiEventReplayQuery,
   AiSessionView,
   AiStreamEvent,
+  AiStreamToolName,
   AiTurnCreateRequest,
   AiTurnView,
 } from "./streaming.js";
@@ -86,3 +88,22 @@ export {
   AiApprovalViewSchema,
 } from "./approval.js";
 export type { AiApprovalListQuery, AiApprovalView } from "./approval.js";
+export {
+  AI_ASSISTANT_MAX_RESULTS,
+  AI_ASSISTANT_MAX_TOOL_CALLS,
+  AI_ASSISTANT_TOOL_NAMES,
+  AI_ASSISTANT_TOOL_TIMEOUT_MS,
+  AiAssistantFilterSchema,
+  AiAssistantSourceSchema,
+  AiAssistantToolCallSchema,
+  AiAssistantToolNameSchema,
+  AiAssistantToolResultSchema,
+  AiBusinessSummaryArgsSchema,
+  AiProcedureTroubleshootArgsSchema,
+  AiRecordSearchArgsSchema,
+} from "./assistant.js";
+export type {
+  AiAssistantToolCall,
+  AiAssistantToolName,
+  AiAssistantToolResult,
+} from "./assistant.js";

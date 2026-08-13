@@ -1,6 +1,11 @@
 import type { AiSessionView } from "@laundry/contracts";
 
-import type { AiConversationStore, AiRequestContext, AiTurnRecord } from "./streaming-store.js";
+import type {
+  AiConversationStore,
+  AiRequestContext,
+  AiToolAttemptRecord,
+  AiTurnRecord,
+} from "./streaming-store.js";
 
 export type MemorySession = Readonly<{
   id: string;
@@ -37,10 +42,32 @@ export type MemoryMessage = Readonly<{
 }>;
 
 export type SafeAudit = Readonly<{
-  command: "ai.session.create" | "ai.turn.create" | "ai.turn.finish" | "ai.safety.reject";
+  command:
+    | "ai.session.create"
+    | "ai.turn.create"
+    | "ai.turn.finish"
+    | "ai.safety.reject"
+    | "ai.readonly_tool.execute";
   entityId: string;
   metadata: Readonly<Record<string, number | string>>;
 }>;
+
+export function readonlyToolAudit(attempt: AiToolAttemptRecord): SafeAudit | null {
+  if (attempt.toolName === "synthetic.lookup") return null;
+  return Object.freeze({
+    command: "ai.readonly_tool.execute",
+    entityId: attempt.id,
+    metadata: Object.freeze({
+      tool_name: attempt.toolName,
+      step: attempt.step,
+      outcome: attempt.outcome,
+      duration_ms: attempt.durationMs,
+      result_count: attempt.resultCount,
+      source_count: attempt.sourceCount,
+      filter_count: attempt.filterCount,
+    }),
+  });
+}
 
 export function sameContext(session: MemorySession, context: AiRequestContext): boolean {
   return (

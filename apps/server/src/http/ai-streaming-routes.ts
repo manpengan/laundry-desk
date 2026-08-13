@@ -69,6 +69,7 @@ function requestContext(authorized: Authorized): AiRequestContext {
     }),
     authSessionId: authorized.session.session_id,
     deviceId: authorized.session.device_id,
+    permissions: permissionsForAuthority(authorized.authority),
   });
 }
 

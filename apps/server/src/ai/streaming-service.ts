@@ -9,7 +9,11 @@ import {
   type AiTurnView,
 } from "@laundry/contracts";
 
-import { type AiProviderPort, type SyntheticToolPort } from "./streaming-provider.js";
+import {
+  type AiProviderPort,
+  type ReadonlyAssistantToolPort,
+  type SyntheticToolPort,
+} from "./streaming-provider.js";
 import { runAiTurn, sha256Text } from "./streaming-runner.js";
 import {
   AiStoreError,
@@ -72,6 +76,7 @@ export function createAiStreamingService(
     store: AiConversationStore;
     provider: AiProviderPort | null;
     tool: SyntheticToolPort;
+    assistantTool?: ReadonlyAssistantToolPort;
   }>,
 ): AiStreamingService {
   const requireEnabled = (): AiProviderPort => {
@@ -174,6 +179,7 @@ export function createAiStreamingService(
         store: options.store,
         provider,
         tool: options.tool,
+        ...(options.assistantTool === undefined ? {} : { assistantTool: options.assistantTool }),
         turn,
         messages,
         context,

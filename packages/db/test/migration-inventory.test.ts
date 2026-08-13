@@ -72,6 +72,7 @@ const expectedSqlFiles = [
   "0064_byok_model_registry.sql",
   "0065_ai_streaming_sessions.sql",
   "0066_ai_safety_metering.sql",
+  "0067_readonly_ai_assistant.sql",
   "0068_ai_approval_center.sql",
   "0069_bounded_automation.sql",
 ] as const;
@@ -81,7 +82,7 @@ describe("packages/db migration inventory", () => {
     .filter((name) => name.endsWith(".sql"))
     .sort();
 
-  it("ships formal SQL migrations in lexical order with 0067 reserved", () => {
+  it("ships formal SQL migrations in gap-free lexical order", () => {
     expect(sqlFiles).toEqual(expectedSqlFiles);
   });
 

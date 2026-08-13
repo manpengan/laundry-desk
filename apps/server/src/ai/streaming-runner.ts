@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 
-import type { AiStreamEvent } from "@laundry/contracts";
+import {
+  AI_ASSISTANT_MAX_TOOL_CALLS,
+  type AiStreamEvent,
+  type AiStreamToolName,
+} from "@laundry/contracts";
 
 import {
+  ASSISTANT_TOOL_DESCRIPTORS,
   SYNTHETIC_TOOL_DESCRIPTOR,
-  SyntheticLookupArgsSchema,
   type AiProviderMessage,
   type AiProviderPort,
+  type ReadonlyAssistantToolPort,
   type SyntheticToolPort,
 } from "./streaming-provider.js";
 import type {
@@ -15,9 +20,9 @@ import type {
   AiRequestContext,
   AiTurnRecord,
 } from "./streaming-store.js";
-import { detectsPromptInjection, redactAiText, sanitizeAiToolPayload } from "./safety-guard.js";
 import { AiStreamingRedactor } from "./streaming-redactor.js";
-import { finishAiTurn, sha256Text, type AiRuntimeState } from "./streaming-finish.js";
+import { finishAiTurn, type AiRuntimeState } from "./streaming-finish.js";
+import { executeAiTool } from "./streaming-tool-executor.js";
 
 export { sha256Text } from "./streaming-finish.js";
 
@@ -103,61 +108,6 @@ async function persistContent(
   );
 }
 
-async function executeTool(
-  store: AiConversationStore,
-  tool: SyntheticToolPort,
-  turn: AiTurnRecord,
-  context: AiRequestContext,
-  step: number,
-  args: unknown,
-  parentSignal: AbortSignal,
-): Promise<
-  Readonly<{
-    message: AiProviderMessage;
-    outcome: "succeeded" | "failed" | "timed_out" | "cancelled";
-  }>
-> {
-  const parsed = SyntheticLookupArgsSchema.safeParse(args);
-  const startedAt = Date.now();
-  const safeQuery = parsed.success ? redactAiText(parsed.data.query).text : null;
-  const requestHash = sha256Text(
-    JSON.stringify(safeQuery === null ? { invalid: true } : { query: safeQuery }),
-  );
-  const timeoutSignal = AbortSignal.timeout(AI_STREAM_LIMITS.toolTimeoutMs);
-  const signal = AbortSignal.any([parentSignal, timeoutSignal]);
-  let result: unknown = Object.freeze({ error: "invalid_tool_input" });
-  let outcome: "succeeded" | "failed" | "timed_out" | "cancelled" = "failed";
-  try {
-    if (safeQuery === null || detectsPromptInjection(safeQuery))
-      throw new Error("unsafe tool input");
-    result = await tool.lookup(Object.freeze({ query: safeQuery }), signal);
-    outcome = "succeeded";
-  } catch {
-    outcome = parentSignal.aborted ? "cancelled" : timeoutSignal.aborted ? "timed_out" : "failed";
-    result = Object.freeze({ error: outcome });
-  }
-  const safeResult = sanitizeAiToolPayload(result);
-  const serialized = safeResult.content;
-  if (safeResult.blocked) outcome = "failed";
-  await store.appendToolAttempt({
-    attempt: Object.freeze({
-      id: randomUUID(),
-      turnId: turn.id,
-      step,
-      requestSha256: requestHash,
-      resultSha256: sha256Text(serialized),
-      outcome,
-      durationMs: Math.min(AI_STREAM_LIMITS.toolTimeoutMs, Date.now() - startedAt),
-      createdAt: new Date(),
-    }),
-    context,
-  });
-  return Object.freeze({
-    message: Object.freeze({ role: "tool" as const, content: serialized }),
-    outcome,
-  });
-}
-
 function safeErrorCode(error: unknown, signal: AbortSignal): SafeErrorCode {
   const rawCode = error instanceof Error ? error.message : "AI_PROVIDER_FAILED";
   if (signal.aborted && rawCode !== "AI_TOOL_TIMEOUT") {
@@ -180,7 +130,8 @@ function safeErrorCode(error: unknown, signal: AbortSignal): SafeErrorCode {
 async function runLoop(
   store: AiConversationStore,
   provider: AiProviderPort,
-  tool: SyntheticToolPort,
+  syntheticTool: SyntheticToolPort,
+  assistantTool: ReadonlyAssistantToolPort | undefined,
   turn: AiTurnRecord,
   messages: readonly AiProviderMessage[],
   context: AiRequestContext,
@@ -215,7 +166,10 @@ async function runLoop(
       const outputRedactor = new AiStreamingRedactor();
       for await (const providerEvent of provider.stream({
         messages: Object.freeze(activeMessages),
-        tools: Object.freeze([SYNTHETIC_TOOL_DESCRIPTOR]),
+        tools:
+          assistantTool === undefined
+            ? Object.freeze([SYNTHETIC_TOOL_DESCRIPTOR])
+            : ASSISTANT_TOOL_DESCRIPTORS,
         maxOutputTokens: turn.maxOutputTokens,
         signal,
       })) {
@@ -253,28 +207,41 @@ async function runLoop(
           continue;
         }
         state.toolSteps += 1;
-        if (state.toolSteps > AI_STREAM_LIMITS.maxToolSteps) throw new Error("AI_TOOL_LIMIT");
+        const toolLimit =
+          assistantTool === undefined ? AI_STREAM_LIMITS.maxToolSteps : AI_ASSISTANT_MAX_TOOL_CALLS;
+        if (state.toolSteps > toolLimit) throw new Error("AI_TOOL_LIMIT");
         if (state.eventCount + 3 > AI_STREAM_LIMITS.maxEvents) throw new Error("AI_OUTPUT_LIMIT");
-        if (providerEvent.name !== "synthetic.lookup") throw new Error("AI_PROVIDER_FAILED");
+        const toolName = providerEvent.name as AiStreamToolName;
+        const isAssistantTool = ASSISTANT_TOOL_DESCRIPTORS.some(
+          (descriptor) => descriptor.name === providerEvent.name,
+        );
+        if (
+          (assistantTool === undefined && toolName !== "synthetic.lookup") ||
+          (assistantTool !== undefined && !isAssistantTool)
+        ) {
+          throw new Error("AI_PROVIDER_FAILED");
+        }
         accountForEvent(
           state,
           await persistEvent(
             store,
             turn.id,
             context,
-            { type: "tool_call", tool: "synthetic.lookup", step: state.toolSteps },
+            { type: "tool_call", tool: toolName, step: state.toolSteps },
             onEvent,
           ),
         );
-        const toolResult = await executeTool(
+        const toolResult = await executeAiTool({
           store,
-          tool,
+          syntheticTool,
+          ...(assistantTool === undefined ? {} : { assistantTool }),
           turn,
           context,
-          state.toolSteps,
-          providerEvent.args,
-          signal,
-        );
+          step: state.toolSteps,
+          name: toolName,
+          args: providerEvent.args,
+          parentSignal: signal,
+        });
         accountForEvent(
           state,
           await persistEvent(
@@ -283,7 +250,7 @@ async function runLoop(
             context,
             {
               type: "tool_result",
-              tool: "synthetic.lookup",
+              tool: toolName,
               step: state.toolSteps,
               outcome: toolResult.outcome,
             },
@@ -353,6 +320,7 @@ export async function runAiTurn(
     store: AiConversationStore;
     provider: AiProviderPort;
     tool: SyntheticToolPort;
+    assistantTool?: ReadonlyAssistantToolPort;
     turn: AiTurnRecord;
     messages: readonly AiProviderMessage[];
     context: AiRequestContext;
@@ -372,6 +340,7 @@ export async function runAiTurn(
       input.store,
       input.provider,
       input.tool,
+      input.assistantTool,
       input.turn,
       input.messages,
       input.context,

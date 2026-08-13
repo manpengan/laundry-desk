@@ -70,7 +70,11 @@ import { createByokService } from "../ai/byok-service.js";
 import type { ByokStore } from "../ai/byok-types.js";
 import { registerByokRoutes } from "./byok-routes.js";
 import { createByokMutationRateLimiter, type ByokMutationRateLimiter } from "./byok-rate-limit.js";
-import type { AiProviderPort, SyntheticToolPort } from "../ai/streaming-provider.js";
+import type {
+  AiProviderPort,
+  ReadonlyAssistantToolPort,
+  SyntheticToolPort,
+} from "../ai/streaming-provider.js";
 import { deterministicSyntheticTool } from "../ai/streaming-provider.js";
 import type { AiConversationStore } from "../ai/streaming-store.js";
 import { MemoryAiConversationStore } from "../ai/streaming-memory-store.js";
@@ -80,6 +84,7 @@ import { createAiRateLimiter, type AiRateLimiter } from "../ai/streaming-rate-li
 import { registerAiStreamingRoutes } from "./ai-streaming-routes.js";
 import { createProviderValidationService } from "../ai/provider-validation-service.js";
 import type { ProviderHttpPort } from "../ai/provider-http.js";
+import { createReadonlyAssistantTool } from "../ai/readonly-assistant-tool.js";
 
 export type CreateAppOptions = Readonly<{
   runtime: LocalRuntime;
@@ -122,6 +127,8 @@ export type CreateAppOptions = Readonly<{
   aiProvider?: AiProviderPort;
   aiConversationStore?: AiConversationStore;
   aiSyntheticTool?: SyntheticToolPort;
+  /** Focused tests may replace the Item 15 closed business-tool registry. */
+  aiAssistantTool?: ReadonlyAssistantToolPort;
   aiRateLimiter?: AiRateLimiter;
   approvalRateLimiter?: ApprovalRateLimiter;
   /** Tests may silence request logs; runtime defaults to the redacted structured logger. */
@@ -294,6 +301,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
       store: aiStore,
       provider: options.aiProvider ?? null,
       tool: options.aiSyntheticTool ?? deterministicSyntheticTool,
+      assistantTool: options.aiAssistantTool ?? createReadonlyAssistantTool(options.runtime),
     }),
     options.aiRateLimiter ?? createAiRateLimiter(),
   );

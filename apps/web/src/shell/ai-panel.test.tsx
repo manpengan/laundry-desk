@@ -17,6 +17,10 @@ test("AI panel renders text-only generation, stop-ready controls, and unavailabl
   );
   assert.match(html, /AI 助手/iu);
   assert.match(html, /流式生成/iu);
+  assert.match(html, /来源与筛选条件/iu);
+  assert.match(html, /经营汇总|经营/iu);
+  assert.match(html, /订单\/顾客/iu);
+  assert.match(html, /规程/iu);
   assert.match(html, /未配置 AI 时会明确失败关闭/iu);
   assert.match(html, /textarea/iu);
   assert.doesNotMatch(html, /dangerouslySetInnerHTML|innerHTML/iu);

@@ -3,6 +3,7 @@ import type {
   AiSafetyStatusView,
   AiSessionView,
   AiStreamEvent,
+  AiStreamToolName,
   AiTurnView,
 } from "@laundry/contracts";
 
@@ -12,6 +13,7 @@ export type AiRequestContext = Readonly<{
   tenant: TenantContext;
   authSessionId: string;
   deviceId: string;
+  permissions?: readonly string[];
 }>;
 
 export type AiTurnRecord = Readonly<{
@@ -30,10 +32,15 @@ export type AiToolAttemptRecord = Readonly<{
   id: string;
   turnId: string;
   step: number;
+  toolName: AiStreamToolName;
   requestSha256: string;
   resultSha256: string | null;
   outcome: "succeeded" | "failed" | "timed_out" | "cancelled";
   durationMs: number;
+  resultCount: number;
+  sourceCount: number;
+  filterCount: number;
+  auditId: string;
   createdAt: Date;
 }>;
 
@@ -70,10 +77,10 @@ export type AiTurnFinish = Readonly<{
 
 export type AiEventDraft =
   | Readonly<{ type: "content_delta"; text: string }>
-  | Readonly<{ type: "tool_call"; tool: "synthetic.lookup"; step: number }>
+  | Readonly<{ type: "tool_call"; tool: AiStreamToolName; step: number }>
   | Readonly<{
       type: "tool_result";
-      tool: "synthetic.lookup";
+      tool: AiStreamToolName;
       step: number;
       outcome: "succeeded" | "failed" | "timed_out" | "cancelled";
     }>

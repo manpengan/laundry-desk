@@ -1,4 +1,13 @@
 import { z } from "zod";
+import {
+  AI_ASSISTANT_TOOL_NAMES,
+  AiAssistantToolCallSchema,
+  type AiAssistantToolCall,
+  type AiAssistantToolName,
+  type AiAssistantToolResult,
+} from "@laundry/contracts";
+
+import type { AiRequestContext } from "./streaming-store.js";
 
 export const SyntheticLookupArgsSchema = z
   .object({ query: z.string().trim().min(1).max(128) })
@@ -43,7 +52,7 @@ export type AiProviderEvent =
 export type AiProviderRequest = Readonly<{
   messages: readonly AiProviderMessage[];
   tools: readonly Readonly<{
-    name: "synthetic.lookup";
+    name: "synthetic.lookup" | AiAssistantToolName;
     description: string;
     inputSchema: Readonly<Record<string, unknown>>;
   }>[];
@@ -120,9 +129,61 @@ export const SYNTHETIC_TOOL_DESCRIPTOR = Object.freeze({
   }),
 });
 
+const ASSISTANT_INPUT_SCHEMAS = Object.freeze({
+  "business.summary": Object.freeze({
+    type: "object",
+    additionalProperties: false,
+    properties: Object.freeze({ business_date: Object.freeze({ type: "string" }) }),
+  }),
+  "records.search": Object.freeze({
+    type: "object",
+    additionalProperties: false,
+    required: Object.freeze(["scope", "query"]),
+    properties: Object.freeze({
+      scope: Object.freeze({ enum: Object.freeze(["orders", "customers"]) }),
+      query: Object.freeze({ type: "string", minLength: 1, maxLength: 64 }),
+      limit: Object.freeze({ type: "integer", minimum: 1, maximum: 10 }),
+    }),
+  }),
+  "procedure.troubleshoot": Object.freeze({
+    type: "object",
+    additionalProperties: false,
+    required: Object.freeze(["topic", "symptom"]),
+    properties: Object.freeze({
+      topic: Object.freeze({
+        enum: Object.freeze(["order_intake", "pickup", "printing", "customer_lookup"]),
+      }),
+      symptom: Object.freeze({ type: "string", minLength: 1, maxLength: 128 }),
+    }),
+  }),
+});
+
+export const ASSISTANT_TOOL_DESCRIPTORS = Object.freeze(
+  AI_ASSISTANT_TOOL_NAMES.map((name) =>
+    Object.freeze({
+      name,
+      description: `Execute the bounded read-only ${name} projection.`,
+      inputSchema: ASSISTANT_INPUT_SCHEMAS[name],
+    }),
+  ),
+);
+
 export type SyntheticToolPort = Readonly<{
   lookup(input: Readonly<{ query: string }>, signal: AbortSignal): Promise<unknown>;
 }>;
+
+export type ReadonlyAssistantToolPort = Readonly<{
+  execute(
+    call: AiAssistantToolCall,
+    context: AiRequestContext,
+    signal: AbortSignal,
+  ): Promise<AiAssistantToolResult>;
+}>;
+
+export function parseAssistantToolCall(name: string, args: unknown): AiAssistantToolCall | null {
+  const parsed = AiAssistantToolCallSchema.safeParse({ tool: name, args });
+  return parsed.success ? Object.freeze(parsed.data) : null;
+}
 
 export const deterministicSyntheticTool: SyntheticToolPort = Object.freeze({
   async lookup(input, signal) {

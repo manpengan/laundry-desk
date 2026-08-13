@@ -16,6 +16,7 @@ import { OwnerMarketingPage } from "./OwnerMarketingPage.js";
 import { OwnerStoreManagementPage, type OwnerStoreSelection } from "./OwnerStoreManagementPage.js";
 import type { OwnerDrilldownKind } from "./owner-operations-model.js";
 import { OwnerPortfolioPanel } from "./OwnerPortfolioPanel.js";
+import { AiPanel } from "../shell/AiPanel.js";
 
 export type OwnerShellProps = Readonly<{
   session: SessionView;
@@ -55,6 +56,7 @@ export function OwnerShell({
   const [loggingOut, setLoggingOut] = useState(false);
   const [drilldownKind, setDrilldownKind] = useState<OwnerDrilldownKind | null>(null);
   const [section, setSection] = useState<OwnerSection>("today");
+  const [aiOpen, setAiOpen] = useState(false);
   const logout = async (): Promise<void> => {
     if (loggingOut) return;
     setLoggingOut(true);
@@ -77,6 +79,11 @@ export function OwnerShell({
         </div>
         <div className="ld-owner-header__actions">
           <span className="ld-owner-header__badge">云端经营台</span>
+          {allowed && aiPort !== undefined ? (
+            <button className="ld-owner-logout" type="button" onClick={() => setAiOpen(true)}>
+              ✨ AI 助手
+            </button>
+          ) : null}
           <button
             className="ld-owner-logout"
             type="button"
@@ -163,6 +170,14 @@ export function OwnerShell({
         <span aria-hidden>·</span>
         <span>高风险变更需另一位店长现场复核</span>
       </footer>
+      {allowed && aiPort !== undefined ? (
+        <AiPanel
+          open={aiOpen}
+          onClose={() => setAiOpen(false)}
+          authSessionId={session.session.session_id}
+          aiPort={aiPort}
+        />
+      ) : null}
     </div>
   );
 }

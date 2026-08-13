@@ -10,6 +10,7 @@ import { FULL_STORE_FEATURES } from "../auth/permissions.js";
 import type { SessionView } from "../auth/types.js";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
+import { createUnavailableAiPanelPort } from "../host/ai-port.js";
 import type { AppPorts } from "../host/types.js";
 import { appSurfaceFromPathname } from "../host/app-surface.js";
 
@@ -124,6 +125,19 @@ test("owner marketing navigation stays hidden when the store feature is off", ()
     }),
   );
   assert.doesNotMatch(html, /营销活动/u);
+});
+
+test("owner receives the same bounded read-only AI assistant entry as the counter", () => {
+  const appPorts = Object.freeze({ ...ports(), ai: createUnavailableAiPanelPort() });
+  const html = renderToStaticMarkup(
+    createElement(App, {
+      ports: appPorts,
+      surface: "owner",
+      enableLiquidGlass: false,
+      initialSession: session("admin"),
+    }),
+  );
+  assert.match(html, /✨ AI 助手/u);
 });
 
 test("owner logout clears the renderer session even when host revocation rejects", async () => {

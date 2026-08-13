@@ -47,6 +47,11 @@ const COMPATIBLE_CONSTRAINT_REPLACEMENTS: readonly Readonly<{
     table: "customer_portal_access_log",
     constraint: "customer_portal_access_log_operation_chk",
   },
+  // ADR-62: 0067 strictly broadens the Item 14 synthetic-only event/attempt
+  // vocabulary with three named read-only tools. Both checks are re-added in
+  // the same migration and retain every previous allowed value.
+  { table: "ai_stream_events", constraint: "ai_stream_events_shape_chk" },
+  { table: "ai_tool_attempts", constraint: "ai_tool_attempts_allowlist_chk" },
 ];
 
 const isCompatibleConstraintReplacement = (statement: string): boolean =>

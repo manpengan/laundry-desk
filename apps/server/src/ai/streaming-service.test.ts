@@ -7,6 +7,7 @@ import { MemoryAiConversationStore } from "./streaming-memory-store.js";
 import {
   createDeterministicFakeProvider,
   deterministicSyntheticTool,
+  type ReadonlyAssistantToolPort,
   type SyntheticToolPort,
 } from "./streaming-provider.js";
 import { AiServiceError, createAiStreamingService } from "./streaming-service.js";
@@ -121,6 +122,66 @@ test("fake provider persists typed deltas, exact read-only tool, usage, and meta
   const audit = JSON.stringify(store.auditSnapshot());
   assert.match(audit, /prompt_sha256/iu);
   assert.doesNotMatch(audit, /只读查询|结果正常|today/iu);
+});
+
+test("assistant mode exposes only three read tools and audits counts without result payload", async () => {
+  const store = new MemoryAiConversationStore();
+  const calls: string[] = [];
+  const assistantTool: ReadonlyAssistantToolPort = Object.freeze({
+    async execute(call) {
+      calls.push(call.tool);
+      return Object.freeze({
+        summary: "安全摘要",
+        result_count: 1,
+        sources: [{ kind: "document" as const, ref: "document:test:1", label: "测试来源" }],
+        filters: [{ field: "scope", value: "bounded" }],
+        items: [{ status: "ok" }],
+      });
+    },
+  });
+  const toolStep = (name: "business.summary" | "records.search" | "procedure.troubleshoot") => ({
+    events: [
+      {
+        type: "tool_call" as const,
+        callId: name,
+        name,
+        args:
+          name === "business.summary"
+            ? {}
+            : name === "records.search"
+              ? { scope: "orders", query: "A001" }
+              : { topic: "printing", symptom: "offline" },
+      },
+      END_TOOLS,
+    ],
+  });
+  const service = createAiStreamingService({
+    store,
+    provider: createDeterministicFakeProvider([
+      toolStep("business.summary"),
+      toolStep("records.search"),
+      toolStep("procedure.troubleshoot"),
+      { events: [{ type: "delta", text: "带来源回答" }, END_STOP] },
+    ]),
+    tool: deterministicSyntheticTool,
+    assistantTool,
+  });
+  const { session } = await sessionAndTurn(store, service);
+  await service.runQueuedTurn(
+    session.session_id,
+    { ...CONTEXT, permissions: ["ai_use", "customer_read", "accounting_read"] },
+    new AbortController().signal,
+    async () => undefined,
+  );
+
+  assert.deepEqual(calls, ["business.summary", "records.search", "procedure.troubleshoot"]);
+  assert.deepEqual(
+    store.toolAttemptSnapshot().map((attempt) => attempt.toolName),
+    calls,
+  );
+  const audit = JSON.stringify(store.auditSnapshot());
+  assert.match(audit, /ai\.readonly_tool\.execute|source_count|filter_count/iu);
+  assert.doesNotMatch(audit, /安全摘要|测试来源|带来源回答|A001/iu);
 });
 
 test("turn idempotency replays only the same hash and single active turn is enforced", async () => {

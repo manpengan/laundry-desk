@@ -50,6 +50,21 @@
   font-size: 0.85rem;
 }
 
+.ld-ai-panel__suggestions {
+  display: grid;
+  gap: 8px;
+}
+
+.ld-ai-panel__suggestions button {
+  padding: 8px 10px;
+  color: inherit;
+  text-align: left;
+  background: rgba(0, 122, 255, 0.08);
+  border: 1px solid rgba(0, 122, 255, 0.2);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
 .ld-ai-panel__error {
   color: var(--lg-danger, #b42318);
 }

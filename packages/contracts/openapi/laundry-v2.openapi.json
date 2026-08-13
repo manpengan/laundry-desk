@@ -773,6 +773,218 @@
         ],
         "type": "object"
       },
+      "AiAssistantToolCall": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "properties": {
+                  "business_date": {
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "tool": {
+                "const": "business.summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "args"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "properties": {
+                  "limit": {
+                    "default": 5,
+                    "maximum": 10,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "query": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "scope": {
+                    "enum": [
+                      "orders",
+                      "customers"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "scope",
+                  "query",
+                  "limit"
+                ],
+                "type": "object"
+              },
+              "tool": {
+                "const": "records.search",
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "args"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "properties": {
+                  "symptom": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "topic": {
+                    "enum": [
+                      "order_intake",
+                      "pickup",
+                      "printing",
+                      "customer_lookup"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "topic",
+                  "symptom"
+                ],
+                "type": "object"
+              },
+              "tool": {
+                "const": "procedure.troubleshoot",
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "args"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "AiAssistantToolResult": {
+        "additionalProperties": false,
+        "properties": {
+          "filters": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "field": {
+                  "pattern": "^[a-z][a-z0-9_]{0,31}$",
+                  "type": "string"
+                },
+                "value": {
+                  "maxLength": 64,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "value"
+              ],
+              "type": "object"
+            },
+            "maxItems": 6,
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "maxLength": 256,
+                    "type": "string"
+                  },
+                  {
+                    "maximum": 9007199254740991,
+                    "minimum": -9007199254740991,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "result_count": {
+            "maximum": 10,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "query",
+                    "document"
+                  ],
+                  "type": "string"
+                },
+                "label": {
+                  "maxLength": 96,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "ref": {
+                  "pattern": "^[a-z][a-z0-9_.:-]{2,127}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "ref",
+                "label"
+              ],
+              "type": "object"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "type": "array"
+          },
+          "summary": {
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "result_count",
+          "sources",
+          "filters",
+          "items"
+        ],
+        "type": "object"
+      },
       "AiEventReplayResponse": {
         "additionalProperties": false,
         "properties": {
@@ -838,8 +1050,20 @@
                           "type": "integer"
                         },
                         "tool": {
-                          "const": "synthetic.lookup",
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "const": "synthetic.lookup",
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "business.summary",
+                                "records.search",
+                                "procedure.troubleshoot"
+                              ],
+                              "type": "string"
+                            }
+                          ]
                         },
                         "turn_id": {
                           "format": "uuid",
@@ -889,8 +1113,20 @@
                           "type": "integer"
                         },
                         "tool": {
-                          "const": "synthetic.lookup",
-                          "type": "string"
+                          "anyOf": [
+                            {
+                              "const": "synthetic.lookup",
+                              "type": "string"
+                            },
+                            {
+                              "enum": [
+                                "business.summary",
+                                "records.search",
+                                "procedure.troubleshoot"
+                              ],
+                              "type": "string"
+                            }
+                          ]
                         },
                         "turn_id": {
                           "format": "uuid",
@@ -1490,8 +1726,20 @@
                 "type": "integer"
               },
               "tool": {
-                "const": "synthetic.lookup",
-                "type": "string"
+                "anyOf": [
+                  {
+                    "const": "synthetic.lookup",
+                    "type": "string"
+                  },
+                  {
+                    "enum": [
+                      "business.summary",
+                      "records.search",
+                      "procedure.troubleshoot"
+                    ],
+                    "type": "string"
+                  }
+                ]
               },
               "turn_id": {
                 "format": "uuid",
@@ -1541,8 +1789,20 @@
                 "type": "integer"
               },
               "tool": {
-                "const": "synthetic.lookup",
-                "type": "string"
+                "anyOf": [
+                  {
+                    "const": "synthetic.lookup",
+                    "type": "string"
+                  },
+                  {
+                    "enum": [
+                      "business.summary",
+                      "records.search",
+                      "procedure.troubleshoot"
+                    ],
+                    "type": "string"
+                  }
+                ]
               },
               "turn_id": {
                 "format": "uuid",
@@ -82504,7 +82764,7 @@
     },
     "/api/v2/ai/safety": {
       "get": {
-        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Item 15 exposes only business.summary, records.search, and procedure.troubleshoot through the server registry; no write, free SQL, URL, header, credential, or provider escape hatch.",
         "operationId": "ai_safety_status",
         "responses": {
           "200": {
@@ -82584,7 +82844,7 @@
     },
     "/api/v2/ai/sessions": {
       "post": {
-        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Item 15 exposes only business.summary, records.search, and procedure.troubleshoot through the server registry; no write, free SQL, URL, header, credential, or provider escape hatch.",
         "operationId": "ai_session_create",
         "parameters": [
           {
@@ -82697,7 +82957,7 @@
     },
     "/api/v2/ai/sessions/{session_id}/events": {
       "get": {
-        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Item 15 exposes only business.summary, records.search, and procedure.troubleshoot through the server registry; no write, free SQL, URL, header, credential, or provider escape hatch.",
         "operationId": "ai_events_replay",
         "parameters": [
           {
@@ -82809,7 +83069,7 @@
     },
     "/api/v2/ai/sessions/{session_id}/stream": {
       "get": {
-        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Item 15 exposes only business.summary, records.search, and procedure.troubleshoot through the server registry; no write, free SQL, URL, header, credential, or provider escape hatch.",
         "operationId": "ai_events_stream",
         "parameters": [
           {
@@ -82911,7 +83171,7 @@
     },
     "/api/v2/ai/sessions/{session_id}/turns": {
       "post": {
-        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Item 15 exposes only business.summary, records.search, and procedure.troubleshoot through the server registry; no write, free SQL, URL, header, credential, or provider escape hatch.",
         "operationId": "ai_turn_create",
         "parameters": [
           {

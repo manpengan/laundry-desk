@@ -11,6 +11,7 @@ import { MemoryAiSafetyState, type MemoryAiSafetyPolicy } from "./safety-memory-
 import {
   eventBytes,
   publicTurn,
+  readonlyToolAudit,
   sameContext,
   sessionView,
   type MemoryMessage,
@@ -257,6 +258,8 @@ export class MemoryAiConversationStore implements AiConversationStore {
       throw new AiStoreError("NOT_FOUND");
     }
     this.attempts = Object.freeze([...this.attempts, Object.freeze({ ...input.attempt })]);
+    const audit = readonlyToolAudit(input.attempt);
+    if (audit !== null) this.audits = Object.freeze([...this.audits, audit]);
   }
 
   async finishTurn(input: Parameters<AiConversationStore["finishTurn"]>[0]): Promise<boolean> {

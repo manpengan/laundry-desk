@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AiAssistantToolNameSchema } from "./assistant.js";
 
 export const AI_PROMPT_MAX_CHARS = 8_000;
 export const AI_TURN_MAX_OUTPUT_TOKENS = 1_024;
@@ -65,6 +66,11 @@ const EventBaseSchema = z.object({
   at: z.iso.datetime({ offset: true }),
 });
 
+export const AiStreamToolNameSchema = z.union([
+  z.literal("synthetic.lookup"),
+  AiAssistantToolNameSchema,
+]);
+
 export const AiStreamEventSchema = z.discriminatedUnion("type", [
   EventBaseSchema.extend({
     type: z.literal("content_delta"),
@@ -72,12 +78,12 @@ export const AiStreamEventSchema = z.discriminatedUnion("type", [
   }).strict(),
   EventBaseSchema.extend({
     type: z.literal("tool_call"),
-    tool: z.literal("synthetic.lookup"),
+    tool: AiStreamToolNameSchema,
     step: z.number().int().min(1).max(4),
   }).strict(),
   EventBaseSchema.extend({
     type: z.literal("tool_result"),
-    tool: z.literal("synthetic.lookup"),
+    tool: AiStreamToolNameSchema,
     step: z.number().int().min(1).max(4),
     outcome: z.enum(["succeeded", "failed", "timed_out", "cancelled"]),
   }).strict(),
@@ -177,4 +183,5 @@ export type AiSessionView = Readonly<z.output<typeof AiSessionViewSchema>>;
 export type AiTurnView = Readonly<z.output<typeof AiTurnViewSchema>>;
 export type AiTurnCreateRequest = Readonly<z.output<typeof AiTurnCreateRequestSchema>>;
 export type AiStreamEvent = Readonly<z.output<typeof AiStreamEventSchema>>;
+export type AiStreamToolName = z.output<typeof AiStreamToolNameSchema>;
 export type AiEventReplayQuery = Readonly<z.output<typeof AiEventReplayQuerySchema>>;

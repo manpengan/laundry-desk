@@ -73,7 +73,7 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0064_byok_model_registry.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0065_ai_streaming_sessions.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0066_ai_safety_metering.sql
-# 0068 只能在统一分支已具备并应用 0065–0067 后执行；本 Item 显式预留编号。
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0067_readonly_ai_assistant.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0068_ai_approval_center.sql
 # 0069 只能在最终集成分支已具备并应用 0065–0068 后执行；本 Item 不伪造占位迁移。
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0069_bounded_automation.sql
@@ -112,6 +112,7 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **BYOK custody and model registry** (0064, [ADR-57](../../../../docs/adr/2026-08-13-adr-57-byok-custody-model-registry.md)): org-RLS AES-256-GCM envelopes with KMS-wrapped per-credential DEKs, fail-closed lifecycle transitions, and an empty owner-verified global model registry; requires the integrated 0054–0063 chain first
 - **Bounded AI streaming state** (0065, [ADR-58](../../../../docs/adr/2026-08-13-adr-58-bounded-ai-streaming-runtime.md)): tenant/session/staff-scoped sessions, append-only messages and events, bounded usage/tool-attempt metadata, closed write functions, FORCE RLS, and no direct application DML; public AI remains hard-off
 - **AI safety metering** (0066, [ADR-59](../../../../docs/adr/2026-08-13-adr-59-ai-safety-metering.md)): integer token/cost ledgers, atomic org budget reservations, durable circuit state, metadata-only rejection evidence, FORCE RLS, and owner-only status; public AI remains hard-off
+- **Read-only AI assistant** (0067, [ADR-62](../../../../docs/adr/2026-08-13-adr-62-readonly-ai-assistant.md)): three closed business/search/procedure tools over existing query authority, bounded metadata-only attempts, explicit source/filter projections, and no write/SQL/URL/header escape hatch
 - **R4 asynchronous approval center** (0068, [ADR-61](../../../../docs/adr/2026-08-13-adr-61-r4-asynchronous-approval-center.md)): store-scoped single-level approval requests bound to the existing WYSIWYS pending action, current other-admin authority, optimistic decision versions and transaction-local single consumption; requires the integrated 0065–0067 chain first
 - **Bounded automation** (0069, [ADR-63](../../../../docs/adr/2026-08-13-adr-63-bounded-automation.md)): store-RLS allowlisted policies, active-admin approval, daily integer-fen quotas, leases and privacy-safe action evidence; requires the integrated 0065–0068 chain first
 - **M2 payments** (0009): `payments` append-only ledger (`SELECT, INSERT` only for `laundry_app`)
