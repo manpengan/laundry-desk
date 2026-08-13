@@ -6,13 +6,11 @@ async function resolveOrderId(api, session, orderId, locator) {
     return requireUuid(orderId, "CLEANUP_ORDER_INVALID");
   }
   if (locator === null || locator === undefined) return null;
-  const found = asRecord(
-    await api.query(session, "order.list", {
-      customer_phone: locator.customerPhone,
-      limit: 50,
-    }),
-    "CLEANUP_ORDER_INVALID",
-  );
+  const query =
+    locator.customerPhone === null
+      ? { limit: 50 }
+      : { customer_phone: locator.customerPhone, limit: 50 };
+  const found = asRecord(await api.query(session, "order.list", query), "CLEANUP_ORDER_INVALID");
   const matches = requireArray(found.orders, "CLEANUP_ORDER_INVALID").filter((value) => {
     const row = asRecord(value, "CLEANUP_ORDER_INVALID");
     return row.customer_name === locator.customerName && row.payable_cents === locator.payableCents;

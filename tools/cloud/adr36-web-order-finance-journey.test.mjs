@@ -106,6 +106,11 @@ function createFakeApi(initialCatalog, options = {}) {
   };
 
   const receive = (args) => {
+    assert.equal(
+      Object.hasOwn(args, "customer_phone"),
+      false,
+      "finance orders must remain walk-in priced",
+    );
     const orderId = nextUuid();
     const garmentId = nextUuid();
     const price = catalog.unit_price_cents;
@@ -114,7 +119,7 @@ function createFakeApi(initialCatalog, options = {}) {
       order_id: orderId,
       ticket_no: `20260809-${String(orders.length + 1).padStart(4, "0")}`,
       status: "open",
-      customer_phone: args.customer_phone,
+      customer_phone: args.customer_phone ?? null,
       customer_name: args.customer_name,
       payable_cents: price,
       paid_cents: paid,
@@ -318,7 +323,10 @@ function createFakeApi(initialCatalog, options = {}) {
       return Object.freeze({
         orders: Object.freeze(
           orders
-            .filter((order) => order.customer_phone === args.customer_phone)
+            .filter(
+              (order) =>
+                args.customer_phone === undefined || order.customer_phone === args.customer_phone,
+            )
             .map((order) => Object.freeze(orderResult(order))),
         ),
       });
