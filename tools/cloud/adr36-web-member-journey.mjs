@@ -101,11 +101,18 @@ export async function memberJourney(api, credentials, artifacts, run, update) {
     ),
   );
   const memberOrderId = requireUuid(memberOrder.order_id, "ORDER_RECEIVE_INVALID");
-  requireThat(memberOrder.balance_cents === 2_600, "ORDER_RECEIVE_INVALID");
+  const memberOrderChargeCents = requireInteger(memberOrder.balance_cents, "ORDER_RECEIVE_INVALID");
+  requireThat(
+    memberOrderChargeCents > 0 &&
+      memberOrder.payable_cents === memberOrderChargeCents &&
+      memberOrder.paid_cents === 0,
+    "ORDER_RECEIVE_INVALID",
+  );
+  update({ memberOrderChargeCents });
   const balancePayInput = Object.freeze({
     account_id: accountId,
     order_id: memberOrderId,
-    amount_cents: 2_600,
+    amount_cents: memberOrderChargeCents,
     note: run.note,
   });
   let view = asRecord(
@@ -174,7 +181,8 @@ export async function memberJourney(api, credentials, artifacts, run, update) {
     ),
   );
   requireThat(
-    paid.order_balance_cents === 0 && paid.balance_cents === topupCents - 1_600,
+    paid.order_balance_cents === 0 &&
+      paid.balance_cents === topupCents + 1_000 - memberOrderChargeCents,
     "MEMBER_BALANCE_PAY_INVALID",
   );
   await writeMutation(update, {}, () =>
@@ -202,7 +210,7 @@ export async function memberJourney(api, credentials, artifacts, run, update) {
     ),
   );
   requireThat(
-    refunded.principal_cents === topupCents - 2_600 && refunded.bonus_cents === 0,
+    refunded.principal_cents === topupCents - memberOrderChargeCents && refunded.bonus_cents === 0,
     "MEMBER_REFUND_INVALID",
   );
   view = asRecord(

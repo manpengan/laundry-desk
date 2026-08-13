@@ -72,8 +72,9 @@ export function selectLocalEnvironment(environment) {
 export function selectCommandEnvironment(file, environment) {
   const common = ["LANG", "LC_ALL", "PATH"];
   const homeAware = [GIT, SSH, SCP, SSH_KEYSCAN, SSH_KEYGEN].includes(file) ? ["HOME"] : [];
+  const sshAgent = [SSH, SCP].includes(file) ? ["SSH_AUTH_SOCK"] : [];
   const github = file === GH ? ["GH_CONFIG_DIR", "GH_TOKEN", "GITHUB_TOKEN", "HOME"] : [];
-  const names = new Set([...common, ...homeAware, ...github]);
+  const names = new Set([...common, ...homeAware, ...sshAgent, ...github]);
   return Object.freeze(
     Object.fromEntries(
       [...names].flatMap((name) =>

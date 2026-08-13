@@ -1,13 +1,14 @@
 import { asRecord, requireThat } from "./adr36-web-core.mjs";
 import {
-  EXPECTED_DELTA,
   accountingReport,
   assertBasis,
+  expectedAccountingDelta,
   staffBasis,
   subtractBasis,
 } from "./adr36-web-journey-support.mjs";
 
 export async function accountingDeltaJourney(api, artifacts) {
+  const expected = expectedAccountingDelta(artifacts.memberOrderChargeCents);
   const afterDay = await accountingReport(api, artifacts.adminSession, {
     date_from: artifacts.accountingBaselineDay.date,
     date_to: artifacts.accountingBaselineDay.date,
@@ -22,17 +23,10 @@ export async function accountingDeltaJourney(api, artifacts) {
     afterDay.date === artifacts.accountingBaselineDay.date && afterStaff.date === afterDay.date,
     "BUSINESS_DAY_ROLLOVER",
   );
-  assertBasis(
-    subtractBasis(afterDay.totals, artifacts.accountingBaselineDay.totals),
-    EXPECTED_DELTA,
-  );
+  assertBasis(subtractBasis(afterDay.totals, artifacts.accountingBaselineDay.totals), expected);
   const beforeActor = staffBasis(artifacts.accountingBaselineStaff, artifacts.adminSession.staffId);
   const afterActor = staffBasis(afterStaff, artifacts.adminSession.staffId);
-  assertBasis(
-    subtractBasis(afterActor, beforeActor),
-    EXPECTED_DELTA,
-    "ACCOUNTING_STAFF_DELTA_INVALID",
-  );
+  assertBasis(subtractBasis(afterActor, beforeActor), expected, "ACCOUNTING_STAFF_DELTA_INVALID");
 }
 
 async function settleOpenOrder(api, artifacts, orderId, note) {
@@ -179,6 +173,7 @@ export function initialArtifacts() {
     customerProfileCustomerOrderLocator: null,
     memberOrderId: null,
     memberOrderLocator: null,
+    memberOrderChargeCents: null,
     memberAccountId: null,
     memberAccountLocator: null,
     memberClosed: false,
