@@ -73,6 +73,9 @@ const writeManifest = async (name, value, signature = signPayload(value)) => {
 };
 const signature = signPayload(payload);
 const manifest = await writeManifest("runtime-manifest.json", payload, signature);
+const testingCapacity = Object.freeze({
+  LAUNDRY_RUNTIME_TEST_ROOT_CAPACITY_BYTES: "1073741824",
+});
 const execute = (configRoot, runnerLog, args, input = "", extraEnvironment = {}) =>
   new Promise((resolveRun, rejectRun) => {
     const child = spawn(
@@ -80,7 +83,7 @@ const execute = (configRoot, runnerLog, args, input = "", extraEnvironment = {})
       ["--test-config-root", configRoot, "--test-runner-log", runnerLog, ...args],
       {
         cwd: emptyCwd,
-        env: { PATH: "", ...extraEnvironment },
+        env: { PATH: "", ...testingCapacity, ...extraEnvironment },
         shell: false,
         stdio: ["pipe", "pipe", "pipe"],
       },
