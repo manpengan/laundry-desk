@@ -18,9 +18,9 @@ async function mutation(update, locator, operation, register = (value) => value)
   return registered;
 }
 
-function orderInput(artifacts, run, customerName, note, initialPayment) {
+// Keep catalog-price finance evidence independent from the member policy journey.
+function orderInput(run, customerName, note, initialPayment) {
   return Object.freeze({
-    customer_phone: artifacts.customerPhone,
     customer_name: customerName,
     lines: [
       Object.freeze({
@@ -41,7 +41,7 @@ export async function createOrder(api, artifacts, run, update, kind, priceCents,
   const locatorName = `${kind}OrderLocator`;
   const idName = `${kind}OrderId`;
   const locator = Object.freeze({
-    customerPhone: artifacts.customerPhone,
+    customerPhone: null,
     customerName,
     note,
     payableCents: priceCents,
@@ -57,7 +57,7 @@ export async function createOrder(api, artifacts, run, update, kind, priceCents,
         api.command(
           artifacts.adminSession,
           "order.receive",
-          orderInput(artifacts, run, customerName, note, initialPayment),
+          orderInput(run, customerName, note, initialPayment),
         ),
       (value) => {
         const record = asRecord(value, "ORDER_RECEIVE_INVALID");
