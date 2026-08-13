@@ -2,14 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 
-import {
-  DELIVERY_APPOINTMENT_COMMAND_NAMES,
-  DELIVERY_EVIDENCE_COMMAND_NAMES,
-  DELIVERY_ORDER_COMMAND_NAMES,
-  DELIVERY_TASK_COMMAND_NAMES,
-  createCommandError,
-  type CommandError,
-} from "@laundry/contracts";
+import { createCommandError, type CommandError } from "@laundry/contracts";
 import { measureInput, type SizeMeasures, type StepResult, type Thresholds } from "@laundry/domain";
 
 import type { BusChainPorts, ChainPortHooks } from "../bus/chain-adapter.js";
@@ -35,6 +28,7 @@ import {
   type PendingActionPreparer,
   type PendingRiskPreparer,
 } from "./pending-policy.js";
+import { REUSABLE_PENDING_COMMANDS } from "./reusable-pending-commands.js";
 
 const okVoid = (): StepResult<void, CommandError> => ({ ok: true, data: undefined });
 
@@ -47,16 +41,6 @@ const okPolicy = (): StepResult<Readonly<{ allowed: true }>, CommandError> => ({
   ok: true,
   data: Object.freeze({ allowed: true as const }),
 });
-
-const REUSABLE_PENDING_COMMANDS: ReadonlySet<string> = new Set([
-  "delivery.policy.set",
-  ...DELIVERY_APPOINTMENT_COMMAND_NAMES,
-  ...DELIVERY_ORDER_COMMAND_NAMES,
-  ...DELIVERY_TASK_COMMAND_NAMES,
-  ...DELIVERY_EVIDENCE_COMMAND_NAMES,
-  "marketing.campaign.set",
-  "marketing.campaign.audience.freeze",
-]);
 
 export { actorPermissionSet, requiredPermissionsFromInvariants } from "../bus/rbac.js";
 
@@ -196,6 +180,14 @@ function policyDecisionFrom(
     }),
     authority,
   );
+}
+
+/** Pure C5 evaluation for tightly bounded standing authorities such as ADR-63 policies. */
+export function evaluateCurrentCommandPolicy(
+  bus: BusContext,
+  parsed: unknown,
+): PolicyDecision | null {
+  return policyDecisionFrom(bus, parsed);
 }
 
 function confirmationMatchesCurrentPolicy(bus: BusContext, decision: PolicyDecision): boolean {
@@ -354,7 +346,9 @@ export function createEnforcingPolicyCheck(
         orgId: bus.tenant.orgId,
         storeId: bus.tenant.storeId,
         idempotencyKey: idempotencyKey ?? nonce,
-        privacySubjectCustomerId: customerPrivacySubjectFromCommand(bus.definition.name, parsed),
+        privacySubjectCustomerId:
+          preparation?.privacySubjectCustomerId ??
+          customerPrivacySubjectFromCommand(bus.definition.name, parsed),
         createdAt: now,
         effectiveRisk: decision.effectiveRisk,
         policyOutcome: decision.outcome,

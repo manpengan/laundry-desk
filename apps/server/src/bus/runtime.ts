@@ -39,6 +39,8 @@ const ADMIN_PERMISSIONS = Object.freeze([
   // runtime is independently hard-off unless an explicit adapter is injected.
   "ai_use",
   "approval_manage",
+  // ADR-63: policy creation, approval, pause/resume and run history are admin-only.
+  "automation_manage",
   "fulfillment_handoff",
   "fulfillment_qc",
   "fulfillment_reconcile",
@@ -95,6 +97,7 @@ export function createRuntimeBus(runtime: LocalRuntime) {
       shift: runtime.shift,
       reconciliation: runtime.reconciliation,
       accounting: runtime.accounting,
+      automation: runtime.automation,
       reporting: runtime.reporting,
       photo: runtime.photo,
       fulfillment: runtime.fulfillment,

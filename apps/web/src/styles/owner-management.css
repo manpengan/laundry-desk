@@ -196,6 +196,48 @@
   font-size: 13px;
 }
 
+.ld-owner-automation__form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ld-owner-automation__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--lg-ink2);
+  font-size: 12px;
+}
+
+.ld-owner-automation__field input,
+.ld-owner-automation__field select {
+  min-height: 42px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-surface);
+  color: var(--lg-ink);
+  font: inherit;
+}
+
+.ld-owner-automation__check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  color: var(--lg-ink2);
+  font-size: 12px;
+}
+
+.ld-owner-automation__actions,
+.ld-owner-automation__row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 @media (max-width: 560px) {
   .ld-owner-nav {
     top: 62px;
@@ -212,6 +254,10 @@
   }
 
   .ld-owner-management__form {
+    grid-template-columns: 1fr;
+  }
+
+  .ld-owner-automation__form {
     grid-template-columns: 1fr;
   }
 

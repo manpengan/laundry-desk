@@ -106,6 +106,14 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
   Owner Web 查看完整冻结参数后批准并通过同一命令总线执行，或填写原因驳回；发起人不可自批，
   hash、实体版本、幂等键、权限版本和有效期任一漂移都会失败关闭。R3 原确认路径保持不变，R5
   不进入异步审批或 AI 执行；0068 需在统一集成分支的 0065–0067 之后验证和发布。
+- 有界自动化策略与调度（[ADR-63](adr/2026-08-13-adr-63-bounded-automation.md)）：Owner 可用固定
+  取件提醒模板建立当前门店策略，配置有效期、非跨午夜时段、对象过滤、每日次数和整数分金额上限；
+  新建或修改后必须由 active admin 经 R3 确认批准，一键暂停/恢复，额度超限或连续三次失败自动暂停。
+  worker 以 `via=automation` 继续走统一 command bus、RBAC、租户、policy、pending risk 和审计；PostgreSQL
+  在同一事务锁定策略与日额度并保存脱敏运行证据。当前只允许
+  `notification.delivery_batch.enqueue@0.1.0` 且每次最多 10 单，明确禁止 R4/R5、退款、免单、余额、
+  权限、密钥、备份恢复、审计删除以及自由 cron、代码、SQL 或 URL。当前 software-only 通知不代表真实送达；
+  0069 仍须随 0065–0068 集成后进入连续迁移、required CI 与 hk-vps 发布门禁。
 
 - BYOK 凭据托管与模型注册表（[ADR-57](adr/2026-08-13-adr-57-byok-custody-model-registry.md)）：
   新增组织隔离的 envelope 加密凭据生命周期，replace/revoke 只经 admin、CSRF、限流与另一管理员 R5

@@ -9,3 +9,4 @@ export * from "./delivery-evidence.js";
 export * from "./marketing-all.js";
 export * from "./customer-self-service.js";
 export * from "./customer-self-service-account.js";
+export * from "./automation.js";

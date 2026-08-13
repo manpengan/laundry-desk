@@ -15,6 +15,12 @@ const OWNER_CLOUD_COMMANDS: ReadonlySet<string> = new Set([
   "marketing.referral.reward.issue",
   "marketing.group_buy.voucher.register",
   "marketing.group_buy.voucher.redeem",
+  "automation.policy.create",
+  "automation.policy.update",
+  "automation.policy.approve",
+  "automation.policy.pause",
+  "automation.policy.resume",
+  "automation.policy.archive",
 ]);
 
 const OWNER_CLOUD_QUERIES: ReadonlySet<string> = new Set([
@@ -32,6 +38,9 @@ const OWNER_CLOUD_QUERIES: ReadonlySet<string> = new Set([
   "marketing.campaign.audience.preview",
   "marketing.campaign.coupons.preview",
   "marketing.campaign.coupon_batch.get",
+  "automation.policies.list",
+  "automation.policy.get",
+  "automation.runs.list",
 ]);
 
 export type RuntimeBusSurface = "command" | "query";

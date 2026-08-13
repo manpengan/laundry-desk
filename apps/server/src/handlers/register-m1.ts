@@ -1,5 +1,6 @@
 import type { ChainPortHooks } from "../bus/chain-adapter.js";
 import type { AccountingHandlerDeps } from "../accounting/types.js";
+import * as automationRegistration from "../automation/handlers.js";
 import { createAccountingHandlers } from "../accounting/handlers.js";
 import { createM1CommandRegistry, type MutableCommandRegistry } from "../bus/registry.js";
 import { createM1QueryRegistry, type MutableQueryRegistry } from "../bus/query-registry.js";
@@ -92,6 +93,8 @@ export type RegisterM1Deps = Readonly<{
   reconciliation?: ReconciliationHandlerDeps;
   /** ADR-24 dual-basis day/month/staff accounting reports. */
   accounting?: AccountingHandlerDeps;
+  /** ADR-63 allowlisted, quota-bound automation management and history. */
+  automation?: automationRegistration.AutomationHandlerDeps;
   /** ADR-26 owner dashboard; financial rows reuse the ADR-24 read port. */
   reporting?: ReportingHandlerDeps;
   /** M3 garment photo metadata (memory). */
@@ -211,6 +214,8 @@ export function registerM1Handlers(
     registered.push("accounting.report.export");
   }
 
+  registered.push(...automationRegistration.registerAutomationCommands(registry, deps.automation));
+
   if (deps.photo !== undefined) {
     registerPhotoCommandHandlers(registry, deps.photo);
     registered.push("photo.register");
@@ -323,6 +328,8 @@ export function registerM1QueryHandlers(
     queryRegistry.registerHandler("accounting.report.get", handlers["accounting.report.get"]);
     names.push("accounting.report.get");
   }
+
+  names.push(...automationRegistration.registerAutomationQueries(queryRegistry, deps.automation));
 
   if (deps.reporting !== undefined) {
     registerReportingQueryHandlers(queryRegistry, deps.reporting);

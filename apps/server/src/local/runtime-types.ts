@@ -1,6 +1,7 @@
 import type { CsrfProofSigner } from "../auth/csrf.js";
 import type { ApprovalStore } from "../approvals/types.js";
 import type { AccountingHandlerDeps } from "../accounting/types.js";
+import type { AutomationHandlerDeps } from "../automation/types.js";
 import type { CommandIdempotencyStore, StepUpApproverAuthority } from "../bus/types.js";
 import type { CatalogHandlerDeps } from "../catalog/handlers.js";
 import type { CustomerHandlerDeps } from "../customer/handlers.js";
@@ -64,6 +65,7 @@ export type LocalRuntime = Readonly<{
   shift: ShiftHandlerDeps;
   reconciliation: ReconciliationHandlerDeps;
   accounting: AccountingHandlerDeps;
+  automation: AutomationHandlerDeps;
   reporting: ReportingHandlerDeps;
   photo: PhotoHandlerDeps;
   fulfillment: FulfillmentHandlerDeps;

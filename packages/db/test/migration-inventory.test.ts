@@ -73,6 +73,7 @@ const expectedSqlFiles = [
   "0065_ai_streaming_sessions.sql",
   "0066_ai_safety_metering.sql",
   "0068_ai_approval_center.sql",
+  "0069_bounded_automation.sql",
 ] as const;
 
 describe("packages/db migration inventory", () => {

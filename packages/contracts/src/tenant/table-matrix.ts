@@ -90,10 +90,8 @@ const ORG_TABLES = describeTables(
     "ai_presets",
     "ai_conversations",
     "ai_messages",
-    "automation_policies",
     "approval_requests",
     "ai_usage_daily",
-    "ai_action_log",
   ] as const,
 );
 
@@ -158,6 +156,9 @@ const STORE_TABLES = describeTables(
     "edge_replay_records",
     "ticket_no_blocks",
     "ai_pending_actions",
+    "automation_policies",
+    "automation_policy_usage_daily",
+    "ai_action_log",
   ] as const,
 );
 

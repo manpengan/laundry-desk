@@ -122,6 +122,14 @@ describe("M2 contract surface", () => {
       "marketing.referral.reward.issue",
       "marketing.group_buy.voucher.register",
       "marketing.group_buy.voucher.redeem",
+      // ADR-63: only allowlisted R3-or-lower automations with explicit approval,
+      // schedule windows and lock-checked daily count/integer-fen quotas.
+      "automation.policy.create",
+      "automation.policy.update",
+      "automation.policy.approve",
+      "automation.policy.pause",
+      "automation.policy.resume",
+      "automation.policy.archive",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
@@ -158,6 +166,9 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.wallet.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.benefits.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.profile.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("automation.policies.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("automation.policy.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("automation.runs.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("accounting.report.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.drilldown");
@@ -177,8 +188,8 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.task.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.tasks.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.evidence.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(76);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(61);
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(82);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(64);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );

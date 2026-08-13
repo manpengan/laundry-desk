@@ -1,6 +1,12 @@
 import type { CommandDefinition, QueryDefinition } from "../registry/definitions.js";
 import type { z } from "zod";
 import {
+  AUTOMATION_COMMAND_NAMES,
+  AUTOMATION_COMMANDS,
+  AUTOMATION_QUERY_NAMES,
+  AUTOMATION_QUERIES,
+} from "./automation.js";
+import {
   M2_CONTRACT_COMMAND_NAMES as BASE_COMMAND_NAMES,
   M2_CONTRACT_DEFINITIONS as BASE_DEFINITIONS,
   M2_CONTRACT_QUERY_NAMES as BASE_QUERY_NAMES,
@@ -8,11 +14,9 @@ import {
   M2_SKELETON_DEFINITIONS as BASE_SKELETON_DEFINITIONS,
 } from "./catalog-base.js";
 import {
-  DELIVERY_POLICY_COMMAND_NAMES,
-  DELIVERY_POLICY_COMMANDS,
-  DELIVERY_POLICY_QUERIES,
-  DELIVERY_POLICY_QUERY_NAMES,
-} from "./delivery-policy.js";
+  CUSTOMER_SELF_SERVICE_QUERIES,
+  CUSTOMER_SELF_SERVICE_QUERY_NAMES,
+} from "./customer-self-service.js";
 import {
   DELIVERY_APPOINTMENT_COMMAND_NAMES,
   DELIVERY_APPOINTMENT_COMMANDS,
@@ -20,27 +24,29 @@ import {
   DELIVERY_APPOINTMENT_QUERY_NAMES,
 } from "./delivery-appointments.js";
 import {
-  DELIVERY_ORDER_COMMAND_NAMES,
-  DELIVERY_ORDER_COMMANDS,
-  DELIVERY_ORDER_QUERIES,
-  DELIVERY_ORDER_QUERY_NAMES,
-} from "./delivery-orders.js";
-import {
-  DELIVERY_TASK_COMMAND_NAMES,
-  DELIVERY_TASK_COMMANDS,
-  DELIVERY_TASK_QUERIES,
-  DELIVERY_TASK_QUERY_NAMES,
-} from "./delivery-tasks.js";
-import {
   DELIVERY_EVIDENCE_COMMAND_NAMES,
   DELIVERY_EVIDENCE_COMMANDS,
   DELIVERY_EVIDENCE_QUERIES,
   DELIVERY_EVIDENCE_QUERY_NAMES,
 } from "./delivery-evidence.js";
 import {
-  CUSTOMER_SELF_SERVICE_QUERIES,
-  CUSTOMER_SELF_SERVICE_QUERY_NAMES,
-} from "./customer-self-service.js";
+  DELIVERY_ORDER_COMMAND_NAMES,
+  DELIVERY_ORDER_COMMANDS,
+  DELIVERY_ORDER_QUERIES,
+  DELIVERY_ORDER_QUERY_NAMES,
+} from "./delivery-orders.js";
+import {
+  DELIVERY_POLICY_COMMAND_NAMES,
+  DELIVERY_POLICY_COMMANDS,
+  DELIVERY_POLICY_QUERIES,
+  DELIVERY_POLICY_QUERY_NAMES,
+} from "./delivery-policy.js";
+import {
+  DELIVERY_TASK_COMMAND_NAMES,
+  DELIVERY_TASK_COMMANDS,
+  DELIVERY_TASK_QUERIES,
+  DELIVERY_TASK_QUERY_NAMES,
+} from "./delivery-tasks.js";
 import {
   MARKETING_COMMAND_NAMES,
   MARKETING_COMMANDS,
@@ -60,7 +66,7 @@ import {
 
 export * from "./catalog-base.js";
 
-/** ADR-46 through ADR-51 extend the frozen surface while keeping the historical catalog bounded. */
+/** ADR-46 through ADR-63 extend the frozen surface while keeping the historical catalog bounded. */
 export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] = Object.freeze([
   ...BASE_SKELETON_DEFINITIONS,
   ...DELIVERY_POLICY_COMMANDS,
@@ -71,6 +77,7 @@ export const M2_SKELETON_DEFINITIONS: readonly CommandDefinition<z.ZodObject>[] 
   ...MARKETING_COMMANDS,
   ...MARKETING_COUPON_COMMANDS,
   ...MARKETING_EXTENSION_COMMANDS,
+  ...AUTOMATION_COMMANDS,
 ]);
 
 export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
@@ -83,6 +90,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   ...MARKETING_COMMAND_NAMES,
   ...MARKETING_COUPON_COMMAND_NAMES,
   ...MARKETING_EXTENSION_COMMAND_NAMES,
+  ...AUTOMATION_COMMAND_NAMES,
 ] as const);
 
 export const M2_CONTRACT_COMMAND_NAMES = Object.freeze([
@@ -95,6 +103,7 @@ export const M2_CONTRACT_COMMAND_NAMES = Object.freeze([
   ...MARKETING_COMMAND_NAMES,
   ...MARKETING_COUPON_COMMAND_NAMES,
   ...MARKETING_EXTENSION_COMMAND_NAMES,
+  ...AUTOMATION_COMMAND_NAMES,
 ] as const);
 
 export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
@@ -107,6 +116,7 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   ...MARKETING_QUERY_NAMES,
   ...MARKETING_COUPON_QUERY_NAMES,
   ...CUSTOMER_SELF_SERVICE_QUERY_NAMES,
+  ...AUTOMATION_QUERY_NAMES,
 ] as const);
 
 export const M2_CONTRACT_DEFINITIONS: readonly (
@@ -129,4 +139,6 @@ export const M2_CONTRACT_DEFINITIONS: readonly (
   ...MARKETING_COUPON_QUERIES,
   ...MARKETING_EXTENSION_COMMANDS,
   ...CUSTOMER_SELF_SERVICE_QUERIES,
+  ...AUTOMATION_COMMANDS,
+  ...AUTOMATION_QUERIES,
 ]);

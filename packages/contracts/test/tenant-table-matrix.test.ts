@@ -20,6 +20,7 @@ const EXPECTED_TABLES = Object.freeze([
   "approval_requests",
   "audit_log",
   "automation_policies",
+  "automation_policy_usage_daily",
   "backups",
   "batch_garments",
   "brand_dict",
@@ -107,14 +108,12 @@ const EXPECTED_TABLES = Object.freeze([
 
 const EXPECTED_GLOBAL_TABLES = Object.freeze(["ai_model_registry", "orgs"] as const);
 const EXPECTED_ORG_TABLES = Object.freeze([
-  "ai_action_log",
   "ai_conversations",
   "ai_messages",
   "ai_presets",
   "ai_provider_keys",
   "ai_usage_daily",
   "approval_requests",
-  "automation_policies",
   "backups",
   "card_types",
   "coupon_grants",
@@ -146,8 +145,11 @@ const EXPECTED_ORG_TABLES = Object.freeze([
 ] as const);
 const EXPECTED_STORE_TABLES = Object.freeze([
   "addon_catalog",
+  "ai_action_log",
   "ai_pending_actions",
   "audit_log",
+  "automation_policies",
+  "automation_policy_usage_daily",
   "batch_garments",
   "brand_dict",
   "campaign_audience_snapshots",
@@ -227,8 +229,10 @@ describe("A3 tenant table matrix", () => {
     ).toEqual(expectedTables);
   });
 
-  it("keeps optional store filters at org scope", () => {
-    expect(getTenantTableScope("automation_policies")).toBe("org");
+  it("ratifies bounded automation authority and evidence as strict store scope", () => {
+    expect(getTenantTableScope("automation_policies")).toBe("store");
+    expect(getTenantTableScope("automation_policy_usage_daily")).toBe("store");
+    expect(getTenantTableScope("ai_action_log")).toBe("store");
   });
 
   it("registers ordinary grant replay high-water as a strict store-scoped RLS table", () => {

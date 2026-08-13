@@ -7,6 +7,7 @@
 
 import {
   ACCOUNTING_QUERIES,
+  AUTOMATION_QUERIES,
   M1_FIRST_WAVE_DEFINITIONS,
   M2_CATALOG_DEFINITIONS,
   M2_CUSTOMER_QUERY_DEFINITIONS,
@@ -89,6 +90,7 @@ export const DEFAULT_BUS_QUERY_DEFINITIONS: readonly AnyDefinition[] = Object.fr
   ...(MARKETING_QUERIES as readonly AnyDefinition[]),
   ...(MARKETING_COUPON_QUERIES as readonly AnyDefinition[]),
   ...(ACCOUNTING_QUERIES as readonly AnyDefinition[]),
+  ...(AUTOMATION_QUERIES as readonly AnyDefinition[]),
   ...(REPORTING_QUERIES as readonly AnyDefinition[]),
   ...(RECONCILIATION_QUERIES as readonly AnyDefinition[]),
   ...(STAFF_QUERIES as readonly AnyDefinition[]),

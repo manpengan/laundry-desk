@@ -9,6 +9,7 @@ import { OwnerAiSafetyCard } from "./OwnerAiSafetyCard.js";
 import type { ApprovalPort } from "../ai/approval-port.js";
 import { ApprovalCenterPage } from "./ApprovalCenterPage.js";
 import { OwnerDashboardPage } from "./OwnerDashboardPage.js";
+import { OwnerAutomationPage } from "./OwnerAutomationPage.js";
 import { OwnerDrilldownPanel } from "./OwnerDrilldownPanel.js";
 import { OwnerReportsPage } from "./OwnerReportsPage.js";
 import { OwnerMarketingPage } from "./OwnerMarketingPage.js";
@@ -28,11 +29,12 @@ export type OwnerShellProps = Readonly<{
   approvalPort?: ApprovalPort;
 }>;
 
-type OwnerSection = "today" | "reports" | "stores" | "marketing" | "approvals";
+type OwnerSection = "today" | "reports" | "automation" | "stores" | "marketing" | "approvals";
 
 const OWNER_SECTIONS: readonly Readonly<{ id: OwnerSection; label: string }>[] = Object.freeze([
   Object.freeze({ id: "today", label: "今日经营" }),
   Object.freeze({ id: "reports", label: "经营报表" }),
+  Object.freeze({ id: "automation", label: "有界自动化" }),
   Object.freeze({ id: "stores", label: "门店管理" }),
   Object.freeze({ id: "approvals", label: "审批中心" }),
 ]);
@@ -119,6 +121,8 @@ export function OwnerShell({
             </>
           ) : section === "reports" ? (
             <OwnerReportsPage queryClient={queryClient} commandClient={commandClient} />
+          ) : section === "automation" ? (
+            <OwnerAutomationPage queryClient={queryClient} commandClient={commandClient} />
           ) : section === "stores" ? (
             <OwnerStoreManagementPage
               session={session}

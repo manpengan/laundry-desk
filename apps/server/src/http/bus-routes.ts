@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 
 import {
   ConfirmReferenceSchema,
+  AUTOMATION_COMMAND_NAMES,
+  AUTOMATION_QUERY_NAMES,
   FACTORY_HANDOFF_COMMAND_NAMES,
   FACTORY_HANDOFF_QUERY_NAMES,
   IdempotencyKeySchema,
@@ -47,6 +49,8 @@ const IDEMPOTENCY_HEADER_NAME = "idempotency-key";
 const NOTIFICATION_ENQUEUE_COMMAND = "notification.delivery_batch.enqueue";
 const FACTORY_COMMANDS: ReadonlySet<string> = new Set(FACTORY_HANDOFF_COMMAND_NAMES);
 const FACTORY_QUERIES: ReadonlySet<string> = new Set(FACTORY_HANDOFF_QUERY_NAMES);
+const AUTOMATION_COMMANDS: ReadonlySet<string> = new Set(AUTOMATION_COMMAND_NAMES);
+const AUTOMATION_QUERIES: ReadonlySet<string> = new Set(AUTOMATION_QUERY_NAMES);
 
 function routeName(params: unknown): string {
   if (!isRecord(params)) return "";
@@ -221,7 +225,7 @@ function registerCommandRoute(
         );
         if (limited !== null) return limited;
       }
-      if (FACTORY_COMMANDS.has(name)) {
+      if (FACTORY_COMMANDS.has(name) || AUTOMATION_COMMANDS.has(name)) {
         const decision = factoryLimiter.check(
           "command",
           resolved.session.session_id,
@@ -316,7 +320,7 @@ function registerQueryRoute(
         const limited = enforceMarketingOperationLimit(marketingLimiter, "query", resolved, reply);
         if (limited !== null) return limited;
       }
-      if (FACTORY_QUERIES.has(name)) {
+      if (FACTORY_QUERIES.has(name) || AUTOMATION_QUERIES.has(name)) {
         const decision = factoryLimiter.check(
           "query",
           resolved.session.session_id,
