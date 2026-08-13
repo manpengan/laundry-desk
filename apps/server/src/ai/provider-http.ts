@@ -33,6 +33,17 @@ const systemResolver: Resolver = async (hostname) => {
   return Object.freeze(rows.map((row) => row.address));
 };
 
+export function createPinnedLookup(address: string): NonNullable<RequestOptions["lookup"]> {
+  const family = address.includes(":") ? 6 : 4;
+  return (_hostname, options, callback) => {
+    if (options.all === true) {
+      callback(null, [{ address, family }]);
+      return;
+    }
+    callback(null, address, family);
+  };
+}
+
 function mapTransportError(error: unknown, signal: AbortSignal): ProviderAdapterError {
   if (error instanceof ProviderAdapterError) return error;
   if (signal.aborted) return new ProviderAdapterError("PROVIDER_ABORTED");
@@ -69,9 +80,7 @@ export function createPinnedProviderHttp(
             headers: { ...input.headers },
             signal: input.signal,
             servername: target.hostname,
-            lookup: (_hostname, _options, callback) => {
-              callback(null, pinnedAddress, pinnedAddress.includes(":") ? 6 : 4);
-            },
+            lookup: createPinnedLookup(pinnedAddress),
           };
           const request = httpsRequest(url, options, (response) => {
             const safeBody = async function* (): AsyncIterable<Uint8Array> {

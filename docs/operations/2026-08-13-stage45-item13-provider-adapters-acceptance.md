@@ -30,13 +30,17 @@ pnpm exec prettier --check <Item-13 changed files>
 git diff --check
 ```
 
-结果：协议夹具 6/6、连接验证 3/3、安全文件 2/2 通过；build/typecheck、OpenAPI snapshot、focused
-ESLint、Prettier、文件规模与 diff check 通过。没有读取或发送开发机真实密钥；真实 DeepSeek smoke 由
-root 在隔离凭据文件上另行执行，属于外部验收证据。
+结果：集成后协议夹具 10/10、连接验证 3/3、安全文件 2/2 通过；build/typecheck、OpenAPI snapshot、
+focused ESLint、Prettier、文件规模与 diff check 通过。root 随后在 hk-vps 使用 Hermes 既有凭据的
+root-only 临时副本完成真实 DeepSeek smoke：模型发现、`deepseek-v4-pro` 可用性、流式文本、整数 usage
+与一次受控 tool call 均通过；输出未含 key、header 或生成文本。远端及本机临时凭据/bundle 已精确清理，
+Hermes 原始配置未改。Item 13/15 集成后 `pnpm workspace:check` 全量通过，Edge SPA 内容寻址包已同步并
+通过 `spa:check` 与 Edge 全包测试。
 
 ## 失败关闭边界
 
 - 401/403、429、5xx、timeout、abort、malformed/oversized 响应只映射固定安全码。
 - 选中模型未发现、feature hard-off、credential/model/session 版本漂移均不消费卡或激活凭据。
 - base URL 不来自 wire/config；私网、link-local、IPv6 保留地址、userinfo、非 HTTPS 和 redirect 均拒绝。
-- 不包含 Item 15 经营助手、写工具、自由 URL/provider，也不宣称真实供应商可用性已验收。
+- 与 Item 15 集成后，四个内部工具名使用固定双向映射；未知工具、截断 tool stream 和未提供工具均在
+  产生可执行事件前失败关闭。仍不包含写工具、自由 URL/provider。

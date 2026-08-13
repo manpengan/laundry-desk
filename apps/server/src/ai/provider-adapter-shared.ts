@@ -1,9 +1,26 @@
-import type { AiProviderEvent } from "./streaming-provider.js";
+import type { AiProviderEvent, AiProviderToolName } from "./streaming-provider.js";
 import { ProviderAdapterError, type ProviderFailureCode } from "./provider-types.js";
 
 export const PROVIDER_TIMEOUT_MS = 10_000;
 export const MAX_DISCOVERED_MODELS = 200;
-export const EXTERNAL_TOOL_NAME = "synthetic_lookup";
+export type ExternalProviderToolName =
+  "synthetic_lookup" | "business_summary" | "records_search" | "procedure_troubleshoot";
+
+export function toExternalToolName(name: string | undefined): ExternalProviderToolName {
+  if (name === "synthetic.lookup") return "synthetic_lookup";
+  if (name === "business.summary") return "business_summary";
+  if (name === "records.search") return "records_search";
+  if (name === "procedure.troubleshoot") return "procedure_troubleshoot";
+  throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
+}
+
+export function fromExternalToolName(name: string): AiProviderToolName {
+  if (name === "synthetic_lookup") return "synthetic.lookup";
+  if (name === "business_summary") return "business.summary";
+  if (name === "records_search") return "records.search";
+  if (name === "procedure_troubleshoot") return "procedure.troubleshoot";
+  throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
+}
 
 export function credentialText(credential: Buffer): string {
   if (

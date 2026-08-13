@@ -1,12 +1,13 @@
 import { z } from "zod";
 
 import {
-  EXTERNAL_TOOL_NAME,
   PROVIDER_TIMEOUT_MS,
   boundedModels,
   credentialText,
+  fromExternalToolName,
   normalizeProviderError,
   providerErrorEvent,
+  toExternalToolName,
 } from "./provider-adapter-shared.js";
 import { readProviderJson, readProviderSse, type ProviderHttpPort } from "./provider-http.js";
 import {
@@ -94,13 +95,17 @@ function safeToolResult(content: string): unknown {
 function mapMessages(messages: readonly AiProviderMessage[]): readonly unknown[] {
   return messages.map((message) => {
     if (message.role === "tool") {
+      if (message.toolCallId === undefined) {
+        throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
+      }
+      const toolName = toExternalToolName(message.toolName);
       return Object.freeze({
         role: "user",
         parts: Object.freeze([
           {
             functionResponse: {
               id: message.toolCallId,
-              name: EXTERNAL_TOOL_NAME,
+              name: toolName,
               response: safeToolResult(message.content),
             },
           },
@@ -108,13 +113,14 @@ function mapMessages(messages: readonly AiProviderMessage[]): readonly unknown[]
       });
     }
     if (message.role === "assistant" && message.toolCallId !== undefined) {
+      const toolName = toExternalToolName(message.toolName);
       return Object.freeze({
         role: "model",
         parts: Object.freeze([
           {
             functionCall: {
               id: message.toolCallId,
-              name: EXTERNAL_TOOL_NAME,
+              name: toolName,
               args: message.toolArgs ?? {},
             },
           },
@@ -141,7 +147,7 @@ function requestBody(request: AiProviderRequest): string {
     tools: [
       {
         functionDeclarations: request.tools.map((tool) => ({
-          name: EXTERNAL_TOOL_NAME,
+          name: toExternalToolName(tool.name),
           description: tool.description,
           parameters: tool.inputSchema,
         })),
@@ -192,18 +198,20 @@ async function* streamWithCredential(
   if (inputTokens === null || outputTokens === null || finishReason === "") {
     throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
   }
+  let toolEvent: Extract<AiProviderEvent, { type: "tool_call" }> | null = null;
   if (call !== null) {
-    if (call.name !== EXTERNAL_TOOL_NAME)
+    const toolName = fromExternalToolName(call.name);
+    if (!request.tools.some((tool) => tool.name === toolName))
       throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
-    yield Object.freeze({
+    toolEvent = Object.freeze({
       type: "tool_call",
       callId: call.id ?? "gemini-call-1",
-      name: "synthetic.lookup",
+      name: toolName,
       args: call.args,
     });
   }
-  if (call === null && finishReason !== "STOP")
-    throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
+  if (finishReason !== "STOP") throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
+  if (toolEvent !== null) yield toolEvent;
   yield Object.freeze({
     type: "end",
     finishReason: call === null ? "stop" : "tool_calls",

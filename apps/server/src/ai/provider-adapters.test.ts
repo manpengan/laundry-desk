@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createEphemeralCredentialAuthority } from "./provider-credential-authority.js";
-import type {
-  ProviderHttpPort,
-  ProviderHttpRequest,
-  ProviderHttpResponse,
+import { fromExternalToolName, toExternalToolName } from "./provider-adapter-shared.js";
+import {
+  createPinnedLookup,
+  type ProviderHttpPort,
+  type ProviderHttpRequest,
+  type ProviderHttpResponse,
 } from "./provider-http.js";
 import { createProviderAdapter } from "./provider-registry.js";
 import { ProviderAdapterError, type ProviderAdapter, type ProviderCode } from "./provider-types.js";
@@ -65,11 +67,46 @@ const REQUEST: AiProviderRequest = Object.freeze({
   signal: new AbortController().signal,
 });
 
-async function collect(provider: ProviderAdapter): Promise<readonly AiProviderEvent[]> {
+async function collect(
+  provider: ProviderAdapter,
+  request: AiProviderRequest = REQUEST,
+): Promise<readonly AiProviderEvent[]> {
   const values: AiProviderEvent[] = [];
-  for await (const event of provider.stream(REQUEST)) values.push(event);
+  for await (const event of provider.stream(request)) values.push(event);
   return values;
 }
+
+test("pinned lookup follows Node 22 all-address callback semantics", async () => {
+  const lookup = createPinnedLookup("203.0.113.7");
+  const result = await new Promise<
+    Readonly<{ address: string | unknown[]; family: number | undefined }>
+  >((resolve, reject) => {
+    lookup("api.deepseek.com", { all: true }, (error, address, family) => {
+      if (error !== null) {
+        reject(error);
+        return;
+      }
+      resolve(Object.freeze({ address, family }));
+    });
+  });
+  assert.deepEqual(result.address, [{ address: "203.0.113.7", family: 4 }]);
+  assert.equal(result.family, undefined);
+});
+
+test("provider tool names use one fixed reversible mapping and reject unknown names", () => {
+  const pairs = Object.freeze([
+    ["synthetic.lookup", "synthetic_lookup"],
+    ["business.summary", "business_summary"],
+    ["records.search", "records_search"],
+    ["procedure.troubleshoot", "procedure_troubleshoot"],
+  ] as const);
+  for (const [internal, external] of pairs) {
+    assert.equal(toExternalToolName(internal), external);
+    assert.equal(fromExternalToolName(external), internal);
+  }
+  assert.throws(() => toExternalToolName("unbounded.tool"), ProviderAdapterError);
+  assert.throws(() => fromExternalToolName("unbounded_tool"), ProviderAdapterError);
+});
 
 test("DeepSeek uses the fixed OpenAI-compatible models and streaming shapes", async () => {
   const http = new QueueHttp([
@@ -113,6 +150,118 @@ test("DeepSeek uses the fixed OpenAI-compatible models and streaming shapes", as
     stream: true,
     stream_options: { include_usage: true },
   });
+});
+
+test("DeepSeek round-trips business.summary through request, tool call, and history", async () => {
+  const http = new QueueHttp([
+    sse(
+      {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call-business",
+                  function: {
+                    name: "business_summary",
+                    arguments: '{"business_date":"2026-08-13"}',
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+      },
+      { choices: [], usage: { prompt_tokens: 9, completion_tokens: 3 } },
+    ),
+    sse(
+      { choices: [{ delta: { content: "done" }, finish_reason: "stop" }] },
+      { choices: [], usage: { prompt_tokens: 15, completion_tokens: 1 } },
+    ),
+  ]);
+  const provider = adapter("deepseek", "deepseek-v4-pro", http);
+  const tool = Object.freeze({
+    name: "business.summary" as const,
+    description: "Bounded business summary",
+    inputSchema: Object.freeze({
+      type: "object",
+      additionalProperties: false,
+      properties: Object.freeze({ business_date: Object.freeze({ type: "string" }) }),
+    }),
+  });
+  const firstRequest: AiProviderRequest = Object.freeze({
+    messages: Object.freeze([{ role: "user" as const, content: "summarize" }]),
+    tools: Object.freeze([tool]),
+    maxOutputTokens: 64,
+    signal: new AbortController().signal,
+  });
+  assert.deepEqual(await collect(provider, firstRequest), [
+    {
+      type: "tool_call",
+      callId: "call-business",
+      name: "business.summary",
+      args: { business_date: "2026-08-13" },
+    },
+    { type: "end", finishReason: "tool_calls", inputTokens: 9, outputTokens: 3 },
+  ]);
+  const toolArgs = Object.freeze({ business_date: "2026-08-13" });
+  const secondRequest: AiProviderRequest = Object.freeze({
+    messages: Object.freeze([
+      { role: "user" as const, content: "summarize" },
+      {
+        role: "assistant" as const,
+        content: "",
+        toolCallId: "call-business",
+        toolName: "business.summary" as const,
+        toolArgs,
+      },
+      {
+        role: "tool" as const,
+        content: '{"summary":"ok"}',
+        toolCallId: "call-business",
+        toolName: "business.summary" as const,
+      },
+    ]),
+    tools: Object.freeze([tool]),
+    maxOutputTokens: 64,
+    signal: new AbortController().signal,
+  });
+  assert.deepEqual(await collect(provider, secondRequest), [
+    { type: "delta", text: "done" },
+    { type: "end", finishReason: "stop", inputTokens: 15, outputTokens: 1 },
+  ]);
+  const firstBody = JSON.parse(http.requests[0]?.body ?? "") as {
+    tools: readonly Readonly<{ function: Readonly<{ name: string }> }>[];
+  };
+  assert.equal(firstBody.tools[0]?.function.name, "business_summary");
+  const secondBody = JSON.parse(http.requests[1]?.body ?? "") as {
+    messages: readonly Readonly<{
+      role: string;
+      tool_calls?: readonly Readonly<{
+        function: Readonly<{ name: string; arguments: string }>;
+      }>[];
+      tool_call_id?: string;
+    }>[];
+  };
+  assert.deepEqual(secondBody.messages.slice(1), [
+    {
+      role: "assistant",
+      content: null,
+      tool_calls: [
+        {
+          id: "call-business",
+          type: "function",
+          function: {
+            name: "business_summary",
+            arguments: '{"business_date":"2026-08-13"}',
+          },
+        },
+      ],
+    },
+    { role: "tool", tool_call_id: "call-business", content: '{"summary":"ok"}' },
+  ]);
 });
 
 test("Anthropic uses x-api-key, versioned Messages, and official SSE events", async () => {
@@ -299,6 +448,34 @@ test("provider failures are bounded and never expose credentials or raw response
     assert.deepEqual(events, [{ type: "error", code }]);
     assert.doesNotMatch(JSON.stringify(events), new RegExp(SECRET, "u"));
   }
+});
+
+test("a truncated provider tool stream fails before emitting a callable event", async () => {
+  const fixture = sse(
+    {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call-truncated",
+                function: { name: "synthetic_lookup", arguments: '{"query":"fixture"}' },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+      usage: null,
+    },
+    {
+      choices: [{ delta: {}, finish_reason: "length" }],
+      usage: { prompt_tokens: 8, completion_tokens: 64 },
+    },
+  );
+  const events = await collect(adapter("deepseek", "deepseek-v4-pro", new QueueHttp([fixture])));
+  assert.deepEqual(events, [{ type: "error", code: "provider_response_invalid" }]);
 });
 
 test("credential authority zeroes each lease on success and failure", async () => {

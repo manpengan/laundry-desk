@@ -1,10 +1,8 @@
-import {
-  createEphemeralCredentialAuthority,
-  createProviderAdapter,
-} from "../../apps/server/dist/ai/index.js";
+import { createProviderAdapter } from "../../apps/server/dist/ai/provider-registry.js";
 import { readPrivateCredential } from "./ai-provider-smoke-secret.mjs";
 
 const SAFE_MODEL = /^[^\p{Cc}\p{Zl}\p{Zp}]{1,128}$/u;
+let smokePhase = "startup";
 
 const SYNTHETIC_TOOL = Object.freeze({
   name: "synthetic.lookup",
@@ -21,19 +19,36 @@ async function main() {
   const credentialFile = process.env.DEEPSEEK_API_KEY_FILE;
   const modelId = process.env.DEEPSEEK_MODEL ?? "deepseek-v4-pro";
   if (!SAFE_MODEL.test(modelId)) throw new Error("SMOKE_MODEL_INVALID");
-  const authority = createEphemeralCredentialAuthority(async () =>
-    readPrivateCredential(credentialFile),
-  );
+  const authority = Object.freeze({
+    async run(operation) {
+      const secret = readPrivateCredential(credentialFile);
+      try {
+        return await operation(secret);
+      } finally {
+        secret.fill(0);
+      }
+    },
+    async *stream(operation) {
+      const secret = readPrivateCredential(credentialFile);
+      try {
+        yield* operation(secret);
+      } finally {
+        secret.fill(0);
+      }
+    },
+  });
   const adapter = createProviderAdapter({
     providerCode: "deepseek",
     modelId,
     credentialAuthority: authority,
   });
+  smokePhase = "model_discovery";
   const validation = await adapter.discoverModels(AbortSignal.timeout(15_000));
   let inputTokens = 0;
   let outputTokens = 0;
   let toolCalls = 0;
   let completed = false;
+  smokePhase = "text_stream";
   for await (const event of adapter.stream({
     messages: Object.freeze([{ role: "user", content: "Reply with the single word READY." }]),
     tools: Object.freeze([]),
@@ -50,6 +65,7 @@ async function main() {
   }
   if (!completed) throw new Error("SMOKE_STREAM_INCOMPLETE");
   let toolCompleted = false;
+  smokePhase = "tool_stream";
   for await (const event of adapter.stream({
     messages: Object.freeze([
       {
@@ -59,7 +75,7 @@ async function main() {
       },
     ]),
     tools: Object.freeze([SYNTHETIC_TOOL]),
-    maxOutputTokens: 64,
+    maxOutputTokens: 512,
     signal: AbortSignal.timeout(15_000),
   })) {
     if (event.type === "tool_call") {
@@ -90,6 +106,6 @@ main().catch((error) => {
     error instanceof Error && /^[A-Z0-9_]{1,64}$/u.test(error.message)
       ? error.message
       : "SMOKE_FAILED";
-  console.error(JSON.stringify({ ok: false, code }));
+  console.error(JSON.stringify({ ok: false, phase: smokePhase, code }));
   process.exitCode = 1;
 });

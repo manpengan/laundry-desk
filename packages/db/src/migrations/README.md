@@ -146,5 +146,5 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Store commissioning and staff credentials** (0045, ADR-31): permanent dual-admin commissioning metadata plus tenant-scoped, expiring, single-use credential setup references with no retained secrets
 - **Signed print request idempotency** (0046): database-derived logical keys make original enqueue and source-bound retry/reprint exact across lost responses and concurrent clients; unambiguous legacy rows are backfilled while duplicate history remains fail-closed
 - **Cloud counter trust** (0047, [ADR-38](../../../../docs/adr/2026-08-11-adr-38-cloud-counter-trust-closure.md)): store-scoped pricing policy with RLS, authoritative order pricing selections/snapshots, and persistent per-piece draft/formal garment details
-- Still deferred: provider adapters, business tools, AI automation, and remaining matrix tables
+- Still deferred: writable AI tools and remaining matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

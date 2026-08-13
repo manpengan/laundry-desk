@@ -1,13 +1,14 @@
 import { z } from "zod";
 
 import {
-  EXTERNAL_TOOL_NAME,
   PROVIDER_TIMEOUT_MS,
   boundedModels,
   credentialText,
+  fromExternalToolName,
   normalizeProviderError,
   parseToolArguments,
   providerErrorEvent,
+  toExternalToolName,
 } from "./provider-adapter-shared.js";
 import { readProviderJson, readProviderSse, type ProviderHttpPort } from "./provider-http.js";
 import {
@@ -81,6 +82,10 @@ const StreamChunkSchema = z
 function mapMessages(messages: readonly AiProviderMessage[]): readonly unknown[] {
   return messages.map((message) => {
     if (message.role === "tool") {
+      if (message.toolCallId === undefined) {
+        throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
+      }
+      toExternalToolName(message.toolName);
       return Object.freeze({
         role: "tool",
         tool_call_id: message.toolCallId,
@@ -88,6 +93,7 @@ function mapMessages(messages: readonly AiProviderMessage[]): readonly unknown[]
       });
     }
     if (message.role === "assistant" && message.toolCallId !== undefined) {
+      const toolName = toExternalToolName(message.toolName);
       return Object.freeze({
         role: "assistant",
         content: message.content || null,
@@ -96,7 +102,7 @@ function mapMessages(messages: readonly AiProviderMessage[]): readonly unknown[]
             id: message.toolCallId,
             type: "function",
             function: {
-              name: EXTERNAL_TOOL_NAME,
+              name: toolName,
               arguments: JSON.stringify(message.toolArgs ?? {}),
             },
           },
@@ -111,7 +117,7 @@ function requestBody(modelId: string, request: AiProviderRequest): string {
   const tools = request.tools.map((tool) => ({
     type: "function",
     function: {
-      name: EXTERNAL_TOOL_NAME,
+      name: toExternalToolName(tool.name),
       description: tool.description,
       parameters: tool.inputSchema,
     },
@@ -170,20 +176,26 @@ async function* streamWithCredential(
     throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
   }
   const hasTool = callId !== "" || callName !== "" || callArgs !== "";
+  let toolEvent: Extract<AiProviderEvent, { type: "tool_call" }> | null = null;
   if (hasTool) {
-    if (callId === "" || callName !== EXTERNAL_TOOL_NAME) {
+    if (callId === "") {
       throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
     }
-    yield Object.freeze({
+    const toolName = fromExternalToolName(callName);
+    if (!request.tools.some((tool) => tool.name === toolName)) {
+      throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
+    }
+    toolEvent = Object.freeze({
       type: "tool_call",
       callId,
-      name: "synthetic.lookup",
+      name: toolName,
       args: parseToolArguments(callArgs),
     });
   }
-  if (finishReason === "" || (!hasTool && finishReason !== "stop")) {
+  if (finishReason === "" || (hasTool ? finishReason !== "tool_calls" : finishReason !== "stop")) {
     throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
   }
+  if (toolEvent !== null) yield toolEvent;
   yield Object.freeze({
     type: "end",
     finishReason: hasTool ? "tool_calls" : "stop",

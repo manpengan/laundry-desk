@@ -13,11 +13,13 @@ export const SyntheticLookupArgsSchema = z
   .object({ query: z.string().trim().min(1).max(128) })
   .strict();
 
+export type AiProviderToolName = "synthetic.lookup" | AiAssistantToolName;
+
 export type AiProviderMessage = Readonly<{
   role: "user" | "assistant" | "tool";
   content: string;
   toolCallId?: string;
-  toolName?: "synthetic.lookup";
+  toolName?: AiProviderToolName;
   toolArgs?: unknown;
 }>;
 
@@ -52,7 +54,7 @@ export type AiProviderEvent =
 export type AiProviderRequest = Readonly<{
   messages: readonly AiProviderMessage[];
   tools: readonly Readonly<{
-    name: "synthetic.lookup" | AiAssistantToolName;
+    name: AiProviderToolName;
     description: string;
     inputSchema: Readonly<Record<string, unknown>>;
   }>[];

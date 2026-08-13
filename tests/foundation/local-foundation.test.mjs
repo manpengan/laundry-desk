@@ -418,7 +418,7 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
     /assert\.equal\(migrations\.head, "0069_bounded_automation\.sql"\)/u,
   );
   assert.match(migrationTest, /"0069_bounded_automation\.sql"/u);
-  assert.match(migrationTest, /with 0067 reserved/u);
+  assert.match(migrationTest, /gap-free lexical order/u);
 });
 
 test("keeps the recovery-set CI shell block syntactically valid", async () => {
