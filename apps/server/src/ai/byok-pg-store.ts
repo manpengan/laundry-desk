@@ -135,16 +135,18 @@ async function selectCredential(
 
 export function createPgByokStore(pool: PgPool): ByokStore {
   return Object.freeze({
-    listModels: async () => {
-      const result = await pool.query(
-        `SELECT provider_code, model_id, display_name, adapter_family,
+    listModels: async (context) => {
+      const sql = `SELECT provider_code, model_id, display_name, adapter_family,
                 supports_streaming, supports_tools, supports_vision,
                 max_input_tokens, max_output_tokens, status, registry_version,
                 source_url, verified_at
            FROM ai_model_registry
           ORDER BY provider_code, model_id
-          LIMIT ${MAX_MODELS + 1}`,
-      );
+          LIMIT ${MAX_MODELS + 1}`;
+      const result =
+        context?.client === undefined
+          ? await pool.query<Record<string, unknown>>(sql)
+          : await context.client.query<Record<string, unknown>>(sql);
       const rows = requireBounded(result.rows, MAX_MODELS, "Model registry");
       const models: AiModelMetadata[] = rows.map((row: Record<string, unknown>) =>
         AiModelMetadataSchema.parse({

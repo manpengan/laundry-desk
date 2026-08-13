@@ -67,6 +67,7 @@
 | [ADR-57](2026-08-13-adr-57-byok-custody-model-registry.md)                    | BYOK 凭据托管生命周期与模型注册表               | **Proposed** 2026-08-13；Stage 4.5 Item 12         |
 | [ADR-58](2026-08-13-adr-58-bounded-ai-streaming-runtime.md)                   | Provider-neutral 流式会话与有界 tool-use loop   | **Proposed** 2026-08-13；Stage 4.5 Item 14         |
 | [ADR-59](2026-08-13-adr-59-ai-safety-metering.md)                             | AI 安全、整数计量、预算熔断与失败降级           | **Proposed** 2026-08-13；Stage 4.5 Item 18         |
+| [ADR-60](2026-08-13-adr-60-provider-adapters-and-validation.md)               | 固定端点 Provider Adapter 与 BYOK 连接验证      | **Proposed** 2026-08-13；Stage 4.5 Item 13         |
 | [ADR-61](2026-08-13-adr-61-r4-asynchronous-approval-center.md)                | R4 另一管理员异步审批中心                       | **Proposed** 2026-08-13；Stage 4.5 Item 16         |
 | [ADR-63](2026-08-13-adr-63-bounded-automation.md)                             | 有界自动化策略、调度与额度控制                  | **Proposed** 2026-08-13；Stage 4.5 Item 17         |
 

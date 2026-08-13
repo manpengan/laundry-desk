@@ -78,6 +78,8 @@ import { createPgAiConversationStore } from "../ai/streaming-pg-store.js";
 import { createAiStreamingService } from "../ai/streaming-service.js";
 import { createAiRateLimiter, type AiRateLimiter } from "../ai/streaming-rate-limit.js";
 import { registerAiStreamingRoutes } from "./ai-streaming-routes.js";
+import { createProviderValidationService } from "../ai/provider-validation-service.js";
+import type { ProviderHttpPort } from "../ai/provider-http.js";
 
 export type CreateAppOptions = Readonly<{
   runtime: LocalRuntime;
@@ -114,6 +116,8 @@ export type CreateAppOptions = Readonly<{
   /** Focused tests may replace persistence without weakening route policy. */
   byokStore?: ByokStore;
   byokMutationRateLimiter?: ByokMutationRateLimiter;
+  /** Focused protocol fixtures may inject a local-only transport. */
+  aiProviderHttp?: ProviderHttpPort;
   /** Explicit tests only. Omitted means hard-off and performs no provider/network work. */
   aiProvider?: AiProviderPort;
   aiConversationStore?: AiConversationStore;
@@ -266,13 +270,17 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   );
   registerPhotoFileRoutes(app, context, options.runtime.photo);
   registerDeliveryEvidenceFileRoutes(app, context, options.runtime.deliveryEvidence);
+  const byokRuntime = createByokRuntime(
+    options.runtime,
+    options.byokKms ?? null,
+    options.byokStore,
+  );
   registerByokRoutes(
     app,
     context,
-    createByokService(
-      createByokRuntime(options.runtime, options.byokKms ?? null, options.byokStore),
-    ),
+    createByokService(byokRuntime),
     options.byokMutationRateLimiter ?? createByokMutationRateLimiter(),
+    createProviderValidationService(byokRuntime, options.aiProviderHttp),
   );
   const aiStore =
     options.aiConversationStore ??

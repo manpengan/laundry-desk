@@ -34,7 +34,7 @@ export type ByokTransactionContext = Readonly<{
 }>;
 
 export type ByokStore = Readonly<{
-  listModels(): Promise<readonly AiModelMetadata[]>;
+  listModels(context?: ByokStoreContext): Promise<readonly AiModelMetadata[]>;
   listCredentialMetadata(context: ByokStoreContext): Promise<readonly AiCredentialMetadata[]>;
   findCredentialMetadata(
     id: string,

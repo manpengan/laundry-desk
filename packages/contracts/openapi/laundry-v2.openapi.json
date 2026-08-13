@@ -1074,6 +1074,216 @@
         ],
         "type": "object"
       },
+      "AiProviderValidateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_ref": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirm_ref"
+        ],
+        "type": "object"
+      },
+      "AiProviderValidationIntentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "credential_ref": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "model_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}\\p{Zl}\\p{Zp}]+$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "credential_ref",
+          "model_id",
+          "idempotency_key"
+        ],
+        "type": "object"
+      },
+      "AiProviderValidationIntentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "confirm_ref": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "expires_at": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "summary": {
+                "additionalProperties": false,
+                "properties": {
+                  "credential_last4": {
+                    "maxLength": 4,
+                    "minLength": 4,
+                    "type": "string"
+                  },
+                  "credential_ref": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "credential_version": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991,
+                    "type": "integer"
+                  },
+                  "model_id": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "pattern": "^[^\\p{Cc}\\p{Zl}\\p{Zp}]+$",
+                    "type": "string"
+                  },
+                  "provider_code": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "pattern": "^[a-z][a-z0-9._-]*$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "provider_code",
+                  "credential_ref",
+                  "credential_version",
+                  "credential_last4",
+                  "model_id"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "confirm_ref",
+              "expires_at",
+              "summary"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AiProviderValidationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "credential_ref": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "credential_version": {
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991,
+                "type": "integer"
+              },
+              "discovered_model_count": {
+                "maximum": 200,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "error_code": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "PROVIDER_AUTH_REJECTED",
+                      "PROVIDER_RATE_LIMITED",
+                      "PROVIDER_UNAVAILABLE",
+                      "PROVIDER_TIMEOUT",
+                      "PROVIDER_ABORTED",
+                      "PROVIDER_RESPONSE_INVALID",
+                      "PROVIDER_RESPONSE_TOO_LARGE",
+                      "NETWORK_POLICY_DENIED",
+                      "NETWORK_ERROR"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "model_id": {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[^\\p{Cc}\\p{Zl}\\p{Zp}]+$",
+                "type": "string"
+              },
+              "outcome": {
+                "enum": [
+                  "valid",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              "provider_code": {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9._-]*$",
+                "type": "string"
+              },
+              "selected_model_available": {
+                "type": "boolean"
+              },
+              "validated_at": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "outcome",
+              "provider_code",
+              "credential_ref",
+              "credential_version",
+              "model_id",
+              "discovered_model_count",
+              "selected_model_available",
+              "error_code",
+              "validated_at"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "AiSafetyStatusResponse": {
         "additionalProperties": false,
         "properties": {
@@ -82084,6 +82294,212 @@
         "x-laundry-offline-mode": "forbidden",
         "x-laundry-risk": "R4",
         "x-laundry-version": "1.0.0"
+      }
+    },
+    "/api/v2/ai/provider-connections/validate": {
+      "post": {
+        "description": "Admin-only, CSRF-protected, rate-limited provider validation. Credential plaintext is never returned.",
+        "operationId": "ai_provider_validate",
+        "parameters": [
+          {
+            "description": "Double-submit CSRF proof; must match the readable CSRF cookie value.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiProviderValidateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderValidationResponse"
+                }
+              }
+            },
+            "description": "Provider validation operation completed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission or frozen confirmation denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Feature, credential, or version unavailable"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Dedicated provider validation rate limit exceeded"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "AI provider validate",
+        "tags": [
+          "ai-provider"
+        ],
+        "x-laundry-classification": "secret",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R3"
+      }
+    },
+    "/api/v2/ai/provider-validation-intents": {
+      "post": {
+        "description": "Admin-only, CSRF-protected, rate-limited provider validation. Credential plaintext is never returned.",
+        "operationId": "ai_provider_validation_intent",
+        "parameters": [
+          {
+            "description": "Double-submit CSRF proof; must match the readable CSRF cookie value.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiProviderValidationIntentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiProviderValidationIntentResponse"
+                }
+              }
+            },
+            "description": "Provider validation operation completed"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission or frozen confirmation denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Feature, credential, or version unavailable"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Dedicated provider validation rate limit exceeded"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "AI provider validation_intent",
+        "tags": [
+          "ai-provider"
+        ],
+        "x-laundry-classification": "secret",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R3"
       }
     },
     "/api/v2/ai/safety": {

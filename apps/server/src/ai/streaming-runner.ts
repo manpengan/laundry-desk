@@ -298,6 +298,8 @@ async function runLoop(
             role: "assistant" as const,
             content: "",
             toolCallId: providerEvent.callId,
+            toolName: "synthetic.lookup" as const,
+            toolArgs: providerEvent.args,
           }),
           Object.freeze({ ...toolResult.message, toolCallId: providerEvent.callId }),
         ];

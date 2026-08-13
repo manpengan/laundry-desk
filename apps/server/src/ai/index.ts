@@ -34,3 +34,29 @@ export type {
   AiTurnFinish,
   AiTurnRecord,
 } from "./streaming-store.js";
+export {
+  createByokCredentialAuthority,
+  createEphemeralCredentialAuthority,
+} from "./provider-credential-authority.js";
+export { AI_PROVIDER_CATALOG, createProviderAdapter } from "./provider-registry.js";
+export { createPinnedProviderHttp } from "./provider-http.js";
+export { projectProviderModels, ProviderAdapterError } from "./provider-types.js";
+export type {
+  DiscoveredProviderModel,
+  ProviderAdapter,
+  ProviderCode,
+  ProviderConnectionValidation,
+  ProviderCredentialAuthority,
+  ProviderFailureCode,
+  ProviderModelProjection,
+} from "./provider-types.js";
+export type {
+  ProviderHttpPort,
+  ProviderHttpRequest,
+  ProviderHttpResponse,
+} from "./provider-http.js";
+export {
+  createProviderValidationService,
+  ProviderValidationServiceError,
+} from "./provider-validation-service.js";
+export type { ProviderValidationService } from "./provider-validation-service.js";

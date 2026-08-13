@@ -8,6 +8,8 @@ export type AiProviderMessage = Readonly<{
   role: "user" | "assistant" | "tool";
   content: string;
   toolCallId?: string;
+  toolName?: "synthetic.lookup";
+  toolArgs?: unknown;
 }>;
 
 export type AiProviderEvent =
@@ -24,7 +26,19 @@ export type AiProviderEvent =
       inputTokens: number;
       outputTokens: number;
     }>
-  | Readonly<{ type: "error"; code: "provider_unavailable" | "provider_failed" }>;
+  | Readonly<{
+      type: "error";
+      code:
+        | "provider_auth_rejected"
+        | "provider_rate_limited"
+        | "provider_unavailable"
+        | "provider_timeout"
+        | "provider_aborted"
+        | "provider_response_invalid"
+        | "provider_response_too_large"
+        | "provider_network_denied"
+        | "provider_failed";
+    }>;
 
 export type AiProviderRequest = Readonly<{
   messages: readonly AiProviderMessage[];
@@ -39,7 +53,7 @@ export type AiProviderRequest = Readonly<{
 
 /** Provider-neutral port. It deliberately has no URL, headers, credentials, or SDK object. */
 export type AiProviderPort = Readonly<{
-  kind: "deterministic_fake";
+  kind: "deterministic_fake" | "openai_compatible" | "anthropic" | "gemini";
   stream(request: AiProviderRequest): AsyncIterable<AiProviderEvent>;
 }>;
 

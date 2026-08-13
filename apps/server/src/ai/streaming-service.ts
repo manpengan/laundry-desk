@@ -75,13 +75,13 @@ export function createAiStreamingService(
   }>,
 ): AiStreamingService {
   const requireEnabled = (): AiProviderPort => {
-    if (options.provider === null || options.provider.kind !== "deterministic_fake") {
+    if (options.provider === null) {
       throw new AiServiceError("AI_UNAVAILABLE");
     }
     return options.provider;
   };
   return Object.freeze({
-    enabled: options.provider !== null && options.provider.kind === "deterministic_fake",
+    enabled: options.provider !== null,
     async createSession(context) {
       requireEnabled();
       return options.store.createSession({

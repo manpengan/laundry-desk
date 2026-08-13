@@ -10,9 +10,17 @@ import {
   AiCredentialRevokeRequestSchema,
   AiCredentialSecretIngressRequestSchema,
   AiModelListResponseSchema,
+  AiProviderValidateRequestSchema,
+  AiProviderValidationIntentRequestSchema,
+  AiProviderValidationIntentResponseSchema,
+  AiProviderValidationResponseSchema,
 } from "@laundry/contracts";
 
 import { ByokServiceError, type ByokService } from "../ai/byok-service.js";
+import {
+  ProviderValidationServiceError,
+  type ProviderValidationService,
+} from "../ai/provider-validation-service.js";
 import { permissionsForAuthority } from "../bus/runtime.js";
 import { fail, requireCsrf, resolveSession, type AuthRouteContext } from "./auth-route-support.js";
 import type { ByokMutationRateLimiter } from "./byok-rate-limit.js";
@@ -58,6 +66,10 @@ function serviceFailure(error: unknown, request: FastifyRequest, reply: FastifyR
     reply.code(status);
     return fail(error.code);
   }
+  if (error instanceof ProviderValidationServiceError) {
+    reply.code(error.code === "POLICY_DENIED" ? 403 : 409);
+    return fail(error.code);
+  }
   request.log.error(safeErrorContext(error), "BYOK operation failed");
   reply.code(500);
   return fail("TRANSACTION_FAILED");
@@ -80,6 +92,7 @@ export function registerByokRoutes(
   context: AuthRouteContext,
   service: ByokService,
   limiter: ByokMutationRateLimiter,
+  validationService?: ProviderValidationService,
 ): void {
   app.get("/api/v2/ai/models", async (request, reply) => {
     try {
@@ -192,4 +205,65 @@ export function registerByokRoutes(
       }
     },
   );
+
+  if (validationService !== undefined) {
+    app.post(
+      "/api/v2/ai/provider-validation-intents",
+      { bodyLimit: METADATA_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        try {
+          const authorized = await requireManager(context, request, reply);
+          if (authorized === null) {
+            return fail(reply.statusCode === 401 ? "AUTHENTICATION_FAILED" : "PERMISSION_DENIED");
+          }
+          const csrf = await requireCsrf(context, request, reply, authorized.session);
+          if (csrf !== true) return csrf;
+          if (!applyRateLimit(limiter, authorized.session.session_id, reply)) {
+            return fail("RATE_LIMITED");
+          }
+          const input = AiProviderValidationIntentRequestSchema.parse(request.body);
+          return AiProviderValidationIntentResponseSchema.parse({
+            ok: true,
+            data: await validationService.createIntent(authorized, input),
+          });
+        } catch (error) {
+          return serviceFailure(error, request, reply);
+        }
+      },
+    );
+
+    app.post(
+      "/api/v2/ai/provider-connections/validate",
+      { bodyLimit: METADATA_BODY_LIMIT_BYTES },
+      async (request, reply) => {
+        const controller = new AbortController();
+        const abort = () => controller.abort();
+        request.raw.once("aborted", abort);
+        try {
+          const authorized = await requireManager(context, request, reply);
+          if (authorized === null) {
+            return fail(reply.statusCode === 401 ? "AUTHENTICATION_FAILED" : "PERMISSION_DENIED");
+          }
+          const csrf = await requireCsrf(context, request, reply, authorized.session);
+          if (csrf !== true) return csrf;
+          if (!applyRateLimit(limiter, authorized.session.session_id, reply)) {
+            return fail("RATE_LIMITED");
+          }
+          const input = AiProviderValidateRequestSchema.parse(request.body);
+          return AiProviderValidationResponseSchema.parse({
+            ok: true,
+            data: await validationService.validate(
+              authorized,
+              input.confirm_ref,
+              controller.signal,
+            ),
+          });
+        } catch (error) {
+          return serviceFailure(error, request, reply);
+        } finally {
+          request.raw.off("aborted", abort);
+        }
+      },
+    );
+  }
 }

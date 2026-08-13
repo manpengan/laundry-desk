@@ -120,6 +120,12 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
   proof 的专用 secret ingress；API 只返回 last4 与 metadata。模型注册表初始为空且应用只读，必须由
   官方文档核验后另行登记。当前不含生产 KMS adapter、provider 网络/SDK、模型选择、推理、UI 或
   自动化，`ai` feature 继续关闭；0064 需在集成 0054–0063 后才可进入连续迁移与发布门禁。
+- Provider Adapter 与连接验证（[ADR-60](adr/2026-08-13-adr-60-provider-adapters-and-validation.md)）：
+  新增固定 HTTPS 端点的 DeepSeek/OpenAI-compatible、Anthropic、Gemini adapter，把流式文本、tool call、
+  usage 和安全错误归一化到 typed provider port。管理员可用 R3 冻结卡验证 Item 12 的
+  `pending_verification` 凭据；只有选中模型确实被发现且 session/feature/credential/model CAS 均未漂移时
+  才原子激活。凭据仅短租解密并清零，响应/日志/审计/UI 不回显 key；无迁移、无业务助手，默认 AI
+  composition 仍 hard-off。另提供只接受 owner-only `DEEPSEEK_API_KEY_FILE` 的不回显 smoke 入口。
 
 - 店厂交接与质检返工（[ADR-45](adr/2026-08-12-adr-45-factory-handoff-and-qc.md)）：新增当前门店
   内部员工使用的批次建单、门店出库、工厂收件、工厂出库和门店收件四节点完整扫码证据；服务端计算

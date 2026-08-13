@@ -22,6 +22,21 @@ export type {
   AiModelMetadata,
 } from "./byok.js";
 export {
+  AI_PROVIDER_OPERATION_MATRIX,
+  AiProviderModelIdSchema,
+  AiProviderValidateRequestSchema,
+  AiProviderValidationErrorCodeSchema,
+  AiProviderValidationIntentRequestSchema,
+  AiProviderValidationIntentResponseSchema,
+  AiProviderValidationResponseSchema,
+  AiProviderValidationResultSchema,
+} from "./provider-connections.js";
+export type {
+  AiProviderValidationErrorCode,
+  AiProviderValidationIntentRequest,
+  AiProviderValidationResult,
+} from "./provider-connections.js";
+export {
   AI_COST_MICROS_MAX,
   AiSafetyDenialCodeSchema,
   AiSafetyStatusResponseSchema,

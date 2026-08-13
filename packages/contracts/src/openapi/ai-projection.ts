@@ -8,6 +8,13 @@ import {
   AiTurnCreateResponseSchema,
 } from "../ai/streaming.js";
 import { AiSafetyStatusResponseSchema } from "../ai/safety.js";
+import {
+  AI_PROVIDER_OPERATION_MATRIX,
+  AiProviderValidateRequestSchema,
+  AiProviderValidationIntentRequestSchema,
+  AiProviderValidationIntentResponseSchema,
+  AiProviderValidationResponseSchema,
+} from "../ai/provider-connections.js";
 import type {
   OpenApiMediaType,
   OpenApiOperation,
@@ -170,6 +177,42 @@ function buildAiOperation(row: (typeof AI_STREAMING_OPERATION_MATRIX)[number]): 
   });
 }
 
+function buildProviderOperation(
+  row: (typeof AI_PROVIDER_OPERATION_MATRIX)[number],
+): OpenApiOperation {
+  const intent = row.operation === "validation_intent";
+  const request = intent ? "AiProviderValidationIntentRequest" : "AiProviderValidateRequest";
+  const response = intent ? "AiProviderValidationIntentResponse" : "AiProviderValidationResponse";
+  return Object.freeze({
+    operationId: `ai_provider_${row.operation}`,
+    summary: `AI provider ${row.operation}`,
+    description:
+      "Admin-only, CSRF-protected, rate-limited provider validation. Credential plaintext is never returned.",
+    tags: Object.freeze(["ai-provider"]),
+    parameters: Object.freeze([csrfHeader()]),
+    requestBody: Object.freeze({
+      required: true as const,
+      content: Object.freeze({
+        "application/json": jsonContent(schemaRef(request)),
+      }),
+    }),
+    responses: Object.freeze({
+      "200": successSchemaResponse(response, "Provider validation operation completed"),
+      "401": failureResponse("Authentication failed"),
+      "403": failureResponse("Permission or frozen confirmation denied"),
+      "409": failureResponse("Feature, credential, or version unavailable"),
+      "429": failureResponse("Dedicated provider validation rate limit exceeded"),
+      default: failureResponse("Unified failure envelope"),
+    }),
+    security: Object.freeze([
+      Object.freeze({ bearerAuth: Object.freeze([]), csrfHeader: Object.freeze([]) }),
+    ]),
+    "x-laundry-kind": "ai" as const,
+    "x-laundry-risk": row.risk,
+    "x-laundry-classification": "secret" as const,
+  });
+}
+
 export function collectAiOpenApiProjection(toSchema: SchemaConverter): Readonly<{
   paths: Record<string, OpenApiPathItem>;
   schemas: Record<string, OpenApiSchemaObject>;
@@ -182,6 +225,10 @@ export function collectAiOpenApiProjection(toSchema: SchemaConverter): Readonly<
     AiStreamEvent: toSchema(AiStreamEventSchema),
     AiTurnCreateRequest: toSchema(AiTurnCreateRequestSchema),
     AiTurnCreateResponse: toSchema(AiTurnCreateResponseSchema),
+    AiProviderValidateRequest: toSchema(AiProviderValidateRequestSchema),
+    AiProviderValidationIntentRequest: toSchema(AiProviderValidationIntentRequestSchema),
+    AiProviderValidationIntentResponse: toSchema(AiProviderValidationIntentResponseSchema),
+    AiProviderValidationResponse: toSchema(AiProviderValidationResponseSchema),
   };
   const paths: Record<string, OpenApiPathItem> = {};
   for (const row of AI_STREAMING_OPERATION_MATRIX) {
@@ -189,6 +236,9 @@ export function collectAiOpenApiProjection(toSchema: SchemaConverter): Readonly<
     paths[row.path] = Object.freeze(
       row.method === "POST" ? { post: operation } : { get: operation },
     );
+  }
+  for (const row of AI_PROVIDER_OPERATION_MATRIX) {
+    paths[row.path] = Object.freeze({ post: buildProviderOperation(row) });
   }
   return Object.freeze({ paths, schemas });
 }
