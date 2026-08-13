@@ -12,19 +12,21 @@
 R4 人工接管。`delivery_order` 继续作为路线进度真源，`delivery_task` 只保存执行保管关系和不可变
 successor 历史。
 
-不包含 Item 5 配送员移动 H5，也不包含 Item 6 路线、GPS、照片、签名或其他交付证据；不包含顾客
-公开自助、离线/Edge 或第三方配送 provider。本员工 Web 的响应式布局不能替代这些后续门禁。
+本记录在 Item 4 验收时不包含 Item 5 配送员移动 H5；该历史边界现由
+[ADR-50](../../adr/2026-08-13-adr-50-mobile-delivery-task-h5.md)及其独立验收记录追加，而不是回写为
+Item 4 证据。Item 6 路线导航、GPS、照片、签名或其他交付证据仍不包含；顾客公开自助、离线写/
+Edge 或第三方配送 provider 也仍需独立门禁。桌面员工 Web 的响应式布局本身不替代移动验收。
 
 ## 2. 关闭矩阵
 
-| 层级             | Item 4 目标                                                   | 候选状态                 |
-| ---------------- | ------------------------------------------------------------- | ------------------------ |
-| ADR/Domain       | 明确状态机、订单/任务权威关系、successor 与 feature-off 边界  | 本地门禁与独立审查通过   |
-| Contracts        | 4 commands + 2 queries、68/47、R3/R4/R2、严格 WYSIWYS、非 AI  | 811/811 通过             |
-| Schema/RLS       | 0057 组合 FK、CAS/DB time、延迟完整性、FORCE RLS、ACL         | 真实 PG 通过             |
-| Server           | memory/PG、锁序、active staff/admin、幂等、audit/event 同事务 | 952 通过、93 PG 跳过     |
-| Web              | 列表、分派、响应、转派、R4 接管、冲突刷新、feature-off 提示   | build 与 428/428 通过    |
-| External/release | Browser、required CI、合入与 hk-vps exact-SHA 发布            | 未执行，不宣称交付       |
+| 层级             | Item 4 目标                                                   | 候选状态               |
+| ---------------- | ------------------------------------------------------------- | ---------------------- |
+| ADR/Domain       | 明确状态机、订单/任务权威关系、successor 与 feature-off 边界  | 本地门禁与独立审查通过 |
+| Contracts        | 4 commands + 2 queries、68/47、R3/R4/R2、严格 WYSIWYS、非 AI  | 811/811 通过           |
+| Schema/RLS       | 0057 组合 FK、CAS/DB time、延迟完整性、FORCE RLS、ACL         | 真实 PG 通过           |
+| Server           | memory/PG、锁序、active staff/admin、幂等、audit/event 同事务 | 952 通过、93 PG 跳过   |
+| Web              | 列表、分派、响应、转派、R4 接管、冲突刷新、feature-off 提示   | build 与 428/428 通过  |
+| External/release | Browser、required CI、合入与 hk-vps exact-SHA 发布            | 未执行，不宣称交付     |
 
 ## 3. 不可替代的验收证据
 

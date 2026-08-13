@@ -4,6 +4,8 @@ import type { SessionView, LoginFormValues } from "./auth/types.js";
 import type { ConnectionStatus } from "./connection.js";
 import type { AppSurface } from "./host/app-surface.js";
 import type { AppPorts } from "./host/types.js";
+import { MobileTaskShell } from "./mobile/MobileTaskShell.js";
+import { mobileTaskSessionScope } from "./mobile/mobile-task-request-authority.js";
 import { OwnerShell, type OwnerShellProps } from "./owner/OwnerShell.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { CounterShell, type CounterShellProps } from "./shell/CounterShell.js";
@@ -17,7 +19,7 @@ export type AppProps = {
   themePreference?: ThemePreference;
   /** Skip liquid-glass install in pure SSR unit tests. */
   enableLiquidGlass?: boolean;
-  /** Seed a token-free desktop resume view; browser production still starts logged out. */
+  /** Seed a token-free desktop or explicit mobile-task resume view. */
   initialSession?: SessionView | null;
   /** Desktop cold-start fallback is query-only; all mutation paths stay closed. */
   readOnly?: boolean;
@@ -80,7 +82,7 @@ export function shellPropsFrom(
 }
 
 /**
- * Web app root: unauthenticated → LoginPage; authenticated → CounterShell.
+ * Web app root: unauthenticated → LoginPage; authenticated → the exact selected shell.
  * React state contains only SessionView; host adapters retain transport credentials.
  */
 export function App({
@@ -125,6 +127,15 @@ export function App({
               }
             })}
           />
+        ) : surface === "mobile_delivery_tasks" ? (
+          <MobileTaskShell
+            key={mobileTaskSessionScope(session)}
+            session={session}
+            authClient={ports.auth}
+            commandClient={ports.command}
+            queryClient={ports.query}
+            onSessionChange={setSession}
+          />
         ) : (
           <CounterShell
             {...shellPropsFrom(connection, themePreference, session, ports, setSession)}
@@ -137,7 +148,9 @@ export function App({
           onSuccess={setSession}
           {...(surface === "owner"
             ? { title: "店主登录", hint: "使用管理员账号进入经营看板" }
-            : {})}
+            : surface === "mobile_delivery_tasks"
+              ? { title: "配送任务登录", hint: "使用当前门店员工账号进入我的任务" }
+              : {})}
           {...(activeLoginInitialForm !== undefined ? { initialForm: activeLoginInitialForm } : {})}
         />
       )}

@@ -57,6 +57,7 @@
 | [ADR-47](2026-08-13-adr-47-customer-delivery-appointments.md)                 | 顾客取送预约、改期与取消                        | **Proposed** 2026-08-13；实现候选待 manpengan 签署 |
 | [ADR-48](2026-08-13-adr-48-authoritative-delivery-orders.md)                  | 权威配送订单与取送生命周期                      | **Proposed** 2026-08-13；实现候选开发中            |
 | [ADR-49](2026-08-13-adr-49-authoritative-delivery-tasks.md)                   | 配送任务分派、接单、转派与人工接管              | **Proposed** 2026-08-13；实现候选开发中            |
+| [ADR-50](2026-08-13-adr-50-mobile-delivery-task-h5.md)                        | 配送员/员工移动 H5 我的任务工作台               | **Proposed** 2026-08-13；实现候选本地门禁已通过    |
 
 ## v1 线
 

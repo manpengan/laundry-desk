@@ -1,18 +1,18 @@
 {
   "version": 1,
   "entries": {
-    "assets/index-Cbjn8oO8.css": {
-      "sha256": "6bc1422a4c015a3377a4cef77cde8016c9cf58878aa7c20c68ece1fd19f4a72c",
+    "assets/index-BExJkkbR.css": {
+      "sha256": "566326c9ae042427dbc154b4f9782492c7975b5f3001a8171244a91957722b3b",
       "mime": "text/css; charset=utf-8",
-      "bytes": 82281
+      "bytes": 90194
     },
-    "assets/index-p1dhtGBS.js": {
-      "sha256": "36022a95aa044033f3094483f7fa466b2c52248e55850cf98fb6012fdc28957e",
+    "assets/index-CNReYwG1.js": {
+      "sha256": "f7b51b7b3a9b115dc7d1bb5039523fd2d903a6288165221a1b2be97496248f31",
       "mime": "text/javascript; charset=utf-8",
-      "bytes": 934225
+      "bytes": 959293
     },
     "index.html": {
-      "sha256": "0802c0b67f997282ffd4327c0427616d77f6b6a64a2b4d9767cd8826b807e049",
+      "sha256": "48c4daa3951ee752872a2041d4c58d74ed2d6772dacced5f09bf7fed55c50584",
       "mime": "text/html; charset=utf-8",
       "bytes": 412
     }

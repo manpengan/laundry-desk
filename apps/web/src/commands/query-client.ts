@@ -3,7 +3,8 @@
  * Auth headers mirror createHttpCommandClient (Bearer + CSRF + credentials).
  */
 
-import type { CommandFailure, CommandResult, QueryPort } from "./types.js";
+import { requestFailureResult } from "./request-abort.js";
+import type { CommandFailure, CommandResult, QueryExecutionOptions, QueryPort } from "./types.js";
 
 /** Matches packages/contracts CSRF_HEADER_NAME. */
 const CSRF_HEADER_NAME = "x-csrf-token";
@@ -145,7 +146,11 @@ export function createHttpQueryClient(options: HttpQueryClientOptions): QueryPor
   const readCsrf = options.readCsrf ?? defaultReadCsrf;
 
   return Object.freeze({
-    async execute<T = unknown>(name: string, body: unknown = {}): Promise<CommandResult<T>> {
+    async execute<T = unknown>(
+      name: string,
+      body: unknown = {},
+      execOptions: QueryExecutionOptions = {},
+    ): Promise<CommandResult<T>> {
       const token = options.getAccessToken();
       if (token === null || token.length === 0) {
         return Object.freeze({
@@ -170,6 +175,7 @@ export function createHttpQueryClient(options: HttpQueryClientOptions): QueryPor
             [CSRF_HEADER_NAME]: csrf,
           },
           body: JSON.stringify(body ?? {}),
+          ...(execOptions.signal === undefined ? {} : { signal: execOptions.signal }),
         });
         const json: unknown = await res.json();
         if (isRecord(json) && json.ok === true) {
@@ -177,10 +183,7 @@ export function createHttpQueryClient(options: HttpQueryClientOptions): QueryPor
         }
         return Object.freeze({ ok: false as const, error: parseFailure(json) });
       } catch {
-        return Object.freeze({
-          ok: false as const,
-          error: Object.freeze({ code: "NETWORK", message: "无法连接本地服务器" }),
-        });
+        return requestFailureResult(execOptions.signal);
       }
     },
   });
