@@ -120,12 +120,12 @@ maybe("PG customer search hides merged and anonymized customers", async () => {
     // Retire two of them the way the privacy commands do.
     await withPoolClient(pool, (sql) =>
       withTenantTransaction(sql, TENANT, async (tx) => {
-        // customers_merge_pair_chk requires merged_into_id and merged_at to be
-        // set together, so a half-written merge cannot exist. Honour it.
-        await tx.query(
-          "UPDATE customers SET merged_into_id = $2::uuid, merged_at = now() WHERE id = $1::uuid",
-          [merged.customer.customer_id, survivor.customer.customer_id],
-        );
+        // Canonical merge columns are owner-only; exercise the granted definer
+        // primitive instead of bypassing its advisory-lock ordering.
+        await tx.query("SELECT * FROM customer_merge_canonical($1::uuid, $2::uuid, now())", [
+          merged.customer.customer_id,
+          survivor.customer.customer_id,
+        ]);
         // customers_anonymized_pair_chk likewise refuses an anonymization that
         // does not record who performed it.
         await tx.query(

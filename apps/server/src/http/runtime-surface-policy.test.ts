@@ -3,6 +3,8 @@ import test from "node:test";
 
 import type { AuthorizedSession } from "../auth/session-view.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
+import { createMemoryLocalRuntime } from "../local/demo-seed.js";
+import { executeTrustedSessionQuery } from "./bus-route-execution.js";
 import {
   isConfiguredRuntimeTenant,
   isRuntimeBusOperationAvailable,
@@ -54,6 +56,14 @@ test("another store is restricted to the Stage 3.2 Owner bus surface", () => {
     "staff.create",
     "staff.credentials.reset",
     "store.profile.set",
+    "delivery.policy.set",
+    "marketing.campaign.set",
+    "marketing.campaign.audience.freeze",
+    "marketing.campaign.coupons.issue",
+    "marketing.coupon.redemption.reverse",
+    "marketing.referral.reward.issue",
+    "marketing.group_buy.voucher.register",
+    "marketing.group_buy.voucher.redeem",
   ]) {
     assert.equal(isRuntimeBusOperationAvailable(resolved, "command", name), true, name);
   }
@@ -64,6 +74,14 @@ test("another store is restricted to the Stage 3.2 Owner bus surface", () => {
     "reporting.owner_portfolio.get",
     "staff.access.list",
     "store.authorized.list",
+    "delivery.policy.get",
+    "delivery.availability.quote",
+    "member.benefit_catalog.get",
+    "marketing.campaigns.list",
+    "marketing.campaign.get",
+    "marketing.campaign.audience.preview",
+    "marketing.campaign.coupons.preview",
+    "marketing.campaign.coupon_batch.get",
   ]) {
     assert.equal(isRuntimeBusOperationAvailable(resolved, "query", name), true, name);
   }
@@ -82,4 +100,31 @@ test("another store is restricted to the Stage 3.2 Owner bus surface", () => {
   for (const name of ["fulfillment.batches.list", "fulfillment.batch.get"]) {
     assert.equal(isRuntimeBusOperationAvailable(resolved, "query", name), false, name);
   }
+});
+
+test("non-configured Owner query routing reaches the benefit catalog contract", async () => {
+  const runtime = await createMemoryLocalRuntime();
+  const resolved = session(
+    "55555555-5555-4555-8555-555555555555",
+    "66666666-6666-4666-8666-666666666666",
+  );
+  const routed = await executeTrustedSessionQuery(
+    runtime,
+    resolved,
+    "member.benefit_catalog.get",
+    Object.freeze({ unexpected: true }),
+  );
+  assert.equal(routed.ok, false);
+  if (routed.ok) return;
+  assert.equal(routed.error.code, "VALIDATION_FAILED");
+
+  const blocked = await executeTrustedSessionQuery(
+    runtime,
+    resolved,
+    "catalog.items.get",
+    Object.freeze({ unexpected: true }),
+  );
+  assert.equal(blocked.ok, false);
+  if (blocked.ok) return;
+  assert.equal(blocked.error.code, "RESOURCE_UNAVAILABLE");
 });

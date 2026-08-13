@@ -3,7 +3,12 @@
  * Auth headers mirror createHttpCommandClient (Bearer + CSRF + credentials).
  */
 
-import type { CommandFailure, CommandResult, QueryPort } from "./types.js";
+import { filterDemoCatalog } from "./mock-catalog.js";
+import { requestFailureResult } from "./request-abort.js";
+import type { CommandFailure, CommandResult, QueryExecutionOptions, QueryPort } from "./types.js";
+
+export { DEMO_CATALOG_ITEMS } from "./mock-catalog.js";
+export type { CatalogListItem, CatalogListResult } from "./mock-catalog.js";
 
 /** Matches packages/contracts CSRF_HEADER_NAME. */
 const CSRF_HEADER_NAME = "x-csrf-token";
@@ -16,73 +21,6 @@ export type HttpQueryClientOptions = Readonly<{
   /** Optional CSRF reader (defaults to document.cookie). */
   readCsrf?: () => string | null;
 }>;
-
-/** Counter price-list row (integer fen). Mirrors domain CatalogItem. */
-export type CatalogListItem = Readonly<{
-  code: string;
-  name: string;
-  service_code: string;
-  category_code: string;
-  unit_price_cents: number;
-  mnemonic?: string;
-}>;
-
-export type CatalogListResult = Readonly<{
-  items: readonly CatalogListItem[];
-  total: number;
-}>;
-
-/** Demo seed aligned with apps/server memory catalog (no packages/* import). */
-export const DEMO_CATALOG_ITEMS: readonly CatalogListItem[] = Object.freeze([
-  Object.freeze({
-    code: "wash_shirt",
-    name: "水洗衬衫",
-    service_code: "wash",
-    category_code: "shirt",
-    unit_price_cents: 1500,
-    mnemonic: "xs",
-  }),
-  Object.freeze({
-    code: "wash_pants",
-    name: "水洗西裤",
-    service_code: "wash",
-    category_code: "pants",
-    unit_price_cents: 1800,
-    mnemonic: "xk",
-  }),
-  Object.freeze({
-    code: "dry_coat",
-    name: "干洗大衣",
-    service_code: "dry",
-    category_code: "coat",
-    unit_price_cents: 4500,
-    mnemonic: "dy",
-  }),
-  Object.freeze({
-    code: "dry_suit",
-    name: "干洗西装",
-    service_code: "dry",
-    category_code: "suit",
-    unit_price_cents: 3800,
-    mnemonic: "xz",
-  }),
-  Object.freeze({
-    code: "iron_shirt",
-    name: "熨烫衬衫",
-    service_code: "iron",
-    category_code: "shirt",
-    unit_price_cents: 800,
-    mnemonic: "yt",
-  }),
-  Object.freeze({
-    code: "wash_duvet",
-    name: "水洗被套",
-    service_code: "wash",
-    category_code: "duvet",
-    unit_price_cents: 3500,
-    mnemonic: "bt",
-  }),
-]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -118,34 +56,17 @@ function parseFailure(body: unknown): CommandFailure {
   });
 }
 
-function matchesCatalog(item: CatalogListItem, key: string): boolean {
-  if (item.code.toLowerCase().includes(key)) return true;
-  if (item.name.toLowerCase().includes(key)) return true;
-  if (item.service_code.toLowerCase().includes(key)) return true;
-  if (item.category_code.toLowerCase().includes(key)) return true;
-  if (item.mnemonic !== undefined && item.mnemonic.toLowerCase().includes(key)) return true;
-  return false;
-}
-
-function filterDemoCatalog(query: string, limit: number): CatalogListResult {
-  const key = query.trim().toLowerCase();
-  const filtered =
-    key.length === 0
-      ? DEMO_CATALOG_ITEMS.slice()
-      : DEMO_CATALOG_ITEMS.filter((item) => matchesCatalog(item, key));
-  return Object.freeze({
-    items: Object.freeze(filtered.slice(0, Math.max(1, limit))),
-    total: filtered.length,
-  });
-}
-
 export function createHttpQueryClient(options: HttpQueryClientOptions): QueryPort {
   const base = options.apiBaseUrl.replace(/\/$/u, "");
   const fetchImpl = options.fetchImpl ?? fetch;
   const readCsrf = options.readCsrf ?? defaultReadCsrf;
 
   return Object.freeze({
-    async execute<T = unknown>(name: string, body: unknown = {}): Promise<CommandResult<T>> {
+    async execute<T = unknown>(
+      name: string,
+      body: unknown = {},
+      execOptions: QueryExecutionOptions = {},
+    ): Promise<CommandResult<T>> {
       const token = options.getAccessToken();
       if (token === null || token.length === 0) {
         return Object.freeze({
@@ -170,6 +91,7 @@ export function createHttpQueryClient(options: HttpQueryClientOptions): QueryPor
             [CSRF_HEADER_NAME]: csrf,
           },
           body: JSON.stringify(body ?? {}),
+          ...(execOptions.signal === undefined ? {} : { signal: execOptions.signal }),
         });
         const json: unknown = await res.json();
         if (isRecord(json) && json.ok === true) {
@@ -177,10 +99,7 @@ export function createHttpQueryClient(options: HttpQueryClientOptions): QueryPor
         }
         return Object.freeze({ ok: false as const, error: parseFailure(json) });
       } catch {
-        return Object.freeze({
-          ok: false as const,
-          error: Object.freeze({ code: "NETWORK", message: "无法连接本地服务器" }),
-        });
+        return requestFailureResult(execOptions.signal);
       }
     },
   });

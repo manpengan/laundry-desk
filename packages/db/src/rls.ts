@@ -53,6 +53,17 @@ export const M2_ORDER_RLS_TABLES = Object.freeze([
 export const M2_CATALOG_RLS_TABLES = Object.freeze([
   "catalog_items",
   "store_pricing_policies",
+  "delivery_policies",
+] as const);
+
+/** Delivery appointments use the authenticated org + store scope (ADR-47). */
+export const M2_DELIVERY_RLS_TABLES = Object.freeze([
+  "delivery_appointments",
+  "delivery_orders",
+  "delivery_tasks",
+  "delivery_evidence_attachments",
+  "delivery_evidence_events",
+  "delivery_evidence_attachment_links",
 ] as const);
 
 /**

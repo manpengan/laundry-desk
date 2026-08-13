@@ -123,6 +123,7 @@ export type LocalHostConfig = Readonly<{
   browserFetchSite: "same-site" | "same-origin";
   cookieSecure: boolean;
   hostAuthorities: readonly ["127.0.0.1:8787"];
+  trustedProxyClientIpRequired: boolean;
 }>;
 
 export type LocalSigningSecrets = Readonly<{
@@ -160,6 +161,7 @@ export function parseLocalHostConfig(env: NodeJS.ProcessEnv): LocalHostConfig {
     browserFetchSite: remoteOrigin === undefined ? "same-site" : "same-origin",
     cookieSecure: remoteOrigin !== undefined,
     hostAuthorities: LOCAL_HOST_AUTHORITIES,
+    trustedProxyClientIpRequired: result.data.LAUNDRY_PUBLIC_ORIGIN !== undefined,
   });
 }
 

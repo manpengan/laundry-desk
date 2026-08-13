@@ -1,12 +1,27 @@
 import { z } from "zod";
 
 import { JsonPointerSchema } from "../registry/primitives.js";
+import { freezeConfirmationSummary } from "./confirmation-summary-freeze.js";
+import { DeliveryPolicyConfirmationSummarySchema } from "./delivery-policy-confirmation.js";
 import {
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
-  type FactoryHandoffConfirmationSummary,
-  type FulfillmentOperationConfirmationSummary,
 } from "./fulfillment-confirmation.js";
+import { DeliveryTaskConfirmationSummarySchema } from "./delivery-task-confirmation.js";
+import { DeliveryEvidenceConfirmationSummarySchema } from "./delivery-evidence-confirmation.js";
+import {
+  MarketingAudienceFreezeConfirmationSummarySchema,
+  MarketingCampaignSetConfirmationSummarySchema,
+} from "./marketing-campaign-confirmation.js";
+import {
+  MarketingCouponIssueConfirmationSummarySchema,
+  MarketingCouponReversalConfirmationSummarySchema,
+} from "./marketing-confirmation.js";
+import {
+  MarketingGroupBuyRedemptionConfirmationSummarySchema,
+  MarketingGroupBuyRegistrationConfirmationSummarySchema,
+  MarketingReferralRewardConfirmationSummarySchema,
+} from "./marketing-extension-confirmation.js";
 import { ConfirmReferenceSchema } from "./wire-payload.js";
 
 /** Architecture §6.5: externally safe outcomes for each C1 validation-chain stage. */
@@ -77,7 +92,6 @@ export type AuthPublicErrorDescriptor =
 export type AuthPublicErrorCode = keyof typeof AUTH_PUBLIC_ERROR_DESCRIPTORS;
 
 const ConfirmationCentsSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-
 const MemberTopupMatchedRuleSchema = z
   .object({
     rule_id: z.uuid(),
@@ -181,11 +195,21 @@ export const NotificationDeliveryConfirmationSummarySchema = z
     }
   });
 
-const ConfirmationSummarySchema = z.union([
+export const ConfirmationSummarySchema = z.union([
   MemberTopupConfirmationSummarySchema,
   NotificationDeliveryConfirmationSummarySchema,
+  DeliveryPolicyConfirmationSummarySchema,
   FactoryHandoffConfirmationSummarySchema,
   FulfillmentOperationConfirmationSummarySchema,
+  DeliveryTaskConfirmationSummarySchema,
+  DeliveryEvidenceConfirmationSummarySchema,
+  MarketingCampaignSetConfirmationSummarySchema,
+  MarketingAudienceFreezeConfirmationSummarySchema,
+  MarketingCouponIssueConfirmationSummarySchema,
+  MarketingCouponReversalConfirmationSummarySchema,
+  MarketingReferralRewardConfirmationSummarySchema,
+  MarketingGroupBuyRegistrationConfirmationSummarySchema,
+  MarketingGroupBuyRedemptionConfirmationSummarySchema,
 ]);
 
 const ErrorDetailSchema = z.discriminatedUnion("kind", [
@@ -220,11 +244,7 @@ export type MemberTopupConfirmationSummary = DeepReadonly<
 export type NotificationDeliveryConfirmationSummary = DeepReadonly<
   z.output<typeof NotificationDeliveryConfirmationSummarySchema>
 >;
-export type ConfirmationSummary =
-  | MemberTopupConfirmationSummary
-  | NotificationDeliveryConfirmationSummary
-  | FactoryHandoffConfirmationSummary
-  | FulfillmentOperationConfirmationSummary;
+export type ConfirmationSummary = DeepReadonly<z.output<typeof ConfirmationSummarySchema>>;
 
 const createErrorSchema = <TCode extends CommandErrorCode, TMessage extends string>(
   code: TCode,
@@ -286,46 +306,7 @@ const freezeCommandError = (error: CommandError): CommandError => {
       return { ...error.detail, methods: [...error.detail.methods] };
     }
     if (error.detail.kind === "confirmation" && error.detail.summary !== undefined) {
-      if (error.detail.summary.kind === "notification_delivery_batch") {
-        return {
-          ...error.detail,
-          summary: Object.freeze({
-            ...error.detail.summary,
-            ticket_nos: Object.freeze([...error.detail.summary.ticket_nos]),
-            garment_statuses: Object.freeze([...error.detail.summary.garment_statuses]),
-          }),
-        };
-      }
-      if (error.detail.summary.kind === "member_topup") {
-        const matchedRule =
-          error.detail.summary.matched_rule === null
-            ? null
-            : Object.freeze({ ...error.detail.summary.matched_rule });
-        return {
-          ...error.detail,
-          summary: Object.freeze({ ...error.detail.summary, matched_rule: matchedRule }),
-        };
-      }
-      if (error.detail.summary.kind === "factory_handoff") {
-        return {
-          ...error.detail,
-          summary: Object.freeze({
-            ...error.detail.summary,
-            ticket_nos: Object.freeze([...error.detail.summary.ticket_nos]),
-            barcodes: Object.freeze([...error.detail.summary.barcodes]),
-            counts: Object.freeze({ ...error.detail.summary.counts }),
-          }),
-        };
-      }
-      return {
-        ...error.detail,
-        summary: Object.freeze({
-          ...error.detail.summary,
-          garment_ids: Object.freeze([...error.detail.summary.garment_ids]),
-          ticket_nos: Object.freeze([...error.detail.summary.ticket_nos]),
-          barcodes: Object.freeze([...error.detail.summary.barcodes]),
-        }),
-      };
+      return { ...error.detail, summary: freezeConfirmationSummary(error.detail.summary) };
     }
     return { ...error.detail };
   })();

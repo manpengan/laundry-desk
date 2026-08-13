@@ -3,10 +3,11 @@
  */
 
 import { Button, Dialog, Input, useToast } from "@laundry/ui";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SwitchableStaff } from "../auth/types.js";
 import { validatePin } from "../auth/validate-pin.js";
+import { createStepUpAttemptAuthority } from "./step-up-attempt-authority.js";
 
 export type StepUpConfirmDialogProps = {
   open: boolean;
@@ -44,6 +45,16 @@ export function StepUpConfirmDialog({
   const [pinError, setPinError] = useState<string | undefined>(undefined);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const attemptAuthorityRef = useRef(createStepUpAttemptAuthority());
+  const openRef = useRef(open);
+  openRef.current = open;
+
+  useEffect(
+    () => () => {
+      attemptAuthorityRef.current.invalidate();
+    },
+    [authClient, confirmRef, currentStaffId, open],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -62,6 +73,7 @@ export function StepUpConfirmDialog({
   }, []);
 
   const handleClose = useCallback(() => {
+    attemptAuthorityRef.current.invalidate();
     resetLocal();
     onClose();
   }, [onClose, resetLocal]);
@@ -79,12 +91,14 @@ export function StepUpConfirmDialog({
     }
     setPinError(undefined);
     setSubmitting(true);
+    const attempt = attemptAuthorityRef.current.begin(confirmRef);
     try {
       const challenge = await authClient.createPinChallenge({
         purpose: "step_up",
         pending_action_ref: confirmRef,
         approver_staff_id: approverId,
       });
+      if (!openRef.current || !attemptAuthorityRef.current.isCurrent(attempt, confirmRef)) return;
       if (!challenge.ok) {
         setFormError(challenge.error.message);
         toast.push(challenge.error.message, "error");
@@ -94,6 +108,7 @@ export function StepUpConfirmDialog({
         challenge_id: challenge.data.challenge_id,
         pin,
       });
+      if (!openRef.current || !attemptAuthorityRef.current.isCurrent(attempt, confirmRef)) return;
       setPin("");
       if (!verified.ok) {
         setFormError(verified.error.message);
@@ -105,7 +120,7 @@ export function StepUpConfirmDialog({
       resetLocal();
       onClose();
     } finally {
-      setSubmitting(false);
+      if (attemptAuthorityRef.current.isCurrent(attempt, confirmRef)) setSubmitting(false);
     }
   }, [approverId, authClient, confirmRef, onApproved, onClose, pin, resetLocal, toast]);
 

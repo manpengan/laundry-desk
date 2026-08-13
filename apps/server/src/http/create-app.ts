@@ -9,10 +9,18 @@ import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance } from "fastify";
 
 import type { LocalRuntime } from "../local/demo-seed.js";
+import { createApprovalRuntime } from "../approvals/runtime.js";
+import { createApprovalService } from "../approvals/service.js";
+import { registerApprovalRoutes } from "./approval-routes.js";
+import { createApprovalRateLimiter, type ApprovalRateLimiter } from "./approval-rate-limit.js";
 import { registerAuthRoutes } from "./auth-routes.js";
 import type { AuthRouteContext, RouteSecurityContext } from "./auth-route-support.js";
 import { registerBusRoutes } from "./bus-routes.js";
 import { registerEdgeAuthorityRoute } from "./edge-authority-route.js";
+import {
+  createDeliveryPolicyRateLimiter,
+  type DeliveryPolicyRateLimiter,
+} from "./delivery-policy-rate-limit.js";
 import { registerEdgeReplayRoute } from "./edge-replay-route.js";
 import {
   createFactoryOperationRateLimiter,
@@ -21,6 +29,7 @@ import {
 import { registerEdgePrintRoute } from "./edge-print-route.js";
 import { createEdgePrintRateLimiter, type EdgePrintRateLimiter } from "./edge-print-rate-limit.js";
 import { registerPhotoFileRoutes } from "./photo-file-routes.js";
+import { registerDeliveryEvidenceFileRoutes } from "./delivery-evidence-file-routes.js";
 import { registerPrintArtifactRoutes } from "./print-artifact-routes.js";
 import type { FileSpool } from "../print/file-spool.js";
 import type { CookiePolicy } from "./cookie-policy.js";
@@ -32,12 +41,50 @@ import {
   type NotificationCommandRateLimiter,
 } from "./notification-command-rate-limit.js";
 import {
+  createMarketingOperationRateLimiter,
+  type MarketingOperationRateLimiter,
+} from "./marketing-operation-rate-limit.js";
+import {
   registerRequestSecurityHooks,
   type LocalRequestSecurityPolicy,
 } from "./request-security.js";
 import { createSecurityEventSink, type SecurityEventSink } from "./security-events.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
+import {
+  createPgCustomerPortalStore,
+  type CustomerPortalStore,
+} from "../customer-self-service/index.js";
+import {
+  createCustomerPortalQueryRateLimiter,
+  type CustomerPortalQueryRateLimiter,
+} from "../customer-self-service/query-rate-limit.js";
+import {
+  createCustomerPortalLoginTimingGuard,
+  type CustomerPortalLoginTimingGuard,
+} from "../customer-self-service/login-timing.js";
+import { registerCustomerPortalRoutes } from "./customer-portal-routes.js";
+import type { ByokKmsPort } from "../ai/byok-kms.js";
+import { createByokRuntime } from "../ai/byok-runtime.js";
+import { createByokService } from "../ai/byok-service.js";
+import type { ByokStore } from "../ai/byok-types.js";
+import { registerByokRoutes } from "./byok-routes.js";
+import { createByokMutationRateLimiter, type ByokMutationRateLimiter } from "./byok-rate-limit.js";
+import type {
+  AiProviderPort,
+  ReadonlyAssistantToolPort,
+  SyntheticToolPort,
+} from "../ai/streaming-provider.js";
+import { deterministicSyntheticTool } from "../ai/streaming-provider.js";
+import type { AiConversationStore } from "../ai/streaming-store.js";
+import { MemoryAiConversationStore } from "../ai/streaming-memory-store.js";
+import { createPgAiConversationStore } from "../ai/streaming-pg-store.js";
+import { createAiStreamingService } from "../ai/streaming-service.js";
+import { createAiRateLimiter, type AiRateLimiter } from "../ai/streaming-rate-limit.js";
+import { registerAiStreamingRoutes } from "./ai-streaming-routes.js";
+import { createProviderValidationService } from "../ai/provider-validation-service.js";
+import type { ProviderHttpPort } from "../ai/provider-http.js";
+import { createReadonlyAssistantTool } from "../ai/readonly-assistant-tool.js";
 
 export type CreateAppOptions = Readonly<{
   runtime: LocalRuntime;
@@ -47,6 +94,7 @@ export type CreateAppOptions = Readonly<{
   browserOrigin?: string;
   browserFetchSite?: "same-site" | "same-origin";
   desktopOrigin?: string;
+  trustedProxyClientIpRequired?: boolean;
   /** Deterministic limiter injection for focused tests. */
   loginRateLimiter?: LoginRateLimiter;
   /** Dedicated main-process print transport limiter. */
@@ -55,10 +103,34 @@ export type CreateAppOptions = Readonly<{
   notificationCommandRateLimiter?: NotificationCommandRateLimiter;
   /** Dedicated factory handoff command/query limiter. */
   factoryOperationRateLimiter?: FactoryOperationRateLimiter;
+  /** Dedicated delivery policy command/query limiter. */
+  deliveryPolicyRateLimiter?: DeliveryPolicyRateLimiter;
+  /** Dedicated marketing command/query limiter. */
+  marketingOperationRateLimiter?: MarketingOperationRateLimiter;
+  /** Customer-only browser authority; production derives it from the PG runtime. */
+  customerPortalStore?: CustomerPortalStore;
+  customerPortalLoginRateLimiter?: LoginRateLimiter;
+  customerPortalLoginTimingGuard?: CustomerPortalLoginTimingGuard;
+  customerPortalQueryRateLimiter?: CustomerPortalQueryRateLimiter;
   /** Mock print spool; when absent the artifact download route is not mounted. */
   printSpool?: FileSpool;
   /** Structured redacted auth-security events (tests may capture). */
   securityEventSink?: SecurityEventSink;
+  /** Production injects a non-exportable KMS/OS secret-store adapter; never a raw KEK. */
+  byokKms?: ByokKmsPort;
+  /** Focused tests may replace persistence without weakening route policy. */
+  byokStore?: ByokStore;
+  byokMutationRateLimiter?: ByokMutationRateLimiter;
+  /** Focused protocol fixtures may inject a local-only transport. */
+  aiProviderHttp?: ProviderHttpPort;
+  /** Explicit tests only. Omitted means hard-off and performs no provider/network work. */
+  aiProvider?: AiProviderPort;
+  aiConversationStore?: AiConversationStore;
+  aiSyntheticTool?: SyntheticToolPort;
+  /** Focused tests may replace the Item 15 closed business-tool registry. */
+  aiAssistantTool?: ReadonlyAssistantToolPort;
+  aiRateLimiter?: AiRateLimiter;
+  approvalRateLimiter?: ApprovalRateLimiter;
   /** Tests may silence request logs; runtime defaults to the redacted structured logger. */
   logger?: false;
 }>;
@@ -117,6 +189,7 @@ async function installCoreHttp(
     browserOrigin: options.browserOrigin ?? DEFAULT_BROWSER_ORIGIN,
     browserFetchSite: options.browserFetchSite ?? "same-site",
     desktopOrigin: options.desktopOrigin ?? DEFAULT_DESKTOP_ORIGIN,
+    trustedProxyClientIpRequired: options.trustedProxyClientIpRequired ?? false,
   });
   await app.register(cors, {
     origin: requestSecurity.corsOrigin,
@@ -127,8 +200,11 @@ async function installCoreHttp(
     if (
       request.url.startsWith("/api/v2/auth/") ||
       request.url.startsWith("/api/v2/local/staff") ||
+      request.url.startsWith("/api/v2/customer/") ||
       request.url.startsWith("/api/v2/edge/authority") ||
       request.url.startsWith("/api/v2/edge/print/") ||
+      request.url.startsWith("/api/v2/delivery-evidence/") ||
+      request.url.startsWith("/api/v2/ai/") ||
       request.url.startsWith("/v1/commands/") ||
       request.url.startsWith("/v1/queries/")
     ) {
@@ -169,12 +245,29 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   const context = createRouteContext(options, requestSecurity);
   installPendingActionCleanup(app, options.runtime.pendingStore);
   registerAuthRoutes(app, context);
+  const customerPortalStore =
+    options.customerPortalStore ??
+    (options.runtime.pool === null ? undefined : createPgCustomerPortalStore(options.runtime.pool));
   registerBusRoutes(
     app,
     context,
     options.notificationCommandRateLimiter ?? createNotificationCommandRateLimiter(),
     options.factoryOperationRateLimiter ?? createFactoryOperationRateLimiter(),
+    options.deliveryPolicyRateLimiter ?? createDeliveryPolicyRateLimiter(),
+    options.marketingOperationRateLimiter ?? createMarketingOperationRateLimiter(),
   );
+  if (customerPortalStore !== undefined) {
+    registerCustomerPortalRoutes(app, {
+      store: customerPortalStore,
+      cookiePolicy: options.cookiePolicy,
+      loginRateLimiter: options.customerPortalLoginRateLimiter ?? createLoginRateLimiter(),
+      loginTimingGuard:
+        options.customerPortalLoginTimingGuard ?? createCustomerPortalLoginTimingGuard(),
+      queryRateLimiter:
+        options.customerPortalQueryRateLimiter ?? createCustomerPortalQueryRateLimiter(),
+      requestSecurity,
+    });
+  }
   registerEdgeAuthorityRoute(app, context);
   registerEdgeReplayRoute(app, context);
   registerEdgePrintRoute(
@@ -183,6 +276,41 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     options.edgePrintRateLimiter ?? createEdgePrintRateLimiter(),
   );
   registerPhotoFileRoutes(app, context, options.runtime.photo);
+  registerDeliveryEvidenceFileRoutes(app, context, options.runtime.deliveryEvidence);
+  const byokRuntime = createByokRuntime(
+    options.runtime,
+    options.byokKms ?? null,
+    options.byokStore,
+  );
+  registerByokRoutes(
+    app,
+    context,
+    createByokService(byokRuntime),
+    options.byokMutationRateLimiter ?? createByokMutationRateLimiter(),
+    createProviderValidationService(byokRuntime, options.aiProviderHttp),
+  );
+  const aiStore =
+    options.aiConversationStore ??
+    (options.runtime.pool === null
+      ? new MemoryAiConversationStore()
+      : createPgAiConversationStore(options.runtime.pool));
+  registerAiStreamingRoutes(
+    app,
+    context,
+    createAiStreamingService({
+      store: aiStore,
+      provider: options.aiProvider ?? null,
+      tool: options.aiSyntheticTool ?? deterministicSyntheticTool,
+      assistantTool: options.aiAssistantTool ?? createReadonlyAssistantTool(options.runtime),
+    }),
+    options.aiRateLimiter ?? createAiRateLimiter(),
+  );
+  registerApprovalRoutes(
+    app,
+    context,
+    createApprovalService(createApprovalRuntime(options.runtime)),
+    options.approvalRateLimiter ?? createApprovalRateLimiter(),
+  );
 
   // Artifact download only exists when a spool is configured; the memory
   // runtime has nothing on disk to serve.

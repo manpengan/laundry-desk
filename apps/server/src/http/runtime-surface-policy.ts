@@ -7,6 +7,20 @@ const OWNER_CLOUD_COMMANDS: ReadonlySet<string> = new Set([
   "staff.create",
   "staff.credentials.reset",
   "store.profile.set",
+  "delivery.policy.set",
+  "marketing.campaign.set",
+  "marketing.campaign.audience.freeze",
+  "marketing.campaign.coupons.issue",
+  "marketing.coupon.redemption.reverse",
+  "marketing.referral.reward.issue",
+  "marketing.group_buy.voucher.register",
+  "marketing.group_buy.voucher.redeem",
+  "automation.policy.create",
+  "automation.policy.update",
+  "automation.policy.approve",
+  "automation.policy.pause",
+  "automation.policy.resume",
+  "automation.policy.archive",
 ]);
 
 const OWNER_CLOUD_QUERIES: ReadonlySet<string> = new Set([
@@ -16,6 +30,17 @@ const OWNER_CLOUD_QUERIES: ReadonlySet<string> = new Set([
   "reporting.owner_portfolio.get",
   "staff.access.list",
   "store.authorized.list",
+  "delivery.policy.get",
+  "delivery.availability.quote",
+  "member.benefit_catalog.get",
+  "marketing.campaigns.list",
+  "marketing.campaign.get",
+  "marketing.campaign.audience.preview",
+  "marketing.campaign.coupons.preview",
+  "marketing.campaign.coupon_batch.get",
+  "automation.policies.list",
+  "automation.policy.get",
+  "automation.runs.list",
 ]);
 
 export type RuntimeBusSurface = "command" | "query";

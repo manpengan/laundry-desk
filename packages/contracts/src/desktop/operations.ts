@@ -36,6 +36,8 @@ import {
   DesktopPhotoUploadInputSchema,
   DesktopPhotoUploadResultSchema,
 } from "./photo-operations.js";
+import type { DesktopOperationSchemas } from "./operation-registry-types.js";
+
 export {
   DESKTOP_MAX_PHOTO_BYTES,
   DesktopPhotoDeleteInputSchema,
@@ -226,17 +228,22 @@ export const DesktopQueryExecuteInputSchema = DesktopQueryExecuteInputBaseSchema
   },
 );
 
-const DesktopBoundedCommandResponseSchema = z.preprocess((value, context) => {
-  try {
-    return snapshotBoundedJson(value, "desktop command result");
-  } catch {
-    context.addIssue({
-      code: "custom",
-      message: "Desktop command result exceeds the complexity limit",
-    });
-    return z.NEVER;
-  }
-}, CommandResponseSchema);
+export type DesktopCommandResponse = z.output<typeof CommandResponseSchema>;
+
+const DesktopBoundedCommandResponseSchema: z.ZodType<DesktopCommandResponse> = z.preprocess(
+  (value, context) => {
+    try {
+      return snapshotBoundedJson(value, "desktop command result");
+    } catch {
+      context.addIssue({
+        code: "custom",
+        message: "Desktop command result exceeds the complexity limit",
+      });
+      return z.NEVER;
+    }
+  },
+  CommandResponseSchema,
+);
 
 export const DesktopCommandExecuteResultSchema = DesktopBoundedCommandResponseSchema;
 export const DesktopQueryExecuteResultSchema = DesktopBoundedCommandResponseSchema;
@@ -322,7 +329,7 @@ const operation = <TInput extends z.ZodType, TResult extends z.ZodType>(
   result: TResult,
 ) => Object.freeze({ input, result });
 
-export const DESKTOP_OPERATION_SCHEMAS = Object.freeze({
+export const DESKTOP_OPERATION_SCHEMAS: DesktopOperationSchemas = Object.freeze({
   auth: Object.freeze({
     login: operation(DesktopLoginInputSchema, DesktopLoginResultSchema),
     refresh: operation(DesktopRefreshInputSchema, DesktopRefreshResultSchema),

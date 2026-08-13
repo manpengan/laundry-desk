@@ -1,0 +1,163 @@
+.ld-delivery-operations {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ld-delivery-operations__tabs {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.ld-delivery-operations__tabs button {
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--lg-border, #d7dde8);
+  border-radius: 999px;
+  background: var(--lg-surface, #fff);
+  color: inherit;
+  cursor: pointer;
+}
+
+.ld-delivery-operations__tabs button[aria-current="page"] {
+  border-color: var(--lg-accent, #3764dd);
+  background: color-mix(in srgb, var(--lg-accent, #3764dd) 12%, transparent);
+}
+
+.ld-delivery-tasks {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.ld-delivery-tasks__header,
+.ld-delivery-tasks__detail-head,
+.ld-delivery-tasks__assignment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.ld-delivery-tasks__assignment,
+.ld-delivery-tasks__worklist,
+.ld-delivery-tasks__detail {
+  padding: 1rem;
+  border: 1px solid var(--lg-border, #d7dde8);
+  border-radius: 0.9rem;
+  background: var(--lg-surface, #fff);
+}
+
+.ld-delivery-tasks__assignment {
+  flex-wrap: wrap;
+}
+
+.ld-delivery-tasks__assignment p,
+.ld-delivery-tasks__assignment h2 {
+  margin: 0.2rem 0;
+}
+
+.ld-delivery-tasks__assignment label,
+.ld-delivery-tasks__action-block label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 13rem;
+  font-weight: 600;
+}
+
+.ld-delivery-tasks select {
+  min-height: 2.5rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--lg-border, #c8d0dd);
+  border-radius: 0.55rem;
+  background: var(--lg-surface, #fff);
+  color: inherit;
+}
+
+.ld-delivery-tasks__layout {
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.9fr) minmax(20rem, 1.25fr);
+  gap: 1rem;
+  min-height: 26rem;
+}
+
+.ld-delivery-tasks__filters,
+.ld-delivery-tasks__action-block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.ld-delivery-tasks__rows {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ld-delivery-tasks__rows button {
+  display: grid;
+  width: 100%;
+  gap: 0.22rem;
+  padding: 0.75rem;
+  border: 1px solid var(--lg-border, #d7dde8);
+  border-radius: 0.7rem;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ld-delivery-tasks__rows button.is-selected {
+  border-color: var(--lg-accent, #3764dd);
+  background: color-mix(in srgb, var(--lg-accent, #3764dd) 9%, transparent);
+}
+
+.ld-delivery-tasks__rows span,
+.ld-delivery-tasks__detail dt,
+.ld-delivery-tasks__pending-summary dt {
+  color: var(--lg-muted, #657087);
+  font-size: 0.875rem;
+}
+
+.ld-delivery-tasks__detail dl,
+.ld-delivery-tasks__pending-summary {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.ld-delivery-tasks__detail dl > div,
+.ld-delivery-tasks__pending-summary > div {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+.ld-delivery-tasks__detail dd,
+.ld-delivery-tasks__pending-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ld-delivery-tasks__action-block {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--lg-border, #d7dde8);
+}
+
+.ld-delivery-tasks__action-block h3 {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+@media (max-width: 860px) {
+  .ld-delivery-tasks__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ld-delivery-tasks__header,
+  .ld-delivery-tasks__assignment {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

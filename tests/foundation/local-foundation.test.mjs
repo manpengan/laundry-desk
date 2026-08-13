@@ -343,6 +343,7 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   const freshCommissioningAcceptance = await readRepositoryFile(
     "tools/local/commissioning-acceptance.mjs",
   );
+  const migrationTest = await readRepositoryFile("packages/db/test/migration-inventory.test.ts");
 
   assert.doesNotMatch(workflow, /^\s*-\s+name:\s+Start local Vite Web host\s*$/mu);
   assert.match(workflow, /^\s*-\s+name:\s+Run Playwright against real server and PostgreSQL\s*$/mu);
@@ -383,6 +384,8 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
     /name: Run Playwright against real server and PostgreSQL[\s\S]{0,160}LAUNDRY_NOTIFICATION_PROVIDER_MODE:\s*["']software_only["'][\s\S]{0,160}pnpm local:up -- --bootstrap[\s\S]{0,120}pnpm run local:web:e2e/u,
   );
   assert.match(workflow, /commissioning-pg-acceptance\.mjs/u);
+  assert.match(freshCommissioningAcceptance, /"--filter", "@laundry\/server\.\.\."/u);
+  assert.match(freshCommissioningAcceptance, /delivery-policy-pg-acceptance\.mjs/u);
   assert.match(freshCommissioningAcceptance, /member-benefits-pg-acceptance\.mjs/u);
   assert.match(freshCommissioningAcceptance, /notification-delivery-pg-acceptance\.mjs/u);
   assert.match(freshCommissioningAcceptance, /factory-handoff-pg-acceptance\.mjs/u);
@@ -412,8 +415,10 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   );
   assert.match(
     commissioningPgAcceptance,
-    /assert\.equal\(migrations\.head, "0053_factory_handoff_and_qc\.sql"\)/u,
+    /assert\.equal\(migrations\.head, "0069_bounded_automation\.sql"\)/u,
   );
+  assert.match(migrationTest, /"0069_bounded_automation\.sql"/u);
+  assert.match(migrationTest, /gap-free lexical order/u);
 });
 
 test("keeps the recovery-set CI shell block syntactically valid", async () => {
@@ -448,7 +453,10 @@ test("uses generated local database secrets and loopback-only Compose ports", as
     withFileTypes: true,
   });
 
-  assert.match(compose, /["']127\.0\.0\.1:8543:5432["']/u);
+  assert.deepEqual(
+    [...compose.matchAll(/^\s*-\s*["']([^"']+:5432)["']\s*$/gmu)].map((match) => match[1]),
+    ["127.0.0.1:${LAUNDRY_PG_HOST_PORT-8543}:5432"],
+  );
   assert.match(compose, /["']127\.0\.0\.1:8787:8787["']/u);
   assert.match(compose, /com\.laundry-desk\.managed:\s*["']true["']/u);
   assert.match(compose, /com\.laundry-desk\.project:/u);

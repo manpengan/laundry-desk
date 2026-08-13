@@ -1,10 +1,11 @@
 import {
+  ConfirmationSummarySchema,
   createCommandError,
-  NotificationDeliveryConfirmationSummarySchema,
   type ConfirmationSummary,
 } from "@laundry/contracts";
 
 import type { BusContext } from "../bus/types.js";
+import type { PolicyDecision } from "../policy/types.js";
 import { freezeCanonical } from "../pending-actions/canonical.js";
 import type {
   PendingAction,
@@ -24,6 +25,8 @@ export type PendingActionPreparation = Readonly<{
   riskReservation?: PendingRiskReservationRequest;
   /** Database-owned epoch returned with a durable risk measurement. */
   createdAtEpoch?: number;
+  /** Server-derived customer owner when the public command body carries only an indirect id. */
+  privacySubjectCustomerId?: string;
 }>;
 
 export type PendingActionPreparer = (
@@ -105,17 +108,29 @@ export function bindRiskReservation(
   });
 }
 
-export function existingNotificationSummary(
+export function existingConfirmationSummary(
   existing: PendingAction,
 ): ConfirmationSummary | undefined {
   const authority = existing.authority;
   if (typeof authority !== "object" || authority === null || Array.isArray(authority)) {
     return undefined;
   }
-  const parsed = NotificationDeliveryConfirmationSummarySchema.safeParse(
-    (authority as Readonly<Record<string, unknown>>).confirmation_summary,
-  );
+  const record = authority as Readonly<Record<string, unknown>>;
+  const parsed = ConfirmationSummarySchema.safeParse(record.confirmation_summary ?? authority);
   return parsed.success ? Object.freeze(parsed.data) : undefined;
+}
+
+export function notificationPendingRetrySummary(
+  existing: PendingAction,
+  parsed: unknown,
+  bus: BusContext,
+): ConfirmationSummary | null {
+  const matches =
+    JSON.stringify(existing.args) === JSON.stringify(freezeCanonical(parsed)) &&
+    existing.commandVersion === bus.definition.version &&
+    existing.creatorStaffId === bus.actor.staffId &&
+    (existing.status === "pending" || existing.status === "consumed");
+  return matches ? (existingConfirmationSummary(existing) ?? null) : null;
 }
 
 export function pendingResponse(existing: PendingAction, summary?: ConfirmationSummary) {
@@ -131,4 +146,25 @@ export function pendingResponse(existing: PendingAction, summary?: ConfirmationS
       ...(summary === undefined ? {} : { summary }),
     }),
   };
+}
+
+export function preparedPendingRetryMatches(
+  existing: PendingAction,
+  parsed: unknown,
+  bus: BusContext,
+  preparation: PendingActionPreparation | null,
+  decision: PolicyDecision,
+): boolean {
+  if (preparation === null) return false;
+  return (
+    JSON.stringify(existing.args) === JSON.stringify(freezeCanonical(parsed)) &&
+    existing.authority !== undefined &&
+    JSON.stringify(existing.authority) === JSON.stringify(freezeCanonical(preparation.authority)) &&
+    existing.commandVersion === bus.definition.version &&
+    existing.creatorStaffId === bus.actor.staffId &&
+    existing.status === "pending" &&
+    existing.effectiveRisk === decision.effectiveRisk &&
+    existing.policyOutcome === decision.outcome &&
+    existing.requiresOtherApprover === decision.requiresOtherApprover
+  );
 }

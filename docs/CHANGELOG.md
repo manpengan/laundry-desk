@@ -14,6 +14,126 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
+- 有来源的只读 AI 助手（[ADR-62](adr/2026-08-13-adr-62-readonly-ai-assistant.md)）：柜台和
+  Owner 共用经营汇总、订单/顾客检索与内置规程排障三个闭合只读工具。业务读取
+  继续经既有 Query Bus、tenant GUC 和 RBAC，顾客信息在模型前脱敏，回答必须带
+  来源与筛选条件。0067 只保存工具名、耗时、结果/来源/筛选计数和 hash。当前
+  仍是 provider-neutral deterministic fake，无真实 key、外网、写工具、自由 SQL 或任意
+  URL/header。
+
+- 推荐奖励与团购核销（[ADR-54](adr/2026-08-13-adr-54-referral-and-group-buy.md)）：推荐奖励绑定已结清
+  订单、active 会员、券版本和活动预算；外部团购券只保存域分离摘要与末四位，并只能核销一次。三条
+  R4 写入口均使用服务端冻结 authority、整数分计算、专用限流、持久幂等及同事务审计。
+
+- 顾客钱包、权益与自助偏好（[ADR-56](adr/2026-08-13-adr-56-customer-wallet-and-preferences.md)）：
+  `/customer` 新增储值账本、等级、积分、次卡和券包只读投影，以及最多十条 portal-owned 地址与通知
+  偏好的 CAS 更新；资金和权益继续以既有账本为权威，不开放充值、支付、兑换或核销入口。
+
+- 顾客自助订单与洗护进度（[ADR-55](adr/2026-08-13-adr-55-customer-self-service-orders.md)）：新增
+  独立顾客登录、短会话和 `/customer` 响应式入口，可查询自身 canonical group 的订单、整数分票据及
+  件级进度；tab authority、CSRF、限流和反枚举边界阻止跨顾客与迟到响应泄露。
+
+- 活动批量发券与核销冲正（[ADR-53](adr/2026-08-13-adr-53-campaign-coupon-issuance.md)）：基于冻结受众
+  和既有券定义批量发券，按最坏券面额原子占用活动预算；误核销只可在未付款订单上由另一管理员 R4
+  复核后追加冲正，原核销与 grant 证据保持不可变。
+
+- 门店营销活动基础（[ADR-52](adr/2026-08-13-adr-52-store-marketing-campaigns.md)）：新增活动时间窗、
+  严格受众规则、摘要冻结与整数分预算上限；活动定义、预算和快照均为门店 RLS、乐观版本、持久幂等
+  与同事务审计，高预算操作升级另一管理员复核。
+
+- 取件、送达、异常与现场交付证据（[ADR-51](adr/2026-08-13-adr-51-delivery-evidence.md)）：
+  新增 `delivery.evidence.record` 与 `delivery.evidence.list`，把当前 accepted 任务受派人的 GPS 定点、现场
+  照片、签名图片和受控异常原因绑定到精确组织、门店、配送订单、任务、腿、任务版本与员工。取件完成
+  必须同时有 GPS 和照片，送达完成还必须有签名；证据追加、订单推进和任务收口在同一事务完成，移动端
+  不再先完成任务再补证据。专用私有附件路由只保存 opaque key、摘要、类型和整数大小，上传失败会清理
+  文件，下载每次重新验证 tenant/store/task/assignee；媒体、坐标、存储 key 和 PII 不进入 audit、event 或
+  AI 投影。移动 H5 只在员工明确点击后触发单次定位或文件选择，旧 generation、AbortSignal、scope/
+  selection 与断网全部阻断旧响应和离线写。隐私导出仅增加证据/附件计数及保留、过期孤儿清理裁决，
+  不导出坐标或媒体。冻结面从 68/47 增至 **69 commands / 48 queries**，数据库迁移头为 `0058`。
+
+- 配送员/员工移动 H5 我的任务工作台（[ADR-50](adr/2026-08-13-adr-50-mobile-delivery-task-h5.md)）：
+  Cloud Web 新增精确 `/mobile/tasks` browser-only 入口，复用安全登录，并只在该入口使用 refresh/CSRF
+  cookie 冷恢复；access token 继续只驻留 host 私有内存。当前员工可读取自己的有界任务与订单详情、接受或
+  带受控原因拒绝 offered 任务，并按任务腿推进既有订单的取件/送回状态；管理员分派、转派和 R4 接管仍
+  留在桌面员工面。R3 确认绑定完整 task/order/laundry ID、腿、路线、当前→目标状态和任务/订单版本；
+  session/store/staff/permission、选择或详情变化会 abort transport、递增 generation 并使旧确认失效。
+  断网只保留同会话最后读取供核对，所有写停用且恢复后重读；feature-off 不冻结既有任务。没有新增
+  Contracts、Server、数据库或迁移，冻结面当时仍为 68/47；该历史 Item 5 边界及“直接完成后补证据”
+  行为现已由 ADR-51/Item 6 推翻，路线导航仍未包含。
+
+- 配送任务分派、接单、转派与人工接管（[ADR-49](adr/2026-08-13-adr-49-authoritative-delivery-tasks.md)）：
+  在权威 `delivery_order` 之下新增一腿一条活动任务的员工保管链。管理员可把待执行取件/送回腿分派给
+  当前门店 active 员工；受派人以 CAS 接受或拒绝；管理员转派会终结旧任务并创建 offered successor，
+  R4 人工接管会在另一管理员复核后创建已接受 successor。数据库延迟完整性 guard 阻止只有终结旧任务
+  而没有 successor 的孤立转派/接管，并只允许配送订单真源驱动任务完成或取消。四写两读均 online-only、
+  当前门店隔离并使用冻结 WYSIWYS 确认；业务变化、audit 与 event 同事务。员工 Web 新增任务列表、分派、
+  响应、转派和接管面；feature 关闭不冻结既有任务。该 Item 4 历史切片当时不包含移动 H5；后续
+  ADR-50 已增加独立的当前员工“我的任务”移动入口，但路线导航、GPS、照片、签名、交付证据和第三方
+  配送 provider 仍未包含。
+
+- 权威配送订单与取送生命周期（[ADR-48](adr/2026-08-13-adr-48-authoritative-delivery-orders.md)）：
+  新增当前门店员工使用的取送订单工作台，把既有洗衣订单、canonical 顾客和取/送预约绑定为唯一活动
+  `delivery_order`。三种含实际配送腿的路线使用数据库强制的显式状态机、逐次版本、数据库时间和不可逆
+  终态；上门取件、到店送洗、送回与顾客自取边界互不混用。新建从预约派生整型分费用并要求 feature
+  开启，既有在途订单在 feature 关闭后仍可安全收尾；返件准备与完成继续以既有洗衣订单、件级状态和
+  余额为权威，不由物流按钮代写。两写两读均按会话门店限流，R3 写入与持久幂等、audit/event 同事务。
+  该 Item 3 历史切片当时不包含任务分派；后续 ADR-49 已增加独立任务保管链，ADR-50 已增加当前员工
+  移动 H5 候选，但路线导航、GPS、照片、签名、交付证据和顾客公开自助入口仍未包含。
+
+- 顾客取送预约、改期与取消（[ADR-47](adr/2026-08-13-adr-47-customer-delivery-appointments.md)）：
+  顾客详情新增员工代客预约面，引用已有顾客地址但不复制姓名、电话或地址正文。创建在同一事务重新验证
+  feature、策略版本、门店时区规则、地址归属、重复与真实每格容量；改期原子移动新旧容量，失败不释放
+  旧槽；取消保留历史并在功能或接单暂停时仍可释放。专用地址查询会合并 canonical 根档案与来源档案
+  的有效地址，只向 UI 返回必要字段；数据库 guard 令应用角色无法复活取消行、跳号或篡改预约身份。
+  三写均为 R3 显式确认与持久幂等，三读有界且不进入 AI 面。该 Item 2 历史切片当时不包含
+  `delivery_order`；后续 ADR-48 已交付权威配送订单，但顾客本人认证/小程序、任务派送、路线、GPS
+  与交付证据仍未包含。
+
+- 门店取送策略与不占位报价（[ADR-46](adr/2026-08-13-adr-46-delivery-policy-and-policy-only-availability.md)）：
+  设置页新增当前门店的服务区域、整型分运费、周时段、提前期限、时隙和名义每格上限，
+  保存经另一管理员 R5 复核。同页报价只判断当前策略并始终标记容量未检查；它不接收顾客/地址、
+  不占位也不创建预约。保存策略不会打开 `store_features.delivery`，功能关闭或 feature 行缺失时
+  所有报价都明确不可预约。当前为 online-only Cloud Web 内部员工切片，不包含顾客自助、地址管理、
+  实际容量、预约/任务状态、路线、GPS 或第三方 provider。
+- AI 安全、成本计量与失败降级（[ADR-59](adr/2026-08-13-adr-59-ai-safety-metering.md)）：
+  0066 新增整数 token/估算成本日账、组织月预算 reservation 与持久熔断状态；输入和跨 chunk 输出默认
+  PII 脱敏，prompt injection 红队命中会在 provider 前拒绝并留下 metadata-only 证据。严格出口验证只
+  接受 HTTPS 443 allowlist 域名并拒绝 IP literal、私网/metadata DNS 结果及未重验 redirect。Owner
+  只读面显示本月 token/成本、限额和熔断状态；AI 仍默认 hard-off，本项不发外网、不读取真实 key、
+  不实现或声明任何真实 provider。
+
+- Provider-neutral 流式 AI 会话（[ADR-58](adr/2026-08-13-adr-58-bounded-ai-streaming-runtime.md)）：
+  新增 staff/admin 专用 HTTP 会话、幂等 turn、持久事件 cursor、可取消 SSE 与纯文本 AI 面板；provider
+  port 不接受 URL、header、credential 或 SDK 对象，默认 runtime 保持 hard-off 且不发网络。隔离测试只
+  可显式注入 deterministic fake，并把 tool-use 限定为最多四步的只读 `synthetic.lookup`；真实 provider、
+  BYOK 解密、业务查询/写工具和生产启用均不在本 Item。0065 保存最小会话/message/usage/tool-attempt
+  状态，以 FORCE RLS、closed function、无 app 直接 DML 与 metadata/hash-only 审计约束数据边界。
+- R4 异步审批中心（[ADR-61](adr/2026-08-13-adr-61-r4-asynchronous-approval-center.md)）：在既有
+  WYSIWYS 确认卡和现场 step-up 之外，新增 store-scoped 单级异步待办。另一 active admin 可在
+  Owner Web 查看完整冻结参数后批准并通过同一命令总线执行，或填写原因驳回；发起人不可自批，
+  hash、实体版本、幂等键、权限版本和有效期任一漂移都会失败关闭。R3 原确认路径保持不变，R5
+  不进入异步审批或 AI 执行；0068 需在统一集成分支的 0065–0067 之后验证和发布。
+- 有界自动化策略与调度（[ADR-63](adr/2026-08-13-adr-63-bounded-automation.md)）：Owner 可用固定
+  取件提醒模板建立当前门店策略，配置有效期、非跨午夜时段、对象过滤、每日次数和整数分金额上限；
+  新建或修改后必须由 active admin 经 R3 确认批准，一键暂停/恢复，额度超限或连续三次失败自动暂停。
+  worker 以 `via=automation` 继续走统一 command bus、RBAC、租户、policy、pending risk 和审计；PostgreSQL
+  在同一事务锁定策略与日额度并保存脱敏运行证据。当前只允许
+  `notification.delivery_batch.enqueue@0.1.0` 且每次最多 10 单，明确禁止 R4/R5、退款、免单、余额、
+  权限、密钥、备份恢复、审计删除以及自由 cron、代码、SQL 或 URL。当前 software-only 通知不代表真实送达；
+  0069 仍须随 0065–0068 集成后进入连续迁移、required CI 与 hk-vps 发布门禁。
+
+- BYOK 凭据托管与模型注册表（[ADR-57](adr/2026-08-13-adr-57-byok-custody-model-registry.md)）：
+  新增组织隔离的 envelope 加密凭据生命周期，replace/revoke 只经 admin、CSRF、限流与另一管理员 R5
+  proof 的专用 secret ingress；API 只返回 last4 与 metadata。模型注册表初始为空且应用只读，必须由
+  官方文档核验后另行登记。当前不含生产 KMS adapter、provider 网络/SDK、模型选择、推理、UI 或
+  自动化，`ai` feature 继续关闭；0064 需在集成 0054–0063 后才可进入连续迁移与发布门禁。
+- Provider Adapter 与连接验证（[ADR-60](adr/2026-08-13-adr-60-provider-adapters-and-validation.md)）：
+  新增固定 HTTPS 端点的 DeepSeek/OpenAI-compatible、Anthropic、Gemini adapter，把流式文本、tool call、
+  usage 和安全错误归一化到 typed provider port。管理员可用 R3 冻结卡验证 Item 12 的
+  `pending_verification` 凭据；只有选中模型确实被发现且 session/feature/credential/model CAS 均未漂移时
+  才原子激活。凭据仅短租解密并清零，响应/日志/审计/UI 不回显 key；无迁移、无业务助手，默认 AI
+  composition 仍 hard-off。另提供只接受 owner-only `DEEPSEEK_API_KEY_FILE` 的不回显 smoke 入口。
+
 - 店厂交接与质检返工（[ADR-45](adr/2026-08-12-adr-45-factory-handoff-and-qc.md)）：新增当前门店
   内部员工使用的批次建单、门店出库、工厂收件、工厂出库和门店收件四节点完整扫码证据；服务端计算
   missing/unexpected 并阻断普通推进，只有另一管理员 R4 处置才可隔离异常件，且不会自动把衣物判丢。

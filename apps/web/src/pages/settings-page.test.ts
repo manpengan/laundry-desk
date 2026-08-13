@@ -146,3 +146,30 @@ test("settings replaces the inert minimum-order demo with store pricing authorit
   assert.match(html, /添加附加项/u);
   assert.doesNotMatch(html, /最低消费/u);
 });
+
+test("settings exposes delivery policy configuration and a truthful feature-off quote boundary", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(SettingsPage, {
+        session: {
+          ...SESSION,
+          features: Object.freeze({ ...FULL_STORE_FEATURES, delivery_enabled: false }),
+        },
+        authClient: createMockAuthClient(),
+        commandClient: createMockCommandClient(),
+        queryClient: createMockQueryClient(),
+      }),
+    ),
+  );
+
+  assert.match(html, /data-testid="delivery-policy-settings"/u);
+  assert.match(html, /服务区域与运费/u);
+  assert.match(html, /每周取送时段/u);
+  assert.match(html, /保存取送策略/u);
+  assert.match(html, /data-testid="delivery-policy-quote"/u);
+  assert.match(html, /不查询已占名额、不保留容量，也不创建预约/u);
+  assert.match(html, /本店取送功能当前关闭/u);
+  assert.doesNotMatch(html, /启用取送功能/u);
+});

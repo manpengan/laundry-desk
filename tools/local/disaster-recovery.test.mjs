@@ -31,6 +31,19 @@ async function fixture() {
   await writeFile(join(photos, photoName), Buffer.from([0xff, 0xd8, 0xff, 0xd9]), {
     mode: 0o600,
   });
+  const deliveryDirectory = join(photos, "delivery-evidence");
+  const deliveryPhotoName = "22222222-2222-4222-8222-222222222222.png";
+  await mkdir(deliveryDirectory, { mode: 0o700 });
+  await writeFile(
+    join(deliveryDirectory, ".laundry-photo-store-v1"),
+    "laundry-desk-photo-store:v1\n",
+    { mode: 0o600 },
+  );
+  await writeFile(
+    join(deliveryDirectory, deliveryPhotoName),
+    Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+    { mode: 0o600 },
+  );
   const context = Object.freeze({
     project: "laundry-ci-test",
     config: Object.freeze({ instanceId: "0123456789abcdefghijklmn" }),
@@ -51,9 +64,19 @@ async function fixture() {
         join(destination, ".laundry-photo-store-v1"),
       );
       await copyFile(join(photos, photoName), join(destination, photoName));
+      const deliveryDestination = join(destination, "delivery-evidence");
+      await mkdir(deliveryDestination, { mode: 0o700 });
+      await copyFile(
+        join(deliveryDirectory, ".laundry-photo-store-v1"),
+        join(deliveryDestination, ".laundry-photo-store-v1"),
+      );
+      await copyFile(
+        join(deliveryDirectory, deliveryPhotoName),
+        join(deliveryDestination, deliveryPhotoName),
+      );
     },
   });
-  return { photos, photoName, context, dependencies };
+  return { photos, photoName, deliveryPhotoName, context, dependencies };
 }
 
 test("disaster recovery set binds the database dump and every private photo", async () => {
@@ -63,10 +86,10 @@ test("disaster recovery set binds the database dump and every private photo", as
     { cwd: "/workspace", kind: "backup" },
     dependencies,
   );
-  assert.equal(backup.photo_files, 1);
+  assert.equal(backup.photo_files, 2);
   const verified = await verifyDisasterRecoveryBackup(context, backup.path, backup.sha256);
   assert.equal(verified.database_sha256, backup.database_sha256);
-  assert.equal(verified.photo_files, 1);
+  assert.equal(verified.photo_files, 2);
 
   const snapshotPhoto = join(verified.snapshotPath, "11111111-1111-4111-8111-111111111111.jpg");
   await writeFile(snapshotPhoto, Buffer.from([0xff, 0xd8, 0xff, 0x00]), { mode: 0o600 });
@@ -109,7 +132,7 @@ test("photo snapshot exports through the stopped container when the bind mount i
 });
 
 test("photo restore swaps only the owned private photo directory", async () => {
-  const { photos, photoName, context, dependencies } = await fixture();
+  const { photos, photoName, deliveryPhotoName, context, dependencies } = await fixture();
   const backup = await createDisasterRecoveryBackup(
     context,
     { cwd: "/workspace", kind: "backup" },
@@ -119,8 +142,17 @@ test("photo restore swaps only the owned private photo directory", async () => {
   await writeFile(join(photos, photoName), Buffer.from([0xff, 0xd8, 0xff, 0x01]), {
     mode: 0o600,
   });
+  await writeFile(
+    join(photos, "delivery-evidence", deliveryPhotoName),
+    Buffer.from([0x89, 0x50, 0x4e, 0x00]),
+    { mode: 0o600 },
+  );
   await restorePhotoSnapshot(context, source);
   assert.deepEqual(await readFile(join(photos, photoName)), Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+  assert.deepEqual(
+    await readFile(join(photos, "delivery-evidence", deliveryPhotoName)),
+    Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+  );
 });
 
 test("bundle verification rejects a checksum-confirmed photo snapshot path escape", async () => {

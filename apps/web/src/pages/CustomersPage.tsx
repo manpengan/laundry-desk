@@ -11,6 +11,7 @@ import type { PhotoPort } from "../host/photo-port.js";
 import type { PrintJobView } from "../shell/print-jobs.js";
 import { CustomerDetail } from "./CustomerDetail.js";
 import { CustomerGovernancePanel } from "./CustomerGovernancePanel.js";
+import { DeliveryAppointmentPanel } from "./DeliveryAppointmentPanel.js";
 import { MemberBalancePanel } from "./MemberBalancePanel.js";
 import { MemberBenefitsPanel } from "./MemberBenefitsPanel.js";
 import { CustomerPrivacyPanel } from "./CustomerPrivacyPanel.js";
@@ -308,6 +309,17 @@ export function CustomersPage({
             {...(authClient === undefined ? {} : { authClient })}
             {...(session === undefined ? {} : { session })}
           />
+          {session !== undefined ? (
+            <DeliveryAppointmentPanel
+              key={selected.customer_id}
+              customer={selected}
+              queryClient={queryClient}
+              commandClient={commandClient}
+              featureEnabled={session.features.delivery_enabled === true}
+              {...(authClient === undefined ? {} : { authClient })}
+              session={session}
+            />
+          ) : null}
           {session?.features.member_enabled === true ? (
             <>
               <MemberBalancePanel

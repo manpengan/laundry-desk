@@ -43,6 +43,7 @@
     "workspace:check": "pnpm run workspace:audit && pnpm run workspace:format:check && pnpm run workspace:lint && pnpm run workspace:typecheck && pnpm run workspace:test && pnpm run cloud:adr36:acceptance:test && pnpm run workspace:build",
     "local:bootstrap": "pnpm --filter @laundry/contracts build && pnpm --filter @laundry/domain build && pnpm --filter @laundry/server build && node apps/server/dist/local/bootstrap-cli.js",
     "local:server": "pnpm --filter @laundry/contracts build && pnpm --filter @laundry/domain build && pnpm --filter @laundry/server build && node apps/server/dist/http/main.js",
+    "ai:provider:deepseek:smoke": "pnpm --filter @laundry/contracts build && pnpm --filter @laundry/server build && node tools/local/ai-provider-deepseek-smoke.mjs",
     "local:web": "pnpm --filter @laundry/ui build && pnpm --filter @laundry/web exec vite --config vite.config.ts",
     "local:web:commissioning:e2e": "pnpm exec playwright test -c apps/web/playwright.commissioning.config.ts",
     "local:web:e2e": "pnpm exec playwright test -c apps/web/playwright.local.config.ts",

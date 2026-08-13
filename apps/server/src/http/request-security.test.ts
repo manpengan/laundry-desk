@@ -5,9 +5,11 @@ import cors from "@fastify/cors";
 import Fastify from "fastify";
 
 import {
+  TRUSTED_PROXY_CLIENT_IP_HEADER_NAME,
   createRequestSecurityPolicy,
   evaluateLocalRequest,
   registerRequestSecurityHooks,
+  trustedClientSource,
   type LocalRequestSecurityOptions,
   type RequestSecurityInput,
 } from "./request-security.js";
@@ -76,20 +78,53 @@ test("accepts only one exact configured Host authority", () => {
   }
 });
 
-test("rejects Forwarded and every X-Forwarded-* header", () => {
+test("rejects every untrusted forwarding or client-source attribution header", () => {
   for (const name of [
     "Forwarded",
+    "CF-Connecting-IP",
+    "True-Client-IP",
     "X-Forwarded-For",
     "X-Forwarded-Host",
     "X-Forwarded-Port",
     "X-Forwarded-Prefix",
     "X-Forwarded-Proto",
+    "X-Real-IP",
   ]) {
     const decision = evaluateLocalRequest(
       request("GET", Object.freeze({ [name]: "untrusted-forwarding-metadata" })),
       POLICY,
     );
     assert.deepEqual(decision, { allowed: false, statusCode: 400 }, name);
+  }
+});
+
+test("accepts the dedicated Caddy source only from a loopback peer", () => {
+  const required = createRequestSecurityPolicy({
+    ...OPTIONS,
+    trustedProxyClientIpRequired: true,
+  });
+  assert.equal(
+    trustedClientSource(
+      {
+        ip: "127.0.0.1",
+        headers: { [TRUSTED_PROXY_CLIENT_IP_HEADER_NAME]: "198.51.100.19" },
+      },
+      required,
+    ),
+    "198.51.100.19",
+  );
+  assert.equal(trustedClientSource({ ip: "127.0.0.1", headers: {} }, required), null);
+  for (const request of [
+    {
+      ip: "198.51.100.19",
+      headers: { [TRUSTED_PROXY_CLIENT_IP_HEADER_NAME]: "203.0.113.8" },
+    },
+    {
+      ip: "127.0.0.1",
+      headers: { [TRUSTED_PROXY_CLIENT_IP_HEADER_NAME]: "198.51.100.19, 203.0.113.8" },
+    },
+  ]) {
+    assert.equal(trustedClientSource(request, required), null);
   }
 });
 

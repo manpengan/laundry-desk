@@ -1,4 +1,5 @@
 import { createMemoryAccountingSource, createPgAccountingSource } from "../accounting/index.js";
+import { MemoryApprovalStore, createPgApprovalStore } from "../approvals/index.js";
 import { createMemoryReportingDeps, createPgReportingDeps } from "../reporting/index.js";
 import { createCsrfProofSigner } from "../auth/csrf.js";
 import * as edgeRuntime from "../edge/runtime-authority.js";
@@ -7,10 +8,7 @@ import { createPgIdempotencyStore } from "../bus/pg-idempotency.js";
 import { createMemoryIdentityStore } from "../identity/memory-store.js";
 import { createPgIdentityStore } from "../identity/pg-store.js";
 import { createPgStepUpProofStore } from "../identity/pg-step-up-proof-store.js";
-import {
-  createMemoryStepUpApproverAuthority,
-  verifyPgStepUpApproverAuthority,
-} from "../identity/step-up-approver-authority.js";
+import * as stepUpAuthority from "../identity/step-up-approver-authority.js";
 import { createPasswordPort } from "../identity/password.js";
 import type { StaffRecord, Uuid } from "../identity/types.js";
 import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
@@ -33,86 +31,35 @@ import { createPgStatsQuery } from "../stats/pg-source.js";
 import { createPgStaffAccessDeps } from "../staff/runtime.js";
 import * as ownerOperations from "./runtime-owner-operations.js";
 import * as notificationRuntime from "./runtime-notification.js";
+import { createMemoryMarketingRuntime, createPgMarketingRuntime } from "./runtime-marketing.js";
 import { createMemoryShiftStore } from "../shift/memory-store.js";
 import { createPgShiftStore } from "../shift/pg-shift-store.js";
 import { acquirePgBusinessDayLock } from "../workday/business-day-lock.js";
-import type { PhotoHandlerDeps } from "../photo/handlers.js";
 import { createMemoryPhotoStore } from "../photo/memory-store.js";
-import { preparePgPhotoDeps } from "../photo/runtime-files.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import { createPgPendingActionStore } from "../pending-actions/pg-store.js";
 import { processStepUpProofStore } from "../policy/step-up-proof-store.js";
-import {
-  createMemoryFulfillmentRuntime,
-  createPgFulfillmentRuntime,
-} from "../fulfillment/runtime.js";
+import * as fulfillmentRuntime from "../fulfillment/runtime.js";
 import { deriveEdgeAuthorityKeyPair } from "../edge/authority-key.js";
-import {
-  createPgPool,
-  resolveRuntimeDatabaseUrl,
-  RUNTIME_DATABASE_URL_REQUIRED,
-  type CreatePoolOptions,
-  type PgPool,
-} from "../db/pg-pool.js";
+import { resolveRuntimeDatabaseUrl, RUNTIME_DATABASE_URL_REQUIRED } from "../db/pg-pool.js";
 import { DEMO_PASSWORD, DEMO_PIN, DEMO_STAFF_A_ID, DEMO_STAFF_B_ID } from "./demo-ids.js";
-import { assertLocalBootstrapReady } from "./bootstrap.js";
-import {
-  parseLocalHostConfig,
-  parseLocalPhotoStoreDir,
-  parseLocalPrintSpoolDir,
-  parseLocalServerConfig,
-  parseLocalSigningSecrets,
-  parseNotificationProviderMode,
-  type LocalServerConfig,
-} from "./config.js";
+import * as localConfig from "./config.js";
 import { LOCAL_PROFILE } from "./profile.js";
 import { createLocalMemoryStaffAccessDeps } from "./memory-staff-access.js";
 import { buildPlatform, mintRuntimeSecret } from "./runtime-support.js";
-import {
-  freezeStaffDirectory,
-  loadPgStaffDirectory,
-  LOCAL_MEMORY_STAFF_DIRECTORY,
-  type LocalStaffDirectoryEntry,
-} from "./staff-directory.js";
+import * as staffDirectory from "./staff-directory.js";
 import { createMemoryStaffRoleResolver, createPgStaffRoleResolver } from "./staff-role-resolver.js";
 import * as recon from "./runtime-reconciliation.js";
 import type { LocalRuntime } from "./runtime-types.js";
 import { createMemoryMemberRuntimes, createPgMemberRuntimes } from "./runtime-member-benefits.js";
 import { buildIdentityDeps } from "./runtime-identity.js";
-export {
-  DEMO_ADMIN_ID,
-  DEMO_ORG_ID,
-  DEMO_PASSWORD,
-  DEMO_PIN,
-  DEMO_STAFF_A_ID,
-  DEMO_STAFF_B_ID,
-  DEMO_STORE_ID,
-} from "./demo-ids.js";
-export type { LocalStaffDirectoryEntry } from "./staff-directory.js";
-export { loadPgStaffDirectory } from "./staff-directory.js";
+import * as deliveryRuntime from "./runtime-delivery.js";
+import { createMemoryAutomationRuntime, createPgAutomationRuntime } from "./runtime-automation.js";
+import * as pgRuntime from "./runtime-pg-dependencies.js";
+export * from "./demo-ids.js";
+export { loadPgStaffDirectory, type LocalStaffDirectoryEntry } from "./staff-directory.js";
 export type { LocalRuntime, LocalRuntimeMode } from "./runtime-types.js";
-export type CreatePgLocalRuntimeDependencies = Readonly<{
-  createPool: (options: CreatePoolOptions) => PgPool;
-  assertReady: (pool: PgPool, expectedDemoOnly: boolean) => Promise<void>;
-  loadStaffDirectory: typeof loadPgStaffDirectory;
-}>;
-const defaultPgRuntimeDependencies: CreatePgLocalRuntimeDependencies = Object.freeze({
-  createPool: createPgPool,
-  assertReady: assertLocalBootstrapReady,
-  loadStaffDirectory: loadPgStaffDirectory,
-});
-async function closeFailedPgPool(pool: PgPool, initializationError: unknown): Promise<never> {
-  try {
-    await pool.end();
-  } catch (cleanupError) {
-    throw new AggregateError(
-      [initializationError, cleanupError],
-      "PostgreSQL runtime initialization and pool cleanup both failed",
-      { cause: initializationError },
-    );
-  }
-  throw initializationError;
-}
+export type { CreatePgLocalRuntimeDependencies } from "./runtime-pg-dependencies.js";
 export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const store = createMemoryIdentityStore();
   const passwordPort = createPasswordPort();
@@ -147,6 +94,15 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const memberRuntimes = createMemoryMemberRuntimes(DEMO_CUSTOMERS, orderStore);
   const customerStore = createMemoryCustomerStore(DEMO_CUSTOMERS, memberRuntimes.customerMerge);
   const customerProfileStore = createMemoryCustomerProfileStore(customerStore);
+  const platform = buildPlatform("memory");
+  const delivery = deliveryRuntime.createMemoryDeliveryRuntimes(
+    platform.features,
+    LOCAL_PROFILE.timezone,
+    customerProfileStore,
+    customerStore,
+    orderStore,
+    staffDirectory.LOCAL_MEMORY_STAFF_DIRECTORY,
+  );
   const statsSource = createOrderBackedStatsQuery(orderStore, memberRuntimes.member.store);
   const shiftStore = createMemoryShiftStore();
   const printStore = createMemoryPrintJobStore({
@@ -168,14 +124,21 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
   const photoStore = createMemoryPhotoStore();
   const accountingSource = createMemoryAccountingSource();
   const staffAccess = createLocalMemoryStaffAccessDeps(store);
-  const platform = buildPlatform("memory");
+  const approvalStore = new MemoryApprovalStore();
+  const notification = notificationRuntime.createMemoryNotificationRuntime(orderStore);
+  let runtimeRef: LocalRuntime | null = null;
+  const automation = createMemoryAutomationRuntime({
+    notification,
+    pendingStore: processPendingActionStore,
+    runtime: () => runtimeRef,
+  });
   const isBusinessDayClosed = async (businessDate: string): Promise<boolean> =>
     (await shiftStore.getByBusinessDate(
       LOCAL_PROFILE.orgId,
       LOCAL_PROFILE.storeId,
       businessDate,
     )) !== null;
-  return Object.freeze({
+  const runtime: LocalRuntime = Object.freeze({
     mode: "memory" as const,
     identity: buildIdentityDeps(
       store,
@@ -188,6 +151,11 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     ),
     platform,
     pricing: Object.freeze({ store: pricingStore }),
+    deliveryPolicy: delivery.policy,
+    deliveryAppointments: delivery.appointments,
+    deliveryOrders: delivery.orders,
+    deliveryTasks: delivery.tasks,
+    deliveryEvidence: delivery.evidence,
     order: Object.freeze({
       store: orderStore,
       pricing: pricingStore,
@@ -216,9 +184,10 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
       source: accountingSource,
       timeZone: LOCAL_PROFILE.timezone,
     }),
+    automation,
     reporting: createMemoryReportingDeps(accountingSource, LOCAL_PROFILE.timezone),
     photo: Object.freeze({ store: photoStore }),
-    fulfillment: createMemoryFulfillmentRuntime({
+    fulfillment: fulfillmentRuntime.createMemoryFulfillmentRuntime({
       order: orderStore,
       timeZone: LOCAL_PROFILE.timezone,
       isBusinessDayClosed,
@@ -228,44 +197,58 @@ export async function createMemoryLocalRuntime(): Promise<LocalRuntime> {
     storeManagement: ownerOperations.createMemoryStoreManagementDeps(),
     member: memberRuntimes.member,
     memberBenefits: memberRuntimes.memberBenefits,
-    notification: notificationRuntime.createMemoryNotificationRuntime(orderStore),
+    notification,
+    marketing: createMemoryMarketingRuntime(
+      platform.features,
+      DEMO_CUSTOMERS,
+      memberRuntimes,
+      orderStore,
+    ),
     edgeAuthority: edgeRuntime.createMemoryRuntimeAuthority(accessTokenSecret),
     accessTokenSecret,
     csrfProofSigner,
-    staffDirectory: LOCAL_MEMORY_STAFF_DIRECTORY,
+    staffDirectory: staffDirectory.LOCAL_MEMORY_STAFF_DIRECTORY,
     pendingStore: processPendingActionStore,
+    approvalStore,
     stepUpProofStore: processStepUpProofStore,
-    stepUpApproverAuthority: createMemoryStepUpApproverAuthority(staffAccess.store),
+    stepUpApproverAuthority: stepUpAuthority.createMemoryStepUpApproverAuthority(staffAccess.store),
     idempotencyStore: new MemoryIdempotencyStore(),
     pool: null,
     store,
   });
+  runtimeRef = runtime;
+  return runtime;
 }
 export async function createPgLocalRuntime(
   connectionString: string,
   expectedDemoOnly: boolean,
-  config: LocalServerConfig = parseLocalServerConfig(process.env),
-  dependencies: CreatePgLocalRuntimeDependencies = defaultPgRuntimeDependencies,
+  config: localConfig.LocalServerConfig = localConfig.parseLocalServerConfig(process.env),
+  dependencies: pgRuntime.CreatePgLocalRuntimeDependencies = pgRuntime.defaultPgRuntimeDependencies,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<LocalRuntime> {
   const csrfProofSigner = createCsrfProofSigner(config.csrfProofSecret);
-  const notificationMode = parseNotificationProviderMode(env);
-  const spoolDir = parseLocalPrintSpoolDir(env);
+  const notificationMode = localConfig.parseNotificationProviderMode(env);
+  const spoolDir = localConfig.parseLocalPrintSpoolDir(env);
   const printSpool = spoolDir === null ? null : await createFileSpool({ rootPath: spoolDir });
   const appPool = dependencies.createPool({ connectionString });
-  let pgStaffDirectory: readonly LocalStaffDirectoryEntry[];
-  let photo: PhotoHandlerDeps;
+  const photoRootPath = localConfig.parseLocalPhotoStoreDir(env);
+  const delivery = deliveryRuntime.createPgDeliveryRuntimes(appPool);
+  let pgStaffDirectory: readonly staffDirectory.LocalStaffDirectoryEntry[];
+  let deliveryMedia: Awaited<ReturnType<typeof deliveryRuntime.preparePgDeliveryMedia>>;
   try {
     await dependencies.assertReady(appPool, expectedDemoOnly);
-    pgStaffDirectory = freezeStaffDirectory(await dependencies.loadStaffDirectory(appPool));
-    photo = await preparePgPhotoDeps(
+    pgStaffDirectory = staffDirectory.freezeStaffDirectory(
+      await dependencies.loadStaffDirectory(appPool),
+    );
+    deliveryMedia = await deliveryRuntime.preparePgDeliveryMedia(
       appPool,
-      parseLocalPhotoStoreDir(env),
+      photoRootPath,
+      delivery.evidence,
       LOCAL_PROFILE.orgId,
       LOCAL_PROFILE.storeId,
     );
   } catch (error) {
-    return closeFailedPgPool(appPool, error);
+    return pgRuntime.closeFailedPgPool(appPool, error);
   }
   const store = createPgIdentityStore(appPool);
   const passwordPort = createPasswordPort();
@@ -290,14 +273,23 @@ export async function createPgLocalRuntime(
   });
   const accountingSource = createPgAccountingSource();
   const pendingStore = createPgPendingActionStore(appPool);
+  const approvalStore = createPgApprovalStore(appPool);
   const stepUpProofStore = createPgStepUpProofStore(appPool);
+  const platform = buildPlatform("sql");
+  const notification = notificationRuntime.createPgNotificationRuntime(appPool, notificationMode);
+  let runtimeRef: LocalRuntime | null = null;
+  const automation = createPgAutomationRuntime(appPool, {
+    notification,
+    pendingStore,
+    runtime: () => runtimeRef,
+  });
   const isBusinessDayClosed = async (businessDate: string): Promise<boolean> =>
     (await shiftStore.getByBusinessDate(
       LOCAL_PROFILE.orgId,
       LOCAL_PROFILE.storeId,
       businessDate,
     )) !== null;
-  return Object.freeze({
+  const runtime: LocalRuntime = Object.freeze({
     mode: "pg" as const,
     identity: buildIdentityDeps(
       store,
@@ -308,8 +300,13 @@ export async function createPgLocalRuntime(
       stepUpProofStore,
       createPgStaffRoleResolver(appPool, dependencies.loadStaffDirectory),
     ),
-    platform: buildPlatform("sql"),
+    platform,
     pricing: Object.freeze({ store: pricingStore }),
+    deliveryPolicy: delivery.policy,
+    deliveryAppointments: delivery.appointments,
+    deliveryOrders: delivery.orders,
+    deliveryTasks: delivery.tasks,
+    deliveryEvidence: deliveryMedia.evidence,
     order: Object.freeze({
       store: orderStore,
       pricing: pricingStore,
@@ -355,9 +352,10 @@ export async function createPgLocalRuntime(
     }),
     reconciliation: recon.createPgReconciliationDeps(),
     accounting: ownerOperations.createPgAccountingDeps(accountingSource),
+    automation,
     reporting: createPgReportingDeps(accountingSource, LOCAL_PROFILE.timezone),
-    photo,
-    fulfillment: createPgFulfillmentRuntime(appPool, {
+    photo: deliveryMedia.photo,
+    fulfillment: fulfillmentRuntime.createPgFulfillmentRuntime(appPool, {
       order: orderStore,
       timeZone: LOCAL_PROFILE.timezone,
       isBusinessDayClosed,
@@ -366,35 +364,37 @@ export async function createPgLocalRuntime(
     storeManagement: ownerOperations.createPgStoreManagementDeps(),
     member: memberRuntimes.member,
     memberBenefits: memberRuntimes.memberBenefits,
-    notification: notificationRuntime.createPgNotificationRuntime(appPool, notificationMode),
+    notification,
+    marketing: createPgMarketingRuntime(platform.features),
     edgeAuthority: edgeRuntime.createPgRuntimeAuthority(appPool, config.accessTokenSecret),
     accessTokenSecret: config.accessTokenSecret,
     csrfProofSigner,
     staffDirectory: pgStaffDirectory,
     pendingStore,
+    approvalStore,
     stepUpProofStore,
-    stepUpApproverAuthority: verifyPgStepUpApproverAuthority,
+    stepUpApproverAuthority: stepUpAuthority.verifyPgStepUpApproverAuthority,
     idempotencyStore: createPgIdempotencyStore(appPool),
     pool: appPool,
     store: null,
   });
+  runtimeRef = runtime;
+  return runtime;
 }
 export async function createLocalRuntime(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<LocalRuntime> {
-  const hostConfig = parseLocalHostConfig(env);
+  const hostConfig = localConfig.parseLocalHostConfig(env);
   const databaseUrl = resolveRuntimeDatabaseUrl(env);
-  if (databaseUrl === null) {
-    throw new Error(RUNTIME_DATABASE_URL_REQUIRED);
-  }
+  if (databaseUrl === null) throw new Error(RUNTIME_DATABASE_URL_REQUIRED);
   return createPgLocalRuntime(
     databaseUrl,
     env.LAUNDRY_LOCAL_DEMO === "1",
     Object.freeze({
       ...hostConfig,
-      ...parseLocalSigningSecrets(env),
+      ...localConfig.parseLocalSigningSecrets(env),
     }),
-    defaultPgRuntimeDependencies,
+    pgRuntime.defaultPgRuntimeDependencies,
     env,
   );
 }

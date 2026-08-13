@@ -156,6 +156,26 @@ test("PageHost pickup with session+commandClient mounts PickupPage form", () => 
   assert.match(html, /订单 ID/);
 });
 
+test("PageHost delivery route mounts the authoritative order worklist", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(PageHost, {
+        activeId: "delivery",
+        onNavigate: () => undefined,
+        session: sampleSession,
+        authClient: createMockAuthClient(),
+        commandClient: createMockCommandClient(),
+        queryClient: createMockQueryClient(),
+      }),
+    ),
+  );
+  assert.match(html, /本页只推进权威配送订单状态/u);
+  assert.match(html, /aria-label="取送订单列表"/u);
+  assert.match(html, /aria-label="取送订单详情"/u);
+});
+
 test("PageHost loading exposes aria-busy skeleton", () => {
   const html = renderToStaticMarkup(
     createElement(PageHost, {

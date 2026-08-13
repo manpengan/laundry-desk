@@ -2,6 +2,16 @@ import Foundation
 
 extension NativeRuntimeController {
   func ensureBackupCapacity() throws {
+    #if RUNTIME_TESTING
+      if let raw = ProcessInfo.processInfo.environment[
+        RuntimeExternalPath.CapacityDomain.runtime.testingEnvironmentKey
+      ], let available = Int64(raw) {
+        guard available >= 536_870_912 else {
+          try runtimeFail("RUNTIME_BACKUP_CAPACITY_LOW")
+        }
+        return
+      }
+    #endif
     let values = try backupsRoot.resourceValues(forKeys: [
       .volumeAvailableCapacityForImportantUsageKey
     ])

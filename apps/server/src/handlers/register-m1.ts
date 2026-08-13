@@ -1,5 +1,6 @@
 import type { ChainPortHooks } from "../bus/chain-adapter.js";
 import type { AccountingHandlerDeps } from "../accounting/types.js";
+import * as automationRegistration from "../automation/handlers.js";
 import { createAccountingHandlers } from "../accounting/handlers.js";
 import { createM1CommandRegistry, type MutableCommandRegistry } from "../bus/registry.js";
 import { createM1QueryRegistry, type MutableQueryRegistry } from "../bus/query-registry.js";
@@ -25,7 +26,6 @@ import {
   registerFulfillmentCommandHandlers,
   registerFulfillmentQueryHandlers,
 } from "../fulfillment/handlers.js";
-import { createFulfillmentConfirmationPreparer } from "../fulfillment/confirmation.js";
 import { registerOrderWorkdayCommandHandlers } from "../order/workday-handlers.js";
 import {
   registerPaymentCommandHandlers,
@@ -54,14 +54,7 @@ import type { MemberRuntimeDeps } from "../member/handlers.js";
 import * as memberRegistration from "../member/registration.js";
 import type { MemberBenefitsRuntimeDeps } from "../member-benefits/types.js";
 import { withMemberBenefitCouponCancellation } from "../member-benefits/order-cancellation.js";
-import { createMemberTopupConfirmationPreparer } from "../member/topup-confirmation.js";
-import {
-  createNotificationDeliveryConfirmationPreparer,
-  prepareNotificationDeliveryRisk,
-} from "../notification/delivery-confirmation.js";
-import { combinePendingActionPreparers } from "./default-chain-hooks.js";
-import type { NotificationHandlerDeps } from "../notification/types.js";
-import * as notificationRegistration from "../notification/registration.js";
+import { prepareNotificationDeliveryRisk } from "../notification/delivery-confirmation.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import { createStaffAccessHandlers, type StaffAccessHandlerDeps } from "../staff/handlers.js";
@@ -70,6 +63,12 @@ import { registerIdentityCommandHandlers, type IdentityHandlerDeps } from "./ide
 import type { PlatformHandlerDeps } from "./platform-handlers.js";
 import { registerPlatformHandlers, registerPlatformQueryHandlers } from "./platform-handlers.js";
 import { createDefaultChainHooks } from "./default-chain-hooks.js";
+import {
+  registerStage4Commands,
+  registerStage4Queries,
+  type Stage4RegistrationDeps,
+} from "./stage4-registration.js";
+import { createM1PendingActionPreparer } from "./m1-pending-preparer.js";
 
 export type RegisterM1Deps = Readonly<{
   identity?: IdentityHandlerDeps;
@@ -94,6 +93,8 @@ export type RegisterM1Deps = Readonly<{
   reconciliation?: ReconciliationHandlerDeps;
   /** ADR-24 dual-basis day/month/staff accounting reports. */
   accounting?: AccountingHandlerDeps;
+  /** ADR-63 allowlisted, quota-bound automation management and history. */
+  automation?: automationRegistration.AutomationHandlerDeps;
   /** ADR-26 owner dashboard; financial rows reuse the ADR-24 read port. */
   reporting?: ReportingHandlerDeps;
   /** M3 garment photo metadata (memory). */
@@ -104,8 +105,8 @@ export type RegisterM1Deps = Readonly<{
   storeManagement?: storeManagement.HandlerDeps;
   member?: MemberRuntimeDeps;
   memberBenefits?: MemberBenefitsRuntimeDeps;
-  notification?: NotificationHandlerDeps;
-}>;
+}> &
+  Stage4RegistrationDeps;
 
 export type RegisterM1Result = Readonly<{
   registry: MutableCommandRegistry;
@@ -213,6 +214,8 @@ export function registerM1Handlers(
     registered.push("accounting.report.export");
   }
 
+  registered.push(...automationRegistration.registerAutomationCommands(registry, deps.automation));
+
   if (deps.photo !== undefined) {
     registerPhotoCommandHandlers(registry, deps.photo);
     registered.push("photo.register");
@@ -247,9 +250,7 @@ export function registerM1Handlers(
 
   registered.push(...memberRegistration.registerCommands(registry, deps));
 
-  registered.push(
-    ...notificationRegistration.registerNotificationCommands(registry, deps.notification),
-  );
+  registered.push(...registerStage4Commands(registry, deps));
 
   return Object.freeze(registered);
 }
@@ -328,6 +329,8 @@ export function registerM1QueryHandlers(
     names.push("accounting.report.get");
   }
 
+  names.push(...automationRegistration.registerAutomationQueries(queryRegistry, deps.automation));
+
   if (deps.reporting !== undefined) {
     registerReportingQueryHandlers(queryRegistry, deps.reporting);
     names.push(
@@ -357,9 +360,7 @@ export function registerM1QueryHandlers(
 
   names.push(...memberRegistration.registerQueries(queryRegistry, deps));
 
-  names.push(
-    ...notificationRegistration.registerNotificationQueries(queryRegistry, deps.notification),
-  );
+  names.push(...registerStage4Queries(queryRegistry, deps));
 
   return Object.freeze(names);
 }
@@ -378,17 +379,7 @@ export function createRegisteredM1Bus(
     chainHooks: createDefaultChainHooks(
       {},
       pendingStore,
-      combinePendingActionPreparers([
-        deps.member === undefined || deps.order === undefined
-          ? undefined
-          : createMemberTopupConfirmationPreparer(deps.member),
-        deps.notification === undefined
-          ? undefined
-          : createNotificationDeliveryConfirmationPreparer(deps.notification),
-        deps.fulfillment === undefined
-          ? undefined
-          : createFulfillmentConfirmationPreparer(deps.fulfillment),
-      ]),
+      createM1PendingActionPreparer(deps),
       deps.notification === undefined ? undefined : prepareNotificationDeliveryRisk,
     ),
     registered,

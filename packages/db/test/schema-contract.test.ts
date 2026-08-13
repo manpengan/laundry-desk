@@ -18,6 +18,9 @@ import {
   M2_CATALOG_RLS_TABLES,
   M2_CATALOG_TABLE_NAMES,
   M2_CATALOG_TABLES,
+  M2_DELIVERY_RLS_TABLES,
+  M2_DELIVERY_TABLE_NAMES,
+  M2_DELIVERY_TABLES,
   M2_COMMAND_IDEMPOTENCY_RLS_TABLES,
   M2_COMMAND_IDEMPOTENCY_TABLE_NAMES,
   M2_COMMAND_IDEMPOTENCY_TABLES,
@@ -226,6 +229,24 @@ describe("M1 schema contract vs A3 matrix", () => {
         "updated_by_staff_id",
       ]),
     );
+
+    const deliveryColumns = columnNames(M2_CATALOG_TABLES.delivery_policies);
+    expect(deliveryColumns).toEqual(
+      expect.arrayContaining([
+        "org_id",
+        "store_id",
+        "accepting_appointments",
+        "minimum_lead_minutes",
+        "maximum_advance_days",
+        "slot_minutes",
+        "max_appointments_per_slot",
+        "service_areas_json",
+        "weekly_windows_json",
+        "version",
+        "updated_at",
+        "updated_by_staff_id",
+      ]),
+    );
   });
 
   it("declares M2 catalog tenant unique layouts", () => {
@@ -248,6 +269,53 @@ describe("M1 schema contract vs A3 matrix", () => {
       return cols[0] === "org_id" && cols[1] === "store_id" && cols.includes("code");
     });
     expect(hasCodeUnique).toBe(true);
+  });
+
+  it("exports store-scoped delivery booking and order projections", () => {
+    expect(Object.keys(M2_DELIVERY_TABLES)).toEqual([...M2_DELIVERY_TABLE_NAMES]);
+    expect([...M2_DELIVERY_RLS_TABLES]).toEqual([...M2_DELIVERY_TABLE_NAMES]);
+    expect(columnNames(M2_DELIVERY_TABLES.delivery_appointments)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "org_id",
+        "store_id",
+        "customer_id",
+        "address_id",
+        "direction",
+        "service_area_code",
+        "scheduled_start_at",
+        "scheduled_end_at",
+        "fee_cents",
+        "status",
+        "version",
+        "policy_version",
+        "cancellation_reason",
+        "cancelled_at",
+      ]),
+    );
+    expect(getTenantTableScope("delivery_appointments")).toBe("store");
+    expect(columnNames(M2_DELIVERY_TABLES.delivery_orders)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "org_id",
+        "store_id",
+        "laundry_order_id",
+        "customer_id",
+        "collection_method",
+        "return_method",
+        "pickup_appointment_id",
+        "return_appointment_id",
+        "pickup_fee_cents",
+        "return_fee_cents",
+        "total_fee_cents",
+        "status",
+        "version",
+        "completed_at",
+        "cancelled_at",
+        "cancellation_reason",
+      ]),
+    );
+    expect(getTenantTableScope("delivery_orders")).toBe("store");
   });
 
   it("exports M2 payments tables with store tenant columns and ledger fields", () => {
@@ -498,6 +566,7 @@ describe("M1 schema contract vs A3 matrix", () => {
       ...M1_ALL_TABLE_NAMES,
       ...M2_ORDER_TABLE_NAMES,
       ...M2_CATALOG_TABLE_NAMES,
+      ...M2_DELIVERY_TABLE_NAMES,
       ...M2_PAYMENT_TABLE_NAMES,
       ...M2_PRINT_TABLE_NAMES,
       ...M2_CUSTOMER_TABLE_NAMES,
@@ -519,5 +588,6 @@ describe("M1 schema contract vs A3 matrix", () => {
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("shift_closings");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("garment_photos");
     expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("ai_pending_actions");
+    expect(DEFERRED_V2_TABLES_NOTE.deferredExamples).not.toContain("ai_model_registry");
   });
 });

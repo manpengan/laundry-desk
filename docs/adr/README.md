@@ -53,6 +53,24 @@
 | [ADR-43](2026-08-12-adr-43-cloud-data-protection-and-joint-recovery.md)       | Cloud 数据保护、离机副本与联合恢复              | **Accepted** 2026-08-12；Cloud Web 阶段 4.1        |
 | [ADR-44](2026-08-12-adr-44-provider-neutral-notification-outbox.md)           | Provider-neutral 通知 outbox、回执与人工降级    | **Accepted** 2026-08-12；Cloud Web 阶段 4.2        |
 | [ADR-45](2026-08-12-adr-45-factory-handoff-and-qc.md)                         | 店厂四节点交接、清点差异与质检返工              | **Proposed** 2026-08-12；实现候选待 manpengan 签署 |
+| [ADR-46](2026-08-13-adr-46-delivery-policy-and-policy-only-availability.md)   | 门店取送策略与不占位可预约报价                  | **Proposed** 2026-08-13；实现候选待 manpengan 签署 |
+| [ADR-47](2026-08-13-adr-47-customer-delivery-appointments.md)                 | 顾客取送预约、改期与取消                        | **Proposed** 2026-08-13；实现候选待 manpengan 签署 |
+| [ADR-48](2026-08-13-adr-48-authoritative-delivery-orders.md)                  | 权威配送订单与取送生命周期                      | **Proposed** 2026-08-13；实现候选开发中            |
+| [ADR-49](2026-08-13-adr-49-authoritative-delivery-tasks.md)                   | 配送任务分派、接单、转派与人工接管              | **Proposed** 2026-08-13；实现候选开发中            |
+| [ADR-50](2026-08-13-adr-50-mobile-delivery-task-h5.md)                        | 配送员/员工移动 H5 我的任务工作台               | **Proposed** 2026-08-13；实现候选本地门禁已通过    |
+| [ADR-51](2026-08-13-adr-51-delivery-evidence.md)                              | 取送现场证据与原子腿完成                        | **Proposed** 2026-08-13；Stage 4.4 Item 6 候选     |
+| [ADR-52](2026-08-13-adr-52-store-marketing-campaigns.md)                      | 当前门店营销活动、受众摘要与预算上限            | **Proposed** 2026-08-13；Stage 4.4 Item 7 候选     |
+| [ADR-53](2026-08-13-adr-53-campaign-coupon-issuance.md)                       | 活动批量发券、服务端资格与核销冲正              | **Proposed** 2026-08-13；Stage 4.4 Item 8 候选     |
+| [ADR-54](2026-08-13-adr-54-referral-and-group-buy.md)                         | 推荐奖励、团购券登记与单次核销                  | **Proposed** 2026-08-13；Stage 4.4 Item 9 候选     |
+| [ADR-55](2026-08-13-adr-55-customer-self-service-orders.md)                   | 顾客自助订单、票据与件级洗护进度                | **Proposed** 2026-08-13；Stage 4.4 Item 10 候选    |
+| [ADR-56](2026-08-13-adr-56-customer-wallet-and-preferences.md)                | 顾客钱包、权益、地址与通知偏好                  | **Proposed** 2026-08-13；Stage 4.4 Item 11 候选    |
+| [ADR-57](2026-08-13-adr-57-byok-custody-model-registry.md)                    | BYOK 凭据托管生命周期与模型注册表               | **Proposed** 2026-08-13；Stage 4.5 Item 12         |
+| [ADR-58](2026-08-13-adr-58-bounded-ai-streaming-runtime.md)                   | Provider-neutral 流式会话与有界 tool-use loop   | **Proposed** 2026-08-13；Stage 4.5 Item 14         |
+| [ADR-59](2026-08-13-adr-59-ai-safety-metering.md)                             | AI 安全、整数计量、预算熔断与失败降级           | **Proposed** 2026-08-13；Stage 4.5 Item 18         |
+| [ADR-60](2026-08-13-adr-60-provider-adapters-and-validation.md)               | 固定端点 Provider Adapter 与 BYOK 连接验证      | **Proposed** 2026-08-13；Stage 4.5 Item 13         |
+| [ADR-61](2026-08-13-adr-61-r4-asynchronous-approval-center.md)                | R4 另一管理员异步审批中心                       | **Proposed** 2026-08-13；Stage 4.5 Item 16         |
+| [ADR-62](2026-08-13-adr-62-readonly-ai-assistant.md)                          | 有来源、脱敏且有界的只读 AI 助手                | **Proposed** 2026-08-13；Stage 4.5 Item 15         |
+| [ADR-63](2026-08-13-adr-63-bounded-automation.md)                             | 有界自动化策略、调度与额度控制                  | **Proposed** 2026-08-13；Stage 4.5 Item 17         |
 
 ## v1 线
 

@@ -4,6 +4,15 @@ export { staffs } from "./staffs.js";
 export { staffStoreRoles } from "./staff-store-roles.js";
 export { settings } from "./settings.js";
 export { storePricingPolicies } from "./store-pricing-policies.js";
+export { deliveryPolicies } from "./delivery-policies.js";
+export { deliveryAppointments } from "./delivery-appointments.js";
+export { deliveryOrders } from "./delivery-orders.js";
+export { deliveryTasks } from "./delivery-tasks.js";
+export {
+  deliveryEvidenceAttachments,
+  deliveryEvidenceEvents,
+  deliveryEvidenceAttachmentLinks,
+} from "./delivery-evidence.js";
 export { storeFeatures } from "./store-features.js";
 export { auditLog } from "./audit-log.js";
 export { sessions } from "./sessions.js";
@@ -29,6 +38,15 @@ import { staffs } from "./staffs.js";
 import { staffStoreRoles } from "./staff-store-roles.js";
 import { settings } from "./settings.js";
 import { storePricingPolicies } from "./store-pricing-policies.js";
+import { deliveryPolicies } from "./delivery-policies.js";
+import { deliveryAppointments } from "./delivery-appointments.js";
+import { deliveryOrders } from "./delivery-orders.js";
+import { deliveryTasks } from "./delivery-tasks.js";
+import {
+  deliveryEvidenceAttachments,
+  deliveryEvidenceEvents,
+  deliveryEvidenceAttachmentLinks,
+} from "./delivery-evidence.js";
 import { storeFeatures } from "./store-features.js";
 import { auditLog } from "./audit-log.js";
 import { sessions } from "./sessions.js";
@@ -76,10 +94,21 @@ export const M2_ORDER_TABLES = Object.freeze({
   ticket_counters: ticketCounters,
 } as const);
 
-/** M2 catalog tables (store-scoped price list). */
+/** Store-scoped catalog and current operational policy projections. */
 export const M2_CATALOG_TABLES = Object.freeze({
   catalog_items: catalogItems,
   store_pricing_policies: storePricingPolicies,
+  delivery_policies: deliveryPolicies,
+} as const);
+
+/** Store-scoped delivery booking projections. */
+export const M2_DELIVERY_TABLES = Object.freeze({
+  delivery_appointments: deliveryAppointments,
+  delivery_orders: deliveryOrders,
+  delivery_tasks: deliveryTasks,
+  delivery_evidence_attachments: deliveryEvidenceAttachments,
+  delivery_evidence_events: deliveryEvidenceEvents,
+  delivery_evidence_attachment_links: deliveryEvidenceAttachmentLinks,
 } as const);
 
 /** M2 payments ledger (store-scoped, append-only). */
@@ -118,6 +147,7 @@ export const schema = Object.freeze({
   ...M1_SESSION_TABLES,
   ...M2_ORDER_TABLES,
   ...M2_CATALOG_TABLES,
+  ...M2_DELIVERY_TABLES,
   ...M2_PAYMENT_TABLES,
   ...M2_PRINT_TABLES,
   ...M2_CUSTOMER_TABLES,
@@ -130,6 +160,7 @@ export type M1MatrixTableName = keyof typeof M1_MATRIX_TABLES;
 export type M1SessionTableName = keyof typeof M1_SESSION_TABLES;
 export type M2OrderTableName = keyof typeof M2_ORDER_TABLES;
 export type M2CatalogTableName = keyof typeof M2_CATALOG_TABLES;
+export type M2DeliveryTableName = keyof typeof M2_DELIVERY_TABLES;
 export type M2PaymentTableName = keyof typeof M2_PAYMENT_TABLES;
 export type M2PrintTableName = keyof typeof M2_PRINT_TABLES;
 export type M2CustomerTableName = keyof typeof M2_CUSTOMER_TABLES;

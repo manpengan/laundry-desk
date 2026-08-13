@@ -1,12 +1,4 @@
-/**
- * Default C1 chain port hooks for M1 integration wiring.
- *
- * - parse: always definition-bound in createChainPorts (not overridden here)
- * - rbac: allow when every `rbac.*` invariant permission is present on actor
- * - tenant: always allow (unit/integration tests; production GUC still scopes rows)
- * - policy: C5 evaluatePolicy — confirm/step_up fail-closed unless confirm_ref path
- * - invariants: allow (concrete invariant runners land later)
- */
+/** Default C1 chain hooks; production row scope remains enforced by PostgreSQL GUC/RLS. */
 
 import { randomUUID } from "node:crypto";
 
@@ -24,18 +16,19 @@ import type {
   PolicyRiskInput,
 } from "../policy/types.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
-import { freezeCanonical } from "../pending-actions/canonical.js";
 import { customerPrivacySubjectFromCommand } from "../pending-actions/privacy-subject.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
 import {
   bindRiskReservation,
-  existingNotificationSummary,
   measurePendingRisk,
+  notificationPendingRetrySummary,
   pendingResponse,
+  preparedPendingRetryMatches,
   sameRiskRequest,
   type PendingActionPreparer,
   type PendingRiskPreparer,
 } from "./pending-policy.js";
+import { REUSABLE_PENDING_COMMANDS } from "./reusable-pending-commands.js";
 
 const okVoid = (): StepResult<void, CommandError> => ({ ok: true, data: undefined });
 
@@ -189,6 +182,14 @@ function policyDecisionFrom(
   );
 }
 
+/** Pure C5 evaluation for tightly bounded standing authorities such as ADR-63 policies. */
+export function evaluateCurrentCommandPolicy(
+  bus: BusContext,
+  parsed: unknown,
+): PolicyDecision | null {
+  return policyDecisionFrom(bus, parsed);
+}
+
 function confirmationMatchesCurrentPolicy(bus: BusContext, decision: PolicyDecision): boolean {
   const authorization = bus.confirmAuthorization;
   if (
@@ -274,18 +275,10 @@ export function createEnforcingPolicyCheck(
         transaction,
       );
       if (existing !== null) {
-        const argsMatch = JSON.stringify(existing.args) === JSON.stringify(freezeCanonical(parsed));
-        if (
-          !argsMatch ||
-          existing.commandVersion !== bus.definition.version ||
-          existing.creatorStaffId !== bus.actor.staffId ||
-          (existing.status !== "pending" && existing.status !== "consumed")
-        ) {
-          return { ok: false, error: createCommandError("POLICY_DENIED") };
-        }
-        const summary = existingNotificationSummary(existing);
-        if (summary === undefined) return { ok: false, error: createCommandError("POLICY_DENIED") };
-        return pendingResponse(existing, summary);
+        const summary = notificationPendingRetrySummary(existing, parsed, bus);
+        return summary === null
+          ? { ok: false, error: createCommandError("POLICY_DENIED") }
+          : pendingResponse(existing, summary);
       }
     }
     const earlyRiskRequest = preparePendingRisk?.(parsed, bus) ?? null;
@@ -298,6 +291,18 @@ export function createEnforcingPolicyCheck(
     }
     let preparation =
       preparePendingAction === undefined ? null : await preparePendingAction(parsed, bus);
+    if (idempotencyKey !== undefined && REUSABLE_PENDING_COMMANDS.has(bus.definition.name)) {
+      const existing = await pendingStore.findByIdempotency(
+        bus.definition.name,
+        idempotencyKey,
+        transaction,
+      );
+      if (existing !== null) {
+        return preparedPendingRetryMatches(existing, parsed, bus, preparation, decision)
+          ? pendingResponse(existing, preparation?.summary)
+          : { ok: false, error: createCommandError("POLICY_DENIED") };
+      }
+    }
     if (preparation?.riskReservation !== undefined) {
       let reservation;
       if (earlyRiskRequest !== null) {
@@ -341,7 +346,9 @@ export function createEnforcingPolicyCheck(
         orgId: bus.tenant.orgId,
         storeId: bus.tenant.storeId,
         idempotencyKey: idempotencyKey ?? nonce,
-        privacySubjectCustomerId: customerPrivacySubjectFromCommand(bus.definition.name, parsed),
+        privacySubjectCustomerId:
+          preparation?.privacySubjectCustomerId ??
+          customerPrivacySubjectFromCommand(bus.definition.name, parsed),
         createdAt: now,
         effectiveRisk: decision.effectiveRisk,
         policyOutcome: decision.outcome,

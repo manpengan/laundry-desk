@@ -10,7 +10,7 @@ import { safeErrorContext } from "./local-logger.js";
 export type LocalHttpApp = Pick<FastifyInstance, "listen" | "close">;
 
 export type ResourceCleanupFailure = Readonly<{
-  resource: "http" | "print_worker" | "notification_worker" | "database";
+  resource: "http" | "print_worker" | "notification_worker" | "automation_worker" | "database";
   error_type: string;
 }>;
 
@@ -72,6 +72,22 @@ async function closeResources(
         Object.freeze({
           report: Object.freeze({
             resource: "print_worker" as const,
+            error_type: safeErrorContext(error).error_type,
+          }),
+          cause: error,
+        }),
+      ]);
+    }
+  }
+  if (runtime?.automation?.worker !== undefined) {
+    try {
+      await runtime.automation.worker.stop();
+    } catch (error) {
+      failures = Object.freeze([
+        ...failures,
+        Object.freeze({
+          report: Object.freeze({
+            resource: "automation_worker" as const,
             error_type: safeErrorContext(error).error_type,
           }),
           cause: error,
@@ -158,10 +174,12 @@ export async function startLocalHttpServer(
       hostAuthorities: config.hostAuthorities,
       browserOrigin: config.browserOrigin,
       browserFetchSite: config.browserFetchSite,
+      trustedProxyClientIpRequired: config.trustedProxyClientIpRequired,
     });
     await app.listen({ port: config.port, host: config.listenHost });
     runtime.print.worker?.start();
     runtime.notification.worker?.start();
+    runtime.automation?.worker?.start();
     return Object.freeze({
       app,
       runtime,

@@ -6,7 +6,13 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3
  * never become database identifiers.
  */
 export function customerPrivacySubjectFromCommand(command: string, parsed: unknown): string | null {
-  if (!command.startsWith("customer.")) return null;
+  if (
+    !command.startsWith("customer.") &&
+    !command.startsWith("delivery.appointment.") &&
+    !command.startsWith("delivery.order.")
+  ) {
+    return null;
+  }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
 
   const candidate = (parsed as Readonly<Record<string, unknown>>).customer_id;

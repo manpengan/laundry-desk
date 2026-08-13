@@ -7,6 +7,7 @@ import type { OfflinePort } from "../host/offline-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
 import { CatalogMaintenancePanel } from "./CatalogMaintenancePanel.js";
 import { CatalogAuditPanel } from "./CatalogAuditPanel.js";
+import { DeliveryPolicyPanel } from "./DeliveryPolicyPanel.js";
 import { MemberBonusRulesPanel } from "./MemberBonusRulesPanel.js";
 import { MemberBenefitDefinitionsPanel } from "./MemberBenefitDefinitionsPanel.js";
 import { OfflineConflictPanel } from "./OfflineConflictPanel.js";
@@ -45,6 +46,15 @@ export function SettingsPage({
 
       {queryClient === undefined ? null : (
         <PricingSettingsPanel
+          session={session}
+          authClient={authClient}
+          commandClient={commandClient}
+          queryClient={queryClient}
+        />
+      )}
+
+      {queryClient === undefined ? null : (
+        <DeliveryPolicyPanel
           session={session}
           authClient={authClient}
           commandClient={commandClient}

@@ -128,6 +128,9 @@ function parseExport(value: unknown): CustomerPrivacyExport | null {
     !Array.isArray(value.notification_deliveries) ||
     !Array.isArray(value.factory_handoff_evidence) ||
     !Array.isArray(value.orders) ||
+    value.delivery_evidence_retention !== "retained_operational_evidence" ||
+    value.delivery_unlinked_upload_cleanup !==
+      "private_file_purged_after_expiry_metadata_retained" ||
     typeof value.order_count !== "number" ||
     typeof value.truncated !== "boolean"
   ) {
@@ -166,6 +169,8 @@ function parseExport(value: unknown): CustomerPrivacyExport | null {
   const relatedNarrativeCount = boundedInteger(value.related_narrative_count);
   const notificationDeliveryCount = boundedInteger(value.notification_delivery_count);
   const factoryHandoffEvidenceCount = boundedInteger(value.factory_handoff_evidence_count);
+  const deliveryEvidenceCount = boundedInteger(value.delivery_evidence_count);
+  const deliveryAttachmentCount = boundedInteger(value.delivery_attachment_count);
   const orderCount = boundedInteger(value.order_count);
   const canonicalCustomerCount = boundedInteger(value.canonical_customer_count);
   assertBoundedRows("profile", profiles, profileCount, value.profiles_truncated);
@@ -231,6 +236,10 @@ function parseExport(value: unknown): CustomerPrivacyExport | null {
     factory_handoff_evidence: records(value.factory_handoff_evidence, "factory handoff evidence"),
     factory_handoff_evidence_count: factoryHandoffEvidenceCount,
     factory_handoff_evidence_truncated: value.factory_handoff_evidence_truncated,
+    delivery_evidence_count: deliveryEvidenceCount,
+    delivery_attachment_count: deliveryAttachmentCount,
+    delivery_evidence_retention: "retained_operational_evidence",
+    delivery_unlinked_upload_cleanup: "private_file_purged_after_expiry_metadata_retained",
     orders: Object.freeze(
       value.orders.map((order) => {
         if (!isRecord(order)) throw new Error("customer privacy export order is invalid");

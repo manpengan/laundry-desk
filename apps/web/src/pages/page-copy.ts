@@ -26,6 +26,12 @@ const COPY: Record<NavItemId, PageCopy> = {
     emptyDescription: "会话就绪后按订单 UUID 取件；件 ID 可留空取全部。",
     actionLabel: "去开单",
   },
+  delivery: {
+    title: "取送订单",
+    emptyTitle: "取送订单不可用",
+    emptyDescription: "需要登录并保持本地服务连接，既有在途订单不会因功能关闭而隐藏。",
+    actionLabel: "返回工作台",
+  },
   fulfillment: {
     title: "生产",
     emptyTitle: "生产工作台不可用",

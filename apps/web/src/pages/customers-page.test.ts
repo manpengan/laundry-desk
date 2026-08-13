@@ -241,3 +241,32 @@ test("member-disabled sessions neither mount nor render the account panel", () =
   assert.doesNotMatch(render(false), /aria-label="会员储值"/);
   assert.match(render(true), /aria-label="会员储值"/);
 });
+
+test("delivery feature preserves cancellation access while gating new appointment work", () => {
+  const render = (deliveryEnabled: boolean) => {
+    const base = memberSession(false);
+    const session: SessionView = Object.freeze({
+      ...base,
+      features: Object.freeze({ ...base.features, delivery_enabled: deliveryEnabled }),
+    });
+    return renderToStaticMarkup(
+      createElement(
+        ToastProvider,
+        null,
+        createElement(CustomersPage, {
+          queryClient: createMockQueryClient(),
+          commandClient: createMockCommandClient(),
+          autoLoad: false,
+          initialSelected: SAMPLE_CUSTOMER,
+          initialOrders: Object.freeze([]),
+          session,
+        }),
+      ),
+    );
+  };
+
+  assert.match(render(false), /data-testid="delivery-appointment-panel"/u);
+  assert.match(render(false), /门店取送功能已关闭/u);
+  assert.match(render(true), /data-testid="delivery-appointment-panel"/u);
+  assert.match(render(true), /预约、改期与取消/u);
+});

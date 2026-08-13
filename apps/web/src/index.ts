@@ -22,9 +22,38 @@ export {
 } from "./theme.js";
 export { COUNTER_NAV, navLabel, type NavItem, type NavItemId } from "./nav.js";
 export { App, type AppProps } from "./App.js";
-export { appSurfaceFromPathname, type AppSurface } from "./host/app-surface.js";
+export {
+  CustomerPortalApp,
+  type CustomerPortalAppProps,
+} from "./customer-portal/CustomerPortalApp.js";
+export {
+  createHttpCustomerPortalClient,
+  type CustomerPortalClient,
+  type CustomerPortalFailure,
+  type CustomerPortalResult,
+} from "./customer-portal/client.js";
+export {
+  customerPortalStatusLabel,
+  formatCustomerPortalCents,
+  newestOrderFirst,
+  progressLabels,
+} from "./customer-portal/model.js";
+export {
+  appSurfaceFromPathname,
+  shouldResumeHostSession,
+  type AppSurface,
+} from "./host/app-surface.js";
 export { CounterShell, type CounterShellProps } from "./shell/CounterShell.js";
 export { OwnerShell, type OwnerShellProps } from "./owner/OwnerShell.js";
+export { MobileTaskShell, type MobileTaskShellProps } from "./mobile/MobileTaskShell.js";
+export { ApprovalCenterPage, type ApprovalCenterPageProps } from "./owner/ApprovalCenterPage.js";
+export {
+  createHttpApprovalPort,
+  type ApprovalExecutionView,
+  type ApprovalFailure,
+  type ApprovalPort,
+  type ApprovalResult,
+} from "./ai/approval-port.js";
 export { OwnerReportsPage, type OwnerReportsPageProps } from "./owner/OwnerReportsPage.js";
 export {
   OwnerStoreDirectoryView,
@@ -61,6 +90,14 @@ export {
 } from "./owner/owner-dashboard-model.js";
 export { Sidebar, type SidebarProps } from "./shell/Sidebar.js";
 export { TopBar, type TopBarProps } from "./shell/TopBar.js";
+export { AiPanel, type AiPanelProps } from "./shell/AiPanel.js";
+export {
+  createHttpAiPanelPort,
+  createUnavailableAiPanelPort,
+  type AiPanelFailure,
+  type AiPanelPort,
+  type AiPanelResult,
+} from "./host/ai-port.js";
 export { PinSwitchDialog, type PinSwitchDialogProps } from "./shell/PinSwitchDialog.js";
 export { StepUpConfirmDialog, type StepUpConfirmDialogProps } from "./shell/StepUpConfirmDialog.js";
 export { PrintQueuePanel, type PrintQueuePanelProps } from "./shell/PrintQueuePanel.js";
@@ -162,7 +199,14 @@ export {
   type CatalogListResult,
   type HttpQueryClientOptions,
 } from "./commands/query-client.js";
-export type { CommandFailure, CommandPort, CommandResult, QueryPort } from "./commands/types.js";
+export type {
+  CommandExecutionOptions,
+  CommandFailure,
+  CommandPort,
+  CommandResult,
+  QueryExecutionOptions,
+  QueryPort,
+} from "./commands/types.js";
 export type {
   AuthError,
   AuthResult,

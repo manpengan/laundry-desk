@@ -7,6 +7,8 @@ export const LOCAL_LOG_REDACTION_PATHS = Object.freeze([
   "req.headers.authorization",
   "req.headers.cookie",
   'req.headers["x-csrf-token"]',
+  'req.headers["x-customer-portal-authority"]',
+  'req.headers["x-laundry-proxy-client-ip"]',
   'res.headers["set-cookie"]',
   "body.password",
   "body.pin",
@@ -14,12 +16,16 @@ export const LOCAL_LOG_REDACTION_PATHS = Object.freeze([
   "body.refresh_token",
   "body.csrf_token",
   "body.token",
+  "body.api_key",
+  "body.secret",
   "data.password",
   "data.pin",
   "data.access_token",
   "data.refresh_token",
   "data.csrf_token",
   "data.token",
+  "data.api_key",
+  "data.secret",
 ] as const);
 
 export type LocalLoggerOptions = Readonly<{

@@ -9,6 +9,7 @@ import type { PrinterPort } from "../host/printer-port.js";
 import type { NavItemId } from "../nav.js";
 import { CustomersPage } from "./CustomersPage.js";
 import { DebtPage } from "./DebtPage.js";
+import { DeliveryOperationsPage } from "./DeliveryOperationsPage.js";
 import { CounterWorkbench } from "./CounterWorkbench.js";
 import { pageCopy } from "./page-copy.js";
 import { PickupPage } from "./PickupPage.js";
@@ -106,6 +107,23 @@ export function PageHost({
         {...(commandClient !== undefined ? { commandClient } : {})}
         {...(authClient !== undefined ? { authClient } : {})}
         {...(offlinePort !== undefined ? { offlinePort } : {})}
+      />
+    );
+  }
+
+  if (
+    activeId === "delivery" &&
+    session !== undefined &&
+    authClient !== undefined &&
+    commandClient !== undefined &&
+    queryClient !== undefined
+  ) {
+    return (
+      <DeliveryOperationsPage
+        queryClient={queryClient}
+        commandClient={commandClient}
+        authClient={authClient}
+        session={session}
       />
     );
   }

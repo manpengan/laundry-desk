@@ -120,6 +120,10 @@ export type CustomerPrivacyExport = Readonly<{
   factory_handoff_evidence: readonly Readonly<Record<string, unknown>>[];
   factory_handoff_evidence_count: number;
   factory_handoff_evidence_truncated: boolean;
+  delivery_evidence_count: number;
+  delivery_attachment_count: number;
+  delivery_evidence_retention: "retained_operational_evidence";
+  delivery_unlinked_upload_cleanup: "private_file_purged_after_expiry_metadata_retained";
   orders: readonly Readonly<Record<string, unknown>>[];
   order_count: number;
   truncated: boolean;

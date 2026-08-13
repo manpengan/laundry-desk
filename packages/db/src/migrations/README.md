@@ -59,6 +59,24 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0051_customer_extended_profiles.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0052_notification_delivery_outbox.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0053_factory_handoff_and_qc.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0054_delivery_policy.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0055_delivery_appointments.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0056_delivery_orders.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0057_delivery_tasks.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0058_delivery_evidence.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0059_marketing_campaigns.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0060_campaign_coupon_batches.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0061_customer_self_service.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0062_customer_wallet_and_preferences.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0063_referral_and_group_buy.sql
+# 0064 只能在集成分支已具备并应用 0054–0063 后执行；本 Item 不伪造占位迁移。
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0064_byok_model_registry.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0065_ai_streaming_sessions.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0066_ai_safety_metering.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0067_readonly_ai_assistant.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0068_ai_approval_center.sql
+# 0069 只能在最终集成分支已具备并应用 0065–0068 后执行；本 Item 不伪造占位迁移。
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0069_bounded_automation.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -81,6 +99,22 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Customer extended profiles** (0051, [ADR-42](../../../../docs/adr/2026-08-12-adr-42-customer-extended-profiles-and-discount-policy.md)): bounded org-scoped profile/address/identifier rows, recursive canonical groups, owner-only HMAC erasure tombstones, privacy-copy purge metadata, tier/customer discount snapshots, and order waiver snapshots
 - **Provider-neutral notification outbox** (0052, [ADR-44](../../../../docs/adr/2026-08-12-adr-44-provider-neutral-notification-outbox.md)): approved org templates, bounded store batches, leased delivery state, append-only attempt/receipt evidence, integer cost guards, and privacy-safe fingerprints
 - **Factory handoff and QC** (0053, [ADR-45](../../../../docs/adr/2026-08-12-adr-45-factory-handoff-and-qc.md)): store-scoped garment manifests, four immutable handoff checkpoints, discrepancy reconciliation, custody anchors, and append-only quality evidence
+- **Delivery policy and policy-only quote** (0054, [ADR-46](../../../../docs/adr/2026-08-13-adr-46-delivery-policy-and-policy-only-availability.md)): store-scoped bounded areas, integer-cent fees, weekly windows, booking rules, optimistic versions, forced RLS, and no reservation or feature enablement
+- **Customer delivery appointments** (0055, [ADR-47](../../../../docs/adr/2026-08-13-adr-47-customer-delivery-appointments.md)): opaque customer/address references, integer-cent fee snapshots, serialized slot capacity, database-enforced terminal reschedule/cancel lifecycle, immutable identity, and forced store RLS
+- **Authoritative delivery orders** (0056, [ADR-48](../../../../docs/adr/2026-08-13-adr-48-authoritative-delivery-orders.md)): store-scoped laundry-order/appointment authority, integer-cent fee snapshots, database-enforced pickup/return lifecycle, optimistic CAS, irreversible terminal states, and forced store RLS
+- **Authoritative delivery tasks** (0057, [ADR-49](../../../../docs/adr/2026-08-13-adr-49-authoritative-delivery-tasks.md)): order-leg assignment custody, active-store staff authority, immutable transfer/takeover successor chains, optimistic CAS, order-owned completion/cancellation, and forced store RLS
+- **Delivery evidence** (0058, [ADR-51](../../../../docs/adr/2026-08-13-adr-51-delivery-evidence.md)): append-only pickup/delivery evidence and attachment metadata with atomic task/order completion
+- **Marketing campaigns** (0059, [ADR-52](../../../../docs/adr/2026-08-13-adr-52-store-marketing-campaigns.md)): store-scoped campaign windows, strict audience rules, digest-only freezes, and integer-cent budget authority
+- **Campaign coupon batches** (0060, [ADR-53](../../../../docs/adr/2026-08-13-adr-53-campaign-coupon-issuance.md)): bounded server-side eligibility, immutable grant provenance, exact budget debits, and auditable redemption reversals
+- **Customer self-service orders** (0061, [ADR-55](../../../../docs/adr/2026-08-13-adr-55-customer-self-service-orders.md)): short-lived customer authority and canonical order/receipt/garment projections
+- **Customer wallet and preferences** (0062, [ADR-56](../../../../docs/adr/2026-08-13-adr-56-customer-wallet-and-preferences.md)): wallet/benefit projections plus canonical CAS over portal-owned addresses and notification preferences
+- **Referral and group-buy** (0063, [ADR-54](../../../../docs/adr/2026-08-13-adr-54-referral-and-group-buy.md)): active-member referral rewards and digest-only external vouchers with single-use order redemption
+- **BYOK custody and model registry** (0064, [ADR-57](../../../../docs/adr/2026-08-13-adr-57-byok-custody-model-registry.md)): org-RLS AES-256-GCM envelopes with KMS-wrapped per-credential DEKs, fail-closed lifecycle transitions, and an empty owner-verified global model registry; requires the integrated 0054–0063 chain first
+- **Bounded AI streaming state** (0065, [ADR-58](../../../../docs/adr/2026-08-13-adr-58-bounded-ai-streaming-runtime.md)): tenant/session/staff-scoped sessions, append-only messages and events, bounded usage/tool-attempt metadata, closed write functions, FORCE RLS, and no direct application DML; public AI remains hard-off
+- **AI safety metering** (0066, [ADR-59](../../../../docs/adr/2026-08-13-adr-59-ai-safety-metering.md)): integer token/cost ledgers, atomic org budget reservations, durable circuit state, metadata-only rejection evidence, FORCE RLS, and owner-only status; public AI remains hard-off
+- **Read-only AI assistant** (0067, [ADR-62](../../../../docs/adr/2026-08-13-adr-62-readonly-ai-assistant.md)): three closed business/search/procedure tools over existing query authority, bounded metadata-only attempts, explicit source/filter projections, and no write/SQL/URL/header escape hatch
+- **R4 asynchronous approval center** (0068, [ADR-61](../../../../docs/adr/2026-08-13-adr-61-r4-asynchronous-approval-center.md)): store-scoped single-level approval requests bound to the existing WYSIWYS pending action, current other-admin authority, optimistic decision versions and transaction-local single consumption; requires the integrated 0065–0067 chain first
+- **Bounded automation** (0069, [ADR-63](../../../../docs/adr/2026-08-13-adr-63-bounded-automation.md)): store-RLS allowlisted policies, active-admin approval, daily integer-fen quotas, leases and privacy-safe action evidence; requires the integrated 0065–0068 chain first
 - **M2 payments** (0009): `payments` append-only ledger (`SELECT, INSERT` only for `laundry_app`)
 - **M2 print** (0010): `print_jobs` queue (`SELECT, INSERT, UPDATE` for status transitions; no DELETE)
 - **M2 customers** (0011): `customers` org-scoped archive (`SELECT, INSERT, UPDATE`; unique org+phone)
@@ -112,5 +146,5 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Store commissioning and staff credentials** (0045, ADR-31): permanent dual-admin commissioning metadata plus tenant-scoped, expiring, single-use credential setup references with no retained secrets
 - **Signed print request idempotency** (0046): database-derived logical keys make original enqueue and source-bound retry/reprint exact across lost responses and concurrent clients; unambiguous legacy rows are backfilled while duplicate history remains fail-closed
 - **Cloud counter trust** (0047, [ADR-38](../../../../docs/adr/2026-08-11-adr-38-cloud-counter-trust-closure.md)): store-scoped pricing policy with RLS, authoritative order pricing selections/snapshots, and persistent per-piece draft/formal garment details
-- Still deferred: AI matrix tables
+- Still deferred: writable AI tools and remaining matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)

@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fail, requireSha } from "./hk-vps-release-core.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
 import { DESK_READINESS_POLICY, awaitDeskReadiness } from "./hk-vps-release-readiness.mjs";
+import { parseCaddyCustomerSourceAuthority } from "./caddy-customer-source-contract.mjs";
 import {
   assertLoopbackBindings,
   assertSharedInfrastructure,
@@ -165,6 +166,15 @@ export async function assertSystemContract(signal) {
         "{ path=/opt/nodejs/bin/node ; argv[]=/opt/nodejs/bin/node apps/server/dist/http/main.js ;",
       )
   ) {
+    fail("CLOUD_RELEASE_SYSTEM_CONTRACT_INVALID");
+  }
+  const caddy = await command(
+    "/usr/bin/caddy",
+    ["adapt", "--config", "/etc/caddy/Caddyfile", "--pretty"],
+    "CLOUD_RELEASE_CADDY_VALIDATE",
+    signal,
+  );
+  if (!parseCaddyCustomerSourceAuthority(caddy.stdout)) {
     fail("CLOUD_RELEASE_SYSTEM_CONTRACT_INVALID");
   }
 }

@@ -83,7 +83,15 @@ test("resolveRouteGate denies staff on settings with fallback", () => {
 test("visibleNavItems for staff omits stats and settings", () => {
   const items = visibleNavItems(permissionContextFrom("staff", STAFF_STORE_FEATURES));
   const ids = items.map((i) => i.id);
-  assert.deepEqual(ids, ["workbench", "receive", "pickup", "orders", "customers", "reminders"]);
+  assert.deepEqual(ids, [
+    "workbench",
+    "receive",
+    "pickup",
+    "delivery",
+    "orders",
+    "customers",
+    "reminders",
+  ]);
 });
 
 test("RouteGate denied SSR shows 无权限 EmptyState without crash", () => {

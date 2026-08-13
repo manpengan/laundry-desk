@@ -1,4 +1,6 @@
-import type { FastifyInstance } from "fastify";
+import { isIP } from "node:net";
+
+import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import { createCommandError } from "@laundry/contracts";
 
@@ -9,6 +11,7 @@ export type LocalRequestSecurityOptions = Readonly<{
   browserOrigin: string;
   browserFetchSite: "same-site" | "same-origin";
   desktopOrigin: string;
+  trustedProxyClientIpRequired?: boolean;
 }>;
 
 export type LocalRequestSecurityPolicy = Readonly<{
@@ -17,6 +20,7 @@ export type LocalRequestSecurityPolicy = Readonly<{
   browserFetchSite: "same-site" | "same-origin";
   desktopOrigin: string;
   corsOrigin: string;
+  trustedProxyClientIpRequired: boolean;
 }>;
 
 export type RequestSecurityInput = Readonly<{
@@ -29,6 +33,10 @@ export type RequestSecurityDecision =
   Readonly<{ allowed: true }> | Readonly<{ allowed: false; statusCode: 400 | 403 | 415 }>;
 
 const SAFE_METHODS = Object.freeze(["GET", "HEAD", "OPTIONS"] as const);
+export const TRUSTED_PROXY_CLIENT_IP_HEADER_NAME = "x-laundry-proxy-client-ip" as const;
+const UNTRUSTED_SOURCE_HEADERS = Object.freeze(
+  new Set(["cf-connecting-ip", "true-client-ip", "x-real-ip"]),
+);
 const ALLOWED = Object.freeze({ allowed: true as const });
 const BAD_REQUEST = Object.freeze({ allowed: false as const, statusCode: 400 as const });
 const FORBIDDEN = Object.freeze({ allowed: false as const, statusCode: 403 as const });
@@ -51,11 +59,15 @@ function headerValues(
   });
 }
 
-function hasForwardingMetadata(headers: RequestSecurityInput["headers"]): boolean {
+function hasUntrustedSourceMetadata(headers: RequestSecurityInput["headers"]): boolean {
   return Object.entries(headers).some(([name, value]) => {
     if (value === undefined) return false;
     const normalized = name.toLowerCase();
-    return normalized === "forwarded" || normalized.startsWith("x-forwarded-");
+    return (
+      normalized === "forwarded" ||
+      normalized.startsWith("x-forwarded-") ||
+      UNTRUSTED_SOURCE_HEADERS.has(normalized)
+    );
   });
 }
 
@@ -112,7 +124,9 @@ function hasValidOptions(options: LocalRequestSecurityOptions): boolean {
     (options.browserFetchSite === "same-site" || options.browserFetchSite === "same-origin") &&
     isExactOrigin(options.desktopOrigin, ["http:", "https:"]) &&
     hosts.includes(desktopHost) &&
-    options.browserOrigin !== options.desktopOrigin
+    options.browserOrigin !== options.desktopOrigin &&
+    (options.trustedProxyClientIpRequired === undefined ||
+      typeof options.trustedProxyClientIpRequired === "boolean")
   );
 }
 
@@ -130,7 +144,39 @@ export function createRequestSecurityPolicy(
     browserFetchSite: options.browserFetchSite,
     desktopOrigin: options.desktopOrigin,
     corsOrigin: options.browserOrigin,
+    trustedProxyClientIpRequired: options.trustedProxyClientIpRequired ?? false,
   });
+}
+
+function isLoopbackPeer(address: string): boolean {
+  const normalized = address.toLowerCase();
+  return (
+    /^127(?:\.\d{1,3}){3}$/u.test(normalized) ||
+    normalized === "::1" ||
+    normalized === "0:0:0:0:0:0:0:1" ||
+    normalized.startsWith("::ffff:127.")
+  );
+}
+
+function proxyClientIp(
+  headers: RequestSecurityInput["headers"],
+  peerAddress: string,
+): string | null | undefined {
+  const values = headerValues(headers, TRUSTED_PROXY_CLIENT_IP_HEADER_NAME);
+  if (values.length === 0) return undefined;
+  const value = values.length === 1 ? values[0] : undefined;
+  return value !== undefined && isLoopbackPeer(peerAddress) && isIP(value) !== 0 ? value : null;
+}
+
+/** Resolve the rate-limit source without enabling Fastify's generic proxy trust. */
+export function trustedClientSource(
+  request: Pick<FastifyRequest, "headers" | "ip">,
+  policy: LocalRequestSecurityPolicy,
+): string | null {
+  const proxied = proxyClientIp(request.headers, request.ip);
+  if (proxied === null) return null;
+  if (proxied !== undefined) return proxied;
+  return policy.trustedProxyClientIpRequired ? null : request.ip;
 }
 
 function hasAllowedHost(
@@ -168,7 +214,7 @@ function hasAllowedContentType(input: RequestSecurityInput): boolean {
   const path = input.url?.split("?", 1)[0];
   return (
     input.method === "POST" &&
-    path === "/api/v2/photos" &&
+    (path === "/api/v2/photos" || path === "/api/v2/delivery-evidence/attachments") &&
     (type === "image/jpeg" || type === "image/png" || type === "image/webp")
   );
 }
@@ -177,7 +223,7 @@ export function evaluateLocalRequest(
   input: RequestSecurityInput,
   policy: LocalRequestSecurityPolicy,
 ): RequestSecurityDecision {
-  if (hasForwardingMetadata(input.headers) || !hasAllowedHost(input.headers, policy)) {
+  if (hasUntrustedSourceMetadata(input.headers) || !hasAllowedHost(input.headers, policy)) {
     return BAD_REQUEST;
   }
   if (SAFE_METHODS.includes(input.method as (typeof SAFE_METHODS)[number])) return ALLOWED;
@@ -192,12 +238,16 @@ export function registerRequestSecurityHooks(
 ): LocalRequestSecurityPolicy {
   const policy = createRequestSecurityPolicy(options);
   app.addHook("onRequest", async (request, reply) => {
+    if (request.url.split("?", 1)[0]?.startsWith("/api/v2/customer/auth/") === true) {
+      reply.header("Cache-Control", "no-store");
+    }
     const decision = evaluateLocalRequest(
       Object.freeze({ method: request.method, url: request.url, headers: request.headers }),
       policy,
     );
-    if (!decision.allowed) {
-      await reply.code(decision.statusCode).send(PUBLIC_FAILURE);
+    const trustedSource = proxyClientIp(request.headers, request.ip);
+    if (!decision.allowed || trustedSource === null) {
+      await reply.code(decision.allowed ? 400 : decision.statusCode).send(PUBLIC_FAILURE);
     }
   });
   return policy;

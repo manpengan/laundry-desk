@@ -32,9 +32,22 @@ const ADMIN_PERMISSIONS = Object.freeze([
   // ADR-44: automatic provider dispatch is admin-only; ordinary staff retain
   // the explicit ADR-23 manual-list fallback.
   "notification_send",
+  "marketing_manage",
+  // ADR-57: provider credential custody is an R5, admin-only management surface.
+  "ai_key_manage",
+  // ADR-58: authenticated staff may use the provider-neutral AI panel. The
+  // runtime is independently hard-off unless an explicit adapter is injected.
+  "ai_use",
+  "approval_manage",
+  // ADR-63: policy creation, approval, pause/resume and run history are admin-only.
+  "automation_manage",
   "fulfillment_handoff",
   "fulfillment_qc",
   "fulfillment_reconcile",
+  "delivery_read",
+  "delivery_write",
+  "delivery_assign",
+  "delivery_takeover",
 ]);
 const STAFF_PERMISSIONS = Object.freeze([
   "staff_read",
@@ -44,8 +57,11 @@ const STAFF_PERMISSIONS = Object.freeze([
   // A counter worker may immediately protect a reported-lost account; restoring
   // or closing it remains admin-only.
   "member_freeze",
+  "ai_use",
   "fulfillment_handoff",
   "fulfillment_qc",
+  "delivery_read",
+  "delivery_write",
 ]);
 const NO_PERMISSIONS = Object.freeze([] as string[]);
 
@@ -67,6 +83,11 @@ export function createRuntimeBus(runtime: LocalRuntime) {
       identity: runtime.identity,
       platform: runtime.platform,
       pricing: runtime.pricing,
+      deliveryPolicy: runtime.deliveryPolicy,
+      deliveryAppointments: runtime.deliveryAppointments,
+      deliveryOrders: runtime.deliveryOrders,
+      deliveryTasks: runtime.deliveryTasks,
+      deliveryEvidence: runtime.deliveryEvidence,
       order: runtime.order,
       catalog: runtime.catalog,
       print: runtime.print,
@@ -76,6 +97,7 @@ export function createRuntimeBus(runtime: LocalRuntime) {
       shift: runtime.shift,
       reconciliation: runtime.reconciliation,
       accounting: runtime.accounting,
+      automation: runtime.automation,
       reporting: runtime.reporting,
       photo: runtime.photo,
       fulfillment: runtime.fulfillment,
@@ -84,6 +106,7 @@ export function createRuntimeBus(runtime: LocalRuntime) {
       member: runtime.member,
       memberBenefits: runtime.memberBenefits,
       notification: runtime.notification,
+      marketing: runtime.marketing,
     },
     runtime.pendingStore,
   );

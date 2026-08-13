@@ -1,8 +1,12 @@
 import { createHttpAuthClient, type HttpAuthCredentialStore } from "../auth/HttpAuthClient.js";
+import { createHttpApprovalPort } from "../ai/approval-port.js";
 import { createHttpCommandClient } from "../commands/command-client.js";
 import { createHttpQueryClient } from "../commands/query-client.js";
 import type { AppPorts, HealthResult } from "./types.js";
+import { createBrowserResumePort } from "./browser-resume-port.js";
 import { createHttpPhotoPort } from "./photo-port.js";
+import { createHttpDeliveryEvidenceMediaPort } from "./delivery-evidence-port.js";
+import { createHttpAiPanelPort } from "./ai-port.js";
 
 export type BrowserPortsOptions = Readonly<{
   apiBaseUrl: string;
@@ -81,9 +85,28 @@ export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
 
   return Object.freeze({
     auth,
+    resume: createBrowserResumePort(auth),
     command,
     query,
     photo: createHttpPhotoPort({
+      apiBaseUrl: base,
+      fetchImpl,
+      getAccessToken: credentialStore.getAccessToken,
+      readCsrf: credentialStore.readCsrf,
+    }),
+    deliveryEvidence: createHttpDeliveryEvidenceMediaPort({
+      apiBaseUrl: base,
+      fetchImpl,
+      getAccessToken: credentialStore.getAccessToken,
+      readCsrf: credentialStore.readCsrf,
+    }),
+    ai: createHttpAiPanelPort({
+      apiBaseUrl: base,
+      fetchImpl,
+      getAccessToken: credentialStore.getAccessToken,
+      readCsrf: credentialStore.readCsrf,
+    }),
+    approval: createHttpApprovalPort({
       apiBaseUrl: base,
       fetchImpl,
       getAccessToken: credentialStore.getAccessToken,

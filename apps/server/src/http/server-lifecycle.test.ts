@@ -161,6 +161,7 @@ test("LAN origin injects secure cookies and same-origin browser metadata policy"
     assert.equal(options.cookiePolicy.csrfName, "__Host-laundry_csrf");
     assert.equal(options.browserOrigin, "https://192.168.50.12:8443");
     assert.equal(options.browserFetchSite, "same-origin");
+    assert.equal(options.trustedProxyClientIpRequired, false);
   } finally {
     await started.shutdown();
   }
@@ -185,6 +186,7 @@ test("cloud origin injects secure cookies and exact public browser policy", asyn
     assert.equal(options.cookiePolicy.csrfName, "__Host-laundry_csrf");
     assert.equal(options.browserOrigin, "https://desk.manpengan.xyz");
     assert.equal(options.browserFetchSite, "same-origin");
+    assert.equal(options.trustedProxyClientIpRequired, true);
   } finally {
     await started.shutdown();
   }
@@ -273,6 +275,26 @@ test("configured background workers start after listen and stop before the pool"
           }),
       }),
     }),
+    automation: Object.freeze({
+      ...base.automation,
+      worker: Object.freeze({
+        start: () => {
+          calls.push("automation.start");
+        },
+        stop: async () => {
+          calls.push("automation.stop");
+        },
+        runNow: async () => undefined,
+        status: () =>
+          Object.freeze({
+            state: "running" as const,
+            processed_policies: 0,
+            consecutive_failures: 0,
+            last_cycle_at: null,
+            last_error_code: null,
+          }),
+      }),
+    }),
   });
   const app = fakeApp({
     listen: async () => {
@@ -288,14 +310,16 @@ test("configured background workers start after listen and stop before the pool"
     ENV,
     dependencies(runtime, async () => app),
   );
-  assert.deepEqual(calls, ["app.listen", "worker.start", "notification.start"]);
+  assert.deepEqual(calls, ["app.listen", "worker.start", "notification.start", "automation.start"]);
   await started.shutdown();
   assert.deepEqual(calls, [
     "app.listen",
     "worker.start",
     "notification.start",
+    "automation.start",
     "app.close",
     "worker.stop",
+    "automation.stop",
     "notification.stop",
     "pool.end",
   ]);

@@ -11,8 +11,8 @@ const ENVIRONMENT = Object.freeze({
   LAUNDRY_CLOUD_RELEASE_PG_TEST: "1",
   LAUNDRY_USE_LOCAL_PG: "1",
 });
-const FROM_HEAD = "0052_notification_delivery_outbox.sql";
-const TO_HEAD = "0053_factory_handoff_and_qc.sql";
+const FROM_HEAD = "0068_ai_approval_center.sql";
+const TO_HEAD = "0069_bounded_automation.sql";
 const CATALOG_ROWS = Object.freeze([{ value: JSON.stringify({ kind: "catalog_contract" }) }]);
 const EVIDENCE = Object.freeze({
   entries: 663,
@@ -42,7 +42,7 @@ test("requires both explicit real PostgreSQL opt-ins before reading local config
   assert.equal(configReads, 0);
 });
 
-test("queries stable catalog and proves the isolated 0052 to 0053 migration chain", async () => {
+test("queries stable catalog and proves the isolated 0068 to 0069 migration chain", async () => {
   const calls = [];
   const evidence = await runReleaseCatalogPgAcceptance({
     environment: ENVIRONMENT,

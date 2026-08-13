@@ -41,6 +41,17 @@ const COMPATIBLE_CONSTRAINT_REPLACEMENTS: readonly Readonly<{
   { table: "member_ledger", constraint: "member_ledger_kind_chk" },
   // ADR-25: terminal account closure extends active/frozen with `closed`.
   { table: "member_accounts", constraint: "member_accounts_status_chk" },
+  // ADR-56: extends the append-only portal evidence vocabulary for wallet,
+  // benefits and bounded self-service profile access.
+  {
+    table: "customer_portal_access_log",
+    constraint: "customer_portal_access_log_operation_chk",
+  },
+  // ADR-62: 0067 strictly broadens the Item 14 synthetic-only event/attempt
+  // vocabulary with three named read-only tools. Both checks are re-added in
+  // the same migration and retain every previous allowed value.
+  { table: "ai_stream_events", constraint: "ai_stream_events_shape_chk" },
+  { table: "ai_tool_attempts", constraint: "ai_tool_attempts_allowlist_chk" },
 ];
 
 const isCompatibleConstraintReplacement = (statement: string): boolean =>
@@ -50,6 +61,12 @@ const isCompatibleConstraintReplacement = (statement: string): boolean =>
       "iu",
     ).test(statement),
   );
+
+const DELIVERY_EVIDENCE_TRUNCATE_GUARD =
+  "'CREATE TRIGGER %I BEFORE TRUNCATE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.reject_delivery_evidence_mutation()',";
+
+const isDeliveryEvidenceTruncateGuard = (file: string, statement: string): boolean =>
+  file === "0058_delivery_evidence.sql" && statement === DELIVERY_EVIDENCE_TRUNCATE_GUARD;
 
 export type DestructiveMigrationFinding = Readonly<{
   file: string;
@@ -75,7 +92,12 @@ export const findDestructiveSql = (
       // This is a privilege revocation, not a TRUNCATE statement. Keep the
       // expand-only guard strict for actual data-removal SQL while allowing
       // append-only ledgers to explicitly revoke the TRUNCATE privilege.
-      if (rule.name === "TRUNCATE" && /^REVOKE\b/iu.test(stripped)) continue;
+      if (
+        rule.name === "TRUNCATE" &&
+        (/^REVOKE\b/iu.test(stripped) || isDeliveryEvidenceTruncateGuard(file, stripped))
+      ) {
+        continue;
+      }
       if (
         rule.name === "ALTER ... DROP CONSTRAINT (data-loss style)" &&
         isCompatibleConstraintReplacement(stripped)

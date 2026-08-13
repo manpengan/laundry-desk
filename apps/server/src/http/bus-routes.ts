@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 
 import {
   ConfirmReferenceSchema,
+  AUTOMATION_COMMAND_NAMES,
+  AUTOMATION_QUERY_NAMES,
   FACTORY_HANDOFF_COMMAND_NAMES,
   FACTORY_HANDOFF_QUERY_NAMES,
   IdempotencyKeySchema,
@@ -10,7 +12,6 @@ import {
 
 import type { AuthorizedSession } from "../auth/session-view.js";
 import { executeCommand } from "../bus/executor.js";
-import { executeQuery } from "../bus/execute-query.js";
 import { createRuntimeBus } from "../bus/runtime.js";
 import type { CommandResult } from "../bus/types.js";
 import {
@@ -25,11 +26,21 @@ import {
   applyCommandErrorStatus,
   createSqlRunner,
   executeTrustedSessionCommand,
+  executeTrustedSessionQuery,
   tenantFromSession,
   type SqlRunner,
 } from "./bus-route-execution.js";
 import { safeErrorContext } from "./local-logger.js";
+import {
+  DELIVERY_COMMANDS,
+  DELIVERY_QUERIES,
+  MARKETING_COMMANDS,
+  MARKETING_QUERIES,
+  enforceMarketingOperationLimit,
+} from "./bus-route-operation-limits.js";
 import type { FactoryOperationRateLimiter } from "./factory-operation-rate-limit.js";
+import type { DeliveryPolicyRateLimiter } from "./delivery-policy-rate-limit.js";
+import type { MarketingOperationRateLimiter } from "./marketing-operation-rate-limit.js";
 import type { NotificationCommandRateLimiter } from "./notification-command-rate-limit.js";
 import { isRuntimeBusOperationAvailable } from "./runtime-surface-policy.js";
 
@@ -38,6 +49,8 @@ const IDEMPOTENCY_HEADER_NAME = "idempotency-key";
 const NOTIFICATION_ENQUEUE_COMMAND = "notification.delivery_batch.enqueue";
 const FACTORY_COMMANDS: ReadonlySet<string> = new Set(FACTORY_HANDOFF_COMMAND_NAMES);
 const FACTORY_QUERIES: ReadonlySet<string> = new Set(FACTORY_HANDOFF_QUERY_NAMES);
+const AUTOMATION_COMMANDS: ReadonlySet<string> = new Set(AUTOMATION_COMMAND_NAMES);
+const AUTOMATION_QUERIES: ReadonlySet<string> = new Set(AUTOMATION_QUERY_NAMES);
 
 function routeName(params: unknown): string {
   if (!isRecord(params)) return "";
@@ -178,6 +191,8 @@ function registerCommandRoute(
   runWithSql: SqlRunner,
   notificationLimiter: NotificationCommandRateLimiter,
   factoryLimiter: FactoryOperationRateLimiter,
+  deliveryLimiter: DeliveryPolicyRateLimiter,
+  marketingLimiter: MarketingOperationRateLimiter,
 ): void {
   app.post("/v1/commands/:name", async (request, reply) => {
     try {
@@ -201,8 +216,30 @@ function registerCommandRoute(
         reply.code(404);
         return fail("RESOURCE_UNAVAILABLE");
       }
-      if (FACTORY_COMMANDS.has(name)) {
+      if (MARKETING_COMMANDS.has(name)) {
+        const limited = enforceMarketingOperationLimit(
+          marketingLimiter,
+          "command",
+          resolved,
+          reply,
+        );
+        if (limited !== null) return limited;
+      }
+      if (FACTORY_COMMANDS.has(name) || AUTOMATION_COMMANDS.has(name)) {
         const decision = factoryLimiter.check(
+          "command",
+          resolved.session.session_id,
+          resolved.session.org_id,
+          resolved.session.store_id,
+        );
+        if (!decision.allowed) {
+          reply.header("Retry-After", String(decision.retryAfterSeconds));
+          reply.code(429);
+          return fail("RATE_LIMITED");
+        }
+      }
+      if (DELIVERY_COMMANDS.has(name)) {
+        const decision = deliveryLimiter.check(
           "command",
           resolved.session.session_id,
           resolved.session.org_id,
@@ -260,6 +297,8 @@ function registerQueryRoute(
   context: RouteSecurityContext,
   runWithSql: SqlRunner,
   factoryLimiter: FactoryOperationRateLimiter,
+  deliveryLimiter: DeliveryPolicyRateLimiter,
+  marketingLimiter: MarketingOperationRateLimiter,
 ): void {
   app.post("/v1/queries/:name", async (request, reply) => {
     try {
@@ -277,8 +316,25 @@ function registerQueryRoute(
         reply.code(404);
         return fail("RESOURCE_UNAVAILABLE");
       }
-      if (FACTORY_QUERIES.has(name)) {
+      if (MARKETING_QUERIES.has(name)) {
+        const limited = enforceMarketingOperationLimit(marketingLimiter, "query", resolved, reply);
+        if (limited !== null) return limited;
+      }
+      if (FACTORY_QUERIES.has(name) || AUTOMATION_QUERIES.has(name)) {
         const decision = factoryLimiter.check(
+          "query",
+          resolved.session.session_id,
+          resolved.session.org_id,
+          resolved.session.store_id,
+        );
+        if (!decision.allowed) {
+          reply.header("Retry-After", String(decision.retryAfterSeconds));
+          reply.code(429);
+          return fail("RATE_LIMITED");
+        }
+      }
+      if (DELIVERY_QUERIES.has(name)) {
+        const decision = deliveryLimiter.check(
           "query",
           resolved.session.session_id,
           resolved.session.org_id,
@@ -294,14 +350,12 @@ function registerQueryRoute(
         reply.code(400);
         return fail("VALIDATION_FAILED");
       }
-      const { queryRegistry } = createRuntimeBus(context.runtime);
-      const result = await runWithSql((sql) =>
-        executeQuery(sql, tenantFromSession(resolved), name, request.body, {
-          registry: queryRegistry,
-          actor: actorFromSession(resolved),
-          onUnexpectedError: (error) =>
-            request.log.error(safeErrorContext(error), "query execution failed"),
-        }),
+      const result = await executeTrustedSessionQuery(
+        context.runtime,
+        resolved,
+        name,
+        request.body,
+        (error) => request.log.error(safeErrorContext(error), "query execution failed"),
       );
       if (!result.ok) applyCommandErrorStatus(reply, result.error.code);
       return result;
@@ -318,8 +372,18 @@ export function registerBusRoutes(
   context: RouteSecurityContext,
   notificationLimiter: NotificationCommandRateLimiter,
   factoryLimiter: FactoryOperationRateLimiter,
+  deliveryLimiter: DeliveryPolicyRateLimiter,
+  marketingLimiter: MarketingOperationRateLimiter,
 ): void {
   const runWithSql = createSqlRunner(context.runtime);
-  registerCommandRoute(app, context, runWithSql, notificationLimiter, factoryLimiter);
-  registerQueryRoute(app, context, runWithSql, factoryLimiter);
+  registerCommandRoute(
+    app,
+    context,
+    runWithSql,
+    notificationLimiter,
+    factoryLimiter,
+    deliveryLimiter,
+    marketingLimiter,
+  );
+  registerQueryRoute(app, context, runWithSql, factoryLimiter, deliveryLimiter, marketingLimiter);
 }

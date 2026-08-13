@@ -20,9 +20,14 @@ const EXPECTED_TABLES = Object.freeze([
   "approval_requests",
   "audit_log",
   "automation_policies",
+  "automation_policy_usage_daily",
   "backups",
   "batch_garments",
   "brand_dict",
+  "campaign_audience_snapshots",
+  "campaign_budget_ledger",
+  "campaign_coupon_batches",
+  "campaign_coupon_grants",
   "campaigns",
   "card_types",
   "color_dict",
@@ -33,10 +38,16 @@ const EXPECTED_TABLES = Object.freeze([
   "customer_addresses",
   "customer_erasure_tombstones",
   "customer_identifiers",
+  "customer_portal_access_log",
+  "customer_portal_preferences",
+  "customer_portal_sessions",
   "customer_privacy_hmac_keys",
   "customer_profiles",
   "customers",
+  "delivery_appointments",
   "delivery_orders",
+  "delivery_policies",
+  "delivery_tasks",
   "devices",
   "edge_authority_challenges",
   "edge_devices",
@@ -46,6 +57,8 @@ const EXPECTED_TABLES = Object.freeze([
   "garment_qc_log",
   "garment_status_log",
   "garments",
+  "group_buy_redemptions",
+  "group_buy_vouchers",
   "item_catalog",
   "member_cards",
   "member_ledger",
@@ -95,16 +108,13 @@ const EXPECTED_TABLES = Object.freeze([
 
 const EXPECTED_GLOBAL_TABLES = Object.freeze(["ai_model_registry", "orgs"] as const);
 const EXPECTED_ORG_TABLES = Object.freeze([
-  "ai_action_log",
   "ai_conversations",
   "ai_messages",
   "ai_presets",
   "ai_provider_keys",
   "ai_usage_daily",
   "approval_requests",
-  "automation_policies",
   "backups",
-  "campaigns",
   "card_types",
   "coupon_grants",
   "coupon_redemption_reversals",
@@ -113,6 +123,7 @@ const EXPECTED_ORG_TABLES = Object.freeze([
   "customer_addresses",
   "customer_erasure_tombstones",
   "customer_identifiers",
+  "customer_portal_preferences",
   "customer_privacy_hmac_keys",
   "customer_profiles",
   "customers",
@@ -128,19 +139,31 @@ const EXPECTED_ORG_TABLES = Object.freeze([
   "points_ledger",
   "punch_card_ledger",
   "punch_cards",
-  "referral_rewards",
   "settings",
   "staffs",
   "stores",
 ] as const);
 const EXPECTED_STORE_TABLES = Object.freeze([
   "addon_catalog",
+  "ai_action_log",
   "ai_pending_actions",
   "audit_log",
+  "automation_policies",
+  "automation_policy_usage_daily",
   "batch_garments",
   "brand_dict",
+  "campaign_audience_snapshots",
+  "campaign_budget_ledger",
+  "campaign_coupon_batches",
+  "campaign_coupon_grants",
+  "campaigns",
   "color_dict",
+  "customer_portal_access_log",
+  "customer_portal_sessions",
+  "delivery_appointments",
   "delivery_orders",
+  "delivery_policies",
+  "delivery_tasks",
   "devices",
   "edge_authority_challenges",
   "edge_devices",
@@ -150,6 +173,8 @@ const EXPECTED_STORE_TABLES = Object.freeze([
   "garment_qc_log",
   "garment_status_log",
   "garments",
+  "group_buy_redemptions",
+  "group_buy_vouchers",
   "item_catalog",
   "notification_deliveries",
   "notification_delivery_attempts",
@@ -171,6 +196,7 @@ const EXPECTED_STORE_TABLES = Object.freeze([
   "production_handoff_attempts",
   "production_handoff_checkpoints",
   "production_handoff_discrepancy_resolutions",
+  "referral_rewards",
   "remark_dict",
   "service_types",
   "shift_closings",
@@ -203,8 +229,10 @@ describe("A3 tenant table matrix", () => {
     ).toEqual(expectedTables);
   });
 
-  it("keeps optional store filters at org scope", () => {
-    expect(getTenantTableScope("automation_policies")).toBe("org");
+  it("ratifies bounded automation authority and evidence as strict store scope", () => {
+    expect(getTenantTableScope("automation_policies")).toBe("store");
+    expect(getTenantTableScope("automation_policy_usage_daily")).toBe("store");
+    expect(getTenantTableScope("ai_action_log")).toBe("store");
   });
 
   it("registers ordinary grant replay high-water as a strict store-scoped RLS table", () => {

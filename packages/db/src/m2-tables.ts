@@ -14,6 +14,16 @@ export const M2_ORDER_TABLE_NAMES = Object.freeze([
 export const M2_CATALOG_TABLE_NAMES = Object.freeze([
   "catalog_items",
   "store_pricing_policies",
+  "delivery_policies",
+] as const);
+
+export const M2_DELIVERY_TABLE_NAMES = Object.freeze([
+  "delivery_appointments",
+  "delivery_orders",
+  "delivery_tasks",
+  "delivery_evidence_attachments",
+  "delivery_evidence_events",
+  "delivery_evidence_attachment_links",
 ] as const);
 
 export const M2_PAYMENT_TABLE_NAMES = Object.freeze(["payments"] as const);
@@ -32,6 +42,7 @@ export const M3_PHOTO_TABLE_NAMES = Object.freeze(["garment_photos"] as const);
 export const M2_ALL_TABLE_NAMES = Object.freeze([
   ...M2_ORDER_TABLE_NAMES,
   ...M2_CATALOG_TABLE_NAMES,
+  ...M2_DELIVERY_TABLE_NAMES,
   ...M2_PAYMENT_TABLE_NAMES,
   ...M2_PRINT_TABLE_NAMES,
   ...M2_CUSTOMER_TABLE_NAMES,
@@ -42,6 +53,7 @@ export const M2_ALL_TABLE_NAMES = Object.freeze([
 
 export type M2OrderTableNameLiteral = (typeof M2_ORDER_TABLE_NAMES)[number];
 export type M2CatalogTableNameLiteral = (typeof M2_CATALOG_TABLE_NAMES)[number];
+export type M2DeliveryTableNameLiteral = (typeof M2_DELIVERY_TABLE_NAMES)[number];
 export type M2PaymentTableNameLiteral = (typeof M2_PAYMENT_TABLE_NAMES)[number];
 export type M2PrintTableNameLiteral = (typeof M2_PRINT_TABLE_NAMES)[number];
 export type M2CustomerTableNameLiteral = (typeof M2_CUSTOMER_TABLE_NAMES)[number];

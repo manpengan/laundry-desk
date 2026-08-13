@@ -39,6 +39,13 @@ describe("destructive migration static reject", () => {
         "ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_chk;",
       ),
     ).toHaveLength(0);
+    const evidenceTruncateGuard =
+      "'CREATE TRIGGER %I BEFORE TRUNCATE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.reject_delivery_evidence_mutation()',";
+    expect(findDestructiveSql("0058_delivery_evidence.sql", evidenceTruncateGuard)).toHaveLength(0);
+    expect(findDestructiveSql("other.sql", evidenceTruncateGuard)).toHaveLength(1);
+    expect(
+      findDestructiveSql("0058_delivery_evidence.sql", "TRUNCATE delivery_evidence_events;"),
+    ).toHaveLength(1);
     expect(
       findDestructiveSql(
         "0032_member_stored_value.sql",
@@ -137,6 +144,22 @@ describe("destructive migration static reject", () => {
       "0051_customer_extended_profiles.sql",
       "0052_notification_delivery_outbox.sql",
       "0053_factory_handoff_and_qc.sql",
+      "0054_delivery_policy.sql",
+      "0055_delivery_appointments.sql",
+      "0056_delivery_orders.sql",
+      "0057_delivery_tasks.sql",
+      "0058_delivery_evidence.sql",
+      "0059_marketing_campaigns.sql",
+      "0060_campaign_coupon_batches.sql",
+      "0061_customer_self_service.sql",
+      "0062_customer_wallet_and_preferences.sql",
+      "0063_referral_and_group_buy.sql",
+      "0064_byok_model_registry.sql",
+      "0065_ai_streaming_sessions.sql",
+      "0066_ai_safety_metering.sql",
+      "0067_readonly_ai_assistant.sql",
+      "0068_ai_approval_center.sql",
+      "0069_bounded_automation.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

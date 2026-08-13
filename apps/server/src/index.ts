@@ -29,6 +29,8 @@ export type {
   Uuid,
 } from "./db/index.js";
 
+export * from "./ai/index.js";
+
 export {
   createM1CommandRegistry,
   createChainPorts,
@@ -391,3 +393,6 @@ export type {
   PickupReminderFilters,
   PickupReminderListRequest,
 } from "./notification/index.js";
+
+export * from "./marketing/index.js";
+export * from "./customer-self-service/index.js";

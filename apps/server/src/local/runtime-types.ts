@@ -1,16 +1,24 @@
 import type { CsrfProofSigner } from "../auth/csrf.js";
+import type { ApprovalStore } from "../approvals/types.js";
 import type { AccountingHandlerDeps } from "../accounting/types.js";
+import type { AutomationHandlerDeps } from "../automation/types.js";
 import type { CommandIdempotencyStore, StepUpApproverAuthority } from "../bus/types.js";
 import type { CatalogHandlerDeps } from "../catalog/handlers.js";
 import type { CustomerHandlerDeps } from "../customer/handlers.js";
 import type { CustomerProfileHandlerDeps } from "../customer-profile/handlers.js";
-import type { PgPool } from "../db/pg-pool.js";
+import type { DeliveryPolicyHandlerDeps } from "../delivery-policy/handlers.js";
+import type { DeliveryAppointmentHandlerDeps } from "../delivery-appointments/handlers.js";
+import type { DeliveryOrderHandlerDeps } from "../delivery-orders/handlers.js";
+import type { DeliveryTaskHandlerDeps } from "../delivery-tasks/handlers.js";
+import type { DeliveryEvidenceHandlerDeps } from "../delivery-evidence/handlers.js";
+import type { CreatePoolOptions, PgPool } from "../db/pg-pool.js";
 import type { EdgeAuthorityService } from "../edge/authority-service.js";
 import type { FulfillmentHandlerDeps } from "../fulfillment/handlers.js";
 import type { IdentityHandlerDeps } from "../handlers/identity-handlers.js";
 import type { createMemoryIdentityStore } from "../identity/memory-store.js";
 import type { MemberRuntimeDeps } from "../member/handlers.js";
 import type { MemberBenefitsRuntimeDeps } from "../member-benefits/types.js";
+import type { MarketingHandlerDeps } from "../marketing/types.js";
 import type { NotificationHandlerDeps } from "../notification/types.js";
 import type { OrderHandlerDeps } from "../order/handlers.js";
 import type { PendingActionStore } from "../pending-actions/types.js";
@@ -30,11 +38,22 @@ import type { LocalStaffDirectoryEntry } from "./staff-directory.js";
 
 export type LocalRuntimeMode = "memory" | "pg";
 
+export type CreatePgLocalRuntimeDependencies = Readonly<{
+  createPool: (options: CreatePoolOptions) => PgPool;
+  assertReady: (pool: PgPool, expectedDemoOnly: boolean) => Promise<void>;
+  loadStaffDirectory: (pool: PgPool) => Promise<readonly LocalStaffDirectoryEntry[]>;
+}>;
+
 export type LocalRuntime = Readonly<{
   mode: LocalRuntimeMode;
   identity: IdentityHandlerDeps;
   platform: PlatformHandlerDeps;
   pricing: PricingHandlerDeps;
+  deliveryPolicy: DeliveryPolicyHandlerDeps;
+  deliveryAppointments: DeliveryAppointmentHandlerDeps;
+  deliveryOrders: DeliveryOrderHandlerDeps;
+  deliveryTasks: DeliveryTaskHandlerDeps;
+  deliveryEvidence: DeliveryEvidenceHandlerDeps;
   order: OrderHandlerDeps;
   catalog: CatalogHandlerDeps;
   print: PrintHandlerDeps;
@@ -46,6 +65,7 @@ export type LocalRuntime = Readonly<{
   shift: ShiftHandlerDeps;
   reconciliation: ReconciliationHandlerDeps;
   accounting: AccountingHandlerDeps;
+  automation: AutomationHandlerDeps;
   reporting: ReportingHandlerDeps;
   photo: PhotoHandlerDeps;
   fulfillment: FulfillmentHandlerDeps;
@@ -54,11 +74,13 @@ export type LocalRuntime = Readonly<{
   member: MemberRuntimeDeps;
   memberBenefits: MemberBenefitsRuntimeDeps;
   notification: NotificationHandlerDeps;
+  marketing: MarketingHandlerDeps;
   edgeAuthority: EdgeAuthorityService;
   accessTokenSecret: string;
   csrfProofSigner: CsrfProofSigner;
   staffDirectory: readonly LocalStaffDirectoryEntry[];
   pendingStore: PendingActionStore;
+  approvalStore?: ApprovalStore;
   stepUpProofStore: StepUpProofStore;
   stepUpApproverAuthority: StepUpApproverAuthority;
   idempotencyStore: CommandIdempotencyStore;

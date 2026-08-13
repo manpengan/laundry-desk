@@ -367,9 +367,11 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthPort {
 
   const refreshSession = (): Promise<AuthResult<SessionView>> => {
     const stateAtStart = authState;
-    if (credentials.getAccessToken() === null) return Promise.resolve(asError("未登录"));
+    const loginAttemptAtStart = latestLoginAttempt;
+    const isCurrent = (): boolean =>
+      authState === stateAtStart && latestLoginAttempt === loginAttemptAtStart;
     return enqueueCookieMutation(async () => {
-      if (authState !== stateAtStart) return asError("认证状态已变更，请重试");
+      if (!isCurrent()) return asError("认证状态已变更，请重试");
       const csrf = credentials.readCsrf();
       if (csrf === null) return asError("缺少 CSRF cookie");
       let cookiesMayHaveChanged = false;
@@ -397,7 +399,7 @@ export function createHttpAuthClient(options: HttpAuthClientOptions): AuthPort {
         if (parsed === null) return failAfterResponse("刷新登录响应格式错误");
         const staffDirectory = await loadHttpStaffDirectory(fetchImpl, base, parsed.accessToken);
         if (staffDirectory === null) return failAfterResponse("刷新员工目录失败");
-        if (authState !== stateAtStart) return failAfterResponse("认证状态已变更，请重试");
+        if (!isCurrent()) return failAfterResponse("认证状态已变更，请重试");
         authState = Object.freeze({ staffDirectory });
         credentials.replaceAccessToken(parsed.accessToken);
         return Object.freeze({ ok: true as const, data: parsed.view });

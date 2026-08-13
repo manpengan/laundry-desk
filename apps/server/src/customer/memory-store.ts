@@ -83,7 +83,6 @@ export class MemoryCustomerStore implements CustomerStore {
     }
     throw new Error("customer merge depth exceeded");
   }
-
   private groupFor(customerId: string): readonly CustomerRecord[] {
     const root = this.rootFor(customerId);
     if (root === null) return Object.freeze([]);
@@ -93,7 +92,6 @@ export class MemoryCustomerStore implements CustomerStore {
     if (group.length > 1000) throw new Error("customer merge group size exceeded");
     return Object.freeze(group);
   }
-
   async search(query: string | undefined, limit: number): Promise<readonly CustomerSearchRow[]> {
     const capped = Math.max(0, Math.min(limit, 50));
     const q = typeof query === "string" ? query.trim() : "";
@@ -103,7 +101,6 @@ export class MemoryCustomerStore implements CustomerStore {
     const newestFirst = [...filtered].sort((a, b) => b.updated_at - a.updated_at);
     return Object.freeze(newestFirst.slice(0, capped).map((row) => toSearchRow(row)));
   }
-
   async getByPhone(phone: string): Promise<CustomerRecord | null> {
     const row = this.rows.find(
       (candidate) => candidate.phone === phone && candidate.anonymized_at == null,
@@ -112,7 +109,6 @@ export class MemoryCustomerStore implements CustomerStore {
     const root = this.rootFor(row.customer_id);
     return root?.anonymized_at == null ? root : null;
   }
-
   async getById(customerId: string): Promise<CustomerRecord | null> {
     const root = this.rootFor(customerId);
     return root?.anonymized_at == null ? root : null;
@@ -347,6 +343,10 @@ export class MemoryCustomerStore implements CustomerStore {
       factory_handoff_evidence: Object.freeze([]),
       factory_handoff_evidence_count: 0,
       factory_handoff_evidence_truncated: false,
+      delivery_evidence_count: 0,
+      delivery_attachment_count: 0,
+      delivery_evidence_retention: "retained_operational_evidence",
+      delivery_unlinked_upload_cleanup: "private_file_purged_after_expiry_metadata_retained",
       orders: Object.freeze([]),
       order_count: 0,
       truncated: false,

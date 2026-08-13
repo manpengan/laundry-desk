@@ -2,8 +2,14 @@
  * HTTP command port → POST /v1/commands/:name (local server).
  */
 
-import type { CommandFailure, CommandPort, CommandResult } from "./types.js";
+import type {
+  CommandExecutionOptions,
+  CommandFailure,
+  CommandPort,
+  CommandResult,
+} from "./types.js";
 import { readConfirmationSummary } from "./confirmation-summary.js";
+import { requestFailureResult } from "./request-abort.js";
 
 /** Matches packages/contracts CSRF_HEADER_NAME. */
 const CSRF_HEADER_NAME = "x-csrf-token";
@@ -118,7 +124,7 @@ export function createHttpCommandClient(options: HttpCommandClientOptions): Comm
     async execute<T = unknown>(
       name: string,
       body: unknown = {},
-      execOptions: Readonly<{ confirmRef?: string }> = {},
+      execOptions: CommandExecutionOptions = {},
     ): Promise<CommandResult<T>> {
       const token = options.getAccessToken();
       if (token === null || token.length === 0) {
@@ -157,6 +163,7 @@ export function createHttpCommandClient(options: HttpCommandClientOptions): Comm
             [IDEMPOTENCY_HEADER_NAME]: idempotencyKey,
           },
           body: JSON.stringify(payload ?? {}),
+          ...(execOptions.signal === undefined ? {} : { signal: execOptions.signal }),
         });
         const json: unknown = await res.json();
         if (res.ok && isRecord(json) && json.ok === true) {
@@ -172,10 +179,7 @@ export function createHttpCommandClient(options: HttpCommandClientOptions): Comm
         }
         return Object.freeze({ ok: false as const, error: failure });
       } catch {
-        return Object.freeze({
-          ok: false as const,
-          error: Object.freeze({ code: "NETWORK", message: "无法连接本地服务器" }),
-        });
+        return requestFailureResult(execOptions.signal);
       }
     },
   });

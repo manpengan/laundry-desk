@@ -3,8 +3,18 @@
  */
 
 import type {
+  DeliveryTaskConfirmationSummary,
+  DeliveryEvidenceConfirmationSummary,
   FactoryHandoffConfirmationSummary,
   FulfillmentOperationConfirmationSummary,
+  DeliveryPolicyConfirmationSummary,
+  MarketingAudienceFreezeConfirmationSummary,
+  MarketingCampaignSetConfirmationSummary,
+  MarketingCouponIssueConfirmationSummary,
+  MarketingCouponReversalConfirmationSummary,
+  MarketingGroupBuyRedemptionConfirmationSummary,
+  MarketingGroupBuyRegistrationConfirmationSummary,
+  MarketingReferralRewardConfirmationSummary,
 } from "@laundry/contracts";
 
 export type MemberTopupMatchedRule = Readonly<{
@@ -41,8 +51,18 @@ export type NotificationDeliveryConfirmationSummary = Readonly<{
 export type ConfirmationSummary =
   | MemberTopupConfirmationSummary
   | NotificationDeliveryConfirmationSummary
+  | DeliveryPolicyConfirmationSummary
   | FactoryHandoffConfirmationSummary
-  | FulfillmentOperationConfirmationSummary;
+  | FulfillmentOperationConfirmationSummary
+  | DeliveryTaskConfirmationSummary
+  | DeliveryEvidenceConfirmationSummary
+  | MarketingCampaignSetConfirmationSummary
+  | MarketingAudienceFreezeConfirmationSummary
+  | MarketingCouponIssueConfirmationSummary
+  | MarketingCouponReversalConfirmationSummary
+  | MarketingReferralRewardConfirmationSummary
+  | MarketingGroupBuyRegistrationConfirmationSummary
+  | MarketingGroupBuyRedemptionConfirmationSummary;
 
 export type CommandErrorDetail = Readonly<{
   kind?: string;
@@ -60,15 +80,30 @@ export type CommandFailure = Readonly<{
 export type CommandResult<T = unknown> =
   Readonly<{ ok: true; data: T }> | Readonly<{ ok: false; error: CommandFailure }>;
 
+export type CommandExecutionOptions = Readonly<{
+  confirmRef?: string;
+  /** Abort transport when the owning session/scope is replaced. */
+  signal?: AbortSignal;
+}>;
+
+export type QueryExecutionOptions = Readonly<{
+  /** Abort transport when the owning session/scope is replaced. */
+  signal?: AbortSignal;
+}>;
+
 export type CommandPort = Readonly<{
   execute: <T = unknown>(
     name: string,
     body?: unknown,
-    options?: Readonly<{ confirmRef?: string }>,
+    options?: CommandExecutionOptions,
   ) => Promise<CommandResult<T>>;
 }>;
 
 /** Read-only query bus port (POST /v1/queries/:name). Same result envelope as commands. */
 export type QueryPort = Readonly<{
-  execute: <T = unknown>(name: string, body?: unknown) => Promise<CommandResult<T>>;
+  execute: <T = unknown>(
+    name: string,
+    body?: unknown,
+    options?: QueryExecutionOptions,
+  ) => Promise<CommandResult<T>>;
 }>;

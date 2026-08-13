@@ -50,6 +50,13 @@ test("automatic notification delivery remains admin-only", () => {
   assert.equal(staff.includes("notification_send"), false);
 });
 
+test("marketing campaign management remains admin-only", () => {
+  const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
+  const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });
+  assert.equal(admin.includes("marketing_manage"), true);
+  assert.equal(staff.includes("marketing_manage"), false);
+});
+
 test("factory handoff and QC are internal staff capabilities while reconciliation is admin-only", () => {
   const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
   const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });
@@ -59,6 +66,23 @@ test("factory handoff and QC are internal staff capabilities while reconciliatio
   }
   assert.equal(admin.includes("fulfillment_reconcile"), true);
   assert.equal(staff.includes("fulfillment_reconcile"), false);
+});
+
+test("delivery policy reads are available to staff while configuration remains admin-only", () => {
+  const admin = permissionsForAuthority({ role: "admin", is_privacy_admin: false });
+  const staff = permissionsForAuthority({ role: "staff", is_privacy_admin: false });
+  assert.equal(admin.includes("delivery_read"), true);
+  assert.equal(staff.includes("delivery_read"), true);
+  assert.equal(admin.includes("settings_admin"), true);
+  assert.equal(staff.includes("settings_admin"), false);
+});
+
+test("customer appointment reads and writes are available to counter staff", () => {
+  for (const role of ["admin", "staff"] as const) {
+    const permissions = permissionsForAuthority({ role, is_privacy_admin: false });
+    assert.equal(permissions.includes("delivery_read"), true, role);
+    assert.equal(permissions.includes("delivery_write"), true, role);
+  }
 });
 
 test("runtime bus registers the complete member command and query surface", async () => {
@@ -78,6 +102,18 @@ test("runtime bus registers the complete member command and query surface", asyn
   assert.ok(bus.registeredQueries.includes("notification.delivery.capability.get"));
   assert.ok(bus.registeredQueries.includes("notification.delivery_batches.list"));
   assert.ok(bus.registeredQueries.includes("notification.delivery_batch.get"));
+  assert.ok(bus.registered.includes("marketing.campaign.set"));
+  assert.ok(bus.registered.includes("marketing.campaign.audience.freeze"));
+  assert.ok(bus.registered.includes("marketing.campaign.coupons.issue"));
+  assert.ok(bus.registered.includes("marketing.coupon.redemption.reverse"));
+  assert.ok(bus.registered.includes("marketing.referral.reward.issue"));
+  assert.ok(bus.registered.includes("marketing.group_buy.voucher.register"));
+  assert.ok(bus.registered.includes("marketing.group_buy.voucher.redeem"));
+  assert.ok(bus.registeredQueries.includes("marketing.campaigns.list"));
+  assert.ok(bus.registeredQueries.includes("marketing.campaign.get"));
+  assert.ok(bus.registeredQueries.includes("marketing.campaign.audience.preview"));
+  assert.ok(bus.registeredQueries.includes("marketing.campaign.coupons.preview"));
+  assert.ok(bus.registeredQueries.includes("marketing.campaign.coupon_batch.get"));
   for (const name of [
     "fulfillment.batch.create",
     "fulfillment.batch.cancel",
@@ -93,6 +129,42 @@ test("runtime bus registers the complete member command and query surface", asyn
   assert.ok(bus.registeredQueries.includes("reporting.owner_dashboard.get"));
   assert.ok(bus.registered.includes("store.profile.set"));
   assert.ok(bus.registeredQueries.includes("store.authorized.list"));
+  assert.ok(bus.registered.includes("delivery.policy.set"));
+  assert.ok(bus.registeredQueries.includes("delivery.policy.get"));
+  assert.ok(bus.registeredQueries.includes("delivery.availability.quote"));
+  for (const name of [
+    "delivery.appointment.create",
+    "delivery.appointment.reschedule",
+    "delivery.appointment.cancel",
+  ]) {
+    assert.ok(bus.registered.includes(name), name);
+  }
+  for (const name of [
+    "delivery.appointment.get",
+    "delivery.appointment.addresses.list",
+    "delivery.appointments.list",
+  ]) {
+    assert.ok(bus.registeredQueries.includes(name), name);
+  }
+  for (const name of ["delivery.order.create", "delivery.order.transition"]) {
+    assert.ok(bus.registered.includes(name), name);
+  }
+  for (const name of ["delivery.order.get", "delivery.orders.list"]) {
+    assert.ok(bus.registeredQueries.includes(name), name);
+  }
+  for (const name of [
+    "delivery.task.assign",
+    "delivery.task.respond",
+    "delivery.task.transfer",
+    "delivery.task.takeover",
+  ]) {
+    assert.ok(bus.registered.includes(name), name);
+  }
+  for (const name of ["delivery.task.get", "delivery.tasks.list"]) {
+    assert.ok(bus.registeredQueries.includes(name), name);
+  }
+  assert.ok(bus.registered.includes("delivery.evidence.record"));
+  assert.ok(bus.registeredQueries.includes("delivery.evidence.list"));
   for (const name of [
     "member.benefit_definition.upsert",
     "member.membership.set",

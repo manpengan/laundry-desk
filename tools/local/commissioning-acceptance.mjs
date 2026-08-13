@@ -129,7 +129,7 @@ for (const mode of modes) {
     if (mode === "pg") {
       // The PostgreSQL acceptance runners execute compiled Node tests on the
       // host, so make their dist tree part of this self-contained gate.
-      await run("pnpm", ["--filter", "@laundry/server", "build"], environment);
+      await run("pnpm", ["--filter", "@laundry/server...", "build"], environment);
     }
     await run(process.execPath, ["tools/local/up.mjs", "--bootstrap"], environment);
     await run(process.execPath, ["tools/local/commissioning-proof.mjs"], environment);
@@ -140,6 +140,10 @@ for (const mode of modes) {
         environment,
       );
       await run(process.execPath, ["tools/local/commissioning-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+      });
+      await run(process.execPath, ["tools/local/delivery-policy-pg-acceptance.mjs"], {
         ...environment,
         LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
       });
@@ -156,6 +160,26 @@ for (const mode of modes) {
         LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
       });
       await run(process.execPath, ["tools/local/factory-handoff-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+      });
+      await run(process.execPath, ["tools/local/delivery-appointments-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+      });
+      await run(process.execPath, ["tools/local/delivery-orders-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+      });
+      await run(process.execPath, ["tools/local/delivery-tasks-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+      });
+      await run(process.execPath, ["tools/local/delivery-evidence-pg-acceptance.mjs"], {
+        ...environment,
+        LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
+      });
+      await run(process.execPath, ["tools/local/marketing-campaigns-pg-acceptance.mjs"], {
         ...environment,
         LAUNDRY_COMMISSIONING_ACCEPTANCE_ISOLATED: "1",
       });

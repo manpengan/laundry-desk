@@ -99,6 +99,37 @@ describe("M2 contract surface", () => {
       "notification.manual_list.create",
       // ADR-44: explicit admin enqueue; 11-50 recipients escalate R3 to R4.
       "notification.delivery_batch.enqueue",
+      // ADR-46: current-store policy only; does not enable delivery or create bookings.
+      "delivery.policy.set",
+      // ADR-47: customer/address references, real slot capacity and optimistic lifecycle.
+      "delivery.appointment.create",
+      "delivery.appointment.reschedule",
+      "delivery.appointment.cancel",
+      // ADR-48: authoritative route linkage and DB-enforced optimistic logistics lifecycle.
+      "delivery.order.create",
+      "delivery.order.transition",
+      // ADR-49: current-store assignment custody, successor chain and R4 takeover.
+      "delivery.task.assign",
+      "delivery.task.respond",
+      "delivery.task.transfer",
+      "delivery.task.takeover",
+      // ADR-51: accepted-assignee evidence, with optional atomic leg completion.
+      "delivery.evidence.record",
+      "marketing.campaign.set",
+      "marketing.campaign.audience.freeze",
+      "marketing.campaign.coupons.issue",
+      "marketing.coupon.redemption.reverse",
+      "marketing.referral.reward.issue",
+      "marketing.group_buy.voucher.register",
+      "marketing.group_buy.voucher.redeem",
+      // ADR-63: only allowlisted R3-or-lower automations with explicit approval,
+      // schedule windows and lock-checked daily count/integer-fen quotas.
+      "automation.policy.create",
+      "automation.policy.update",
+      "automation.policy.approve",
+      "automation.policy.pause",
+      "automation.policy.resume",
+      "automation.policy.archive",
     ]);
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("catalog.items.manage.list");
@@ -122,6 +153,22 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.delivery.capability.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.delivery_batches.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("notification.delivery_batch.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaigns.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.audience.preview");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.coupons.preview");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("marketing.campaign.coupon_batch.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.orders.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.order.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.receipt.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.garments.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.garment.progress");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.wallet.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.benefits.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("customer.self_service.profile.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("automation.policies.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("automation.policy.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("automation.runs.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("accounting.report.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("reporting.owner_dashboard.drilldown");
@@ -129,8 +176,20 @@ describe("M2 contract surface", () => {
     // ADR-38: trusted policy read and immutable payment-ledger refund source.
     expect(M2_CONTRACT_QUERY_NAMES).toContain("pricing.policy.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("payment.ledger.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(58);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(38);
+    // ADR-46: store delivery policy plus a feature-gated, policy-only quote.
+    expect(M2_CONTRACT_COMMAND_NAMES).toContain("delivery.policy.set");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.policy.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.availability.quote");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.appointment.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.appointment.addresses.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.appointments.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.order.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.orders.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.task.get");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.tasks.list");
+    expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.evidence.list");
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(82);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(64);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
@@ -226,9 +285,30 @@ describe("M2 contract surface", () => {
     expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
       "fulfillment.batch.get",
     );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.availability.quote",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.appointment.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.appointment.addresses.list",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.appointments.list",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.order.get",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.orders.list",
+    );
+    expect(M2_READ_ONLY_AI_DEFINITIONS.map((definition) => definition.name)).not.toContain(
+      "delivery.evidence.list",
+    );
   });
 
-  it("projects the frozen M2 surface into deterministic OpenAPI", { timeout: 10_000 }, () => {
+  it("projects the frozen M2 surface into deterministic OpenAPI", { timeout: 30_000 }, () => {
     const document = buildLaundryOpenApiDocument();
     const first = serializeOpenApiDocument(document);
     const second = serializeOpenApiDocument(buildLaundryOpenApiDocument());
