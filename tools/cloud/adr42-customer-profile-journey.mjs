@@ -270,7 +270,17 @@ export function createCustomerProfileJourney(options) {
           customer_id: context.customerId,
         }),
       );
-      if (current.addresses.length > 0 || current.identifiers.length > 0) {
+      const currentWaivers = asRecord(current.waivers, "CUSTOMER_PROFILE_CLEANUP_INVALID");
+      const profileNeedsReset =
+        current.addresses.length > 0 ||
+        current.identifiers.length > 0 ||
+        current.gender !== "unspecified" ||
+        current.preferred_contact !== "none" ||
+        current.service_note !== null ||
+        currentWaivers.skip_ticket_print !== false ||
+        currentWaivers.skip_label_print !== false ||
+        currentWaivers.skip_rack_assignment !== false;
+      if (profileNeedsReset) {
         readCustomerProfileMutationVersion(
           await context.api.confirm(
             context.session,
@@ -307,6 +317,8 @@ export function createCustomerProfileJourney(options) {
       requireThat(
         cleaned.addresses.length === 0 &&
           cleaned.identifiers.length === 0 &&
+          cleaned.gender === "unspecified" &&
+          cleaned.preferred_contact === "none" &&
           cleaned.service_note === null &&
           cleaned.discount_bps === null &&
           waivers.skip_ticket_print === false &&
