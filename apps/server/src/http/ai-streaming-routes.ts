@@ -8,6 +8,7 @@ import {
   AiEventReplayResponseSchema,
   AiSessionCreateRequestSchema,
   AiSessionCreateResponseSchema,
+  AiSafetyStatusResponseSchema,
   AiTurnCreateRequestSchema,
   AiTurnCreateResponseSchema,
   type AiStreamEvent,
@@ -42,6 +43,23 @@ async function requireAiUser(
   return authorized;
 }
 
+async function requireAiOwner(
+  context: AuthRouteContext,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<Authorized | null> {
+  const authorized = await resolveSession(context.runtime, request);
+  if (authorized === null) {
+    reply.code(401);
+    return null;
+  }
+  if (!permissionsForAuthority(authorized.authority).includes("settings_admin")) {
+    reply.code(403);
+    return null;
+  }
+  return authorized;
+}
+
 function requestContext(authorized: Authorized): AiRequestContext {
   return Object.freeze({
     tenant: Object.freeze({
@@ -60,6 +78,10 @@ function serviceFailure(error: unknown, request: FastifyRequest, reply: FastifyR
     return fail("VALIDATION_FAILED");
   }
   if (error instanceof AiServiceError) {
+    if (error.code === "PROMPT_INJECTION_DETECTED") {
+      reply.code(400);
+      return fail("VALIDATION_FAILED");
+    }
     if (error.code === "AI_UNAVAILABLE") reply.code(503);
     else if (error.code === "NOT_FOUND") reply.code(404);
     else reply.code(409);
@@ -155,6 +177,19 @@ export function registerAiStreamingRoutes(
   service: AiStreamingService,
   limiter: AiRateLimiter,
 ): void {
+  app.get("/api/v2/ai/safety", async (request, reply) => {
+    try {
+      const authorized = await requireAiOwner(auth, request, reply);
+      if (authorized === null)
+        return fail(reply.statusCode === 401 ? "AUTHENTICATION_FAILED" : "PERMISSION_DENIED");
+      if (!consumeRateLimit(limiter, authorized, reply)) return fail("RATE_LIMITED");
+      const data = await service.getSafetyStatus(requestContext(authorized));
+      return AiSafetyStatusResponseSchema.parse({ ok: true, data });
+    } catch (error) {
+      return serviceFailure(error, request, reply);
+    }
+  });
+
   app.post("/api/v2/ai/sessions", { bodyLimit: BODY_LIMIT_BYTES }, async (request, reply) => {
     try {
       const authorized = await requireAiUser(auth, request, reply);

@@ -72,6 +72,7 @@ psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migration
 # 0064 只能在集成分支已具备并应用 0054–0063 后执行；本 Item 不伪造占位迁移。
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0064_byok_model_registry.sql
 psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0065_ai_streaming_sessions.sql
+psql "$DATABASE_URL" -X --single-transaction -v ON_ERROR_STOP=1 -f src/migrations/0066_ai_safety_metering.sql
 ```
 
 Tables are owned by the connecting role used at CREATE time. Prefer connecting as
@@ -106,6 +107,7 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Referral and group-buy** (0063, [ADR-54](../../../../docs/adr/2026-08-13-adr-54-referral-and-group-buy.md)): active-member referral rewards and digest-only external vouchers with single-use order redemption
 - **BYOK custody and model registry** (0064, [ADR-57](../../../../docs/adr/2026-08-13-adr-57-byok-custody-model-registry.md)): org-RLS AES-256-GCM envelopes with KMS-wrapped per-credential DEKs, fail-closed lifecycle transitions, and an empty owner-verified global model registry; requires the integrated 0054–0063 chain first
 - **Bounded AI streaming state** (0065, [ADR-58](../../../../docs/adr/2026-08-13-adr-58-bounded-ai-streaming-runtime.md)): tenant/session/staff-scoped sessions, append-only messages and events, bounded usage/tool-attempt metadata, closed write functions, FORCE RLS, and no direct application DML; public AI remains hard-off
+- **AI safety metering** (0066, [ADR-59](../../../../docs/adr/2026-08-13-adr-59-ai-safety-metering.md)): integer token/cost ledgers, atomic org budget reservations, durable circuit state, metadata-only rejection evidence, FORCE RLS, and owner-only status; public AI remains hard-off
 - **M2 payments** (0009): `payments` append-only ledger (`SELECT, INSERT` only for `laundry_app`)
 - **M2 print** (0010): `print_jobs` queue (`SELECT, INSERT, UPDATE` for status transitions; no DELETE)
 - **M2 customers** (0011): `customers` org-scoped archive (`SELECT, INSERT, UPDATE`; unique org+phone)

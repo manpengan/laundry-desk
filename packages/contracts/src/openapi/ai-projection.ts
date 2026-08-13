@@ -7,6 +7,7 @@ import {
   AiTurnCreateRequestSchema,
   AiTurnCreateResponseSchema,
 } from "../ai/streaming.js";
+import { AiSafetyStatusResponseSchema } from "../ai/safety.js";
 import type {
   OpenApiMediaType,
   OpenApiOperation,
@@ -71,9 +72,11 @@ const responseSchemaId = (operation: string): string | null =>
     ? "AiSessionCreateResponse"
     : operation === "turn_create"
       ? "AiTurnCreateResponse"
-      : operation === "events_replay"
-        ? "AiEventReplayResponse"
-        : null;
+      : operation === "safety_status"
+        ? "AiSafetyStatusResponse"
+        : operation === "events_replay"
+          ? "AiEventReplayResponse"
+          : null;
 
 function operationParameters(
   row: (typeof AI_STREAMING_OPERATION_MATRIX)[number],
@@ -173,6 +176,7 @@ export function collectAiOpenApiProjection(toSchema: SchemaConverter): Readonly<
 }> {
   const schemas = {
     AiEventReplayResponse: toSchema(AiEventReplayResponseSchema),
+    AiSafetyStatusResponse: toSchema(AiSafetyStatusResponseSchema),
     AiSessionCreateRequest: toSchema(AiSessionCreateRequestSchema),
     AiSessionCreateResponse: toSchema(AiSessionCreateResponseSchema),
     AiStreamEvent: toSchema(AiStreamEventSchema),

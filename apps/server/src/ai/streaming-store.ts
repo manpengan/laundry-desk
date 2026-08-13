@@ -1,4 +1,10 @@
-import type { AiSessionView, AiStreamEvent, AiTurnView } from "@laundry/contracts";
+import type {
+  AiSafetyDenialCode,
+  AiSafetyStatusView,
+  AiSessionView,
+  AiStreamEvent,
+  AiTurnView,
+} from "@laundry/contracts";
 
 import type { TenantContext } from "../db/types.js";
 
@@ -15,6 +21,7 @@ export type AiTurnRecord = Readonly<{
   prompt: string;
   promptSha256: string;
   maxOutputTokens: number;
+  inputRedactions: number;
   status: AiTurnView["status"];
   createdAt: Date;
 }>;
@@ -32,11 +39,22 @@ export type AiToolAttemptRecord = Readonly<{
 
 export type AiTurnUsage = Readonly<{
   id: string;
+  createdAt: Date;
   inputTokens: number;
   outputTokens: number;
   outputBytes: number;
   eventCount: number;
   toolSteps: number;
+  estimatedCostMicros: number;
+  inputRedactions: number;
+  outputRedactions: number;
+}>;
+
+export type AiTurnStartResult = Readonly<{
+  started: boolean;
+  denialCode: Exclude<AiSafetyDenialCode, "AI_PROMPT_INJECTION"> | null;
+  inputMicrosPerMillion: number;
+  outputMicrosPerMillion: number;
 }>;
 
 export type AiTurnFinish = Readonly<{
@@ -99,13 +117,21 @@ export type AiConversationStore = Readonly<{
       prompt: string;
       promptSha256: string;
       maxOutputTokens: number;
+      inputRedactions: number;
       context: AiRequestContext;
       now: Date;
     }>,
   ): Promise<Readonly<{ turn: AiTurnRecord; replayed: boolean }>>;
   getSession(sessionId: string, context: AiRequestContext): Promise<AiSessionView | null>;
   getQueuedTurn(sessionId: string, context: AiRequestContext): Promise<AiTurnRecord | null>;
-  startTurn(turnId: string, context: AiRequestContext, now: Date): Promise<boolean>;
+  authorizeAndStartTurn(
+    input: Readonly<{
+      turnId: string;
+      estimatedInputTokens: number;
+      context: AiRequestContext;
+      now: Date;
+    }>,
+  ): Promise<AiTurnStartResult>;
   appendEvent(
     input: Readonly<{
       id: string;
@@ -138,4 +164,19 @@ export type AiConversationStore = Readonly<{
     sessionId: string,
     context: AiRequestContext,
   ): Promise<readonly Readonly<{ role: "user" | "assistant"; content: string }>[]>;
+  recordSafetyRejection(
+    input: Readonly<{
+      id: string;
+      auditId: string;
+      sessionId: string;
+      code: "AI_PROMPT_INJECTION";
+      contentSha256: string;
+      context: AiRequestContext;
+      now: Date;
+    }>,
+  ): Promise<void>;
+  getSafetyStatus(
+    context: AiRequestContext,
+    now: Date,
+  ): Promise<Omit<AiSafetyStatusView, "runtime_enabled">>;
 }>;

@@ -66,6 +66,7 @@
 | [ADR-56](2026-08-13-adr-56-customer-wallet-and-preferences.md)                | 顾客钱包、权益、地址与通知偏好                  | **Proposed** 2026-08-13；Stage 4.4 Item 11 候选    |
 | [ADR-57](2026-08-13-adr-57-byok-custody-model-registry.md)                    | BYOK 凭据托管生命周期与模型注册表               | **Proposed** 2026-08-13；Stage 4.5 Item 12         |
 | [ADR-58](2026-08-13-adr-58-bounded-ai-streaming-runtime.md)                   | Provider-neutral 流式会话与有界 tool-use loop   | **Proposed** 2026-08-13；Stage 4.5 Item 14         |
+| [ADR-59](2026-08-13-adr-59-ai-safety-metering.md)                             | AI 安全、整数计量、预算熔断与失败降级           | **Proposed** 2026-08-13；Stage 4.5 Item 18         |
 
 ## v1 线
 

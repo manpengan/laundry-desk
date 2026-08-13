@@ -302,6 +302,98 @@
         ],
         "type": "object"
       },
+      "AiSafetyStatusResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "circuit_open_until": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "circuit_state": {
+                "enum": [
+                  "closed",
+                  "open"
+                ],
+                "type": "string"
+              },
+              "egress_policy": {
+                "const": "https_443_allowlist",
+                "type": "string"
+              },
+              "estimated_cost_micros": {
+                "maximum": 9000000000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "input_tokens": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "month": {
+                "pattern": "^\\d{4}-\\d{2}$",
+                "type": "string"
+              },
+              "monthly_limit_micros": {
+                "maximum": 9000000000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "output_tokens": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "pii_masking": {
+                "const": true,
+                "type": "boolean"
+              },
+              "remaining_micros": {
+                "maximum": 9000000000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "runtime_enabled": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "runtime_enabled",
+              "pii_masking",
+              "egress_policy",
+              "month",
+              "input_tokens",
+              "output_tokens",
+              "estimated_cost_micros",
+              "monthly_limit_micros",
+              "remaining_micros",
+              "circuit_state",
+              "circuit_open_until"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "AiSessionCreateRequest": {
         "additionalProperties": false,
         "properties": {},
@@ -80425,6 +80517,86 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v2/ai/safety": {
+      "get": {
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",
+        "operationId": "ai_safety_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSafetyStatusResponse"
+                }
+              }
+            },
+            "description": "Successful AI operation"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Active turn or idempotency conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "AI is not configured"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "AI safety_status",
+        "tags": [
+          "ai"
+        ],
+        "x-laundry-classification": "confidential",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R0"
+      }
+    },
     "/api/v2/ai/sessions": {
       "post": {
         "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Never projected as an LLM business tool.",

@@ -1,14 +1,12 @@
 import { AiStreamEventSchema, type AiSessionView, type AiStreamEvent } from "@laundry/contracts";
 
 import type { PgPool } from "../db/pg-pool.js";
-import { withPoolClient } from "../db/pg-sql-client.js";
-import { withTenantTransaction } from "../db/tenant-transaction.js";
-import type { SqlClient } from "../db/types.js";
+import { createPgAiSafetyMethods } from "./safety-pg-store.js";
+import { withAiContext } from "./streaming-pg-context.js";
 import {
   AiStoreError,
   type AiConversationStore,
   type AiEventDraft,
-  type AiRequestContext,
   type AiTurnRecord,
 } from "./streaming-store.js";
 
@@ -26,6 +24,7 @@ type TurnRow = Readonly<{
   prompt: string;
   prompt_sha256: string;
   max_output_tokens: number;
+  input_redactions: number;
   status: AiTurnRecord["status"];
   created_at: Date;
 }>;
@@ -45,27 +44,6 @@ type EventRow = Readonly<{
   created_at: Date;
 }>;
 
-async function withContext<T>(
-  pool: PgPool,
-  context: AiRequestContext,
-  operation: (client: SqlClient) => Promise<T>,
-  readOnly = false,
-): Promise<T> {
-  return withPoolClient(pool, (client) =>
-    withTenantTransaction(
-      client,
-      context.tenant,
-      async (transaction) => {
-        await transaction.query("SELECT set_config('app.auth_session_id', $1, true)", [
-          context.authSessionId,
-        ]);
-        return operation(transaction);
-      },
-      { readOnly },
-    ),
-  );
-}
-
 function viewFromRow(row: SessionRow): AiSessionView {
   return Object.freeze({
     session_id: row.id,
@@ -83,6 +61,7 @@ function turnFromRow(row: TurnRow): AiTurnRecord {
     prompt: row.prompt,
     promptSha256: row.prompt_sha256,
     maxOutputTokens: row.max_output_tokens,
+    inputRedactions: row.input_redactions,
     status: row.status,
     createdAt: new Date(row.created_at),
   });
@@ -159,7 +138,7 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
   return Object.freeze({
     createSession: async (input) => {
       try {
-        return await withContext(pool, input.context, async (client) => {
+        return await withAiContext(pool, input.context, async (client) => {
           await client.query("SELECT public.ai_session_create($1::uuid, $2::uuid, $3::uuid)", [
             input.id,
             input.context.authSessionId,
@@ -181,15 +160,16 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
 
     createTurn: async (input) => {
       try {
-        return await withContext(pool, input.context, async (client) => {
+        return await withAiContext(pool, input.context, async (client) => {
           const created = await client.query<
             Readonly<{
               turn_id: string;
               replayed: boolean;
             }>
           >(
-            `SELECT turn_id::text, replayed FROM public.ai_turn_create(
-              $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6::char(64), $7, $8::uuid, $9::uuid
+            `SELECT turn_id::text, replayed FROM public.ai_turn_create_safe(
+              $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6::char(64), $7,
+              $8::uuid, $9::uuid, $10
             )`,
             [
               input.id,
@@ -201,6 +181,7 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
               input.maxOutputTokens,
               input.messageId,
               input.auditId,
+              input.inputRedactions,
             ],
           );
           const createdRow = created.rows[0];
@@ -209,6 +190,7 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
             `SELECT turn_value.id::text, turn_value.ai_session_id::text,
                     turn_value.idempotency_key::text, message.content AS prompt,
                     turn_value.prompt_sha256, turn_value.max_output_tokens,
+                    turn_value.input_redactions,
                     turn_value.status, turn_value.created_at
                FROM public.ai_turns turn_value
                JOIN public.ai_messages message ON message.turn_id = turn_value.id
@@ -226,7 +208,7 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
     },
 
     getSession: async (sessionId, context) =>
-      withContext(
+      withAiContext(
         pool,
         context,
         async (client) => {
@@ -241,7 +223,7 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
       ),
 
     getQueuedTurn: async (sessionId, context) =>
-      withContext(
+      withAiContext(
         pool,
         context,
         async (client) => {
@@ -249,6 +231,7 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
             `SELECT turn_value.id::text, turn_value.ai_session_id::text,
                     turn_value.idempotency_key::text, message.content AS prompt,
                     turn_value.prompt_sha256, turn_value.max_output_tokens,
+                    turn_value.input_redactions,
                     turn_value.status, turn_value.created_at
                FROM public.ai_turns turn_value
                JOIN public.ai_messages message ON message.turn_id = turn_value.id
@@ -263,17 +246,8 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
         true,
       ),
 
-    startTurn: async (turnId, context) =>
-      withContext(pool, context, async (client) => {
-        const result = await client.query<Readonly<{ changed: boolean }>>(
-          "SELECT public.ai_turn_start($1::uuid, $2::uuid) AS changed",
-          [turnId, context.authSessionId],
-        );
-        return result.rows[0]?.changed === true;
-      }),
-
     appendEvent: async (input) =>
-      withContext(pool, input.context, async (client) => {
+      withAiContext(pool, input.context, async (client) => {
         const params = eventParams(input.event);
         const result = await client.query<Readonly<{ cursor: string }>>(
           `SELECT public.ai_stream_event_append(
@@ -295,7 +269,7 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
       }),
 
     appendToolAttempt: async (input) =>
-      withContext(pool, input.context, async (client) => {
+      withAiContext(pool, input.context, async (client) => {
         await client.query(
           `SELECT public.ai_tool_attempt_append(
             $1::uuid, $2::uuid, $3::uuid, $4, $5::char(64), $6::char(64), $7, $8
@@ -313,32 +287,8 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
         );
       }),
 
-    finishTurn: async (input) =>
-      withContext(pool, input.context, async (client) => {
-        const finish = input.finish;
-        const result = await client.query<Readonly<{ changed: boolean }>>(
-          `SELECT public.ai_turn_finish(
-            $1::uuid, $2::uuid, $3, $4, $5, $6, $7::uuid, $8, $9::char(64), $10::uuid, $11::uuid
-          ) AS changed`,
-          [
-            input.turnId,
-            input.context.authSessionId,
-            finish.status,
-            finish.errorCode,
-            finish.usage.inputTokens,
-            finish.usage.outputTokens,
-            finish.assistantMessageId,
-            finish.assistantText.length === 0 ? null : finish.assistantText,
-            finish.assistantSha256,
-            finish.usage.id,
-            finish.auditId,
-          ],
-        );
-        return result.rows[0]?.changed === true;
-      }),
-
     listEvents: async (sessionId, after, limit, context) =>
-      withContext(
+      withAiContext(
         pool,
         context,
         async (client) => {
@@ -354,7 +304,7 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
       ),
 
     listMessages: async (sessionId, context) =>
-      withContext(
+      withAiContext(
         pool,
         context,
         async (client) => {
@@ -370,5 +320,7 @@ export function createPgAiConversationStore(pool: PgPool): AiConversationStore {
         },
         true,
       ),
+
+    ...createPgAiSafetyMethods(pool),
   });
 }

@@ -1,4 +1,9 @@
-import { AiStreamEventSchema, type AiStreamEvent } from "@laundry/contracts";
+import {
+  AiSafetyStatusResponseSchema,
+  AiStreamEventSchema,
+  type AiSafetyStatusView,
+  type AiStreamEvent,
+} from "@laundry/contracts";
 
 const CSRF_HEADER_NAME = "x-csrf-token";
 
@@ -11,6 +16,7 @@ export type AiPanelResult<T> =
   Readonly<{ ok: true; data: T }> | Readonly<{ ok: false; error: AiPanelFailure }>;
 
 export type AiPanelPort = Readonly<{
+  getSafetyStatus(): Promise<AiPanelResult<AiSafetyStatusView>>;
   createSession(): Promise<AiPanelResult<Readonly<{ sessionId: string }>>>;
   createTurn(
     sessionId: string,
@@ -154,6 +160,24 @@ async function readSse(
 export function createHttpAiPanelPort(options: HttpAiPanelPortOptions): AiPanelPort {
   const base = options.apiBaseUrl.replace(/\/$/u, "");
   return Object.freeze({
+    async getSafetyStatus() {
+      const requestHeaders = headers(options);
+      if (requestHeaders === null) return failure("AUTH", "当前登录已失效");
+      try {
+        const response = await options.fetchImpl(`${base}/api/v2/ai/safety`, {
+          method: "GET",
+          credentials: "include",
+          headers: requestHeaders,
+        });
+        if (!response.ok) return failureFromStatus(response.status);
+        const parsed = AiSafetyStatusResponseSchema.safeParse(await response.json());
+        return parsed.success
+          ? Object.freeze({ ok: true as const, data: parsed.data.data })
+          : failure("INVALID_RESPONSE", "AI 安全状态响应格式错误");
+      } catch {
+        return failure("NETWORK", "无法读取 AI 安全状态");
+      }
+    },
     async createSession() {
       const requestHeaders = headers(options, true);
       if (requestHeaders === null) return failure("AUTH", "当前登录已失效");
@@ -223,6 +247,7 @@ export function createHttpAiPanelPort(options: HttpAiPanelPortOptions): AiPanelP
 export function createUnavailableAiPanelPort(): AiPanelPort {
   const unavailable = async () => failure("UNAVAILABLE", "AI 未配置或不可用");
   return Object.freeze({
+    getSafetyStatus: unavailable,
     createSession: unavailable,
     createTurn: unavailable,
     stream: unavailable,

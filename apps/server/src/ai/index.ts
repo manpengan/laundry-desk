@@ -17,6 +17,15 @@ export { createPgAiConversationStore } from "./streaming-pg-store.js";
 export { AI_STREAM_LIMITS, AiServiceError, createAiStreamingService } from "./streaming-service.js";
 export type { AiStreamingService } from "./streaming-service.js";
 export { AiStoreError } from "./streaming-store.js";
+export {
+  detectsPromptInjection,
+  estimateCostMicros,
+  isForbiddenAiAddress,
+  redactAiText,
+  sanitizeAiToolPayload,
+  validateAiEgressUrl,
+} from "./safety-guard.js";
+export type { AiEgressTarget, AiSafeToolPayload, AiTextRedaction } from "./safety-guard.js";
 export type {
   AiConversationStore,
   AiEventDraft,

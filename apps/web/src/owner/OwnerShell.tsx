@@ -4,6 +4,8 @@ import { useState } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
+import type { AiPanelPort } from "../host/ai-port.js";
+import { OwnerAiSafetyCard } from "./OwnerAiSafetyCard.js";
 import { OwnerDashboardPage } from "./OwnerDashboardPage.js";
 import { OwnerDrilldownPanel } from "./OwnerDrilldownPanel.js";
 import { OwnerReportsPage } from "./OwnerReportsPage.js";
@@ -20,6 +22,7 @@ export type OwnerShellProps = Readonly<{
   onSessionChange: (session: SessionView | null) => void;
   onSelectStore: (selection: OwnerStoreSelection) => Promise<void>;
   onLogout: () => Promise<void>;
+  aiPort?: AiPanelPort;
 }>;
 
 type OwnerSection = "today" | "reports" | "stores" | "marketing";
@@ -38,6 +41,7 @@ export function OwnerShell({
   onSessionChange,
   onSelectStore,
   onLogout,
+  aiPort,
 }: OwnerShellProps) {
   const allowed = session.role === "admin";
   const marketingEnabled = allowed && session.features.marketing_enabled === true;
@@ -104,6 +108,9 @@ export function OwnerShell({
                 onClose={() => setDrilldownKind(null)}
               />
               <OwnerPortfolioPanel queryClient={queryClient} />
+              {aiPort === undefined ? null : (
+                <OwnerAiSafetyCard key={session.session.session_id} aiPort={aiPort} />
+              )}
             </>
           ) : section === "reports" ? (
             <OwnerReportsPage queryClient={queryClient} commandClient={commandClient} />

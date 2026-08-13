@@ -108,11 +108,15 @@ test("fake provider persists typed deltas, exact read-only tool, usage, and meta
   assert.equal(store.toolAttemptSnapshot()[0]?.outcome, "succeeded");
   assert.deepEqual(store.usageSnapshot()[0], {
     id: store.usageSnapshot()[0]?.id,
+    createdAt: store.usageSnapshot()[0]?.createdAt,
     inputTokens: 5,
     outputTokens: 3,
     outputBytes: Buffer.byteLength("结果正常", "utf8"),
     eventCount: 4,
     toolSteps: 1,
+    estimatedCostMicros: 17,
+    inputRedactions: 0,
+    outputRedactions: 0,
   });
   const audit = JSON.stringify(store.auditSnapshot());
   assert.match(audit, /prompt_sha256/iu);

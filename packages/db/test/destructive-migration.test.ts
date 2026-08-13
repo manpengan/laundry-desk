@@ -154,6 +154,9 @@ describe("destructive migration static reject", () => {
       "0061_customer_self_service.sql",
       "0062_customer_wallet_and_preferences.sql",
       "0063_referral_and_group_buy.sql",
+      "0064_byok_model_registry.sql",
+      "0065_ai_streaming_sessions.sql",
+      "0066_ai_safety_metering.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

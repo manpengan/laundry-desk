@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import type {
-  AiSessionView,
-  AiStreamEvent,
-  AiTurnCreateRequest,
-  AiTurnView,
+import {
+  AiTurnCreateRequestSchema,
+  type AiSafetyStatusView,
+  type AiSessionView,
+  type AiStreamEvent,
+  type AiTurnCreateRequest,
+  type AiTurnView,
 } from "@laundry/contracts";
 
 import { type AiProviderPort, type SyntheticToolPort } from "./streaming-provider.js";
@@ -14,10 +16,16 @@ import {
   type AiConversationStore,
   type AiRequestContext,
 } from "./streaming-store.js";
+import { detectsPromptInjection, redactAiText } from "./safety-guard.js";
 
 export { AI_STREAM_LIMITS } from "./streaming-runner.js";
 
-type AiServiceErrorCode = "AI_UNAVAILABLE" | "NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "ACTIVE_TURN";
+type AiServiceErrorCode =
+  | "AI_UNAVAILABLE"
+  | "NOT_FOUND"
+  | "IDEMPOTENCY_CONFLICT"
+  | "ACTIVE_TURN"
+  | "PROMPT_INJECTION_DETECTED";
 
 export class AiServiceError extends Error {
   constructor(readonly code: AiServiceErrorCode) {
@@ -41,6 +49,7 @@ export type AiStreamingService = Readonly<{
     limit: number,
     context: AiRequestContext,
   ): Promise<readonly AiStreamEvent[]>;
+  getSafetyStatus(context: AiRequestContext): Promise<AiSafetyStatusView>;
   runQueuedTurn(
     sessionId: string,
     context: AiRequestContext,
@@ -85,15 +94,34 @@ export function createAiStreamingService(
     async createTurn(sessionId, input, context) {
       requireEnabled();
       try {
+        const boundedInput = AiTurnCreateRequestSchema.parse(input);
+        const redacted = redactAiText(boundedInput.prompt);
+        const safeInput = AiTurnCreateRequestSchema.parse({
+          ...boundedInput,
+          prompt: redacted.text,
+        });
+        if (detectsPromptInjection(redacted.text)) {
+          await options.store.recordSafetyRejection({
+            id: randomUUID(),
+            auditId: randomUUID(),
+            sessionId,
+            code: "AI_PROMPT_INJECTION",
+            contentSha256: sha256Text(redacted.text),
+            context,
+            now: new Date(),
+          });
+          throw new AiServiceError("PROMPT_INJECTION_DETECTED");
+        }
         const created = await options.store.createTurn({
           id: randomUUID(),
           messageId: randomUUID(),
           auditId: randomUUID(),
           sessionId,
-          idempotencyKey: input.idempotency_key,
-          prompt: input.prompt,
-          promptSha256: sha256Text(input.prompt),
-          maxOutputTokens: input.max_output_tokens,
+          idempotencyKey: safeInput.idempotency_key,
+          prompt: redacted.text,
+          promptSha256: sha256Text(redacted.text),
+          maxOutputTokens: safeInput.max_output_tokens,
+          inputRedactions: redacted.redactionCount,
           context,
           now: new Date(),
         });
@@ -121,14 +149,27 @@ export function createAiStreamingService(
         return mapStoreError(error);
       }
     },
+    async getSafetyStatus(context) {
+      const status = await options.store.getSafetyStatus(context, new Date());
+      return Object.freeze({
+        runtime_enabled: options.provider !== null && status.monthly_limit_micros > 0,
+        ...status,
+      });
+    },
     async runQueuedTurn(sessionId, context, parentSignal, onEvent) {
       const provider = requireEnabled();
       const turn = await options.store.getQueuedTurn(sessionId, context);
       if (turn === null) return;
-      if (!(await options.store.startTurn(turn.id, context, new Date()))) return;
       const messages = (await options.store.listMessages(sessionId, context)).map((message) =>
         Object.freeze({ role: message.role, content: message.content }),
       );
+      const start = await options.store.authorizeAndStartTurn({
+        turnId: turn.id,
+        estimatedInputTokens: 20_000,
+        context,
+        now: new Date(),
+      });
+      if (!start.started) return;
       await runAiTurn({
         store: options.store,
         provider,
@@ -138,6 +179,12 @@ export function createAiStreamingService(
         context,
         parentSignal,
         onEvent,
+        safety: Object.freeze({
+          denialCode: start.denialCode,
+          inputRedactions: turn.inputRedactions,
+          inputMicrosPerMillion: start.inputMicrosPerMillion,
+          outputMicrosPerMillion: start.outputMicrosPerMillion,
+        }),
       });
     },
   });

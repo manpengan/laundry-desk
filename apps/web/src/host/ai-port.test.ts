@@ -98,3 +98,51 @@ test("browser AI port treats an explicit AbortSignal as a clean stop", async () 
     { ok: true, data: { cursor: 7 } },
   );
 });
+
+test("browser AI port validates the owner-only integer safety status", async () => {
+  const requests: Request[] = [];
+  const port = createHttpAiPanelPort({
+    apiBaseUrl: "http://127.0.0.1:8787",
+    fetchImpl: async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json({
+        ok: true,
+        data: {
+          runtime_enabled: false,
+          pii_masking: true,
+          egress_policy: "https_443_allowlist",
+          month: "2026-08",
+          input_tokens: 10,
+          output_tokens: 5,
+          estimated_cost_micros: 30,
+          monthly_limit_micros: 100,
+          remaining_micros: 70,
+          circuit_state: "closed",
+          circuit_open_until: null,
+        },
+      });
+    },
+    getAccessToken: () => "owner-token",
+    readCsrf: () => null,
+  });
+
+  assert.deepEqual(await port.getSafetyStatus(), {
+    ok: true,
+    data: {
+      runtime_enabled: false,
+      pii_masking: true,
+      egress_policy: "https_443_allowlist",
+      month: "2026-08",
+      input_tokens: 10,
+      output_tokens: 5,
+      estimated_cost_micros: 30,
+      monthly_limit_micros: 100,
+      remaining_micros: 70,
+      circuit_state: "closed",
+      circuit_open_until: null,
+    },
+  });
+  assert.equal(requests[0]?.method, "GET");
+  assert.equal(requests[0]?.headers.get("authorization"), "Bearer owner-token");
+  assert.equal(requests[0]?.headers.get("x-csrf-token"), null);
+});

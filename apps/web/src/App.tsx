@@ -29,7 +29,7 @@ export type AppProps = {
 
 export function ownerShellPropsFrom(
   session: SessionView,
-  ports: Pick<AppPorts, "auth" | "command" | "query">,
+  ports: Pick<AppPorts, "auth" | "command" | "query" | "ai">,
   onSessionChange: (session: SessionView | null) => void,
   onSelectStore?: OwnerShellProps["onSelectStore"],
 ): OwnerShellProps {
@@ -50,6 +50,7 @@ export function ownerShellPropsFrom(
     onSessionChange,
     onSelectStore: onSelectStore ?? (async () => logout()),
     onLogout: logout,
+    ...(ports.ai === undefined ? {} : { aiPort: ports.ai }),
   });
 }
 

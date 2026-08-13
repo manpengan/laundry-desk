@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import type { AiStreamEvent } from "@laundry/contracts";
 
@@ -15,6 +15,11 @@ import type {
   AiRequestContext,
   AiTurnRecord,
 } from "./streaming-store.js";
+import { detectsPromptInjection, redactAiText, sanitizeAiToolPayload } from "./safety-guard.js";
+import { AiStreamingRedactor } from "./streaming-redactor.js";
+import { finishAiTurn, sha256Text, type AiRuntimeState } from "./streaming-finish.js";
+
+export { sha256Text } from "./streaming-finish.js";
 
 export const AI_STREAM_LIMITS = Object.freeze({
   maxToolSteps: 4,
@@ -27,20 +32,7 @@ export const AI_STREAM_LIMITS = Object.freeze({
   maxEvents: 256,
 });
 
-type RuntimeState = {
-  assistantText: string;
-  outputBytes: number;
-  eventCount: number;
-  inputTokens: number;
-  outputTokens: number;
-  toolSteps: number;
-  finishReason: "stop" | "limit";
-};
-
 type SafeErrorCode = Extract<AiStreamEvent, { type: "error" }>["code"];
-
-export const sha256Text = (value: string): string =>
-  createHash("sha256").update(value).digest("hex");
 
 function linkedAbort(parent: AbortSignal): Readonly<{
   signal: AbortSignal;
@@ -81,11 +73,34 @@ async function persistEvent(
   return persisted;
 }
 
-function accountForEvent(state: RuntimeState, event: AiStreamEvent): void {
+function accountForEvent(state: AiRuntimeState, event: AiStreamEvent): void {
   state.eventCount += 1;
   if (event.type !== "content_delta") return;
   state.outputBytes += Buffer.byteLength(event.text, "utf8");
   state.assistantText += event.text;
+}
+
+async function persistContent(
+  state: AiRuntimeState,
+  store: AiConversationStore,
+  turn: AiTurnRecord,
+  context: AiRequestContext,
+  text: string | null,
+  onEvent: (event: AiStreamEvent) => Promise<void>,
+): Promise<void> {
+  if (text === null || text.length === 0) return;
+  const nextBytes = state.outputBytes + Buffer.byteLength(text, "utf8");
+  if (
+    nextBytes > AI_STREAM_LIMITS.maxOutputBytes ||
+    state.assistantText.length + text.length > AI_STREAM_LIMITS.maxOutputChars ||
+    state.eventCount + 1 >= AI_STREAM_LIMITS.maxEvents
+  ) {
+    throw new Error("AI_OUTPUT_LIMIT");
+  }
+  accountForEvent(
+    state,
+    await persistEvent(store, turn.id, context, { type: "content_delta", text }, onEvent),
+  );
 }
 
 async function executeTool(
@@ -104,20 +119,26 @@ async function executeTool(
 > {
   const parsed = SyntheticLookupArgsSchema.safeParse(args);
   const startedAt = Date.now();
-  const requestHash = sha256Text(JSON.stringify(parsed.success ? parsed.data : { invalid: true }));
+  const safeQuery = parsed.success ? redactAiText(parsed.data.query).text : null;
+  const requestHash = sha256Text(
+    JSON.stringify(safeQuery === null ? { invalid: true } : { query: safeQuery }),
+  );
   const timeoutSignal = AbortSignal.timeout(AI_STREAM_LIMITS.toolTimeoutMs);
   const signal = AbortSignal.any([parentSignal, timeoutSignal]);
   let result: unknown = Object.freeze({ error: "invalid_tool_input" });
   let outcome: "succeeded" | "failed" | "timed_out" | "cancelled" = "failed";
   try {
-    if (!parsed.success) throw new Error("invalid tool input");
-    result = await tool.lookup(parsed.data, signal);
+    if (safeQuery === null || detectsPromptInjection(safeQuery))
+      throw new Error("unsafe tool input");
+    result = await tool.lookup(Object.freeze({ query: safeQuery }), signal);
     outcome = "succeeded";
   } catch {
     outcome = parentSignal.aborted ? "cancelled" : timeoutSignal.aborted ? "timed_out" : "failed";
     result = Object.freeze({ error: outcome });
   }
-  const serialized = JSON.stringify(result);
+  const safeResult = sanitizeAiToolPayload(result);
+  const serialized = safeResult.content;
+  if (safeResult.blocked) outcome = "failed";
   await store.appendToolAttempt({
     attempt: Object.freeze({
       id: randomUUID(),
@@ -137,37 +158,6 @@ async function executeTool(
   });
 }
 
-async function finishTurn(
-  store: AiConversationStore,
-  turn: AiTurnRecord,
-  context: AiRequestContext,
-  state: RuntimeState,
-  status: "completed" | "failed" | "cancelled",
-  errorCode: SafeErrorCode | null,
-): Promise<void> {
-  await store.finishTurn({
-    turnId: turn.id,
-    context,
-    finish: Object.freeze({
-      status,
-      errorCode,
-      assistantMessageId: randomUUID(),
-      assistantText: state.assistantText,
-      assistantSha256: sha256Text(state.assistantText),
-      usage: Object.freeze({
-        id: randomUUID(),
-        inputTokens: state.inputTokens,
-        outputTokens: state.outputTokens,
-        outputBytes: state.outputBytes,
-        eventCount: state.eventCount,
-        toolSteps: state.toolSteps,
-      }),
-      auditId: randomUUID(),
-      completedAt: new Date(),
-    }),
-  });
-}
-
 function safeErrorCode(error: unknown, signal: AbortSignal): SafeErrorCode {
   const rawCode = error instanceof Error ? error.message : "AI_PROVIDER_FAILED";
   if (signal.aborted && rawCode !== "AI_TOOL_TIMEOUT") {
@@ -181,6 +171,9 @@ function safeErrorCode(error: unknown, signal: AbortSignal): SafeErrorCode {
   ) {
     return rawCode;
   }
+  if (rawCode === "AI_BUDGET_EXCEEDED" || rawCode === "AI_CIRCUIT_OPEN") {
+    return "AI_UNAVAILABLE";
+  }
   return "AI_PROVIDER_FAILED";
 }
 
@@ -193,8 +186,14 @@ async function runLoop(
   context: AiRequestContext,
   signal: AbortSignal,
   onEvent: (event: AiStreamEvent) => Promise<void>,
+  safety: Readonly<{
+    denialCode: "AI_BUDGET_EXCEEDED" | "AI_CIRCUIT_OPEN" | null;
+    inputRedactions: number;
+    inputMicrosPerMillion: number;
+    outputMicrosPerMillion: number;
+  }>,
 ): Promise<void> {
-  const state: RuntimeState = {
+  const state: AiRuntimeState = {
     assistantText: "",
     outputBytes: 0,
     eventCount: 0,
@@ -202,36 +201,41 @@ async function runLoop(
     outputTokens: 0,
     toolSteps: 0,
     finishReason: "stop",
+    inputRedactions: safety.inputRedactions,
+    outputRedactions: 0,
+    inputMicrosPerMillion: safety.inputMicrosPerMillion,
+    outputMicrosPerMillion: safety.outputMicrosPerMillion,
   };
   let activeMessages = [...messages];
+  let providerEventCount = 0;
   try {
+    if (safety.denialCode !== null) throw new Error(safety.denialCode);
     while (!signal.aborted) {
       let continueWithTool = false;
+      const outputRedactor = new AiStreamingRedactor();
       for await (const providerEvent of provider.stream({
         messages: Object.freeze(activeMessages),
         tools: Object.freeze([SYNTHETIC_TOOL_DESCRIPTOR]),
         maxOutputTokens: turn.maxOutputTokens,
         signal,
       })) {
+        providerEventCount += 1;
+        if (providerEventCount >= AI_STREAM_LIMITS.maxEvents) {
+          throw new Error("AI_OUTPUT_LIMIT");
+        }
         if (providerEvent.type === "delta") {
-          const nextBytes = state.outputBytes + Buffer.byteLength(providerEvent.text, "utf8");
-          const nextChars = state.assistantText.length + providerEvent.text.length;
-          if (nextBytes > AI_STREAM_LIMITS.maxOutputBytes) throw new Error("AI_OUTPUT_LIMIT");
-          if (nextChars > AI_STREAM_LIMITS.maxOutputChars) throw new Error("AI_OUTPUT_LIMIT");
-          if (state.eventCount + 1 >= AI_STREAM_LIMITS.maxEvents)
-            throw new Error("AI_OUTPUT_LIMIT");
-          accountForEvent(
+          await persistContent(
             state,
-            await persistEvent(
-              store,
-              turn.id,
-              context,
-              { type: "content_delta", text: providerEvent.text },
-              onEvent,
-            ),
+            store,
+            turn,
+            context,
+            outputRedactor.push(providerEvent.text),
+            onEvent,
           );
           continue;
         }
+        await persistContent(state, store, turn, context, outputRedactor.flush(), onEvent);
+        state.outputRedactions += outputRedactor.drainRedactionCount();
         if (providerEvent.type === "error") throw new Error("AI_PROVIDER_FAILED");
         if (providerEvent.type === "end") {
           const nextInputTokens = state.inputTokens + providerEvent.inputTokens;
@@ -299,6 +303,8 @@ async function runLoop(
         ];
         continueWithTool = true;
       }
+      await persistContent(state, store, turn, context, outputRedactor.flush(), onEvent);
+      state.outputRedactions += outputRedactor.drainRedactionCount();
       if (continueWithTool) continue;
       accountForEvent(
         state,
@@ -315,7 +321,7 @@ async function runLoop(
           onEvent,
         ),
       );
-      await finishTurn(store, turn, context, state, "completed", null);
+      await finishAiTurn(store, turn, context, state, "completed", null);
       return;
     }
     throw new Error("AI_ABORTED");
@@ -329,7 +335,7 @@ async function runLoop(
     } catch {
       // The event is durable even if the disconnected client rejects delivery.
     }
-    await finishTurn(
+    await finishAiTurn(
       store,
       turn,
       context,
@@ -350,6 +356,12 @@ export async function runAiTurn(
     context: AiRequestContext;
     parentSignal: AbortSignal;
     onEvent: (event: AiStreamEvent) => Promise<void>;
+    safety: Readonly<{
+      denialCode: "AI_BUDGET_EXCEEDED" | "AI_CIRCUIT_OPEN" | null;
+      inputRedactions: number;
+      inputMicrosPerMillion: number;
+      outputMicrosPerMillion: number;
+    }>;
   }>,
 ): Promise<void> {
   const linked = linkedAbort(input.parentSignal);
@@ -363,6 +375,7 @@ export async function runAiTurn(
       input.context,
       linked.signal,
       input.onEvent,
+      input.safety,
     );
   } finally {
     linked.dispose();

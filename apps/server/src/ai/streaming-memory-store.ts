@@ -1,88 +1,25 @@
-import { AiStreamEventSchema, type AiSessionView, type AiStreamEvent } from "@laundry/contracts";
+import { AiStreamEventSchema, type AiStreamEvent } from "@laundry/contracts";
 
 import {
   AiStoreError,
   type AiConversationStore,
   type AiRequestContext,
   type AiToolAttemptRecord,
-  type AiTurnRecord,
   type AiTurnUsage,
 } from "./streaming-store.js";
+import { MemoryAiSafetyState, type MemoryAiSafetyPolicy } from "./safety-memory-state.js";
+import {
+  eventBytes,
+  publicTurn,
+  sameContext,
+  sessionView,
+  type MemoryMessage,
+  type MemorySession,
+  type MemoryTurn,
+  type SafeAudit,
+} from "./streaming-memory-types.js";
 
-type MemorySession = Readonly<{
-  id: string;
-  orgId: string;
-  storeId: string;
-  staffId: string;
-  authSessionId: string;
-  status: AiSessionView["status"];
-  nextCursor: number;
-  createdAt: Date;
-  updatedAt: Date;
-}>;
-
-type MemoryTurn = AiTurnRecord &
-  Readonly<{
-    orgId: string;
-    storeId: string;
-    staffId: string;
-    authSessionId: string;
-    outputBytes: number;
-    eventCount: number;
-    toolSteps: number;
-  }>;
-
-type MemoryMessage = Readonly<{
-  id: string;
-  sessionId: string;
-  turnId: string;
-  role: "user" | "assistant";
-  content: string;
-  sha256: string;
-  sequence: number;
-  createdAt: Date;
-}>;
-
-type SafeAudit = Readonly<{
-  command: "ai.session.create" | "ai.turn.create" | "ai.turn.finish";
-  entityId: string;
-  metadata: Readonly<Record<string, number | string>>;
-}>;
-
-function sameContext(session: MemorySession, context: AiRequestContext): boolean {
-  return (
-    session.orgId === context.tenant.orgId &&
-    session.storeId === context.tenant.storeId &&
-    session.staffId === context.tenant.staffId &&
-    session.authSessionId === context.authSessionId
-  );
-}
-
-function sessionView(session: MemorySession): AiSessionView {
-  return Object.freeze({
-    session_id: session.id,
-    status: session.status,
-    created_at: session.createdAt.toISOString(),
-    updated_at: session.updatedAt.toISOString(),
-  });
-}
-
-function publicTurn(turn: MemoryTurn): AiTurnRecord {
-  return Object.freeze({
-    id: turn.id,
-    sessionId: turn.sessionId,
-    idempotencyKey: turn.idempotencyKey,
-    prompt: turn.prompt,
-    promptSha256: turn.promptSha256,
-    maxOutputTokens: turn.maxOutputTokens,
-    status: turn.status,
-    createdAt: new Date(turn.createdAt),
-  });
-}
-
-function eventBytes(event: Parameters<AiConversationStore["appendEvent"]>[0]["event"]): number {
-  return event.type === "content_delta" ? Buffer.byteLength(event.text, "utf8") : 0;
-}
+export type { MemoryAiSafetyPolicy } from "./safety-memory-state.js";
 
 export class MemoryAiConversationStore implements AiConversationStore {
   private sessions = new Map<string, MemorySession>();
@@ -91,7 +28,28 @@ export class MemoryAiConversationStore implements AiConversationStore {
   private events: readonly AiStreamEvent[] = Object.freeze([]);
   private attempts: readonly AiToolAttemptRecord[] = Object.freeze([]);
   private usage: readonly AiTurnUsage[] = Object.freeze([]);
+  private usageOrgById = new Map<string, string>();
   private audits: readonly SafeAudit[] = Object.freeze([]);
+  private safetyByOrg = new Map<string, MemoryAiSafetyState>();
+
+  constructor(private readonly safetyPolicy?: MemoryAiSafetyPolicy) {}
+
+  private safetyFor(orgId: string): MemoryAiSafetyState {
+    const existing = this.safetyByOrg.get(orgId);
+    if (existing !== undefined) return existing;
+    const created = new MemoryAiSafetyState(this.safetyPolicy);
+    this.safetyByOrg = new Map(this.safetyByOrg).set(orgId, created);
+    return created;
+  }
+
+  private usageForOrg(orgId: string, now: Date): readonly AiTurnUsage[] {
+    const month = now.toISOString().slice(0, 7);
+    return this.usage.filter(
+      (entry) =>
+        this.usageOrgById.get(entry.id) === orgId &&
+        entry.createdAt.toISOString().startsWith(month),
+    );
+  }
 
   async createSession(input: Parameters<AiConversationStore["createSession"]>[0]) {
     const session: MemorySession = Object.freeze({
@@ -150,6 +108,7 @@ export class MemoryAiConversationStore implements AiConversationStore {
       prompt: input.prompt,
       promptSha256: input.promptSha256,
       maxOutputTokens: input.maxOutputTokens,
+      inputRedactions: input.inputRedactions,
       status: "queued" as const,
       createdAt: new Date(input.now),
       orgId: session.orgId,
@@ -207,16 +166,38 @@ export class MemoryAiConversationStore implements AiConversationStore {
     return turn === undefined ? null : publicTurn(turn);
   }
 
-  async startTurn(turnId: string, context: AiRequestContext, now: Date): Promise<boolean> {
-    const turn = this.turns.get(turnId);
+  async authorizeAndStartTurn(input: Parameters<AiConversationStore["authorizeAndStartTurn"]>[0]) {
+    const turn = this.turns.get(input.turnId);
     const session = turn === undefined ? undefined : this.sessions.get(turn.sessionId);
     if (
       turn === undefined ||
       session === undefined ||
-      !sameContext(session, context) ||
+      !sameContext(session, input.context) ||
       turn.status !== "queued"
     ) {
-      return false;
+      return Object.freeze({
+        started: false,
+        denialCode: null,
+        inputMicrosPerMillion: 0,
+        outputMicrosPerMillion: 0,
+      });
+    }
+    const safety = this.safetyFor(session.orgId).authorize({
+      turnId: turn.id,
+      estimatedInputTokens: input.estimatedInputTokens,
+      maxOutputTokens: turn.maxOutputTokens,
+      usage: this.usageForOrg(session.orgId, input.now),
+      now: input.now,
+    });
+    if (safety.denialCode !== null) {
+      this.audits = Object.freeze([
+        ...this.audits,
+        Object.freeze({
+          command: "ai.safety.reject" as const,
+          entityId: turn.id,
+          metadata: Object.freeze({ code: safety.denialCode }),
+        }),
+      ]);
     }
     this.turns = new Map(this.turns).set(
       turn.id,
@@ -224,9 +205,9 @@ export class MemoryAiConversationStore implements AiConversationStore {
     );
     this.sessions = new Map(this.sessions).set(
       session.id,
-      Object.freeze({ ...session, status: "running" as const, updatedAt: new Date(now) }),
+      Object.freeze({ ...session, status: "running" as const, updatedAt: new Date(input.now) }),
     );
-    return true;
+    return safety;
   }
 
   async appendEvent(input: Parameters<AiConversationStore["appendEvent"]>[0]) {
@@ -317,6 +298,13 @@ export class MemoryAiConversationStore implements AiConversationStore {
       ]);
     }
     this.usage = Object.freeze([...this.usage, Object.freeze({ ...input.finish.usage })]);
+    this.usageOrgById = new Map(this.usageOrgById).set(input.finish.usage.id, session.orgId);
+    this.safetyFor(session.orgId).finish(
+      turn.id,
+      input.finish.status,
+      input.finish.errorCode,
+      input.finish.completedAt,
+    );
     this.audits = Object.freeze([
       ...this.audits,
       Object.freeze({
@@ -329,6 +317,9 @@ export class MemoryAiConversationStore implements AiConversationStore {
           output_bytes: input.finish.usage.outputBytes,
           event_count: input.finish.usage.eventCount,
           tool_steps: input.finish.usage.toolSteps,
+          estimated_cost_micros: input.finish.usage.estimatedCostMicros,
+          input_redactions: input.finish.usage.inputRedactions,
+          output_redactions: input.finish.usage.outputRedactions,
         }),
       }),
     ]);
@@ -357,6 +348,30 @@ export class MemoryAiConversationStore implements AiConversationStore {
         .filter((message) => message.sessionId === sessionId)
         .sort((left, right) => left.sequence - right.sequence)
         .map((message) => Object.freeze({ role: message.role, content: message.content })),
+    );
+  }
+
+  async recordSafetyRejection(
+    input: Parameters<AiConversationStore["recordSafetyRejection"]>[0],
+  ): Promise<void> {
+    const session = this.sessions.get(input.sessionId);
+    if (session === undefined || !sameContext(session, input.context)) {
+      throw new AiStoreError("NOT_FOUND");
+    }
+    this.audits = Object.freeze([
+      ...this.audits,
+      Object.freeze({
+        command: "ai.safety.reject" as const,
+        entityId: input.id,
+        metadata: Object.freeze({ code: input.code, content_sha256: input.contentSha256 }),
+      }),
+    ]);
+  }
+
+  async getSafetyStatus(context: AiRequestContext, now: Date) {
+    return this.safetyFor(context.tenant.orgId).status(
+      this.usageForOrg(context.tenant.orgId, now),
+      now,
     );
   }
 

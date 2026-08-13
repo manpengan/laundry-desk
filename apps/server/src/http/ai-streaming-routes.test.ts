@@ -40,7 +40,11 @@ function cookieValues(headers: Record<string, unknown>): Record<string, string> 
   );
 }
 
-async function login(app: FastifyInstance, runtime: LocalRuntime): Promise<BrowserSession> {
+async function login(
+  app: FastifyInstance,
+  runtime: LocalRuntime,
+  username = "staff",
+): Promise<BrowserSession> {
   const response = await app.inject({
     method: "POST",
     url: "/api/v2/auth/login",
@@ -48,7 +52,7 @@ async function login(app: FastifyInstance, runtime: LocalRuntime): Promise<Brows
     payload: {
       org_code: "local",
       store_code: "main",
-      username: "staff",
+      username,
       password: DEMO_PASSWORD,
       device_id: DEVICE_ID,
     },
@@ -173,6 +177,39 @@ test("default runtime is hard-off and CSRF remains mandatory", async () => {
     (unavailable.json() as { error: { code: string } }).error.code,
     "RESOURCE_UNAVAILABLE",
   );
+  await app.close();
+});
+
+test("owner-only safety status stays readable while the default runtime is hard-off", async () => {
+  const { app, runtime } = await buildApp(false);
+  const staff = await login(app, runtime);
+  const forbidden = await app.inject({
+    method: "GET",
+    url: "/api/v2/ai/safety",
+    headers: { ...HOST, authorization: `Bearer ${staff.token}` },
+  });
+  assert.equal(forbidden.statusCode, 403, forbidden.body);
+
+  const owner = await login(app, runtime, "admin");
+  const status = await app.inject({
+    method: "GET",
+    url: "/api/v2/ai/safety",
+    headers: { ...HOST, authorization: `Bearer ${owner.token}` },
+  });
+  assert.equal(status.statusCode, 200, status.body);
+  assert.deepEqual((status.json() as { data: object }).data, {
+    runtime_enabled: false,
+    pii_masking: true,
+    egress_policy: "https_443_allowlist",
+    month: new Date().toISOString().slice(0, 7),
+    input_tokens: 0,
+    output_tokens: 0,
+    estimated_cost_micros: 0,
+    monthly_limit_micros: 10_000_000,
+    remaining_micros: 10_000_000,
+    circuit_state: "closed",
+    circuit_open_until: null,
+  });
   await app.close();
 });
 

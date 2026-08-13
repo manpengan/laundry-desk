@@ -88,6 +88,13 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
   不占位也不创建预约。保存策略不会打开 `store_features.delivery`，功能关闭或 feature 行缺失时
   所有报价都明确不可预约。当前为 online-only Cloud Web 内部员工切片，不包含顾客自助、地址管理、
   实际容量、预约/任务状态、路线、GPS 或第三方 provider。
+- AI 安全、成本计量与失败降级（[ADR-59](adr/2026-08-13-adr-59-ai-safety-metering.md)）：
+  0066 新增整数 token/估算成本日账、组织月预算 reservation 与持久熔断状态；输入和跨 chunk 输出默认
+  PII 脱敏，prompt injection 红队命中会在 provider 前拒绝并留下 metadata-only 证据。严格出口验证只
+  接受 HTTPS 443 allowlist 域名并拒绝 IP literal、私网/metadata DNS 结果及未重验 redirect。Owner
+  只读面显示本月 token/成本、限额和熔断状态；AI 仍默认 hard-off，本项不发外网、不读取真实 key、
+  不实现或声明任何真实 provider。
+
 - Provider-neutral 流式 AI 会话（[ADR-58](adr/2026-08-13-adr-58-bounded-ai-streaming-runtime.md)）：
   新增 staff/admin 专用 HTTP 会话、幂等 turn、持久事件 cursor、可取消 SSE 与纯文本 AI 面板；provider
   port 不接受 URL、header、credential 或 SDK 对象，默认 runtime 保持 hard-off 且不发网络。隔离测试只

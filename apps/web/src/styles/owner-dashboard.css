@@ -8,6 +8,34 @@
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
 
+.ld-owner-ai-safety {
+  margin-top: 16px;
+  padding: 18px;
+}
+
+.ld-owner-ai-safety dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 12px 0 0;
+}
+
+.ld-owner-ai-safety dl > div {
+  padding: 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+}
+
+.ld-owner-ai-safety dt {
+  color: var(--lg-ink2);
+  font-size: 12px;
+}
+
+.ld-owner-ai-safety dd {
+  margin: 4px 0 0;
+  font-weight: 700;
+}
+
 .ld-owner-shell * {
   box-sizing: border-box;
 }

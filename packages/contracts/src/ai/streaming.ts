@@ -121,10 +121,10 @@ export const AiEventReplayResponseSchema = z
   .strict();
 
 type AiStreamingOperationRow = Readonly<{
-  operation: "session_create" | "turn_create" | "events_replay" | "events_stream";
+  operation: "session_create" | "turn_create" | "events_replay" | "events_stream" | "safety_status";
   method: "GET" | "POST";
   path: string;
-  permission: "ai_use";
+  permission: "ai_use" | "settings_admin";
   csrf: boolean;
   provider_network: false;
 }>;
@@ -160,6 +160,14 @@ export const AI_STREAMING_OPERATION_MATRIX = Object.freeze([
     method: "GET" as const,
     path: "/api/v2/ai/sessions/{session_id}/stream" as const,
     permission: "ai_use" as const,
+    csrf: false,
+    provider_network: false,
+  }),
+  Object.freeze({
+    operation: "safety_status" as const,
+    method: "GET" as const,
+    path: "/api/v2/ai/safety" as const,
+    permission: "settings_admin" as const,
     csrf: false,
     provider_network: false,
   }),
