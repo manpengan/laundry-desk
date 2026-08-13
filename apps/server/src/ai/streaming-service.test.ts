@@ -282,6 +282,37 @@ test("tool loop stops before a fifth attempt", async () => {
   assert.equal(last?.type === "error" ? last.code : null, "AI_TOOL_LIMIT");
 });
 
+test("completed tool releases its timeout handle and parent abort listener", async (t) => {
+  const clearTimeoutMock = t.mock.method(globalThis, "clearTimeout");
+  const parent = new AbortController();
+  const removeListenerMock = t.mock.method(parent.signal, "removeEventListener");
+  const store = new MemoryAiConversationStore();
+  const service = createAiStreamingService({
+    store,
+    provider: createDeterministicFakeProvider([
+      {
+        events: [
+          {
+            type: "tool_call",
+            callId: "cleanup",
+            name: "synthetic.lookup",
+            args: { query: "safe" },
+          },
+          END_TOOLS,
+        ],
+      },
+      { events: [END_STOP] },
+    ]),
+    tool: deterministicSyntheticTool,
+  });
+  const { session } = await sessionAndTurn(store, service);
+  await service.runQueuedTurn(session.session_id, CONTEXT, parent.signal, async () => undefined);
+
+  assert.equal(clearTimeoutMock.mock.callCount(), 1);
+  assert.equal(removeListenerMock.mock.callCount(), 1);
+  assert.equal(removeListenerMock.mock.calls[0]?.arguments[0], "abort");
+});
+
 test("tool timeout cancels work and records no raw args", async () => {
   const store = new MemoryAiConversationStore();
   const slowTool: SyntheticToolPort = Object.freeze({

@@ -25,6 +25,31 @@ type PreparedInput = Readonly<{
   assistantCall: AiAssistantToolCall | null;
   requestHash: string;
 }>;
+type ToolAbortScope = Readonly<{
+  signal: AbortSignal;
+  didTimeout: () => boolean;
+  dispose: () => void;
+}>;
+
+function createToolAbortScope(parentSignal: AbortSignal, timeoutMs: number): ToolAbortScope {
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromParent = () => controller.abort(parentSignal.reason);
+  if (parentSignal.aborted) abortFromParent();
+  else parentSignal.addEventListener("abort", abortFromParent, { once: true });
+  const timeoutHandle = setTimeout(() => {
+    timedOut = true;
+    controller.abort("AI_TOOL_TIMEOUT");
+  }, timeoutMs);
+  return Object.freeze({
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    dispose: () => {
+      clearTimeout(timeoutHandle);
+      parentSignal.removeEventListener("abort", abortFromParent);
+    },
+  });
+}
 
 function prepareInput(name: AiStreamToolName, args: unknown): PreparedInput {
   const synthetic = name === "synthetic.lookup" ? SyntheticLookupArgsSchema.safeParse(args) : null;
@@ -91,8 +116,7 @@ export async function executeAiTool(
   const startedAt = Date.now();
   const timeoutMs =
     input.name === "synthetic.lookup" ? SYNTHETIC_TOOL_TIMEOUT_MS : AI_ASSISTANT_TOOL_TIMEOUT_MS;
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const signal = AbortSignal.any([input.parentSignal, timeoutSignal]);
+  const abortScope = createToolAbortScope(input.parentSignal, timeoutMs);
   let requestHash = sha256Text('{"invalid":true}');
   let result: unknown = Object.freeze({ error: "invalid_tool_input" });
   let outcome: ToolOutcome = "failed";
@@ -105,16 +129,18 @@ export async function executeAiTool(
       input.syntheticTool,
       input.assistantTool,
       input.context,
-      signal,
+      abortScope.signal,
     );
     outcome = "succeeded";
   } catch {
     outcome = input.parentSignal.aborted
       ? "cancelled"
-      : timeoutSignal.aborted
+      : abortScope.didTimeout()
         ? "timed_out"
         : "failed";
     result = Object.freeze({ error: outcome });
+  } finally {
+    abortScope.dispose();
   }
   const counts = resultCounts(result);
   const safeResult = sanitizeAiToolPayload(result);
