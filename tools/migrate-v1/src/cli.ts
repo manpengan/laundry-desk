@@ -47,39 +47,46 @@ const targetUrlSchema = z
     }
   });
 
-function readArgument(args: readonly string[], name: string): string | undefined {
-  const index = args.indexOf(name);
-  if (index < 0) return undefined;
-  const value = args[index + 1];
-  if (value === undefined || value.startsWith("--")) throw new Error(`${name} requires a value`);
-  return value;
+const FLAG_OPTIONS = new Set(["--dry-run", "--apply"]);
+const VALUE_OPTIONS = new Set(["--source", "--target", "--loader", "--confirm-source-sha256"]);
+
+function parseArguments(args: readonly string[]): ReadonlyMap<string, string | true> {
+  const parsed = new Map<string, string | true>();
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === undefined || parsed.has(argument)) throw new Error("invalid option grammar");
+    if (FLAG_OPTIONS.has(argument)) {
+      parsed.set(argument, true);
+      continue;
+    }
+    if (!VALUE_OPTIONS.has(argument)) throw new Error("invalid option grammar");
+    const value = args[index + 1];
+    if (value === undefined || value.startsWith("--")) throw new Error("invalid option grammar");
+    parsed.set(argument, value);
+    index += 1;
+  }
+  return parsed;
 }
 
+const optionValue = (parsed: ReadonlyMap<string, string | true>, name: string) => {
+  const value = parsed.get(name);
+  return typeof value === "string" ? value : undefined;
+};
+
 export function parseCliOptions(args: readonly string[]): CliOptions {
-  const allowed = new Set([
-    "--source",
-    "--dry-run",
-    "--apply",
-    "--target",
-    "--loader",
-    "--confirm-source-sha256",
-  ]);
-  for (const arg of args) {
-    if (arg.startsWith("--") && !allowed.has(arg)) throw new Error(`unknown option: ${arg}`);
-  }
-  const source = readArgument(args, "--source");
+  const parsed = parseArguments(args);
+  const source = optionValue(parsed, "--source");
   if (source === undefined) throw new Error("--source is required");
-  const apply = args.includes("--apply");
-  const dryRun = args.includes("--dry-run") || !apply;
-  if (apply && args.includes("--dry-run"))
-    throw new Error("--apply and --dry-run cannot be combined");
+  const apply = parsed.has("--apply");
+  const dryRun = parsed.has("--dry-run") || !apply;
+  if (apply && parsed.has("--dry-run")) throw new Error("--apply and --dry-run cannot be combined");
   const options: CliOptions = Object.freeze({
     source,
     apply,
     dryRun,
-    target: readArgument(args, "--target"),
-    loader: readArgument(args, "--loader"),
-    confirmSourceSha256: readArgument(args, "--confirm-source-sha256"),
+    target: optionValue(parsed, "--target"),
+    loader: optionValue(parsed, "--loader"),
+    confirmSourceSha256: optionValue(parsed, "--confirm-source-sha256"),
   });
   if (options.apply) {
     if (options.target === undefined)
@@ -90,6 +97,15 @@ export function parseCliOptions(args: readonly string[]): CliOptions {
     if (options.confirmSourceSha256 === undefined) {
       throw new Error("--apply requires --confirm-source-sha256 from a reviewed dry run");
     }
+    if (!/^[0-9a-f]{64}$/u.test(options.confirmSourceSha256)) {
+      throw new Error("--confirm-source-sha256 must be one lowercase SHA-256");
+    }
+  } else if (
+    options.target !== undefined ||
+    options.loader !== undefined ||
+    options.confirmSourceSha256 !== undefined
+  ) {
+    throw new Error("apply-only options require --apply");
   }
   return options;
 }
@@ -133,26 +149,32 @@ export async function runCli(
   args: readonly string[],
   dependencies: CliDependencies = defaultDependencies(),
 ): Promise<number> {
+  let failureCode = "V1_MIGRATION_OPTIONS_INVALID";
   try {
     const options = parseCliOptions(args);
+    failureCode = "V1_MIGRATION_SOURCE_INVALID";
     const snapshot = await dependencies.extract(options.source);
+    failureCode = "V1_MIGRATION_TRANSFORM_INVALID";
     const plan = dependencies.transform(snapshot);
+    failureCode = "V1_MIGRATION_RECONCILIATION_INVALID";
     const report = dependencies.reconcile(snapshot, plan);
     dependencies.write(reportOutput(report, options.dryRun ? "dry-run" : "apply"));
     if (!report.isZeroDifference) return 1;
     if (options.dryRun) return 0;
+    failureCode = "V1_MIGRATION_SOURCE_CONFIRMATION_MISMATCH";
     if (options.confirmSourceSha256 !== snapshot.sourceBackupSha256) {
       throw new Error("--confirm-source-sha256 does not match this exact v1 backup");
     }
+    failureCode = "V1_MIGRATION_LOADER_INVALID";
     const loader = await dependencies.importLoader(options.loader as string);
+    failureCode = "V1_MIGRATION_APPLY_FAILED";
     await dependencies.load(loader, options.target as string, plan, report);
     dependencies.write(
       JSON.stringify({ applied: true, sourceBackupSha256: snapshot.sourceBackupSha256 }),
     );
     return 0;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "unknown migration failure";
-    dependencies.write(JSON.stringify({ ok: false, error: message }));
+  } catch {
+    dependencies.write(JSON.stringify({ ok: false, error: failureCode }));
     return 2;
   }
 }

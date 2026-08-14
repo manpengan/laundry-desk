@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFile, chmod, mkdtemp, realpath, rm, stat } from "node:fs/promises";
+import { copyFile, chmod, lstat, mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
@@ -16,6 +16,7 @@ import type {
 } from "./types.js";
 
 const SQLITE_FILE_MODE = 0o600;
+const SQLITE_SIDECARS = Object.freeze(["-journal", "-shm", "-wal"] as const);
 const REQUIRED_TABLES = Object.freeze([
   "customers",
   "orders",
@@ -114,12 +115,38 @@ async function sha256File(path: string): Promise<string> {
   return hash.digest("hex");
 }
 
+async function assertStandaloneSource(sourcePath: string): Promise<string> {
+  const supplied = await lstat(sourcePath).catch(() => null);
+  if (supplied === null || !supplied.isFile() || supplied.isSymbolicLink()) {
+    throw new V1ExtractionError("v1 source must be one regular, non-linked SQLite backup file");
+  }
+  const source = await realpath(sourcePath);
+  for (const suffix of SQLITE_SIDECARS) {
+    if ((await lstat(`${source}${suffix}`).catch(() => null)) !== null) {
+      throw new V1ExtractionError("v1 source must be a checkpointed standalone SQLite backup");
+    }
+  }
+  return source;
+}
+
+function assertDatabaseIntegrity(database: Database.Database): void {
+  let result: unknown;
+  try {
+    result = database.pragma("integrity_check", { simple: true });
+  } catch {
+    throw new V1ExtractionError("v1 source failed SQLite integrity validation");
+  }
+  if (result !== "ok") {
+    throw new V1ExtractionError("v1 source failed SQLite integrity validation");
+  }
+}
+
 async function copyReadOnlySnapshot(sourcePath: string): Promise<{
   readonly path: string;
   readonly cleanup: () => Promise<void>;
   readonly sha256: string;
 }> {
-  const source = await realpath(sourcePath);
+  const source = await assertStandaloneSource(sourcePath);
   const sourceStat = await stat(source);
   if (!sourceStat.isFile()) {
     throw new V1ExtractionError("v1 source must be a regular SQLite backup file");
@@ -136,6 +163,7 @@ async function copyReadOnlySnapshot(sourcePath: string): Promise<{
       sha256File(snapshotPath),
       sha256File(source),
     ]);
+    await assertStandaloneSource(source);
     if (beforeHash !== afterHash || beforeHash !== copiedHash) {
       throw new V1ExtractionError("v1 source changed while its read-only snapshot was created");
     }
@@ -298,6 +326,7 @@ export async function extractV1Snapshot(sourcePath: string): Promise<V1Snapshot>
     database = new Database(snapshot.path, { fileMustExist: true, readonly: true });
     database.pragma("query_only = ON");
     database.pragma("trusted_schema = OFF");
+    assertDatabaseIntegrity(database);
     return Object.freeze({ sourceBackupSha256: snapshot.sha256, ...readSnapshotRows(database) });
   } catch (error) {
     if (error instanceof V1ExtractionError || error instanceof z.ZodError) throw error;
