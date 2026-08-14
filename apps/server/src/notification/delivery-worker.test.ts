@@ -120,8 +120,11 @@ test("provider mismatch and cost cap fail before any network adapter call", asyn
     const provider: NotificationProvider = Object.freeze({
       code: claim.providerCode === "other_provider" ? "software_only_fake" : claim.providerCode,
       assurance: "software_only",
+      channel: "sms",
+      maxBatchSize: 50,
       supportsIdempotency: true,
       supportsCancellation: true,
+      supportsReceipts: true,
       unitCostCents: claim.providerCode === "other_provider" ? 0 : 1,
       maxBatchCostCents: claim.providerCode === "other_provider" ? 0 : 4,
       send: async () => {
@@ -147,13 +150,75 @@ test("provider mismatch and cost cap fail before any network adapter call", asyn
   }
 });
 
+test("provider contract, receipt, channel, and batch declarations fail closed before send", async () => {
+  const base = createSoftwareOnlyNotificationProvider();
+  const { supportsReceipts: omittedReceipt, ...missingReceipt } = base;
+  assert.equal(omittedReceipt, true);
+  const cases: readonly Readonly<{
+    claim: NotificationDeliveryClaim;
+    provider: NotificationProvider;
+    errorCode: string;
+  }>[] = [
+    {
+      claim: CLAIM,
+      provider: Object.freeze(missingReceipt) as unknown as NotificationProvider,
+      errorCode: "PROVIDER_CONTRACT_INVALID",
+    },
+    {
+      claim: CLAIM,
+      provider: Object.freeze({ ...base, supportsReceipts: false }),
+      errorCode: "PROVIDER_RECEIPTS_UNPROVEN",
+    },
+    {
+      claim: Object.freeze({ ...CLAIM, batchRecipientCount: 2 }),
+      provider: Object.freeze({ ...base, maxBatchSize: 1 }),
+      errorCode: "PROVIDER_BATCH_LIMIT_EXCEEDED",
+    },
+    {
+      claim: CLAIM,
+      provider: Object.freeze({ ...base, channel: "wechat" }),
+      errorCode: "PROVIDER_CONFIGURATION_CHANGED",
+    },
+    {
+      claim: CLAIM,
+      provider: Object.freeze({ ...base, unitCostCents: 0.5 }),
+      errorCode: "PROVIDER_CONTRACT_INVALID",
+    },
+  ];
+  for (const fixture of cases) {
+    const { settlements, store } = fakeStore(fixture.claim, "manual_required");
+    let sends = 0;
+    const provider: NotificationProvider = Object.freeze({
+      ...fixture.provider,
+      send: async (input) => {
+        sends += 1;
+        return base.send(input);
+      },
+    });
+    const outcome = await runNotificationWorkerOnce({
+      store,
+      provider,
+      tenant: TENANT,
+      workerId: "worker-a",
+      now: () => NOW,
+    });
+    assert.equal(outcome.kind, "manual_required", fixture.errorCode);
+    assert.equal(sends, 0, fixture.errorCode);
+    assert.equal(settlements[0]?.outcome, "permanent_failure", fixture.errorCode);
+    assert.equal(settlements[0]?.errorCode, fixture.errorCode);
+  }
+});
+
 test("provider timeout remains retryable only with a proven stable idempotency key", async () => {
   const { settlements, store } = fakeStore(CLAIM, "retry_wait");
   const provider: NotificationProvider = Object.freeze({
     code: "software_only_fake",
     assurance: "software_only",
+    channel: "sms",
+    maxBatchSize: 50,
     supportsIdempotency: true,
     supportsCancellation: true,
+    supportsReceipts: true,
     unitCostCents: 0,
     maxBatchCostCents: 0,
     send: ({ signal }) =>
@@ -188,8 +253,11 @@ test("hard timeout settles even when the adapter ignores abort and stops lease r
   const provider: NotificationProvider = Object.freeze({
     code: "software_only_fake",
     assurance: "software_only",
+    channel: "sms",
+    maxBatchSize: 50,
     supportsIdempotency: true,
     supportsCancellation: true,
+    supportsReceipts: true,
     unitCostCents: 0,
     maxBatchCostCents: 0,
     send: () =>
@@ -221,8 +289,11 @@ test("provider result validation preserves accepted overage evidence and rejects
   const provider: NotificationProvider = Object.freeze({
     code: "software_only_fake",
     assurance: "software_only",
+    channel: "sms",
+    maxBatchSize: 50,
     supportsIdempotency: true,
     supportsCancellation: true,
+    supportsReceipts: true,
     unitCostCents: 0,
     maxBatchCostCents: 100_000,
     send: async () =>
@@ -301,8 +372,11 @@ test("unproven idempotency fails closed before the provider call", async () => {
   const provider: NotificationProvider = Object.freeze({
     code: "software_only_fake",
     assurance: "software_only",
+    channel: "sms",
+    maxBatchSize: 50,
     supportsIdempotency: false,
     supportsCancellation: true,
+    supportsReceipts: true,
     unitCostCents: 0,
     maxBatchCostCents: 0,
     send: async () => {
