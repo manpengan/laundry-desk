@@ -29,7 +29,10 @@ test("host entry delegates selection and gates lazy surfaces behind ServiceGate"
   );
   const resumeAt = source.indexOf("await ports.resume?.resume()");
   const surfaceLoadAt = source.indexOf("await loadStaffSurfaceApp(surface)");
-  const renderAt = source.lastIndexOf("createRoot(hostRoot).render");
+  // The staff render is the first one after the surface load; a single shared
+  // root serves both the success and the startup-failure path.
+  const renderAt = source.indexOf("reactRoot.render", surfaceLoadAt);
+  assert.doesNotMatch(source, /createRoot\(hostRoot\)\.render/u);
   assert.ok(resumeAt >= 0 && surfaceLoadAt > resumeAt && renderAt > surfaceLoadAt);
   assert.match(source, /initialSession=\{resumed\.ok\s*\?\s*resumed\.session\s*:\s*null\}/u);
   assert.match(source, /readOnly=\{readOnly\}/u);
