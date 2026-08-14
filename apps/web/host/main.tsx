@@ -1,15 +1,18 @@
 /** Shared renderer entry for local Vite and the Electron app://local host. */
+import type { ComponentType } from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "../src/App.js";
 import { createMockConnection } from "../src/connection.js";
-import { appSurfaceFromPathname, shouldResumeHostSession } from "../src/host/app-surface.js";
+import {
+  appSurfaceFromPathname,
+  shouldResumeHostSession,
+  type AppSurface,
+} from "../src/host/app-surface.js";
 import { resolveBrowserApiBaseUrl } from "../src/host/browser-api-base.js";
 import { createBrowserPorts } from "../src/host/browser-ports.js";
 import { createDesktopPorts, type LaundryDesktopBridge } from "../src/host/desktop-ports.js";
-import { createHttpCustomerPortalClient } from "../src/customer-portal/client.js";
-import { CustomerPortalApp } from "../src/customer-portal/CustomerPortalApp.js";
 import { selectHost } from "../src/host/select-ports.js";
 import { ServiceGate } from "../src/host/ServiceGate.js";
+import type { StaffSurfaceAppProps } from "../src/host/staff-surface-types.js";
 import "@laundry/ui/styles.css";
 import "@laundry/ui/styles/components.css";
 import "../src/styles/shell.css";
@@ -50,11 +53,24 @@ const surface =
 const ports =
   host.kind === "desktop" ? createDesktopPorts(host.bridge) : createBrowserPorts({ apiBaseUrl });
 
+async function loadStaffSurfaceApp(
+  selectedSurface: AppSurface,
+): Promise<ComponentType<StaffSurfaceAppProps>> {
+  if (selectedSurface === "owner") {
+    return (await import("../src/host/OwnerSurfaceApp.js")).OwnerSurfaceApp;
+  }
+  if (selectedSurface === "mobile_delivery_tasks") {
+    return (await import("../src/host/MobileTaskSurfaceApp.js")).MobileTaskSurfaceApp;
+  }
+  return (await import("../src/host/CounterSurfaceApp.js")).CounterSurfaceApp;
+}
+
 async function start(): Promise<void> {
   if (surface === "customer" && host.kind === "browser") {
+    const { CustomerSurfaceApp } = await import("../src/host/CustomerSurfaceApp.js");
     createRoot(hostRoot).render(
       <ServiceGate health={ports.health}>
-        <CustomerPortalApp client={createHttpCustomerPortalClient({ apiBaseUrl })} />
+        <CustomerSurfaceApp apiBaseUrl={apiBaseUrl} />
       </ServiceGate>,
     );
     return;
@@ -64,11 +80,11 @@ async function start(): Promise<void> {
     ? ((await ports.resume?.resume()) ?? Object.freeze({ ok: false as const }))
     : Object.freeze({ ok: false as const });
   const readOnly = resumed.ok && resumed.mode === "offline_read_only";
+  const SurfaceApp = await loadStaffSurfaceApp(surface);
   createRoot(hostRoot).render(
     <ServiceGate health={ports.health}>
-      <App
+      <SurfaceApp
         ports={ports}
-        surface={surface}
         connection={createMockConnection({ mode: readOnly ? "offline" : "online" })}
         enableLiquidGlass={host.kind === "browser"}
         initialSession={resumed.ok ? resumed.session : null}
