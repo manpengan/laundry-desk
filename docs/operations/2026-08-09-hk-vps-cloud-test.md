@@ -85,6 +85,40 @@ correlation nonce，`rollback` 只在候选
 - KB 的 `127.0.0.1:8700/healthz` 与公网 `/healthz` 同时通过，PostgreSQL 5432、KB 8700 和
   Desk 8787 均保持 loopback 绑定，相关 systemd unit 无 failed 状态。
 
+### 1.1 退役产物的可恢复归档
+
+保留上限是 `MAX_RETAINED_RELEASES = 8`，预检峰值为当前 `/opt/laundry-desk.*` 计数再加
+incoming 与 next 两项。计数到 6 时下一次 `prepare` 必然以
+`CLOUD_RELEASE_ARTIFACT_RETENTION_LIMIT` 失败关闭。发布链**从不自动删除**任何产物，
+腾出槽位是一次单独授权的动作。
+
+归档只做同文件系统原子 rename，不删除任何东西，反向 rename 即可完整还原。工具会拒绝
+任何没有被 history 证明为 `rolled_back` 且 `verification_evidence_authoritative=false` 的
+产物 —— 活动版本的 rollback tree 绑定的是 `committed` 记录，因此永远不会被移动；没有任何
+history 绑定的产物同样一律拒绝。
+
+入口随 `tools/cloud/` 一起进入发布产物，因此**只有部署树包含该文件的版本上线之后**这两条
+命令才可用；在此之前 `/opt/laundry-desk/tools/cloud/` 里没有它，会直接 `MODULE_NOT_FOUND`。
+
+先只读列出可归档项，再对精确名字执行：
+
+```bash
+ssh hk-vps /opt/nodejs/bin/node \
+  /opt/laundry-desk/tools/cloud/hk-vps-release-artifact-archive-run.mjs --list
+```
+
+```bash
+ssh hk-vps /opt/nodejs/bin/node \
+  /opt/laundry-desk/tools/cloud/hk-vps-release-artifact-archive-run.mjs \
+  --archive laundry-desk.failed-<40 位 SHA>
+```
+
+成功输出 `CLOUD_RELEASE_ARTIFACT_ARCHIVE_OK entries=… bytes=… ino=… target=…`；`ino` 与
+移动前一致即证明是同一对象而非复制。归档根为 `/var/lib/laundry-desk-release-archive`
+（root:root `0700`）。history、controller、backup 与 verification evidence 都不在 `/opt`，
+归档不会触及它们。本地回归为
+`pnpm cloud:release:hk:artifact-archive:test`。
+
 先更新并核对候选：
 
 ```bash

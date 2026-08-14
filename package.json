@@ -90,6 +90,7 @@
     "cloud:adr36:acceptance:test": "node --test tools/cloud/*.test.mjs",
     "cloud:web:e2e": "pnpm exec playwright test -c apps/web/playwright.cloud.config.ts",
     "cloud:release:hk": "node tools/cloud/hk-vps-release.mjs",
+    "cloud:release:hk:artifact-archive:test": "node --test tools/cloud/hk-vps-release-artifact-archive.test.mjs",
     "cloud:data:hk": "node tools/cloud/hk-vps-data-protection.mjs"
   },
   "build": {
