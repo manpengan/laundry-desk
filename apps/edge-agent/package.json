@@ -22,6 +22,7 @@
     "typecheck": "node --check scripts/build-preload.mjs && node --check scripts/build-preload.test.mjs && node --check scripts/hash-app.mjs && node --check scripts/hash-app.test.mjs && node --check scripts/prune-packaged-spa.mjs && node --check scripts/prune-packaged-spa.test.mjs && node --check scripts/release-inspection.mjs && node --check scripts/release-mac.mjs && node --check scripts/release-mac.test.mjs && node --check scripts/release-resources.mjs && node --check scripts/release-transaction.mjs && node --check scripts/release-tree.mjs && node --check scripts/sync-spa.mjs && node --check scripts/sync-spa.test.mjs && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.e2e.json",
     "spa:sync": "node scripts/sync-spa.mjs sync",
     "spa:check": "node scripts/sync-spa.mjs check",
+    "spa:retention:plan": "node scripts/prune-packaged-spa.mjs --plan",
     "spa:verify": "pnpm exec turbo run build --filter=@laundry/web && pnpm run spa:check",
     "update:recovery:drill": "tsc -p tsconfig.json && node dist/upgrade/runtime-recovery-drill-cli.js",
     "printer-smoke": "tsc -p tsconfig.json && node dist/print/printer-smoke-cli.js",

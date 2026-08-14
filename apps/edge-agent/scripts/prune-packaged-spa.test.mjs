@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import afterPack, { prunePackagedSpa } from "./prune-packaged-spa.mjs";
+import afterPack, { planPackagedSpaPrune, prunePackagedSpa } from "./prune-packaged-spa.mjs";
 
 const PRODUCT_NAME = "laundry-desk V2";
 const INACTIVE_BUNDLE = "f".repeat(64);
@@ -58,6 +58,28 @@ test("afterPack retains only the bundle selected by the packaged manifest", asyn
     "active\n",
   );
   assert.equal(await readFile(join(sourceHistory, "index.html"), "utf8"), "source history\n");
+});
+
+test("retention planning is deterministic and never removes a bundle", async (t) => {
+  const fixture = await createFixture();
+  t.after(async () => {
+    await rm(fixture.rootPath, { force: true, recursive: true });
+  });
+
+  const plan = await planPackagedSpaPrune(fixture.context);
+
+  assert.deepEqual(plan, {
+    active_bundle: fixture.activeBundle,
+    active_bundle_bytes: 7,
+    bundle_count: 2,
+    inactive_bundle_bytes: 9,
+    inactive_bundles: [INACTIVE_BUNDLE],
+    packaged_retained_bundles: [fixture.activeBundle],
+  });
+  assert.deepEqual((await readdir(join(fixture.spaPath, "bundles"))).sort(), [
+    fixture.activeBundle,
+    INACTIVE_BUNDLE,
+  ]);
 });
 
 test("pruning is idempotent for an already minimal packaged snapshot", async (t) => {
