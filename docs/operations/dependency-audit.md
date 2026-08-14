@@ -16,7 +16,7 @@ severity 忽略规则放行。
 Vite `6.4.3`、React Router DOM `7.18.2` 与 PostCSS `8.5.23`。Electron-Vite 4/Vite 7
 要求 Node `>=22.12`，仓库 engine 与 CI 的 Node 22 最新补丁线必须满足该下限。传递依赖
 通过同主版本 override 固定到 `undici@7.29.0`、`fast-uri@3.1.5/4.1.2`、
-`brace-expansion@1.1.18/2.1.4/5.0.9`、`js-yaml@4.3.1`、`nanoid@3.3.17`。
+`brace-expansion@1.1.18/2.1.4/5.0.9`、`js-yaml@4.3.1`、`nanoid@3.3.18`。
 
 ## 当前临时例外
 
