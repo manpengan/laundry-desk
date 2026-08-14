@@ -87,8 +87,11 @@ export type NotificationProviderSendResult = Readonly<{
 export type NotificationProvider = Readonly<{
   code: string;
   assurance: "software_only" | "external";
+  channel: "sms" | "wechat";
+  maxBatchSize: number;
   supportsIdempotency: boolean;
   supportsCancellation: boolean;
+  supportsReceipts: boolean;
   unitCostCents: number;
   maxBatchCostCents: number;
   send: (input: NotificationProviderSendInput) => Promise<NotificationProviderSendResult>;

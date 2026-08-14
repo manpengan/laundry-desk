@@ -14,6 +14,7 @@ import type {
 const DEFAULT_PROVIDER_TIMEOUT_MS = 10_000;
 const MAX_RECORDED_PROVIDER_COST_CENTS = 100_000;
 const SAFE_ERROR = /^[A-Z][A-Z0-9_]{0,63}$/u;
+const SAFE_PROVIDER_CODE = /^[a-z][a-z0-9_]{0,63}$/u;
 
 export type NotificationWorkerStep = Readonly<{
   kind: "idle" | "accepted" | "retry_wait" | "manual_required" | "stale_lease";
@@ -190,17 +191,45 @@ function preflightFailure(
   options: NotificationWorkerOptions,
   claim: NotificationDeliveryClaim,
 ): string | null {
+  try {
+    if (
+      !SAFE_PROVIDER_CODE.test(options.provider.code) ||
+      !["software_only", "external"].includes(options.provider.assurance) ||
+      !["sms", "wechat"].includes(options.provider.channel) ||
+      !Number.isSafeInteger(options.provider.maxBatchSize) ||
+      options.provider.maxBatchSize < 1 ||
+      typeof options.provider.supportsIdempotency !== "boolean" ||
+      typeof options.provider.supportsCancellation !== "boolean" ||
+      typeof options.provider.supportsReceipts !== "boolean" ||
+      !Number.isSafeInteger(options.provider.unitCostCents) ||
+      options.provider.unitCostCents < 0 ||
+      !Number.isSafeInteger(options.provider.maxBatchCostCents) ||
+      options.provider.maxBatchCostCents < 0 ||
+      typeof options.provider.send !== "function"
+    ) {
+      return "PROVIDER_CONTRACT_INVALID";
+    }
+  } catch {
+    return "PROVIDER_CONTRACT_INVALID";
+  }
   if (!options.provider.supportsIdempotency) {
     return "PROVIDER_IDEMPOTENCY_UNPROVEN";
   }
   if (!options.provider.supportsCancellation) {
     return "PROVIDER_CANCELLATION_UNPROVEN";
   }
+  if (!options.provider.supportsReceipts) {
+    return "PROVIDER_RECEIPTS_UNPROVEN";
+  }
   if (
     claim.providerCode !== options.provider.code ||
-    claim.assurance !== options.provider.assurance
+    claim.assurance !== options.provider.assurance ||
+    claim.template.channel !== options.provider.channel
   ) {
     return "PROVIDER_CONFIGURATION_CHANGED";
+  }
+  if (claim.batchRecipientCount > options.provider.maxBatchSize) {
+    return "PROVIDER_BATCH_LIMIT_EXCEEDED";
   }
   const currentEstimatedCost = options.provider.unitCostCents * claim.batchRecipientCount;
   if (
