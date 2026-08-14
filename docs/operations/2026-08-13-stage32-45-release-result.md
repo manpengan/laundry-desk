@@ -60,8 +60,8 @@ schema 上运行。回滚不能只做代码切换，必须走保留的 controlle
 - [#180](https://github.com/manpengan/laundry-desk/pull/180) 隔离订单财务会员定价
 - [#181](https://github.com/manpengan/laundry-desk/pull/181) 修复顾客档案验收清理
 
-失败产物 `/opt/laundry-desk.failed-53b012c62ae0956ca58ef4cc1b8f46091c97d5b9` 按保留设计仍在，
-未删除。
+失败产物 `/opt/laundry-desk.failed-53b012c62ae0956ca58ef4cc1b8f46091c97d5b9` 在发布当时按保留
+设计原样保留，未删除；其后续可恢复归档见 §9。
 
 ## 4. 两阶段发布结果
 
@@ -115,7 +115,7 @@ API 19 条纵向逐项 PASS：`configuration`、`dual_admin_auth`、`owner_store
 | systemd      | `laundry-desk`、`postgresql`、`caddy`、`kb-web` 均 active；failed units 0    |
 | 健康         | Desk loopback `8787` 200；Desk 公网 200；KB 公网 302                        |
 | retention    | history 7；controller 7；backup 12；verification evidence 4                 |
-| `/opt` 产物  | 7 个：1 live + 1 failed(`53b012c`) + 5 rollback                             |
+| `/opt` 产物  | 7 个：1 live + 1 failed(`53b012c`) + 5 rollback（§9 归档后为 6 个）        |
 
 ## 7. 明确未取得
 
@@ -134,5 +134,43 @@ API 19 条纵向逐项 PASS：`configuration`、`dual_admin_auth`、`owner_store
 API 19/19 与 Cloud Chromium、marker/schema/服务/健康与保留证据均已闭环，`53b012c` 的两次失败
 尝试与修复链完整留痕。仓库与 hk-vps 当前精确一致于 `65bd8210…c314`。
 
-下一次发布前需注意：本轮之后代码回滚不再被证明兼容当前 schema，且 `/opt` 已有 7 个产物，
-接近阶段 3.1 触发过的保留上限；应先按明确授权对 `53b012c` 失败产物做可恢复归档。
+下一次发布前需注意：本轮之后代码回滚不再被证明兼容当前 schema。保留上限问题已由 §9 的
+归档解除。
+
+## 9. 发布后保留槽位归档（2026-08-14 11:33，经明确授权）
+
+发布结束时计入保留上限的 `/opt/laundry-desk.*` 产物为 6 个，而 `MAX_RETAINED_RELEASES = 8`、
+预检峰值为计数加 incoming 与 next 两项，因此下一次 `prepare` 必然以
+`CLOUD_RELEASE_ARTIFACT_RETENTION_LIMIT` 失败关闭 —— 与阶段 3.1 遇到的是同一个门禁。
+
+经明确授权，对首轮失败产物执行可恢复归档。**未做删除**：操作是同盘原子 rename，反向 rename
+即可完整还原。
+
+- 源：`/opt/laundry-desk.failed-53b012c62ae0956ca58ef4cc1b8f46091c97d5b9`
+- 归档：`/var/lib/laundry-desk-release-archive/53b012c62ae0956ca58ef4cc1b8f46091c97d5b9-rolled-back-failed-artifact`
+
+| 核验         | 操作前        | 操作后            |
+| ------------ | ------------- | ----------------- |
+| inode        | `957558`      | `957558`（同一对象） |
+| 条目数       | `58,804`      | `58,804`          |
+| 总字节       | `915,600,449` | `915,600,449`     |
+| owner / mode | `root:root 755` | `root:root 755`（父目录 `0700`） |
+| 计入上限产物 | 6             | **5**             |
+
+前置条件在操作前逐项只读核对：源为 root 拥有的普通目录、目标不存在、`/opt` 与归档根同一
+文件系统（`stat -c %d` 相同）、两条 `53b012c` history 均为 `rolled_back` 且
+`verification_evidence_authoritative=false`、`phase=stable` 无在途发布。
+
+操作后复核：`phase=stable`，live marker 仍为 `65bd8210…c314`；四个 systemd unit 均 active、
+failed units 0；desk loopback 与公网均 200。`53b012c` 的 2 条 history、9 个 controller 与
+2 份 backup dump 全部原样保留 —— 它们不在 `/opt`，归档不触及。
+
+保留槽位现为 5，预检峰值 7 < 8，下一次发布不再阻塞。本次操作使用带前置校验的受控 rename；
+其后已沉淀为 `tools/cloud/hk-vps-release-artifact-archive.mjs` 与宿主机入口
+`hk-vps-release-artifact-archive-run.mjs`，流程写入
+[ADR-36 运维手册 §1.1](2026-08-09-hk-vps-cloud-test.md)，回归为
+`pnpm cloud:release:hk:artifact-archive:test`。
+
+该工具的守卫与身份校验由 13 项本地回归覆盖；宿主机端到端路径尚未执行过，因为入口随
+`tools/cloud/` 进入发布产物，当前线上 `65bd8210…c314` 的部署树里还没有它。首次真实使用应在
+下一次发布之后，并先跑 `--list` 只读确认。
