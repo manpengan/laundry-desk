@@ -40,7 +40,7 @@ jobs:
 
   runtime-app-macos:
     runs-on: macos-15
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -56,6 +56,9 @@ jobs:
           version: 11.15.0
           run_install: false
 
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Lint native runtime Swift sources
         run: pnpm run runtime:app:lint:swift
 
@@ -64,3 +67,6 @@ jobs:
 
       - name: Verify portable release-candidate evidence and native verifier
         run: pnpm run release:candidate:swift:check && pnpm run release:candidate:test
+
+      - name: Build, inspect, and smoke unsigned Counter package
+        run: pnpm run local:mac:software:acceptance

@@ -243,6 +243,9 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 修复
 
+- V1 只读迁移演练现拒绝软链接、活动 SQLite sidecar、完整性失败和含糊 CLI 参数；脱敏 fixture
+  会连续两次验证源 SHA-256 不变、转换结果确定且金额/件数/顾客/照片零差异。loader 或连接失败
+  只输出稳定错误码，不再可能回显 PostgreSQL URL。该项不新增生产 loader，也不恢复宏发交付线。
 - 修复打包 Counter 的小票按钮向严格 `print.ticket.enqueue` 投影多传 `ticket_no`、导致真实签名打印任务无法入队的问题；有桌面入队能力时，成功或失败都不再旁路调用浏览器 `window.print()`，并阻止重复点击产生多份任务。打印队列现向操作员显示验收 CLI 所需的 `job_id`，不显示订单内部 ID 或顾客资料。
 - 签名打印请求现由 PostgreSQL 派生租户内精确幂等键：原始订单/票种重放与同一 source job 的 retry/reprint 都回读同一权威任务，覆盖刷新、跨客户端和 COMMIT 后响应丢失；历史歧义重复组与伪造 lineage 继续失败关闭，不会生成第二张实体票据。
 - macOS XP-58 验收记录升级为 schema v3：必须由已上传设备签名回执绑定 `enqueue → reprint → retry` 的原始成功、断连失败/不确定和恢复后显式补打一份三个不同任务，同时记录 XP-58 型号、连接方式与打包 App 的 `app.asar`、SPA manifest、`Info.plist` 身份和版本摘要。当前 Mac 未发现可用 CUPS、USB 或局域网 IPP 打印机，因此该变化只关闭软件证据缺口，不宣称实体打印通过。

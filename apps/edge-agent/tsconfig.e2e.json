@@ -8,6 +8,7 @@
   "include": [
     "e2e/**/*.ts",
     "playwright.electron.commissioning.config.ts",
+    "playwright.electron.package.config.ts",
     "playwright.electron.config.ts"
   ]
 }

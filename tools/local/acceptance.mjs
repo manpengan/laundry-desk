@@ -144,7 +144,7 @@ export async function findUniquePackagedApp(releaseRoot) {
   let outputDirectories;
   try {
     outputDirectories = (await readdir(releaseRoot, { withFileTypes: true })).filter(
-      (entry) => entry.isDirectory() && /^mac-[A-Za-z0-9._-]+$/u.test(entry.name),
+      (entry) => entry.isDirectory() && /^(?:mac|mac-[A-Za-z0-9._-]+)$/u.test(entry.name),
     );
   } catch {
     fail("ACCEPTANCE_MAC_APP_NOT_UNIQUE");

@@ -358,8 +358,8 @@ test("finds exactly one regular packaged app under mac-* output", async () => {
   const { findUniquePackagedApp } = await implementation();
   const root = await mkdtemp(join(tmpdir(), "laundry-app-scan-"));
   try {
-    await mkdir(join(root, "mac-arm64", "laundry-desk V2.app"), { recursive: true });
-    assert.equal(await findUniquePackagedApp(root), join(root, "mac-arm64", "laundry-desk V2.app"));
+    await mkdir(join(root, "mac", "laundry-desk V2.app"), { recursive: true });
+    assert.equal(await findUniquePackagedApp(root), join(root, "mac", "laundry-desk V2.app"));
 
     await mkdir(join(root, "mac-x64", "laundry-desk V2.app"), { recursive: true });
     await assert.rejects(

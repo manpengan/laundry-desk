@@ -186,7 +186,8 @@ test("host entry selects the pathname surface and loads the isolated owner style
   );
 
   assert.match(source, /appSurfaceFromPathname\(window\.location\.pathname\)/u);
-  assert.match(source, /surface=\{surface\}/u);
+  assert.match(source, /await loadStaffSurfaceApp\(surface\)/u);
+  assert.match(source, /await import\(["'][^"']+OwnerSurfaceApp\.js["']\)/u);
   assert.match(source, /import\s+["']\.\.\/src\/styles\/owner-dashboard\.css["'];/u);
   assert.match(source, /import\s+["']\.\.\/src\/styles\/owner-operations\.css["'];/u);
   assert.match(source, /import\s+["']\.\.\/src\/styles\/owner-management\.css["'];/u);
