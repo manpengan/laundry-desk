@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 
+import { ErrorBoundary, SurfaceFailure } from "../host/SurfaceFailure.js";
 import {
   PageHostCore,
   PageLoadingFallback,
@@ -53,8 +54,17 @@ const LAZY_PAGES: PageComponentRegistry = Object.freeze({
 /** Production-only route host: the active counter route is fetched on demand. */
 export function LazyPageHost(props: PageHostProps) {
   return (
-    <Suspense fallback={<PageLoadingFallback />}>
-      <PageHostCore {...props} pages={LAZY_PAGES} />
-    </Suspense>
+    <ErrorBoundary
+      fallback={
+        <SurfaceFailure
+          title="页面加载失败"
+          description="没有取到这个页面的代码，可能是网络中断或刚发布了新版本。重新加载后重试。"
+        />
+      }
+    >
+      <Suspense fallback={<PageLoadingFallback />}>
+        <PageHostCore {...props} pages={LAZY_PAGES} />
+      </Suspense>
+    </ErrorBoundary>
   );
 }

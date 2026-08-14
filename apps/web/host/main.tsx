@@ -12,6 +12,7 @@ import { createBrowserPorts } from "../src/host/browser-ports.js";
 import { createDesktopPorts, type LaundryDesktopBridge } from "../src/host/desktop-ports.js";
 import { selectHost } from "../src/host/select-ports.js";
 import { ServiceGate } from "../src/host/ServiceGate.js";
+import { SurfaceFailure } from "../src/host/SurfaceFailure.js";
 import type { StaffSurfaceAppProps } from "../src/host/staff-surface-types.js";
 import "@laundry/ui/styles.css";
 import "@laundry/ui/styles/components.css";
@@ -41,6 +42,9 @@ if (rootEl === null) {
   throw new Error("#root missing");
 }
 const hostRoot = rootEl;
+// One root for both the success and the failure path: a second createRoot on the
+// same element would warn and detach whatever the first one mounted.
+const reactRoot = createRoot(hostRoot);
 
 const bridge = (
   window as Window & {
@@ -68,7 +72,7 @@ async function loadStaffSurfaceApp(
 async function start(): Promise<void> {
   if (surface === "customer" && host.kind === "browser") {
     const { CustomerSurfaceApp } = await import("../src/host/CustomerSurfaceApp.js");
-    createRoot(hostRoot).render(
+    reactRoot.render(
       <ServiceGate health={ports.health}>
         <CustomerSurfaceApp apiBaseUrl={apiBaseUrl} />
       </ServiceGate>,
@@ -81,7 +85,7 @@ async function start(): Promise<void> {
     : Object.freeze({ ok: false as const });
   const readOnly = resumed.ok && resumed.mode === "offline_read_only";
   const SurfaceApp = await loadStaffSurfaceApp(surface);
-  createRoot(hostRoot).render(
+  reactRoot.render(
     <ServiceGate health={ports.health}>
       <SurfaceApp
         ports={ports}
@@ -94,4 +98,16 @@ async function start(): Promise<void> {
   );
 }
 
-void start();
+// The surface is fetched on demand, so startup can fail after this module has
+// loaded: a stale cached entry pointing at a replaced chunk, or a dropped
+// connection. Discarding that rejection would leave the operator on a blank page
+// with nothing to act on.
+start().catch((error: unknown) => {
+  console.error("host startup failed", error);
+  reactRoot.render(
+    <SurfaceFailure
+      title="无法启动"
+      description="没有取到界面代码，可能是网络中断或刚发布了新版本。重新加载后重试。"
+    />,
+  );
+});
