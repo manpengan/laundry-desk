@@ -94,6 +94,22 @@ macOS CUPS 发现、试打和只有人工逐项确认后才落盘的验收入口
 纯函数入口（可单测）：`runPrinterSmoke(env, options?)` → `{ ok, path, kind, message, bytes_written? }`。  
 `normalizePrinterPath`：`COM3` → `\\.\COM3`，`USB001` → `\\.\USB001`。
 
+## macOS 软件打包门禁
+
+在 macOS 上执行：
+
+```bash
+pnpm local:mac:software:acceptance
+```
+
+该门禁实际构建未签名 `.app`，核对 bundle 身份、当前架构、`app.asar`、严格禁用的开发更新配置、
+单一且完整的 SPA bundle 与 App tree SHA-256；随后在隔离 user-data 和固定不可用 loopback 服务下
+启动成品，验证 `app://` 页面、安全 webPreferences、专用 session 和最小 preload 能力面。必需的
+`runtime-app-macos` PR 门禁执行同一命令，不上传产物，也不使用业务凭据。
+
+这只形成 `software_only` 证据，不等于 Developer ID 签名、公证、Gatekeeper、正式更新密钥、
+Windows 适配或真机打印验收。
+
 ## macOS 正式分发
 
 正式 `release:mac` 与未签名本地测试包分离。它强制 Developer ID、hardened runtime、
