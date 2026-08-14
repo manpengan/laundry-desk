@@ -36,8 +36,11 @@ export function createSoftwareOnlyNotificationProvider(): NotificationProvider {
   return Object.freeze({
     code: "software_only_fake",
     assurance: "software_only" as const,
+    channel: "sms" as const,
+    maxBatchSize: 50,
     supportsIdempotency: true,
     supportsCancellation: true,
+    supportsReceipts: true,
     unitCostCents: 0,
     maxBatchCostCents: 0,
     send: async (input) =>
