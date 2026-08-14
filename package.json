@@ -53,6 +53,7 @@
     "local:lan:e2e": "pnpm exec playwright test -c apps/web/playwright.lan.config.ts",
     "local:mac:build": "pnpm --filter @laundry/edge-agent package:mac",
     "local:mac:e2e": "pnpm exec playwright test -c apps/edge-agent/playwright.electron.config.ts",
+    "local:mac:software:acceptance": "pnpm local:mac:build && pnpm --filter @laundry/edge-agent package:inspect:mac && pnpm --filter @laundry/edge-agent package:smoke:mac",
     "local:mac:commissioning:e2e": "pnpm exec playwright test -c apps/edge-agent/playwright.electron.commissioning.config.ts",
     "local:commissioning:fresh:browser": "node tools/local/commissioning-acceptance.mjs browser",
     "local:commissioning:fresh:mac": "node tools/local/commissioning-acceptance.mjs mac",
