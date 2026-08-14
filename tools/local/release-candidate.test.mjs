@@ -58,6 +58,21 @@ async function createApp(root, name, executableName, resources) {
   return app;
 }
 
+async function copyAppTreeForTesting(file, args) {
+  assert.equal(file, "/usr/bin/ditto");
+  assert.deepEqual(args.slice(0, 3), ["--rsrc", "--extattr", "--acl"]);
+  const source = args.at(-2);
+  const destination = args.at(-1);
+  assert.equal(typeof source, "string");
+  assert.equal(typeof destination, "string");
+  await cp(source, destination, {
+    recursive: true,
+    verbatimSymlinks: true,
+    preserveTimestamps: true,
+  });
+  return Object.freeze({ stderr: "", stdout: "" });
+}
+
 function ociIndex(amd64, arm64) {
   return {
     schemaVersion: 2,
@@ -176,7 +191,16 @@ async function fixture(t) {
     "trusted-manifest-public-key.txt": runtimePublic,
   });
   const verifierApp = join(source, "Laundry Desk Release Candidate Verifier.app");
-  await buildVerifier({ mode: "testing", output: verifierApp });
+  if (process.platform === "darwin") {
+    await buildVerifier({ mode: "testing", output: verifierApp });
+  } else {
+    await createApp(
+      source,
+      "Laundry Desk Release Candidate Verifier.app",
+      "Laundry Desk Release Candidate Verifier",
+      {},
+    );
+  }
   const counterDmg = join(source, "laundry-counter.dmg");
   const counterZip = join(source, "laundry-counter.zip");
   const runtimeDmg = join(source, "laundry-runtime.dmg");
@@ -291,8 +315,9 @@ async function fixture(t) {
     LAUNDRY_COUNTER_EVIDENCE_PRIVATE_KEY_FILE: counterPrivate,
     LAUNDRY_RUNTIME_EVIDENCE_PRIVATE_KEY_FILE: runtimePrivate,
   };
-  await assembleReleaseCandidate(input, { env });
-  return { env, input, output, temporary };
+  const copyExecute = process.platform === "darwin" ? undefined : copyAppTreeForTesting;
+  await assembleReleaseCandidate(input, { env, copyExecute });
+  return { copyExecute, env, input, output, temporary };
 }
 
 async function runVerifier(root, cwd) {
@@ -350,6 +375,27 @@ test("native verifier scopes Darwin output buffers to contiguous storage", async
   assert.doesNotMatch(source, /Darwin\.realpath\([^,]+,\s*&buffer/u);
   assert.match(source, /withUnsafeMutableBytes/u);
   assert.match(source, /withUnsafeMutableBufferPointer/u);
+});
+
+test("software-only candidate assembly is complete and repeatable on every platform", async (t) => {
+  const setup = await fixture(t);
+  const firstRelease = await readFile(join(setup.output, "release-evidence.json"), "utf8");
+  const firstField = await readFile(join(setup.output, "field-evidence.json"), "utf8");
+  assert.equal(JSON.parse(firstRelease).authority.assurance, "software_only");
+  assert.equal(JSON.parse(firstField).authority.assurance, "software_only");
+  assert.equal(
+    (await readdir(setup.output, { recursive: true })).some((name) => name.includes("private.pem")),
+    false,
+  );
+
+  const repeatedOutput = join(setup.temporary, "candidate-repeat");
+  const repeated = await assembleReleaseCandidate(
+    { ...setup.input, output_directory: repeatedOutput },
+    { env: setup.env, copyExecute: setup.copyExecute },
+  );
+  assert.equal(repeated.assurance, "software_only");
+  assert.equal(await readFile(join(repeatedOutput, "release-evidence.json"), "utf8"), firstRelease);
+  assert.equal(await readFile(join(repeatedOutput, "field-evidence.json"), "utf8"), firstField);
 });
 
 test(

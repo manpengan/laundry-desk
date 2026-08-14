@@ -12,6 +12,12 @@
 | **打包产物**   | `scripts/prune-packaged-spa.mjs`   | ✅ 有界  |
 | **仓库工作树** | `scripts/sync-spa.mjs`（有意保留） | ❌ 无界  |
 
+可随时执行只读计划核对当前体积与“若进入打包目录会删除哪些 bundle”；该命令不修改工作树：
+
+```bash
+pnpm --filter @laundry/edge-agent spa:retention:plan
+```
+
 **打包侧已经有界。** `electron-builder.yml` 把 `prune-packaged-spa.mjs` 挂在
 `afterPack`，装包时只保留 manifest 指向的活动 bundle。仓库里的历史 bundle
 **不会进入用户拿到的 .app / .exe**，安装包体积不受影响。
@@ -27,9 +33,10 @@
 
 ## 想动它之前要知道的
 
-- **每次提交 SPA 变更约增加 340KB 工作树体积**（当前 4 个 bundle，共 1.3MB）。
-- **git 永久保留所有 blob**。事后删除历史 bundle 只能减小 checkout 体积，
-  **永远不会减小 `.git`**。当前 `.git` 约 638MB，主要来源不是这些 bundle。
+- bundle 大小随功能和拆包策略变化，不能再按早期约 340KB 估算。2026-08-13 的只读计划为
+  48 个 bundle、工作树约 32MiB，当前活动 bundle 约 1.3MiB；后续应以上述命令实时结果为准。
+- **git 永久保留所有已提交 blob**。事后删除历史 bundle 只能减小未来 checkout 体积，
+  **不会重写既有 Git 历史**；仓库对象体积也应以 `git count-objects -vH` 实测，不沿用旧快照。
 - **按「保留最近 N 个」收敛会破坏上面的崩溃安全不变量**，除非先落地读者感知
   （reader-aware）剪枝。
 
