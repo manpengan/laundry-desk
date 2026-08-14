@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -24,6 +25,20 @@ describe("extractV1Snapshot", () => {
       expect(snapshot.orders).toHaveLength(2);
       expect(snapshot.orderItems).toHaveLength(2);
       expect(snapshot.orderPhotos).toHaveLength(1);
+    } finally {
+      await rm(fixture.directory, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects linked and active-WAL inputs before reading business rows", async () => {
+    const fixture = await createFixtureDatabase();
+    try {
+      const linked = join(fixture.directory, "linked.db");
+      await symlink(fixture.path, linked);
+      await expect(extractV1Snapshot(linked)).rejects.toThrow(/non-linked/u);
+
+      await writeFile(`${fixture.path}-wal`, "active-v1-wal");
+      await expect(extractV1Snapshot(fixture.path)).rejects.toThrow(/checkpointed standalone/u);
     } finally {
       await rm(fixture.directory, { force: true, recursive: true });
     }
