@@ -289,7 +289,8 @@ pnpm local:maintenance:schedule -- --install
 ```
 
 恢复演练不会修改生产库。它先校验数据库与每张照片，然后把 dump 恢复到随机命名的影子
-数据库，执行固定 schema 查询，最后删除影子库并记录演练时间：
+数据库；影子库使用正式迁移器追平当前版本，再逐项核对当前源码中的迁移文件名、SHA-256
+与关键 schema，最后删除影子库并记录演练时间。旧版本恢复集因此也会演练升级到当前版本：
 
 ```bash
 pnpm local:restore:drill -- --file "/absolute/path/to/backup.dump" \

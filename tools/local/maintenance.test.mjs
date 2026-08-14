@@ -12,7 +12,24 @@ import {
   updateMaintenanceState,
   withMaintenanceLock,
 } from "./maintenance-state.mjs";
-import { parseRestoreDrillArguments, runRestoreDrill } from "./restore-drill.mjs";
+import {
+  drillMigrateCommand,
+  drillValidateCommand,
+  parseRestoreDrillArguments,
+  readMigrationInventory,
+  runRestoreDrill,
+} from "./restore-drill.mjs";
+
+const CURRENT_MIGRATIONS = Object.freeze([
+  Object.freeze({
+    filename: "0069_bounded_automation.sql",
+    checksum: "b".repeat(64),
+  }),
+]);
+const VALID_DRILL_EVIDENCE = `${JSON.stringify({
+  status: "DRILL_OK",
+  migrations: CURRENT_MIGRATIONS.map(({ filename, checksum }) => [filename, checksum]),
+})}\n`;
 
 const roots = [];
 after(async () => {
@@ -51,6 +68,22 @@ test("maintenance CLI is bounded and retention deletion is explicit", () => {
     () => parseRestoreDrillArguments(["--file", "/tmp/x"]),
     /LOCAL_RESTORE_DRILL_ARGS_INVALID/u,
   );
+});
+
+test("restore drill binds shadow migration to the exact repository inventory", async () => {
+  const inventory = await readMigrationInventory(process.cwd());
+  assert.equal(inventory.length, 69);
+  assert.equal(inventory.at(-1)?.filename, "0069_bounded_automation.sql");
+  assert.ok(inventory.every(({ checksum }) => /^[0-9a-f]{64}$/u.test(checksum)));
+
+  const migrate = drillMigrateCommand("laundry-ci-test");
+  assert.deepEqual(migrate.args.slice(-5), ["run", "--rm", "-e", "PGDATABASE", "migrate"]);
+  const validationSql = drillValidateCommand(
+    "laundry-ci-test",
+    "laundry_v2_drill_aaaaaaaaaaaa",
+  ).args.at(-1);
+  assert.match(validationSql, /json_agg\(json_build_array\(filename, checksum\)/u);
+  assert.match(validationSql, /public\.automation_policies/u);
 });
 
 test("maintenance lock rejects a concurrent backup and is released after completion", async () => {
@@ -276,12 +309,21 @@ test("restore drill uses a shadow database and drops it after validation", async
       }),
     withMaintenanceLock: async (_directory, _operation, callback) => callback(),
     verifyBackup: async () => Object.freeze({ path: sourcePath }),
+    readMigrationInventory: async () => CURRENT_MIGRATIONS,
     open,
-    run: async (command) => calls.push(command.args.includes("createdb") ? "create" : "drop"),
+    run: async (command, options) => {
+      if (command.args.includes("createdb")) calls.push("create");
+      else if (command.args.includes("dropdb")) calls.push("drop");
+      else {
+        assert.ok(command.args.includes("migrate"));
+        assert.match(options.env.PGDATABASE, /^laundry_v2_drill_[0-9a-f]{12}$/u);
+        calls.push("migrate");
+      }
+    },
     stream: async () => calls.push("restore"),
     capture: async () => {
       calls.push("validate");
-      return "DRILL_OK\n";
+      return VALID_DRILL_EVIDENCE;
     },
     updateMaintenanceState: async () => calls.push("state"),
   });
@@ -295,7 +337,7 @@ test("restore drill uses a shadow database and drops it after validation", async
     dependencies,
   );
   assert.equal(result.status, "ok");
-  assert.deepEqual(calls, ["create", "restore", "validate", "drop", "state"]);
+  assert.deepEqual(calls, ["create", "restore", "migrate", "validate", "drop", "state"]);
 });
 
 test("restore drill records failure when shadow database cleanup fails", async () => {
@@ -323,12 +365,13 @@ test("restore drill records failure when shadow database cleanup fails", async (
             }),
           withMaintenanceLock: async (_directory, _operation, callback) => callback(),
           verifyBackup: async () => Object.freeze({ path: sourcePath }),
+          readMigrationInventory: async () => CURRENT_MIGRATIONS,
           open,
           run: async (command) => {
             if (command.args.includes("dropdb")) throw new Error("drop failed");
           },
           stream: async () => undefined,
-          capture: async () => "DRILL_OK\n",
+          capture: async () => VALID_DRILL_EVIDENCE,
           updateMaintenanceState: async (_directory, patch) => statePatches.push(patch),
         }),
       ),
@@ -337,6 +380,47 @@ test("restore drill records failure when shadow database cleanup fails", async (
   assert.equal(statePatches.length, 1);
   assert.equal(statePatches[0]?.last_drill, undefined);
   assert.equal(statePatches[0]?.last_failure?.operation, "restore-drill");
+});
+
+test("restore drill rejects an incomplete migration ledger after reconciliation", async () => {
+  const directory = await backupDirectory();
+  const sourcePath = join(directory, "laundry-v2-backup-20260730T030000Z-aaaaaaaa.dump");
+  await writeFile(sourcePath, "private-dump", { mode: 0o600 });
+  const calls = [];
+  await assert.rejects(
+    () =>
+      runRestoreDrill(
+        {
+          argv: ["--file", sourcePath, "--confirm-sha256", "a".repeat(64)],
+          env: Object.freeze({}),
+          cwd: "/workspace",
+          stdout: () => undefined,
+        },
+        Object.freeze({
+          now: () => new Date("2026-07-30T04:00:00.000Z"),
+          randomUUID: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          prepareLocalDataContext: async () =>
+            Object.freeze({
+              project: "laundry-ci-test",
+              env: Object.freeze({ PATH: "/bin" }),
+              backupDirectory: directory,
+            }),
+          withMaintenanceLock: async (_directory, _operation, callback) => callback(),
+          verifyBackup: async () => Object.freeze({ path: sourcePath }),
+          readMigrationInventory: async () => CURRENT_MIGRATIONS,
+          open,
+          run: async (command) => {
+            if (command.args.includes("dropdb")) calls.push("drop");
+          },
+          stream: async () => undefined,
+          capture: async () => JSON.stringify({ status: "DRILL_OK", migrations: [] }),
+          updateMaintenanceState: async (_directory, patch) => calls.push(patch),
+        }),
+      ),
+    /LOCAL_RESTORE_DRILL_VALIDATION_FAILED/u,
+  );
+  assert.ok(calls.includes("drop"));
+  assert.equal(calls.at(-1)?.last_failure?.operation, "restore-drill");
 });
 
 test("restore drill does not touch PostgreSQL when recovery verification fails", async () => {
