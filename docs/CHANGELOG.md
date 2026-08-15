@@ -14,9 +14,11 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
+- 退役产物归档工具现在真的能归档产物：`measureTree` 此前对符号链接直接失败关闭，而任何真实部署树都是 pnpm workspace（目标产物一棵树就有 2688 个 `node_modules` 符号链接），该守卫使 mover 路径从未在真实数据上成功过；此前三层验证（两次真机 `--list` 返回 `count=0`、17 项合成树单测、只调用 `plan` 的真机预演）恰好都绕开了 move 路径。修复把符号链接计为叶子，不拒绝也不跟随，遍历仍不可能逃出该树。同时为退役账本从未认领的无主产物增加受控归档子命令 `--archive-orphan`（比 `--archive` 更严：任何 history 引用该路径即拒绝，并要求该产物自身 marker 与 live marker 不同）。随精确 `main` `c04f858362f1a02bf857b668513a1d1e29f64104` 发布到 hk-vps，迁移头保持 69/`0069_bounded_automation.sql` 不变（`same_migration`、`old_code_compatible=true`）；公网 API 20/20 journey 全 PASS、Cloud Chromium PASS。见[归档工具修复发布结果](operations/2026-08-15-artifact-archive-release-result.md)。
+
 - 柜台 Web 不再因单个代码分片取不到而白屏：host 入口的启动失败会渲染可重新加载的失败态而不是停在空白页，懒加载路由外层新增错误边界，单个页面加载失败只降级该路由，不再卸载整个柜台界面（含外壳、导航与在途开单状态）。修复 issue #192、#193，两者均由路由级拆包引入且在本次发布前从未上线。
 
-- 上述修复与七个非部署软件批次（依赖门禁、路由拆包与 bundle 预算、影子恢复演练、脱敏 V1 迁移演练、release candidate 组装、macOS 未签名包门禁、provider 契约收紧）已随精确 `main` `b80ab3e1af8145f7c49b6767a87dcbf89079e1ec` 发布到 hk-vps。迁移头保持 69/`0069_bounded_automation.sql` 不变，`compatibility_decision=same_migration`、`old_code_compatible=true`，为纯代码切换；公网 API 20/20 journey 全 PASS、Cloud Chromium PASS，marker/schema/服务/健康与保留证据均通过。退役产物归档工具随本次发布首次进入部署树并在真实数据上验证。见[非部署批次与白屏修复发布结果](operations/2026-08-14-nondeploy-batches-release-result.md)。
+- 上述修复与七个非部署软件批次（依赖门禁、路由拆包与 bundle 预算、影子恢复演练、脱敏 V1 迁移演练、release candidate 组装、macOS 未签名包门禁、provider 契约收紧）已随精确 `main` `b80ab3e1af8145f7c49b6767a87dcbf89079e1ec` 发布到 hk-vps。迁移头保持 69/`0069_bounded_automation.sql` 不变，`compatibility_decision=same_migration`、`old_code_compatible=true`，为纯代码切换；公网 API 20/20 journey 全 PASS、Cloud Chromium PASS，marker/schema/服务/健康与保留证据均通过。退役产物归档工具随本次发布首次进入部署树；当时只在真实 `/opt` 与真实 history 上验证了 `--list`（正确返回 `count=0`），mover 路径直到 2026-08-15 修复符号链接守卫后才真正可用。见[非部署批次与白屏修复发布结果](operations/2026-08-14-nondeploy-batches-release-result.md)。
 
 - 上述 ADR-40 至 ADR-63 的全部能力（Owner 云端经营与门店管理、会员权益与有效期、顾客扩展档案与折扣政策、云数据保护与联合恢复、provider-neutral 通知 outbox、店厂交接与质检、取送全链、营销与顾客自助、AI/BYOK）已随精确 `main` `65bd8210c824037d4c871a46ce3eaf3e3dc1c314` 一次性发布到 hk-vps，迁移由 48/head `0048_catalog_governance.sql` 推进到 69/head `0069_bounded_automation.sql`；公网 API 19/19 journey PASS、Cloud Chromium PASS，marker/schema/服务/健康与保留证据均通过。首个候选 `53b012c` 的两次尝试均失败关闭并回滚，经 PR #179–#181 修复后重新发布。本轮 `old_code_compatible=false`，代码回滚必须走保留的 controller 与 pre-release dump。见[阶段 3.2–4.5 发布结果](operations/2026-08-13-stage32-45-release-result.md)。
 
