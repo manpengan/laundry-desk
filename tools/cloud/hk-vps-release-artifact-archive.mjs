@@ -14,7 +14,12 @@ import { join } from "node:path";
 
 import { fail } from "./hk-vps-release-core.mjs";
 import { readPrivateFile } from "./hk-vps-release-private-file.mjs";
-import { HISTORY_ROOT, parseTransition } from "./hk-vps-release-remote-support.mjs";
+import {
+  HISTORY_ROOT,
+  LIVE_ROOT,
+  parseTransition,
+  readReleaseMarker,
+} from "./hk-vps-release-remote-support.mjs";
 
 export const OPT_ROOT = "/opt";
 export const ARCHIVE_ROOT = "/var/lib/laundry-desk-release-archive";
@@ -26,6 +31,9 @@ const HISTORY_NAME = new RegExp(`^${SHA}-[0-9a-f]{32}-(?:committed|rolled_back)\
 const RETIRED_ARTIFACT = Object.freeze([
   new RegExp(`^laundry-desk\\.failed-${SHA}$`, "u"),
   new RegExp(`^laundry-desk\\.rollback-${SHA}-before-${SHA}$`, "u"),
+  // Pre-history-system safety points, e.g. laundry-desk.rollback-pre-ae9808c-20260809T112330Z.
+  // These predate the transition ledger and can only ever qualify as orphans.
+  /^laundry-desk\.rollback-pre-[0-9a-f]{7}-\d{8}T\d{6}Z$/u,
 ]);
 
 function use(dependencies, name, fallback) {
@@ -109,6 +117,33 @@ function assertReleasedByHistory(source, records) {
   return Object.freeze(bound.map((record) => record.candidate_sha));
 }
 
+// The orphan path exists only for trees the transition ledger never claimed — pre-ledger safety
+// points, or artifacts whose history was archived long ago. It is strictly narrower than the bound
+// path: ANY reference from ANY record disqualifies the tree, so a live or historical rollback
+// target can never reach it. Requiring the artifact's own marker to differ from the live marker is
+// a second, independent proof that it is not the running deployment.
+function assertUnreferenced(source, records) {
+  for (const record of records) {
+    if (record.failed_path === source || record.rollback_path === source) fail(CODE);
+  }
+}
+
+async function assertNotLiveTree(source, dependencies) {
+  const read = use(dependencies, "readReleaseMarker", readReleaseMarker);
+  const liveRoot = dependencies.liveRoot ?? LIVE_ROOT;
+  if (source === liveRoot) fail(CODE);
+  const live = await read(liveRoot).catch((error) => fail(CODE, error));
+  const artifact = await read(source).catch((error) => fail(CODE, error));
+  if (
+    typeof live.git_sha !== "string" ||
+    typeof artifact.git_sha !== "string" ||
+    artifact.git_sha === live.git_sha
+  ) {
+    fail(CODE);
+  }
+  return artifact.git_sha;
+}
+
 async function measureTree(path, dependencies) {
   const metadata = await use(dependencies, "lstat", lstat)(path);
   if (metadata.isSymbolicLink()) fail(CODE);
@@ -140,7 +175,7 @@ async function assertAbsent(path, dependencies) {
  * Verify that `name` under /opt may be archived. Read-only: performs every ownership, binding and
  * filesystem check and returns the resolved plan without touching the tree.
  */
-export async function planArtifactArchive(name, dependencies = {}) {
+async function resolveArchivePlan(name, dependencies) {
   assertRetiredName(name);
   const optRoot = dependencies.optRoot ?? OPT_ROOT;
   const archiveRoot = dependencies.archiveRoot ?? ARCHIVE_ROOT;
@@ -153,8 +188,39 @@ export async function planArtifactArchive(name, dependencies = {}) {
   await assertOwnedDirectory(source, 0o755, dependencies);
   await assertAbsent(target, dependencies);
   const records = await use(dependencies, "records", historyRecords)(dependencies);
-  const candidates = assertReleasedByHistory(source, records);
-  return Object.freeze({ archiveRoot, candidates, optRoot, source, target });
+  return { archiveRoot, optRoot, records, source, target };
+}
+
+export async function planArtifactArchive(name, dependencies = {}) {
+  const plan = await resolveArchivePlan(name, dependencies);
+  const candidates = assertReleasedByHistory(plan.source, plan.records);
+  return Object.freeze({
+    archiveRoot: plan.archiveRoot,
+    candidates,
+    optRoot: plan.optRoot,
+    source: plan.source,
+    target: plan.target,
+  });
+}
+
+/**
+ * Verify that `name` is an orphan: retired by shape, referenced by no history record at all, and
+ * carrying a release marker that differs from the live one. Read-only.
+ *
+ * Separate from planArtifactArchive on purpose — this path is for trees the ledger never claimed,
+ * and it must never become a way to retire a rollback target that history still binds.
+ */
+export async function planOrphanArtifactArchive(name, dependencies = {}) {
+  const plan = await resolveArchivePlan(name, dependencies);
+  assertUnreferenced(plan.source, plan.records);
+  const markerSha = await assertNotLiveTree(plan.source, dependencies);
+  return Object.freeze({
+    archiveRoot: plan.archiveRoot,
+    markerSha,
+    optRoot: plan.optRoot,
+    source: plan.source,
+    target: plan.target,
+  });
 }
 
 /**
@@ -162,7 +228,19 @@ export async function planArtifactArchive(name, dependencies = {}) {
  * same object. Never deletes; the inverse rename restores the previous layout.
  */
 export async function archiveRetiredArtifact(name, dependencies = {}) {
-  const plan = await planArtifactArchive(name, dependencies);
+  return moveArchivedTree(await planArtifactArchive(name, dependencies), dependencies);
+}
+
+/**
+ * Archive an orphaned artifact. Same atomic rename and same-object proof as the bound path; only
+ * the qualifying rule differs. Requires the caller to have obtained explicit authorisation — the
+ * runner gates this behind its own subcommand rather than folding it into --archive.
+ */
+export async function archiveOrphanArtifact(name, dependencies = {}) {
+  return moveArchivedTree(await planOrphanArtifactArchive(name, dependencies), dependencies);
+}
+
+async function moveArchivedTree(plan, dependencies) {
   const before = await measureTree(plan.source, dependencies);
   const identity = await use(dependencies, "lstat", lstat)(plan.source);
   await use(dependencies, "rename", rename)(plan.source, plan.target);
@@ -182,9 +260,12 @@ export async function archiveRetiredArtifact(name, dependencies = {}) {
   }
   return Object.freeze({
     bytes: after.bytes,
-    candidates: plan.candidates,
+    // Bound archives report the candidate SHAs history tied to the tree; orphan archives have no
+    // such binding and report the tree's own marker instead.
+    candidates: plan.candidates ?? null,
     entries: after.entries,
     ino: moved.ino,
+    markerSha: plan.markerSha ?? null,
     source: plan.source,
     target: plan.target,
   });

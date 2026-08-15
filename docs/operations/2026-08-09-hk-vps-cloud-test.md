@@ -113,6 +113,26 @@ ssh hk-vps /opt/nodejs/bin/node \
   --archive laundry-desk.failed-<40 位 SHA>
 ```
 
+### 无主产物
+
+`--list` 只列出 history 证明为 `rolled_back` 的产物。早于 transition 账本的安全点（例如
+`laundry-desk.rollback-pre-<短 SHA>-<时间戳>`）不会被任何记录引用，因此永远不在该列表里，
+但同样占用保留槽位。
+
+这类产物走独立子命令，不是 `--archive` 的开关 —— 退役账本从未认领的树是一个单独授权的决定，
+在 shell 历史里也应当读起来就是如此：
+
+```bash
+ssh hk-vps /opt/nodejs/bin/node \
+  /opt/laundry-desk/tools/cloud/hk-vps-release-artifact-archive-run.mjs \
+  --archive-orphan laundry-desk.rollback-pre-<短 SHA>-<时间戳>
+```
+
+该路径比 `--archive` **更严**：任何一条 history 记录只要引用了该路径（无论 `rollback_path`
+还是 `failed_path`）即拒绝，因此活动或历史回滚目标都不可能走到这里；此外还要求该产物自身的
+release marker 与 live marker 不同，作为「它不是当前部署」的第二重独立证明。成功输出带
+`orphan_marker=<该树的 git_sha>` 而非 `candidates=`。
+
 成功输出 `CLOUD_RELEASE_ARTIFACT_ARCHIVE_OK entries=… bytes=… ino=… target=…`；`ino` 与
 移动前一致即证明是同一对象而非复制。归档根为 `/var/lib/laundry-desk-release-archive`
 （root:root `0700`）。history、controller、backup 与 verification evidence 都不在 `/opt`，
