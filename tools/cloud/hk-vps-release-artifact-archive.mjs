@@ -144,9 +144,14 @@ async function assertNotLiveTree(source, dependencies) {
   return artifact.git_sha;
 }
 
+// Symlinks are counted as leaves, never rejected and never followed. A deployed tree is a pnpm
+// workspace: laundry-desk.rollback-pre-ae9808c-20260809T112330Z alone holds 2,688 node_modules
+// symlinks. Rejecting them made the mover unable to archive any real artifact. lstat does not
+// follow, and isDirectory() is false for a link, so the walk cannot escape the tree either way —
+// and the rename moves links intact regardless of what they point at. The root is still required
+// to be a real directory: assertOwnedDirectory checks isSymbolicLink() and realpath.
 async function measureTree(path, dependencies) {
   const metadata = await use(dependencies, "lstat", lstat)(path);
-  if (metadata.isSymbolicLink()) fail(CODE);
   let entries = 1;
   let bytes = metadata.size;
   if (metadata.isDirectory()) {

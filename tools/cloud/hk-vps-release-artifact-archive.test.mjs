@@ -104,6 +104,28 @@ test("archives a bound rolled-back artifact and proves the moved tree is the sam
   assert.deepEqual(synced, [roots.optRoot, roots.archiveRoot]);
 });
 
+test("archives a tree containing node_modules symlinks", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+  const source = await makeArtifact(roots.optRoot, FAILED);
+  // Every real deployment is a pnpm workspace; the tree this mover was written for holds 2,688
+  // such links. Counting them as leaves is the whole point of this regression.
+  await mkdir(join(source, "node_modules"));
+  await symlink(join(source, "nested"), join(source, "node_modules", "linked-package"));
+  await symlink("../../dangling-target", join(source, "node_modules", "dangling"));
+  const { dependencies } = dependenciesFor(roots, [boundRecord(source)]);
+
+  const result = await archiveRetiredArtifact(FAILED, dependencies);
+
+  // root + nested + nested/marker.txt + node_modules + two links.
+  assert.equal(result.entries, 6);
+  assert.deepEqual(await readdir(roots.optRoot), []);
+  assert.deepEqual((await readdir(join(result.target, "node_modules"))).sort(), [
+    "dangling",
+    "linked-package",
+  ]);
+});
+
 test("refuses a name outside the retired artifact patterns", async (t) => {
   const roots = await makeRoots();
   t.after(() => rm(roots.base, { force: true, recursive: true }));
