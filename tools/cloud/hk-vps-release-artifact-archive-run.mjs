@@ -13,6 +13,7 @@ import { pathToFileURL } from "node:url";
 
 import { CloudReleaseError } from "./hk-vps-release-identifiers.mjs";
 import {
+  archiveOrphanArtifact,
   archiveRetiredArtifact,
   listArchivableArtifacts,
 } from "./hk-vps-release-artifact-archive.mjs";
@@ -30,6 +31,11 @@ export function parseArguments(argv) {
   if (argv.length === 2 && argv[0] === "--archive" && typeof argv[1] === "string") {
     return Object.freeze({ action: "archive", name: argv[1] });
   }
+  // Deliberately a separate subcommand, not a flag on --archive: retiring a tree the ledger never
+  // claimed is a distinct, separately authorised decision and should read that way in shell history.
+  if (argv.length === 2 && argv[0] === "--archive-orphan" && typeof argv[1] === "string") {
+    return Object.freeze({ action: "archive-orphan", name: argv[1] });
+  }
   throw new CloudReleaseError("CLOUD_RELEASE_ARTIFACT_ARCHIVE_ARGS_INVALID");
 }
 
@@ -41,10 +47,17 @@ export async function main(argv, write) {
     for (const name of names) write(`  ${name}\n`);
     return;
   }
-  const result = await archiveRetiredArtifact(request.name);
+  const result =
+    request.action === "archive-orphan"
+      ? await archiveOrphanArtifact(request.name)
+      : await archiveRetiredArtifact(request.name);
+  const binding =
+    result.markerSha === null
+      ? `candidates=${result.candidates.join(",")}`
+      : `orphan_marker=${result.markerSha}`;
   write(
     `CLOUD_RELEASE_ARTIFACT_ARCHIVE_OK entries=${result.entries} bytes=${result.bytes} ` +
-      `ino=${result.ino} target=${result.target}\n`,
+      `ino=${result.ino} ${binding} target=${result.target}\n`,
   );
 }
 

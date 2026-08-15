@@ -16,14 +16,17 @@ import test from "node:test";
 
 import {
   ARTIFACT_PREFIX,
+  archiveOrphanArtifact,
   archiveRetiredArtifact,
   listArchivableArtifacts,
   planArtifactArchive,
+  planOrphanArtifactArchive,
 } from "./hk-vps-release-artifact-archive.mjs";
 import { isDirectEntrypoint, parseArguments } from "./hk-vps-release-artifact-archive-run.mjs";
 
 const FAILED = `${ARTIFACT_PREFIX}failed-${"a".repeat(40)}`;
 const ROLLBACK = `${ARTIFACT_PREFIX}rollback-${"b".repeat(40)}-before-${"c".repeat(40)}`;
+const ORPHAN = `${ARTIFACT_PREFIX}rollback-pre-abcdef0-20260809T112330Z`;
 
 async function makeRoots() {
   // realpath normalises the macOS /var -> /private/var symlink so the module's realpath guard holds.
@@ -224,11 +227,85 @@ test("lists only the artifacts history proves are archivable", async (t) => {
   assert.deepEqual(await listArchivableArtifacts(dependencies), [FAILED]);
 });
 
-test("host runner accepts only the two supported invocations", () => {
+test("the orphan path accepts a tree no history record references", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+  const live = await makeArtifact(roots.base, "live");
+  const source = await makeArtifact(roots.optRoot, ORPHAN);
+  // Bound to a different artifact, so the orphan under test stays unreferenced.
+  const { dependencies } = dependenciesFor(roots, [boundRecord(join(roots.optRoot, FAILED))], {
+    liveRoot: live,
+    readReleaseMarker: async (root) => ({
+      git_sha: root === live ? "1".repeat(40) : "2".repeat(40),
+    }),
+  });
+
+  const result = await archiveOrphanArtifact(ORPHAN, dependencies);
+
+  assert.equal(result.markerSha, "2".repeat(40));
+  assert.equal(result.candidates, null);
+  assert.deepEqual(await readdir(roots.optRoot), []);
+  assert.equal(source.endsWith(ORPHAN), true);
+});
+
+test("the orphan path refuses a tree any history record still references", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+  const live = await makeArtifact(roots.base, "live");
+  const source = await makeArtifact(roots.optRoot, ORPHAN);
+  const marker = { git_sha: "2".repeat(40) };
+  for (const overrides of [{ rollback_path: source }, { failed_path: source }]) {
+    const { dependencies } = dependenciesFor(roots, [boundRecord(source, overrides)], {
+      liveRoot: live,
+      readReleaseMarker: async () => marker,
+    });
+    await rejects(planOrphanArtifactArchive(ORPHAN, dependencies));
+  }
+  assert.deepEqual(await readdir(roots.optRoot), [ORPHAN]);
+});
+
+test("the orphan path refuses a tree whose marker equals the live marker", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+  const live = await makeArtifact(roots.base, "live");
+  await makeArtifact(roots.optRoot, ORPHAN);
+  const { dependencies } = dependenciesFor(roots, [], {
+    liveRoot: live,
+    readReleaseMarker: async () => ({ git_sha: "3".repeat(40) }),
+  });
+
+  await rejects(planOrphanArtifactArchive(ORPHAN, dependencies));
+});
+
+test("the orphan path still refuses a name outside the retired patterns", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+  const live = await makeArtifact(roots.base, "live");
+  const { dependencies } = dependenciesFor(roots, [], {
+    liveRoot: live,
+    readReleaseMarker: async () => ({ git_sha: "2".repeat(40) }),
+  });
+
+  await rejects(planOrphanArtifactArchive("laundry-desk.next-" + "a".repeat(40), dependencies));
+});
+
+test("host runner accepts only the three supported invocations", () => {
   assert.deepEqual(parseArguments(["--list"]), { action: "list" });
   assert.deepEqual(parseArguments(["--archive", FAILED]), { action: "archive", name: FAILED });
 
-  for (const argv of [[], ["--list", FAILED], ["--archive"], ["--remove", FAILED], [FAILED]]) {
+  assert.deepEqual(parseArguments(["--archive-orphan", ORPHAN]), {
+    action: "archive-orphan",
+    name: ORPHAN,
+  });
+
+  for (const argv of [
+    [],
+    ["--list", FAILED],
+    ["--archive"],
+    ["--remove", FAILED],
+    [FAILED],
+    ["--archive-orphan"],
+  ]) {
     assert.throws(() => parseArguments(argv), /CLOUD_RELEASE_ARTIFACT_ARCHIVE_ARGS_INVALID/u);
   }
 });
