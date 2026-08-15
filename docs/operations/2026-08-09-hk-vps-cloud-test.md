@@ -92,6 +92,16 @@ incoming 与 next 两项。计数到 6 时下一次 `prepare` 必然以
 `CLOUD_RELEASE_ARTIFACT_RETENTION_LIMIT` 失败关闭。发布链**从不自动删除**任何产物，
 腾出槽位是一次单独授权的动作。
 
+> **不要只按 `assertRoomForRelease` 的字面阈值推断。** 该函数写的是 `count >= 8`，只读代码
+> 会得出「常驻 6 也能过」的错误结论；但 `ARTIFACT_PATTERNS` 里确实存在
+> `laundry-desk.incoming-<sha>-<token>.tar` 与 `laundry-desk.next-<sha>`，发布过程中 `/opt`
+> 会临时多出这两项，`6 + 2 = 8` 正好触顶。**`/opt` 的有效上限是常驻 ≤ 5。**
+> 2026-08-15 曾因此浪费一次尝试（前一次失败留下的 `laundry-desk.failed-<sha>` 把常驻从 5
+> 推到 6，下一次 `prepare` 在预检即失败）。
+>
+> 同理，一次**进入停写窗口**的失败会同时消耗四个集合各一格：history +1、backup +1 对、
+> `/opt` +1 树、controller +1。规划发布前应逐个集合核对余量，而不是只看 `/opt`。
+
 归档只做同文件系统原子 rename，不删除任何东西，反向 rename 即可完整还原。工具会拒绝
 任何没有被 history 证明为 `rolled_back` 且 `verification_evidence_authoritative=false` 的
 产物 —— 活动版本的 rollback tree 绑定的是 `committed` 记录，因此永远不会被移动；没有任何
@@ -99,6 +109,12 @@ history 绑定的产物同样一律拒绝。
 
 入口随 `tools/cloud/` 一起进入发布产物，因此**只有部署树包含该文件的版本上线之后**这两条
 命令才可用；在此之前 `/opt/laundry-desk/tools/cloud/` 里没有它，会直接 `MODULE_NOT_FOUND`。
+同理，工具自身的修复也要先发布才能生效：2026-08-15 之前部署树里的版本因 `measureTree` 拒绝
+符号链接而**无法归档任何真实产物**（真实部署树都是 pnpm workspace），修复本身又要靠一次发布
+才能上线，构成鸡生蛋。遇到这种情况时，腾槽位只能按当轮授权手工守卫式搬迁：先做身份证明
+（`outcome`、`verification_evidence_authoritative`、controller/backup 绑定唯一性、live marker
+不同），再同文件系统原子 rename，最后逐项核对 inode 与剩余集合的 1:1 关系。
+注意 history 记录里表示状态的字段是 `outcome` 而不是 `state`。
 
 先只读列出可归档项，再对精确名字执行：
 

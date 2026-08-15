@@ -10,6 +10,8 @@
 > 阶段 3.1 验收：[价目治理验收记录](../specs/2026-08-11-stage3-catalog-governance-acceptance.md)
 > 阶段 3.1 结果：[hk-vps 阶段 3.1 发布结果](../../operations/2026-08-11-stage3-catalog-governance-release-result.md)
 > 阶段 3.2–4.5 结果：[hk-vps 阶段 3.2–4.5 发布结果](../../operations/2026-08-13-stage32-45-release-result.md)
+> 后续发布：[非部署批次与白屏修复结果](../../operations/2026-08-14-nondeploy-batches-release-result.md)（`b80ab3e…9e1ec`）·
+> [归档工具修复结果](../../operations/2026-08-15-artifact-archive-release-result.md)（`c04f858…4104`，当前 live）
 > 当前裁决：[ADR-37](../../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
 > 继承边界：[ADR-16](../../adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-36](../../adr/2026-08-09-adr-36-cloud-test-environment.md)
 
