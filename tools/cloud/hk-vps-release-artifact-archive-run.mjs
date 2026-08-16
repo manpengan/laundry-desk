@@ -15,6 +15,7 @@ import { CloudReleaseError } from "./hk-vps-release-identifiers.mjs";
 import {
   archiveOrphanArtifact,
   archiveRetiredArtifact,
+  archiveSupersededRollback,
   listArchivableArtifacts,
 } from "./hk-vps-release-artifact-archive.mjs";
 
@@ -31,12 +32,32 @@ export function parseArguments(argv) {
   if (argv.length === 2 && argv[0] === "--archive" && typeof argv[1] === "string") {
     return Object.freeze({ action: "archive", name: argv[1] });
   }
-  // Deliberately a separate subcommand, not a flag on --archive: retiring a tree the ledger never
-  // claimed is a distinct, separately authorised decision and should read that way in shell history.
-  if (argv.length === 2 && argv[0] === "--archive-orphan" && typeof argv[1] === "string") {
-    return Object.freeze({ action: "archive-orphan", name: argv[1] });
+  // Deliberately separate subcommands, not flags on --archive: retiring a tree the ledger never
+  // claimed, and retiring a superseded committed rollback tree, are each a distinct separately
+  // authorised decision and should read that way in shell history.
+  for (const [flag, action] of [
+    ["--archive-orphan", "archive-orphan"],
+    ["--retire-superseded-rollback", "retire-superseded-rollback"],
+  ]) {
+    if (argv.length === 2 && argv[0] === flag && typeof argv[1] === "string") {
+      return Object.freeze({ action, name: argv[1] });
+    }
   }
   throw new CloudReleaseError("CLOUD_RELEASE_ARTIFACT_ARCHIVE_ARGS_INVALID");
+}
+
+const MOVERS = Object.freeze({
+  archive: archiveRetiredArtifact,
+  "archive-orphan": archiveOrphanArtifact,
+  "retire-superseded-rollback": archiveSupersededRollback,
+});
+
+function describeBinding(action, result) {
+  if (action === "archive-orphan") return `orphan_marker=${result.markerSha}`;
+  if (action === "retire-superseded-rollback") {
+    return `superseded=${result.candidates.join(",")} retired_marker=${result.markerSha}`;
+  }
+  return `candidates=${result.candidates.join(",")}`;
 }
 
 export async function main(argv, write) {
@@ -47,17 +68,10 @@ export async function main(argv, write) {
     for (const name of names) write(`  ${name}\n`);
     return;
   }
-  const result =
-    request.action === "archive-orphan"
-      ? await archiveOrphanArtifact(request.name)
-      : await archiveRetiredArtifact(request.name);
-  const binding =
-    result.markerSha === null
-      ? `candidates=${result.candidates.join(",")}`
-      : `orphan_marker=${result.markerSha}`;
+  const result = await MOVERS[request.action](request.name);
   write(
     `CLOUD_RELEASE_ARTIFACT_ARCHIVE_OK entries=${result.entries} bytes=${result.bytes} ` +
-      `ino=${result.ino} ${binding} target=${result.target}\n`,
+      `ino=${result.ino} ${describeBinding(request.action, result)} target=${result.target}\n`,
   );
 }
 

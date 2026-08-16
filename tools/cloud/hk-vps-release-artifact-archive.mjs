@@ -28,6 +28,7 @@ export const ARTIFACT_PREFIX = "laundry-desk.";
 const CODE = "CLOUD_RELEASE_ARTIFACT_ARCHIVE_INVALID";
 const SHA = "[0-9a-f]{40}";
 const HISTORY_NAME = new RegExp(`^${SHA}-[0-9a-f]{32}-(?:committed|rolled_back)\\.json$`, "u");
+const SUPERSEDED_ROLLBACK = new RegExp(`^laundry-desk\\.rollback-${SHA}-before-${SHA}$`, "u");
 const RETIRED_ARTIFACT = Object.freeze([
   new RegExp(`^laundry-desk\\.failed-${SHA}$`, "u"),
   new RegExp(`^laundry-desk\\.rollback-${SHA}-before-${SHA}$`, "u"),
@@ -128,6 +129,36 @@ function assertUnreferenced(source, records) {
   }
 }
 
+// A committed release's rollback tree is deliberately out of --archive's reach: history proves it
+// `committed`, so assertReleasedByHistory refuses it. That default is correct, but it also means
+// /opt grows monotonically — every successful release adds a rollback tree and nothing ever removes
+// one — so once the resident count reaches the effective cap, no further release can even prepare.
+//
+// This is the separately authorised exception, and it is narrower than it looks:
+//   * only a rollback tree — never a failed tree, never a pre-ledger safety point;
+//   * bound by exactly one record, via rollback_path, and that record is committed + authoritative;
+//   * that record must NOT be the live release: the running deployment keeps its own rollback tree;
+//   * the live release must itself hold a committed record, so the newest recovery path always
+//     exists and can never be the one being retired.
+// The move stays a same-filesystem rename. The release's history, controller, backup dump and
+// verification evidence are untouched, and the inverse rename restores the tree exactly.
+function assertSupersededRollback(source, records, liveSha) {
+  const bound = records.filter(
+    (record) => record.failed_path === source || record.rollback_path === source,
+  );
+  if (bound.length !== 1) fail(CODE);
+  const [record] = bound;
+  if (record.rollback_path !== source) fail(CODE);
+  if (record.outcome !== "committed") fail(CODE);
+  if (record.verification_evidence_authoritative !== true) fail(CODE);
+  if (typeof liveSha !== "string" || record.candidate_sha === liveSha) fail(CODE);
+  const liveIsCommitted = records.some(
+    (other) => other.outcome === "committed" && other.candidate_sha === liveSha,
+  );
+  if (!liveIsCommitted) fail(CODE);
+  return record.candidate_sha;
+}
+
 async function assertNotLiveTree(source, dependencies) {
   const read = use(dependencies, "readReleaseMarker", readReleaseMarker);
   const liveRoot = dependencies.liveRoot ?? LIVE_ROOT;
@@ -226,6 +257,35 @@ export async function planOrphanArtifactArchive(name, dependencies = {}) {
     source: plan.source,
     target: plan.target,
   });
+}
+
+/**
+ * Verify that `name` is the rollback tree of a committed release that a later release has already
+ * superseded. Read-only. Strictly narrower than planArtifactArchive: see assertSupersededRollback.
+ */
+export async function planSupersededRollbackArchive(name, dependencies = {}) {
+  if (typeof name !== "string" || !SUPERSEDED_ROLLBACK.test(name)) fail(CODE);
+  const plan = await resolveArchivePlan(name, dependencies);
+  const markerSha = await assertNotLiveTree(plan.source, dependencies);
+  const live = await use(
+    dependencies,
+    "readReleaseMarker",
+    readReleaseMarker,
+  )(dependencies.liveRoot ?? LIVE_ROOT).catch((error) => fail(CODE, error));
+  const candidate = assertSupersededRollback(plan.source, plan.records, live.git_sha);
+  return Object.freeze({
+    archiveRoot: plan.archiveRoot,
+    candidates: Object.freeze([candidate]),
+    markerSha,
+    optRoot: plan.optRoot,
+    source: plan.source,
+    target: plan.target,
+  });
+}
+
+/** Archive a superseded committed rollback tree. Requires its own explicit authorisation. */
+export async function archiveSupersededRollback(name, dependencies = {}) {
+  return moveArchivedTree(await planSupersededRollbackArchive(name, dependencies), dependencies);
 }
 
 /**
