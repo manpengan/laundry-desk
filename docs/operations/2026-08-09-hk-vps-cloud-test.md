@@ -149,6 +149,29 @@ ssh hk-vps /opt/nodejs/bin/node \
 release marker 与 live marker 不同，作为「它不是当前部署」的第二重独立证明。成功输出带
 `orphan_marker=<该树的 git_sha>` 而非 `candidates=`。
 
+### 已被取代的 committed 回滚树
+
+前两条路径都要求 history 证明该树 `rolled_back`，因此活动版本与历史版本的回滚树永远不会被
+移动。但这也意味着 **`/opt` 只增不减**：每次成功发布都新增一棵回滚树，没有任何路径会移除它，
+常驻计数迟早到达有效上限，之后任何发布都无法 `prepare`。
+
+第三条子命令是这个单调增长的唯一出口，它比 `--archive` 更严：
+
+```bash
+ssh hk-vps /opt/nodejs/bin/node \
+  /opt/laundry-desk/tools/cloud/hk-vps-release-artifact-archive-run.mjs \
+  --retire-superseded-rollback laundry-desk.rollback-<40 位 SHA>-before-<40 位 SHA>
+```
+
+只接受回滚树（不接受 `failed-`，也不接受 pre-ledger 安全点）；必须**恰好**被一条记录经
+`rollback_path` 绑定，且该记录为 `committed` 且 `verification_evidence_authoritative=true`；
+该记录**不得是当前 live 发布**——运行中的部署始终保留自己的回滚树；并且 live 发布自身必须
+持有一条 `committed` 记录，因此最新的恢复路径永远存在、永远不会是被退役的这一棵。此外仍要
+通过「该树自身 marker 与 live marker 不同」的独立证明。
+
+该发布的 history、controller、恢复点 dump 与验收证据都不动，只移动 `/opt` 那棵树；反向
+rename 即可完整还原。成功输出带 `superseded=<该发布 SHA> retired_marker=<该树 marker>`。
+
 成功输出 `CLOUD_RELEASE_ARTIFACT_ARCHIVE_OK entries=… bytes=… ino=… target=…`；`ino` 与
 移动前一致即证明是同一对象而非复制。归档根为 `/var/lib/laundry-desk-release-archive`
 （root:root `0700`）。history、controller、backup 与 verification evidence 都不在 `/opt`，

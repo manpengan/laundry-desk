@@ -18,6 +18,7 @@ import {
   ARTIFACT_PREFIX,
   archiveOrphanArtifact,
   archiveRetiredArtifact,
+  archiveSupersededRollback,
   listArchivableArtifacts,
   planArtifactArchive,
   planOrphanArtifactArchive,
@@ -311,13 +312,149 @@ test("the orphan path still refuses a name outside the retired patterns", async 
   await rejects(planOrphanArtifactArchive("laundry-desk.next-" + "a".repeat(40), dependencies));
 });
 
-test("host runner accepts only the three supported invocations", () => {
+const LIVE = "e".repeat(40);
+const SUPERSEDED = "c".repeat(40);
+
+function supersededRoots(roots, overrides = {}) {
+  const source = join(roots.optRoot, ROLLBACK);
+  const records = [
+    {
+      candidate_sha: SUPERSEDED,
+      failed_path: `${source}.failed`,
+      outcome: "committed",
+      rollback_path: source,
+      verification_evidence_authoritative: true,
+      ...overrides,
+    },
+    {
+      candidate_sha: LIVE,
+      failed_path: null,
+      outcome: "committed",
+      rollback_path: `${source}.newer`,
+      verification_evidence_authoritative: true,
+    },
+  ];
+  return dependenciesFor(roots, records, {
+    liveRoot: join(roots.base, "live"),
+    readReleaseMarker: async (path) => ({
+      git_sha: path === join(roots.base, "live") ? LIVE : SUPERSEDED,
+    }),
+  });
+}
+
+test("retires a superseded committed rollback tree and proves the same object moved", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+  const source = await makeArtifact(roots.optRoot, ROLLBACK);
+  const before = await lstat(source);
+  const { dependencies } = supersededRoots(roots);
+
+  const result = await archiveSupersededRollback(ROLLBACK, dependencies);
+
+  assert.deepEqual(result.candidates, [SUPERSEDED]);
+  assert.equal(result.markerSha, SUPERSEDED);
+  assert.equal(result.ino, before.ino);
+  assert.deepEqual(await readdir(roots.optRoot), []);
+  assert.equal((await lstat(result.target)).ino, before.ino);
+});
+
+test("retiring a rollback tree refuses the live release and every weaker binding", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+  for (const overrides of [
+    // the live release keeps its own rollback tree
+    { candidate_sha: LIVE },
+    // only committed, authoritative records qualify
+    { outcome: "rolled_back" },
+    { verification_evidence_authoritative: false },
+    // bound through failed_path, not rollback_path
+    { failed_path: join(roots.optRoot, ROLLBACK), rollback_path: null },
+  ]) {
+    await makeArtifact(roots.optRoot, ROLLBACK);
+    const { dependencies } = supersededRoots(roots, overrides);
+    await rejects(archiveSupersededRollback(ROLLBACK, dependencies));
+    await rm(join(roots.optRoot, ROLLBACK), { force: true, recursive: true });
+  }
+});
+
+test("retiring a rollback tree refuses failed trees, orphans and multiple bindings", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+
+  for (const name of [FAILED, ORPHAN]) {
+    await makeArtifact(roots.optRoot, name);
+    const { dependencies } = supersededRoots(roots);
+    await rejects(archiveSupersededRollback(name, dependencies));
+  }
+
+  await makeArtifact(roots.optRoot, ROLLBACK);
+  const source = join(roots.optRoot, ROLLBACK);
+  const { dependencies } = dependenciesFor(
+    roots,
+    [
+      {
+        candidate_sha: SUPERSEDED,
+        failed_path: null,
+        outcome: "committed",
+        rollback_path: source,
+        verification_evidence_authoritative: true,
+      },
+      {
+        candidate_sha: "f".repeat(40),
+        failed_path: null,
+        outcome: "rolled_back",
+        rollback_path: source,
+        verification_evidence_authoritative: false,
+      },
+    ],
+    {
+      liveRoot: join(roots.base, "live"),
+      readReleaseMarker: async (path) => ({
+        git_sha: path === join(roots.base, "live") ? LIVE : SUPERSEDED,
+      }),
+    },
+  );
+  await rejects(archiveSupersededRollback(ROLLBACK, dependencies));
+});
+
+test("retiring a rollback tree refuses when the live release has no committed record", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+  await makeArtifact(roots.optRoot, ROLLBACK);
+  const source = join(roots.optRoot, ROLLBACK);
+  const { dependencies } = dependenciesFor(
+    roots,
+    [
+      {
+        candidate_sha: SUPERSEDED,
+        failed_path: null,
+        outcome: "committed",
+        rollback_path: source,
+        verification_evidence_authoritative: true,
+      },
+    ],
+    {
+      liveRoot: join(roots.base, "live"),
+      readReleaseMarker: async (path) => ({
+        git_sha: path === join(roots.base, "live") ? LIVE : SUPERSEDED,
+      }),
+    },
+  );
+  await rejects(archiveSupersededRollback(ROLLBACK, dependencies));
+});
+
+test("host runner accepts only the four supported invocations", () => {
   assert.deepEqual(parseArguments(["--list"]), { action: "list" });
   assert.deepEqual(parseArguments(["--archive", FAILED]), { action: "archive", name: FAILED });
 
   assert.deepEqual(parseArguments(["--archive-orphan", ORPHAN]), {
     action: "archive-orphan",
     name: ORPHAN,
+  });
+
+  assert.deepEqual(parseArguments(["--retire-superseded-rollback", ROLLBACK]), {
+    action: "retire-superseded-rollback",
+    name: ROLLBACK,
   });
 
   for (const argv of [
@@ -327,6 +464,7 @@ test("host runner accepts only the three supported invocations", () => {
     ["--remove", FAILED],
     [FAILED],
     ["--archive-orphan"],
+    ["--retire-superseded-rollback"],
   ]) {
     assert.throws(() => parseArguments(argv), /CLOUD_RELEASE_ARTIFACT_ARCHIVE_ARGS_INVALID/u);
   }
