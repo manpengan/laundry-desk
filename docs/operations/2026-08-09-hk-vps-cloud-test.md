@@ -270,6 +270,20 @@ CLOUD_RELEASE_AWAITING_EXTERNAL_VERIFICATION candidate_sha=<sha> expected_sha=<s
 7. transition 停在 `awaiting_external_verification`，等待下一节由 `finalize` 亲自启动的公网
    业务与 UI 验收；工具不会因健康检查通过而自动提交。
 
+第 6 步的三个 health 探针各有独立的有界重试预算，只重试探针自身的传输失败，绝不重试契约
+违例（200 但信封不对、marker 漂移等一律首次即失败关闭）：
+
+| 探针                            | 尝试 | 单次上限 | 间隔 | 耗尽后的码                            |
+| ------------------------------- | ---: | -------: | ---: | ------------------------------------- |
+| loopback `/health`              |   15 |      2 s |  1 s | `CLOUD_RELEASE_DESK_READINESS_TIMEOUT` |
+| 公网 `/health`                  |    5 |     15 s |  2 s | `CLOUD_RELEASE_PUBLIC_READINESS_TIMEOUT` |
+| 公网 SPA `/`                    |    5 |     15 s |  2 s | `CLOUD_RELEASE_PUBLIC_READINESS_TIMEOUT` |
+
+公网两项的预算是 2026-08-15 补上的：此前它们是单发 15 秒零重试，而公网路径要出站解析 DNS、
+经 NAT hairpin 回到本机再由 Caddy 终止 TLS，任何一环停顿十几秒就会让一轮已经完成停写、备份、
+影子恢复与迁移的发布整体作废（当天实际发生过一次，见
+[归档工具修复发布结果](2026-08-15-artifact-archive-release-result.md) §3.1）。
+
 这里的恢复点只包含数据库，且只在同一 PostgreSQL 集群做过影子恢复；它不包含私有照片，
 不等于 ADR-33 完整数据保护、离机备份、生产灾备或 SLA 证据。
 
