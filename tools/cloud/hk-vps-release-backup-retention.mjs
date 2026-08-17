@@ -72,7 +72,7 @@ async function assertBackupRoot(path, postgresGid, allowMissing, dependencies) {
   return true;
 }
 
-function expectedBackupRecords(records, backupRoot) {
+function expectedBackupRecords(records, backupRoot, enforceLimit) {
   const expected = new Map();
   for (const record of records) {
     if (record.backup_path === null) continue;
@@ -85,20 +85,20 @@ function expectedBackupRecords(records, backupRoot) {
     expected.set(name, record);
     expected.set(basename(manifestPath), record);
   }
-  if (expected.size / 2 >= MAX_RETAINED_BACKUPS) {
+  if (enforceLimit && expected.size / 2 >= MAX_RETAINED_BACKUPS) {
     fail("CLOUD_RELEASE_BACKUP_RETENTION_LIMIT");
   }
   return expected;
 }
 
-export async function assertRetainedBackups(dependencies = {}) {
+async function assertBackups(dependencies, enforceLimit) {
   const backupRoot = dependencies.backupRoot ?? BACKUP_ROOT;
   const postgresGid = dependencies.postgresGid;
   if (!Number.isSafeInteger(postgresGid) || postgresGid < 0) {
     fail("CLOUD_RELEASE_POSTGRES_IDENTITY_INVALID");
   }
   const records = await (dependencies.records ?? historyRecords)(dependencies);
-  const expected = expectedBackupRecords(records, backupRoot);
+  const expected = expectedBackupRecords(records, backupRoot, enforceLimit);
   const exists = await assertBackupRoot(backupRoot, postgresGid, expected.size === 0, dependencies);
   if (!exists) return;
   const names = (await (dependencies.readdir ?? readdir)(backupRoot)).sort();
@@ -114,4 +114,16 @@ export async function assertRetainedBackups(dependencies = {}) {
     if (name.endsWith(".json")) continue;
     await verify(record);
   }
+}
+
+// Archive maintenance must be able to prove an already-full set is internally sound before it
+// moves anything. Capacity remains a separate preflight concern: assertRetainedBackups continues
+// to reject eight retained backup sets, while this entry point validates the same bindings and
+// bytes without treating the current count as corruption.
+export async function assertRetainedBackupIntegrity(dependencies = {}) {
+  await assertBackups(dependencies, false);
+}
+
+export async function assertRetainedBackups(dependencies = {}) {
+  await assertBackups(dependencies, true);
 }

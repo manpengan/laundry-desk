@@ -18,15 +18,26 @@ import {
   ARTIFACT_PREFIX,
   archiveOrphanArtifact,
   archiveRetiredArtifact,
+  archiveSupersededRollback,
   listArchivableArtifacts,
+  listSupersededRollbacks,
   planArtifactArchive,
   planOrphanArtifactArchive,
+  planSupersededRollbackArchive,
 } from "./hk-vps-release-artifact-archive.mjs";
-import { isDirectEntrypoint, parseArguments } from "./hk-vps-release-artifact-archive-run.mjs";
+import {
+  artifactArguments,
+  isDirectEntrypoint,
+  lockedArtifactArguments,
+  main,
+  parseArguments,
+} from "./hk-vps-release-artifact-archive-run.mjs";
+import { REMOTE_RELEASE_LOCK } from "./hk-vps-release-core.mjs";
 
 const FAILED = `${ARTIFACT_PREFIX}failed-${"a".repeat(40)}`;
 const ROLLBACK = `${ARTIFACT_PREFIX}rollback-${"b".repeat(40)}-before-${"c".repeat(40)}`;
 const ORPHAN = `${ARTIFACT_PREFIX}rollback-pre-abcdef0-20260809T112330Z`;
+const LIVE_SHA = "e".repeat(40);
 
 async function makeRoots() {
   // realpath normalises the macOS /var -> /private/var symlink so the module's realpath guard holds.
@@ -52,6 +63,7 @@ async function makeArtifact(optRoot, name) {
 function boundRecord(source, overrides = {}) {
   return {
     candidate_sha: "d".repeat(40),
+    expected_sha: "b".repeat(40),
     failed_path: source,
     outcome: "rolled_back",
     rollback_path: `${source}.other`,
@@ -249,6 +261,159 @@ test("lists only the artifacts history proves are archivable", async (t) => {
   assert.deepEqual(await listArchivableArtifacts(dependencies), [FAILED]);
 });
 
+test("archives a committed rollback tree after a later committed live release supersedes it", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+  const live = await makeArtifact(roots.base, "live");
+  const source = await makeArtifact(roots.optRoot, ROLLBACK);
+  const candidate = "c".repeat(40);
+  const records = [
+    boundRecord(source, {
+      candidate_sha: candidate,
+      failed_path: `${source}.unused`,
+      outcome: "committed",
+      rollback_path: source,
+      verification_evidence_authoritative: true,
+    }),
+    boundRecord("/opt/laundry-desk.rollback-live", {
+      candidate_sha: LIVE_SHA,
+      outcome: "committed",
+      verification_evidence_authoritative: true,
+    }),
+  ];
+  const { dependencies } = dependenciesFor(roots, records, {
+    liveRoot: live,
+    readReleaseMarker: async (root) => ({
+      git_sha: root === live ? LIVE_SHA : "b".repeat(40),
+    }),
+  });
+
+  const result = await archiveSupersededRollback(ROLLBACK, dependencies);
+
+  assert.deepEqual(result.candidates, [candidate]);
+  assert.equal(result.markerSha, "b".repeat(40));
+  assert.deepEqual(await readdir(roots.optRoot), []);
+});
+
+test("superseded rollback accepts one committed authority plus an earlier failed retry", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+  const live = await makeArtifact(roots.base, "live");
+  const source = await makeArtifact(roots.optRoot, ROLLBACK);
+  const candidate = "c".repeat(40);
+  const committed = boundRecord(source, {
+    candidate_sha: candidate,
+    failed_path: `${source}.unused`,
+    outcome: "committed",
+    rollback_path: source,
+    verification_evidence_authoritative: true,
+  });
+  const retry = boundRecord(source, {
+    candidate_sha: candidate,
+    expected_sha: committed.expected_sha,
+    failed_path: `${source}.failed`,
+    outcome: "rolled_back",
+    rollback_path: source,
+    verification_evidence_authoritative: false,
+  });
+  const liveRecord = boundRecord("/opt/laundry-desk.rollback-live", {
+    candidate_sha: LIVE_SHA,
+    outcome: "committed",
+    verification_evidence_authoritative: true,
+  });
+  const { dependencies } = dependenciesFor(roots, [retry, committed, liveRecord], {
+    liveRoot: live,
+    readReleaseMarker: async (root) => ({
+      git_sha: root === live ? LIVE_SHA : "b".repeat(40),
+    }),
+  });
+
+  const plan = await planSupersededRollbackArchive(ROLLBACK, dependencies);
+
+  assert.deepEqual(plan.candidates, [candidate]);
+});
+
+test("superseded rollback path refuses live, ambiguous and unproven history", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+  const live = await makeArtifact(roots.base, "live");
+  const source = await makeArtifact(roots.optRoot, ROLLBACK);
+  const committed = boundRecord(source, {
+    candidate_sha: "c".repeat(40),
+    failed_path: `${source}.unused`,
+    outcome: "committed",
+    rollback_path: source,
+    verification_evidence_authoritative: true,
+  });
+  const liveRecord = boundRecord("/opt/laundry-desk.rollback-live", {
+    candidate_sha: LIVE_SHA,
+    outcome: "committed",
+    verification_evidence_authoritative: true,
+  });
+  const marker = async (root) => ({ git_sha: root === live ? LIVE_SHA : "b".repeat(40) });
+
+  for (const records of [
+    [committed],
+    [committed, committed, liveRecord],
+    [{ ...committed, candidate_sha: LIVE_SHA }, liveRecord],
+    [{ ...committed, outcome: "rolled_back" }, liveRecord],
+  ]) {
+    const { dependencies } = dependenciesFor(roots, records, {
+      liveRoot: live,
+      readReleaseMarker: marker,
+    });
+    await rejects(planSupersededRollbackArchive(ROLLBACK, dependencies));
+  }
+
+  const { dependencies } = dependenciesFor(roots, [committed, liveRecord], {
+    liveRoot: live,
+    readReleaseMarker: async () => ({ git_sha: LIVE_SHA }),
+  });
+  await rejects(planSupersededRollbackArchive(ROLLBACK, dependencies));
+
+  const wrongMarker = dependenciesFor(roots, [committed, liveRecord], {
+    liveRoot: live,
+    readReleaseMarker: async (root) => ({
+      git_sha: root === live ? LIVE_SHA : "9".repeat(40),
+    }),
+  }).dependencies;
+  await rejects(planSupersededRollbackArchive(ROLLBACK, wrongMarker));
+  assert.deepEqual(await readdir(roots.optRoot), [ROLLBACK]);
+});
+
+test("lists only superseded rollback trees that pass the complete plan", async (t) => {
+  const roots = await makeRoots();
+  t.after(() => rm(roots.base, { force: true, recursive: true }));
+  const live = await makeArtifact(roots.base, "live");
+  const source = await makeArtifact(roots.optRoot, ROLLBACK);
+  await makeArtifact(
+    roots.optRoot,
+    `${ARTIFACT_PREFIX}rollback-${"7".repeat(40)}-before-${"8".repeat(40)}`,
+  );
+  const records = [
+    boundRecord(source, {
+      candidate_sha: "c".repeat(40),
+      failed_path: `${source}.unused`,
+      outcome: "committed",
+      rollback_path: source,
+      verification_evidence_authoritative: true,
+    }),
+    boundRecord("/opt/laundry-desk.rollback-live", {
+      candidate_sha: LIVE_SHA,
+      outcome: "committed",
+      verification_evidence_authoritative: true,
+    }),
+  ];
+  const { dependencies } = dependenciesFor(roots, records, {
+    liveRoot: live,
+    readReleaseMarker: async (root) => ({
+      git_sha: root === live ? LIVE_SHA : "b".repeat(40),
+    }),
+  });
+
+  assert.deepEqual(await listSupersededRollbacks(dependencies), [ROLLBACK]);
+});
+
 test("the orphan path accepts a tree no history record references", async (t) => {
   const roots = await makeRoots();
   t.after(() => rm(roots.base, { force: true, recursive: true }));
@@ -311,13 +476,20 @@ test("the orphan path still refuses a name outside the retired patterns", async 
   await rejects(planOrphanArtifactArchive("laundry-desk.next-" + "a".repeat(40), dependencies));
 });
 
-test("host runner accepts only the three supported invocations", () => {
+test("host runner accepts only the five supported invocations", () => {
   assert.deepEqual(parseArguments(["--list"]), { action: "list" });
+  assert.deepEqual(parseArguments(["--list-superseded-rollbacks"]), {
+    action: "list-superseded-rollbacks",
+  });
   assert.deepEqual(parseArguments(["--archive", FAILED]), { action: "archive", name: FAILED });
 
   assert.deepEqual(parseArguments(["--archive-orphan", ORPHAN]), {
     action: "archive-orphan",
     name: ORPHAN,
+  });
+  assert.deepEqual(parseArguments(["--retire-superseded-rollback", ROLLBACK]), {
+    action: "retire-superseded-rollback",
+    name: ROLLBACK,
   });
 
   for (const argv of [
@@ -327,9 +499,39 @@ test("host runner accepts only the three supported invocations", () => {
     ["--remove", FAILED],
     [FAILED],
     ["--archive-orphan"],
+    ["--retire-superseded-rollback"],
   ]) {
     assert.throws(() => parseArguments(argv), /CLOUD_RELEASE_ARTIFACT_ARCHIVE_ARGS_INVALID/u);
   }
+});
+
+test("host runner re-executes under the shared release lock and verifies it internally", async () => {
+  const request = parseArguments(["--retire-superseded-rollback", ROLLBACK]);
+  assert.deepEqual(artifactArguments(request), ["--retire-superseded-rollback", ROLLBACK]);
+  const script = "/opt/laundry-desk/tools/cloud/hk-vps-release-artifact-archive-run.mjs";
+  assert.deepEqual(lockedArtifactArguments(script, request).slice(0, 9), [
+    "--no-fork",
+    "--exclusive",
+    "--nonblock",
+    "--conflict-exit-code",
+    "73",
+    REMOTE_RELEASE_LOCK,
+    "/opt/nodejs/bin/node",
+    script,
+    "--lock-held",
+  ]);
+
+  let lockChecks = 0;
+  const output = [];
+  await main(["--lock-held", "--list"], (line) => output.push(line), {
+    assertLockHeld: async () => {
+      lockChecks += 1;
+    },
+    listArtifacts: async () => [FAILED],
+    processUid: 0,
+  });
+  assert.equal(lockChecks, 1);
+  assert.equal(output.join(""), `CLOUD_RELEASE_ARTIFACT_ARCHIVE_LIST count=1\n  ${FAILED}\n`);
 });
 
 test("host runner only self-executes when it is the process entry point", () => {

@@ -2,8 +2,8 @@
 
 Claude（Opus 4.7）在本项目中的入场指引。
 
-> **当前状态（ADR-37）**：Claude draft3.1a 与 ADR-14 是通用 V2 的架构与 UI 基线；当前由
-> **Codex** 负责 Cloud Web-first 1–4 活动线的设计、实现与验收。本文其余内容保留为历史门禁
+> **当前状态（ADR-64）**：Claude draft3.1a 与 ADR-14 是通用 V2 的架构与 UI 基线；当前由
+> **Codex** 负责阶段 5 活动线的设计、实现与验收。Cloud Web 主形态继续继承 ADR-37。本文其余内容保留为历史门禁
 > 参考；Claude 如参与，仅提供非阻塞可选复审，不拥有当前 spec、contracts 或 PR
 > 放行权。
 
@@ -11,18 +11,20 @@ Claude（Opus 4.7）在本项目中的入场指引。
 
 **历史角色：设计与门禁**。当前不在关键路径，不写实现代码，不 scaffold，不装依赖。
 
-当前实现与设计由 Codex 负责，见 `AGENTS.md` 与 ADR-37。
+当前实现与设计由 Codex 负责，见 `AGENTS.md` 与 ADR-64。
 
 ## 入场必读
 
-1. [`docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md`](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) — 当前产品形态与 1–4 交付裁决
-2. [`docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md`](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md) — 通用 V2 架构基线
-3. [`docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md`](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) — 契约面新增须附 ADR
-4. [`docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md`](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) — 产品设计基线
-5. [`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) — Claude 架构基线
-6. [`docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md`](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md) — Claude UI 基线
-7. [`docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md`](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) — V2-only 基础裁决
-8. [`AGENTS.md`](AGENTS.md) — 当前 owner 与执行入口
+1. [`docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md`](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) — 当前阶段 5 裁决
+2. [`docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md`](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md) — 当前执行计划
+3. [`docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md`](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) — Cloud Web 主形态与已完成 1–4 基线
+4. [`docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md`](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md) — 通用 V2 架构基线
+5. [`docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md`](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) — 契约面新增须附 ADR
+6. [`docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md`](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) — 产品设计基线
+7. [`docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md`](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md) — Claude 架构基线
+8. [`docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md`](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md) — Claude UI 基线
+9. [`docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md`](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) — V2-only 基础裁决
+10. [`AGENTS.md`](AGENTS.md) — 当前 owner 与执行入口
 
 ## 门禁清单（每期 Gemini 声明完成时用）
 

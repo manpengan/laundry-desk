@@ -29,6 +29,7 @@ import {
 } from "./hk-vps-release-local.mjs";
 import { withPinnedSshAuthority } from "./hk-vps-release-local-files.mjs";
 import {
+  CANONICAL_HTTPS_ORIGIN_URL,
   CANONICAL_ORIGIN_URL,
   assertRepositoryCandidate,
 } from "./hk-vps-release-local-repository.mjs";
@@ -120,6 +121,11 @@ test("SSH and SCP arguments pin non-interactive strict-host-key operation", () =
   assert.deepEqual(scp.slice(-2), ["/private/tmp/release.tar", `hk-vps:${remote}`]);
   assert.ok(scp.includes(`UserKnownHostsFile=${KNOWN_HOSTS}`));
   assert.ok(scp.includes("HostKeyAlgorithms=ssh-ed25519"));
+  const maintenance = `/var/lib/laundry-desk-release-maintenance/incoming-${CANDIDATE}-${TOKEN}.tar`;
+  assert.deepEqual(scpArguments("/private/tmp/release.tar", maintenance, KNOWN_HOSTS).slice(-2), [
+    "/private/tmp/release.tar",
+    `hk-vps:${maintenance}`,
+  ]);
   assert.throws(() => scpArguments("relative.tar", remote, KNOWN_HOSTS), {
     code: "CLOUD_RELEASE_ARCHIVE_PATH_INVALID",
   });
@@ -228,7 +234,7 @@ test("GitHub credentials are scoped to gh and never inherited by SSH, SCP, git, 
   assert.equal(selectCommandEnvironment("/usr/bin/curl", source).SSH_AUTH_SOCK, undefined);
 });
 
-test("repository and GitHub check authority are pinned before fetching", async () => {
+test("repository and GitHub check authority accept only exact canonical transports", async () => {
   const labels = [];
   const checks = ["workspace-check", "real-postgres"].map((name, index) => ({
     app: { slug: "github-actions" },
@@ -239,26 +245,28 @@ test("repository and GitHub check authority are pinned before fetching", async (
     started_at: "2026-08-10T00:00:00.000Z",
     status: "completed",
   }));
-  const execute = async (_context, _file, arguments_, label) => {
-    labels.push({ arguments_, label });
-    const outputs = {
-      CLOUD_RELEASE_GIT_ORIGIN: `${CANONICAL_ORIGIN_URL}\n`,
-      CLOUD_RELEASE_GIT_FETCH: "",
-      CLOUD_RELEASE_GIT_ROOT: "/private/repository\n",
-      CLOUD_RELEASE_GIT_STATUS: "",
-      CLOUD_RELEASE_GIT_BRANCH: "main\n",
-      CLOUD_RELEASE_GIT_HEAD: `${CANDIDATE}\n`,
-      CLOUD_RELEASE_GIT_REMOTE: `${CANDIDATE}\n`,
-      CLOUD_RELEASE_GITHUB_CHECKS: JSON.stringify({ check_runs: checks }),
+  for (const origin of [CANONICAL_ORIGIN_URL, CANONICAL_HTTPS_ORIGIN_URL]) {
+    const execute = async (_context, _file, arguments_, label) => {
+      labels.push({ arguments_, label });
+      const outputs = {
+        CLOUD_RELEASE_GIT_ORIGIN: `${origin}\n`,
+        CLOUD_RELEASE_GIT_FETCH: "",
+        CLOUD_RELEASE_GIT_ROOT: "/private/repository\n",
+        CLOUD_RELEASE_GIT_STATUS: "",
+        CLOUD_RELEASE_GIT_BRANCH: "main\n",
+        CLOUD_RELEASE_GIT_HEAD: `${CANDIDATE}\n`,
+        CLOUD_RELEASE_GIT_REMOTE: `${CANDIDATE}\n`,
+        CLOUD_RELEASE_GITHUB_CHECKS: JSON.stringify({ check_runs: checks }),
+      };
+      return { code: 0, stderr: "", stdout: outputs[label] };
     };
-    return { code: 0, stderr: "", stdout: outputs[label] };
-  };
-  await assertRepositoryCandidate(
-    { cwd: "/private/repository", environment: {} },
-    CANDIDATE,
-    execute,
-    { realpath: async (path) => path },
-  );
+    await assertRepositoryCandidate(
+      { cwd: "/private/repository", environment: {} },
+      CANDIDATE,
+      execute,
+      { realpath: async (path) => path },
+    );
+  }
   assert.deepEqual(
     labels.slice(0, 2).map(({ label }) => label),
     ["CLOUD_RELEASE_GIT_ORIGIN", "CLOUD_RELEASE_GIT_FETCH"],

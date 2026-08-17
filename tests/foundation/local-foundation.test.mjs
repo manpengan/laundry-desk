@@ -17,7 +17,8 @@ const governanceFiles = [
   "GEMINI.md",
   "HERMES.md",
 ];
-const currentDeliveryAdr = "(docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)";
+const currentDeliveryAdr =
+  "(docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)";
 const activeV2ProductEntries = [
   "apps/server/src/local/create-runtime.ts",
   "apps/server/src/http/main.ts",
@@ -107,7 +108,7 @@ function findLocalProfileCopies(source) {
     .map(([label]) => label);
 }
 
-test("routes every governance entry point to ADR-37", async () => {
+test("routes every governance entry point to ADR-64", async () => {
   const contents = await Promise.all(governanceFiles.map(readRepositoryFile));
   const missingLinks = governanceFiles.filter(
     (_file, index) => !contents[index].includes(currentDeliveryAdr),
@@ -119,7 +120,7 @@ test("routes every governance entry point to ADR-37", async () => {
 test("leads the README with the generic v2 hk-vps cloud-test route", async () => {
   const readmeLead = (await readRepositoryFile("README.md")).slice(0, 1500);
 
-  assert.match(readmeLead, /通用 V2.*hk-vps.*Linux Web Server\/Web.*桌面 App/su);
+  assert.match(readmeLead, /通用 V2.*hk-vps.*Linux Web Server\/Web.*5\.0.*合成数据/su);
 });
 
 test("does not advertise stale Hongfa or Grok delivery ownership in the README lead", async () => {

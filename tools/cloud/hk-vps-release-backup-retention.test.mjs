@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { basename } from "node:path";
 
-import { assertRetainedBackups } from "./hk-vps-release-backup-retention.mjs";
+import {
+  assertRetainedBackupIntegrity,
+  assertRetainedBackups,
+} from "./hk-vps-release-backup-retention.mjs";
 import {
   BACKUP_ROOT,
   HISTORY_ROOT,
@@ -156,6 +159,8 @@ test("retention rejects missing, orphan, duplicate, excessive, and tampered back
   await assert.rejects(() => assertRetainedBackups(excessive.dependencies), {
     code: "CLOUD_RELEASE_BACKUP_RETENTION_LIMIT",
   });
+  await assert.doesNotReject(() => assertRetainedBackupIntegrity(excessive.dependencies));
+  assert.equal(excessive.verified.length, 8);
 
   const tampered = fixture([first], exact);
   tampered.dependencies.verifyBackupEvidence = async () => {
