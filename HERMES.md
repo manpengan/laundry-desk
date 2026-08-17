@@ -2,8 +2,8 @@
 
 Hermes Agent 在本仓库中的入场与执行指引。
 
-> **治理边界（ADR-37）**：[ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
-> 已将 Cloud Web-first 1–4 确定为当前路线，Codex 是通用 V2 交付 owner。ADR-14 保留为
+> **治理边界（ADR-64）**：[ADR-64](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
+> 已将阶段 5 确定为当前路线，Codex 是通用 V2 交付 owner。ADR-37 保留 Cloud Web 主形态，ADR-14 保留为
 > 架构基线，ADR-13 保留为
 > V2-only 基础裁决。Hermes 作为结对工程与验证代理参与，不拥有 spec、contracts、
 > 放行或合并决策权。
@@ -20,14 +20,14 @@ laundry-desk 是洗衣店柜台管理系统，覆盖开单、取衣、顾客、�
 v2 的核心原则是：人工 UI、AI、自动化和 Edge 离线回放共用同一 Command/Query Bus；浏览器不直连数据库、不持有设备私钥，也不承担交易离线真源。
 
 当前只按此顺序交付：
-`云端基线 → 柜台可信性缺口 → 经营增强 → 大型云端模块`。
+`5.0 发布解阻 → 5.1 Cloud 生产基线 → 5.2 受控试点 → 5.3 真实 provider → 5.4 桌面与硬件`。
 
 ## 2. 真源优先级
 
 发生冲突时按以下顺序处理：
 
 1. manpengan 的当前书面/会话裁决；
-2. ADR-37 与 Accepted ADR；
+2. ADR-64、ADR-37 与 Accepted ADR；
 3. ADR-14、当前产品设计及 Claude V2 架构/UI 基线；
 4. `AGENTS.md` 与当前实施计划；
 5. contracts 代码、测试、tag 与 `origin/main`；
@@ -37,16 +37,18 @@ v2 的核心原则是：人工 UI、AI、自动化和 Edge 离线回放共用同
 
 ## 3. 入场必读
 
-1. [ADR-37：Cloud Web 主形态与 1–4 顺序](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
-2. [ADR-14：通用 V2 架构基线](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
-3. [`AGENTS.md`](AGENTS.md)
-4. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
-5. [Claude V2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
-6. [Claude V2 Web UI](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
-7. [ADR-13：V2-only 基础裁决](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
-8. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
+1. [ADR-64：阶段 5 当前路线](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
+2. [阶段 5 执行计划](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md)
+3. [ADR-37：Cloud Web 主形态](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
+4. [ADR-14：通用 V2 架构基线](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
+5. [`AGENTS.md`](AGENTS.md)
+6. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
+7. [Claude V2 架构](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
+8. [Claude V2 Web UI](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
+9. [ADR-13：V2-only 基础裁决](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
+10. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
 
-只读与本次任务有关的 ADR、验收单、代码和测试；不要用历史 owner 文案覆盖 ADR-37，
+只读与本次任务有关的 ADR、验收单、代码和测试；不要用历史 owner 文案覆盖 ADR-64/ADR-37，
 也不要把 ADR-14 的本地优先阶段顺序恢复为当前关键路径。
 
 ## 4. 代码地图

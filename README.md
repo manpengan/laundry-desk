@@ -2,18 +2,18 @@
 
 产品目标是面向洗衣店行业提供通用 V2 柜台与经营系统，规划支持云端 Web、离线柜台、硬件打印和 AI-first 操作。
 
-[ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) 已把 hk-vps Linux Web Server/Web
-确定为当前主交付与开发测试形态。后续按 [Cloud Web-first 1–4 交付计划](docs/superpowers/plans/2026-08-10-post-adr36-delivery-plan.md)
-依次收口云端基线、柜台可信性缺口、经营增强与大型云端模块。Windows、macOS 桌面 App
-正式发行、XP-58 实体验收和逐功能桌面适配先不做；历史成果保留，但不再阻塞 Web 功能开发。
+[ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) 确定 hk-vps Linux Web Server/Web
+为主交付形态，阶段 1–4.5 已关闭。[ADR-64](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
+现按 5.0–5.4 接续发布解阻、Cloud 生产基线、受控试点、真实 provider、桌面与硬件；5.1
+关闭前 hk-vps 仍是只允许合成数据的开发测试环境。
 
 ## 当前状态
 
 | 项         | 值                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 活动路线   | **Cloud Web-first 1–4 顺序交付**：[ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 保留 V2-only 基础裁决，[ADR-14](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md) 保留通用 V2 架构基线，[ADR-16](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) 约束能力边界，[ADR-36](docs/adr/2026-08-09-adr-36-cloud-test-environment.md) 定义公网安全边界，[ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) 定义当前主形态与顺序                                                                                  |
-| 当前阶段   | **阶段 1 – 4.5 全部切片已关闭并完成云端发布**。阶段 3.2 – 4.5 由 [ADR-40](docs/adr/2026-08-11-adr-40-cloud-owner-operations.md) 至 [ADR-63](docs/adr/2026-08-13-adr-63-bounded-automation.md) 冻结，随精确 `main` `65bd8210c824037d4c871a46ce3eaf3e3dc1c314` 一次性发布到 hk-vps，迁移推进到 `0069_bounded_automation.sql`（69 条）；公网 API 19/19 journey PASS、Cloud Chromium PASS，marker/schema/服务/健康与保留证据均通过。见[发布结果](docs/operations/2026-08-13-stage32-45-release-result.md)。其后七个非部署软件批次与懒加载白屏修复已随精确 `main` `b80ab3e1af8145f7c49b6767a87dcbf89079e1ec` 发布，迁移头不变（`same_migration`、`old_code_compatible=true`），公网 API 20/20 全 PASS、Cloud Chromium PASS；见[非部署批次与白屏修复结果](docs/operations/2026-08-14-nondeploy-batches-release-result.md)。退役产物归档工具的两项修复（#200、#201）已随精确 `main` `c04f858362f1a02bf857b668513a1d1e29f64104` 发布，迁移头仍不变，公网 API 20/20 全 PASS、Cloud Chromium PASS；见[归档工具修复发布结果](docs/operations/2026-08-15-artifact-archive-release-result.md)。真实短信/微信/AI provider 仍为 `software_only` / `blocked_external_provider`。 |
-| 设计真源   | [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) · [ADR-16](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-36](docs/adr/2026-08-09-adr-36-cloud-test-environment.md) · [ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) · [ADR-38](docs/adr/2026-08-11-adr-38-cloud-counter-trust-closure.md) · [ADR-39](docs/adr/2026-08-11-adr-39-catalog-governance.md) · [ADR-40](docs/adr/2026-08-11-adr-40-cloud-owner-operations.md) – [ADR-63](docs/adr/2026-08-13-adr-63-bounded-automation.md) · [Cloud Web-first 1–4 交付计划](docs/superpowers/plans/2026-08-10-post-adr36-delivery-plan.md)                               |
+| 活动路线   | **阶段 5 生产化接续**：[ADR-64](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) 与 [阶段 5 计划](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md)；V2-only 继续继承 [ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)，契约、Cloud 安全边界和 Web 主形态继续继承 ADR-14/16/36/37 |
+| 当前阶段   | **5.0 路线重置与发布解阻进行中**：不增加产品命令、查询或迁移；先为 superseded `/opt` 回滚树及 history/controller/backup/evidence 完整 release set 建立受控、可恢复归档，再恢复 hk-vps release preflight。当前 live 仍为 `c04f858362f1a02bf857b668513a1d1e29f64104`、迁移头 0069，history/controller/backup 各 8 组且 `/opt` 常驻 6，尚未完成远端腾槽或新工具发布。 |
+| 设计真源   | [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) · [ADR-16](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) · [ADR-64](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) · [阶段 5 计划](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md) |
 | 当前 owner | **Codex** — 设计、实现、集成与门禁                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | 目标平台   | 当前：`desk.manpengan.xyz` 上的 Linux Fastify/PostgreSQL + 浏览器 Web；后续桌面、操作系统安装包和实体硬件另行恢复                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
@@ -41,14 +41,13 @@ Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 ·
 
 ## 当前交付顺序
 
-`1 云端基线与既有 Web 收口 → 2 柜台可信性缺口 → 3 经营增强 → 4 大型云端模块`
+`5.0 发布解阻 → 5.1 Cloud 生产基线 → 5.2 受控试点 → 5.3 真实 provider → 5.4 桌面与硬件`
 
-当前执行入口是 [Cloud Web-first 1–4 交付计划](docs/superpowers/plans/2026-08-10-post-adr36-delivery-plan.md)。
-阶段 1 至 4.5 已依次关闭，最后一批（3.2 – 4.5）已随 `65bd8210…c314` 完成云端发布。
-每一阶段都必须测试通过、经 PR 合入 `main` 且 required CI 绿灯，再把该 `main` 精确部署并
-完成公网 Web 验收，才能开始下一阶段。Windows、macOS 正式发行和 XP-58 不在这条关键路径；
-真实短信/微信/支付/AI 等提供商集成必须有获授权的 sandbox 或正式回执，软件 fake 只能证明
-`software_only`。历史 [ADR-36 Web 产品收口计划](docs/superpowers/plans/2026-08-09-adr36-web-product-convergence-plan.md)、
+当前执行入口是[阶段 5 生产化交付计划](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md)。
+阶段 1–4.5 是已完成基线；每一阶段仍须本地门禁、PR 合入、精确 `main` required CI、远端部署与
+验收后才可关闭。真实 provider 必须有获授权的 sandbox 或正式回执，软件 fake 只能证明
+`software_only`。历史 [Cloud Web-first 1–4 计划](docs/superpowers/plans/2026-08-10-post-adr36-delivery-plan.md)、
+[ADR-36 Web 产品收口计划](docs/superpowers/plans/2026-08-09-adr36-web-product-convergence-plan.md)、
 [V2-M2 → V2-M6 计划](docs/superpowers/plans/2026-07-19-v2-m2-m6-implementation-plan.md) 与
 [Grok owner 任务书](docs/superpowers/plans/tasks/2026-07-21-task-grok-lead.md) 仅作决策沿革和既有证据记录。
 

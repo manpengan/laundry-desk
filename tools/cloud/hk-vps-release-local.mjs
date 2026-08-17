@@ -26,7 +26,7 @@ import { parseTransition } from "./hk-vps-release-remote-support.mjs";
 export { parseScannedHostKey } from "./hk-vps-release-local-files.mjs";
 
 const GIT = "/usr/bin/git";
-const GH = "/opt/homebrew/bin/gh";
+const GH_PATHS = new Set(["/opt/homebrew/bin/gh", "/usr/bin/gh"]);
 const SSH = "/usr/bin/ssh";
 const SCP = "/usr/bin/scp";
 const SSH_KEYSCAN = "/usr/bin/ssh-keyscan";
@@ -73,7 +73,7 @@ export function selectCommandEnvironment(file, environment) {
   const common = ["LANG", "LC_ALL", "PATH"];
   const homeAware = [GIT, SSH, SCP, SSH_KEYSCAN, SSH_KEYGEN].includes(file) ? ["HOME"] : [];
   const sshAgent = [SSH, SCP].includes(file) ? ["SSH_AUTH_SOCK"] : [];
-  const github = file === GH ? ["GH_CONFIG_DIR", "GH_TOKEN", "GITHUB_TOKEN", "HOME"] : [];
+  const github = GH_PATHS.has(file) ? ["GH_CONFIG_DIR", "GH_TOKEN", "GITHUB_TOKEN", "HOME"] : [];
   const names = new Set([...common, ...homeAware, ...sshAgent, ...github]);
   return Object.freeze(
     Object.fromEntries(

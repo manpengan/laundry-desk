@@ -28,6 +28,7 @@ export const ARTIFACT_PREFIX = "laundry-desk.";
 const CODE = "CLOUD_RELEASE_ARTIFACT_ARCHIVE_INVALID";
 const SHA = "[0-9a-f]{40}";
 const HISTORY_NAME = new RegExp(`^${SHA}-[0-9a-f]{32}-(?:committed|rolled_back)\\.json$`, "u");
+const SUPERSEDED_ROLLBACK = new RegExp(`^laundry-desk\\.rollback-${SHA}-before-${SHA}$`, "u");
 const RETIRED_ARTIFACT = Object.freeze([
   new RegExp(`^laundry-desk\\.failed-${SHA}$`, "u"),
   new RegExp(`^laundry-desk\\.rollback-${SHA}-before-${SHA}$`, "u"),
@@ -126,6 +127,44 @@ function assertUnreferenced(source, records) {
   for (const record of records) {
     if (record.failed_path === source || record.rollback_path === source) fail(CODE);
   }
+}
+
+// This path is deliberately separate from rolled-back and orphan retirement. A successful release
+// adds a committed rollback tree, so /opt otherwise grows monotonically until preflight can never
+// prepare again. Only an older committed release may qualify; the live release always keeps its own
+// immediate rollback tree and must itself have authoritative committed history.
+function assertSupersededRollback(source, records, liveSha, markerSha) {
+  const bound = records.filter(
+    (record) => record.failed_path === source || record.rollback_path === source,
+  );
+  const committed = bound.filter(
+    (record) =>
+      record.rollback_path === source &&
+      record.outcome === "committed" &&
+      record.verification_evidence_authoritative === true,
+  );
+  if (committed.length !== 1 || typeof liveSha !== "string") fail(CODE);
+  const [authority] = committed;
+  if (authority.candidate_sha === liveSha || authority.expected_sha !== markerSha) fail(CODE);
+  const allBindingsAgree = bound.every(
+    (record) =>
+      record.rollback_path === source &&
+      record.candidate_sha === authority.candidate_sha &&
+      record.expected_sha === authority.expected_sha &&
+      (record === authority ||
+        (record.outcome === "rolled_back" && record.verification_evidence_authoritative === false)),
+  );
+  if (!allBindingsAgree) {
+    fail(CODE);
+  }
+  const liveIsCommitted = records.some(
+    (other) =>
+      other.outcome === "committed" &&
+      other.verification_evidence_authoritative === true &&
+      other.candidate_sha === liveSha,
+  );
+  if (!liveIsCommitted) fail(CODE);
+  return authority.candidate_sha;
 }
 
 async function assertNotLiveTree(source, dependencies) {
@@ -228,6 +267,32 @@ export async function planOrphanArtifactArchive(name, dependencies = {}) {
   });
 }
 
+/** Verify a committed rollback tree that a later committed live release has superseded. */
+export async function planSupersededRollbackArchive(name, dependencies = {}) {
+  if (typeof name !== "string" || !SUPERSEDED_ROLLBACK.test(name)) fail(CODE);
+  const plan = await resolveArchivePlan(name, dependencies);
+  const markerSha = await assertNotLiveTree(plan.source, dependencies);
+  const live = await use(
+    dependencies,
+    "readReleaseMarker",
+    readReleaseMarker,
+  )(dependencies.liveRoot ?? LIVE_ROOT).catch((error) => fail(CODE, error));
+  const candidate = assertSupersededRollback(plan.source, plan.records, live.git_sha, markerSha);
+  return Object.freeze({
+    archiveRoot: plan.archiveRoot,
+    candidates: Object.freeze([candidate]),
+    markerSha,
+    optRoot: plan.optRoot,
+    source: plan.source,
+    target: plan.target,
+  });
+}
+
+/** Archive a superseded committed rollback tree. Requires its own explicit authorization. */
+export async function archiveSupersededRollback(name, dependencies = {}) {
+  return moveArchivedTree(await planSupersededRollbackArchive(name, dependencies), dependencies);
+}
+
 /**
  * Archive a retired /opt artifact by atomic rename, then prove the moved tree is byte-for-byte the
  * same object. Never deletes; the inverse rename restores the previous layout.
@@ -293,4 +358,25 @@ export async function listArchivableArtifacts(dependencies = {}) {
     archivable.push(name);
   }
   return Object.freeze(archivable);
+}
+
+/** Superseded committed rollback trees that pass the complete read-only plan. */
+export async function listSupersededRollbacks(dependencies = {}) {
+  const optRoot = dependencies.optRoot ?? OPT_ROOT;
+  const records = await use(dependencies, "records", historyRecords)(dependencies);
+  const names = (await use(dependencies, "readdir", readdir)(optRoot)).sort();
+  const result = [];
+  for (const name of names) {
+    if (!SUPERSEDED_ROLLBACK.test(name)) continue;
+    try {
+      await planSupersededRollbackArchive(name, {
+        ...dependencies,
+        records: async () => records,
+      });
+      result.push(name);
+    } catch {
+      continue;
+    }
+  }
+  return Object.freeze(result);
 }

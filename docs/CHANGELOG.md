@@ -2,7 +2,7 @@
 
 本项目版本记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 SemVer。
 
-> **当前路线（2026-08-10 修订）**：[ADR-37](adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) 将 hk-vps Linux Server/Web 确定为当前主交付与开发测试形态，后续按 [Cloud Web-first 1–4 交付计划](superpowers/plans/2026-08-10-post-adr36-delivery-plan.md)依次完成云端基线、柜台可信性缺口、经营增强与大型云端模块。Windows、macOS 正式发行、XP-58 与逐功能桌面适配移出关键路径；外部提供商完成声明必须有真实 sandbox 或正式回执。[ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 的 V2-only 基础、契约面 ADR 门禁及 ADR-36 公网安全边界继续有效。
+> **当前路线（2026-08-17 修订）**：[ADR-64](adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) 在 ADR-37 的 Cloud Web 主形态与 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 的 V2-only 路线上接续阶段 5：先完成 5.0 发布解阻，再依次建立 Cloud 生产基线、受控试点、真实 provider、桌面与硬件。阶段 1–4.5 是已完成基线；5.1 关闭前 hk-vps 仍只允许合成数据，不称生产 SaaS。
 
 ---
 
@@ -13,6 +13,8 @@
 _本节记录**面向用户的变化**；纯内部重构与验证性工作不入 CHANGELOG，去向见 `docs/research/` 与 `docs/superpowers/plans/`。_
 
 ### 新增
+
+- 阶段 5.0 建立可恢复的发布留存归档：`/opt` 增加只接受“已被后续 committed live 取代”的 superseded rollback 路径；history、root 私有 controller、可选 backup dump/manifest 与 finalize evidence 改为一个 manifest-bound release set，在同一 release lock、无活动 transition 下按精确 candidate SHA + token digest 显式归档或恢复。工具先验证 active 四类严格绑定与摘要，manifest 先于任何移动落盘，逐项只做同文件系统原子 rename，并以 inode/摘要支持中断重入；不自动挑最旧、不删除、不输出原 token。为解决“live 缺工具但留存已满”的引导死锁，新增固定 SSH + required-check 门禁的 root-private exact-main 维护树，安装与精确归档保持两次独立授权，不修改 live。上述变化不改变 69 commands / 48 queries 或迁移头 0069；远端槽位与新工具正式部署尚待精确 `main` 合入后单独验收，当前不作完成声明。
 
 - 退役产物归档工具现在真的能归档产物：`measureTree` 此前对符号链接直接失败关闭，而任何真实部署树都是 pnpm workspace（目标产物一棵树就有 2688 个 `node_modules` 符号链接），该守卫使 mover 路径从未在真实数据上成功过；此前三层验证（两次真机 `--list` 返回 `count=0`、17 项合成树单测、只调用 `plan` 的真机预演）恰好都绕开了 move 路径。修复把符号链接计为叶子，不拒绝也不跟随，遍历仍不可能逃出该树。同时为退役账本从未认领的无主产物增加受控归档子命令 `--archive-orphan`（比 `--archive` 更严：任何 history 引用该路径即拒绝，并要求该产物自身 marker 与 live marker 不同）。随精确 `main` `c04f858362f1a02bf857b668513a1d1e29f64104` 发布到 hk-vps，迁移头保持 69/`0069_bounded_automation.sql` 不变（`same_migration`、`old_code_compatible=true`）；公网 API 20/20 journey 全 PASS、Cloud Chromium PASS。见[归档工具修复发布结果](operations/2026-08-15-artifact-archive-release-result.md)。
 

@@ -3,13 +3,18 @@ import { realpath } from "node:fs/promises";
 import { assertRequiredChecks, fail } from "./hk-vps-release-core.mjs";
 
 export const CANONICAL_ORIGIN_URL = "git@github.com:manpengan/laundry-desk.git";
+export const CANONICAL_HTTPS_ORIGIN_URL = "https://github.com/manpengan/laundry-desk.git";
 
 const REPOSITORY = "manpengan/laundry-desk";
 const GIT = "/usr/bin/git";
-const GH = "/opt/homebrew/bin/gh";
+const GH = process.platform === "darwin" ? "/opt/homebrew/bin/gh" : "/usr/bin/gh";
+const CANONICAL_ORIGIN_OUTPUTS = new Set([
+  `${CANONICAL_ORIGIN_URL}\n`,
+  `${CANONICAL_HTTPS_ORIGIN_URL}\n`,
+]);
 
 function requireCanonicalOrigin(source) {
-  if (source !== `${CANONICAL_ORIGIN_URL}\n`) fail("CLOUD_RELEASE_GIT_ORIGIN_INVALID");
+  if (!CANONICAL_ORIGIN_OUTPUTS.has(source)) fail("CLOUD_RELEASE_GIT_ORIGIN_INVALID");
 }
 
 function parseCheckRuns(source) {

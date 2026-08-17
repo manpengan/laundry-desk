@@ -4,8 +4,8 @@ Grok 在本项目中的入场指引。
 
 ## 你的角色
 
-[ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) 已将 Cloud Web-first 1–4
-确定为当前路线，ADR-14 继续作为通用 V2 架构基线。Codex 是当前交付负责人；Grok 退出关键
+[ADR-64](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) 已将阶段 5
+确定为当前路线，ADR-37 的 Cloud Web 主形态与 ADR-14 通用 V2 架构基线继续有效。Codex 是当前交付负责人；Grok 退出关键
 路径，可提供非阻塞复审或候选输入，但不拥有当前 spec、实现、门禁或合并权。
 
 历史任务书
@@ -14,13 +14,15 @@ Grok 在本项目中的入场指引。
 
 ## 入场必读
 
-1. [ADR-37：Cloud Web 主形态与 1–4 顺序](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
-2. [ADR-14：通用 V2 架构基线](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
-3. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
-4. [Claude V2 架构 spec](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
-5. [Claude V2 Web UI spec](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
-6. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
-7. [AGENTS.md](AGENTS.md)
+1. [ADR-64：阶段 5 当前路线](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
+2. [阶段 5 执行计划](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md)
+3. [ADR-37：Cloud Web 主形态](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
+4. [ADR-14：通用 V2 架构基线](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
+5. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
+6. [Claude V2 架构 spec](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
+7. [Claude V2 Web UI spec](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
+8. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
+9. [AGENTS.md](AGENTS.md)
 
 ## 可选复审范围
 
@@ -42,5 +44,5 @@ Grok 在本项目中的入场指引。
 ## 协作流程
 
 - 不直接实施或合并，除非 manpengan 另行明确授权；
-- 候选建议必须对照 ADR-37、ADR-14 与当前设计基线；
+- 候选建议必须对照 ADR-64、ADR-37、ADR-14 与当前设计基线；
 - 不向 v1 `src/` 增加功能，不恢复宏发、Windows、macOS 正式发行或实体打印的当前优先级。

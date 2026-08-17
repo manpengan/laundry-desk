@@ -68,7 +68,10 @@ export function scpArguments(sourcePath, remotePath, knownHostsPath) {
   }
   if (
     typeof remotePath !== "string" ||
-    !/^\/opt\/laundry-desk\.incoming-[0-9a-f]{40}-[0-9a-f]{32}\.tar$/u.test(remotePath)
+    ![
+      /^\/opt\/laundry-desk\.incoming-[0-9a-f]{40}-[0-9a-f]{32}\.tar$/u,
+      /^\/var\/lib\/laundry-desk-release-maintenance\/incoming-[0-9a-f]{40}-[0-9a-f]{32}\.tar$/u,
+    ].some((pattern) => pattern.test(remotePath))
   ) {
     fail("CLOUD_RELEASE_REMOTE_PATH_INVALID");
   }

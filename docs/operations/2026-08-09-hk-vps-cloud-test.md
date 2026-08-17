@@ -1,9 +1,9 @@
-# hk-vps 云测试环境运维手册（ADR-36/37）
+# hk-vps 云测试环境运维手册（ADR-36/37/64）
 
 - 环境：**开发测试**，允许随时丢弃，不承载真实顾客 PII
 - 地址：<https://desk.manpengan.xyz>
 - 主机：SSH alias `hk-vps`（实际地址和密钥由操作者的 SSH 配置管理）
-- 裁决：[ADR-36](../adr/2026-08-09-adr-36-cloud-test-environment.md) · [ADR-37](../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
+- 裁决：[ADR-36](../adr/2026-08-09-adr-36-cloud-test-environment.md) · [ADR-37](../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) · [ADR-64](../adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
 
 本文件是操作流程，不是部署结果。命令输出格式和判据不能作为「已经发布」的证据；每次发布
 必须另行记录实际目标 SHA、required CI、transition、API/UI run-id 与最终状态。
@@ -31,6 +31,8 @@ browser → Caddy :443 → 127.0.0.1:8787 Fastify
 | 迁移恢复点      | `/var/lib/laundry-desk-release-backups`                                |
 | 发布验收配置    | `/etc/laundry-desk/adr36-acceptance.env` 与 `acceptance-secrets/`      |
 | 发布验收证据    | `/var/lib/laundry-desk-release/verification-<sha>-<token-sha256>.json` |
+| 可恢复归档      | `/var/lib/laundry-desk-release-archive`，`root:root`、`0700`           |
+| exact-main 维护 | `/var/lib/laundry-desk-release-maintenance`，`root:root`、`0700`       |
 
 `desk.manpengan.xyz` 在 `:443` 的唯一实际 handler 必须只把 `/health`、`/api/*`、`/v1/*` 送入以下
 Desk upstream/header contract；`header_up` 是覆盖而非追加，故浏览器同名伪造值不能穿透。release preflight
@@ -102,19 +104,17 @@ incoming 与 next 两项。计数到 6 时下一次 `prepare` 必然以
 > 同理，一次**进入停写窗口**的失败会同时消耗四个集合各一格：history +1、backup +1 对、
 > `/opt` +1 树、controller +1。规划发布前应逐个集合核对余量，而不是只看 `/opt`。
 
-归档只做同文件系统原子 rename，不删除任何东西，反向 rename 即可完整还原。工具会拒绝
-任何没有被 history 证明为 `rolled_back` 且 `verification_evidence_authoritative=false` 的
-产物 —— 活动版本的 rollback tree 绑定的是 `committed` 记录，因此永远不会被移动；没有任何
-history 绑定的产物同样一律拒绝。
+归档只做同文件系统原子 rename，不删除任何发布树，反向 rename 可恢复。`/opt` 有三条互斥路径：
 
-入口随 `tools/cloud/` 一起进入发布产物，因此**只有部署树包含该文件的版本上线之后**这两条
-命令才可用；在此之前 `/opt/laundry-desk/tools/cloud/` 里没有它，会直接 `MODULE_NOT_FOUND`。
-同理，工具自身的修复也要先发布才能生效：2026-08-15 之前部署树里的版本因 `measureTree` 拒绝
-符号链接而**无法归档任何真实产物**（真实部署树都是 pnpm workspace），修复本身又要靠一次发布
-才能上线，构成鸡生蛋。遇到这种情况时，腾槽位只能按当轮授权手工守卫式搬迁：先做身份证明
-（`outcome`、`verification_evidence_authoritative`、controller/backup 绑定唯一性、live marker
-不同），再同文件系统原子 rename，最后逐项核对 inode 与剩余集合的 1:1 关系。
-注意 history 记录里表示状态的字段是 `outcome` 而不是 `state`。
+- history 证明为 `rolled_back` 且非权威的 failed/rollback tree；
+- 账本从未认领、marker 又与 live 不同的 pre-ledger orphan；
+- 恰好有一条旧 committed 权威记录、tree marker 精确等于其 `expected_sha`、且已被另一个
+  committed live 取代的 rollback tree；同候选、同旧版本的早期非权威 rolled-back 重试记录可以并存。
+
+当前 live 的即时 rollback tree、无 committed live 证明、多条 committed 或冲突绑定、marker 与 live 相同、跨设备或
+目标碰撞都失败关闭。所有 runner 会自行进入同一 release lock 并验证继承锁；不要在外层再套一层
+`flock`。如果精确 `main` 工具尚未进入 live 且留存已满，只允许按 §1.2 安装 root-private exact-main
+维护树；不再允许手工拆搬 history/controller/backup/evidence，也不修改 live tree。
 
 先只读列出可归档项，再对精确名字执行：
 
@@ -127,6 +127,18 @@ ssh hk-vps /opt/nodejs/bin/node \
 ssh hk-vps /opt/nodejs/bin/node \
   /opt/laundry-desk/tools/cloud/hk-vps-release-artifact-archive-run.mjs \
   --archive laundry-desk.failed-<40 位 SHA>
+```
+
+已被新 live 取代的 committed rollback tree 使用独立列表和动作：
+
+```bash
+ssh hk-vps /opt/nodejs/bin/node \
+  /opt/laundry-desk/tools/cloud/hk-vps-release-artifact-archive-run.mjs \
+  --list-superseded-rollbacks
+
+ssh hk-vps /opt/nodejs/bin/node \
+  /opt/laundry-desk/tools/cloud/hk-vps-release-artifact-archive-run.mjs \
+  --retire-superseded-rollback laundry-desk.rollback-<old>-before-<candidate>
 ```
 
 ### 无主产物
@@ -149,11 +161,68 @@ ssh hk-vps /opt/nodejs/bin/node \
 release marker 与 live marker 不同，作为「它不是当前部署」的第二重独立证明。成功输出带
 `orphan_marker=<该树的 git_sha>` 而非 `candidates=`。
 
-成功输出 `CLOUD_RELEASE_ARTIFACT_ARCHIVE_OK entries=… bytes=… ino=… target=…`；`ino` 与
+### 完整 release set
+
+history 不能单独退出 active 计数。release-set 工具把一条 history、它唯一绑定的 root 私有
+controller、可选 backup dump/verified manifest、可选 finalize evidence 作为一个集合。列表只输出
+非秘密身份 `candidate SHA + release-token SHA-256 + outcome`；原 token 不进入参数或输出：
+
+```bash
+ssh hk-vps /opt/nodejs/bin/node \
+  /opt/laundry-desk/tools/cloud/hk-vps-release-set-archive-run.mjs list
+```
+
+先确认该记录引用的 `/opt` 树已经通过上面的精确路径退役，再为列表中一个精确对象取得单独授权：
+
+```bash
+ssh hk-vps /opt/nodejs/bin/node \
+  /opt/laundry-desk/tools/cloud/hk-vps-release-set-archive-run.mjs \
+  archive <candidate-sha> <token-sha256> <committed|rolled_back>
+```
+
+反向恢复使用同一非秘密身份：
+
+```bash
+ssh hk-vps /opt/nodejs/bin/node \
+  /opt/laundry-desk/tools/cloud/hk-vps-release-set-archive-run.mjs \
+  restore <candidate-sha> <token-sha256> <committed|rolled_back>
+```
+
+工具在首次 rename 前验证 active 四类严格一一绑定、owner/mode 与摘要，先把精确 manifest 持久化到
+`/var/lib/laundry-desk-release-archive/release-sets/<identity>/manifest.json`，再按 controller、backup、
+evidence、history 顺序逐项移动，history 永远最后退出或恢复。每项记录原 dev/inode/摘要；中断后
+重复同一 archive 可继续，执行 restore 可反向收敛。源和目标同时存在、同时缺失、字节或 inode 漂移、
+manifest 碰撞都会拒绝，不自动选择、不使用 glob、不删除。
+
+单树成功输出 `CLOUD_RELEASE_ARTIFACT_ARCHIVE_OK entries=… bytes=… ino=… target=…`；`ino` 与
 移动前一致即证明是同一对象而非复制。归档根为 `/var/lib/laundry-desk-release-archive`
-（root:root `0700`）。history、controller、backup 与 verification evidence 都不在 `/opt`，
-归档不会触及它们。本地回归为
-`pnpm cloud:release:hk:artifact-archive:test`。
+（root:root `0700`）。本地定向回归为 `pnpm cloud:release:hk:artifact-archive:test` 与
+`pnpm cloud:release:hk:release-set:test`。
+
+### 1.2 留存已满时安装 exact-main 维护树
+
+只有“当前 live 缺少新归档工具，且留存上限又阻止正常发布”的鸡生蛋场景使用本节。工具安装与
+具体归档是两次独立动作；本节只安装代码，不选择或移动任何发布证据。
+
+先等待实现 PR 合入，确认本地 clean `main == origin/main` 且该 SHA 的 `workspace-check`、
+`real-postgres` 绿灯，然后执行：
+
+```bash
+pnpm cloud:release:hk:maintenance -- --candidate-sha <exact-main-sha>
+```
+
+该命令复用固定 SSH authority 与 GitHub required-check 门禁，只上传该 SHA 的 `git archive`。远端在
+无活动 transition 和同一 release lock 下验证 archive SHA-256，把代码原子发布到 root-only
+`/var/lib/laundry-desk-release-maintenance/trees/<sha>`，并把原 archive 留在 `archives/` 作来源证据；
+不改 `/opt/laundry-desk`、数据库、服务或发布证据。安装后，把上文命令中的 runner 路径暂时替换为：
+
+```text
+/var/lib/laundry-desk-release-maintenance/trees/<sha>/tools/cloud/<runner>.mjs
+```
+
+维护树 runner 与未来 live runner 使用相同校验和 release lock。完成精确 `/opt` 与 release-set 归档、
+preflight 复核后，仍必须走标准 prepare/finalize 把同一个绿灯 `main` 发布为 live；维护树本身不算部署
+完成，也不允许承载服务器私有补丁。
 
 先更新并核对候选：
 
