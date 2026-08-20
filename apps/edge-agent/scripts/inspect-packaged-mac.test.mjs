@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -8,7 +8,7 @@ import test from "node:test";
 import { inspectPackagedMacSoftware } from "./inspect-packaged-mac.mjs";
 
 async function fixture(t) {
-  const root = await mkdtemp(join(tmpdir(), "laundry-package-inspection-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "laundry-package-inspection-")));
   t.after(async () => rm(root, { force: true, recursive: true }));
   const releaseRoot = join(root, "release");
   const appPath = join(releaseRoot, "mac-arm64", "laundry-desk V2.app");
@@ -143,5 +143,22 @@ test("rejects non-Darwin execution and symlinked package output", async (t) => {
         run: setup.run,
       }),
     /real directory/u,
+  );
+});
+
+test("rejects a release root reached through a symlinked ancestor", async (t) => {
+  const setup = await fixture(t);
+  const root = join(setup.releaseRoot, "..");
+  const linkedRoot = join(root, "linked-root");
+  await symlink(root, linkedRoot);
+
+  await assert.rejects(
+    () =>
+      inspectPackagedMacSoftware({
+        platform: "darwin",
+        releaseRoot: join(linkedRoot, "release"),
+        run: setup.run,
+      }),
+    /package release root must be canonical/u,
   );
 });
