@@ -8,6 +8,7 @@ import {
   assertReleasePreflight,
   assertSharedInfrastructure,
   parseAvailableBytes,
+  readReleaseHostSnapshot,
   removeOrphanStaging,
 } from "./hk-vps-release-host-guard.mjs";
 import { restorePreviousCode } from "./hk-vps-release-remote-system.mjs";
@@ -206,6 +207,27 @@ test("release preflight reserves the eighth slot and never prunes retention", as
       fixture.calls.some(({ file }) => file === "/usr/bin/rm"),
       false,
     );
+  }
+});
+
+test("read-only host snapshot reports full retention while prepare keeps its one-slot rule", async () => {
+  const full = preflightFixture({
+    artifacts: Array.from({ length: MAX_RETAINED_RELEASES }, (_, index) => artifactEntry(index)),
+    history: Array.from({ length: MAX_RETAINED_RELEASES }, (_, index) => historyEntry(index)),
+  });
+  assert.deepEqual(await readReleaseHostSnapshot(undefined, full.dependencies), {
+    historyActive: MAX_RETAINED_RELEASES,
+    optAvailableBytes: MINIMUM_RELEASE_FREE_BYTES,
+    optResident: MAX_RETAINED_RELEASES,
+    postgresqlAvailableBytes: MINIMUM_RELEASE_FREE_BYTES,
+  });
+
+  for (const field of ["artifacts", "history"]) {
+    const entries = Array.from({ length: MAX_RETAINED_RELEASES - 1 }, (_, index) =>
+      field === "artifacts" ? artifactEntry(index) : historyEntry(index),
+    );
+    const prepare = preflightFixture({ [field]: entries });
+    await assert.doesNotReject(() => assertReleasePreflight(undefined, prepare.dependencies));
   }
 });
 

@@ -4,7 +4,10 @@ import { dirname, join } from "node:path";
 
 import { fail, requireSha } from "./hk-vps-release-core.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
-import { DESK_READINESS_POLICY, awaitDeskReadiness } from "./hk-vps-release-readiness.mjs";
+import {
+  probeLoopbackWithReadiness,
+  probePublicWithReadiness,
+} from "./hk-vps-release-readiness.mjs";
 import { parseCaddyCustomerSourceAuthority } from "./caddy-customer-source-contract.mjs";
 import {
   assertLoopbackBindings,
@@ -298,23 +301,24 @@ async function curl(url, label, signal, discard = false, maxTime = "15", timeout
 
 export async function assertDeskHealth(expectedSha, signal, dependencies = {}) {
   const executeCurl = dependencies.curl ?? curl;
-  const loopback = await awaitDeskReadiness(
-    () =>
-      executeCurl(
-        "http://127.0.0.1:8787/health",
-        "CLOUD_RELEASE_LOOPBACK_HEALTH",
-        signal,
-        false,
-        DESK_READINESS_POLICY.probeMaxTimeSeconds,
-        DESK_READINESS_POLICY.probeTimeoutMs,
-      ),
+  const loopback = await probeLoopbackWithReadiness(
+    executeCurl,
     signal,
-    { wait: dependencies.waitForReadiness },
+    dependencies.waitForReadiness,
   );
-  const publicHealth = await executeCurl(
+  const probePublic = (url, label, discard) =>
+    probePublicWithReadiness(
+      executeCurl,
+      url,
+      label,
+      signal,
+      discard,
+      dependencies.waitForReadiness,
+    );
+  const publicHealth = await probePublic(
     "https://desk.manpengan.xyz/health",
     "CLOUD_RELEASE_PUBLIC_HEALTH",
-    signal,
+    false,
   );
   for (const source of [loopback.stdout, publicHealth.stdout]) {
     let parsed;
@@ -327,7 +331,7 @@ export async function assertDeskHealth(expectedSha, signal, dependencies = {}) {
       fail("CLOUD_RELEASE_HEALTH_INVALID");
     }
   }
-  await executeCurl("https://desk.manpengan.xyz/", "CLOUD_RELEASE_PUBLIC_SPA", signal, true);
+  await probePublic("https://desk.manpengan.xyz/", "CLOUD_RELEASE_PUBLIC_SPA", true);
   const sockets = await (dependencies.command ?? command)(
     "/usr/bin/ss",
     ["-H", "-ltn", "sport", "=", ":8787"],

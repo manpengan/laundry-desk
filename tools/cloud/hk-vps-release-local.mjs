@@ -34,6 +34,8 @@ const SSH_KEYGEN = "/usr/bin/ssh-keygen";
 const CURL = "/usr/bin/curl";
 const NODE = "/opt/nodejs/bin/node";
 const REMOTE_ENTRY = "/opt/laundry-desk/tools/cloud/hk-vps-release-remote.mjs";
+const REMOTE_API_EVIDENCE_TIMEOUT_MS = 30 * 60_000;
+export const REMOTE_FINALIZE_ROLLBACK_TIMEOUT_MS = 10 * 60_000;
 const HEALTH_ENVELOPE = Object.freeze({ ok: true, data: Object.freeze({ status: "ready" }) });
 const STATUS_SCRIPT = `set -euo pipefail
 exec 9>"${REMOTE_RELEASE_LOCK}"
@@ -155,18 +157,27 @@ export function remoteStatefulArguments(action, options, knownHostsPath) {
   );
 }
 
-async function remoteAction(context, action, options, knownHostsPath, extra = {}) {
+export async function remoteAction(
+  context,
+  action,
+  options,
+  knownHostsPath,
+  extra = {},
+  dependencies = {},
+) {
   const invocation = Object.freeze({
     ...extra,
     ...(action === "rollback" ? { input: rollbackRequest(options) } : {}),
     pinnedSshRelease: true,
   });
-  return await command(
+  return await (dependencies.command ?? command)(
     context,
     SSH,
     remoteStatefulArguments(action, options, knownHostsPath),
     `CLOUD_RELEASE_REMOTE_${action.toUpperCase().replaceAll("-", "_")}`,
-    action === "api-evidence" ? 30 * 60_000 : 5 * 60_000,
+    action === "api-evidence"
+      ? REMOTE_API_EVIDENCE_TIMEOUT_MS
+      : REMOTE_FINALIZE_ROLLBACK_TIMEOUT_MS,
     invocation,
   );
 }

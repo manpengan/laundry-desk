@@ -111,6 +111,11 @@ incoming 与 next 两项。计数到 6 时下一次 `prepare` 必然以
 - 恰好有一条旧 committed 权威记录、tree marker 精确等于其 `expected_sha`、且已被另一个
   committed live 取代的 rollback tree；同候选、同旧版本的早期非权威 rolled-back 重试记录可以并存。
 
+阶段 5.0 对 `/opt` 的关闭证据是原子 rename 前后 dev/inode/entries/bytes 不变，并由回归测试执行
+精确 inverse rename、证明原 source 可恢复。当前 runner **没有通用 `/opt` restore 子命令**；不要把
+这项可逆性证明写成已执行真实远端恢复，也不要在没有精确对象授权时手工反向移动。完整 release set
+另有下面的 manifest-bound `restore`。
+
 当前 live 的即时 rollback tree、无 committed live 证明、多条 committed 或冲突绑定、marker 与 live 相同、跨设备或
 目标碰撞都失败关闭。所有 runner 会自行进入同一 release lock 并验证继承锁；不要在外层再套一层
 `flock`。如果精确 `main` 工具尚未进入 live 且留存已满，只允许按 §1.2 安装 root-private exact-main
@@ -166,6 +171,37 @@ release marker 与 live marker 不同，作为「它不是当前部署」的第�
 history 不能单独退出 active 计数。release-set 工具把一条 history、它唯一绑定的 root 私有
 controller、可选 backup dump/verified manifest、可选 finalize evidence 作为一个集合。列表只输出
 非秘密身份 `candidate SHA + release-token SHA-256 + outcome`；原 token 不进入参数或输出：
+
+### 只读 inventory 与独立 preflight
+
+在选择任何归档对象前，先用同一个 runner 取得稳定态快照：
+
+```bash
+ssh hk-vps /opt/nodejs/bin/node \
+  /opt/laundry-desk/tools/cloud/hk-vps-release-set-archive-run.mjs inventory
+
+ssh hk-vps /opt/nodejs/bin/node \
+  /opt/laundry-desk/tools/cloud/hk-vps-release-set-archive-run.mjs preflight
+```
+
+两者都只接受这一个 action，不接受 candidate、token 或其他参数。runner 自行取得 release lock、验证
+继承锁，并在任何 `df` 或留存目录读取前拒绝活动 transition；整个路径只读，不调用 ensure、cleanup、
+`mkdir`、`rename`、`rm` 或写文件。成功 stdout 恰好一行，固定顺序为：
+
+```text
+CLOUD_RELEASE_<INVENTORY|PREFLIGHT>_OK phase=stable live_sha=<sha> opt_resident=<n> opt_reserved=2 opt_prepare_peak=<n> history_active=<n> controller_active=<n> backup_sets_active=<n> evidence_active=<n> opt_available_bytes=<n> postgresql_available_bytes=<n> artifact_room=<true|false> history_room=<true|false> backup_room=<true|false>
+```
+
+输出不含原 token、history 文件名、私有路径、证据内容、数据库 URL 或环境变量。`inventory` 在结构、
+身份、摘要和绑定均有效时，即使槽位已满也成功并以 `room=false` 报告；它不把“可观察”冒充“可发布”。
+`preflight` 使用同一快照，要求两个文件系统各至少 8 GiB、history/backup 各少于 8 组，并为稳定态
+`/opt` 的 `incoming + next` 预留两格：常驻 5 棵通过，6 棵报
+`CLOUD_RELEASE_ARTIFACT_RETENTION_LIMIT`。任何失败都不输出部分快照，只在 stderr 给出现有稳定错误码。
+
+如果使用 §1.2 的 exact-main 维护树，只替换上述 runner 路径；锁、只读和输出边界不变。`inventory`
+只报告四类 active 计数，精确候选仍分别由 artifact runner 的三个 list 和 release-set 的 `list` 提供。
+
+### 列出与移动完整 release set
 
 ```bash
 ssh hk-vps /opt/nodejs/bin/node \
@@ -338,6 +374,21 @@ CLOUD_RELEASE_AWAITING_EXTERNAL_VERIFICATION candidate_sha=<sha> expected_sha=<s
    loopback 和 `https://kb.manpengan.xyz/healthz`。
 7. transition 停在 `awaiting_external_verification`，等待下一节由 `finalize` 亲自启动的公网
    业务与 UI 验收；工具不会因健康检查通过而自动提交。
+
+第 6 步的三个 health 探针各有独立的有界重试预算，只重试探针自身的 transport failure，绝不
+重试契约违例；200 但信封不对、marker 漂移或绑定错误均首次失败关闭：
+
+| 探针               | 尝试 | curl max | command timeout | 间隔 | 耗尽后的码                               |
+| ------------------ | ---: | -------: | --------------: | ---: | ---------------------------------------- |
+| loopback `/health` |   15 |      2 s |             3 s |  1 s | `CLOUD_RELEASE_DESK_READINESS_TIMEOUT`   |
+| 公网 `/health`     |    5 |     15 s |            20 s |  2 s | `CLOUD_RELEASE_PUBLIC_READINESS_TIMEOUT` |
+| 公网 SPA `/`       |    5 |     15 s |            20 s |  2 s | `CLOUD_RELEASE_PUBLIC_READINESS_TIMEOUT` |
+
+公网两项此前是单发 15 秒零重试；公网路径要出站解析 DNS、经 NAT hairpin 回到本机再由 Caddy
+终止 TLS，短暂 transport 停顿不应让已经完成停写、备份、影子恢复和迁移的发布窗口直接作废。
+按 command timeout 加尝试间隔计算，三个串行探针的最坏预算为 275 秒；`finalize` 与 `rollback`
+的父 SSH 上限为 10 分钟，较该预算多 325 秒，避免父进程先切断远端稳定失败码。`api-evidence`
+与 deploy 仍各保持既有 30 分钟上限。这些是软件预算与本地回归结果，不表示已完成新的远端发布。
 
 这里的恢复点只包含数据库，且只在同一 PostgreSQL 集群做过影子恢复；它不包含私有照片，
 不等于 ADR-33 完整数据保护、离机备份、生产灾备或 SLA 证据。

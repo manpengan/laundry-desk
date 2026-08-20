@@ -14,6 +14,7 @@ import {
 } from "./hk-vps-release-artifact-archive.mjs";
 import { CloudReleaseError, REMOTE_RELEASE_LOCK } from "./hk-vps-release-core.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
+import { transitionExists } from "./hk-vps-release-remote-support.mjs";
 
 const NODE = "/opt/nodejs/bin/node";
 const FLOCK = "/usr/bin/flock";
@@ -118,8 +119,19 @@ function describeBinding(action, result) {
   return `candidates=${result.candidates.join(",")}`;
 }
 
+async function assertNoActiveTransition(dependencies) {
+  let active;
+  try {
+    active = await (dependencies.transitionExists ?? transitionExists)();
+  } catch (error) {
+    throw new CloudReleaseError("CLOUD_RELEASE_TRANSITION_ACTIVE", { cause: error });
+  }
+  if (active !== false) throw new CloudReleaseError("CLOUD_RELEASE_TRANSITION_ACTIVE");
+}
+
 async function execute(request, write, dependencies) {
   await (dependencies.assertLockHeld ?? assertDataProtectionLockHeld)();
+  await assertNoActiveTransition(dependencies);
   if (request.action === "list" || request.action === "list-superseded-rollbacks") {
     const list =
       request.action === "list"

@@ -11,6 +11,11 @@ import {
 } from "./hk-vps-release-set-archive.mjs";
 import { CloudReleaseError, REMOTE_RELEASE_LOCK, fail } from "./hk-vps-release-core.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
+import {
+  assertReadonlyReleasePreflight,
+  formatReadonlyReleaseSnapshot,
+  readReadonlyReleaseSnapshot,
+} from "./hk-vps-release-readonly-preflight.mjs";
 
 const NODE = "/opt/nodejs/bin/node";
 const FLOCK = "/usr/bin/flock";
@@ -18,6 +23,7 @@ const LOCK_HELD = "--lock-held";
 const SHA = /^[0-9a-f]{40}$/u;
 const DIGEST = /^[0-9a-f]{64}$/u;
 const OUTCOMES = new Set(["committed", "rolled_back"]);
+const IDENTITYLESS_ACTIONS = new Set(["inventory", "list", "preflight"]);
 const ACCEPTING_CODES = Object.freeze(Array.from({ length: 256 }, (_, index) => index));
 const COMMAND_ENVIRONMENT = Object.freeze({
   LANG: "C.UTF-8",
@@ -39,8 +45,8 @@ export function parseReleaseSetArguments(arguments_) {
   ) {
     fail("CLOUD_RELEASE_SET_ARGS_INVALID");
   }
-  if (arguments_.length === 1 && arguments_[0] === "list") {
-    return Object.freeze({ action: "list", identity: null });
+  if (arguments_.length === 1 && IDENTITYLESS_ACTIONS.has(arguments_[0])) {
+    return Object.freeze({ action: arguments_[0], identity: null });
   }
   if (arguments_.length === 4 && (arguments_[0] === "archive" || arguments_[0] === "restore")) {
     return Object.freeze({
@@ -53,8 +59,8 @@ export function parseReleaseSetArguments(arguments_) {
 
 export function releaseSetArguments(options) {
   return Object.freeze(
-    options.action === "list"
-      ? ["list"]
+    IDENTITYLESS_ACTIONS.has(options.action)
+      ? [options.action]
       : [
           options.action,
           options.identity.candidateSha,
@@ -98,6 +104,20 @@ export async function runLockedReleaseSet(options, dependencies = {}) {
 }
 
 async function execute(options, dependencies) {
+  if (options.action === "inventory" || options.action === "preflight") {
+    const snapshot = await (
+      dependencies.readReadonlyReleaseSnapshot ?? readReadonlyReleaseSnapshot
+    )(undefined, dependencies);
+    if (options.action === "preflight") {
+      await (dependencies.assertReadonlyReleasePreflight ?? assertReadonlyReleasePreflight)(
+        snapshot,
+      );
+    }
+    return (dependencies.formatReadonlyReleaseSnapshot ?? formatReadonlyReleaseSnapshot)(
+      options.action,
+      snapshot,
+    );
+  }
   if (options.action === "list") {
     const candidates = await (dependencies.listReleaseSets ?? listArchivableReleaseSets)(
       dependencies,
