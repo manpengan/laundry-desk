@@ -34,7 +34,16 @@ import {
   parseRemoteApiEvidenceResult,
   runLocalBrowserEvidence,
 } from "./hk-vps-release-local-evidence.mjs";
-import { completeRemoteAction, remoteStatefulArguments } from "./hk-vps-release-local.mjs";
+import {
+  REMOTE_FINALIZE_ROLLBACK_TIMEOUT_MS,
+  completeRemoteAction,
+  remoteAction,
+  remoteStatefulArguments,
+} from "./hk-vps-release-local.mjs";
+import {
+  DESK_PUBLIC_READINESS_POLICY,
+  DESK_READINESS_POLICY,
+} from "./hk-vps-release-readiness.mjs";
 import {
   discoverUnboundFinalizeEvidence,
   persistFinalizeEvidence,
@@ -709,6 +718,54 @@ test("finalize orchestration keeps evidence off argv and serializes API/finalize
     assert.ok(arguments_.includes("/run/lock/laundry-desk-cloud-release.lock"));
     assert.equal(arguments_.includes(canonical), false);
   }
+});
+
+test("finalize and rollback SSH parents outlive the complete serial readiness budget", async () => {
+  const worstCase = (policy) =>
+    policy.attempts * policy.probeTimeoutMs + (policy.attempts - 1) * policy.intervalMs;
+  const serialReadinessBudget =
+    worstCase(DESK_READINESS_POLICY) + 2 * worstCase(DESK_PUBLIC_READINESS_POLICY);
+  assert.equal(serialReadinessBudget, 275_000);
+  assert.equal(REMOTE_FINALIZE_ROLLBACK_TIMEOUT_MS, 10 * 60_000);
+  assert.ok(REMOTE_FINALIZE_ROLLBACK_TIMEOUT_MS >= serialReadinessBudget + 2 * 60_000);
+
+  const invocations = [];
+  for (const action of ["api-evidence", "finalize", "rollback"]) {
+    await remoteAction(
+      { cwd: "/private/repository", environment: {}, signal: undefined },
+      action,
+      options(),
+      "/private/known-hosts",
+      {},
+      {
+        command: async (_context, file, _arguments, label, timeoutMs) => {
+          invocations.push({ action, file, label, timeoutMs });
+          return { code: 0, stderr: "", stdout: "" };
+        },
+      },
+    );
+  }
+  assert.deepEqual(
+    invocations.map(({ action, label, timeoutMs }) => ({ action, label, timeoutMs })),
+    [
+      {
+        action: "api-evidence",
+        label: "CLOUD_RELEASE_REMOTE_API_EVIDENCE",
+        timeoutMs: 30 * 60_000,
+      },
+      {
+        action: "finalize",
+        label: "CLOUD_RELEASE_REMOTE_FINALIZE",
+        timeoutMs: REMOTE_FINALIZE_ROLLBACK_TIMEOUT_MS,
+      },
+      {
+        action: "rollback",
+        label: "CLOUD_RELEASE_REMOTE_ROLLBACK",
+        timeoutMs: REMOTE_FINALIZE_ROLLBACK_TIMEOUT_MS,
+      },
+    ],
+  );
+  assert.ok(invocations.every(({ file }) => file === "/usr/bin/ssh"));
 });
 
 test("bounded stdin rejects empty and oversized evidence before state mutation", async () => {

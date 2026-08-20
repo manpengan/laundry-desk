@@ -85,12 +85,30 @@ release-set 工具必须满足：
 归档根继续是 root-only `/var/lib/laundry-desk-release-archive`。归档只是从发布前置计数中退出，
 不改变原 history 的 outcome、权威性或证据内容。
 
+### 4.1 只读 inventory 与独立 preflight
+
+同一个 root-only release-set runner 提供不接受额外参数的 `inventory` 与 `preflight`。两者都必须
+自行取得 release lock、验证继承锁，并在任何容量或留存目录读取前拒绝活动 transition；它们只调用
+严格的 active history/controller/backup/evidence、live marker、`/opt` 名称与磁盘容量校验，不创建
+目录、不清理、不移动、不删除也不写入任何证据。
+
+`inventory` 即使留存已满也返回固定一行、固定字段顺序且不含 token、私有路径、凭据或证据内容的
+有界快照。`preflight` 使用同一快照，但另行执行容量与余量门禁；稳定态 `/opt` 必须为上传后的
+`incoming` 与解包后的 `next` 预留两格，因此常驻 5 棵时通过，6 棵时以既有
+`CLOUD_RELEASE_ARTIFACT_RETENTION_LIMIT` 失败关闭。history 与 backup 各自必须少于 8 组。
+失败不得输出部分成功快照，继续复用既有稳定错误码。
+
+`/opt` 在 5.0 的恢复证据限定为：同文件系统原子 rename 前后 inode 不变，并由测试证明精确
+inverse rename 可回到原 source。当前不提供通用 `/opt` restore CLI，也不得把这一可逆性证明描述成
+已经完成一次真实远端恢复；完整 release set 的受控恢复仍由 manifest-bound `restore` 提供。
+
 ### 5. 5.0 的关闭条件
 
 5.0 只有同时满足以下条件才可关闭：
 
 - ADR、AGENTS、README、CHANGELOG、当前计划和运维手册一致指向阶段 5；
-- `/opt` 与 release-set 归档工具通过失败路径、恢复路径、中断重入和文件身份测试；
+- `/opt` 归档路径通过失败路径、same-inode 与 inverse-rename 可逆性测试；release-set 通过显式
+  archive/restore、中断重入和文件身份测试；
 - 精确 `main` required checks 绿灯，且工具本身已进入 hk-vps live 部署树；
 - 在同一 release lock 下完成新鲜只读候选盘点，并经单独授权归档精确对象；
 - 远端无活动 transition、服务与共享站点健康，active history/controller/backup/evidence 仍严格

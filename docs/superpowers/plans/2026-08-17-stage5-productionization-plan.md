@@ -69,13 +69,13 @@
 3. 用维护树只读 list；对另行授权的精确对象先执行 `/opt` 退役，再执行完整 release-set 归档；
 4. 复核 inode、manifest、剩余 active 一一绑定、磁盘、systemd、loopback 与公网健康；
 5. 运行 release preflight，确认 retention limit 全部解除；
-6. 把同一精确 `main` 正式发布到 hk-vps，再用 live runner 重复只读列表与恢复预演；
+6. 把同一精确 `main` 正式发布到 hk-vps，再用 live runner 重复只读 `inventory`、列表与
+   `preflight`；本步骤不执行远端 restore，任何真实 release-set restore 仍须为精确对象另行授权；
 7. 回写一份不含 token、秘密或真实 PII 的阶段 5.0 发布结果。
 
 当前执行环境已生成专用 `~/.ssh/hk_vps_ed25519`、写入精确 `Host hk-vps` 配置并核对服务器
-Ed25519 fingerprint 与仓库固定值一致；但服务器只开放 publickey，远端尚未把该公钥加入 root
-`authorized_keys`，key-only 探测以 `Permission denied (publickey)` 失败关闭且无副作用。5.0-E
-在远端 authority 安装完成前保持环境门禁，不启用密码或降低校验。
+Ed25519 fingerprint 与仓库固定值一致。截至 2026-08-20，严格 key-only 路径已经通过远端
+`status` 复核；后续 5.0-E 继续使用同一固定 authority，不启用密码，也不降低主机密钥或身份校验。
 
 ## 4. 5.0 关闭检查表
 

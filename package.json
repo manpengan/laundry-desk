@@ -93,7 +93,7 @@
     "cloud:release:hk": "node tools/cloud/hk-vps-release.mjs",
     "cloud:release:hk:maintenance": "node tools/cloud/hk-vps-release-maintenance.mjs",
     "cloud:release:hk:artifact-archive:test": "node --test tools/cloud/hk-vps-release-artifact-archive.test.mjs",
-    "cloud:release:hk:release-set:test": "node --test tools/cloud/hk-vps-release-set-archive.test.mjs",
+    "cloud:release:hk:release-set:test": "node --test tools/cloud/hk-vps-release-set-archive.test.mjs tools/cloud/hk-vps-release-readonly-preflight.test.mjs tools/cloud/hk-vps-release-host-guard.test.mjs",
     "cloud:data:hk": "node tools/cloud/hk-vps-data-protection.mjs"
   },
   "build": {

@@ -156,7 +156,7 @@ function assertRoomForRelease(count, code) {
   if (!Number.isSafeInteger(count) || count < 0 || count >= MAX_RETAINED_RELEASES) fail(code);
 }
 
-async function assertArtifactRetention(dependencies) {
+async function readArtifactRetention(dependencies) {
   await assertRoot(OPT_ROOT, 0o755, "CLOUD_RELEASE_ARTIFACT_RETENTION_INVALID", dependencies);
   const names = (
     await namesIn(OPT_ROOT, "CLOUD_RELEASE_ARTIFACT_RETENTION_INVALID", dependencies)
@@ -171,10 +171,10 @@ async function assertArtifactRetention(dependencies) {
       dependencies,
     );
   }
-  assertRoomForRelease(names.length, "CLOUD_RELEASE_ARTIFACT_RETENTION_LIMIT");
+  return names.length;
 }
 
-async function assertHistoryRetention(dependencies) {
+async function readHistoryRetention(dependencies) {
   await assertRoot(HISTORY_ROOT, 0o700, "CLOUD_RELEASE_HISTORY_RETENTION_INVALID", dependencies);
   const names = await namesIn(
     HISTORY_ROOT,
@@ -190,7 +190,36 @@ async function assertHistoryRetention(dependencies) {
       dependencies,
     );
   }
-  assertRoomForRelease(names.length, "CLOUD_RELEASE_HISTORY_RETENTION_LIMIT");
+  return names.length;
+}
+
+async function availableBytes(path, label, signal, dependencies) {
+  const result = await command(
+    "/usr/bin/df",
+    ["--block-size=1", "--output=avail", "--", path],
+    `CLOUD_RELEASE_${label}_CAPACITY`,
+    signal,
+    dependencies,
+  );
+  return parseAvailableBytes(result.stdout);
+}
+
+export async function readReleaseHostSnapshot(signal, dependencies = {}) {
+  const optAvailableBytes = await availableBytes(OPT_ROOT, "OPT", signal, dependencies);
+  const postgresqlAvailableBytes = await availableBytes(
+    POSTGRESQL_ROOT,
+    "POSTGRESQL",
+    signal,
+    dependencies,
+  );
+  const optResident = await readArtifactRetention(dependencies);
+  const historyActive = await readHistoryRetention(dependencies);
+  return Object.freeze({
+    historyActive,
+    optAvailableBytes,
+    optResident,
+    postgresqlAvailableBytes,
+  });
 }
 
 export async function assertReleasePreflight(signal, dependencies = {}) {
@@ -198,19 +227,18 @@ export async function assertReleasePreflight(signal, dependencies = {}) {
     [OPT_ROOT, "OPT"],
     [POSTGRESQL_ROOT, "POSTGRESQL"],
   ]) {
-    const result = await command(
-      "/usr/bin/df",
-      ["--block-size=1", "--output=avail", "--", path],
-      `CLOUD_RELEASE_${label}_CAPACITY`,
-      signal,
-      dependencies,
-    );
-    if (parseAvailableBytes(result.stdout) < MINIMUM_RELEASE_FREE_BYTES) {
+    if ((await availableBytes(path, label, signal, dependencies)) < MINIMUM_RELEASE_FREE_BYTES) {
       fail("CLOUD_RELEASE_CAPACITY_LOW");
     }
   }
-  await assertArtifactRetention(dependencies);
-  await assertHistoryRetention(dependencies);
+  assertRoomForRelease(
+    await readArtifactRetention(dependencies),
+    "CLOUD_RELEASE_ARTIFACT_RETENTION_LIMIT",
+  );
+  assertRoomForRelease(
+    await readHistoryRetention(dependencies),
+    "CLOUD_RELEASE_HISTORY_RETENTION_LIMIT",
+  );
   await (dependencies.assertRetainedEvidence ?? assertRetainedFinalizeEvidence)(dependencies);
   await (dependencies.assertRetainedControllers ?? assertRetainedReleaseControllers)(dependencies);
   const postgresGid = await identity(

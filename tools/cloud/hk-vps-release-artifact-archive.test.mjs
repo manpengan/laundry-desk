@@ -4,8 +4,10 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  readFile,
   readdir,
   realpath,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -114,6 +116,35 @@ test("archives a bound rolled-back artifact and proves the moved tree is the sam
   assert.deepEqual(await readdir(roots.optRoot), []);
   assert.deepEqual(await readdir(result.target), ["nested"]);
   assert.deepEqual(synced, [roots.optRoot, roots.archiveRoot]);
+
+  const archivedIdentity = await lstat(result.target);
+  await rename(result.target, source);
+  const restoredIdentity = await lstat(source);
+  assert.equal(restoredIdentity.dev, identity.dev);
+  assert.equal(restoredIdentity.ino, identity.ino);
+  assert.equal(await readFile(join(source, "nested", "marker.txt"), "utf8"), "release artifact\n");
+
+  const rearchived = await archiveRetiredArtifact(FAILED, dependencies);
+  const rearchivedIdentity = await lstat(rearchived.target);
+  assert.deepEqual(
+    {
+      bytes: rearchived.bytes,
+      dev: rearchivedIdentity.dev,
+      entries: rearchived.entries,
+      ino: rearchived.ino,
+    },
+    {
+      bytes: result.bytes,
+      dev: archivedIdentity.dev,
+      entries: result.entries,
+      ino: result.ino,
+    },
+  );
+  assert.equal(
+    await readFile(join(rearchived.target, "nested", "marker.txt"), "utf8"),
+    "release artifact\n",
+  );
+  assert.deepEqual(synced, [roots.optRoot, roots.archiveRoot, roots.optRoot, roots.archiveRoot]);
 });
 
 test("archives a tree containing node_modules symlinks", async (t) => {
@@ -529,9 +560,70 @@ test("host runner re-executes under the shared release lock and verifies it inte
     },
     listArtifacts: async () => [FAILED],
     processUid: 0,
+    transitionExists: async () => false,
   });
   assert.equal(lockChecks, 1);
   assert.equal(output.join(""), `CLOUD_RELEASE_ARTIFACT_ARCHIVE_LIST count=1\n  ${FAILED}\n`);
+});
+
+test("host runner rejects every artifact action while a release transition is active", async () => {
+  const actions = [
+    { argv: ["--list"], dependency: "listArtifacts" },
+    { argv: ["--list-superseded-rollbacks"], dependency: "listSuperseded" },
+    { argv: ["--archive", FAILED], dependency: "moveArtifact" },
+    { argv: ["--archive-orphan", ORPHAN], dependency: "moveArtifact" },
+    { argv: ["--retire-superseded-rollback", ROLLBACK], dependency: "moveArtifact" },
+  ];
+
+  for (const { argv, dependency } of actions) {
+    const events = [];
+    const output = [];
+    await assert.rejects(
+      () =>
+        main(["--lock-held", ...argv], (line) => output.push(line), {
+          assertLockHeld: async () => {
+            events.push("lock");
+          },
+          [dependency]: async () => {
+            events.push("action");
+            return [];
+          },
+          processUid: 0,
+          transitionExists: async () => {
+            events.push("transition");
+            return true;
+          },
+        }),
+      { code: "CLOUD_RELEASE_TRANSITION_ACTIVE" },
+    );
+    assert.deepEqual(events, ["lock", "transition"]);
+    assert.equal(output.join(""), "");
+  }
+});
+
+test("host runner fails closed when its transition probe cannot complete", async () => {
+  const events = [];
+  const output = [];
+  await assert.rejects(
+    () =>
+      main(["--lock-held", "--list"], (line) => output.push(line), {
+        assertLockHeld: async () => {
+          events.push("lock");
+        },
+        listArtifacts: async () => {
+          events.push("action");
+          return [FAILED];
+        },
+        processUid: 0,
+        transitionExists: async () => {
+          events.push("transition");
+          throw new Error("probe failed");
+        },
+      }),
+    { code: "CLOUD_RELEASE_TRANSITION_ACTIVE" },
+  );
+  assert.deepEqual(events, ["lock", "transition"]);
+  assert.equal(output.join(""), "");
 });
 
 test("host runner only self-executes when it is the process entry point", () => {

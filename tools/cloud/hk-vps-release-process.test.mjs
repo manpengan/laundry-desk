@@ -64,6 +64,16 @@ test("remote stable errors require an exact allowlisted stderr-only record", () 
     parseSafeRemoteReleaseErrorCode("", "CLOUD_RELEASE_BACKUP_RECOVERY_REQUIRED\n"),
     "CLOUD_RELEASE_BACKUP_RECOVERY_REQUIRED",
   );
+  for (const code of [
+    "CLOUD_RELEASE_LOOPBACK_HEALTH_ABORTED",
+    "CLOUD_RELEASE_PUBLIC_HEALTH_ABORTED",
+    "CLOUD_RELEASE_PUBLIC_HEALTH_FAILED",
+    "CLOUD_RELEASE_PUBLIC_READINESS_TIMEOUT",
+    "CLOUD_RELEASE_PUBLIC_SPA_ABORTED",
+    "CLOUD_RELEASE_PUBLIC_SPA_FAILED",
+  ]) {
+    assert.equal(parseSafeRemoteReleaseErrorCode("", `${code}\n`), code);
+  }
   for (const [stdout, stderr] of [
     ["", "CLOUD_RELEASE_UNKNOWN_FAILURE\n"],
     ["", "prefix CLOUD_RELEASE_INSTALL_FAILED\n"],
