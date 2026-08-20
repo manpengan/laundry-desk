@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DESK_READINESS_POLICY } from "./hk-vps-release-readiness.mjs";
+import {
+  DESK_PUBLIC_READINESS_POLICY,
+  DESK_READINESS_POLICY,
+} from "./hk-vps-release-readiness.mjs";
 import { assertDeskHealth, restorePreviousCode } from "./hk-vps-release-remote-system.mjs";
 import { LIVE_ROOT, releasePaths } from "./hk-vps-release-remote-support.mjs";
 
@@ -13,8 +16,8 @@ function result(stdout = "") {
   return Object.freeze({ code: 0, stderr: "", stdout });
 }
 
-function transientFailure() {
-  return new Error("CLOUD_RELEASE_LOOPBACK_HEALTH_FAILED");
+function transientFailure(code = "CLOUD_RELEASE_LOOPBACK_HEALTH_FAILED") {
+  return new Error(code);
 }
 
 function healthFixture({
@@ -22,10 +25,14 @@ function healthFixture({
   failures = 0,
   loopback = READY,
   marker = EXPECTED,
+  publicFailures = 0,
   publicHealth = READY,
+  spaFailures = 0,
 } = {}) {
   const events = [];
   let loopbackAttempts = 0;
+  let publicAttempts = 0;
+  let spaAttempts = 0;
   return {
     dependencies: {
       command: async () => {
@@ -41,9 +48,18 @@ function healthFixture({
           if (loopbackAttempts <= failures) throw transientFailure();
           return result(loopback);
         }
-        if (label === "CLOUD_RELEASE_PUBLIC_HEALTH") return result(publicHealth);
+        if (label === "CLOUD_RELEASE_PUBLIC_HEALTH") {
+          assert.equal(maxTime, DESK_PUBLIC_READINESS_POLICY.probeMaxTimeSeconds);
+          assert.equal(timeoutMs, DESK_PUBLIC_READINESS_POLICY.probeTimeoutMs);
+          publicAttempts += 1;
+          if (publicAttempts <= publicFailures) {
+            throw transientFailure("CLOUD_RELEASE_PUBLIC_HEALTH_FAILED");
+          }
+          return result(publicHealth);
+        }
         assert.equal(url, "https://desk.manpengan.xyz/");
-        assert.equal(signal, undefined);
+        spaAttempts += 1;
+        if (spaAttempts <= spaFailures) throw transientFailure("CLOUD_RELEASE_PUBLIC_SPA_FAILED");
         return result();
       },
       readReleaseMarker: async (path) => {
@@ -57,6 +73,8 @@ function healthFixture({
     },
     events,
     loopbackAttempts: () => loopbackAttempts,
+    publicAttempts: () => publicAttempts,
+    spaAttempts: () => spaAttempts,
   };
 }
 
@@ -122,6 +140,64 @@ test("desk readiness aborts during its wait without another health attempt", asy
   queueMicrotask(() => controller.abort());
   await assert.rejects(() => operation, { code: "CLOUD_RELEASE_LOOPBACK_HEALTH_ABORTED" });
   assert.equal(attempts, 1);
+});
+
+test("public health retries a transient hairpin failure before strict gates", async () => {
+  const fixture = healthFixture({ publicFailures: 2 });
+  await assertDeskHealth(EXPECTED, undefined, fixture.dependencies);
+  assert.equal(fixture.publicAttempts(), 3);
+  assert.deepEqual(fixture.events, [
+    "curl:CLOUD_RELEASE_LOOPBACK_HEALTH:read",
+    "curl:CLOUD_RELEASE_PUBLIC_HEALTH:read",
+    "wait",
+    "curl:CLOUD_RELEASE_PUBLIC_HEALTH:read",
+    "wait",
+    "curl:CLOUD_RELEASE_PUBLIC_HEALTH:read",
+    "curl:CLOUD_RELEASE_PUBLIC_SPA:discard",
+    "binding",
+    `marker:${LIVE_ROOT}`,
+  ]);
+});
+
+test("public readiness exhausts its bounded budget and fails closed on its own code", async () => {
+  const fixture = healthFixture({ publicFailures: Number.POSITIVE_INFINITY });
+  await assert.rejects(() => assertDeskHealth(EXPECTED, undefined, fixture.dependencies), {
+    code: "CLOUD_RELEASE_PUBLIC_READINESS_TIMEOUT",
+  });
+  assert.equal(fixture.publicAttempts(), DESK_PUBLIC_READINESS_POLICY.attempts);
+  assert.equal(
+    fixture.events.filter((event) => event === "wait").length,
+    DESK_PUBLIC_READINESS_POLICY.attempts - 1,
+  );
+  assert.equal(fixture.spaAttempts(), 0);
+});
+
+test("public SPA retries transiently but a bad public envelope never retries", async () => {
+  const retried = healthFixture({ spaFailures: 1 });
+  await assertDeskHealth(EXPECTED, undefined, retried.dependencies);
+  assert.equal(retried.spaAttempts(), 2);
+
+  const invalid = healthFixture({ publicHealth: "{}" });
+  await assert.rejects(() => assertDeskHealth(EXPECTED, undefined, invalid.dependencies), {
+    code: "CLOUD_RELEASE_HEALTH_INVALID",
+  });
+  assert.equal(invalid.publicAttempts(), 1);
+  assert.equal(invalid.events.includes("wait"), false);
+});
+
+test("public readiness aborts during its wait without another public attempt", async () => {
+  const controller = new AbortController();
+  let publicAttempts = 0;
+  const operation = assertDeskHealth(EXPECTED, controller.signal, {
+    curl: async (url, label) => {
+      if (label === "CLOUD_RELEASE_LOOPBACK_HEALTH") return result(READY);
+      publicAttempts += 1;
+      throw transientFailure("CLOUD_RELEASE_PUBLIC_HEALTH_FAILED");
+    },
+  });
+  queueMicrotask(() => controller.abort());
+  await assert.rejects(() => operation, { code: "CLOUD_RELEASE_PUBLIC_HEALTH_ABORTED" });
+  assert.equal(publicAttempts, 1);
 });
 
 test("rollback starts restored code before readiness retry and shared checks", async () => {
