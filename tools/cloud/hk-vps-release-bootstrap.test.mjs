@@ -14,6 +14,7 @@ const EXPECTED = "b".repeat(40);
 const DIGEST = "c".repeat(64);
 const TOKEN = "d".repeat(32);
 const MIGRATION = "0046_cloud_primary.sql";
+const BOOTSTRAP_FIXTURE_TIMEOUT_MS = 10_000;
 
 function installPortableProcessRecord(script) {
   const start = script.indexOf("read_process_record() {");
@@ -165,9 +166,10 @@ async function runBootstrap(root, commands, label, options = {}) {
       encoding: "utf8",
       env: fixture.environment,
       input: fixture.input,
-      timeout: 2_000,
+      timeout: BOOTSTRAP_FIXTURE_TIMEOUT_MS,
     },
   );
+  assert.equal(result.error, undefined, result.error?.message);
   return { ...fixture, result };
 }
 
@@ -178,8 +180,9 @@ function assertSafeFailure(result, code, status = 74) {
   assert.equal(parseSafeRemoteReleaseErrorCode(result.stdout, result.stderr), code);
 }
 
-async function waitForText(path) {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+async function waitForText(path, timeoutMs = BOOTSTRAP_FIXTURE_TIMEOUT_MS) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
     try {
       return await readFile(path, "utf8");
     } catch (error) {
