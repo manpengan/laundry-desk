@@ -24,6 +24,24 @@ export type AiPanelProps = Readonly<{
   aiPort: AiPanelPort;
 }>;
 
+export async function drainStaleAiTurn(
+  aiPort: AiPanelPort,
+  sessionId: string,
+  after: number,
+): Promise<boolean> {
+  try {
+    const result = await aiPort.stream(
+      sessionId,
+      after,
+      new AbortController().signal,
+      () => undefined,
+    );
+    return result.ok;
+  } catch {
+    return false;
+  }
+}
+
 function nextId(): string {
   return globalThis.crypto.randomUUID();
 }
@@ -64,32 +82,60 @@ export function AiPanel({ open, onClose, authSessionId, aiPort }: AiPanelProps) 
   const [messages, setMessages] = useState<readonly PanelMessage[]>(Object.freeze([]));
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
+  const [canStop, setCanStop] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
+  const operationGenerationRef = useRef(0);
+  const panelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    operationGenerationRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
     setConversationId(null);
     setMessages(Object.freeze([]));
     setPrompt("");
     setBusy(false);
+    setCanStop(false);
     setError(null);
     setCursor(0);
   }, [authSessionId]);
 
   useEffect(
     () => () => {
+      operationGenerationRef.current += 1;
       abortRef.current?.abort();
     },
     [],
   );
 
+  useEffect(() => {
+    if (!open) return;
+    const returnFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panelRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    return () => {
+      if (returnFocus?.isConnected === true) returnFocus.focus();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [onClose, open]);
+
   const stop = () => {
+    if (abortRef.current === null) return;
+    operationGenerationRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
     setBusy(false);
+    setCanStop(false);
   };
 
   const submit = async (event: FormEvent) => {
@@ -99,9 +145,14 @@ export function AiPanel({ open, onClose, authSessionId, aiPort }: AiPanelProps) 
     setError(null);
     setBusy(true);
     setPrompt("");
+    const operationGeneration = operationGenerationRef.current + 1;
+    operationGenerationRef.current = operationGeneration;
+    const isCurrentOperation = (): boolean =>
+      operationGenerationRef.current === operationGeneration;
     let activeConversationId = conversationId;
     if (activeConversationId === null) {
       const created = await aiPort.createSession();
+      if (!isCurrentOperation()) return;
       if (!created.ok) {
         setError(created.error.message);
         setBusy(false);
@@ -123,6 +174,12 @@ export function AiPanel({ open, onClose, authSessionId, aiPort }: AiPanelProps) 
       prompt: text,
       idempotencyKey: nextId(),
     });
+    if (!isCurrentOperation()) {
+      if (turn.ok && !(await drainStaleAiTurn(aiPort, activeConversationId, cursor))) {
+        console.warn("AI stale turn drain failed");
+      }
+      return;
+    }
     if (!turn.ok) {
       setError(turn.error.message);
       setBusy(false);
@@ -130,25 +187,36 @@ export function AiPanel({ open, onClose, authSessionId, aiPort }: AiPanelProps) 
     }
     const abort = new AbortController();
     abortRef.current = abort;
+    setCanStop(true);
     const streamed = await aiPort.stream(activeConversationId, cursor, abort.signal, (item) => {
+      if (!isCurrentOperation()) return;
       setCursor(item.cursor);
       if (item.turn_id !== turn.data.turnId) return;
       setMessages((current) => applyEvent(current, assistantId, item));
     });
+    if (!isCurrentOperation()) return;
     abortRef.current = null;
+    setCanStop(false);
     if (!streamed.ok) setError(streamed.error.message);
     setBusy(false);
   };
 
   if (!open) return null;
   return (
-    <aside className="ld-ai-panel" aria-label="AI 助手" data-testid="ai-panel">
+    <aside
+      ref={panelRef}
+      id="ld-ai-panel"
+      className="ld-ai-panel"
+      role="dialog"
+      aria-label="AI 助手"
+      data-testid="ai-panel"
+    >
       <header className="ld-ai-panel__header">
         <div>
           <strong>AI 助手</strong>
           <small>经营 / 检索 / 规程 · 流式生成 · 仅限有界只读工具</small>
         </div>
-        <Button type="button" size="sm" variant="ghost" onClick={onClose}>
+        <Button type="button" size="sm" variant="secondary" onClick={onClose}>
           关闭
         </Button>
       </header>
@@ -195,7 +263,8 @@ export function AiPanel({ open, onClose, authSessionId, aiPort }: AiPanelProps) 
           onChange={(event) => setPrompt(event.currentTarget.value)}
         />
         <div className="ld-ai-panel__actions">
-          {busy ? (
+          {busy && !canStop ? <span role="status">正在建立 AI 回合…</span> : null}
+          {canStop ? (
             <Button type="button" variant="secondary" onClick={stop}>
               停止
             </Button>

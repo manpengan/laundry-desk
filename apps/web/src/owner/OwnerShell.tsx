@@ -80,7 +80,13 @@ export function OwnerShell({
         <div className="ld-owner-header__actions">
           <span className="ld-owner-header__badge">云端经营台</span>
           {allowed && aiPort !== undefined ? (
-            <button className="ld-owner-logout" type="button" onClick={() => setAiOpen(true)}>
+            <button
+              className="ld-owner-logout"
+              type="button"
+              aria-expanded={aiOpen}
+              aria-controls="ld-ai-panel"
+              onClick={() => setAiOpen((value) => !value)}
+            >
               ✨ AI 助手
             </button>
           ) : null}
