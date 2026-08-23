@@ -38,6 +38,7 @@ export function CounterWorkbench({
   const [summary, setSummary] = useState<DaySummaryView | null>(null);
   const [customerNames, setCustomerNames] = useState<readonly string[]>([]);
   const [busy, setBusy] = useState(false);
+  const workbenchRef = useRef<HTMLElement | null>(null);
   const loadRef = useRef<() => Promise<void>>(async () => undefined);
 
   const load = useCallback(async () => {
@@ -74,6 +75,21 @@ export function CounterWorkbench({
   loadRef.current = load;
   useEffect(() => {
     void loadRef.current();
+  }, []);
+
+  useEffect(() => {
+    const root = workbenchRef.current;
+    if (root === null) return;
+    const doc = root.ownerDocument;
+    const activeElement = doc.activeElement;
+    if (
+      activeElement !== null &&
+      activeElement !== doc.body &&
+      activeElement !== doc.documentElement
+    ) {
+      return;
+    }
+    root.querySelector<HTMLInputElement>('input[name="quick-pickup"]')?.focus();
   }, []);
 
   const onPickupSearch = useCallback(async () => {
@@ -132,7 +148,7 @@ export function CounterWorkbench({
   }, [customerKey, onNavigate, queryClient, toast]);
 
   return (
-    <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
+    <main ref={workbenchRef} className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">工作台</h1>
       <p className="ld-shell-main__hint">
         扫描或输入票号、取件码或衣物条码即可进入取衣；今日数据按服务端营业日计算。
@@ -146,7 +162,6 @@ export function CounterWorkbench({
               label="票号 / 取件码 / 条码 / 手机号 / 姓名"
               value={pickupKey}
               onChange={(event) => setPickupKey(event.target.value)}
-              autoFocus
               disabled={busy}
               hint="扫码枪可直接输入后按 Enter"
               onKeyDown={(event) => {
