@@ -110,6 +110,16 @@ test("generic local administrator login reaches the counter shell", async ({ pag
 });
 
 test("AI assistant can be closed from a narrow counter viewport", async ({ page }) => {
+  let releaseWorkbench = (): void => undefined;
+  const workbenchGate = new Promise<void>((resolve) => {
+    releaseWorkbench = resolve;
+  });
+  await page.route("**/src/pages/CounterWorkbench.tsx*", async (route) => {
+    await workbenchGate;
+    await route.continue();
+  });
+  const workbenchRequest = page.waitForRequest("**/src/pages/CounterWorkbench.tsx*");
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(WEB);
   await page.locator('input[name="org_code"]').fill(LOGIN.orgCode);
@@ -118,6 +128,7 @@ test("AI assistant can be closed from a narrow counter viewport", async ({ page 
   await page.locator('input[name="password"]').fill(LOGIN.password);
   await page.getByRole("button", { name: "登录" }).click();
   await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 15_000 });
+  await workbenchRequest;
 
   const trigger = page.getByRole("button", { name: "✨ AI", exact: true });
   const panel = page.locator('[data-testid="ai-panel"]');
@@ -132,6 +143,10 @@ test("AI assistant can be closed from a narrow counter viewport", async ({ page 
   await close.click();
   await expect(panel).toHaveCount(0);
   await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(trigger).toBeFocused();
+
+  releaseWorkbench();
+  await expect(page.getByLabel("票号 / 取件码 / 条码 / 手机号 / 姓名")).toBeVisible();
   await expect(trigger).toBeFocused();
 
   await trigger.click();
