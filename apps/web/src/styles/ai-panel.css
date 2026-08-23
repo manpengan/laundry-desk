@@ -6,10 +6,12 @@
   grid-template-rows: auto 1fr auto auto;
   width: min(400px, 100vw);
   padding: 16px;
-  color: var(--lg-text, #1d1d1f);
-  background: var(--lg-card-bg, rgba(255, 255, 255, 0.96));
-  border-left: 1px solid var(--lg-border, rgba(60, 60, 67, 0.2));
+  color: var(--lg-ink);
+  background: var(--lg-surface);
+  border-left: 1px solid var(--lg-hair);
   box-shadow: -16px 0 40px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
 }
 
 .ld-ai-panel__header,
@@ -46,7 +48,7 @@
 
 .ld-ai-panel__message--system,
 .ld-ai-panel__empty {
-  color: var(--lg-muted, #6e6e73);
+  color: var(--lg-ink2);
   font-size: 0.85rem;
 }
 
@@ -66,7 +68,7 @@
 }
 
 .ld-ai-panel__error {
-  color: var(--lg-danger, #b42318);
+  color: var(--lg-late-ink);
 }
 
 .ld-ai-panel__form textarea {

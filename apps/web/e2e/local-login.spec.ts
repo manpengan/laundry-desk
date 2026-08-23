@@ -109,6 +109,37 @@ test("generic local administrator login reaches the counter shell", async ({ pag
   });
 });
 
+test("AI assistant can be closed from a narrow counter viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(WEB);
+  await page.locator('input[name="org_code"]').fill(LOGIN.orgCode);
+  await page.locator('input[name="store_code"]').fill(LOGIN.storeCode);
+  await page.locator('input[name="username"]').fill(LOGIN.username);
+  await page.locator('input[name="password"]').fill(LOGIN.password);
+  await page.getByRole("button", { name: "登录" }).click();
+  await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 15_000 });
+
+  const trigger = page.getByRole("button", { name: "✨ AI", exact: true });
+  const panel = page.locator('[data-testid="ai-panel"]');
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+  await trigger.click();
+  await expect(panel).toBeVisible();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  const close = panel.getByRole("button", { name: "关闭", exact: true });
+  await expect(close).toBeInViewport();
+  await expect(close).toBeFocused();
+  await close.click();
+  await expect(panel).toHaveCount(0);
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+});
+
 test("a rejected login clears the password before rendering an error artifact", async ({
   page,
 }) => {

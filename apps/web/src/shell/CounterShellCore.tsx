@@ -164,7 +164,9 @@ export function CounterShellCore({
           onCycleTheme={() => setThemePref((preference) => cycleThemePreference(preference))}
           printSummary={printSummary}
           onOpenPrintQueue={() => setPrintQueueOpen(true)}
-          {...(readOnly || aiPort === undefined ? {} : { onOpenAi: () => setAiOpen(true) })}
+          {...(readOnly || aiPort === undefined
+            ? {}
+            : { aiOpen, onToggleAi: () => setAiOpen((value) => !value) })}
           {...(readOnly ? {} : { onSwitchStaff: () => setPinOpen(true) })}
           readOnly={readOnly}
         />

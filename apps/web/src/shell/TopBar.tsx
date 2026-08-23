@@ -10,7 +10,8 @@ export type TopBarProps = {
   onOpenPrintQueue?: () => void;
   /** Open PIN quick-switch when session is present. */
   onSwitchStaff?: () => void;
-  onOpenAi?: () => void;
+  aiOpen?: boolean;
+  onToggleAi?: () => void;
   readOnly?: boolean;
 };
 
@@ -21,7 +22,8 @@ export function TopBar({
   printSummary = { queued: 0, failed: 0 },
   onOpenPrintQueue,
   onSwitchStaff,
-  onOpenAi,
+  aiOpen = false,
+  onToggleAi,
   readOnly = false,
 }: TopBarProps) {
   return (
@@ -40,8 +42,15 @@ export function TopBar({
             切换员工
           </Button>
         ) : null}
-        {onOpenAi ? (
-          <Button variant="secondary" size="sm" type="button" onClick={onOpenAi}>
+        {onToggleAi ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            type="button"
+            aria-expanded={aiOpen}
+            aria-controls="ld-ai-panel"
+            onClick={onToggleAi}
+          >
             ✨ AI
           </Button>
         ) : null}

@@ -12,6 +12,27 @@ function isBusinessCommand(request) {
   return new URL(request.url()).pathname.startsWith("/v1/commands/");
 }
 
+async function assertAiPanelCanClose(page, triggerName) {
+  const trigger = page.getByRole("button", { name: triggerName, exact: true });
+  const panel = page.locator('[data-testid="ai-panel"]');
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+  await trigger.click();
+  await expect(panel).toBeVisible();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  const close = panel.getByRole("button", { name: "关闭", exact: true });
+  await expect(close).toBeFocused();
+  await close.click();
+  await expect(panel).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+}
+
 async function assertCatalogReadSurface(page) {
   await page.locator('[data-nav-id="settings"]').click();
   const panel = page.locator('[data-testid="catalog-admin"]');
@@ -105,6 +126,7 @@ test("core_ui_subset: public Cloud Web read surfaces are reachable", async ({
   await cloudRun.signIn(cloudPage);
 
   await expect(cloudPage.locator('[data-testid="counter-workbench-metrics"]')).toBeVisible();
+  await assertAiPanelCanClose(cloudPage, "✨ AI");
   await assertCatalogReadSurface(cloudPage);
   await assertDebtAndFulfillmentReadSurfaces(cloudPage);
   await assertCustomerAndReminderReadSurfaces(cloudPage);
@@ -120,6 +142,7 @@ test("core_ui_subset: public Cloud Web read surfaces are reachable", async ({
   });
   try {
     await cloudRun.signIn(ownerPage, "owner");
+    await assertAiPanelCanClose(ownerPage, "✨ AI 助手");
     await assertOwnerReadSurfaces(ownerPage);
     await ownerPage.waitForLoadState("networkidle");
   } finally {
