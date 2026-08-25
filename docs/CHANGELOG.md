@@ -2,7 +2,7 @@
 
 本项目版本记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 SemVer。
 
-> **当前路线（2026-08-17 修订）**：[ADR-64](adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) 在 ADR-37 的 Cloud Web 主形态与 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 的 V2-only 路线上接续阶段 5：先完成 5.0 发布解阻，再依次建立 Cloud 生产基线、受控试点、真实 provider、桌面与硬件。阶段 1–4.5 是已完成基线；5.1 关闭前 hk-vps 仍只允许合成数据，不称生产 SaaS。
+> **当前路线（2026-08-25 修订）**：[ADR-64](adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) 在 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 的 V2-only 路线上关闭了 5.0 发布解阻；当前以待签署的 [ADR-65](adr/2026-08-25-adr-65-cloud-production-baseline.md) 启动 5.1 Cloud 生产基线规划，随后才进入受控试点、真实 provider、桌面与硬件。5.1 关闭并另行授权真实数据前，hk-vps 与任何 production-candidate 都只允许合成数据，不称生产 SaaS。
 
 ---
 
@@ -14,7 +14,7 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
-- 阶段 5.0 建立可恢复的发布留存归档：`/opt` 增加只接受“已被后续 committed live 取代”的 superseded rollback 路径；history、root 私有 controller、可选 backup dump/manifest 与 finalize evidence 改为一个 manifest-bound release set，在同一 release lock、无活动 transition 下按精确 candidate SHA + token digest 显式归档或恢复。工具先验证 active 四类严格绑定与摘要，manifest 先于任何移动落盘，逐项只做同文件系统原子 rename，并以 inode/摘要支持中断重入；不自动挑最旧、不删除、不输出原 token。同一 root-only runner 新增无参数 `inventory` 与 `preflight`：两者在锁内先拒绝活动 transition，再输出固定一行、无秘密的 live/容量/四类计数快照；inventory 满槽仍可诊断，preflight 使用同一快照并为 `/opt` 的 incoming + next 预留两格。`/opt` 的 5.0 恢复证据限定为 same-inode rename 与测试中的 inverse rename 可逆性，不声称存在通用 restore CLI 或已完成远端恢复。为解决“live 缺工具但留存已满”的引导死锁，新增固定 SSH + required-check 门禁的 root-private exact-main 维护树，安装与精确归档保持两次独立授权，不修改 live。上述变化不改变 69 commands / 48 queries 或迁移头 0069；远端槽位与新工具正式部署尚待精确 `main` 合入后单独验收，当前不作完成声明。
+- 阶段 5.0 建立并实证可恢复的发布留存归档：`/opt` 增加只接受“已被后续 committed live 取代”的 superseded rollback 路径；history、root 私有 controller、可选 backup dump/manifest 与 finalize evidence 组成 manifest-bound release set，在同一 release lock、无活动 transition 下按精确 candidate SHA + token digest 显式归档或恢复。工具先验证 active 四类严格绑定与摘要，manifest 先于任何移动落盘，逐项只做同文件系统原子 rename，并以 inode/摘要支持中断重入；不自动挑最旧、不删除、不输出原 token。同一 root-only runner 提供无参数 `inventory` 与 `preflight`，并通过 exact-main 维护树解决“live 缺工具但留存已满”的引导死锁。远端已受控退役两棵 superseded rollback 树、归档三组完整 release set，并将 exact `main` `c8919af3c666cf70df2fbf04645ebdf0f377f35a` 正式提交为 hk-vps live；迁移保持 69/head 0069，公网 API 20/20、Cloud Chromium、四服务/共享站点和发布后 preflight 全部通过。稳定态 `/opt=5`、history/controller/backup `=7/7/7`、evidence `=6`，room 全部为 true。`/opt` 的恢复证据仍只声明 same-inode/inverse-rename 可逆性，不冒充实际远端 restore。见[阶段 5.0 发布解阻与关闭结果](operations/2026-08-25-stage50-release-result.md)。
 
 - 退役产物归档工具现在真的能归档产物：`measureTree` 此前对符号链接直接失败关闭，而任何真实部署树都是 pnpm workspace（目标产物一棵树就有 2688 个 `node_modules` 符号链接），该守卫使 mover 路径从未在真实数据上成功过；此前三层验证（两次真机 `--list` 返回 `count=0`、17 项合成树单测、只调用 `plan` 的真机预演）恰好都绕开了 move 路径。修复把符号链接计为叶子，不拒绝也不跟随，遍历仍不可能逃出该树。同时为退役账本从未认领的无主产物增加受控归档子命令 `--archive-orphan`（比 `--archive` 更严：任何 history 引用该路径即拒绝，并要求该产物自身 marker 与 live marker 不同）。随精确 `main` `c04f858362f1a02bf857b668513a1d1e29f64104` 发布到 hk-vps，迁移头保持 69/`0069_bounded_automation.sql` 不变（`same_migration`、`old_code_compatible=true`）；公网 API 20/20 journey 全 PASS、Cloud Chromium PASS。见[归档工具修复发布结果](operations/2026-08-15-artifact-archive-release-result.md)。
 
