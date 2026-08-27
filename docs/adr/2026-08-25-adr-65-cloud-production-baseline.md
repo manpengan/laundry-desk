@@ -1,12 +1,12 @@
 # ADR-65：Cloud 生产基线、隔离环境与可恢复性门禁
 
 - 日期：2026-08-25
-- 状态：**Proposed**
-- 决策者：待 manpengan 签署（已授权启动阶段 5.1 规划，尚未签署本决策细节）
+- 状态：**Accepted**（2026-08-27）
+- 决策者：manpengan（会话裁决：“依次进行实现提交推送”）
 - 前序：[ADR-43：Cloud 数据保护、离机副本与联合恢复](2026-08-12-adr-43-cloud-data-protection-and-joint-recovery.md)、
   [ADR-64：阶段 5 生产化接续与发布留存归档](2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
 - 5.0 证据：[阶段 5.0 发布解阻与关闭结果](../operations/2026-08-25-stage50-release-result.md)
-- 执行草案：[阶段 5.1 Cloud 生产基线计划](../superpowers/plans/2026-08-25-stage51-cloud-production-baseline-plan.md)
+- 执行计划：[阶段 5.1 Cloud 生产基线计划](../superpowers/plans/2026-08-25-stage51-cloud-production-baseline-plan.md)
 - 影响：Cloud 环境权威、数据保护、离机介质、监控告警、容量门禁、事故回滚与阶段 5.2 准入
 
 ## 背景

@@ -6,7 +6,7 @@
 - 发布前 marker：`b9ddacc9ae85551ce6b66f7da9f1dd7811d3e6ca`
 - 迁移头：`0069_bounded_automation.sql`（69 条，发布前后一致）
 - 裁决：[ADR-64](../adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
-- 后继：[ADR-65 提案](../adr/2026-08-25-adr-65-cloud-production-baseline.md)与
+- 后继：[ADR-65](../adr/2026-08-25-adr-65-cloud-production-baseline.md)与
   [阶段 5.1 计划](../superpowers/plans/2026-08-25-stage51-cloud-production-baseline-plan.md)
 
 > 本结果只关闭阶段 5.0 的发布连续性与留存门禁。hk-vps 继续只承载合成数据；本结果不等于

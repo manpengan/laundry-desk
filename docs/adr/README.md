@@ -72,7 +72,7 @@
 | [ADR-62](2026-08-13-adr-62-readonly-ai-assistant.md)                          | 有来源、脱敏且有界的只读 AI 助手                | **Proposed** 2026-08-13；Stage 4.5 Item 15         |
 | [ADR-63](2026-08-13-adr-63-bounded-automation.md)                             | 有界自动化策略、调度与额度控制                  | **Proposed** 2026-08-13；Stage 4.5 Item 17         |
 | [ADR-64](2026-08-17-adr-64-stage5-productionization-and-release-retention.md) | 阶段 5 生产化接续与发布留存归档                 | **Accepted** 2026-08-17；Stage 5 路线、5.0 已关闭  |
-| [ADR-65](2026-08-25-adr-65-cloud-production-baseline.md)                      | Cloud 生产基线、隔离环境与可恢复性门禁          | **Proposed** 2026-08-25；Stage 5.1 待签署          |
+| [ADR-65](2026-08-25-adr-65-cloud-production-baseline.md)                      | Cloud 生产基线、隔离环境与可恢复性门禁          | **Accepted** 2026-08-27；Stage 5.1 执行准备        |
 
 ## v1 线
 

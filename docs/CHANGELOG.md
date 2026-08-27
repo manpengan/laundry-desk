@@ -2,7 +2,7 @@
 
 本项目版本记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 SemVer。
 
-> **当前路线（2026-08-25 修订）**：[ADR-64](adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) 在 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 的 V2-only 路线上关闭了 5.0 发布解阻；当前以待签署的 [ADR-65](adr/2026-08-25-adr-65-cloud-production-baseline.md) 启动 5.1 Cloud 生产基线规划，随后才进入受控试点、真实 provider、桌面与硬件。5.1 关闭并另行授权真实数据前，hk-vps 与任何 production-candidate 都只允许合成数据，不称生产 SaaS。
+> **当前路线（2026-08-27 修订）**：[ADR-64](adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) 在 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 的 V2-only 路线上关闭了 5.0 发布解阻；已签署的 [ADR-65](adr/2026-08-25-adr-65-cloud-production-baseline.md) 现进入 5.1 Cloud 生产基线执行准备，随后才进入受控试点、真实 provider、桌面与硬件。5.1 关闭并另行授权真实数据前，hk-vps 与任何 production-candidate 都只允许合成数据，不称生产 SaaS。
 
 ---
 

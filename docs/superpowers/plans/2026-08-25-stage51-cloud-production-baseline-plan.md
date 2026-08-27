@@ -1,8 +1,8 @@
 # 通用 V2 阶段 5.1 Cloud 生产基线计划
 
 > 日期：2026-08-25
-> 状态：**规划已启动；待 ADR-65 签署与外部基础设施选择**
-> 提案：[ADR-65：Cloud 生产基线、隔离环境与可恢复性门禁](../../adr/2026-08-25-adr-65-cloud-production-baseline.md)
+> 状态：**ADR-65 已签署；5.1-A 进行中，待外部基础设施选择**
+> 当前裁决：[ADR-65：Cloud 生产基线、隔离环境与可恢复性门禁](../../adr/2026-08-25-adr-65-cloud-production-baseline.md)
 > 前序裁决：[ADR-64](../../adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
 > 已完成入口：[阶段 5.0 发布解阻与关闭结果](../../operations/2026-08-25-stage50-release-result.md)
 
@@ -23,7 +23,8 @@ hk-vps 与未来 production-candidate 在 5.1 关闭前都只使用合成数据�
 
 ## 2. 推进规则
 
-1. ADR-65 未签署前只做只读盘点、威胁/容量输入整理和计划评审，不实施生产主机变更。
+1. ADR-65 已签署；外部对象取得精确 identity 与单独授权前，只做仓库软件切片、只读盘点和
+   威胁/容量输入整理，不实施 production-candidate 主机变更。
 2. 每一代码切片先有精确 ADR 边界、定向失败路径测试、`workspace-check`/真实 PostgreSQL，再经 PR
    合入 `main`；服务器不产生私有补丁。
 3. 主机、DNS/TLS、离机挂载、告警接收端、恢复和真实数据均按精确对象单独授权；凭据不进 Git、
@@ -33,11 +34,11 @@ hk-vps 与未来 production-candidate 在 5.1 关闭前都只使用合成数据�
 5. 软件门禁、真实部署、离机介质、告警接收、容量、联合恢复和真实数据授权分别记账，不互相冒充。
 6. 任一阶段失败都先保存安全现场并恢复或保持 write gate 的确定状态，不用手工 SQL/rename 绕过 runner。
 
-## 3. 启动前待签署输入
+## 3. 启动前外部输入
 
 | 输入                 | 最低要求                                                                          | 当前状态                       |
 | -------------------- | --------------------------------------------------------------------------------- | ------------------------------ |
-| ADR-65               | manpengan 对环境隔离、RPO/RTO、容量公式和关闭门禁书面签署                         | `pending_decision`             |
+| ADR-65               | manpengan 对环境隔离、RPO/RTO、容量公式和关闭门禁书面签署                         | `accepted_2026-08-27`          |
 | production-candidate | 独立主机/网络、固定 SSH host key、服务与数据盘、责任人与费用授权                  | `blocked_external_environment` |
 | DNS/TLS              | 与 test origin 分离的正式候选 origin 和可验证证书管理权威                         | `blocked_external_environment` |
 | 离机介质             | 独立 failure domain 的 NFS4/CIFS/SSHFS，root-private authority、传输/静态加密证明 | `blocked_external_offsite`     |
@@ -50,7 +51,7 @@ hk-vps 与未来 production-candidate 在 5.1 关闭前都只使用合成数据�
 
 ### 5.1-A 裁决与基线盘点
 
-- 签署 ADR-65，冻结 production-candidate、offsite、alerting 和容量画像的责任边界；
+- 记录 ADR-65 签署，冻结 production-candidate、offsite、alerting 和容量画像的责任边界；
 - 对 exact main 的 ADR-43 runner、systemd units、环境硬编码、固定路径和 SSH authority 做只读差距盘点；
 - 形成命令/查询/迁移影响表；默认不改产品契约，若必须扩大则在同 PR 更新 ADR/CHANGELOG/验收记录；
 - 建立只含非秘密标识的 evidence schema 和阶段结果模板。
@@ -65,7 +66,7 @@ hk-vps 与未来 production-candidate 在 5.1 关闭前都只使用合成数据�
 - 补齐 parser、身份漂移、跨环境误连、输出脱敏、锁和回滚负向测试。
 
 关闭门禁：定向测试、`workspace-check`、真实 PostgreSQL 和 exact-main required checks 通过；不修改
-69 commands / 48 queries，除非另立并签署精确产品 ADR。
+82 commands / 64 queries，除非另立并签署精确产品 ADR。
 
 ### 5.1-C production-candidate 建立与加固
 
@@ -148,7 +149,8 @@ hk-vps 与未来 production-candidate 在 5.1 关闭前都只使用合成数据�
 
 ## 7. 紧接的下一动作
 
-1. manpengan 审阅并签署/修订 ADR-65；
-2. 提供或选择 production-candidate、离机介质、告警接收端和容量画像责任人；
-3. 在只读差距盘点后，把 5.1-B 拆成首个可合入 PR；
+1. 合入阶段 5.0 关闭与 ADR-65 裁决记录，并完成 5.1-A 只读差距盘点；
+2. 把 5.1-B 拆为保持 hk-vps 行为等价的命名 profile 基座，以及外部 identity 获批后的
+   production-candidate profile 两个切片；
+3. 提供或选择 production-candidate、离机介质、告警接收端和容量画像责任人；
 4. 在任何外部主机变更前再次列出精确对象并取得对应授权。

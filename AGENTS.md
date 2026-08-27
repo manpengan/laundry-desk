@@ -2,16 +2,16 @@
 
 仓库通用 agent 入口。
 
-## 当前 owner 与路线（ADR-64；ADR-65 提案）
+## 当前 owner 与路线（ADR-64；ADR-65）
 
 **Codex 为当前交付负责人**（设计、实现、集成与门禁）。当前裁决见
 [ADR-64](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)，Cloud Web
 主形态继续继承 [ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)；阶段 5.1 的
-生产基线细节见待签署的 [ADR-65](docs/adr/2026-08-25-adr-65-cloud-production-baseline.md)。
+生产基线细节见已签署的 [ADR-65](docs/adr/2026-08-25-adr-65-cloud-production-baseline.md)。
 
 **仅通用 V2 是活动交付线**：宏发版本停止，根 `src/` 只保留为历史行为参考；
 阶段 1–4.5 与 5.0 已关闭；当前进入 **5.1 规划/裁决**，随后再按 5.2–5.4 推进受控试点、真实
-provider、桌面与硬件。ADR-65 未签署前不实施生产主机变更；5.1 未取得真实独立环境、离机数据
+provider、桌面与硬件。外部对象取得精确 identity 与单独授权前不实施生产主机变更；5.1 未取得真实独立环境、离机数据
 保护、告警、容量与恢复证据前，hk-vps 和任何 production-candidate 都只允许合成数据。
 ADR-14 继续作为通用 V2 架构基线。
 
@@ -28,7 +28,7 @@ ADR-14 继续作为通用 V2 架构基线。
 1. [ADR-64：阶段 5 生产化接续与发布留存归档](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
 2. [阶段 5 生产化交付计划](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md)
 3. [阶段 5.0 发布解阻与关闭结果](docs/operations/2026-08-25-stage50-release-result.md)
-4. [ADR-65：Cloud 生产基线、隔离环境与可恢复性门禁（Proposed）](docs/adr/2026-08-25-adr-65-cloud-production-baseline.md)
+4. [ADR-65：Cloud 生产基线、隔离环境与可恢复性门禁](docs/adr/2026-08-25-adr-65-cloud-production-baseline.md)
 5. [阶段 5.1 Cloud 生产基线计划](docs/superpowers/plans/2026-08-25-stage51-cloud-production-baseline-plan.md)
 6. [ADR-37：Cloud Web 主交付形态与已完成 1–4 基线](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
 7. [ADR-14：通用 V2 本地优先架构基线](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
