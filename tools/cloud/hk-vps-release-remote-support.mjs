@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { lstat, mkdir, open, readFile, realpath, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
 import {
   fail,
   requireDigest,
@@ -26,14 +27,16 @@ export {
   resolveCompatibility,
 } from "./hk-vps-release-remote-migrations.mjs";
 
-export const LIVE_ROOT = "/opt/laundry-desk";
-export const STATE_ROOT = "/var/lib/laundry-desk-release";
+const PROFILE = DEFAULT_CLOUD_ENVIRONMENT_PROFILE;
+
+export const LIVE_ROOT = PROFILE.paths.liveRoot;
+export const STATE_ROOT = PROFILE.paths.releaseStateRoot;
 export const HISTORY_ROOT = `${STATE_ROOT}/history`;
 export const TRANSITION_PATH = `${STATE_ROOT}/transition.json`;
-export const BACKUP_ROOT = "/var/lib/laundry-desk-release-backups";
-export const SERVICE_NAME = "laundry-desk.service";
-export const ENV_FILE = "/etc/laundry-desk/server.env";
-export const RELEASE_ENVIRONMENT = "hk-vps-cloud-test";
+export const BACKUP_ROOT = PROFILE.paths.releaseBackupRoot;
+export const SERVICE_NAME = PROFILE.services.desk;
+export const ENV_FILE = PROFILE.paths.serverEnvironmentFile;
+export const RELEASE_ENVIRONMENT = PROFILE.environmentMarker;
 
 const MIGRATION_NAME = /^\d{4}_[a-z0-9_]+\.sql$/u;
 const DIGEST = /^[0-9a-f]{64}$/u;
@@ -95,9 +98,9 @@ export function releasePaths(candidateSha, expectedSha) {
   const candidate = requireSha(candidateSha);
   const expected = requireSha(expectedSha);
   return Object.freeze({
-    failed: `/opt/laundry-desk.failed-${candidate}`,
-    rollback: `/opt/laundry-desk.rollback-${expected}-before-${candidate}`,
-    staging: `/opt/laundry-desk.next-${candidate}`,
+    failed: `${LIVE_ROOT}.failed-${candidate}`,
+    rollback: `${LIVE_ROOT}.rollback-${expected}-before-${candidate}`,
+    staging: `${LIVE_ROOT}.next-${candidate}`,
   });
 }
 

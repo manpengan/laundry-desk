@@ -4,20 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  HK_VPS_ED25519_FINGERPRINT,
-  HK_VPS_HOST,
-  HK_VPS_PORT,
-  assertPinnedSshConfig,
-  fail,
-  sha256File,
-} from "./hk-vps-release-core.mjs";
+  DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+  requireCloudEnvironmentProfile,
+} from "./cloud-environment-profile.mjs";
+import { assertPinnedSshConfig } from "./cloud-environment-ssh.mjs";
+import { fail, sha256File } from "./hk-vps-release-core.mjs";
 
 const GIT = "/usr/bin/git";
 const SSH = "/usr/bin/ssh";
 const SSH_KEYSCAN = "/usr/bin/ssh-keyscan";
 const SSH_KEYGEN = "/usr/bin/ssh-keygen";
 
-export function parseScannedHostKey(source) {
+export function parseScannedHostKey(source, profileInput = DEFAULT_CLOUD_ENVIRONMENT_PROFILE) {
+  const profile = requireCloudEnvironmentProfile(profileInput);
   if (typeof source !== "string" || source.length > 16_384) {
     fail("CLOUD_RELEASE_SSH_HOST_KEY_INVALID");
   }
@@ -25,23 +24,30 @@ export function parseScannedHostKey(source) {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line !== "" && !line.startsWith("#"));
+  const fields = lines[0]?.split(" ");
+  const allowedHosts = new Set([profile.ssh.host, `[${profile.ssh.host}]:${profile.ssh.port}`]);
   if (
     lines.length !== 1 ||
-    !/^(?:103\.233\.252\.201|\[103\.233\.252\.201\]:22) ssh-ed25519 [A-Za-z0-9+/=]+$/u.test(
-      lines[0],
-    )
+    fields?.length !== 3 ||
+    !allowedHosts.has(fields[0]) ||
+    fields[1] !== "ssh-ed25519" ||
+    !/^[A-Za-z0-9+/=]+$/u.test(fields[2])
   ) {
     fail("CLOUD_RELEASE_SSH_HOST_KEY_INVALID");
   }
   return lines[0];
 }
 
-export async function createPinnedSshAuthority(execute) {
-  const config = await execute(SSH, ["-G", "hk-vps"], "CLOUD_RELEASE_SSH_CONFIG");
-  assertPinnedSshConfig(config.stdout);
+export async function createPinnedSshAuthority(
+  execute,
+  profileInput = DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+) {
+  const profile = requireCloudEnvironmentProfile(profileInput);
+  const config = await execute(SSH, ["-G", profile.ssh.alias], "CLOUD_RELEASE_SSH_CONFIG");
+  assertPinnedSshConfig(config.stdout, profile);
   const scan = await execute(
     SSH_KEYSCAN,
-    ["-T", "10", "-t", "ed25519", "-p", HK_VPS_PORT, HK_VPS_HOST],
+    ["-T", "10", "-t", "ed25519", "-p", profile.ssh.port, profile.ssh.host],
     "CLOUD_RELEASE_SSH_KEYSCAN",
   );
   const fingerprint = await execute(
@@ -54,10 +60,10 @@ export async function createPinnedSshAuthority(execute) {
   const matches = [...fingerprint.stdout.matchAll(/SHA256:[A-Za-z0-9+/]+/gu)].map(
     (match) => match[0],
   );
-  if (matches.length !== 1 || matches[0] !== HK_VPS_ED25519_FINGERPRINT) {
+  if (matches.length !== 1 || matches[0] !== profile.ssh.ed25519Fingerprint) {
     fail("CLOUD_RELEASE_SSH_FINGERPRINT_MISMATCH");
   }
-  const hostKey = parseScannedHostKey(scan.stdout);
+  const hostKey = parseScannedHostKey(scan.stdout, profile);
   const temporaryRoot = await mkdtemp(
     join(await realpath(tmpdir()), "laundry-cloud-release-known-host-"),
   );
@@ -92,9 +98,16 @@ export async function createPinnedSshAuthority(execute) {
   }
 }
 
-export async function withPinnedSshAuthority(execute, operation, dependencies = {}) {
+export async function withPinnedSshAuthority(
+  execute,
+  operation,
+  dependencies = {},
+  profileInput = DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+) {
+  const profile = requireCloudEnvironmentProfile(profileInput);
   const authority = await (dependencies.createPinnedSshAuthority ?? createPinnedSshAuthority)(
     execute,
+    profile,
   );
   let operationFailed = false;
   let operationError;

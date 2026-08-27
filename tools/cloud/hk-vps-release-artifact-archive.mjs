@@ -12,6 +12,7 @@ import { constants } from "node:fs";
 import { lstat, open, readdir, realpath, rename } from "node:fs/promises";
 import { join } from "node:path";
 
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
 import { fail } from "./hk-vps-release-core.mjs";
 import { readPrivateFile } from "./hk-vps-release-private-file.mjs";
 import {
@@ -22,7 +23,7 @@ import {
 } from "./hk-vps-release-remote-support.mjs";
 
 export const OPT_ROOT = "/opt";
-export const ARCHIVE_ROOT = "/var/lib/laundry-desk-release-archive";
+export const ARCHIVE_ROOT = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.archiveRoot;
 export const ARTIFACT_PREFIX = "laundry-desk.";
 
 const CODE = "CLOUD_RELEASE_ARTIFACT_ARCHIVE_INVALID";

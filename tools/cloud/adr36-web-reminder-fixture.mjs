@@ -3,6 +3,7 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 
 import { AcceptanceFailure, requireThat } from "./adr36-web-core.mjs";
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
 import {
   buildReminderFixtureApplySql,
   buildReminderFixtureArtifacts,
@@ -12,7 +13,7 @@ import {
 import { buildReminderFixtureCleanupSql } from "./adr36-web-reminder-fixture-cleanup.mjs";
 
 export const REMINDER_FIXTURE_OPT_IN = "APPLY_SYNTHETIC_HISTORY_ON_HK_VPS";
-const FIXED_ROOT = "/opt/laundry-desk";
+const FIXED_ROOT = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.liveRoot;
 const PSQL_PATH = "/usr/bin/psql";
 const RELEASE_SHA = /^[0-9a-f]{40}$/u;
 const MAX_SQL_OUTPUT_BYTES = 16 * 1024;

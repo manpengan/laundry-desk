@@ -8,6 +8,11 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
+  DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+  requireCloudEnvironmentProfile,
+  resolveCloudEnvironmentProfile,
+} from "./cloud-environment-profile.mjs";
+import {
   CloudReleaseError,
   fail,
   requireSha,
@@ -19,25 +24,35 @@ import { assertRepositoryCandidate } from "./hk-vps-release-local-repository.mjs
 import { selectCommandEnvironment, selectLocalEnvironment } from "./hk-vps-release-local.mjs";
 import { runCloudCommand, withCloudSignalCancellation } from "./hk-vps-release-process.mjs";
 
-export const MAINTENANCE_ROOT = "/var/lib/laundry-desk-release-maintenance";
+export const MAINTENANCE_ROOT = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.maintenanceRoot;
 
 const SSH = "/usr/bin/ssh";
 const SCP = "/usr/bin/scp";
 const TOKEN = /^[0-9a-f]{32}$/u;
 
-export function maintenanceIncomingPath(candidateSha, nonce) {
+export function maintenanceIncomingPath(
+  candidateSha,
+  nonce,
+  profileInput = DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+) {
+  const profile = requireCloudEnvironmentProfile(profileInput);
   const candidate = requireSha(candidateSha);
   if (typeof nonce !== "string" || !TOKEN.test(nonce)) {
     fail("CLOUD_RELEASE_MAINTENANCE_NONCE_INVALID");
   }
-  return `${MAINTENANCE_ROOT}/incoming-${candidate}-${nonce}.tar`;
+  return `${profile.paths.maintenanceRoot}/incoming-${candidate}-${nonce}.tar`;
 }
 
-export function maintenanceTreePath(candidateSha) {
-  return `${MAINTENANCE_ROOT}/trees/${requireSha(candidateSha)}`;
+export function maintenanceTreePath(
+  candidateSha,
+  profileInput = DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+) {
+  const profile = requireCloudEnvironmentProfile(profileInput);
+  return `${profile.paths.maintenanceRoot}/trees/${requireSha(candidateSha)}`;
 }
 
-export function maintenancePrepareScript() {
+export function maintenancePrepareScript(profileInput = DEFAULT_CLOUD_ENVIRONMENT_PROFILE) {
+  const profile = requireCloudEnvironmentProfile(profileInput);
   return `set -euo pipefail
 umask 077
 test "$#" -eq 2 || { echo CLOUD_RELEASE_MAINTENANCE_ARGS_INVALID >&2; exit 64; }
@@ -45,7 +60,7 @@ candidate="$1"; nonce="$2"
 [[ "\${candidate}" =~ ^[0-9a-f]{40}$ ]] && [[ "\${nonce}" =~ ^[0-9a-f]{32}$ ]] || {
   echo CLOUD_RELEASE_MAINTENANCE_ARGS_INVALID >&2; exit 64;
 }
-root=${MAINTENANCE_ROOT}
+root=${profile.paths.maintenanceRoot}
 if [ ! -e "\${root}" ]; then mkdir -m 0700 -- "\${root}"; fi
 test -d "\${root}" && test ! -L "\${root}" &&
   test "$(stat -c '%U:%G:%a' "\${root}")" = root:root:700 &&
@@ -60,7 +75,8 @@ printf 'CLOUD_RELEASE_MAINTENANCE_READY\\n'
 `;
 }
 
-export function maintenanceInstallScript() {
+export function maintenanceInstallScript(profileInput = DEFAULT_CLOUD_ENVIRONMENT_PROFILE) {
+  const profile = requireCloudEnvironmentProfile(profileInput);
   return `set -euo pipefail
 umask 077
 fail() { printf '%s\\n' "$1" >&2; exit 74; }
@@ -70,11 +86,11 @@ candidate="$1"; nonce="$2"; digest="$3"
   [[ "\${digest}" =~ ^[0-9a-f]{64}$ ]] || {
     echo CLOUD_RELEASE_MAINTENANCE_ARGS_INVALID >&2; exit 64;
   }
-root=${MAINTENANCE_ROOT}
-lock=/run/lock/laundry-desk-cloud-release.lock
+root=${profile.paths.maintenanceRoot}
+lock=${profile.paths.releaseLock}
 exec 9>"\${lock}" || fail CLOUD_RELEASE_MAINTENANCE_LOCK_FAILED
 flock -n 9 || { echo CLOUD_RELEASE_LOCKED >&2; exit 73; }
-test ! -e /var/lib/laundry-desk-release/transition.json ||
+test ! -e ${profile.paths.releaseStateRoot}/transition.json ||
   fail CLOUD_RELEASE_SET_TRANSITION_ACTIVE
 test -d "\${root}" && test ! -L "\${root}" &&
   test "$(stat -c '%U:%G:%a' "\${root}")" = root:root:700 &&
@@ -148,14 +164,26 @@ printf 'CLOUD_RELEASE_MAINTENANCE_OK candidate=%s archive_sha256=%s tree=%s\\n' 
 
 export function parseMaintenanceArguments(argv) {
   const arguments_ = argv[0] === "--" ? argv.slice(1) : argv;
-  if (
-    arguments_.length !== 2 ||
-    arguments_[0] !== "--candidate-sha" ||
-    typeof arguments_[1] !== "string"
-  ) {
-    fail("CLOUD_RELEASE_MAINTENANCE_ARGS_INVALID");
+  const values = new Map();
+  for (let index = 0; index < arguments_.length; index += 2) {
+    const key = arguments_[index];
+    const value = arguments_[index + 1];
+    if (
+      !new Set(["--candidate-sha", "--profile"]).has(key) ||
+      typeof value !== "string" ||
+      values.has(key)
+    ) {
+      fail("CLOUD_RELEASE_MAINTENANCE_ARGS_INVALID");
+    }
+    values.set(key, value);
   }
-  return Object.freeze({ candidateSha: requireSha(arguments_[1]) });
+  if (!values.has("--candidate-sha")) fail("CLOUD_RELEASE_MAINTENANCE_ARGS_INVALID");
+  const profileName = values.get("--profile");
+  if (profileName !== undefined) resolveCloudEnvironmentProfile(profileName);
+  return Object.freeze({
+    candidateSha: requireSha(values.get("--candidate-sha")),
+    ...(profileName === undefined ? {} : { profileName }),
+  });
 }
 
 function commandOptions(context, file, label, timeoutMs, extra) {
@@ -179,6 +207,9 @@ async function command(context, file, arguments_, label, timeoutMs = 2 * 60_000,
 
 export async function installMaintenanceTree(context, input, dependencies = {}) {
   const candidateSha = requireSha(input.candidateSha);
+  const profile = requireCloudEnvironmentProfile(
+    context?.profile ?? DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+  );
   const execute = dependencies.command ?? command;
   await (dependencies.assertRepositoryCandidate ?? assertRepositoryCandidate)(
     context,
@@ -190,7 +221,7 @@ export async function installMaintenanceTree(context, input, dependencies = {}) 
     execute.bind(undefined, context),
   );
   const nonce = (dependencies.randomBytes ?? randomBytes)(16).toString("hex");
-  const incoming = maintenanceIncomingPath(candidateSha, nonce);
+  const incoming = maintenanceIncomingPath(candidateSha, nonce, profile);
   let result;
   let operationError;
   try {
@@ -200,15 +231,15 @@ export async function installMaintenanceTree(context, input, dependencies = {}) 
         await execute(
           context,
           SSH,
-          sshArguments(["/usr/bin/bash", "-s", "--", candidateSha, nonce], authority.path),
+          sshArguments(["/usr/bin/bash", "-s", "--", candidateSha, nonce], authority.path, profile),
           "CLOUD_RELEASE_MAINTENANCE_PREPARE",
           2 * 60_000,
-          { input: maintenancePrepareScript() },
+          { input: maintenancePrepareScript(profile) },
         );
         await execute(
           context,
           SCP,
-          scpArguments(archive.archivePath, incoming, authority.path),
+          scpArguments(archive.archivePath, incoming, authority.path, profile),
           "CLOUD_RELEASE_MAINTENANCE_UPLOAD",
           5 * 60_000,
         );
@@ -218,18 +249,21 @@ export async function installMaintenanceTree(context, input, dependencies = {}) 
           sshArguments(
             ["/usr/bin/bash", "-s", "--", candidateSha, nonce, archive.digest],
             authority.path,
+            profile,
           ),
           "CLOUD_RELEASE_MAINTENANCE_INSTALL",
           10 * 60_000,
-          { input: maintenanceInstallScript() },
+          { input: maintenanceInstallScript(profile) },
         );
         return Object.freeze({
           archiveSha256: archive.digest,
           candidateSha,
           output: installed.stdout,
-          tree: maintenanceTreePath(candidateSha),
+          tree: maintenanceTreePath(candidateSha, profile),
         });
       },
+      {},
+      profile,
     );
   } catch (error) {
     operationError = error;
@@ -254,6 +288,7 @@ export async function main(argv = process.argv.slice(2)) {
   const context = Object.freeze({
     cwd: await realpath(process.cwd()),
     environment: selectLocalEnvironment(process.env),
+    profile: resolveCloudEnvironmentProfile(options.profileName),
   });
   await withCloudSignalCancellation(async (signal) => {
     const result = await installMaintenanceTree(Object.freeze({ ...context, signal }), options);

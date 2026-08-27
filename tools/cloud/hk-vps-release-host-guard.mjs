@@ -2,7 +2,7 @@ import { lstat, readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 
 import { assertRetainedBackups } from "./hk-vps-release-backup-retention.mjs";
-import { fail } from "./hk-vps-release-core.mjs";
+import { KB_HEALTH_URL, KB_LOOPBACK_HEALTH_URL, fail } from "./hk-vps-release-core.mjs";
 import { assertRetainedReleaseControllers } from "./hk-vps-release-controller-retention.mjs";
 import { assertRetainedFinalizeEvidence } from "./hk-vps-release-evidence-retention.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
@@ -289,13 +289,13 @@ export async function assertSharedInfrastructure(signal, dependencies = {}) {
   if (failed.stdout.trim() !== "") fail("CLOUD_RELEASE_FAILED_UNITS_PRESENT");
 
   const localKb = await curl(
-    "http://127.0.0.1:8700/healthz",
+    KB_LOOPBACK_HEALTH_URL,
     "CLOUD_RELEASE_KB_LOOPBACK_HEALTH",
     signal,
     dependencies,
   );
   const publicKb = await curl(
-    "https://kb.manpengan.xyz/healthz",
+    KB_HEALTH_URL,
     "CLOUD_RELEASE_KB_PUBLIC_HEALTH",
     signal,
     dependencies,

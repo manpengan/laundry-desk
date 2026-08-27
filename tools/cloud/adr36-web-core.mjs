@@ -1,4 +1,6 @@
-export const ADR36_PUBLIC_ORIGIN = "https://desk.manpengan.xyz";
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
+
+export const ADR36_PUBLIC_ORIGIN = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.endpoints.deskPublicOrigin;
 
 export const SAFE_CODE = /^[A-Z][A-Z0-9_]{0,95}$/u;
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;

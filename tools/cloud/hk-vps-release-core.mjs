@@ -1,129 +1,49 @@
-import { isAbsolute } from "node:path";
-
+import {
+  DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+  requireCloudEnvironmentProfile,
+} from "./cloud-environment-profile.mjs";
 import { releaseBootstrapSignalScript } from "./hk-vps-release-bootstrap-signal.mjs";
-import { fail, requireSha } from "./hk-vps-release-identifiers.mjs";
+import { fail, requireSha, requireToken } from "./hk-vps-release-identifiers.mjs";
 import { safeRemoteReleaseErrorCodes } from "./hk-vps-release-remote-error-contract.mjs";
 
 export {
   CloudReleaseError,
   fail,
-  incomingArchivePath,
   requireDigest,
   requireMigrationHead,
   requireSha,
   requireToken,
   sha256File,
 } from "./hk-vps-release-identifiers.mjs";
+export {
+  DESK_LOOPBACK_ORIGIN,
+  HK_VPS_ALIAS,
+  HK_VPS_ED25519_FINGERPRINT,
+  HK_VPS_HOST,
+  HK_VPS_IDENTITY_SUFFIX,
+  HK_VPS_PORT,
+  HK_VPS_USER,
+  KB_HEALTH_URL,
+  KB_LOOPBACK_HEALTH_URL,
+  PUBLIC_ORIGIN,
+  REMOTE_RELEASE_LOCK,
+} from "./cloud-environment-profile.mjs";
+export {
+  assertPinnedSshConfig,
+  parseSshConfig,
+  scpArguments,
+  sshArguments,
+} from "./cloud-environment-ssh.mjs";
 
-export const HK_VPS_ALIAS = "hk-vps";
-export const HK_VPS_HOST = "103.233.252.201";
-export const HK_VPS_USER = "root";
-export const HK_VPS_PORT = "22";
-export const HK_VPS_IDENTITY_SUFFIX = "/.ssh/hk_vps_ed25519";
-export const HK_VPS_ED25519_FINGERPRINT = "SHA256:Urp+pKpu/XD45nZlT+1tYJ5VYmV5X0fXStu+zmQjv4A";
 export const REQUIRED_CHECKS = Object.freeze(["workspace-check", "real-postgres"]);
-export const PUBLIC_ORIGIN = "https://desk.manpengan.xyz";
-export const KB_HEALTH_URL = "https://kb.manpengan.xyz/healthz";
-export const REMOTE_RELEASE_LOCK = "/run/lock/laundry-desk-cloud-release.lock";
 
-function requireKnownHostsPath(value) {
-  if (typeof value !== "string" || !isAbsolute(value) || value.includes("\0")) {
-    fail("CLOUD_RELEASE_KNOWN_HOSTS_INVALID");
-  }
-  return value;
-}
-
-function hostAuthorityArguments(knownHostsPath) {
-  return [
-    "-o",
-    `UserKnownHostsFile=${requireKnownHostsPath(knownHostsPath)}`,
-    "-o",
-    "GlobalKnownHostsFile=/dev/null",
-    "-o",
-    "HostKeyAlgorithms=ssh-ed25519",
-  ];
-}
-
-export function sshArguments(arguments_, knownHostsPath) {
-  return Object.freeze([
-    "-o",
-    "BatchMode=yes",
-    "-o",
-    "PasswordAuthentication=no",
-    "-o",
-    "KbdInteractiveAuthentication=no",
-    "-o",
-    "IdentitiesOnly=yes",
-    "-o",
-    "StrictHostKeyChecking=yes",
-    ...hostAuthorityArguments(knownHostsPath),
-    HK_VPS_ALIAS,
-    ...arguments_,
-  ]);
-}
-
-export function scpArguments(sourcePath, remotePath, knownHostsPath) {
-  if (typeof sourcePath !== "string" || !isAbsolute(sourcePath) || sourcePath.includes("\0")) {
-    fail("CLOUD_RELEASE_ARCHIVE_PATH_INVALID");
-  }
-  if (
-    typeof remotePath !== "string" ||
-    ![
-      /^\/opt\/laundry-desk\.incoming-[0-9a-f]{40}-[0-9a-f]{32}\.tar$/u,
-      /^\/var\/lib\/laundry-desk-release-maintenance\/incoming-[0-9a-f]{40}-[0-9a-f]{32}\.tar$/u,
-    ].some((pattern) => pattern.test(remotePath))
-  ) {
-    fail("CLOUD_RELEASE_REMOTE_PATH_INVALID");
-  }
-  return Object.freeze([
-    "-q",
-    "-o",
-    "BatchMode=yes",
-    "-o",
-    "PasswordAuthentication=no",
-    "-o",
-    "KbdInteractiveAuthentication=no",
-    "-o",
-    "IdentitiesOnly=yes",
-    "-o",
-    "StrictHostKeyChecking=yes",
-    ...hostAuthorityArguments(knownHostsPath),
-    sourcePath,
-    `${HK_VPS_ALIAS}:${remotePath}`,
-  ]);
-}
-
-export function parseSshConfig(source) {
-  if (typeof source !== "string" || source.length > 65_536) {
-    fail("CLOUD_RELEASE_SSH_CONFIG_INVALID");
-  }
-  const entries = new Map();
-  for (const line of source.split("\n")) {
-    const match = /^([^\s]+)\s+(.+)$/u.exec(line.trim());
-    if (match === null) continue;
-    const [, key, value] = match;
-    if (key !== undefined && value !== undefined && !entries.has(key)) entries.set(key, value);
-  }
-  return entries;
-}
-
-export function assertPinnedSshConfig(source) {
-  const config = parseSshConfig(source);
-  const identity = config.get("identityfile");
-  if (
-    config.get("hostname") !== HK_VPS_HOST ||
-    config.get("user") !== HK_VPS_USER ||
-    config.get("port") !== HK_VPS_PORT ||
-    config.get("passwordauthentication") !== "no" ||
-    config.get("kbdinteractiveauthentication") !== "no" ||
-    (config.has("proxycommand") && config.get("proxycommand") !== "none") ||
-    (config.has("proxyjump") && config.get("proxyjump") !== "none") ||
-    config.has("hostkeyalias") ||
-    typeof identity !== "string" ||
-    !identity.endsWith(HK_VPS_IDENTITY_SUFFIX)
-  ) {
-    fail("CLOUD_RELEASE_SSH_CONFIG_INVALID");
-  }
+export function incomingArchivePath(
+  candidateSha,
+  token,
+  profileInput = DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+) {
+  const profile = requireCloudEnvironmentProfile(profileInput);
+  return `${profile.paths.liveRoot}.incoming-${requireSha(candidateSha)}-${requireToken(token)}.tar`;
 }
 
 export function assertRequiredChecks(checkRuns, expectedSha) {
@@ -151,7 +71,8 @@ export function assertRequiredChecks(checkRuns, expectedSha) {
   }
 }
 
-export function releaseBootstrapScript() {
+export function releaseBootstrapScript(profileInput = DEFAULT_CLOUD_ENVIRONMENT_PROFILE) {
+  const profile = requireCloudEnvironmentProfile(profileInput);
   const safeRemoteCodes = safeRemoteReleaseErrorCodes()
     .map((code) => `  (${code}) return 0 ;;`)
     .join("\n");
@@ -195,9 +116,9 @@ test "\${candidate}" != "\${expected}" || {
   echo CLOUD_RELEASE_ALREADY_CURRENT >&2
   exit 64
 }
-archive="/opt/laundry-desk.incoming-\${candidate}-\${token}.tar"
-staging="/opt/laundry-desk.next-\${candidate}"
-lock="${REMOTE_RELEASE_LOCK}"
+archive="${profile.paths.liveRoot}.incoming-\${candidate}-\${token}.tar"
+staging="${profile.paths.liveRoot}.next-\${candidate}"
+lock="${profile.paths.releaseLock}"
 staging_created=0; staging_identity=""
 capture_dir=""; remote_stdout=""; remote_stderr=""
 stdout_pipe=""; stderr_pipe=""; watchdog_pipe=""
@@ -353,7 +274,7 @@ if [ -z "\${stdout_reader_identity}" ] || [ -z "\${stderr_reader_identity}" ]; t
 fi
 { exec 6>"\${stdout_pipe}" 7>"\${stderr_pipe}"; } 2>/dev/null ||
   bootstrap_fail CLOUD_RELEASE_BOOTSTRAP_REMOTE_ENTRY_FAILED
-/opt/nodejs/bin/node "\${staging}/tools/cloud/hk-vps-release-remote.mjs" \
+${profile.paths.nodeExecutable} "\${staging}/tools/cloud/hk-vps-release-remote.mjs" \
   --candidate-sha "\${candidate}" \
   --expected-current-sha "\${expected}" \
   --archive-sha256 "\${digest}" \

@@ -1,12 +1,14 @@
 import { lstat, mkdir, readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
 import { fail } from "./hk-vps-release-core.mjs";
 import { readPrivateFile, writeOrVerifyPrivateFile } from "./hk-vps-release-private-file.mjs";
 
-export const ACCEPTANCE_SECRET_ROOT = "/etc/laundry-desk/acceptance-secrets";
-export const ACCEPTANCE_ENV_PATH = "/etc/laundry-desk/adr36-acceptance.env";
-export const SERVER_ENV_PATH = "/etc/laundry-desk/server.env";
+export const ACCEPTANCE_SECRET_ROOT = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.acceptanceSecretRoot;
+export const ACCEPTANCE_ENV_PATH =
+  DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.acceptanceEnvironmentFile;
+export const SERVER_ENV_PATH = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.serverEnvironmentFile;
 export const ACCEPTANCE_FIXTURE_OPT_IN = "APPLY_SYNTHETIC_HISTORY_ON_HK_VPS";
 
 const MAX_SECRET_BYTES = 16 * 1024;

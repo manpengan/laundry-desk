@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { lstat, open, realpath, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { fail, requireSha } from "./hk-vps-release-core.mjs";
+import { PUBLIC_ORIGIN, fail, requireSha } from "./hk-vps-release-core.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
 import {
   probeLoopbackWithReadiness,
@@ -316,7 +316,7 @@ export async function assertDeskHealth(expectedSha, signal, dependencies = {}) {
       dependencies.waitForReadiness,
     );
   const publicHealth = await probePublic(
-    "https://desk.manpengan.xyz/health",
+    `${PUBLIC_ORIGIN}/health`,
     "CLOUD_RELEASE_PUBLIC_HEALTH",
     false,
   );
@@ -331,7 +331,7 @@ export async function assertDeskHealth(expectedSha, signal, dependencies = {}) {
       fail("CLOUD_RELEASE_HEALTH_INVALID");
     }
   }
-  await probePublic("https://desk.manpengan.xyz/", "CLOUD_RELEASE_PUBLIC_SPA", true);
+  await probePublic(`${PUBLIC_ORIGIN}/`, "CLOUD_RELEASE_PUBLIC_SPA", true);
   const sockets = await (dependencies.command ?? command)(
     "/usr/bin/ss",
     ["-H", "-ltn", "sport", "=", ":8787"],

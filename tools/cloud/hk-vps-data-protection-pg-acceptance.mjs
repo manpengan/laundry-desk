@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { ensureLocalConfig } from "../local/config.mjs";
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
 import { captureVerifiedDataProtectionSet } from "./hk-vps-data-protection-capture.mjs";
 import {
   DATA_PROTECTION_PHOTO_MARKER,
@@ -55,6 +56,7 @@ import {
 } from "./hk-vps-data-protection-storage.mjs";
 
 const executeFile = promisify(execFile);
+const PROFILE = DEFAULT_CLOUD_ENVIRONMENT_PROFILE;
 const REQUIRED_ENVIRONMENT = Object.freeze({
   LAUNDRY_CLOUD_DATA_PG_TEST: "1",
   LAUNDRY_USE_LOCAL_PG: "1",
@@ -171,7 +173,7 @@ async function runRealAcceptance({ adapter, codeSha, identity, paths, stores, fi
     stage = "LIVE_MUTATION";
     await adapter.setWriteGate(true);
     await adapter.query(
-      "laundry_v2",
+      PROFILE.services.postgresDatabase,
       "UPDATE orders SET note='mutated', updated_at=now() WHERE id=$1",
       [fixture.order],
     );
@@ -179,7 +181,7 @@ async function runRealAcceptance({ adapter, codeSha, identity, paths, stores, fi
       mode: 0o600,
     });
     await adapter.query(
-      "laundry_v2",
+      PROFILE.services.postgresDatabase,
       "UPDATE garment_photos SET content_sha256=$2 WHERE id=$1::uuid",
       [fixture.photo, dataProtectionPgPhotoSha256(DATA_PROTECTION_PG_MUTATED_PHOTO)],
     );
@@ -200,7 +202,7 @@ async function runRealAcceptance({ adapter, codeSha, identity, paths, stores, fi
         transitionExists: async () => false,
         inspectSets: stores.inspectSets,
         drillSet,
-        findCodeTree: async () => "/opt/laundry-desk",
+        findCodeTree: async () => PROFILE.paths.liveRoot,
         laundryIdentity: async () => identity,
         readMarker: async () => ({ git_sha: codeSha }),
         stopDesk: async () => {
@@ -216,7 +218,7 @@ async function runRealAcceptance({ adapter, codeSha, identity, paths, stores, fi
         captureSet: async (input) =>
           await captureVerifiedDataProtectionSet(input, captureDependencies),
         prepareCode: async (_source, _sha, operationId) =>
-          `/opt/laundry-desk.restore-${operationId}`,
+          `${PROFILE.paths.liveRoot}.restore-${operationId}`,
         preparePhotos: async (verified, operationId) =>
           await prepareDataProtectionPhotoRestore(verified, operationId, identity, {
             photoRoot: paths.photoRoot,
@@ -224,7 +226,7 @@ async function runRealAcceptance({ adapter, codeSha, identity, paths, stores, fi
           }),
         verifySet: stores.verifySet,
         restoreDatabase: async (verified) =>
-          await adapter.restore(verified.dumpPath, "laundry_v2", true),
+          await adapter.restore(verified.dumpPath, PROFILE.services.postgresDatabase, true),
         verifyDatabase: async (manifest) =>
           await verifyRestoredDataProtectionDatabase(
             manifest,
@@ -238,7 +240,7 @@ async function runRealAcceptance({ adapter, codeSha, identity, paths, stores, fi
         verifyPhotos: async (_path, manifest) =>
           await verifyDataProtectionRestoredPhotos(paths.photoRoot, manifest, identity),
         switchCode: async () =>
-          `/opt/laundry-desk.rollback-pre-${codeSha.slice(0, 7)}-20260812T000000Z`,
+          `${PROFILE.paths.liveRoot}.rollback-pre-${codeSha.slice(0, 7)}-20260812T000000Z`,
         cleanupRecoveryPath: async (path, operationId) =>
           await cleanupDataProtectionRecoveryPath(path, operationId, {
             photoRoot: paths.photoRoot,
@@ -251,7 +253,7 @@ async function runRealAcceptance({ adapter, codeSha, identity, paths, stores, fi
     );
     stage = "RESTORED_EVIDENCE";
     const restored = await adapter.query(
-      "laundry_v2",
+      PROFILE.services.postgresDatabase,
       `SELECT orders.note, photos.content_sha256
        FROM orders
        JOIN garment_photos photos ON photos.order_id=orders.id

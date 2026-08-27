@@ -1,13 +1,19 @@
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
 import { readDataProtectionJsonFile } from "./hk-vps-data-protection-files.mjs";
 import { fail } from "./hk-vps-release-core.mjs";
 
 export const DATA_PROTECTION_OFFSITE_AUTHORITY_PATH =
-  "/etc/laundry-desk/data-protection-offsite-authority.json";
+  DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.dataProtectionAuthorityFile;
 
 const TARGET_ID = /^[a-z0-9][a-z0-9-]{0,63}$/u;
 const REMOTE_IDENTITY = /^[A-Za-z0-9][A-Za-z0-9:+/=_@.-]{7,255}$/u;
 const MAXIMUM_AUTHORITY_AGE_MS = 366 * 24 * 60 * 60 * 1000;
-const LOCAL_FAILURE_DOMAINS = new Set(["hk-vps", "hk-vps-cloud-test", "local", "localhost"]);
+const LOCAL_FAILURE_DOMAINS = new Set([
+  DEFAULT_CLOUD_ENVIRONMENT_PROFILE.ssh.alias,
+  DEFAULT_CLOUD_ENVIRONMENT_PROFILE.environmentMarker,
+  "local",
+  "localhost",
+]);
 
 function exactKeys(value, expected) {
   return (
