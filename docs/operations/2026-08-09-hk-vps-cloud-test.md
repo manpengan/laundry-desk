@@ -4,6 +4,7 @@
 - 地址：<https://desk.manpengan.xyz>
 - 主机：SSH alias `hk-vps`（实际地址和密钥由操作者的 SSH 配置管理）
 - 裁决：[ADR-36](../adr/2026-08-09-adr-36-cloud-test-environment.md) · [ADR-37](../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) · [ADR-64](../adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
+- 最新结果：[2026-08-25 阶段 5.0 发布解阻与关闭结果](2026-08-25-stage50-release-result.md)
 
 本文件是操作流程，不是部署结果。命令输出格式和判据不能作为「已经发布」的证据；每次发布
 必须另行记录实际目标 SHA、required CI、transition、API/UI run-id 与最终状态。
