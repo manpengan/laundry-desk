@@ -2,6 +2,7 @@ import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import { resolveCloudEnvironmentProfile } from "./cloud-environment-profile.mjs";
 import { CloudReleaseError, fail } from "./hk-vps-release-core.mjs";
 import {
   completeRemoteAction,
@@ -38,11 +39,14 @@ export function parseArguments(argv) {
     "--migration-head",
     "--release-token",
   ];
-  const allowed = new Set(["--action", ...(action === "status" ? [] : identityKeys)]);
+  const allowed = new Set(["--action", "--profile", ...(action === "status" ? [] : identityKeys)]);
   if ([...values.keys()].some((key) => !allowed.has(key))) {
     fail("CLOUD_RELEASE_ARGS_INVALID");
   }
-  if (action === "status") return Object.freeze({ action });
+  const profileName = values.get("--profile");
+  if (profileName !== undefined) resolveCloudEnvironmentProfile(profileName);
+  const profileOption = profileName === undefined ? {} : { profileName };
+  if (action === "status") return Object.freeze({ action, ...profileOption });
   const required = action === "prepare" ? identityKeys.slice(0, 3) : identityKeys;
   if (required.some((key) => !values.has(key))) fail("CLOUD_RELEASE_ARGS_INVALID");
   return Object.freeze({
@@ -50,6 +54,7 @@ export function parseArguments(argv) {
     candidateSha: values.get("--candidate-sha"),
     expectedSha: values.get("--expected-current-sha"),
     migrationHead: values.get("--migration-head"),
+    ...profileOption,
     token: values.get("--release-token"),
   });
 }
@@ -68,6 +73,7 @@ export async function main(argv = process.argv.slice(2)) {
   const context = Object.freeze({
     cwd,
     environment: selectLocalEnvironment(process.env),
+    profile: resolveCloudEnvironmentProfile(options.profileName),
   });
   await withCloudSignalCancellation(async (signal) => {
     const active = Object.freeze({ ...context, signal });

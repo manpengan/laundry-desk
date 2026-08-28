@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { CloudReleaseError, fail } from "./hk-vps-release-core.mjs";
 
 const COMMAND_ENVIRONMENT = Object.freeze({
@@ -26,7 +27,7 @@ export function dataProtectionDumpArguments() {
     "postgres",
     "--",
     "/usr/bin/pg_dump",
-    "--dbname=laundry_v2",
+    `--dbname=${PROFILE.services.postgresDatabase}`,
     "--format=custom",
     "--lock-wait-timeout=10s",
   ]);

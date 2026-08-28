@@ -1,3 +1,6 @@
+import { dirname } from "node:path";
+
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { fail, requireSha } from "./hk-vps-release-core.mjs";
 
 const DIGEST = /^[0-9a-f]{64}$/u;
@@ -5,6 +8,10 @@ const SET_ID = /^(manual|scheduled|pre_recovery)-\d{8}T\d{6}Z-[0-9a-f]{16}$/u;
 const ACTIONS = Object.freeze(["backup", "drill", "offsite", "recover"]);
 const TARGET_ID = /^[a-z0-9][a-z0-9-]{0,63}$/u;
 const REMOTE_IDENTITY = /^[A-Za-z0-9][A-Za-z0-9:+/=_@.-]{7,255}$/u;
+const ROLLBACK_CODE_PATH = new RegExp(
+  `^${dirname(PROFILE.paths.liveRoot)}/${PROFILE.markers.releaseTreeName}\\.rollback-pre-[0-9a-f]{7}-\\d{8}T\\d{6}Z$`,
+  "u",
+);
 
 function exactKeys(value, expected) {
   return (
@@ -57,9 +64,7 @@ function parseStateSet(value, kind) {
     if (
       !result.pre_recovery_set_id.startsWith("pre_recovery-") ||
       typeof value.rollback_code_path !== "string" ||
-      !/^\/opt\/laundry-desk\.rollback-pre-[0-9a-f]{7}-\d{8}T\d{6}Z$/u.test(
-        value.rollback_code_path,
-      )
+      !ROLLBACK_CODE_PATH.test(value.rollback_code_path)
     ) {
       fail("CLOUD_DATA_STATE_INVALID");
     }

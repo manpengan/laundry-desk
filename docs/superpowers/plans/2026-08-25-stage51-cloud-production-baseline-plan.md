@@ -1,7 +1,7 @@
 # 通用 V2 阶段 5.1 Cloud 生产基线计划
 
 > 日期：2026-08-25
-> 状态：**ADR-65 已签署；5.1-A 进行中，待外部基础设施选择**
+> 状态：**ADR-65 已签署；5.1-B1 实现候选，外部基础设施仍阻塞**
 > 当前裁决：[ADR-65：Cloud 生产基线、隔离环境与可恢复性门禁](../../adr/2026-08-25-adr-65-cloud-production-baseline.md)
 > 前序裁决：[ADR-64](../../adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
 > 已完成入口：[阶段 5.0 发布解阻与关闭结果](../../operations/2026-08-25-stage50-release-result.md)
@@ -67,6 +67,11 @@ hk-vps 与未来 production-candidate 在 5.1 关闭前都只使用合成数据�
 
 关闭门禁：定向测试、`workspace-check`、真实 PostgreSQL 和 exact-main required checks 通过；不修改
 82 commands / 64 queries，除非另立并签署精确产品 ADR。
+
+首个 B1 仓库切片只登记 `hk-vps-cloud-test`：把 environment marker、origin/TLS/loopback、固定 SSH
+authority、release/data-protection 路径、服务与 marker 收敛到深度冻结的代码 allowlist；release 与
+maintenance CLI 可显式选择该 profile，并保留省略参数时的现有默认行为。未知或伪造 profile、任意
+host/user/path 在网络动作前拒绝。该切片不登记 production-candidate、不改变远端主机、不关闭 5.1-B。
 
 ### 5.1-C production-candidate 建立与加固
 
@@ -149,8 +154,8 @@ hk-vps 与未来 production-candidate 在 5.1 关闭前都只使用合成数据�
 
 ## 7. 紧接的下一动作
 
-1. 合入阶段 5.0 关闭与 ADR-65 裁决记录，并完成 5.1-A 只读差距盘点；
-2. 把 5.1-B 拆为保持 hk-vps 行为等价的命名 profile 基座，以及外部 identity 获批后的
-   production-candidate profile 两个切片；
-3. 提供或选择 production-candidate、离机介质、告警接收端和容量画像责任人；
+1. 合入阶段 5.0 关闭与 ADR-65 裁决记录；
+2. 验证并合入保持 hk-vps 行为等价的 5.1-B1 命名 profile 基座；
+3. 提供或选择 production-candidate、离机介质、告警接收端和容量画像责任人，随后登记第二个
+   固定 profile 并完成 5.1-A 外部 identity 差距清单；
 4. 在任何外部主机变更前再次列出精确对象并取得对应授权。

@@ -5,8 +5,10 @@ import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { TextDecoder } from "node:util";
 
-const ROOT = "/var/lib/laundry-desk-release-controllers";
-const STATE = "/var/lib/laundry-desk-release";
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
+
+const ROOT = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.controllerRoot;
+const STATE = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.releaseStateRoot;
 const ENTRY = "tools/cloud/hk-vps-release-rollback-entry.mjs";
 const ROLLBACK_PHASES = new Set([
   "staged",

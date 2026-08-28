@@ -8,12 +8,17 @@ import {
 } from "./hk-vps-data-protection-contract.mjs";
 import { captureDataProtectionPhotos } from "./hk-vps-data-protection-files.mjs";
 import { sha256DataProtectionFile } from "./hk-vps-data-protection-hash.mjs";
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { fail, requireSha } from "./hk-vps-release-core.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
 import { LIVE_ROOT, readReleaseMarker } from "./hk-vps-release-remote-support.mjs";
 
-const CODE_TREE =
-  /^(?:laundry-desk|laundry-desk\.(?:failed|next)-[0-9a-f]{40}|laundry-desk\.rollback-[0-9a-f]{40}-before-[0-9a-f]{40}|laundry-desk\.rollback-pre-[0-9a-f]{7}-\d{8}T\d{6}Z)$/u;
+const CODE_ROOT = dirname(PROFILE.paths.liveRoot);
+const TREE = PROFILE.markers.releaseTreeName;
+const CODE_TREE = new RegExp(
+  `^(?:${TREE}|${TREE}\\.(?:failed|next)-[0-9a-f]{40}|${TREE}\\.rollback-[0-9a-f]{40}-before-[0-9a-f]{40}|${TREE}\\.rollback-pre-[0-9a-f]{7}-\\d{8}T\\d{6}Z)$`,
+  "u",
+);
 const OPERATION_ID = /^[0-9a-f]{32}$/u;
 const COMMAND_ENVIRONMENT = Object.freeze({
   LANG: "C.UTF-8",
@@ -81,7 +86,7 @@ async function cleanupRecoveryStaging(paths, remove, code) {
 
 export async function findDataProtectionCodeTree(expectedSha, options = {}) {
   const sha = requireSha(expectedSha, "CLOUD_DATA_CODE_SHA_INVALID");
-  const root = options.root ?? "/opt";
+  const root = options.root ?? CODE_ROOT;
   const identity = options.identity ?? Object.freeze({ uid: 0, gid: 0 });
   const names = (await (options.readdir ?? readdir)(root)).filter((name) => CODE_TREE.test(name));
   const matches = [];
@@ -96,7 +101,7 @@ export async function findDataProtectionCodeTree(expectedSha, options = {}) {
 }
 
 function codeStagingPath(root, operationId) {
-  return join(root, `laundry-desk.restore-${requireOperationId(operationId)}`);
+  return join(root, `${TREE}.restore-${requireOperationId(operationId)}`);
 }
 
 export async function prepareDataProtectionCodeRestore(
@@ -105,7 +110,7 @@ export async function prepareDataProtectionCodeRestore(
   operationId,
   options = {},
 ) {
-  const root = options.root ?? "/opt";
+  const root = options.root ?? CODE_ROOT;
   const identity = options.identity ?? Object.freeze({ uid: 0, gid: 0 });
   const staging = codeStagingPath(root, operationId);
   if (await pathPresent(staging, options)) fail("CLOUD_DATA_CODE_STAGING_COLLISION");
@@ -140,11 +145,11 @@ export async function prepareDataProtectionCodeRestore(
 function rollbackCodePath(root, currentSha, createdAt) {
   const timestamp =
     createdAt.toISOString().slice(0, 19).replaceAll("-", "").replaceAll(":", "") + "Z";
-  return join(root, `laundry-desk.rollback-pre-${requireSha(currentSha).slice(0, 7)}-${timestamp}`);
+  return join(root, `${TREE}.rollback-pre-${requireSha(currentSha).slice(0, 7)}-${timestamp}`);
 }
 
 export async function switchDataProtectionCode(staging, currentSha, createdAt, options = {}) {
-  const root = options.root ?? "/opt";
+  const root = options.root ?? CODE_ROOT;
   const live = options.liveRoot ?? LIVE_ROOT;
   const rollback = rollbackCodePath(root, currentSha, createdAt);
   if (await pathPresent(rollback, options)) fail("CLOUD_DATA_CODE_ROLLBACK_COLLISION");
@@ -262,7 +267,7 @@ export async function switchDataProtectionPhotos(staging, operationId, options =
 export async function cleanupDataProtectionRecoveryPath(path, operationId, options = {}) {
   const id = requireOperationId(operationId);
   const allowed = new Set([
-    codeStagingPath(options.codeRoot ?? "/opt", id),
+    codeStagingPath(options.codeRoot ?? CODE_ROOT, id),
     `${options.photoRoot ?? DATA_PROTECTION_PHOTO_ROOT}.restore-${id}`,
     `${options.photoRoot ?? DATA_PROTECTION_PHOTO_ROOT}.previous-${id}`,
   ]);

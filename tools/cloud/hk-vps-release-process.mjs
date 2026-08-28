@@ -2,7 +2,11 @@ import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { isAbsolute } from "node:path";
 
-import { CloudReleaseError, HK_VPS_ALIAS, fail } from "./hk-vps-release-core.mjs";
+import {
+  DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+  requireCloudEnvironmentProfile,
+} from "./cloud-environment-profile.mjs";
+import { CloudReleaseError, fail } from "./hk-vps-release-core.mjs";
 import { parseSafeRemoteReleaseErrorCode } from "./hk-vps-release-remote-error-contract.mjs";
 
 const MAXIMUM_OUTPUT_BYTES = 2 * 1024 * 1024;
@@ -17,39 +21,42 @@ const PINNED_SSH_RELEASE_LABELS = new Set([
   "CLOUD_RELEASE_REMOTE_FINALIZE",
   "CLOUD_RELEASE_REMOTE_ROLLBACK",
 ]);
-const PINNED_SSH_ARGUMENTS = Object.freeze([
-  "-o",
-  "BatchMode=yes",
-  "-o",
-  "PasswordAuthentication=no",
-  "-o",
-  "KbdInteractiveAuthentication=no",
-  "-o",
-  "IdentitiesOnly=yes",
-  "-o",
-  "StrictHostKeyChecking=yes",
-  "-o",
-  null,
-  "-o",
-  "GlobalKnownHostsFile=/dev/null",
-  "-o",
-  "HostKeyAlgorithms=ssh-ed25519",
-  HK_VPS_ALIAS,
-]);
+function pinnedSshArguments(profile) {
+  return Object.freeze([
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "PasswordAuthentication=no",
+    "-o",
+    "KbdInteractiveAuthentication=no",
+    "-o",
+    "IdentitiesOnly=yes",
+    "-o",
+    "StrictHostKeyChecking=yes",
+    "-o",
+    null,
+    "-o",
+    "GlobalKnownHostsFile=/dev/null",
+    "-o",
+    "HostKeyAlgorithms=ssh-ed25519",
+    profile.ssh.alias,
+  ]);
+}
 
-function assertPinnedSshReleaseCommand(file, arguments_, label) {
+function assertPinnedSshReleaseCommand(file, arguments_, label, profile) {
+  const expected = pinnedSshArguments(profile);
   const knownHostsOption = arguments_[11];
   const knownHosts =
     typeof knownHostsOption === "string" && knownHostsOption.startsWith("UserKnownHostsFile=")
       ? knownHostsOption.slice("UserKnownHostsFile=".length)
       : null;
-  const matches = PINNED_SSH_ARGUMENTS.every(
+  const matches = expected.every(
     (argument, index) => argument === null || arguments_[index] === argument,
   );
   if (
     file !== SSH ||
     !PINNED_SSH_RELEASE_LABELS.has(label) ||
-    arguments_.length <= PINNED_SSH_ARGUMENTS.length ||
+    arguments_.length <= expected.length ||
     !matches ||
     typeof knownHosts !== "string" ||
     !isAbsolute(knownHosts) ||
@@ -221,8 +228,10 @@ export function runCloudCommand(file, arguments_, inputOptions = {}) {
 }
 
 export function runPinnedSshReleaseCommand(file, arguments_, inputOptions = {}) {
-  assertPinnedSshReleaseCommand(file, arguments_, inputOptions.label);
-  return runCommand(file, arguments_, inputOptions, true);
+  const { profile: profileInput, ...commandOptions } = inputOptions;
+  const profile = requireCloudEnvironmentProfile(profileInput ?? DEFAULT_CLOUD_ENVIRONMENT_PROFILE);
+  assertPinnedSshReleaseCommand(file, arguments_, commandOptions.label, profile);
+  return runCommand(file, arguments_, commandOptions, true);
 }
 
 export async function withCloudSignalCancellation(operation, processObject = process) {

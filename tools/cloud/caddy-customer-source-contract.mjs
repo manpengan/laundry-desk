@@ -1,7 +1,9 @@
-const DESK_HOST = "desk.manpengan.xyz";
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
+
+const DESK_HOST = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.endpoints.deskTlsServerName;
 const DESK_LISTENER = ":443";
 const DESK_PATHS = Object.freeze(["/api/*", "/health", "/v1/*"]);
-const UPSTREAM = "127.0.0.1:8787";
+const UPSTREAM = new URL(DEFAULT_CLOUD_ENVIRONMENT_PROFILE.endpoints.deskLoopbackOrigin).host;
 const CLIENT_IP_HEADER = "x-laundry-proxy-client-ip";
 const REMOTE_HOST = "{http.request.remote.host}";
 const REQUIRED_DELETES = Object.freeze(["forwarded", "x-forwarded-*", "x-real-ip"]);

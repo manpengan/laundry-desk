@@ -1,8 +1,9 @@
 import { lstat, readdir, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { assertRetainedBackups } from "./hk-vps-release-backup-retention.mjs";
-import { fail } from "./hk-vps-release-core.mjs";
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
+import { KB_HEALTH_URL, KB_LOOPBACK_HEALTH_URL, fail } from "./hk-vps-release-core.mjs";
 import { assertRetainedReleaseControllers } from "./hk-vps-release-controller-retention.mjs";
 import { assertRetainedFinalizeEvidence } from "./hk-vps-release-evidence-retention.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
@@ -16,8 +17,9 @@ const COMMAND_ENVIRONMENT = Object.freeze({
   LC_ALL: "C.UTF-8",
   PATH: "/usr/sbin:/usr/bin:/sbin:/bin",
 });
-const OPT_ROOT = "/opt";
-const POSTGRESQL_ROOT = "/var/lib/postgresql";
+const OPT_ROOT = dirname(PROFILE.paths.liveRoot);
+const POSTGRESQL_ROOT = PROFILE.paths.postgresDataRoot;
+const { postgresDatabase, postgresHost, postgresPort } = PROFILE.services;
 const SHA = "[0-9a-f]{40}";
 const TOKEN = "[0-9a-f]{32}";
 const ARTIFACT_PATTERNS = Object.freeze([
@@ -160,7 +162,7 @@ async function readArtifactRetention(dependencies) {
   await assertRoot(OPT_ROOT, 0o755, "CLOUD_RELEASE_ARTIFACT_RETENTION_INVALID", dependencies);
   const names = (
     await namesIn(OPT_ROOT, "CLOUD_RELEASE_ARTIFACT_RETENTION_INVALID", dependencies)
-  ).filter((name) => name.startsWith("laundry-desk."));
+  ).filter((name) => name.startsWith(`${basename(PROFILE.paths.liveRoot)}.`));
   for (const name of names) {
     const specification = ARTIFACT_PATTERNS.find(({ pattern }) => pattern.test(name));
     if (specification === undefined) fail("CLOUD_RELEASE_ARTIFACT_RETENTION_INVALID");
@@ -267,9 +269,9 @@ async function curl(url, label, signal, dependencies) {
 
 export async function assertSharedInfrastructure(signal, dependencies = {}) {
   for (const [service, label] of [
-    ["kb-web.service", "KB_WEB"],
-    ["caddy.service", "CADDY"],
-    ["postgresql.service", "POSTGRESQL"],
+    [PROFILE.services.kb, "KB_WEB"],
+    [PROFILE.services.caddy, "CADDY"],
+    [PROFILE.services.postgres, "POSTGRESQL"],
   ]) {
     await command(
       "/usr/bin/systemctl",
@@ -289,13 +291,13 @@ export async function assertSharedInfrastructure(signal, dependencies = {}) {
   if (failed.stdout.trim() !== "") fail("CLOUD_RELEASE_FAILED_UNITS_PRESENT");
 
   const localKb = await curl(
-    "http://127.0.0.1:8700/healthz",
+    KB_LOOPBACK_HEALTH_URL,
     "CLOUD_RELEASE_KB_LOOPBACK_HEALTH",
     signal,
     dependencies,
   );
   const publicKb = await curl(
-    "https://kb.manpengan.xyz/healthz",
+    KB_HEALTH_URL,
     "CLOUD_RELEASE_KB_PUBLIC_HEALTH",
     signal,
     dependencies,
@@ -305,14 +307,14 @@ export async function assertSharedInfrastructure(signal, dependencies = {}) {
 
   await command(
     "/usr/bin/pg_isready",
-    ["--host=127.0.0.1", "--port=5432", "--dbname=laundry_v2"],
+    [`--host=${postgresHost}`, `--port=${postgresPort}`, `--dbname=${postgresDatabase}`],
     "CLOUD_RELEASE_POSTGRES_READY",
     signal,
     dependencies,
   );
   for (const [port, label, code] of [
-    [5432, "POSTGRES", "CLOUD_RELEASE_POSTGRES_BINDING_INVALID"],
-    [8700, "KB", "CLOUD_RELEASE_KB_BINDING_INVALID"],
+    [postgresPort, "POSTGRES", "CLOUD_RELEASE_POSTGRES_BINDING_INVALID"],
+    [PROFILE.services.kbPort, "KB", "CLOUD_RELEASE_KB_BINDING_INVALID"],
   ]) {
     const sockets = await command(
       "/usr/bin/ss",

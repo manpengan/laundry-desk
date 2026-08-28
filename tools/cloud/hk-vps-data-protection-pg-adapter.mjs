@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { basename } from "node:path";
 import { promisify } from "node:util";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { parseDataProtectionPhotoInventory } from "./hk-vps-data-protection-db.mjs";
 import { sha256DataProtectionFile } from "./hk-vps-data-protection-hash.mjs";
 import { fail, requireSha } from "./hk-vps-release-core.mjs";
@@ -135,7 +136,7 @@ export function createDataProtectionPgAdapter(options) {
       catalogSource(result),
       undefined,
       clusterState,
-      database === "laundry_v2",
+      database === PROFILE.services.postgresDatabase,
     );
   };
   const readPhotos = async (database) => {
@@ -166,7 +167,7 @@ export function createDataProtectionPgAdapter(options) {
       code: "CLOUD_DATA_PG_CLEANUP_FAILED",
     });
   };
-  const createDump = async (path, database = "laundry_v2") => {
+  const createDump = async (path, database = PROFILE.services.postgresDatabase) => {
     const temporary = containerFile();
     try {
       await docker(
@@ -258,8 +259,12 @@ export function createDataProtectionPgAdapter(options) {
     postgresCommand,
     setWriteGate,
     sourceEvidence: async (codeSha) => {
-      const ledger = await readLedger("laundry_v2");
-      const catalog = await readCatalog("laundry_v2", undefined, "write_frozen");
+      const ledger = await readLedger(PROFILE.services.postgresDatabase);
+      const catalog = await readCatalog(
+        PROFILE.services.postgresDatabase,
+        undefined,
+        "write_frozen",
+      );
       return Object.freeze({
         codeSha: requireSha(codeSha),
         migration: Object.freeze({
@@ -268,7 +273,7 @@ export function createDataProtectionPgAdapter(options) {
           ledger_sha256: migrationLedgerDigest(ledger),
           catalog_sha256: catalog.sha256,
         }),
-        photos: await readPhotos("laundry_v2"),
+        photos: await readPhotos(PROFILE.services.postgresDatabase),
       });
     },
     drillDependencies: Object.freeze({

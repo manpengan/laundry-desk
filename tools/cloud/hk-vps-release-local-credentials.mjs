@@ -5,16 +5,25 @@ import { isAbsolute, join } from "node:path";
 import { TextDecoder } from "node:util";
 
 import {
+  DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+  requireCloudEnvironmentProfile,
+} from "./cloud-environment-profile.mjs";
+import {
   ACCEPTANCE_CREDENTIAL_FILES,
-  ACCEPTANCE_SECRET_ROOT,
   assertNoDirectAcceptanceSecrets,
 } from "./hk-vps-release-acceptance-secrets.mjs";
-import { HK_VPS_ALIAS, fail, sshArguments } from "./hk-vps-release-core.mjs";
+import { fail, sshArguments } from "./hk-vps-release-core.mjs";
 
 const MAX_SECRET_BYTES = 16 * 1024;
 const LOCAL_TEMP_PREFIX = "laundry-cloud-release-credentials-";
 
-export function acceptanceCredentialScpArguments(filename, destination, knownHostsPath) {
+export function acceptanceCredentialScpArguments(
+  filename,
+  destination,
+  knownHostsPath,
+  profileInput = DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+) {
+  const profile = requireCloudEnvironmentProfile(profileInput);
   const item = ACCEPTANCE_CREDENTIAL_FILES.find((candidate) => candidate.filename === filename);
   if (
     item === undefined ||
@@ -24,11 +33,11 @@ export function acceptanceCredentialScpArguments(filename, destination, knownHos
   ) {
     fail("CLOUD_RELEASE_CREDENTIAL_DOWNLOAD_PATH_INVALID");
   }
-  const ssh = sshArguments([], knownHostsPath);
+  const ssh = sshArguments([], knownHostsPath, profile);
   return Object.freeze([
     "-q",
     ...ssh.slice(0, -1),
-    `${HK_VPS_ALIAS}:${join(ACCEPTANCE_SECRET_ROOT, item.filename)}`,
+    `${profile.ssh.alias}:${join(profile.paths.acceptanceSecretRoot, item.filename)}`,
     destination,
   ]);
 }
@@ -96,6 +105,9 @@ function safeLocalRuntimeEnvironment(environment) {
 
 export async function withDownloadedAcceptanceCredentials(input, operation, dependencies = {}) {
   assertNoDirectAcceptanceSecrets(input.environment);
+  const profile = requireCloudEnvironmentProfile(
+    input.profile ?? DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+  );
   const uid = dependencies.uid ?? process.getuid?.();
   const gid = dependencies.gid ?? process.getgid?.();
   if (!Number.isSafeInteger(uid) || uid < 0 || !Number.isSafeInteger(gid) || gid < 0) {
@@ -112,7 +124,7 @@ export async function withDownloadedAcceptanceCredentials(input, operation, depe
       const path = join(temporaryRoot, item.filename);
       await input.execute(
         "/usr/bin/scp",
-        acceptanceCredentialScpArguments(item.filename, path, input.knownHostsPath),
+        acceptanceCredentialScpArguments(item.filename, path, input.knownHostsPath, profile),
         `CLOUD_RELEASE_CREDENTIAL_DOWNLOAD_${item.filename.replaceAll("-", "_").toUpperCase()}`,
         2 * 60_000,
       );

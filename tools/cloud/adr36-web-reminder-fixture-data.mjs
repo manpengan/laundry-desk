@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { requireThat, requireUuid } from "./adr36-web-core.mjs";
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 
 export const REMINDER_FIXTURE_AGES = Object.freeze([31, 91, 181]);
 const RUN_ID = /^ADR36-\d{8}T\d{6}(?:\d{3})?Z-[0-9a-f]{8}$/u;
@@ -111,7 +112,7 @@ SET LOCAL ROLE laundry_owner;
 SELECT pg_advisory_xact_lock(hashtextextended('adr36-reminder-history-fixture', 0));
 DO $fixture$
 BEGIN
-  IF current_database() <> 'laundry_v2' THEN
+  IF current_database() <> '${PROFILE.services.postgresDatabase}' THEN
     RAISE EXCEPTION 'fixture database mismatch';
   END IF;
   IF inet_server_addr() IS NOT NULL AND host(inet_server_addr()) NOT IN ('127.0.0.1', '::1') THEN

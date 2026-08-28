@@ -2,6 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
+
+const DATABASE = PROFILE.services.postgresDatabase;
+
 export const DATA_PROTECTION_PG_ORIGINAL_PHOTO = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
 export const DATA_PROTECTION_PG_MUTATED_PHOTO = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
 
@@ -11,7 +15,7 @@ export function dataProtectionPgPhotoSha256(value) {
 
 export async function seedDataProtectionPgFixture(adapter, photoRoot) {
   const identity = await adapter.query(
-    "laundry_v2",
+    DATABASE,
     `SELECT store.org_id::text, store.id::text AS store_id, role.staff_id::text
        FROM stores store
        JOIN staff_store_roles role
@@ -37,7 +41,7 @@ export async function seedDataProtectionPgFixture(adapter, photoRoot) {
     mode: 0o600,
   });
   await adapter.query(
-    "laundry_v2",
+    DATABASE,
     `INSERT INTO orders (
        id, org_id, store_id, ticket_no, status, customer_phone, customer_name, note,
        subtotal_cents, payable_cents, paid_cents, balance_cents,
@@ -48,7 +52,7 @@ export async function seedDataProtectionPgFixture(adapter, photoRoot) {
     [ids.order, tenant.org_id, tenant.store_id, `data-${ids.order.slice(0, 8)}`, tenant.staff_id],
   );
   await adapter.query(
-    "laundry_v2",
+    DATABASE,
     `INSERT INTO order_lines (
        id, org_id, store_id, order_id, line_index, service_code, category_code,
        unit_price_cents, qty, line_total_cents
@@ -56,7 +60,7 @@ export async function seedDataProtectionPgFixture(adapter, photoRoot) {
     [ids.line, tenant.org_id, tenant.store_id, ids.order],
   );
   await adapter.query(
-    "laundry_v2",
+    DATABASE,
     `INSERT INTO garments (
        id, org_id, store_id, order_id, order_line_id, seq, barcode,
        service_code, category_code, unit_price_cents, status
@@ -72,7 +76,7 @@ export async function seedDataProtectionPgFixture(adapter, photoRoot) {
     ],
   );
   await adapter.query(
-    "laundry_v2",
+    DATABASE,
     `INSERT INTO garment_photos (
        id, org_id, store_id, garment_id, order_id, kind, storage_key,
        content_type, byte_size, content_sha256, taken_at, created_by_staff_id

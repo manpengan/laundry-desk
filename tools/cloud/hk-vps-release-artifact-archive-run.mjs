@@ -4,6 +4,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { assertDataProtectionLockHeld } from "./hk-vps-data-protection-lock.mjs";
 import {
   archiveOrphanArtifact,
@@ -16,7 +17,7 @@ import { CloudReleaseError, REMOTE_RELEASE_LOCK } from "./hk-vps-release-core.mj
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
 import { transitionExists } from "./hk-vps-release-remote-support.mjs";
 
-const NODE = "/opt/nodejs/bin/node";
+const NODE = PROFILE.paths.nodeExecutable;
 const FLOCK = "/usr/bin/flock";
 const LOCK_HELD = "--lock-held";
 const ACCEPTING_CODES = Object.freeze(Array.from({ length: 256 }, (_, index) => index));

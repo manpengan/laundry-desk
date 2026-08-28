@@ -1,18 +1,21 @@
 import { basename, dirname, join } from "node:path";
 
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
 import { fail, requireSha } from "./hk-vps-release-core.mjs";
 
-export const DATA_PROTECTION_ROOT = "/var/lib/laundry-desk-data-protection";
+const PROFILE = DEFAULT_CLOUD_ENVIRONMENT_PROFILE;
+
+export const DATA_PROTECTION_ROOT = PROFILE.paths.dataProtectionRoot;
 export const DATA_PROTECTION_SET_ROOT = `${DATA_PROTECTION_ROOT}/sets`;
 export const DATA_PROTECTION_STATE_PATH = `${DATA_PROTECTION_ROOT}/state.json`;
 export const DATA_PROTECTION_OPERATION_PATH = `${DATA_PROTECTION_ROOT}/operation.json`;
 export const DATA_PROTECTION_STATUS_PATH = `${DATA_PROTECTION_ROOT}/status.json`;
-export const DATA_PROTECTION_PHOTO_ROOT = "/var/lib/laundry/photos";
-export const DATA_PROTECTION_OFFSITE_ROOT = "/mnt/laundry-desk-offsite";
-export const DATA_PROTECTION_OFFSITE_MARKER = ".laundry-offsite-store-v1";
-export const DATA_PROTECTION_PHOTO_MARKER = ".laundry-photo-store-v1";
-export const DATA_PROTECTION_PHOTO_MARKER_CONTENT = "laundry-desk-photo-store:v1\n";
-export const DATA_PROTECTION_ENVIRONMENT = "hk-vps-cloud-test";
+export const DATA_PROTECTION_PHOTO_ROOT = PROFILE.paths.dataProtectionPhotoRoot;
+export const DATA_PROTECTION_OFFSITE_ROOT = PROFILE.paths.dataProtectionOffsiteRoot;
+export const DATA_PROTECTION_OFFSITE_MARKER = PROFILE.markers.offsiteStoreFile;
+export const DATA_PROTECTION_PHOTO_MARKER = PROFILE.markers.photoStoreFile;
+export const DATA_PROTECTION_PHOTO_MARKER_CONTENT = PROFILE.markers.photoStoreContent;
+export const DATA_PROTECTION_ENVIRONMENT = PROFILE.environmentMarker;
 export const DATA_PROTECTION_MAX_SETS = 8;
 export const DATA_PROTECTION_MAX_OFFSITE_SETS = 30;
 export const DATA_PROTECTION_BACKUP_MAX_AGE_SECONDS = 26 * 60 * 60;

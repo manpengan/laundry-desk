@@ -1,3 +1,4 @@
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { fail } from "./hk-vps-release-core.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
 
@@ -99,7 +100,7 @@ function psqlArguments(sql) {
     "--tuples-only",
     "--no-align",
     "--dbname",
-    "laundry_v2",
+    PROFILE.services.postgresDatabase,
     "--command",
     sql,
   ];

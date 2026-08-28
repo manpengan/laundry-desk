@@ -1,5 +1,6 @@
 import { join } from "node:path";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { photoInventoryDigest } from "./hk-vps-data-protection-files.mjs";
 import { fail } from "./hk-vps-release-core.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
@@ -25,7 +26,7 @@ export async function restoreDataProtectionDatabase(verified, signal, dependenci
       "-c",
       'exec /usr/bin/sudo -u postgres -- /usr/bin/pg_restore --clean --if-exists --exit-on-error --single-transaction --dbname "$1" < "$2"',
       "laundry-data-protection-restore",
-      "laundry_v2",
+      PROFILE.services.postgresDatabase,
       verified.dumpPath,
     ],
     {
@@ -40,16 +41,16 @@ export async function restoreDataProtectionDatabase(verified, signal, dependenci
 
 export async function verifyRestoredDataProtectionDatabase(manifest, signal, dependencies = {}) {
   const ledger = await (dependencies.readMigrationLedger ?? readMigrationLedger)(
-    "laundry_v2",
+    PROFILE.services.postgresDatabase,
     signal,
   );
   const catalog = await (dependencies.readCatalogEvidence ?? readCatalogEvidence)(
-    "laundry_v2",
+    PROFILE.services.postgresDatabase,
     signal,
     "write_frozen",
   );
   const photos = await (dependencies.readPhotoInventory ?? readDataProtectionPhotoInventory)(
-    "laundry_v2",
+    PROFILE.services.postgresDatabase,
     signal,
   );
   const evidence = Object.freeze({

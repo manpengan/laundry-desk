@@ -716,7 +716,7 @@ test("release marker mode is made exact even when the caller starts with a priva
 
 test("status is serialized with the release lock and redacts the transition token", () => {
   const source = readFileSync(new URL("./hk-vps-release-local.mjs", import.meta.url), "utf8");
-  assert.ok(source.includes('exec 9>"${REMOTE_RELEASE_LOCK}"'));
+  assert.ok(source.includes('exec 9>"${profile.paths.releaseLock}"'));
   assert.match(source, /flock -n 9/u);
   assert.doesNotMatch(source, /stdout: `CLOUD_RELEASE_REMOTE_STATUS[^`]*token=/u);
 });
