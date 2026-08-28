@@ -3,7 +3,7 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 
 import { AcceptanceFailure, requireThat } from "./adr36-web-core.mjs";
-import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import {
   buildReminderFixtureApplySql,
   buildReminderFixtureArtifacts,
@@ -13,7 +13,7 @@ import {
 import { buildReminderFixtureCleanupSql } from "./adr36-web-reminder-fixture-cleanup.mjs";
 
 export const REMINDER_FIXTURE_OPT_IN = "APPLY_SYNTHETIC_HISTORY_ON_HK_VPS";
-const FIXED_ROOT = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.liveRoot;
+const FIXED_ROOT = PROFILE.paths.liveRoot;
 const PSQL_PATH = "/usr/bin/psql";
 const RELEASE_SHA = /^[0-9a-f]{40}$/u;
 const MAX_SQL_OUTPUT_BYTES = 16 * 1024;
@@ -40,7 +40,7 @@ async function inspectCloudTestRoot(cwd) {
     rootMetadata.isDirectory() && rootMetadata.uid === 0 && (rootMetadata.mode & 0o022) === 0,
     "REMINDER_FIXTURE_TARGET_INVALID",
   );
-  const markerPath = join(resolved, ".laundry-release.json");
+  const markerPath = join(resolved, PROFILE.markers.releaseFile);
   const metadata = await lstat(markerPath);
   requireThat(
     metadata.isFile() &&
@@ -59,7 +59,7 @@ async function inspectCloudTestRoot(cwd) {
     typeof marker === "object" &&
       marker !== null &&
       !Array.isArray(marker) &&
-      marker.environment === "hk-vps-cloud-test" &&
+      marker.environment === PROFILE.environmentMarker &&
       typeof marker.git_sha === "string" &&
       RELEASE_SHA.test(marker.git_sha),
     "REMINDER_FIXTURE_MARKER_INVALID",
@@ -87,8 +87,8 @@ function databaseEnvironment(rawUrl, baseEnv) {
   requireThat(
     (url.protocol === "postgres:" || url.protocol === "postgresql:") &&
       (hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]") &&
-      (url.port === "" || url.port === "5432") &&
-      database === "laundry_v2" &&
+      (url.port === "" || url.port === String(PROFILE.services.postgresPort)) &&
+      database === PROFILE.services.postgresDatabase &&
       decoded(url.username, "REMINDER_FIXTURE_DATABASE_INVALID") === "postgres" &&
       url.password.length > 0 &&
       url.hash === "" &&
@@ -99,7 +99,7 @@ function databaseEnvironment(rawUrl, baseEnv) {
     PATH: baseEnv.PATH ?? "/usr/bin:/bin",
     LANG: baseEnv.LANG ?? "C.UTF-8",
     PGHOST: hostname === "[::1]" ? "::1" : hostname,
-    PGPORT: url.port || "5432",
+    PGPORT: url.port || String(PROFILE.services.postgresPort),
     PGDATABASE: database,
     PGUSER: decoded(url.username, "REMINDER_FIXTURE_DATABASE_INVALID"),
     PGPASSWORD: decoded(url.password, "REMINDER_FIXTURE_DATABASE_INVALID"),

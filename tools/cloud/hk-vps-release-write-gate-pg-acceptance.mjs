@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import {
   ACTIVATE_WRITE_GATE_SQL,
   INSPECT_WRITE_GATE_SQL,
@@ -9,7 +10,7 @@ import {
   parseWriteGateRole,
 } from "./hk-vps-release-write-gate.mjs";
 
-const DATABASE = "laundry_v2";
+const DATABASE = PROFILE.services.postgresDatabase;
 
 function fail(code, cause) {
   const error = new Error(code, cause === undefined ? undefined : { cause });

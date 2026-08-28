@@ -10,9 +10,9 @@
 
 import { constants } from "node:fs";
 import { lstat, open, readdir, realpath, rename } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
-import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { fail } from "./hk-vps-release-core.mjs";
 import { readPrivateFile } from "./hk-vps-release-private-file.mjs";
 import {
@@ -22,20 +22,21 @@ import {
   readReleaseMarker,
 } from "./hk-vps-release-remote-support.mjs";
 
-export const OPT_ROOT = "/opt";
-export const ARCHIVE_ROOT = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.archiveRoot;
-export const ARTIFACT_PREFIX = "laundry-desk.";
+export const OPT_ROOT = dirname(PROFILE.paths.liveRoot);
+export const ARCHIVE_ROOT = PROFILE.paths.archiveRoot;
+export const ARTIFACT_PREFIX = `${PROFILE.markers.releaseTreeName}.`;
 
 const CODE = "CLOUD_RELEASE_ARTIFACT_ARCHIVE_INVALID";
 const SHA = "[0-9a-f]{40}";
+const TREE = PROFILE.markers.releaseTreeName;
 const HISTORY_NAME = new RegExp(`^${SHA}-[0-9a-f]{32}-(?:committed|rolled_back)\\.json$`, "u");
-const SUPERSEDED_ROLLBACK = new RegExp(`^laundry-desk\\.rollback-${SHA}-before-${SHA}$`, "u");
+const SUPERSEDED_ROLLBACK = new RegExp(`^${TREE}\\.rollback-${SHA}-before-${SHA}$`, "u");
 const RETIRED_ARTIFACT = Object.freeze([
-  new RegExp(`^laundry-desk\\.failed-${SHA}$`, "u"),
-  new RegExp(`^laundry-desk\\.rollback-${SHA}-before-${SHA}$`, "u"),
+  new RegExp(`^${TREE}\\.failed-${SHA}$`, "u"),
+  new RegExp(`^${TREE}\\.rollback-${SHA}-before-${SHA}$`, "u"),
   // Pre-history-system safety points, e.g. laundry-desk.rollback-pre-ae9808c-20260809T112330Z.
   // These predate the transition ledger and can only ever qualify as orphans.
-  /^laundry-desk\.rollback-pre-[0-9a-f]{7}-\d{8}T\d{6}Z$/u,
+  new RegExp(`^${TREE}\\.rollback-pre-[0-9a-f]{7}-\\d{8}T\\d{6}Z$`, "u"),
 ]);
 
 function use(dependencies, name, fallback) {

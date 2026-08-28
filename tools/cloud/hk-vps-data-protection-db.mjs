@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import {
   createDataProtectionVerification,
   requireDataProtectionSetId,
@@ -115,9 +116,9 @@ export async function readDataProtectionSourceEvidence(signal, dependencies = {}
   const readCatalog = dependencies.readCatalogEvidence ?? readCatalogEvidence;
   const readPhotos = dependencies.readPhotoInventory ?? readDataProtectionPhotoInventory;
   const marker = await readMarker(LIVE_ROOT);
-  const ledger = await readLedger("laundry_v2", signal);
-  const catalog = await readCatalog("laundry_v2", signal, "write_frozen");
-  const photos = await readPhotos("laundry_v2", signal);
+  const ledger = await readLedger(PROFILE.services.postgresDatabase, signal);
+  const catalog = await readCatalog(PROFILE.services.postgresDatabase, signal, "write_frozen");
+  const photos = await readPhotos(PROFILE.services.postgresDatabase, signal);
   const head = ledger.at(-1)?.filename;
   if (typeof head !== "string") fail("CLOUD_DATA_MIGRATION_LEDGER_INVALID");
   return Object.freeze({
@@ -137,8 +138,8 @@ export async function readDataProtectionLiveEvidence(signal, dependencies = {}) 
   const readLedger = dependencies.readMigrationLedger ?? readMigrationLedger;
   const readCatalog = dependencies.readCatalogEvidence ?? readCatalogEvidence;
   const marker = await readMarker(LIVE_ROOT);
-  const ledger = await readLedger("laundry_v2", signal);
-  const catalog = await readCatalog("laundry_v2", signal, "stable");
+  const ledger = await readLedger(PROFILE.services.postgresDatabase, signal);
+  const catalog = await readCatalog(PROFILE.services.postgresDatabase, signal, "stable");
   const head = ledger.at(-1)?.filename;
   if (typeof head !== "string") fail("CLOUD_DATA_MIGRATION_LEDGER_INVALID");
   return Object.freeze({

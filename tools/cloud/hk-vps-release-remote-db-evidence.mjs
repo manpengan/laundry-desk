@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { fail } from "./hk-vps-release-core.mjs";
 import { parseCatalogPolicyEvidence } from "./hk-vps-release-catalog-policy.mjs";
 import { assertMigrationLedger } from "./hk-vps-release-remote-migrations.mjs";
@@ -8,7 +9,7 @@ export const CATALOG_SQL = `WITH entries(value) AS (
   SELECT pg_catalog.jsonb_build_object('kind','catalog_contract',
     'migration_head',(SELECT filename FROM public.laundry_schema_migrations ORDER BY filename DESC LIMIT 1),
     'postgres_major',current_setting('server_version_num')::integer / 10000,
-    'primary_database',current_database()='laundry_v2')
+    'primary_database',current_database()='${PROFILE.services.postgresDatabase}')
   UNION ALL
   SELECT pg_catalog.jsonb_build_object('kind','role','name',rolname,'can_login',rolcanlogin,
     'superuser',rolsuper,'create_database',rolcreatedb,'create_role',rolcreaterole,

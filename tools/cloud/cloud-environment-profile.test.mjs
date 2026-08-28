@@ -5,6 +5,7 @@ import { ADR36_PUBLIC_ORIGIN } from "./adr36-web-core.mjs";
 import {
   CLOUD_ENVIRONMENT_PROFILE_NAMES,
   DEFAULT_CLOUD_ENVIRONMENT_PROFILE,
+  HK_VPS_CLOUD_TEST,
   requireCloudEnvironmentProfile,
   resolveCloudEnvironmentProfile,
 } from "./cloud-environment-profile.mjs";
@@ -76,11 +77,16 @@ function sshConfig(profile, overrides = {}) {
 test("environment allowlist exposes one deeply frozen synthetic hk-vps profile", () => {
   const profile = DEFAULT_CLOUD_ENVIRONMENT_PROFILE;
   assert.deepEqual(CLOUD_ENVIRONMENT_PROFILE_NAMES, ["hk-vps-cloud-test"]);
+  assert.equal(HK_VPS_CLOUD_TEST, profile);
   assert.equal(resolveCloudEnvironmentProfile(), profile);
   assert.equal(resolveCloudEnvironmentProfile(profile.name), profile);
   assert.equal(requireCloudEnvironmentProfile(profile), profile);
   assert.equal(profile.environmentMarker, profile.name);
   assert.equal(profile.dataPolicy, "synthetic-only");
+  assert.equal(profile.markers.releaseFile, ".laundry-release.json");
+  assert.equal(profile.markers.releaseTreeName, "laundry-desk");
+  assert.equal(profile.services.postgresDatabase, "laundry_v2");
+  assert.equal(profile.services.postgresHost, "127.0.0.1");
   for (const value of [
     profile,
     profile.endpoints,

@@ -321,7 +321,7 @@ export async function assertOrdinaryDirectory(path, expectedMode = 0o755) {
 }
 
 export async function readReleaseMarker(root) {
-  const path = join(root, ".laundry-release.json");
+  const path = join(root, PROFILE.markers.releaseFile);
   const metadata = await lstat(path).catch(() => null);
   if (
     metadata === null ||

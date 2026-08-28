@@ -1,4 +1,4 @@
-import { isAbsolute, normalize } from "node:path";
+import { basename, isAbsolute, normalize } from "node:path";
 
 import { fail } from "./hk-vps-release-identifiers.mjs";
 
@@ -53,6 +53,7 @@ function assertProfile(profile) {
     Number(ssh.port) > 65_535 ||
     !SAFE_PATH.test(ssh.identitySuffix) ||
     !/^SHA256:[A-Za-z0-9+/]+$/u.test(ssh.ed25519Fingerprint) ||
+    services.postgresHost !== "127.0.0.1" ||
     !Number.isSafeInteger(services.postgresPort) ||
     services.postgresPort < 1 ||
     services.postgresPort > 65_535 ||
@@ -62,6 +63,9 @@ function assertProfile(profile) {
     ) ||
     !/^[A-Za-z0-9._-]+$/u.test(markers.offsiteStoreFile) ||
     !/^[A-Za-z0-9._-]+$/u.test(markers.photoStoreFile) ||
+    !/^[A-Za-z0-9._-]+$/u.test(markers.releaseFile) ||
+    !SAFE_NAME.test(markers.releaseTreeName) ||
+    basename(paths.liveRoot) !== markers.releaseTreeName ||
     typeof markers.photoStoreContent !== "string" ||
     !markers.photoStoreContent.endsWith("\n") ||
     Object.values(paths).some(
@@ -91,7 +95,7 @@ function createProfile(input) {
   return profile;
 }
 
-const HK_VPS_CLOUD_TEST = createProfile({
+export const HK_VPS_CLOUD_TEST = createProfile({
   dataPolicy: "synthetic-only",
   endpoints: {
     deskLoopbackOrigin: "http://127.0.0.1:8787",
@@ -106,6 +110,8 @@ const HK_VPS_CLOUD_TEST = createProfile({
     offsiteStoreFile: ".laundry-offsite-store-v1",
     photoStoreContent: "laundry-desk-photo-store:v1\n",
     photoStoreFile: ".laundry-photo-store-v1",
+    releaseFile: ".laundry-release.json",
+    releaseTreeName: "laundry-desk",
   },
   name: "hk-vps-cloud-test",
   paths: {
@@ -120,6 +126,7 @@ const HK_VPS_CLOUD_TEST = createProfile({
     liveRoot: "/opt/laundry-desk",
     maintenanceRoot: "/var/lib/laundry-desk-release-maintenance",
     nodeExecutable: "/opt/nodejs/bin/node",
+    postgresDataRoot: "/var/lib/postgresql",
     releaseBackupRoot: "/var/lib/laundry-desk-release-backups",
     releaseLock: "/run/lock/laundry-desk-cloud-release.lock",
     releaseStateRoot: "/var/lib/laundry-desk-release",
@@ -133,6 +140,7 @@ const HK_VPS_CLOUD_TEST = createProfile({
     kbPort: 8700,
     postgres: "postgresql.service",
     postgresDatabase: "laundry_v2",
+    postgresHost: "127.0.0.1",
     postgresPort: 5432,
   },
   ssh: {

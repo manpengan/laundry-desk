@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import { lstat, open, realpath, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { PUBLIC_ORIGIN, fail, requireSha } from "./hk-vps-release-core.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
 import {
@@ -36,12 +37,12 @@ const BUILD_ENVIRONMENT = Object.freeze([
   "HOME=/var/lib/laundry",
   "LANG=C.UTF-8",
   "LC_ALL=C.UTF-8",
-  "PATH=/opt/nodejs/bin:/usr/bin:/bin",
+  `PATH=${dirname(PROFILE.paths.nodeExecutable)}:/usr/bin:/bin`,
   "TMPDIR=/var/lib/laundry",
   "XDG_CACHE_HOME=/var/lib/laundry/.cache",
 ]);
 const HEALTH_ENVELOPE = Object.freeze({ ok: true, data: Object.freeze({ status: "ready" }) });
-
+const DESK_PORT = PROFILE.services.deskPort;
 function commandOptions(label, signal, timeoutMs = 2 * 60_000) {
   return Object.freeze({
     cwd: "/",
@@ -101,7 +102,7 @@ async function runAsLaundry(stagingRoot, pnpmArguments, label, signal) {
       "/usr/bin/env",
       "-i",
       ...BUILD_ENVIRONMENT,
-      "/opt/nodejs/bin/corepack",
+      join(dirname(PROFILE.paths.nodeExecutable), "corepack"),
       "pnpm",
       ...pnpmArguments,
     ],
@@ -113,7 +114,7 @@ async function runAsLaundry(stagingRoot, pnpmArguments, label, signal) {
 }
 
 async function writeReleaseMarker(root, candidateSha) {
-  const path = join(root, ".laundry-release.json");
+  const path = join(root, PROFILE.markers.releaseFile);
   const handle = await open(
     path,
     constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
@@ -161,12 +162,12 @@ export async function assertSystemContract(signal) {
     properties.get("User") !== "laundry" ||
     properties.get("Group") !== "laundry" ||
     properties.get("WorkingDirectory") !== LIVE_ROOT ||
-    properties.get("FragmentPath") !== "/etc/systemd/system/laundry-desk.service" ||
+    properties.get("FragmentPath") !== `/etc/systemd/system/${PROFILE.services.desk}` ||
     properties.get("EnvironmentFiles") !== `${ENV_FILE} (ignore_errors=no)` ||
     !properties
       .get("ExecStart")
       ?.startsWith(
-        "{ path=/opt/nodejs/bin/node ; argv[]=/opt/nodejs/bin/node apps/server/dist/http/main.js ;",
+        `{ path=${PROFILE.paths.nodeExecutable} ; argv[]=${PROFILE.paths.nodeExecutable} apps/server/dist/http/main.js ;`,
       )
   ) {
     fail("CLOUD_RELEASE_SYSTEM_CONTRACT_INVALID");
@@ -192,7 +193,7 @@ export async function prepareStaging(stagingRoot, candidateSha, migrationHead, s
   ]) {
     await assertOrdinaryFile(path, 0);
   }
-  if (await pathExists(join(stagingRoot, ".laundry-release.json"))) {
+  if (await pathExists(join(stagingRoot, PROFILE.markers.releaseFile))) {
     fail("CLOUD_RELEASE_STAGING_MARKER_PRESENT");
   }
   await command(
@@ -334,11 +335,11 @@ export async function assertDeskHealth(expectedSha, signal, dependencies = {}) {
   await probePublic(`${PUBLIC_ORIGIN}/`, "CLOUD_RELEASE_PUBLIC_SPA", true);
   const sockets = await (dependencies.command ?? command)(
     "/usr/bin/ss",
-    ["-H", "-ltn", "sport", "=", ":8787"],
+    ["-H", "-ltn", "sport", "=", `:${DESK_PORT}`],
     "CLOUD_RELEASE_DESK_BINDING",
     signal,
   );
-  assertLoopbackBindings(sockets.stdout, 8787, "CLOUD_RELEASE_DESK_BINDING_INVALID");
+  assertLoopbackBindings(sockets.stdout, DESK_PORT, "CLOUD_RELEASE_DESK_BINDING_INVALID");
   const marker = await (dependencies.readReleaseMarker ?? readReleaseMarker)(LIVE_ROOT);
   if (marker.git_sha !== requireSha(expectedSha)) fail("CLOUD_RELEASE_MARKER_MISMATCH");
 }
@@ -350,9 +351,9 @@ export async function switchToCandidate(record) {
     fail("CLOUD_RELEASE_SWITCH_PATH_COLLISION");
   }
   await rename(LIVE_ROOT, record.rollback_path);
-  await syncDirectory("/opt");
+  await syncDirectory(dirname(LIVE_ROOT));
   await rename(record.staging_path, LIVE_ROOT);
-  await syncDirectory("/opt");
+  await syncDirectory(dirname(LIVE_ROOT));
 }
 
 export async function assertRollbackEvidence(record) {
@@ -390,10 +391,10 @@ export async function restorePreviousCode(record, dependencies = {}) {
       fail("CLOUD_RELEASE_ROLLBACK_LIVE_INVALID");
     }
     await use("rename", rename)(LIVE_ROOT, record.failed_path);
-    await use("syncDirectory", syncDirectory)("/opt");
+    await use("syncDirectory", syncDirectory)(dirname(LIVE_ROOT));
   }
   await use("assertOrdinaryDirectory", assertOrdinaryDirectory)(record.rollback_path);
   await use("rename", rename)(record.rollback_path, LIVE_ROOT);
-  await use("syncDirectory", syncDirectory)("/opt");
+  await use("syncDirectory", syncDirectory)(dirname(LIVE_ROOT));
   await startRestoredCode();
 }

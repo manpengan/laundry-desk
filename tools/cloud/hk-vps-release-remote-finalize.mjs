@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { realpath } from "node:fs/promises";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { fail } from "./hk-vps-release-core.mjs";
 import {
   parseCanonicalFinalizeEvidence,
@@ -63,8 +64,12 @@ async function assertFinalizableState(record, options, signal) {
   await verifyBackupEvidence(record);
   await assertSharedInfrastructure(signal);
   const inventory = await migrationInventory(LIVE_ROOT, options.migrationHead);
-  assertMigrationLedger(inventory, await readMigrationLedger("laundry_v2", signal), "exact");
-  await readCatalogEvidence("laundry_v2", signal, "stable");
+  assertMigrationLedger(
+    inventory,
+    await readMigrationLedger(PROFILE.services.postgresDatabase, signal),
+    "exact",
+  );
+  await readCatalogEvidence(PROFILE.services.postgresDatabase, signal, "stable");
 }
 
 async function validateCommittedRecord(record, binding, options, signal, dependencies) {
