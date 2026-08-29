@@ -39,7 +39,9 @@ ADR-14 继续作为通用 V2 架构基线。
 11. [Claude V2 Web UI draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
 12. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
 13. [hk-vps 运维手册](docs/operations/2026-08-09-hk-vps-cloud-test.md)
-14. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
+14. [Windows 形态 findings 与局域网构建机操作手册](docs/research/2026-08-29-windows-port-findings-and-build-host.md)
+    — 实机取证：持久化与权限两处 POSIX 假设阻塞 Windows 形态，需 ADR 裁决
+15. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
 
 判断"某能力是否已交付"以 `main` 代码与绿灯门禁为准，不以文档为准；发现文档滞后
 按缺陷订正（ADR-16 §4）。
