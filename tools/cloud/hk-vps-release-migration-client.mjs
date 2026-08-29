@@ -1,5 +1,6 @@
 import { join } from "node:path";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import {
   fail,
   requireDigest,
@@ -45,7 +46,7 @@ export function migrationExecutionRequest(record, inputAuthority) {
 export async function applyMigrations(record, authority, signal, dependencies = {}) {
   const request = migrationExecutionRequest(record, authority);
   await (dependencies.runCloudCommand ?? runCloudCommand)(
-    "/opt/nodejs/bin/node",
+    PROFILE.paths.nodeExecutable,
     [join(record.controller_path, MIGRATION_EXECUTOR_RELATIVE)],
     Object.freeze({
       cwd: "/",

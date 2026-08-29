@@ -4,6 +4,7 @@
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import {
   archiveReleaseSet,
   listArchivableReleaseSets,
@@ -17,7 +18,7 @@ import {
   readReadonlyReleaseSnapshot,
 } from "./hk-vps-release-readonly-preflight.mjs";
 
-const NODE = "/opt/nodejs/bin/node";
+const NODE = PROFILE.paths.nodeExecutable;
 const FLOCK = "/usr/bin/flock";
 const LOCK_HELD = "--lock-held";
 const SHA = /^[0-9a-f]{40}$/u;

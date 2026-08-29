@@ -4,6 +4,7 @@
 - 地址：<https://desk.manpengan.xyz>
 - 主机：SSH alias `hk-vps`（实际地址和密钥由操作者的 SSH 配置管理）
 - 裁决：[ADR-36](../adr/2026-08-09-adr-36-cloud-test-environment.md) · [ADR-37](../adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) · [ADR-64](../adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
+- 最新结果：[2026-08-25 阶段 5.0 发布解阻与关闭结果](2026-08-25-stage50-release-result.md)
 
 本文件是操作流程，不是部署结果。命令输出格式和判据不能作为「已经发布」的证据；每次发布
 必须另行记录实际目标 SHA、required CI、transition、API/UI run-id 与最终状态。
@@ -58,11 +59,15 @@ reverse_proxy 127.0.0.1:8787 {
 发布入口固定为：
 
 ```bash
-pnpm cloud:release:hk -- --action status
-pnpm cloud:release:hk -- --action prepare  --candidate-sha <sha> --expected-current-sha <sha> --migration-head <file>
-pnpm cloud:release:hk -- --action finalize --candidate-sha <sha> --expected-current-sha <sha> --migration-head <file> --release-token <token>
-pnpm cloud:release:hk -- --action rollback --candidate-sha <sha> --expected-current-sha <sha> --migration-head <file> --release-token <token>
+pnpm cloud:release:hk -- --action status --profile hk-vps-cloud-test
+pnpm cloud:release:hk -- --action prepare  --profile hk-vps-cloud-test --candidate-sha <sha> --expected-current-sha <sha> --migration-head <file>
+pnpm cloud:release:hk -- --action finalize --profile hk-vps-cloud-test --candidate-sha <sha> --expected-current-sha <sha> --migration-head <file> --release-token <token>
+pnpm cloud:release:hk -- --action rollback --profile hk-vps-cloud-test --candidate-sha <sha> --expected-current-sha <sha> --migration-head <file> --release-token <token>
 ```
+
+5.1-B1 后 `--profile` 只接受代码 allowlist 中的 `hk-vps-cloud-test`；未知 profile，以及任意
+`--host`、`--user`、`--path` 均在 SSH/HTTP 前失败关闭。为兼容既有自动化，省略该参数仍精确选择
+同一默认 profile；本手册的新操作一律显式填写，不能把 profile 名替换成主机或路径。
 
 `prepare` 与 `finalize` 是发布的两个阶段；`status` 只读检查 transition 且不输出 release
 correlation nonce，`rollback` 只在候选
@@ -244,7 +249,7 @@ manifest 碰撞都会拒绝，不自动选择、不使用 glob、不删除。
 `real-postgres` 绿灯，然后执行：
 
 ```bash
-pnpm cloud:release:hk:maintenance -- --candidate-sha <exact-main-sha>
+pnpm cloud:release:hk:maintenance -- --profile hk-vps-cloud-test --candidate-sha <exact-main-sha>
 ```
 
 该命令复用固定 SSH authority 与 GitHub required-check 门禁，只上传该 SHA 的 `git archive`。远端在
@@ -284,7 +289,7 @@ test -n "${MIGRATION_HEAD}"
 SSH 配置与固定 fingerprint：
 
 ```bash
-pnpm cloud:release:hk -- --action status
+pnpm cloud:release:hk -- --action status --profile hk-vps-cloud-test
 ```
 
 若输出 `phase=stable`，再以严格 key-only SSH 只读解析当前 marker，并把唯一的 40 位输出
@@ -324,6 +329,7 @@ test "${#EXPECTED_CURRENT_SHA}" -eq 40
 ```bash
 pnpm cloud:release:hk -- \
   --action prepare \
+  --profile hk-vps-cloud-test \
   --candidate-sha "${CANDIDATE_SHA}" \
   --expected-current-sha "${EXPECTED_CURRENT_SHA}" \
   --migration-head "${MIGRATION_HEAD}"
@@ -467,7 +473,7 @@ printf '%s\n' 'RECOVER-<12-hex>' | \
 只有 `status` 返回 `phase=awaiting_external_verification` 才可执行 `finalize`：
 
 ```bash
-pnpm cloud:release:hk -- --action status
+pnpm cloud:release:hk -- --action status --profile hk-vps-cloud-test
 ```
 
 `finalize` 不接受操作者提供的 `PASS` 文本或既有证据文件，而会在本次调用中亲自启动两套全新
@@ -567,12 +573,13 @@ Browser subset **没有独立关闭权**。完整业务写入、双管理员/员
 ```bash
 pnpm cloud:release:hk -- \
   --action finalize \
+  --profile hk-vps-cloud-test \
   --candidate-sha "${CANDIDATE_SHA}" \
   --expected-current-sha "${EXPECTED_CURRENT_SHA}" \
   --migration-head "${MIGRATION_HEAD}" \
   --release-token "${RELEASE_TOKEN}"
 
-pnpm cloud:release:hk -- --action status
+pnpm cloud:release:hk -- --action status --profile hk-vps-cloud-test
 ```
 
 `finalize` 会在写入证据前和原子归档 transition 前再次核对 desk public/loopback health、SPA、
@@ -596,7 +603,7 @@ glob 或未验证路径递归删除。每份 committed history 必须一对一�
 先读取活动 transition：
 
 ```bash
-pnpm cloud:release:hk -- --action status
+pnpm cloud:release:hk -- --action status --profile hk-vps-cloud-test
 ```
 
 若候选 API/UI 验收失败，并且没有需要保留的现场调查，使用同一完整 identity 请求代码回滚：
@@ -604,6 +611,7 @@ pnpm cloud:release:hk -- --action status
 ```bash
 pnpm cloud:release:hk -- \
   --action rollback \
+  --profile hk-vps-cloud-test \
   --candidate-sha "${CANDIDATE_SHA}" \
   --expected-current-sha "${EXPECTED_CURRENT_SHA}" \
   --migration-head "${MIGRATION_HEAD}" \

@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ensureLocalConfig } from "../local/config.mjs";
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { CATALOG_SQL, parseCatalogEvidence } from "./hk-vps-release-remote-db-evidence.mjs";
 import { runWriteGatePgAcceptance } from "./hk-vps-release-write-gate-pg-acceptance.mjs";
 
@@ -37,7 +38,7 @@ function assertOptIn(environment) {
   }
 }
 
-function databaseUrl(password, database = "laundry_v2") {
+function databaseUrl(password, database = PROFILE.services.postgresDatabase) {
   const url = new URL("postgresql://127.0.0.1:8543");
   url.username = "postgres";
   url.password = password;
@@ -231,7 +232,7 @@ export async function runReleaseCatalogPgAcceptance({
   const client = createClient(
     clientConfiguration(
       config.postgresSuperuserPassword,
-      "laundry_v2",
+      PROFILE.services.postgresDatabase,
       "laundry-release-catalog-acceptance",
     ),
   );

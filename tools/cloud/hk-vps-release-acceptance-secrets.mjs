@@ -1,12 +1,13 @@
 import { lstat, mkdir, readdir, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { fail } from "./hk-vps-release-core.mjs";
 import { readPrivateFile, writeOrVerifyPrivateFile } from "./hk-vps-release-private-file.mjs";
 
-export const ACCEPTANCE_SECRET_ROOT = "/etc/laundry-desk/acceptance-secrets";
-export const ACCEPTANCE_ENV_PATH = "/etc/laundry-desk/adr36-acceptance.env";
-export const SERVER_ENV_PATH = "/etc/laundry-desk/server.env";
+export const ACCEPTANCE_SECRET_ROOT = PROFILE.paths.acceptanceSecretRoot;
+export const ACCEPTANCE_ENV_PATH = PROFILE.paths.acceptanceEnvironmentFile;
+export const SERVER_ENV_PATH = PROFILE.paths.serverEnvironmentFile;
 export const ACCEPTANCE_FIXTURE_OPT_IN = "APPLY_SYNTHETIC_HISTORY_ON_HK_VPS";
 
 const MAX_SECRET_BYTES = 16 * 1024;
@@ -279,7 +280,7 @@ export async function loadRemoteAcceptanceEnvironment(options = {}) {
   return Object.freeze({
     LANG: "C.UTF-8",
     LC_ALL: "C.UTF-8",
-    PATH: "/opt/nodejs/bin:/usr/bin:/bin",
+    PATH: `${dirname(PROFILE.paths.nodeExecutable)}:/usr/bin:/bin`,
     ...Object.fromEntries(
       [...ACCEPTANCE_CREDENTIAL_FILES, DATABASE_SECRET].map((item) => [
         item.env,

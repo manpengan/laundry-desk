@@ -30,7 +30,7 @@ bytes、总 CSS 99327 bytes。本轮全量 `workspace:check` 再次得到相同�
 
 | 范围                              | 结论                                                                    |
 | --------------------------------- | ----------------------------------------------------------------------- |
-| 通用 V2 Cloud Web 既定产品面      | 阶段 4.5 代码基线已闭环；冻结面为 69 commands / 48 queries、迁移头 0069 |
+| 通用 V2 Cloud Web 既定产品面      | 阶段 4.5 代码基线已闭环；冻结面为 82 commands / 64 queries、迁移头 0069 |
 | 本轮获授权的非部署软件工作        | 七个软件批次已按顺序通过全部 required checks 并合入 `main`              |
 | 正式 Cloud 部署与公网新鲜证据     | 本轮未执行；不能用主干软件绿灯替代                                      |
 | 真实 provider、离机备份和生产容量 | 外部证据未齐，继续失败关闭                                              |
@@ -47,6 +47,8 @@ bytes、总 CSS 99327 bytes。本轮全量 `workspace:check` 再次得到相同�
   `real-postgres` 和 `runtime-app-macos` required checks 均成功。
 - 生产 Web 预算通过；本轮七个软件批次没有增加命令、查询、迁移或 `m2-freeze` 清单。
 - 本轮新增/触及的生产文件均低于 400 physical lines，测试文件低于 800；既有冻结预算没有增长。
+- 本记录初版误沿用了 ADR-51 切片结束时的 69/48 历史数值；当前冻结测试真源在后续
+  ADR-52–63 合入后已为 82/64。本订正只修复当时的“当前主干”汇总，不改写各历史切片自己的验收数值。
 - 活动 Cloud Web 源码未发现 `TODO`、`FIXME` 或 `NOT_IMPLEMENTED`。扫描命中的 OS KeyStore 占位只
   位于 ADR-37 已后置的桌面发行线。
 - 依赖审计仍有两项精确复审的 moderate 例外：Drizzle CLI 的 dev-only `esbuild@0.18.20`，以及

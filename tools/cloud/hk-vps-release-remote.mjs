@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { dirname, resolve } from "node:path";
 import { realpath } from "node:fs/promises";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import {
   CloudReleaseError,
   fail,
@@ -222,7 +223,7 @@ async function deploy(options, signal) {
     await assertDeskHealth(options.expectedSha, signal);
     await assertSharedInfrastructure(signal);
     const inventory = await migrationInventory(root, options.migrationHead);
-    const beforeLedger = await readMigrationLedger("laundry_v2", signal);
+    const beforeLedger = await readMigrationLedger(PROFILE.services.postgresDatabase, signal);
     assertMigrationLedger(inventory, beforeLedger, "prefix");
     const policy = await readCompatibilityPolicy(root);
     const frozen = await freezeAndPrepareStaging(
@@ -265,8 +266,12 @@ async function deploy(options, signal) {
     current = updateTransition(current, { phase: "migrating" });
     await persistAndTrack(current);
     await applyMigrations(current, frozen.authority, signal);
-    assertMigrationLedger(inventory, await readMigrationLedger("laundry_v2", signal), "exact");
-    await readCatalogEvidence("laundry_v2", signal, "write_frozen");
+    assertMigrationLedger(
+      inventory,
+      await readMigrationLedger(PROFILE.services.postgresDatabase, signal),
+      "exact",
+    );
+    await readCatalogEvidence(PROFILE.services.postgresDatabase, signal, "write_frozen");
 
     await switchToCandidate(current);
     current = updateTransition(current, { phase: "switched" });
@@ -274,13 +279,17 @@ async function deploy(options, signal) {
     current = await releasePersistedWriteGate(current, signal, {
       persistTransition: persistAndTrack,
     });
-    await readCatalogEvidence("laundry_v2", signal, "stable");
+    await readCatalogEvidence(PROFILE.services.postgresDatabase, signal, "stable");
     await startDesk(signal);
     await assertDeskHealth(options.candidateSha, signal);
     await assertRollbackEvidence(current);
     await verifyBackupEvidence(current);
     await assertSharedInfrastructure(signal);
-    assertMigrationLedger(inventory, await readMigrationLedger("laundry_v2", signal), "exact");
+    assertMigrationLedger(
+      inventory,
+      await readMigrationLedger(PROFILE.services.postgresDatabase, signal),
+      "exact",
+    );
 
     current = updateTransition(current, { phase: "awaiting_external_verification" });
     await persistAndTrack(current);

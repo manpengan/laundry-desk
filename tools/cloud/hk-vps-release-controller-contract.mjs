@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
 import { fail, requireSha, requireToken } from "./hk-vps-release-core.mjs";
 
-export const CONTROLLER_ROOT = "/var/lib/laundry-desk-release-controllers";
+export const CONTROLLER_ROOT = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.controllerRoot;
 export const CONTROLLER_MANIFEST_NAME = "files.json";
 export const CONTROLLER_METADATA_NAME = "controller.json";
 export const CONTROLLER_ENTRY = "tools/cloud/hk-vps-release-rollback-entry.mjs";

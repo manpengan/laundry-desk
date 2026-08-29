@@ -1,6 +1,7 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import {
   runDataProtectionBackup,
   runDataProtectionDrill,
@@ -19,7 +20,7 @@ import { assertDataProtectionLockHeld } from "./hk-vps-data-protection-lock.mjs"
 import { CloudReleaseError, REMOTE_RELEASE_LOCK, fail } from "./hk-vps-release-core.mjs";
 import { runCloudCommand, withCloudSignalCancellation } from "./hk-vps-release-process.mjs";
 
-const NODE = "/opt/nodejs/bin/node";
+const NODE = PROFILE.paths.nodeExecutable;
 const FLOCK = "/usr/bin/flock";
 const LOCK_HELD = "--lock-held";
 const COMMAND_ENVIRONMENT = Object.freeze({

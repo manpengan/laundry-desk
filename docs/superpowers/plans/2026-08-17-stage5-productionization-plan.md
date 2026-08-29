@@ -1,10 +1,12 @@
 # 通用 V2 阶段 5 生产化交付计划
 
 > 日期：2026-08-17
-> 状态：**5.0 路线重置与发布解阻进行中**
+> 状态：**5.0 已关闭；5.1 已裁决并进入执行准备**
 > 当前裁决：[ADR-64](../../adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
 > 已完成基线：[Cloud Web-first 1–4 交付计划](2026-08-10-post-adr36-delivery-plan.md)
-> 当前 live 证据：[2026-08-15 归档工具修复发布结果](../../operations/2026-08-15-artifact-archive-release-result.md)
+> 5.0 关闭证据：[2026-08-25 发布解阻与关闭结果](../../operations/2026-08-25-stage50-release-result.md)
+> 5.1 入口：[ADR-65](../../adr/2026-08-25-adr-65-cloud-production-baseline.md) ·
+> [Cloud 生产基线计划](2026-08-25-stage51-cloud-production-baseline-plan.md)
 
 ## 1. 目标与推进规则
 
@@ -25,8 +27,8 @@
 
 | 阶段 | 状态       | 范围                                               | 关闭证据                         |
 | ---: | ---------- | -------------------------------------------------- | -------------------------------- |
-|  5.0 | **进行中** | 路线重置、四类发布留存受控归档、恢复发布 preflight | ADR-64 §5                        |
-|  5.1 | 未开始     | 生产环境隔离、离机备份、告警、容量与联合恢复       | 独立 ADR 与真实介质/演练证据     |
+|  5.0 | **已关闭** | 路线重置、四类发布留存受控归档、恢复发布 preflight | 2026-08-25 关闭结果              |
+|  5.1 | **准备中** | 生产环境隔离、离机备份、告警、容量与联合恢复       | ADR-65 签署与真实介质/演练证据   |
 |  5.2 | 未开始     | 单门店受控试点、真实数据授权、SLO、必要的 V1 迁移  | 独立 ADR 与试点运行证据          |
 |  5.3 | 未开始     | 短信/微信、AI 及其他获授权 provider                | 真实 sandbox/回执/失败与撤销证据 |
 |  5.4 | 未开始     | macOS、Windows、XP-58 与桌面对齐                   | 各平台和硬件独立实证             |
@@ -37,7 +39,7 @@
 
 - 新增 ADR-64 和本计划；
 - 更新 ADR 索引、AGENTS、README、CHANGELOG 与旧 1–4 计划的后继关系；
-- 明确 69 commands / 48 queries、迁移头 0069 均不变化。
+- 明确 82 commands / 64 queries、迁移头 0069 均不变化。
 
 ### 5.0-B `/opt` 单树归档
 
@@ -73,21 +75,26 @@
    `preflight`；本步骤不执行远端 restore，任何真实 release-set restore 仍须为精确对象另行授权；
 7. 回写一份不含 token、秘密或真实 PII 的阶段 5.0 发布结果。
 
-当前执行环境已生成专用 `~/.ssh/hk_vps_ed25519`、写入精确 `Host hk-vps` 配置并核对服务器
-Ed25519 fingerprint 与仓库固定值一致。截至 2026-08-20，严格 key-only 路径已经通过远端
-`status` 复核；后续 5.0-E 继续使用同一固定 authority，不启用密码，也不降低主机密钥或身份校验。
+当前执行环境使用专用 `~/.ssh/hk_vps_ed25519` 与精确 `Host hk-vps` 配置。5.0-E 全部远端动作均
+重新核对服务器 Ed25519 fingerprint 与仓库固定值一致，并使用严格 key-only authority；未启用密码，
+也未降低主机密钥或身份校验。
 
 ## 4. 5.0 关闭检查表
 
-- [ ] 治理文档一致；
-- [ ] `/opt` superseded 路径与负向测试通过；
-- [ ] release-set archive/restore/重入测试通过；
-- [ ] 全量本地门禁通过；
-- [ ] PR 合入与精确主干 required checks 通过；
-- [ ] hk-vps 精确候选归档完成且四类 active 集合仍一致；
-- [ ] retention preflight 通过；
-- [ ] 新工具随精确 `main` 上线并完成远端只读复核；
-- [ ] 阶段 5.0 结果回写。
+- [x] 治理文档一致；
+- [x] `/opt` superseded 路径与负向测试通过；
+- [x] release-set archive/restore/重入测试通过；
+- [x] 全量本地门禁通过；
+- [x] PR 合入与精确主干 required checks 通过；
+- [x] hk-vps 精确候选归档完成且四类 active 集合仍一致；
+- [x] retention preflight 通过；
+- [x] 新工具随精确 `main` 上线并完成远端只读复核；
+- [x] 阶段 5.0 结果回写。
+
+关闭快照：exact `main` `c8919af3c666cf70df2fbf04645ebdf0f377f35a` 已提交到 hk-vps，迁移保持
+69/head `0069_bounded_automation.sql`；API 20/20、Cloud Chromium、服务/共享站点与独立
+preflight 通过。稳定态为 `/opt=5`、history/controller/backup `=7/7/7`、evidence `=6`，room
+全部为 `true`。完整证据见本计划页首的 5.0 关闭结果。
 
 ## 5. 不在 5.0 范围
 

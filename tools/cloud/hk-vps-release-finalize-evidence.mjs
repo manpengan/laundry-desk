@@ -1,5 +1,6 @@
 import { createHash, randomUUID as systemRandomUUID } from "node:crypto";
 
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
 import {
   assertAdr36ApiAcceptancePassed,
   requireAdr36ApiAcceptanceEvidence,
@@ -19,7 +20,7 @@ export const FINALIZE_EVIDENCE_VERSION = 1;
 export const FINALIZE_EVIDENCE_MAX_AGE_MS = 30 * 60_000;
 export const FINALIZE_EVIDENCE_MAX_FUTURE_MS = 60_000;
 export const FINALIZE_EVIDENCE_MAX_BYTES = 64 * 1024;
-export const FINALIZE_EVIDENCE_ROOT = "/var/lib/laundry-desk-release";
+export const FINALIZE_EVIDENCE_ROOT = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.releaseStateRoot;
 
 const DIGEST = /^[0-9a-f]{64}$/u;
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;

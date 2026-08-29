@@ -115,6 +115,7 @@ export async function collectFinalizeEvidence(input, dependencies = {}) {
       environment: input.environment,
       execute: input.execute,
       knownHostsPath: input.knownHostsPath,
+      profile: input.profile,
     }),
     async (environment) =>
       await (dependencies.runBrowserEvidence ?? runLocalBrowserEvidence)(

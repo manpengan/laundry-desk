@@ -44,10 +44,6 @@ export function requireMigrationHead(value) {
   return value;
 }
 
-export function incomingArchivePath(candidateSha, token) {
-  return `/opt/laundry-desk.incoming-${requireSha(candidateSha)}-${requireToken(token)}.tar`;
-}
-
 export async function sha256File(path) {
   return await new Promise((resolveHash, rejectHash) => {
     const hash = createHash("sha256");

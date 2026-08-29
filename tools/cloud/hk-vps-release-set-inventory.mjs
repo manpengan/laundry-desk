@@ -1,6 +1,7 @@
 import { lstat, readdir, realpath } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { assertRetainedBackupIntegrity } from "./hk-vps-release-backup-retention.mjs";
 import { CONTROLLER_ROOT } from "./hk-vps-release-controller-contract.mjs";
 import { assertRetainedReleaseControllers } from "./hk-vps-release-controller-retention.mjs";
@@ -20,7 +21,7 @@ import {
   transitionExists,
 } from "./hk-vps-release-remote-support.mjs";
 
-export const RELEASE_ARCHIVE_ROOT = "/var/lib/laundry-desk-release-archive";
+export const RELEASE_ARCHIVE_ROOT = PROFILE.paths.archiveRoot;
 export const RELEASE_SET_ROOT = `${RELEASE_ARCHIVE_ROOT}/release-sets`;
 
 const CODE = "CLOUD_RELEASE_SET_ARCHIVE_INVALID";
@@ -143,7 +144,7 @@ export async function assertActiveReleaseSetIntegrity(dependencies = {}) {
 }
 
 function localOptPath(path, dependencies) {
-  return join(dependencies.optRoot ?? "/opt", basename(path));
+  return join(dependencies.optRoot ?? dirname(PROFILE.paths.liveRoot), basename(path));
 }
 
 async function anyReferencedTreeExists(record, dependencies) {

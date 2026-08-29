@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 
-import { fail } from "./hk-vps-release-core.mjs";
+import { DESK_LOOPBACK_ORIGIN, fail } from "./hk-vps-release-core.mjs";
 
 // Loopback readiness only waits for the freshly restarted Desk process to bind and answer; the
 // probe is cheap and local, so it can afford many short attempts.
@@ -35,7 +35,7 @@ export function publicReadinessPolicy(label) {
   });
 }
 
-const LOOPBACK_HEALTH_URL = "http://127.0.0.1:8787/health";
+const LOOPBACK_HEALTH_URL = `${DESK_LOOPBACK_ORIGIN}/health`;
 const LOOPBACK_HEALTH_LABEL = "CLOUD_RELEASE_LOOPBACK_HEALTH";
 
 export async function probeLoopbackWithReadiness(executeCurl, signal, wait) {

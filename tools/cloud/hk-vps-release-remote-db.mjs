@@ -12,6 +12,7 @@ import {
   unlink,
 } from "node:fs/promises";
 
+import { HK_VPS_CLOUD_TEST as PROFILE } from "./cloud-environment-profile.mjs";
 import { fail, sha256File } from "./hk-vps-release-core.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
 import {
@@ -110,8 +111,8 @@ export async function freezeDatabaseWrites(signal, dependencies = {}) {
   const readCatalog = dependencies.readCatalogEvidence ?? readCatalogEvidence;
   const now = dependencies.now ?? (() => new Date());
   const freeze = await activateWriteGate(signal);
-  const ledger = await readLedger("laundry_v2", signal);
-  const catalog = await readCatalog("laundry_v2", signal, "write_frozen");
+  const ledger = await readLedger(PROFILE.services.postgresDatabase, signal);
+  const catalog = await readCatalog(PROFILE.services.postgresDatabase, signal, "write_frozen");
   return Object.freeze({ ...freeze, catalog, ledger, verifiedAt: now().toISOString() });
 }
 
@@ -196,7 +197,7 @@ export async function createDump(temporaryPath, signal, dependencies = {}) {
         "postgres",
         "--",
         "/usr/bin/pg_dump",
-        "--dbname=laundry_v2",
+        `--dbname=${PROFILE.services.postgresDatabase}`,
         "--format=custom",
         "--lock-wait-timeout=10s",
         `--file=${temporaryPath}`,

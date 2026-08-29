@@ -4,6 +4,7 @@ import { lstat, open, realpath, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { TextDecoder } from "node:util";
 
+import { DEFAULT_CLOUD_ENVIRONMENT_PROFILE } from "./cloud-environment-profile.mjs";
 import {
   assertAdr36ApiAcceptancePassed,
   parseAdr36ApiAcceptanceEvidence,
@@ -21,8 +22,8 @@ import {
 } from "./hk-vps-release-finalize-evidence.mjs";
 import { runCloudCommand } from "./hk-vps-release-process.mjs";
 
-const NODE = "/opt/nodejs/bin/node";
-const LIVE_ROOT = "/opt/laundry-desk";
+const NODE = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.nodeExecutable;
+const LIVE_ROOT = DEFAULT_CLOUD_ENVIRONMENT_PROFILE.paths.liveRoot;
 const API_ENTRY = `${LIVE_ROOT}/tools/cloud/adr36-web-acceptance.mjs`;
 const API_MAXIMUM_OUTPUT_BYTES = 64 * 1024;
 
