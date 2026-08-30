@@ -4,8 +4,8 @@ Grok 在本项目中的入场指引。
 
 ## 你的角色
 
-[ADR-64](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) 已将阶段 5
-确定为当前路线，ADR-37 的 Cloud Web 主形态与 ADR-14 通用 V2 架构基线继续有效。Codex 是当前交付负责人；Grok 退出关键
+[ADR-66](docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md) 已将 Windows V2 定制 EXE 与宏发受控
+试点确定为当前路线，ADR-14 通用 V2 架构和 ADR-65 真实数据准入继续有效。Codex 是当前交付负责人；Grok 退出关键
 路径，可提供非阻塞复审或候选输入，但不拥有当前 spec、实现、门禁或合并权。
 
 历史任务书
@@ -14,8 +14,8 @@ Grok 在本项目中的入场指引。
 
 ## 入场必读
 
-1. [ADR-64：阶段 5 当前路线](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
-2. [阶段 5 执行计划](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md)
+1. [ADR-66：Windows V2 与宏发试点](docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md)
+2. [Windows 实机 findings](docs/research/2026-08-29-windows-port-findings-and-build-host.md)
 3. [ADR-37：Cloud Web 主形态](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
 4. [ADR-14：通用 V2 架构基线](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
 5. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
@@ -44,5 +44,5 @@ Grok 在本项目中的入场指引。
 ## 协作流程
 
 - 不直接实施或合并，除非 manpengan 另行明确授权；
-- 候选建议必须对照 ADR-64、ADR-37、ADR-14 与当前设计基线；
-- 不向 v1 `src/` 增加功能，不恢复宏发、Windows、macOS 正式发行或实体打印的当前优先级。
+- 候选建议必须对照 ADR-66、ADR-65、ADR-14 与当前设计基线；
+- 不向 v1 `src/` 增加功能；宏发只允许作为通用 V2 的发行 profile、迁移与试点对象。

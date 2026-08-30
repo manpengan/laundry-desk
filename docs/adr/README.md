@@ -73,6 +73,8 @@
 | [ADR-63](2026-08-13-adr-63-bounded-automation.md)                             | 有界自动化策略、调度与额度控制                  | **Proposed** 2026-08-13；Stage 4.5 Item 17         |
 | [ADR-64](2026-08-17-adr-64-stage5-productionization-and-release-retention.md) | 阶段 5 生产化接续与发布留存归档                 | **Accepted** 2026-08-17；Stage 5 路线、5.0 已关闭  |
 | [ADR-65](2026-08-25-adr-65-cloud-production-baseline.md)                      | Cloud 生产基线、隔离环境与可恢复性门禁          | **Accepted** 2026-08-27；Stage 5.1 执行准备        |
+| [ADR-66](2026-08-29-adr-66-windows-hongfa-pilot.md)                           | Windows V2 定制桌面版与宏发受控运营试点         | **Accepted** 2026-08-29；Windows/Hongfa 主线       |
+| [ADR-67](2026-08-30-adr-67-windows-native-local-runtime.md)                   | Windows 独立原生 PostgreSQL/Fastify Runtime     | **Accepted** 2026-08-30；W1.5 本地服务闭环         |
 
 ## v1 线
 

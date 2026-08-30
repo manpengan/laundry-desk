@@ -1,8 +1,8 @@
 # Windows 形态可行性 findings 与局域网构建机操作手册
 
-> 状态：**待 Codex 采纳**（2026-08-29）
+> 状态：**已由 ADR-66 采纳并进入实现**（2026-08-29）
 > 主责：Claude（非阻塞复审角色，见 [CLAUDE.md](../../CLAUDE.md)）；**本文不构成裁决**
-> 交付对象：Codex（阶段 5 owner，见 [AGENTS.md](../../AGENTS.md)）
+> 交付对象：Codex（Windows V2 / 宏发试点 owner，见 [AGENTS.md](../../AGENTS.md)）
 > 触发：manpengan 提出「后面要开发 Windows 版本」，先行搭建实机环境并取证
 
 本文两部分：**§1–§2** 是可直接使用的 Windows 构建机与 SSH 操作手册；**§3–§7** 是在该实机上跑出来的
@@ -14,18 +14,20 @@ Windows 移植阻塞点证据。§8 给出对设计的影响判断与 ADR 建议
 
 在同局域网 Windows 10 实机上完成环境搭建并跑通到测试层，结论如下。
 
-| 项 | 结果 | 深度 |
-| --- | --- | --- |
-| `pnpm install --frozen-lockfile` | ✅ 49.1s，退出码 0，无 node-gyp 编译 | — |
-| `pnpm workspace:typecheck` | ✅ 12/12 任务，1m50.7s，退出码 0 | — |
-| `@laundry/edge-agent` 脚本测试 | ❌ 61 项：33 通过 / 23 失败 / 5 跳过 | 见下 |
-| **A. 目录 `fsync` 返回 `EPERM`** | ❌ 17 项失败 | **架构级，需 ADR** |
-| **B. POSIX `0600` 权限不变量不可满足** | ❌ 5 项失败 | **架构级，需 ADR** |
-| C. 脚本层 POSIX 命令替换 | ❌ 3 个 `test` 脚本 | 浅层，可直接修 |
-| D. 无 `win` 打包目标 + 守卫测试禁止 | 静态扫描 | 设计闸门，需 ADR |
-| E. 打印链路平台绑定 | 静态扫描 | **比预想乐观**，见 §7.2 |
-| F. `safeStorage` 在 Windows 降级为 DPAPI | 静态扫描 | 安全属性变化，需 ADR 记录 |
-| （非缺陷）Mach-O 检查测试 | 1 项失败 | macOS 专属测试，属预期 |
+> 下表保留 2026-08-29 的原始移植采样；ADR-66 实现后的关闭结果见 §10。
+
+| 项                                       | 结果                                 | 深度                      |
+| ---------------------------------------- | ------------------------------------ | ------------------------- |
+| `pnpm install --frozen-lockfile`         | ✅ 49.1s，退出码 0，无 node-gyp 编译 | —                         |
+| `pnpm workspace:typecheck`               | ✅ 12/12 任务，1m50.7s，退出码 0     | —                         |
+| `@laundry/edge-agent` 脚本测试           | ❌ 61 项：33 通过 / 23 失败 / 5 跳过 | 见下                      |
+| **A. 目录 `fsync` 返回 `EPERM`**         | ❌ 17 项失败                         | **架构级，需 ADR**        |
+| **B. POSIX `0600` 权限不变量不可满足**   | ❌ 5 项失败                          | **架构级，需 ADR**        |
+| C. 脚本层 POSIX 命令替换                 | ❌ 3 个 `test` 脚本                  | 浅层，可直接修            |
+| D. 无 `win` 打包目标 + 守卫测试禁止      | 静态扫描                             | 设计闸门，需 ADR          |
+| E. 打印链路平台绑定                      | 静态扫描                             | **比预想乐观**，见 §7.2   |
+| F. `safeStorage` 在 Windows 降级为 DPAPI | 静态扫描                             | 安全属性变化，需 ADR 记录 |
+| （非缺陷）Mach-O 检查测试                | 1 项失败                             | macOS 专属测试，属预期    |
 
 **一句话**：类型层完全干净，依赖层无原生模块负担；真正的阻塞在**持久化与权限这两个 POSIX 假设**上，
 它们是 durable / 签名更新链路的设计前提，不是可以打补丁绕过的实现细节。
@@ -37,23 +39,17 @@ Windows 移植阻塞点证据。§8 给出对设计的影响判断与 ADR 建议
 ### 2.1 机器与接入
 
 ```
-主机      DESKTOP-MAN   192.168.1.84   （与 Mac 同网段 en0 192.168.1.0/24）
+主机      同局域网 Windows 构建机（具体 endpoint 仅保存在本机私有 SSH Skill）
 系统      Windows 10 家庭中文版  build 19045 (22H2)
 硬件      i7-11800H / 23.7 GB RAM / C: 剩余 114 GB
-用户      74997
+用户      专用本地构建账户
 仓库      C:\dev\laundry-desk
 工具链    node v22.22.3   pnpm 11.15.0   git 2.55.0.windows.5
 ```
 
-Mac 侧 `~/.ssh/config` 已配好别名，直接用：
-
-```bash
-ssh winbox
-```
-
-公钥 `~/.ssh/id_ed25519_windows_lan`，已写入 Windows 端
-`C:\ProgramData\ssh\administrators_authorized_keys`（管理员组用户**不读** `~/.ssh/authorized_keys`，
-这是 Windows OpenSSH 的常见坑）。
+Mac 侧统一调用本机私有 `windows-lan-ssh` Skill 的严格 wrapper。公开仓库不记录 endpoint、客户端
+密钥路径、authorized-keys 路径或 host-key 文件；不得绕过 wrapper 回落到密码、agent 或自动接受
+主机密钥变化。
 
 `scp` / `sftp` 可用。注意：MSI 安装的 OpenSSH 默认 `sshd_config` 里 `Subsystem sftp sftp-server.exe`
 是相对路径，sshd 服务解析不到会导致 `scp: Connection closed`。已改为绝对路径
@@ -115,13 +111,9 @@ Start-ScheduledTask -TaskName 'ld-restart-sshd'
 
 ### 2.4 在无外网条件下把仓库送过去
 
-不依赖 GitHub / gitea，直接从 Mac 推 bundle（首次已用此法完成，HEAD 与 Mac 逐位一致）：
-
-```bash
-git bundle create /tmp/laundry-desk.bundle --all
-scp /tmp/laundry-desk.bundle winbox:C:/dev/laundry-desk.bundle
-ssh winbox "cd /d C:\dev && git.exe clone -b main C:/dev/laundry-desk.bundle C:/dev/laundry-desk"
-```
+不依赖 GitHub / Gitea 时，从 Mac 创建有界 bundle/archive，再通过 `windows-lan-ssh` Skill 的严格文件
+传输 wrapper 送到 `C:/dev`。clone 完记得把 bundle 形成的临时 origin 改回真实远端；本轮按用户裁决
+不做 Gitea 同步。
 
 clone 完记得把 `origin` 改回真实远端（bundle 会被登记为 origin）。
 
@@ -184,11 +176,11 @@ POSIX 下 `fsync()` 一个目录 fd 是把**目录项**持久化的标准手段�
 
 三份独立实现，共 16 个调用点：
 
-| 位置 | 调用点数 |
-| --- | --- |
-| [`apps/edge-agent/scripts/sync-spa.mjs:281`](../../apps/edge-agent/scripts/sync-spa.mjs) | 11 |
-| [`apps/server/src/print/file-spool.ts:155`](../../apps/server/src/print/file-spool.ts) | 2 |
-| [`apps/server/src/photo/file-store.ts:109`](../../apps/server/src/photo/file-store.ts) | 3 |
+| 位置                                                                                     | 调用点数 |
+| ---------------------------------------------------------------------------------------- | -------- |
+| [`apps/edge-agent/scripts/sync-spa.mjs:281`](../../apps/edge-agent/scripts/sync-spa.mjs) | 11       |
+| [`apps/server/src/print/file-spool.ts:155`](../../apps/server/src/print/file-spool.ts)   | 2        |
+| [`apps/server/src/photo/file-store.ts:109`](../../apps/server/src/photo/file-store.ts)   | 3        |
 
 三份实现形态一致：`open(dir, O_RDONLY)` → `handle.sync()`。
 
@@ -249,10 +241,10 @@ POSIX 下 `fsync()` 一个目录 fd 是把**目录项**持久化的标准手段�
 
 仓库未设 `shellEmulator`，pnpm 在 Windows 上经 `cmd.exe` 执行脚本：
 
-| 位置 | 问题 |
-| --- | --- |
-| `apps/edge-agent` / `apps/web` / `packages/ui` 的 `test` | `node --test $(find dist -name '*.test.js')` |
-| 根 `runtime:app:lint:swift`、`release:candidate:swift:check` | `xcrun` / `swiftc`，纯 macOS |
+| 位置                                                         | 问题                                         |
+| ------------------------------------------------------------ | -------------------------------------------- |
+| `apps/edge-agent` / `apps/web` / `packages/ui` 的 `test`     | `node --test $(find dist -name '*.test.js')` |
+| 根 `runtime:app:lint:swift`、`release:candidate:swift:check` | `xcrun` / `swiftc`，纯 macOS                 |
 
 `$(...)` 在 `cmd.exe` 中是字面量；更糟的是 Windows 的 `find.exe` 是**在文件中搜索字符串**的工具，
 与 Unix `find` 参数完全不兼容。
@@ -283,10 +275,10 @@ assert.doesNotMatch(builderText, /dmg|notari|publish|windows|nsis/iu);
 
 初判「打印在 Windows 上功能为零」**需要修正**。代码里存在两条并行路径：
 
-| 路径 | 组成 | 平台状态 |
-| --- | --- | --- |
-| 设备直写 | [`print/usb-port.ts`](../../apps/edge-agent/src/print/usb-port.ts) → `executor.ts` / `printer-smoke.ts` | **已支持 win32** |
-| 签名派发运行时 | `cups-process` → `cups-worker` → `signed-executor` → `runtime.ts` | 仅 darwin |
+| 路径           | 组成                                                                                                    | 平台状态         |
+| -------------- | ------------------------------------------------------------------------------------------------------- | ---------------- |
+| 设备直写       | [`print/usb-port.ts`](../../apps/edge-agent/src/print/usb-port.ts) → `executor.ts` / `printer-smoke.ts` | **已支持 win32** |
+| 签名派发运行时 | `cups-process` → `cups-worker` → `signed-executor` → `runtime.ts`                                       | 仅 darwin        |
 
 [`usb-port.ts:203`](../../apps/edge-agent/src/print/usb-port.ts) 已有完整 `win32` 分支
 （校验 COM / LPT / USB 设备路径），`:316` 按平台切换打开标志（Windows `r+`，
@@ -315,9 +307,10 @@ macOS Keychain 至少有 ACL 与提示。
 
 ---
 
-## §8 对设计的影响与 ADR 建议
+## §8 对设计的影响与 ADR 裁决
 
-**建议新增一份「Windows 形态」ADR**，一次性裁决以下六项（按 ADR-16「契约面新增须附 ADR」）：
+[ADR-66](../adr/2026-08-29-adr-66-windows-hongfa-pilot.md) 已一次性裁决以下六项（按 ADR-16
+“契约面新增须附 ADR”）：
 
 1. **持久化契约**（§4）——Windows 上目录级持久化如何取得与 POSIX 等价的崩溃安全保证，
    或明确降级范围。这是最深的一项
@@ -330,6 +323,11 @@ macOS Keychain 至少有 ACL 与提示。
 
 **可不经 ADR 直接修**：§6 的脚本层 POSIX 依赖。
 
+ADR 签署后的补充实机探针进一步确认：Windows 10 22H2/NTFS 上，以
+`GENERIC_WRITE | FILE_FLAG_BACKUP_SEMANTICS` 打开的目录句柄可成功调用 `FlushFileBuffers`；
+`MoveFileExW(MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)` 也可成功替换文件。因此正式实现
+采用 Win32 等价持久化原语，不采用“win32 跳过目录 fsync”的降级路径。
+
 **另需注意**：根 [`.github/workflows/build.yml`](../../.github/workflows/build.yml) 虽跑在
 `windows-latest`，但那是**冻结的 v1 链路**（npm + electron-vite + better-sqlite3 + NSIS，
 且为 `workflow_dispatch`），与 pnpm/turbo 的 V2 monorepo 不是同一条流水线，不可直接复用。
@@ -338,9 +336,7 @@ macOS Keychain 至少有 ACL 与提示。
 
 ## §9 复现方式
 
-```bash
-ssh winbox
-```
+先通过本机私有 `windows-lan-ssh` Skill 建立严格 key-only 会话，再在仓库中执行：
 
 ```
 cd /d C:\dev\laundry-desk
@@ -359,3 +355,19 @@ node --test scripts/*.test.mjs > C:\dev\test-scripts.txt 2>&1
 - **1 项**`mode` 作为哈希输入（测试 5）——与上一类同源
 - **1 项**`release inspection rejects a thin nested Mach-O and binds app identity`（测试 31）
   ——Mach-O 是 macOS 二进制格式，该测试**本质上是 macOS 专属**，不属移植缺陷
+
+---
+
+## §10 2026-08-30 实现关闭结果
+
+- §4/§5 已由共享 `@laundry/platform-fs` 和固定 Win32 helper 关闭，没有 Windows 跳过分支。Windows
+  原生套件 8/8；Edge 完整 404 项 0 fail，Server 完整 1167 项 0 fail。
+- §6 的包脚本已改用 Windows/Node 兼容 glob；Edge 脚本测试在 Windows 为 51 pass、10 个明确平台
+  skip、0 fail。
+- Windows RAW spooler 已接入既有 signed-executor seam；系统枚举与失败分类已通过，但构建机没有
+  XP-58，未发送实体打印字节。
+- 活动 V2 已生成 x64 NSIS development-only 安装器；结构检查确认 x64 PE、唯一 SPA、固定 helper
+  摘要和禁用更新配置。解包版、安装版和 Session 1 受限令牌 Electron 均通过，稳定窗口截图显示
+  “本地服务尚未就绪”而非浏览器页面。
+- 安装、同版本修复安装、卸载、快捷方式、注册表、旧安装树清理和 AppData 保留语义均已实测。
+  产物仍为 `NotSigned`；跨版本升级/回滚、Authenticode、XP-58 与真实运营准入继续在 W2。

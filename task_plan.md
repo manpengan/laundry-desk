@@ -1,9 +1,95 @@
-# 当前任务：依次关闭 Stage 5.0、实现 Stage 5.1、提交推送并部署（2026-08-23）
+# 当前任务：活动 V2 Windows 定制桌面 EXE 与宏发受控实操（2026-08-30）
 
 > **本文件已纳入版本控制，且仓库是公开的。** 写入前自查：不得出现密钥、口令、PIN、release
 > token、真实顾客 PII，也不得记录主机上凭据文件的具体路径或变量名（这类定位信息发到公开
 > 仓库等于给出半张地图）。运维私有细节留在主机侧记录，本文只写判据、结论与可复核的标识。
 
+## 目标与裁决
+
+- 主交付线改为活动 V2 的 Windows x64 桌面 EXE，面向宏发门店受控实操；根 `src/` 的历史 V1
+  Electron 不复活、不作为交付入口。
+- ADR-66 已接受：Windows 安全持久化、用户级密钥保护、打印执行器、NSIS 打包和桌面验收均须
+  保持既有崩溃安全与密钥保护不变量。
+- 浏览器/Edge 只可辅助排查，不能作为 Windows 桌面发行验收；权威证据来自打包后的 Electron
+  应用、真实 Windows 运行环境和实体打印/运营记录。
+- Gitea 不同步、不清理、不作为本轮交付依赖；Windows 代码传输可走受控 SSH 文件通道。
+
+## 当前阶段
+
+W2：W1.5 development Runtime 已关闭当前安装版 EXE 的本地服务缺口；继续完成 no-repo companion、
+签名、实体打印与生产准入。W0 已关闭，W1 只代表桌面壳、打印软件链和 NSIS。
+
+## 阶段清单
+
+### W0：安全与崩溃一致性基线
+
+- [x] 修复跨 shell 包脚本，证明 Windows 能发现并运行既有测试。
+- [x] 接受 ADR-66，冻结 Windows durable replace、目录 flush、私有 ACL 与 DPAPI 边界。
+- [x] 完成 `@laundry/platform-fs` 的 Windows helper、摘要校验、目录/文件私有 ACL 和回归。
+- [x] 将 Edge/Server 的文件存储、队列、身份、信任、升级、照片与打印 spool 迁移到共享原语。
+- [x] 在 Windows 10 重跑相关 Edge/Server 测试并关闭平台差异失败。
+- **状态：** completed（Edge 404 项 0 fail；Server 1167 项 0 fail）
+
+### W1：Windows 打印与发行包
+
+- [x] 将签名派发 executor 接入 Windows RAW spooler；保留既有 `usb-port.ts` 直连作为受控退路。
+- [x] 为活动 V2 Electron 增加 Windows x64 NSIS 打包，不调用冻结的根 V1 `build:win`。
+- [x] 将原生 helper 作为受摘要约束的 unpacked 资源打包并从发行路径解析。
+- [x] 产出明确标记未签名/development-only 的安装包、摘要清单和安装/修复安装/卸载回归；真正
+      跨版本升级/回滚在形成第二个版本后于 W2 独立验证。
+- **状态：** completed_shell_only（安装器能启动 Electron，但尚未交付独立 localhost 业务服务）
+
+### W1.5：Windows 本地业务服务运行链
+
+- [x] 复现用户启动安装版后报错，并证明 Electron 未崩溃、8787 无监听、与 Clash 无关。
+- [x] 盘点 Fastify/PostgreSQL 的既有启动、迁移、秘密文件和平台前置条件，冻结不降低安全边界的
+      Windows 部署拓扑。
+- [x] 实现独立于 Electron 的 Windows development 本地服务安装/启动/停止/健康检查；Electron 仍只连接固定
+      `127.0.0.1:8787`，不内嵌数据库或把业务逻辑搬入主进程。
+- [x] 使用合成数据验证首次初始化、重复启动、失败诊断和登录会话 Electron 进入可用页面。
+- [x] 以禁止 hard terminate 的登录任务和 Server→`pg_ctl fast` stopper 验证停止/启动恢复，并用真实
+      安装版 EXE 完成登录、重启会话恢复和桌面截图。
+- [x] 在同版本重复安装上验证安全停机、迁移/引导/校验、任务重注册与 ready 恢复；安装器等待直接
+      `pg_ctl` 而不等待后台 postgres 进程树。
+- **状态：** completed_development_runtime（正式 no-repo companion 与安装/修复/卸载整合进入 W2）
+
+### W2：桌面与生产准入
+
+- [x] 对解包版与安装版 Electron 运行自动 smoke，并在真实登录会话取得目标窗口稳定错误态截图。
+- [x] 在真实 Windows 登录会话验证显示、DPAPI 可用、原生 helper、加密队列与打印机枚举；浏览器
+      证据未计入。
+- [x] 验证真实安装版 Electron 通过真实 `/health`、使用随机生成的 development 操作员登录，并在
+      关闭/重开同一 EXE 后恢复会话进入可用业务页面。
+- [x] 通过安装版 Electron 创建一名独立合成测试店长并完成双人复核、私有凭据落盘、错误密码拒绝、
+      密码登录、PIN 快速切换、会话重启恢复与退出。
+- [x] 以该测试账号覆盖十个桌面导航面、价目、客户/档案、开单、部分收款、原路退款、欠款取衣结清、
+      工作台、账目/对账、主题和打印队列，并保存视觉证据。
+- [x] 用只读数据库终态核对账号、价目、客户、订单、支付/退款、衣物状态和审计事件，清理临时 runner；
+      XP-58 实体出纸、真实 provider、不可逆隐私删除和真实数据不计入本轮通过。
+- [ ] 将固定 Node、Server、migration 与 PostgreSQL payload 制成不依赖源码仓库的 Runtime companion，
+      纳入安装、修复安装、升级、停止、重启和保留数据卸载门禁。
+- [ ] 接入宏发目标 XP-58，完成 RAW 出纸、中文、金额、条码、走纸、切刀、断连、补打与防重复实证。
+- [ ] 取得 Authenticode/受控内网安装裁决，并以第二个版本完成跨版本升级与回滚。
+- [ ] 关闭 ADR-65 的生产候选、离机恢复、告警、容量与迁移安全门禁后，才允许真实顾客数据。
+- **状态：** functional_journey_completed_development_only（实体硬件、签名与生产准入仍待外部条件）
+
+### W3：宏发受控实操
+
+- [ ] 冻结宏发发行 profile、设备/打印配置、回滚点与操作手册；不在核心业务代码创建客户分叉。
+- [ ] 先用合成数据完成门店演练，再在 W2 准入后进入限范围真实运营。
+- [ ] 记录故障、恢复、打印成功率和人工回退证据，未取得现场证据前不称正式交付完成。
+- **状态：** pending_after_W2
+
+## 完成条件
+
+1. Windows 10 上相关测试、类型检查、构建与打包均为新鲜绿灯。
+2. 安装后的活动 V2 Electron 可以启动、显示、连接受控服务并完成桌面级验收。
+3. 实体打印与失败回退有现场证据，私有文件/密钥和崩溃一致性不变量未削弱。
+4. 生产数据准入与宏发交接分别有独立证据；开发包、模拟数据或浏览器页面不能替代。
+
+---
+
+# 历史任务：依次关闭 Stage 5.0、实现 Stage 5.1、提交推送并部署（2026-08-23）
 
 ## 目标
 
@@ -115,18 +201,18 @@ Codex 会话已于 2026-08-15 12:00 前后退出，最后一次动作是合入 P
 `assertRoomForRelease` 在 `count >= MAX_RETAINED_RELEASES(8)` 时失败关闭，而 history 恰为 8。
 `/opt` 侧的 `laundry-desk.` 前缀产物只有 5（live 不带点、不计数），并不阻塞。
 
-| 前置 | 实测 | 判定 |
-| --- | --- | --- |
-| 候选 = HEAD = origin/main | `c04f858…4104` | 通过 |
-| 工作树（含 untracked） | 0 变更 | 通过 |
-| 精确 SHA 主干 CI | Foundation + PostgreSQL Integration 双 success | 通过 |
-| live marker | `b80ab3e…9e1ec` | 通过 |
-| 迁移 | 候选 69 条 / head `0069`，库内 69 条 | 通过（`same_migration`） |
-| transition | 不存在 | 通过（stable） |
-| `/opt` `laundry-desk.*` | 5 | 通过 |
-| backup | 7 对 | 通过 |
-| verification evidence | 5 | 通过 |
-| history | **8** | **阻塞** `CLOUD_RELEASE_HISTORY_RETENTION_LIMIT` |
+| 前置                      | 实测                                           | 判定                                             |
+| ------------------------- | ---------------------------------------------- | ------------------------------------------------ |
+| 候选 = HEAD = origin/main | `c04f858…4104`                                 | 通过                                             |
+| 工作树（含 untracked）    | 0 变更                                         | 通过                                             |
+| 精确 SHA 主干 CI          | Foundation + PostgreSQL Integration 双 success | 通过                                             |
+| live marker               | `b80ab3e…9e1ec`                                | 通过                                             |
+| 迁移                      | 候选 69 条 / head `0069`，库内 69 条           | 通过（`same_migration`）                         |
+| transition                | 不存在                                         | 通过（stable）                                   |
+| `/opt` `laundry-desk.*`   | 5                                              | 通过                                             |
+| backup                    | 7 对                                           | 通过                                             |
+| verification evidence     | 5                                              | 通过                                             |
+| history                   | **8**                                          | **阻塞** `CLOUD_RELEASE_HISTORY_RETENTION_LIMIT` |
 
 ## 本轮步骤
 

@@ -1,12 +1,13 @@
 # 通用 V2 阶段 5 生产化交付计划
 
 > 日期：2026-08-17
-> 状态：**5.0 已关闭；5.1 已裁决并进入执行准备**
+> 状态：**5.0 已关闭；ADR-66 已把当前主线切换为 Windows V2 → 宏发试点**
 > 当前裁决：[ADR-64](../../adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
 > 已完成基线：[Cloud Web-first 1–4 交付计划](2026-08-10-post-adr36-delivery-plan.md)
 > 5.0 关闭证据：[2026-08-25 发布解阻与关闭结果](../../operations/2026-08-25-stage50-release-result.md)
 > 5.1 入口：[ADR-65](../../adr/2026-08-25-adr-65-cloud-production-baseline.md) ·
 > [Cloud 生产基线计划](2026-08-25-stage51-cloud-production-baseline-plan.md)
+> 当前入口：[ADR-66](../../adr/2026-08-29-adr-66-windows-hongfa-pilot.md)
 
 ## 1. 目标与推进规则
 
@@ -24,6 +25,18 @@
 5. 在 5.1 关闭前只使用合成数据，不把 hk-vps 称为生产 SaaS。
 
 ## 2. 固定交付顺序
+
+2026-08-29 起，下表的原 5.1/5.2 安全门禁继续有效，但执行顺序由 ADR-66 改为：
+
+`W0 Windows 安全基座 → W1 Windows EXE/打印 → W2 production-candidate/迁移准入 → W3 宏发受控运营`。
+
+真实 provider 不进入 Windows/宏发关键路径；Windows 开发包可以先用合成数据验收，真实顾客数据仍
+必须等待 W2 完整关闭。下表保留为 ADR-64 原阶段映射：
+
+截至 2026-08-30，W0 与 W1 软件链已关闭：Windows 目录写穿透/flush、私有 DACL、DPAPI 队列、
+Winspool RAW 接缝、x64 NSIS、解包/安装 Electron smoke、登录会话窗口截图以及安装/修复安装/卸载
+回归均已通过。当前进入 W2；`NotSigned` 开发包、系统 PDF/Fax 队列或浏览器证据均不能替代
+Authenticode 签名裁决、目标 XP-58 出纸和 ADR-65 生产准入。
 
 | 阶段 | 状态       | 范围                                               | 关闭证据                         |
 | ---: | ---------- | -------------------------------------------------- | -------------------------------- |

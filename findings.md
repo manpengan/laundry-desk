@@ -4,6 +4,93 @@
 > token、真实顾客 PII，也不得记录主机上凭据文件的具体路径或变量名（这类定位信息发到公开
 > 仓库等于给出半张地图）。运维私有细节留在主机侧记录，本文只写判据、结论与可复核的标识。
 
+## 2026-08-30：Windows V2 桌面交付边界
+
+- 桌面在线 cold resume 与普通 login 不能只共享最终 SessionView；PIN 快速切换还依赖当前认证态下的
+  严格员工目录。目录应由 host adapter 私有持有，在线 resume 成功后用同一认证态补载，不能为了
+  补载再次旋转 token；目录加载失败必须注销并返回未恢复，不能留下“已登录但无可切换员工”的半态。
+- 恢复路径不能借用员工管理查询：`staff.access.list` 需要 `staff_write`，会让普通 `staff` 角色在
+  合法 session 冷启动时被错误注销。桌面认证目录必须走权限语义匹配的固定 `/api/v2/local/staff`
+  端点、不得携带 renderer token，并在 logout 与迟到响应竞态中保持注销优先、不得复活旧会话。
+- 价目代码唯一不代表服务/分类组合唯一。服务端价格权威若命中多个 active 行，应按价格集合裁决：
+  全部整数分价格相同即可确定解析；出现两个不同价格仍必须 `RESOURCE_UNAVAILABLE` 失败关闭。
+  直接要求命中行数等于一会把合法的等价别名误判为价格歧义。
+- 登录失败已经在表单内以 `role=alert` 明确呈现；同一错误再进入全局 toast 会跨过成功登录的组件
+  切换并短暂残留在工作台，形成相互矛盾的状态反馈。认证失败保留表单内错误即可，字段缺失等本地
+  校验仍可使用短时 toast。
+- 全功能桌面验收不能只断言 UI toast。最终证据应同时绑定：安装树与当前打包 `app.asar` 摘要、
+  安装版 Electron 行为、renderer/HTTP 错误计数、私有账号文件检查、只读 PostgreSQL 账本投影、
+  回环 listener/进程身份和退出后的 revoked session；这些层次本轮均已闭合。
+- 支付表 `amount_cents` 始终保存正整数，退款通过 `kind=refund` 与引用原支付表达负向贡献；数据库
+  审计不能直接 `sum(amount_cents)`。权威签名投影是 pay/repay 正向、refund 负向、reversal 按被反转
+  行的贡献取反，本轮 3 条流水按该规则精确回到订单 `paid_cents=2000`。
+- “全面功能验证”须先明确证据边界：本轮以一名通过产品 UI 创建的合成测试店长驱动真实安装版
+  Electron，覆盖可重复、可回滚或可审计的柜台核心旅程和全部导航面；实体打印、外部 provider、
+  不可逆隐私操作、生产恢复/签名及真实顾客数据必须继续单独失败关闭，不能用软件 smoke 替代。
+- 安装版窗口显示“本地服务尚未就绪”时，不能仅凭 Electron 进程存在判定桌面可用。用户实操暴露
+  当前 NSIS 只安装 Edge/Electron；固定回环地址的 Fastify 服务没有监听 8787。Clash 正常运行且
+  WinHTTP direct，因此出海代理与 localhost 服务缺失是两条独立问题。
+- 正确修复不能把 health 硬编码为成功、绕过 `ServiceGate`，也不能把 Fastify/PostgreSQL 偷塞进
+  Electron 主进程。应保持 ADR-14 的进程隔离，在 Windows 提供可审计、可恢复的独立本地服务生命
+  周期，并把它纳入安装与桌面验收。
+- ADR-67 冻结 Windows 为独立 Runtime + Counter：development 层允许复用构建机 Node 与仓库产物，
+  pilot 层必须携带固定 Node/Server/migration/PostgreSQL payload，完成 no-repo 生命周期与签名；两层
+  都不得把 Fastify/PostgreSQL 生命周期转嫁给 Electron。
+- 原生 development Runtime 已在同一 Windows 10 实机以 PostgreSQL 16.15 完成 69 条连续迁移、真实
+  bootstrap、kit verify 与 loopback health；PostgreSQL/Server 只监听固定回环端口，登录任务的完整
+  stop/start 后重新进入 ready，证明修复的是服务链而不是 UI 假状态。
+- 真正安装版 EXE 的 `_electron` 验收覆盖私有 handoff 登录、可用柜台工作台、进程关闭后重开和会话
+  恢复；因此当前用户报错已关闭。该证据不覆盖 no-repo companion、签名、实体 XP-58 或真实顾客数据。
+- Windows PowerShell 启动 `pg_ctl` 时若把 native stdout 留在安装器管道中，后台 postgres 会继承
+  管道并让调用方长期等待；`Start-Process -Wait` 也会等待整个后代进程树。当前改由
+  `System.Diagnostics.Process` 隔离 shell 输出句柄，只等待直接 `pg_ctl` PID 并检查 exit code；实机
+  探针中 start 在 340 ms 返回且 PostgreSQL 保持监听，随后 fast stop 清空端口。此次调试还纠正了
+  `postgres --version` 输出前缀假设。
+- 独立安全复核发现 development launcher 原会继承登录环境；若残留
+  `LAUNDRY_CONTAINER_RUNTIME=1`，Server 可改绑 `0.0.0.0`。launcher 现显式清空 container/LAN/public
+  拓扑、Node 注入和未启用的照片/打印目录变量，并以污染环境启动后仍只监听 loopback 的实机回归锁定。
+- Task Scheduler 的硬停止会把 `0xC000013A` 传播给任务树里的 PostgreSQL backend，不能作为安全停机。
+  development 任务现禁止 hard terminate；受控 stop 先临时禁用自动重启、验证 8787 listener 的 Node
+  身份并结束 Server，再由 stopper 直接执行 `pg_ctl fast`，最后恢复任务可用状态。不能依赖 Task
+  Scheduler 下的 batch 在 Node 退出后继续执行清理。恢复验收检查 WAL、data checksums、69 条 migration
+  ledger、`pg_is_in_recovery=false` 与真实 health；修复后的 clean shutdown/ready 晚于最后一次硬终止。
+- 活动 V2 已有 Electron 宿主，Windows 发行应扩展该宿主；根目录旧 V1 只作历史参考。调用根
+  `build:win` 会打错产品，不是捷径。
+- Windows 上目录以只读 handle 调用 `FlushFileBuffers` 会拒绝访问；使用带写权限且带
+  `FILE_FLAG_BACKUP_SEMANTICS` 的目录 handle 可成功。文件替换可用 `MoveFileExW` 的
+  `REPLACE_EXISTING | WRITE_THROUGH` 保持落盘语义。
+- Windows 的 `0600/0700` 不能由 POSIX mode 位替代。私有文件与目录必须拒绝 reparse/hard-link
+  绕过，关闭 ACL 继承，并只授予当前用户与 SYSTEM 必要权限；检查必须比较实际 security descriptor。
+- 原生 helper 必须是固定命令、固定参数语法和有界输入输出，并在每次调用前校验受信摘要；不得
+  退化为任意 shell、PowerShell 或不校验的 sidecar。
+- 密钥的 Windows 首期边界为 DPAPI CurrentUser；它不等价于硬件密钥保护，因此需要用户级运行、
+  私有 ACL、日志禁密和恢复/迁移门禁作为补偿控制。
+- 票据打印不是从零实现：现有 `usb-port.ts` 已有 win32 直连。主路径应放在已签名 executor seam
+  后调用 Windows RAW spooler；COM/LPT/USB 直连保留为明确配置且可审计的退路。
+- 桌面验收的最小权威对象是安装/解包后的活动 V2 Electron 进程和窗口。系统浏览器可以辅助检查
+  服务，但无法证明 preload、IPC、打包资源、native helper、打印或安装升级链路。
+- Windows 的 Node `chmod(0600/0700)` 与目录 `fsync` 都不能作为安全/持久化证据：前者不表达
+  DACL，后者直接返回 `EPERM`。共享 helper 迁移后，Edge 404 项和 Server 1167 项均为 0 fail，
+  证明这些差异应由平台原语解决，而不是放宽调用方测试。
+- 秘密文件读取不能只依赖 `O_NOFOLLOW`：Windows 会忽略这类 POSIX 语义。读取边界必须先后比较
+  `lstat/fstat` 对象身份，并独立验证 reparse、link count 与私有 DACL；错误只返回稳定安全码。
+- 收紧 DACL 不能无条件调用 `SetOwner(current)`。受限登录令牌即使已是 owner，也未必有
+  `WRITE_OWNER`；正确做法是 owner 已为当前用户时只改 DACL，提升管理员且 owner 精确为
+  `BUILTIN\\Administrators` 时才归一化 owner，其他身份全部拒绝。只在提升 SSH 测试会漏掉该缺陷。
+- Windows 锁屏时 `CopyFromScreen` 会得到锁屏/桌面背景，即使目标进程已有窗口句柄，不能当应用
+  截图。可靠的远程桌面证据应组合：Playwright `_electron` 验证行为和 webPreferences，登录会话任务
+  证明 Session/窗口，`PrintWindow(PW_RENDERFULLCONTENT)` 只渲染目标窗口，并人工检查最终截图。
+- NSIS 的首次安装、同版本修复安装和卸载可远程自动验证；真正“升级”仍需两个不同版本。修复安装
+  应清掉旧安装树残留并保留 AppData，卸载应移除程序、快捷方式与注册表但按策略保留 AppData。
+- 软件层发现的打印队列不包含 XP-58。Winspool 接受队列枚举/失败分类不等于出纸，实体中文、金额、
+  条码、切刀、断连和重复保护仍必须在宏发现场逐项取证。
+- 进程就绪探针不能把 PID 文件“已创建”等同于“内容可读”：创建与写入之间存在真实竞态。等待逻辑
+  必须校验文件内容是合法正整数 PID，才能避免把空串解析成偶发门禁失败。
+- 跨层静态门禁应检查当前模块实际承担的责任。Electron session 只需断言调用统一 scheme wrapper；
+  `standard/secure/cors/fetch` 等特权注册不变量由 wrapper 自身单测独立锁定，避免重构后保留失真的
+  文本匹配。
+
+---
 
 ## 2026-08-27：被取代的实现里那个会误拒的守卫
 
@@ -18,7 +105,7 @@
 - `198b0d0` 合入的版本改为：要求恰好一条 `committed` 且 `authoritative=true` 的权威记录，
   额外绑定只允许是 `rolled_back` 且非权威、且 `candidate_sha` 与 `expected_sha` 与权威记录
   一致；并有专门用例 `superseded rollback accepts one committed authority plus an earlier
-  failed retry` 盯住它。维护这条路径时不要把守卫简化回“唯一绑定”。
+failed retry` 盯住它。维护这条路径时不要把守卫简化回“唯一绑定”。
 - 同一版本另有两处强化值得保留：`authority.expected_sha !== markerSha` 把树自身的 release
   marker 绑进身份校验；`liveIsCommitted` 额外要求 `verification_evidence_authoritative === true`。
   另新增只读盘点子命令 `--list-superseded-rollbacks`。
@@ -143,7 +230,6 @@
   readiness 冻结 `delivery=false`；若 0054 提前翻转 flag，回滚到 0053 会启动失败，因此启用预约必须
   留给后续显式、可回滚的状态迁移。
 
-
 ## 2026-08-12：0053 发布控制器嵌套目录回归
 
 - controller installer 原先枚举 `tools/cloud` 一级名字后直接 `readSource()`；历史上目录里只有
@@ -156,7 +242,6 @@
   形成后继主线 commit，并只发布 required/push CI 全绿的精确新 SHA。
 - retention 归档与发布失败证据保持分层：两个归档均可恢复；失败后无 transition、无新 history/
   controller/backup，线上仍是 `f276bdb / 0048`，所以后续开发不能在初次云发布闭环前启动。
-
 
 ## 2026-08-12：阶段 4.3 店厂交接与质检边界
 
@@ -990,6 +1075,7 @@
   精确 `127.0.0.1`/`::1`，不扩大连接边界。
 - finalize 失败后线上保持 `awaiting_external_verification`：marker 为
   `1a588e791d269cc1153b243776b56f137b130b45`，migration head 为 0046；不会自动回到旧版本。
+
 # 2026-08-12 0053 首次发布新发现
 
 - `main@02b3883b…0d4b` 的精确 push CI 已排除候选 SHA、workspace、真实 PostgreSQL 和
@@ -1107,6 +1193,7 @@
 - 合并后的 workspace 首轮 audit、format、9 包 lint、12 项 typecheck 均通过；Foundation 的两个失败
   是验收真源仍写 0063/测试仍期待 0057，以及 Compose 已支持隔离 PG 端口而测试仍只接受固定 8543，
   均属于集成断言滞后，不应放宽生产安全边界。
+
 # 2026-08-13：Hermes DeepSeek 凭据复用边界
 
 - hk-vps 重新核验固定 ED25519 指纹 `SHA256:Urp+pKpu/XD45nZlT+1tYJ5VYmV5X0fXStu+zmQjv4A`，

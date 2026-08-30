@@ -17,8 +17,7 @@ const governanceFiles = [
   "GEMINI.md",
   "HERMES.md",
 ];
-const currentDeliveryAdr =
-  "(docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)";
+const currentDeliveryAdr = "(docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md)";
 const activeV2ProductEntries = [
   "apps/server/src/local/create-runtime.ts",
   "apps/server/src/http/main.ts",
@@ -108,7 +107,7 @@ function findLocalProfileCopies(source) {
     .map(([label]) => label);
 }
 
-test("routes every governance entry point to ADR-64", async () => {
+test("routes every governance entry point to ADR-66", async () => {
   const contents = await Promise.all(governanceFiles.map(readRepositoryFile));
   const missingLinks = governanceFiles.filter(
     (_file, index) => !contents[index].includes(currentDeliveryAdr),
@@ -117,13 +116,13 @@ test("routes every governance entry point to ADR-64", async () => {
   assert.deepEqual(missingLinks, []);
 });
 
-test("leads the README with the generic v2 hk-vps cloud-test route", async () => {
+test("leads the README with the V2 Windows and Hongfa pilot route", async () => {
   const readmeLead = (await readRepositoryFile("README.md")).slice(0, 1500);
 
-  assert.match(readmeLead, /通用 V2.*hk-vps.*Linux Web Server\/Web.*5\.0.*合成数据/su);
+  assert.match(readmeLead, /通用 V2.*Windows 定制 EXE.*宏发.*受控运营试点.*根 `src\/`.*冻结 v1/su);
 });
 
-test("does not advertise stale Hongfa or Grok delivery ownership in the README lead", async () => {
+test("does not advertise stale Hongfa upgrade or Grok delivery ownership in the README lead", async () => {
   const readmeLead = (await readRepositoryFile("README.md")).slice(0, 1500);
 
   assert.doesNotMatch(readmeLead, /宏发升级候选版|Grok 单一技术负责人/u);
@@ -530,6 +529,9 @@ test("keeps browser and Electron acceptance sources inside canonical quality gat
     "e2e/**/*.ts",
     "playwright.electron.commissioning.config.ts",
     "playwright.electron.package.config.ts",
+    "playwright.electron.windows-functional.config.ts",
+    "playwright.electron.windows-package.config.ts",
+    "playwright.electron.windows-runtime.config.ts",
     "playwright.electron.config.ts",
   ]);
   assert.equal(webPackage.scripts.lint, "eslint . --ext .ts,.tsx,.mjs --max-warnings=0");
