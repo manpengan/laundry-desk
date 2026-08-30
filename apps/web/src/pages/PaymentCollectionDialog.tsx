@@ -1,6 +1,6 @@
 /** Independent counter collection / repayment against the append-only payment ledger. */
 
-import { Button, Dialog, Input, MoneyText, useToast } from "@laundry/ui";
+import { Button, Dialog, Input, MoneyInput, MoneyText, useToast } from "@laundry/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import type { CommandPort, QueryPort } from "../commands/types.js";
@@ -150,12 +150,11 @@ export function PaymentCollectionDialog({
           当前欠款 <MoneyText fen={order.balance_cents} />
           ；本次将追加一条不可修改的支付流水。
         </p>
-        <Input
+        <MoneyInput
           name="payment-amount-cents"
-          label="本次收款（分）"
-          inputMode="numeric"
-          value={amount}
-          onChange={(event) => setAmount(event.target.value)}
+          label="本次收款"
+          valueFen={amount}
+          onChangeFen={setAmount}
           disabled={busy}
         />
         <label className="ld-counter-select">

@@ -2,7 +2,7 @@
  * 取衣（order.pickup）— M2 counter form with partial multi-select via order.get.
  */
 
-import { Button, Input, useToast } from "@laundry/ui";
+import { Button, Input, MoneyInput, useToast } from "@laundry/ui";
 import { useCallback, useMemo, useState } from "react";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import {
@@ -289,13 +289,12 @@ export function PickupPage({
           />
         ) : null}
 
-        <Input
+        <MoneyInput
           name="collect-cents"
-          label="本次收款（分）"
-          inputMode="numeric"
-          value={collectText}
-          onChange={(event) => setCollectText(event.target.value)}
-          hint="整数分；0 表示不追加收款"
+          label="本次收款"
+          valueFen={collectText}
+          onChangeFen={setCollectText}
+          hint="0 表示不追加收款"
           disabled={disabled}
         />
 

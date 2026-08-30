@@ -329,7 +329,12 @@ button.ld-workbench-customers__row:hover {
   font-size: 13px;
 }
 
-@media (max-width: 1120px) {
+/* The three-column minimums total 830px + 32px of gaps = 862px, and the shell
+   spends 288px on the sidebar (208) plus main margin/padding (80). Below a
+   1150px viewport the third column cannot fit, so collapse before then rather
+   than letting it overflow — 1138px (1707px at 150% DPI) is a very common
+   retail display and used to land inside that dead zone. */
+@media (max-width: 1199px) {
   .ld-counter-grid--receive,
   .ld-counter-grid--workbench {
     grid-template-columns: repeat(2, minmax(0, 1fr));

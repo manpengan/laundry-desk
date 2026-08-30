@@ -1,5 +1,5 @@
 import type { FulfillmentOperationConfirmationSummary } from "@laundry/contracts";
-import { Button, Input, useToast } from "@laundry/ui";
+import { Button, Input, MoneyInput, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { AuthClient } from "../auth/AuthClient.js";
@@ -312,12 +312,11 @@ export function FulfillmentPage({
           value={note}
           onChange={(event) => setNote(event.target.value)}
         />
-        <Input
+        <MoneyInput
           name="fulfillment-compensation"
-          label="赔付（分）"
-          inputMode="numeric"
-          value={compensationCents}
-          onChange={(event) => setCompensationCents(event.target.value)}
+          label="赔付"
+          valueFen={compensationCents}
+          onChangeFen={setCompensationCents}
         />
         <select
           value={incidentKind}

@@ -86,13 +86,21 @@
   border-color: var(--lg-late-ink);
 }
 
+/* Field rows are flex + flex-wrap. Without a basis the field box sizes to the
+   input's intrinsic width (~193px) instead of sharing the row, which clips long
+   placeholders and values. */
 .ld-field {
   display: block;
+  flex: 1 1 220px;
+  min-width: 0;
 }
 
 .ld-field__label {
   display: block;
   margin-bottom: 6px;
+  /* Deterministic so --lg-field-label-offset (19 + 6) stays true: action
+     containers in a field row pad by that offset to sit on the input line. */
+  line-height: 19px;
   font-size: 13px;
   font-weight: 600;
   color: var(--lg-ink2);

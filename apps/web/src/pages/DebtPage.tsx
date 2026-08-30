@@ -3,7 +3,7 @@
  */
 
 import { Button, MoneyText, StatusBadge, formatMoneyFromFen, useToast } from "@laundry/ui";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
@@ -100,6 +100,12 @@ export function DebtPage({
     }
   }, [queryClient, toast]);
 
+  // The workbench already shows an outstanding-balance total, so the data is
+  // ready by the time this page opens; make the operator click only to refresh.
+  useEffect(() => {
+    void load();
+  }, [load]);
+
   const onCopyReminder = useCallback(
     async (row: OrderListRowView) => {
       const text = buildDebtReminderText(row);
@@ -114,11 +120,10 @@ export function DebtPage({
   );
 
   return (
-    <section className="ld-debt" data-testid="debt-section" aria-label="欠款">
-      <h2 className="ld-orders__title">欠款</h2>
-      <p className="ld-orders__hint">
-        余额 ≥ 1 分的应收订单（全日期，最多 {DEBT_LIST_LIMIT}{" "}
-        条）。可打开详情/取衣，或生成催付文案。
+    <section className="ld-shell-main lg-card ld-debt" data-testid="debt-section" aria-label="欠款">
+      <h2 className="ld-shell-main__title">欠款</h2>
+      <p className="ld-shell-main__hint">
+        仍有欠款的应收订单（全日期，最多 {DEBT_LIST_LIMIT} 条）。可打开详情/取衣，或生成催付文案。
       </p>
 
       <div className="ld-orders-form">

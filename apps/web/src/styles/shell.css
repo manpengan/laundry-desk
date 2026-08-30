@@ -722,7 +722,9 @@
 .ld-customers-search {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  /* Fields with a hint are taller; flex-end would lift their input off the
+     row line. Align on the label top so every input shares one baseline. */
+  align-items: flex-start;
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -730,12 +732,14 @@
 .ld-customers-search__actions {
   display: flex;
   gap: 8px;
+  flex: none;
+  padding-top: var(--lg-field-label-offset);
 }
 
 .ld-customers-form {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 12px;
   margin-bottom: 20px;
   padding: 14px;
@@ -747,6 +751,8 @@
 .ld-customers-form__actions {
   display: flex;
   gap: 8px;
+  flex: none;
+  padding-top: var(--lg-field-label-offset);
 }
 
 .ld-customers-list {

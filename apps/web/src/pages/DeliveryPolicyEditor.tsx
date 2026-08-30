@@ -1,4 +1,4 @@
-import { Button, Input } from "@laundry/ui";
+import { Button, Input, MoneyInput } from "@laundry/ui";
 import { useCallback } from "react";
 
 import {
@@ -116,11 +116,10 @@ export function DeliveryPolicyEditor({
               onChange={(event) => patchArea(area.row_id, { name: event.target.value })}
               disabled={disabled}
             />
-            <Input
-              label="单次运费（分）"
-              inputMode="numeric"
-              value={area.fee_text}
-              onChange={(event) => patchArea(area.row_id, { fee_text: event.target.value })}
+            <MoneyInput
+              label="单次运费"
+              valueFen={area.fee_text}
+              onChangeFen={(fen) => patchArea(area.row_id, { fee_text: fen })}
               disabled={disabled}
             />
             <label className="ld-delivery-policy__toggle">

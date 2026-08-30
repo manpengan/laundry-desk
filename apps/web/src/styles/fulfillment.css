@@ -156,7 +156,10 @@
 .ld-fulfillment__incident,
 .ld-fulfillment__rack {
   display: flex;
-  align-items: end;
+  /* A field carrying a hint is ~20px taller. align-items: end bottom-aligns the
+     boxes, which lifts that field's input off the row line and drops the next
+     label into its vertical band. Align on label top instead. */
+  align-items: start;
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -174,8 +177,17 @@
 .ld-fulfillment__filters > label,
 .ld-fulfillment__incident > label,
 .ld-fulfillment__rack > label {
-  min-width: 180px;
-  flex: 1;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+/* Buttons sit directly in these rows with no label above them; pad by the label
+   block so they land on the input line rather than the label line. */
+.ld-fulfillment__filters > .ld-btn,
+.ld-fulfillment__incident > .ld-btn,
+.ld-fulfillment__rack > .ld-btn {
+  flex: none;
+  margin-top: var(--lg-field-label-offset);
 }
 
 .ld-fulfillment select {

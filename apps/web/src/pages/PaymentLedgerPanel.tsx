@@ -1,4 +1,4 @@
-import { Button, Dialog, Input, MoneyText, useToast } from "@laundry/ui";
+import { Button, Dialog, Input, MoneyInput, MoneyText, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AuthClient } from "../auth/AuthClient.js";
@@ -255,12 +255,11 @@ export function PaymentLedgerPanel({
               <MoneyText fen={target.refundable_cents} />
               。提交后需另一位店长现场 PIN 复核。
             </p>
-            <Input
+            <MoneyInput
               name="payment-refund-amount-cents"
-              label="退款金额（分）"
-              inputMode="numeric"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
+              label="退款金额"
+              valueFen={amount}
+              onChangeFen={setAmount}
               disabled={busy}
               data-testid="payment-refund-amount"
             />

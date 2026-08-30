@@ -7,6 +7,8 @@ export {
   formatFenToYuan,
   formatMoneyFromFen,
   assertIntegerFen,
+  parseYuanToFen,
+  type ParsedYuan,
   YUAN_SIGN_UI,
 } from "./lib/money.js";
 export {
@@ -24,6 +26,7 @@ export {
   type ButtonSize,
 } from "./components/Button.js";
 export { Input, type InputProps } from "./components/Input.js";
+export { MoneyInput, type MoneyInputProps } from "./components/MoneyInput.js";
 export { Table, type TableProps, type TableColumn } from "./components/Table.js";
 export { Drawer, type DrawerProps } from "./components/Drawer.js";
 export { Dialog, type DialogProps } from "./components/Dialog.js";
