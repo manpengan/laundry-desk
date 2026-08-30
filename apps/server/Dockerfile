@@ -9,16 +9,21 @@ COPY apps/server/package.json apps/server/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/domain/package.json packages/domain/package.json
+COPY packages/platform-fs/package.json packages/platform-fs/package.json
 
-RUN pnpm install --frozen-lockfile --ignore-scripts --filter @laundry/server...
+RUN pnpm install --frozen-lockfile --ignore-scripts \
+  --filter @laundry/server... \
+  --filter @laundry/platform-fs...
 
 COPY apps/server apps/server
 COPY packages/config/tsconfig packages/config/tsconfig
 COPY packages/contracts packages/contracts
 COPY packages/domain packages/domain
+COPY packages/platform-fs packages/platform-fs
 COPY packages/db/src/migrations packages/db/src/migrations
 
-RUN pnpm --filter @laundry/server... build
+RUN pnpm --filter @laundry/platform-fs build \
+  && pnpm --filter @laundry/server... build
 
 COPY tools/compose tools/compose
 

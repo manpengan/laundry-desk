@@ -3,6 +3,36 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const dockerfileUrl = new URL("../../apps/server/Dockerfile.runtime", import.meta.url);
+const developmentDockerfileUrl = new URL("../../apps/server/Dockerfile", import.meta.url);
+
+test("server images build the file-linked platform filesystem package first", async () => {
+  for (const [name, url] of [
+    ["development", developmentDockerfileUrl],
+    ["runtime", dockerfileUrl],
+  ]) {
+    const source = await readFile(url, "utf8");
+    assert.match(
+      source,
+      /COPY packages\/platform-fs\/package\.json packages\/platform-fs\/package\.json/u,
+      `${name} image must install the platform package manifest`,
+    );
+    assert.match(
+      source,
+      /--filter @laundry\/platform-fs\.\.\./u,
+      `${name} image must install the file-linked platform package`,
+    );
+    assert.match(
+      source,
+      /COPY packages\/platform-fs packages\/platform-fs/u,
+      `${name} image must copy the platform package sources`,
+    );
+
+    const platformBuild = source.indexOf("pnpm --filter @laundry/platform-fs build");
+    const serverBuild = source.indexOf("pnpm --filter @laundry/server... build");
+    assert.ok(platformBuild >= 0, `${name} image must build the platform package`);
+    assert.ok(serverBuild > platformBuild, `${name} image must build Server after platform-fs`);
+  }
+});
 
 test("runtime server image contains a fixed compiled entrypoint and migration resources", async () => {
   const source = await readFile(dockerfileUrl, "utf8");
