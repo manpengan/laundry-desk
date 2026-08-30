@@ -9,11 +9,19 @@ import {
   openSync,
   readFileSync,
   realpathSync,
-  renameSync,
   writeFileSync,
 } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { z } from "zod";
+
+import {
+  flushDirectoryDurablySync,
+  inspectPrivateDirectorySync,
+  inspectPrivateFileSync,
+  replaceFileWriteThroughSync,
+  securePrivateDirectorySync,
+  securePrivateFileSync,
+} from "@laundry/platform-fs";
 
 import { type Kek, type KekStore, type WrappedDek } from "./dek-kek.js";
 
@@ -53,7 +61,10 @@ function prepareRoot(path: string): string {
   if (!meta.isDirectory() || meta.isSymbolicLink()) {
     throw new Error("Queue key root must be a real directory");
   }
-  return realpathSync(path);
+  securePrivateDirectorySync(path);
+  const root = realpathSync(path);
+  inspectPrivateDirectorySync(root);
+  return root;
 }
 
 function freezeState(state: KeyState): KeyState {
@@ -68,18 +79,14 @@ function writePrivateJson(root: string, path: string, state: KeyState): void {
   const temp = join(root, ".queue-key.staging");
   const fd = openSync(temp, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC, 0o600);
   try {
+    securePrivateFileSync(temp);
     writeFileSync(fd, `${JSON.stringify(KeyStateSchema.parse(state))}\n`, "utf8");
     fsyncSync(fd);
   } finally {
     closeSync(fd);
   }
-  renameSync(temp, path);
-  const dirFd = openSync(root, constants.O_RDONLY);
-  try {
-    fsyncSync(dirFd);
-  } finally {
-    closeSync(dirFd);
-  }
+  replaceFileWriteThroughSync(temp, path);
+  flushDirectoryDurablySync(root);
 }
 
 function serializeWrapped(wrapped: WrappedDek): NonNullable<KeyState["wrapped_dek"]> {
@@ -110,7 +117,7 @@ export class SafeStorageKekStore implements KekStore {
 
   constructor(rootPath: string, safeStorage: SafeStorageSurface) {
     if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error("macOS Keychain encryption is unavailable");
+      throw new Error("OS protected storage encryption is unavailable");
     }
     this.root = prepareRoot(rootPath);
     this.path = join(this.root, "queue-key.json");
@@ -125,6 +132,7 @@ export class SafeStorageKekStore implements KekStore {
     if (!meta.isFile() || meta.isSymbolicLink() || meta.size > 64 * 1024) {
       throw new Error("Invalid queue key state file");
     }
+    inspectPrivateFileSync(this.path);
     const parsed = KeyStateSchema.parse(JSON.parse(readFileSync(this.path, "utf8")) as unknown);
     this.state = freezeState(parsed);
     return this.state;

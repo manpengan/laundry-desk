@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { securePrivateFile } from "@laundry/platform-fs";
+
 import { createLocalRuntime, createMemoryLocalRuntime } from "./create-runtime.js";
 import {
   parseLocalHostConfig,
@@ -218,6 +220,8 @@ test("loads signing secrets from container secret files", async (t) => {
   const csrfPath = join(root, "csrf");
   await writeFile(accessPath, ACCESS_SECRET, { mode: 0o600 });
   await writeFile(csrfPath, CSRF_SECRET, { mode: 0o600 });
+  await securePrivateFile(accessPath);
+  await securePrivateFile(csrfPath);
 
   assert.deepEqual(
     parseLocalServerConfig({

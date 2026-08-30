@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@laundry/contracts": "file:../../packages/contracts",
+    "@laundry/platform-fs": "file:../../packages/platform-fs",
     "iconv-lite": "0.6.3",
     "zod": "4.4.3"
   },

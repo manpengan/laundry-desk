@@ -12,6 +12,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
 
+import { inspectPrivateDirectory, inspectPrivateFile } from "@laundry/platform-fs";
+
 import { createFileSpool, SpoolError } from "./file-spool.js";
 
 const created: string[] = [];
@@ -50,8 +52,13 @@ test("writes a private artifact inside the spool root with a content hash", asyn
 
   const finalPath = join(spool.rootPath, artifact.relative_path);
   assert.equal(await readFile(finalPath, "utf8"), writeInput().content);
-  assert.equal(((await lstat(finalPath)).mode & 0o777).toString(8), "600");
-  assert.equal(((await lstat(spool.rootPath)).mode & 0o777).toString(8), "700");
+  if (process.platform === "win32") {
+    assert.equal((await inspectPrivateFile(finalPath)).scheme, "windows-dacl-v1");
+    assert.equal((await inspectPrivateDirectory(spool.rootPath)).scheme, "windows-dacl-v1");
+  } else {
+    assert.equal(((await lstat(finalPath)).mode & 0o777).toString(8), "600");
+    assert.equal(((await lstat(spool.rootPath)).mode & 0o777).toString(8), "700");
+  }
 });
 
 test("leaves no staging file behind", async () => {

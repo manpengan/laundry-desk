@@ -16,6 +16,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
 
+import { inspectPrivateDirectory, inspectPrivateFile } from "@laundry/platform-fs";
+
 import { createPhotoFileStore, PhotoFileError } from "./file-store.js";
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]);
@@ -60,13 +62,24 @@ test("installs and reads private JPEG, PNG, and WebP files with integrity metada
     assert.match(stored.content_sha256, /^[0-9a-f]{64}$/u);
     assert.equal(stored.byte_size, bytes.byteLength);
     assert.deepEqual((await store.read(stored)).bytes, bytes);
-    assert.equal(
-      ((await lstat(join(store.rootPath, stored.storage_key))).mode & 0o777).toString(8),
-      "600",
-    );
+    if (process.platform === "win32") {
+      assert.equal(
+        (await inspectPrivateFile(join(store.rootPath, stored.storage_key))).scheme,
+        "windows-dacl-v1",
+      );
+    } else {
+      assert.equal(
+        ((await lstat(join(store.rootPath, stored.storage_key))).mode & 0o777).toString(8),
+        "600",
+      );
+    }
   }
 
-  assert.equal(((await lstat(store.rootPath)).mode & 0o777).toString(8), "700");
+  if (process.platform === "win32") {
+    assert.equal((await inspectPrivateDirectory(store.rootPath)).scheme, "windows-dacl-v1");
+  } else {
+    assert.equal(((await lstat(store.rootPath)).mode & 0o777).toString(8), "700");
+  }
   assert.equal(
     (await readdir(store.rootPath)).some((name) => name.endsWith(".staging")),
     false,
@@ -75,10 +88,12 @@ test("installs and reads private JPEG, PNG, and WebP files with integrity metada
     await readFile(join(store.rootPath, ".laundry-photo-store-v1"), "utf8"),
     "laundry-desk-photo-store:v1\n",
   );
-  assert.equal(
-    ((await lstat(join(store.rootPath, ".laundry-photo-store-v1"))).mode & 0o777).toString(8),
-    "600",
-  );
+  const markerPath = join(store.rootPath, ".laundry-photo-store-v1");
+  if (process.platform === "win32") {
+    assert.equal((await inspectPrivateFile(markerPath)).scheme, "windows-dacl-v1");
+  } else {
+    assert.equal(((await lstat(markerPath)).mode & 0o777).toString(8), "600");
+  }
 });
 
 test("rejects empty, oversized, disguised, and unsupported photo bytes", async () => {
@@ -154,12 +169,13 @@ test("refuses filesystem root, unowned directories, and symlink ancestors", asyn
   const unowned = join(root, "unowned");
   await mkdir(unowned, { mode: 0o755 });
   await chmod(unowned, 0o755);
+  const originalMode = (await lstat(unowned)).mode & 0o777;
   await writeFile(join(unowned, "do-not-touch.txt"), "keep");
   await assert.rejects(
     () => createPhotoFileStore({ rootPath: unowned }),
     hasCode("PHOTO_ROOT_UNOWNED"),
   );
-  assert.equal(((await lstat(unowned)).mode & 0o777).toString(8), "755");
+  assert.equal((await lstat(unowned)).mode & 0o777, originalMode);
   assert.equal(await readFile(join(unowned, "do-not-touch.txt"), "utf8"), "keep");
 
   const realParent = join(root, "real-parent");

@@ -116,7 +116,7 @@ test("rejects symlink, hardlink, and non-private sequence state", async (t) => {
       await unlink(alias);
     });
 
-    await t.test("mode", async () => {
+    await t.test("mode", { skip: process.platform === "win32" }, async () => {
       await chmod(path, 0o644);
       assert.throws(() => new FileGrantSequenceStore(root), /Invalid offline grant sequence file/u);
       await chmod(path, 0o600);

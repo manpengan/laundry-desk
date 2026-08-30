@@ -13,6 +13,7 @@ import {
   type DesktopSessionView,
   type OfflineGrantPayload,
 } from "@laundry/contracts";
+import { inspectPrivateDirectory, inspectPrivateFile } from "@laundry/platform-fs";
 
 import { bytesToBase64Url } from "../pairing/device-keys.js";
 import { MemoryAuthorityTrustStore } from "../pairing/authority-trust.js";
@@ -128,8 +129,13 @@ test("encrypts the strict query cache as one private atomic file and restores ex
     const path = join(root, "offline-read-cache.json");
     const wire = await readFile(path, "utf8");
     assert.doesNotMatch(wire, /order\.list|13800000001|session_id|offline_grant/u);
-    assert.equal((await stat(root)).mode & 0o777, 0o700);
-    assert.equal((await stat(path)).mode & 0o777, 0o600);
+    if (process.platform === "win32") {
+      assert.equal((await inspectPrivateDirectory(root)).scheme, "windows-dacl-v1");
+      assert.equal((await inspectPrivateFile(path)).scheme, "windows-dacl-v1");
+    } else {
+      assert.equal((await stat(root)).mode & 0o777, 0o700);
+      assert.equal((await stat(path)).mode & 0o777, 0o600);
+    }
     assert.deepEqual(await cache.get(session, orderListInput), orderListResult);
     assert.equal(
       await cache.get(session, { name: "order.list", body: { status: "closed", limit: 20 } }),

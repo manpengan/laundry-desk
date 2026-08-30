@@ -4,6 +4,7 @@ import { lstat, mkdir, open, readdir, rename, rm } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, posix, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import properLock from "proper-lockfile";
+import { flushDirectoryDurably, replaceFileWriteThrough } from "@laundry/platform-fs";
 
 const MANIFEST_FILE = "manifest.json";
 const BUNDLES_DIRECTORY = "bundles";
@@ -279,16 +280,7 @@ async function reportFsync(dependencies, event) {
 }
 
 async function fsyncDirectory(directoryPath, dependencies, report = true) {
-  const handle = await open(directoryPath, constants.O_RDONLY);
-  try {
-    const metadata = await handle.stat();
-    if (!metadata.isDirectory()) {
-      throw new Error(`SPA durable directory is not a directory: ${directoryPath}`);
-    }
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
+  await flushDirectoryDurably(directoryPath);
   if (report) await reportFsync(dependencies, { kind: "directory", path: directoryPath });
 }
 
@@ -490,8 +482,8 @@ async function commitManifest(targetPath, manifest, dependencies, onCommitted) {
       throw new Error("SPA temporary manifest bundle id changed");
     }
     await dependencies.beforeManifestCommit?.();
-    const renamePath = dependencies.renamePath ?? rename;
-    await renamePath(temporaryPath, manifestPath);
+    const replacePath = dependencies.renamePath ?? replaceFileWriteThrough;
+    await replacePath(temporaryPath, manifestPath);
     onCommitted();
     await dependencies.afterManifestRename?.();
     await fsyncDirectory(targetPath, dependencies);

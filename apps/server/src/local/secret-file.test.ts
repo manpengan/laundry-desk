@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { securePrivateFile } from "@laundry/platform-fs";
+
 import { readSecretValue } from "./secret-file.js";
 
 test("reads an absolute regular secret file without exposing it through process env", async (t) => {
@@ -12,6 +14,7 @@ test("reads an absolute regular secret file without exposing it through process 
   const path = join(root, "access-token");
   const secret = "secret-file-value-is-at-least-thirty-two-bytes";
   await writeFile(path, secret, { mode: 0o600 });
+  await securePrivateFile(path);
 
   assert.equal(
     readSecretValue({ LAUNDRY_ACCESS_TOKEN_SECRET_FILE: path }, "LAUNDRY_ACCESS_TOKEN_SECRET"),
@@ -27,9 +30,12 @@ test("fails closed for ambiguous, linked, multiline, and oversized secret source
   const multiline = join(root, "multiline");
   const oversized = join(root, "oversized");
   await writeFile(regular, "safe-secret-value", { mode: 0o600 });
+  await securePrivateFile(regular);
   await symlink(regular, linked);
   await writeFile(multiline, "secret\nsecond-line", { mode: 0o600 });
+  await securePrivateFile(multiline);
   await writeFile(oversized, "x".repeat(16_385), { mode: 0o600 });
+  await securePrivateFile(oversized);
 
   assert.throws(
     () =>

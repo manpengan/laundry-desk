@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { securePrivateFile } from "@laundry/platform-fs";
+
 import {
   BOOTSTRAP_APPROVER_STAFF_ID,
   BootstrapError,
@@ -147,6 +149,7 @@ test("bootstrap consumes setup credentials only through *_FILE inputs", async (t
   for (const [name, value] of Object.entries(values)) {
     const path = join(root, name.toLowerCase());
     await writeFile(path, value, { mode: 0o600 });
+    await securePrivateFile(path);
     fileEnvironment[`${name}_FILE`] = path;
   }
   const harness = createHarness();
@@ -181,6 +184,7 @@ test("commission consumes only the second administrator through private files", 
   for (const [name, value] of Object.entries(values)) {
     const path = join(root, name.toLowerCase());
     await writeFile(path, value, { mode: 0o600 });
+    await securePrivateFile(path);
     env[`${name}_FILE`] = path;
   }
   const harness = createHarness();

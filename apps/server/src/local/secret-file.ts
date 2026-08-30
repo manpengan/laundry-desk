@@ -1,5 +1,7 @@
-import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
+
+import { inspectPrivateFileSync } from "@laundry/platform-fs";
 
 const MAXIMUM_SECRET_BYTES = 16_384;
 
@@ -19,20 +21,42 @@ const readPrivateFile = (path: string): string => {
 
   let descriptor: number | null = null;
   try {
-    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const metadata = fstatSync(descriptor);
-    if (!metadata.isFile() || metadata.size <= 0 || metadata.size > MAXIMUM_SECRET_BYTES) {
+    const before = lstatSync(path);
+    if (before.isSymbolicLink() || !before.isFile()) {
+      throw new SecretFileError("SECRET_FILE_INVALID");
+    }
+    inspectPrivateFileSync(path);
+    descriptor = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    const opened = fstatSync(descriptor);
+    if (
+      !opened.isFile() ||
+      opened.dev !== before.dev ||
+      opened.ino !== before.ino ||
+      opened.nlink !== 1 ||
+      opened.size <= 0 ||
+      opened.size > MAXIMUM_SECRET_BYTES
+    ) {
       throw new SecretFileError("SECRET_FILE_INVALID");
     }
     const value = readFileSync(descriptor, "utf8");
+    const afterRead = fstatSync(descriptor);
+    const current = lstatSync(path);
     if (
-      Buffer.byteLength(value, "utf8") !== metadata.size ||
+      current.isSymbolicLink() ||
+      !current.isFile() ||
+      current.dev !== opened.dev ||
+      current.ino !== opened.ino ||
+      afterRead.dev !== opened.dev ||
+      afterRead.ino !== opened.ino ||
+      afterRead.size !== opened.size ||
+      Buffer.byteLength(value, "utf8") !== opened.size ||
       value.includes("\0") ||
       value.includes("\n") ||
       value.includes("\r")
     ) {
       throw new SecretFileError("SECRET_FILE_INVALID");
     }
+    inspectPrivateFileSync(path);
     return value;
   } catch (error) {
     if (error instanceof SecretFileError) throw error;

@@ -14,6 +14,13 @@ import {
 } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
+import {
+  flushDirectoryDurably,
+  inspectPrivateDirectory,
+  replaceFileWriteThrough,
+  securePrivateDirectory,
+  securePrivateFile,
+} from "@laundry/platform-fs";
 
 import {
   SignedReleaseManifestSchema,
@@ -124,6 +131,12 @@ async function downloadVerified(
     throw new Error("Update artifact metadata is invalid");
   }
   const root = await realpath(destinationDirectory);
+  const rootMetadata = await lstat(root);
+  if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink()) {
+    throw new Error("Update artifact destination must be a real directory");
+  }
+  await securePrivateDirectory(root);
+  await inspectPrivateDirectory(root);
   const finalPath = join(root, artifact.name);
   const tempPath = join(root, `.${artifact.name}.downloading`);
   assertContained(root, finalPath);
@@ -140,6 +153,7 @@ async function downloadVerified(
   const hash = createHash("sha256");
   let received = 0;
   try {
+    await securePrivateFile(tempPath);
     const reader = response.body.getReader();
     for (;;) {
       const chunk = await reader.read();
@@ -158,13 +172,8 @@ async function downloadVerified(
     if (received !== artifact.size_bytes || digest !== artifact.sha256) {
       throw new Error("Update artifact did not match its signed size and digest");
     }
-    await rename(tempPath, finalPath);
-    const directory = await open(root, constants.O_RDONLY);
-    try {
-      await directory.sync();
-    } finally {
-      await directory.close();
-    }
+    await replaceFileWriteThrough(tempPath, finalPath);
+    await flushDirectoryDurably(root);
     return Object.freeze({ path: finalPath, sha256: digest });
   } catch (error) {
     await handle.close().catch(() => undefined);

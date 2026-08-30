@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { securePrivateFile } from "@laundry/platform-fs";
+
 import { resolvePgUrls, resolveRuntimeDatabaseUrl } from "./pg-pool.js";
 
 test("runtime database resolution never falls back to an admin URL", () => {
@@ -32,6 +34,7 @@ test("runtime database resolution accepts a private DATABASE_URL_FILE", async ()
   const path = join(root, "database-url");
   const appUrl = "postgresql://laundry_app:file-secret@postgres:5432/laundry_v2";
   await writeFile(path, appUrl, { mode: 0o600 });
+  await securePrivateFile(path);
 
   assert.equal(resolveRuntimeDatabaseUrl({ DATABASE_URL_FILE: path }), appUrl);
   assert.throws(

@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
+import { securePrivateFile } from "@laundry/platform-fs";
+
 import type { LocalRuntime } from "../local/create-runtime.js";
 import { createHttpRuntime } from "./http-runtime.js";
 
@@ -58,6 +60,7 @@ test("listenable HTTP runtime accepts one strict DATABASE_URL_FILE", async () =>
   const path = join(root, "database-url");
   const env = Object.freeze({ DATABASE_URL_FILE: path, LAUNDRY_CONTAINER_RUNTIME: "1" });
   await writeFile(path, "postgresql://laundry_app:secret@postgres/laundry_v2", { mode: 0o600 });
+  await securePrivateFile(path);
   try {
     const received: NodeJS.ProcessEnv[] = [];
     const runtime = await createHttpRuntime(env, {
@@ -79,10 +82,12 @@ test("listenable HTTP runtime rejects ambiguous and unsafe DATABASE_URL_FILE inp
   const linked = join(root, "linked");
   const multiline = join(root, "multiline");
   await writeFile(regular, "postgresql://laundry_app:secret@postgres/laundry_v2", { mode: 0o600 });
+  await securePrivateFile(regular);
   await symlink(regular, linked);
   await writeFile(multiline, "postgresql://laundry_app:secret@postgres/laundry_v2\n", {
     mode: 0o600,
   });
+  await securePrivateFile(multiline);
   let factoryCalls = 0;
   const createRuntime = async (): Promise<LocalRuntime> => {
     factoryCalls += 1;

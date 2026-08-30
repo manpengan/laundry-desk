@@ -4,6 +4,7 @@ import { chmod, link, lstat, mkdtemp, readFile, rm, symlink, writeFile } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { inspectPrivateDirectory, inspectPrivateFile } from "@laundry/platform-fs";
 
 import type { SafeStorageSurface } from "../queue/safe-storage-kek.js";
 import { SafeStorageDeviceKeyStore } from "./safe-storage-device-keys.js";
@@ -18,7 +19,7 @@ const fakeSafeStorage: SafeStorageSurface = Object.freeze({
   },
 });
 
-test("Keychain-backed device key survives restart without plaintext private material", async () => {
+test("OS-protected device key survives restart without plaintext private material", async () => {
   const root = await mkdtemp(join(tmpdir(), "laundry-device-key-"));
   try {
     const first = new SafeStorageDeviceKeyStore(root, fakeSafeStorage);
@@ -62,7 +63,7 @@ test("device key store refuses to start without OS encryption", async () => {
             isEncryptionAvailable: () => false,
           }),
         ),
-      /Keychain/u,
+      /protected storage/u,
     );
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -74,8 +75,16 @@ test("device key state and its root stay owner-private", async () => {
   try {
     const store = new SafeStorageDeviceKeyStore(root, fakeSafeStorage);
     store.generate();
-    assert.equal((await lstat(root)).mode & 0o777, 0o700);
-    assert.equal((await lstat(join(root, "device-signing-key.json"))).mode & 0o777, 0o600);
+    if (process.platform === "win32") {
+      assert.equal((await inspectPrivateDirectory(root)).scheme, "windows-dacl-v1");
+      assert.equal(
+        (await inspectPrivateFile(join(root, "device-signing-key.json"))).scheme,
+        "windows-dacl-v1",
+      );
+    } else {
+      assert.equal((await lstat(root)).mode & 0o777, 0o700);
+      assert.equal((await lstat(join(root, "device-signing-key.json"))).mode & 0o777, 0o600);
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -108,7 +117,7 @@ test("device key state rejects symlinks, hard links, and public modes", async (t
     }
   });
 
-  await t.test("public mode", async () => {
+  await t.test("public mode", { skip: process.platform === "win32" }, async () => {
     const root = await mkdtemp(join(tmpdir(), "laundry-device-key-public-"));
     try {
       const store = new SafeStorageDeviceKeyStore(root, fakeSafeStorage);

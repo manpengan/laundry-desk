@@ -1,9 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import {
-  chmodSync,
   closeSync,
-  fchmodSync,
   fstatSync,
   fsyncSync,
   lstatSync,
@@ -11,12 +9,20 @@ import {
   openSync,
   readFileSync,
   realpathSync,
-  renameSync,
   unlinkSync,
   writeFileSync,
   type Stats,
 } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
+import {
+  flushDirectoryDurablySync,
+  inspectPrivateDirectorySync,
+  inspectPrivateFileSync,
+  replaceFileWriteThroughSync,
+  securePrivateDirectorySync,
+  securePrivateFileSync,
+  type PrivateFileSecurity,
+} from "@laundry/platform-fs";
 import { z } from "zod";
 
 const PositiveSafeIntegerSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
@@ -80,8 +86,14 @@ function preparePrivateRoot(path: string): string {
   if (!meta.isDirectory() || meta.isSymbolicLink()) {
     throw new Error("Grant sequence root must be a real directory");
   }
-  chmodSync(path, 0o700);
-  return realpathSync(path);
+  securePrivateDirectorySync(path);
+  const root = realpathSync(path);
+  inspectPrivateDirectorySync(root);
+  return root;
+}
+
+function sameSecurity(left: PrivateFileSecurity, right: PrivateFileSecurity): boolean {
+  return left.scheme === right.scheme && left.descriptorSha256 === right.descriptorSha256;
 }
 
 function replaceEntry(
@@ -161,6 +173,7 @@ export class FileGrantSequenceStore implements GrantSequenceStore {
       }
       const before = fstatSync(fd);
       const pathBefore = lstatSync(this.path);
+      const securityBefore = inspectPrivateFileSync(this.path);
       if (
         !this.validStateMetadata(pathBefore) ||
         !this.validStateMetadata(before) ||
@@ -171,12 +184,14 @@ export class FileGrantSequenceStore implements GrantSequenceStore {
       const content = readFileSync(fd, "utf8");
       const after = fstatSync(fd);
       const pathAfter = lstatSync(this.path);
+      const securityAfter = inspectPrivateFileSync(this.path);
       if (
         Buffer.byteLength(content, "utf8") !== before.size ||
         !this.validStateMetadata(after) ||
         !this.validStateMetadata(pathAfter) ||
         !this.sameSnapshot(before, after) ||
-        !this.sameSnapshot(after, pathAfter)
+        !this.sameSnapshot(after, pathAfter) ||
+        !sameSecurity(securityBefore, securityAfter)
       ) {
         throw new Error("Invalid offline grant sequence file");
       }
@@ -196,7 +211,6 @@ export class FileGrantSequenceStore implements GrantSequenceStore {
       meta.isFile() &&
       !meta.isSymbolicLink() &&
       meta.nlink === 1 &&
-      (meta.mode & 0o777) === 0o600 &&
       meta.size > 0 &&
       meta.size <= 2 * 1_024 * 1_024
     );
@@ -246,7 +260,7 @@ export class FileGrantSequenceStore implements GrantSequenceStore {
     );
     let failure: unknown = null;
     try {
-      fchmodSync(fd, 0o600);
+      securePrivateFileSync(staging);
       writeFileSync(fd, `${JSON.stringify(state)}\n`, "utf8");
       fsyncSync(fd);
     } catch (error) {
@@ -267,7 +281,7 @@ export class FileGrantSequenceStore implements GrantSequenceStore {
       throw failure;
     }
     try {
-      renameSync(staging, this.path);
+      replaceFileWriteThroughSync(staging, this.path);
     } catch (error) {
       try {
         unlinkSync(staging);
@@ -280,11 +294,6 @@ export class FileGrantSequenceStore implements GrantSequenceStore {
   }
 
   private syncRoot(): void {
-    const fd = openSync(this.root, constants.O_RDONLY);
-    try {
-      fsyncSync(fd);
-    } finally {
-      closeSync(fd);
-    }
+    flushDirectoryDurablySync(this.root);
   }
 }

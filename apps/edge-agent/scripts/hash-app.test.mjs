@@ -61,7 +61,9 @@ test("file bytes, relative path, mode, and symlink target are hash inputs", asyn
 
   const modeRoot = await createAppFixture(join(temporary, "mode"));
   await chmod(join(modeRoot, "Contents", "MacOS", "laundry-desk V2"), 0o700);
-  assert.notEqual(await hashAppTree(modeRoot), baseline);
+  if (process.platform !== "win32") {
+    assert.notEqual(await hashAppTree(modeRoot), baseline);
+  }
 
   const linkRoot = await createAppFixture(join(temporary, "link"));
   await mkdir(join(linkRoot, "Contents", "Frameworks", "Demo.framework", "Versions", "B"), {
@@ -138,6 +140,8 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
   assert.match(builderText, /^\s+output:\s+release$/mu);
   assert.match(builderText, /^asar:\s+true$/mu);
   assert.match(builderText, /^afterPack:\s+\.\/scripts\/prune-packaged-spa\.mjs$/mu);
+  assert.match(builderText, /^npmRebuild:\s+false$/mu);
+  assert.match(builderText, /^electronDist:\s+\.\.\/\.\.\/node_modules\/electron\/dist$/mu);
   assert.match(builderText, /^extraResources:\n\s+-\s+from:\s+resources\/spa$/mu);
   assert.match(builderText, /^\s+to:\s+spa$/mu);
   assert.match(builderText, /^\s+-\s+dist\/preload\.cjs$/mu);
@@ -197,10 +201,12 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
     "dist/print/main-runtime.js",
     "dist/print/printer-config.js",
     "dist/print/printer-smoke.js",
+    "dist/print/raw-print-port.js",
     "dist/print/runtime.js",
     "dist/print/signed-executor.js",
     "dist/print/snapshot-render.js",
     "dist/print/usb-port.js",
+    "dist/print/windows-printer-pilot.js",
     "dist/pairing/sign-receipt.js",
     "dist/pairing/verify-ticket.js",
   ]) {
@@ -239,25 +245,77 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
     assert.ok(filesBlock.includes(exclusion), `missing package exclusion: ${exclusion}`);
   }
   assert.doesNotMatch(builderText, /hongfa|\.\.\/\.\.\/src/iu);
-  assert.doesNotMatch(builderText, /dmg|notari|publish|windows|nsis/iu);
+  assert.doesNotMatch(builderText, /dmg|notari|publish/iu);
+  assert.match(builderText, /^forceCodeSigning:\s+false$/mu);
+  assert.match(builderText, /^win:\n/mu);
+  assert.match(builderText, /^\s+requestedExecutionLevel:\s+asInvoker$/mu);
+  assert.match(builderText, /^\s+signExecutable:\s+false$/mu);
+  assert.match(builderText, /^\s+-\s+target:\s+nsis$/mu);
+  assert.match(builderText, /^\s+-\s+x64$/mu);
+  assert.match(builderText, /^\s+-\s+from:\s+resources\/windows-helper$/mu);
+  assert.match(builderText, /^\s+to:\s+windows-helper$/mu);
+  assert.match(builderText, /^nsis:\n/mu);
+  assert.match(builderText, /^\s+oneClick:\s+false$/mu);
+  assert.match(builderText, /^\s+perMachine:\s+false$/mu);
+  assert.match(builderText, /^\s+allowElevation:\s+false$/mu);
+  assert.match(builderText, /^\s+allowToChangeInstallationDirectory:\s+true$/mu);
+  assert.match(builderText, /^\s+packElevateHelper:\s+false$/mu);
+  assert.match(builderText, /^\s+deleteAppDataOnUninstall:\s+false$/mu);
+  assert.match(
+    builderText,
+    /^\s+artifactName:\s+"laundry-desk-v2-\$\{version\}-windows-x64-development-only\.\$\{ext\}"$/mu,
+  );
+  assert.match(filesBlock, /^\s+-\s+"!\*\*\/node_modules\/@laundry\/platform-fs\/native\/\*\*"$/mu);
 
   assert.equal(packageJson.main, "./dist/main.js");
+  assert.deepEqual(Object.keys(packageJson.dependencies).sort(), [
+    "@laundry/contracts",
+    "@laundry/platform-fs",
+    "iconv-lite",
+    "zod",
+  ]);
   assert.equal(packageJson.scripts["preload:bundle"], "node scripts/build-preload.mjs");
   assert.equal(packageJson.scripts["hash:app"], "node scripts/hash-app.mjs");
   const packageMac = packageJson.scripts["package:mac"];
   assert.equal(typeof packageMac, "string");
+  const platformBuildIndex = packageMac.indexOf("pnpm --filter @laundry/platform-fs build");
   const graphBuildIndex = packageMac.indexOf(
     "pnpm exec turbo run build --filter=@laundry/edge-agent",
   );
   const preloadIndex = packageMac.indexOf("pnpm run preload:bundle");
   const builderIndex = packageMac.indexOf("electron-builder");
-  assert.ok(graphBuildIndex >= 0 && preloadIndex > graphBuildIndex && builderIndex > preloadIndex);
+  assert.ok(
+    platformBuildIndex >= 0 &&
+      graphBuildIndex > platformBuildIndex &&
+      preloadIndex > graphBuildIndex &&
+      builderIndex > preloadIndex,
+  );
   assert.deepEqual(turboJson.tasks["@laundry/edge-agent#build"].outputs, [
     "dist/**",
     "resources/spa/**",
   ]);
   assert.match(packageMac, /electron-builder\.yml/u);
   assert.doesNotMatch(packageMac, /dmg|notari|publish|windows|nsis|root|src\//iu);
+
+  assert.equal(packageJson.scripts["helper:stage:win"], "node scripts/stage-windows-helper.mjs");
+  const packageWin = packageJson.scripts["package:win"];
+  assert.equal(typeof packageWin, "string");
+  const winPlatformBuildIndex = packageWin.indexOf("pnpm --filter @laundry/platform-fs build");
+  const winGraphBuildIndex = packageWin.indexOf(
+    "pnpm exec turbo run build --filter=@laundry/edge-agent",
+  );
+  const helperStageIndex = packageWin.indexOf("pnpm run helper:stage:win");
+  const winPreloadIndex = packageWin.indexOf("pnpm run preload:bundle");
+  const winBuilderIndex = packageWin.indexOf("electron-builder");
+  assert.ok(
+    winPlatformBuildIndex >= 0 &&
+      winGraphBuildIndex > winPlatformBuildIndex &&
+      helperStageIndex > winGraphBuildIndex &&
+      winPreloadIndex > helperStageIndex &&
+      winBuilderIndex > winPreloadIndex,
+  );
+  assert.match(packageWin, /--win nsis --x64/u);
+  assert.doesNotMatch(packageWin, /hongfa|publish|root|src\//iu);
 });
 
 test("packaged runtime whitelist is closed under relative JavaScript imports", async () => {
@@ -304,6 +362,37 @@ test("mac acceptance does not persist credentials or inherit arbitrary host secr
   assert.match(smoke, /await waitForProcessGroupExit\(processId\)/u);
   assert.match(smoke, /args:\s*\[[^\]]*"--use-mock-keychain"\]/u);
   assert.doesNotMatch(`${main}\n${localBuilder}\n${releaseBuilder}`, /--use-mock-keychain/u);
+});
+
+test("Windows package evidence uses Electron, DPAPI and a credential-free fixed artifact path", async () => {
+  const config = await readFile(
+    join(packageRoot, "playwright.electron.windows-package.config.ts"),
+    "utf8",
+  );
+  const smoke = await readFile(join(packageRoot, "e2e", "package-win.spec.ts"), "utf8");
+  const inspector = await readFile(
+    join(packageRoot, "scripts", "inspect-packaged-win.mjs"),
+    "utf8",
+  );
+  const packageJson = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
+
+  assert.match(config, /trace:\s*"off"/u);
+  assert.match(config, /screenshot:\s*"off"/u);
+  assert.match(config, /video:\s*"off"/u);
+  assert.match(smoke, /_electron as electron/u);
+  assert.match(smoke, /safeStorage\.isEncryptionAvailable\(\)/u);
+  assert.match(smoke, /process\.platform\)\.toBe\("win32"\)/u);
+  assert.match(smoke, /test-results["',\s\n]+windows-package["',\s\n]+desktop-smoke\.png/u);
+  assert.match(smoke, /printer-config\.json/u);
+  assert.doesNotMatch(smoke, /Object\.entries\(process\.env\)|--use-mock-keychain/u);
+  assert.match(inspector, /Get-AuthenticodeSignature/u);
+  assert.match(inspector, /0x8664/u);
+  assert.match(inspector, /development-only/u);
+  assert.equal(packageJson.scripts["package:inspect:win"], "node scripts/inspect-packaged-win.mjs");
+  assert.equal(
+    packageJson.scripts["package:smoke:win"],
+    "pnpm exec playwright test -c playwright.electron.windows-package.config.ts",
+  );
 });
 
 test("packaged commissioning acceptance is isolated from SQL fixtures and artifacts", async () => {

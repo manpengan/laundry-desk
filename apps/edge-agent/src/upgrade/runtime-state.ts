@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import {
   closeSync,
@@ -8,10 +9,18 @@ import {
   openSync,
   readFileSync,
   realpathSync,
-  renameSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
+import {
+  flushDirectoryDurablySync,
+  inspectPrivateDirectorySync,
+  inspectPrivateFileSync,
+  replaceFileWriteThroughSync,
+  securePrivateDirectorySync,
+  securePrivateFileSync,
+} from "@laundry/platform-fs";
 import { z } from "zod";
 
 import { compareVersion, isSemVer } from "./version.js";
@@ -117,13 +126,20 @@ export class RuntimeUpdateStateStore {
     if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
       throw new Error("Update root must be a real directory");
     }
+    securePrivateDirectorySync(rootPath);
     this.root = realpathSync(rootPath);
+    inspectPrivateDirectorySync(this.root);
     this.path = join(this.root, "update-state.json");
     assertContained(this.root, this.path);
     if (existsSync(this.path)) {
       const stateMeta = lstatSync(this.path);
       if (!stateMeta.isFile() || stateMeta.isSymbolicLink() || stateMeta.size > 256 * 1_024) {
         throw new Error("Invalid update state file");
+      }
+      try {
+        inspectPrivateFileSync(this.path);
+      } catch (error) {
+        throw new Error("Invalid update state file", { cause: error });
       }
       this.state = freezeState(JSON.parse(readFileSync(this.path, "utf8")) as unknown);
       return;
@@ -161,8 +177,10 @@ export class RuntimeUpdateStateStore {
   slotRoot(slot: RuntimeSlotName): string {
     const path = join(this.root, "slots", slot);
     mkdirSync(path, { recursive: true, mode: 0o700 });
+    securePrivateDirectorySync(path);
     const real = realpathSync(path);
     assertContained(this.root, real);
+    inspectPrivateDirectorySync(real);
     return real;
   }
 
@@ -316,20 +334,35 @@ export class RuntimeUpdateStateStore {
   }
 
   private persist(state: RuntimeUpdateState): void {
-    const temp = join(this.root, ".update-state.staging");
-    const fd = openSync(temp, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC, 0o600);
+    const temp = join(this.root, `.update-state.${randomBytes(12).toString("hex")}.staging`);
+    assertContained(this.root, temp);
+    const fd = openSync(
+      temp,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+      0o600,
+    );
+    let replaced = false;
     try {
+      securePrivateFileSync(temp);
       writeFileSync(fd, `${JSON.stringify(state)}\n`, "utf8");
       fsyncSync(fd);
     } finally {
       closeSync(fd);
     }
-    renameSync(temp, this.path);
-    const rootFd = openSync(this.root, constants.O_RDONLY);
     try {
-      fsyncSync(rootFd);
-    } finally {
-      closeSync(rootFd);
+      replaceFileWriteThroughSync(temp, this.path);
+      replaced = true;
+      flushDirectoryDurablySync(this.root);
+    } catch (error) {
+      if (!replaced) {
+        try {
+          unlinkSync(temp);
+          flushDirectoryDurablySync(this.root);
+        } catch {
+          // The original persistence failure remains authoritative.
+        }
+      }
+      throw error;
     }
     this.state = freezeState(state);
   }

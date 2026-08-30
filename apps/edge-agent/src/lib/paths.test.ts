@@ -14,7 +14,7 @@ test("spaRootForRuntime uses the package resource in development", () => {
       packageRoot: "/workspace/apps/edge-agent",
       resourcesPath: "/runtime/resources",
     }),
-    "/workspace/apps/edge-agent/resources/spa",
+    join("/workspace/apps/edge-agent", "resources", "spa"),
   );
 });
 
@@ -25,14 +25,14 @@ test("spaRootForRuntime uses the extraResources root when packaged", () => {
       packageRoot: "/app/laundry-desk-v2.asar",
       resourcesPath: "/Applications/laundry-desk V2.app/Contents/Resources",
     }),
-    "/Applications/laundry-desk V2.app/Contents/Resources/spa",
+    join("/Applications/laundry-desk V2.app/Contents/Resources", "spa"),
   );
 });
 
 test("preloadPathFromDistDir selects the sandbox-compatible CJS bundle", () => {
   assert.equal(
     preloadPathFromDistDir("/workspace/apps/edge-agent/dist"),
-    "/workspace/apps/edge-agent/dist/preload.cjs",
+    join("/workspace/apps/edge-agent/dist", "preload.cjs"),
   );
 });
 

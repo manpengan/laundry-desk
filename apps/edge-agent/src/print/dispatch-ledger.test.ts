@@ -4,6 +4,7 @@ import { chmod, link, mkdtemp, readFile, rm, stat, symlink, writeFile } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { inspectPrivateDirectory } from "@laundry/platform-fs";
 
 import { APP_CAPABILITY_ORIGIN } from "../lib/security-prefs.js";
 import { signReceipt, type SignedExecutionReceipt } from "../pairing/sign-receipt.js";
@@ -262,7 +263,11 @@ test("private root is forced to 0700 and an O_EXCL staging collision is preserve
   await writeFile(staging, "do-not-truncate\n", { mode: 0o600 });
   const ledger = await PrintDispatchLedger.open(root, { randomStagingId: () => stagingId });
 
-  assert.equal((await stat(root)).mode & 0o777, 0o700);
+  if (process.platform === "win32") {
+    assert.equal((await inspectPrivateDirectory(root)).scheme, "windows-dacl-v1");
+  } else {
+    assert.equal((await stat(root)).mode & 0o777, 0o700);
+  }
   await assert.rejects(() => ledger.prepare(binding()), /EEXIST/u);
   assert.equal(await readFile(staging, "utf8"), "do-not-truncate\n");
   await assert.rejects(() => readFile(join(root, "print-dispatch-ledger.json")));
