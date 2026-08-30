@@ -14,12 +14,14 @@ import {
   type CapabilityTicketPayload,
   type PrintSnapshot,
 } from "@laundry/contracts";
+import { WindowsRawSubmissionError } from "@laundry/platform-fs";
 
 import { APP_CAPABILITY_ORIGIN } from "../lib/security-prefs.js";
 import { base64UrlToBytes, bytesToBase64Url } from "../pairing/device-keys.js";
 import { CupsSubmissionError } from "./cups-process.js";
 import { type DispatchLedgerBinding, PrintDispatchLedger } from "./dispatch-ledger.js";
 import { verifyPrintDispatch, type DispatchClaimTiming } from "./dispatch-verifier.js";
+import { createCupsRawPrintPort, createWindowsRawPrintPort } from "./raw-print-port.js";
 import { createSignedPrintExecutor, type SignedPrintExecutorOptions } from "./signed-executor.js";
 
 const DEVICE_ID = "01a2eed0-a6c3-493c-a3a7-20bf94b1d678";
@@ -126,6 +128,13 @@ function request(claim: unknown = dispatch()) {
   });
 }
 
+function testPrintPort(submitCups: (queue: string, bytes: Uint8Array) => Promise<string>) {
+  return createCupsRawPrintPort({
+    discoverCups: async () => Object.freeze([QUEUE]),
+    submitCups,
+  });
+}
+
 async function fixture(t: TestContext, overrides: Partial<SignedPrintExecutorOptions> = {}) {
   const root = await mkdtemp(join(tmpdir(), "laundry-signed-print-"));
   t.after(async () => rm(root, { recursive: true, force: true }));
@@ -138,11 +147,10 @@ async function fixture(t: TestContext, overrides: Partial<SignedPrintExecutorOpt
     queue: QUEUE,
     devicePrivateKey: device.privateKey,
     serverPublicKey: () => server.publicKey,
-    discoverQueues: async () => Object.freeze([QUEUE]),
-    submitCups: async () => {
+    printPort: testPrintPort(async () => {
       submissions += 1;
       return `${QUEUE}-42`;
-    },
+    }),
     monotonicNowMs: () => monotonicNow,
     receiptNow: () => new Date(RECEIPT_AT),
     safetyMarginMs: 0,
@@ -163,10 +171,10 @@ async function fixture(t: TestContext, overrides: Partial<SignedPrintExecutorOpt
 test("verified snapshot renders to CUPS and persists a device-signed accepted receipt", async (t) => {
   let submittedBytes = new Uint8Array();
   const setup = await fixture(t, {
-    submitCups: async (_queue, bytes) => {
+    printPort: testPrintPort(async (_queue, bytes) => {
       submittedBytes = Uint8Array.from(bytes);
       return `${QUEUE}-42`;
-    },
+    }),
   });
 
   const result = await setup.executor.execute(request());
@@ -191,6 +199,47 @@ test("verified snapshot renders to CUPS and persists a device-signed accepted re
   const durable = await setup.ledger.get(JOB_ID);
   assert.equal(durable?.binding.printAction, "enqueue");
   assert.equal(durable?.binding.sourceJobId, null);
+});
+
+test("verified snapshot uses the Windows RAW spooler without bypassing the signed ledger", async (t) => {
+  const queue = "XP-58 前台";
+  const setup = await fixture(t, {
+    queue,
+    printPort: createWindowsRawPrintPort({
+      discoverWindows: async () => Object.freeze([queue]),
+      submitWindows: async (_queue, bytes) =>
+        Object.freeze({ jobId: "31", bytesWritten: bytes.byteLength }),
+    }),
+  });
+
+  const result = await setup.executor.execute(request());
+
+  assert.equal(result.state, "cups_accepted");
+  assert.equal(result.cupsJobId, "winspool-31");
+  assert.equal((await setup.ledger.get(JOB_ID))?.binding.queue, queue);
+  assert.equal(result.receipt.payload.cups_job_id, "winspool-31");
+});
+
+test("Windows RAW outcomes stay definite-failed or uncertain in signed receipts", async (t) => {
+  for (const outcome of ["failed", "uncertain"] as const) {
+    await t.test(outcome, async (child) => {
+      const queue = "XP-58 前台";
+      const setup = await fixture(child, {
+        queue,
+        printPort: createWindowsRawPrintPort({
+          discoverWindows: async () => Object.freeze([queue]),
+          submitWindows: async () => {
+            throw new WindowsRawSubmissionError(outcome);
+          },
+        }),
+      });
+
+      const result = await setup.executor.execute(request());
+      assert.equal(result.state, outcome);
+      assert.equal(result.receipt.payload.result, outcome);
+      assert.equal(result.receipt.payload.cups_job_id, null);
+    });
+  }
 });
 
 test("signed retry lineage is durable and cannot be rebound as a reprint", async (t) => {
@@ -257,9 +306,9 @@ test("durable duplicate nonce and exact dispatch replay never submit twice", asy
 
 test("timeout becomes durable uncertain and restart only retries the exact receipt", async (t) => {
   const setup = await fixture(t, {
-    submitCups: async () => {
+    printPort: testPrintPort(async () => {
       throw new CupsSubmissionError("uncertain", "timeout");
-    },
+    }),
   });
   const uncertain = await setup.executor.execute(request());
   assert.equal(uncertain.state, "uncertain");
@@ -270,10 +319,10 @@ test("timeout becomes durable uncertain and restart only retries the exact recei
   const restarted = createSignedPrintExecutor({
     ...setup.options,
     ledger: restartedLedger,
-    submitCups: async () => {
+    printPort: testPrintPort(async () => {
       submissions += 1;
       return `${QUEUE}-99`;
-    },
+    }),
   });
   const same = await restarted.execute(request());
   assert.deepEqual(same.receipt, uncertain.receipt);
@@ -317,10 +366,10 @@ test("restart turns both prepared and submitting entries into durable uncertain 
   const restarted = createSignedPrintExecutor({
     ...setup.options,
     ledger: restartedLedger,
-    submitCups: async () => {
+    printPort: testPrintPort(async () => {
       submissions += 1;
       return `${QUEUE}-99`;
-    },
+    }),
   });
   const recoveredPrepared = await restarted.recoverInterrupted();
   assert.deepEqual(
@@ -348,10 +397,10 @@ test("restart turns both prepared and submitting entries into durable uncertain 
   const afterSubmitting = createSignedPrintExecutor({
     ...setup.options,
     ledger: restartedLedger,
-    submitCups: async () => {
+    printPort: testPrintPort(async () => {
       submissions += 1;
       return `${QUEUE}-100`;
-    },
+    }),
   });
   const recoveredSubmitting = await afterSubmitting.recoverInterrupted();
   assert.deepEqual(
@@ -406,7 +455,7 @@ test(
     });
     let submissions = 0;
     const setup = await fixture(t, {
-      submitCups: async () => {
+      printPort: testPrintPort(async () => {
         submissions += 1;
         const current = submissions;
         events.push(`start:${current}`);
@@ -418,7 +467,7 @@ test(
         }
         events.push(`end:${current}`);
         return `${QUEUE}-${current}`;
-      },
+      }),
     });
     const first = setup.executor.execute(request(dispatch(JOB_ID, NONCE)));
     const second = setup.executor.execute(request(dispatch(JOB_ID, NONCE)));

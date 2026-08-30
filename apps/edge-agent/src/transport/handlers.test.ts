@@ -29,6 +29,7 @@ function createService(overrides: Partial<DesktopOperationService> = {}): Deskto
       Object.freeze({
         login: async () => SAFE_FAILURE,
         refresh: async () => SAFE_FAILURE,
+        staffDirectory: async () => SAFE_FAILURE,
         pinChallenge: async () => SAFE_FAILURE,
         pinVerify: async () => SAFE_FAILURE,
         logout: async () => SAFE_FAILURE,
@@ -126,6 +127,7 @@ test("registers exactly the fixed desktop capability channels", () => {
     [
       DESKTOP_IPC_CHANNELS.auth.login,
       DESKTOP_IPC_CHANNELS.auth.refresh,
+      DESKTOP_IPC_CHANNELS.auth.staffDirectory,
       DESKTOP_IPC_CHANNELS.auth.pinChallenge,
       DESKTOP_IPC_CHANNELS.auth.pinVerify,
       DESKTOP_IPC_CHANNELS.auth.credentialComplete,
@@ -145,6 +147,41 @@ test("registers exactly the fixed desktop capability channels", () => {
       DESKTOP_IPC_CHANNELS.health.get,
     ],
   );
+});
+
+test("staff directory IPC accepts only empty input and returns the strict token-free view", async () => {
+  let calls = 0;
+  const base = createService();
+  const success = Object.freeze({
+    ok: true as const,
+    data: Object.freeze([
+      Object.freeze({
+        staff_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        display_name: "店员",
+        role: "staff" as const,
+      }),
+    ]),
+  });
+  const harness = createHarness(
+    createService({
+      auth: Object.freeze({
+        ...base.auth,
+        staffDirectory: async () => {
+          calls += 1;
+          return success;
+        },
+      }),
+    }),
+  );
+  const invoke = getHandler(harness, DESKTOP_IPC_CHANNELS.auth.staffDirectory);
+
+  assert.deepEqual(await invoke(sender(), {}), success);
+  await assert.rejects(
+    () => invoke(sender(), { url: "https://attacker.invalid" }),
+    /Desktop operation rejected/u,
+  );
+  assert.equal(calls, 1);
+  assert.doesNotMatch(JSON.stringify(success), /username|access_token|authorization/iu);
 });
 
 test("validates photo bytes before invoking the named service", async () => {
@@ -201,6 +238,7 @@ test("validates a login before invoking the main-only service", async () => {
           return SAFE_FAILURE;
         },
         refresh: async () => SAFE_FAILURE,
+        staffDirectory: async () => SAFE_FAILURE,
         pinChallenge: async () => SAFE_FAILURE,
         pinVerify: async () => SAFE_FAILURE,
         logout: async () => SAFE_FAILURE,
@@ -236,6 +274,7 @@ test("credential completion IPC accepts only the dedicated secret input and stri
       auth: Object.freeze({
         login: async () => SAFE_FAILURE,
         refresh: async () => SAFE_FAILURE,
+        staffDirectory: async () => SAFE_FAILURE,
         pinChallenge: async () => SAFE_FAILURE,
         pinVerify: async () => SAFE_FAILURE,
         credentialComplete: async (input) => {
@@ -294,6 +333,7 @@ test("rejects missing, extra, and transport-shaped renderer arguments", async ()
           return SAFE_FAILURE;
         },
         refresh: async () => SAFE_FAILURE,
+        staffDirectory: async () => SAFE_FAILURE,
         pinChallenge: async () => SAFE_FAILURE,
         pinVerify: async () => SAFE_FAILURE,
         logout: async () => SAFE_FAILURE,
@@ -359,6 +399,7 @@ test("validates the service result before it crosses into the renderer", async (
           },
         }),
         refresh: async () => SAFE_FAILURE,
+        staffDirectory: async () => SAFE_FAILURE,
         pinChallenge: async () => SAFE_FAILURE,
         pinVerify: async () => SAFE_FAILURE,
         logout: async () => SAFE_FAILURE,

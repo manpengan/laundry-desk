@@ -32,6 +32,7 @@ files:
   - dist/desktop/print-http-transport.js
   - dist/desktop/printer-operation.js
   - dist/desktop/request-builder.js
+  - dist/desktop/staff-directory-operation.js
   - dist/desktop/staff-setup-operation.js
   - dist/drivers/render/code128-width.js
   - dist/drivers/render/money-gbk.js
@@ -51,11 +52,13 @@ files:
   - dist/print/main-runtime.js
   - dist/print/printer-config.js
   - dist/print/printer-smoke.js
+  - dist/print/raw-print-port.js
   - dist/print/runtime.js
   - dist/print/signed-executor.js
   - dist/print/snapshot-render.js
   - dist/print/template-render.js
   - dist/print/usb-port.js
+  - dist/print/windows-printer-pilot.js
   - dist/queue/crypto.js
   - dist/queue/dek-kek.js
   - dist/queue/file-store.js
@@ -109,6 +112,7 @@ files:
   - "!**/node_modules/**/docs/**"
   - "!**/node_modules/**/tests.js"
   - "!**/node_modules/@laundry/contracts/openapi/**"
+  - "!**/node_modules/@laundry/platform-fs/native/**"
 
 extraResources:
   - from: resources/spa

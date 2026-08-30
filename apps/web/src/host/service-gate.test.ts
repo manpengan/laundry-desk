@@ -47,6 +47,8 @@ test("service gate starts pending and exposes a diagnostic after an unreachable 
   );
   assert.match(markup, /本地服务尚未就绪/u);
   assert.match(markup, /无法连接本地服务/u);
+  assert.match(markup, /本地业务服务/u);
+  assert.doesNotMatch(markup, /Web Server/iu);
   assert.match(markup, /重试/u);
   assert.doesNotMatch(markup, /Login should stay hidden/u);
 });

@@ -37,6 +37,8 @@ import { withAtomicReleaseDirectory } from "./release-transaction.mjs";
 import { readReleaseInputFile } from "./release-resources.mjs";
 import { createReleaseTreeVersion, sealReleaseTreePermissions } from "./release-tree.mjs";
 
+const macReleaseTest = process.platform === "win32" ? test.skip : test;
+
 async function releaseFixture(t) {
   const root = await mkdtemp(join(tmpdir(), "laundry-release-preflight-"));
   t.after(async () => {
@@ -138,200 +140,216 @@ test("build environment cannot discover the update signing private key", async (
   assert.deepEqual(command.args, ["dist/upgrade/release-bundle-cli.js"]);
 });
 
-test("release stages only the matching Ed25519 public key and strict update config", async (t) => {
-  const setup = await releaseFixture(t);
-  const parsed = parseReleaseEnvironment(setup.env, "darwin");
-  const packageRoot = join(setup.root, "package");
-  await mkdir(join(packageRoot, "build"), { recursive: true });
-  const staged = await stageReleaseResources(parsed, packageRoot);
-  assert.equal(
-    await readFile(staged.publicKeyStagingPath, "utf8"),
-    await readFile(parsed.publicKeyPath, "utf8"),
-  );
-  assert.deepEqual(JSON.parse(await readFile(staged.updateConfigStagingPath, "utf8")), {
-    schema_version: 1,
-    enabled: true,
-    channel: "stable",
-    manifest_url: "https://updates.manpengan.xyz/laundry/stable/latest-laundry-v2.json",
-  });
-
-  const other = generateKeyPairSync("ed25519");
-  await writeFile(parsed.publicKeyPath, other.publicKey.export({ format: "pem", type: "spki" }));
-  const secondRoot = join(setup.root, "other-package");
-  await mkdir(join(secondRoot, "build"), { recursive: true });
-  await assert.rejects(() => stageReleaseResources(parsed, secondRoot), /does not match/u);
-});
-
-test("release refuses disabled, credentialed, or shape-drifted production update config", async (t) => {
-  for (const candidate of [
-    { schema_version: 1, enabled: false },
-    {
-      schema_version: 1,
-      enabled: true,
-      channel: "stable",
-      manifest_url:
-        "https://user:password@updates.manpengan.xyz/laundry/stable/latest-laundry-v2.json",
-    },
-    {
+macReleaseTest(
+  "release stages only the matching Ed25519 public key and strict update config",
+  async (t) => {
+    const setup = await releaseFixture(t);
+    const parsed = parseReleaseEnvironment(setup.env, "darwin");
+    const packageRoot = join(setup.root, "package");
+    await mkdir(join(packageRoot, "build"), { recursive: true });
+    const staged = await stageReleaseResources(parsed, packageRoot);
+    assert.equal(
+      await readFile(staged.publicKeyStagingPath, "utf8"),
+      await readFile(parsed.publicKeyPath, "utf8"),
+    );
+    assert.deepEqual(JSON.parse(await readFile(staged.updateConfigStagingPath, "utf8")), {
       schema_version: 1,
       enabled: true,
       channel: "stable",
       manifest_url: "https://updates.manpengan.xyz/laundry/stable/latest-laundry-v2.json",
-      extra: true,
-    },
-  ]) {
-    const setup = await releaseFixture(t);
-    await writeFile(setup.updateConfigPath, JSON.stringify(candidate));
-    const packageRoot = join(setup.root, "package-invalid-config");
-    await mkdir(join(packageRoot, "build"), { recursive: true });
-    await assert.rejects(
-      () => stageReleaseResources(parseReleaseEnvironment(setup.env, "darwin"), packageRoot),
-      /configuration is invalid/u,
-    );
-  }
-});
+    });
 
-test("release refuses a placeholder host or channel drift from signed policy", async (t) => {
-  for (const candidate of [
-    {
-      schema_version: 1,
-      enabled: true,
-      channel: "stable",
-      manifest_url: "https://updates.example/laundry/stable/latest-laundry-v2.json",
-    },
-    {
-      schema_version: 1,
-      enabled: true,
-      channel: "beta",
-      manifest_url: "https://updates.manpengan.xyz/laundry/beta/latest-laundry-v2.json",
-    },
-  ]) {
-    const setup = await releaseFixture(t);
-    await writeFile(setup.updateConfigPath, JSON.stringify(candidate));
-    const packageRoot = join(setup.root, "package-policy-mismatch");
-    await mkdir(join(packageRoot, "build"), { recursive: true });
-    await assert.rejects(
-      () => stageReleaseResources(parseReleaseEnvironment(setup.env, "darwin"), packageRoot),
-      /configuration is invalid|channels must match/u,
-    );
-  }
-});
+    const other = generateKeyPairSync("ed25519");
+    await writeFile(parsed.publicKeyPath, other.publicKey.export({ format: "pem", type: "spki" }));
+    const secondRoot = join(setup.root, "other-package");
+    await mkdir(join(secondRoot, "build"), { recursive: true });
+    await assert.rejects(() => stageReleaseResources(parsed, secondRoot), /does not match/u);
+  },
+);
 
-test("release inputs reject hard links and same-inode mutation during bounded reads", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "laundry-release-input-snapshot-"));
-  t.after(async () => rm(root, { recursive: true }));
-  const path = join(root, "input.json");
-  await writeFile(path, '{"channel":"stable"}', { mode: 0o600 });
-  await assert.rejects(
-    () =>
-      readReleaseInputFile(path, "release input", 1024, {
-        afterOpen: async () => await chmod(path, 0o644),
-      }),
-    /changed while reading/u,
-  );
-  await chmod(path, 0o600);
-  await assert.rejects(
-    () =>
-      readReleaseInputFile(path, "release input", 1024, {
-        afterOpen: async () => await appendFile(path, " "),
-      }),
-    /changed while reading/u,
-  );
-  const linked = join(root, "linked.json");
-  await link(path, linked);
-  await assert.rejects(
-    () => readReleaseInputFile(path, "release input", 1024),
-    /one bounded 600 file/u,
-  );
-});
-
-test("release inspection rejects a thin nested Mach-O and binds app identity", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "laundry-release-inspection-"));
-  t.after(async () => rm(root, { recursive: true }));
-  const appPath = join(root, "Laundry Desk.app");
-  const main = join(appPath, "Contents", "MacOS", "Laundry Desk");
-  const helper = join(appPath, "Contents", "Frameworks", "Helper.framework", "Helper");
-  const resources = join(appPath, "Contents", "Resources");
-  await mkdir(join(appPath, "Contents"), { recursive: true });
-  await mkdir(join(appPath, "Contents", "MacOS"), { recursive: true });
-  await mkdir(join(appPath, "Contents", "Frameworks", "Helper.framework"), { recursive: true });
-  await mkdir(resources, { recursive: true });
-  await writeFile(main, Buffer.from("cafebabf", "hex"));
-  await writeFile(helper, Buffer.from("cafebabf", "hex"));
-
-  const signing = [
-    "Identifier=com.laundry-desk.v2",
-    "TeamIdentifier=ABCDE12345",
-    `CDHash=${"a".repeat(40)}`,
-    '# designated => identifier "com.laundry-desk.v2" and anchor apple generic',
-  ].join("\n");
-  const fakeRun = async (file, args) => {
-    if (file.endsWith("PlistBuddy")) {
-      if (args[1].includes("CFBundleExecutable")) return { stdout: "Laundry Desk\n", stderr: "" };
-      if (args[1].includes("CFBundleShortVersionString")) return { stdout: "1.2.3\n", stderr: "" };
-      return { stdout: "com.laundry-desk.v2\n", stderr: "" };
+macReleaseTest(
+  "release refuses disabled, credentialed, or shape-drifted production update config",
+  async (t) => {
+    for (const candidate of [
+      { schema_version: 1, enabled: false },
+      {
+        schema_version: 1,
+        enabled: true,
+        channel: "stable",
+        manifest_url:
+          "https://user:password@updates.manpengan.xyz/laundry/stable/latest-laundry-v2.json",
+      },
+      {
+        schema_version: 1,
+        enabled: true,
+        channel: "stable",
+        manifest_url: "https://updates.manpengan.xyz/laundry/stable/latest-laundry-v2.json",
+        extra: true,
+      },
+    ]) {
+      const setup = await releaseFixture(t);
+      await writeFile(setup.updateConfigPath, JSON.stringify(candidate));
+      const packageRoot = join(setup.root, "package-invalid-config");
+      await mkdir(join(packageRoot, "build"), { recursive: true });
+      await assert.rejects(
+        () => stageReleaseResources(parseReleaseEnvironment(setup.env, "darwin"), packageRoot),
+        /configuration is invalid/u,
+      );
     }
-    if (file.endsWith("lipo")) {
-      return { stdout: args[1] === helper ? "arm64\n" : "arm64 x86_64\n", stderr: "" };
+  },
+);
+
+macReleaseTest(
+  "release refuses a placeholder host or channel drift from signed policy",
+  async (t) => {
+    for (const candidate of [
+      {
+        schema_version: 1,
+        enabled: true,
+        channel: "stable",
+        manifest_url: "https://updates.example/laundry/stable/latest-laundry-v2.json",
+      },
+      {
+        schema_version: 1,
+        enabled: true,
+        channel: "beta",
+        manifest_url: "https://updates.manpengan.xyz/laundry/beta/latest-laundry-v2.json",
+      },
+    ]) {
+      const setup = await releaseFixture(t);
+      await writeFile(setup.updateConfigPath, JSON.stringify(candidate));
+      const packageRoot = join(setup.root, "package-policy-mismatch");
+      await mkdir(join(packageRoot, "build"), { recursive: true });
+      await assert.rejects(
+        () => stageReleaseResources(parseReleaseEnvironment(setup.env, "darwin"), packageRoot),
+        /configuration is invalid|channels must match/u,
+      );
     }
-    if (args.includes("--display")) return { stdout: "", stderr: signing };
-    return { stdout: "", stderr: "" };
-  };
-  await assert.rejects(
-    () => inspectSignedUniversalApplication(appPath, fakeRun),
-    /every packaged Mach-O/u,
-  );
+  },
+);
 
-  const universal = await inspectSignedUniversalApplication(appPath, async (file, args) => {
-    const result = await fakeRun(file, args);
-    return file.endsWith("lipo") ? { stdout: "x86_64 arm64\n", stderr: "" } : result;
-  });
-  assert.deepEqual(universal.machOFiles, [
-    "Contents/Frameworks/Helper.framework/Helper",
-    "Contents/MacOS/Laundry Desk",
-  ]);
-  assert.throws(
-    () => assertEquivalentApplication(universal, { ...universal, cdHash: "b".repeat(40) }, "ZIP"),
-    /ZIP app identity does not match/u,
-  );
-  assertExpectedApplication(universal, {
-    bundleIdentifier: "com.laundry-desk.v2",
-    version: "1.2.3",
-    teamIdentifier: "ABCDE12345",
-  });
-  for (const expected of [
-    { bundleIdentifier: "com.attacker.app", version: "1.2.3", teamIdentifier: "ABCDE12345" },
-    { bundleIdentifier: "com.laundry-desk.v2", version: "9.9.9", teamIdentifier: "ABCDE12345" },
-    { bundleIdentifier: "com.laundry-desk.v2", version: "1.2.3", teamIdentifier: "ZZZZZ99999" },
-  ]) {
-    assert.throws(() => assertExpectedApplication(universal, expected), /configured release/u);
-  }
-
-  const symlinkPath = join(resources, "link");
-  await writeFile(join(resources, "target"), "target");
-  await symlink("target", symlinkPath);
-  await inspectSignedUniversalApplication(appPath, async (file, args) => {
-    const result = await fakeRun(file, args);
-    return file.endsWith("lipo") ? { stdout: "x86_64 arm64\n", stderr: "" } : result;
-  });
-  await unlink(symlinkPath);
-  for (const [target, message] of [
-    [join(root, "outside"), /absolute symlink/u],
-    ["../../../../outside", /escapes its root/u],
-    ["missing", /broken symlink/u],
-  ]) {
-    await symlink(target, symlinkPath);
+macReleaseTest(
+  "release inputs reject hard links and same-inode mutation during bounded reads",
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-release-input-snapshot-"));
+    t.after(async () => rm(root, { recursive: true }));
+    const path = join(root, "input.json");
+    await writeFile(path, '{"channel":"stable"}', { mode: 0o600 });
     await assert.rejects(
       () =>
-        inspectSignedUniversalApplication(appPath, async (file, args) => {
-          const result = await fakeRun(file, args);
-          return file.endsWith("lipo") ? { stdout: "x86_64 arm64\n", stderr: "" } : result;
+        readReleaseInputFile(path, "release input", 1024, {
+          afterOpen: async () => await chmod(path, 0o644),
         }),
-      message,
+      /changed while reading/u,
     );
+    await chmod(path, 0o600);
+    await assert.rejects(
+      () =>
+        readReleaseInputFile(path, "release input", 1024, {
+          afterOpen: async () => await appendFile(path, " "),
+        }),
+      /changed while reading/u,
+    );
+    const linked = join(root, "linked.json");
+    await link(path, linked);
+    await assert.rejects(
+      () => readReleaseInputFile(path, "release input", 1024),
+      /one bounded 600 file/u,
+    );
+  },
+);
+
+macReleaseTest(
+  "release inspection rejects a thin nested Mach-O and binds app identity",
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-release-inspection-"));
+    t.after(async () => rm(root, { recursive: true }));
+    const appPath = join(root, "Laundry Desk.app");
+    const main = join(appPath, "Contents", "MacOS", "Laundry Desk");
+    const helper = join(appPath, "Contents", "Frameworks", "Helper.framework", "Helper");
+    const resources = join(appPath, "Contents", "Resources");
+    await mkdir(join(appPath, "Contents"), { recursive: true });
+    await mkdir(join(appPath, "Contents", "MacOS"), { recursive: true });
+    await mkdir(join(appPath, "Contents", "Frameworks", "Helper.framework"), { recursive: true });
+    await mkdir(resources, { recursive: true });
+    await writeFile(main, Buffer.from("cafebabf", "hex"));
+    await writeFile(helper, Buffer.from("cafebabf", "hex"));
+
+    const signing = [
+      "Identifier=com.laundry-desk.v2",
+      "TeamIdentifier=ABCDE12345",
+      `CDHash=${"a".repeat(40)}`,
+      '# designated => identifier "com.laundry-desk.v2" and anchor apple generic',
+    ].join("\n");
+    const fakeRun = async (file, args) => {
+      if (file.endsWith("PlistBuddy")) {
+        if (args[1].includes("CFBundleExecutable")) return { stdout: "Laundry Desk\n", stderr: "" };
+        if (args[1].includes("CFBundleShortVersionString"))
+          return { stdout: "1.2.3\n", stderr: "" };
+        return { stdout: "com.laundry-desk.v2\n", stderr: "" };
+      }
+      if (file.endsWith("lipo")) {
+        return { stdout: args[1] === helper ? "arm64\n" : "arm64 x86_64\n", stderr: "" };
+      }
+      if (args.includes("--display")) return { stdout: "", stderr: signing };
+      return { stdout: "", stderr: "" };
+    };
+    await assert.rejects(
+      () => inspectSignedUniversalApplication(appPath, fakeRun),
+      /every packaged Mach-O/u,
+    );
+
+    const universal = await inspectSignedUniversalApplication(appPath, async (file, args) => {
+      const result = await fakeRun(file, args);
+      return file.endsWith("lipo") ? { stdout: "x86_64 arm64\n", stderr: "" } : result;
+    });
+    assert.deepEqual(universal.machOFiles, [
+      "Contents/Frameworks/Helper.framework/Helper",
+      "Contents/MacOS/Laundry Desk",
+    ]);
+    assert.throws(
+      () => assertEquivalentApplication(universal, { ...universal, cdHash: "b".repeat(40) }, "ZIP"),
+      /ZIP app identity does not match/u,
+    );
+    assertExpectedApplication(universal, {
+      bundleIdentifier: "com.laundry-desk.v2",
+      version: "1.2.3",
+      teamIdentifier: "ABCDE12345",
+    });
+    for (const expected of [
+      { bundleIdentifier: "com.attacker.app", version: "1.2.3", teamIdentifier: "ABCDE12345" },
+      { bundleIdentifier: "com.laundry-desk.v2", version: "9.9.9", teamIdentifier: "ABCDE12345" },
+      { bundleIdentifier: "com.laundry-desk.v2", version: "1.2.3", teamIdentifier: "ZZZZZ99999" },
+    ]) {
+      assert.throws(() => assertExpectedApplication(universal, expected), /configured release/u);
+    }
+
+    const symlinkPath = join(resources, "link");
+    await writeFile(join(resources, "target"), "target");
+    await symlink("target", symlinkPath);
+    await inspectSignedUniversalApplication(appPath, async (file, args) => {
+      const result = await fakeRun(file, args);
+      return file.endsWith("lipo") ? { stdout: "x86_64 arm64\n", stderr: "" } : result;
+    });
     await unlink(symlinkPath);
-  }
-});
+    for (const [target, message] of [
+      [join(root, "outside"), /absolute symlink/u],
+      ["../../../../outside", /escapes its root/u],
+      ["missing", /broken symlink/u],
+    ]) {
+      await symlink(target, symlinkPath);
+      await assert.rejects(
+        () =>
+          inspectSignedUniversalApplication(appPath, async (file, args) => {
+            const result = await fakeRun(file, args);
+            return file.endsWith("lipo") ? { stdout: "x86_64 arm64\n", stderr: "" } : result;
+          }),
+        message,
+      );
+      await unlink(symlinkPath);
+    }
+  },
+);
 
 test("release root is an exact app, DMG, ZIP, and optional manifest allowlist", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-release-root-shape-"));

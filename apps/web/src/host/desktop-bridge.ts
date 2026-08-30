@@ -34,6 +34,7 @@ export type LaundryDesktopBridge = Readonly<{
   auth: Readonly<{
     login: (input: LoginFormValues) => Promise<unknown>;
     refresh: () => Promise<unknown>;
+    staffDirectory: () => Promise<unknown>;
     pinChallenge: (input: PinChallengeRequest) => Promise<unknown>;
     pinVerify: (input: PinVerifyRequest) => Promise<unknown>;
     credentialComplete?: (input: StaffCredentialsCompleteInput) => Promise<unknown>;

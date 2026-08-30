@@ -4,13 +4,13 @@ import type { KeyObject } from "node:crypto";
 
 import type { EdgePrintHttpTransport } from "../desktop/print-http-transport.js";
 import { createPrintContinuity, type PrintContinuity } from "./continuity.js";
-import { discoverCupsQueues, submitCupsBytes } from "./cups-process.js";
 import {
   createPrintDispatchController,
   type PrintDispatchController,
   type PrintDispatchControllerStatus,
 } from "./dispatch-controller.js";
 import { PrintDispatchLedger } from "./dispatch-ledger.js";
+import { createPlatformRawPrintPort, type RawPrintPort } from "./raw-print-port.js";
 import { createSignedPrintExecutor } from "./signed-executor.js";
 
 export type SignedPrintRuntime = Readonly<{
@@ -31,11 +31,11 @@ export async function createSignedPrintRuntime(
     onStatus?: (status: PrintDispatchControllerStatus) => void;
     onError: (error: unknown) => void;
     platform?: NodeJS.Platform;
+    printPort?: RawPrintPort;
   }>,
 ): Promise<SignedPrintRuntime> {
-  if ((options.platform ?? process.platform) !== "darwin") {
-    throw new Error("Signed CUPS print runtime requires macOS");
-  }
+  const platform = options.platform ?? process.platform;
+  const printPort = options.printPort ?? createPlatformRawPrintPort(platform);
   const continuity = createPrintContinuity();
   const ledger = await PrintDispatchLedger.open(options.stateRoot);
   const executor = createSignedPrintExecutor({
@@ -44,8 +44,7 @@ export async function createSignedPrintRuntime(
     queue: options.queue,
     devicePrivateKey: options.devicePrivateKey,
     serverPublicKey: options.serverPublicKey,
-    discoverQueues: discoverCupsQueues,
-    submitCups: submitCupsBytes,
+    printPort,
     monotonicNowMs: () => performance.now(),
   });
   const controller = createPrintDispatchController({

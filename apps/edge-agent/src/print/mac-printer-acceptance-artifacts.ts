@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants, type BigIntStats } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { join, posix } from "node:path";
 
 import type { PackagedMacAppEvidence } from "./mac-printer-acceptance.js";
 import { InfoPlistError, parsePackagedMacAppInfoPlist } from "./mac-printer-acceptance-plist.js";
@@ -70,14 +70,15 @@ async function assertDirectoryStillStable(
 }
 
 export function assertCanonicalPackagedAppPath(appPath: string): void {
+  const appName = posix.basename(appPath);
   if (
-    !isAbsolute(appPath) ||
-    resolve(appPath) !== appPath ||
+    !posix.isAbsolute(appPath) ||
+    posix.normalize(appPath) !== appPath ||
     appPath.length > 4_096 ||
     CONTROL_CHARACTER.test(appPath) ||
-    basename(appPath).length < 5 ||
-    basename(appPath).length > 255 ||
-    !basename(appPath).endsWith(".app")
+    appName.length < 5 ||
+    appName.length > 255 ||
+    !appName.endsWith(".app")
   ) {
     throw new PackagedAppEvidenceError(
       "packaged app path must be canonical, absolute, and end in .app",

@@ -1,12 +1,10 @@
 /** Main-process-only signed dispatch → durable ledger → raw CUPS → signed receipt. */
 import type { KeyObject } from "node:crypto";
 
-import { CupsJobIdSchema, type ExecutionReceiptPayload } from "@laundry/contracts";
+import { PrintJobReferenceSchema, type ExecutionReceiptPayload } from "@laundry/contracts";
 
 import { APP_CAPABILITY_ORIGIN } from "../lib/security-prefs.js";
 import { signReceipt, type SignedExecutionReceipt } from "../pairing/sign-receipt.js";
-import { CupsSubmissionError } from "./cups-process.js";
-import { isCupsQueueName } from "./cups-queue.js";
 import {
   type DispatchLedgerBinding,
   type DispatchLedgerEntry,
@@ -18,6 +16,7 @@ import {
   type VerifiedPrintDispatch,
 } from "./dispatch-verifier.js";
 import { createExecutionGate, type ExecutionGate } from "./execution-gate.js";
+import { RawPrintSubmissionError, type RawPrintPort } from "./raw-print-port.js";
 import { renderPrintSnapshot, type RenderedPrintSnapshot } from "./snapshot-render.js";
 
 export type SignedPrintRequest = Readonly<{
@@ -41,8 +40,7 @@ export type SignedPrintExecutorOptions = Readonly<{
   devicePrivateKey: KeyObject;
   /** Returns only the authority-exchange key already accepted by persistent trust. */
   serverPublicKey: () => KeyObject | null;
-  discoverQueues: () => Promise<readonly string[]>;
-  submitCups: (queue: string, bytes: Uint8Array) => Promise<string>;
+  printPort: RawPrintPort;
   monotonicNowMs: () => number;
   receiptNow?: () => Date;
   safetyMarginMs?: number;
@@ -91,7 +89,9 @@ export class SignedPrintExecutor {
     if (options.devicePrivateKey.asymmetricKeyType !== "ed25519") {
       throw new TypeError("Signed print receipts require an Ed25519 device key");
     }
-    if (!isCupsQueueName(options.queue)) throw new TypeError("Invalid signed-print CUPS queue");
+    if (!options.printPort.isQueueName(options.queue)) {
+      throw new TypeError("Invalid signed-print queue");
+    }
   }
 
   async execute(request: SignedPrintRequest): Promise<SignedPrintExecution> {
@@ -158,12 +158,12 @@ export class SignedPrintExecutor {
       if (this.options.monotonicNowMs() >= verified.localDeadlineMonoMs) {
         throw new Error("print dispatch monotonic deadline expired");
       }
-      const queues = await this.options.discoverQueues();
+      const queues = await this.options.printPort.discoverQueues();
       if (!queues.includes(this.options.queue))
-        throw new Error("configured CUPS queue unavailable");
+        throw new Error("configured print queue unavailable");
       rendered = renderPrintSnapshot(verified.snapshot);
       if (!continuityTrusted() || this.options.monotonicNowMs() >= verified.localDeadlineMonoMs) {
-        throw new Error("print dispatch deadline elapsed before CUPS submission");
+        throw new Error("print dispatch deadline elapsed before spooler submission");
       }
     } catch {
       return executionFrom(await this.persistOutcome(current, "failed", null));
@@ -171,12 +171,12 @@ export class SignedPrintExecutor {
 
     const submitting = await this.options.ledger.markSubmitting(verified.payload.job_id);
     try {
-      const cupsJobId = CupsJobIdSchema.parse(
-        await this.options.submitCups(this.options.queue, rendered.bytes),
+      const cupsJobId = PrintJobReferenceSchema.parse(
+        await this.options.printPort.submitRaw(this.options.queue, rendered.bytes),
       );
       return executionFrom(await this.persistOutcome(submitting, "succeeded", cupsJobId));
     } catch (error) {
-      const result = error instanceof CupsSubmissionError ? error.outcome : "uncertain";
+      const result = error instanceof RawPrintSubmissionError ? error.outcome : "uncertain";
       return executionFrom(await this.persistOutcome(submitting, result, null));
     }
   }

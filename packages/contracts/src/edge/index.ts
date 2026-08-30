@@ -18,6 +18,8 @@ export {
   EdgeOriginSchema,
   EdgePrinterKindSchema,
   ExactUtcTimestampSchema,
+  PrinterQueueNameSchema,
+  PrintJobReferenceSchema,
   Sha256HexSchema,
 } from "./primitives.js";
 

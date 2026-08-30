@@ -1,3 +1,5 @@
+import { PrinterQueueNameSchema, PrintJobReferenceSchema } from "@laundry/contracts";
+
 import type { LaundryDesktopBridge } from "./desktop-bridge.js";
 import type {
   PrinterPort,
@@ -6,8 +8,6 @@ import type {
   PrinterTestSubmission,
 } from "./printer-port.js";
 
-const QUEUE = /^[A-Za-z0-9_.-]{1,64}$/u;
-const CUPS_JOB = /^[A-Za-z0-9_.-]{1,64}-[1-9][0-9]*$/u;
 const SHA256 = /^[0-9a-f]{64}$/u;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -51,7 +51,7 @@ function readFailure(value: unknown): PrinterResult<never> | null {
 
 function readQueueList(value: unknown): readonly string[] | null {
   if (!Array.isArray(value) || value.length > 128) return null;
-  if (!value.every((queue) => typeof queue === "string" && QUEUE.test(queue))) return null;
+  if (!value.every((queue) => PrinterQueueNameSchema.safeParse(queue).success)) return null;
   return Object.freeze([...value]);
 }
 
@@ -64,9 +64,11 @@ function readStatusData(value: unknown): PrinterStatus | null {
   }
   const queues = readQueueList(value.available_queues);
   const configured = value.configured_queue;
+  const parsedConfigured =
+    configured === null ? null : PrinterQueueNameSchema.safeParse(configured);
   if (
     (value.state !== "disabled" && value.state !== "ready" && value.state !== "unavailable") ||
-    (configured !== null && (typeof configured !== "string" || !QUEUE.test(configured))) ||
+    (parsedConfigured !== null && !parsedConfigured.success) ||
     queues === null ||
     typeof value.message !== "string" ||
     value.message.length === 0
@@ -75,7 +77,7 @@ function readStatusData(value: unknown): PrinterStatus | null {
   }
   return Object.freeze({
     state: value.state,
-    configuredQueue: configured,
+    configuredQueue: parsedConfigured === null ? null : parsedConfigured.data,
     availableQueues: queues,
     message: value.message,
   });
@@ -112,11 +114,11 @@ function readTestResult(value: unknown): PrinterResult<PrinterTestSubmission> {
     return failed("桌面测试票响应格式错误");
   }
   const data = value.data;
+  const parsedQueue = PrinterQueueNameSchema.safeParse(data.queue);
+  const parsedJobReference = PrintJobReferenceSchema.safeParse(data.cups_job_id);
   if (
-    typeof data.queue !== "string" ||
-    !QUEUE.test(data.queue) ||
-    typeof data.cups_job_id !== "string" ||
-    !CUPS_JOB.test(data.cups_job_id) ||
+    !parsedQueue.success ||
+    !parsedJobReference.success ||
     typeof data.payload_sha256 !== "string" ||
     !SHA256.test(data.payload_sha256) ||
     typeof data.bytes_written !== "number" ||
@@ -130,8 +132,8 @@ function readTestResult(value: unknown): PrinterResult<PrinterTestSubmission> {
   return Object.freeze({
     ok: true as const,
     data: Object.freeze({
-      queue: data.queue,
-      cupsJobId: data.cups_job_id,
+      queue: parsedQueue.data,
+      cupsJobId: parsedJobReference.data,
       payloadSha256: data.payload_sha256,
       bytesWritten: data.bytes_written,
       message: data.message,
@@ -157,8 +159,8 @@ export function createDesktopPrinterPort(
     discover: () => invoke(bridge.discover, readStatusResult),
     status: () => invoke(bridge.status, readStatusResult),
     configure: (queue) => {
-      if (queue !== null && !QUEUE.test(queue)) {
-        return Promise.resolve(failed("CUPS 队列名称格式无效"));
+      if (queue !== null && !PrinterQueueNameSchema.safeParse(queue).success) {
+        return Promise.resolve(failed("打印队列名称格式无效"));
       }
       return invoke(() => bridge.configure(Object.freeze({ queue })), readStatusResult);
     },

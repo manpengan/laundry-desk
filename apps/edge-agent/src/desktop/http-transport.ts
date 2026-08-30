@@ -26,7 +26,6 @@ import {
   DesktopRefreshInputSchema,
   DesktopRefreshResultSchema,
   DesktopSessionViewSchema,
-  DesktopStaffDirectorySchema,
   EdgeReplayResponseSchema,
   LoginRequestSchema,
   type AccessSessionResponse,
@@ -42,7 +41,6 @@ import {
   type DesktopQueryExecuteResult,
   type DesktopRefreshResult,
   type DesktopSessionView,
-  type EdgeAuthorityResponse,
   type EdgeQueueEnvelope,
 } from "@laundry/contracts";
 
@@ -64,7 +62,6 @@ import {
   parseInput,
   parseOutput,
   projectSessionView,
-  projectStaffDirectory,
   readSuccessData,
   type AsyncSchema,
   type AuthState,
@@ -73,15 +70,14 @@ import {
   type ResultEnvelope,
 } from "./http-transport-support.js";
 import type { DesktopCookie, DesktopHttpTransportDependencies } from "./http-transport-ports.js";
-import {
-  createEdgePrintHttpTransport,
-  type EdgePrintHttpTransport,
-} from "./print-http-transport.js";
+import type { DesktopHttpTransport } from "./http-transport-types.js";
+import { createEdgePrintHttpTransport } from "./print-http-transport.js";
 import { createDesktopRequest, DESKTOP_API_BASE_URL } from "./request-builder.js";
+import { createStaffCredentialCompleteOperation } from "./staff-setup-operation.js";
 import {
-  createStaffCredentialCompleteOperation,
-  type DesktopStaffCredentialCompleteResult,
-} from "./staff-setup-operation.js";
+  createStaffDirectoryGetOperation,
+  readDesktopStaffDirectoryResponse,
+} from "./staff-directory-operation.js";
 export {
   DESKTOP_API_BASE_URL,
   DESKTOP_REQUEST_ORIGIN,
@@ -94,43 +90,12 @@ export type {
   DesktopHttpTransportDependencies,
   DesktopPhotoHttpResponse,
 } from "./http-transport-ports.js";
+export type { DesktopHttpTransport } from "./http-transport-types.js";
 
 const LOCAL_CSRF_COOKIE_NAME = "laundry_csrf";
 const CSRF_COOKIE_CANDIDATES = Object.freeze([LOCAL_CSRF_COOKIE_NAME, CSRF_COOKIE_NAME]);
 const RESPONSE_ENCODER = new TextEncoder();
 const ACCESS_REFRESH_SKEW_MS = 30_000;
-
-export type DesktopHttpTransport = Readonly<{
-  auth: Readonly<{
-    login: (input: unknown) => Promise<DesktopLoginResult>;
-    refresh: () => Promise<DesktopRefreshResult>;
-    pinChallenge: (input: unknown) => Promise<DesktopPinChallengeResult>;
-    pinVerify: (input: unknown) => Promise<DesktopPinVerifyResult>;
-    credentialComplete: (input: unknown) => Promise<DesktopStaffCredentialCompleteResult>;
-    logout: () => Promise<DesktopLogoutResult>;
-  }>;
-  command: Readonly<{
-    execute: (input: unknown) => Promise<DesktopCommandExecuteResult>;
-  }>;
-  query: Readonly<{
-    execute: (input: unknown) => Promise<DesktopQueryExecuteResult>;
-  }>;
-  photo: Readonly<{
-    upload: (input: unknown) => Promise<DesktopPhotoUploadResult>;
-    read: (input: unknown) => Promise<DesktopPhotoReadResult>;
-    delete: (input: unknown) => Promise<DesktopPhotoDeleteResult>;
-  }>;
-  health: Readonly<{
-    get: () => Promise<DesktopHealthGetResult>;
-  }>;
-  /** Main-process-only authority/replay surface. Never project this through preload. */
-  edge: Readonly<{
-    authority: (requestNonce: string, requestPrimary: boolean) => Promise<EdgeAuthorityResponse>;
-    replay: (envelope: EdgeQueueEnvelope) => Promise<DesktopCommandExecuteResult>;
-    print: EdgePrintHttpTransport;
-    currentSession: () => DesktopSessionView | null;
-  }>;
-}>;
 
 type AccessOutcome<T extends ResultEnvelope> =
   | Readonly<{ kind: "access"; access: AccessSessionResponse }>
@@ -355,18 +320,9 @@ export function createDesktopHttpTransport(
       const staffResponse = await requestJson("GET", "/api/v2/local/staff", {
         accessToken: outcome.access.access_token,
       });
-      const staffData =
-        staffResponse === null ? NO_SUCCESS_DATA : readSuccessData(staffResponse.payload);
-      const staffProjection =
-        staffData === NO_SUCCESS_DATA ? null : projectStaffDirectory(staffData);
-      const staff = await DesktopStaffDirectorySchema.safeParseAsync(staffProjection);
+      const staff = await readDesktopStaffDirectoryResponse(staffResponse);
       const sessionView = await parseSessionView(outcome.access);
-      if (
-        staffResponse === null ||
-        !isSuccessStatus(staffResponse.statusCode) ||
-        !staff.success ||
-        sessionView === null
-      ) {
+      if (!staff.ok || sessionView === null) {
         if (isCurrentIntent(intent)) await clearCookies();
         return parseOutput(DesktopLoginResultSchema, RESOURCE_FAILURE);
       }
@@ -778,9 +734,24 @@ export function createDesktopHttpTransport(
   });
   const currentSession = (): DesktopSessionView | null => authState?.sessionView ?? null;
   const credentialComplete = createStaffCredentialCompleteOperation(executeProtected);
+  const staffDirectory = createStaffDirectoryGetOperation({
+    currentState: () => authState,
+    request: (accessToken) =>
+      requestJson("GET", "/api/v2/local/staff", {
+        accessToken,
+      }),
+  });
 
   return Object.freeze({
-    auth: Object.freeze({ login, refresh, pinChallenge, pinVerify, credentialComplete, logout }),
+    auth: Object.freeze({
+      login,
+      refresh,
+      staffDirectory,
+      pinChallenge,
+      pinVerify,
+      credentialComplete,
+      logout,
+    }),
     command: Object.freeze({ execute: executeCommand }),
     query: Object.freeze({ execute: executeQuery }),
     photo: Object.freeze({ upload: uploadPhoto, read: readPhoto, delete: deletePhoto }),

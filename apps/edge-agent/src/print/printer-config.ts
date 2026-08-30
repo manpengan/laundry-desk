@@ -1,13 +1,13 @@
+import { PrinterQueueNameSchema } from "@laundry/contracts";
 import { z } from "zod";
 
 import { DurableJsonFile } from "./durable-json-file.js";
-import { isCupsQueueName } from "./cups-queue.js";
 
 const MAX_CONFIG_BYTES = 1_024;
 
 export const PrinterConfigSchema = z.strictObject({
   version: z.literal(1),
-  queue: z.string().refine(isCupsQueueName, "Invalid CUPS queue name").nullable(),
+  queue: PrinterQueueNameSchema.nullable(),
 });
 
 export type PrinterConfig = Readonly<z.output<typeof PrinterConfigSchema>>;
@@ -22,7 +22,7 @@ function parseConfig(input: unknown): PrinterConfig {
   return Object.freeze({ version: parsed.version, queue: parsed.queue });
 }
 
-/** Device-local, private and atomically replaced CUPS queue selection. */
+/** Device-local, private and atomically replaced OS queue selection. */
 export class PrinterConfigStore {
   private constructor(private readonly file: DurableJsonFile<PrinterConfig>) {}
 

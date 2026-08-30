@@ -71,6 +71,7 @@ function isDesktopBridge(value: unknown): value is LaundryDesktopBridge {
     hasExactFunctionSurface(auth, [
       "login",
       "refresh",
+      "staffDirectory",
       "pinChallenge",
       "pinVerify",
       "credentialComplete",

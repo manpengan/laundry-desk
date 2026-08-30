@@ -16,6 +16,7 @@ import {
 import { randomUUID, type KeyObject } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { configureWindowsHelperDirectory } from "@laundry/platform-fs";
 import {
   activeBundleRootFromSpaRoot,
   loadCanonicalManifest,
@@ -28,7 +29,7 @@ import {
   spaRootForRuntime,
 } from "./lib/paths.js";
 import { APP_SCHEME } from "./lib/security-prefs.js";
-import { createAppProtocolHandler } from "./protocol.js";
+import { createAppProtocolHandler, registerAppProtocolScheme } from "./protocol.js";
 import { claimPrimaryInstance, onSecondInstance } from "./shell/single-instance.js";
 import { createAppTray } from "./shell/tray.js";
 import {
@@ -54,9 +55,12 @@ import {
   SafeStorageAuthorityTrustStore,
   type AuthorityTrustStore,
 } from "./pairing/authority-trust.js";
-import { discoverCupsQueues } from "./print/cups-process.js";
 import { ConfiguredPrinterRuntime } from "./print/configured-runtime.js";
-import { configuredQueueForHealth, createMainPrinterRuntime } from "./print/main-runtime.js";
+import {
+  configuredQueueForHealth,
+  createMainPrinterRuntime,
+  discoverMainPrinterQueues,
+} from "./print/main-runtime.js";
 import { createDesktopPrinterService } from "./desktop/printer-operation.js";
 import { OfflineConflictStore } from "./offline/conflict-store.js";
 import { FileGrantSequenceStore } from "./offline/grant-sequence-store.js";
@@ -93,17 +97,7 @@ let printerRuntime: ConfiguredPrinterRuntime | null = null;
 let offlineQueue: PersistentEncryptedQueue | null = null;
 let offlineRuntime: OfflineCommandRuntime | null = null;
 type BootMode = "normal" | "recovery";
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: APP_SCHEME,
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      corsEnabled: true,
-    },
-  },
-]);
+registerAppProtocolScheme(protocol);
 async function showMainWindow(): Promise<void> {
   if (!mainWindow) {
     if (activeDesktopSession === null) return;
@@ -200,11 +194,10 @@ async function boot(mode: BootMode): Promise<void> {
     }),
     { recoveryReadOnly: mode === "recovery" },
   );
+  const bootstrapPrinterQueue = process.env.LAUNDRY_PRINTER_QUEUE ?? process.env.LAUNDRY_CUPS_QUEUE;
   printerRuntime = await createMainPrinterRuntime({
     stateRoot: edgeStateRoot,
-    ...(process.env.LAUNDRY_CUPS_QUEUE === undefined
-      ? {}
-      : { bootstrapQueue: process.env.LAUNDRY_CUPS_QUEUE }),
+    ...(bootstrapPrinterQueue === undefined ? {} : { bootstrapQueue: bootstrapPrinterQueue }),
     runtimeEnabled: mode === "normal",
     deviceId,
     devicePrivateKey: deviceKey.privateKey,
@@ -254,13 +247,13 @@ async function boot(mode: BootMode): Promise<void> {
 }
 async function runStagedHealthProbe(): Promise<boolean> {
   if (!safeStorage.isEncryptionAvailable()) return false;
-  const cupsQueue = await configuredQueueForHealth(
+  const configuredQueue = await configuredQueueForHealth(
     join(app.getPath("userData"), "edge-state"),
-    process.env.LAUNDRY_CUPS_QUEUE,
+    process.env.LAUNDRY_PRINTER_QUEUE ?? process.env.LAUNDRY_CUPS_QUEUE,
   );
-  if (cupsQueue !== null) {
-    const queues = await discoverCupsQueues();
-    if (!queues.includes(cupsQueue)) return false;
+  if (configuredQueue !== null) {
+    const queues = await discoverMainPrinterQueues();
+    if (!queues.includes(configuredQueue)) return false;
   }
   try {
     const response = await net.fetch(`${DESKTOP_API_BASE_URL}/health`, {
@@ -282,6 +275,9 @@ async function runStagedHealthProbe(): Promise<boolean> {
 }
 
 async function runApplication(): Promise<void> {
+  if (app.isPackaged && process.platform === "win32") {
+    configureWindowsHelperDirectory(join(process.resourcesPath, "windows-helper"));
+  }
   if (process.argv.includes(STAGED_HEALTH_ARGUMENT)) {
     const ok = await runStagedHealthProbe();
     process.stdout.write(ok ? '{"ok":true}\n' : '{"ok":false}\n');

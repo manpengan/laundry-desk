@@ -4,6 +4,7 @@ import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 import type { KeyObject } from "node:crypto";
+import { PrinterQueueNameSchema } from "@laundry/contracts";
 
 import type { QueueStatusSnapshot } from "../queue/types.js";
 import {
@@ -288,9 +289,9 @@ export async function runMacStagedHealth(appPath: string): Promise<boolean> {
   if (!metadata.isFile() || metadata.isSymbolicLink()) return false;
   try {
     await validateMacAppLaunch(macAppBundlePath(process.execPath), appPath);
-    const cupsQueue = process.env.LAUNDRY_CUPS_QUEUE?.trim();
-    const safeQueue =
-      cupsQueue !== undefined && /^[A-Za-z0-9._-]{1,64}$/u.test(cupsQueue) ? cupsQueue : undefined;
+    const printerQueue = process.env.LAUNDRY_PRINTER_QUEUE ?? process.env.LAUNDRY_CUPS_QUEUE;
+    const parsedQueue = PrinterQueueNameSchema.safeParse(printerQueue?.trim());
+    const safeQueue = parsedQueue.success ? parsedQueue.data : undefined;
     const result = await execFileAsync(executable, [STAGED_HEALTH_ARGUMENT], {
       timeout: 30_000,
       maxBuffer: 64 * 1_024,
@@ -298,7 +299,7 @@ export async function runMacStagedHealth(appPath: string): Promise<boolean> {
         PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
         TMPDIR: process.env.TMPDIR ?? "/tmp",
         ...(process.env.HOME === undefined ? {} : { HOME: process.env.HOME }),
-        ...(safeQueue === undefined ? {} : { LAUNDRY_CUPS_QUEUE: safeQueue }),
+        ...(safeQueue === undefined ? {} : { LAUNDRY_PRINTER_QUEUE: safeQueue }),
       },
     });
     return result.stdout.trim() === '{"ok":true}' && basename(appPath).endsWith(".app");

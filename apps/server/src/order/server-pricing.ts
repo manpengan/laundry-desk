@@ -143,7 +143,8 @@ export async function resolveServerPrices(
         (item) =>
           item.service_code === line.service_code && item.category_code === line.category_code,
       );
-      if (matches.length !== 1) throw unavailable();
+      const prices = new Set(matches.map((item) => item.unit_price_cents));
+      if (matches.length === 0 || prices.size !== 1) throw unavailable();
       const item = matches[0];
       if (item === undefined) throw unavailable();
       return Object.freeze({ ...line, unit_price_cents: item.unit_price_cents });

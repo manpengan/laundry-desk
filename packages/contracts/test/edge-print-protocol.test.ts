@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   PrintDispatchClaimRequestSchema,
   PrintExecutionReceiptRequestSchema,
+  PrintJobReferenceSchema,
   PrintSnapshotSchema,
+  PrinterQueueNameSchema,
   canonicalizePrintSnapshot,
   parseDeviceSignatureExecutionReceiptCandidate,
   parseServerSignatureCapabilityTicketCandidate,
@@ -133,7 +135,7 @@ describe("Stage3 signed print dispatch protocol", () => {
     ).toThrow();
   });
 
-  it("requires a CUPS job reference after definite success", () => {
+  it("requires a bounded spooler job reference after definite success", () => {
     expect(() =>
       parseDeviceSignatureExecutionReceiptCandidate({
         ...RECEIPT,
@@ -164,6 +166,13 @@ describe("Stage3 signed print dispatch protocol", () => {
         payload: { ...RECEIPT.payload, cups_job_id: "xp58" },
       }),
     ).toThrow();
+  });
+
+  it("accepts discovered Windows display names without accepting paths or controls", () => {
+    expect(PrinterQueueNameSchema.parse("XP-58 宏发前台")).toBe("XP-58 宏发前台");
+    expect(() => PrinterQueueNameSchema.parse("../XP58")).toThrow();
+    expect(() => PrinterQueueNameSchema.parse("XP58\nRAW")).toThrow();
+    expect(PrintJobReferenceSchema.parse("winspool-42")).toBe("winspool-42");
   });
 
   it("keeps claim and receipt ingress strict and main-process sized", () => {

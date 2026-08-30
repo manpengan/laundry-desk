@@ -3,11 +3,35 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import type { CustomScheme, Protocol } from "electron";
 import { sha256Hex, type SpaManifest } from "./lib/integrity.js";
-import { createAppProtocolHandler } from "./protocol.js";
+import { createAppProtocolHandler, registerAppProtocolScheme } from "./protocol.js";
 
 const CSP =
   "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'none'";
+
+test("registers exactly one fixed privileged app scheme", () => {
+  let registered: CustomScheme[] | null = null;
+  const registrar: Pick<Protocol, "registerSchemesAsPrivileged"> = {
+    registerSchemesAsPrivileged: (schemes) => {
+      registered = schemes;
+    },
+  };
+
+  registerAppProtocolScheme(registrar);
+
+  assert.deepEqual(registered, [
+    {
+      scheme: "app",
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+      },
+    },
+  ]);
+});
 
 function makeSpa(): Readonly<{ spaRoot: string; manifest: SpaManifest }> {
   const spaRoot = mkdtempSync(join(tmpdir(), "edge-proto-"));

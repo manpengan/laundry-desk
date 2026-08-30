@@ -12,10 +12,9 @@ import type {
   SwitchableStaff,
 } from "../auth/types.js";
 import type { LaundryDesktopBridge } from "./desktop-bridge.js";
-import { readDesktopCommandResult, readDesktopFailure } from "./desktop-result-boundary.js";
+import { readDesktopFailure } from "./desktop-result-boundary.js";
 import { readDesktopSessionView } from "./desktop-session-view.js";
 import {
-  EMPTY_BUSINESS_BODY,
   hasExactKeys,
   isNonEmptyString,
   isPositiveInteger,
@@ -26,6 +25,25 @@ import {
 const EMPTY_STAFF_DIRECTORY: readonly SwitchableStaff[] = Object.freeze([]);
 const PIN = /^\d{4,8}$/u;
 const MAX_STAFF_DIRECTORY_SIZE = 500;
+
+export type DesktopStaffDirectoryState = Readonly<{
+  clear: () => void;
+  list: () => readonly SwitchableStaff[];
+  replace: (directory: readonly SwitchableStaff[]) => void;
+}>;
+
+export function createDesktopStaffDirectoryState(): DesktopStaffDirectoryState {
+  let directory = EMPTY_STAFF_DIRECTORY;
+  return Object.freeze({
+    clear: () => {
+      directory = EMPTY_STAFF_DIRECTORY;
+    },
+    list: () => directory,
+    replace: (next) => {
+      directory = Object.freeze(next.map((entry) => Object.freeze({ ...entry })));
+    },
+  });
+}
 
 function readSwitchableStaff(value: unknown): SwitchableStaff | null {
   const keys = ["staff_id", "display_name", "role"] as const;
@@ -57,35 +75,30 @@ function readStaffDirectory(value: unknown): readonly SwitchableStaff[] | null {
   return Object.freeze(staff);
 }
 
-function readStaffDirectoryFromAccessResult(value: unknown): readonly SwitchableStaff[] | null {
-  const command = readDesktopCommandResult<unknown>(value);
-  if (!command.ok || !isRecord(command.data)) return null;
-  const result = "result" in command.data ? command.data.result : command.data;
-  if (!isRecord(result) || !Array.isArray(result.staff)) return null;
-  const directory: SwitchableStaff[] = [];
-  const seen = new Set<string>();
-  for (const row of result.staff) {
-    if (
-      !isRecord(row) ||
-      !isUuid(row.staff_id) ||
-      !isNonEmptyString(row.display_name) ||
-      (row.role !== "admin" && row.role !== "staff") ||
-      typeof row.is_active !== "boolean"
-    ) {
-      return null;
+export async function refreshDesktopStaffDirectory(
+  bridge: LaundryDesktopBridge,
+  state: DesktopStaffDirectoryState,
+): Promise<boolean> {
+  try {
+    const value = await bridge.auth.staffDirectory();
+    const failure = readDesktopFailure(value);
+    const directory =
+      failure === null &&
+      isRecord(value) &&
+      hasExactKeys(value, ["ok", "data"]) &&
+      value.ok === true
+        ? readStaffDirectory(value.data)
+        : null;
+    if (directory === null) {
+      state.clear();
+      return false;
     }
-    if (!row.is_active) continue;
-    if (seen.has(row.staff_id) || directory.length >= MAX_STAFF_DIRECTORY_SIZE) return null;
-    seen.add(row.staff_id);
-    directory.push(
-      Object.freeze({
-        staff_id: row.staff_id,
-        display_name: row.display_name,
-        role: row.role,
-      }),
-    );
+    state.replace(directory);
+    return true;
+  } catch {
+    state.clear();
+    return false;
   }
-  return Object.freeze(directory);
 }
 
 type ParsedLoginSuccess = Readonly<{
@@ -227,8 +240,10 @@ function isStepUpSuccess(value: unknown): boolean {
   return Object.prototype.hasOwnProperty.call(value.data, "step_up_proof_id");
 }
 
-export function createDesktopAuthPort(bridge: LaundryDesktopBridge): AuthPort {
-  let staffDirectory = EMPTY_STAFF_DIRECTORY;
+export function createDesktopAuthPort(
+  bridge: LaundryDesktopBridge,
+  staffDirectory: DesktopStaffDirectoryState = createDesktopStaffDirectoryState(),
+): AuthPort {
   return Object.freeze({
     async refreshSession(): Promise<AuthResult<SessionView>> {
       try {
@@ -237,20 +252,15 @@ export function createDesktopAuthPort(bridge: LaundryDesktopBridge): AuthPort {
           "桌面登录刷新响应格式错误",
         );
         if (!sessionResult.ok) {
-          staffDirectory = EMPTY_STAFF_DIRECTORY;
+          staffDirectory.clear();
           return sessionResult;
         }
-        const directory = readStaffDirectoryFromAccessResult(
-          await bridge.query.execute({ name: "staff.access.list", body: EMPTY_BUSINESS_BODY }),
-        );
-        if (directory === null) {
-          staffDirectory = EMPTY_STAFF_DIRECTORY;
+        if (!(await refreshDesktopStaffDirectory(bridge, staffDirectory))) {
           return authError("桌面员工目录刷新失败");
         }
-        staffDirectory = directory;
         return sessionResult;
       } catch {
-        staffDirectory = EMPTY_STAFF_DIRECTORY;
+        staffDirectory.clear();
         return authError("桌面宿主调用失败");
       }
     },
@@ -276,7 +286,7 @@ export function createDesktopAuthPort(bridge: LaundryDesktopBridge): AuthPort {
     },
 
     async logout(): Promise<void> {
-      staffDirectory = EMPTY_STAFF_DIRECTORY;
+      staffDirectory.clear();
       try {
         await bridge.auth.logout();
       } catch {
@@ -287,25 +297,25 @@ export function createDesktopAuthPort(bridge: LaundryDesktopBridge): AuthPort {
     async login(values: LoginFormValues): Promise<AuthResult<SessionView>> {
       const input = readLoginInput(values);
       if (input === null) {
-        staffDirectory = EMPTY_STAFF_DIRECTORY;
+        staffDirectory.clear();
         return authError("桌面登录参数格式错误");
       }
       try {
         const value = await bridge.auth.login(input);
         const failure = readDesktopFailure(value);
         if (failure !== null) {
-          staffDirectory = EMPTY_STAFF_DIRECTORY;
+          staffDirectory.clear();
           return failure;
         }
         const success = readLoginSuccess(value);
         if (success === null) {
-          staffDirectory = EMPTY_STAFF_DIRECTORY;
+          staffDirectory.clear();
           return authError("桌面登录响应格式错误");
         }
-        staffDirectory = success.staffDirectory;
+        staffDirectory.replace(success.staffDirectory);
         return Object.freeze({ ok: true as const, data: success.sessionView });
       } catch {
-        staffDirectory = EMPTY_STAFF_DIRECTORY;
+        staffDirectory.clear();
         return authError("桌面宿主调用失败");
       }
     },
@@ -346,6 +356,6 @@ export function createDesktopAuthPort(bridge: LaundryDesktopBridge): AuthPort {
       }
     },
 
-    listSwitchableStaff: () => staffDirectory,
+    listSwitchableStaff: staffDirectory.list,
   });
 }

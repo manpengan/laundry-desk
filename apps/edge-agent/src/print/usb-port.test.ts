@@ -202,7 +202,7 @@ test("resolveUsbPrintPort rejects arbitrary spool paths from product env", async
   try {
     assert.throws(
       () => resolveUsbPrintPort({ LAUNDRY_PRINTER_PATH: devicePath }),
-      /under \/dev|POSIX printer/i,
+      /under \/dev|POSIX printer|Windows printer/i,
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -225,38 +225,45 @@ test("resolveUsbPrintPort accepts a validated POSIX character device", () => {
   assert.equal(port.kind, "usb");
 });
 
-test("product port rejects a POSIX target replaced after validation", async () => {
-  let validationCalls = 0;
-  let writes = 0;
-  let closed = false;
-  let openedFlags: string | number | undefined;
-  const port = resolveUsbPrintPort(
-    { LAUNDRY_PRINTER_PATH: "/dev/usb/lp0" },
-    {
-      platform: "linux",
-      stat: () => {
-        validationCalls += 1;
-        return { isCharacterDevice: () => true, isSymbolicLink: () => false };
+test(
+  "product port rejects a POSIX target replaced after validation",
+  { skip: process.platform === "win32" },
+  async () => {
+    let validationCalls = 0;
+    let writes = 0;
+    let closed = false;
+    let openedFlags: string | number | undefined;
+    const port = resolveUsbPrintPort(
+      { LAUNDRY_PRINTER_PATH: "/dev/usb/lp0" },
+      {
+        platform: "linux",
+        stat: () => {
+          validationCalls += 1;
+          return { isCharacterDevice: () => true, isSymbolicLink: () => false };
+        },
+        openDevice: async (_path, flags) => {
+          openedFlags = flags;
+          return {
+            stat: async () => ({ isCharacterDevice: () => false }),
+            write: async () => {
+              writes += 1;
+            },
+            close: async () => {
+              closed = true;
+            },
+          };
+        },
       },
-      openDevice: async (_path, flags) => {
-        openedFlags = flags;
-        return {
-          stat: async () => ({ isCharacterDevice: () => false }),
-          write: async () => {
-            writes += 1;
-          },
-          close: async () => {
-            closed = true;
-          },
-        };
-      },
-    },
-  );
+    );
 
-  await assert.rejects(() => port.write(PAYLOAD), /opened POSIX printer target.*character device/i);
-  assert.equal(validationCalls, 2, "path must be revalidated immediately before open");
-  assert.equal(writes, 0);
-  assert.equal(closed, true);
-  assert.equal(typeof openedFlags, "number");
-  assert.notEqual((openedFlags as number) & constants.O_NOFOLLOW, 0);
-});
+    await assert.rejects(
+      () => port.write(PAYLOAD),
+      /opened POSIX printer target.*character device/i,
+    );
+    assert.equal(validationCalls, 2, "path must be revalidated immediately before open");
+    assert.equal(writes, 0);
+    assert.equal(closed, true);
+    assert.equal(typeof openedFlags, "number");
+    assert.notEqual((openedFlags as number) & constants.O_NOFOLLOW, 0);
+  },
+);

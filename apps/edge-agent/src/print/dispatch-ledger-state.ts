@@ -5,13 +5,13 @@ import {
   EdgePrinterKindSchema,
   ExecutionReceiptPayloadSchema,
   PrintJobActionSchema,
+  PrinterQueueNameSchema,
   Sha256HexSchema,
   type PrintJobAction,
 } from "@laundry/contracts";
 
 import { APP_CAPABILITY_ORIGIN } from "../lib/security-prefs.js";
 import type { SignedExecutionReceipt } from "../pairing/sign-receipt.js";
-import { CUPS_QUEUE_NAME_PATTERN } from "./cups-queue.js";
 
 const SEMVER = /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/u;
 const SIGNATURE = /^[A-Za-z0-9_-]{86}$/u;
@@ -42,7 +42,7 @@ export const DispatchRecordSchema = z
     snapshot_sha256: Sha256HexSchema,
     capability_sha256: Sha256HexSchema,
     expected_receipt_seq: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-    queue: z.string().regex(CUPS_QUEUE_NAME_PATTERN),
+    queue: PrinterQueueNameSchema,
     phase: z.enum(["prepared", "submitting", "receipt_pending", "receipt_uploaded"]),
     receipt: SignedReceiptSchema.nullable(),
     updated_at: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),

@@ -83,7 +83,7 @@ export function ServiceGateView({ state, onRetry, children }: ServiceGateViewPro
     <main aria-live="polite">
       <h1>本地服务尚未就绪</h1>
       <p>{state.message}</p>
-      <p>请确认本地 Web Server 已启动，然后重试。</p>
+      <p>请确认本地业务服务已启动，然后重试。</p>
       <button type="button" onClick={onRetry}>
         重试
       </button>

@@ -11,9 +11,9 @@ import {
 } from "./migration-bundle.js";
 import { runEmbeddedLanGateway } from "./lan-gateway-command.js";
 import { applyRuntimeRoles, type RuntimeRoleClient } from "./role-bootstrap.js";
+import { resolveRuntimeMigrationsRoot } from "./migration-root.js";
 import { parseRuntimeRelease } from "./runtime-release.js";
 
-const MIGRATIONS_ROOT = "/opt/laundry/migrations";
 const COMMANDS = Object.freeze([
   "server",
   "roles",
@@ -23,6 +23,7 @@ const COMMANDS = Object.freeze([
   "verify",
   "verify-commissioned",
   "commission-status",
+  "migration-info",
   "lan-gateway",
 ] as const);
 type RuntimeCommand = (typeof COMMANDS)[number];
@@ -45,7 +46,7 @@ const connect = (url: string): PgPool => createPgPool({ connectionString: url, m
 
 const loadVerifiedBundle = async () => {
   const release = parseRuntimeRelease(process.env);
-  const bundle = await loadMigrationBundle(MIGRATIONS_ROOT);
+  const bundle = await loadMigrationBundle(resolveRuntimeMigrationsRoot(process.env));
   if (
     bundle.aggregateChecksum !== release.migrationsChecksum ||
     bundle.head !== release.migrationHead
@@ -164,6 +165,16 @@ const runServer = async (): Promise<void> => {
   await import("../http/main.js");
 };
 
+const runMigrationInfo = async (): Promise<void> => {
+  const bundle = await loadMigrationBundle(resolveRuntimeMigrationsRoot(process.env));
+  process.stdout.write(
+    `${JSON.stringify({
+      migrations_sha256: bundle.aggregateChecksum,
+      migration_head: bundle.head,
+    })}\n`,
+  );
+};
+
 const runLanGateway = async (): Promise<void> => {
   parseRuntimeRelease(process.env);
   await runEmbeddedLanGateway();
@@ -184,6 +195,7 @@ async function main(): Promise<void> {
   if (command === "migrate") return runMigrate();
   if (command === "bootstrap") return runBootstrap();
   if (command === "commission") return runCommission();
+  if (command === "migration-info") return runMigrationInfo();
   if (command === "lan-gateway") return runLanGateway();
   if (command === "verify") {
     await runVerify(false);

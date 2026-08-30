@@ -73,7 +73,7 @@ test("SettingsPage source cannot reconnect renderer printer smoke", () => {
   assert.match(source, /--validate/u);
 });
 
-test("SettingsPage exposes admin CUPS configuration without claiming physical acceptance", () => {
+test("SettingsPage exposes admin system-printer configuration without claiming physical acceptance", () => {
   const unavailable = Object.freeze({
     ok: false as const,
     error: Object.freeze({ code: "UNAVAILABLE", message: "not loaded" }),
@@ -98,7 +98,7 @@ test("SettingsPage exposes admin CUPS configuration without claiming physical ac
   );
 
   assert.match(html, /data-testid="printer-settings"/u);
-  assert.match(html, /CUPS 小票打印机/u);
+  assert.match(html, /系统小票打印机/u);
   assert.match(html, /启用所选队列/u);
   assert.match(html, /打印固定测试票/u);
   assert.match(html, /XP-58.*仍须现场验收/u);

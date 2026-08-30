@@ -18,6 +18,7 @@ import {
   type PrintDispatchControllerStatus,
 } from "./dispatch-controller.js";
 import { type DispatchLedgerBinding, PrintDispatchLedger } from "./dispatch-ledger.js";
+import { createCupsRawPrintPort } from "./raw-print-port.js";
 import { createSignedPrintExecutor } from "./signed-executor.js";
 
 const JOB_ID = "936da01f-9abd-4d9d-80c7-02af85c822a8";
@@ -98,11 +99,13 @@ function executor(
     queue: QUEUE,
     devicePrivateKey: keys.privateKey,
     serverPublicKey,
-    discoverQueues: async () => Object.freeze([QUEUE]),
-    submitCups: async () => {
-      onSubmit();
-      return `${QUEUE}-99`;
-    },
+    printPort: createCupsRawPrintPort({
+      discoverCups: async () => Object.freeze([QUEUE]),
+      submitCups: async () => {
+        onSubmit();
+        return `${QUEUE}-99`;
+      },
+    }),
     monotonicNowMs: () => 30,
   });
 }

@@ -5,6 +5,7 @@ import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const DARWIN_PLATFORM = "darwin";
+const WINDOWS_PLATFORM = "win32";
 const MANIFEST_FILE = "manifest.json";
 const BUNDLES_DIRECTORY = "bundles";
 const SHA256_DIRECTORY = /^[0-9a-f]{64}$/u;
@@ -34,9 +35,24 @@ async function assertRealDirectory(path, label) {
   }
 }
 
+async function assertRealFile(path, label) {
+  let metadata;
+  try {
+    metadata = await lstat(path);
+  } catch {
+    throw new Error(`${label} is unavailable`);
+  }
+  if (metadata.isSymbolicLink() || !metadata.isFile()) {
+    throw new Error(`${label} must be a real file`);
+  }
+}
+
 async function resolvePackagedSpaPath(context) {
-  if (!isRecord(context) || context.electronPlatformName !== DARWIN_PLATFORM) {
-    throw new Error("SPA snapshot pruning requires a darwin package");
+  if (
+    !isRecord(context) ||
+    ![DARWIN_PLATFORM, WINDOWS_PLATFORM].includes(context.electronPlatformName)
+  ) {
+    throw new Error("SPA snapshot pruning requires a supported desktop package");
   }
   if (typeof context.appOutDir !== "string" || !isAbsolute(context.appOutDir)) {
     throw new Error("afterPack appOutDir must be an absolute path");
@@ -55,17 +71,30 @@ async function resolvePackagedSpaPath(context) {
 
   await assertRealDirectory(context.appOutDir, "afterPack output directory");
   const realOutputPath = await realpath(context.appOutDir);
-  const appPath = join(context.appOutDir, `${productFilename}.app`);
-  await assertRealDirectory(appPath, "packaged macOS application");
-  const realAppPath = await realpath(appPath);
-  if (!isWithinRoot(realOutputPath, realAppPath)) {
-    throw new Error("packaged macOS application escapes the output directory");
+  let applicationPath;
+  let spaPath;
+  if (context.electronPlatformName === DARWIN_PLATFORM) {
+    const appPath = join(context.appOutDir, `${productFilename}.app`);
+    await assertRealDirectory(appPath, "packaged macOS application");
+    applicationPath = await realpath(appPath);
+    if (!isWithinRoot(realOutputPath, applicationPath)) {
+      throw new Error("packaged macOS application escapes the output directory");
+    }
+    spaPath = join(applicationPath, "Contents", "Resources", "spa");
+  } else {
+    const executablePath = join(context.appOutDir, `${productFilename}.exe`);
+    await assertRealFile(executablePath, "packaged Windows executable");
+    const realExecutablePath = await realpath(executablePath);
+    if (!isWithinRoot(realOutputPath, realExecutablePath)) {
+      throw new Error("packaged Windows executable escapes the output directory");
+    }
+    applicationPath = realOutputPath;
+    spaPath = join(applicationPath, "resources", "spa");
   }
 
-  const spaPath = join(appPath, "Contents", "Resources", "spa");
   await assertRealDirectory(spaPath, "packaged SPA snapshot");
   const realSpaPath = await realpath(spaPath);
-  if (!isWithinRoot(realAppPath, realSpaPath)) {
+  if (!isWithinRoot(applicationPath, realSpaPath)) {
     throw new Error("packaged SPA snapshot escapes the application");
   }
   return realSpaPath;

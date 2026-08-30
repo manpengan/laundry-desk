@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { HandlerCommandError } from "../bus/types.js";
+import { createMemoryCatalogStore } from "../catalog/memory-catalog.js";
 import type { CustomerOrderPolicySnapshot } from "../customer-profile/order-policy.js";
 import type { StorePricingPolicy } from "../pricing/types.js";
 import {
   assertReplayCustomerPolicy,
   requireLines,
   resolveCustomerPolicyPricing,
+  resolveServerPrices,
   resolveTrustedPricing,
 } from "./server-pricing.js";
 
@@ -129,6 +131,33 @@ test("unknown or inactive add-on codes cannot be priced", () => {
         error instanceof HandlerCommandError && error.commandError.code === "VALIDATION_FAILED",
     );
   }
+});
+
+test("server pricing accepts equal-price aliases but rejects conflicting active prices", async () => {
+  const lines = requireLines([{ service_code: "wash", category_code: "shirt", qty: 1 }]);
+  const item = (code: string, unitPriceCents: number) =>
+    Object.freeze({
+      code,
+      name: code,
+      service_code: "wash",
+      category_code: "shirt",
+      unit_price_cents: unitPriceCents,
+    });
+
+  const equalPrices = await resolveServerPrices(
+    createMemoryCatalogStore([item("wash_shirt", 1_500), item("wash_shirt_alias", 1_500)]),
+    lines,
+  );
+  assert.equal(equalPrices[0]?.unit_price_cents, 1_500);
+
+  await assert.rejects(
+    resolveServerPrices(
+      createMemoryCatalogStore([item("wash_shirt", 1_500), item("wash_shirt_conflict", 1_600)]),
+      lines,
+    ),
+    (error: unknown) =>
+      error instanceof HandlerCommandError && error.commandError.code === "RESOURCE_UNAVAILABLE",
+  );
 });
 
 test("customer policy discount priority is manual then customer then tier", () => {

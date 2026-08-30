@@ -31,6 +31,7 @@ import type {
   DesktopStaffCredentialCompleteInput,
   DesktopStaffCredentialCompleteResult,
 } from "./desktop/staff-setup-operation.js";
+import type { DesktopStaffDirectoryResult } from "./desktop/staff-directory-operation.js";
 import type {
   DesktopPrinterConfigureInput,
   DesktopPrinterStatusResult,
@@ -45,6 +46,8 @@ const laundryDesktop = Object.freeze({
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.auth.login, input),
     refresh: (): Promise<DesktopRefreshResult> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.auth.refresh, EMPTY_DESKTOP_INPUT),
+    staffDirectory: (): Promise<DesktopStaffDirectoryResult> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.auth.staffDirectory, EMPTY_DESKTOP_INPUT),
     pinChallenge: (input: PinChallengeRequest): Promise<DesktopPinChallengeResult> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.auth.pinChallenge, input),
     pinVerify: (input: PinVerifyRequest): Promise<DesktopPinVerifyResult> =>

@@ -1,3 +1,4 @@
+import { PrinterQueueNameSchema, PrintJobReferenceSchema } from "@laundry/contracts";
 import { z } from "zod";
 
 import {
@@ -6,10 +7,9 @@ import {
   type PrinterRuntimeStatus,
   type PrinterTestSubmission,
 } from "../print/configured-runtime.js";
-import { isCupsQueueName } from "../print/cups-queue.js";
 
 const EmptyInputSchema = z.strictObject({});
-const QueueSchema = z.string().refine(isCupsQueueName, "Invalid CUPS queue name");
+const QueueSchema = PrinterQueueNameSchema;
 const MessageSchema = z.string().min(1).max(512);
 
 export const DesktopPrinterStatusSchema = z.strictObject({
@@ -21,7 +21,7 @@ export const DesktopPrinterStatusSchema = z.strictObject({
 
 const DesktopPrinterTestDataSchema = z.strictObject({
   queue: QueueSchema,
-  cups_job_id: z.string().regex(/^[A-Za-z0-9_.-]{1,64}-[1-9][0-9]*$/u),
+  cups_job_id: PrintJobReferenceSchema,
   payload_sha256: z.string().regex(/^[0-9a-f]{64}$/u),
   bytes_written: z
     .number()

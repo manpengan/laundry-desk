@@ -63,6 +63,10 @@ function createPlannedAuthBridge(
   return Object.freeze({
     login: auth.login,
     refresh: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
+    staffDirectory: async () => ({
+      ok: true,
+      data: STAFF_DIRECTORY,
+    }),
     pinChallenge: auth.pinChallenge,
     pinVerify: auth.pinVerify,
     logout: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),

@@ -49,7 +49,7 @@ export function PrinterSettingsPanel({ printerPort }: PrinterSettingsPanelProps)
   const discover = useCallback(async () => {
     setBusy(true);
     try {
-      if (acceptStatus(await printerPort.discover())) toast.push("已刷新 CUPS 队列", "success");
+      if (acceptStatus(await printerPort.discover())) toast.push("已刷新本机打印队列", "success");
     } finally {
       setBusy(false);
     }
@@ -84,7 +84,7 @@ export function PrinterSettingsPanel({ printerPort }: PrinterSettingsPanelProps)
         toast.push(result.error.message, "error");
         return;
       }
-      toast.push(`测试票已提交 CUPS（${result.data.cupsJobId}），请现场核对出纸`, "success");
+      toast.push(`测试票已提交系统打印后台（${result.data.cupsJobId}），请现场核对出纸`, "success");
     } finally {
       setBusy(false);
     }
@@ -95,7 +95,7 @@ export function PrinterSettingsPanel({ printerPort }: PrinterSettingsPanelProps)
     <section className="ld-printer-settings lg-card" data-testid="printer-settings">
       <div className="ld-printer-settings__heading">
         <div>
-          <h2>CUPS 小票打印机</h2>
+          <h2>系统小票打印机</h2>
           <p>仅配置本机已安装队列；签名订单票由主进程领取并回执。</p>
         </div>
         <span
@@ -106,11 +106,11 @@ export function PrinterSettingsPanel({ printerPort }: PrinterSettingsPanelProps)
         </span>
       </div>
 
-      <label className="ld-printer-settings__label" htmlFor="cups-printer-queue">
-        本机 CUPS 队列
+      <label className="ld-printer-settings__label" htmlFor="system-printer-queue">
+        本机打印队列
       </label>
       <select
-        id="cups-printer-queue"
+        id="system-printer-queue"
         className="ld-printer-settings__select"
         value={selectedQueue}
         onChange={(event) => setSelectedQueue(event.target.value)}
@@ -149,7 +149,7 @@ export function PrinterSettingsPanel({ printerPort }: PrinterSettingsPanelProps)
         </Button>
       </div>
       <p className="ld-printer-settings__evidence">
-        CUPS 接单不等于实际出纸。XP-58 中文、金额、条码、走纸、切刀及断线不重复仍须现场验收。
+        系统打印后台接单不等于实际出纸。XP-58 中文、金额、条码、走纸、切刀及断线不重复仍须现场验收。
       </p>
     </section>
   );

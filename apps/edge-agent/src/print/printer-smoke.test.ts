@@ -128,7 +128,7 @@ test("runPrinterSmoke rejects arbitrary product file paths before writing", asyn
     const result = await runPrinterSmoke({ LAUNDRY_PRINTER_PATH: path });
     assert.equal(result.ok, false);
     assert.equal(result.path, path);
-    assert.match(result.message, /under \/dev|POSIX printer/i);
+    assert.match(result.message, /under \/dev|POSIX printer|Windows printer/i);
     await assert.rejects(() => readFile(path));
   } finally {
     await rm(dir, { recursive: true, force: true });

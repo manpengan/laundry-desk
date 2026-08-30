@@ -14,10 +14,13 @@ function sha256(content) {
   return createHash("sha256").update(content).digest("hex");
 }
 
-async function createFixture() {
+async function createFixture(platform = "darwin") {
   const rootPath = await mkdtemp(join(tmpdir(), "laundry-packaged-spa-"));
-  const appOutDir = join(rootPath, "mac-arm64");
-  const spaPath = join(appOutDir, `${PRODUCT_NAME}.app`, "Contents", "Resources", "spa");
+  const appOutDir = join(rootPath, platform === "darwin" ? "mac-arm64" : "win-unpacked");
+  const spaPath =
+    platform === "darwin"
+      ? join(appOutDir, `${PRODUCT_NAME}.app`, "Contents", "Resources", "spa")
+      : join(appOutDir, "resources", "spa");
   const manifest = '{"version":1,"entries":{}}\n';
   const activeBundle = sha256(manifest);
   await mkdir(join(spaPath, "bundles", activeBundle), { recursive: true });
@@ -25,6 +28,9 @@ async function createFixture() {
   await writeFile(join(spaPath, "manifest.json"), manifest);
   await writeFile(join(spaPath, "bundles", activeBundle, "index.html"), "active\n");
   await writeFile(join(spaPath, "bundles", INACTIVE_BUNDLE, "index.html"), "inactive\n");
+  if (platform === "win32") {
+    await writeFile(join(appOutDir, `${PRODUCT_NAME}.exe`), "windows executable fixture\n");
+  }
 
   return Object.freeze({
     rootPath,
@@ -33,7 +39,7 @@ async function createFixture() {
     activeBundle,
     context: Object.freeze({
       appOutDir,
-      electronPlatformName: "darwin",
+      electronPlatformName: platform,
       packager: Object.freeze({
         appInfo: Object.freeze({ productFilename: PRODUCT_NAME }),
       }),
@@ -58,6 +64,17 @@ test("afterPack retains only the bundle selected by the packaged manifest", asyn
     "active\n",
   );
   assert.equal(await readFile(join(sourceHistory, "index.html"), "utf8"), "source history\n");
+});
+
+test("afterPack applies the same retention contract to a Windows package", async (t) => {
+  const fixture = await createFixture("win32");
+  t.after(async () => {
+    await rm(fixture.rootPath, { force: true, recursive: true });
+  });
+
+  await afterPack(fixture.context);
+
+  assert.deepEqual(await readdir(join(fixture.spaPath, "bundles")), [fixture.activeBundle]);
 });
 
 test("retention planning is deterministic and never removes a bundle", async (t) => {
@@ -127,7 +144,7 @@ test("symbolic-link bundle entries are rejected without following or deleting th
   ]);
 });
 
-test("missing active bundle and non-mac contexts fail closed", async (t) => {
+test("missing active bundle and unsupported desktop contexts fail closed", async (t) => {
   const fixture = await createFixture();
   t.after(async () => {
     await rm(fixture.rootPath, { force: true, recursive: true });
@@ -139,8 +156,8 @@ test("missing active bundle and non-mac contexts fail closed", async (t) => {
     () =>
       prunePackagedSpa({
         ...fixture.context,
-        electronPlatformName: "win32",
+        electronPlatformName: "linux",
       }),
-    /darwin package/u,
+    /supported desktop package/u,
   );
 });

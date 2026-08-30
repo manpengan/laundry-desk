@@ -191,83 +191,99 @@ test("schema v3 rejects any weak or mismatched three-job proof", () => {
   );
 });
 
-test("acceptance record is create-only in a private canonical directory", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "laundry-printer-acceptance-"));
-  t.after(async () => {
-    await rm(root, { recursive: true });
-  });
-  const directory = join(await realpath(root), "records");
-  const record = createMacPrinterAcceptanceRecord(evidence, confirmed, recordOptions);
-  const path = await writeMacPrinterAcceptanceRecord(directory, record);
-  const metadata = await lstat(path);
-  assert.equal(metadata.mode & 0o777, 0o600);
-  assert.deepEqual(JSON.parse(await readFile(path, "utf8")), record);
-  await assert.rejects(
-    () => writeMacPrinterAcceptanceRecord("relative", record),
-    /canonical and absolute/u,
-  );
-});
-
-test("concurrent acceptance writes remain bound to their own private directories", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "laundry-printer-concurrent-write-"));
-  t.after(async () => rm(root, { recursive: true }));
-  const canonicalRoot = await realpath(root);
-  const firstDirectory = join(canonicalRoot, "first");
-  const secondDirectory = join(canonicalRoot, "second");
-  const record = createMacPrinterAcceptanceRecord(evidence, confirmed, recordOptions);
-  const [first, second] = await Promise.all([
-    writeMacPrinterAcceptanceRecord(firstDirectory, record),
-    writeMacPrinterAcceptanceRecord(secondDirectory, record),
-  ]);
-  assert.equal(first.startsWith(`${firstDirectory}/`), true);
-  assert.equal(second.startsWith(`${secondDirectory}/`), true);
-  for (const path of [first, second]) {
-    assert.equal((await lstat(path)).mode & 0o777, 0o600);
+test(
+  "acceptance record is create-only in a private canonical directory",
+  { skip: process.platform === "win32" },
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-printer-acceptance-"));
+    t.after(async () => {
+      await rm(root, { recursive: true });
+    });
+    const directory = join(await realpath(root), "records");
+    const record = createMacPrinterAcceptanceRecord(evidence, confirmed, recordOptions);
+    const path = await writeMacPrinterAcceptanceRecord(directory, record);
+    const metadata = await lstat(path);
+    assert.equal(metadata.mode & 0o777, 0o600);
     assert.deepEqual(JSON.parse(await readFile(path, "utf8")), record);
-  }
-});
+    await assert.rejects(
+      () => writeMacPrinterAcceptanceRecord("relative", record),
+      /canonical and absolute/u,
+    );
+  },
+);
 
-test("acceptance record never writes into a replaced output directory", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "laundry-printer-directory-race-"));
-  t.after(async () => rm(root, { recursive: true }));
-  const canonicalRoot = await realpath(root);
-  const directory = join(canonicalRoot, "records");
-  const displaced = join(canonicalRoot, "records-displaced");
-  const record = createMacPrinterAcceptanceRecord(evidence, confirmed, recordOptions);
-  await assert.rejects(
-    () =>
-      writeMacPrinterAcceptanceRecord(directory, record, {
-        afterCwdBound: () => {
-          renameSync(directory, displaced);
-          mkdirSync(directory, { mode: 0o700 });
-        },
-      }),
-    /acceptance directory changed before writing/u,
-  );
-  assert.deepEqual(await readdir(directory), []);
-  assert.deepEqual(await readdir(displaced), []);
-});
+test(
+  "concurrent acceptance writes remain bound to their own private directories",
+  { skip: process.platform === "win32" },
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-printer-concurrent-write-"));
+    t.after(async () => rm(root, { recursive: true }));
+    const canonicalRoot = await realpath(root);
+    const firstDirectory = join(canonicalRoot, "first");
+    const secondDirectory = join(canonicalRoot, "second");
+    const record = createMacPrinterAcceptanceRecord(evidence, confirmed, recordOptions);
+    const [first, second] = await Promise.all([
+      writeMacPrinterAcceptanceRecord(firstDirectory, record),
+      writeMacPrinterAcceptanceRecord(secondDirectory, record),
+    ]);
+    assert.equal(first.startsWith(`${firstDirectory}/`), true);
+    assert.equal(second.startsWith(`${secondDirectory}/`), true);
+    for (const path of [first, second]) {
+      assert.equal((await lstat(path)).mode & 0o777, 0o600);
+      assert.deepEqual(JSON.parse(await readFile(path, "utf8")), record);
+    }
+  },
+);
 
-test("acceptance record removes an inode-bound file when the path changes before create", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "laundry-printer-create-race-"));
-  t.after(async () => rm(root, { recursive: true }));
-  const canonicalRoot = await realpath(root);
-  const directory = join(canonicalRoot, "records");
-  const displaced = join(canonicalRoot, "records-displaced");
-  const record = createMacPrinterAcceptanceRecord(evidence, confirmed, recordOptions);
-  await assert.rejects(
-    () =>
-      writeMacPrinterAcceptanceRecord(directory, record, {
-        afterPathCheck: () => {
-          renameSync(directory, displaced);
-          mkdirSync(directory, { mode: 0o700 });
-        },
-      }),
-    /acceptance record changed while writing/u,
-  );
-  assert.deepEqual(await readdir(directory), []);
-  assert.deepEqual(await readdir(displaced), []);
-});
+test(
+  "acceptance record never writes into a replaced output directory",
+  { skip: process.platform === "win32" },
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-printer-directory-race-"));
+    t.after(async () => rm(root, { recursive: true }));
+    const canonicalRoot = await realpath(root);
+    const directory = join(canonicalRoot, "records");
+    const displaced = join(canonicalRoot, "records-displaced");
+    const record = createMacPrinterAcceptanceRecord(evidence, confirmed, recordOptions);
+    await assert.rejects(
+      () =>
+        writeMacPrinterAcceptanceRecord(directory, record, {
+          afterCwdBound: () => {
+            renameSync(directory, displaced);
+            mkdirSync(directory, { mode: 0o700 });
+          },
+        }),
+      /acceptance directory changed before writing/u,
+    );
+    assert.deepEqual(await readdir(directory), []);
+    assert.deepEqual(await readdir(displaced), []);
+  },
+);
+
+test(
+  "acceptance record removes an inode-bound file when the path changes before create",
+  { skip: process.platform === "win32" },
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-printer-create-race-"));
+    t.after(async () => rm(root, { recursive: true }));
+    const canonicalRoot = await realpath(root);
+    const directory = join(canonicalRoot, "records");
+    const displaced = join(canonicalRoot, "records-displaced");
+    const record = createMacPrinterAcceptanceRecord(evidence, confirmed, recordOptions);
+    await assert.rejects(
+      () =>
+        writeMacPrinterAcceptanceRecord(directory, record, {
+          afterPathCheck: () => {
+            renameSync(directory, displaced);
+            mkdirSync(directory, { mode: 0o700 });
+          },
+        }),
+      /acceptance record changed while writing/u,
+    );
+    assert.deepEqual(await readdir(directory), []);
+    assert.deepEqual(await readdir(displaced), []);
+  },
+);
 
 type FixtureOutcome = Readonly<{
   evidence: SignedPrintAcceptanceEvidence;
