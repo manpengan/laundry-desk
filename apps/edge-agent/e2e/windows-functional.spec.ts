@@ -11,6 +11,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { inspectPrivateFile, securePrivateFile } from "@laundry/platform-fs";
+import { yuanText } from "./money-input.js";
 
 const PASSTHROUGH_ENV_KEYS = Object.freeze([
   "PATH",
@@ -455,7 +456,7 @@ test("created test admin completes the installed Windows desktop functional jour
     await catalog.locator('input[name="catalog-name"]').fill(fixtures.catalogName);
     await catalog.locator('input[name="catalog-service"]').fill("wash");
     await catalog.locator('input[name="catalog-category"]').fill(fixtures.catalogCategory);
-    await catalog.locator('input[name="catalog-price"]').fill("2000");
+    await catalog.locator('input[name="catalog-price"]').fill(yuanText("2000"));
     await catalog.locator('[data-testid="catalog-save-btn"]').click();
     const catalogRow = catalog.locator('[data-testid="catalog-admin-row"]', {
       hasText: fixtures.catalogCode,
@@ -502,7 +503,7 @@ test("created test admin completes the installed Windows desktop functional jour
       .click();
     await page.locator('input[name="customer-phone"]').fill(fixtures.customerPhone);
     await page.locator('input[name="customer-name"]').fill(fixtures.customerName);
-    await page.locator('input[name="initial-payment"]').fill("500");
+    await page.locator('input[name="initial-payment"]').fill(yuanText("500"));
     await page.getByRole("button", { name: "确认开单" }).click();
     ticketNo = (await page.locator('[data-testid="receive-ticket"]').innerText()).trim();
     expect(ticketNo.length).toBeGreaterThan(0);
@@ -530,7 +531,7 @@ test("created test admin completes the installed Windows desktop functional jour
     const payment = drawer.locator('[data-testid="payment-ledger-row"]', { hasText: "收款" });
     await payment.locator('[data-testid="payment-refund-open-btn"]').click();
     const refund = page.locator('[data-testid="payment-refund-dialog"]');
-    await refund.locator('[data-testid="payment-refund-amount"]').fill("100");
+    await refund.locator('[data-testid="payment-refund-amount"]').fill(yuanText("100"));
     await refund.locator('[data-testid="payment-refund-reason"]').fill("Windows 合成验收退款");
     await page
       .getByRole("dialog", { name: "原路退款" })
@@ -549,7 +550,7 @@ test("created test admin completes the installed Windows desktop functional jour
     await expect(page.locator('[data-testid="pickup-loaded-ticket"]')).toHaveText(ticketNo, {
       timeout: 20_000,
     });
-    await page.locator('input[name="collect-cents"]').fill("1600");
+    await page.locator('input[name="collect-cents"]').fill(yuanText("1600"));
     await page.getByRole("button", { name: "确认取衣" }).click();
     await expect(page.locator('[data-testid="pickup-ticket"]')).toHaveText(ticketNo, {
       timeout: 20_000,

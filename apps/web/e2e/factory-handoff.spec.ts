@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { yuanText } from "./money-input.js";
 
 const WEB = "http://127.0.0.1:5173";
 const API = "http://127.0.0.1:8787";
@@ -43,7 +44,7 @@ async function createCatalogAndOrder(page: Page): Promise<string> {
   await catalog.locator('input[name="catalog-name"]').fill(FIXTURE.catalogName);
   await catalog.locator('input[name="catalog-service"]').fill("factory");
   await catalog.locator('input[name="catalog-category"]').fill(`handoff_${SUFFIX}`);
-  await catalog.locator('input[name="catalog-price"]').fill("1000");
+  await catalog.locator('input[name="catalog-price"]').fill(yuanText("1000"));
   await catalog.locator('[data-testid="catalog-save-btn"]').click();
   await expect(
     catalog.locator('[data-testid="catalog-admin-row"]', { hasText: FIXTURE.catalogCode }),

@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import { yuanText } from "./money-input.js";
 
 export const PACKAGED_CATALOG = Object.freeze({
   code: "mac_wash_shirt",
@@ -36,7 +37,7 @@ export async function ensurePackagedCatalog(page: Page): Promise<void> {
   await page.locator('input[name="catalog-name"]').fill(PACKAGED_CATALOG.name);
   await page.locator('input[name="catalog-service"]').fill(PACKAGED_CATALOG.service);
   await page.locator('input[name="catalog-category"]').fill(PACKAGED_CATALOG.category);
-  await page.locator('input[name="catalog-price"]').fill(PACKAGED_CATALOG.priceCents);
+  await page.locator('input[name="catalog-price"]').fill(yuanText(PACKAGED_CATALOG.priceCents));
   await page.locator('[data-testid="catalog-save-btn"]').click();
   await expect(
     panel.locator('[data-testid="catalog-admin-row"]', { hasText: PACKAGED_CATALOG.name }),
@@ -53,7 +54,7 @@ export async function fillPackagedReceiveForm(page: Page, draft: ReceiveDraft): 
   }
   await page.locator('input[name="customer-phone"]').fill(draft.phone);
   await page.locator('input[name="customer-name"]').fill(draft.name);
-  await page.locator('input[name="initial-payment"]').fill(draft.paymentCents ?? "0");
+  await page.locator('input[name="initial-payment"]').fill(yuanText(draft.paymentCents ?? "0"));
 }
 
 export async function receivePackagedOrder(page: Page): Promise<string> {
@@ -104,7 +105,7 @@ async function settleAtPickup(page: Page, ticketNo: string): Promise<void> {
     timeout: 15_000,
   });
   await expect(page.locator('[data-testid="pickup-loaded-balance"]')).toContainText("¥20.00");
-  await page.locator('input[name="collect-cents"]').fill("2000");
+  await page.locator('input[name="collect-cents"]').fill(yuanText("2000"));
   await page.getByRole("button", { name: "确认取衣" }).click();
   await expect(page.locator('[data-testid="pickup-ticket"]')).toHaveText(ticketNo, {
     timeout: 15_000,

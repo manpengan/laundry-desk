@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Request } from "@playwright/test";
+import { yuanText } from "./money-input.js";
 
 const WEB = "http://127.0.0.1:5173";
 const API = "http://127.0.0.1:8787";
@@ -120,7 +121,7 @@ test("member tiers, points, punch cards and coupons complete a real PostgreSQL b
   await catalog.locator('input[name="catalog-name"]').fill(FIXTURE.catalogName);
   await catalog.locator('input[name="catalog-service"]').fill("wash");
   await catalog.locator('input[name="catalog-category"]').fill(`benefit_${SUFFIX}`);
-  await catalog.locator('input[name="catalog-price"]').fill("1500");
+  await catalog.locator('input[name="catalog-price"]').fill(yuanText("1500"));
   await catalog.locator('[data-testid="catalog-save-btn"]').click();
   await expect(
     catalog.locator('[data-testid="catalog-admin-row"]', { hasText: FIXTURE.catalogCode }),
@@ -209,7 +210,7 @@ test("member tiers, points, punch cards and coupons complete a real PostgreSQL b
   await page.locator('[data-testid="order-detail-pickup-btn"]').click();
   await page.locator('input[name="pickup-key"]').fill(ticket);
   await page.getByRole("button", { name: "加载订单" }).click();
-  await page.locator('input[name="collect-cents"]').fill("1000");
+  await page.locator('input[name="collect-cents"]').fill(yuanText("1000"));
   await page.getByRole("button", { name: "确认取衣" }).click();
   await expect(page.locator('[data-testid="pickup-ticket"]')).toHaveText(ticket, {
     timeout: 15_000,

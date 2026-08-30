@@ -1,5 +1,7 @@
 /** View models for the member stored-value panel. All money is integer fen. */
 
+import { formatFenToYuan, parseYuanToFen } from "@laundry/ui";
+
 export const MEMBER_ACCOUNT_STATUSES = Object.freeze(["active", "frozen", "closed"] as const);
 export type MemberAccountStatusView = (typeof MEMBER_ACCOUNT_STATUSES)[number];
 
@@ -314,24 +316,21 @@ export function topupAmountToCents(text: string): number | null {
   return cents !== null && cents > 0 ? cents : null;
 }
 
-/** Parse a non-negative yuan input without ever multiplying a float. */
+/**
+ * Parse a non-negative yuan input without ever multiplying a float.
+ *
+ * The digit-wise arithmetic lives once, in @laundry/ui; this keeps the member
+ * module's stricter input contract (non-negative, at most nine yuan digits).
+ */
 export function yuanAmountToCents(text: string): number | null {
-  const trimmed = text.trim();
-  if (!/^\d{1,9}(\.\d{1,2})?$/u.test(trimmed)) return null;
-  const [yuanPart, fenPart = ""] = trimmed.split(".");
-  const yuan = Number(yuanPart);
-  const fen = Number(fenPart.padEnd(2, "0"));
-  if (!Number.isSafeInteger(yuan) || !Number.isSafeInteger(fen)) return null;
-  const cents = yuan * 100 + fen;
-  if (!Number.isSafeInteger(cents) || cents < 0) return null;
-  return cents;
+  if (!/^\d{1,9}(\.\d{1,2})?$/u.test(text.trim())) return null;
+  const parsed = parseYuanToFen(text);
+  return parsed.ok ? parsed.fen : null;
 }
 
 export function centsToYuanInput(cents: number): string {
   if (!Number.isSafeInteger(cents) || cents < 0) return "";
-  const yuan = Math.floor(cents / 100);
-  const fen = String(cents % 100).padStart(2, "0");
-  return `${yuan}.${fen}`;
+  return formatFenToYuan(cents);
 }
 
 export function parseMemberBonusRules(value: unknown): readonly MemberBonusRuleView[] | null {

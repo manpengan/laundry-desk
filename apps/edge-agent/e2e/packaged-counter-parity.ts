@@ -4,6 +4,8 @@ import { join } from "node:path";
 
 import { expect, type Download, type Locator, type Page } from "@playwright/test";
 
+import { yuanText } from "./money-input.js";
+
 import {
   fillPackagedReceiveForm,
   openPackagedDebtOrder,
@@ -165,7 +167,7 @@ async function verifyPickupWithoutCollection(
   await page.locator('input[name="pickup-verification-barcode"]').fill(barcode);
   await page.getByRole("button", { name: "确认扫码" }).click();
   await expect(page.getByText("已扫码复核")).toBeVisible({ timeout: 15_000 });
-  await page.locator('input[name="collect-cents"]').fill("0");
+  await page.locator('input[name="collect-cents"]').fill(yuanText("0"));
   await expect(pickup).toBeEnabled();
   await pickup.click();
   await expect(page.locator('[data-testid="pickup-ticket"]')).toHaveText(ticketNo, {
@@ -177,7 +179,7 @@ async function repayPickedUpOrder(page: Page, ticketNo: string): Promise<void> {
   const drawer = await openPackagedDebtOrder(page, ticketNo);
   await expect(drawer.locator('[data-testid="order-detail-balance"]')).toContainText("¥10.00");
   await drawer.locator('[data-testid="order-detail-payment-btn"]').click();
-  await page.locator('input[name="payment-amount-cents"]').fill("1000");
+  await page.locator('input[name="payment-amount-cents"]').fill(yuanText("1000"));
   await page.getByRole("button", { name: "确认补缴" }).click();
   await expect(drawer.locator('[data-testid="order-detail-balance"]')).toContainText("¥0.00", {
     timeout: 15_000,
