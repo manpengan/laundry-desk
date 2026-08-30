@@ -8,12 +8,20 @@ import {
   openSync,
   readFileSync,
   realpathSync,
-  renameSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { z } from "zod";
+
+import {
+  flushDirectoryDurablySync,
+  inspectPrivateDirectorySync,
+  inspectPrivateFileSync,
+  replaceFileWriteThroughSync,
+  securePrivateDirectorySync,
+  securePrivateFileSync,
+} from "@laundry/platform-fs";
 
 import type { QueueRowState, QueueStore, QueueStoredRecord } from "./store.js";
 
@@ -57,7 +65,10 @@ function prepareRoot(path: string): string {
   if (!meta.isDirectory() || meta.isSymbolicLink()) {
     throw new Error("Queue root must be a real directory");
   }
-  return realpathSync(path);
+  securePrivateDirectorySync(path);
+  const root = realpathSync(path);
+  inspectPrivateDirectorySync(root);
+  return root;
 }
 
 function decodeRows(value: unknown): readonly StoredRow[] {
@@ -105,6 +116,7 @@ export class FileQueueStore implements QueueStore {
     if (!meta.isFile() || meta.isSymbolicLink() || meta.size > 16 * 1024 * 1024) {
       throw new Error("Invalid offline queue file");
     }
+    inspectPrivateFileSync(this.path);
     this.rows = decodeRows(JSON.parse(readFileSync(this.path, "utf8")) as unknown);
   }
 
@@ -113,18 +125,14 @@ export class FileQueueStore implements QueueStore {
     const temp = join(this.root, ".offline-queue.staging");
     const fd = openSync(temp, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC, 0o600);
     try {
+      securePrivateFileSync(temp);
       writeFileSync(fd, `${JSON.stringify(parsed)}\n`, "utf8");
       fsyncSync(fd);
     } finally {
       closeSync(fd);
     }
-    renameSync(temp, this.path);
-    const dirFd = openSync(this.root, constants.O_RDONLY);
-    try {
-      fsyncSync(dirFd);
-    } finally {
-      closeSync(dirFd);
-    }
+    replaceFileWriteThroughSync(temp, this.path);
+    flushDirectoryDurablySync(this.root);
     this.rows = decodeRows(parsed);
   }
 
@@ -171,6 +179,9 @@ export class FileQueueStore implements QueueStore {
 
   clear(): void {
     this.rows = Object.freeze([]);
-    if (existsSync(this.path)) unlinkSync(this.path);
+    if (existsSync(this.path)) {
+      unlinkSync(this.path);
+      flushDirectoryDurablySync(this.root);
+    }
   }
 }

@@ -566,10 +566,10 @@ export async function runPackagedSettingsParity(page: Page, admin: PackagedAdmin
     timeout: 15_000,
   });
   await printer.getByRole("button", { name: "刷新队列" }).click();
-  await expect(page.locator(".ld-toast").last()).toContainText("已刷新 CUPS 队列", {
+  await expect(page.locator(".ld-toast").last()).toContainText("已刷新本机打印队列", {
     timeout: 15_000,
   });
-  await expect(printer).toContainText("CUPS 接单不等于实际出纸");
+  await expect(printer).toContainText("系统打印后台接单不等于实际出纸");
   await expect(page.locator('[data-testid="printer-smoke-section"]')).toContainText(
     "旧版 USB / Windows CLI 诊断",
   );

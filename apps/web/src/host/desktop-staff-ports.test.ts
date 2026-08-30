@@ -33,6 +33,13 @@ const SESSION: SessionView = Object.freeze({
   }),
 });
 
+const STAFF_SESSION: SessionView = Object.freeze({
+  ...SESSION,
+  session: Object.freeze({ ...SESSION.session, staff_id: NEW_STAFF_ID }),
+  role: "staff",
+  display: Object.freeze({ ...SESSION.display, staff_name: "新员工" }),
+});
+
 function bridgeWithStaffOperations(captured: unknown[]): LaundryDesktopBridge {
   return Object.freeze({
     auth: Object.freeze({
@@ -44,6 +51,16 @@ function bridgeWithStaffOperations(captured: unknown[]): LaundryDesktopBridge {
         },
       }),
       refresh: async () => ({ ok: true, data: SESSION }),
+      staffDirectory: async () => {
+        captured.push("staffDirectory");
+        return {
+          ok: true,
+          data: [
+            { staff_id: STAFF_ID, display_name: "本地管理员", role: "admin" },
+            { staff_id: NEW_STAFF_ID, display_name: "新员工", role: "staff" },
+          ],
+        };
+      },
       pinChallenge: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
       pinVerify: async () => ({ ok: false, error: { code: "UNUSED", message: "unused" } }),
       credentialComplete: async (input: CredentialInput) => {
@@ -110,5 +127,97 @@ test("desktop staff credential completion returns no secret and refreshes the di
     { staff_id: STAFF_ID, display_name: "本地管理员", role: "admin" },
     { staff_id: NEW_STAFF_ID, display_name: "新员工", role: "staff" },
   ]);
-  assert.deepEqual(captured, [input, { name: "staff.access.list", body: {} }]);
+  assert.deepEqual(captured, [input, "staffDirectory"]);
+});
+
+test("ordinary staff online desktop resume hydrates the PIN directory without admin permission", async () => {
+  const captured: unknown[] = [];
+  let refreshCalls = 0;
+  const base = bridgeWithStaffOperations(captured);
+  const bridge: LaundryDesktopBridge = Object.freeze({
+    ...base,
+    auth: Object.freeze({
+      ...base.auth,
+      refresh: async () => {
+        refreshCalls += 1;
+        return { ok: true, data: SESSION };
+      },
+    }),
+    offline: Object.freeze({
+      resume: async () => ({
+        ok: true,
+        data: { mode: "online", session_view: STAFF_SESSION },
+      }),
+      status: async () => ({ ok: false }),
+      resolve: async () => ({ ok: false }),
+    }),
+  });
+  const ports = createDesktopPorts(bridge);
+
+  assert.deepEqual(ports.auth.listSwitchableStaff(), []);
+  assert.deepEqual(await ports.resume?.resume(), {
+    ok: true,
+    session: STAFF_SESSION,
+    mode: "online",
+  });
+  assert.deepEqual(ports.auth.listSwitchableStaff(), [
+    { staff_id: STAFF_ID, display_name: "本地管理员", role: "admin" },
+    { staff_id: NEW_STAFF_ID, display_name: "新员工", role: "staff" },
+  ]);
+  assert.equal(refreshCalls, 0);
+  assert.deepEqual(captured, ["staffDirectory"]);
+});
+
+test("online desktop resume logs out and clears authority when directory hydration fails", async (t) => {
+  const failures = Object.freeze([
+    Object.freeze({
+      name: "malformed directory",
+      load: async () => ({ ok: true, data: "invalid" }),
+    }),
+    Object.freeze({
+      name: "transport rejection",
+      load: async () => {
+        throw new Error("unavailable");
+      },
+    }),
+  ]);
+
+  for (const failure of failures) {
+    await t.test(failure.name, async () => {
+      let logoutCalls = 0;
+      const base = bridgeWithStaffOperations([]);
+      const bridge: LaundryDesktopBridge = Object.freeze({
+        ...base,
+        auth: Object.freeze({
+          ...base.auth,
+          staffDirectory: failure.load,
+          logout: async () => {
+            logoutCalls += 1;
+            return { ok: true, data: { logged_out: true } };
+          },
+        }),
+        offline: Object.freeze({
+          resume: async () => ({
+            ok: true,
+            data: { mode: "online", session_view: SESSION },
+          }),
+          status: async () => ({ ok: false }),
+          resolve: async () => ({ ok: false }),
+        }),
+      });
+      const ports = createDesktopPorts(bridge);
+      const login = await ports.auth.login({
+        org_code: "local",
+        store_code: "main",
+        username: "owner",
+        password: "test-only-password",
+      });
+      assert.equal(login.ok, true);
+      assert.equal(ports.auth.listSwitchableStaff().length, 1);
+
+      assert.deepEqual(await ports.resume?.resume(), { ok: false });
+      assert.deepEqual(ports.auth.listSwitchableStaff(), []);
+      assert.equal(logoutCalls, 1);
+    });
+  }
 });

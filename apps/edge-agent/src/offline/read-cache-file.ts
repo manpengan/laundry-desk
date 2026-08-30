@@ -1,22 +1,29 @@
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import {
-  chmodSync,
   closeSync,
   existsSync,
+  fstatSync,
   fsyncSync,
-  fchmodSync,
   lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
   readdirSync,
   realpathSync,
-  renameSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
+import {
+  flushDirectoryDurablySync,
+  inspectPrivateDirectorySync,
+  inspectPrivateFileSync,
+  replaceFileWriteThroughSync,
+  securePrivateDirectorySync,
+  securePrivateFileSync,
+  type PrivateFileSecurity,
+} from "@laundry/platform-fs";
 import { z } from "zod";
 
 import { decryptAes256Gcm, encryptAes256Gcm } from "../queue/crypto.js";
@@ -49,8 +56,55 @@ function preparePrivateRoot(path: string): string {
   if (!meta.isDirectory() || meta.isSymbolicLink()) {
     throw new Error("Offline read cache root must be a real directory");
   }
-  chmodSync(path, 0o700);
-  return realpathSync(path);
+  securePrivateDirectorySync(path);
+  const root = realpathSync(path);
+  inspectPrivateDirectorySync(root);
+  return root;
+}
+
+type CacheMetadata = Readonly<{
+  dev: number;
+  ino: number;
+  nlink: number;
+  size: number;
+  mtimeMs: number;
+  ctimeMs: number;
+  isFile: () => boolean;
+  isSymbolicLink: () => boolean;
+}>;
+
+function assertPrivateCacheFile(metadata: CacheMetadata): void {
+  if (
+    !metadata.isFile() ||
+    metadata.isSymbolicLink() ||
+    metadata.nlink !== 1 ||
+    metadata.size > MAX_CACHE_FILE_BYTES
+  ) {
+    throw new Error("Invalid offline read cache file");
+  }
+}
+
+function sameFile(left: CacheMetadata, right: CacheMetadata): boolean {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.nlink === right.nlink &&
+    left.size === right.size &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs
+  );
+}
+
+function sameSecurity(left: PrivateFileSecurity, right: PrivateFileSecurity): boolean {
+  return left.scheme === right.scheme && left.descriptorSha256 === right.descriptorSha256;
+}
+
+function inspectCacheFile(path: string): PrivateFileSecurity {
+  try {
+    return inspectPrivateFileSync(path);
+  } catch (error) {
+    throw new Error("Invalid offline read cache file", { cause: error });
+  }
 }
 
 export class OfflineReadCacheFile {
@@ -62,7 +116,7 @@ export class OfflineReadCacheFile {
     private readonly safeStorage: SafeStorageSurface,
   ) {
     if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error("macOS Keychain encryption is unavailable");
+      throw new Error("OS protected storage encryption is unavailable");
     }
     this.root = preparePrivateRoot(rootPath);
     this.path = join(this.root, "offline-read-cache.json");
@@ -72,17 +126,33 @@ export class OfflineReadCacheFile {
 
   read(): unknown | null {
     if (!existsSync(this.path)) return null;
-    const meta = lstatSync(this.path);
-    if (
-      !meta.isFile() ||
-      meta.isSymbolicLink() ||
-      meta.nlink !== 1 ||
-      (meta.mode & 0o777) !== 0o600 ||
-      meta.size > MAX_CACHE_FILE_BYTES
-    ) {
-      throw new Error("Invalid offline read cache file");
+    const expected = lstatSync(this.path);
+    assertPrivateCacheFile(expected);
+    const securityBefore = inspectCacheFile(this.path);
+    const fd = openSync(this.path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    let bytes: Buffer;
+    try {
+      const opened = fstatSync(fd);
+      assertPrivateCacheFile(opened);
+      if (!sameFile(expected, opened)) throw new Error("Invalid offline read cache file");
+      bytes = readFileSync(fd);
+      const final = fstatSync(fd);
+      const pathAfter = lstatSync(this.path);
+      assertPrivateCacheFile(final);
+      assertPrivateCacheFile(pathAfter);
+      const securityAfter = inspectCacheFile(this.path);
+      if (
+        !sameFile(opened, final) ||
+        !sameFile(final, pathAfter) ||
+        bytes.byteLength !== final.size ||
+        !sameSecurity(securityBefore, securityAfter)
+      ) {
+        throw new Error("Invalid offline read cache file");
+      }
+    } finally {
+      closeSync(fd);
     }
-    const file = CacheFileSchema.parse(JSON.parse(readFileSync(this.path, "utf8")) as unknown);
+    const file = CacheFileSchema.parse(JSON.parse(bytes.toString("utf8")) as unknown);
     const keyText = this.safeStorage.decryptString(Buffer.from(file.protected_key, "base64"));
     const key = Buffer.from(keyText, "base64");
     try {
@@ -135,9 +205,8 @@ export class OfflineReadCacheFile {
   clear(): void {
     if (!existsSync(this.path)) return;
     const meta = lstatSync(this.path);
-    if (!meta.isFile() || meta.isSymbolicLink() || meta.nlink !== 1) {
-      throw new Error("Invalid offline read cache file");
-    }
+    assertPrivateCacheFile(meta);
+    inspectCacheFile(this.path);
     unlinkSync(this.path);
     this.syncRoot();
   }
@@ -145,9 +214,8 @@ export class OfflineReadCacheFile {
   private assertWritableDestination(): void {
     if (!existsSync(this.path)) return;
     const meta = lstatSync(this.path);
-    if (!meta.isFile() || meta.isSymbolicLink() || meta.nlink !== 1) {
-      throw new Error("Invalid offline read cache file");
-    }
+    assertPrivateCacheFile(meta);
+    inspectCacheFile(this.path);
   }
 
   private cleanupInterruptedWrites(): void {
@@ -157,8 +225,11 @@ export class OfflineReadCacheFile {
       const staging = join(this.root, name);
       assertContained(this.root, staging);
       const meta = lstatSync(staging);
-      if (!meta.isFile() || meta.isSymbolicLink() || meta.nlink !== 1) {
-        throw new Error("Invalid offline read cache staging file");
+      try {
+        assertPrivateCacheFile(meta);
+        inspectPrivateFileSync(staging);
+      } catch (error) {
+        throw new Error("Invalid offline read cache staging file", { cause: error });
       }
       unlinkSync(staging);
       removed = true;
@@ -178,22 +249,17 @@ export class OfflineReadCacheFile {
       0o600,
     );
     try {
-      fchmodSync(fd, 0o600);
+      securePrivateFileSync(staging);
       writeFileSync(fd, `${JSON.stringify(file)}\n`, "utf8");
       fsyncSync(fd);
     } finally {
       closeSync(fd);
     }
-    renameSync(staging, this.path);
+    replaceFileWriteThroughSync(staging, this.path);
     this.syncRoot();
   }
 
   private syncRoot(): void {
-    const directory = openSync(this.root, constants.O_RDONLY);
-    try {
-      fsyncSync(directory);
-    } finally {
-      closeSync(directory);
-    }
+    flushDirectoryDurablySync(this.root);
   }
 }

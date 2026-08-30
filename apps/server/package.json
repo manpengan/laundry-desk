@@ -14,7 +14,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "lint": "eslint . --ext .ts,.tsx --max-warnings=0",
-    "test": "tsc -p tsconfig.json && node --test --test-concurrency=1 'dist/**/*.test.js'",
+    "test": "tsc -p tsconfig.json && node --test --test-concurrency=1 \"dist/**/*.test.js\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -22,6 +22,7 @@
     "@fastify/cors": "^11.3.0",
     "@laundry/contracts": "file:../../packages/contracts",
     "@laundry/domain": "file:../../packages/domain",
+    "@laundry/platform-fs": "file:../../packages/platform-fs",
     "@node-rs/argon2": "^2.0.2",
     "fastify": "^5.10.0",
     "pg": "^8.22.0",

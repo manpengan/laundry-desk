@@ -4,6 +4,131 @@
 > token、真实顾客 PII，也不得记录主机上凭据文件的具体路径或变量名（这类定位信息发到公开
 > 仓库等于给出半张地图）。运维私有细节留在主机侧记录，本文只写判据、结论与可复核的标识。
 
+## 2026-08-30：Windows V2 桌面主线启动
+
+- 独立合成测试店长已通过真实安装版 UI 创建并完成另一位管理员现场复核；最终重跑复用该账号，
+  错误密码拒绝、密码字段清空、正确登录、冷启动会话恢复、双向 PIN 快速切换和退出均通过。账号
+  密码与 PIN 只存在目标机私有 development-only 文件，原生 DACL/link-count 检查通过，未写入日志、
+  截图、JSON 证据或仓库。
+- 安装版全功能旅程最终 1/1 通过：覆盖十个桌面导航面、960×720 启动窗口布局、系统/浅色/深色
+  主题、打印队列与系统打印机枚举、价目新增/停用/启用、合成顾客与档案、20 元开单、部分收款、
+  1 元原路退款、16 元欠款取衣结清、工作台与日结对账。最终 renderer error=0、HTTP 5xx=0，六张
+  Electron 截图已逐张人工复核；XP-58 实体出纸未包含在通过结论。
+- 全功能旅程暴露并关闭三类真实缺陷，并在在线恢复修复复审中关闭一项权限回归：在线冷启动恢复
+  只返回 SessionView、未补载 PIN 员工目录；首次补载实现误用了需要 `staff_write` 的管理查询，会使
+  普通员工恢复失败；同一服务/分类存在多个等价价目代码时 Server 误按“行数不等于一”拒绝；登录
+  失败 toast 在随后成功登录后仍跨页面残留。最终实现改用固定、无 token 的桌面认证目录端点，普通
+  员工与管理员均可恢复，并用并发 logout 回归证明迟到响应不会复活会话；等价价格可确定解析、冲突
+  价格继续拒绝，成功登录后的工作台不再显示旧认证错误。
+- Windows 最终安装包重新构建、结构检查、解包版 smoke、覆盖安装、安装版 smoke 和全功能旅程均
+  通过；installer SHA-256 为 `d79c6c4778f9ab6e28a7a5e341315becfe25d2526f7ccb497a732a77361b2e14`，
+  安装版 EXE 为 `d8648d336190fe99dda4aad378b03dd7827781d9a5080555ad9534069a58c4c1`，SPA bundle
+  为 `931fab69b2e5155eb2fe130bb23c72ccb3bcb0cd347551882ea4448541ccff47`。安装树 `app.asar`
+  摘要为 `6fc1c710283ece27b75ccb337c571d80acc804212bc042e0eac88653146cc2d5`，与解包产物一致；包仍
+  明确 `NotSigned` / development-only。
+- 新鲜门禁：Web 519/519；Edge Agent 420/420；Server 1069 pass / 102 显式环境 skip / 0 fail；
+  Server 价格回归 7/7；TypeScript 与 ESLint 通过；Windows package smoke、runtime smoke、
+  functional journey 各 1/1。独立安全复核为 APPROVE，未发现 High/Medium 问题。
+  只读数据库终态证明合成票 `20260830-0008` 已结清、2000/2000/0 分、1 件已取、3 条支付流水含
+  1 条退款，支付账本投影与订单一致；账号为 active admin 且密码/PIN 仅存 argon2id hash。
+- 终态运行审计确认 Runtime 任务 Running/health ready，PostgreSQL 与 API 仅监听
+  `127.0.0.1:8543/8787`，安装版无残留进程，最新测试账号 session 已 revoked。历史 PostgreSQL
+  尾部错误均来自早期安装/受控停机或本轮一次只读审计语法错误；修正后的独立健康+数据库探针窗口
+  Server/PostgreSQL 新增错误均为 0。本轮目标机一次性构建/审计 runner 已按精确清单删除且残留为 0；可复用
+  Playwright runner 留在仓库，私有测试账号与功能证据按 development 验收用途保留。
+- 用户要求创建测试账号登录并做全面功能验证；已把本轮定义为安装版 Electron 的合成全功能旅程，
+  覆盖账号创建/双人复核/密码与 PIN、全部十个桌面导航、价目、客户档案、开单、收退款、取衣结清、
+  对账、会话恢复和视觉检查。凭据只写入 Windows 私有 development-only 文件，不进源码、日志或报告；
+  实体 XP-58、真实 provider、不可逆隐私删除和真实顾客数据保持外部门禁。
+- 用户首次直接运行已安装 EXE 后看到错误页。实机诊断确认 4 个 Electron 进程均在登录会话正常
+  运行，Application/CodeIntegrity 无应用失败且无 crash dump；真正失败是固定
+  `http://127.0.0.1:8787/health` 无监听。Clash GUI/服务当时均运行，WinHTTP 为 direct，故不是
+  Clash 导致，而是安装包只交付了桌面壳、没有交付独立本地业务服务启动链。
+- W1 状态据此从“软件链关闭”更正为 `completed_shell_only`，当前插入 W1.5：保持 Fastify/PostgreSQL
+  与 Electron 分离，在 Windows 上补齐 localhost 服务安装、初始化、启动、恢复和安装器生命周期，
+  不能用隐藏 ServiceGate 或伪造 health 响应代替。
+- ADR-67 已接受并关闭 W1.5 development Runtime：目标机使用摘要绑定的 PostgreSQL 16.15 Windows
+  binary、UTF-8/SCRAM/data-checksums cluster、独立随机秘密和受保护 DACL；Fastify/PostgreSQL 分别只
+  监听 `127.0.0.1:8787` 与 `127.0.0.1:8543`，Electron 仍不拥有数据库生命周期。
+- Windows 实机首次初始化已真实执行连续 69 条迁移至 `0069_bounded_automation.sql`，角色、bootstrap、
+  kit verify 与真实 `/health` 全部通过；登录任务停止后能恢复 PostgreSQL、Server 和 ready health。
+- 真正安装到 Program Files 的 EXE 已通过 Playwright `_electron` 桌面验收：使用私有 handoff 中随机生成
+  的 development 操作员登录，进入柜台工作台，关闭后重开同一安装版并恢复会话，1/1 通过；桌面截图
+  显示在线状态且不再出现“本地服务尚未就绪”。浏览器证据未计入此次结论。
+- 本轮没有把 development 修复冒充宏发正式版：当前 Runtime 仍使用构建机 Node 和仓库构建产物；固定
+  payload、no-repo companion、安装/修复/卸载整合、Authenticode、XP-58 与真实数据准入转入 W2。
+- 独立安全复核为 development-only 范围 APPROVE，且发现并修复一个非阻断环境继承风险：launcher
+  现在清空 container/LAN/public 拓扑与 Node 注入变量；目标机用污染的 container 环境启动后，8787
+  仍只绑定 `127.0.0.1`。正式 companion 的固定迁移 payload 与签名 manifest 仍按 W2 保持未关闭。
+- 后续 stop/start 实证发现 Task Scheduler hard-stop 会向 PostgreSQL backend 传播 `0xC000013A`；已改为
+  禁止任务 hard terminate，并新增 Server→`pg_ctl fast` 的受控停机脚本。一次诊断竞态中的开发库使用
+  PostgreSQL immediate stop 收口后完成 WAL 自动恢复；最终 kit verify 通过，ledger 仍为
+  `69|0001_roles.sql|0069_bounded_automation.sql`、`pg_is_in_recovery=false`、data checksums=on。
+- 修复后的真实受控 stop/start 已连续通过：最后一次 `0xC000013A` 留在修复前，后续日志先记录 clean
+  shutdown 再记录 ready；污染 container/LAN/public/`NODE_OPTIONS` 的临时任务仍只得到
+  `127.0.0.1:8787` 与 `127.0.0.1:8543`，临时任务、wrapper 与传输脚本均已删除。
+- Runtime 恢复后再次运行真实安装版 `_electron`：development 操作员登录、柜台工作台、关闭/重开
+  同一 EXE 与会话恢复 1/1 通过；物理登录 Session 1 的既有安装版 Counter 保持运行。
+- development Runtime 同版本修复安装已在最终进程封装上退出 0：`pg_ctl start` 只等待直接子进程，
+  不再被后台 postgres 或 SSH 输出管道拖住；安装器完成安全停机、69 项迁移/引导/校验、任务重注册并
+  回到 ready。修复安装后的安装版 `_electron` 再次 1/1 通过；终态审计确认两个端口仅回环监听、任务
+  禁止 hard terminate、ledger 为 69/head 0069、非 recovery、data checksums=on，最近运行日志无
+  panic/fatal。
+- 用户裁决后续主线为活动 V2 的 Windows 定制桌面 EXE，并交宏发门店做实际运营实践；已明确
+  纠正“Web UI 验收”描述，浏览器不再作为桌面交付证据。
+- ADR-66 已接受并同步入口文档、CHANGELOG、阶段计划与研究记录。它规定 W0 安全基线、W1
+  Windows 打印/NSIS、W2 生产准入与桌面验收、W3 宏发受控实操，且禁止复活根 V1 Electron。
+- 修复了包脚本中的 POSIX `find`/单引号 glob；Mac 相关包门禁已通过，Windows 已证明 UI、Web、
+  Server 与 Edge 脚本测试可被完整发现。Server 的剩余失败已归因于真实目录 flush 和私有文件语义，
+  不能用跳过或放宽断言“修绿”。
+- 新增共享 `@laundry/platform-fs` 与固定命令的 Windows 原生 helper，已证明 write-through replace、
+  可写目录 handle flush、私有文件 ACL 和 RAW spooler 接口可实现；目录 ACL 与 Edge/Server 调用方
+  迁移已经完成。
+- `sync-spa` 已改用共享 durable replace/flush：Mac 23/23，Windows 18 pass / 5 平台条件 skip / 0 fail。
+- W0 已关闭：Windows Edge 完整编译测试 404 项、368 pass / 36 显式平台 skip / 0 fail；Server
+  完整编译测试 1167 项、1065 pass / 102 原有环境或平台 skip / 0 fail。
+- Server 照片存储、打印 spool 与秘密文件读取已迁移到共享持久化/DACL 原语；秘密文件现在同时
+  拒绝 reparse、非唯一 hard-link、非私有 ACL 及读取期间对象替换。两端相关回归均为 89/89。
+- Edge 脚本门禁在 macOS 为 61/61 全执行，在 Windows 为 51 pass / 10 明确平台 skip / 0 fail；
+  没有把跨平台逻辑整体跳过。
+- Windows 控制面已固化为严格密钥登录和受限项目文件传输；Gitea 明确不参与本轮同步或清理。
+- W1 Windows 打印链已关闭：通用 `RawPrintPort` 在签名派发/ledger/回执之后按平台选择 CUPS 或
+  Winspool；主进程启动与 `queueReady` 复用同一个平台 pilot，避免 Windows 启动后误回落 CUPS。
+  真实系统枚举到 5 个队列并以 `Fax` 做无出纸软件 smoke；未发现 XP-58，故实体打印仍保持阻塞。
+- 活动 V2 x64 NSIS development-only 安装器已生成并通过结构检查：installer SHA-256
+  `fd98e1b70ea7fbb832648415fcb994c994c0293a7995e27f31415b11a7e34e53`，安装后主 EXE
+  `64bc60c328c996104dfacfb9d0d08b93600bf7428f79ac12fb86db3e3ff939fb`，原生 helper
+  `82bbffc6a3365b91929170a783dc3790f8de94820d3e1762404ac939311ec90f`；三者状态均明确为
+  `NotSigned`，不能交付为宏发运营签名版。
+- 解包版与安装版 Playwright `_electron` smoke 均通过；另在 Windows 登录 Session 1 以受限令牌
+  启动安装版，取得 `Laundry Desk — Local` 稳定窗口、0 字节 stderr、加密离线队列 ready 和
+  “本地服务尚未就绪”桌面截图，截图 SHA-256 为
+  `42cc5d2c91412d83700be5a99c9b62f9faca7ca480e9e46188b14e0151809f7d`。
+- 交互验收暴露并修复了 DACL helper 对 `WRITE_OWNER` 的隐式依赖：普通用户已拥有对象时只收紧
+  DACL；仅提升管理员可把 `BUILTIN\\Administrators` 所有对象归一化给当前用户，其他 owner 失败
+  关闭。修复后 Windows 原生套件 8/8、受限桌面启动和加密队列均通过。
+- NSIS 生命周期已完成首次安装、同版本修复安装、卸载和数据保留回归：修复安装删除安装树中的
+  stale probe、保持 AppData sentinel；卸载删除程序目录/快捷方式/注册表但保持 AppData，随后测试
+  sentinel 与临时目录均已自行清理。跨版本升级/回滚未冒充完成。
+- Windows 测试安装、交互任务/脚本/日志/用户数据和 7 个传输归档均已清理；最终开发安装器保留，
+  既有 Hongfa Laundry 安装未触碰。联网前置的 Clash 进程仍在登录会话运行，未为清理而中断。
+- 最终从干净的新鲜输出执行 `pnpm workspace:check` 已退出 0：依赖审计无 high/critical、格式检查
+  通过、lint 10/10、typecheck 13/13、foundation/runtime 294/294、Cloud ADR-36 363 pass / 1 skip /
+  0 fail、build 10/10；Edge 包脚本 68/68、运行时 416/416。
+- 收口门禁还修复了三项测试基础设施漂移：进程 PID 文件必须等到出现合法正整数内容而非只等文件
+  存在；Electron scheme 静态门禁改为检查实际 wrapper 调用，并由 wrapper 单测证明特权注册语义；
+  打包 SPA manifest 已同步到 44 项的 `7bfcee0892a8e64f64d9735577d052dc91a30719cf7999e7d32f288be94a3fa8`。
+
+## 当前下一步
+
+1. 将固定 Node、Server、migration 与 PostgreSQL 制成不依赖源码仓库的 Runtime companion，并完成
+   安装、修复、升级、停止、重启与保留数据卸载门禁。
+2. 接入宏发目标 XP-58，完成实体 RAW 打印矩阵与失败/补打/防重复证据。
+3. 确定 Authenticode 或受控内网安装政策，并在第二个版本上完成升级/回滚门禁。
+4. 关闭 ADR-65 production-candidate、离机恢复、告警、容量与迁移准入，再做宏发合成数据演练；
+   未关闭前不得输入真实顾客数据。
+
+---
 
 ## 2026-08-27：Claude 只读核对与 #203/#204 收口
 
@@ -271,7 +396,6 @@
 - 18 项仍为 `0/18`；Item 1 只读设计已冻结为 ADR-46/0054 的政策配置与 policy-only quote，且为保证
   0053 回滚兼容不会提前把 `store_features.delivery` 改为 true，也不夹带预约/订单/地图/provider。
 
-
 ## 2026-08-12：0053 首轮发布被 controller 嵌套目录阻塞
 
 - 用户授权先发布 `f2d40ce…4eee / 0053`，再按 1→18 每项独立 commit 实现 Stage 4.4/4.5，
@@ -297,7 +421,6 @@
 - PR #173 已以 merge commit `02b3883b9b5de1ea119bdcbe2f1ddde8cd9a0d4b` 合入；本地 `main`
   已 fast-forward 到同一 SHA。精确 push 级 Foundation `31604206437` 与 PostgreSQL
   Integration `31604206432` 正在运行，未提前发布。
-
 
 ## 2026-08-12：阶段 3.2–4.3 五批提交并进入 GitHub 保护流程
 
@@ -1460,6 +1583,7 @@ AUDITED_TIME_FIXTURE_REQUIRED` 外全部旅程、safe cleanup 与 logout PASS；
 - 22:01 PR #161 三项 required CI 全绿（runtime 3m30s、workspace 7m13s、real PG
   12m54s），已合入并快进到 `main=origin/main=9cc31c4`；开始以 token 仅驻内存的单进程
   包装执行真实 prepare→finalize。
+
 # 2026-08-12 PR #173 合入后首次 0053 发布
 
 - PR #173 已合入 `main@02b3883b9b5de1ea119bdcbe2f1ddde8cd9a0d4b`；本地 `main`、
@@ -1532,6 +1656,7 @@ AUDITED_TIME_FIXTURE_REQUIRED` 外全部旅程、safe cleanup 与 logout PASS；
   已绿。统一 `workspace:check` 首轮已通过 audit/format/lint/typecheck，测试阶段仅剩两个陈旧
   Foundation 断言（旧 migration head 与固定 PG 端口）待最小订正后定点重跑。
 - hk-vps 仍保持已验证的 `f276bdb / 0048`，不会在 18 项全部完成和统一集成门禁前发布。
+
 # 2026-08-13：恢复 Items 13/15
 
 - 用户明确授权从 hk-vps Hermes 复用既有 DeepSeek API 凭据完成 Items 13/15；主机 ED25519

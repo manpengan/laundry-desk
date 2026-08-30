@@ -130,7 +130,7 @@ test("restart retries the oldest inflight item before newer pending work", async
   }
 });
 
-test("SafeStorage KEK adapter refuses to start without Keychain encryption", async () => {
+test("SafeStorage KEK adapter refuses to start without OS protected storage", async () => {
   const root = await mkdtemp(join(tmpdir(), "laundry-persistent-queue-"));
   try {
     assert.throws(
@@ -139,7 +139,7 @@ test("SafeStorage KEK adapter refuses to start without Keychain encryption", asy
           ...fakeSafeStorage,
           isEncryptionAvailable: () => false,
         }),
-      /Keychain encryption is unavailable/u,
+      /protected storage encryption is unavailable/u,
     );
   } finally {
     await rm(root, { recursive: true, force: true });

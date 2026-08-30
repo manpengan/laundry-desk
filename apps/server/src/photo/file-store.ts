@@ -10,6 +10,8 @@ import { constants } from "node:fs";
 import { link, lstat, open, readdir, unlink } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 
+import { flushDirectoryDurably, inspectPrivateFile, securePrivateFile } from "@laundry/platform-fs";
+
 import { PhotoFileError } from "./file-store-error.js";
 import { securePhotoStoreRoot } from "./file-store-root.js";
 
@@ -106,21 +108,13 @@ function pathFor(rootPath: string, storageKey: string): string {
   return path;
 }
 
-async function fsyncDirectory(rootPath: string): Promise<void> {
-  const handle = await open(rootPath, constants.O_RDONLY);
-  try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-}
-
 async function inspectOwned(rootPath: string) {
   const entries: Array<Readonly<{ name: string; bytes: number; mtimeMs: number }>> = [];
   for (const name of await readdir(rootPath)) {
     if (!STORAGE_KEY.test(name) && !STAGING_NAME.test(name)) continue;
     const metadata = await lstat(join(rootPath, name)).catch(() => null);
     if (metadata === null || metadata.isSymbolicLink() || !metadata.isFile()) continue;
+    if ((await inspectPrivateFile(join(rootPath, name)).catch(() => null)) === null) continue;
     entries.push(Object.freeze({ name, bytes: metadata.size, mtimeMs: metadata.mtimeMs }));
   }
   return Object.freeze(entries);
@@ -134,23 +128,35 @@ async function stage(
 ): Promise<string> {
   const path = join(rootPath, `.${storageKey}.${newId()}.staging`);
   assertContained(rootPath, path);
-  const handle = await open(
-    path,
-    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
-    FILE_MODE,
-  );
   try {
-    await handle.writeFile(bytes);
-    await handle.sync();
-  } finally {
-    await handle.close();
+    const handle = await open(
+      path,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
+      FILE_MODE,
+    );
+    try {
+      await securePrivateFile(path);
+      await handle.writeFile(bytes);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await inspectPrivateFile(path);
+    return path;
+  } catch (error) {
+    await unlink(path).catch(() => undefined);
+    throw error;
   }
-  return path;
 }
 
 async function readRegularPhoto(path: string) {
   const metadata = await lstat(path).catch(() => null);
   if (metadata === null || metadata.isSymbolicLink() || !metadata.isFile()) {
+    throw new PhotoFileError("PHOTO_FILE_UNAVAILABLE", "photo file is unavailable");
+  }
+  try {
+    await inspectPrivateFile(path);
+  } catch {
     throw new PhotoFileError("PHOTO_FILE_UNAVAILABLE", "photo file is unavailable");
   }
   const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0)).catch(
@@ -169,8 +175,23 @@ async function readRegularPhoto(path: string) {
     ) {
       throw new PhotoFileError("PHOTO_FILE_UNAVAILABLE", "photo file changed while opening");
     }
+    const bytes = await handle.readFile();
+    const current = await lstat(path).catch(() => null);
+    if (
+      current === null ||
+      current.isSymbolicLink() ||
+      !current.isFile() ||
+      current.dev !== opened.dev ||
+      current.ino !== opened.ino ||
+      current.size !== opened.size
+    ) {
+      throw new PhotoFileError("PHOTO_FILE_UNAVAILABLE", "photo file changed while reading");
+    }
+    await inspectPrivateFile(path).catch(() => {
+      throw new PhotoFileError("PHOTO_FILE_UNAVAILABLE", "photo file changed while reading");
+    });
     return Object.freeze({
-      bytes: await handle.readFile(),
+      bytes,
       device: opened.dev,
       inode: opened.ino,
     });
@@ -284,7 +305,8 @@ export async function createPhotoFileStore(
         try {
           await link(temporaryPath, finalPath);
           await unlink(temporaryPath);
-          await fsyncDirectory(rootPath);
+          await inspectPrivateFile(finalPath);
+          await flushDirectoryDurably(rootPath);
         } catch (error) {
           await unlink(temporaryPath).catch(() => undefined);
           throw error;
@@ -311,7 +333,7 @@ export async function createPhotoFileStore(
       const path = pathFor(rootPath, storageKey);
       const removed = await removeVerified(path, expectedSha256);
       if (!removed) return false;
-      await fsyncDirectory(rootPath);
+      await flushDirectoryDurably(rootPath);
       return true;
     },
     sweepOrphans: async (referencedKeys: ReadonlySet<string>, nowMs = Date.now()) =>
@@ -332,7 +354,7 @@ export async function createPhotoFileStore(
             retainedBytes += entry.bytes;
           }
         }
-        if (removed > 0) await fsyncDirectory(rootPath);
+        if (removed > 0) await flushDirectoryDurably(rootPath);
         return Object.freeze({
           removed,
           removed_bytes: removedBytes,

@@ -1,26 +1,26 @@
 # laundry-desk
 
-产品目标是面向洗衣店行业提供通用 V2 柜台与经营系统，规划支持云端 Web、离线柜台、硬件打印和 AI-first 操作。
+产品目标面向洗衣店行业，规划支持通用 V2 柜台与经营系统的桌面柜台、云端服务、离线操作、硬件打印和 AI-first 操作。
 
-[ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) 确定 hk-vps Linux Web Server/Web
-为主交付形态，阶段 1–4.5 已关闭。[ADR-64](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
-下的 5.0 发布解阻已于 2026-08-25 关闭，当前以已签署的
-[ADR-65](docs/adr/2026-08-25-adr-65-cloud-production-baseline.md) 推进 5.1 Cloud 生产基线；5.1
-关闭并另行授权真实数据前，hk-vps 与任何 production-candidate 都只允许合成数据。
+[ADR-66](docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md) 已把后续主线切换为活动 V2 的
+Windows 定制 EXE，并以宏发作为首个受控运营试点。根 `src/` 与根 `build:win` 仍是冻结 v1；宏发
+定制只进入发行 profile，不进入通用业务核心。真实运营前仍必须关闭
+[ADR-65](docs/adr/2026-08-25-adr-65-cloud-production-baseline.md) 的独立生产环境、离机恢复、告警、容量
+与数据准入门禁；`hk-vps-cloud-test` 继续只允许合成数据。
 
 ## 当前状态
 
-| 项         | 值                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 活动路线   | **阶段 5 生产化接续**：[ADR-64](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) 与 [阶段 5 计划](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md)；5.1 细节由已签署的 [ADR-65](docs/adr/2026-08-25-adr-65-cloud-production-baseline.md) 与 [5.1 计划](docs/superpowers/plans/2026-08-25-stage51-cloud-production-baseline-plan.md)冻结；V2-only 继续继承 [ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)，契约、安全边界和 Web 主形态继续继承 ADR-14/16/36/37 |
-| 当前阶段   | **5.1 Cloud 生产基线执行准备中**：5.0 已随 exact `main` `c8919af3c666cf70df2fbf04645ebdf0f377f35a` 关闭；迁移保持 69/head 0069，契约冻结面为 82 commands / 64 queries；hk-vps 稳定态 `/opt=5`、history/controller/backup `=7/7/7`、evidence `=6`，release preflight room 全部为 true。下一步是完成命名环境 profile 基座，并选择独立 production-candidate、真实离机介质、告警接收端与容量画像；当前仍不称生产 SaaS。                                                                                                             |
-| 设计真源   | [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) · [ADR-16](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [ADR-37](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) · [ADR-64](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) · [ADR-65](docs/adr/2026-08-25-adr-65-cloud-production-baseline.md) · [阶段 5 计划](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md)                                       |
-| 当前 owner | **Codex** — 设计、实现、集成与门禁                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| 目标平台   | 当前：`desk.manpengan.xyz` 上的 Linux Fastify/PostgreSQL + 浏览器 Web；后续桌面、操作系统安装包和实体硬件另行恢复                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 项         | 值                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 活动路线   | **Windows V2 → 宏发试点**：[ADR-66](docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md)；V2-only 继续继承 [ADR-13](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)，契约与生产数据边界继续继承 ADR-14/16/65                                                                                                                                                                                |
+| 当前阶段   | **W2 Windows 桌面/硬件与生产准入**：W0/W1 软件链已关闭，development-only、未签名 NSIS 包的解包、安装和交互式桌面验收已通过。XP-58 实体打印、Authenticode/内部分发策略、跨版本升级回滚与 ADR-65 生产门禁仍待关闭；真实宏发运营前只允许合成数据。                                                                                                                                                    |
+| 设计真源   | [ADR-66](docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md) · [Windows 实机 findings](docs/research/2026-08-29-windows-port-findings-and-build-host.md) · [ADR-65](docs/adr/2026-08-25-adr-65-cloud-production-baseline.md) · [ADR-16](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) · [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) |
+| 当前 owner | **Codex** — 设计、实现、集成与门禁                                                                                                                                                                                                                                                                                                                                                                 |
+| 目标平台   | 当前：Windows 10 22H2 / Windows 11 x64 的活动 V2 Electron NSIS `.exe`；服务端使用独立 production-candidate，实体打印按宏发现役设备实证                                                                                                                                                                                                                                                             |
 
 已交付到 hk-vps 的代码面包括 `Local Foundation → 完整柜台工作日 → 履约/顾客/员工治理 → 本地备份恢复 → 加密离线队列与 Primary → 重放对账 → 会员储值二期 → 催取人工名单 → 双口径账目 → 会员账户生命周期 → LAN Owner → Runtime 数据保护/升级 → 正式候选软件证据 → 服务端权威计价/支付退款/件级挂单恢复 → 价目恢复/原子排序/乐观版本/安全审计 → Owner 云端经营与门店管理 → 会员权益与有效期 → 顾客扩展档案与折扣政策 → 云数据保护与联合恢复 → provider-neutral 通知 outbox → 店厂交接与质检 → 取送全链与移动任务面 → 营销活动/券/推荐团购 → 顾客自助订单与钱包 → AI/BYOK 有界只读与自动化`。阶段 5.0 的新鲜证据包含 exact-main `c8919af3…f35a`、公网 API 20/20、Cloud Chromium PASS、marker/0069、四服务/共享站点健康及 release-set inventory/preflight；该环境仍禁止真实顾客 PII，也不等于生产 SaaS。AI/BYOK 与通知 provider 当前只有 `software_only` 证据，不声称已发送、已送达或已产生真实模型调用。当前 macOS 新鲜证据只属于 **software-only**，不冒充 XP-58 实体打印、Developer ID/公证、正式双架构 OCI、Windows 实机或生产云证据。
 
-宏发版本停止开发；根 `src/` 只作为历史行为参考，不作为当前产品入口。
+宏发 v1 版本仍停止开发；根 `src/` 只作为历史行为参考。宏发现在是通用 V2 Windows 发行 profile 与受控试点对象。
 
 ## 架构
 
@@ -42,7 +42,7 @@ Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 ·
 
 ## 当前交付顺序
 
-`5.0 发布解阻（已关闭） → 5.1 Cloud 生产基线（规划中） → 5.2 受控试点 → 5.3 真实 provider → 5.4 桌面与硬件`
+`W0 Windows 安全基座 → W1 Windows EXE/打印 → W2 生产与迁移准入 → W3 宏发受控运营`
 
 当前执行入口是[阶段 5 生产化交付计划](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md)。
 阶段 1–4.5 是已完成基线；每一阶段仍须本地门禁、PR 合入、精确 `main` required CI、远端部署与

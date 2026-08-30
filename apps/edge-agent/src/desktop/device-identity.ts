@@ -1,6 +1,14 @@
 import { constants, type Stats } from "node:fs";
-import { chmod, link, lstat, mkdir, mkdtemp, open, readdir, rmdir, unlink } from "node:fs/promises";
+import { link, lstat, mkdtemp, open, readdir, rename, rmdir, unlink } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
+import {
+  flushDirectoryDurably,
+  inspectPrivateDirectory,
+  inspectPrivateFileLinks,
+  securePrivateDirectory,
+  securePrivateFile,
+  type PrivateFileSecurity,
+} from "@laundry/platform-fs";
 
 export type DeviceIdentityOptions = Readonly<{
   userDataPath: string;
@@ -10,8 +18,8 @@ export type DeviceIdentityOptions = Readonly<{
 const IDENTITY_DIRECTORY_NAME = "device-identity";
 const IDENTITY_FILE_NAME = "device-id";
 const STAGING_DIRECTORY_PREFIX = ".device-id-";
+const ROOT_STAGING_DIRECTORY_PREFIX = ".device-identity-root-";
 const STAGING_FILE_NAME = "candidate";
-const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
 const UUID_BYTES = 36;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -28,25 +36,78 @@ async function ensureIdentityDirectory(userDataPath: string): Promise<string> {
     throw new Error("Device identity userData path must be absolute");
   }
   const path = join(userDataPath, IDENTITY_DIRECTORY_NAME);
-  let created = false;
+  let existing = true;
   try {
-    await mkdir(path, { mode: DIRECTORY_MODE });
-    created = true;
+    await lstat(path);
   } catch (error) {
-    if (!hasErrorCode(error, "EEXIST")) throw error;
+    if (!hasErrorCode(error, "ENOENT")) throw error;
+    existing = false;
   }
-  if (created) await chmod(path, DIRECTORY_MODE);
+  if (!existing) {
+    const staging = await mkdtemp(join(userDataPath, ROOT_STAGING_DIRECTORY_PREFIX));
+    let installed = false;
+    try {
+      await securePrivateDirectory(staging);
+      try {
+        await rename(staging, path);
+        installed = true;
+        await flushDirectoryDurably(userDataPath);
+      } catch (error) {
+        let finalExists = true;
+        try {
+          await lstat(path);
+        } catch (finalError) {
+          if (hasErrorCode(finalError, "ENOENT")) finalExists = false;
+          else throw finalError;
+        }
+        if (!finalExists) throw error;
+      }
+    } finally {
+      if (!installed) await removeStagingDirectory(staging);
+    }
+  }
 
   const stat = await lstat(path);
-  if (stat.isSymbolicLink() || !stat.isDirectory() || (stat.mode & 0o777) !== DIRECTORY_MODE) {
+  if (stat.isSymbolicLink() || !stat.isDirectory()) {
     throw new Error("Device identity directory is not secure");
+  }
+  try {
+    await inspectPrivateDirectory(path);
+  } catch (error) {
+    throw new Error("Device identity directory is not secure", { cause: error });
   }
   return path;
 }
 
-function assertSecureIdentityFile(stat: Stats, expectedLinks = 1): void {
-  if (!stat.isFile() || stat.nlink !== expectedLinks || (stat.mode & 0o777) !== FILE_MODE) {
+function assertSecureIdentityFile(stat: Stats, expectedLinks: 1 | 2 = 1): void {
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== expectedLinks) {
     throw new Error("Device identity file is not secure");
+  }
+}
+
+function sameFile(left: Stats, right: Stats): boolean {
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.nlink === right.nlink &&
+    left.size === right.size &&
+    left.mtimeMs === right.mtimeMs &&
+    left.ctimeMs === right.ctimeMs
+  );
+}
+
+function sameSecurity(left: PrivateFileSecurity, right: PrivateFileSecurity): boolean {
+  return left.scheme === right.scheme && left.descriptorSha256 === right.descriptorSha256;
+}
+
+async function inspectIdentityFile(
+  path: string,
+  expectedLinks: 1 | 2,
+): Promise<PrivateFileSecurity> {
+  try {
+    return await inspectPrivateFileLinks(path, expectedLinks);
+  } catch (error) {
+    throw new Error("Device identity file is not secure", { cause: error });
   }
 }
 
@@ -61,10 +122,19 @@ function parseStoredIdentity(buffer: Buffer, bytesRead: number, size: number): s
   return deviceId;
 }
 
-async function readIdentityFile(path: string, expectedLinks = 1): Promise<string | null> {
+async function readIdentityFile(path: string, expectedLinks: 1 | 2 = 1): Promise<string | null> {
+  let pathBefore: Stats;
+  try {
+    pathBefore = await lstat(path);
+  } catch (error) {
+    if (hasErrorCode(error, "ENOENT")) return null;
+    throw error;
+  }
+  assertSecureIdentityFile(pathBefore, expectedLinks);
+  const securityBefore = await inspectIdentityFile(path, expectedLinks);
   let file;
   try {
-    file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    file = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   } catch (error) {
     if (hasErrorCode(error, "ENOENT")) return null;
     if (hasErrorCode(error, "ELOOP")) {
@@ -76,10 +146,23 @@ async function readIdentityFile(path: string, expectedLinks = 1): Promise<string
   try {
     const beforeRead = await file.stat();
     assertSecureIdentityFile(beforeRead, expectedLinks);
+    if (!sameFile(pathBefore, beforeRead)) {
+      throw new Error("Device identity file is not secure");
+    }
     const buffer = Buffer.alloc(UUID_BYTES + 1);
     const { bytesRead } = await file.read(buffer, 0, buffer.byteLength, 0);
     const afterRead = await file.stat();
+    const pathAfter = await lstat(path);
     assertSecureIdentityFile(afterRead, expectedLinks);
+    assertSecureIdentityFile(pathAfter, expectedLinks);
+    const securityAfter = await inspectIdentityFile(path, expectedLinks);
+    if (
+      !sameFile(beforeRead, afterRead) ||
+      !sameFile(afterRead, pathAfter) ||
+      !sameSecurity(securityBefore, securityAfter)
+    ) {
+      throw new Error("Device identity file is not secure");
+    }
     return parseStoredIdentity(buffer, bytesRead, afterRead.size);
   } finally {
     await file.close();
@@ -87,12 +170,15 @@ async function readIdentityFile(path: string, expectedLinks = 1): Promise<string
 }
 
 async function writeStagedIdentity(path: string, deviceId: string): Promise<void> {
-  const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW;
+  const flags =
+    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0);
   const file = await open(path, flags, FILE_MODE);
   try {
-    await file.chmod(FILE_MODE);
+    await securePrivateFile(path);
     await file.writeFile(deviceId, "utf8");
     await file.sync();
+    assertSecureIdentityFile(await file.stat());
+    await inspectIdentityFile(path, 1);
   } finally {
     await file.close();
   }
@@ -115,16 +201,12 @@ async function removeStagingDirectory(path: string): Promise<void> {
 }
 
 async function syncIdentityDirectory(path: string): Promise<void> {
-  const flags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
-  const directory = await open(path, flags);
   try {
-    const stat = await directory.stat();
-    if (!stat.isDirectory() || (stat.mode & 0o777) !== DIRECTORY_MODE) {
-      throw new Error("Device identity directory is not secure");
-    }
-    await directory.sync();
-  } finally {
-    await directory.close();
+    await inspectPrivateDirectory(path);
+    await flushDirectoryDurably(path);
+    await inspectPrivateDirectory(path);
+  } catch (error) {
+    throw new Error("Device identity directory is not secure", { cause: error });
   }
 }
 
@@ -135,12 +217,14 @@ async function installIdentityFile(
 ): Promise<boolean> {
   const stagingDirectory = await mkdtemp(join(directory, STAGING_DIRECTORY_PREFIX));
   const stagingPath = join(stagingDirectory, STAGING_FILE_NAME);
-  await chmod(stagingDirectory, DIRECTORY_MODE);
+  await securePrivateDirectory(stagingDirectory);
   let installed = false;
   try {
     await writeStagedIdentity(stagingPath, deviceId);
     try {
       await link(stagingPath, finalPath);
+      await inspectIdentityFile(stagingPath, 2);
+      await inspectIdentityFile(finalPath, 2);
       installed = true;
     } catch (error) {
       if (!hasErrorCode(error, "EEXIST")) throw error;
@@ -160,11 +244,12 @@ async function inspectManagedCandidate(
 ): Promise<string | null> {
   const stagingDirectory = join(directory, name);
   const directoryStat = await lstat(stagingDirectory);
-  if (
-    directoryStat.isSymbolicLink() ||
-    !directoryStat.isDirectory() ||
-    (directoryStat.mode & 0o777) !== DIRECTORY_MODE
-  ) {
+  if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
+    return null;
+  }
+  try {
+    await inspectPrivateDirectory(stagingDirectory);
+  } catch {
     return null;
   }
   const entries = await readdir(stagingDirectory);
@@ -175,10 +260,14 @@ async function inspectManagedCandidate(
   if (
     !candidateStat.isFile() ||
     candidateStat.nlink !== 2 ||
-    (candidateStat.mode & 0o777) !== FILE_MODE ||
     candidateStat.dev !== identityStat.dev ||
     candidateStat.ino !== identityStat.ino
   ) {
+    return null;
+  }
+  try {
+    await inspectPrivateFileLinks(candidatePath, 2);
+  } catch {
     return null;
   }
   return candidatePath;
@@ -207,6 +296,7 @@ async function recoverInterruptedInstall(
   identityStat: Stats,
 ): Promise<string> {
   assertSecureIdentityFile(identityStat, 2);
+  await inspectIdentityFile(identityPath, 2);
   const candidatePath = await findManagedCandidate(directory, identityStat);
   const deviceId = await readIdentityFile(identityPath, 2);
   if (deviceId === null) throw new Error("Device identity file is not secure");
@@ -230,10 +320,10 @@ async function loadExistingIdentity(
     if (hasErrorCode(error, "ENOENT")) return null;
     throw error;
   }
-  if (stat.isFile() && stat.nlink === 1 && (stat.mode & 0o777) === FILE_MODE) {
+  if (stat.isFile() && stat.nlink === 1) {
     return readIdentityFile(identityPath);
   }
-  if (stat.isFile() && stat.nlink === 2 && (stat.mode & 0o777) === FILE_MODE) {
+  if (stat.isFile() && stat.nlink === 2) {
     return recoverInterruptedInstall(directory, identityPath, stat);
   }
   throw new Error("Device identity file is not secure");

@@ -106,14 +106,14 @@ export const ExecutionReceiptPayloadSchema = z
     if (payload.result === "succeeded" && payload.cups_job_id === null) {
       context.addIssue({
         code: "custom",
-        message: "A succeeded receipt requires a CUPS job id",
+        message: "A succeeded receipt requires a spooler job reference",
         path: ["cups_job_id"],
       });
     }
     if (payload.result === "failed" && payload.cups_job_id !== null) {
       context.addIssue({
         code: "custom",
-        message: "A failed pre-submit receipt cannot carry a CUPS job id",
+        message: "A failed pre-submit receipt cannot carry a spooler job reference",
         path: ["cups_job_id"],
       });
     }

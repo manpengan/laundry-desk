@@ -9,10 +9,12 @@ COPY apps/web/package.json apps/web/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/domain/package.json packages/domain/package.json
+COPY packages/platform-fs/package.json packages/platform-fs/package.json
 COPY packages/ui/package.json packages/ui/package.json
 
 RUN pnpm install --frozen-lockfile --ignore-scripts \
   --filter @laundry/server... \
+  --filter @laundry/platform-fs... \
   --filter @laundry/web...
 
 COPY apps/server apps/server
@@ -20,6 +22,7 @@ COPY apps/web apps/web
 COPY packages/config/tsconfig packages/config/tsconfig
 COPY packages/contracts packages/contracts
 COPY packages/domain packages/domain
+COPY packages/platform-fs packages/platform-fs
 COPY packages/ui packages/ui
 COPY tools/local/lan-gateway-config.mjs tools/local/lan-gateway-config.mjs
 COPY tools/local/lan-gateway-core.mjs tools/local/lan-gateway-core.mjs
@@ -27,7 +30,8 @@ COPY tools/local/lan-gateway-lifecycle.mjs tools/local/lan-gateway-lifecycle.mjs
 COPY tools/local/lan-runtime-entrypoint.mjs tools/local/lan-runtime-entrypoint.mjs
 COPY tools/local/lan-runtime-healthcheck.mjs tools/local/lan-runtime-healthcheck.mjs
 
-RUN pnpm --filter @laundry/server... build \
+RUN pnpm --filter @laundry/platform-fs build \
+  && pnpm --filter @laundry/server... build \
   && pnpm --filter @laundry/ui build \
   && pnpm --filter @laundry/web build \
   && pnpm --filter @laundry/server deploy --legacy --prod /runtime/server \

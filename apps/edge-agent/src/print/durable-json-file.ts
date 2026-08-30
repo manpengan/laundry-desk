@@ -1,16 +1,17 @@
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import {
-  chmod,
-  lstat,
-  mkdir,
-  open,
-  realpath,
-  rename,
-  unlink,
-  type FileHandle,
-} from "node:fs/promises";
+import { lstat, mkdir, open, realpath, unlink, type FileHandle } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
+
+import {
+  flushDirectoryDurably,
+  inspectPrivateDirectory,
+  inspectPrivateFile,
+  replaceFileWriteThrough,
+  securePrivateDirectory,
+  securePrivateFile,
+  type PrivateFileSecurity,
+} from "@laundry/platform-fs";
 
 const PRIVATE_FILE_MODE = 0o600;
 const PRIVATE_DIRECTORY_MODE = 0o700;
@@ -38,16 +39,13 @@ async function preparePrivateRoot(path: string): Promise<string> {
   if (!initial.isDirectory() || initial.isSymbolicLink()) {
     throw new Error("Durable JSON root must be a real directory");
   }
-  await chmod(path, PRIVATE_DIRECTORY_MODE);
+  await securePrivateDirectory(path);
   const root = await realpath(path);
   const metadata = await lstat(root);
-  if (
-    !metadata.isDirectory() ||
-    metadata.isSymbolicLink() ||
-    (metadata.mode & 0o777) !== PRIVATE_DIRECTORY_MODE
-  ) {
+  if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
     throw new Error("Durable JSON root must be private");
   }
+  await inspectPrivateDirectory(root);
   return root;
 }
 
@@ -55,20 +53,26 @@ function assertPrivateFile(
   metadata: Readonly<{
     dev: number;
     ino: number;
-    mode: number;
     nlink: number;
     size: number;
     isFile: () => boolean;
   }>,
   maxBytes: number,
 ): void {
-  if (
-    !metadata.isFile() ||
-    metadata.nlink !== 1 ||
-    (metadata.mode & 0o777) !== PRIVATE_FILE_MODE ||
-    metadata.size > maxBytes
-  ) {
+  if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size > maxBytes) {
     throw new Error("Invalid private durable JSON file");
+  }
+}
+
+function sameSecurity(left: PrivateFileSecurity, right: PrivateFileSecurity): boolean {
+  return left.scheme === right.scheme && left.descriptorSha256 === right.descriptorSha256;
+}
+
+async function inspectDurablePrivateFile(path: string): Promise<PrivateFileSecurity> {
+  try {
+    return await inspectPrivateFile(path);
+  } catch (error) {
+    throw new Error("Invalid private durable JSON file", { cause: error });
   }
 }
 
@@ -118,11 +122,15 @@ export class DurableJsonFile<T> {
     }
     if (expected.isSymbolicLink()) throw new Error("Durable JSON file cannot be a symlink");
     assertPrivateFile(expected, this.options.maxBytes);
+    const expectedSecurity = await inspectDurablePrivateFile(this.path);
     const handle = await open(this.path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
     try {
       const opened = await handle.stat();
       assertPrivateFile(opened, this.options.maxBytes);
       if (!sameFile(expected, opened)) throw new Error("Durable JSON file changed before open");
+      if (!sameSecurity(expectedSecurity, await inspectDurablePrivateFile(this.path))) {
+        throw new Error("Durable JSON file security changed before open");
+      }
       const bytes = await handle.readFile();
       const final = await handle.stat();
       assertPrivateFile(final, this.options.maxBytes);
@@ -133,6 +141,9 @@ export class DurableJsonFile<T> {
         bytes.byteLength !== final.size
       ) {
         throw new Error("Durable JSON file changed while reading");
+      }
+      if (!sameSecurity(expectedSecurity, await inspectDurablePrivateFile(this.path))) {
+        throw new Error("Durable JSON file security changed while reading");
       }
       return this.options.parse(JSON.parse(bytes.toString("utf8")) as unknown);
     } finally {
@@ -159,12 +170,12 @@ export class DurableJsonFile<T> {
         PRIVATE_FILE_MODE,
       );
       created = true;
-      await handle.chmod(PRIVATE_FILE_MODE);
+      await securePrivateFile(staging);
       await handle.writeFile(serialized, "utf8");
       await handle.sync();
       await handle.close();
       handle = null;
-      await rename(staging, this.path);
+      await replaceFileWriteThrough(staging, this.path);
       renamed = true;
       await this.syncRoot();
     } catch (error) {
@@ -178,11 +189,6 @@ export class DurableJsonFile<T> {
   }
 
   private async syncRoot(): Promise<void> {
-    const directory = await open(this.root, constants.O_RDONLY);
-    try {
-      await directory.sync();
-    } finally {
-      await directory.close();
-    }
+    await flushDirectoryDurably(this.root);
   }
 }

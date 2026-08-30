@@ -13,6 +13,12 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import test from "node:test";
+import {
+  inspectPrivateDirectory,
+  inspectPrivateFile,
+  securePrivateDirectory,
+  securePrivateFile,
+} from "@laundry/platform-fs";
 
 import { loadOrCreateDeviceId } from "./device-identity.js";
 
@@ -29,13 +35,13 @@ async function createUserDataDirectory(): Promise<string> {
 async function createIdentityDirectory(userDataPath: string): Promise<string> {
   const directory = join(userDataPath, "device-identity");
   await mkdir(directory, { mode: 0o700 });
-  await chmod(directory, 0o700);
+  await securePrivateDirectory(directory);
   return directory;
 }
 
 async function writePrivateFile(path: string, contents: string): Promise<void> {
   await writeFile(path, contents, { encoding: "utf8", mode: 0o600 });
-  await chmod(path, 0o600);
+  await securePrivateFile(path);
 }
 
 async function createInterruptedInstall(userDataPath: string, stagingName: string) {
@@ -44,7 +50,7 @@ async function createInterruptedInstall(userDataPath: string, stagingName: strin
   const candidateFile = join(stagingDirectory, "candidate");
   const identityFile = join(identityDirectory, "device-id");
   await mkdir(stagingDirectory, { mode: 0o700 });
-  await chmod(stagingDirectory, 0o700);
+  await securePrivateDirectory(stagingDirectory);
   await writePrivateFile(candidateFile, DEVICE_ID);
   await link(candidateFile, identityFile);
   return Object.freeze({
@@ -93,10 +99,15 @@ test("creates one private device id and returns it on later loads", async () => 
   const directoryStat = await lstat(identityDirectory);
   const fileStat = await lstat(identityFile);
   assert.equal(directoryStat.isDirectory(), true);
-  assert.equal(directoryStat.mode & 0o777, 0o700);
   assert.equal(fileStat.isFile(), true);
   assert.equal(fileStat.nlink, 1);
-  assert.equal(fileStat.mode & 0o777, 0o600);
+  if (process.platform === "win32") {
+    assert.equal((await inspectPrivateDirectory(identityDirectory)).scheme, "windows-dacl-v1");
+    assert.equal((await inspectPrivateFile(identityFile)).scheme, "windows-dacl-v1");
+  } else {
+    assert.equal(directoryStat.mode & 0o777, 0o700);
+    assert.equal(fileStat.mode & 0o777, 0o600);
+  }
   assert.equal(await readFile(identityFile, "utf8"), DEVICE_ID);
 });
 
@@ -148,18 +159,22 @@ test("rejects a symlinked device identity file", async () => {
   );
 });
 
-test("rejects a device identity file with group or other permissions", async () => {
-  const userDataPath = await createUserDataDirectory();
-  const identityDirectory = await createIdentityDirectory(userDataPath);
-  const identityFile = join(identityDirectory, "device-id");
-  await writePrivateFile(identityFile, DEVICE_ID);
-  await chmod(identityFile, 0o640);
+test(
+  "rejects a device identity file with group or other permissions",
+  { skip: process.platform === "win32" },
+  async () => {
+    const userDataPath = await createUserDataDirectory();
+    const identityDirectory = await createIdentityDirectory(userDataPath);
+    const identityFile = join(identityDirectory, "device-id");
+    await writePrivateFile(identityFile, DEVICE_ID);
+    await chmod(identityFile, 0o640);
 
-  await assert.rejects(
-    () => loadOrCreateDeviceId({ userDataPath, randomUUID: () => DEVICE_ID }),
-    /file is not secure/u,
-  );
-});
+    await assert.rejects(
+      () => loadOrCreateDeviceId({ userDataPath, randomUUID: () => DEVICE_ID }),
+      /file is not secure/u,
+    );
+  },
+);
 
 test("rejects a hard-linked device identity file", async () => {
   const userDataPath = await createUserDataDirectory();
@@ -247,7 +262,11 @@ test("recovers the exact managed hard-link residue of an interrupted install", a
   const recovered = await lstat(residue.identityFile);
   assert.equal(recovered.isFile(), true);
   assert.equal(recovered.nlink, 1);
-  assert.equal(recovered.mode & 0o777, 0o600);
+  if (process.platform === "win32") {
+    assert.equal((await inspectPrivateFile(residue.identityFile)).scheme, "windows-dacl-v1");
+  } else {
+    assert.equal(recovered.mode & 0o777, 0o600);
+  }
   assert.equal(await readFile(residue.identityFile, "utf8"), DEVICE_ID);
   assert.equal(await readFile(unknownFile, "utf8"), "unrelated");
   await assertPathNotFound(residue.stagingDirectory);
@@ -289,7 +308,8 @@ test("concurrent first loads atomically converge on one device id", async () => 
     (_, index) => `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
   );
 
-  for (let round = 0; round < 40; round += 1) {
+  const rounds = process.platform === "win32" ? 4 : 40;
+  for (let round = 0; round < rounds; round += 1) {
     const userDataPath = await createUserDataDirectory();
     const loaded = await Promise.all(
       candidates.map((candidate) =>
@@ -306,25 +326,33 @@ test("concurrent first loads atomically converge on one device id", async () => 
     const fileStat = await lstat(identityFile);
     assert.equal(fileStat.isFile(), true);
     assert.equal(fileStat.nlink, 1);
-    assert.equal(fileStat.mode & 0o777, 0o600);
+    if (process.platform === "win32") {
+      assert.equal((await inspectPrivateFile(identityFile)).scheme, "windows-dacl-v1");
+    } else {
+      assert.equal(fileStat.mode & 0o777, 0o600);
+    }
     assert.equal(await readFile(identityFile, "utf8"), loaded[0]);
   }
 });
 
-test("forces exact private modes under a restrictive process umask", async () => {
-  const userDataPath = await createUserDataDirectory();
-  const previousUmask = process.umask(0o777);
-  try {
-    assert.equal(
-      await loadOrCreateDeviceId({ userDataPath, randomUUID: () => DEVICE_ID }),
-      DEVICE_ID,
-    );
-  } finally {
-    process.umask(previousUmask);
-  }
+test(
+  "forces exact private modes under a restrictive process umask",
+  { skip: process.platform === "win32" },
+  async () => {
+    const userDataPath = await createUserDataDirectory();
+    const previousUmask = process.umask(0o777);
+    try {
+      assert.equal(
+        await loadOrCreateDeviceId({ userDataPath, randomUUID: () => DEVICE_ID }),
+        DEVICE_ID,
+      );
+    } finally {
+      process.umask(previousUmask);
+    }
 
-  const identityDirectory = join(userDataPath, "device-identity");
-  const identityFile = join(identityDirectory, "device-id");
-  assert.equal((await lstat(identityDirectory)).mode & 0o777, 0o700);
-  assert.equal((await lstat(identityFile)).mode & 0o777, 0o600);
-});
+    const identityDirectory = join(userDataPath, "device-identity");
+    const identityFile = join(identityDirectory, "device-id");
+    assert.equal((await lstat(identityDirectory)).mode & 0o777, 0o700);
+    assert.equal((await lstat(identityFile)).mode & 0o777, 0o600);
+  },
+);

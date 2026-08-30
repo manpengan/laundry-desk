@@ -31,6 +31,14 @@ import {
 } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
+import {
+  flushDirectoryDurably,
+  inspectPrivateDirectory,
+  inspectPrivateFile,
+  securePrivateDirectory,
+  securePrivateFile,
+} from "@laundry/platform-fs";
+
 import type { PrintJobKind } from "./types.js";
 
 /** One artifact may not exceed this; a runaway render must not fill the disk. */
@@ -144,21 +152,14 @@ async function stageTemp(directory: string, name: string, bytes: Buffer): Promis
     FILE_MODE,
   );
   try {
+    await securePrivateFile(tempPath);
     await handle.write(bytes);
     await handle.sync();
   } finally {
     await handle.close();
   }
+  await inspectPrivateFile(tempPath);
   return tempPath;
-}
-
-async function fsyncDirectory(directory: string): Promise<void> {
-  const handle = await open(directory, constants.O_RDONLY);
-  try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
 }
 
 /**
@@ -175,6 +176,11 @@ async function reuseOrFail(
   const meta = await lstat(finalPath);
   if (meta.isSymbolicLink()) {
     throw new SpoolError("SPOOL_ARTIFACT_SYMLINK", "existing artifact is a symbolic link");
+  }
+  try {
+    await inspectPrivateFile(finalPath);
+  } catch {
+    throw new SpoolError("SPOOL_ARTIFACT_SECURITY", "existing artifact is not private");
   }
   const existing = await readFile(finalPath);
   if (sha256Hex(existing) !== expectedHash) {
@@ -198,6 +204,7 @@ async function listArtifacts(rootPath: string): Promise<readonly SpoolEntry[]> {
     if (!ARTIFACT_NAME.test(name)) continue;
     const meta = await lstat(join(rootPath, name)).catch(() => null);
     if (meta === null || meta.isSymbolicLink() || !meta.isFile()) continue;
+    if ((await inspectPrivateFile(join(rootPath, name)).catch(() => null)) === null) continue;
     entries.push({ name, bytes: meta.size, mtimeMs: meta.mtimeMs });
   }
   return Object.freeze(entries);
@@ -230,7 +237,7 @@ async function sweepSpool(
     total -= entry.bytes;
     count -= 1;
   }
-  if (removed > 0) await fsyncDirectory(rootPath);
+  if (removed > 0) await flushDirectoryDurably(rootPath);
   return Object.freeze({
     removed,
     removed_bytes: removedBytes,
@@ -250,6 +257,8 @@ export async function createFileSpool(options: FileSpoolOptions): Promise<FileSp
   await assertRealDirectory(options.rootPath);
   // Canonicalise once so later containment checks compare real paths.
   const rootPath = await realpath(resolve(options.rootPath));
+  await securePrivateDirectory(rootPath);
+  await inspectPrivateDirectory(rootPath);
 
   return Object.freeze({
     rootPath,
@@ -282,7 +291,8 @@ export async function createFileSpool(options: FileSpoolOptions): Promise<FileSp
         throw error;
       }
       await unlink(tempPath);
-      await fsyncDirectory(rootPath);
+      await inspectPrivateFile(finalPath);
+      await flushDirectoryDurably(rootPath);
       return Object.freeze({
         relative_path: name,
         sha256: hash,

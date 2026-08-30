@@ -1,5 +1,9 @@
 import type { CommandPort, CommandResult, QueryPort } from "../commands/types.js";
-import { createDesktopAuthPort } from "./desktop-auth-port.js";
+import {
+  createDesktopAuthPort,
+  createDesktopStaffDirectoryState,
+  refreshDesktopStaffDirectory,
+} from "./desktop-auth-port.js";
 import type {
   DesktopCommandInput,
   DesktopQueryInput,
@@ -89,9 +93,26 @@ function createHealthPort(bridge: LaundryDesktopBridge): HealthPort {
 }
 
 export function createDesktopPorts(bridge: LaundryDesktopBridge): AppPorts {
-  const resume = createDesktopResumePort(bridge.offline);
+  const staffDirectory = createDesktopStaffDirectoryState();
+  const auth = createDesktopAuthPort(bridge, staffDirectory);
+  const baseResume = createDesktopResumePort(bridge.offline);
+  const resume =
+    baseResume === undefined
+      ? undefined
+      : Object.freeze({
+          resume: async () => {
+            const result = await baseResume.resume();
+            if (!result.ok || result.mode === "offline_read_only") {
+              staffDirectory.clear();
+              return result;
+            }
+            if (await refreshDesktopStaffDirectory(bridge, staffDirectory)) return result;
+            await auth.logout();
+            return Object.freeze({ ok: false as const });
+          },
+        });
   return Object.freeze({
-    auth: createDesktopAuthPort(bridge),
+    auth,
     command: createCommandPort(bridge),
     query: createQueryPort(bridge),
     photo: createDesktopPhotoPort(bridge),

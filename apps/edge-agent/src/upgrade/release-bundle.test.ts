@@ -23,6 +23,8 @@ import {
 } from "./release-bundle.js";
 import { verifyReleaseManifest } from "./release-manifest.js";
 
+const macReleaseTest = process.platform === "win32" ? test.skip : test;
+
 async function fixture(t: test.TestContext) {
   const root = await mkdtemp(join(tmpdir(), "laundry-release-bundle-"));
   t.after(async () => {
@@ -105,65 +107,72 @@ async function descriptor(setup: Awaited<ReturnType<typeof fixture>>) {
   };
 }
 
-test("release bundle signs the exact DMG and ZIP metadata and is create-only", async (t) => {
-  const setup = await fixture(t);
-  const immutableInput = await descriptor(setup);
-  const result = await buildSignedReleaseBundle({
-    ...setup,
-    descriptor: immutableInput,
-    publishedAt: "2026-07-30T08:00:00.000Z",
-  });
-  const parsed = JSON.parse(await readFile(result.path, "utf8"));
-  assert.equal(
-    verifyReleaseManifest(parsed, setup.keys.publicKey, {
-      channel: "stable",
-      current_version: "1.9.0",
-      installed_minimum_secure_version: "1.8.0",
-      current_local_schema: 3,
-      supported_contracts_majors: [0, 1],
-    }).ok,
-    true,
-  );
-  assert.deepEqual(result.manifest.authority.artifacts.map((artifact) => artifact.kind).sort(), [
-    "dmg",
-    "zip",
-  ]);
-  await assert.rejects(
-    () =>
-      buildSignedReleaseBundle({
-        ...setup,
-        descriptor: immutableInput,
-      }),
-    /EEXIST|unexpected entry/u,
-  );
-});
+macReleaseTest(
+  "release bundle signs the exact DMG and ZIP metadata and is create-only",
+  async (t) => {
+    const setup = await fixture(t);
+    const immutableInput = await descriptor(setup);
+    const result = await buildSignedReleaseBundle({
+      ...setup,
+      descriptor: immutableInput,
+      publishedAt: "2026-07-30T08:00:00.000Z",
+    });
+    const parsed = JSON.parse(await readFile(result.path, "utf8"));
+    assert.equal(
+      verifyReleaseManifest(parsed, setup.keys.publicKey, {
+        channel: "stable",
+        current_version: "1.9.0",
+        installed_minimum_secure_version: "1.8.0",
+        current_local_schema: 3,
+        supported_contracts_majors: [0, 1],
+      }).ok,
+      true,
+    );
+    assert.deepEqual(result.manifest.authority.artifacts.map((artifact) => artifact.kind).sort(), [
+      "dmg",
+      "zip",
+    ]);
+    await assert.rejects(
+      () =>
+        buildSignedReleaseBundle({
+          ...setup,
+          descriptor: immutableInput,
+        }),
+      /EEXIST|unexpected entry/u,
+    );
+  },
+);
 
-test("release bundle rejects permissive private key and symlinked artifact", async (t) => {
-  const permissive = await fixture(t);
-  await chmod(permissive.privateKeyPath, 0o644);
-  await assert.rejects(
-    async () =>
-      await buildSignedReleaseBundle({
-        ...permissive,
-        descriptor: await descriptor(permissive),
-      }),
-    /metadata is unsafe/u,
-  );
+macReleaseTest(
+  "release bundle rejects permissive private key and symlinked artifact",
+  async (t) => {
+    const permissive = await fixture(t);
+    await chmod(permissive.privateKeyPath, 0o644);
+    await assert.rejects(
+      async () =>
+        await buildSignedReleaseBundle({
+          ...permissive,
+          descriptor: await descriptor(permissive),
+        }),
+      /metadata is unsafe/u,
+    );
 
-  const linked = await fixture(t);
-  await rm(join(linked.releaseDirectory, "laundry-desk-2.0.0-arm64.zip"));
-  await writeFile(join(linked.root, "outside.zip"), "zip");
-  await symlink(
-    join(linked.root, "outside.zip"),
-    join(linked.releaseDirectory, "laundry-desk-2.0.0-arm64.zip"),
-  );
-  await assert.rejects(
-    async () => await buildSignedReleaseBundle({ ...linked, descriptor: await descriptor(linked) }),
-    /unsafe|symlink/u,
-  );
-});
+    const linked = await fixture(t);
+    await rm(join(linked.releaseDirectory, "laundry-desk-2.0.0-arm64.zip"));
+    await writeFile(join(linked.root, "outside.zip"), "zip");
+    await symlink(
+      join(linked.root, "outside.zip"),
+      join(linked.releaseDirectory, "laundry-desk-2.0.0-arm64.zip"),
+    );
+    await assert.rejects(
+      async () =>
+        await buildSignedReleaseBundle({ ...linked, descriptor: await descriptor(linked) }),
+      /unsafe|symlink/u,
+    );
+  },
+);
 
-test("immutable inputs reject replaced key, policy, ZIP, and DMG bytes", async (t) => {
+macReleaseTest("immutable inputs reject replaced key, policy, ZIP, and DMG bytes", async (t) => {
   for (const replacement of ["key", "policy", "zip", "dmg"] as const) {
     const setup = await fixture(t);
     const immutableInput = await descriptor(setup);
@@ -199,33 +208,36 @@ test("immutable inputs reject replaced key, policy, ZIP, and DMG bytes", async (
   }
 });
 
-test("post-sign verification binds the embedded key, app tree, and current artifact bytes", async (t) => {
-  const setup = await fixture(t);
-  const immutableInput = await descriptor(setup);
-  await buildSignedReleaseBundle({ ...setup, descriptor: immutableInput });
-  assert.deepEqual(await verifySignedReleaseBundle({ ...setup, descriptor: immutableInput }), {
-    ok: true,
-  });
-  await writeFile(join(setup.releaseDirectory, "laundry-desk-2.0.0-arm64.zip"), "replaced");
-  await assert.rejects(
-    () => verifySignedReleaseBundle({ ...setup, descriptor: immutableInput }),
-    /immutable release input/u,
-  );
+macReleaseTest(
+  "post-sign verification binds the embedded key, app tree, and current artifact bytes",
+  async (t) => {
+    const setup = await fixture(t);
+    const immutableInput = await descriptor(setup);
+    await buildSignedReleaseBundle({ ...setup, descriptor: immutableInput });
+    assert.deepEqual(await verifySignedReleaseBundle({ ...setup, descriptor: immutableInput }), {
+      ok: true,
+    });
+    await writeFile(join(setup.releaseDirectory, "laundry-desk-2.0.0-arm64.zip"), "replaced");
+    await assert.rejects(
+      () => verifySignedReleaseBundle({ ...setup, descriptor: immutableInput }),
+      /immutable release input/u,
+    );
 
-  const appSetup = await fixture(t);
-  const appInput = await descriptor(appSetup);
-  await buildSignedReleaseBundle({ ...appSetup, descriptor: appInput });
-  await writeFile(
-    join(appSetup.appPath, "Contents", "Resources", "application.txt"),
-    "replaced application",
-  );
-  await assert.rejects(
-    () => verifySignedReleaseBundle({ ...appSetup, descriptor: appInput }),
-    /application does not match/u,
-  );
-});
+    const appSetup = await fixture(t);
+    const appInput = await descriptor(appSetup);
+    await buildSignedReleaseBundle({ ...appSetup, descriptor: appInput });
+    await writeFile(
+      join(appSetup.appPath, "Contents", "Resources", "application.txt"),
+      "replaced application",
+    );
+    await assert.rejects(
+      () => verifySignedReleaseBundle({ ...appSetup, descriptor: appInput }),
+      /application does not match/u,
+    );
+  },
+);
 
-test("release bundle rejects every unexpected release-root entry", async (t) => {
+macReleaseTest("release bundle rejects every unexpected release-root entry", async (t) => {
   const setup = await fixture(t);
   const immutableInput = await descriptor(setup);
   await writeFile(join(setup.releaseDirectory, "private.pem"), "sensitive");
@@ -235,7 +247,7 @@ test("release bundle rejects every unexpected release-root entry", async (t) => 
   );
 });
 
-test("signer input reads reject a same-inode mutation after open", async (t) => {
+macReleaseTest("signer input reads reject a same-inode mutation after open", async (t) => {
   const setup = await fixture(t);
   await assert.rejects(
     () =>

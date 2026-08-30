@@ -18,6 +18,7 @@ function bridgeWithPhoto(photo: NonNullable<LaundryDesktopBridge["photo"]>): Lau
     auth: Object.freeze({
       login: async () => ({ ok: false }),
       refresh: async () => ({ ok: false }),
+      staffDirectory: async () => ({ ok: false }),
       pinChallenge: async () => ({ ok: false }),
       pinVerify: async () => ({ ok: false }),
       logout: async () => ({ ok: false }),

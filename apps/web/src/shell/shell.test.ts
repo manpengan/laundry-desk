@@ -135,7 +135,7 @@ test("PageHost settings forwards the desktop printer port to the admin panel", (
   );
 
   assert.match(html, /data-testid="printer-settings"/u);
-  assert.match(html, /CUPS 小票打印机/u);
+  assert.match(html, /系统小票打印机/u);
 });
 
 test("PageHost pickup with session+commandClient mounts PickupPage form", () => {

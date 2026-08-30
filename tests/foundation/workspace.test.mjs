@@ -285,10 +285,13 @@ test("lints each active workspace from its package root", async () => {
 
 test("builds file-linked workspace dependencies before their consumers test", async () => {
   const turboConfig = await readJson("turbo.json");
+  const edgePackage = await readJson("apps/edge-agent/package.json");
+  const serverPackage = await readJson("apps/server/package.json");
   const webPackage = await readJson("apps/web/package.json");
   const contractsPackage = await readJson("packages/contracts/package.json");
   const uiPackage = await readJson("packages/ui/package.json");
   const domainPackage = await readJson("packages/domain/package.json");
+  const platformFsPackage = await readJson("packages/platform-fs/package.json");
 
   // web depends on contracts + ui + domain dist types; turbo must build them first.
   const webDepBuild = [
@@ -300,6 +303,33 @@ test("builds file-linked workspace dependencies before their consumers test", as
   assert.deepEqual(turboConfig.tasks[`${webPackage.name}#test`]?.dependsOn, webDepBuild);
   assert.deepEqual(turboConfig.tasks[`${webPackage.name}#typecheck`]?.dependsOn, webDepBuild);
   assert.deepEqual(turboConfig.tasks[`${webPackage.name}#build`]?.dependsOn, webDepBuild);
+
+  // Edge and Server import platform-fs dist declarations, but pnpm file: links are not
+  // guaranteed to participate in Turbo's inferred ^build graph.
+  const edgeDepBuild = [
+    "^build",
+    `${contractsPackage.name}#build`,
+    `${platformFsPackage.name}#build`,
+  ];
+  assert.deepEqual(turboConfig.tasks[`${edgePackage.name}#typecheck`]?.dependsOn, edgeDepBuild);
+  assert.deepEqual(turboConfig.tasks[`${edgePackage.name}#test`]?.dependsOn, [
+    ...edgeDepBuild,
+    `${webPackage.name}#test`,
+  ]);
+  assert.deepEqual(turboConfig.tasks[`${edgePackage.name}#build`]?.dependsOn, [
+    ...edgeDepBuild,
+    `${webPackage.name}#build`,
+  ]);
+
+  const serverDepBuild = [
+    "^build",
+    `${contractsPackage.name}#build`,
+    `${domainPackage.name}#build`,
+    `${platformFsPackage.name}#build`,
+  ];
+  for (const task of ["typecheck", "test", "build"]) {
+    assert.deepEqual(turboConfig.tasks[`${serverPackage.name}#${task}`]?.dependsOn, serverDepBuild);
+  }
 });
 
 test("publishes shared TypeScript, ESLint, and Prettier configuration", async () => {

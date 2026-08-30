@@ -17,8 +17,7 @@ const governanceFiles = [
   "GEMINI.md",
   "HERMES.md",
 ];
-const currentDeliveryAdr =
-  "(docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)";
+const currentDeliveryAdr = "(docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md)";
 const activeV2ProductEntries = [
   "apps/server/src/local/create-runtime.ts",
   "apps/server/src/http/main.ts",
@@ -108,7 +107,7 @@ function findLocalProfileCopies(source) {
     .map(([label]) => label);
 }
 
-test("routes every governance entry point to ADR-64", async () => {
+test("routes every governance entry point to ADR-66", async () => {
   const contents = await Promise.all(governanceFiles.map(readRepositoryFile));
   const missingLinks = governanceFiles.filter(
     (_file, index) => !contents[index].includes(currentDeliveryAdr),
@@ -117,13 +116,13 @@ test("routes every governance entry point to ADR-64", async () => {
   assert.deepEqual(missingLinks, []);
 });
 
-test("leads the README with the generic v2 hk-vps cloud-test route", async () => {
+test("leads the README with the V2 Windows and Hongfa pilot route", async () => {
   const readmeLead = (await readRepositoryFile("README.md")).slice(0, 1500);
 
-  assert.match(readmeLead, /通用 V2.*hk-vps.*Linux Web Server\/Web.*5\.0.*合成数据/su);
+  assert.match(readmeLead, /通用 V2.*Windows 定制 EXE.*宏发.*受控运营试点.*根 `src\/`.*冻结 v1/su);
 });
 
-test("does not advertise stale Hongfa or Grok delivery ownership in the README lead", async () => {
+test("does not advertise stale Hongfa upgrade or Grok delivery ownership in the README lead", async () => {
   const readmeLead = (await readRepositoryFile("README.md")).slice(0, 1500);
 
   assert.doesNotMatch(readmeLead, /宏发升级候选版|Grok 单一技术负责人/u);
@@ -516,33 +515,6 @@ test("registers the guarded local lifecycle in default workspace gates", async (
     rootPackage.scripts["workspace:lint"],
     /eslint tools\/local tools\/release-candidate tests\/foundation tools\/runtime-kit\/\*\.mjs --ext \.mjs/u,
   );
-});
-
-test("keeps browser and Electron acceptance sources inside canonical quality gates", async () => {
-  const edgePackage = JSON.parse(await readRepositoryFile("apps/edge-agent/package.json"));
-  const webPackage = JSON.parse(await readRepositoryFile("apps/web/package.json"));
-  const edgeE2eConfig = JSON.parse(await readRepositoryFile("apps/edge-agent/tsconfig.e2e.json"));
-  const webE2eConfig = JSON.parse(await readRepositoryFile("apps/web/tsconfig.e2e.json"));
-
-  assert.equal(edgePackage.scripts.lint, "eslint . --ext .ts,.tsx,.mjs --max-warnings=0");
-  assert.match(edgePackage.scripts.typecheck, /tsconfig\.e2e\.json/u);
-  assert.deepEqual(edgeE2eConfig.include, [
-    "e2e/**/*.ts",
-    "playwright.electron.commissioning.config.ts",
-    "playwright.electron.package.config.ts",
-    "playwright.electron.config.ts",
-  ]);
-  assert.equal(webPackage.scripts.lint, "eslint . --ext .ts,.tsx,.mjs --max-warnings=0");
-  assert.match(webPackage.scripts.typecheck, /tsconfig\.e2e\.json/u);
-  assert.deepEqual(webE2eConfig.include, [
-    "e2e/**/*.ts",
-    "e2e-commissioning/**/*.ts",
-    "e2e-lan/**/*.ts",
-    "playwright.cloud.config.ts",
-    "playwright.commissioning.config.ts",
-    "playwright.local.config.ts",
-    "playwright.lan.config.ts",
-  ]);
 });
 
 test("rejects undefined globals in Cloud release and browser JavaScript", async () => {

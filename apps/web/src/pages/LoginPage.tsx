@@ -66,7 +66,6 @@ export function LoginPage({
         const result = await authClient.login(credentials);
         if (!result.ok) {
           setFormError(result.error.message);
-          toast.push(result.error.message, "error");
           return;
         }
         onSuccess(result.data);

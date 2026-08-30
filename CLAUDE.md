@@ -2,8 +2,8 @@
 
 Claude（Opus 4.7）在本项目中的入场指引。
 
-> **当前状态（ADR-64）**：Claude draft3.1a 与 ADR-14 是通用 V2 的架构与 UI 基线；当前由
-> **Codex** 负责阶段 5 活动线的设计、实现与验收。Cloud Web 主形态继续继承 ADR-37。本文其余内容保留为历史门禁
+> **当前状态（ADR-66）**：Claude draft3.1a 与 ADR-14 是通用 V2 的架构与 UI 基线；当前由
+> **Codex** 负责 Windows V2 定制 EXE 与宏发受控试点的设计、实现与验收。本文其余内容保留为历史门禁
 > 参考；Claude 如参与，仅提供非阻塞可选复审，不拥有当前 spec、contracts 或 PR
 > 放行权。
 
@@ -11,12 +11,12 @@ Claude（Opus 4.7）在本项目中的入场指引。
 
 **历史角色：设计与门禁**。当前不在关键路径，不写实现代码，不 scaffold，不装依赖。
 
-当前实现与设计由 Codex 负责，见 `AGENTS.md` 与 ADR-64。
+当前实现与设计由 Codex 负责，见 `AGENTS.md` 与 ADR-66。
 
 ## 入场必读
 
-1. [`docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md`](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) — 当前阶段 5 裁决
-2. [`docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md`](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md) — 当前执行计划
+1. [`docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md`](docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md) — 当前 Windows/宏发主线裁决
+2. [`docs/research/2026-08-29-windows-port-findings-and-build-host.md`](docs/research/2026-08-29-windows-port-findings-and-build-host.md) — Windows 实机证据
 3. [`docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md`](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) — Cloud Web 主形态与已完成 1–4 基线
 4. [`docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md`](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md) — 通用 V2 架构基线
 5. [`docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md`](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) — 契约面新增须附 ADR

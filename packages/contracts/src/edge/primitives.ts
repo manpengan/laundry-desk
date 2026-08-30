@@ -3,7 +3,8 @@ import { z } from "zod";
 const EXACT_UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const BASE64URL = /^[A-Za-z0-9_-]+$/u;
 const SHA256_HEX = /^[0-9a-f]{64}$/u;
-const CUPS_JOB_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}-[1-9][0-9]{0,9}$/u;
+const PRINT_JOB_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}-[1-9][0-9]{0,9}$/u;
+const PRINTER_QUEUE_CONTROL = /[\u0000-\u001f\u007f]/u;
 
 const isExactUtcTimestamp = (value: string): boolean => {
   if (!EXACT_UTC_TIMESTAMP.test(value)) return false;
@@ -31,8 +32,25 @@ export const EdgePrinterKindSchema = z.enum(["xp58", "dl206", "gp3120"]);
 /** Lowercase SHA-256 wire encoding used to bind immutable print snapshots. */
 export const Sha256HexSchema = z.string().regex(SHA256_HEX, "Expected lowercase SHA-256 hex");
 
-/** Exact CUPS request id returned by `lp`; whitespace and shell syntax are forbidden. */
-export const CupsJobIdSchema = z.string().regex(CUPS_JOB_ID, "Expected a bounded CUPS job id");
+/** Installed OS queue name; callers must additionally prove it came from platform discovery. */
+export const PrinterQueueNameSchema = z
+  .string()
+  .min(1)
+  .max(256)
+  .refine(
+    (value) => value.trim() === value && !value.includes("/") && !PRINTER_QUEUE_CONTROL.test(value),
+    {
+      message: "Expected a bounded installed printer queue name",
+    },
+  );
+
+/** Bounded spooler reference. The wire field retains its historical `cups_job_id` name. */
+export const PrintJobReferenceSchema = z
+  .string()
+  .regex(PRINT_JOB_REFERENCE, "Expected a bounded spooler job reference");
+
+/** Backward-compatible export for the historical wire field name. */
+export const CupsJobIdSchema = PrintJobReferenceSchema;
 
 /** Architecture §10: execution receipts expose a closed result vocabulary. */
 export const EdgeExecutionResultSchema = z.enum(["succeeded", "failed", "uncertain"]);

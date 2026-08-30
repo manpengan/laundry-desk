@@ -2,7 +2,7 @@
 
 本项目版本记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 SemVer。
 
-> **当前路线（2026-08-27 修订）**：[ADR-64](adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md) 在 [ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 的 V2-only 路线上关闭了 5.0 发布解阻；已签署的 [ADR-65](adr/2026-08-25-adr-65-cloud-production-baseline.md) 现进入 5.1 Cloud 生产基线执行准备，随后才进入受控试点、真实 provider、桌面与硬件。5.1 关闭并另行授权真实数据前，hk-vps 与任何 production-candidate 都只允许合成数据，不称生产 SaaS。
+> **当前路线（2026-08-29 修订）**：[ADR-66](adr/2026-08-29-adr-66-windows-hongfa-pilot.md) 把后续主线切换为活动 V2 Windows 定制 EXE，并以宏发作为首个受控运营试点；[ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 规定 V2 是唯一活动交付线。根 v1 继续冻结；真实顾客数据仍须先通过 ADR-65 的独立 production-candidate、离机恢复、告警、容量与数据授权门禁。
 
 ---
 
@@ -13,6 +13,26 @@
 _本节记录**面向用户的变化**；纯内部重构与验证性工作不入 CHANGELOG，去向见 `docs/research/` 与 `docs/superpowers/plans/`。_
 
 ### 新增
+
+- Windows V2 增加独立原生本地 Runtime：柜台 EXE 继续只探测固定 loopback 服务，Runtime 使用
+  PostgreSQL 16、同一迁移/角色/bootstrap 与 Fastify，密钥和数据由受保护 DACL 隔离并在登录时独立
+  启动；同版本修复安装会安全停止旧 Server/PostgreSQL、重验迁移后恢复 ready，不再因后台 postgres
+  继承安装器输出句柄而卡住。development 修复只允许合成数据；可交宏发的 companion 仍须完成
+  no-repo payload、签名、恢复、卸载保留数据和真实运营准入。见
+  [ADR-67](adr/2026-08-30-adr-67-windows-native-local-runtime.md)。
+
+- 启动 Windows V2 → 宏发试点主线：Windows 发行必须来自 `@laundry/edge-agent`，宏发定制只进入有模式
+  校验的发行 profile；目录持久化使用 Win32 写权限目录句柄 `FlushFileBuffers` 与
+  `MoveFileExW(...WRITE_THROUGH)`，私有文件以受保护 DACL 表达 `0600` 等价约束，DPAPI CurrentUser
+  的同用户进程风险被明确接受并补偿。Windows 打印在既有 signed-executor 接缝接入 RAW spooler/
+  受控直写，保留派发签名、durable ledger、一次性执行和回执。开发 `.exe`、真实数据准入和宏发正式
+  运营是三个独立证据层，浏览器截图或冻结 v1 `build:win` 不得冒充 V2 桌面交付。
+
+- 活动 V2 首个 Windows x64 NSIS development-only 软件候选已跑通：安装器固定携带经过摘要校验的
+  Win32 持久化/DACL/RAW 打印 helper 与唯一完整性校验 SPA，支持用户级安装、修复安装、快捷方式和
+  保留 AppData 的卸载。解包版、安装版及真实登录会话 Electron 均已验证；Windows RAW 队列接在既有
+  签名派发、durable ledger、一次性执行与回执之后。当前产物仍为 `NotSigned`，且未连接 XP-58，
+  因此只属于软件开发证据，不是宏发可记真实账的 pilot release。
 
 - 阶段 5.0 建立并实证可恢复的发布留存归档：`/opt` 增加只接受“已被后续 committed live 取代”的 superseded rollback 路径；history、root 私有 controller、可选 backup dump/manifest 与 finalize evidence 组成 manifest-bound release set，在同一 release lock、无活动 transition 下按精确 candidate SHA + token digest 显式归档或恢复。工具先验证 active 四类严格绑定与摘要，manifest 先于任何移动落盘，逐项只做同文件系统原子 rename，并以 inode/摘要支持中断重入；不自动挑最旧、不删除、不输出原 token。同一 root-only runner 提供无参数 `inventory` 与 `preflight`，并通过 exact-main 维护树解决“live 缺工具但留存已满”的引导死锁。远端已受控退役两棵 superseded rollback 树、归档三组完整 release set，并将 exact `main` `c8919af3c666cf70df2fbf04645ebdf0f377f35a` 正式提交为 hk-vps live；迁移保持 69/head 0069，公网 API 20/20、Cloud Chromium、四服务/共享站点和发布后 preflight 全部通过。稳定态 `/opt=5`、history/controller/backup `=7/7/7`、evidence `=6`，room 全部为 true。`/opt` 的恢复证据仍只声明 same-inode/inverse-rename 可逆性，不冒充实际远端 restore。见[阶段 5.0 发布解阻与关闭结果](operations/2026-08-25-stage50-release-result.md)。
 

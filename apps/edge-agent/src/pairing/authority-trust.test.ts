@@ -5,6 +5,7 @@ import { chmod, link, lstat, mkdtemp, readFile, rm, symlink, writeFile } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { inspectPrivateDirectory, inspectPrivateFile } from "@laundry/platform-fs";
 
 import type { SafeStorageSurface } from "../queue/safe-storage-kek.js";
 import { MemoryAuthorityTrustStore, SafeStorageAuthorityTrustStore } from "./authority-trust.js";
@@ -43,8 +44,16 @@ test("authority trust state and its root stay owner-private", async () => {
     new SafeStorageAuthorityTrustStore(root, safeStorage).accept(
       generateKeyPairSync("ed25519").publicKey,
     );
-    assert.equal((await lstat(root)).mode & 0o777, 0o700);
-    assert.equal((await lstat(join(root, "authority-trust.json"))).mode & 0o777, 0o600);
+    if (process.platform === "win32") {
+      assert.equal((await inspectPrivateDirectory(root)).scheme, "windows-dacl-v1");
+      assert.equal(
+        (await inspectPrivateFile(join(root, "authority-trust.json"))).scheme,
+        "windows-dacl-v1",
+      );
+    } else {
+      assert.equal((await lstat(root)).mode & 0o777, 0o700);
+      assert.equal((await lstat(join(root, "authority-trust.json"))).mode & 0o777, 0o600);
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -77,7 +86,7 @@ test("authority trust state rejects symlinks, hard links, and public modes", asy
     }
   });
 
-  await t.test("public mode", async () => {
+  await t.test("public mode", { skip: process.platform === "win32" }, async () => {
     const root = await mkdtemp(join(tmpdir(), "laundry-authority-trust-public-"));
     try {
       const authority = generateKeyPairSync("ed25519").publicKey;

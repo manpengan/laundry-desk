@@ -223,7 +223,7 @@ export async function createDrillHarness(
           kekKeyVersion: 1,
         }),
       stagedHealth: async (appPath) =>
-        appPath.endsWith("/payload/laundry-desk V2.app") && options.health,
+        appPath.endsWith(join("payload", "laundry-desk V2.app")) && options.health,
       setPrimaryLeaseBlocked: (blocked) => {
         leaseHistory = Object.freeze([...leaseHistory, blocked]);
       },

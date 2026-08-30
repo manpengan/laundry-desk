@@ -1,9 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import {
-  chmodSync,
   closeSync,
-  fchmodSync,
   fstatSync,
   fsyncSync,
   lstatSync,
@@ -11,11 +9,19 @@ import {
   openSync,
   readFileSync,
   realpathSync,
-  renameSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
+import {
+  flushDirectoryDurablySync,
+  inspectPrivateDirectorySync,
+  inspectPrivateFileSync,
+  replaceFileWriteThroughSync,
+  securePrivateDirectorySync,
+  securePrivateFileSync,
+  type PrivateFileSecurity,
+} from "@laundry/platform-fs";
 import { z } from "zod";
 
 import type { SafeStorageSurface } from "../queue/safe-storage-kek.js";
@@ -32,7 +38,6 @@ const DeviceKeyStateSchema = z.strictObject({
   protected_private_key: z.base64(),
 });
 
-const PRIVATE_DIRECTORY_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
 const MAX_STATE_BYTES = 64 * 1024;
 const STAGING_ID = /^[0-9a-f]{24}$/u;
@@ -52,15 +57,16 @@ function prepareRoot(path: string): string {
   if (!meta.isDirectory() || meta.isSymbolicLink()) {
     throw new Error("Device key root must be a real directory");
   }
-  chmodSync(path, PRIVATE_DIRECTORY_MODE);
+  securePrivateDirectorySync(path);
   const root = realpathSync(path);
   const canonical = lstatSync(root);
-  if (
-    !canonical.isDirectory() ||
-    canonical.isSymbolicLink() ||
-    (canonical.mode & 0o777) !== PRIVATE_DIRECTORY_MODE
-  ) {
+  if (!canonical.isDirectory() || canonical.isSymbolicLink()) {
     throw new Error("Device key root must be private");
+  }
+  try {
+    inspectPrivateDirectorySync(root);
+  } catch (error) {
+    throw new Error("Device key root must be private", { cause: error });
   }
   return root;
 }
@@ -76,18 +82,12 @@ function assertPrivateStateFile(
   metadata: Readonly<{
     dev: number;
     ino: number;
-    mode: number;
     nlink: number;
     size: number;
     isFile: () => boolean;
   }>,
 ): void {
-  if (
-    !metadata.isFile() ||
-    metadata.nlink !== 1 ||
-    (metadata.mode & 0o777) !== PRIVATE_FILE_MODE ||
-    metadata.size > MAX_STATE_BYTES
-  ) {
+  if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size > MAX_STATE_BYTES) {
     throw new Error("Invalid private device key state file");
   }
 }
@@ -99,13 +99,20 @@ function sameFile(
   return expected.dev === observed.dev && expected.ino === observed.ino;
 }
 
-function syncRoot(root: string): void {
-  const dirFd = openSync(root, constants.O_RDONLY);
+function sameSecurity(left: PrivateFileSecurity, right: PrivateFileSecurity): boolean {
+  return left.scheme === right.scheme && left.descriptorSha256 === right.descriptorSha256;
+}
+
+function inspectPrivateStateFile(path: string): PrivateFileSecurity {
   try {
-    fsyncSync(dirFd);
-  } finally {
-    closeSync(dirFd);
+    return inspectPrivateFileSync(path);
+  } catch (error) {
+    throw new Error("Invalid private device key state file", { cause: error });
   }
+}
+
+function syncRoot(root: string): void {
+  flushDirectoryDurablySync(root);
 }
 
 function writePrivateState(
@@ -135,14 +142,15 @@ function writePrivateState(
       PRIVATE_FILE_MODE,
     );
     created = true;
-    fchmodSync(fd, PRIVATE_FILE_MODE);
+    securePrivateFileSync(staging);
     writeFileSync(fd, serialized, "utf8");
     fsyncSync(fd);
     closeSync(fd);
     fd = null;
-    renameSync(staging, path);
+    replaceFileWriteThroughSync(staging, path);
     renamed = true;
     syncRoot(root);
+    inspectPrivateStateFile(path);
   } catch (error) {
     if (fd !== null) {
       try {
@@ -178,6 +186,7 @@ function readPrivateState(path: string, afterReadBytes?: () => void): ReadPrivat
   }
   if (expected.isSymbolicLink()) throw new Error("Device key state cannot be a symlink");
   assertPrivateStateFile(expected);
+  const securityBefore = inspectPrivateStateFile(path);
   const fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
     const opened = fstatSync(fd);
@@ -205,6 +214,10 @@ function readPrivateState(path: string, afterReadBytes?: () => void): ReadPrivat
     ) {
       throw new Error("Device key state path changed while reading");
     }
+    const securityAfter = inspectPrivateStateFile(path);
+    if (!sameSecurity(securityBefore, securityAfter)) {
+      throw new Error("Device key state security changed while reading");
+    }
     return Object.freeze({
       state: DeviceKeyStateSchema.parse(JSON.parse(bytes.toString("utf8")) as unknown),
       identity: Object.freeze({ dev: final.dev, ino: final.ino }),
@@ -214,7 +227,7 @@ function readPrivateState(path: string, afterReadBytes?: () => void): ReadPrivat
   }
 }
 
-/** Ed25519 private key encrypted by Electron safeStorage (macOS Keychain backed). */
+/** Ed25519 private key encrypted by Electron safeStorage (OS protected storage). */
 export class SafeStorageDeviceKeyStore implements DeviceKeyStore {
   private readonly root: string;
   private readonly path: string;
@@ -227,7 +240,7 @@ export class SafeStorageDeviceKeyStore implements DeviceKeyStore {
     options: SafeStorageDeviceKeyStoreOptions = {},
   ) {
     if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error("macOS Keychain encryption is unavailable");
+      throw new Error("OS protected storage encryption is unavailable");
     }
     this.root = prepareRoot(rootPath);
     this.path = join(this.root, "device-signing-key.json");
@@ -259,6 +272,11 @@ export class SafeStorageDeviceKeyStore implements DeviceKeyStore {
     const current = lstatSync(this.path);
     if (current.isSymbolicLink()) throw new Error("Device key state cannot be a symlink");
     assertPrivateStateFile(current);
+    try {
+      inspectPrivateStateFile(this.path);
+    } catch (error) {
+      throw new Error("Device key state changed before clear", { cause: error });
+    }
     if (!sameFile(observed.identity, current)) {
       throw new Error("Device key state changed before clear");
     }

@@ -5,9 +5,12 @@ import { join } from "node:path";
 import test from "node:test";
 
 import type { SignedPrintRuntime } from "./runtime.js";
-import { ConfiguredPrinterRuntime, PrinterManagerError } from "./configured-runtime.js";
+import {
+  ConfiguredPrinterRuntime,
+  PrinterManagerError,
+  type PrinterPilotResult,
+} from "./configured-runtime.js";
 import { PrinterConfigStore } from "./printer-config.js";
-import type { MacPrinterPilotResult } from "./mac-printer-pilot.js";
 
 type RuntimeEvent = Readonly<{ action: "start" | "stop"; queue: string }>;
 
@@ -64,7 +67,7 @@ async function fixture(t: test.TestContext, installed = ["XP58_A", "XP58_B"]) {
   };
   const manager = new ConfiguredPrinterRuntime({
     store: await PrinterConfigStore.open(join(root, "printing")),
-    pilot: (input) => pilot(input) as Promise<MacPrinterPilotResult>,
+    pilot: (input) => pilot(input) as Promise<PrinterPilotResult>,
     runtimeEnabled: true,
     createRuntime: async (queue) =>
       ({
@@ -105,7 +108,7 @@ test("configured runtime bootstraps env once and serially restarts queue selecti
         queues: Object.freeze(["XP58_B"]),
         ...(input.mode === "discover" ? {} : { selected_queue: "XP58_B" }),
         message: "ok",
-      }) as MacPrinterPilotResult,
+      }) as PrinterPilotResult,
     runtimeEnabled: false,
     createRuntime: async () => {
       throw new Error("runtime must stay disabled");

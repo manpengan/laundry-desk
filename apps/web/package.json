@@ -13,7 +13,7 @@
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.host.json && vite build --config vite.config.ts && node ../../tools/local/web-bundle-budget.mjs dist-spa",
     "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
     "lint": "eslint . --ext .ts,.tsx,.mjs --max-warnings=0",
-    "test": "pnpm run build && node --test $(find dist -name '*.test.js')",
+    "test": "pnpm run build && node --test \"dist/**/*.test.js\"",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.host.json && tsc -p tsconfig.e2e.json"
   },
   "dependencies": {

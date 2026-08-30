@@ -120,6 +120,7 @@ export function createOfflineDesktopService(
         }
         return result;
       },
+      staffDirectory: () => online.auth.staffDirectory(),
       pinChallenge: (input: unknown) =>
         isMutationBlocked() ? Promise.resolve(unavailable()) : online.auth.pinChallenge(input),
       pinVerify: async (input: unknown) => {

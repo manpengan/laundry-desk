@@ -7,6 +7,7 @@ import {
   type DesktopPrinterService,
 } from "../desktop/printer-operation.js";
 import { DESKTOP_STAFF_CREDENTIAL_OPERATION } from "../desktop/staff-setup-operation.js";
+import { DESKTOP_STAFF_DIRECTORY_OPERATION } from "../desktop/staff-directory-operation.js";
 
 export type DesktopFrameSurface = Readonly<{
   url: string;
@@ -33,6 +34,7 @@ export type DesktopOperationService = Readonly<{
   auth: Readonly<{
     login: (input: unknown) => Promise<unknown>;
     refresh: () => Promise<unknown>;
+    staffDirectory: () => Promise<unknown>;
     pinChallenge: (input: unknown) => Promise<unknown>;
     pinVerify: (input: unknown) => Promise<unknown>;
     credentialComplete?: (input: unknown) => Promise<unknown>;
@@ -149,6 +151,12 @@ export function registerDesktopOperationHandlers(options: DesktopOperationHandle
     DESKTOP_IPC_CHANNELS.auth.refresh,
     DESKTOP_OPERATION_SCHEMAS.auth.refresh,
     () => service.auth.refresh(),
+  );
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.auth.staffDirectory,
+    DESKTOP_STAFF_DIRECTORY_OPERATION,
+    () => service.auth.staffDirectory(),
   );
   registerOperation(
     options,

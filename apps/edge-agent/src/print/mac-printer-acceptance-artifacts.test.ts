@@ -17,6 +17,8 @@ import test from "node:test";
 
 import { hashPackagedMacApp } from "./mac-printer-acceptance-artifacts.js";
 
+const macArtifactTest = process.platform === "win32" ? test.skip : test;
+
 type AppFixture = Readonly<{
   app: string;
   appAsar: string;
@@ -70,7 +72,7 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-test("packaged app evidence hashes the real app.asar and SPA manifest", async (t) => {
+macArtifactTest("packaged app evidence hashes the real app.asar and SPA manifest", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-packaged-app-"));
   t.after(async () => rm(root, { recursive: true }));
   const fixture = await createPackagedApp(root);
@@ -85,7 +87,7 @@ test("packaged app evidence hashes the real app.asar and SPA manifest", async (t
   });
 });
 
-test("packaged app evidence rejects forged identity and version drift", async (t) => {
+macArtifactTest("packaged app evidence rejects forged identity and version drift", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-packaged-app-identity-"));
   t.after(async () => rm(root, { recursive: true }));
   const forged = await createPackagedApp(root, "forged.app", {
@@ -99,33 +101,39 @@ test("packaged app evidence rejects forged identity and version drift", async (t
   await assert.rejects(() => hashPackagedMacApp(drifted.app), /identity is invalid/u);
 });
 
-test("packaged app evidence rejects symlinks, hard links, and oversized files", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "laundry-packaged-app-boundary-"));
-  t.after(async () => rm(root, { recursive: true }));
+macArtifactTest(
+  "packaged app evidence rejects symlinks, hard links, and oversized files",
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-packaged-app-boundary-"));
+    t.after(async () => rm(root, { recursive: true }));
 
-  const symlinkFixture = await createPackagedApp(root, "symlink-file.app");
-  await rename(symlinkFixture.appAsar, `${symlinkFixture.appAsar}.real`);
-  await symlink(`${symlinkFixture.appAsar}.real`, symlinkFixture.appAsar);
-  await assert.rejects(() => hashPackagedMacApp(symlinkFixture.app), /single-link real file/u);
+    const symlinkFixture = await createPackagedApp(root, "symlink-file.app");
+    await rename(symlinkFixture.appAsar, `${symlinkFixture.appAsar}.real`);
+    await symlink(`${symlinkFixture.appAsar}.real`, symlinkFixture.appAsar);
+    await assert.rejects(() => hashPackagedMacApp(symlinkFixture.app), /single-link real file/u);
 
-  const hardLinkFixture = await createPackagedApp(root, "hard-link.app");
-  await link(hardLinkFixture.appAsar, `${hardLinkFixture.appAsar}.second-link`);
-  await assert.rejects(() => hashPackagedMacApp(hardLinkFixture.app), /single-link real file/u);
+    const hardLinkFixture = await createPackagedApp(root, "hard-link.app");
+    await link(hardLinkFixture.appAsar, `${hardLinkFixture.appAsar}.second-link`);
+    await assert.rejects(() => hashPackagedMacApp(hardLinkFixture.app), /single-link real file/u);
 
-  const oversizedFixture = await createPackagedApp(root, "oversized.app");
-  await truncate(oversizedFixture.appAsar, 1024 * 1024 * 1024 + 1);
-  await assert.rejects(() => hashPackagedMacApp(oversizedFixture.app), /bounded/u);
+    const oversizedFixture = await createPackagedApp(root, "oversized.app");
+    await truncate(oversizedFixture.appAsar, 1024 * 1024 * 1024 + 1);
+    await assert.rejects(() => hashPackagedMacApp(oversizedFixture.app), /bounded/u);
 
-  const linkedPlistFixture = await createPackagedApp(root, "linked-plist.app");
-  await link(linkedPlistFixture.infoPlist, `${linkedPlistFixture.infoPlist}.second-link`);
-  await assert.rejects(() => hashPackagedMacApp(linkedPlistFixture.app), /single-link real file/u);
+    const linkedPlistFixture = await createPackagedApp(root, "linked-plist.app");
+    await link(linkedPlistFixture.infoPlist, `${linkedPlistFixture.infoPlist}.second-link`);
+    await assert.rejects(
+      () => hashPackagedMacApp(linkedPlistFixture.app),
+      /single-link real file/u,
+    );
 
-  const appSymlink = join(await realpath(root), "redirect.app");
-  await symlink(hardLinkFixture.app, appSymlink);
-  await assert.rejects(() => hashPackagedMacApp(appSymlink), /real directory/u);
-});
+    const appSymlink = join(await realpath(root), "redirect.app");
+    await symlink(hardLinkFixture.app, appSymlink);
+    await assert.rejects(() => hashPackagedMacApp(appSymlink), /real directory/u);
+  },
+);
 
-test("packaged app evidence detects replacement between lstat and open", async (t) => {
+macArtifactTest("packaged app evidence detects replacement between lstat and open", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-packaged-app-race-"));
   t.after(async () => rm(root, { recursive: true }));
   const fixture = await createPackagedApp(root);
@@ -142,7 +150,7 @@ test("packaged app evidence detects replacement between lstat and open", async (
   );
 });
 
-test("packaged app evidence detects Info.plist replacement", async (t) => {
+macArtifactTest("packaged app evidence detects Info.plist replacement", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-packaged-plist-race-"));
   t.after(async () => rm(root, { recursive: true }));
   const fixture = await createPackagedApp(root);
@@ -159,7 +167,7 @@ test("packaged app evidence detects Info.plist replacement", async (t) => {
   );
 });
 
-test("packaged app evidence detects mutation after reading", async (t) => {
+macArtifactTest("packaged app evidence detects mutation after reading", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-packaged-app-after-read-"));
   t.after(async () => rm(root, { recursive: true }));
   const fixture = await createPackagedApp(root);
@@ -174,7 +182,7 @@ test("packaged app evidence detects mutation after reading", async (t) => {
   );
 });
 
-test("packaged app evidence rejects a cross-artifact finalization race", async (t) => {
+macArtifactTest("packaged app evidence rejects a cross-artifact finalization race", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-packaged-app-final-race-"));
   t.after(async () => rm(root, { recursive: true }));
   const fixture = await createPackagedApp(root);
@@ -189,7 +197,7 @@ test("packaged app evidence rejects a cross-artifact finalization race", async (
   );
 });
 
-test("packaged app evidence rejects replacement of the app directory", async (t) => {
+macArtifactTest("packaged app evidence rejects replacement of the app directory", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-packaged-app-dir-race-"));
   t.after(async () => rm(root, { recursive: true }));
   const fixture = await createPackagedApp(root, "accepted.app");
@@ -206,7 +214,7 @@ test("packaged app evidence rejects replacement of the app directory", async (t)
   );
 });
 
-test("packaged app path errors do not reflect private paths", async () => {
+macArtifactTest("packaged app path errors do not reflect private paths", async () => {
   const supplied = "/private/secret/not-an-app";
   await assert.rejects(
     () => hashPackagedMacApp(supplied),

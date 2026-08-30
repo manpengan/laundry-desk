@@ -9,6 +9,7 @@ function createBridge(): LaundryDesktopBridge {
     auth: {
       login: async () => ({ ok: false }),
       refresh: async () => ({ ok: false }),
+      staffDirectory: async () => ({ ok: false }),
       pinChallenge: async () => ({ ok: false }),
       pinVerify: async () => ({ ok: false }),
       credentialComplete: async () => ({ ok: false }),
@@ -112,10 +113,19 @@ test("selectHost fails closed when app://local has no valid desktop bridge", () 
   }
 });
 
-test("selectHost requires the exact six-method desktop auth surface", () => {
+test("selectHost requires the exact seven-method desktop auth surface", () => {
   const valid = createBridge();
   const missingRefresh = {
     login: valid.auth.login,
+    staffDirectory: valid.auth.staffDirectory,
+    pinChallenge: valid.auth.pinChallenge,
+    pinVerify: valid.auth.pinVerify,
+    credentialComplete: valid.auth.credentialComplete,
+    logout: valid.auth.logout,
+  };
+  const missingStaffDirectory = {
+    login: valid.auth.login,
+    refresh: valid.auth.refresh,
     pinChallenge: valid.auth.pinChallenge,
     pinVerify: valid.auth.pinVerify,
     credentialComplete: valid.auth.credentialComplete,
@@ -123,6 +133,7 @@ test("selectHost requires the exact six-method desktop auth surface", () => {
   };
   const invalidBridges: readonly unknown[] = [
     { ...valid, auth: missingRefresh },
+    { ...valid, auth: missingStaffDirectory },
     {
       ...valid,
       auth: {
@@ -171,6 +182,7 @@ test("selectHost rejects accessor-backed bridge namespaces and methods without e
           return valid.auth.refresh;
         },
       },
+      staffDirectory: { enumerable: true, value: valid.auth.staffDirectory },
       pinChallenge: { enumerable: true, value: valid.auth.pinChallenge },
       pinVerify: { enumerable: true, value: valid.auth.pinVerify },
       credentialComplete: { enumerable: true, value: valid.auth.credentialComplete },

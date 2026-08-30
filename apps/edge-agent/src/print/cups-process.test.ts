@@ -13,6 +13,7 @@ import {
 import { isCupsJobIdForQueue, isCupsQueueName } from "./cups-queue.js";
 
 const QUEUE = "xp58-local";
+const cupsTest = process.platform === "win32" ? test.skip : test;
 
 async function fakeLp(
   root: string,
@@ -40,7 +41,7 @@ process.stdin.on("end", () => {
   return Object.freeze({ executable, args, stdin });
 }
 
-test("fake lp receives only explicit queue/raw args and exact ESC/POS bytes", async (t) => {
+cupsTest("fake lp receives only explicit queue/raw args and exact ESC/POS bytes", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-fake-lp-"));
   t.after(async () => rm(root, { recursive: true, force: true }));
   const fake = await fakeLp(
@@ -56,7 +57,7 @@ test("fake lp receives only explicit queue/raw args and exact ESC/POS bytes", as
   assert.deepEqual(new Uint8Array(await readFile(fake.stdin)), bytes);
 });
 
-test("waits for close and parses stdout delivered after the lp process exits", async (t) => {
+cupsTest("waits for close and parses stdout delivered after the lp process exits", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-fake-lp-late-stdout-"));
   t.after(async () => rm(root, { recursive: true, force: true }));
   const writer = `setTimeout(() => process.stdout.write(${JSON.stringify(
@@ -110,39 +111,45 @@ test("CUPS queue contract accepts 64 bytes, rejects 65, and requires a positive 
   assert.throws(() => parseCupsJobReference(oversizedQueue, `${oversizedQueue}-1`));
 });
 
-test("timeout after fake lp spawn is uncertain and never reported as a known failure", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "laundry-fake-lp-timeout-"));
-  t.after(async () => rm(root, { recursive: true, force: true }));
-  const fake = await fakeLp(root, "setTimeout(() => undefined, 5_000);");
+cupsTest(
+  "timeout after fake lp spawn is uncertain and never reported as a known failure",
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-fake-lp-timeout-"));
+    t.after(async () => rm(root, { recursive: true, force: true }));
+    const fake = await fakeLp(root, "setTimeout(() => undefined, 5_000);");
 
-  await assert.rejects(
-    () => submitCupsBytesWithExecutable(QUEUE, Uint8Array.of(1), fake.executable, 50),
-    (error: unknown) =>
-      error instanceof CupsSubmissionError &&
-      error.outcome === "uncertain" &&
-      error.message === "CUPS submission timed out",
-  );
-});
+    await assert.rejects(
+      () => submitCupsBytesWithExecutable(QUEUE, Uint8Array.of(1), fake.executable, 50),
+      (error: unknown) =>
+        error instanceof CupsSubmissionError &&
+        error.outcome === "uncertain" &&
+        error.message === "CUPS submission timed out",
+    );
+  },
+);
 
-test("any nonzero exit after lp spawn is uncertain; only pre-spawn failure is failed", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "laundry-fake-lp-failed-"));
-  t.after(async () => rm(root, { recursive: true, force: true }));
-  const fake = await fakeLp(
-    root,
-    'process.stderr.write("queue stopped\\n"); process.exitCode = 2;',
-  );
+cupsTest(
+  "any nonzero exit after lp spawn is uncertain; only pre-spawn failure is failed",
+  async (t) => {
+    const root = await mkdtemp(join(tmpdir(), "laundry-fake-lp-failed-"));
+    t.after(async () => rm(root, { recursive: true, force: true }));
+    const fake = await fakeLp(
+      root,
+      'process.stderr.write("queue stopped\\n"); process.exitCode = 2;',
+    );
 
-  await assert.rejects(
-    () => submitCupsBytesWithExecutable(QUEUE, Uint8Array.of(1), fake.executable, 2_000),
-    (error: unknown) => error instanceof CupsSubmissionError && error.outcome === "uncertain",
-  );
-  await assert.rejects(
-    () => submitCupsBytesWithExecutable(QUEUE, Uint8Array.of(1), join(root, "missing-lp"), 100),
-    (error: unknown) => error instanceof CupsSubmissionError && error.outcome === "failed",
-  );
-});
+    await assert.rejects(
+      () => submitCupsBytesWithExecutable(QUEUE, Uint8Array.of(1), fake.executable, 2_000),
+      (error: unknown) => error instanceof CupsSubmissionError && error.outcome === "uncertain",
+    );
+    await assert.rejects(
+      () => submitCupsBytesWithExecutable(QUEUE, Uint8Array.of(1), join(root, "missing-lp"), 100),
+      (error: unknown) => error instanceof CupsSubmissionError && error.outcome === "failed",
+    );
+  },
+);
 
-test("an external signal remains distinct from an exit code or timeout", async (t) => {
+cupsTest("an external signal remains distinct from an exit code or timeout", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-fake-lp-signal-"));
   t.after(async () => rm(root, { recursive: true, force: true }));
   const fake = await fakeLp(root, 'process.kill(process.pid, "SIGTERM");');
@@ -156,7 +163,7 @@ test("an external signal remains distinct from an exit code or timeout", async (
   );
 });
 
-test("fake lp output is hard-capped before parsing a job reference", async (t) => {
+cupsTest("fake lp output is hard-capped before parsing a job reference", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-fake-lp-output-cap-"));
   t.after(async () => rm(root, { recursive: true, force: true }));
   const fake = await fakeLp(root, `process.stdout.write("X".repeat(4096) + " ${QUEUE}-77\\n");`);
@@ -167,7 +174,7 @@ test("fake lp output is hard-capped before parsing a job reference", async (t) =
   );
 });
 
-test("CUPS discovery is bounded and kills a hung backend", async (t) => {
+cupsTest("CUPS discovery is bounded and kills a hung backend", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "laundry-fake-lpstat-timeout-"));
   t.after(async () => rm(root, { recursive: true, force: true }));
   const executable = join(root, "fake-lpstat.mjs");

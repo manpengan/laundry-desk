@@ -21,6 +21,7 @@ export const DESKTOP_IPC_CHANNELS = Object.freeze({
   auth: Object.freeze({
     login: "desktop:auth:login",
     refresh: "desktop:auth:refresh",
+    staffDirectory: "desktop:auth:staff-directory",
     pinChallenge: "desktop:auth:pin-challenge",
     pinVerify: "desktop:auth:pin-verify",
     credentialComplete: "desktop:auth:staff-credential-complete",

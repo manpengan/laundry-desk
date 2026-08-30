@@ -32,6 +32,7 @@ test("DESKTOP_IPC_CHANNELS is the exact deeply frozen renderer capability map", 
     auth: {
       login: "desktop:auth:login",
       refresh: "desktop:auth:refresh",
+      staffDirectory: "desktop:auth:staff-directory",
       pinChallenge: "desktop:auth:pin-challenge",
       pinVerify: "desktop:auth:pin-verify",
       credentialComplete: "desktop:auth:staff-credential-complete",
@@ -74,13 +75,13 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
   );
   const invokedDesktopChannels = Array.from(
     preload.matchAll(
-      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:login|refresh|pinChallenge|pinVerify|credentialComplete|logout)|command\.execute|query\.execute|photo\.(?:upload|read|delete)|offline\.(?:resume|status|resolve)|printer\.(?:discover|status|configure|test)|health\.get)/gu,
+      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:login|refresh|staffDirectory|pinChallenge|pinVerify|credentialComplete|logout)|command\.execute|query\.execute|photo\.(?:upload|read|delete)|offline\.(?:resume|status|resolve)|printer\.(?:discover|status|configure|test)|health\.get)/gu,
     ),
     (match) => match[1],
   );
   const emptyInputChannels = Array.from(
     preload.matchAll(
-      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:refresh|logout)|offline\.(?:resume|status)|printer\.(?:discover|status)|health\.get),\s*EMPTY_DESKTOP_INPUT\s*\)/gu,
+      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(auth\.(?:refresh|staffDirectory|logout)|offline\.(?:resume|status)|printer\.(?:discover|status)|health\.get),\s*EMPTY_DESKTOP_INPUT\s*\)/gu,
     ),
     (match) => match[1],
   );
@@ -89,6 +90,7 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
   assert.deepEqual(invokedDesktopChannels, [
     "auth.login",
     "auth.refresh",
+    "auth.staffDirectory",
     "auth.pinChallenge",
     "auth.pinVerify",
     "auth.credentialComplete",
@@ -109,6 +111,7 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
   ]);
   assert.deepEqual(emptyInputChannels, [
     "auth.refresh",
+    "auth.staffDirectory",
     "auth.logout",
     "offline.resume",
     "offline.status",
@@ -116,7 +119,7 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
     "printer.status",
     "health.get",
   ]);
-  assert.equal(preload.match(/ipcRenderer\.invoke\(/gu)?.length, 19);
+  assert.equal(preload.match(/ipcRenderer\.invoke\(/gu)?.length, 20);
   assert.doesNotMatch(preload, /edgeBridge/);
   assert.doesNotMatch(preload, /import\s*\{\s*IPC_CHANNELS\s*\}/u);
   assert.doesNotMatch(

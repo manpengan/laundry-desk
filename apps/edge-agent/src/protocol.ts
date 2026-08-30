@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { CustomScheme, Protocol } from "electron";
 import {
   isNormalizedSpaPath,
   sha256Hex,
@@ -7,6 +8,7 @@ import {
   type SpaManifest,
   type SpaManifestEntry,
 } from "./lib/integrity.js";
+import { APP_SCHEME } from "./lib/security-prefs.js";
 
 const CONTENT_SECURITY_POLICY =
   "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'none'";
@@ -15,6 +17,24 @@ type VerifiedAsset = Readonly<{
   body: ArrayBuffer;
   entry: SpaManifestEntry;
 }>;
+
+/** Register the fixed privileged scheme before Electron becomes ready. */
+export function registerAppProtocolScheme(
+  registrar: Pick<Protocol, "registerSchemesAsPrivileged">,
+): void {
+  const schemes: CustomScheme[] = [
+    {
+      scheme: APP_SCHEME,
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+      },
+    },
+  ];
+  registrar.registerSchemesAsPrivileged(schemes);
+}
 
 /** Create a session-agnostic app:// handler backed only by verified manifest assets. */
 export function createAppProtocolHandler(

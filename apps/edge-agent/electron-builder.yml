@@ -2,6 +2,9 @@ appId: com.laundry-desk.v2
 productName: laundry-desk V2
 asar: true
 afterPack: ./scripts/prune-packaged-spa.mjs
+forceCodeSigning: false
+npmRebuild: false
+electronDist: ../../node_modules/electron/dist
 
 directories:
   output: release
@@ -31,6 +34,7 @@ files:
   - dist/desktop/print-http-transport.js
   - dist/desktop/printer-operation.js
   - dist/desktop/request-builder.js
+  - dist/desktop/staff-directory-operation.js
   - dist/desktop/staff-setup-operation.js
   - dist/drivers/render/code128-width.js
   - dist/drivers/render/money-gbk.js
@@ -50,11 +54,13 @@ files:
   - dist/print/main-runtime.js
   - dist/print/printer-config.js
   - dist/print/printer-smoke.js
+  - dist/print/raw-print-port.js
   - dist/print/runtime.js
   - dist/print/signed-executor.js
   - dist/print/snapshot-render.js
   - dist/print/template-render.js
   - dist/print/usb-port.js
+  - dist/print/windows-printer-pilot.js
   - dist/queue/crypto.js
   - dist/queue/dek-kek.js
   - dist/queue/file-store.js
@@ -108,6 +114,7 @@ files:
   - "!**/node_modules/**/docs/**"
   - "!**/node_modules/**/tests.js"
   - "!**/node_modules/@laundry/contracts/openapi/**"
+  - "!**/node_modules/@laundry/platform-fs/native/**"
 
 extraResources:
   - from: resources/spa
@@ -120,3 +127,29 @@ extraResources:
 mac:
   target: dir
   identity: null
+
+win:
+  icon: ../../build/icon.ico
+  requestedExecutionLevel: asInvoker
+  signExecutable: false
+  target:
+    - target: nsis
+      arch:
+        - x64
+  extraResources:
+    - from: resources/windows-helper
+      to: windows-helper
+      filter:
+        - laundry-windows-helper.exe
+        - laundry-windows-helper.exe.sha256
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  packElevateHelper: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false
+  artifactName: "laundry-desk-v2-${version}-windows-x64-development-only.${ext}"

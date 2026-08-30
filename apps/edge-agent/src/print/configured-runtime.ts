@@ -1,10 +1,10 @@
-import { isCupsQueueName } from "./cups-queue.js";
+import { PrinterQueueNameSchema } from "@laundry/contracts";
+
 import {
   DISABLED_PRINTER_CONFIG,
   PrinterConfigStore,
   type PrinterConfig,
 } from "./printer-config.js";
-import type { MacPrinterPilotResult } from "./mac-printer-pilot.js";
 import type { SignedPrintRuntime } from "./runtime.js";
 
 export type PrinterRuntimeState = "disabled" | "ready" | "unavailable";
@@ -37,9 +37,20 @@ export class PrinterManagerError extends Error {
   }
 }
 
-type PrinterPilot = (
+export type PrinterPilotResult = Readonly<{
+  ok: boolean;
+  mode: "discover" | "validate" | "print";
+  queues: readonly string[];
+  selected_queue?: string;
+  cups_job_id?: string;
+  payload_sha256?: string;
+  bytes_written?: number;
+  message: string;
+}>;
+
+export type PrinterPilot = (
   input: Readonly<{ mode: "discover" | "validate" | "print"; queue?: string }>,
-) => Promise<MacPrinterPilotResult>;
+) => Promise<PrinterPilotResult>;
 
 export type ConfiguredPrinterRuntimeOptions = Readonly<{
   store: PrinterConfigStore;
@@ -48,9 +59,9 @@ export type ConfiguredPrinterRuntimeOptions = Readonly<{
   runtimeEnabled: boolean;
 }>;
 
-function stablePilotMessage(result: MacPrinterPilotResult): string {
+function stablePilotMessage(result: PrinterPilotResult): string {
   if (result.ok) return result.message;
-  return "CUPS 打印机不可用，请刷新队列并检查本机打印设置";
+  return "系统打印机不可用，请刷新队列并检查本机打印设置";
 }
 
 /** Serializes queue changes with signed-runtime stop/start and fixed pilot tests. */
@@ -116,7 +127,7 @@ export class ConfiguredPrinterRuntime {
     return this.exclusive(async () => {
       const queue = this.config.queue;
       if (queue === null) {
-        throw new PrinterManagerError("UNAVAILABLE", "请先选择并启用 CUPS 打印队列");
+        throw new PrinterManagerError("UNAVAILABLE", "请先选择并启用本机打印队列");
       }
       const result = await this.options.pilot({ mode: "print", queue });
       if (
@@ -128,7 +139,7 @@ export class ConfiguredPrinterRuntime {
       ) {
         throw new PrinterManagerError(
           "TEST_FAILED",
-          "固定测试票未获 CUPS 可追踪任务；结果不代表已经出纸",
+          "固定测试票未获可追踪的后台任务；结果不代表已经出纸",
         );
       }
       return Object.freeze({
@@ -136,7 +147,7 @@ export class ConfiguredPrinterRuntime {
         cups_job_id: result.cups_job_id,
         payload_sha256: result.payload_sha256,
         bytes_written: result.bytes_written,
-        message: "固定测试票已提交 CUPS；请现场核对实际出纸",
+        message: "固定测试票已提交系统打印后台；请现场核对实际出纸",
       });
     });
   }
@@ -166,12 +177,12 @@ export class ConfiguredPrinterRuntime {
   }
 
   private async assertInstalled(queue: string): Promise<void> {
-    if (!isCupsQueueName(queue)) {
-      throw new PrinterManagerError("INVALID_QUEUE", "CUPS 队列名称格式无效");
+    if (!PrinterQueueNameSchema.safeParse(queue).success) {
+      throw new PrinterManagerError("INVALID_QUEUE", "打印队列名称格式无效");
     }
     const result = await this.options.pilot({ mode: "validate", queue });
     if (!result.ok || result.selected_queue !== queue) {
-      throw new PrinterManagerError("QUEUE_NOT_FOUND", "所选 CUPS 队列未安装或当前不可用");
+      throw new PrinterManagerError("QUEUE_NOT_FOUND", "所选系统打印队列未安装或当前不可用");
     }
   }
 
@@ -214,11 +225,11 @@ export class ConfiguredPrinterRuntime {
     const message =
       this.lastError ??
       (queue === null
-        ? "尚未启用 CUPS 打印队列"
+        ? "尚未启用本机打印队列"
         : state === "ready"
-          ? "CUPS 队列已启用，签名打印运行时正在工作"
+          ? "本机打印队列已启用，签名打印运行时正在工作"
           : discovered.ok
-            ? "已选 CUPS 队列当前不可用，未领取新的打印任务"
+            ? "已选打印队列当前不可用，未领取新的打印任务"
             : stablePilotMessage(discovered));
     return Object.freeze({
       state,

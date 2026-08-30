@@ -3,6 +3,7 @@ import { chmod, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { inspectPrivateDirectory, inspectPrivateFile } from "@laundry/platform-fs";
 
 import { PrinterConfigStore } from "./printer-config.js";
 
@@ -21,8 +22,16 @@ test("PrinterConfigStore writes and reads exact private v1 queue state", async (
   await store.write(Object.freeze({ version: 1, queue: "XP58_USB" }));
 
   assert.deepEqual(await store.read(), { version: 1, queue: "XP58_USB" });
-  assert.equal((await stat(configRoot)).mode & 0o777, 0o700);
-  assert.equal((await stat(join(configRoot, "printer-config.json"))).mode & 0o777, 0o600);
+  if (process.platform === "win32") {
+    assert.equal((await inspectPrivateDirectory(configRoot)).scheme, "windows-dacl-v1");
+    assert.equal(
+      (await inspectPrivateFile(join(configRoot, "printer-config.json"))).scheme,
+      "windows-dacl-v1",
+    );
+  } else {
+    assert.equal((await stat(configRoot)).mode & 0o777, 0o700);
+    assert.equal((await stat(join(configRoot, "printer-config.json"))).mode & 0o777, 0o600);
+  }
 
   await store.write(Object.freeze({ version: 1, queue: null }));
   assert.deepEqual(await store.read(), { version: 1, queue: null });

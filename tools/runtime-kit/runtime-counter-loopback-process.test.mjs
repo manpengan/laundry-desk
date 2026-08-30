@@ -28,17 +28,21 @@ function processExists(processId) {
   }
 }
 
-async function waitForFile(path, timeoutMs = 5_000) {
+async function waitForProcessId(path, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      return await readFile(path, "utf8");
+      const contents = await readFile(path, "utf8");
+      if (/^[1-9][0-9]*$/u.test(contents)) {
+        const processId = Number(contents);
+        if (Number.isSafeInteger(processId) && processId > 1) return processId;
+      }
     } catch (error) {
       if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     }
     await delay(20);
   }
-  throw new Error("RUNTIME_COUNTER_TEST_FILE_TIMEOUT");
+  throw new Error("RUNTIME_COUNTER_TEST_PID_TIMEOUT");
 }
 
 async function waitForProcessExit(processId, timeoutMs = 5_000) {
@@ -118,8 +122,7 @@ async function assertStubbornProcessGroupIsKilled(trigger) {
         "u",
       ),
     );
-    grandchildPid = Number.parseInt(await waitForFile(grandchildPath), 10);
-    assert.ok(Number.isSafeInteger(grandchildPid) && grandchildPid > 1);
+    grandchildPid = await waitForProcessId(grandchildPath);
     await waitForProcessExit(grandchildPid);
   } finally {
     killIfAlive(grandchildPid);
@@ -238,8 +241,7 @@ test("actual acceptance lifecycle cancels its command before unified temp and le
     );
     try {
       await readyPromise;
-      activePid = Number.parseInt(await waitForFile(activePidPath), 10);
-      assert.ok(Number.isSafeInteger(activePid) && activePid > 1);
+      activePid = await waitForProcessId(activePidPath);
       processEvents.emit(orchestratorSignal);
       await assert.rejects(lifecycle, /RUNTIME_COUNTER_TEST_LIFECYCLE_ACTIVE_ABORTED/u);
       await waitForProcessExit(activePid);
@@ -309,8 +311,7 @@ test("orchestrator signals cancel the active command and await its isolated clea
         child.once("close", (code, closeSignal) => resolve({ code, closeSignal })),
       );
       await waitForReady(child);
-      activePid = Number.parseInt(await waitForFile(activePidPath), 10);
-      assert.ok(Number.isSafeInteger(activePid) && activePid > 1);
+      activePid = await waitForProcessId(activePidPath);
       assert.equal(child.kill(signal), true);
       const result = await closed;
       assert.deepEqual(result, { code: 1, closeSignal: null });

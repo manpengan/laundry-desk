@@ -2,13 +2,13 @@
 
 Gemini 在本项目中的入场指引。
 
-> **当前状态（ADR-64）**：[ADR-64](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
-> 已将阶段 5 确定为当前路线，Codex 是通用 V2 交付 owner。ADR-37 保留 Cloud Web 主形态，ADR-14 保留为
+> **当前状态（ADR-66）**：[ADR-66](docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md)
+> 已将 Windows V2 定制 EXE 与宏发受控试点确定为当前路线，Codex 是通用 V2 交付 owner。ADR-14 保留为
 > 架构基线，ADR-13 保留为
 > V2-only 基础裁决。Gemini 退出关键路径；未合并分支仅可作为 Codex 的候选输入。
 
 当前只按此顺序交付：
-`5.0 发布解阻 → 5.1 Cloud 生产基线 → 5.2 受控试点 → 5.3 真实 provider → 5.4 桌面与硬件`。
+`W0 Windows 安全基座 → W1 Windows EXE/打印 → W2 生产与迁移准入 → W3 宏发受控运营`。
 
 ## 你在这个项目里的角色
 
@@ -22,8 +22,8 @@ Gemini 在本项目中的入场指引。
 
 ## 入场必读（按顺序）
 
-1. **当前产品裁决**：[`ADR-64`](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
-2. **当前执行计划**：[`阶段 5`](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md)
+1. **当前产品裁决**：[`ADR-66`](docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md)
+2. **Windows 实机证据**：[`findings`](docs/research/2026-08-29-windows-port-findings-and-build-host.md)
 3. **Cloud Web 主形态**：[`ADR-37`](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
 4. **V2 架构基线**：[`ADR-14`](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
 5. **产品设计基线**：[`docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md`](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)

@@ -2,6 +2,14 @@ import { constants } from "node:fs";
 import { lstat, mkdir, open, readdir, realpath } from "node:fs/promises";
 import { dirname, join, parse, relative, resolve, sep } from "node:path";
 
+import {
+  flushDirectoryDurably,
+  inspectPrivateDirectory,
+  inspectPrivateFile,
+  securePrivateDirectory,
+  securePrivateFile,
+} from "@laundry/platform-fs";
+
 import { PhotoFileError } from "./file-store-error.js";
 
 export const PHOTO_STORE_MARKER = ".laundry-photo-store-v1";
@@ -42,15 +50,6 @@ async function assertRealDirectoryChain(rootPath: string): Promise<void> {
   }
 }
 
-async function syncDirectory(rootPath: string): Promise<void> {
-  const handle = await open(rootPath, constants.O_RDONLY);
-  try {
-    await handle.sync();
-  } finally {
-    await handle.close();
-  }
-}
-
 async function validateMarker(markerPath: string): Promise<void> {
   const metadata = await lstatIfPresent(markerPath);
   if (metadata === null || metadata.isSymbolicLink() || !metadata.isFile()) {
@@ -72,9 +71,14 @@ async function validateMarker(markerPath: string): Promise<void> {
     ) {
       throw new PhotoFileError("PHOTO_ROOT_UNOWNED", "photo root ownership marker is invalid");
     }
-    await handle.chmod(FILE_MODE);
   } finally {
     await handle.close();
+  }
+  try {
+    await securePrivateFile(markerPath);
+    await inspectPrivateFile(markerPath);
+  } catch {
+    throw new PhotoFileError("PHOTO_ROOT_UNOWNED", "photo root ownership marker is invalid");
   }
 }
 
@@ -96,12 +100,13 @@ async function establishStoreOwnership(rootPath: string): Promise<void> {
     FILE_MODE,
   );
   try {
+    await securePrivateFile(markerPath);
     await handle.writeFile(PHOTO_STORE_MARKER_CONTENT, "utf8");
     await handle.sync();
   } finally {
     await handle.close();
   }
-  await syncDirectory(rootPath);
+  await flushDirectoryDurably(rootPath);
   await validateMarker(markerPath);
 }
 
@@ -122,6 +127,8 @@ export async function securePhotoStoreRoot(rootPath: string): Promise<string> {
     throw new PhotoFileError("PHOTO_ROOT_INVALID", "photo root must not traverse aliases");
   }
   await establishStoreOwnership(canonical);
+  await securePrivateDirectory(canonical);
+  await inspectPrivateDirectory(canonical);
   const handle = await open(
     canonical,
     constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0),
@@ -131,10 +138,10 @@ export async function securePhotoStoreRoot(rootPath: string): Promise<string> {
     if (!opened.isDirectory() || opened.dev !== metadata.dev || opened.ino !== metadata.ino) {
       throw new PhotoFileError("PHOTO_ROOT_INVALID", "photo root changed during initialization");
     }
-    await handle.chmod(DIRECTORY_MODE);
   } finally {
     await handle.close();
   }
+  await flushDirectoryDurably(canonical);
   await assertRealDirectoryChain(canonical);
   return canonical;
 }

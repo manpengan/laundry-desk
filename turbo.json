@@ -58,23 +58,48 @@
       "outputs": ["dist/**"]
     },
     "@laundry/edge-agent#typecheck": {
-      "dependsOn": ["^build", "@laundry/contracts#build"]
+      "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/platform-fs#build"]
     },
     "@laundry/edge-agent#test": {
-      "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/web#test"]
+      "dependsOn": [
+        "^build",
+        "@laundry/contracts#build",
+        "@laundry/platform-fs#build",
+        "@laundry/web#test"
+      ]
     },
     "@laundry/edge-agent#build": {
-      "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/web#build"],
+      "dependsOn": [
+        "^build",
+        "@laundry/contracts#build",
+        "@laundry/platform-fs#build",
+        "@laundry/web#build"
+      ],
       "outputs": ["dist/**", "resources/spa/**"]
     },
     "@laundry/server#typecheck": {
-      "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/domain#build"]
+      "dependsOn": [
+        "^build",
+        "@laundry/contracts#build",
+        "@laundry/domain#build",
+        "@laundry/platform-fs#build"
+      ]
     },
     "@laundry/server#test": {
-      "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/domain#build"]
+      "dependsOn": [
+        "^build",
+        "@laundry/contracts#build",
+        "@laundry/domain#build",
+        "@laundry/platform-fs#build"
+      ]
     },
     "@laundry/server#build": {
-      "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/domain#build"],
+      "dependsOn": [
+        "^build",
+        "@laundry/contracts#build",
+        "@laundry/domain#build",
+        "@laundry/platform-fs#build"
+      ],
       "outputs": ["dist/**"]
     }
   }
