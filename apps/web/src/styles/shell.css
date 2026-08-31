@@ -227,6 +227,12 @@
   gap: 14px;
 }
 
+/* The shared field basis is for horizontal, wrapping field rows. In this
+   column form it becomes a vertical basis and stretches every login field. */
+.ld-login__form > .ld-field {
+  flex: 0 0 auto;
+}
+
 .ld-login__error {
   padding: 10px 12px;
   border-radius: var(--lg-radius-sm);
