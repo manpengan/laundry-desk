@@ -199,6 +199,36 @@ Codex 在 `7006172` 修了登录页（`.ld-login__form > .ld-field { flex: 0 0 a
 假象——字段在瓜分一个固定高度。真实容器是 `height: auto`，正确表现为每个字段被平铺到 220px
 基准、容器累加膨胀。**复现缺陷时，harness 必须复制真实容器的尺寸约束（尤其 `height: auto`），
 否则量到的是自己造出来的现象。**
+
+### §7.4 关闭 apps/web e2e 验证缺口
+
+`5d4920f` 收敛金额迁移调用方时，9 个 e2e 里只有 `windows-functional` 能在 Windows 构建机上实证，
+其余 8 个 `apps/web/e2e/*` 需要本地 PostgreSQL + Fastify，一直只能靠「改动机械、模式一致、
+类型检查通过」的间接论证。本次以项目自带路径补齐：
+
+```
+pnpm local:reset -- --confirm DELETE-laundry-desk-v2-local   # 旧卷 0019 checksum 失配
+pnpm local:up -- --bootstrap                                 # 69 迁移 + 双管理员
+pnpm local:web:e2e
+```
+
+**结果：22 passed，0 failed。** 覆盖 `counter-workday`、`counter-followups`、`member-benefits`、
+`customer-profile`、`factory-handoff`、`operations-governance` —— 即 25 处 `fill(yuanText(...))`
+中的 20 处所在规格。真实浏览器 + 真实 PostgreSQL + 真实 Fastify 走完开单、结算、收款、退款与
+会员储值全流程。**金额迁移的调用方收敛至此获得直接证据。**
+
+过程中遇到的两个非缺陷失败，记录以免后人重复排查：
+
+| 现象 | 根因 | 处理 |
+| --- | --- | --- |
+| 全部 spec 加载期抛 `LAUNDRY_LOCAL_ORG_CODE is required`，末尾报 `No tests found` | 该套件需五个环境变量：三个来自 bootstrap，加 `LAUNDRY_LOCAL_ORG_CODE=local` / `LAUNDRY_LOCAL_STORE_CODE=main` | 补齐变量 |
+| `notification-delivery` 期望「软件模拟模式」，实得「自动通知未启用」 | [`docker-compose.yml:57`](../../tools/compose/docker-compose.yml) 的 `LAUNDRY_NOTIFICATION_PROVIDER_MODE` 默认 `disabled`，该 spec 需要 `software_only` | 设置变量后通过；**断言正确，未修改** |
+
+**教训（判据）**：这套 e2e 的 `exit code 1` 至少有三义——测试未加载、测试已跑但环境未配、测试已跑
+且代码有问题。三者退出码相同。第一种最具误导性：会让人以为自己的改动搞挂了全部用例，进而去修
+本来正确的代码。**判据必须取自输出内容（`N passed` / `N failed` / `No tests found`），不能取自
+退出码。**
+
 ## §8 复现方式
 
 在 Windows 构建机上启动打包后的 exe，然后按 §1 注入点击与截屏。构建机接入方式见
