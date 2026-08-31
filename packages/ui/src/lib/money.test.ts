@@ -57,6 +57,11 @@ describe("money yuan parsing", () => {
       assert.equal(parsed.ok, false, `expected rejection for ${JSON.stringify(bad)}`);
     }
     assert.equal(parseYuanToFen("999999999999999999").ok, false);
+    assert.deepEqual(parseYuanToFen("90071992547409.91"), {
+      ok: true,
+      fen: Number.MAX_SAFE_INTEGER,
+    });
+    assert.equal(parseYuanToFen("90071992547409.92").ok, false);
   });
 
   it("parseYuanToFen round-trips against formatFenToYuan", () => {

@@ -56,5 +56,8 @@ export function parseYuanToFen(text: string): ParsedYuan {
     return Object.freeze({ ok: false as const, message: "金额超出系统支持范围" });
   }
   const magnitude = whole * 100 + frac;
+  if (!Number.isSafeInteger(magnitude)) {
+    return Object.freeze({ ok: false as const, message: "金额超出系统支持范围" });
+  }
   return Object.freeze({ ok: true as const, fen: groups["sign"] === "-" ? -magnitude : magnitude });
 }

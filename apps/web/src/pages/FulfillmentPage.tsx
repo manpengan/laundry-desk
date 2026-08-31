@@ -206,7 +206,7 @@ export function FulfillmentPage({
     const reason = requireReason();
     const compensation = integerCents(compensationCents);
     if (reason === null || compensation === null) {
-      if (compensation === null) toast.push("赔付金额必须是非负整数分", "error");
+      if (compensation === null) toast.push("赔付金额请按元输入非负金额，最多两位小数", "error");
       return;
     }
     void executeAction(
@@ -226,7 +226,7 @@ export function FulfillmentPage({
     const reason = requireReason();
     const compensation = integerCents(compensationCents);
     if (reason === null || compensation === null) {
-      if (compensation === null) toast.push("赔付金额必须是非负整数分", "error");
+      if (compensation === null) toast.push("赔付金额请按元输入非负金额，最多两位小数", "error");
       return;
     }
     void executeAction(
@@ -255,7 +255,7 @@ export function FulfillmentPage({
           value={key}
           onChange={(event) => setKey(event.target.value)}
         />
-        <label>
+        <label className="ld-fulfillment__select-field">
           <span>状态</span>
           <select
             value={status}
@@ -275,7 +275,7 @@ export function FulfillmentPage({
       <FulfillmentRackPanel commandClient={commandClient} onAssigned={finish} />
 
       <section className="ld-fulfillment__actions" aria-label="批量操作">
-        <strong>已选 {ids.length} 件</strong>
+        <strong aria-live="polite">已选 {ids.length} 件</strong>
         <Button
           type="button"
           onClick={() => transition("washing")}
@@ -318,13 +318,16 @@ export function FulfillmentPage({
           valueFen={compensationCents}
           onChangeFen={setCompensationCents}
         />
-        <select
-          value={incidentKind}
-          onChange={(event) => setIncidentKind(event.target.value as typeof incidentKind)}
-        >
-          <option value="damage">损坏</option>
-          <option value="other">其他</option>
-        </select>
+        <label className="ld-fulfillment__select-field">
+          <span>异常类型</span>
+          <select
+            value={incidentKind}
+            onChange={(event) => setIncidentKind(event.target.value as typeof incidentKind)}
+          >
+            <option value="damage">损坏</option>
+            <option value="other">其他</option>
+          </select>
+        </label>
         <Button
           variant="secondary"
           type="button"

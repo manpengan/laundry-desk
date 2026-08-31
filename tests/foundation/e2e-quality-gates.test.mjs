@@ -37,3 +37,21 @@ test("keeps browser and Electron acceptance sources inside canonical quality gat
     "playwright.lan.config.ts",
   ]);
 });
+
+test("money E2E fixtures accept only safe decimal integer fen", async () => {
+  const helpers = await Promise.all([
+    import(new URL("../../apps/web/e2e/money-input.ts", import.meta.url)),
+    import(new URL("../../apps/edge-agent/e2e/money-input.ts", import.meta.url)),
+  ]);
+
+  for (const { yuanText } of helpers) {
+    assert.equal(yuanText("1500"), "15.00");
+    assert.equal(yuanText(-1), "-0.01");
+    for (const invalid of ["", " ", "1e3", "1.5", " 1500", "1500 "]) {
+      assert.throws(() => yuanText(invalid), /money fixture must be integer fen/u);
+    }
+    for (const unsafe of [Number.MAX_SAFE_INTEGER + 1, `${Number.MAX_SAFE_INTEGER}0`]) {
+      assert.throws(() => yuanText(unsafe), /money fixture must be safe integer fen/u);
+    }
+  }
+});

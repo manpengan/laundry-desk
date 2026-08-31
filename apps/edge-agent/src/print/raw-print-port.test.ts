@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { WindowsRawSubmissionError } from "@laundry/platform-fs";
+
 import { CupsSubmissionError } from "./cups-process.js";
 import {
   createCupsRawPrintPort,
@@ -26,6 +28,7 @@ test("CUPS and Windows adapters expose one bounded RAW print port", async () => 
     discoverWindows: async () => Object.freeze(["XP-58 前台"]),
     submitWindows: async (queue, bytes) => {
       assert.equal(queue, "XP-58 前台");
+      assert.deepEqual(bytes, Uint8Array.of(3));
       return Object.freeze({ jobId: "19", bytesWritten: bytes.byteLength });
     },
   });
@@ -34,7 +37,7 @@ test("CUPS and Windows adapters expose one bounded RAW print port", async () => 
   assert.equal(await windows.submitRaw("XP-58 前台", Uint8Array.of(3)), "winspool-19");
 });
 
-test("RAW adapters preserve uncertain outcomes after submission starts", async () => {
+test("RAW adapters preserve definite and uncertain backend outcomes", async () => {
   const cups = createCupsRawPrintPort({
     submitCups: async () => {
       throw new CupsSubmissionError("uncertain", "timeout");
@@ -45,11 +48,23 @@ test("RAW adapters preserve uncertain outcomes after submission starts", async (
     (error: unknown) => error instanceof RawPrintSubmissionError && error.outcome === "uncertain",
   );
 
-  const windows = createWindowsRawPrintPort({
+  for (const outcome of ["failed", "uncertain"] as const) {
+    const windows = createWindowsRawPrintPort({
+      submitWindows: async () => {
+        throw new WindowsRawSubmissionError(outcome);
+      },
+    });
+    await assert.rejects(
+      () => windows.submitRaw("XP-58", Uint8Array.of(1)),
+      (error: unknown) => error instanceof RawPrintSubmissionError && error.outcome === outcome,
+    );
+  }
+
+  const incomplete = createWindowsRawPrintPort({
     submitWindows: async () => Object.freeze({ jobId: "20", bytesWritten: 0 }),
   });
   await assert.rejects(
-    () => windows.submitRaw("XP-58", Uint8Array.of(1)),
+    () => incomplete.submitRaw("XP-58", Uint8Array.of(1)),
     (error: unknown) => error instanceof RawPrintSubmissionError && error.outcome === "uncertain",
   );
 });

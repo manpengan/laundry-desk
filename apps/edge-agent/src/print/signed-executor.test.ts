@@ -224,22 +224,64 @@ test("Windows RAW outcomes stay definite-failed or uncertain in signed receipts"
   for (const outcome of ["failed", "uncertain"] as const) {
     await t.test(outcome, async (child) => {
       const queue = "XP-58 前台";
+      let submissions = 0;
       const setup = await fixture(child, {
         queue,
         printPort: createWindowsRawPrintPort({
           discoverWindows: async () => Object.freeze([queue]),
           submitWindows: async () => {
+            submissions += 1;
             throw new WindowsRawSubmissionError(outcome);
           },
         }),
       });
 
       const result = await setup.executor.execute(request());
+      const replay = await setup.executor.execute(request());
       assert.equal(result.state, outcome);
       assert.equal(result.receipt.payload.result, outcome);
       assert.equal(result.receipt.payload.cups_job_id, null);
+      assert.deepEqual(replay.receipt, result.receipt);
+      assert.equal(submissions, 1);
     });
   }
+});
+
+test("Windows RAW exact replay is deduplicated while an explicit signed reprint submits once", async (t) => {
+  const queue = "XP-58 前台";
+  let submissions = 0;
+  const setup = await fixture(t, {
+    queue,
+    printPort: createWindowsRawPrintPort({
+      discoverWindows: async () => Object.freeze([queue]),
+      submitWindows: async (selectedQueue, bytes) => {
+        assert.equal(selectedQueue, queue);
+        submissions += 1;
+        return Object.freeze({ jobId: String(40 + submissions), bytesWritten: bytes.byteLength });
+      },
+    }),
+  });
+
+  const original = await setup.executor.execute(request());
+  const originalReplay = await setup.executor.execute(request());
+  assert.equal(original.cupsJobId, "winspool-41");
+  assert.deepEqual(originalReplay.receipt, original.receipt);
+  assert.equal(submissions, 1);
+
+  const reprintClaim = dispatch(OTHER_JOB_ID, OTHER_NONCE, SNAPSHOT, {
+    print_action: "reprint",
+    source_job_id: JOB_ID,
+    next_receipt_seq: 2,
+  });
+  const reprint = await setup.executor.execute(request(reprintClaim));
+  const reprintReplay = await setup.executor.execute(request(reprintClaim));
+
+  assert.equal(reprint.cupsJobId, "winspool-42");
+  assert.deepEqual(reprintReplay.receipt, reprint.receipt);
+  assert.equal(submissions, 2);
+  const durable = await setup.ledger.get(OTHER_JOB_ID);
+  assert.equal(durable?.binding.printAction, "reprint");
+  assert.equal(durable?.binding.sourceJobId, JOB_ID);
 });
 
 test("signed retry lineage is durable and cannot be rebound as a reprint", async (t) => {

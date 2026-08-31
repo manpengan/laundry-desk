@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -10,6 +10,7 @@ import { inspectPackagedWindowsSoftware } from "./inspect-packaged-win.mjs";
 const APP = "laundry-desk V2.exe";
 const INSTALLER = "laundry-desk-v2-0.1.0-windows-x64-development-only.exe";
 const HELPER = "laundry-windows-helper.exe";
+const SOURCE_GIT_SHA = "a".repeat(40);
 
 function x64PeFixture() {
   const bytes = Buffer.alloc(256);
@@ -27,10 +28,12 @@ async function fixture(t) {
   const resources = join(releaseRoot, "win-unpacked", "resources");
   const spa = join(resources, "spa");
   const helperRoot = join(resources, "windows-helper");
+  const provenanceRoot = join(resources, "build-provenance");
   await Promise.all([
     mkdir(join(spa, "bundles"), { recursive: true }),
     mkdir(join(resources, "update"), { recursive: true }),
     mkdir(helperRoot, { recursive: true }),
+    mkdir(provenanceRoot, { recursive: true }),
   ]);
   const html = Buffer.from("<!doctype html>\n");
   const manifest = `${JSON.stringify(
@@ -62,10 +65,20 @@ async function fixture(t) {
     ),
     writeFile(join(helperRoot, HELPER), helper),
     writeFile(join(helperRoot, `${HELPER}.sha256`), `${helperDigest}\n`),
+    writeFile(
+      join(provenanceRoot, "windows-source.json"),
+      `${JSON.stringify({
+        assurance: "development_only",
+        schema_version: 1,
+        source_git_sha: SOURCE_GIT_SHA,
+        source_tree: "clean",
+        windows_helper_sha256: helperDigest,
+      })}\n`,
+    ),
     writeFile(join(spa, "manifest.json"), manifest),
     writeFile(join(spa, "bundles", bundle, "index.html"), html),
   ]);
-  return { bundle, helperDigest, helperRoot, releaseRoot };
+  return { bundle, helperDigest, helperRoot, provenanceRoot, releaseRoot };
 }
 
 test("inspects exact x64 unsigned NSIS, helper and SPA evidence", async (t) => {
@@ -74,6 +87,7 @@ test("inspects exact x64 unsigned NSIS, helper and SPA evidence", async (t) => {
   const evidence = await inspectPackagedWindowsSoftware({
     platform: "win32",
     releaseRoot: setup.releaseRoot,
+    expectedGitSha: SOURCE_GIT_SHA,
     signatureStatus: async () => "NotSigned",
   });
 
@@ -81,6 +95,8 @@ test("inspects exact x64 unsigned NSIS, helper and SPA evidence", async (t) => {
   assert.equal(evidence.architecture, "x64");
   assert.equal(evidence.assurance, "software_only");
   assert.equal(evidence.helper_sha256, setup.helperDigest);
+  assert.equal(evidence.source_git_sha, SOURCE_GIT_SHA);
+  assert.equal(evidence.source_tree, "clean");
   assert.equal(evidence.spa_bundle, setup.bundle);
   assert.match(evidence.app_sha256, /^[0-9a-f]{64}$/u);
   assert.match(evidence.installer_sha256, /^[0-9a-f]{64}$/u);
@@ -94,6 +110,7 @@ test("rejects helper tampering and a signed development-only artifact", async (t
       inspectPackagedWindowsSoftware({
         platform: "win32",
         releaseRoot: tampered.releaseRoot,
+        expectedGitSha: SOURCE_GIT_SHA,
         signatureStatus: async () => "NotSigned",
       }),
     /helper digest does not match/u,
@@ -105,8 +122,52 @@ test("rejects helper tampering and a signed development-only artifact", async (t
       inspectPackagedWindowsSoftware({
         platform: "win32",
         releaseRoot: signed.releaseRoot,
+        expectedGitSha: SOURCE_GIT_SHA,
         signatureStatus: async () => "Valid",
       }),
     /explicitly unsigned/u,
+  );
+});
+
+test("rejects missing, stale, or helper-detached build provenance", async (t) => {
+  const missingExpectation = await fixture(t);
+  await assert.rejects(
+    () =>
+      inspectPackagedWindowsSoftware({
+        platform: "win32",
+        releaseRoot: missingExpectation.releaseRoot,
+        signatureStatus: async () => "NotSigned",
+      }),
+    /PROVENANCE_EXPECTATION_INVALID/u,
+  );
+
+  const stale = await fixture(t);
+  await assert.rejects(
+    () =>
+      inspectPackagedWindowsSoftware({
+        platform: "win32",
+        releaseRoot: stale.releaseRoot,
+        expectedGitSha: "b".repeat(40),
+        signatureStatus: async () => "NotSigned",
+      }),
+    /PROVENANCE_INVALID/u,
+  );
+
+  const detached = await fixture(t);
+  const path = join(detached.provenanceRoot, "windows-source.json");
+  const provenance = JSON.parse(await readFile(path, "utf8"));
+  await writeFile(
+    path,
+    `${JSON.stringify({ ...provenance, windows_helper_sha256: "f".repeat(64) })}\n`,
+  );
+  await assert.rejects(
+    () =>
+      inspectPackagedWindowsSoftware({
+        platform: "win32",
+        releaseRoot: detached.releaseRoot,
+        expectedGitSha: SOURCE_GIT_SHA,
+        signatureStatus: async () => "NotSigned",
+      }),
+    /PROVENANCE_INVALID/u,
   );
 });

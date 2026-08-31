@@ -350,7 +350,9 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   await expect(page.getByLabel("第 2 件随衣附件")).toHaveValue("衣架");
   await expect(page.getByLabel(`第 1 件${POLICY.addonName}`)).toBeChecked();
   await expect(page.getByLabel(`第 2 件${POLICY.addonName}`)).toBeChecked();
-  await expect(page.locator('input[name="discount-cents"]')).toHaveValue(POLICY.discountCents);
+  await expect(page.locator('input[name="discount-cents"]')).toHaveValue(
+    yuanText(POLICY.discountCents),
+  );
   await expect(page.getByLabel(/^加急/u)).toBeChecked();
   await expect(page.getByLabel(/^运费/u)).toBeChecked();
   await page.locator('input[name="initial-payment"]').fill(yuanText(INITIAL_PAYMENT_CENTS));

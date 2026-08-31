@@ -7,6 +7,10 @@ param(
   [ValidatePattern('^[0-9a-fA-F]{64}$')]
   [string] $PostgresArchiveSha256,
 
+  [Parameter(Mandatory = $true)]
+  [ValidatePattern('^[0-9a-fA-F]{40}$')]
+  [string] $SourceGitSha,
+
   [string] $RepositoryRoot
 )
 
@@ -89,11 +93,57 @@ function New-RuntimeTaskSettings {
     -StartWhenAvailable
 }
 
-$RepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
+function Assert-ExactGitSource {
+  param([string] $Root, [string] $ExpectedSha, [string] $Git)
+  $prefix = @(
+    '--no-optional-locks',
+    '-c',
+    'core.fsmonitor=false',
+    '-c',
+    'core.hooksPath=NUL',
+    '-C',
+    $Root
+  )
+  $reportedRoot = (Invoke-Captured $Git ($prefix + @(
+    'rev-parse',
+    '--show-toplevel'
+  )) 'WINDOWS_RUNTIME_GIT_ROOT_FAILED').Trim()
+  if (-not [StringComparer]::OrdinalIgnoreCase.Equals(
+    [IO.Path]::GetFullPath($reportedRoot),
+    $Root
+  )) {
+    throw 'WINDOWS_RUNTIME_GIT_ROOT_INVALID'
+  }
+  $headBefore = (Invoke-Captured $Git ($prefix + @(
+    'rev-parse',
+    '--verify',
+    'HEAD^{commit}'
+  )) 'WINDOWS_RUNTIME_GIT_HEAD_FAILED').Trim()
+  $status = Invoke-Captured $Git ($prefix + @(
+    'status',
+    '--porcelain=v1',
+    '--untracked-files=all',
+    '--ignored=no'
+  )) 'WINDOWS_RUNTIME_GIT_STATUS_FAILED'
+  $headAfter = (Invoke-Captured $Git ($prefix + @(
+    'rev-parse',
+    '--verify',
+    'HEAD^{commit}'
+  )) 'WINDOWS_RUNTIME_GIT_HEAD_FAILED').Trim()
+  if ($status.Length -ne 0) { throw 'WINDOWS_RUNTIME_GIT_NOT_CLEAN' }
+  if ($headBefore -ne $ExpectedSha -or $headAfter -ne $ExpectedSha) {
+    throw 'WINDOWS_RUNTIME_GIT_SHA_MISMATCH'
+  }
+}
+
+$RepositoryRoot = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $RepositoryRoot).Path)
 $PostgresArchive = (Resolve-Path -LiteralPath $PostgresArchive).Path
 if (-not (Test-Path -LiteralPath (Join-Path $RepositoryRoot 'pnpm-workspace.yaml'))) {
   throw 'WINDOWS_RUNTIME_REPOSITORY_INVALID'
 }
+$SourceGitSha = $SourceGitSha.ToLowerInvariant()
+$git = (Get-Command git.exe -ErrorAction Stop).Source
+Assert-ExactGitSource $RepositoryRoot $SourceGitSha $git
 if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
   throw 'WINDOWS_RUNTIME_LOCALAPPDATA_REQUIRED'
 }
@@ -113,6 +163,7 @@ try {
 } finally {
   Pop-Location
 }
+Assert-ExactGitSource $RepositoryRoot $SourceGitSha $git
 
 $HelperRoot = Join-Path $RepositoryRoot 'packages\platform-fs\native\windows'
 $Helper = Join-Path $HelperRoot 'laundry-windows-helper.exe'
@@ -189,6 +240,21 @@ $LogsRoot = Join-Path $RuntimeRoot 'logs'
 Ensure-PrivateDirectory $RuntimeRoot
 Ensure-PrivateDirectory $SecretsRoot
 Ensure-PrivateDirectory $LogsRoot
+$BuildProvenanceFile = Join-Path $RuntimeRoot 'build-provenance.development-only.json'
+$buildProvenance = [ordered]@{
+  assurance = 'development_only'
+  runtime_release = $RuntimeRelease
+  schema_version = 1
+  source_git_sha = $SourceGitSha
+  source_tree = 'clean'
+} | ConvertTo-Json -Compress
+[IO.File]::WriteAllText($BuildProvenanceFile, $buildProvenance, $Utf8NoBom)
+Invoke-Helper @('secure-file', $BuildProvenanceFile) 'WINDOWS_RUNTIME_FILE_SECURITY_FAILED'
+Invoke-Helper @(
+  'inspect-private-file-links',
+  $BuildProvenanceFile,
+  '1'
+) 'WINDOWS_RUNTIME_FILE_SECURITY_FAILED'
 
 $archiveItem = Get-Item -LiteralPath $PostgresArchive
 if (-not $archiveItem.PSIsContainer -and -not ($archiveItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
@@ -392,6 +458,7 @@ $launcherLines = @(
   'curl.exe --silent --fail --max-time 3 http://127.0.0.1:8787/health >nul 2>&1 && exit /b 0',
   "set `"NODE_ENV=production`"",
   "set `"LAUNDRY_RUNTIME_RELEASE=$RuntimeRelease`"",
+  "set `"LAUNDRY_RUNTIME_SOURCE_GIT_SHA=$SourceGitSha`"",
   "set `"LAUNDRY_RUNTIME_CONTRACTS_SHA256=$($env:LAUNDRY_RUNTIME_CONTRACTS_SHA256)`"",
   "set `"LAUNDRY_RUNTIME_SCHEMA_SHA256=$($env:LAUNDRY_RUNTIME_SCHEMA_SHA256)`"",
   "set `"LAUNDRY_RUNTIME_MIGRATIONS_SHA256=$($env:LAUNDRY_RUNTIME_MIGRATIONS_SHA256)`"",
@@ -441,6 +508,9 @@ if (-not $ready) { throw 'WINDOWS_RUNTIME_HEALTH_TIMEOUT' }
 [pscustomobject]@{
   Status = 'ready'
   RuntimeRelease = $RuntimeRelease
+  SourceGitSha = $SourceGitSha
+  SourceTree = 'clean'
+  BuildProvenance = $BuildProvenanceFile
   RuntimeRoot = $RuntimeRoot
   PostgresVersion = $PostgresVersion
   PostgresPort = $PostgresPort

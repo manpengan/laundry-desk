@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { formatFenToYuan, parseYuanToFen } from "../lib/money.js";
 import { Input, type InputProps } from "./Input.js";
@@ -12,9 +12,22 @@ export type MoneyInputProps = Omit<InputProps, "value" | "onChange" | "type"> & 
 
 /** Yuan text for a fen amount, or "" when fen is absent or not an integer. */
 function toYuanText(fen: string): string {
-  if (fen.trim().length === 0) return "";
-  const parsed = Number(fen);
-  return Number.isInteger(parsed) ? formatFenToYuan(parsed) : "";
+  const trimmed = fen.trim();
+  if (!/^-?\d+$/u.test(trimmed)) return "";
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) ? formatFenToYuan(parsed) : "";
+}
+
+/**
+ * Preserve text only when it produced the incoming fen value. Any other prop
+ * change is an external load/reset and must replace the displayed amount.
+ */
+function reconcileMoneyInputText(
+  currentText: string,
+  valueFen: string,
+  lastEmittedFen: string | null,
+): string {
+  return lastEmittedFen === valueFen ? currentText : toYuanText(valueFen);
 }
 
 /**
@@ -25,15 +38,17 @@ function toYuanText(fen: string): string {
  * The typed text is local state so partial input ("15.") survives a keystroke;
  * only a fully parsed amount reaches `onChangeFen`.
  */
-export function MoneyInput({ valueFen, onChangeFen, hint, ...rest }: MoneyInputProps) {
+export function MoneyInput({ valueFen, onChangeFen, hint, onBlur, ...rest }: MoneyInputProps) {
   const [text, setText] = useState(() => toYuanText(valueFen));
   const [touched, setTouched] = useState(false);
+  const lastEmittedFen = useRef<string | null>(null);
 
   // Follow programmatic resets (form cleared, order reloaded) without clobbering
-  // what the operator is currently typing.
+  // partial text that produced the current parent value.
   useEffect(() => {
-    const canonical = toYuanText(valueFen);
-    setText((current) => (parseYuanToFen(current).ok && valueFen.length > 0 ? current : canonical));
+    const emitted = lastEmittedFen.current;
+    setText((current) => reconcileMoneyInputText(current, valueFen, emitted));
+    if (emitted !== valueFen) lastEmittedFen.current = null;
   }, [valueFen]);
 
   const parsed = parseYuanToFen(text);
@@ -50,12 +65,17 @@ export function MoneyInput({ valueFen, onChangeFen, hint, ...rest }: MoneyInputP
       {...feedback}
       inputMode="decimal"
       value={text}
-      onBlur={() => setTouched(true)}
+      onBlur={(event) => {
+        setTouched(true);
+        onBlur?.(event);
+      }}
       onChange={(event) => {
         const next = event.target.value;
         setText(next);
         const result = parseYuanToFen(next);
-        onChangeFen(result.ok ? String(result.fen) : "");
+        const nextFen = result.ok ? String(result.fen) : "";
+        lastEmittedFen.current = nextFen;
+        onChangeFen(nextFen);
       }}
     />
   );

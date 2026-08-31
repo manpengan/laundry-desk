@@ -17,7 +17,7 @@ const COPY: Record<NavItemId, PageCopy> = {
   receive: {
     title: "开单",
     emptyTitle: "登录后开单",
-    emptyDescription: "会话就绪后可在此录入衣物明细与整数分收款。",
+    emptyDescription: "会话就绪后可在此录入衣物明细，并按元录入收款金额。",
     actionLabel: "去设置",
   },
   pickup: {

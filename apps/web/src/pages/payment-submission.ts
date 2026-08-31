@@ -91,7 +91,7 @@ export function buildPaymentSubmission(input: PaymentSubmissionInput): PaymentSu
 export function submissionErrorMessage(reason: PaymentSubmissionRejectReason): string {
   switch (reason) {
     case "invalid_amount":
-      return "收款金额须为正整数分";
+      return "收款金额以元为单位，须大于 0 且最多两位小数";
     case "exceeds_order_balance":
       return "收款不能超过当前欠款";
     case "exceeds_member_balance":

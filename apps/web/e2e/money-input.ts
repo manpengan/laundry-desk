@@ -4,9 +4,12 @@
  * money input with this so the two stay in sync from one place.
  */
 export function yuanText(fen: number | string): string {
-  const amount = typeof fen === "string" ? Number(fen) : fen;
-  if (!Number.isInteger(amount)) {
+  if (typeof fen === "string" && !/^-?\d+$/u.test(fen)) {
     throw new Error(`money fixture must be integer fen, got ${String(fen)}`);
+  }
+  const amount = typeof fen === "string" ? Number(fen) : fen;
+  if (!Number.isSafeInteger(amount)) {
+    throw new Error(`money fixture must be safe integer fen, got ${String(fen)}`);
   }
   const sign = amount < 0 ? "-" : "";
   const abs = Math.abs(amount);
