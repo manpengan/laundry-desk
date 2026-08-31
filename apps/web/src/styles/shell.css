@@ -7,6 +7,10 @@
 @import "./accounting.css";
 @import "./catalog-governance.css";
 
+html > body {
+  margin: 0;
+}
+
 /* Counter shell layout (UI spec §3). Uses --lg-* tokens from @laundry/ui. */
 
 .ld-skip-link {
@@ -186,6 +190,7 @@
 
 .ld-login {
   min-height: 100vh;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;

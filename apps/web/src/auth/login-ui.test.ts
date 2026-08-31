@@ -91,6 +91,15 @@ test("login column fields do not inherit the shared horizontal flex basis", asyn
   assert.match(fieldRule, /\bflex:\s*0\s+0\s+auto\s*;/u);
 });
 
+test("login viewport sizing includes padding and removes the browser body margin", async () => {
+  const css = await readFile(new URL("../../src/styles/shell.css", import.meta.url), "utf8");
+  const bodyRule = cssRule(css, "html > body");
+  const loginRule = cssRule(css, ".ld-login");
+
+  assert.match(bodyRule, /\bmargin:\s*0\s*;/u);
+  assert.match(loginRule, /\bbox-sizing:\s*border-box\s*;/u);
+});
+
 test("App unauthenticated renders login, not counter shell", () => {
   const html = renderToStaticMarkup(
     createElement(App, {
