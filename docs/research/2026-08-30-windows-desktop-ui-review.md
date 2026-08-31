@@ -169,6 +169,34 @@ Register-ScheduledTask -Principal (New-ScheduledTaskPrincipal -UserId '74997' -L
 本次已把两处算术合并到 `@laundry/ui`：`yuanAmountToCents` 委托给共享实现，member 更严格的入参
 契约（非负、至多九位整数）保留在其自身正则中。
 
+
+### §7.3 全局 flex 基准的轴向陷阱（后续修正）
+
+`9584e89` 给 `.ld-field` 加的 `flex: 1 1 220px` 是**全局**规则。在 `flex-direction: column` 的容器里，
+`flex-basis` 被解释为**高度**，`flex-grow: 1` 再把字段纵向撑开。Codex 在 `7006172` 修了登录页
+（`.ld-login__form > .ld-field { flex: 0 0 auto }`），但那是逐容器打补丁。
+
+隔离量测确认受影响的纵向容器不止一个：
+
+| 容器 | 字段高（基线 69px） |
+| --- | --- |
+| `.ld-counter-lines`（开单行） | **340px** —— 占满整个容器 |
+| `.ld-counter-panel`（工作台/开单面板，3 处） | **178px** |
+| `.ld-login__form` | 已由 `7006172` 修复 |
+| `.ld-catalog-picker` | 未受影响 |
+
+**根因修法**：把横向增长基准从 `.ld-field` 全局规则中移出，改由需要它的换行行容器自行声明。
+`.ld-field` 只保留 `min-width: 0`（那才是防止 flex 行溢出的部分，与轴向无关）。
+
+复验（同一 harness）：四个纵向容器全部回到 69px；横向行不受影响 —— 搜索框 626/700px、
+客户表单 278/278、生产行输入框顶部对齐差 0px、三行内溢出均为 0。
+
+新增 `shell.test.ts` 断言钉住该不变量：`.ld-field` 规则内不得出现 `flex` / `flex-basis` /
+`flex-grow`，且必须保留 `min-width: 0`；换行行容器必须自行声明基准。
+
+**教训**：给广泛使用的类加 `flex` 简写时，`flex-basis` 的含义取决于父容器的轴向。同一条规则
+在 row 里是宽度、在 column 里是高度。作用域应当收敛到确定轴向的容器，而不是放在被复用的原子类上。
+
 ## §8 复现方式
 
 在 Windows 构建机上启动打包后的 exe，然后按 §1 注入点击与截屏。构建机接入方式见

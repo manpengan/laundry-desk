@@ -86,12 +86,12 @@
   border-color: var(--lg-late-ink);
 }
 
-/* Field rows are flex + flex-wrap. Without a basis the field box sizes to the
-   input's intrinsic width (~193px) instead of sharing the row, which clips long
-   placeholders and values. */
+/* min-width: 0 lets a field shrink inside a flex row instead of forcing the
+   row to overflow. The horizontal growth basis is NOT global: in a column
+   container flex-basis becomes a height and stretches the field, so each
+   wrapping field row opts in for itself (see .ld-customers-search below). */
 .ld-field {
   display: block;
-  flex: 1 1 220px;
   min-width: 0;
 }
 

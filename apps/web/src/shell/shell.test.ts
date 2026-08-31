@@ -289,3 +289,26 @@ test("CounterShell print indicator idle by default (self-managed SSR first paint
   assert.match(html, /data-queued="0"/);
   assert.match(html, /data-failed="0"/);
 });
+
+test("the shared field rule carries no flex basis, so column forms are not stretched", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const components = await readFile(
+    new URL("../../../../packages/ui/src/styles/components.css", import.meta.url),
+    "utf8",
+  );
+  const fieldRule = /^\.ld-field\s*\{(?<body>[^}]*)\}/mu.exec(components)?.groups?.["body"];
+  assert.ok(fieldRule, "missing .ld-field rule");
+
+  // A flex-basis here becomes a *height* in any column container. Four of them
+  // (.ld-counter-panel, .ld-counter-lines, .ld-login__form, .ld-catalog-picker)
+  // hold fields directly; a global basis stretched them to 178–340px.
+  assert.doesNotMatch(fieldRule, /\bflex(-basis|-grow)?\s*:/u);
+  assert.match(fieldRule, /\bmin-width:\s*0\s*;/u);
+
+  const shell = await readFile(new URL("../../src/styles/shell.css", import.meta.url), "utf8");
+  assert.match(
+    shell,
+    /\.ld-customers-search > \.ld-field,\s*\n\.ld-customers-form > \.ld-field \{\s*\n\s*flex: 1 1 220px;/u,
+    "wrapping field rows must opt into the horizontal basis themselves",
+  );
+});
