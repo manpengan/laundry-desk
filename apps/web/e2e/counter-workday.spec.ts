@@ -9,6 +9,7 @@
  * Requires local:up + the seeded catalog from global-setup.mjs.
  */
 import { expect, test, type Locator, type Page, type Request } from "@playwright/test";
+import { yuanText } from "./money-input.js";
 
 const exactLocalUrl = (name: "LAUNDRY_WEB_URL" | "LAUNDRY_API_URL", expected: string): string => {
   const configured = process.env[name];
@@ -171,7 +172,7 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   await page.locator('input[name="catalog-name"]').fill(CATALOG_ITEM_NAME);
   await page.locator('input[name="catalog-service"]').fill(CATALOG_SERVICE);
   await page.locator('input[name="catalog-category"]').fill(CATALOG_CATEGORY);
-  await page.locator('input[name="catalog-price"]').fill(CATALOG_PRICE_CENTS);
+  await page.locator('input[name="catalog-price"]').fill(yuanText(CATALOG_PRICE_CENTS));
   await page.locator('[data-testid="catalog-save-btn"]').click();
 
   // The saved row appearing proves the write reached PostgreSQL and came back
@@ -232,7 +233,7 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   await page.locator('input[name="catalog-name"]').fill(AUX_CATALOG_NAME);
   await page.locator('input[name="catalog-service"]').fill(CATALOG_SERVICE);
   await page.locator('input[name="catalog-category"]').fill(AUX_CATALOG_CATEGORY);
-  await page.locator('input[name="catalog-price"]').fill("100");
+  await page.locator('input[name="catalog-price"]').fill(yuanText("100"));
   await page.locator('[data-testid="catalog-save-btn"]').click();
   const auxiliaryRow = catalogPanel.locator('[data-testid="catalog-admin-row"]', {
     hasText: AUX_CATALOG_CODE,
@@ -275,13 +276,13 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   const versionMatch = /当前版本 (\d+)/u.exec((await policyStatus.textContent()) ?? "");
   expect(versionMatch).not.toBeNull();
   const expectedPolicyVersion = Number(versionMatch?.[1]) + 1;
-  await pricingPanel.getByLabel("加急固定费（分）").fill(POLICY.urgentCents);
-  await pricingPanel.getByLabel("运费固定费（分）").fill(POLICY.freightCents);
+  await pricingPanel.getByLabel("加急固定费").fill(yuanText(POLICY.urgentCents));
+  await pricingPanel.getByLabel("运费固定费").fill(yuanText(POLICY.freightCents));
   await pricingPanel.getByRole("button", { name: "添加附加项" }).click();
   const addon = pricingPanel.locator(".ld-settings-pricing__addon").last();
   await addon.getByLabel("附加项编码").fill(POLICY.addonCode);
   await addon.getByLabel("显示名称").fill(POLICY.addonName);
-  await addon.getByLabel("每件金额（分）").fill(POLICY.addonUnitCents);
+  await addon.getByLabel("每件金额").fill(yuanText(POLICY.addonUnitCents));
   await addon.getByLabel("排序").fill("10");
   await pricingPanel.getByRole("button", { name: "保存计价设置" }).click();
 
@@ -319,7 +320,7 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   const phone = `139${Date.now().toString().slice(-8)}`;
   await page.locator('input[name="customer-phone"]').fill(phone);
   await page.locator('input[name="customer-name"]').fill("E2E 顾客");
-  await page.locator('input[name="discount-cents"]').fill(POLICY.discountCents);
+  await page.locator('input[name="discount-cents"]').fill(yuanText(POLICY.discountCents));
   await page.getByLabel(`第 1 件${POLICY.addonName}`).check();
   await page.getByLabel(`第 2 件${POLICY.addonName}`).check();
   await page.getByLabel(/^加急/u).check();
@@ -349,10 +350,12 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   await expect(page.getByLabel("第 2 件随衣附件")).toHaveValue("衣架");
   await expect(page.getByLabel(`第 1 件${POLICY.addonName}`)).toBeChecked();
   await expect(page.getByLabel(`第 2 件${POLICY.addonName}`)).toBeChecked();
-  await expect(page.locator('input[name="discount-cents"]')).toHaveValue(POLICY.discountCents);
+  await expect(page.locator('input[name="discount-cents"]')).toHaveValue(
+    yuanText(POLICY.discountCents),
+  );
   await expect(page.getByLabel(/^加急/u)).toBeChecked();
   await expect(page.getByLabel(/^运费/u)).toBeChecked();
-  await page.locator('input[name="initial-payment"]').fill(INITIAL_PAYMENT_CENTS);
+  await page.locator('input[name="initial-payment"]').fill(yuanText(INITIAL_PAYMENT_CENTS));
 
   const preview = page.locator('[aria-label="本地预览"]');
   await expect(preview).toContainText("原价");
@@ -415,7 +418,7 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
     hasText: CATALOG_CODE,
   });
   await committedCatalogRow.getByRole("button", { name: "编辑" }).click();
-  await page.locator('input[name="catalog-price"]').fill("1600");
+  await page.locator('input[name="catalog-price"]').fill(yuanText("1600"));
   await page.locator('[data-testid="catalog-save-btn"]').click();
   await expect(committedCatalogRow).toContainText("¥16.00", { timeout: 15_000 });
 
@@ -447,7 +450,7 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   await originalPayment.locator('[data-testid="payment-refund-open-btn"]').click();
 
   const refundDialog = page.locator('[data-testid="payment-refund-dialog"]');
-  await refundDialog.locator('[data-testid="payment-refund-amount"]').fill(REFUND_CENTS);
+  await refundDialog.locator('[data-testid="payment-refund-amount"]').fill(yuanText(REFUND_CENTS));
   await refundDialog.locator('[data-testid="payment-refund-reason"]').fill("E2E 顾客改项退款");
   await page
     .getByRole("dialog", { name: "原路退款" })
@@ -494,7 +497,7 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
     REFUNDED_DEBT_TEXT,
   );
 
-  await page.locator('input[name="collect-cents"]').fill("3200");
+  await page.locator('input[name="collect-cents"]').fill(yuanText("3200"));
   await page.getByRole("button", { name: "确认取衣" }).click();
 
   await expect(page.locator('[data-testid="pickup-ticket"]')).toHaveText(ticketNo, {

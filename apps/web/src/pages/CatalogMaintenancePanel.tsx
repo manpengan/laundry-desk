@@ -3,7 +3,7 @@
  * order.receive resolves prices from the catalog and nothing else can write it.
  */
 
-import { Button, Input, MoneyText, useToast } from "@laundry/ui";
+import { Button, Input, MoneyInput, MoneyText, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { CommandPort, QueryPort } from "../commands/types.js";
@@ -188,13 +188,11 @@ export function CatalogMaintenancePanel({
           hint="小写，如 shirt / coat"
           disabled={busy}
         />
-        <Input
+        <MoneyInput
           name="catalog-price"
-          label="单价（分）"
-          inputMode="numeric"
-          value={form.price_text}
-          onChange={(event) => patch({ price_text: event.target.value })}
-          hint="整数分；1500 表示 ¥15.00"
+          label="单价"
+          valueFen={form.price_text}
+          onChangeFen={(fen) => patch({ price_text: fen })}
           disabled={busy}
         />
         <Input

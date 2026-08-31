@@ -66,11 +66,10 @@ export function buildCatalogUpsertBody(form: CatalogFormState): CatalogBuildResu
     return { ok: false, message: "服务代码只能用小写字母数字与 _ -" };
   if (!TAXONOMY.test(categoryCode))
     return { ok: false, message: "品类代码只能用小写字母数字与 _ -" };
-  if (!CENTS.test(priceText))
-    return { ok: false, message: "单价必须是整数分（如 1500 表示 ¥15.00）" };
+  if (!CENTS.test(priceText)) return { ok: false, message: "单价以元为单位，最多两位小数" };
   const unitPriceCents = Number(priceText);
   if (unitPriceCents > POSTGRES_INTEGER_MAX)
-    return { ok: false, message: "单价超出系统支持的整数分范围" };
+    return { ok: false, message: "单价超出系统支持的金额范围" };
   if (mnemonic.length > 16) return { ok: false, message: "助记码最多 16 字符" };
 
   return {

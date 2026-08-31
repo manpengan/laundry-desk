@@ -6,7 +6,7 @@
  * StepUpConfirmDialog when authClient + session are provided.
  */
 
-import { Button, Input, MoneyText, useToast } from "@laundry/ui";
+import { Button, Input, MoneyInput, MoneyText, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
@@ -146,7 +146,7 @@ export function ShiftClosePanel({
       !/^\d+$/u.test(retainedFloatCents) ||
       !Number.isSafeInteger(retainedFloat)
     ) {
-      toast.push("实点现金与留存备用金必须是非负整数分", "error");
+      toast.push("实点现金与留存备用金必须是非负金额", "error");
       return;
     }
     setBusy(true);
@@ -266,21 +266,19 @@ export function ShiftClosePanel({
             placeholder="店员显示名"
             data-testid="shift-signature-input"
           />
-          <Input
+          <MoneyInput
             name="shift-counted-cash"
-            label="实点现金（分）"
-            inputMode="numeric"
-            value={countedCashCents}
-            onChange={(event) => setCountedCashCents(event.target.value)}
+            label="实点现金"
+            valueFen={countedCashCents}
+            onChangeFen={setCountedCashCents}
             disabled={busy}
             data-testid="shift-counted-cash-input"
           />
-          <Input
+          <MoneyInput
             name="shift-retained-float"
-            label="留存备用金（分）"
-            inputMode="numeric"
-            value={retainedFloatCents}
-            onChange={(event) => setRetainedFloatCents(event.target.value)}
+            label="留存备用金"
+            valueFen={retainedFloatCents}
+            onChangeFen={setRetainedFloatCents}
             disabled={busy}
             data-testid="shift-retained-float-input"
           />

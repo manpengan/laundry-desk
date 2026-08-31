@@ -18,7 +18,7 @@ test("PickupPage SSR shows load order and collect fields", () => {
   assert.match(html, /取衣/);
   assert.match(html, /票号 \/ 取件码 \/ 条码 \/ 手机号 \/ 姓名/);
   assert.match(html, /加载订单/);
-  assert.match(html, /本次收款（分）/);
+  assert.match(html, /本次收款/);
   assert.match(html, /确认取衣/);
   assert.match(html, /勾选要取的衣物/);
   assert.match(html, /匹配多张订单时须显式选择/);

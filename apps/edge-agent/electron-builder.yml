@@ -142,6 +142,8 @@ win:
       filter:
         - laundry-windows-helper.exe
         - laundry-windows-helper.exe.sha256
+    - from: resources/windows-helper/windows-build-provenance.json
+      to: build-provenance/windows-source.json
 
 nsis:
   oneClick: false

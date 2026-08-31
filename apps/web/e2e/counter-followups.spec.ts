@@ -4,6 +4,7 @@
  * stats page and an isolated historic-day shift close.
  */
 import { expect, test, type Page } from "@playwright/test";
+import { yuanText } from "./money-input.js";
 
 const exactLocalUrl = (name: "LAUNDRY_WEB_URL" | "LAUNDRY_API_URL", expected: string): string => {
   const configured = process.env[name];
@@ -61,7 +62,7 @@ async function ensureCatalogItem(page: Page): Promise<void> {
   await page.locator('input[name="catalog-name"]').fill(CATALOG.name);
   await page.locator('input[name="catalog-service"]').fill(CATALOG.service);
   await page.locator('input[name="catalog-category"]').fill(CATALOG.category);
-  await page.locator('input[name="catalog-price"]').fill(CATALOG.priceCents);
+  await page.locator('input[name="catalog-price"]').fill(yuanText(CATALOG.priceCents));
   await page.locator('[data-testid="catalog-save-btn"]').click();
   await expect(
     panel.locator('[data-testid="catalog-admin-row"]', { hasText: CATALOG.name }),
@@ -76,7 +77,7 @@ async function fillReceiveForm(page: Page, phone: string, paymentCents: string):
   await picker.getByRole("option", { name: new RegExp(CATALOG.name, "u") }).click();
   await page.locator('input[name="customer-phone"]').fill(phone);
   await page.locator('input[name="customer-name"]').fill("E2E 跟进顾客");
-  await page.locator('input[name="initial-payment"]').fill(paymentCents);
+  await page.locator('input[name="initial-payment"]').fill(yuanText(paymentCents));
 }
 
 test.beforeAll(async ({ request }) => {
@@ -186,7 +187,7 @@ test("a picked-up order with debt is settled by standalone repayment", async ({ 
   await expect(page.locator('[data-testid="pickup-loaded-ticket"]')).toHaveText(ticketNo, {
     timeout: 15_000,
   });
-  await page.locator('input[name="collect-cents"]').fill("0");
+  await page.locator('input[name="collect-cents"]').fill(yuanText("0"));
   await page.getByRole("button", { name: "确认取衣" }).click();
   await expect(page.locator('[data-testid="pickup-ticket"]')).toHaveText(ticketNo, {
     timeout: 15_000,
@@ -204,7 +205,7 @@ test("a picked-up order with debt is settled by standalone repayment", async ({ 
   await expect(drawer).toBeVisible({ timeout: 15_000 });
   await expect(drawer.locator('[data-testid="order-detail-balance"]')).toContainText("¥15.00");
   await drawer.locator('[data-testid="order-detail-payment-btn"]').click();
-  await page.locator('input[name="payment-amount-cents"]').fill("1500");
+  await page.locator('input[name="payment-amount-cents"]').fill(yuanText("1500"));
   await page.getByRole("button", { name: "确认补缴" }).click();
 
   await expect(drawer.locator('[data-testid="order-detail-balance"]')).toContainText("¥0.00", {

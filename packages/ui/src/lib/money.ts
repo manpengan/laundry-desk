@@ -29,3 +29,35 @@ export function formatMoneyFromFen(fen: number, sign = YUAN_SIGN_UI): string {
   }
   return `${sign}${formatFenToYuan(fen)}`;
 }
+
+/** Largest amount we accept, in fen. Keeps integer arithmetic exact. */
+const MAX_FEN = Number.MAX_SAFE_INTEGER;
+const YUAN_TEXT = /^(?<sign>-?)(?<whole>\d+)(?:\.(?<frac>\d{1,2}))?$/u;
+
+export type ParsedYuan =
+  Readonly<{ ok: true; fen: number }> | Readonly<{ ok: false; message: string }>;
+
+/**
+ * Yuan text ("15", "15.5", "15.50") → integer fen.
+ *
+ * Parsed digit-by-digit rather than through `Number(text) * 100`: the float
+ * round-trip turns "8.29" into 828.9999… and silently loses a fen.
+ */
+export function parseYuanToFen(text: string): ParsedYuan {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return Object.freeze({ ok: false as const, message: "请输入金额" });
+  const groups = YUAN_TEXT.exec(trimmed)?.groups;
+  if (groups === undefined) {
+    return Object.freeze({ ok: false as const, message: "金额格式为元，最多两位小数（如 15.00）" });
+  }
+  const whole = Number(groups["whole"]);
+  const frac = Number((groups["frac"] ?? "").padEnd(2, "0") || "0");
+  if (!Number.isSafeInteger(whole) || whole > Math.floor(MAX_FEN / 100)) {
+    return Object.freeze({ ok: false as const, message: "金额超出系统支持范围" });
+  }
+  const magnitude = whole * 100 + frac;
+  if (!Number.isSafeInteger(magnitude)) {
+    return Object.freeze({ ok: false as const, message: "金额超出系统支持范围" });
+  }
+  return Object.freeze({ ok: true as const, fen: groups["sign"] === "-" ? -magnitude : magnitude });
+}

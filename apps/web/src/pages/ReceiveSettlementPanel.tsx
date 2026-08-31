@@ -1,4 +1,4 @@
-import { Button, Input, MoneyText } from "@laundry/ui";
+import { Button, Input, MoneyInput, MoneyText } from "@laundry/ui";
 
 import type { PaymentMethod } from "./order-form.js";
 import type { PricingPolicyView } from "./pricing-policy-model.js";
@@ -60,13 +60,12 @@ export function ReceiveSettlementPanel({
       </div>
       <div className="ld-counter-adjustments">
         {canDiscount ? (
-          <Input
+          <MoneyInput
             name="discount-cents"
-            label="店长折扣（分）"
-            inputMode="numeric"
-            value={pricing.discount_cents}
-            onChange={(event) =>
-              onPricingChange(Object.freeze({ ...pricing, discount_cents: event.target.value }))
+            label="店长折扣"
+            valueFen={pricing.discount_cents}
+            onChangeFen={(fen) =>
+              onPricingChange(Object.freeze({ ...pricing, discount_cents: fen }))
             }
             disabled={busy || !policyReady}
           />
@@ -110,12 +109,11 @@ export function ReceiveSettlementPanel({
           应收预览 <MoneyText fen={totals.payable} />
         </strong>
       </div>
-      <Input
+      <MoneyInput
         name="initial-payment"
-        label="首笔收款（分）"
-        inputMode="numeric"
-        value={paymentCents}
-        onChange={(event) => onPaymentCentsChange(event.target.value)}
+        label="首笔收款"
+        valueFen={paymentCents}
+        onChangeFen={onPaymentCentsChange}
         hint="0 表示欠款，不写 payment 流水"
         disabled={busy}
       />

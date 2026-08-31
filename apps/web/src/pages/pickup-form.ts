@@ -29,7 +29,10 @@ export function buildPickupBody(input: {
   }
   const collect = parseCents(input.collect_cents);
   if (collect === null) {
-    return Object.freeze({ ok: false as const, message: "收款金额须为整数分" });
+    return Object.freeze({
+      ok: false as const,
+      message: "收款金额以元为单位，须为非负金额且最多两位小数",
+    });
   }
   let garmentIds: string[] = [];
   if (input.garment_ids !== undefined) {

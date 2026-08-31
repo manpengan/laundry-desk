@@ -5,6 +5,7 @@
 import { readFile } from "node:fs/promises";
 
 import { expect, test, type Page } from "@playwright/test";
+import { yuanText } from "./money-input.js";
 
 const WEB = "http://127.0.0.1:5173";
 const API = "http://127.0.0.1:8787";
@@ -50,7 +51,7 @@ async function ensureCatalogItem(page: Page): Promise<void> {
   await page.locator('input[name="catalog-name"]').fill(CATALOG.name);
   await page.locator('input[name="catalog-service"]').fill(CATALOG.service);
   await page.locator('input[name="catalog-category"]').fill(CATALOG.category);
-  await page.locator('input[name="catalog-price"]').fill(CATALOG.priceCents);
+  await page.locator('input[name="catalog-price"]').fill(yuanText(CATALOG.priceCents));
   await page.locator('[data-testid="catalog-save-btn"]').click();
   await expect(
     panel.locator('[data-testid="catalog-admin-row"]', { hasText: CATALOG.name }),

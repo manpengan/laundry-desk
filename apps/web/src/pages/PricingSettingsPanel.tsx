@@ -1,5 +1,5 @@
 import { PricingPolicySetInputSchema, type PricingPolicySetInput } from "@laundry/contracts";
-import { Button, Input, MoneyText, useToast } from "@laundry/ui";
+import { Button, Input, MoneyInput, MoneyText, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import type { AuthClient } from "../auth/AuthClient.js";
@@ -239,18 +239,16 @@ export function PricingSettingsPanel({
         加急、运费和附加项由服务端按本店设置计价；修改需另一位店长现场复核。
       </p>
       <div className="ld-settings-form">
-        <Input
-          label="加急固定费（分）"
-          inputMode="numeric"
-          value={urgentText}
-          onChange={(event) => setUrgentText(event.target.value)}
+        <MoneyInput
+          label="加急固定费"
+          valueFen={urgentText}
+          onChangeFen={setUrgentText}
           disabled={busy || !loaded}
         />
-        <Input
-          label="运费固定费（分）"
-          inputMode="numeric"
-          value={freightText}
-          onChange={(event) => setFreightText(event.target.value)}
+        <MoneyInput
+          label="运费固定费"
+          valueFen={freightText}
+          onChangeFen={setFreightText}
           disabled={busy || !loaded}
         />
       </div>
@@ -269,11 +267,10 @@ export function PricingSettingsPanel({
               onChange={(event) => patchAddon(addon.row_id, { name: event.target.value })}
               disabled={busy}
             />
-            <Input
-              label="每件金额（分）"
-              inputMode="numeric"
-              value={addon.price_text}
-              onChange={(event) => patchAddon(addon.row_id, { price_text: event.target.value })}
+            <MoneyInput
+              label="每件金额"
+              valueFen={addon.price_text}
+              onChangeFen={(fen) => patchAddon(addon.row_id, { price_text: fen })}
               disabled={busy}
             />
             <Input

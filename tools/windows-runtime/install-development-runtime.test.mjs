@@ -12,6 +12,7 @@ test("development runtime installs a real loopback PostgreSQL and Fastify lifecy
   const source = await readFile(scriptPath, "utf8");
 
   assert.match(source, /PostgresArchiveSha256/u);
+  assert.match(source, /\[ValidatePattern\('\^\[0-9a-fA-F\]\{40\}\$'\)\][\s\S]+\$SourceGitSha/u);
   assert.match(source, /Join-Path \$PSScriptRoot '\.\.\\\.\.'/u);
   assert.match(source, /Get-FileHash[^\n]+PostgresArchive/u);
   assert.match(source, /--auth-host=scram-sha-256/u);
@@ -32,6 +33,9 @@ test("development runtime installs a real loopback PostgreSQL and Fastify lifecy
   assert.doesNotMatch(source, /Start-Process/u);
   assert.doesNotMatch(source, /& \$File @Arguments > \$null 2>&1/u);
   assert.match(source, /http:\/\/127\.0\.0\.1:\$ApiPort\/health/u);
+  assert.match(source, /LAUNDRY_RUNTIME_SOURCE_GIT_SHA=\$SourceGitSha/u);
+  assert.match(source, /build-provenance\.development-only\.json/u);
+  assert.match(source, /source_tree = 'clean'/u);
   for (const name of [
     "NODE_OPTIONS",
     "NODE_PATH",
@@ -45,6 +49,31 @@ test("development runtime installs a real loopback PostgreSQL and Fastify lifecy
     assert.match(source, new RegExp(`set "${name}="`, "u"));
   }
   assert.doesNotMatch(source, /ServiceGate|status\s*=\s*'ready'\s*#|SQLite/iu);
+});
+
+test("development runtime fails closed unless the repository is clean at an explicit commit", async () => {
+  const source = await readFile(scriptPath, "utf8");
+
+  assert.match(source, /Get-Command git\.exe -ErrorAction Stop/u);
+  assert.match(source, /--no-optional-locks/u);
+  assert.match(source, /core\.fsmonitor=false/u);
+  assert.match(source, /core\.hooksPath=NUL/u);
+  assert.match(source, /rev-parse'[\s\S]+HEAD\^\{commit\}/u);
+  assert.match(source, /status'[\s\S]+--porcelain=v1[\s\S]+--untracked-files=all/u);
+  assert.match(source, /WINDOWS_RUNTIME_GIT_NOT_CLEAN/u);
+  assert.match(source, /WINDOWS_RUNTIME_GIT_SHA_MISMATCH/u);
+  assert.match(source, /Assert-ExactGitSource \$RepositoryRoot \$SourceGitSha \$git/u);
+  assert.equal(
+    source.match(/Assert-ExactGitSource \$RepositoryRoot \$SourceGitSha \$git/gu)?.length,
+    2,
+    "source identity must be stable before and after repository builds",
+  );
+  assert.ok(
+    source.indexOf("Assert-ExactGitSource $RepositoryRoot $SourceGitSha $git") <
+      source.indexOf("Push-Location $RepositoryRoot"),
+    "source identity must be checked before any repository build runs",
+  );
+  assert.doesNotMatch(source, /origin\/main|github|pilot|hk-vps/iu);
 });
 
 test("development secrets inherit a protected DACL and never enter source constants", async () => {

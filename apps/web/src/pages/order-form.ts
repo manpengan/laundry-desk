@@ -247,14 +247,20 @@ export function buildReceiveBody(input: {
 
   const discountCents = parseNonNegCents(input.discount_cents);
   if (discountCents === null) {
-    return Object.freeze({ ok: false as const, message: "折扣须为非负整数分" });
+    return Object.freeze({
+      ok: false as const,
+      message: "折扣以元为单位，须为非负金额且最多两位小数",
+    });
   }
   if (discountCents > originalCents) {
     return Object.freeze({ ok: false as const, message: "折扣不能超过原价" });
   }
   const initialPayment = parseNonNegCents(input.initial_payment_cents);
   if (initialPayment === null) {
-    return Object.freeze({ ok: false as const, message: "首笔收款须为非负整数分" });
+    return Object.freeze({
+      ok: false as const,
+      message: "首笔收款以元为单位，须为非负金额且最多两位小数",
+    });
   }
 
   if (input.draft_id !== undefined) {

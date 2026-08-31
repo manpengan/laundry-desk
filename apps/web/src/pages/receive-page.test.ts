@@ -24,7 +24,7 @@ test("ReceivePage SSR shows form fields and submit", () => {
   assert.match(html, /手机号/);
   assert.match(html, /衣物明细/);
   assert.match(html, /价目单价/);
-  assert.match(html, /首笔收款（分）/);
+  assert.match(html, /首笔收款/);
   assert.match(html, /确认开单/);
   assert.match(html, /服务端重新定价/);
   assert.match(html, /暂存挂单/);
@@ -67,11 +67,11 @@ test("receive exposes fixed fee choices and keeps manual discount admin-only", (
     ),
   );
 
-  assert.match(admin, /店长折扣（分）/u);
+  assert.match(admin, /店长折扣/u);
   assert.match(admin, /加急（/u);
   assert.match(admin, /运费（/u);
   assert.doesNotMatch(admin, /附加（分）|加急（分）|运费（分）/u);
-  assert.doesNotMatch(staff, /店长折扣（分）/u);
+  assert.doesNotMatch(staff, /店长折扣/u);
 });
 
 test("after successful receive, ticket-preview shows ticket_no", () => {

@@ -47,3 +47,25 @@ test("the Windows helper narrows ACLs without requiring ownership elevation", as
     /Directory\.SetAccessControl\(path, PrivateDirectorySecurity\(path, current\)\);/u,
   );
 });
+
+test("development-only Windows packaging is bound to one explicit clean source commit", async () => {
+  const [builder, stager, inspector] = await Promise.all([
+    readFile(join(repositoryRoot, "apps/edge-agent/electron-builder.yml"), "utf8"),
+    readFile(join(repositoryRoot, "apps/edge-agent/scripts/stage-windows-helper.mjs"), "utf8"),
+    readFile(join(repositoryRoot, "apps/edge-agent/scripts/inspect-packaged-win.mjs"), "utf8"),
+  ]);
+
+  assert.match(
+    builder,
+    /from: resources\/windows-helper\/windows-build-provenance\.json[\s\S]+to: build-provenance\/windows-source\.json/u,
+  );
+  assert.match(stager, /LAUNDRY_WINDOWS_BUILD_GIT_SHA/u);
+  assert.match(stager, /--porcelain=v1/u);
+  assert.match(stager, /--untracked-files=all/u);
+  assert.match(stager, /WINDOWS_BUILD_SOURCE_NOT_CLEAN/u);
+  assert.match(stager, /WINDOWS_BUILD_SOURCE_SHA_MISMATCH/u);
+  assert.match(inspector, /parseWindowsBuildProvenance/u);
+  assert.match(inspector, /source_git_sha/u);
+  assert.match(inspector, /source_tree/u);
+  assert.doesNotMatch(`${stager}\n${inspector}`, /origin\/main|hk-vps|pilot/iu);
+});

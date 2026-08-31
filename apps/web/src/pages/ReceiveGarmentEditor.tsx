@@ -35,21 +35,24 @@ export function ReceiveGarmentEditor({
       <div className="ld-counter-piece__fields">
         <Input
           name={`color-${garment.key}`}
-          label={`${label}颜色`}
+          label="颜色"
+          aria-label={`${label}颜色`}
           value={garment.color}
           onChange={(event) => onChange(patchGarment(garment, { color: event.target.value }))}
           disabled={busy}
         />
         <Input
           name={`brand-${garment.key}`}
-          label={`${label}品牌`}
+          label="品牌"
+          aria-label={`${label}品牌`}
           value={garment.brand}
           onChange={(event) => onChange(patchGarment(garment, { brand: event.target.value }))}
           disabled={busy}
         />
         <Input
           name={`defects-${garment.key}`}
-          label={`${label}瑕疵`}
+          label="瑕疵"
+          aria-label={`${label}瑕疵`}
           value={garment.defects_text}
           hint="多项用逗号分隔"
           onChange={(event) =>
@@ -59,7 +62,8 @@ export function ReceiveGarmentEditor({
         />
         <Input
           name={`accessories-${garment.key}`}
-          label={`${label}随衣附件`}
+          label="随衣附件"
+          aria-label={`${label}随衣附件`}
           value={garment.accessories_text}
           hint="多项用逗号分隔"
           onChange={(event) =>
@@ -69,7 +73,8 @@ export function ReceiveGarmentEditor({
         />
         <Input
           name={`garment-note-${garment.key}`}
-          label={`${label}件级备注`}
+          label="件级备注"
+          aria-label={`${label}件级备注`}
           value={garment.note}
           onChange={(event) => onChange(patchGarment(garment, { note: event.target.value }))}
           disabled={busy}

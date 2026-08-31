@@ -3,6 +3,13 @@
   gap: 16px;
 }
 
+/* The 2px shared ring was hard to track against the glass cards on the
+   Windows 150% DPI target. Keep keyboard focus visibly distinct here. */
+.ld-shell .ld-fulfillment :focus-visible {
+  outline: 3px solid var(--lg-accent);
+  outline-offset: 3px;
+}
+
 .ld-fulfillment-hub {
   display: grid;
   gap: 12px;
@@ -40,14 +47,14 @@
 .ld-factory-card,
 .ld-factory-discrepancy {
   padding: 16px;
-  border: 1px solid var(--lg-border);
+  border: 1px solid var(--lg-hair);
   border-radius: 12px;
   background: var(--lg-surface);
 }
 
 .ld-factory-discrepancy {
-  border-color: var(--lg-danger);
-  color: var(--lg-danger);
+  border-color: var(--lg-late-ink);
+  color: var(--lg-late-ink);
 }
 
 .ld-factory-card h2,
@@ -65,7 +72,7 @@
   gap: 10px;
   min-height: 48px;
   padding: 10px;
-  border: 1px solid var(--lg-border);
+  border: 1px solid var(--lg-hair);
   border-radius: 10px;
 }
 
@@ -80,10 +87,10 @@
   gap: 6px 12px;
   min-height: 64px;
   padding: 12px;
-  border: 1px solid var(--lg-border);
+  border: 1px solid var(--lg-hair);
   border-radius: 10px;
   background: var(--lg-surface);
-  color: var(--lg-text);
+  color: var(--lg-ink);
   text-align: left;
   cursor: pointer;
 }
@@ -115,10 +122,10 @@
 
 .ld-factory-scan-list button {
   min-height: 44px;
-  border: 1px solid var(--lg-border);
+  border: 1px solid var(--lg-hair);
   border-radius: 999px;
-  background: var(--lg-surface-elevated);
-  color: var(--lg-text);
+  background: var(--lg-leaf);
+  color: var(--lg-ink);
   padding: 6px 12px;
 }
 
@@ -135,8 +142,8 @@
   grid-template-columns: minmax(100px, 1fr) repeat(3, auto);
   gap: 8px;
   padding: 10px;
-  border-left: 4px solid var(--lg-success);
-  background: var(--lg-surface-elevated);
+  border-left: 4px solid var(--lg-ok-ink);
+  background: var(--lg-leaf);
 }
 
 .ld-factory-confirmation {
@@ -156,7 +163,10 @@
 .ld-fulfillment__incident,
 .ld-fulfillment__rack {
   display: flex;
-  align-items: end;
+  /* A field carrying a hint is ~20px taller. align-items: end bottom-aligns the
+     boxes, which lifts that field's input off the row line and drops the next
+     label into its vertical band. Align on label top instead. */
+  align-items: start;
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -168,23 +178,55 @@
 
 .ld-fulfillment__header p {
   margin: 4px 0 0;
-  color: var(--lg-text-secondary);
+  color: var(--lg-ink2);
 }
 
 .ld-fulfillment__filters > label,
 .ld-fulfillment__incident > label,
 .ld-fulfillment__rack > label {
-  min-width: 180px;
-  flex: 1;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.ld-fulfillment__select-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--lg-ink2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ld-fulfillment__actions {
+  align-items: center;
+}
+
+.ld-fulfillment__actions > strong {
+  min-width: 6em;
+  color: var(--lg-ink2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Buttons sit directly in these rows with no label above them; pad by the label
+   block so they land on the input line rather than the label line. */
+.ld-fulfillment__filters > .ld-btn,
+.ld-fulfillment__incident > .ld-btn,
+.ld-fulfillment__rack > .ld-btn {
+  flex: none;
+  margin-top: var(--lg-field-label-offset);
 }
 
 .ld-fulfillment select {
-  min-height: 40px;
-  border: 1px solid var(--lg-border);
-  border-radius: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
   padding: 0 10px;
   background: var(--lg-surface);
-  color: var(--lg-text);
+  color: var(--lg-ink);
+  font: inherit;
+  font-size: 16px;
 }
 
 .ld-fulfillment__table {
@@ -200,37 +242,44 @@
   gap: 12px;
   align-items: center;
   padding: 12px;
-  border: 1px solid var(--lg-border);
+  box-sizing: border-box;
+  max-width: 100%;
+  border: 1px solid var(--lg-hair);
   border-radius: 12px;
   background: var(--lg-surface);
+}
+
+.ld-fulfillment__row > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .ld-fulfillment__row small {
   display: block;
   margin-top: 2px;
-  color: var(--lg-text-secondary);
+  color: var(--lg-ink2);
 }
 
 .ld-fulfillment__status {
   justify-self: start;
   padding: 4px 8px;
   border-radius: 999px;
-  background: var(--lg-surface-elevated);
+  background: var(--lg-leaf);
 }
 
 .ld-fulfillment__status--lost {
-  color: var(--lg-danger);
+  color: var(--lg-late-ink);
 }
 
 .ld-fulfillment__status--ready,
 .ld-fulfillment__status--racked {
-  color: var(--lg-success);
+  color: var(--lg-ok-ink);
 }
 
 .ld-fulfillment__empty {
   padding: 36px;
   text-align: center;
-  color: var(--lg-text-secondary);
+  color: var(--lg-ink2);
 }
 
 @media (max-width: 900px) {
@@ -249,7 +298,7 @@
     top: 0;
     z-index: 2;
     padding: 8px 12px;
-    background: var(--lg-background);
+    background: var(--lg-bg);
   }
 
   .ld-fulfillment-hub__tabs > button {
@@ -273,5 +322,11 @@
   .ld-factory-card > button,
   .ld-factory-discrepancy > button {
     width: 100%;
+  }
+}
+
+@media (forced-colors: active) {
+  .ld-shell .ld-fulfillment :focus-visible {
+    outline-color: Highlight;
   }
 }

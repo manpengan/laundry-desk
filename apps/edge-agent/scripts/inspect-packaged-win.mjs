@@ -12,12 +12,14 @@ import {
   verifySpaIntegrity,
 } from "../dist/lib/integrity.js";
 import { planSpaRetention } from "./prune-packaged-spa.mjs";
+import { parseWindowsBuildProvenance } from "./stage-windows-helper.mjs";
 
 const APP_ID = "com.laundry-desk.v2";
 const APP_EXECUTABLE = "laundry-desk V2.exe";
 const INSTALLER = "laundry-desk-v2-0.1.0-windows-x64-development-only.exe";
 const PACKAGE_VERSION = "0.1.0";
 const HELPER = "laundry-windows-helper.exe";
+const PROVENANCE = "windows-source.json";
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const RELEASE_ROOT = join(PACKAGE_ROOT, "release");
 const SHA256 = /^[0-9a-f]{64}$/u;
@@ -176,6 +178,7 @@ export async function inspectPackagedWindowsSoftware(options = {}) {
     throw new Error("Windows package inspection requires win32");
   }
   const releaseRoot = await canonicalReleaseRoot(options.releaseRoot ?? RELEASE_ROOT);
+  const expectedGitSha = options.expectedGitSha;
   const signatureStatus = options.signatureStatus ?? defaultSignatureStatus;
   const appRoot = join(releaseRoot, "win-unpacked");
   const executablePath = join(appRoot, APP_EXECUTABLE);
@@ -231,6 +234,26 @@ export async function inspectPackagedWindowsSoftware(options = {}) {
     throw new Error("packaged Windows helper digest does not match");
   }
 
+  const provenanceRoot = join(resourcesPath, "build-provenance");
+  await assertRealDirectory(provenanceRoot, "packaged Windows build provenance directory");
+  const provenanceEntries = await readdir(provenanceRoot, { withFileTypes: true });
+  if (
+    provenanceEntries.length !== 1 ||
+    provenanceEntries[0]?.name !== PROVENANCE ||
+    !provenanceEntries[0].isFile()
+  ) {
+    throw new Error("packaged Windows build provenance directory is not exact");
+  }
+  const provenanceBytes = await readBoundedFile(
+    join(provenanceRoot, PROVENANCE),
+    "packaged Windows build provenance",
+    1_024,
+  );
+  const provenance = parseWindowsBuildProvenance(provenanceBytes, {
+    expectedGitSha,
+    expectedHelperDigest: helperDigest,
+  });
+
   const spaPath = await realpath(join(resourcesPath, "spa"));
   if (!isWithin(appRoot, spaPath)) throw new Error("packaged SPA escapes its application");
   const retention = await planSpaRetention(spaPath);
@@ -257,7 +280,10 @@ export async function inspectPackagedWindowsSoftware(options = {}) {
     assurance: "software_only",
     helper_sha256: helperDigest,
     installer_sha256: await sha256File(installerPath, "development-only NSIS installer"),
+    provenance_sha256: createHash("sha256").update(provenanceBytes).digest("hex"),
     signatures: "NotSigned",
+    source_git_sha: provenance.source_git_sha,
+    source_tree: provenance.source_tree,
     spa_bundle: loaded.bundleId,
     spa_entry_count: Object.keys(loaded.manifest.entries).length,
     version: PACKAGE_VERSION,
@@ -270,7 +296,9 @@ if (invoked !== undefined && pathToFileURL(resolve(invoked)).href === import.met
     process.stderr.write("WINDOWS_PACKAGE_SOFTWARE_ARGS_INVALID\n");
     process.exitCode = 1;
   } else {
-    inspectPackagedWindowsSoftware()
+    inspectPackagedWindowsSoftware({
+      expectedGitSha: process.env.LAUNDRY_WINDOWS_BUILD_GIT_SHA,
+    })
       .then((evidence) =>
         process.stdout.write(`WINDOWS_PACKAGE_SOFTWARE_OK ${JSON.stringify(evidence)}\n`),
       )
