@@ -7,6 +7,10 @@
 @import "./accounting.css";
 @import "./catalog-governance.css";
 
+html > body {
+  margin: 0;
+}
+
 /* Counter shell layout (UI spec §3). Uses --lg-* tokens from @laundry/ui. */
 
 .ld-skip-link {
@@ -186,6 +190,7 @@
 
 .ld-login {
   min-height: 100vh;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -225,6 +230,12 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* The shared field basis is for horizontal, wrapping field rows. In this
+   column form it becomes a vertical basis and stretches every login field. */
+.ld-login__form > .ld-field {
+  flex: 0 0 auto;
 }
 
 .ld-login__error {

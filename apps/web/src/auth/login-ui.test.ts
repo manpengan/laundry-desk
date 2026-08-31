@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
@@ -17,6 +18,13 @@ import type { SessionView } from "./types.js";
 import { assertNoAuthSecretsInWebStorage } from "./storage-guard.js";
 
 const DEVICE = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+
+function cssRule(css: string, selector: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const body = new RegExp(`${escaped}\\s*\\{(?<body>[^}]*)\\}`, "u").exec(css)?.groups?.body;
+  assert.ok(body, `missing CSS rule for ${selector}`);
+  return body;
+}
 
 function sampleSession(): SessionView {
   return Object.freeze({
@@ -74,6 +82,22 @@ test("LoginPage SSR renders required fields", () => {
   assert.match(html, /密码/);
   assert.match(html, /type="password"/);
   assert.match(html, /登录/);
+});
+
+test("login column fields do not inherit the shared horizontal flex basis", async () => {
+  const css = await readFile(new URL("../../src/styles/shell.css", import.meta.url), "utf8");
+  const fieldRule = cssRule(css, ".ld-login__form > .ld-field");
+
+  assert.match(fieldRule, /\bflex:\s*0\s+0\s+auto\s*;/u);
+});
+
+test("login viewport sizing includes padding and removes the browser body margin", async () => {
+  const css = await readFile(new URL("../../src/styles/shell.css", import.meta.url), "utf8");
+  const bodyRule = cssRule(css, "html > body");
+  const loginRule = cssRule(css, ".ld-login");
+
+  assert.match(bodyRule, /\bmargin:\s*0\s*;/u);
+  assert.match(loginRule, /\bbox-sizing:\s*border-box\s*;/u);
 });
 
 test("App unauthenticated renders login, not counter shell", () => {
