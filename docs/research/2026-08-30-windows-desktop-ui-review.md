@@ -169,6 +169,66 @@ Register-ScheduledTask -Principal (New-ScheduledTaskPrincipal -UserId '74997' -L
 本次已把两处算术合并到 `@laundry/ui`：`yuanAmountToCents` 委托给共享实现，member 更严格的入参
 契约（非负、至多九位整数）保留在其自身正则中。
 
+
+### §7.3 全局 flex 基准的轴向陷阱（后续修正）
+
+`9584e89` 给 `.ld-field` 加的 `flex: 1 1 220px` 是**全局**规则。在 `flex-direction: column` 的容器里，
+`flex-basis` 被解释为**主轴尺寸即高度**，于是每个字段拿到 220px 的基础高度，容器随之膨胀。
+Codex 在 `7006172` 修了登录页（`.ld-login__form > .ld-field { flex: 0 0 auto }`），但那是逐容器
+打补丁；`.ld-counter-panel`（工作台/开单面板，3 处）与 `.ld-counter-lines`（开单行）同样中招。
+
+隔离量测（容器 `height: auto`，与真实页面一致）：
+
+| | 修复前 | 修复后 |
+| --- | --- | --- |
+| 面板内单个字段高 | **220px** | 69px |
+| `.ld-counter-panel` 总高 | **515px** | 213px |
+| `.ld-counter-lines` 总高 | **448px** | 146px |
+
+**根因修法**：把横向增长基准从 `.ld-field` 全局规则中移出，改由需要它的换行行容器自行声明。
+`.ld-field` 只保留 `min-width: 0`——那才是防止 flex 行溢出的部分，与轴向无关。
+
+横向行复验不受影响：搜索框 626/700px、客户表单 278/278、生产行输入框顶部对齐差 0px、
+三行内溢出均为 0。新增 `shell.test.ts` 断言钉住该不变量：`.ld-field` 规则内不得出现
+`flex` / `flex-basis` / `flex-grow`，且必须保留 `min-width: 0`。
+
+**教训一（设计）**：给广泛复用的原子类加 `flex` 简写时，`flex-basis` 的含义取决于父容器轴向——
+在 row 里是宽度、在 column 里是高度。作用域应收敛到轴向确定的容器，而不是放在原子类上。
+
+**教训二（测量）**：本节数字曾一度报为 178px / 340px，那是 harness 给容器**硬写了高度**导致的
+假象——字段在瓜分一个固定高度。真实容器是 `height: auto`，正确表现为每个字段被平铺到 220px
+基准、容器累加膨胀。**复现缺陷时，harness 必须复制真实容器的尺寸约束（尤其 `height: auto`），
+否则量到的是自己造出来的现象。**
+
+### §7.4 关闭 apps/web e2e 验证缺口
+
+`5d4920f` 收敛金额迁移调用方时，9 个 e2e 里只有 `windows-functional` 能在 Windows 构建机上实证，
+其余 8 个 `apps/web/e2e/*` 需要本地 PostgreSQL + Fastify，一直只能靠「改动机械、模式一致、
+类型检查通过」的间接论证。本次以项目自带路径补齐：
+
+```
+pnpm local:reset -- --confirm DELETE-laundry-desk-v2-local   # 旧卷 0019 checksum 失配
+pnpm local:up -- --bootstrap                                 # 69 迁移 + 双管理员
+pnpm local:web:e2e
+```
+
+**结果：22 passed，0 failed。** 覆盖 `counter-workday`、`counter-followups`、`member-benefits`、
+`customer-profile`、`factory-handoff`、`operations-governance` —— 即 25 处 `fill(yuanText(...))`
+中的 20 处所在规格。真实浏览器 + 真实 PostgreSQL + 真实 Fastify 走完开单、结算、收款、退款与
+会员储值全流程。**金额迁移的调用方收敛至此获得直接证据。**
+
+过程中遇到的两个非缺陷失败，记录以免后人重复排查：
+
+| 现象 | 根因 | 处理 |
+| --- | --- | --- |
+| 全部 spec 加载期抛 `LAUNDRY_LOCAL_ORG_CODE is required`，末尾报 `No tests found` | 该套件需五个环境变量：三个来自 bootstrap，加 `LAUNDRY_LOCAL_ORG_CODE=local` / `LAUNDRY_LOCAL_STORE_CODE=main` | 补齐变量 |
+| `notification-delivery` 期望「软件模拟模式」，实得「自动通知未启用」 | [`docker-compose.yml:57`](../../tools/compose/docker-compose.yml) 的 `LAUNDRY_NOTIFICATION_PROVIDER_MODE` 默认 `disabled`，该 spec 需要 `software_only` | 设置变量后通过；**断言正确，未修改** |
+
+**教训（判据）**：这套 e2e 的 `exit code 1` 至少有三义——测试未加载、测试已跑但环境未配、测试已跑
+且代码有问题。三者退出码相同。第一种最具误导性：会让人以为自己的改动搞挂了全部用例，进而去修
+本来正确的代码。**判据必须取自输出内容（`N passed` / `N failed` / `No tests found`），不能取自
+退出码。**
+
 ## §8 复现方式
 
 在 Windows 构建机上启动打包后的 exe，然后按 §1 注入点击与截屏。构建机接入方式见

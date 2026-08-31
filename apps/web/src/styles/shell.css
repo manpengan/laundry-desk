@@ -740,6 +740,13 @@ html > body {
   margin-bottom: 16px;
 }
 
+/* Opt these wrapping rows into the horizontal growth basis. Kept off .ld-field
+   itself so column containers are not stretched by a height basis. */
+.ld-customers-search > .ld-field,
+.ld-customers-form > .ld-field {
+  flex: 1 1 220px;
+}
+
 .ld-customers-search__actions {
   display: flex;
   gap: 8px;
