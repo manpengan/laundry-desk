@@ -173,30 +173,32 @@ Register-ScheduledTask -Principal (New-ScheduledTaskPrincipal -UserId '74997' -L
 ### §7.3 全局 flex 基准的轴向陷阱（后续修正）
 
 `9584e89` 给 `.ld-field` 加的 `flex: 1 1 220px` 是**全局**规则。在 `flex-direction: column` 的容器里，
-`flex-basis` 被解释为**高度**，`flex-grow: 1` 再把字段纵向撑开。Codex 在 `7006172` 修了登录页
-（`.ld-login__form > .ld-field { flex: 0 0 auto }`），但那是逐容器打补丁。
+`flex-basis` 被解释为**主轴尺寸即高度**，于是每个字段拿到 220px 的基础高度，容器随之膨胀。
+Codex 在 `7006172` 修了登录页（`.ld-login__form > .ld-field { flex: 0 0 auto }`），但那是逐容器
+打补丁；`.ld-counter-panel`（工作台/开单面板，3 处）与 `.ld-counter-lines`（开单行）同样中招。
 
-隔离量测确认受影响的纵向容器不止一个：
+隔离量测（容器 `height: auto`，与真实页面一致）：
 
-| 容器 | 字段高（基线 69px） |
-| --- | --- |
-| `.ld-counter-lines`（开单行） | **340px** —— 占满整个容器 |
-| `.ld-counter-panel`（工作台/开单面板，3 处） | **178px** |
-| `.ld-login__form` | 已由 `7006172` 修复 |
-| `.ld-catalog-picker` | 未受影响 |
+| | 修复前 | 修复后 |
+| --- | --- | --- |
+| 面板内单个字段高 | **220px** | 69px |
+| `.ld-counter-panel` 总高 | **515px** | 213px |
+| `.ld-counter-lines` 总高 | **448px** | 146px |
 
 **根因修法**：把横向增长基准从 `.ld-field` 全局规则中移出，改由需要它的换行行容器自行声明。
-`.ld-field` 只保留 `min-width: 0`（那才是防止 flex 行溢出的部分，与轴向无关）。
+`.ld-field` 只保留 `min-width: 0`——那才是防止 flex 行溢出的部分，与轴向无关。
 
-复验（同一 harness）：四个纵向容器全部回到 69px；横向行不受影响 —— 搜索框 626/700px、
-客户表单 278/278、生产行输入框顶部对齐差 0px、三行内溢出均为 0。
+横向行复验不受影响：搜索框 626/700px、客户表单 278/278、生产行输入框顶部对齐差 0px、
+三行内溢出均为 0。新增 `shell.test.ts` 断言钉住该不变量：`.ld-field` 规则内不得出现
+`flex` / `flex-basis` / `flex-grow`，且必须保留 `min-width: 0`。
 
-新增 `shell.test.ts` 断言钉住该不变量：`.ld-field` 规则内不得出现 `flex` / `flex-basis` /
-`flex-grow`，且必须保留 `min-width: 0`；换行行容器必须自行声明基准。
+**教训一（设计）**：给广泛复用的原子类加 `flex` 简写时，`flex-basis` 的含义取决于父容器轴向——
+在 row 里是宽度、在 column 里是高度。作用域应收敛到轴向确定的容器，而不是放在原子类上。
 
-**教训**：给广泛使用的类加 `flex` 简写时，`flex-basis` 的含义取决于父容器的轴向。同一条规则
-在 row 里是宽度、在 column 里是高度。作用域应当收敛到确定轴向的容器，而不是放在被复用的原子类上。
-
+**教训二（测量）**：本节数字曾一度报为 178px / 340px，那是 harness 给容器**硬写了高度**导致的
+假象——字段在瓜分一个固定高度。真实容器是 `height: auto`，正确表现为每个字段被平铺到 220px
+基准、容器累加膨胀。**复现缺陷时，harness 必须复制真实容器的尺寸约束（尤其 `height: auto`），
+否则量到的是自己造出来的现象。**
 ## §8 复现方式
 
 在 Windows 构建机上启动打包后的 exe，然后按 §1 注入点击与截屏。构建机接入方式见
