@@ -79,6 +79,28 @@ function cssBlock(css: string, header: string): string {
   assert.fail(`missing closing brace for ${header}`);
 }
 
+type CssSpecificity = readonly [ids: number, classes: number, elements: number];
+
+function selectorSpecificity(selector: string): CssSpecificity {
+  const ids = selector.match(/#[\w-]+/gu)?.length ?? 0;
+  const pseudoElements = selector.match(/::[\w-]+/gu)?.length ?? 0;
+  const withoutPseudoElements = selector.replace(/::[\w-]+/gu, " ");
+  const classes = withoutPseudoElements.match(/(?:\.[\w-]+|\[[^\]]+\]|:[\w-]+)/gu)?.length ?? 0;
+  const elements = withoutPseudoElements
+    .replace(/#[\w-]+|\.[\w-]+|\[[^\]]+\]|::?[\w-]+|\*/gu, " ")
+    .split(/[\s>+~]+/u)
+    .filter(Boolean).length;
+
+  return [ids, classes, elements + pseudoElements];
+}
+
+function compareSpecificity(left: CssSpecificity, right: CssSpecificity): number {
+  const [leftIds, leftClasses, leftElements] = left;
+  const [rightIds, rightClasses, rightElements] = right;
+
+  return leftIds - rightIds || leftClasses - rightClasses || leftElements - rightElements;
+}
+
 test("fulfillment parser accepts masked bounded workbench rows", () => {
   const parsed = parseFulfillmentRows(unwrapFulfillmentResult({ result: { garments: [ROW] } }));
   assert.equal(parsed?.length, 1);
@@ -121,15 +143,38 @@ test("production controls expose complete labels and selection feedback", () => 
   assert.match(html, /<strong aria-live="polite">已选 0 件<\/strong>/u);
 });
 
-test("production stylesheet keeps Windows focus, alignment, and clipping guards", async () => {
+test("fulfillment focus ring outranks the later shell-wide default", async () => {
+  const [fulfillmentCss, shellCss] = await Promise.all([
+    readFile(new URL("../../src/styles/fulfillment.css", import.meta.url), "utf8"),
+    readFile(new URL("../../src/styles/shell.css", import.meta.url), "utf8"),
+  ]);
+  const fulfillmentSelector = ".ld-shell .ld-fulfillment :focus-visible";
+  const shellSelector = ".ld-shell *:focus-visible";
+  const fulfillmentImportIndex = shellCss.indexOf('@import "./fulfillment.css";');
+  const shellRuleIndex = shellCss.indexOf(`${shellSelector} {`);
+
+  assert.notEqual(fulfillmentImportIndex, -1, "shell must import the fulfillment stylesheet");
+  assert.notEqual(shellRuleIndex, -1, "shell must define its shared focus ring");
+  assert.ok(
+    fulfillmentImportIndex < shellRuleIndex,
+    "the imported fulfillment rule is evaluated before the shell-wide focus rule",
+  );
+  assert.ok(
+    compareSpecificity(
+      selectorSpecificity(fulfillmentSelector),
+      selectorSpecificity(shellSelector),
+    ) > 0,
+    "the earlier fulfillment selector must be more specific than the shell-wide selector",
+  );
+  assert.match(cssRule(fulfillmentCss, fulfillmentSelector), /outline:\s*3px solid/u);
+
+  const forcedColors = cssBlock(fulfillmentCss, "@media (forced-colors: active)");
+  assert.match(cssRule(forcedColors, fulfillmentSelector), /outline-color:\s*Highlight/u);
+});
+
+test("production stylesheet keeps Windows alignment and clipping guards", async () => {
   const css = await readFile(new URL("../../src/styles/fulfillment.css", import.meta.url), "utf8");
 
-  assert.match(cssRule(css, ".ld-fulfillment :focus-visible"), /outline:\s*3px solid/u);
-  const forcedColors = cssBlock(css, "@media (forced-colors: active)");
-  assert.match(
-    cssRule(forcedColors, ".ld-fulfillment :focus-visible"),
-    /outline-color:\s*Highlight/u,
-  );
   assert.match(cssRule(css, ".ld-fulfillment__select-field"), /flex-direction:\s*column/u);
   assert.match(cssRule(css, ".ld-fulfillment__actions"), /align-items:\s*center/u);
   assert.match(cssRule(css, ".ld-fulfillment__row > *"), /min-width:\s*0/u);

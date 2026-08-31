@@ -5,7 +5,7 @@
 
 /* The 2px shared ring was hard to track against the glass cards on the
    Windows 150% DPI target. Keep keyboard focus visibly distinct here. */
-.ld-fulfillment :focus-visible {
+.ld-shell .ld-fulfillment :focus-visible {
   outline: 3px solid var(--lg-accent);
   outline-offset: 3px;
 }
@@ -326,7 +326,7 @@
 }
 
 @media (forced-colors: active) {
-  .ld-fulfillment :focus-visible {
+  .ld-shell .ld-fulfillment :focus-visible {
     outline-color: Highlight;
   }
 }
