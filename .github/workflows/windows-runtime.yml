@@ -2,6 +2,8 @@ name: V2 Windows Runtime Payload
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
     paths:
@@ -60,8 +62,15 @@ jobs:
         run: |
           $trustedNode = (Get-Command node.exe).Source
           Set-Location $env:RUNNER_TEMP
-          & $trustedNode "$env:LAUNDRY_PAYLOAD/scripts/smoke-companion.mjs" $env:LAUNDRY_PAYLOAD $env:LAUNDRY_MANIFEST_SHA256
-          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_SMOKE_FAILED' }
+          $hiddenSource = Join-Path $env:RUNNER_TEMP 'laundry-source-unavailable'
+          if (Test-Path -LiteralPath $hiddenSource) { throw 'WINDOWS_COMPANION_SOURCE_BACKUP_EXISTS' }
+          Move-Item -LiteralPath $env:GITHUB_WORKSPACE -Destination $hiddenSource
+          try {
+            & $trustedNode "$env:LAUNDRY_PAYLOAD/scripts/smoke-companion.mjs" $env:LAUNDRY_PAYLOAD $env:LAUNDRY_MANIFEST_SHA256
+            if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_SMOKE_FAILED' }
+          } finally {
+            Move-Item -LiteralPath $hiddenSource -Destination $env:GITHUB_WORKSPACE
+          }
       - uses: actions/upload-artifact@v7
         with:
           name: windows-runtime-development-payload
