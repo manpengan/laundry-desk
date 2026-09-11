@@ -47,6 +47,13 @@ hk-vps 与未来 production-candidate 在 5.1 关闭前都只使用合成数据�
 
 这些输入缺失不阻止方案评审，但阻止任何“5.1 完成”或“生产可用”声明。
 
+2026-08-28 的非秘密输入差距已记录在
+[外部输入 register](../../operations/2026-08-28-stage51-external-input-register.json) 与
+[差距结果](../../operations/2026-08-28-stage51-external-input-gap-result.md)；可复用关闭结构见
+[阶段结果模板](../../operations/stage51-cloud-production-baseline-result-template.md)。该仓库切片只建立
+strict schema、canonical 记录和精确 blocker 派生，不登记第二 profile、不授权主机动作，也不关闭
+5.1-A 或 5.1-B。
+
 ## 4. 固定执行顺序
 
 ### 5.1-A 裁决与基线盘点
