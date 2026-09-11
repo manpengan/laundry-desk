@@ -36,9 +36,9 @@
     "workspace:build": "turbo run build",
     "workspace:audit": "node tools/local/dependency-audit.mjs",
     "workspace:dev": "turbo run dev",
-    "workspace:format:check": "prettier --check apps packages tools/cloud tools/local tools/compose tools/migrate-v1 tools/release-candidate/*.mjs tools/runtime-kit/*.mjs tools/runtime-kit/README.md tests/foundation docs/local-web-server.md docs/operations/dependency-audit.md .github/workflows/foundation.yml .github/workflows/v2-integration.yml .prettierrc.cjs package.json pnpm-workspace.yaml turbo.json",
-    "workspace:lint": "eslint tools/cloud --ext .mjs --max-warnings=0 && eslint tools/local tools/release-candidate tests/foundation tools/runtime-kit/*.mjs --ext .mjs --max-warnings=0 && turbo run lint",
-    "workspace:test": "node --test tools/local/*.test.mjs tools/runtime-kit/*.test.mjs tests/foundation/*.test.mjs && turbo run test",
+    "workspace:format:check": "prettier --check apps packages tools/cloud tools/local tools/compose tools/migrate-v1 tools/release-candidate/*.mjs tools/runtime-kit/*.mjs tools/runtime-kit/README.md tools/windows-runtime/*.mjs tools/windows-runtime/README.md .github/workflows/windows-runtime.yml tests/foundation docs/local-web-server.md docs/operations/dependency-audit.md .github/workflows/foundation.yml .github/workflows/v2-integration.yml .prettierrc.cjs package.json pnpm-workspace.yaml turbo.json",
+    "workspace:lint": "eslint tools/cloud --ext .mjs --max-warnings=0 && eslint tools/local tools/windows-runtime tools/release-candidate tests/foundation tools/runtime-kit/*.mjs --ext .mjs --max-warnings=0 && turbo run lint",
+    "workspace:test": "node --test tools/local/*.test.mjs tools/runtime-kit/*.test.mjs tools/windows-runtime/*.test.mjs tests/foundation/*.test.mjs && turbo run test",
     "workspace:typecheck": "turbo run typecheck",
     "workspace:check": "pnpm run workspace:audit && pnpm run workspace:format:check && pnpm run workspace:lint && pnpm run workspace:typecheck && pnpm run workspace:test && pnpm run cloud:adr36:acceptance:test && pnpm run workspace:build",
     "local:bootstrap": "pnpm --filter @laundry/contracts build && pnpm --filter @laundry/domain build && pnpm --filter @laundry/server build && node apps/server/dist/local/bootstrap-cli.js",
@@ -94,7 +94,9 @@
     "cloud:release:hk:maintenance": "node tools/cloud/hk-vps-release-maintenance.mjs",
     "cloud:release:hk:artifact-archive:test": "node --test tools/cloud/hk-vps-release-artifact-archive.test.mjs",
     "cloud:release:hk:release-set:test": "node --test tools/cloud/hk-vps-release-set-archive.test.mjs tools/cloud/hk-vps-release-readonly-preflight.test.mjs tools/cloud/hk-vps-release-host-guard.test.mjs",
-    "cloud:data:hk": "node tools/cloud/hk-vps-data-protection.mjs"
+    "cloud:data:hk": "node tools/cloud/hk-vps-data-protection.mjs",
+    "runtime:win:package": "node tools/windows-runtime/package-companion.mjs",
+    "runtime:win:test": "node --test tools/windows-runtime/*.test.mjs"
   },
   "build": {
     "appId": "com.laundry-desk",

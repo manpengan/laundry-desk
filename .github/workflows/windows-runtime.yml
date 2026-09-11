@@ -1,0 +1,72 @@
+name: V2 Windows Runtime Payload
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "tools/windows-runtime/**"
+      - "apps/server/**"
+      - "packages/contracts/**"
+      - "packages/domain/**"
+      - "packages/platform-fs/**"
+      - "packages/db/src/migrations/**"
+      - "packages/db/src/README.md"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/windows-runtime.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-runtime-payload:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+          run_install: false
+      - name: Install locked build dependencies
+        run: pnpm.cmd install --frozen-lockfile
+      - name: Test payload validation
+        run: pnpm.cmd runtime:win:test
+      - name: Download pinned upstream archives and build payload
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sources = node.exe --input-type=module -e "import {COMPANION_SOURCES as s} from './tools/windows-runtime/companion-sources.mjs'; console.log(JSON.stringify(s));" | ConvertFrom-Json
+          $nodeZip = Join-Path $env:RUNNER_TEMP 'laundry-node.zip'
+          $pgZip = Join-Path $env:RUNNER_TEMP 'laundry-postgres.zip'
+          Invoke-WebRequest $sources.node.url -OutFile $nodeZip
+          Invoke-WebRequest $sources.postgres.url -OutFile $pgZip
+          $output = @(pnpm.cmd runtime:win:package --source-sha $env:GITHUB_SHA --node-archive $nodeZip --postgres-archive $pgZip --release 0.1.0-win-dev)
+          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_BUILD_FAILED' }
+          $report = ($output | Where-Object { $_ -match '^\{' } | Select-Object -Last 1) | ConvertFrom-Json
+          if ($report.manifest_sha256 -notmatch '^[0-9a-f]{64}$') { throw 'WINDOWS_COMPANION_REPORT_INVALID' }
+          $payload = Join-Path $env:RUNNER_TEMP 'laundry-no-repo-runtime'
+          Copy-Item -LiteralPath $report.output -Destination $payload -Recurse
+          "LAUNDRY_PAYLOAD=$payload" >> $env:GITHUB_ENV
+          "LAUNDRY_MANIFEST_SHA256=$($report.manifest_sha256)" >> $env:GITHUB_ENV
+          $report | ConvertTo-Json | Set-Content (Join-Path $env:RUNNER_TEMP 'runtime-build-result.json')
+      - name: Load packaged runtime outside the repository
+        shell: pwsh
+        run: |
+          $trustedNode = (Get-Command node.exe).Source
+          Set-Location $env:RUNNER_TEMP
+          & $trustedNode "$env:LAUNDRY_PAYLOAD/scripts/smoke-companion.mjs" $env:LAUNDRY_PAYLOAD $env:LAUNDRY_MANIFEST_SHA256
+          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_SMOKE_FAILED' }
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-runtime-development-payload
+          path: |
+            ${{ runner.temp }}/laundry-no-repo-runtime
+            ${{ runner.temp }}/runtime-build-result.json
+          if-no-files-found: error
+          include-hidden-files: true
