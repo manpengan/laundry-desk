@@ -208,7 +208,7 @@ test("runs every foundation test from the default workspace test gate", async ()
 
   assert.equal(
     rootPackage.scripts["workspace:test"],
-    "node --test tools/local/*.test.mjs tools/runtime-kit/*.test.mjs tests/foundation/*.test.mjs && turbo run test",
+    "node --test tools/local/*.test.mjs tools/runtime-kit/*.test.mjs tools/windows-runtime/*.test.mjs tests/foundation/*.test.mjs && turbo run test",
   );
 });
 
@@ -513,7 +513,7 @@ test("registers the guarded local lifecycle in default workspace gates", async (
   );
   assert.match(
     rootPackage.scripts["workspace:lint"],
-    /eslint tools\/local tools\/release-candidate tests\/foundation tools\/runtime-kit\/\*\.mjs --ext \.mjs/u,
+    /eslint tools\/local tools\/windows-runtime tools\/release-candidate tests\/foundation tools\/runtime-kit\/\*\.mjs --ext \.mjs/u,
   );
 });
 

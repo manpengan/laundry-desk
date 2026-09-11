@@ -1,5 +1,15 @@
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  rmdir,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -81,8 +91,13 @@ export async function packageCompanion({ sourceSha, nodeArchive, postgresArchive
   if (!/^[0-9]+\.[0-9]+\.[0-9]+-win-dev(?:\.[0-9]+)?$/u.test(release)) fail("RELEASE_INVALID");
   await sourceIdentity(sourceSha);
   // Invoke pnpm's JS entrypoint with the current Node, never a shell-parsed .cmd command.
-  const pnpmScript = process.env.npm_execpath;
-  if (!pnpmScript || !/pnpm\.(?:c?js)$/iu.test(pnpmScript)) fail("RUN_WITH_PNPM_REQUIRED");
+  if (!process.env.npm_execpath) fail("RUN_WITH_PNPM_REQUIRED");
+  const pnpmScript = await realpath(process.env.npm_execpath);
+  if (
+    !/pnpm\.[cm]?js$/iu.test(pnpmScript) ||
+    (await run(process.execPath, [pnpmScript, "--version"])) !== "11.15.0"
+  )
+    fail("RUN_WITH_PNPM_REQUIRED");
   await run(process.execPath, [pnpmScript, "--filter", "@laundry/server...", "build"]);
   const outputParent = join(scriptsRoot, "dist");
   await mkdir(outputParent, { recursive: true });
