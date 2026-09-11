@@ -15,8 +15,23 @@ severity 忽略规则放行。
 当前安全版本线为 Electron `41.10.3`、Electron-Vite `4.0.1`、根 Vite `7.3.6`、Web
 Vite `6.4.3`、React Router DOM `7.18.2` 与 PostCSS `8.5.23`。Electron-Vite 4/Vite 7
 要求 Node `>=22.12`，仓库 engine 与 CI 的 Node 22 最新补丁线必须满足该下限。传递依赖
-通过同主版本 override 固定到 `undici@7.29.0`、`fast-uri@3.1.5/4.1.2`、
-`brace-expansion@1.1.18/2.1.4/5.0.9`、`js-yaml@4.3.1`、`nanoid@3.3.18`。
+通过同主版本 override 固定到 `undici@7.29.0`、`fast-uri@3.1.6/4.1.3`、
+`brace-expansion@1.1.18/2.1.4/5.0.9`、`js-yaml@4.3.2`、`nanoid@3.3.18`。
+
+## 2026-09-10 安全依赖更新
+
+9 月 6 日定时 CI 首先被
+[Browserslist 公告](https://github.com/advisories/GHSA-c83g-rgw3-j3cx) 阻断；重新采集完整审计后，
+同步修复当前依赖图内其余未获豁免的公告。按修复下限固定版本：
+
+- Server：Fastify `5.12.1`、Sharp `0.35.4`；
+- 传递依赖：Browserslist `4.28.7`、baseline-browser-mapping `2.11.0`、
+  fast-uri `3.1.6/4.1.3`、js-yaml `4.3.2`、@xmldom/xmldom `0.8.15/0.9.12`；
+- 测试工具：Vitest 与 coverage-v8 统一 `4.1.11`，修复
+  [mocker 文件读取公告](https://github.com/advisories/GHSA-82fw-gwwq-j7x9)。Contracts 移除 v4
+  不再支持的 `coverage.all`，保留显式 `src/**/*.ts` include 与原有覆盖率阈值。
+
+更新不增加审计例外，不放宽 severity、依赖路径或版本校验。已获复审的两个历史例外继续如下。
 
 ## 当前临时例外
 

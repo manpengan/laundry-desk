@@ -24,9 +24,9 @@
     "@laundry/domain": "file:../../packages/domain",
     "@laundry/platform-fs": "file:../../packages/platform-fs",
     "@node-rs/argon2": "^2.0.2",
-    "fastify": "^5.10.0",
+    "fastify": "5.12.1",
     "pg": "^8.22.0",
-    "sharp": "^0.35.3",
+    "sharp": "0.35.4",
     "zod": "4.4.3"
   },
   "devDependencies": {
