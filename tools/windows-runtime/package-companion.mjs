@@ -52,6 +52,19 @@ async function run(file, args, cwd = repositoryRoot, env = buildEnvironment()) {
       /WINDOWS_COMPANION_[A-Z_]+/u,
     );
     if (stable) throw new Error(stable[0]);
+    const codes = [
+      ...new Set(
+        `${error.stdout ?? ""}\n${error.stderr ?? ""}`.match(
+          /\b(?:TS[0-9]{4,5}|ERR_PNPM_[A-Z_]+|RUNTIME_[A-Z_]+)\b/gu,
+        ) ?? [],
+      ),
+    ];
+    console.error(
+      JSON.stringify({
+        subprocess_exit: typeof error.code === "number" ? error.code : null,
+        diagnostic_codes: codes,
+      }),
+    );
     fail("BUILD_PROCESS_FAILED");
   }
 }
@@ -98,7 +111,10 @@ export async function packageCompanion({ sourceSha, nodeArchive, postgresArchive
     (await run(process.execPath, [pnpmScript, "--version"])) !== "11.15.0"
   )
     fail("RUN_WITH_PNPM_REQUIRED");
-  await run(process.execPath, [pnpmScript, "--filter", "@laundry/server...", "build"]);
+  for (const name of ["platform-fs", "contracts", "domain", "server"]) {
+    console.error(`WINDOWS_COMPANION_STAGE_BUILD_${name.toUpperCase().replaceAll("-", "_")}`);
+    await run(process.execPath, [pnpmScript, "--filter", `@laundry/${name}`, "build"]);
+  }
   const outputParent = join(scriptsRoot, "dist");
   await mkdir(outputParent, { recursive: true });
   await requireRealDirectory(outputParent);
@@ -117,6 +133,7 @@ export async function packageCompanion({ sourceSha, nodeArchive, postgresArchive
       ["node", nodeArchive],
       ["postgres", postgresArchive],
     ]) {
+      console.error(`WINDOWS_COMPANION_STAGE_EXTRACT_${kind.toUpperCase()}`);
       await run(powershell, [
         "-NoProfile",
         "-NonInteractive",
@@ -143,6 +160,7 @@ export async function packageCompanion({ sourceSha, nodeArchive, postgresArchive
       fail("BINARY_VERSION_INVALID");
     }
     const deployed = join(work, "deployed");
+    console.error("WINDOWS_COMPANION_STAGE_DEPLOY_SERVER");
     await run(process.execPath, [
       pnpmScript,
       "--filter",
@@ -177,6 +195,7 @@ export async function packageCompanion({ sourceSha, nodeArchive, postgresArchive
       await cp(join(scriptsRoot, name), join(payload, "scripts", name));
     await cp(join(scriptsRoot, "README.md"), join(payload, "README.md"));
     await pruneEmpty(payload);
+    console.error("WINDOWS_COMPANION_STAGE_MIGRATION_INFO");
     const migration = JSON.parse(
       await run(
         node,
@@ -186,6 +205,7 @@ export async function packageCompanion({ sourceSha, nodeArchive, postgresArchive
       ),
     );
     const { files } = await inventory(payload);
+    console.error("WINDOWS_COMPANION_STAGE_MANIFEST");
     const manifest = canonicalManifest({
       schema: "laundry.windows.runtime-payload",
       version: 1,
