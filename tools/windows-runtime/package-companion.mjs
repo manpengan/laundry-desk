@@ -31,8 +31,11 @@ const scriptNames = [
 function buildEnvironment() {
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
-    if (/^(?:NODE_OPTIONS|NODE_PATH|LAUNDRY_|DATABASE_|PG)/iu.test(key)) delete env[key];
+    if (/^(?:NODE_OPTIONS|NODE_PATH|PSModulePath|LAUNDRY_|DATABASE_|PG)/iu.test(key))
+      delete env[key];
   }
+  if (process.platform === "win32")
+    env.PSModulePath = join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/Modules");
   return env;
 }
 

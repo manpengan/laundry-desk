@@ -41,6 +41,9 @@ Windows Server CI 与目标 Windows 10/11 零售 PC 的现场验收分别记录�
 
 ## 后续安装生命周期门禁
 
+执行顺序与失败重入矩阵见
+[Windows Runtime companion 后续交付计划](../../docs/superpowers/plans/2026-09-12-windows-runtime-companion-delivery.md)。
+
 - 私有 DACL 根、版本目录、崩溃安全指针、安装/修复/停止/重启；
 - 无源码仓库且无系统 Node/pnpm 条件下安装，卸载保留数据库和密钥；
 - 同迁移跨版本升级/回滚，迁移变化时的备份与联合恢复；
