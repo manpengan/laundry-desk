@@ -48,6 +48,10 @@ async function run(file, args, cwd = repositoryRoot, env = buildEnvironment()) {
       })
     ).stdout.trim();
   } catch (error) {
+    const archiveDiagnostic = `${error.stdout ?? ""}\n${error.stderr ?? ""}`.match(
+      /WINDOWS_COMPANION_ARCHIVE_FAILURE line=[0-9]+ code=[A-Za-z0-9_.,-]+/u,
+    );
+    if (archiveDiagnostic) console.error(archiveDiagnostic[0]);
     const stable = `${error.stdout ?? ""}\n${error.stderr ?? ""}`.match(
       /WINDOWS_COMPANION_[A-Z_]+/u,
     );

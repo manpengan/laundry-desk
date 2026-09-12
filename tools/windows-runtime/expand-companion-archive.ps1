@@ -7,6 +7,12 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+trap {
+  $code = [string] $_.FullyQualifiedErrorId
+  if ($code -notmatch '^[A-Za-z0-9_.,-]{1,160}$') { $code = 'Unknown' }
+  [Console]::Error.WriteLine("WINDOWS_COMPANION_ARCHIVE_FAILURE line=$($_.InvocationInfo.ScriptLineNumber) code=$code")
+  exit 1
+}
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $item = Get-Item -LiteralPath $Archive
 if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
