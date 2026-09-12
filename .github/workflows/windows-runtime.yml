@@ -59,17 +59,27 @@ jobs:
           $report | ConvertTo-Json | Set-Content (Join-Path $env:RUNNER_TEMP 'runtime-build-result.json')
       - name: Load packaged runtime outside the repository
         shell: pwsh
+        working-directory: ${{ runner.temp }}
         run: |
           $trustedNode = (Get-Command node.exe).Source
-          Set-Location $env:RUNNER_TEMP
           $hiddenSource = Join-Path $env:RUNNER_TEMP 'laundry-source-unavailable'
           if (Test-Path -LiteralPath $hiddenSource) { throw 'WINDOWS_COMPANION_SOURCE_BACKUP_EXISTS' }
-          Move-Item -LiteralPath $env:GITHUB_WORKSPACE -Destination $hiddenSource
+          New-Item -ItemType Directory -Path $hiddenSource | Out-Null
           try {
+            # The runner may hold the checkout root open. Move every child, including
+            # .git and node_modules, and prove the original checkout is empty.
+            Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Force | ForEach-Object {
+              Move-Item -LiteralPath $_.FullName -Destination $hiddenSource -Force
+            }
+            if (@(Get-ChildItem -LiteralPath $env:GITHUB_WORKSPACE -Force).Count -ne 0) {
+              throw 'WINDOWS_COMPANION_SOURCE_STILL_AVAILABLE'
+            }
             & $trustedNode "$env:LAUNDRY_PAYLOAD/scripts/smoke-companion.mjs" $env:LAUNDRY_PAYLOAD $env:LAUNDRY_MANIFEST_SHA256
             if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_SMOKE_FAILED' }
           } finally {
-            Move-Item -LiteralPath $hiddenSource -Destination $env:GITHUB_WORKSPACE
+            Get-ChildItem -LiteralPath $hiddenSource -Force | ForEach-Object {
+              Move-Item -LiteralPath $_.FullName -Destination $env:GITHUB_WORKSPACE -Force
+            }
           }
       - uses: actions/upload-artifact@v7
         with:
