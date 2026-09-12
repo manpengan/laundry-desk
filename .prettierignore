@@ -2,6 +2,9 @@
 packages/contracts/openapi/**
 coverage/**
 
+# Stage 5.1 external-input evidence is canonical one-line JSON owned by its contract parser.
+docs/operations/*-stage51-external-input-register.json
+
 # Generated SPA bundle — sync-spa owns file bytes and manifest hashes.
 apps/edge-agent/resources/spa/**
 
