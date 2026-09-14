@@ -14,19 +14,23 @@ $Launcher = Join-Path $Payload 'scripts\lifecycle-cli.mjs'
 $Arguments = '"' + $Launcher + '" start "' + $Payload + '" ' + $ManifestDigest
 $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 
+function Resolve-UserSid {
+  param([string]$Value)
+  if ($Value -match '^S-1-[0-9-]+$') { return (New-Object Security.Principal.SecurityIdentifier($Value)).Value }
+  return (New-Object Security.Principal.NTAccount($Value)).Translate([Security.Principal.SecurityIdentifier]).Value
+}
+
 function Assert-Task {
   $task = Get-ScheduledTask -TaskName $TaskName -TaskPath '\' -ErrorAction SilentlyContinue
   if ($null -eq $task) { return $null }
-  $principal = New-Object Security.Principal.NTAccount($task.Principal.UserId)
-  try { $sid = $principal.Translate([Security.Principal.SecurityIdentifier]).Value }
-  catch { $sid = $task.Principal.UserId }
+  $sid = Resolve-UserSid $task.Principal.UserId
   if ($task.Actions.Count -ne 1 -or $task.Actions[0].Execute -cne $Node -or
       $task.Actions[0].Arguments -cne $Arguments -or $task.Actions[0].WorkingDirectory -cne $Root -or
       $sid -ne $Identity.User.Value -or $task.Principal.LogonType -ne 'Interactive' -or
       $task.Principal.RunLevel -ne 'Limited' -or $task.Settings.AllowHardTerminate -or
       $task.Settings.MultipleInstances -ne 'IgnoreNew' -or $task.Triggers.Count -ne 1 -or
       $task.Triggers[0].CimClass.CimClassName -ne 'MSFT_TaskLogonTrigger' -or
-      $task.Triggers[0].UserId -ne $Identity.Name) {
+      (Resolve-UserSid $task.Triggers[0].UserId) -ne $Identity.User.Value) {
     throw 'WINDOWS_COMPANION_TASK_CONFLICT'
   }
   return $task
@@ -97,6 +101,10 @@ try {
 } catch {
   $code = [string]$_.Exception.Message
   if ($code -notmatch '^WINDOWS_COMPANION_[A-Z_]+$') { $code = 'WINDOWS_COMPANION_HOST_FAILED' }
+  $identifier = [string]$_.FullyQualifiedErrorId
+  if ($identifier -notmatch '^[A-Za-z0-9_.,-]{1,120}$') { $identifier = 'HOST_EXCEPTION' }
+  $diagnostic = @{ code = $identifier; frames = @("lifecycle-host.ps1:$($_.InvocationInfo.ScriptLineNumber)") } | ConvertTo-Json -Compress
+  [Console]::Error.WriteLine('WINDOWS_COMPANION_DIAGNOSTIC ' + $diagnostic)
   [Console]::Error.WriteLine($code)
   exit 1
 }

@@ -166,6 +166,16 @@ try {
       { env, cwd: payload },
     );
     await health(root, selected, expectedDigest);
+    await execute(
+      join(env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "$deadline=[DateTime]::UtcNow.AddSeconds(60); while ((Get-ScheduledTask -TaskName LaundryDeskV2RuntimeCompanion).State -eq 'Running') { if ([DateTime]::UtcNow -gt $deadline) { throw 'WINDOWS_COMPANION_TASK_TIMEOUT' }; Start-Sleep -Milliseconds 200 }",
+      ],
+      { env, cwd: payload, timeout: 75000 },
+    );
   });
   await scenario("lock-owner-process-death", async () => {
     const script = `const {withOperationLock}=await import(${JSON.stringify(pathToFileURL(join(payload, "scripts/lifecycle-storage.mjs")).href)}); await withOperationLock(${JSON.stringify(root)},async()=>{console.log('LOCKED');await new Promise(()=>{});});`;

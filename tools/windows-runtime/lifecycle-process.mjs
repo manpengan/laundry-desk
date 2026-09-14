@@ -18,7 +18,12 @@ export async function run(file, args, env, cwd) {
       })
     ).stdout.trim();
   } catch (error) {
-    const code = `${error.stderr ?? ""}`.match(/\b(?:WINDOWS_COMPANION|RUNTIME)_[A-Z_]+\b/u)?.[0];
+    const stderr = error.stderr ?? "";
+    for (const line of stderr.split("\n")) {
+      if (/^WINDOWS_COMPANION_DIAGNOSTIC \{[A-Za-z0-9_\s"{},.:[\]\-]*\}$/u.test(line.trim()))
+        console.error(line.trim());
+    }
+    const code = stderr.match(/^(?:WINDOWS_COMPANION|RUNTIME)_[A-Z_]+$/mu)?.[0];
     throw new Error(code ?? "WINDOWS_COMPANION_SUBPROCESS_FAILED");
   }
 }
