@@ -134,3 +134,56 @@ test("all lifecycle operations contend on one kernel-owned lock and release afte
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("interrupted uninstall validates the remaining manifest subset and preserves its recovery record", async () => {
+  const { mkdir, writeFile, unlink } = await import("node:fs/promises");
+  const { dirname } = await import("node:path");
+  const { canonicalManifest, digest, REQUIRED_FILES } = await import("./companion-contract.mjs");
+  const { COMPANION_SOURCES } = await import("./companion-sources.mjs");
+  const { removeBoundPrograms } = await import("./lifecycle-release.mjs");
+  const { reference } = await import("./lifecycle-storage.mjs");
+  const root = await mkdtemp(join(tmpdir(), "laundry-uninstall-"));
+  const names = [...REQUIRED_FILES, `migrations/${entry.migrationHead}`].sort();
+  const bytes = Buffer.from("synthetic");
+  const manifest = {
+    schema: "laundry.windows.runtime-payload",
+    version: 1,
+    assurance: "development_only",
+    platform: "win32-x64",
+    source_git_sha: entry.source,
+    runtime_release: entry.release,
+    sources: COMPANION_SOURCES,
+    migration_head: entry.migrationHead,
+    migrations_sha256: entry.migrations,
+    files: names.map((path) => ({ path, size: bytes.length, sha256: digest(bytes) })),
+  };
+  const canonical = canonicalManifest(manifest);
+  const hash = digest(canonical);
+  const release = reference(manifest, hash);
+  const folder = join(root, "releases", hash);
+  try {
+    for (const path of names) {
+      await mkdir(dirname(join(folder, path)), { recursive: true });
+      await writeFile(join(folder, path), bytes);
+    }
+    await writeFile(join(folder, "runtime-payload.json"), canonical);
+    await writeFile(join(folder, "unowned.txt"), bytes);
+    await assert.rejects(
+      removeBoundPrograms(root, release, platform),
+      /UNINSTALL_CONTENT_CHANGED/u,
+    );
+    assert.deepEqual(await readFile(join(folder, names[0])), bytes);
+    await unlink(join(folder, "unowned.txt"));
+    await writeFile(join(folder, names[0]), "changed");
+    await assert.rejects(
+      removeBoundPrograms(root, release, platform),
+      /UNINSTALL_CONTENT_CHANGED/u,
+    );
+    await unlink(join(folder, names[0])); // Simulate a crash after one bound file was deleted.
+    await removeBoundPrograms(root, release, platform);
+    await removeBoundPrograms(root, release, platform);
+    assert.equal(await readFile(join(folder, "runtime-payload.json"), "utf8"), canonical);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

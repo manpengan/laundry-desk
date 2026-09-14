@@ -53,13 +53,29 @@ export function storage(platform, fault = async () => {}) {
     try {
       const opened = await file.stat();
       if (opened.ino !== before.ino || opened.dev !== before.dev) fail("STATE_CHANGED");
-      const bytes = await file.readFile();
+      const buffer = Buffer.alloc(65537);
+      let length = 0;
+      while (length < buffer.length) {
+        const chunk = await file.read(buffer, length, buffer.length - length, length);
+        if (!chunk.bytesRead) break;
+        length += chunk.bytesRead;
+      }
+      if (length > 65536) fail("STATE_TOO_LARGE");
+      const bytes = buffer.subarray(0, length);
       const after = await lstat(path);
       await platform.inspectPrivateFile(path);
+      const finished = await file.stat();
       if (
         after.ino !== before.ino ||
+        after.dev !== before.dev ||
+        after.ctimeMs !== before.ctimeMs ||
+        finished.ino !== before.ino ||
+        finished.dev !== before.dev ||
+        finished.nlink !== 1 ||
         after.mtimeMs !== before.mtimeMs ||
-        after.size !== bytes.length
+        finished.mtimeMs !== before.mtimeMs ||
+        after.size !== bytes.length ||
+        finished.size !== bytes.length
       )
         fail("STATE_CHANGED");
       return bytes.toString("utf8");

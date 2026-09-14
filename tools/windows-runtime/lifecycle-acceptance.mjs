@@ -286,6 +286,10 @@ try {
     ),
   );
 } catch (error) {
+  for (const line of (error.stderr ?? "").split("\n")) {
+    if (/^WINDOWS_COMPANION_DIAGNOSTIC \{[A-Za-z0-9_\s"{},.:[\]\-]*\}$/u.test(line.trim()))
+      console.error(line.trim());
+  }
   console.error(
     JSON.stringify({
       status: "failed",
