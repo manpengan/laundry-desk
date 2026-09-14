@@ -214,3 +214,42 @@ test(
     }
   },
 );
+
+test(
+  "Windows process identity accepts canonical PostgreSQL slashes and rejects extra authority",
+  { skip: process.platform !== "win32" },
+  async () => {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const { fileURLToPath } = await import("node:url");
+    const script = `
+    . $env:LAUNDRY_PS_IDENTITY_FILE
+    $exe='C:\\Private Runtime\\postgres\\bin\\postgres.exe'
+    $data='C:\\Private Runtime\\postgres-data'
+    $good='"C:/Private Runtime/postgres/bin/postgres.exe" -D "C:/Private Runtime/postgres-data" -h 127.0.0.1 -p 8543'
+    if (-not (Test-RuntimeCommand $good 8543 $exe '' $data)) { throw 'CANONICAL_PATH_REJECTED' }
+    foreach ($bad in @($good.Replace('postgres-data','other-data'), ($good + ' -c shared_preload_libraries=evil'), $good.Replace('127.0.0.1','0.0.0.0'), $good.Replace('8543','9999'))) {
+      if (Test-RuntimeCommand $bad 8543 $exe '' $data) { throw 'PROCESS_AUTHORITY_ACCEPTED' }
+    }
+    $node='C:\\Private Runtime\\node\\node.exe'; $entry='C:\\Private Runtime\\server\\kit-entrypoint.js'
+    $api='"C:\\Private Runtime\\node\\node.exe" "C:\\Private Runtime\\server\\kit-entrypoint.js" server'
+    if (-not (Test-RuntimeCommand $api 8787 $node $entry $data)) { throw 'SERVER_PATH_REJECTED' }
+    if (Test-RuntimeCommand ($api + ' extra') 8787 $node $entry $data) { throw 'SERVER_EXTRA_ACCEPTED' }
+  `;
+    await promisify(execFile)(
+      join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
+      ["-NoProfile", "-NonInteractive", "-Command", script],
+      {
+        env: {
+          ...process.env,
+          LAUNDRY_PS_IDENTITY_FILE: fileURLToPath(
+            new URL("lifecycle-identity.ps1", import.meta.url),
+          ),
+        },
+        timeout: 30000,
+        maxBuffer: 65536,
+        windowsHide: true,
+      },
+    );
+  },
+);

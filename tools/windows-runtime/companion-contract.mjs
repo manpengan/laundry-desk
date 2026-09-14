@@ -67,6 +67,7 @@ export const REQUIRED_FILES = Object.freeze([
   "scripts/lifecycle-database.mjs",
   "scripts/lifecycle-release.mjs",
   "scripts/lifecycle-host.ps1",
+  "scripts/lifecycle-identity.ps1",
   "scripts/lifecycle-launch.ps1",
 ]);
 

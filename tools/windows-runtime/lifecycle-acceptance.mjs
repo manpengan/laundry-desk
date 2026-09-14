@@ -331,7 +331,7 @@ try {
       status: "failed",
       scenario: scenarios.length,
       code:
-        (error.stderr ?? error.message).match(/WINDOWS_COMPANION_[A-Z_]+/u)?.[0] ??
+        (error.stderr ?? error.message).match(/^WINDOWS_COMPANION_[A-Z_]+$/mu)?.[0] ??
         "WINDOWS_COMPANION_ACCEPTANCE_FAILED",
     }),
   );
