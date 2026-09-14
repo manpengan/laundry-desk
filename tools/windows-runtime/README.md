@@ -2,7 +2,7 @@
 
 本工具实现 [ADR-67](../../docs/adr/2026-08-30-adr-67-windows-native-local-runtime.md) 的独立运行文件打包
 与无源码仓库加载验证，当前只产出 `development_only` payload。
-它不是安装器，不创建数据库、凭据或计划任务，不允许作为宏发真实运营包。现有
+包内新增独立安装生命周期入口，可创建合成数据库、私有凭据及登录任务，仍不允许作为宏发真实运营包。现有
 `install-development-runtime.ps1` 仍是依赖构建机源码的开发工具。
 
 ## 构建
@@ -39,17 +39,35 @@ smoke 的子进程使用包内固定 Node、仅含系统目录的 PATH 和受限
 调用同一 `migration-info` 并核对聚合摘要。通过只表示独立 payload 可加载，不代表数据库或柜台已安装。
 Windows Server CI 与目标 Windows 10/11 零售 PC 的现场验收分别记录。
 
-## 后续安装生命周期门禁
+## 独立安装生命周期
+
+先通过可信构建记录验证整个分发物和外部 manifest SHA，再执行包内入口：
+
+```powershell
+& <payload>\node\node.exe <payload>\scripts\lifecycle-cli.mjs install <payload> <manifest-sha256>
+```
+
+同一入口支持 `status`、`stop`、`start`、`repair`、`upgrade`、`rollback`、`uninstall`。
+`upgrade` 传入新完整包及其外部摘要；`rollback` 选择状态中保留的前一版本。
+只允许迁移头及聚合摘要均一致的升级；不同迁移必须另走数据库恢复方案。
+
+安装根固定为 `%LOCALAPPDATA%\laundry-desk-v2\runtime-companion`。初始化时创建两个独立合成管理员，
+凭据仅写入私有 `secrets` 下的 `laundry-bootstrap-admin-*` 与 `laundry-bootstrap-approver-*` 文件。
+登录任务使用固定包内 Node，并读取持久化版本指针；无需源码、系统 Node/pnpm、Docker 或 WSL。
+
+卸载必须从安装根之外的可信原始分发包执行，以免删除正在执行的 Windows 二进制。它保留数据库、
+密钥与恢复记录；重装要求同一发行摘要，完成恢复验证后才启动。半初始化不会自动重建数据库。
+
+软件证据与剩余边界见[生命周期记录](../../docs/operations/2026-09-13-windows-runtime-lifecycle-result.md)。
+
+## 后续现场与生产门禁
 
 执行顺序与失败重入矩阵见
 [Windows Runtime companion 后续交付计划](../../docs/superpowers/plans/2026-09-12-windows-runtime-companion-delivery.md)。
 
-- 私有 DACL 根、版本目录、崩溃安全指针、安装/修复/停止/重启；
-- 无源码仓库且无系统 Node/pnpm 条件下安装，卸载保留数据库和密钥；
-- 同迁移跨版本升级/回滚，迁移变化时的备份与联合恢复；
+- 迁移变化时的备份与数据库联合恢复；
 - Authenticode 或获裁决的受控内部分发策略；
 - 目标 Windows 10/11、中文 IME、150% DPI、三类打印机现场证据；
 - ADR-65 独立生产候选、离机恢复、告警送达、容量与真实数据责任。
 
-本批不会把这些未取得的证据记为通过。首次进入安装器实现前，按这些条件冻结安装状态机与失败重入
-测试；不让 Electron 负责数据库生命周期。
+这些现场与生产证据不由 Windows Server CI 替代。Electron 继续不负责数据库生命周期。

@@ -25,7 +25,7 @@ permissions:
 jobs:
   windows-runtime-payload:
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -62,6 +62,8 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: |
           $trustedNode = (Get-Command node.exe).Source
+          $acceptance = Join-Path $env:RUNNER_TEMP 'lifecycle-acceptance.mjs'
+          Copy-Item (Join-Path $env:GITHUB_WORKSPACE 'tools/windows-runtime/lifecycle-acceptance.mjs') $acceptance
           $hiddenSource = Join-Path $env:RUNNER_TEMP 'laundry-source-unavailable'
           if (Test-Path -LiteralPath $hiddenSource) { throw 'WINDOWS_COMPANION_SOURCE_BACKUP_EXISTS' }
           New-Item -ItemType Directory -Path $hiddenSource | Out-Null
@@ -76,6 +78,12 @@ jobs:
             }
             & $trustedNode "$env:LAUNDRY_PAYLOAD/scripts/smoke-companion.mjs" $env:LAUNDRY_PAYLOAD $env:LAUNDRY_MANIFEST_SHA256
             if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_SMOKE_FAILED' }
+            $savedPath = $env:PATH
+            try {
+              $env:PATH = Join-Path $env:SystemRoot 'System32'
+              & "$env:LAUNDRY_PAYLOAD/node/node.exe" $acceptance $env:LAUNDRY_PAYLOAD $env:LAUNDRY_MANIFEST_SHA256 (Join-Path $env:RUNNER_TEMP 'runtime-lifecycle-result.json')
+              if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_LIFECYCLE_ACCEPTANCE_FAILED' }
+            } finally { $env:PATH = $savedPath }
           } finally {
             Get-ChildItem -LiteralPath $hiddenSource -Force | ForEach-Object {
               Move-Item -LiteralPath $_.FullName -Destination $env:GITHUB_WORKSPACE -Force
@@ -87,5 +95,6 @@ jobs:
           path: |
             ${{ runner.temp }}/laundry-no-repo-runtime
             ${{ runner.temp }}/runtime-build-result.json
+            ${{ runner.temp }}/runtime-lifecycle-result.json
           if-no-files-found: error
           include-hidden-files: true
