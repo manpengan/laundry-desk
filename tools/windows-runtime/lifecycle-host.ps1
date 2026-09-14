@@ -10,8 +10,9 @@ Set-StrictMode -Version Latest
 $TaskName = 'LaundryDeskV2RuntimeCompanion'
 $Node = Join-Path $Payload 'node\node.exe'
 $Entry = Join-Path $Payload 'server\dist\runtime\kit-entrypoint.js'
-$Launcher = Join-Path $Payload 'scripts\lifecycle-cli.mjs'
-$Arguments = '"' + $Launcher + '" start "' + $Payload + '" ' + $ManifestDigest
+$Launcher = Join-Path $Payload 'scripts\lifecycle-launch.ps1'
+$TaskExecutable = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $Launcher + '" -Action start -Payload "' + $Payload + '" -ManifestDigest ' + $ManifestDigest
 $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 
 function Resolve-UserSid {
@@ -24,7 +25,7 @@ function Assert-Task {
   $task = Get-ScheduledTask -TaskName $TaskName -TaskPath '\' -ErrorAction SilentlyContinue
   if ($null -eq $task) { return $null }
   $sid = Resolve-UserSid $task.Principal.UserId
-  if ($task.Actions.Count -ne 1 -or $task.Actions[0].Execute -cne $Node -or
+  if ($task.Actions.Count -ne 1 -or $task.Actions[0].Execute -cne $TaskExecutable -or
       $task.Actions[0].Arguments -cne $Arguments -or $task.Actions[0].WorkingDirectory -cne $Root -or
       $sid -ne $Identity.User.Value -or $task.Principal.LogonType -ne 'Interactive' -or
       $task.Principal.RunLevel -ne 'Limited' -or $task.Settings.AllowHardTerminate -or
@@ -81,7 +82,7 @@ try {
   switch ($Action) {
     'task-register' {
       if ($null -eq $task) {
-        $entry = New-ScheduledTaskAction -Execute $Node -Argument $Arguments -WorkingDirectory $Root
+        $entry = New-ScheduledTaskAction -Execute $TaskExecutable -Argument $Arguments -WorkingDirectory $Root
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $Identity.Name
         $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -DisallowHardTerminate -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable
         $principal = New-ScheduledTaskPrincipal -UserId $Identity.Name -LogonType Interactive -RunLevel Limited

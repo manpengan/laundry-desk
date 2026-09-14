@@ -187,3 +187,30 @@ test("interrupted uninstall validates the remaining manifest subset and preserve
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test(
+  "lifecycle PowerShell boundaries parse on Windows PowerShell 5.1",
+  { skip: process.platform !== "win32" },
+  async () => {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const { fileURLToPath } = await import("node:url");
+    const script =
+      "$errors=$null; $tokens=$null; [System.Management.Automation.Language.Parser]::ParseFile($env:LAUNDRY_PS_PARSE_FILE,[ref]$tokens,[ref]$errors) | Out-Null; if ($errors.Count -ne 0) { throw 'WINDOWS_COMPANION_POWERSHELL_SYNTAX_INVALID' }";
+    for (const name of ["lifecycle-host.ps1", "lifecycle-launch.ps1"]) {
+      await promisify(execFile)(
+        join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
+        ["-NoProfile", "-NonInteractive", "-Command", script],
+        {
+          env: {
+            ...process.env,
+            LAUNDRY_PS_PARSE_FILE: fileURLToPath(new URL(name, import.meta.url)),
+          },
+          timeout: 30000,
+          maxBuffer: 65536,
+          windowsHide: true,
+        },
+      );
+    }
+  },
+);

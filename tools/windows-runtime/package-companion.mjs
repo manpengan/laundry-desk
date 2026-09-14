@@ -34,6 +34,7 @@ const scriptNames = [
   "lifecycle-database.mjs",
   "lifecycle-release.mjs",
   "lifecycle-host.ps1",
+  "lifecycle-launch.ps1",
 ];
 
 function buildEnvironment() {

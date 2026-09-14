@@ -26,9 +26,35 @@ let activePayload = payload;
 let activeDigest = expectedDigest;
 async function command(action, source = payload, hash = expectedDigest) {
   const result = await execute(
-    node,
-    [join(source, "scripts/lifecycle-cli.mjs"), action, source, hash],
-    { env, cwd: payload, windowsHide: true, timeout: 600000, maxBuffer: 65536 },
+    join(env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      join(source, "scripts/lifecycle-launch.ps1"),
+      "-Action",
+      action,
+      "-Payload",
+      source,
+      "-ManifestDigest",
+      hash,
+    ],
+    {
+      env: {
+        ...env,
+        NODE_OPTIONS: "--require=C:/laundry-injection-must-not-load.cjs",
+        NODE_PATH: "C:/laundry-injection",
+        DATABASE_URL: "forbidden",
+        PGHOST: "forbidden",
+        LAUNDRY_PUBLIC_ORIGIN: "forbidden",
+      },
+      cwd: payload,
+      windowsHide: true,
+      timeout: 600000,
+      maxBuffer: 65536,
+    },
   );
   return JSON.parse(result.stdout);
 }

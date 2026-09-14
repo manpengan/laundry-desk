@@ -44,8 +44,10 @@ Windows Server CI 与目标 Windows 10/11 零售 PC 的现场验收分别记录�
 先通过可信构建记录验证整个分发物和外部 manifest SHA，再执行包内入口：
 
 ```powershell
-& <payload>\node\node.exe <payload>\scripts\lifecycle-cli.mjs install <payload> <manifest-sha256>
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <payload>\scripts\lifecycle-launch.ps1 -Action install -Payload <payload> -ManifestDigest <manifest-sha256>
 ```
+
+启动脚本在 Node 执行前清除注入环境并验证 Node/脚本摘要；不要绕过该入口直接启动 Node。
 
 同一入口支持 `status`、`stop`、`start`、`repair`、`upgrade`、`rollback`、`uninstall`。
 `upgrade` 传入新完整包及其外部摘要；`rollback` 选择状态中保留的前一版本。
