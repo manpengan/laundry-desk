@@ -182,3 +182,27 @@ test("helper sidecar must match the helper inside the bound payload", async (t) 
   await assert.rejects(inspectCompanion(root, digest(text)), /HELPER_DIGEST_MISMATCH/u);
   assert.equal((await readFile(join(root, sidecar), "utf8")).length, 65);
 });
+
+test("release staging copies into a private staging directory and publishes only verified content", async (t) => {
+  const { stageRelease } = await import("./lifecycle-release.mjs");
+  const { root: source, hash, manifest } = await fixture(t);
+  const root = await mkdtemp(join(await realpath(tmpdir()), "laundry-stage-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "releases"));
+  const calls = [];
+  const platform = {
+    securePrivateDirectory: async (path) => {
+      calls.push(["private", path]);
+    },
+    flushDirectoryDurably: async (path) => {
+      calls.push(["flush", path]);
+    },
+  };
+  const result = await stageRelease(root, source, hash, platform);
+  assert.deepEqual(result.manifest, manifest);
+  assert.equal(result.payload, join(root, "releases", hash));
+  assert.equal(calls[0][0], "private");
+  assert.deepEqual(calls.at(-1), ["flush", join(root, "releases")]);
+  assert.deepEqual(await inspectCompanion(result.payload, hash), manifest);
+  assert.deepEqual(await stageRelease(root, source, hash, platform), result);
+});

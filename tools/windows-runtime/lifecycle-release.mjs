@@ -1,4 +1,4 @@
-import { cp, mkdir, open, rename, rm, readFile, unlink, rmdir } from "node:fs/promises";
+import { cp, mkdir, open, rename, rm, readFile, unlink, rmdir, readdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { inspectCompanion } from "./inspect-companion.mjs";
@@ -16,7 +16,15 @@ export async function stageRelease(root, source, expectedDigest, platform) {
   await mkdir(temporary, { mode: 0o700 });
   await platform.securePrivateDirectory(temporary);
   try {
-    await cp(source, temporary, { recursive: true, force: false, errorOnExist: true });
+    // Keep the pre-created protected root. Copy its children into absent targets;
+    // Node 22 rejects cp(directory, existingDirectory) with errorOnExist enabled.
+    for (const name of await readdir(source)) {
+      await cp(join(source, name), join(temporary, name), {
+        recursive: true,
+        force: false,
+        errorOnExist: true,
+      });
+    }
     const manifest = await inspectCompanion(temporary, expectedDigest);
     const contents = await inventory(temporary);
     // Flush every copied byte before publishing a directory or a version pointer.
