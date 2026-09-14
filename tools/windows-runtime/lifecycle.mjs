@@ -10,6 +10,7 @@ import {
   readState,
   reference,
   requireCompatible,
+  requireState,
   storage,
   withOperationLock,
 } from "./lifecycle-storage.mjs";
@@ -76,7 +77,7 @@ export async function lifecycle(action, source, expectedDigest) {
     }
     if (!state && existed) fail("UNOWNED_INSTALLATION");
     const save = async (next) => {
-      await io.write(join(root, "state.json"), JSON.stringify(next));
+      await io.write(join(root, "state.json"), JSON.stringify(requireState(next)));
       state = next;
     };
     const task = async (verb, payload, entry) => {
@@ -140,6 +141,7 @@ export async function lifecycle(action, source, expectedDigest) {
         previous: null,
         controller: entry,
         pending: null,
+        releases: [entry],
       });
       await initializeSecrets(root, io);
       await initializeDatabase(root, staged.payload, staged.manifest, io, platform);
@@ -173,13 +175,7 @@ export async function lifecycle(action, source, expectedDigest) {
           // Commit the recovery record before removing only manifest-bound program trees.
           await save({ ...state, phase: "uninstalled" });
         }
-        for (const entry of [
-          ...new Map(
-            [state.current, state.previous, state.controller]
-              .filter(Boolean)
-              .map((entry) => [entry.digest, entry]),
-          ).values(),
-        ]) {
+        for (const entry of state.releases) {
           const path = join(root, "releases", entry.digest);
           if (await exists(path)) {
             await removeBoundPrograms(root, entry, platform);
@@ -199,7 +195,12 @@ export async function lifecycle(action, source, expectedDigest) {
           await rm(retired, { recursive: true });
         }
         await stageRelease(root, source, expectedDigest, platform);
-        await save({ ...state, controller: state.current });
+        await save({
+          ...state,
+          controller: state.current,
+          previous: null,
+          releases: [state.current],
+        });
         const payload = await verifyStopped(state.current);
         await task("register", payload, state.current);
         await save({ ...state, previous: null, phase: "stopped" });
@@ -218,8 +219,11 @@ export async function lifecycle(action, source, expectedDigest) {
         requireCompatible(old, next);
         if (["install", "repair"].includes(action) && next.digest !== old.digest)
           fail("UPGRADE_REQUIRED");
+        const retained = state.releases.some((entry) => entry.digest === next.digest);
+        if (!retained && state.releases.length >= 16) fail("RELEASE_RETENTION_FULL");
         if (action === "rollback") await verify(next);
         else await stageRelease(root, source, expectedDigest, platform);
+        if (!retained) await save({ ...state, releases: [...state.releases, next] });
         await stop(old);
         await save({ ...state, phase: "stopped" });
         const oldState = state;

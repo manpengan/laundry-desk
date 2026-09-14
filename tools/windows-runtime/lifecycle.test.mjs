@@ -58,10 +58,14 @@ test("persistent state rejects extra authority, malformed paths and missing cont
     previous: null,
     controller: entry,
     pending: null,
+    releases: [entry],
   };
   assert.equal(requireState(state), state);
   for (const changed of [
     { ...state, controller: null },
+    { ...state, releases: [] },
+    { ...state, releases: [entry, entry] },
+    { ...state, pending: { ...entry, digest: "f".repeat(64) } },
     { ...state, root: "C:\\arbitrary" },
     { ...state, assurance: "production" },
     { ...state, current: { ...entry, digest: "../escape" } },

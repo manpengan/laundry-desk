@@ -221,6 +221,31 @@ try {
     await exited;
     assert.equal((await command("status")).status, "running");
   });
+  await scenario("failed-candidate-verification-restores-old-release", async () => {
+    const broken = await variant("laundry-runtime-broken", (value) => {
+      value.runtime_release = "0.1.0-win-dev.3";
+    });
+    const value = JSON.parse(await readFile(join(broken.folder, "runtime-payload.json")));
+    const file = value.files.find((file) => file.path === `migrations/${value.migration_head}`);
+    const bytes = Buffer.concat([
+      await readFile(join(broken.folder, file.path)),
+      Buffer.from("\n-- acceptance mismatch\n"),
+    ]);
+    await writeFile(join(broken.folder, file.path), bytes);
+    file.size = bytes.length;
+    file.sha256 = digest(bytes);
+    const canonical = canonicalManifest(value);
+    await writeFile(join(broken.folder, "runtime-payload.json"), canonical);
+    await rejected(
+      "upgrade",
+      broken.folder,
+      digest(canonical),
+      /RUNTIME_MIGRATION_BUNDLE_MISMATCH/u,
+    );
+    assert.equal((await command("status")).manifest_sha256, expectedDigest);
+    assert.equal(await secretDigest(), beforeSecrets);
+    assert.equal(await sql("SELECT count(*) FROM public.runtime_acceptance_probe"), "2");
+  });
   const different = await variant("laundry-runtime-migration-change", (value) => {
     value.migrations_sha256 = "f".repeat(64);
   });

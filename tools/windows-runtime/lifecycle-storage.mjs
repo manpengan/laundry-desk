@@ -123,13 +123,23 @@ export function requireState(value) {
       "previous",
       "controller",
       "pending",
+      "releases",
     ]) ||
+    !Array.isArray(value.releases) ||
+    value.releases.length < 1 ||
+    value.releases.length > 16 ||
     value.schema !== 1 ||
     value.assurance !== "development_only" ||
     !["staged", "initialized", "stopped", "running", "uninstalled"].includes(value.phase)
   )
     fail("STATE_INVALID");
-  for (const entry of [value.current, value.previous, value.controller, value.pending]) {
+  for (const entry of [
+    value.current,
+    value.previous,
+    value.controller,
+    value.pending,
+    ...value.releases,
+  ]) {
     if (entry === null) continue;
     if (
       !exactKeys(entry, ["digest", "release", "source", "migrationHead", "migrations"]) ||
@@ -141,7 +151,19 @@ export function requireState(value) {
     )
       fail("STATE_INVALID");
   }
-  if (!value.current || !value.controller) fail("STATE_INVALID");
+  if (
+    !value.current ||
+    !value.controller ||
+    value.releases.some((entry) => !entry) ||
+    new Set(value.releases.map((entry) => entry.digest)).size !== value.releases.length
+  )
+    fail("STATE_INVALID");
+  for (const entry of [value.current, value.previous, value.controller, value.pending].filter(
+    Boolean,
+  )) {
+    if (!value.releases.some((bound) => JSON.stringify(bound) === JSON.stringify(entry)))
+      fail("STATE_INVALID");
+  }
   return value;
 }
 

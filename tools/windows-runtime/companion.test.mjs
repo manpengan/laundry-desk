@@ -205,4 +205,8 @@ test("release staging copies into a private staging directory and publishes only
   assert.deepEqual(calls.at(-1), ["flush", join(root, "releases")]);
   assert.deepEqual(await inspectCompanion(result.payload, hash), manifest);
   assert.deepEqual(await stageRelease(root, source, hash, platform), result);
+  const { removeBoundPrograms } = await import("./lifecycle-release.mjs");
+  const { reference } = await import("./lifecycle-storage.mjs");
+  await removeBoundPrograms(root, reference(manifest, hash), platform);
+  assert.deepEqual(await stageRelease(root, source, hash, platform), result);
 });

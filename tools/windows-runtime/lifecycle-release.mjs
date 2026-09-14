@@ -10,7 +10,20 @@ export async function stageRelease(root, source, expectedDigest, platform) {
   const releases = join(root, "releases");
   const target = join(releases, expectedDigest);
   if (await exists(target)) {
-    return { payload: target, manifest: await inspectCompanion(target, expectedDigest) };
+    const contents = await inventory(target);
+    if (
+      contents.files.length === 1 &&
+      contents.files[0].path === MANIFEST_NAME &&
+      !contents.directories.length
+    ) {
+      parseManifest(await readFile(join(target, MANIFEST_NAME)), expectedDigest);
+      const retired = join(releases, `.uninstalled-${randomUUID()}`);
+      await rename(target, retired);
+      await platform.flushDirectoryDurably(releases);
+      await rm(retired, { recursive: true });
+    } else {
+      return { payload: target, manifest: await inspectCompanion(target, expectedDigest) };
+    }
   }
   const temporary = join(releases, `.staging-${randomUUID()}`);
   await mkdir(temporary, { mode: 0o700 });
