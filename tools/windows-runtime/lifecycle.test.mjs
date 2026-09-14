@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, chmod, rename, open, lstat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, chmod, rename, open, lstat, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -97,7 +97,7 @@ test("launcher inherits only explicit OS context; secrets and injection are drop
 
 for (const point of ["before-replace", "after-replace", "after-flush"]) {
   test(`commit failure at ${point} leaves one complete recoverable pointer`, async () => {
-    const root = await mkdtemp(join(tmpdir(), "laundry-pointer-"));
+    const root = await mkdtemp(join(await realpath(tmpdir()), "laundry-pointer-"));
     try {
       const path = join(root, "state.json");
       await storage(platform).write(path, JSON.stringify({ version: "old" }));
@@ -115,7 +115,7 @@ for (const point of ["before-replace", "after-replace", "after-flush"]) {
 }
 
 test("all lifecycle operations contend on one kernel-owned lock and release after errors", async () => {
-  const root = await mkdtemp(join(tmpdir(), "laundry-lock-"));
+  const root = await mkdtemp(join(await realpath(tmpdir()), "laundry-lock-"));
   try {
     await withOperationLock(root, async () => {
       await assert.rejects(
@@ -142,7 +142,7 @@ test("interrupted uninstall validates the remaining manifest subset and preserve
   const { COMPANION_SOURCES } = await import("./companion-sources.mjs");
   const { removeBoundPrograms } = await import("./lifecycle-release.mjs");
   const { reference } = await import("./lifecycle-storage.mjs");
-  const root = await mkdtemp(join(tmpdir(), "laundry-uninstall-"));
+  const root = await mkdtemp(join(await realpath(tmpdir()), "laundry-uninstall-"));
   const names = [...REQUIRED_FILES, `migrations/${entry.migrationHead}`].sort();
   const bytes = Buffer.from("synthetic");
   const manifest = {
