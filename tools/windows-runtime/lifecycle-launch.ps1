@@ -45,8 +45,30 @@ try {
   }
   $Node = Join-Path $Payload 'node\node.exe'
   $Entry = Join-Path $Payload 'scripts\lifecycle-cli.mjs'
-  & $Node $Entry $Action $Payload $ManifestDigest
-  exit $LASTEXITCODE
+  # Wait only for the direct controller. A PowerShell native pipeline may retain
+  # console descendants, including the intentionally long-lived database.
+  $rendered = @(@($Entry, $Action, $Payload, $ManifestDigest) | ForEach-Object {
+    if ($_ -match '["\r\n\x00]') { throw 'WINDOWS_COMPANION_LAUNCH_ARGUMENT_INVALID' }
+    '"' + [regex]::Replace($_, '(\\+)$', '$1$1') + '"'
+  })
+  $start = New-Object Diagnostics.ProcessStartInfo
+  $start.FileName = $Node
+  $start.Arguments = $rendered -join ' '
+  $start.WorkingDirectory = $Payload
+  $start.UseShellExecute = $false
+  $start.CreateNoWindow = $true
+  $start.RedirectStandardOutput = $true
+  $start.RedirectStandardError = $true
+  $child = [Diagnostics.Process]::Start($start)
+  try {
+    $stdout = $child.StandardOutput.ReadToEndAsync()
+    $stderr = $child.StandardError.ReadToEndAsync()
+    if (-not $child.WaitForExit(900000)) { $child.Kill(); throw 'WINDOWS_COMPANION_LAUNCH_TIMEOUT' }
+    if (-not $stdout.Wait(10000) -or -not $stderr.Wait(10000)) { throw 'WINDOWS_COMPANION_LAUNCH_OUTPUT_TIMEOUT' }
+    [Console]::Out.Write($stdout.Result)
+    [Console]::Error.Write($stderr.Result)
+    exit $child.ExitCode
+  } finally { $child.Dispose() }
 } catch {
   $code = [string]$_.Exception.Message
   if ($code -notmatch '^WINDOWS_COMPANION_[A-Z_]+$') { $code = 'WINDOWS_COMPANION_LAUNCH_FAILED' }

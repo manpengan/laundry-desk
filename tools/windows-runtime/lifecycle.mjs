@@ -58,9 +58,9 @@ export async function lifecycle(action, source, expectedDigest) {
     if (!existed && action !== "install") fail("NOT_INSTALLED");
     if (!existed) {
       const preflightEntry = reference(supplied, expectedDigest);
-      if ((await host("task-inspect", dirname(root), source, preflightEntry.digest)).exists)
+      if ((await host("task-inspect", root, source, preflightEntry.digest)).exists)
         fail("TASK_CONFLICT");
-      const ports = await host("ports", dirname(root), source, expectedDigest);
+      const ports = await host("ports", root, source, expectedDigest);
       if (ports.api || ports.postgres) fail("PORT_CONFLICT");
     }
     if (action === "uninstall") {
@@ -124,11 +124,6 @@ export async function lifecycle(action, source, expectedDigest) {
       }
     }
     if (!state) {
-      // Never claim an unknown task, existing development server, or occupied port.
-      if ((await task("inspect", source, reference(supplied, expectedDigest))).exists)
-        fail("TASK_CONFLICT");
-      const ports = await host("ports", root, source, expectedDigest);
-      if (ports.api || ports.postgres) fail("PORT_CONFLICT");
       await io.directory(join(root, "releases"));
       await io.directory(join(root, "logs"));
       const staged = await stageRelease(root, source, expectedDigest, platform);

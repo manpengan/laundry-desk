@@ -40,6 +40,10 @@ function Assert-Task {
 
 function Inspect-Port {
   param([int]$Port, [string]$Executable)
+  # Avoid the slow CIM no-match path. A missing listener has no process to own;
+  # startup still rechecks both actual listeners before reporting ready.
+  $listening = @([Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() | Where-Object { $_.Port -eq $Port })
+  if ($listening.Count -eq 0) { return $null }
   $connections = @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue)
   if ($connections.Count -eq 0) { return $null }
   if ($connections.Count -ne 1 -or $connections[0].LocalAddress -ne '127.0.0.1') {
