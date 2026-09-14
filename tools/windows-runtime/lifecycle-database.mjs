@@ -47,7 +47,7 @@ export function kit(payload, command, env, root) {
   );
 }
 
-export async function initializeDatabase(root, payload, manifest, io) {
+export async function initializeDatabase(root, payload, manifest, io, platform) {
   if (await exists(join(root, "postgres-data"))) fail("PARTIAL_INITIALIZATION");
   const env = await runtimeEnvironment(root, payload, manifest, io);
   await run(
@@ -65,7 +65,9 @@ export async function initializeDatabase(root, payload, manifest, io) {
     cleanEnvironment(),
     root,
   );
-  // initdb owns the data subtree; the private installation root supplies inherited DACLs.
+  await platform.securePrivateDirectory(join(root, "postgres-data"));
+  await platform.inspectPrivateDirectory(join(root, "postgres-data"));
+  await platform.flushDirectoryDurably(root);
   await pgControl("start", root, payload, env);
   try {
     await run(

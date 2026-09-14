@@ -99,13 +99,21 @@ export function storage(platform, fault = async () => {}) {
 
 export function requireState(value) {
   if (
-    !exactKeys(value, ["schema", "assurance", "phase", "current", "previous", "controller"]) ||
+    !exactKeys(value, [
+      "schema",
+      "assurance",
+      "phase",
+      "current",
+      "previous",
+      "controller",
+      "pending",
+    ]) ||
     value.schema !== 1 ||
     value.assurance !== "development_only" ||
     !["staged", "initialized", "stopped", "running", "uninstalled"].includes(value.phase)
   )
     fail("STATE_INVALID");
-  for (const entry of [value.current, value.previous, value.controller]) {
+  for (const entry of [value.current, value.previous, value.controller, value.pending]) {
     if (entry === null) continue;
     if (
       !exactKeys(entry, ["digest", "release", "source", "migrationHead", "migrations"]) ||

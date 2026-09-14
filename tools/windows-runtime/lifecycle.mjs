@@ -1,4 +1,5 @@
-import { mkdir, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, rm, rename } from "node:fs/promises";
 import { dirname, join, resolve, relative, isAbsolute } from "node:path";
 import { inspectCompanion } from "./inspect-companion.mjs";
 import { requireRealDirectory } from "./companion-files.mjs";
@@ -12,7 +13,7 @@ import {
   storage,
   withOperationLock,
 } from "./lifecycle-storage.mjs";
-import { stageRelease, verifyRelease } from "./lifecycle-release.mjs";
+import { stageRelease, verifyRelease, removeBoundPrograms } from "./lifecycle-release.mjs";
 import { host, health, pgControl, startServer } from "./lifecycle-process.mjs";
 import { runtimeEnvironment, cleanEnvironment } from "./lifecycle-environment.mjs";
 import {
@@ -138,15 +139,27 @@ export async function lifecycle(action, source, expectedDigest) {
         current: entry,
         previous: null,
         controller: entry,
+        pending: null,
       });
       await initializeSecrets(root, io);
-      await initializeDatabase(root, staged.payload, staged.manifest, io);
+      await initializeDatabase(root, staged.payload, staged.manifest, io, platform);
       await save({ ...state, phase: "initialized" });
       await task("register", staged.payload, entry);
       await save({ ...state, phase: "stopped" });
       await start(entry);
     } else {
-      if (state.phase === "staged") fail("PARTIAL_INITIALIZATION");
+      if (state.phase === "staged") {
+        if (action === "stop") {
+          await stop(state.current);
+          return { status: "staged", assurance: "development_only" };
+        }
+        fail("PARTIAL_INITIALIZATION");
+      }
+      if (state.pending) {
+        requireCompatible(state.current, state.pending);
+        await stop(state.pending);
+        await save({ ...state, pending: null, phase: "stopped" });
+      }
       if (action === "status") {
         if (state.phase !== "uninstalled") {
           const current = await verify(state.current);
@@ -169,14 +182,22 @@ export async function lifecycle(action, source, expectedDigest) {
         ]) {
           const path = join(root, "releases", entry.digest);
           if (await exists(path)) {
-            await verify(entry);
-            await rm(path, { recursive: true });
-            await platform.flushDirectoryDurably(join(root, "releases"));
+            await removeBoundPrograms(root, entry, platform);
           }
         }
       } else if (state.phase === "uninstalled") {
         if (action !== "install" || expectedDigest !== state.current.digest)
           fail("REINSTALL_SAME_RELEASE_REQUIRED");
+        await removeBoundPrograms(root, state.current, platform);
+        // Only a checked manifest stub remains. Move it out of the publication path
+        // before restoring a complete release; no database or secret is touched.
+        const stub = join(root, "releases", expectedDigest);
+        if (await exists(stub)) {
+          const retired = join(root, "releases", `.uninstalled-${randomUUID()}`);
+          await rename(stub, retired);
+          await platform.flushDirectoryDurably(join(root, "releases"));
+          await rm(retired, { recursive: true });
+        }
         await stageRelease(root, source, expectedDigest, platform);
         await save({ ...state, controller: state.current });
         const payload = await verifyStopped(state.current);
@@ -202,6 +223,7 @@ export async function lifecycle(action, source, expectedDigest) {
         await stop(old);
         await save({ ...state, phase: "stopped" });
         const oldState = state;
+        await save({ ...state, pending: next });
         const oldPayload = (await verify(old)).payload;
         let nextPayload;
         try {
@@ -210,6 +232,7 @@ export async function lifecycle(action, source, expectedDigest) {
           await save({
             ...state,
             current: next,
+            pending: null,
             previous: next.digest === old.digest ? state.previous : old,
             phase: "stopped",
           });

@@ -57,6 +57,7 @@ test("persistent state rejects extra authority, malformed paths and missing cont
     current: entry,
     previous: null,
     controller: entry,
+    pending: null,
   };
   assert.equal(requireState(state), state);
   for (const changed of [

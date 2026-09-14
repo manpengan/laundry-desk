@@ -1,8 +1,9 @@
-import { cp, mkdir, open, rename, rm } from "node:fs/promises";
+import { cp, mkdir, open, rename, rm, readFile, unlink, rmdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import { inspectCompanion } from "./inspect-companion.mjs";
 import { inventory, requireRealDirectory } from "./companion-files.mjs";
+import { MANIFEST_NAME, parseManifest, fail } from "./companion-contract.mjs";
 import { exists, reference } from "./lifecycle-storage.mjs";
 
 export async function stageRelease(root, source, expectedDigest, platform) {
@@ -49,4 +50,29 @@ export async function verifyRelease(root, entry) {
   if (JSON.stringify(reference(manifest, entry.digest)) !== JSON.stringify(entry))
     throw new Error("WINDOWS_COMPANION_RELEASE_IDENTITY_INVALID");
   return { payload, manifest };
+}
+
+// Keep the externally bound manifest as the uninstall recovery record. Each retry
+// verifies the remaining subset before removing anything, including empty folders.
+export async function removeBoundPrograms(root, entry, platform) {
+  const payload = join(root, "releases", entry.digest);
+  if (!(await exists(payload))) return;
+  const manifest = parseManifest(await readFile(join(payload, MANIFEST_NAME)), entry.digest);
+  if (JSON.stringify(reference(manifest, entry.digest)) !== JSON.stringify(entry))
+    fail("RELEASE_IDENTITY_INVALID");
+  const remaining = await inventory(payload, [MANIFEST_NAME]);
+  const expected = new Map(manifest.files.map((file) => [file.path, file]));
+  for (const file of remaining.files) {
+    const bound = expected.get(file.path);
+    if (!bound || bound.size !== file.size || bound.sha256 !== file.sha256)
+      fail("UNINSTALL_CONTENT_CHANGED");
+  }
+  for (const directory of remaining.directories) {
+    if (!manifest.files.some((file) => file.path.startsWith(`${directory}/`)))
+      fail("UNINSTALL_CONTENT_CHANGED");
+  }
+  for (const file of remaining.files) await unlink(join(payload, file.path));
+  for (const directory of remaining.directories.sort((a, b) => b.length - a.length))
+    await rmdir(join(payload, directory));
+  await platform.flushDirectoryDurably(payload);
 }

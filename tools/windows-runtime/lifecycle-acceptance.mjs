@@ -1,6 +1,6 @@
 // Windows CI only. This harness is copied outside the checkout, never shipped in payload.
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { cp, readFile, writeFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -11,10 +11,10 @@ const [payload, expectedDigest, reportFile] = process.argv.slice(2);
 assert.equal(process.platform, "win32");
 const load = (name) => import(pathToFileURL(join(payload, "scripts", name)).href);
 const { digest, canonicalManifest } = await load("companion-contract.mjs");
-const { storage, loadPlatform, withOperationLock } = await load("lifecycle-storage.mjs");
-const { cleanEnvironment } = await load("lifecycle-environment.mjs");
+const { storage, loadPlatform, withOperationLock, reference } = await load("lifecycle-storage.mjs");
+const { cleanEnvironment, runtimeEnvironment } = await load("lifecycle-environment.mjs");
 const { installationRoot } = await load("lifecycle.mjs");
-const { host } = await load("lifecycle-process.mjs");
+const { host, pgControl, health } = await load("lifecycle-process.mjs");
 const root = installationRoot();
 const env = cleanEnvironment();
 const node = join(payload, "node/node.exe");
@@ -132,6 +132,59 @@ try {
     assert.equal(await secretDigest(), beforeSecrets);
     assert.equal(await sql("SELECT count(*) FROM public.runtime_acceptance_probe"), "2");
   });
+  await scenario("recover-interrupted-candidate-verification", async () => {
+    await command("stop");
+    const statePath = join(root, "state.json");
+    const state = JSON.parse(await io.read(statePath));
+    const candidate = JSON.parse(await readFile(join(second.folder, "runtime-payload.json")));
+    const selected = join(root, "releases", second.hash);
+    await io.write(
+      statePath,
+      JSON.stringify({ ...state, pending: reference(candidate, second.hash) }),
+    );
+    await pgControl(
+      "start",
+      root,
+      selected,
+      await runtimeEnvironment(root, selected, candidate, io),
+    );
+    assert.equal((await command("start")).manifest_sha256, expectedDigest);
+    assert.equal(await sql("SELECT count(*) FROM public.runtime_acceptance_probe"), "2");
+  });
+  await scenario("scheduled-launcher-action", async () => {
+    await command("stop");
+    const selected = join(root, "releases", expectedDigest);
+    await host("task-enable", root, selected, expectedDigest);
+    await execute(
+      join(env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Start-ScheduledTask -TaskName LaundryDeskV2RuntimeCompanion",
+      ],
+      { env, cwd: payload },
+    );
+    await health(root, selected, expectedDigest);
+  });
+  await scenario("lock-owner-process-death", async () => {
+    const script = `const {withOperationLock}=await import(${JSON.stringify(pathToFileURL(join(payload, "scripts/lifecycle-storage.mjs")).href)}); await withOperationLock(${JSON.stringify(root)},async()=>{console.log('LOCKED');await new Promise(()=>{});});`;
+    const child = spawn(node, ["--input-type=module", "-e", script], {
+      env,
+      cwd: payload,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    await new Promise((resolve, reject) => {
+      child.stdout.once("data", resolve);
+      child.once("error", reject);
+      child.once("exit", () => reject(new Error("LOCK_OWNER_EXITED")));
+    });
+    const exited = new Promise((resolve) => child.once("exit", resolve));
+    child.kill();
+    await exited;
+    assert.equal((await command("status")).status, "running");
+  });
   const different = await variant("laundry-runtime-migration-change", (value) => {
     value.migrations_sha256 = "f".repeat(64);
   });
@@ -189,6 +242,7 @@ try {
     assert.equal(await sql("SELECT count(*) FROM public.runtime_acceptance_probe"), "2");
   });
   await scenario("uninstall-preserves-data-and-reinstall", async () => {
+    assert.equal((await command("uninstall")).status, "uninstalled");
     assert.equal((await command("uninstall")).status, "uninstalled");
     assert.equal(await secretDigest(), beforeSecrets);
     assert.equal((await command("install")).status, "running");

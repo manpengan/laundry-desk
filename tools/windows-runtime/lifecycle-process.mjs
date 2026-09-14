@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
@@ -47,16 +48,12 @@ export async function host(action, root, payload, expectedDigest) {
       payload,
     ),
   );
-  if (
-    !result ||
-    typeof result !== "object" ||
-    (action === "ports" || action === "stop-server"
-      ? Object.keys(result).sort().join(",") !== "api,postgres" ||
-        typeof result.api !== "boolean" ||
-        typeof result.postgres !== "boolean"
-      : Object.keys(result).join(",") !== "exists" || typeof result.exists !== "boolean")
-  )
-    fail("HOST_RESULT_INVALID");
+  const { z } = createRequire(join(payload, "server/package.json"))("zod");
+  const schema =
+    action === "ports" || action === "stop-server"
+      ? z.object({ api: z.boolean(), postgres: z.boolean() }).strict()
+      : z.object({ exists: z.boolean() }).strict();
+  if (!schema.safeParse(result).success) fail("HOST_RESULT_INVALID");
   return result;
 }
 
@@ -99,7 +96,11 @@ export async function health(root, payload, expectedDigest) {
           signal: AbortSignal.timeout(2000),
         });
         const body = await response.json();
-        if (response.ok && body.ok === true && body.data?.status === "ready") return;
+        const { z } = createRequire(join(payload, "server/package.json"))("zod");
+        const schema = z
+          .object({ ok: z.literal(true), data: z.object({ status: z.literal("ready") }).strict() })
+          .strict();
+        if (response.ok && schema.safeParse(body).success) return;
       } catch {
         /* Bounded retry while the verified process becomes ready. */
       }
