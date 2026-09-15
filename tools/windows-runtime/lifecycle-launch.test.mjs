@@ -34,7 +34,7 @@ test(
       join(payload, "scripts/lifecycle-cli.mjs"),
       `
     import {spawn} from 'node:child_process';
-    const child=spawn(${JSON.stringify(process.execPath)},['-e','setTimeout(()=>{},20000)'],{detached:true,stdio:'ignore',windowsHide:true});
+    const child=spawn(${JSON.stringify(process.execPath)},['-e','setTimeout(()=>{},20000)'],{detached:true,stdio:'ignore',windowsHide:true,cwd:${JSON.stringify(await realpath(tmpdir()))}});
     child.unref();
     console.log(JSON.stringify({pid:child.pid}));
   `,
