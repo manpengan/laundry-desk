@@ -334,7 +334,7 @@ try {
     const update = (args) =>
       execute(ps, ["-NoProfile", "-NonInteractive", "-Command", args], { env, cwd: payload });
     await update(
-      "$t=Get-ScheduledTask -TaskName LaundryDeskV2RuntimeCompanion; $a=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\cmd.exe'; Set-ScheduledTask -InputObject $t -Action $a | Out-Null",
+      "$a=New-ScheduledTaskAction -Execute 'C:\\Windows\\System32\\cmd.exe'; Set-ScheduledTask -TaskName LaundryDeskV2RuntimeCompanion -Action $a | Out-Null",
     );
     try {
       await rejected("start", payload, expectedDigest, /TASK_CONFLICT/u);
