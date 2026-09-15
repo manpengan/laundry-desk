@@ -59,6 +59,17 @@ export const REQUIRED_FILES = Object.freeze([
   "scripts/companion-files.mjs",
   "scripts/inspect-companion.mjs",
   "scripts/smoke-companion.mjs",
+  "scripts/lifecycle-cli.mjs",
+  "scripts/lifecycle.mjs",
+  "scripts/lifecycle-storage.mjs",
+  "scripts/lifecycle-environment.mjs",
+  "scripts/lifecycle-process.mjs",
+  "scripts/lifecycle-database.mjs",
+  "scripts/lifecycle-release.mjs",
+  "scripts/lifecycle-host.ps1",
+  "scripts/lifecycle-identity.ps1",
+  "scripts/lifecycle-launch.ps1",
+  "scripts/lifecycle-native.ps1",
 ]);
 
 export function requireManifest(value) {

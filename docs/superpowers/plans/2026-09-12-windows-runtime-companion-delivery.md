@@ -9,8 +9,9 @@
 
 - 依赖审计修复 PR #216、Stage 5.1 外部输入登记工具 PR #217 已合入 main；外部资产仍需实际提供。
 - 既有 Windows 开发 Runtime 依赖源码仓库和系统 Node；它的开发验收不能证明独立安装完成。
-- 独立 payload 正在 PR #218 验证。只有对应 SHA 的 Windows CI 通过后，才能记录固定 Node、
-  PostgreSQL、Server、原生依赖和迁移在仓库移走后的加载结果；不能据此记录安装成功。
+- 独立 payload PR #218 已合入 main（`ce7fbef`），对应 PR 头的 workspace、真实 PostgreSQL、Windows
+  payload 与 macOS Runtime 四项检查通过；这关闭无源码加载门禁，不代表独立安装成功。
+- 安装生命周期接续记录见[2026-09-13 验证记录](../../operations/2026-09-13-windows-runtime-lifecycle-result.md)。
 - 当前环境未找到构建机手册引用的 `windows-lan-ssh` 私有工具。GitHub Windows Server 2022
   能执行软件门禁，不能替代目标 Windows 10/11、中文输入、DPI、设备出纸与现场性能证据。
 
