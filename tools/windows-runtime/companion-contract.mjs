@@ -69,6 +69,7 @@ export const REQUIRED_FILES = Object.freeze([
   "scripts/lifecycle-host.ps1",
   "scripts/lifecycle-identity.ps1",
   "scripts/lifecycle-launch.ps1",
+  "scripts/lifecycle-native.ps1",
 ]);
 
 export function requireManifest(value) {

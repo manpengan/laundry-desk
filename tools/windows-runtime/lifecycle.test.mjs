@@ -201,7 +201,7 @@ test(
     const { fileURLToPath } = await import("node:url");
     const script =
       "$errors=$null; $tokens=$null; [System.Management.Automation.Language.Parser]::ParseFile($env:LAUNDRY_PS_PARSE_FILE,[ref]$tokens,[ref]$errors) | Out-Null; if ($errors.Count -ne 0) { throw 'WINDOWS_COMPANION_POWERSHELL_SYNTAX_INVALID' }";
-    for (const name of ["lifecycle-host.ps1", "lifecycle-launch.ps1"]) {
+    for (const name of ["lifecycle-host.ps1", "lifecycle-launch.ps1", "lifecycle-native.ps1"]) {
       await promisify(execFile)(
         join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
         ["-NoProfile", "-NonInteractive", "-Command", script],

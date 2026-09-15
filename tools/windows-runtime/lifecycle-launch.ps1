@@ -33,7 +33,8 @@ try {
   $value = [IO.File]::ReadAllText($Manifest) | ConvertFrom-Json
   $bootstrap = @($value.files | Where-Object { $_.path -eq 'node/node.exe' -or $_.path.StartsWith('scripts/') })
   if (@($bootstrap | Where-Object { $_.path -eq 'node/node.exe' }).Count -ne 1 -or
-      @($bootstrap | Where-Object { $_.path -eq 'scripts/lifecycle-cli.mjs' }).Count -ne 1) {
+      @($bootstrap | Where-Object { $_.path -eq 'scripts/lifecycle-cli.mjs' }).Count -ne 1 -or
+      @($bootstrap | Where-Object { $_.path -eq 'scripts/lifecycle-native.ps1' }).Count -ne 1) {
     throw 'WINDOWS_COMPANION_LAUNCH_FILE_INVALID'
   }
   foreach ($entry in $bootstrap) {
@@ -45,56 +46,14 @@ try {
   }
   $Node = Join-Path $Payload 'node\node.exe'
   $Entry = Join-Path $Payload 'scripts\lifecycle-cli.mjs'
-  # .NET Framework otherwise passes inheritable outer pipe handles alongside the
-  # redirected handles. A background descendant can then keep our caller open.
-  Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public static class LaundryRuntimeLaunchHandles {
-  [DllImport("kernel32.dll", SetLastError=true)]
-  private static extern IntPtr GetStdHandle(int kind);
-  [DllImport("kernel32.dll", SetLastError=true)]
-  private static extern bool SetHandleInformation(IntPtr handle, uint mask, uint flags);
-  public static void Isolate() {
-    foreach (int kind in new int[] {-10, -11, -12}) {
-      IntPtr handle = GetStdHandle(kind);
-      if (handle != IntPtr.Zero && handle != new IntPtr(-1) && !SetHandleInformation(handle, 1, 0))
-        throw new InvalidOperationException("WINDOWS_COMPANION_LAUNCH_HANDLE_FAILED");
-    }
-  }
-}
-'@
-  [LaundryRuntimeLaunchHandles]::Isolate()
-  # Wait only for the direct controller. A PowerShell native pipeline may retain
-  # console descendants, including the intentionally long-lived database.
+  . (Join-Path $PSScriptRoot 'lifecycle-native.ps1')
   $rendered = @(@($Entry, $Action, $Payload, $ManifestDigest) | ForEach-Object {
     if ($_ -match '["\r\n\x00]') { throw 'WINDOWS_COMPANION_LAUNCH_ARGUMENT_INVALID' }
     '"' + [regex]::Replace($_, '(\\+)$', '$1$1') + '"'
   })
-  $start = New-Object Diagnostics.ProcessStartInfo
-  $start.FileName = $Node
-  $start.Arguments = $rendered -join ' '
-  $start.WorkingDirectory = $Payload
-  $start.UseShellExecute = $false
-  $start.CreateNoWindow = $true
-  $start.RedirectStandardInput = $true
-  $start.RedirectStandardOutput = $true
-  $start.RedirectStandardError = $true
-  $watch = [Diagnostics.Stopwatch]::StartNew()
-  $child = [Diagnostics.Process]::Start($start)
-  $child.StandardInput.Close()
-  try {
-    $stdout = $child.StandardOutput.ReadToEndAsync()
-    $stderr = $child.StandardError.ReadToEndAsync()
-    if (-not $child.WaitForExit(900000)) { $child.Kill(); throw 'WINDOWS_COMPANION_LAUNCH_TIMEOUT' }
-    [Console]::Error.WriteLine('WINDOWS_COMPANION_TIMING {"phase":"controller_exit","elapsed_ms":' + $watch.ElapsedMilliseconds + '}')
-    if (-not $stdout.Wait(10000) -or -not $stderr.Wait(10000)) { throw 'WINDOWS_COMPANION_LAUNCH_OUTPUT_TIMEOUT' }
-    [Console]::Out.Write($stdout.Result)
-    [Console]::Error.Write($stderr.Result)
-    exit $child.ExitCode
-  } finally { $child.Dispose() }
+  exit ([LaundryRuntimeNativeLauncher]::Run($Node, ($rendered -join ' '), $Payload))
 } catch {
-  $code = [string]$_.Exception.Message
+  $code = [string]($_.Exception.GetBaseException().Message)
   if ($code -notmatch '^WINDOWS_COMPANION_[A-Z_]+$') { $code = 'WINDOWS_COMPANION_LAUNCH_FAILED' }
   [Console]::Error.WriteLine($code)
   exit 1

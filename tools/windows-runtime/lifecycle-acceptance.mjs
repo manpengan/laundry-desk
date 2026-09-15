@@ -57,23 +57,18 @@ async function command(action, source = payload, hash = expectedDigest) {
       maxBuffer: 65536,
     },
   );
-  pending.child.once("exit", (code, signal) => {
-    console.log(
-      JSON.stringify({
-        action,
-        event: "launcher-exit",
-        code,
-        signal,
-        elapsed_ms: Date.now() - started,
-      }),
-    );
-  });
-  try {
-    const result = await pending;
-    for (const line of result.stderr.split("\n")) {
+  let timingBuffer = "";
+  pending.child.stderr.on("data", (chunk) => {
+    timingBuffer += chunk;
+    const lines = timingBuffer.split("\n");
+    timingBuffer = lines.pop();
+    for (const line of lines) {
       if (/^WINDOWS_COMPANION_TIMING \{[A-Za-z0-9_\s"{},.:[\]\-]*\}$/u.test(line.trim()))
         console.log(line.trim());
     }
+  });
+  try {
+    const result = await pending;
     return JSON.parse(result.stdout);
   } finally {
     console.log(

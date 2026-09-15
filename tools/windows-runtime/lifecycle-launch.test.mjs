@@ -24,6 +24,10 @@ test(
       new URL("lifecycle-launch.ps1", import.meta.url),
       join(payload, "scripts/lifecycle-launch.ps1"),
     );
+    await copyFile(
+      new URL("lifecycle-native.ps1", import.meta.url),
+      join(payload, "scripts/lifecycle-native.ps1"),
+    );
     // The descendant uses the test runner's executable, so the temporary payload
     // can be removed while it finishes its deliberately bounded lifetime.
     await writeFile(
@@ -40,6 +44,7 @@ test(
       "node/node.exe",
       "scripts/lifecycle-cli.mjs",
       "scripts/lifecycle-launch.ps1",
+      "scripts/lifecycle-native.ps1",
     ]) {
       const bytes = await readFile(join(payload, path));
       files.push({ path, size: bytes.length, sha256: digest(bytes) });
