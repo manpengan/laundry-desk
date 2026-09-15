@@ -25,7 +25,8 @@ const scenarios = [];
 let activePayload = payload;
 let activeDigest = expectedDigest;
 async function command(action, source = payload, hash = expectedDigest) {
-  const result = await execute(
+  const started = Date.now();
+  const pending = execute(
     join(env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
     [
       "-NoProfile",
@@ -56,7 +57,29 @@ async function command(action, source = payload, hash = expectedDigest) {
       maxBuffer: 65536,
     },
   );
-  return JSON.parse(result.stdout);
+  pending.child.once("exit", (code, signal) => {
+    console.log(
+      JSON.stringify({
+        action,
+        event: "launcher-exit",
+        code,
+        signal,
+        elapsed_ms: Date.now() - started,
+      }),
+    );
+  });
+  try {
+    const result = await pending;
+    for (const line of result.stderr.split("\n")) {
+      if (/^WINDOWS_COMPANION_TIMING \{[A-Za-z0-9_\s"{},.:[\]\-]*\}$/u.test(line.trim()))
+        console.log(line.trim());
+    }
+    return JSON.parse(result.stdout);
+  } finally {
+    console.log(
+      JSON.stringify({ action, event: "launcher-close", elapsed_ms: Date.now() - started }),
+    );
+  }
 }
 async function rejected(action, source, hash, pattern) {
   await assert.rejects(command(action, source, hash), (error) => pattern.test(error.stderr ?? ""));

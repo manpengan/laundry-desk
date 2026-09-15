@@ -1,12 +1,13 @@
 import { execFile, spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { cleanEnvironment } from "./lifecycle-environment.mjs";
 import { fail } from "./companion-contract.mjs";
 
 export async function run(file, args, env, cwd) {
+  const started = Date.now();
   try {
     return (
       await promisify(execFile)(file, args, {
@@ -25,6 +26,10 @@ export async function run(file, args, env, cwd) {
     }
     const code = stderr.match(/^(?:WINDOWS_COMPANION|RUNTIME)_[A-Z_]+$/mu)?.[0];
     throw new Error(code ?? "WINDOWS_COMPANION_SUBPROCESS_FAILED");
+  } finally {
+    console.error(
+      `WINDOWS_COMPANION_TIMING ${JSON.stringify({ executable: basename(file), elapsed_ms: Date.now() - started })}`,
+    );
   }
 }
 

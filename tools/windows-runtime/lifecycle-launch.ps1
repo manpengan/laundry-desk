@@ -59,11 +59,13 @@ try {
   $start.CreateNoWindow = $true
   $start.RedirectStandardOutput = $true
   $start.RedirectStandardError = $true
+  $watch = [Diagnostics.Stopwatch]::StartNew()
   $child = [Diagnostics.Process]::Start($start)
   try {
     $stdout = $child.StandardOutput.ReadToEndAsync()
     $stderr = $child.StandardError.ReadToEndAsync()
     if (-not $child.WaitForExit(900000)) { $child.Kill(); throw 'WINDOWS_COMPANION_LAUNCH_TIMEOUT' }
+    [Console]::Error.WriteLine('WINDOWS_COMPANION_TIMING {"phase":"controller_exit","elapsed_ms":' + $watch.ElapsedMilliseconds + '}')
     if (-not $stdout.Wait(10000) -or -not $stderr.Wait(10000)) { throw 'WINDOWS_COMPANION_LAUNCH_OUTPUT_TIMEOUT' }
     [Console]::Out.Write($stdout.Result)
     [Console]::Error.Write($stderr.Result)
