@@ -45,6 +45,26 @@ try {
   }
   $Node = Join-Path $Payload 'node\node.exe'
   $Entry = Join-Path $Payload 'scripts\lifecycle-cli.mjs'
+  # .NET Framework otherwise passes inheritable outer pipe handles alongside the
+  # redirected handles. A background descendant can then keep our caller open.
+  Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class LaundryRuntimeLaunchHandles {
+  [DllImport("kernel32.dll", SetLastError=true)]
+  private static extern IntPtr GetStdHandle(int kind);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  private static extern bool SetHandleInformation(IntPtr handle, uint mask, uint flags);
+  public static void Isolate() {
+    foreach (int kind in new int[] {-10, -11, -12}) {
+      IntPtr handle = GetStdHandle(kind);
+      if (handle != IntPtr.Zero && handle != new IntPtr(-1) && !SetHandleInformation(handle, 1, 0))
+        throw new InvalidOperationException("WINDOWS_COMPANION_LAUNCH_HANDLE_FAILED");
+    }
+  }
+}
+'@
+  [LaundryRuntimeLaunchHandles]::Isolate()
   # Wait only for the direct controller. A PowerShell native pipeline may retain
   # console descendants, including the intentionally long-lived database.
   $rendered = @(@($Entry, $Action, $Payload, $ManifestDigest) | ForEach-Object {
@@ -57,10 +77,12 @@ try {
   $start.WorkingDirectory = $Payload
   $start.UseShellExecute = $false
   $start.CreateNoWindow = $true
+  $start.RedirectStandardInput = $true
   $start.RedirectStandardOutput = $true
   $start.RedirectStandardError = $true
   $watch = [Diagnostics.Stopwatch]::StartNew()
   $child = [Diagnostics.Process]::Start($start)
+  $child.StandardInput.Close()
   try {
     $stdout = $child.StandardOutput.ReadToEndAsync()
     $stderr = $child.StandardError.ReadToEndAsync()
