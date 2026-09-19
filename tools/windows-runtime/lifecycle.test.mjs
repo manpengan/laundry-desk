@@ -119,7 +119,9 @@ for (const point of ["before-replace", "after-replace", "after-flush"]) {
 }
 
 test("all lifecycle operations contend on one kernel-owned lock and release after errors", async () => {
-  const root = await mkdtemp(join(await realpath(tmpdir()), "laundry-lock-"));
+  // macOS's expanded per-user temp path exceeds sockaddr_un.sun_path with the
+  // full lock digest. Keep this test's socket path below the OS limit.
+  const root = await mkdtemp(join(process.platform === "darwin" ? "/tmp" : tmpdir(), "lock-"));
   try {
     await withOperationLock(root, async () => {
       await assert.rejects(

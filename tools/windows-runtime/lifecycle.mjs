@@ -224,9 +224,8 @@ export async function lifecycle(action, source, expectedDigest) {
         const oldState = state;
         await save({ ...state, pending: next });
         const oldPayload = (await verify(old)).payload;
-        let nextPayload;
         try {
-          nextPayload = await verifyStopped(next);
+          const nextPayload = await verifyStopped(next);
           await task("register", nextPayload, next);
           await save({
             ...state,
@@ -239,9 +238,10 @@ export async function lifecycle(action, source, expectedDigest) {
         } catch (error) {
           // Do not infer commit failure: replacement may already be durable. Stop the
           // selected candidate before restoring the previous manifest-bound pointer.
-          if (nextPayload) {
-            await stop(next);
-          }
+          // Verification may have started PostgreSQL before its cleanup failed.
+          // Keep pending intact until the candidate is confirmed stopped so a
+          // later invocation can still identify and recover that process.
+          await stop(next);
           await save(oldState);
           await task("register", oldPayload, old);
           await start(old);
