@@ -26,6 +26,17 @@ const scriptNames = [
   "companion-files.mjs",
   "inspect-companion.mjs",
   "smoke-companion.mjs",
+  "lifecycle-cli.mjs",
+  "lifecycle.mjs",
+  "lifecycle-storage.mjs",
+  "lifecycle-environment.mjs",
+  "lifecycle-process.mjs",
+  "lifecycle-database.mjs",
+  "lifecycle-release.mjs",
+  "lifecycle-host.ps1",
+  "lifecycle-identity.ps1",
+  "lifecycle-launch.ps1",
+  "lifecycle-native.ps1",
 ];
 
 function buildEnvironment() {

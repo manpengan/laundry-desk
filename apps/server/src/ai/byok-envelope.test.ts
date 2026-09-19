@@ -36,10 +36,12 @@ test("AES-256-GCM envelope uses fresh DEKs/nonces, binds AAD, and zeroes input",
   await assert.rejects(
     decryptCredential(kms, { ...IDENTITY, orgId: "33333333-3333-4333-8333-333333333333" }, first),
   );
+  const tamperedCiphertext = Buffer.from(first.ciphertext);
+  tamperedCiphertext[0] = tamperedCiphertext.readUInt8(0) ^ 1;
   await assert.rejects(
     decryptCredential(kms, IDENTITY, {
       ...first,
-      ciphertext: Buffer.concat([first.ciphertext.subarray(0, -1), Buffer.from([0])]),
+      ciphertext: tamperedCiphertext,
     }),
   );
 });

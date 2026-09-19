@@ -14,6 +14,11 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
+- Windows 独立 Runtime payload 增加安装、修复、启停、同迁移升级/回滚与保留数据库和密钥的卸载入口；
+  登录自启固定绑定私有 controller，版本指针使用 Win32 持久化提交，未知任务/进程与迁移变化失败关闭。
+  软件验收进度见[独立安装生命周期记录](operations/2026-09-13-windows-runtime-lifecycle-result.md)。
+  本批仍只允许合成数据，不构成宏发真实运营准入。
+
 - Windows V2 增加独立原生本地 Runtime：柜台 EXE 继续只探测固定 loopback 服务，Runtime 使用
   PostgreSQL 16、同一迁移/角色/bootstrap 与 Fastify，密钥和数据由受保护 DACL 隔离并在登录时独立
   启动；同版本修复安装会安全停止旧 Server/PostgreSQL、重验迁移后恢复 ready，不再因后台 postgres
