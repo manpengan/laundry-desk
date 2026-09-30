@@ -1,7 +1,15 @@
 import { lifecycle } from "./lifecycle.mjs";
 try {
-  if (process.argv.length !== 5) throw new Error("WINDOWS_COMPANION_ARGS_INVALID");
-  console.log(JSON.stringify(await lifecycle(...process.argv.slice(2))));
+  const [action, source, digest, ...extra] = process.argv.slice(2);
+  const expected = action === "restore" ? 2 : action === "backup-verify" ? 1 : 0;
+  if (process.argv.length !== 5 + expected) throw new Error("WINDOWS_COMPANION_ARGS_INVALID");
+  const options =
+    expected === 2
+      ? { backupId: extra[0], confirmation: extra[1] }
+      : expected === 1
+        ? { backupId: extra[0] }
+        : {};
+  console.log(JSON.stringify(await lifecycle(action, source, digest, options)));
 } catch (error) {
   const code = (value) =>
     typeof value === "string" && /^[A-Z][A-Z0-9_]{1,80}$/u.test(value) ? value : null;

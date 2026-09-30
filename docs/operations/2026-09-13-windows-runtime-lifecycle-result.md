@@ -6,6 +6,10 @@
 本批将独立 payload 接入安装、修复、启动、停止、同迁移升级/回滚和保留数据卸载。固定目录为
 `%LOCALAPPDATA%\laundry-desk-v2\runtime-companion`，与旧 development-runtime 隔离。
 
+2026-09-30 接续：[ADR-68](../adr/2026-09-30-adr-68-windows-managed-backup-restore.md) 与
+[备份恢复记录](2026-09-30-windows-runtime-backup-restore-result.md) 新增本机托管备份与数据恢复。
+本页保留 #219 的历史验收范围；新增能力以接续批次的 main 与同版绿灯为准。
+
 - 发行目录、数据库、密钥和状态分离；私有根与状态文件使用既有 Win32 helper。
 - 同一命名管道互斥覆盖所有生命周期动作；进程退出由内核释放，不接管陈旧 PID 锁。
 - 版本指针使用临时文件、私有 ACL、文件 flush、写穿透替换、目录 flush；失败后读取磁盘状态。

@@ -40,6 +40,20 @@ export function requirePayloadPath(value) {
   return value;
 }
 
+export const BACKUP_FILES = Object.freeze([
+  "postgres/bin/pg_dump.exe",
+  "postgres/bin/pg_restore.exe",
+  "scripts/backup-contract.mjs",
+  "scripts/backup-files.mjs",
+  "scripts/backup-process.mjs",
+  "scripts/backup-database.mjs",
+  "scripts/backup-maintenance.mjs",
+]);
+
+export function supportsBackup(manifest) {
+  return BACKUP_FILES.every((path) => manifest.files?.some((file) => file.path === path));
+}
+
 export const REQUIRED_FILES = Object.freeze([
   "node/node.exe",
   "node/LICENSE",
@@ -162,6 +176,13 @@ export function requireManifest(value) {
     )
   )
     fail("REQUIRED_FILE_MISSING");
+  // Schema-1 payloads preceding backup support remain valid upgrade/rollback
+  // inputs. A payload declaring any backup script must bind the entire capability.
+  if (
+    value.files.some((entry) => entry.path.startsWith("scripts/backup-")) &&
+    !supportsBackup(value)
+  )
+    fail("BACKUP_CAPABILITY_INCOMPLETE");
   return value;
 }
 

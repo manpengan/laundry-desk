@@ -14,6 +14,13 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
+- Windows Runtime 增加本机托管备份、列表、验证、确认恢复与维护中断恢复入口：先保留恢复前安全点，
+  再在临时数据库单事务导入并直接验证迁移账本与关键表，以 OID 绑定的事务切换避免残留额外旧表。
+  维护未完成时阻断普通启动、修复、升级、回滚和卸载；旧登录 controller 缺少阻断能力时禁止使用。
+  固定私有目录、流式句柄、摘要/实例/版本校验与有界留存保持 development-only，首期限定相同迁移与
+  PostgreSQL 版本及照片未启用且为空。见
+  [ADR-68](adr/2026-09-30-adr-68-windows-managed-backup-restore.md)。
+
 - Windows 独立 Runtime payload 增加安装、修复、启停、同迁移升级/回滚与保留数据库和密钥的卸载入口；
   登录自启固定绑定私有 controller，版本指针使用 Win32 持久化提交，未知任务/进程与迁移变化失败关闭。
   软件验收进度见[独立安装生命周期记录](operations/2026-09-13-windows-runtime-lifecycle-result.md)。

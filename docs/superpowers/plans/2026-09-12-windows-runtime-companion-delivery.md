@@ -65,6 +65,11 @@ launcher 使用固定包内 Node 和绝对入口，清除 Node 注入、数据�
 
 ## 4. 外部输入与现场记录
 
+2026-09-30 接续增加 [ADR-68 本机托管备份与恢复](../../adr/2026-09-30-adr-68-windows-managed-backup-restore.md)：
+当前迁移与 PostgreSQL 版本、照片为空的合成实例可先完成软件与无源码 Windows CI 验收。
+它补齐安全点、临时库验证、OID 绑定切换与中断重入；不同迁移联合升级、照片联合恢复及下表的
+真实外部输入继续独立验收。结果见[接续记录](../../operations/2026-09-30-windows-runtime-backup-restore-result.md)。
+
 以下均尚未取得本轮可核验输入。责任人提供非秘密 `asset:`、`document:`、`owner:` 或 `ticket:`
 引用；密码、私钥、数据库 URL、顾客字段和票据内容不得提交仓库。
 

@@ -14,7 +14,13 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { COMPANION_SOURCES } from "./companion-sources.mjs";
-import { canonicalManifest, digest, fail, MANIFEST_NAME } from "./companion-contract.mjs";
+import {
+  canonicalManifest,
+  digest,
+  fail,
+  MANIFEST_NAME,
+  BACKUP_FILES,
+} from "./companion-contract.mjs";
 import { inventory, requireRealDirectory } from "./companion-files.mjs";
 import { inspectCompanion } from "./inspect-companion.mjs";
 
@@ -33,6 +39,11 @@ const scriptNames = [
   "lifecycle-process.mjs",
   "lifecycle-database.mjs",
   "lifecycle-release.mjs",
+  "backup-contract.mjs",
+  "backup-files.mjs",
+  "backup-process.mjs",
+  "backup-database.mjs",
+  "backup-maintenance.mjs",
   "lifecycle-host.ps1",
   "lifecycle-identity.ps1",
   "lifecycle-launch.ps1",
@@ -223,6 +234,8 @@ export async function packageCompanion({ sourceSha, nodeArchive, postgresArchive
       ),
     );
     const { files } = await inventory(payload);
+    if (BACKUP_FILES.some((path) => !files.some((file) => file.path === path)))
+      fail("BACKUP_CAPABILITY_INCOMPLETE");
     console.error("WINDOWS_COMPANION_STAGE_MANIFEST");
     const manifest = canonicalManifest({
       schema: "laundry.windows.runtime-payload",

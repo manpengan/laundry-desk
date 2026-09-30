@@ -23,6 +23,9 @@ import {
   kit,
   serverEnvironment,
 } from "./lifecycle-database.mjs";
+import { BACKUP_ACTIONS, requireBackupOptions } from "./backup-contract.mjs";
+import { readMaintenance } from "./backup-files.mjs";
+import { backupMaintenance } from "./backup-maintenance.mjs";
 
 export const ACTIONS = Object.freeze([
   "install",
@@ -33,6 +36,7 @@ export const ACTIONS = Object.freeze([
   "rollback",
   "uninstall",
   "status",
+  ...BACKUP_ACTIONS,
 ]);
 export function installationRoot() {
   if (!process.env.LOCALAPPDATA || !/^[A-Za-z]:\\/u.test(process.env.LOCALAPPDATA))
@@ -40,9 +44,10 @@ export function installationRoot() {
   return resolve(process.env.LOCALAPPDATA, "laundry-desk-v2/runtime-companion");
 }
 
-export async function lifecycle(action, source, expectedDigest) {
+export async function lifecycle(action, source, expectedDigest, options = {}) {
   if (process.platform !== "win32" || process.arch !== "x64") fail("INSTALL_PLATFORM_INVALID");
   if (!ACTIONS.includes(action)) fail("ARGS_INVALID");
+  requireBackupOptions(action, options);
   source = resolve(source);
   const supplied = await inspectCompanion(source, expectedDigest);
   const platform = await loadPlatform(source);
@@ -152,6 +157,26 @@ export async function lifecycle(action, source, expectedDigest) {
         }
         fail("PARTIAL_INITIALIZATION");
       }
+      const maintenance = await readMaintenance(io, root);
+      if (
+        maintenance &&
+        !["status", "stop", "backup-list", "backup-verify", "maintenance-recover"].includes(action)
+      )
+        fail("MAINTENANCE_RECOVERY_REQUIRED");
+      if (BACKUP_ACTIONS.includes(action)) {
+        return backupMaintenance(action, options, {
+          root,
+          io,
+          platform,
+          verify,
+          getState: () => state,
+          stop: async (entry) => {
+            await stop(entry);
+            await save({ ...state, phase: "stopped" });
+          },
+          start,
+        });
+      }
       if (state.pending) {
         requireCompatible(state.current, state.pending);
         await stop(state.pending);
@@ -161,8 +186,17 @@ export async function lifecycle(action, source, expectedDigest) {
         if (state.phase !== "uninstalled") {
           const current = await verify(state.current);
           await task("inspect", current.payload, state.current);
-          if (state.phase === "running") await health(root, current.payload, state.current.digest);
+          if (state.phase === "running" && !maintenance)
+            await health(root, current.payload, state.current.digest);
         }
+        if (maintenance)
+          return {
+            status: "maintenance_required",
+            phase: maintenance.phase,
+            operation: maintenance.operation,
+            safety_backup: maintenance.safety,
+            assurance: "development_only",
+          };
       } else if (action === "uninstall") {
         if (state.phase !== "uninstalled") {
           const payload = await stop(state.current);
