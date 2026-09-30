@@ -13,6 +13,7 @@ export const MAX_DUMP_BYTES = 512 * 1024 * 1024;
 export const BACKUP_ID = /^b_[a-f0-9]{32}$/u;
 const SHA = /^[a-f0-9]{64}$/u;
 const DATABASE = /^laundry_(?:restore|previous)_[a-f0-9]{32}$/u;
+const matches = (pattern, value) => typeof value === "string" && pattern.test(value);
 
 export function requireBackupOptions(action, options = {}) {
   const keys =
@@ -23,14 +24,17 @@ export function requireBackupOptions(action, options = {}) {
         : [];
   if (
     !exactKeys(options, keys) ||
-    (keys.includes("backupId") && !BACKUP_ID.test(options.backupId)) ||
-    (keys.includes("confirmation") && !SHA.test(options.confirmation))
+    (keys.includes("backupId") && !matches(BACKUP_ID, options.backupId)) ||
+    (keys.includes("confirmation") && !matches(SHA, options.confirmation))
   )
     fail("ARGS_INVALID");
   return options;
 }
 
 export function requireRelease(entry) {
+  const keys = ["digest", "release", "source", "migrationHead", "migrations"];
+  if (!exactKeys(entry, keys) || keys.some((key) => typeof entry[key] !== "string"))
+    fail("STATE_INVALID");
   requireState({
     schema: 1,
     assurance: "development_only",
@@ -61,8 +65,8 @@ export function requireBackup(value) {
     value.schema !== "laundry.windows.backup" ||
     value.version !== 1 ||
     value.assurance !== "development_only" ||
-    !BACKUP_ID.test(value.id) ||
-    !SHA.test(value.instance_sha256) ||
+    !matches(BACKUP_ID, value.id) ||
+    !matches(SHA, value.instance_sha256) ||
     typeof value.created_at !== "string" ||
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value.created_at) ||
     !Number.isFinite(Date.parse(value.created_at)) ||
@@ -73,7 +77,7 @@ export function requireBackup(value) {
     !Number.isSafeInteger(value.database.size) ||
     value.database.size < 1 ||
     value.database.size > MAX_DUMP_BYTES ||
-    !SHA.test(value.database.sha256)
+    !matches(SHA, value.database.sha256)
   )
     fail("BACKUP_INVALID");
   requireRelease(value.release);
@@ -104,7 +108,9 @@ export function requireMaintenance(value) {
   for (const bound of [value.target, value.safety]) {
     if (
       bound !== null &&
-      (!exactKeys(bound, ["id", "digest"]) || !BACKUP_ID.test(bound.id) || !SHA.test(bound.digest))
+      (!exactKeys(bound, ["id", "digest"]) ||
+        !matches(BACKUP_ID, bound.id) ||
+        !matches(SHA, bound.digest))
     )
       fail("MAINTENANCE_STATE_INVALID");
   }
@@ -117,7 +123,7 @@ export function requireMaintenance(value) {
     const candidate = value.candidate;
     if (
       !exactKeys(candidate, ["name", "previous", "original_oid", "restored_oid"]) ||
-      !DATABASE.test(candidate.name) ||
+      !matches(DATABASE, candidate.name) ||
       !candidate.name.startsWith("laundry_restore_") ||
       candidate.previous !== candidate.name.replace("laundry_restore_", "laundry_previous_") ||
       !Number.isSafeInteger(candidate.original_oid) ||

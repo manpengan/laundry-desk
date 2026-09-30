@@ -20,6 +20,7 @@ import {
   MAX_DUMP_BYTES,
   requireBackupOptions,
   requireMaintenance,
+  requireBackup,
 } from "./backup-contract.mjs";
 import {
   createBackup,
@@ -62,6 +63,34 @@ test("private backups bind bytes, instance, migration and confirmation and conta
     readBackup({ ...context, postgresVersion: "16.16" }, backup.id),
     /VERSION_MISMATCH/u,
   );
+});
+
+test("manifest, journal and action identifiers reject non-string values that regex would coerce", async (t) => {
+  const context = await backupFixture(t);
+  const { manifest } = await make(context);
+  for (const changed of [
+    { ...manifest, id: [manifest.id] },
+    { ...manifest, instance_sha256: [manifest.instance_sha256] },
+    { ...manifest, database: { ...manifest.database, sha256: [manifest.database.sha256] } },
+    { ...manifest, release: { ...release, source: [release.source] } },
+  ])
+    assert.throws(() => requireBackup(changed), /BACKUP_INVALID|STATE_INVALID/u);
+  assert.throws(
+    () =>
+      requireBackupOptions("restore", { backupId: [manifest.id], confirmation: "a".repeat(64) }),
+    /ARGS_INVALID/u,
+  );
+  const journal = {
+    version: 1,
+    operation: "restore",
+    phase: "quiescing",
+    was_running: true,
+    release,
+    target: { id: [manifest.id], digest: "a".repeat(64) },
+    safety: null,
+    candidate: null,
+  };
+  assert.throws(() => requireMaintenance(journal), /MAINTENANCE_STATE_INVALID/u);
 });
 
 test("corrupt dumps, unknown manifest fields, extra files and path escapes fail closed", async (t) => {
