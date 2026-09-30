@@ -1,8 +1,10 @@
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory=$true)][ValidateSet('install','repair','start','stop','upgrade','rollback','uninstall','status')][string]$Action,
+  [Parameter(Mandatory=$true)][ValidateSet('install','repair','start','stop','upgrade','rollback','uninstall','status','backup','backup-list','backup-verify','restore','maintenance-recover')][string]$Action,
   [Parameter(Mandatory=$true)][string]$Payload,
-  [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{64}$')][string]$ManifestDigest
+  [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{64}$')][string]$ManifestDigest,
+  [ValidatePattern('^b_[a-f0-9]{32}$')][string]$BackupId,
+  [ValidatePattern('^[a-f0-9]{64}$')][string]$ConfirmationDigest
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -27,6 +29,12 @@ function Get-BoundHash {
 }
 
 try {
+  if (($Action -eq 'restore' -and ([string]::IsNullOrEmpty($BackupId) -or [string]::IsNullOrEmpty($ConfirmationDigest))) -or
+      ($Action -eq 'backup-verify' -and ([string]::IsNullOrEmpty($BackupId) -or -not [string]::IsNullOrEmpty($ConfirmationDigest))) -or
+      ($Action -ne 'restore' -and $Action -ne 'backup-verify' -and
+       (-not [string]::IsNullOrEmpty($BackupId) -or -not [string]::IsNullOrEmpty($ConfirmationDigest)))) {
+    throw 'WINDOWS_COMPANION_ARGS_INVALID'
+  }
   $Payload = [IO.Path]::GetFullPath($Payload)
   $Manifest = Join-Path $Payload 'runtime-payload.json'
   if ((Get-BoundHash $Manifest 8388608) -cne $ManifestDigest) { throw 'WINDOWS_COMPANION_MANIFEST_DIGEST_INVALID' }
@@ -47,7 +55,10 @@ try {
   $Node = Join-Path $Payload 'node\node.exe'
   $Entry = Join-Path $Payload 'scripts\lifecycle-cli.mjs'
   . (Join-Path $PSScriptRoot 'lifecycle-native.ps1')
-  $rendered = @(@($Entry, $Action, $Payload, $ManifestDigest) | ForEach-Object {
+  $ChildArguments = @($Entry, $Action, $Payload, $ManifestDigest)
+  if ($Action -eq 'restore' -or $Action -eq 'backup-verify') { $ChildArguments += $BackupId }
+  if ($Action -eq 'restore') { $ChildArguments += $ConfirmationDigest }
+  $rendered = @($ChildArguments | ForEach-Object {
     if ($_ -match '["\r\n\x00]') { throw 'WINDOWS_COMPANION_LAUNCH_ARGUMENT_INVALID' }
     '"' + [regex]::Replace($_, '(\\+)$', '$1$1') + '"'
   })

@@ -2,13 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { win32 } from "node:path";
+import { BACKUP_ACTIONS, requireBackupOptions } from "./backup-contract.mjs";
 
 // Execute the actual state machine with faulting OS/database boundaries. This
 // keeps failure ordering testable without starting Windows processes on macOS.
 const source = await readFile(new URL("./lifecycle.mjs", import.meta.url), "utf8");
 const body = source.replace(/import [\s\S]*? from "[^"\n]+";\n/g, "").replace(/export /g, "");
 
-function fixture({ stopFailures = 0, startFailure = false } = {}) {
+function fixture({ stopFailures = 0, startFailure = false, maintenance = null } = {}) {
   const old = { digest: "old" };
   const next = { digest: "next" };
   let state = {
@@ -24,6 +25,12 @@ function fixture({ stopFailures = 0, startFailure = false } = {}) {
   let remainingStops = stopFailures;
   const mocks = {
     process: { platform: "win32", arch: "x64", env: { LOCALAPPDATA: "C:\\User\\Local" } },
+    BACKUP_ACTIONS,
+    requireBackupOptions,
+    readMaintenance: async () => maintenance,
+    backupMaintenance: async () => {
+      throw new Error("UNEXPECTED_MAINTENANCE_ENTRY");
+    },
     randomUUID: () => "test",
     mkdir: async () => {},
     rm: async () => {},
@@ -130,4 +137,18 @@ test("candidate start that takes effect before throwing is cleaned up before rol
   const subject = fixture({ startFailure: true });
   await assert.rejects(subject.run("upgrade"), /POSTGRES_START_FAILED/u);
   assertOldRunning(subject);
+});
+
+test("pending data maintenance blocks normal startup, repair, upgrade and uninstall", async () => {
+  const maintenance = { operation: "restore", phase: "switching", safety: null };
+  for (const action of ["start", "repair", "install", "upgrade", "rollback", "uninstall"]) {
+    const subject = fixture({ maintenance });
+    await assert.rejects(subject.run(action), /MAINTENANCE_RECOVERY_REQUIRED/u);
+    assert.equal(subject.snapshot().state.current.digest, "old");
+  }
+  assert.equal((await fixture({ maintenance }).run("status")).status, "maintenance_required");
+  const subject = fixture({ maintenance });
+  await subject.run("stop");
+  assert.equal(subject.snapshot().api, null);
+  assert.equal(subject.snapshot().postgres, null);
 });

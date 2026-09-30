@@ -6,6 +6,8 @@ import { cp, readFile, writeFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { launchCommander } from "./lifecycle-acceptance-command.mjs";
+import { backupAcceptance } from "./backup-acceptance.mjs";
 const execute = promisify(execFile);
 const [payload, expectedDigest, reportFile] = process.argv.slice(2);
 assert.equal(process.platform, "win32");
@@ -24,58 +26,7 @@ const manifest = JSON.parse(await readFile(join(payload, "runtime-payload.json")
 const scenarios = [];
 let activePayload = payload;
 let activeDigest = expectedDigest;
-async function command(action, source = payload, hash = expectedDigest) {
-  const started = Date.now();
-  const pending = execute(
-    join(env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
-    [
-      "-NoProfile",
-      "-NonInteractive",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      join(source, "scripts/lifecycle-launch.ps1"),
-      "-Action",
-      action,
-      "-Payload",
-      source,
-      "-ManifestDigest",
-      hash,
-    ],
-    {
-      env: {
-        ...env,
-        NODE_OPTIONS: "--require=C:/laundry-injection-must-not-load.cjs",
-        NODE_PATH: "C:/laundry-injection",
-        DATABASE_URL: "forbidden",
-        PGHOST: "forbidden",
-        LAUNDRY_PUBLIC_ORIGIN: "forbidden",
-      },
-      cwd: payload,
-      windowsHide: true,
-      timeout: 600000,
-      maxBuffer: 65536,
-    },
-  );
-  let timingBuffer = "";
-  pending.child.stderr.on("data", (chunk) => {
-    timingBuffer += chunk;
-    const lines = timingBuffer.split("\n");
-    timingBuffer = lines.pop();
-    for (const line of lines) {
-      if (/^WINDOWS_COMPANION_TIMING \{[A-Za-z0-9_\s"{},.:[\]\-]*\}$/u.test(line.trim()))
-        console.log(line.trim());
-    }
-  });
-  try {
-    const result = await pending;
-    return JSON.parse(result.stdout);
-  } finally {
-    console.log(
-      JSON.stringify({ action, event: "launcher-close", elapsed_ms: Date.now() - started }),
-    );
-  }
-}
+const command = launchCommander({ payload, expectedDigest, env });
 async function rejected(action, source, hash, pattern) {
   await assert.rejects(command(action, source, hash), (error) => pattern.test(error.stderr ?? ""));
 }
@@ -159,6 +110,20 @@ try {
     assert.equal((await command("install")).status, "running");
     assert.equal(await secretDigest(), beforeSecrets);
     assert.equal(await sql("SELECT count(*) FROM public.runtime_acceptance_probe"), "2");
+  });
+  await backupAcceptance({
+    scenario,
+    command,
+    root,
+    payload,
+    expectedDigest,
+    io,
+    env,
+    platform,
+    sql,
+    secretDigest,
+    beforeSecrets,
+    load,
   });
   const second = await variant("laundry-runtime-second", (value) => {
     value.runtime_release = "0.1.0-win-dev.2";
@@ -280,8 +245,24 @@ try {
   });
   await scenario("exclusive-operation-lock", async () => {
     await withOperationLock(root, async () => {
-      for (const action of ["install", "start", "stop", "upgrade", "rollback", "uninstall"])
+      for (const action of [
+        "install",
+        "start",
+        "stop",
+        "upgrade",
+        "rollback",
+        "uninstall",
+        "backup",
+        "backup-list",
+      ])
         await rejected(action, payload, expectedDigest, /OPERATION_BUSY/u);
+      await assert.rejects(
+        command("restore", payload, expectedDigest, {
+          backupId: "b_" + "0".repeat(32),
+          confirmation: "0".repeat(64),
+        }),
+        (error) => /OPERATION_BUSY/u.test(error.stderr ?? ""),
+      );
     });
   });
   await scenario("private-pointer-crash-and-native-failures", async () => {

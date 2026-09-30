@@ -11,6 +11,8 @@ import {
   REQUIRED_FILES,
   requireManifest,
   requirePayloadPath,
+  BACKUP_FILES,
+  supportsBackup,
 } from "./companion-contract.mjs";
 import { inventory } from "./companion-files.mjs";
 import { inspectCompanion } from "./inspect-companion.mjs";
@@ -63,6 +65,23 @@ test("a complete synthetic payload verifies only against its external manifest d
   assert.deepEqual(await inspectCompanion(root, hash), manifest);
   await assert.rejects(inspectCompanion(root, "0".repeat(64)), /MANIFEST_DIGEST_INVALID/u);
   await assert.rejects(inspectCompanion(root, undefined), /MANIFEST_DIGEST_INVALID/u);
+});
+
+test("legacy payloads stay valid while backup capability must be completely manifest-bound", async (t) => {
+  const { manifest } = await fixture(t);
+  assert.equal(supportsBackup(manifest), false);
+  assert.equal(requireManifest(manifest), manifest);
+  const files = BACKUP_FILES.map((path) => ({ path, size: 1, sha256: "a".repeat(64) }));
+  const full = {
+    ...manifest,
+    files: [...manifest.files, ...files].sort((a, b) => (a.path < b.path ? -1 : 1)),
+  };
+  assert.equal(supportsBackup(requireManifest(full)), true);
+  const partial = {
+    ...full,
+    files: full.files.filter((entry) => entry.path !== "scripts/backup-files.mjs"),
+  };
+  assert.throws(() => requireManifest(partial), /BACKUP_CAPABILITY_INCOMPLETE/u);
 });
 
 test("payload tampering, removal and extra files fail complete inventory verification", async (t) => {

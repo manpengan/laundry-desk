@@ -62,12 +62,41 @@ powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <payload
 
 软件证据与剩余边界见[生命周期记录](../../docs/operations/2026-09-13-windows-runtime-lifecycle-result.md)。
 
+## 本机托管备份与恢复
+
+[ADR-68](../../docs/adr/2026-09-30-adr-68-windows-managed-backup-restore.md) 增加原生维护入口。
+操作前退出 Counter；沿用可信原始分发包、外部 manifest SHA 和同一 PowerShell launcher：
+
+```powershell
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <payload>\scripts\lifecycle-launch.ps1 -Action backup -Payload <payload> -ManifestDigest <manifest-sha256>
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <payload>\scripts\lifecycle-launch.ps1 -Action backup-list -Payload <payload> -ManifestDigest <manifest-sha256>
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <payload>\scripts\lifecycle-launch.ps1 -Action backup-verify -Payload <payload> -ManifestDigest <manifest-sha256> -BackupId <b_32hex>
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <payload>\scripts\lifecycle-launch.ps1 -Action restore -Payload <payload> -ManifestDigest <manifest-sha256> -BackupId <b_32hex> -ConfirmationDigest <backup-manifest-sha256>
+powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <payload>\scripts\lifecycle-launch.ps1 -Action maintenance-recover -Payload <payload> -ManifestDigest <manifest-sha256>
+```
+
+`backup` 返回 `backup_id` 和备份 `manifest_sha256`；确认摘要来自所选备份，与发行摘要是不同值。
+托管目录在安装根的 `backups`，每份仅含 custom-format dump 和严格 manifest，使用受保护 DACL。
+绑定实例、迁移、PostgreSQL 版本、大小与 SHA，不接受外部导入路径。恢复先创建安全点，在临时库
+单事务导入并直接校验迁移账本与关键表，再以 OID 绑定的事务切换，避免残留恢复后多余旧表。
+
+失败后先用 `status` 查看阶段，再明确执行 `maintenance-recover`。verified 之前回到原数据；
+verified 之后完成已经验证的恢复。`safety_backup` 保留恢复前的数据，可另选并确认恢复。维护未
+完成时，登录启动、普通启动/修复、升级/回滚和卸载不能绕过记录。原本停止的实例维护后保持停止。
+未标记的临时库不会自动删除，结果会返回 `retained_shadow`。
+
+单 dump 512 MiB、原库预检 2 GiB、托管备份含未完成目录最多 32 份，不自动删除。当前 Windows
+照片能力尚未启用，照片目录存在或照片表非空就阻断；仅允许相同迁移与 PostgreSQL 版本恢复。
+当前版与登录 controller 必须都支持备份；旧 controller 返回 `BACKUP_CONTROLLER_UPGRADE_REQUIRED`，
+需先按既有同迁移流程升级到新包，再保留数据卸载并以当前同一发行身份重装，不能手改任务或状态。
+这仍是合成数据开发能力，不代表离机恢复、换机导入、加密导出或真实运营准入已通过。
+
 ## 后续现场与生产门禁
 
 执行顺序与失败重入矩阵见
 [Windows Runtime companion 后续交付计划](../../docs/superpowers/plans/2026-09-12-windows-runtime-companion-delivery.md)。
 
-- 迁移变化时的备份与数据库联合恢复；
+- 迁移变化时的程序/数据库联合升级与恢复，以及照片能力启用后的联合备份；
 - Authenticode 或获裁决的受控内部分发策略；
 - 目标 Windows 10/11、中文 IME、150% DPI、三类打印机现场证据；
 - ADR-65 独立生产候选、离机恢复、告警送达、容量与真实数据责任。
