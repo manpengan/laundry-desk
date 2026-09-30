@@ -176,7 +176,7 @@
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.0",
     "drizzle-kit": "^0.31.10",
-    "electron": "41.10.3",
+    "electron": "41.10.6",
     "electron-builder": "26.15.3",
     "electron-vite": "4.0.1",
     "eslint": "^8.57.0",
