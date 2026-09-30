@@ -15,8 +15,24 @@ severity 忽略规则放行。
 当前安全版本线为 Electron `41.10.6`、Electron-Vite `4.0.1`、根 Vite `7.3.6`、Web
 Vite `6.4.3`、React Router DOM `7.18.2` 与 PostCSS `8.5.23`。Electron-Vite 4/Vite 7
 要求 Node `>=22.12`，仓库 engine 与 CI 的 Node 22 最新补丁线必须满足该下限。传递依赖
-通过同主版本 override 固定到 `undici@6.28.1/7.29.1`、`fast-uri@3.1.7/4.1.4`、
-`brace-expansion@1.1.18/2.1.4/5.0.9`、`js-yaml@4.3.2`、`nanoid@3.3.18`。
+通过同主版本 override 固定到 `undici@6.28.1/7.29.1`、`fast-uri@3.1.8/4.1.5`、
+`brace-expansion@1.1.21/2.1.7/5.0.12`、`js-yaml@4.3.2`、`nanoid@3.3.18`。
+
+## 2026-09-29 合并后安全依赖补充
+
+PR #220 四项门禁通过并合入后，`main@852d198` 的 `workspace-check` 与 `real-postgres`
+在依赖审计阶段失败。合并未改变已验代码树；重新采集 pnpm 审计报告发现五项新增公告，
+按各依赖分支的最高修复下限补齐：
+
+- Fast URI 固定到 `3.1.8/4.1.5`，修复
+  [百分号编码导致的 host 大小写归一化不一致](https://github.com/advisories/GHSA-hrr3-gc8f-f4qj) 与
+  [mailto 字段名解码导致的头注入](https://github.com/advisories/GHSA-jvvf-x445-j334)。
+- brace-expansion 固定到 `1.1.21/2.1.7/5.0.12`，涵盖
+  [逗号列表递归耗尽栈](https://github.com/advisories/GHSA-6j4f-fj2g-mc7p)、
+  [嵌套分组递归耗尽栈](https://github.com/advisories/GHSA-qhr7-859c-m2p7) 与
+  [分组重写的平方时间复杂度](https://github.com/advisories/GHSA-q2hr-2g5m-vwhr) 三项拒绝服务公告。
+
+仅升级五个同主版本传递依赖分支并同步锁文件；审计策略与历史例外不变。
 
 ## 2026-09-29 安全依赖更新
 
