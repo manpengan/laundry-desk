@@ -22,6 +22,10 @@ import {
 
 const CURRENT_MIGRATIONS = Object.freeze([
   Object.freeze({
+    filename: "0068_ai_approval_center.sql",
+    checksum: "a".repeat(64),
+  }),
+  Object.freeze({
     filename: "0069_bounded_automation.sql",
     checksum: "b".repeat(64),
   }),
@@ -293,7 +297,7 @@ test("scheduled maintenance restarts the server and records a dry-run rotation",
   assert.deepEqual(calls, ["stop", "up", "state"]);
 });
 
-test("restore drill uses a shadow database and drops it after validation", async () => {
+test("restore drill validates the backup before migration and verifies it again afterward", async () => {
   const directory = await backupDirectory();
   const sourcePath = join(directory, "laundry-v2-backup-20260730T030000Z-aaaaaaaa.dump");
   await writeFile(sourcePath, "private-dump", { mode: 0o600 });
@@ -337,8 +341,95 @@ test("restore drill uses a shadow database and drops it after validation", async
     dependencies,
   );
   assert.equal(result.status, "ok");
-  assert.deepEqual(calls, ["create", "restore", "migrate", "validate", "drop", "state"]);
+  assert.deepEqual(calls, [
+    "create",
+    "restore",
+    "validate",
+    "migrate",
+    "validate",
+    "drop",
+    "state",
+  ]);
 });
+
+for (const [name, migrations] of [
+  [
+    "older backup",
+    CURRENT_MIGRATIONS.slice(0, -1).map(({ filename, checksum }) => [filename, checksum]),
+  ],
+  [
+    "changed checksum",
+    CURRENT_MIGRATIONS.map(({ filename, checksum }, index) => [
+      filename,
+      index === 0 ? "c".repeat(64) : checksum,
+    ]),
+  ],
+  [
+    "unknown migration",
+    CURRENT_MIGRATIONS.map(({ filename, checksum }, index) => [
+      index === 0 ? "0068_unknown.sql" : filename,
+      checksum,
+    ]),
+  ],
+]) {
+  test(`restore drill rejects ${name} before migration can replace the evidence`, async () => {
+    const directory = await backupDirectory();
+    const sourcePath = join(directory, "laundry-v2-backup-20260730T030000Z-aaaaaaaa.dump");
+    await writeFile(sourcePath, "private-dump", { mode: 0o600 });
+    const calls = [];
+    const patches = [];
+    const output = [];
+    let migrated = false;
+    await assert.rejects(
+      () =>
+        runRestoreDrill(
+          {
+            argv: ["--file", sourcePath, "--confirm-sha256", "a".repeat(64)],
+            env: Object.freeze({}),
+            cwd: "/workspace",
+            stdout: (text) => output.push(text),
+          },
+          Object.freeze({
+            now: () => new Date("2026-07-30T04:00:00.000Z"),
+            randomUUID: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            prepareLocalDataContext: async () =>
+              Object.freeze({
+                project: "laundry-ci-test",
+                env: Object.freeze({ PATH: "/bin" }),
+                backupDirectory: directory,
+              }),
+            withMaintenanceLock: async (_directory, _operation, callback) => callback(),
+            verifyBackup: async () => Object.freeze({ path: sourcePath }),
+            readMigrationInventory: async () => CURRENT_MIGRATIONS,
+            open,
+            run: async (command) => {
+              if (command.args.includes("createdb")) calls.push("create");
+              else if (command.args.includes("dropdb")) calls.push("drop");
+              else {
+                calls.push("migrate");
+                migrated = true;
+              }
+            },
+            stream: async () => calls.push("restore"),
+            capture: async () => {
+              calls.push("validate");
+              return migrated
+                ? VALID_DRILL_EVIDENCE
+                : JSON.stringify({ status: "DRILL_OK", migrations });
+            },
+            updateMaintenanceState: async (_directory, patch) => patches.push(patch),
+          }),
+        ),
+      /LOCAL_RESTORE_DRILL_VALIDATION_FAILED/u,
+    );
+    assert.equal(migrated, false);
+    assert.deepEqual(calls, ["create", "restore", "validate", "drop"]);
+    assert.deepEqual(output, []);
+    assert.equal(patches.length, 1);
+    assert.equal(patches[0].last_drill, undefined);
+    assert.equal(patches[0].last_failure.code, "LOCAL_RESTORE_DRILL_VALIDATION_FAILED");
+  });
+}
 
 test("restore drill records failure when shadow database cleanup fails", async () => {
   const directory = await backupDirectory();
@@ -387,6 +478,7 @@ test("restore drill rejects an incomplete migration ledger after reconciliation"
   const sourcePath = join(directory, "laundry-v2-backup-20260730T030000Z-aaaaaaaa.dump");
   await writeFile(sourcePath, "private-dump", { mode: 0o600 });
   const calls = [];
+  let validations = 0;
   await assert.rejects(
     () =>
       runRestoreDrill(
@@ -413,13 +505,19 @@ test("restore drill rejects an incomplete migration ledger after reconciliation"
             if (command.args.includes("dropdb")) calls.push("drop");
           },
           stream: async () => undefined,
-          capture: async () => JSON.stringify({ status: "DRILL_OK", migrations: [] }),
+          capture: async () => {
+            validations += 1;
+            return validations === 1
+              ? VALID_DRILL_EVIDENCE
+              : JSON.stringify({ status: "DRILL_OK", migrations: [] });
+          },
           updateMaintenanceState: async (_directory, patch) => calls.push(patch),
         }),
       ),
     /LOCAL_RESTORE_DRILL_VALIDATION_FAILED/u,
   );
   assert.ok(calls.includes("drop"));
+  assert.equal(validations, 2);
   assert.equal(calls.at(-1)?.last_failure?.operation, "restore-drill");
 });
 

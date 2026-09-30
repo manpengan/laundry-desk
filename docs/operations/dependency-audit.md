@@ -12,11 +12,29 @@ low，或未经复审的 moderate 都会失败；已复审例外只允许下列 
 production/dev 属性。路径、版本或可达性发生变化时，门禁同样失败，不能用宽泛的包名或
 severity 忽略规则放行。
 
-当前安全版本线为 Electron `41.10.3`、Electron-Vite `4.0.1`、根 Vite `7.3.6`、Web
+当前安全版本线为 Electron `41.10.6`、Electron-Vite `4.0.1`、根 Vite `7.3.6`、Web
 Vite `6.4.3`、React Router DOM `7.18.2` 与 PostCSS `8.5.23`。Electron-Vite 4/Vite 7
 要求 Node `>=22.12`，仓库 engine 与 CI 的 Node 22 最新补丁线必须满足该下限。传递依赖
-通过同主版本 override 固定到 `undici@7.29.0`、`fast-uri@3.1.6/4.1.3`、
+通过同主版本 override 固定到 `undici@6.28.1/7.29.1`、`fast-uri@3.1.7/4.1.4`、
 `brace-expansion@1.1.18/2.1.4/5.0.9`、`js-yaml@4.3.2`、`nanoid@3.3.18`。
+
+## 2026-09-29 安全依赖更新
+
+修复 #197 时，全量门禁被 9 月 28 日进入 GitHub Advisory Database 的
+[Undici WebSocket 拒绝服务公告](https://github.com/advisories/GHSA-3wwx-pv8p-q78v) 阻断。
+原主干锁定的 `@electron/get > undici@7.29.0` 与
+`electron-builder > app-builder-lib > @electron/rebuild > node-gyp > undici@6.28.0`
+均在受影响范围内。两个同主版本 override 分别固定到修复版 `7.29.1` 与 `6.28.1`。
+
+完整审计还发现当前 Fast URI 与 Electron 版本受到新增公告影响，按同主版本修复下限更新：
+
+- Fast URI 固定到 `3.1.7/4.1.4`，修复
+  [非法端口导致的 authority 注入](https://github.com/advisories/GHSA-qw65-cvwx-89v3) 与
+  [未闭合括号导致的 host 解析混淆](https://github.com/advisories/GHSA-58mr-gqgx-xq4g)。
+- 根与 Edge Agent 的 Electron 统一到 `41.10.6`，涵盖审计发现的五项新增公告，包含
+  [新窗口未继承 sandbox 限制](https://github.com/advisories/GHSA-gr2m-v5gq-v685)。
+
+只更新依赖补丁版本与对应锁定测试；审计策略与历史例外不变。
 
 ## 2026-09-10 安全依赖更新
 

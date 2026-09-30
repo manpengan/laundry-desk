@@ -228,8 +228,8 @@ test("pins Electron and keeps its install lifecycle explicit", async () => {
   const rootPackage = JSON.parse(rootPackageSource);
   const edgePackage = JSON.parse(edgePackageSource);
 
-  assert.equal(rootPackage.devDependencies.electron, "41.10.3");
-  assert.equal(edgePackage.devDependencies.electron, "41.10.3");
+  assert.equal(rootPackage.devDependencies.electron, "41.10.6");
+  assert.equal(edgePackage.devDependencies.electron, "41.10.6");
   assert.equal(rootPackage.devDependencies["electron-builder"], "26.15.3");
   assert.match(workspaceSource, /^\s{2}"?@google\/genai"?: false$/mu);
   assert.match(workspaceSource, /^\s{2}electron: true$/mu);

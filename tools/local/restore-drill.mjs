@@ -211,6 +211,12 @@ export async function runRestoreDrill(options, dependencies = defaultDependencie
       } finally {
         await handle.close();
       }
+      // Check the backup itself before migration can fill missing ledger entries.
+      const restored = await dependencies.capture(
+        drillValidateCommand(context.project, database),
+        commandOptions,
+      );
+      assertDrillEvidence(restored.trim(), expectedMigrations);
       await dependencies.run(drillMigrateCommand(context.project), {
         ...commandOptions,
         env: Object.freeze({ ...context.env, PGDATABASE: database }),
