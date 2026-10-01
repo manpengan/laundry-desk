@@ -26,6 +26,7 @@
     "package:smoke:win": "pnpm exec playwright test -c playwright.electron.windows-package.config.ts",
     "runtime:smoke:win": "pnpm exec playwright test -c playwright.electron.windows-runtime.config.ts",
     "runtime:functional:win": "pnpm exec playwright test -c playwright.electron.windows-functional.config.ts",
+    "runtime:offline:win": "pnpm exec playwright test -c playwright.electron.windows-offline.config.ts",
     "release:mac": "node scripts/release-mac.mjs",
     "hash:app": "node scripts/hash-app.mjs",
     "test": "pnpm run spa:verify && tsc -p tsconfig.json && node --test scripts/*.test.mjs && node --test \"dist/**/*.test.js\"",

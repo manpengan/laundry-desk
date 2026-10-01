@@ -52,18 +52,56 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_SOURCE_CHECKPOINT_FAILED' }
             $known = @($records | Where-Object { $_.Length -ge 4 -and $tracked.Contains($_.Substring(3)) })
             $changed = @($known | Select-Object -First 32 | ForEach-Object { @{ status=$_.Substring(0,2); path=$_.Substring(3) } })
+            $untracked = @($records | Where-Object { $_.StartsWith('?? ') })
+            $metadata = @($untracked | Select-Object -First 32 | ForEach-Object {
+              $relative = $_.Substring(3)
+              $sha = [Security.Cryptography.SHA256]::Create()
+              try { $nameHash = [Convert]::ToHexString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($relative))).ToLowerInvariant() }
+              finally { $sha.Dispose() }
+              $candidateName = if ($relative -cin @('NUL','nul')) { $relative } else { $null }
+              $suffix = [regex]::Match($relative.ToLowerInvariant(),'\.([a-z0-9]{1,16})$').Groups[1].Value
+              $suffixKind = if ($suffix -cin @('ps1','lnk','dll','pdb','tmp','json')) { $suffix } elseif ($relative -notmatch '\.') { 'none' } else { 'other' }
+              $kind = 'unavailable'
+              try {
+                $parts = @($relative.Split('/'))
+                if ($relative.Length -gt 240 -or $relative -match '[\\:\x00-\x1f]' -or @($parts | Where-Object { $_ -cin @('','.', '..') }).Count -ne 0) { throw 'INVALID' }
+                $candidate = $env:GITHUB_WORKSPACE
+                for ($index=0; $index -lt $parts.Count; $index++) {
+                  $candidate = [IO.Path]::Combine($candidate,$parts[$index])
+                  # GetAttributes reports the object itself; stop before entering any reparse point.
+                  $attributes = [IO.File]::GetAttributes('\\?\' + $candidate)
+                  if (($attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { $kind='reparse'; break }
+                  $directory = ($attributes -band [IO.FileAttributes]::Directory) -ne 0
+                  if ($index -eq ($parts.Count - 1)) { $kind=if($directory){'directory'}else{'file'} }
+                  elseif (-not $directory) { throw 'INVALID' }
+                }
+              } catch { $kind='unavailable' }
+              # No unknown path or file content is published or read, including a literal NUL file.
+              @{ name_sha256=$nameHash; public_candidate=$candidateName; suffix_kind=$suffixKind; kind=$kind }
+            })
             $report = [ordered]@{
               stage=$Stage; head_matches=($head -ceq $env:GITHUB_SHA); status_count=$records.Count
               tracked_changed=$changed; tracked_truncated=($known.Count -gt 32)
-              untracked_count=@($records | Where-Object { $_.StartsWith('?? ') }).Count
+              untracked_count=$untracked.Count; untracked_metadata=$metadata; untracked_truncated=($untracked.Count -gt 32)
               unknown_count=($records.Count - $known.Count)
             }
             # Publish only public tracked paths; unknown filenames and file contents stay private.
             [Console]::WriteLine('WINDOWS_COMPANION_SOURCE_CHECKPOINT ' + ($report | ConvertTo-Json -Compress -Depth 4))
           }
           Write-SourceCheckpoint 'before_validation'
-          pnpm.cmd runtime:win:test
-          $validationExit = $LASTEXITCODE
+          $trackedTests = @(git.exe ls-files -- 'tools/windows-runtime/*.test.mjs' | Sort-Object)
+          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_TEST_SET_INVALID' }
+          $globTests = @(Get-ChildItem -LiteralPath 'tools/windows-runtime' -Filter '*.test.mjs' -File | ForEach-Object { 'tools/windows-runtime/' + $_.Name } | Sort-Object)
+          if ($trackedTests.Count -lt 1 -or $trackedTests.Count -gt 64 -or @($trackedTests | Where-Object { $_ -cnotmatch '^tools/windows-runtime/[a-z0-9-]+\.test\.mjs$' }).Count -ne 0 -or @(Compare-Object -ReferenceObject $trackedTests -DifferenceObject $globTests -CaseSensitive).Count -ne 0) {
+            throw 'WINDOWS_COMPANION_TEST_SET_INVALID'
+          }
+          [Console]::WriteLine('WINDOWS_COMPANION_TEST_SET ' + (@{ count=$trackedTests.Count; files=$trackedTests } | ConvertTo-Json -Compress))
+          $validationExit = 0
+          foreach ($testFile in $trackedTests) {
+            node.exe --test $testFile
+            if ($LASTEXITCODE -ne 0) { $validationExit = 1 }
+            Write-SourceCheckpoint ('after/' + $testFile)
+          }
           Write-SourceCheckpoint 'after_validation'
           if ($validationExit -ne 0) { exit $validationExit }
       - name: Download pinned upstream archives and build payload

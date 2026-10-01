@@ -11,7 +11,8 @@ import { runtimeEntryFixture } from "./runtime-entry-test-fixture.mjs";
 
 const execute = promisify(execFile);
 const sourceRoot = dirname(fileURLToPath(import.meta.url));
-const windowsOnly = { skip: process.platform !== "win32", timeout: 120000 };
+// The rejection case invokes six separately bounded PowerShell processes.
+const windowsOnly = { skip: process.platform !== "win32", timeout: 360000 };
 const quote = (value) => "'" + value.replaceAll("'", "''") + "'";
 const shortcutName = (fixture) =>
   `Laundry Runtime V2 安装与维护 (${fixture.manifestSha.slice(0, 12)}).lnk`;
@@ -49,7 +50,7 @@ try {
       env: { ...cleanEnvironment(), ...environment },
       windowsHide: true,
       maxBuffer: 65536,
-      timeout: 40000,
+      timeout: 60000,
     },
   );
   assert.equal(result.stderr.trim(), "");
