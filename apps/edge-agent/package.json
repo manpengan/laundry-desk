@@ -1,6 +1,6 @@
 {
   "name": "@laundry/edge-agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "laundry-desk V2 local-first desktop client",
   "author": "laundry-desk contributors",
   "private": true,

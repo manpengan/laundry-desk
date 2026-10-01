@@ -15,15 +15,24 @@ C# 审查发现的源目录/文件替换竞态已改为 no-follow 同一句柄�
 TypeScript 审查发现的 profile 路径替换及打包资源重复已修复并补行为/真实配置回归。
 安全、C# 与 TypeScript 独立复查通过。
 
+后续 NSIS 实际构建发现安装说明快捷方式的美元引号被识别为变量；修正后，Windows makensis
+以 `/WX` 编译实际指南宏零警告通过。Windows 2022 CI 的入口安装仍在 `MENU` 阶段失败，
+新增严格阶段码与冲突保留回归仅改善诊断，尚未宣称关闭该平台故障。
+
+Counter 第二版为 `0.1.1`。打包与检查从同一包元数据取得严格版本，取消检查器固定 `0.1.0`，
+以便验证从已安装 `0.1.0` 升级和程序回退。中文输入验收只监听真实可信 composition/input；
+隔离 VM 或人工提供输入，自动填值与粘贴不计通过。已移除共享桌面的全局发键实现。
+
 ## 当前软件验证
 
 - 依赖审计：high=0、critical=0，仅原有两项精确例外。
 - Server：1171 项，1069 通过、102 PostgreSQL 环境专项跳过、0 失败。
-- Edge-agent 完整测试：106 个 scripts + 425 个 dist，共 531 通过、0 失败；
+- Edge-agent 完整测试：108 个 scripts + 425 个 dist，共 533 通过、0 失败；
   类型检查及本次相关 lint、格式通过。
-- Runtime 本地：72 项，64 通过、8 项 Windows 专属跳过、0 失败。
-- Windows 10 PowerShell 5.1：生成入口 8/8 通过，环境清理、固定恢复参数、
-  manifest/bootstrap/helpers/链接拒绝、安装幂等、独立目录和快捷方式、源目录撤走后继续使用。
+- Runtime 本地：73 项，64 通过、9 项 Windows 专属跳过、0 失败。
+- Windows 10 PowerShell 5.1：生成入口行为测试 4/4 通过，环境清理、固定恢复参数、
+  manifest/bootstrap/helpers/链接拒绝、安装幂等、独立目录和快捷方式、源目录撤走后继续使用，
+  以及 Start Menu 同名文件冲突时不覆盖并返回稳定码。
 - Windows 10 ACL 合成专项：1/1 通过，约 0.4 秒。
 
 Windows 专项上述入口使用受控合成 launcher，不运行真实数据库或登录任务；

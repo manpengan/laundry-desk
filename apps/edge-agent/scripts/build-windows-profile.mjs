@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WINDOWS_PROFILE_IDS, stageWindowsProfile } from "./windows-profile.mjs";
+import { WINDOWS_PACKAGE_VERSION } from "./windows-package-version.mjs";
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
 
@@ -40,6 +41,7 @@ export async function buildWindowsProfile({
   const staged = await stageWindowsProfile({
     profileId,
     expectedGitSha,
+    packageVersion: WINDOWS_PACKAGE_VERSION,
     targetRoot: join(parent, "windows-profile"),
   });
   const { build, Platform, Arch } = builder ?? (await import("electron-builder"));

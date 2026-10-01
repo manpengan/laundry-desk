@@ -8,8 +8,9 @@ import test from "node:test";
 import { inspectPackagedWindowsSoftware } from "./inspect-packaged-win.mjs";
 import { loadWindowsProfile, stageWindowsProfile } from "./windows-profile.mjs";
 import { cp } from "node:fs/promises";
+import { WINDOWS_PACKAGE_VERSION } from "./windows-package-version.mjs";
 
-const INSTALLER = "laundry-desk-v2-0.1.0-windows-x64-development-only.exe";
+const INSTALLER = `laundry-desk-v2-${WINDOWS_PACKAGE_VERSION}-windows-x64-development-only.exe`;
 const HELPER = "laundry-windows-helper.exe";
 const SOURCE_GIT_SHA = "a".repeat(40);
 
@@ -33,7 +34,7 @@ async function fixture(t, profileId = "generic") {
   const { profile } = await loadWindowsProfile({ profileId });
   const appName = profile.display_name + ".exe";
   const installerName =
-    profileId === "generic" ? INSTALLER : INSTALLER.replace("v2-0.", "v2-hongfa-0.");
+    profileId === "generic" ? INSTALLER : INSTALLER.replace("v2-", "v2-hongfa-");
   await Promise.all([
     mkdir(join(spa, "bundles"), { recursive: true }),
     mkdir(join(resources, "update"), { recursive: true }),

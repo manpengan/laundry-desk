@@ -18,8 +18,9 @@ import {
   inspectPackagedWindowsProfile,
   loadWindowsProfile,
 } from "./windows-profile.mjs";
+import { WINDOWS_PACKAGE_VERSION } from "./windows-package-version.mjs";
 
-const PACKAGE_VERSION = "0.1.0";
+const PACKAGE_VERSION = WINDOWS_PACKAGE_VERSION;
 const HELPER = "laundry-windows-helper.exe";
 const PROVENANCE = "windows-source.json";
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
