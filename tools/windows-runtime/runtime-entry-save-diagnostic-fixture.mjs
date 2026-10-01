@@ -251,6 +251,7 @@ try {
       join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
       ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", runner],
       {
+        cwd: fixture.root,
         env: { ...cleanEnvironment(), ...environment },
         windowsHide: true,
         maxBuffer: 65536,

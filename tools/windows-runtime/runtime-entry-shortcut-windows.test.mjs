@@ -93,7 +93,14 @@ test(
       user = join(fixture.root, "用户");
     const menu = join(roaming, "Microsoft/Windows/Start Menu/Programs");
     const desktop = join(user, "Desktop");
-    for (const path of [local, menu, desktop]) await mkdir(path, { recursive: true });
+    for (const path of [
+      local,
+      menu,
+      desktop,
+      join(user, "AppData/Local"),
+      join(user, "AppData/Roaming"),
+    ])
+      await mkdir(path, { recursive: true });
     const environment = { LOCALAPPDATA: local, APPDATA: roaming, USERPROFILE: user };
     const installed = join(local, "Programs/Laundry Desk Runtime V2", fixture.manifestSha);
     const report = await runScript(
