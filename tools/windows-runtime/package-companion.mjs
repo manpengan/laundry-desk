@@ -23,6 +23,7 @@ import {
 } from "./companion-contract.mjs";
 import { inventory, requireRealDirectory } from "./companion-files.mjs";
 import { inspectCompanion } from "./inspect-companion.mjs";
+import { extractCompanionCrt } from "./extract-companion-crt.mjs";
 
 const execute = promisify(execFile);
 const scriptsRoot = dirname(fileURLToPath(import.meta.url));
@@ -30,6 +31,9 @@ const repositoryRoot = resolve(scriptsRoot, "../..");
 const scriptNames = [
   "companion-contract.mjs",
   "companion-files.mjs",
+  "companion-crt-source.mjs",
+  "companion-crt-contract.mjs",
+  "companion-pe.mjs",
   "inspect-companion.mjs",
   "smoke-companion.mjs",
   "lifecycle-cli.mjs",
@@ -128,7 +132,13 @@ function copyFilter(path) {
   );
 }
 
-export async function packageCompanion({ sourceSha, nodeArchive, postgresArchive, release }) {
+export async function packageCompanion({
+  sourceSha,
+  nodeArchive,
+  postgresArchive,
+  crtArchive,
+  release,
+}) {
   if (process.platform !== "win32" || process.arch !== "x64") fail("BUILD_PLATFORM_INVALID");
   if (!/^[0-9]+\.[0-9]+\.[0-9]+-win-dev(?:\.[0-9]+)?$/u.test(release)) fail("RELEASE_INVALID");
   await sourceIdentity(sourceSha);
@@ -181,13 +191,6 @@ export async function packageCompanion({ sourceSha, nodeArchive, postgresArchive
       ]);
     }
     const node = join(payload, "node/node.exe");
-    if (
-      (await run(node, ["--version"])) !== `v${COMPANION_SOURCES.node.version}` ||
-      (await run(join(payload, "postgres/bin/postgres.exe"), ["--version"])) !==
-        `postgres (PostgreSQL) ${COMPANION_SOURCES.postgres.version}`
-    ) {
-      fail("BINARY_VERSION_INVALID");
-    }
     const deployed = join(work, "deployed");
     console.error("WINDOWS_COMPANION_STAGE_DEPLOY_SERVER");
     await run(process.execPath, [
@@ -219,6 +222,15 @@ export async function packageCompanion({ sourceSha, nodeArchive, postgresArchive
       join(repositoryRoot, "packages/db/src/README.md"),
       join(payload, "metadata/schema.md"),
     );
+    console.error("WINDOWS_COMPANION_STAGE_EXTRACT_CRT");
+    await extractCompanionCrt(crtArchive, payload, buildEnvironment());
+    if (
+      (await run(node, ["--version"])) !== `v${COMPANION_SOURCES.node.version}` ||
+      (await run(join(payload, "postgres/bin/postgres.exe"), ["--version"])) !==
+        `postgres (PostgreSQL) ${COMPANION_SOURCES.postgres.version}`
+    ) {
+      fail("BINARY_VERSION_INVALID");
+    }
     await mkdir(join(payload, "scripts"));
     for (const name of scriptNames)
       await cp(join(scriptsRoot, name), join(payload, "scripts", name));
@@ -267,27 +279,30 @@ export async function packageCompanion({ sourceSha, nodeArchive, postgresArchive
   }
 }
 
+export function packageArguments(args) {
+  if (
+    !Array.isArray(args) ||
+    args.length !== 10 ||
+    args.some((arg) => typeof arg !== "string" || !arg || arg.includes("\0")) ||
+    args[0] !== "--source-sha" ||
+    args[2] !== "--node-archive" ||
+    args[4] !== "--postgres-archive" ||
+    args[6] !== "--crt-archive" ||
+    args[8] !== "--release"
+  )
+    fail("ARGS_INVALID");
+  return {
+    sourceSha: args[1],
+    nodeArchive: args[3],
+    postgresArchive: args[5],
+    crtArchive: args[7],
+    release: args[9],
+  };
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const args = process.argv.slice(2);
-    if (
-      args.length !== 8 ||
-      args[0] !== "--source-sha" ||
-      args[2] !== "--node-archive" ||
-      args[4] !== "--postgres-archive" ||
-      args[6] !== "--release"
-    )
-      fail("ARGS_INVALID");
-    console.log(
-      JSON.stringify(
-        await packageCompanion({
-          sourceSha: args[1],
-          nodeArchive: args[3],
-          postgresArchive: args[5],
-          release: args[7],
-        }),
-      ),
-    );
+    console.log(JSON.stringify(await packageCompanion(packageArguments(process.argv.slice(2)))));
   } catch (error) {
     console.error(
       /^WINDOWS_COMPANION_[A-Z_]+$/u.test(error.message)

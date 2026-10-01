@@ -1,33 +1,15 @@
-import { readFile, open } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { requireX64Pe } from "./companion-pe.mjs";
+import {
+  CRT_METADATA_NAME,
+  CRT_TARGET_DIRECTORIES,
+  requireCrtManifestFiles,
+  requireCrtMetadata,
+} from "./companion-crt-contract.mjs";
 import { fail, MANIFEST_NAME, parseManifest } from "./companion-contract.mjs";
-import { hashFile, inventory, requireRealDirectory } from "./companion-files.mjs";
-
-async function requireX64Pe(path) {
-  const handle = await open(path, "r");
-  try {
-    const header = Buffer.alloc(64);
-    if (
-      (await handle.read(header, 0, 64, 0)).bytesRead !== 64 ||
-      header.toString("ascii", 0, 2) !== "MZ"
-    )
-      fail("PE_INVALID");
-    const offset = header.readUInt32LE(60);
-    const pe = Buffer.alloc(26);
-    if (
-      offset < 64 ||
-      offset > 1024 * 1024 ||
-      (await handle.read(pe, 0, 26, offset)).bytesRead !== 26 ||
-      pe.readUInt32LE(0) !== 0x4550 ||
-      pe.readUInt16LE(4) !== 0x8664 ||
-      pe.readUInt16LE(24) !== 0x20b
-    )
-      fail("PE_INVALID");
-  } finally {
-    await handle.close();
-  }
-}
+import { hashFile, inventory, readBoundedFile, requireRealDirectory } from "./companion-files.mjs";
 
 export async function inspectCompanion(root, expectedDigest) {
   root = await requireRealDirectory(root);
@@ -51,6 +33,16 @@ export async function inspectCompanion(root, expectedDigest) {
   }
   for (const file of actual.files.filter((entry) => /\.(exe|node)$/iu.test(entry.path))) {
     await requireX64Pe(join(root, file.path));
+  }
+  if (requireCrtManifestFiles(manifest.files)) {
+    const metadata = await readBoundedFile(
+      join(root, CRT_METADATA_NAME),
+      manifest.files.find((file) => file.path === CRT_METADATA_NAME),
+      65536,
+    );
+    const crt = requireCrtMetadata(metadata, manifest.files);
+    for (const directory of CRT_TARGET_DIRECTORIES)
+      for (const file of crt.files) await requireX64Pe(join(root, directory, file.name));
   }
   const helper =
     "server/node_modules/@laundry/platform-fs/native/windows/laundry-windows-helper.exe";

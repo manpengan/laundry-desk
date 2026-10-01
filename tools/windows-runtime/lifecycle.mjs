@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, rename } from "node:fs/promises";
 import { dirname, join, resolve, relative, isAbsolute } from "node:path";
+import { smokeCompanion } from "./smoke-companion.mjs";
 import { inspectCompanion } from "./inspect-companion.mjs";
 import { requireRealDirectory } from "./companion-files.mjs";
 import { fail } from "./companion-contract.mjs";
@@ -67,6 +68,8 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
         fail("TASK_CONFLICT");
       const ports = await host("ports", root, source, expectedDigest);
       if (ports.api || ports.postgres) fail("PORT_CONFLICT");
+      // Verify native dependencies before creating state, secrets, or a database.
+      await smokeCompanion(source, expectedDigest);
     }
     if (action === "uninstall") {
       const within = relative(root, source);

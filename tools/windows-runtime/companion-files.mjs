@@ -63,6 +63,45 @@ export async function hashFile(path) {
   }
 }
 
+export async function readBoundedFile(path, expected, limit) {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_FILE_BYTES)
+    fail("FILE_LIMIT_INVALID");
+  await requireRealDirectory(dirname(path));
+  const before = await lstat(path);
+  if (
+    !before.isFile() ||
+    before.isSymbolicLink() ||
+    before.nlink !== 1 ||
+    before.size > limit ||
+    before.size !== expected.size
+  )
+    fail("FILE_INVALID");
+  const file = await open(path, "r");
+  try {
+    if (!sameFile(before, await file.stat())) fail("FILE_CHANGED");
+    // One extra byte detects growth without allocating beyond the declared limit.
+    const buffer = Buffer.alloc(before.size + 1);
+    let size = 0;
+    while (size < buffer.length) {
+      const { bytesRead } = await file.read(buffer, size, buffer.length - size, size);
+      if (bytesRead === 0) break;
+      size += bytesRead;
+    }
+    if (
+      size !== before.size ||
+      !sameFile(before, await file.stat()) ||
+      !sameFile(before, await lstat(path))
+    )
+      fail("FILE_CHANGED");
+    const bytes = buffer.subarray(0, size);
+    if (createHash("sha256").update(bytes).digest("hex") !== expected.sha256)
+      fail("FILE_DIGEST_MISMATCH");
+    return bytes;
+  } finally {
+    await file.close();
+  }
+}
+
 export async function inventory(root, excluded = []) {
   root = await requireRealDirectory(root);
   const files = [];

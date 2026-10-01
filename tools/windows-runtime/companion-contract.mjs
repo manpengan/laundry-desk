@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { requireCrtManifestFiles } from "./companion-crt-contract.mjs";
 
 export const MANIFEST_NAME = "runtime-payload.json";
 export const MAX_FILES = 20000;
@@ -183,6 +184,7 @@ export function requireManifest(value) {
     !supportsBackup(value)
   )
     fail("BACKUP_CAPABILITY_INCOMPLETE");
+  requireCrtManifestFiles(value.files);
   return value;
 }
 
