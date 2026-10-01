@@ -39,7 +39,7 @@ function Invoke-RuntimeEntryAction {
   if (@('install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','restore','maintenance-recover') -cnotcontains $Verb) {
     throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID'
   }
-  if ($Verb -ceq 'install') { [void](Install-RuntimeEntry) }
+  if ($Verb -ceq 'install' -or $Verb -ceq 'upgrade') { [void](Install-RuntimeEntry) }
   $arguments = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',
     (Join-Path $PayloadRoot 'scripts\lifecycle-launch.ps1'),'-Action',$Verb,'-Payload',$PayloadRoot,'-ManifestDigest',$BoundManifest)
   if ($Verb -ceq 'restore' -or $Verb -ceq 'backup-verify') { $arguments += @('-BackupId', $Id) }

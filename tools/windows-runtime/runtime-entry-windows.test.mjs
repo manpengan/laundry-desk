@@ -19,6 +19,11 @@ import { cleanEnvironment } from "./lifecycle-environment.mjs";
 import { packageRuntimeEntry } from "./package-runtime-entry.mjs";
 import { ENTRY_NAME } from "./runtime-entry-contract.mjs";
 import { runtimeEntryFixture } from "./runtime-entry-test-fixture.mjs";
+import {
+  shortcutInstallationFailure,
+  shortcutSaveDiagnostic,
+  shortcutSaveFailureCode,
+} from "./runtime-entry-save-diagnostic-fixture.mjs";
 
 const execute = promisify(execFile);
 const windowsOnly = { skip: process.platform !== "win32", timeout: 120000 };
@@ -143,6 +148,48 @@ test(
 );
 
 test(
+  "upgrade retains a bound Programs maintenance entry after its distribution is removed",
+  windowsOnly,
+  async (t) => {
+    const fixture = await runtimeEntryFixture(t);
+    await packageRuntimeEntry(fixture);
+    const local = join(fixture.root, "L"),
+      roaming = join(fixture.root, "Roaming"),
+      user = join(fixture.root, "UserProfile");
+    const menu = join(roaming, "Microsoft/Windows/Start Menu/Programs");
+    await mkdir(local, { recursive: true });
+    await mkdir(menu, { recursive: true });
+    await mkdir(user, { recursive: true });
+    const environment = { LOCALAPPDATA: local, APPDATA: roaming, USERPROFILE: user };
+    await runEntry(fixture.output, ["-Action", "install"], environment);
+    const previous = join(local, "Programs/Laundry Desk Runtime V2", fixture.manifestSha);
+    const previousBytes = await readFile(join(previous, ENTRY_NAME));
+    const candidate = await runtimeEntryFixture(t);
+    const nextManifest = { ...candidate.manifest, runtime_release: "0.1.1-win-dev" };
+    const nextBytes = canonicalManifest(nextManifest);
+    await writeFile(join(candidate.payload, "runtime-payload.json"), nextBytes);
+    const next = { ...candidate, manifest: nextManifest, manifestSha: digest(nextBytes) };
+    assert.notEqual(next.manifestSha, fixture.manifestSha);
+    await packageRuntimeEntry(next);
+    const upgraded = JSON.parse(
+      (await runEntry(next.output, ["-Action", "upgrade"], environment)).stdout,
+    );
+    assert.equal(upgraded.action, "upgrade");
+    const installed = join(local, "Programs/Laundry Desk Runtime V2", next.manifestSha);
+    assert.ok((await readFile(join(installed, ENTRY_NAME))).length > 0);
+    assert.deepEqual(await readFile(join(previous, ENTRY_NAME)), previousBytes);
+    assert.equal((await readdir(join(menu, "Laundry Desk Runtime V2"))).length, 2);
+    await rm(next.output, { recursive: true });
+    await rm(next.payload, { recursive: true });
+    const result = JSON.parse(
+      (await runEntry(installed, ["-Action", "status"], environment)).stdout,
+    );
+    assert.equal(result.action, "status");
+    assert.equal(result.manifest_sha256, next.manifestSha);
+  },
+);
+
+test(
   "the ordinary-user installer creates independent private Programs entry and shortcuts that survive source removal",
   windowsOnly,
   async (t) => {
@@ -157,11 +204,17 @@ test(
     await mkdir(menu, { recursive: true });
     await mkdir(desktop, { recursive: true });
     const environment = { LOCALAPPDATA: local, APPDATA: roaming, USERPROFILE: user };
-    assert.equal(
-      JSON.parse((await runEntry(fixture.output, ["-Action", "install"], environment)).stdout)
-        .action,
-      "install",
-    );
+    let first;
+    try {
+      first = await runEntry(fixture.output, ["-Action", "install"], environment);
+    } catch (error) {
+      const code = shortcutSaveFailureCode(error.stderr);
+      if (!code) throw error;
+      throw await shortcutInstallationFailure(code, () =>
+        shortcutSaveDiagnostic(fixture, environment),
+      );
+    }
+    assert.equal(JSON.parse(first.stdout).action, "install");
     const installed = join(local, "Programs/Laundry Desk Runtime V2", fixture.manifestSha);
     assert.ok((await readFile(join(installed, ENTRY_NAME))).length > 0);
     assert.equal(
@@ -247,7 +300,7 @@ test(
         assert.equal(error.stdout.trim(), "");
         assert.match(
           error.stderr.trim(),
-          /^WINDOWS_RUNTIME_ENTRY_SHORTCUT_(?:COM_LOAD|SAVE)_(?:COM|ACCESS|IO|ARGUMENT|OTHER)_FAILED$/u,
+          /^WINDOWS_RUNTIME_ENTRY_SHORTCUT_(?:COM_LOAD|SAVE)_(?:COM|ACCESS|IO(?:_[A-Z_]+)?|ARGUMENT|OTHER)_FAILED$/u,
         );
         assert.equal(error.stderr.includes(fixture.root), false);
         return true;
@@ -255,5 +308,16 @@ test(
     );
     assert.equal(await readFile(sentinel, "utf8"), "unrelated shortcut directory\n");
     assert.deepEqual(await readdir(menu), [conflict.split(/[/\\]/u).at(-1)]);
+    const report = await shortcutSaveDiagnostic(
+      fixture,
+      { LOCALAPPDATA: local, APPDATA: roaming, USERPROFILE: user },
+      { directory: menu },
+    );
+    assert.equal(report.diagnostic_result, "failed");
+    assert.match(report.code, /^WINDOWS_RUNTIME_ENTRY_SHORTCUT_SAVE_[A-Z_]+_FAILED$/u);
+    assert.equal(report.native.stage, "SAVE");
+    assert.equal(Number.isInteger(report.native.hresult), true);
+    assert.equal(JSON.stringify(report).includes(fixture.root), false);
+    assert.equal(await readFile(sentinel, "utf8"), "unrelated shortcut directory\n");
   },
 );

@@ -72,7 +72,27 @@ function Set-RuntimeEntryShortcut {
     $kind = 'OTHER'
     if ($exception -is [Runtime.InteropServices.COMException]) { $kind = 'COM' }
     elseif ($exception -is [UnauthorizedAccessException]) { $kind = 'ACCESS' }
-    elseif ($exception -is [IO.IOException]) { $kind = 'IO' }
+    elseif ($exception -is [IO.PathTooLongException]) { $kind = 'IO_PATH_TOO_LONG' }
+    elseif ($exception -is [IO.DirectoryNotFoundException]) { $kind = 'IO_DIRECTORY_NOT_FOUND' }
+    elseif ($exception -is [IO.FileNotFoundException]) { $kind = 'IO_FILE_NOT_FOUND' }
+    elseif ($exception -is [IO.IOException]) {
+      $kind = switch ($exception.HResult -band 0xffff) {
+        2 { 'IO_FILE_NOT_FOUND' }
+        3 { 'IO_DIRECTORY_NOT_FOUND' }
+        5 { 'IO_ACCESS' }
+        32 { 'IO_SHARING' }
+        33 { 'IO_LOCK' }
+        80 { 'IO_EXISTS' }
+        87 { 'IO_INVALID_ARGUMENT' }
+        112 { 'IO_DISK_FULL' }
+        123 { 'IO_INVALID_NAME' }
+        183 { 'IO_EXISTS' }
+        206 { 'IO_PATH_TOO_LONG' }
+        252 { 'IO_INVALID_NAME' }
+        267 { 'IO_NOT_DIRECTORY' }
+        default { 'IO_OTHER' }
+      }
+    }
     elseif ($exception -is [ArgumentException]) { $kind = 'ARGUMENT' }
     throw ('WINDOWS_RUNTIME_ENTRY_SHORTCUT_' + $stage + '_' + $kind + '_FAILED')
   }

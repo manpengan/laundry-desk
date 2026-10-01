@@ -43,13 +43,15 @@ lifecycle 对完整 payload、安装状态、进程/任务归属和维护记录�
 
 ### 3. 独立普通用户程序目录
 
-安装动作先把完整绑定分发安装到 `%LOCALAPPDATA%\Programs\Laundry Desk Runtime V2\<manifestSHA>`。
+安装与升级动作先把完整绑定分发安装到 `%LOCALAPPDATA%\Programs\Laundry Desk Runtime V2\<manifestSHA>`。
 根与发行目录使用当前 SID、SYSTEM 和 Administrators 的受保护私有 DACL；新目录内按绑定逐文件
 验证并复制，再发布目录。既有发行目录须完整匹配，额外文件、链接、篡改或快捷方式冲突拒绝覆盖。
 
 每个发行在开始菜单和存在时的桌面建立独立快捷方式，指向系统 PowerShell 的固定入口参数。
 发行目录不位于 Counter 或 `runtime-companion` 数据目录内；卸载 Counter 不删除 Runtime 程序入口、
-数据库、凭据或备份。现有 Runtime 数据根、登录任务以及保留数据卸载规则不变。
+数据库、凭据或备份。升级保留旧发行入口，并为新版建立独立入口；撤走新版原分发后仍可维护。
+入口保存失败发生在生命周期启动前，原 Runtime 数据与状态不变；后续升级失败由既有生命周期恢复。
+现有 Runtime 数据根、登录任务以及保留数据卸载规则不变。
 
 ### 4. 人可见的维护决策
 

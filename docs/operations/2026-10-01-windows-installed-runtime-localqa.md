@@ -6,6 +6,10 @@
 本次仅使用合成数据，状态为 **completed_local_qa · development_only**：
 两项安装版 E2E、十场景 Runtime 维护 smoke 与原开发服务恢复均完成；正式发行与生产门禁另列。
 
+后续接续：两项安装修复已由 PR #223 通过四项 CI 并普通合入主线；下述旧 QA 产物身份与结果保留。
+独立维护入口、Counter 第二版与宏发 profile 的最新交付进度见
+[Windows 全功能接续记录](2026-10-01-windows-full-feature-delivery.md)。
+
 ## 基线与产物身份
 
 - 干净主线基线：`83d8044e56107e2b723bf652702e6f0c76dfe7b3`，对应

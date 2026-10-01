@@ -69,5 +69,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         : "WINDOWS_PROFILE_BUILD_FAILED",
     );
     process.exitCode = 1;
+    // Builder shutdown callbacks must not replace the failed CLI exit status.
+    process.on("exit", () => {
+      process.exitCode = 1;
+    });
   }
 }
