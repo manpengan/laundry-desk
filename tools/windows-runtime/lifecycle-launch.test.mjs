@@ -36,7 +36,7 @@ test(
     import {spawn} from 'node:child_process';
     const child=spawn(${JSON.stringify(process.execPath)},['-e','setTimeout(()=>{},30000)'],{detached:true,stdio:'ignore',windowsHide:true,cwd:${JSON.stringify(await realpath(tmpdir()))}});
     child.unref();
-    console.log(JSON.stringify({pid:child.pid}));
+    console.log(JSON.stringify({pid:child.pid,executionPolicy:process.env.PSExecutionPolicyPreference,nodeOptions:process.env.NODE_OPTIONS,nodePath:process.env.NODE_PATH}));
   `,
     );
     const files = [];
@@ -67,7 +67,16 @@ test(
         "-ManifestDigest",
         digest(manifest),
       ],
-      { env: cleanEnvironment(), windowsHide: true, timeout: 15000, maxBuffer: 65536 },
+      {
+        env: {
+          ...cleanEnvironment(),
+          NODE_OPTIONS: "--require laundry-launcher-injection-test",
+          NODE_PATH: "laundry-launcher-injection-test",
+        },
+        windowsHide: true,
+        timeout: 15000,
+        maxBuffer: 65536,
+      },
     );
     let exitedAt;
     pending.child.once("exit", () => {
@@ -78,8 +87,11 @@ test(
       exitedAt !== undefined && Date.now() - exitedAt < 1000,
       "launcher output stayed open after process exit",
     );
-    const { pid } = JSON.parse(result.stdout);
+    const { pid, executionPolicy, nodeOptions, nodePath } = JSON.parse(result.stdout);
     assert.ok(Number.isSafeInteger(pid) && pid > 0);
+    assert.equal(executionPolicy, "Bypass", "launcher dropped its established process policy");
+    assert.equal(nodeOptions, undefined);
+    assert.equal(nodePath, undefined);
     // A timeout can close inherited pipes after exit code 0 without rejecting
     // execFile. Measure close latency after exit, excluding cold compiler startup.
     assert.doesNotThrow(() => process.kill(pid, 0));

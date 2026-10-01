@@ -85,6 +85,7 @@ test("launcher inherits only explicit OS context; secrets and injection are drop
     PATH: "evil",
     npm_execpath: "evil",
     PSModulePath: "evil",
+    PSExecutionPolicyPreference: "Bypass",
   });
   for (const key of [
     "NODE_OPTIONS",
@@ -94,6 +95,7 @@ test("launcher inherits only explicit OS context; secrets and injection are drop
     "LAUNDRY_PUBLIC_ORIGIN",
     "LAUNDRY_UNKNOWN",
     "npm_execpath",
+    "PSExecutionPolicyPreference",
   ])
     assert.equal(env[key], undefined);
   assert.ok(!Object.values(env).includes("evil"));
@@ -244,7 +246,7 @@ test(
   `;
     await promisify(execFile)(
       join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
-      ["-NoProfile", "-NonInteractive", "-Command", script],
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
       {
         env: {
           ...process.env,

@@ -9,9 +9,14 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 # This runs before Node can interpret NODE_OPTIONS/NODE_PATH or preload code.
+$ProcessExecutionPolicy = [Environment]::GetEnvironmentVariable('PSExecutionPolicyPreference', 'Process')
 $Allowed = @('SystemRoot','WINDIR','TEMP','TMP','LOCALAPPDATA','APPDATA','USERPROFILE','USERNAME','USERDOMAIN')
 foreach ($key in @([Environment]::GetEnvironmentVariables('Process').Keys)) {
   if ($Allowed -notcontains $key) { [Environment]::SetEnvironmentVariable($key, $null, 'Process') }
+}
+# Preserve the policy already selected by this PowerShell host without changing registry scopes.
+if (@('AllSigned','Bypass','Default','RemoteSigned','Restricted','Undefined','Unrestricted') -contains $ProcessExecutionPolicy) {
+  [Environment]::SetEnvironmentVariable('PSExecutionPolicyPreference', $ProcessExecutionPolicy, 'Process')
 }
 $env:PATH = [IO.Path]::Combine($env:SystemRoot, 'System32')
 $env:PSModulePath = [IO.Path]::Combine($env:SystemRoot, 'System32\WindowsPowerShell\v1.0\Modules')
