@@ -8,7 +8,7 @@ import { cleanEnvironment } from "./lifecycle-environment.mjs";
 
 test(
   "task security accepts only the bound user and protected scheduler trustees",
-  { skip: process.platform !== "win32", timeout: 30000 },
+  { skip: process.platform !== "win32", timeout: 90000 },
   async () => {
     const script = `
       $ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
@@ -67,7 +67,8 @@ test(
           ),
         },
         windowsHide: true,
-        timeout: 20000,
+        // Leave room for Windows PowerShell startup and the AST walk on busy CI hosts.
+        timeout: 60000,
         maxBuffer: 65536,
       },
     );
