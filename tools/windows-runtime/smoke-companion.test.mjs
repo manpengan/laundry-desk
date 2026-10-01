@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { basename } from "node:path";
 import { probeNativeDependencies } from "./smoke-companion.mjs";
 import { BACKUP_FILES } from "./companion-contract.mjs";
 
@@ -49,7 +50,7 @@ test("native preflight verifies all backup tools before loading server modules w
     postgres_tools_verified: 7,
   });
   assert.deepEqual(
-    probe.calls.slice(0, 7).map(({ file }) => file.split("/").at(-1)),
+    probe.calls.slice(0, 7).map(({ file }) => basename(file)),
     [
       "initdb.exe",
       "postgres.exe",
