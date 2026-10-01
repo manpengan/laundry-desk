@@ -8,18 +8,27 @@
 ## 构建
 
 在 Windows x64 的 clean exact Git SHA 上，先安装锁定依赖；下载 `companion-sources.mjs` 中固定的
-两个 HTTPS ZIP。Node 摘要来自官方 SHASUMS256；PostgreSQL 摘要来自官方 Windows 页面指向的 EDB
+两个 HTTPS ZIP，以及 `companion-crt-source.mjs` 固定的 Microsoft x64 Redistributable。
+Node 摘要来自官方 SHASUMS256；PostgreSQL 摘要来自官方 Windows 页面指向的 EDB
 16.15-3 HTTPS 下载，记录于 2026-09-11，**不是上游数字签名**。
 
 ```powershell
 pnpm.cmd install --frozen-lockfile
-pnpm.cmd runtime:win:package --source-sha <40-hex-sha> --node-archive <node.zip> --postgres-archive <postgres.zip> --release 0.1.0-win-dev
+pnpm.cmd runtime:win:package --source-sha <40-hex-sha> --node-archive <node.zip> --postgres-archive <postgres.zip> --crt-archive <VC_redist.x64.exe> --release 0.1.0-win-dev
 ```
 
 构建器核对源码前后 clean SHA，以锁文件导出 hoisted production Server，验证上游 archive 摘要，
 只提取 Node 可执行文件/许可证及 PostgreSQL bin/lib/share/许可证；ZIP 路径、类型和解压大小有界。
 payload 包含同一 Server、原生依赖、Win32 helper、69 个既有迁移及契约/schema 摘要输入。
 逐文件清单绑定整个 payload；链接、额外文件、空目录、硬链接、Windows 路径别名和错误 PE 架构均拒绝。
+
+构建时只用 Windows 内置 `expand.exe` 解开经固定摘要验证的 CAB，不执行 Redistributable 或 MSI。
+完整的 12 个 x64 Visual C++ DLL 原样复制到 PostgreSQL bin 与 Argon2 原生模块目录；两组必须一致，
+来源、版本、许可证及全部摘要由 `metadata/windows-crt.json` 和发行清单绑定。
+安装不会写入系统目录或注册系统运行库。历史无 CRT payload 仍可检查；声明 CRT 的版本须携带完整一组，
+回滚按该发行自身的来源和摘要验证，不把当前构建版本当作历史版本白名单。
+发行权限须按 [Visual Studio 2022 许可](https://visualstudio.microsoft.com/license-terms/vs2022-ga-community/)
+与 [REDIST 清单](https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution) 核对；包内运行库许可证保留原始字节。
 
 结果位于 `tools/windows-runtime/dist/runtime-<SHA>-<release>`；最后一行 JSON 含
 `manifest_sha256`，必须通过可信的构建记录单独传递。清单内的自报摘要不能替代外部预期摘要。
@@ -53,7 +62,8 @@ node.exe <payload>\scripts\inspect-companion.mjs <payload> <manifest-sha256>
 node.exe <payload>\scripts\smoke-companion.mjs <payload> <manifest-sha256>
 ```
 
-smoke 的子进程使用包内固定 Node、仅含系统目录的 PATH 和受限环境；实际加载 Sharp/Argon2 原生模块，
+smoke 的子进程使用包内固定 Node、仅含系统目录的 PATH 和受限环境；验证五个 PostgreSQL 核心工具
+（具备备份能力时再验证 dump/restore）的实际版本，再加载 Sharp 并实际执行 Argon2 hash/verify，
 调用同一 `migration-info` 并核对聚合摘要。通过只表示独立 payload 可加载，不代表数据库或柜台已安装。
 Windows Server CI 与目标 Windows 10/11 零售 PC 的现场验收分别记录。
 
@@ -74,6 +84,8 @@ powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <payload
 安装根固定为 `%LOCALAPPDATA%\laundry-desk-v2\runtime-companion`。初始化时创建两个独立合成管理员，
 凭据仅写入私有 `secrets` 下的 `laundry-bootstrap-admin-*` 与 `laundry-bootstrap-approver-*` 文件。
 登录任务使用固定包内 Node，并读取持久化版本指针；无需源码、系统 Node/pnpm、Docker 或 WSL。
+
+首次安装在创建状态、凭据和数据库前运行原生依赖预检；缺少 DLL 或工具版本不匹配时停止安装。
 
 卸载必须从安装根之外的可信原始分发包执行，以免删除正在执行的 Windows 二进制。它保留数据库、
 密钥与恢复记录；重装要求同一发行摘要，完成恢复验证后才启动。半初始化不会自动重建数据库。

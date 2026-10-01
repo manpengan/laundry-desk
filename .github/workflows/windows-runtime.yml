@@ -109,11 +109,16 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $sources = node.exe --input-type=module -e "import {COMPANION_SOURCES as s} from './tools/windows-runtime/companion-sources.mjs'; console.log(JSON.stringify(s));" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_SOURCE_INVALID' }
+          $crt = node.exe --input-type=module -e "import {CRT_SOURCE as s} from './tools/windows-runtime/companion-crt-source.mjs'; console.log(JSON.stringify(s));" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_CRT_SOURCE_INVALID' }
           $nodeZip = Join-Path $env:RUNNER_TEMP 'laundry-node.zip'
           $pgZip = Join-Path $env:RUNNER_TEMP 'laundry-postgres.zip'
+          $crtArchive = Join-Path $env:RUNNER_TEMP 'laundry-vc-redist-x64.exe'
           Invoke-WebRequest $sources.node.url -OutFile $nodeZip
           Invoke-WebRequest $sources.postgres.url -OutFile $pgZip
-          $output = @(pnpm.cmd runtime:win:package --source-sha $env:GITHUB_SHA --node-archive $nodeZip --postgres-archive $pgZip --release 0.1.0-win-dev)
+          Invoke-WebRequest $crt.url -OutFile $crtArchive
+          $output = @(pnpm.cmd runtime:win:package --source-sha $env:GITHUB_SHA --node-archive $nodeZip --postgres-archive $pgZip --crt-archive $crtArchive --release 0.1.0-win-dev)
           if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_BUILD_FAILED' }
           $report = ($output | Where-Object { $_ -match '^\{' } | Select-Object -Last 1) | ConvertFrom-Json
           if ($report.manifest_sha256 -notmatch '^[0-9a-f]{64}$') { throw 'WINDOWS_COMPANION_REPORT_INVALID' }

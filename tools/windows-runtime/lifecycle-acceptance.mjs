@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { cp, readFile, writeFile, readdir } from "node:fs/promises";
+import { cp, readFile, writeFile, readdir, lstat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -93,6 +93,22 @@ try {
     } finally {
       await new Promise((resolve) => server.close(resolve));
     }
+  });
+  await scenario("fresh-native-version-failure-preserves-uninitialized-state", async () => {
+    const incompatible = await variant("laundry-preflight-wrong-postgres-version", (value) => {
+      value.sources.postgres = {
+        ...value.sources.postgres,
+        version: "16.14",
+        url: "https://get.enterprisedb.com/postgresql/postgresql-16.14-3-windows-x64-binaries.zip",
+      };
+    });
+    await rejected("install", incompatible.folder, incompatible.hash, /POSTGRES_VERSION_INVALID/u);
+    await assert.rejects(lstat(root), { code: "ENOENT" });
+    assert.equal((await host("task-inspect", root, payload, expectedDigest)).exists, false);
+    assert.deepEqual(await host("ports", root, payload, expectedDigest), {
+      api: false,
+      postgres: false,
+    });
   });
   await scenario("install-real-database", async () => {
     assert.equal((await command("install")).status, "running");
