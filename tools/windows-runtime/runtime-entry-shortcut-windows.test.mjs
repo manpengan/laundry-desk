@@ -6,6 +6,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { cleanEnvironment } from "./lifecycle-environment.mjs";
+import { digest } from "./companion-contract.mjs";
 import { packageRuntimeEntry } from "./package-runtime-entry.mjs";
 import { runtimeEntryFixture } from "./runtime-entry-test-fixture.mjs";
 
@@ -43,16 +44,40 @@ try {
 `),
     { flag: "wx" },
   );
+  const beforeNames = new Set(await readdir(fixture.root));
   const result = await execute(
     join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
     ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", runner],
     {
+      cwd: fixture.root,
       env: { ...cleanEnvironment(), ...environment },
       windowsHide: true,
       maxBuffer: 65536,
       timeout: 60000,
     },
   );
+  const created = (await readdir(fixture.root, { withFileTypes: true })).filter(
+    ({ name }) => !beforeNames.has(name),
+  );
+  if (created.length > 0)
+    console.log(
+      "SHORTCUT_FIXTURE_NATIVE_METADATA " +
+        JSON.stringify({
+          call: id,
+          count: created.length,
+          truncated: created.length > 16,
+          entries: created.slice(0, 16).map((entry) => ({
+            name_sha256: digest(Buffer.from(entry.name)),
+            kind: entry.isSymbolicLink()
+              ? "link"
+              : entry.isFile()
+                ? "file"
+                : entry.isDirectory()
+                  ? "directory"
+                  : "other",
+          })),
+        }),
+    );
   assert.equal(result.stderr.trim(), "");
   return JSON.parse(result.stdout);
 }
