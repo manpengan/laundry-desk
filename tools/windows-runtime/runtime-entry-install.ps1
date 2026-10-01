@@ -30,26 +30,52 @@ function Assert-RuntimeEntryTree {
 
 function Set-RuntimeEntryShortcut {
   param([string]$Directory, [string]$ReleaseRoot)
+  $stage = 'DIRECTORY'
+  try {
   [void][LaundryRuntimeEntryTrust]::DirectoryPath($Directory)
   $name = 'Laundry Runtime V2 安装与维护 (' + $BoundManifest.Substring(0, 12) + ').lnk'
   $path = Join-Path $Directory $name
   $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
   $arguments = '-NoProfile -STA -ExecutionPolicy Bypass -File "' + (Join-Path $ReleaseRoot 'runtime-entry.ps1') + '"'
+  $stage = 'COM_CREATE'
   $shell = New-Object -ComObject WScript.Shell
   try {
+    $stage = 'COM_LOAD'
     $shortcut = $shell.CreateShortcut($path)
+    $stage = 'VALIDATE'
     if ([IO.File]::Exists($path)) {
       if (([IO.File]::GetAttributes($path) -band [IO.FileAttributes]::ReparsePoint) -or
           $shortcut.TargetPath -cne $powershell -or $shortcut.Arguments -cne $arguments -or
           $shortcut.WorkingDirectory -cne $ReleaseRoot) { throw 'WINDOWS_RUNTIME_ENTRY_SHORTCUT_CONFLICT' }
       return
     }
+    $stage = 'TARGET'
     $shortcut.TargetPath = $powershell
+    $stage = 'ARGUMENTS'
     $shortcut.Arguments = $arguments
+    $stage = 'WORKING_DIRECTORY'
     $shortcut.WorkingDirectory = $ReleaseRoot
+    $stage = 'DESCRIPTION'
     $shortcut.Description = '独立本地服务的安装、状态与备份恢复（开发合成数据）'
+    $stage = 'SAVE'
     $shortcut.Save()
-  } finally { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell) }
+  } finally {
+    $previous = $stage
+    $stage = 'COM_RELEASE'
+    [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell)
+    $stage = $previous
+  }
+  } catch {
+    $exception = $_.Exception.GetBaseException()
+    $code = [string]$exception.Message
+    if ($code -cmatch '^WINDOWS_(RUNTIME_ENTRY|COMPANION)_[A-Z_]+$') { throw $code }
+    $kind = 'OTHER'
+    if ($exception -is [Runtime.InteropServices.COMException]) { $kind = 'COM' }
+    elseif ($exception -is [UnauthorizedAccessException]) { $kind = 'ACCESS' }
+    elseif ($exception -is [IO.IOException]) { $kind = 'IO' }
+    elseif ($exception -is [ArgumentException]) { $kind = 'ARGUMENT' }
+    throw ('WINDOWS_RUNTIME_ENTRY_SHORTCUT_' + $stage + '_' + $kind + '_FAILED')
+  }
 }
 
 function Install-RuntimeEntry {

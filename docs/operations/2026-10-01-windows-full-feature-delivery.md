@@ -29,10 +29,10 @@ Counter 第二版为 `0.1.1`。打包与检查从同一包元数据取得严格�
 - Server：1171 项，1069 通过、102 PostgreSQL 环境专项跳过、0 失败。
 - Edge-agent 完整测试：108 个 scripts + 425 个 dist，共 533 通过、0 失败；
   类型检查及本次相关 lint、格式通过。
-- Runtime 本地：73 项，64 通过、9 项 Windows 专属跳过、0 失败。
-- Windows 10 PowerShell 5.1：生成入口行为测试 4/4 通过，环境清理、固定恢复参数、
+- Runtime 本地：74 项，64 通过、10 项 Windows 专属跳过、0 失败。
+- Windows 10 PowerShell 5.1：生成入口行为测试 5/5 通过，环境清理、固定恢复参数、
   manifest/bootstrap/helpers/链接拒绝、安装幂等、独立目录和快捷方式、源目录撤走后继续使用，
-  以及 Start Menu 同名文件冲突时不覆盖并返回稳定码。
+  以及 Start Menu 同名文件/快捷方式同名目录冲突时不覆盖并返回稳定阶段码。
 - Windows 10 ACL 合成专项：1/1 通过，约 0.4 秒。
 
 Windows 专项上述入口使用受控合成 launcher，不运行真实数据库或登录任务；
