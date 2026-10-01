@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "assurance": "development_only",
+  "profile_id": "generic",
+  "display_name": "laundry-desk V2",
+  "icon_path": "build/icon.ico",
+  "service_origin": "http://127.0.0.1:8787",
+  "app_id": "com.laundry-desk.v2",
+  "device_types": ["windows-spooler-raw"]
+}

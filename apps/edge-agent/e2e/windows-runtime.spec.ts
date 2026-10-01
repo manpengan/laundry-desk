@@ -1,4 +1,5 @@
 import { lstat, mkdtemp, realpath, rm } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
@@ -47,6 +48,43 @@ async function closeApplication(application: ElectronApplication | null): Promis
   await application?.close();
 }
 
+async function launchSecondInstance(executable: string, userDataPath: string): Promise<void> {
+  const child = spawn(executable, [`--user-data-dir=${userDataPath}`], {
+    env: credentialFreeEnvironment(),
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  await new Promise<void>((resolve, reject) => {
+    let failureCode: string | null = null;
+    let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+    const timer = setTimeout(() => {
+      failureCode = "WINDOWS_SECOND_INSTANCE_EXIT_TIMEOUT";
+      cleanupTimer = setTimeout(() => {
+        reject(new Error("WINDOWS_SECOND_INSTANCE_CLEANUP_TIMEOUT"));
+      }, 5_000);
+      child.kill();
+    }, 15_000);
+    child.once("error", () => {
+      clearTimeout(timer);
+      failureCode ??= "WINDOWS_SECOND_INSTANCE_LAUNCH_FAILED";
+      if (child.pid === undefined) reject(new Error(failureCode));
+      else if (cleanupTimer === undefined) {
+        cleanupTimer = setTimeout(() => {
+          reject(new Error("WINDOWS_SECOND_INSTANCE_CLEANUP_TIMEOUT"));
+        }, 5_000);
+        child.kill();
+      }
+    });
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      clearTimeout(cleanupTimer);
+      if (failureCode !== null) reject(new Error(failureCode));
+      else if (code === 0) resolve();
+      else reject(new Error("WINDOWS_SECOND_INSTANCE_EXIT_FAILED"));
+    });
+  });
+}
+
 test("installed Windows Counter signs in and restarts against the native Runtime", async () => {
   expect(process.platform).toBe("win32");
   const executable = await realpath(requiredAbsoluteEnvironment("LAUNDRY_WINDOWS_INSTALLED_EXE"));
@@ -58,6 +96,7 @@ test("installed Windows Counter signs in and restarts against the native Runtime
   const screenshot = requiredAbsoluteEnvironment("LAUNDRY_WINDOWS_ACCEPTANCE_SCREENSHOT");
   const userDataPath = await mkdtemp(join(await realpath(tmpdir()), "laundry-win-runtime-"));
   let application: ElectronApplication | null = null;
+  let secondaryCleanupConfirmed = true;
 
   try {
     application = await launchInstalled(executable, userDataPath);
@@ -69,12 +108,30 @@ test("installed Windows Counter signs in and restarts against the native Runtime
     const main = await application.evaluate(({ app, BrowserWindow, safeStorage, session }) => {
       const window = BrowserWindow.getAllWindows()[0];
       if (window === undefined) throw new Error("installed Windows main window is unavailable");
+      // Electron exposes this native inspection method without declaring it in its public types.
+      const inspect = (
+        window.webContents as unknown as {
+          getLastWebPreferences?: () => Readonly<Record<string, unknown>>;
+        }
+      ).getLastWebPreferences;
+      if (typeof inspect !== "function")
+        throw new Error("WINDOWS_PREFERENCE_INSPECTION_UNAVAILABLE");
+      const preferences = inspect.call(window.webContents);
       return {
         dedicatedSession:
           window.webContents.session === session.fromPartition("persist:laundry-v2-local"),
         encryptionAvailable: safeStorage.isEncryptionAvailable(),
         isPackaged: app.isPackaged,
         platform: process.platform,
+        preferences: Object.fromEntries(
+          [
+            "nodeIntegration",
+            "contextIsolation",
+            "sandbox",
+            "webSecurity",
+            "allowRunningInsecureContent",
+          ].map((key) => [key, preferences[key]]),
+        ),
       };
     });
     expect(main).toEqual({
@@ -82,6 +139,13 @@ test("installed Windows Counter signs in and restarts against the native Runtime
       encryptionAvailable: true,
       isPackaged: true,
       platform: "win32",
+      preferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+      },
     });
 
     const renderer = await page.evaluate(() => {
@@ -121,7 +185,44 @@ test("installed Windows Counter signs in and restarts against the native Runtime
     await expect(page.getByText(credentials.adminDisplayName, { exact: true })).toBeVisible();
     await page.screenshot({ path: screenshot });
 
-    await closeApplication(application);
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.minimize());
+    await expect
+      .poll(
+        async () =>
+          await application!.evaluate(({ BrowserWindow }) =>
+            BrowserWindow.getAllWindows()[0]?.isMinimized(),
+          ),
+      )
+      .toBe(true);
+    try {
+      await launchSecondInstance(executable, userDataPath);
+    } catch (error) {
+      if (error instanceof Error && error.message === "WINDOWS_SECOND_INSTANCE_CLEANUP_TIMEOUT") {
+        secondaryCleanupConfirmed = false;
+      }
+      throw error;
+    }
+    await expect
+      .poll(
+        async () =>
+          await application!.evaluate(({ BrowserWindow }) => {
+            const windows = BrowserWindow.getAllWindows();
+            return {
+              count: windows.length,
+              minimized: windows[0]?.isMinimized(),
+              focused: windows[0]?.isFocused(),
+            };
+          }),
+      )
+      .toEqual({ count: 1, minimized: false, focused: true });
+    const closed = application.waitForEvent("close");
+    await application.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      if (window === undefined) throw new Error("WINDOWS_MAIN_WINDOW_UNAVAILABLE");
+      setImmediate(() => window.close());
+    });
+    await closed;
+    application = null;
     application = await launchInstalled(executable, userDataPath);
     page = await application.firstWindow();
     await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 20_000 });
@@ -138,6 +239,6 @@ test("installed Windows Counter signs in and restarts against the native Runtime
     expect(logout).toEqual({ ok: true, data: { logged_out: true } });
   } finally {
     await closeApplication(application);
-    await rm(userDataPath, { force: true, recursive: true });
+    if (secondaryCleanupConfirmed) await rm(userDataPath, { force: true, recursive: true });
   }
 });

@@ -25,6 +25,24 @@ payload 包含同一 Server、原生依赖、Win32 helper、69 个既有迁移�
 `manifest_sha256`，必须通过可信的构建记录单独传递。清单内的自报摘要不能替代外部预期摘要。
 检查器验证的是包的完整性，不是发布者签名或安装授权。
 
+## 中文安装与维护入口
+
+在同一可信构建记录上，为完整 payload 生成独立入口：
+
+```powershell
+node.exe tools/windows-runtime/package-runtime-entry.mjs --payload <payload-absolute-path> --manifest-sha <64-hex> --source-sha <40-hex> --output <new-absolute-directory>
+```
+
+分发目录包含 Laundry Runtime V2.cmd、固定绑定的 PowerShell 入口与完整 payload。
+先核对可信构建记录的入口与发行摘要，再双击 CMD；界面无需手填发行摘要、源码路径或环境变量。
+选择“安装本地服务”或“升级”后，私有 Programs 目录与开始菜单保留对应发行的独立维护入口；
+升级保留旧入口，撤走原分发后仍可维护。柜台卸载不删除入口或数据库。
+
+界面提供状态、启停、修复、同迁移升级/程序回滚、备份列表/验证/恢复与中断维护恢复。
+恢复仍要求明确选择一份备份并人工输入完整确认摘要；界面不会默认选择或自动填入确认。
+这是 [ADR-69](../../docs/adr/2026-10-01-adr-69-windows-runtime-operator-entry.md) 的开发版入口，
+当前只允许合成数据，照片和迁移变化仍受既有失败关闭约束。
+
 ## 无源码仓库检查
 
 把完整 payload 复制到仓库外的全新目录。使用已信任的 Node 运行检查器；首次执行包内 Node 前，
@@ -102,3 +120,5 @@ verified 之后完成已经验证的恢复。`safety_backup` 保留恢复前的�
 - ADR-65 独立生产候选、离机恢复、告警送达、容量与真实数据责任。
 
 这些现场与生产证据不由 Windows Server CI 替代。Electron 继续不负责数据库生命周期。
+
+2026-10-01 用户接续裁决：本轮专注 Windows 功能开发及测试，云平台开发部署已移出范围。

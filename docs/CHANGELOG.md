@@ -14,9 +14,16 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 修复
 
+- Windows 柜台托盘读取安装程序的图标，替换不可辨认的单像素占位图；菜单与双击均能恢复
+  最小化的主窗口。装机验收增加实际窗口安全配置、第二实例唤回与正常关闭重开的检查。
+
+- Windows Runtime 维护快捷方式改用宽字符 Shell Link 接口，保留中文名称和说明，解决非中文系统
+  下 WSH 改写中文路径导致保存失败的问题；已存在的未知对象继续拒绝覆盖，文件读取与大小上限保留。
+  新源码的英文系统 CI 结果见[本轮验收接续](operations/2026-10-01-windows-full-feature-delivery.md)。
+
 - Windows Runtime 的本地 QA 修复默认 `Restricted` 环境下安装入口因清理当前进程 execution policy
   而丢失显式 `Bypass`、无法加载固定脚本的问题：只保留合法的当前进程 policy，不改变主机策略，
-  Node 子进程继续使用受限环境。修复尚未合入主线或通过修复版 CI；安装版与无源码 Runtime 的
+  Node 子进程继续使用受限环境。修复已通过 PR #223 的四项 CI 并普通合入主线；安装版与无源码 Runtime 的
   实机结果见[2026-10-01 本地 QA 接续](operations/2026-10-01-windows-installed-runtime-localqa.md)，
   仍仅允许 development-only 合成数据。实机另发现登录任务 ACL 阻断绑定用户的 Limited 启动，
   本地修复只规范化严格匹配的本任务私有 ACL，保留 Limited 并拒绝未知任务；独立安全审查与
@@ -25,6 +32,17 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
   中文 IME、OS 重启后的登录恢复与生产准入仍单独验收。
 
 ### 新增
+
+- Windows 新增独立中文 Runtime 安装与维护入口，发行来源与 manifest 固定绑定；普通用户可在私有
+  Programs 目录安装，升级时保留旧入口并建立新版入口，撤走原分发目录后继续使用。
+  柜台安装器提供本地服务指南，卸载柜台保留服务与数据。
+  恢复须明确选择备份并人工输入完整摘要；见 [ADR-69](adr/2026-10-01-adr-69-windows-runtime-operator-entry.md)。
+
+- Windows 柜台新增严格 generic/hongfa 发行 profile，宏发具有独立安装身份及品牌名称，固定本机 origin
+  和同一 V2 核心；profile 与源码 SHA、安装包检查绑定，不进入 Command/Query、权限或计价分支。
+  见 [ADR-70](adr/2026-10-01-adr-70-windows-distribution-profile.md)。本批仍是未签名合成开发版。
+  2026-10-01 用户明确本轮只完成 Windows 开发测试，云平台开发部署移出范围。
+  Counter `0.1.1` 的安装文件名与打包检查共用包版本，安装说明快捷方式已修正 NSIS 引号。
 
 - Windows Runtime 增加本机托管备份、列表、验证、确认恢复与维护中断恢复入口：先保留恢复前安全点，
   再在临时数据库单事务导入并直接验证迁移账本与关键表，以 OID 绑定的事务切换避免残留额外旧表。

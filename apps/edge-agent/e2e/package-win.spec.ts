@@ -8,8 +8,13 @@ import { _electron as electron, expect, test, type ElectronApplication } from "@
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const RELEASE_ROOT = join(PACKAGE_ROOT, "release");
-const DEFAULT_APP_ROOT = join(RELEASE_ROOT, "win-unpacked");
-const EXECUTABLE_NAME = "laundry-desk V2.exe";
+const profileId = process.env.LAUNDRY_WINDOWS_DISTRIBUTION_PROFILE ?? "generic";
+if (profileId !== "generic" && profileId !== "hongfa") {
+  throw new Error("WINDOWS_PROFILE_ID_INVALID");
+}
+const DEFAULT_APP_ROOT = join(RELEASE_ROOT, profileId, "win-unpacked");
+const EXECUTABLE_NAME =
+  profileId === "generic" ? "laundry-desk V2.exe" : "宏发洗衣 V2（开发版）.exe";
 const SCREENSHOT_PATH = join(PACKAGE_ROOT, "test-results", "windows-package", "desktop-smoke.png");
 const PASSTHROUGH_ENV_KEYS = Object.freeze([
   "PATH",

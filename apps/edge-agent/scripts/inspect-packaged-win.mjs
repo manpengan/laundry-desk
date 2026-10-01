@@ -13,11 +13,14 @@ import {
 } from "../dist/lib/integrity.js";
 import { planSpaRetention } from "./prune-packaged-spa.mjs";
 import { parseWindowsBuildProvenance } from "./stage-windows-helper.mjs";
+import {
+  getWindowsProfileBuildSettings,
+  inspectPackagedWindowsProfile,
+  loadWindowsProfile,
+} from "./windows-profile.mjs";
+import { WINDOWS_PACKAGE_VERSION } from "./windows-package-version.mjs";
 
-const APP_ID = "com.laundry-desk.v2";
-const APP_EXECUTABLE = "laundry-desk V2.exe";
-const INSTALLER = "laundry-desk-v2-0.1.0-windows-x64-development-only.exe";
-const PACKAGE_VERSION = "0.1.0";
+const PACKAGE_VERSION = WINDOWS_PACKAGE_VERSION;
 const HELPER = "laundry-windows-helper.exe";
 const PROVENANCE = "windows-source.json";
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
@@ -177,12 +180,17 @@ export async function inspectPackagedWindowsSoftware(options = {}) {
   if ((options.platform ?? process.platform) !== "win32") {
     throw new Error("Windows package inspection requires win32");
   }
-  const releaseRoot = await canonicalReleaseRoot(options.releaseRoot ?? RELEASE_ROOT);
+  const profileId = options.profileId ?? "generic";
+  const { profile } = await loadWindowsProfile({ profileId });
+  const settings = getWindowsProfileBuildSettings(profile, { packageVersion: PACKAGE_VERSION });
+  const releaseRoot = await canonicalReleaseRoot(
+    options.releaseRoot ?? join(RELEASE_ROOT, profileId),
+  );
   const expectedGitSha = options.expectedGitSha;
   const signatureStatus = options.signatureStatus ?? defaultSignatureStatus;
   const appRoot = join(releaseRoot, "win-unpacked");
-  const executablePath = join(appRoot, APP_EXECUTABLE);
-  const installerPath = join(releaseRoot, INSTALLER);
+  const executablePath = join(appRoot, settings.executableFileName);
+  const installerPath = join(releaseRoot, settings.installerFileName);
   const blockmapPath = `${installerPath}.blockmap`;
   await assertRealDirectory(appRoot, "unpacked Windows application");
   if (!isWithin(releaseRoot, await realpath(appRoot))) {
@@ -253,6 +261,19 @@ export async function inspectPackagedWindowsSoftware(options = {}) {
     expectedGitSha,
     expectedHelperDigest: helperDigest,
   });
+  const packagedProfile = await inspectPackagedWindowsProfile({
+    resourcesPath,
+    expectedProfileId: profileId,
+    expectedGitSha: provenance.source_git_sha,
+  });
+  const guide = await readBoundedFile(
+    join(resourcesPath, "windows-runtime-guide.txt"),
+    "packaged Runtime installation guide",
+    8192,
+  );
+  if (!new TextDecoder("utf-8", { fatal: true }).decode(guide).includes("Laundry Runtime V2.cmd")) {
+    throw new Error("packaged Runtime installation guide is invalid");
+  }
 
   const spaPath = await realpath(join(resourcesPath, "spa"));
   if (!isWithin(appRoot, spaPath)) throw new Error("packaged SPA escapes its application");
@@ -274,13 +295,16 @@ export async function inspectPackagedWindowsSoftware(options = {}) {
     throw new Error("development-only Windows artifacts must be explicitly unsigned");
   }
   return Object.freeze({
-    app_id: APP_ID,
+    app_id: settings.appId,
     app_sha256: await sha256File(executablePath, "packaged Windows executable"),
     architecture: "x64",
     assurance: "software_only",
     helper_sha256: helperDigest,
     installer_sha256: await sha256File(installerPath, "development-only NSIS installer"),
     provenance_sha256: createHash("sha256").update(provenanceBytes).digest("hex"),
+    profile_id: profileId,
+    profile_sha256: packagedProfile.digest,
+    runtime_guide_sha256: createHash("sha256").update(guide).digest("hex"),
     signatures: "NotSigned",
     source_git_sha: provenance.source_git_sha,
     source_tree: provenance.source_tree,
@@ -298,6 +322,7 @@ if (invoked !== undefined && pathToFileURL(resolve(invoked)).href === import.met
   } else {
     inspectPackagedWindowsSoftware({
       expectedGitSha: process.env.LAUNDRY_WINDOWS_BUILD_GIT_SHA,
+      profileId: process.env.LAUNDRY_WINDOWS_DISTRIBUTION_PROFILE ?? "generic",
     })
       .then((evidence) =>
         process.stdout.write(`WINDOWS_PACKAGE_SOFTWARE_OK ${JSON.stringify(evidence)}\n`),

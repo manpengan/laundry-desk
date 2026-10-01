@@ -239,7 +239,7 @@ async function boot(mode: BootMode): Promise<void> {
     expectedWebContentsId: () => mainWindow?.webContents.id ?? null,
   });
   await showMainWindow();
-  const tray = createAppTray({
+  const tray = await createAppTray({
     getWindow: () => mainWindow,
     onQuit: () => app.quit(),
   });

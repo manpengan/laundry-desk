@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "assurance": "development_only",
+  "profile_id": "hongfa",
+  "display_name": "宏发洗衣 V2（开发版）",
+  "icon_path": "build/icon.ico",
+  "service_origin": "http://127.0.0.1:8787",
+  "app_id": "com.laundry-desk.v2.hongfa",
+  "device_types": ["windows-spooler-raw"]
+}
