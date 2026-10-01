@@ -1,3 +1,62 @@
+# 当前交付：Windows 安装维护、系统验收与宏发试点准备（2026-10-01）
+
+用户已授权完成后续 1–5、编译部署 Windows 并测试；随后明确暂无实体打印机，其他项目自主操作。
+本轮 Git 交付与部署属于该授权范围；旧工作区、数据和共享服务继续保留，根 V1 继续冻结。
+
+- [ ] 交付两项安装修复与私有凭据测试入口：独立审查、对应 SHA CI、主线与发行身份复验。
+- [ ] 实现发行绑定的独立中文 Runtime 安装/维护入口与 Counter 安装引导，完成无源码/普通用户实机验收。
+- [ ] 完成 Windows 重启/登录、中文输入与第二版本升级回滚；核对 Windows 11 可用测试环境。
+- [ ] 实现宏发严格发行 profile、编译与软件打印链验证；签名/受控分发分别记录，实体打印等待设备。
+- [ ] 核对独立生产候选、离机存储、告警及容量画像；可用环境完成合成演练后再判断准入。
+
+状态只以新鲜源码、CI、安装包与对应实机/远端证据推进。硬件不可用不记为通过；真实顾客数据仍不导入。
+
+---
+
+# 上轮接续：Windows 安装版与无源码 Runtime 实机验收（2026-10-01）
+
+- [x] 核对主线、最新 Windows Runtime CI 与目标电脑；保留 Windows 旧仓库的已有修改。
+- [x] 在独立 checkout 构建干净主线 Counter，完成 inspect、用户级安装及安装后 EXE/SPA 摘要核对。
+- [x] 定位并修复 Runtime launcher 清理当前进程 execution policy 导致首次安装失败；形成明确标记
+      uncommitted 的本地 QA payload，完整 inspect 与无源码加载 smoke 通过。
+- [x] 完成 companion 私有凭据测试入口与 launcher 修复的相关专项回归及 Edge-agent 完整类型检查；
+      本地 80 项为 75 通过/5 Windows 跳过；Windows 完整相关 80 项为
+      79 通过/1 POSIX 跳过，均 0 失败。
+- [x] 完成 launcher 与凭据变更的 lint、Prettier、SPA verify/build/typecheck 与 Edge-agent 完整测试；
+      Edge-agent 共 513 项全部通过，lint 为 0 warnings。
+- [x] 修复提升权限 SSH 注册任务后绑定用户仅有读取权限、导致 Session 1 Limited 启动失败的问题；
+      对严格匹配的本任务设置精确私有 ACL，保持 Limited，独立安全审查及合成 ACL 回归通过，
+      最新 QA manifest 已绑定，真实 Task owner/Protected/三条 ACE/Limited 已核对。
+- [x] 自带任务在 Session 1 启动常驻服务，退出码 0；health ready，Node/PostgreSQL 均在 Session 1，
+      独立 SSH 复查保持 ready；OS 重启与重新登录恢复仍为后续独立门禁。
+- [x] 安装版 Runtime E2E 在真实 Session 1 通过，覆盖打包身份、DPAPI、固定 origin、renderer 权限、
+      登录、关闭/重开恢复与退出；1/1、11.4 秒，实机截图本地目视正常。
+- [x] 功能 E2E 保留全部 viewport 断言复跑通过：1/1、约 1.1 分钟，十导航、账户/复核、合成业务主链与重开；
+      Session 1 非提升令牌，renderer/server 错误均 0，DPR=1.5、viewport 946×658、无横向滚动，
+      六张截图保存并目视工作台/已结清状态正常；长表单允许正常纵滚。
+- [x] Runtime installed status、受控启停/repair、任务启动与托管 backup/list/verify 通过；错误确认
+      被拒且数据不变，原备份已恢复合成两行基线且后建表不存在。
+- [x] 安全点恢复至三行且后建表存在，最终再次恢复原备份两行且后建表消失；完整十场景报告为
+      status=passed、10/10 PASS，四份托管备份保留，验证结束服务 ready。
+- [x] 受控停止 QA 并保留数据库/四份备份，companion 任务禁用、自建手动 QA 任务移除；
+      原 development 任务及 Session 1 服务恢复 ready，原 handoff 摘要与旧仓库 SHA 保持，独立 SSH 最终复查通过。
+- [x] 回写验收结果、计划与下一步门禁；本轮未提交、推送、合并或删除分支。
+
+基线为干净 `main = 83d8044e56107e2b723bf652702e6f0c76dfe7b3`（PR #222）；
+CI run `36691826087` 已通过 Runtime 20 个软件场景。本地 QA 使用合法标识 `0.1.0-win-dev.2026100102`，
+外部构建记录明确 `artifact_kind=local_qa_not_release`、`source_tree=uncommitted`；
+仅包含 launcher、host 修复与 release 标识变化，不能称为 exact main、修复版 CI 或正式发行。
+新鲜实机证据与后续独立门禁见[本轮接续记录](docs/operations/2026-10-01-windows-installed-runtime-localqa.md)。
+
+本轮只使用合成数据。现有开发 Runtime 与 companion 分目录但共享固定端口，切换前识别任务与进程，
+通过原有受控停止入口保留旧数据。CI 故障注入矩阵不直接运行到已有实例。
+
+本轮之后按顺序推进：两项安装修复的对应 SHA CI（未获 Git 授权前不提交）→ Windows 11、OS 重启/
+重新登录、中文 IME → XP-58 实体打印、签名/内部分发裁决与目标机第二版本升级回滚 → ADR-65
+生产准入。安装版测试的懒路由等待修正属于测试竞态，不记为产品缺陷。
+
+---
+
 # 当前任务：活动 V2 Windows 定制桌面 EXE 与宏发受控实操（2026-08-30）
 
 > **本文件已纳入版本控制，且仓库是公开的。** 写入前自查：不得出现密钥、口令、PIN、release
@@ -16,8 +75,10 @@
 
 ## 当前阶段
 
-W2：W1.5 development Runtime 已关闭当前安装版 EXE 的本地服务缺口；继续完成 no-repo companion、
-签名、实体打印与生产准入。W0 已关闭，W1 只代表桌面壳、打印软件链和 NSIS。
+W2：无源码 companion 生命周期与本机托管备份恢复已进入 main，并通过 Windows CI 软件场景；
+Windows 10 的本地 QA 安装版与维护 smoke 已完成，两项安装修复仍待对应 SHA CI。
+继续完成 Windows 11、OS 重启/重新登录、中文 IME、签名、实体打印与生产准入。W0 已关闭，W1 的历史验收
+只代表桌面壳、打印软件链和 NSIS；本轮实机接续以顶部 2026-10-01 记录为准。
 
 ## 阶段清单
 
@@ -66,8 +127,13 @@ W2：W1.5 development Runtime 已关闭当前安装版 EXE 的本地服务缺口
       工作台、账目/对账、主题和打印队列，并保存视觉证据。
 - [x] 用只读数据库终态核对账号、价目、客户、订单、支付/退款、衣物状态和审计事件，清理临时 runner；
       XP-58 实体出纸、真实 provider、不可逆隐私删除和真实数据不计入本轮通过。
-- [ ] 将固定 Node、Server、migration 与 PostgreSQL payload 制成不依赖源码仓库的 Runtime companion，
-      纳入安装、修复安装、升级、停止、重启和保留数据卸载门禁。
+- [x] 将固定 Node、Server、migration 与 PostgreSQL payload 制成不依赖源码仓库的 Runtime companion，
+      安装、修复、升级/回滚、启停、保留数据卸载及托管备份恢复已进入 main；PR #222 对应 Windows CI
+      run `36691826087` 的 20 个软件场景通过。
+- [x] 在 Windows 10 真实 Session 1 完成无源码 companion 与安装版 Counter 的本地 QA：
+      两项 E2E、150% DPI 与十场景生命周期/托管恢复 smoke 通过，原开发服务已恢复；
+      2026-10-01 的未提交 QA 修复与主线 CI 独立记录，不构成正式发行。
+- [ ] 完成两项安装修复的对应 SHA CI、Windows 11、OS 重启/重新登录及中文 IME 独立验收。
 - [ ] 接入宏发目标 XP-58，完成 RAW 出纸、中文、金额、条码、走纸、切刀、断连、补打与防重复实证。
 - [ ] 取得 Authenticode/受控内网安装裁决，并以第二个版本完成跨版本升级与回滚。
 - [ ] 关闭 ADR-65 的生产候选、离机恢复、告警、容量与迁移安全门禁后，才允许真实顾客数据。

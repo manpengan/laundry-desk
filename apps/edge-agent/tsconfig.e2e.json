@@ -1,11 +1,14 @@
 {
   "extends": "../../packages/config/tsconfig/node.json",
   "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
     "lib": ["ES2022", "DOM"],
     "noEmit": true,
     "types": ["node"]
   },
   "include": [
+    "e2e/**/*.mjs",
     "e2e/**/*.ts",
     "playwright.electron.commissioning.config.ts",
     "playwright.electron.package.config.ts",

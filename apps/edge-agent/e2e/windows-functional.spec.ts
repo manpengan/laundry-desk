@@ -1,5 +1,5 @@
 import { randomBytes, randomInt } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
@@ -12,6 +12,11 @@ import {
 } from "@playwright/test";
 import { inspectPrivateFile, securePrivateFile } from "@laundry/platform-fs";
 import { yuanText } from "./money-input.js";
+import {
+  fillWindowsCredential,
+  loadWindowsBootstrapCredentials,
+  loadWindowsFunctionalAccount,
+} from "./windows-credentials.mjs";
 
 const PASSTHROUGH_ENV_KEYS = Object.freeze([
   "PATH",
@@ -26,15 +31,6 @@ const PASSTHROUGH_ENV_KEYS = Object.freeze([
 const ORG_CODE = "local";
 const STORE_CODE = "main";
 const WRONG_PASSWORD_PROBE = "intentionally-wrong-windows-qa-password";
-
-type BootstrapCredentials = Readonly<{
-  adminUsername: string;
-  adminDisplayName: string;
-  adminPassword: string;
-  adminPin: string;
-  approverDisplayName: string;
-  approverPin: string;
-}>;
 
 type FunctionalAccount = Readonly<{
   username: string;
@@ -79,74 +75,6 @@ function credentialFreeEnvironment(): Readonly<Record<string, string>> {
       }),
     ),
   );
-}
-
-function requiredString(record: Readonly<Record<string, unknown>>, key: string): string {
-  const value = record[key];
-  if (typeof value !== "string" || value.length < 1 || /[\0\r\n]/u.test(value)) {
-    throw new Error("Windows development credential handoff is invalid");
-  }
-  return value;
-}
-
-async function loadBootstrapCredentials(path: string): Promise<BootstrapCredentials> {
-  await inspectPrivateFile(path);
-  const metadata = await lstat(path);
-  if (
-    !metadata.isFile() ||
-    metadata.isSymbolicLink() ||
-    metadata.nlink !== 1 ||
-    metadata.size > 8192
-  ) {
-    throw new Error("Windows development credential handoff is invalid");
-  }
-  const value = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-  if (value.development_only !== true) {
-    throw new Error("Windows development credential handoff is invalid");
-  }
-  return Object.freeze({
-    adminUsername: requiredString(value, "admin_username"),
-    adminDisplayName: requiredString(value, "admin_display_name"),
-    adminPassword: requiredString(value, "admin_password"),
-    adminPin: requiredString(value, "admin_pin"),
-    approverDisplayName: requiredString(value, "approver_display_name"),
-    approverPin: requiredString(value, "approver_pin"),
-  });
-}
-
-async function loadFunctionalAccount(path: string): Promise<FunctionalAccount | null> {
-  let metadata;
-  try {
-    metadata = await lstat(path);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw error;
-  }
-  await inspectPrivateFile(path);
-  if (
-    !metadata.isFile() ||
-    metadata.isSymbolicLink() ||
-    metadata.nlink !== 1 ||
-    metadata.size > 8192
-  ) {
-    throw new Error("Windows functional credential handoff is invalid");
-  }
-  const value = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-  if (
-    value.development_only !== true ||
-    value.org_code !== ORG_CODE ||
-    value.store_code !== STORE_CODE ||
-    value.role !== "admin" ||
-    value.privacy_admin !== false
-  ) {
-    throw new Error("Windows functional credential handoff is invalid");
-  }
-  return Object.freeze({
-    username: requiredString(value, "username"),
-    displayName: requiredString(value, "display_name"),
-    password: requiredString(value, "password"),
-    pin: requiredString(value, "pin"),
-  });
 }
 
 function createFunctionalAccount(): FunctionalAccount {
@@ -198,8 +126,8 @@ async function login(page: Page, username: string, password: string): Promise<vo
   await expect(page.locator('[data-page="login"]')).toBeVisible({ timeout: 20_000 });
   await page.locator('input[name="org_code"]').fill(ORG_CODE);
   await page.locator('input[name="store_code"]').fill(STORE_CODE);
-  await page.locator('input[name="username"]').fill(username);
-  await page.locator('input[name="password"]').fill(password);
+  await fillWindowsCredential(page.locator('input[name="username"]'), username);
+  await fillWindowsCredential(page.locator('input[name="password"]'), password);
   await page.getByRole("button", { name: "登录" }).click();
   await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 20_000 });
 }
@@ -224,7 +152,7 @@ async function selectApprover(page: Page, displayName: string, pin: string): Pro
   const value = await option.getAttribute("value");
   if (value === null) throw new Error("Windows functional approver is unavailable");
   await select.selectOption(value);
-  await dialog.getByLabel("复核人 PIN").fill(pin);
+  await fillWindowsCredential(dialog.getByLabel("复核人 PIN"), pin);
   await dialog.getByRole("button", { name: "确认 PIN" }).click();
 }
 
@@ -239,7 +167,7 @@ async function switchStaff(page: Page, displayName: string, pin: string): Promis
     throw new Error(`Windows functional switch target is unavailable: ${available.join(", ")}`);
   }
   await select.selectOption(value);
-  await dialog.getByLabel("PIN").fill(pin);
+  await fillWindowsCredential(dialog.getByLabel("PIN"), pin);
   await dialog.getByRole("button", { name: "确认切换" }).click();
   await expect(page.getByText(displayName, { exact: true })).toBeVisible({ timeout: 20_000 });
 }
@@ -247,10 +175,10 @@ async function switchStaff(page: Page, displayName: string, pin: string): Promis
 async function completeCredentials(page: Page, account: FunctionalAccount): Promise<void> {
   const form = page.locator(".ld-staff-credential-form");
   await expect(form).toBeVisible({ timeout: 20_000 });
-  await form.getByLabel("新密码", { exact: true }).fill(account.password);
-  await form.getByLabel("再次输入新密码").fill(account.password);
-  await form.getByLabel("新 PIN（6–8 位数字）").fill(account.pin);
-  await form.getByLabel("再次输入新 PIN").fill(account.pin);
+  await fillWindowsCredential(form.getByLabel("新密码", { exact: true }), account.password);
+  await fillWindowsCredential(form.getByLabel("再次输入新密码"), account.password);
+  await fillWindowsCredential(form.getByLabel("新 PIN（6–8 位数字）"), account.pin);
+  await fillWindowsCredential(form.getByLabel("再次输入新 PIN"), account.pin);
   await form.getByRole("button", { name: "设置并启用" }).click();
   await expect(page.locator(".ld-toast").last()).toContainText("员工凭据已设置并启用", {
     timeout: 20_000,
@@ -273,6 +201,10 @@ async function verifyNavigation(page: Page): Promise<void> {
 }
 
 async function verifyAsLaunchedLayout(page: Page) {
+  await expect(page.locator('[data-shell="counter"]')).toHaveAttribute("data-nav", "workbench");
+  await expect(page.getByRole("heading", { name: "工作台", level: 1 })).toBeVisible({
+    timeout: 20_000,
+  });
   const layout = await page.evaluate(() => {
     const bounds = (selector: string) => {
       const element = document.querySelector(selector);
@@ -288,11 +220,14 @@ async function verifyAsLaunchedLayout(page: Page) {
     return Object.freeze({
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio,
       canScrollX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      sidebar: bounds(".ld-shell-sidebar"),
-      settingsNav: bounds('[data-nav-id="settings"]'),
-      topbar: bounds(".ld-shell-topbar"),
-      title: bounds(".ld-shell-main__title"),
+      sidebar: bounds('[data-shell="counter"] .ld-shell-sidebar'),
+      settingsNav: bounds('[data-shell="counter"] button[data-nav-id="settings"]'),
+      topbar: bounds('[data-shell="counter"] .ld-shell-topbar'),
+      title: bounds(
+        '[data-shell="counter"][data-nav="workbench"] #main-content > h1.ld-shell-main__title',
+      ),
     });
   });
   expect(layout.innerWidth).toBeGreaterThanOrEqual(900);
@@ -302,8 +237,12 @@ async function verifyAsLaunchedLayout(page: Page) {
   expect(layout.sidebar?.left).toBeGreaterThanOrEqual(0);
   expect(layout.sidebar?.top).toBeGreaterThanOrEqual(0);
   expect(layout.sidebar?.right).toBeLessThanOrEqual(layout.innerWidth + 1);
-  for (const bounds of [layout.settingsNav, layout.topbar, layout.title]) {
-    expect(bounds).not.toBeNull();
+  for (const [name, bounds] of Object.entries({
+    settingsNav: layout.settingsNav,
+    topbar: layout.topbar,
+    title: layout.title,
+  })) {
+    expect(bounds, `layout ${name} is rendered`).not.toBeNull();
     expect(bounds?.left).toBeGreaterThanOrEqual(0);
     expect(bounds?.top).toBeGreaterThanOrEqual(0);
     expect(bounds?.right).toBeLessThanOrEqual(layout.innerWidth + 1);
@@ -317,19 +256,15 @@ test.setTimeout(360_000);
 test("created test admin completes the installed Windows desktop functional journey", async () => {
   expect(process.platform).toBe("win32");
   const executable = await realpath(requiredAbsoluteEnvironment("LAUNDRY_WINDOWS_INSTALLED_EXE"));
-  const bootstrapPath = await realpath(
-    requiredAbsoluteEnvironment("LAUNDRY_WINDOWS_RUNTIME_CREDENTIALS_FILE"),
-  );
+  const bootstrap = await loadWindowsBootstrapCredentials();
   const accountPath = requiredAbsoluteEnvironment("LAUNDRY_WINDOWS_FUNCTIONAL_ACCOUNT_FILE");
-  const runtimeRoot = await realpath(dirname(bootstrapPath));
-  if (resolve(dirname(accountPath)).toLowerCase() !== runtimeRoot.toLowerCase()) {
-    throw new Error("functional account handoff must stay inside the private Runtime root");
+  if (resolve(dirname(accountPath)).toLowerCase() !== bootstrap.privateRoot.toLowerCase()) {
+    throw new Error("functional account handoff must stay inside the private credential directory");
   }
   const evidenceRoot = requiredAbsoluteEnvironment("LAUNDRY_WINDOWS_FUNCTIONAL_EVIDENCE_DIR");
   await mkdir(evidenceRoot, { recursive: true });
   const evidenceRootReal = await realpath(evidenceRoot);
-  const bootstrap = await loadBootstrapCredentials(bootstrapPath);
-  const existingAccount = await loadFunctionalAccount(accountPath);
+  const existingAccount = await loadWindowsFunctionalAccount(accountPath);
   const account = existingAccount ?? createFunctionalAccount();
   const accountCreatedThisRun = existingAccount === null;
   const suffix = randomBytes(4).toString("hex");

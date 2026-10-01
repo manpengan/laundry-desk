@@ -12,6 +12,18 @@
 
 _本节记录**面向用户的变化**；纯内部重构与验证性工作不入 CHANGELOG，去向见 `docs/research/` 与 `docs/superpowers/plans/`。_
 
+### 修复
+
+- Windows Runtime 的本地 QA 修复默认 `Restricted` 环境下安装入口因清理当前进程 execution policy
+  而丢失显式 `Bypass`、无法加载固定脚本的问题：只保留合法的当前进程 policy，不改变主机策略，
+  Node 子进程继续使用受限环境。修复尚未合入主线或通过修复版 CI；安装版与无源码 Runtime 的
+  实机结果见[2026-10-01 本地 QA 接续](operations/2026-10-01-windows-installed-runtime-localqa.md)，
+  仍仅允许 development-only 合成数据。实机另发现登录任务 ACL 阻断绑定用户的 Limited 启动，
+  本地修复只规范化严格匹配的本任务私有 ACL，保留 Limited 并拒绝未知任务；独立安全审查与
+  合成 ACL 回归与真实 Task 权限检查已通过，Session 1 常驻启动已跨独立 SSH 复验 ready；
+  安装版登录与合成业务旅程、150% DPI 实测及同实例托管备份/确认恢复十场景 smoke 已通过；
+  中文 IME、OS 重启后的登录恢复与生产准入仍单独验收。
+
 ### 新增
 
 - Windows Runtime 增加本机托管备份、列表、验证、确认恢复与维护中断恢复入口：先保留恢复前安全点，

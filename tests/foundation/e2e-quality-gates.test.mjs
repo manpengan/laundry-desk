@@ -17,6 +17,7 @@ test("keeps browser and Electron acceptance sources inside canonical quality gat
   assert.equal(edgePackage.scripts.lint, "eslint . --ext .ts,.tsx,.mjs --max-warnings=0");
   assert.match(edgePackage.scripts.typecheck, /tsconfig\.e2e\.json/u);
   assert.deepEqual(edgeE2eConfig.include, [
+    "e2e/**/*.mjs",
     "e2e/**/*.ts",
     "playwright.electron.commissioning.config.ts",
     "playwright.electron.package.config.ts",

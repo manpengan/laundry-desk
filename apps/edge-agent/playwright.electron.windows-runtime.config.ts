@@ -1,5 +1,8 @@
 import { defineConfig } from "@playwright/test";
 
+// AI error-context snapshots can include credentials even when tracing is disabled.
+process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1";
+
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "windows-runtime.spec.ts",
