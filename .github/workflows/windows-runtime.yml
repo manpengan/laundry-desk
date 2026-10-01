@@ -153,10 +153,18 @@ jobs:
             try {
               $env:PATH = Join-Path $env:SystemRoot 'System32'
               $powershell = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
-              & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $env:LAUNDRY_RUNTIME_ENTRY 'runtime-entry.ps1') -Action status
-              if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_RUNTIME_ENTRY_NO_REPO_FAILED' }
               & "$env:LAUNDRY_PAYLOAD/node/node.exe" $acceptance $env:LAUNDRY_PAYLOAD $env:LAUNDRY_MANIFEST_SHA256 (Join-Path $env:RUNNER_TEMP 'runtime-lifecycle-result.json')
               if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_LIFECYCLE_ACCEPTANCE_FAILED' }
+              # The acceptance harness installs the runtime before its final uninstall;
+              # status on a fresh runner correctly rejects an installation that does not exist.
+              $entryStatus = & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $env:LAUNDRY_RUNTIME_ENTRY 'runtime-entry.ps1') -Action status
+              if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_RUNTIME_ENTRY_NO_REPO_FAILED' }
+              $entryReport = $entryStatus | ConvertFrom-Json
+              if ($entryReport -isnot [pscustomobject] -or $entryReport.status -isnot [string] -or $entryReport.assurance -isnot [string] -or $entryReport.source_git_sha -isnot [string] -or $entryReport.manifest_sha256 -isnot [string] -or
+                  $entryReport.status -cne 'uninstalled' -or $entryReport.assurance -cne 'development_only' -or $entryReport.source_git_sha -cne $env:GITHUB_SHA -or $entryReport.manifest_sha256 -cne $env:LAUNDRY_MANIFEST_SHA256) {
+                throw 'WINDOWS_RUNTIME_ENTRY_NO_REPO_RESULT_INVALID'
+              }
+              $entryStatus
             } finally { $env:PATH = $savedPath }
           } finally {
             Get-ChildItem -LiteralPath $hiddenSource -Force | ForEach-Object {
