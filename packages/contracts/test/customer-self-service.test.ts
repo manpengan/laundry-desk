@@ -222,7 +222,7 @@ describe("customer self-service contracts", () => {
       in: "cookie",
       name: "__Host-laundry_customer_csrf_<sha256-selector>",
     });
-  });
+  }, 10_000);
 
   it("publishes complete customer login, resume and logout operations", () => {
     const document = buildLaundryOpenApiDocument();

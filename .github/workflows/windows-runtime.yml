@@ -38,7 +38,34 @@ jobs:
       - name: Install locked build dependencies
         run: pnpm.cmd install --frozen-lockfile
       - name: Test payload validation
-        run: pnpm.cmd runtime:win:test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Write-SourceCheckpoint([string]$Stage) {
+            $gitOptions = @('--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=NUL', '-c', 'core.quotepath=false')
+            $head = git.exe @gitOptions rev-parse HEAD
+            if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_SOURCE_CHECKPOINT_FAILED' }
+            $tracked = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            @(git.exe @gitOptions ls-files) | ForEach-Object { [void]$tracked.Add($_) }
+            if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_SOURCE_CHECKPOINT_FAILED' }
+            $records = @(git.exe @gitOptions status --porcelain=v1 --untracked-files=all)
+            if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_SOURCE_CHECKPOINT_FAILED' }
+            $known = @($records | Where-Object { $_.Length -ge 4 -and $tracked.Contains($_.Substring(3)) })
+            $changed = @($known | Select-Object -First 32 | ForEach-Object { @{ status=$_.Substring(0,2); path=$_.Substring(3) } })
+            $report = [ordered]@{
+              stage=$Stage; head_matches=($head -ceq $env:GITHUB_SHA); status_count=$records.Count
+              tracked_changed=$changed; tracked_truncated=($known.Count -gt 32)
+              untracked_count=@($records | Where-Object { $_.StartsWith('?? ') }).Count
+              unknown_count=($records.Count - $known.Count)
+            }
+            # Publish only public tracked paths; unknown filenames and file contents stay private.
+            [Console]::WriteLine('WINDOWS_COMPANION_SOURCE_CHECKPOINT ' + ($report | ConvertTo-Json -Compress -Depth 4))
+          }
+          Write-SourceCheckpoint 'before_validation'
+          pnpm.cmd runtime:win:test
+          $validationExit = $LASTEXITCODE
+          Write-SourceCheckpoint 'after_validation'
+          if ($validationExit -ne 0) { exit $validationExit }
       - name: Download pinned upstream archives and build payload
         shell: pwsh
         run: |
