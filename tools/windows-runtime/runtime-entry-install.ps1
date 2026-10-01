@@ -53,6 +53,8 @@ function Set-RuntimeEntryShortcut {
 }
 
 function Install-RuntimeEntry {
+  $stage = 'ROOT'
+  try {
   if ($env:LOCALAPPDATA -cnotmatch '^[A-Za-z]:\\' -or $env:APPDATA -cnotmatch '^[A-Za-z]:\\' -or
       $env:USERPROFILE -cnotmatch '^[A-Za-z]:\\') { throw 'WINDOWS_RUNTIME_ENTRY_INSTALL_ROOT_INVALID' }
   $local = [LaundryRuntimeEntryTrust]::DirectoryPath($env:LOCALAPPDATA)
@@ -66,6 +68,7 @@ function Install-RuntimeEntry {
     [LaundryRuntimeEntryTrust]::PrivateDirectory($parent)
   }
   $release = Join-Path $parent $BoundManifest
+  $stage = 'INVENTORY'
   $selfInfo = New-Object IO.FileInfo((Join-Path $EntryRoot 'runtime-entry.ps1'))
   $expected = @(@{ path = 'runtime-entry.ps1'; size = $selfInfo.Length; sha256 = $SelfDigest }) + @($BoundOperator)
   $expected += @{ path = 'payload/runtime-payload.json'; size = $manifestSize; sha256 = $BoundManifest }
@@ -73,9 +76,11 @@ function Install-RuntimeEntry {
     $expected += @{ path = ('payload/' + $entry.path); size = $entry.size; sha256 = $entry.sha256 }
   }
   if ([IO.Directory]::Exists($release)) {
+    $stage = 'EXISTING'
     [LaundryRuntimeEntryTrust]::AssertPrivateDirectory($release)
     Assert-RuntimeEntryTree $release $expected
   } else {
+    $stage = 'COPY'
     $staging = Join-Path $parent ('.stage-' + [Guid]::NewGuid().ToString('N'))
     [void][IO.Directory]::CreateDirectory($staging)
     [LaundryRuntimeEntryTrust]::PrivateDirectory($staging)
@@ -92,7 +97,9 @@ function Install-RuntimeEntry {
           try { $input.CopyTo($output); $output.Flush($true) } finally { $output.Dispose() }
         } finally { $input.Dispose() }
       }
+      $stage = 'VERIFY'
       Assert-RuntimeEntryTree $staging $expected
+      $stage = 'PUBLISH'
       [IO.Directory]::Move($staging, $release)
     } finally {
       # Only this newly-created staging directory is eligible for cleanup.
@@ -102,13 +109,20 @@ function Install-RuntimeEntry {
       }
     }
   }
+  $stage = 'MENU'
   $menuParent = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
   [void][LaundryRuntimeEntryTrust]::DirectoryPath($menuParent)
   $menu = Join-Path $menuParent 'Laundry Desk Runtime V2'
   if (-not [IO.Directory]::Exists($menu)) { [void][IO.Directory]::CreateDirectory($menu) }
   Set-RuntimeEntryShortcut $menu $release
   # Some managed Windows accounts have no Desktop folder; Start Menu remains available.
+  $stage = 'DESKTOP'
   $desktop = Join-Path $env:USERPROFILE 'Desktop'
   if ([IO.Directory]::Exists($desktop)) { Set-RuntimeEntryShortcut $desktop $release }
   return $release
+  } catch {
+    $code = [string]($_.Exception.GetBaseException().Message)
+    if ($code -cmatch '^WINDOWS_(RUNTIME_ENTRY|COMPANION)_[A-Z_]+$') { throw $code }
+    throw ('WINDOWS_RUNTIME_ENTRY_INSTALL_' + $stage + '_FAILED')
+  }
 }

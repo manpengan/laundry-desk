@@ -1,5 +1,5 @@
 !macro customInstall
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME} 本地服务安装说明.lnk" "$SYSDIR\notepad.exe" '$"$INSTDIR\resources\windows-runtime-guide.txt$"'
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME} 本地服务安装说明.lnk" "$SYSDIR\notepad.exe" '"$INSTDIR\resources\windows-runtime-guide.txt"'
 !macroend
 
 !macro customUnInstall

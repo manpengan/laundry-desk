@@ -181,3 +181,38 @@ test(
     assert.equal(result.manifest_sha256, fixture.manifestSha);
   },
 );
+
+test(
+  "installer reports a stable shortcut-stage error and preserves a conflicting Start Menu file",
+  windowsOnly,
+  async (t) => {
+    const fixture = await runtimeEntryFixture(t);
+    await packageRuntimeEntry(fixture);
+    const local = join(fixture.root, "L"),
+      roaming = join(fixture.root, "Roaming"),
+      user = join(fixture.root, "UserProfile");
+    const menu = join(roaming, "Microsoft/Windows/Start Menu/Programs");
+    await mkdir(local, { recursive: true });
+    await mkdir(menu, { recursive: true });
+    await mkdir(user, { recursive: true });
+    const conflict = join(menu, "Laundry Desk Runtime V2");
+    await writeFile(conflict, "unrelated Start Menu entry\n", { flag: "wx" });
+    await assert.rejects(
+      runEntry(fixture.output, ["-Action", "install"], {
+        LOCALAPPDATA: local,
+        APPDATA: roaming,
+        USERPROFILE: user,
+      }),
+      (error) => {
+        assert.equal(error.stdout.trim(), "");
+        assert.equal(error.stderr.trim(), "WINDOWS_RUNTIME_ENTRY_INSTALL_MENU_FAILED");
+        assert.equal(error.stderr.includes(fixture.root), false);
+        return true;
+      },
+    );
+    assert.equal(await readFile(conflict, "utf8"), "unrelated Start Menu entry\n");
+    const parent = join(local, "Programs/Laundry Desk Runtime V2");
+    assert.deepEqual(await readdir(parent), [fixture.manifestSha]);
+    assert.ok((await readFile(join(parent, fixture.manifestSha, ENTRY_NAME))).length > 0);
+  },
+);
