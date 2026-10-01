@@ -16,11 +16,13 @@ TypeScript 审查发现的 profile 路径替换及打包资源重复已修复并
 安全、C# 与 TypeScript 独立复查通过。
 
 后续 NSIS 实际构建发现安装说明快捷方式的美元引号被识别为变量；修正后，Windows makensis
-以 `/WX` 编译实际指南宏零警告通过。Windows 2022 CI 的入口安装仍在 `MENU` 阶段失败，
-新增严格阶段码、固定 HRESULT 分类和失败时仅输出异常类型/数值的合成诊断；
-冲突保留回归不覆盖既有对象，尚未宣称关闭该平台故障。
+以 `/WX` 编译实际指南宏零警告通过。Windows 2022 CI 的入口安装已定位至快捷方式 `SAVE` 阶段，
+异常为固定分类 `System.IO.FileNotFoundException`、HRESULT `-2147024894`。
+新增等长中文/ASCII 文件名与标准 OS 环境的四格诊断，输出仅含布尔判据、固定异常类型和数值；
+Windows 10 四格均成功。冲突保留回归不覆盖既有对象，Windows 2022 根因仍待该矩阵结果。
 
 Counter 第二版为 `0.1.1`。打包与检查从同一包元数据取得严格版本，取消检查器固定 `0.1.0`，
+macOS 检查器也统一读取包元数据，并以旧版本拒绝回归修复固定版本导致的 CI 失败，
 以便验证从已安装 `0.1.0` 升级和程序回退。中文输入验收只监听真实可信 composition/input；
 隔离 VM 或人工提供输入，自动填值与粘贴不计通过。已移除共享桌面的全局发键实现。
 
@@ -32,9 +34,9 @@ Counter 第二版为 `0.1.1`。打包与检查从同一包元数据取得严格�
 
 - 依赖审计：high=0、critical=0，仅原有两项精确例外。
 - Server：1171 项，1069 通过、102 PostgreSQL 环境专项跳过、0 失败。
-- Edge-agent 完整测试：109 个 scripts + 425 个 dist，共 534 通过、0 失败；
+- Edge-agent 完整测试：110 个 scripts + 425 个 dist，共 535 通过、0 失败；
   类型检查及本次相关 lint、格式通过。
-- Runtime 本地：79 项，68 通过、11 项 Windows 专属跳过、0 失败。
+- Runtime 本地：81 项，70 通过、11 项 Windows 专属跳过、0 失败。
 - Windows 10 PowerShell 5.1：生成入口行为测试 6/6 通过，环境清理、固定恢复参数、
   manifest/bootstrap/helpers/链接拒绝、安装幂等、独立目录和快捷方式、源目录撤走后继续使用，
   升级保存新版且保留旧入口，以及 Start Menu 同名文件/快捷方式同名目录冲突时不覆盖并返回稳定阶段码。
@@ -46,9 +48,11 @@ SSH 令牌不等于普通用户 Session 1，不能据此关闭实机安装与 GU
 
 ## 安装版闭环
 
-干净候选 `95aadd55eea2deefb84fb92425fa9c0c1daa885a` 已在独立 Windows checkout 构建：
+干净候选 `8aa3019f2f8cf47d732439b9a152f1a989fc735f` 已在独立 Windows checkout 构建：
 generic/hongfa Counter `0.1.1` NSIS 及软件 inspect 均通过，两个同迁移 Runtime 开发版和独立入口生成通过。
-记录为未签名软件候选；后续入口修复尚不在该 SHA，最终安装验收与主线发行须重新绑定最新源码。
+四份产物及软件摘要已独立复核，包含入口保留、CLI 失败退出码和有限诊断修复。
+该分支候选的 workspace-check、real-postgres 已通过；macOS 版本检查与 Windows 2022 快捷方式仍在修复验证。
+记录为未签名分支 QA，最终 main 安装验收与发行须重新绑定合并后精确源码。
 
 待新源码 SHA 的干净 Windows checkout 编译、打包检查及部署后补充以下独立证据：
 

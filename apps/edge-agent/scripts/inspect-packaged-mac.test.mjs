@@ -6,8 +6,9 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { inspectPackagedMacSoftware } from "./inspect-packaged-mac.mjs";
+import { WINDOWS_PACKAGE_VERSION as PACKAGE_VERSION } from "./windows-package-version.mjs";
 
-async function fixture(t) {
+async function fixture(t, version = PACKAGE_VERSION) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "laundry-package-inspection-")));
   t.after(async () => rm(root, { force: true, recursive: true }));
   const releaseRoot = join(root, "release");
@@ -53,7 +54,7 @@ async function fixture(t) {
     const values = {
       "Print :CFBundleIdentifier": "com.laundry-desk.v2\n",
       "Print :CFBundleExecutable": "laundry-desk V2\n",
-      "Print :CFBundleShortVersionString": "0.1.0\n",
+      "Print :CFBundleShortVersionString": `${version}\n`,
     };
     return { stderr: "", stdout: values[key] ?? "" };
   };
@@ -75,9 +76,24 @@ test("inspects one complete unsigned package and emits software-only evidence", 
     bundle_identifier: "com.laundry-desk.v2",
     spa_bundle: setup.bundleId,
     spa_entry_count: 1,
-    version: "0.1.0",
+    version: PACKAGE_VERSION,
   });
   assert.match(evidence.app_sha256, /^[0-9a-f]{64}$/u);
+});
+
+test("rejects a stale package version against current Counter metadata", async (t) => {
+  assert.notEqual(PACKAGE_VERSION, "0.1.0");
+  const setup = await fixture(t, "0.1.0");
+
+  await assert.rejects(
+    () =>
+      inspectPackagedMacSoftware({
+        platform: "darwin",
+        releaseRoot: setup.releaseRoot,
+        run: setup.run,
+      }),
+    /packaged application identity is invalid/u,
+  );
 });
 
 test("rejects retained SPA history and any update key material", async (t) => {

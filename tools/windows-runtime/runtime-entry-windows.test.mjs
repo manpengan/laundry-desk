@@ -20,10 +20,13 @@ import { packageRuntimeEntry } from "./package-runtime-entry.mjs";
 import { ENTRY_NAME } from "./runtime-entry-contract.mjs";
 import { runtimeEntryFixture } from "./runtime-entry-test-fixture.mjs";
 import {
-  shortcutInstallationFailure,
   shortcutSaveDiagnostic,
   shortcutSaveFailureCode,
 } from "./runtime-entry-save-diagnostic-fixture.mjs";
+import {
+  shortcutInstallationWithNameMatrix,
+  shortcutNameMatrix,
+} from "./runtime-entry-shortcut-name-matrix-fixture.mjs";
 
 const execute = promisify(execFile);
 const windowsOnly = { skip: process.platform !== "win32", timeout: 120000 };
@@ -210,8 +213,11 @@ test(
     } catch (error) {
       const code = shortcutSaveFailureCode(error.stderr);
       if (!code) throw error;
-      throw await shortcutInstallationFailure(code, () =>
-        shortcutSaveDiagnostic(fixture, environment),
+      throw await shortcutInstallationWithNameMatrix(
+        code,
+        () => shortcutSaveDiagnostic(fixture, environment),
+        fixture,
+        environment,
       );
     }
     assert.equal(JSON.parse(first.stdout).action, "install");
@@ -319,5 +325,19 @@ test(
     assert.equal(Number.isInteger(report.native.hresult), true);
     assert.equal(JSON.stringify(report).includes(fixture.root), false);
     assert.equal(await readFile(sentinel, "utf8"), "unrelated shortcut directory\n");
+    const matrix = await shortcutNameMatrix(fixture, {
+      LOCALAPPDATA: local,
+      APPDATA: roaming,
+      USERPROFILE: user,
+    });
+    assert.equal(matrix.matrix_result, "complete", JSON.stringify(matrix));
+    for (const entry of matrix.cases) {
+      assert.equal(entry.report.diagnostic_result, "succeeded", JSON.stringify(matrix));
+      assert.equal(
+        Object.values(entry.facts).every((value) => value === true),
+        true,
+      );
+    }
+    assert.equal(JSON.stringify(matrix).includes(fixture.root), false);
   },
 );

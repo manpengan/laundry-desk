@@ -12,11 +12,11 @@ import {
 } from "../dist/lib/integrity.js";
 import { hashAppTree } from "./hash-app.mjs";
 import { planSpaRetention } from "./prune-packaged-spa.mjs";
+import { WINDOWS_PACKAGE_VERSION as PACKAGE_VERSION } from "./windows-package-version.mjs";
 
 const APP_NAME = "laundry-desk V2.app";
 const BUNDLE_IDENTIFIER = "com.laundry-desk.v2";
 const EXECUTABLE_NAME = "laundry-desk V2";
-const PACKAGE_VERSION = "0.1.0";
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const RELEASE_ROOT = join(PACKAGE_ROOT, "release");
 const execFileAsync = promisify(execFile);
