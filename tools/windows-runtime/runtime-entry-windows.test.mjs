@@ -110,6 +110,7 @@ test(
       "node",
       "ui",
       "installer",
+      "shortcut",
       "hardlink",
       "junction",
     ]) {
@@ -131,6 +132,11 @@ test(
       else if (mutation === "installer")
         await appendFile(
           join(fixture.output, "runtime-entry-install.ps1"),
+          "throw 'must-not-run'\n",
+        );
+      else if (mutation === "shortcut")
+        await appendFile(
+          join(fixture.output, "runtime-entry-shortcut.ps1"),
           "throw 'must-not-run'\n",
         );
       else if (mutation === "hardlink")
@@ -277,7 +283,7 @@ test(
 );
 
 test(
-  "shortcut creation reports a bounded COM-stage error without replacing an existing directory",
+  "shortcut creation rejects an existing directory before COM loading without replacing it",
   windowsOnly,
   async (t) => {
     const fixture = await runtimeEntryFixture(t);
@@ -304,10 +310,7 @@ test(
       }),
       (error) => {
         assert.equal(error.stdout.trim(), "");
-        assert.match(
-          error.stderr.trim(),
-          /^WINDOWS_RUNTIME_ENTRY_SHORTCUT_(?:COM_LOAD|SAVE)_(?:COM|ACCESS|IO(?:_[A-Z_]+)?|ARGUMENT|OTHER)_FAILED$/u,
-        );
+        assert.equal(error.stderr.trim(), "WINDOWS_RUNTIME_ENTRY_SHORTCUT_CONFLICT");
         assert.equal(error.stderr.includes(fixture.root), false);
         return true;
       },
@@ -320,8 +323,8 @@ test(
       { directory: menu },
     );
     assert.equal(report.diagnostic_result, "failed");
-    assert.match(report.code, /^WINDOWS_RUNTIME_ENTRY_SHORTCUT_SAVE_[A-Z_]+_FAILED$/u);
-    assert.equal(report.native.stage, "SAVE");
+    assert.equal(report.code, "WINDOWS_RUNTIME_ENTRY_SHORTCUT_CONFLICT");
+    assert.equal(report.native.stage, "COM_LOAD");
     assert.equal(Number.isInteger(report.native.hresult), true);
     assert.equal(JSON.stringify(report).includes(fixture.root), false);
     assert.equal(await readFile(sentinel, "utf8"), "unrelated shortcut directory\n");

@@ -59,6 +59,10 @@ test("the generated trust boundary verifies every bootstrap script and operator 
     entry.indexOf("foreach ($entry in $BoundOperator)") <
       entry.indexOf(". (Join-Path $EntryRoot 'runtime-entry-install.ps1')"),
   );
+  assert.ok(
+    entry.indexOf("foreach ($entry in $BoundOperator)") <
+      entry.indexOf(". (Join-Path $EntryRoot 'runtime-entry-shortcut.ps1')"),
+  );
   assert.match(entry, /FILE_SHARE_READ/u);
   assert.match(entry, /ReparsePoint/u);
   assert.match(entry, /info\.Links != 1/u);

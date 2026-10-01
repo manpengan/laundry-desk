@@ -110,7 +110,8 @@ try {
   foreach ($entry in $BoundOperator) {
     $held.Add([LaundryRuntimeEntryTrust]::OpenVerified((Join-Path $EntryRoot $entry.path), $entry.size, $entry.sha256))
   }
-  # Both helpers are already independently bound by the trusted generated entry.
+  # All operator helpers are independently bound by the trusted generated entry.
+  . (Join-Path $EntryRoot 'runtime-entry-shortcut.ps1')
   . (Join-Path $EntryRoot 'runtime-entry-install.ps1')
   if ($script:EntryInteractive) {
     . (Join-Path $EntryRoot 'runtime-entry-ui.ps1')

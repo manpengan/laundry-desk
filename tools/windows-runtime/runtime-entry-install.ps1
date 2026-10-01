@@ -32,18 +32,18 @@ function Set-RuntimeEntryShortcut {
   param([string]$Directory, [string]$ReleaseRoot)
   $stage = 'DIRECTORY'
   try {
-  [void][LaundryRuntimeEntryTrust]::DirectoryPath($Directory)
+  [void][LaundryRuntimeEntryTrust]::HoldDirectoryPath($Directory)
   $name = 'Laundry Runtime V2 安装与维护 (' + $BoundManifest.Substring(0, 12) + ').lnk'
   $path = Join-Path $Directory $name
   $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
   $arguments = '-NoProfile -STA -ExecutionPolicy Bypass -File "' + (Join-Path $ReleaseRoot 'runtime-entry.ps1') + '"'
   $stage = 'COM_CREATE'
-  $shell = New-Object -ComObject WScript.Shell
+  $shortcut = $null
   try {
     $stage = 'COM_LOAD'
-    $shortcut = $shell.CreateShortcut($path)
+    $shortcut = [LaundryRuntimeUnicodeShortcut]::new($path)
     $stage = 'VALIDATE'
-    if ([IO.File]::Exists($path)) {
+    if ($shortcut.Existed) {
       if (([IO.File]::GetAttributes($path) -band [IO.FileAttributes]::ReparsePoint) -or
           $shortcut.TargetPath -cne $powershell -or $shortcut.Arguments -cne $arguments -or
           $shortcut.WorkingDirectory -cne $ReleaseRoot) { throw 'WINDOWS_RUNTIME_ENTRY_SHORTCUT_CONFLICT' }
@@ -62,7 +62,7 @@ function Set-RuntimeEntryShortcut {
   } finally {
     $previous = $stage
     $stage = 'COM_RELEASE'
-    [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shell)
+    if ($null -ne $shortcut) { $shortcut.Dispose() }
     $stage = $previous
   }
   } catch {

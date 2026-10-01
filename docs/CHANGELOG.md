@@ -14,6 +14,10 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 修复
 
+- Windows Runtime 维护快捷方式改用宽字符 Shell Link 接口，保留中文名称和说明，解决非中文系统
+  下 WSH 改写中文路径导致保存失败的问题；已存在的未知对象继续拒绝覆盖，文件读取与大小上限保留。
+  新源码的英文系统 CI 结果见[本轮验收接续](operations/2026-10-01-windows-full-feature-delivery.md)。
+
 - Windows Runtime 的本地 QA 修复默认 `Restricted` 环境下安装入口因清理当前进程 execution policy
   而丢失显式 `Bypass`、无法加载固定脚本的问题：只保留合法的当前进程 policy，不改变主机策略，
   Node 子进程继续使用受限环境。修复已通过 PR #223 的四项 CI 并普通合入主线；安装版与无源码 Runtime 的

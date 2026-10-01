@@ -10,6 +10,7 @@ export const COMMAND_NAME = "Laundry Runtime V2.cmd";
 export const OPERATOR_HELPERS = Object.freeze([
   "runtime-entry-ui.ps1",
   "runtime-entry-install.ps1",
+  "runtime-entry-shortcut.ps1",
 ]);
 export const ENTRY_ACTIONS = Object.freeze([
   "install",

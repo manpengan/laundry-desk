@@ -150,6 +150,7 @@ export async function shortcutNameMatrix(fixture, environment) {
       bytes(`$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'
 Set-StrictMode -Version Latest
 . ${quote(join(sourceRoot, "runtime-entry-trust.ps1"))}
+. ${quote(join(sourceRoot, "runtime-entry-shortcut.ps1"))}
 $BoundManifest=${quote(fixture.manifestSha)}
 $cases=New-Object 'Collections.Generic.List[object]'
 try {

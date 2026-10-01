@@ -229,6 +229,7 @@ export async function shortcutSaveDiagnostic(fixture, environment, options = {})
 Set-StrictMode -Version Latest
 try {
   . ${quote(join(sourceRoot, "runtime-entry-trust.ps1"))}
+  . ${quote(join(sourceRoot, "runtime-entry-shortcut.ps1"))}
   . ${quote(helper)}
   $BoundManifest = ${quote(fixture.manifestSha)}
   foreach ($path in @(${heldPaths.map(quote).join(",")})) {

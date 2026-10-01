@@ -16,10 +16,15 @@ TypeScript 审查发现的 profile 路径替换及打包资源重复已修复并
 安全、C# 与 TypeScript 独立复查通过。
 
 后续 NSIS 实际构建发现安装说明快捷方式的美元引号被识别为变量；修正后，Windows makensis
-以 `/WX` 编译实际指南宏零警告通过。Windows 2022 CI 的入口安装已定位至快捷方式 `SAVE` 阶段，
-异常为固定分类 `System.IO.FileNotFoundException`、HRESULT `-2147024894`。
-新增等长中文/ASCII 文件名与标准 OS 环境的四格诊断，输出仅含布尔判据、固定异常类型和数值；
-Windows 10 四格均成功。冲突保留回归不覆盖既有对象，Windows 2022 根因仍待该矩阵结果。
+以 `/WX` 编译实际指南宏零警告通过。Windows 2022 的严格四格矩阵确认：
+中文链接名的 WSH `FullName` 回读发生变化并在 `SAVE` 返回
+`System.IO.FileNotFoundException` / HRESULT `-2147024894`，等长英文名成功；
+补充四项标准 OS 环境变量不改变结果。
+
+修复使用摘要绑定的 `IShellLinkW` / `IPersistStream` helper，保持中文名称和说明，
+读取旧文件使用 nofollow 同一句柄，序列化流限制 1 MiB，新文件以 `CreateNew` 创建且不覆盖冲突。
+Windows 10 的中文父目录、宽字符字段回读、损坏文件、hardlink/junction、并发创建及流上限
+专项共 23/23 通过，C# 独立审查通过；英文 Windows 2022 的对应新源码 CI 仍待验证。
 
 Counter 第二版为 `0.1.1`。打包与检查从同一包元数据取得严格版本，取消检查器固定 `0.1.0`，
 macOS 检查器也统一读取包元数据，并以旧版本拒绝回归修复固定版本导致的 CI 失败，
@@ -36,7 +41,7 @@ macOS 检查器也统一读取包元数据，并以旧版本拒绝回归修复�
 - Server：1171 项，1069 通过、102 PostgreSQL 环境专项跳过、0 失败。
 - Edge-agent 完整测试：110 个 scripts + 425 个 dist，共 535 通过、0 失败；
   类型检查及本次相关 lint、格式通过。
-- Runtime 本地：81 项，70 通过、11 项 Windows 专属跳过、0 失败。
+- Runtime 本地：87 项，70 通过、17 项 Windows 专属跳过、0 失败。
 - Windows 10 PowerShell 5.1：生成入口行为测试 6/6 通过，环境清理、固定恢复参数、
   manifest/bootstrap/helpers/链接拒绝、安装幂等、独立目录和快捷方式、源目录撤走后继续使用，
   升级保存新版且保留旧入口，以及 Start Menu 同名文件/快捷方式同名目录冲突时不覆盖并返回稳定阶段码。
