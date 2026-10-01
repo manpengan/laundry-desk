@@ -54,6 +54,10 @@ jobs:
           if ($report.manifest_sha256 -notmatch '^[0-9a-f]{64}$') { throw 'WINDOWS_COMPANION_REPORT_INVALID' }
           $payload = Join-Path $env:RUNNER_TEMP 'laundry-no-repo-runtime'
           Copy-Item -LiteralPath $report.output -Destination $payload -Recurse
+          $entry = Join-Path $env:RUNNER_TEMP 'laundry-runtime-operator-entry'
+          node.exe tools/windows-runtime/package-runtime-entry.mjs --payload $payload --manifest-sha $report.manifest_sha256 --source-sha $env:GITHUB_SHA --output $entry
+          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_RUNTIME_ENTRY_BUILD_FAILED' }
+          "LAUNDRY_RUNTIME_ENTRY=$entry" >> $env:GITHUB_ENV
           "LAUNDRY_PAYLOAD=$payload" >> $env:GITHUB_ENV
           "LAUNDRY_MANIFEST_SHA256=$($report.manifest_sha256)" >> $env:GITHUB_ENV
           $report | ConvertTo-Json | Set-Content (Join-Path $env:RUNNER_TEMP 'runtime-build-result.json')
@@ -83,6 +87,9 @@ jobs:
             $savedPath = $env:PATH
             try {
               $env:PATH = Join-Path $env:SystemRoot 'System32'
+              $powershell = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
+              & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $env:LAUNDRY_RUNTIME_ENTRY 'runtime-entry.ps1') -Action status
+              if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_RUNTIME_ENTRY_NO_REPO_FAILED' }
               & "$env:LAUNDRY_PAYLOAD/node/node.exe" $acceptance $env:LAUNDRY_PAYLOAD $env:LAUNDRY_MANIFEST_SHA256 (Join-Path $env:RUNNER_TEMP 'runtime-lifecycle-result.json')
               if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_LIFECYCLE_ACCEPTANCE_FAILED' }
             } finally { $env:PATH = $savedPath }
@@ -98,5 +105,6 @@ jobs:
             ${{ runner.temp }}/laundry-no-repo-runtime
             ${{ runner.temp }}/runtime-build-result.json
             ${{ runner.temp }}/runtime-lifecycle-result.json
+            ${{ runner.temp }}/laundry-runtime-operator-entry
           if-no-files-found: error
           include-hidden-files: true

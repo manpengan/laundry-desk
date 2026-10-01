@@ -19,7 +19,7 @@
     "preload:bundle": "node scripts/build-preload.mjs",
     "helper:stage:win": "node scripts/stage-windows-helper.mjs",
     "package:mac": "pnpm --filter @laundry/platform-fs build && pnpm exec turbo run build --filter=@laundry/edge-agent && pnpm run preload:bundle && pnpm exec electron-builder --config electron-builder.yml --mac dir",
-    "package:win": "pnpm --filter @laundry/platform-fs build && pnpm exec turbo run build --filter=@laundry/edge-agent && pnpm run helper:stage:win && pnpm run preload:bundle && pnpm exec electron-builder --config electron-builder.yml --win nsis --x64",
+    "package:win": "pnpm --filter @laundry/platform-fs build && pnpm exec turbo run build --filter=@laundry/edge-agent && pnpm run helper:stage:win && pnpm run preload:bundle && node scripts/build-windows-profile.mjs",
     "package:inspect:mac": "node scripts/inspect-packaged-mac.mjs",
     "package:inspect:win": "node scripts/inspect-packaged-win.mjs",
     "package:smoke:mac": "pnpm exec playwright test -c playwright.electron.package.config.ts",

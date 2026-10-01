@@ -26,6 +26,15 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
 
 ### 新增
 
+- Windows 新增独立中文 Runtime 安装与维护入口，发行来源与 manifest 固定绑定；普通用户可在私有
+  Programs 目录安装，撤走原分发目录后继续使用。柜台安装器提供本地服务指南，卸载柜台保留服务与数据。
+  恢复须明确选择备份并人工输入完整摘要；见 [ADR-69](adr/2026-10-01-adr-69-windows-runtime-operator-entry.md)。
+
+- Windows 柜台新增严格 generic/hongfa 发行 profile，宏发具有独立安装身份及品牌名称，固定本机 origin
+  和同一 V2 核心；profile 与源码 SHA、安装包检查绑定，不进入 Command/Query、权限或计价分支。
+  见 [ADR-70](adr/2026-10-01-adr-70-windows-distribution-profile.md)。本批仍是未签名合成开发版。
+  2026-10-01 用户明确本轮只完成 Windows 开发测试，云平台开发部署移出范围。
+
 - Windows Runtime 增加本机托管备份、列表、验证、确认恢复与维护中断恢复入口：先保留恢复前安全点，
   再在临时数据库单事务导入并直接验证迁移账本与关键表，以 OID 绑定的事务切换避免残留额外旧表。
   维护未完成时阻断普通启动、修复、升级、回滚和卸载；旧登录 controller 缺少阻断能力时禁止使用。

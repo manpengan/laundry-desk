@@ -6,8 +6,9 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { inspectPackagedWindowsSoftware } from "./inspect-packaged-win.mjs";
+import { loadWindowsProfile, stageWindowsProfile } from "./windows-profile.mjs";
+import { cp } from "node:fs/promises";
 
-const APP = "laundry-desk V2.exe";
 const INSTALLER = "laundry-desk-v2-0.1.0-windows-x64-development-only.exe";
 const HELPER = "laundry-windows-helper.exe";
 const SOURCE_GIT_SHA = "a".repeat(40);
@@ -21,7 +22,7 @@ function x64PeFixture() {
   return bytes;
 }
 
-async function fixture(t) {
+async function fixture(t, profileId = "generic") {
   const root = await realpath(await mkdtemp(join(tmpdir(), "laundry-win-inspection-")));
   t.after(async () => rm(root, { force: true, recursive: true }));
   const releaseRoot = join(root, "release");
@@ -29,6 +30,10 @@ async function fixture(t) {
   const spa = join(resources, "spa");
   const helperRoot = join(resources, "windows-helper");
   const provenanceRoot = join(resources, "build-provenance");
+  const { profile } = await loadWindowsProfile({ profileId });
+  const appName = profile.display_name + ".exe";
+  const installerName =
+    profileId === "generic" ? INSTALLER : INSTALLER.replace("v2-0.", "v2-hongfa-0.");
   await Promise.all([
     mkdir(join(spa, "bundles"), { recursive: true }),
     mkdir(join(resources, "update"), { recursive: true }),
@@ -55,9 +60,9 @@ async function fixture(t) {
   const helper = Buffer.from("fixture helper\n");
   const helperDigest = createHash("sha256").update(helper).digest("hex");
   await Promise.all([
-    writeFile(join(releaseRoot, "win-unpacked", APP), x64PeFixture()),
-    writeFile(join(releaseRoot, INSTALLER), "fixture installer\n"),
-    writeFile(join(releaseRoot, `${INSTALLER}.blockmap`), "fixture blockmap\n"),
+    writeFile(join(releaseRoot, "win-unpacked", appName), x64PeFixture()),
+    writeFile(join(releaseRoot, installerName), "fixture installer\n"),
+    writeFile(join(releaseRoot, installerName + ".blockmap"), "fixture blockmap\n"),
     writeFile(join(resources, "app.asar"), "fixture asar\n"),
     writeFile(
       join(resources, "update", "update-config.json"),
@@ -77,8 +82,15 @@ async function fixture(t) {
     ),
     writeFile(join(spa, "manifest.json"), manifest),
     writeFile(join(spa, "bundles", bundle, "index.html"), html),
+    writeFile(join(resources, "windows-runtime-guide.txt"), "Laundry Runtime V2.cmd\n"),
   ]);
-  return { bundle, helperDigest, helperRoot, provenanceRoot, releaseRoot };
+  const staged = await stageWindowsProfile({
+    profileId,
+    expectedGitSha: SOURCE_GIT_SHA,
+    targetRoot: join(root, "windows-profile"),
+  });
+  await cp(staged.targetRoot, join(resources, "distribution-profile"), { recursive: true });
+  return { bundle, helperDigest, helperRoot, provenanceRoot, releaseRoot, resources };
 }
 
 test("inspects exact x64 unsigned NSIS, helper and SPA evidence", async (t) => {
@@ -100,6 +112,33 @@ test("inspects exact x64 unsigned NSIS, helper and SPA evidence", async (t) => {
   assert.equal(evidence.spa_bundle, setup.bundle);
   assert.match(evidence.app_sha256, /^[0-9a-f]{64}$/u);
   assert.match(evidence.installer_sha256, /^[0-9a-f]{64}$/u);
+});
+
+test("Hongfa has separate executable identity with the same fixed V2 resources", async (t) => {
+  const setup = await fixture(t, "hongfa");
+  const evidence = await inspectPackagedWindowsSoftware({
+    platform: "win32",
+    profileId: "hongfa",
+    releaseRoot: setup.releaseRoot,
+    expectedGitSha: SOURCE_GIT_SHA,
+    signatureStatus: async () => "NotSigned",
+  });
+  assert.equal(evidence.app_id, "com.laundry-desk.v2.hongfa");
+  assert.equal(evidence.profile_id, "hongfa");
+  assert.match(evidence.profile_sha256, /^[a-f0-9]{64}$/u);
+  const binding = join(setup.resources, "distribution-profile", "binding.json");
+  const value = JSON.parse(await readFile(binding, "utf8"));
+  await writeFile(binding, JSON.stringify({ ...value, source_git_sha: "b".repeat(40) }));
+  await assert.rejects(
+    inspectPackagedWindowsSoftware({
+      platform: "win32",
+      profileId: "hongfa",
+      releaseRoot: setup.releaseRoot,
+      expectedGitSha: SOURCE_GIT_SHA,
+      signatureStatus: async () => "NotSigned",
+    }),
+    /WINDOWS_PROFILE_BINDING_INVALID/u,
+  );
 });
 
 test("rejects helper tampering and a signed development-only artifact", async (t) => {

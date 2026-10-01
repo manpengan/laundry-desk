@@ -306,7 +306,7 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
   );
   const helperStageIndex = packageWin.indexOf("pnpm run helper:stage:win");
   const winPreloadIndex = packageWin.indexOf("pnpm run preload:bundle");
-  const winBuilderIndex = packageWin.indexOf("electron-builder");
+  const winBuilderIndex = packageWin.indexOf("node scripts/build-windows-profile.mjs");
   assert.ok(
     winPlatformBuildIndex >= 0 &&
       winGraphBuildIndex > winPlatformBuildIndex &&
@@ -314,7 +314,7 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
       winPreloadIndex > helperStageIndex &&
       winBuilderIndex > winPreloadIndex,
   );
-  assert.match(packageWin, /--win nsis --x64/u);
+  assert.match(packageWin, /build-windows-profile\.mjs/u);
   assert.doesNotMatch(packageWin, /hongfa|publish|root|src\//iu);
 });
 
