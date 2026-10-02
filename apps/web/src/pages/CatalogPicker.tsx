@@ -67,6 +67,7 @@ export function CatalogPicker({ queryClient, disabled = false, onPick }: Catalog
   const [items, setItems] = useState<readonly CatalogListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [state, setState] = useState<LoadState>("idle");
+  const [loadedQuery, setLoadedQuery] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [service, setService] = useState<string>("all");
   const seqRef = useRef(0);
@@ -101,6 +102,7 @@ export function CatalogPicker({ queryClient, disabled = false, onPick }: Catalog
       const next = parseCatalogItems(payload?.items);
       setItems(next);
       setTotal(typeof payload?.total === "number" ? payload.total : next.length);
+      setLoadedQuery(text);
       setState("ready");
     },
     [queryClient],
@@ -136,8 +138,16 @@ export function CatalogPicker({ queryClient, disabled = false, onPick }: Catalog
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [services]);
 
+  const canPick = !disabled && state === "ready" && loadedQuery === query;
+  const changeQuery = (text: string): void => {
+    if (text === query) return;
+    seqRef.current += 1;
+    setQuery(text);
+    setState("loading");
+    setErrorMsg(null);
+  };
   const pick = (item: CatalogListItem | undefined): void => {
-    if (item === undefined || disabled) return;
+    if (item === undefined || !canPick) return;
     onPick(item);
   };
 
@@ -184,8 +194,8 @@ export function CatalogPicker({ queryClient, disabled = false, onPick }: Catalog
         name="catalog-search"
         label="搜索价目"
         value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        hint="名称 / 助记码；Enter 加入第一项，/ 键随时回到这里"
+        onChange={(event) => changeQuery(event.target.value)}
+        hint="名称 / 助记码；结果加载后 Enter 加入第一项，/ 键随时回到这里"
         disabled={disabled}
         autoComplete="off"
         spellCheck={false}
@@ -193,9 +203,9 @@ export function CatalogPicker({ queryClient, disabled = false, onPick }: Catalog
           if (event.nativeEvent.isComposing) return;
           if (event.key === "Enter") {
             event.preventDefault();
-            if (visible[0] !== undefined) {
+            if (canPick && visible[0] !== undefined) {
               pick(visible[0]);
-              setQuery("");
+              changeQuery("");
             }
           } else if (event.key === "ArrowDown") {
             event.preventDefault();
@@ -225,7 +235,7 @@ export function CatalogPicker({ queryClient, disabled = false, onPick }: Catalog
                 className="ld-catalog-picker__chip"
                 role="option"
                 aria-selected={false}
-                disabled={disabled}
+                disabled={!canPick}
                 onClick={() => pick(item)}
                 onKeyDown={(event) => onOptionKeyDown(event, index)}
               >
