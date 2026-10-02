@@ -1,0 +1,226 @@
+/* —— Sidebar rail: icon + label, expandable (UI spec §3) —— */
+
+.ld-shell-sidebar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 88px;
+  height: 100vh;
+  flex-shrink: 0;
+  padding: 14px 10px 12px;
+  background: var(--lg-glass);
+  border-right: 1px solid var(--lg-hair);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+
+.ld-shell-sidebar--open {
+  width: 224px;
+}
+
+.ld-shell-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 2px 4px 12px;
+}
+
+.ld-shell-sidebar--open .ld-shell-brand {
+  justify-content: flex-start;
+  padding-left: 8px;
+}
+
+.ld-shell-brand__mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: linear-gradient(140deg, var(--lg-accent2), var(--lg-accent-fill));
+  color: var(--lg-accent-ink);
+  box-shadow:
+    0 6px 16px var(--lg-accent-ring),
+    inset 0 1px 0 var(--lg-highlight);
+}
+
+.ld-shell-brand__name {
+  font-size: var(--lg-fs-md);
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.ld-shell-sidebar__nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.ld-shell-navitem {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 58px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: var(--lg-radius-md);
+  background: transparent;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-2xs);
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+}
+
+.ld-shell-sidebar--open .ld-shell-navitem {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 46px;
+  padding: 8px 12px;
+  font-size: var(--lg-fs-sm);
+  text-align: left;
+}
+
+.ld-shell-navitem:hover {
+  background: var(--lg-leaf-hover);
+  color: var(--lg-ink);
+}
+
+.ld-shell-navitem--active,
+.ld-shell-navitem--active:hover {
+  background: var(--lg-accent-soft);
+  color: var(--lg-accent-strong);
+}
+
+.ld-shell-navitem--active::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: -10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--lg-accent);
+}
+
+.ld-shell-navitem__icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.ld-shell-navitem__label {
+  white-space: nowrap;
+}
+
+.ld-shell-navitem__kbd {
+  margin-left: auto;
+  font-family: var(--lg-font-mono);
+  font-size: var(--lg-fs-2xs);
+  font-weight: 500;
+  color: var(--lg-ink3);
+}
+
+.ld-shell-sidebar__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-2xs);
+  cursor: pointer;
+}
+
+.ld-shell-sidebar--open .ld-shell-sidebar__toggle {
+  justify-content: flex-start;
+  padding: 0 12px;
+  font-size: var(--lg-fs-xs);
+}
+
+.ld-shell-sidebar__toggle:hover {
+  background: var(--lg-leaf-hover);
+  color: var(--lg-ink);
+}
+
+/* Short windows (1366×768 shop PCs, 1080p at 150%): tighten the rail so all
+   ten pages, 设置 included, stay visible without an inner scrollbar. */
+@media (max-height: 800px) {
+  .ld-shell-sidebar {
+    gap: 4px;
+    padding-block: 10px 8px;
+  }
+
+  .ld-shell-brand {
+    padding-bottom: 6px;
+  }
+
+  .ld-shell-brand__mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .ld-shell-sidebar__nav {
+    gap: 2px;
+  }
+
+  .ld-shell-navitem {
+    gap: 3px;
+    min-height: 48px;
+    padding-block: 5px;
+  }
+
+  .ld-shell-sidebar--open .ld-shell-navitem {
+    min-height: 40px;
+    padding-block: 6px;
+  }
+
+  .ld-shell-navitem--active::before {
+    top: 10px;
+    bottom: 10px;
+  }
+
+  .ld-shell-sidebar__toggle {
+    min-height: 34px;
+  }
+}
+
+@media (max-height: 680px) {
+  .ld-shell-brand__mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  .ld-shell-navitem {
+    gap: 2px;
+    min-height: 42px;
+    padding-block: 3px;
+  }
+
+  .ld-shell-navitem__icon,
+  .ld-shell-navitem__icon > svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .ld-shell-sidebar--open .ld-shell-navitem {
+    min-height: 36px;
+  }
+}
