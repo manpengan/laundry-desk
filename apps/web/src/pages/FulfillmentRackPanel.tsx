@@ -1,5 +1,5 @@
 import { Button, Input, useToast } from "@laundry/ui";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import type { CommandPort } from "../commands/types.js";
 
@@ -15,8 +15,12 @@ export function FulfillmentRackPanel({
   const [rackZone, setRackZone] = useState("");
   const [rackSlot, setRackSlot] = useState("");
   const [busy, setBusy] = useState(false);
+  // The scan field never locks (a locked field drops the caret and the next
+  // scan); this guard stops a double Enter from racking twice.
+  const busyRef = useRef(false);
 
   const assign = useCallback(async () => {
+    if (busyRef.current) return;
     const scanned = barcode.trim();
     const zone = rackZone.trim();
     const slot = rackSlot.trim();
@@ -24,6 +28,7 @@ export function FulfillmentRackPanel({
       toast.push("请扫描衣物条码并填写货架分区与号位", "error");
       return;
     }
+    busyRef.current = true;
     setBusy(true);
     try {
       const result = await commandClient.execute<unknown>("garment.rack.assign", {
@@ -40,6 +45,7 @@ export function FulfillmentRackPanel({
       setRackSlot("");
       await onAssigned();
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }, [barcode, commandClient, onAssigned, rackSlot, rackZone, toast]);
@@ -60,7 +66,8 @@ export function FulfillmentRackPanel({
         onChange={(event) => setBarcode(event.target.value)}
         hint="扫码枪回车立即上架；仅已完成衣物可上架"
         autoFocus
-        disabled={busy}
+        autoComplete="off"
+        spellCheck={false}
       />
       <Input
         name="rack-zone"

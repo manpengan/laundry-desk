@@ -240,7 +240,7 @@ export function CustomerProfilePanel({
             : profile.discount_bps === 0
               ? "明确不使用等级折扣"
               : `顾客专属 ${formatDiscountPercent(profile.discount_bps)}%`}
-          。新订单由服务端计算并冻结，优惠券不叠加。
+          。新订单按此折扣自动计算，优惠券不叠加。
         </p>
         {session?.role === "admin" ? (
           <div className="ld-customer-profile__discount-fields">
@@ -293,7 +293,7 @@ export function CustomerProfilePanel({
       <DangerConfirmDialog
         open={pending?.kind === "confirm"}
         title="确认顾客档案变更"
-        description="服务端已冻结本次参数；确认后将更新档案版本并写入审计。"
+        description="系统已锁定本次参数；确认后将更新档案版本并写入审计。"
         confirmLabel="确认保存"
         serverConfirmation
         busy={busy}

@@ -31,7 +31,7 @@
   color: var(--ld-owner-tone);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--lg-fs-2xs);
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -50,12 +50,12 @@
 .ld-owner-operations__header p,
 .ld-owner-operations__header strong {
   color: var(--lg-ink2);
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-owner-operations__eyebrow {
   color: var(--lg-accent);
-  font-size: 11px;
+  font-size: var(--lg-fs-2xs);
   font-weight: 700;
   letter-spacing: 0.05em;
 }
@@ -81,7 +81,7 @@
 .ld-owner-operations__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-owner-operations__table th,
@@ -102,7 +102,7 @@
   z-index: 1;
   background: var(--lg-surface);
   color: var(--lg-ink2);
-  font-size: 11px;
+  font-size: var(--lg-fs-2xs);
 }
 
 .ld-owner-operations__table tbody tr:last-child > * {
@@ -113,7 +113,7 @@
   display: block;
   margin-top: 3px;
   color: var(--lg-ink3);
-  font-size: 10px;
+  font-size: var(--lg-fs-2xs);
   font-weight: 400;
 }
 
@@ -123,7 +123,7 @@
   border-radius: var(--lg-radius-sm);
   background: var(--lg-warn-bg);
   color: var(--lg-warn-ink);
-  font-size: 12px;
+  font-size: var(--lg-fs-2xs);
 }
 
 .ld-owner-portfolio__totals {
@@ -138,10 +138,10 @@
   border-radius: 999px;
   background: var(--lg-leaf);
   color: var(--lg-ink2);
-  font-size: 12px;
+  font-size: var(--lg-fs-2xs);
 }
 
-@media (max-width: 560px) {
+@media (max-width: 639px) {
   .ld-owner-operations {
     padding: 14px;
   }

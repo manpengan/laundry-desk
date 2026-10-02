@@ -6,10 +6,27 @@ export type MainWindowHandle = Readonly<{
   ready: Promise<void>;
 }>;
 
+/**
+ * Counter-first defaults: three-pane 开单 needs ≥1280; never shrink below 1024.
+ * The 600px minimum height still fits a 1366×768 screen at 125% scaling, and the
+ * side rail compacts down to 600px without scrolling.
+ */
+export const MAIN_WINDOW_SIZE = Object.freeze({
+  width: 1440,
+  height: 900,
+  minWidth: 1024,
+  minHeight: 600,
+});
+
 export function createMainWindow(preloadPath: string, desktopSession: Session): MainWindowHandle {
   const win = new BrowserWindow({
-    width: 960,
-    height: 720,
+    ...MAIN_WINDOW_SIZE,
+    title: "洗衣柜台",
+    // Matches the light canvas so the first paint never flashes white.
+    backgroundColor: "#f3f4f8",
+    // Windows/Linux would otherwise show Electron's English default menu bar
+    // above the counter; Alt still reveals it and its shortcuts keep working.
+    autoHideMenuBar: true,
     show: false,
     webPreferences: {
       preload: preloadPath,

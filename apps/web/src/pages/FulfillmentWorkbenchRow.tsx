@@ -1,3 +1,4 @@
+import { serviceLabel } from "./catalog-services.js";
 import { FULFILLMENT_STATUS_LABELS, type FulfillmentRowView } from "./fulfillment-model.js";
 
 export function FulfillmentWorkbenchRow({
@@ -25,7 +26,7 @@ export function FulfillmentWorkbenchRow({
         <small>{row.barcode}</small>
       </span>
       <span>
-        {row.service_code} · {row.category_code}
+        {serviceLabel(row.service_code)} · {row.category_code}
         <small>{[row.color, row.brand].filter(Boolean).join(" · ") || "—"}</small>
       </span>
       <span>

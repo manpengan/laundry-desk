@@ -15,7 +15,7 @@
 }
 
 .ld-approval-center__header p {
-  color: var(--ld-text-muted, #64748b);
+  color: var(--lg-ink3);
   margin-top: 0.35rem;
 }
 
@@ -25,8 +25,8 @@
 }
 
 .ld-approval-center__tabs button[aria-selected="true"] {
-  background: #155eef;
-  color: #fff;
+  background: var(--lg-accent-fill);
+  color: var(--lg-accent-ink);
 }
 
 .ld-approval-center__layout {
@@ -37,8 +37,8 @@
 
 .ld-approval-center__queue,
 .ld-approval-center__detail {
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: var(--lg-surface);
+  border: 1px solid var(--lg-card-border);
   border-radius: 1rem;
   min-width: 0;
   padding: 1rem;
@@ -52,8 +52,8 @@
 
 .ld-approval-center__card {
   align-items: start;
-  background: #fff;
-  border: 1px solid #dbe4f0;
+  background: var(--lg-surface-input);
+  border: 1px solid var(--lg-hair);
   border-radius: 0.75rem;
   display: grid;
   gap: 0.25rem;
@@ -62,13 +62,13 @@
 }
 
 .ld-approval-center__card[aria-pressed="true"] {
-  border-color: #155eef;
-  box-shadow: 0 0 0 2px rgba(21, 94, 239, 0.12);
+  border-color: var(--lg-accent);
+  box-shadow: var(--lg-focus-ring);
 }
 
 .ld-approval-center__card small,
 .ld-approval-center__card span {
-  color: #64748b;
+  color: var(--lg-ink3);
   overflow-wrap: anywhere;
 }
 
@@ -84,9 +84,9 @@
 }
 
 .ld-approval-center__detail pre {
-  background: #0f172a;
+  background: var(--lg-surface-2);
   border-radius: 0.75rem;
-  color: #e2e8f0;
+  color: var(--lg-ink);
   max-height: 24rem;
   overflow: auto;
   padding: 0.85rem;
@@ -104,11 +104,11 @@
 }
 
 .ld-approval-center__error {
-  color: #b42318;
+  color: var(--lg-late-ink);
   margin: 0;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .ld-approval-center__header {
     align-items: stretch;
     display: grid;

@@ -216,7 +216,7 @@ test("StatsPage SSR keeps the reconciliation shell free of hard-coded colors", (
       }),
     ),
   );
-  assert.match(html, /服务端统一核对/);
+  assert.match(html, /统一核对订单/);
   assert.doesNotMatch(html, /#ff0000/i);
   assert.doesNotMatch(html, /rgb\(/i);
 });

@@ -83,13 +83,7 @@ test("stale AI turn drain reports transport rejection", async () => {
 test("AI trigger exposes its collapsed and expanded state", () => {
   const render = (aiOpen: boolean): string =>
     renderToStaticMarkup(
-      <TopBar
-        connection={createMockConnection()}
-        themePreference="system"
-        onCycleTheme={() => undefined}
-        aiOpen={aiOpen}
-        onToggleAi={() => undefined}
-      />,
+      <TopBar connection={createMockConnection()} aiOpen={aiOpen} onToggleAi={() => undefined} />,
     );
 
   assert.match(render(false), /aria-expanded="false"/u);

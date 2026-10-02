@@ -100,7 +100,7 @@ export function MemberOrderBenefitsPanel({
         toast.push(result.error.message ?? result.error.code, "error");
         return;
       }
-      applyMutation(result.data, "订单积分已按服务端规则入账");
+      applyMutation(result.data, "订单积分已按规则入账");
     } finally {
       setBusy(false);
     }
@@ -120,7 +120,7 @@ export function MemberOrderBenefitsPanel({
           toast.push(result.error.message ?? result.error.code, "error");
           return;
         }
-        if (applyMutation(result.data, "优惠券已核销，订单金额由服务端重算")) {
+        if (applyMutation(result.data, "优惠券已核销，订单金额已重新计算")) {
           await onOrderReload();
         }
       } finally {
@@ -161,7 +161,7 @@ export function MemberOrderBenefitsPanel({
   return (
     <section className="ld-order-benefits" data-testid="order-member-benefits">
       <h3>会员权益</h3>
-      <p>当前可用积分 {benefits.points.available_points} 分；积分与券金额均由服务端计算。</p>
+      <p>当前可用积分 {benefits.points.available_points} 分；积分与优惠券金额由系统自动计算。</p>
       {canEarn ? (
         <Button
           variant="secondary"

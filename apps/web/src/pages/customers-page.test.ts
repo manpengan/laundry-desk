@@ -158,7 +158,7 @@ test("CustomersPage SSR with mock query still renders empty list under SSR", () 
       }),
     ),
   );
-  assert.match(html, /组织级客户档案/);
+  assert.match(html, /按手机号、姓名或会员标识查找/);
   // useEffect does not run under SSR
   assert.match(html, /暂无匹配客户/);
   assert.doesNotMatch(html, /data-testid="customer-detail"/);

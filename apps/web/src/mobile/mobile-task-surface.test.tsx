@@ -110,7 +110,7 @@ test("host entry and stylesheet keep mobile resume and narrow-screen accessibili
   );
   assert.match(hostSource, /shouldResumeHostSession\(host\.kind, surface\)/u);
   assert.match(hostSource, /mobile-delivery-tasks\.css/u);
-  assert.match(styles, /@media \(max-width: 720px\)/u);
+  assert.match(styles, /@media \(max-width: 767px\)/u);
   assert.match(styles, /@media \(max-width: 390px\)/u);
   assert.match(styles, /min-height: 48px/u);
   assert.match(styles, /prefers-reduced-motion: reduce/u);

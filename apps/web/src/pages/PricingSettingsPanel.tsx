@@ -236,7 +236,7 @@ export function PricingSettingsPanel({
     >
       <h2 className="ld-shell-main__title">柜台计价设置</h2>
       <p className="ld-shell-main__hint">
-        加急、运费和附加项由服务端按本店设置计价；修改需另一位店长现场复核。
+        加急、运费和附加项按本店设置自动计价；修改需另一位店长现场复核。
       </p>
       <div className="ld-settings-form">
         <MoneyInput

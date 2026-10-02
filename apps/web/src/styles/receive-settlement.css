@@ -1,0 +1,290 @@
+/* 开单 settlement column, per-garment detail cards and the 未完成挂单 strip. */
+
+/* —— Per-garment details (one card per physical piece) —— */
+
+.ld-counter-piece {
+  padding: 10px 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-surface-input);
+}
+
+.ld-counter-piece__title {
+  margin: 0 0 8px;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-xs);
+  font-weight: 700;
+}
+
+.ld-counter-piece__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+}
+
+.ld-counter-piece__fields .ld-input {
+  min-height: 40px;
+  font-size: var(--lg-fs-sm);
+}
+
+.ld-counter-line__addons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-xs);
+}
+
+.ld-counter-line__addons label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ld-receive-customer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ld-counter-adjustments {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ld-counter-adjustment-toggles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ld-counter-adjustment-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-input);
+  color: var(--lg-ink);
+  font-size: var(--lg-fs-sm);
+  cursor: pointer;
+}
+
+.ld-counter-adjustment-toggle:has(input:checked) {
+  border-color: var(--lg-accent);
+  background: var(--lg-accent-soft);
+}
+
+.ld-counter-adjustment-toggle span {
+  white-space: nowrap;
+}
+
+.ld-counter-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-2);
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+}
+
+.ld-counter-totals span,
+.ld-counter-totals strong {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ld-counter-totals__payable {
+  align-items: baseline;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--lg-hair);
+  color: var(--lg-ink);
+  font-size: var(--lg-fs-sm);
+}
+
+.ld-counter-totals__payable .ld-money {
+  color: var(--lg-ink);
+}
+
+.ld-receive-payment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.7fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.ld-counter-select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-xs);
+  font-weight: 600;
+}
+
+.ld-counter-select > span {
+  line-height: 19px;
+}
+
+.ld-counter-select select {
+  min-height: 44px;
+  border: 1px solid var(--lg-field-border);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-input);
+  color: var(--lg-ink);
+  font-size: var(--lg-fs-md);
+  font-weight: 400;
+  padding: 8px 12px;
+}
+
+/* Checkout bar: the settlement column stretches over the whole row, so
+   `margin-top: auto` parks the bar at its bottom and `sticky` keeps the total
+   and the primary action on screen while long tickets scroll. */
+.ld-counter-panel--settlement .ld-counter-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 10px;
+  margin: auto -18px 0;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--lg-hair);
+  border-radius: 0 0 var(--lg-radius-lg) var(--lg-radius-lg);
+  /* Same color as the panel, but opaque: scrolled fields must not show through. */
+  background: linear-gradient(var(--lg-surface), var(--lg-surface)), var(--lg-bg);
+  box-shadow: var(--lg-shadow-dock);
+}
+
+.ld-counter-panel--settlement .ld-counter-actions > .ld-btn {
+  width: 100%;
+}
+
+.ld-counter-actions__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ld-counter-actions__total {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+  font-weight: 600;
+}
+
+.ld-counter-actions__total .ld-money {
+  color: var(--lg-ink);
+}
+
+/* —— 未完成挂单 strip: one line when empty —— */
+
+.ld-counter-drafts {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--lg-card-border);
+  border-radius: var(--lg-radius-lg);
+  background: var(--lg-surface);
+  box-shadow: var(--lg-shadow-card);
+}
+
+.ld-counter-drafts--empty {
+  padding-block: 6px;
+  box-shadow: none;
+  background: var(--lg-surface-2);
+}
+
+.ld-counter-drafts__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ld-counter-drafts__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--lg-fs-sm);
+  font-weight: 700;
+}
+
+.ld-counter-drafts__count {
+  min-width: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--lg-warn-bg);
+  color: var(--lg-warn-ink);
+  font-size: var(--lg-fs-2xs);
+  text-align: center;
+}
+
+.ld-counter-drafts--empty .ld-counter-drafts__count {
+  background: var(--lg-done-bg);
+  color: var(--lg-done-ink);
+}
+
+.ld-counter-drafts__none {
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-xs);
+}
+
+.ld-counter-drafts__head .ld-btn {
+  margin-left: auto;
+}
+
+.ld-counter-draft-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ld-counter-draft-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-input);
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+}
+
+.ld-counter-draft-list__who {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--lg-ink);
+}
+
+@media (max-width: 767px) {
+  .ld-receive-customer,
+  .ld-counter-adjustment-toggles,
+  .ld-receive-payment,
+  .ld-counter-draft-list li {
+    grid-template-columns: 1fr;
+  }
+}

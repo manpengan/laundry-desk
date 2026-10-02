@@ -1,34 +1,26 @@
-/* Local-first counter layouts: the three high-frequency panes stay readable at 1280px. */
+/* Counter workspace: shared panel cards + 工作台. Three panes stay readable at
+   1280px; at ≤1279px the third pane wraps (UI spec §3: 1024–1280 two columns). */
 
 .ld-counter-grid {
   display: grid;
-  gap: 16px;
-}
-
-.ld-counter-grid--receive {
-  grid-template-columns: minmax(220px, 0.8fr) minmax(360px, 1.35fr) minmax(250px, 0.9fr);
-  align-items: start;
+  gap: 18px;
 }
 
 .ld-counter-grid--workbench {
-  grid-template-columns: minmax(220px, 0.8fr) minmax(340px, 1.3fr) minmax(240px, 0.9fr);
+  grid-template-columns: minmax(280px, 0.95fr) minmax(360px, 1.3fr) minmax(280px, 0.95fr);
   align-items: start;
 }
 
 .ld-counter-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
-  padding: 14px;
-  border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-md);
-  background: var(--lg-leaf);
-}
-
-.ld-counter-panel--settlement {
-  position: sticky;
-  top: 12px;
+  padding: 18px;
+  border: 1px solid var(--lg-card-border);
+  border-radius: var(--lg-radius-lg);
+  background: var(--lg-surface);
+  box-shadow: var(--lg-shadow-card);
 }
 
 .ld-counter-panel__head {
@@ -39,199 +31,32 @@
 }
 
 .ld-counter-panel__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   color: var(--lg-ink);
-  font-size: 15px;
+  font-size: var(--lg-fs-md);
+  font-weight: 700;
+}
+
+.ld-counter-panel__title .ld-icon {
+  color: var(--lg-accent-strong);
+}
+
+.ld-counter-panel__subtitle {
+  margin: 4px 0 0;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .ld-counter-panel__meta,
 .ld-counter-panel__hint {
   margin: 0;
   color: var(--lg-ink3);
-  font-size: 12px;
-}
-
-.ld-counter-draft {
-  padding: 3px 7px;
-  border: 1px solid var(--lg-hair);
-  border-radius: 999px;
-  color: var(--lg-accent);
-  font-size: 12px;
-}
-
-.ld-counter-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ld-counter-drafts {
-  margin-bottom: 16px;
-}
-
-.ld-counter-draft-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.ld-counter-draft-list li {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-sm);
-  background: var(--lg-surface);
-  color: var(--lg-ink2);
-  font-size: 13px;
-}
-
-.ld-counter-line {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(74px, auto) 70px auto;
-  align-items: end;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-sm);
-  background: var(--lg-surface);
-}
-
-.ld-counter-line__index {
-  padding-bottom: 10px;
-  color: var(--lg-ink3);
-  font-size: 12px;
-}
-
-.ld-counter-line__codes,
-.ld-counter-adjustments {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.ld-counter-line__price {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-bottom: 10px;
-  color: var(--lg-ink2);
-  font-size: 12px;
-}
-
-.ld-counter-line__price strong {
-  color: var(--lg-ink3);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.ld-counter-line__addons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-sm);
-  color: var(--lg-ink2);
-  font-size: 12px;
-}
-
-.ld-counter-pieces {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ld-counter-piece {
-  padding: 10px;
-  border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-sm);
-  background: var(--lg-leaf);
-}
-
-.ld-counter-piece__title {
-  margin: 0 0 8px;
-  color: var(--lg-ink2);
-  font-size: 13px;
-}
-
-.ld-counter-piece__fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.ld-counter-piece .ld-counter-line__addons {
-  margin-top: 8px;
-}
-
-.ld-counter-line__addons label,
-.ld-counter-adjustment-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ld-counter-adjustment-toggle {
-  min-height: 40px;
-  padding: 8px 10px;
-  border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-sm);
-  background: var(--lg-surface);
-  color: var(--lg-ink2);
-  font-size: 13px;
-}
-
-.ld-counter-totals {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 12px;
-  border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-sm);
-  background: var(--lg-surface);
-  color: var(--lg-ink2);
-  font-size: 13px;
-}
-
-.ld-counter-totals span,
-.ld-counter-totals strong {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.ld-counter-totals strong {
-  padding-top: 7px;
-  border-top: 1px solid var(--lg-hair);
-  color: var(--lg-ink);
-  font-size: 14px;
-}
-
-.ld-counter-select {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  color: var(--lg-ink2);
-  font-size: 13px;
-}
-
-.ld-counter-select select {
-  min-height: 40px;
-  border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-sm);
-  background: var(--lg-surface);
-  color: var(--lg-ink);
-  font: inherit;
-  padding: 8px 10px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-counter-actions,
@@ -241,39 +66,98 @@
   gap: 8px;
 }
 
+/* —— 快捷取衣: the scan field is the visual anchor of the home screen —— */
+
+.ld-workbench-pickup {
+  border-color: color-mix(in srgb, var(--lg-accent) 28%, var(--lg-card-border));
+  background:
+    radial-gradient(420px 220px at 0% 0%, var(--lg-accent-soft), transparent 70%), var(--lg-surface);
+}
+
 .ld-workbench-search {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
+
+.ld-workbench-search .ld-btn {
+  width: 100%;
+}
+
+.ld-workbench-numpad > summary {
+  width: max-content;
+  color: var(--lg-accent-strong);
+  font-size: var(--lg-fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ld-workbench-numpad[open] > summary {
+  margin-bottom: 10px;
+}
+
+/* —— 今日看板 —— */
 
 .ld-workbench-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .ld-workbench-metric {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  min-height: 72px;
-  padding: 10px;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 92px;
+  padding: 14px;
   border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-sm);
-  background: var(--lg-surface);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-2);
+  color: var(--lg-ink);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--lg-motion-fast) var(--lg-ease-out);
+}
+
+.ld-workbench-metric:hover {
+  border-color: var(--lg-field-border);
+  transform: translateY(-1px);
 }
 
 .ld-workbench-metric__label {
-  color: var(--lg-ink3);
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-xs);
+  font-weight: 600;
 }
 
 .ld-workbench-metric__value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
   color: var(--lg-ink);
-  font-size: 18px;
-  font-weight: 650;
+  font-size: var(--lg-fs-xl);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
 }
+
+.ld-workbench-metric__value .ld-money {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.ld-workbench-metric__value small {
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+  font-weight: 600;
+}
+
+/* —— 今日待取 / 顾客速查 lists —— */
 
 .ld-workbench-orders,
 .ld-workbench-customers {
@@ -287,77 +171,90 @@
 
 .ld-workbench-orders__row,
 .ld-workbench-customers__row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 10px;
+  min-height: 48px;
+  padding: 8px 12px;
   border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-sm);
-  background: var(--lg-surface);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-input);
   color: var(--lg-ink);
-  font: inherit;
   text-align: left;
-}
-
-button.ld-workbench-orders__row,
-button.ld-workbench-customers__row {
   cursor: pointer;
 }
 
-button.ld-workbench-orders__row:hover,
-button.ld-workbench-customers__row:hover {
+.ld-workbench-customers__row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.ld-workbench-orders__row:hover,
+.ld-workbench-customers__row:hover {
   border-color: var(--lg-accent);
 }
 
 .ld-workbench-orders__ticket {
-  font-family: ui-monospace, monospace;
-  font-size: 13px;
+  font-family: var(--lg-font-mono);
+  font-size: var(--lg-fs-sm);
   font-weight: 600;
 }
 
 .ld-workbench-orders__sub,
 .ld-workbench-customers__sub {
-  color: var(--lg-ink3);
-  font-size: 12px;
+  overflow: hidden;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ld-workbench-customers__sub {
+  font-family: var(--lg-font-mono);
 }
 
 .ld-workbench-empty {
   margin: 0;
   color: var(--lg-ink3);
-  font-size: 13px;
+  font-size: var(--lg-fs-sm);
 }
 
-/* The three-column minimums total 830px + 32px of gaps = 862px, and the shell
-   spends 288px on the sidebar (208) plus main margin/padding (80). Below a
-   1150px viewport the third column cannot fit, so collapse before then rather
-   than letting it overflow — 1138px (1707px at 150% DPI) is a very common
-   retail display and used to land inside that dead zone. */
-@media (max-width: 1199px) {
-  .ld-counter-grid--receive,
+.ld-workbench-empty .ld-empty {
+  padding: 16px 8px;
+}
+
+.ld-counter-draft {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--lg-warn-bg);
+  color: var(--lg-warn-ink);
+  font-size: var(--lg-fs-2xs);
+  font-weight: 700;
+}
+
+@media (max-width: 1279px) {
   .ld-counter-grid--workbench {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .ld-counter-panel--settlement {
-    position: static;
+  .ld-counter-grid--workbench > :first-child {
+    grid-row: span 2;
   }
 }
 
-@media (max-width: 720px) {
-  .ld-counter-grid--receive,
-  .ld-counter-grid--workbench,
-  .ld-counter-line,
-  .ld-counter-line__codes,
-  .ld-counter-adjustments,
-  .ld-counter-piece__fields,
-  .ld-counter-draft-list li {
+@media (max-width: 767px) {
+  .ld-counter-grid--workbench {
     grid-template-columns: 1fr;
   }
 
-  .ld-counter-line__index,
-  .ld-counter-line__price {
-    padding-bottom: 0;
+  .ld-counter-grid--workbench > :first-child {
+    grid-row: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ld-workbench-metric {
+    transition: none;
   }
 }

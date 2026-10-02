@@ -22,13 +22,26 @@ export function formatSyncLabel(
   return `${modeLabel} · ${pending}`;
 }
 
-/** Top-bar connection strip (UI only — wire to Edge later). */
+/** Short detail beside the badge; the badge already names the mode. */
+export function formatSyncDetail(pendingSyncCount: number): string {
+  return pendingSyncCount <= 0 ? "全部已同步" : `${pendingSyncCount} 笔待同步`;
+}
+
+/** Top-bar connection strip: one badge for the mode, one detail for the queue. */
 export function SyncStatusBar({ mode, pendingSyncCount, className }: SyncStatusBarProps) {
   const status = syncKey(mode, pendingSyncCount);
+  const label = formatSyncLabel(mode, pendingSyncCount);
   return (
-    <div className={cn("ld-sync-bar", className)} data-mode={mode} data-pending={pendingSyncCount}>
+    <div
+      className={cn("ld-sync-bar", className)}
+      data-mode={mode}
+      data-pending={pendingSyncCount}
+      role="status"
+      aria-label={label}
+      title={label}
+    >
       <StatusBadge family="sync" status={status} />
-      <span>{formatSyncLabel(mode, pendingSyncCount)}</span>
+      <span className="ld-sync-bar__detail">{formatSyncDetail(pendingSyncCount)}</span>
     </div>
   );
 }

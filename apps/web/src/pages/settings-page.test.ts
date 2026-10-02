@@ -53,7 +53,7 @@ test("SettingsPage SSR keeps the legacy path smoke CLI-only", () => {
     ),
   );
 
-  assert.match(html, /旧版 USB/);
+  assert.match(html, /串口 \/ USB 直连打印机诊断/);
   assert.match(html, /data-testid="printer-smoke-section"/);
   assert.match(html, /data-testid="printer-smoke-static"/);
   assert.match(html, /LAUNDRY_PRINTER_PATH/);
@@ -68,7 +68,7 @@ test("SettingsPage SSR keeps the legacy path smoke CLI-only", () => {
 });
 
 test("SettingsPage source cannot reconnect renderer printer smoke", () => {
-  const source = readFileSync(join(packageRoot, "src/pages/SettingsPage.tsx"), "utf8");
+  const source = readFileSync(join(packageRoot, "src/pages/PrinterSupportPanel.tsx"), "utf8");
   assert.doesNotMatch(source, /edgeBridge\.printerSmoke|edgePrinterSmoke|resolveEdgePrinterSmoke/u);
   assert.match(source, /--validate/u);
 });

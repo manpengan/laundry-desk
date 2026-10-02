@@ -1,5 +1,5 @@
 import type { PrintJobSummary } from "@laundry/ui";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 
 import type { AuthClient } from "../auth/AuthClient.js";
 import { filterNavItems, permissionContextFrom } from "../auth/permissions.js";
@@ -10,18 +10,29 @@ import type { AiPanelPort } from "../host/ai-port.js";
 import type { OfflinePort } from "../host/offline-port.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
-import type { NavItemId } from "../nav.js";
-import type { PageHostProps } from "../pages/PageHostCore.js";
+import { navLabel, navTargetForDigit, type NavItemId } from "../nav.js";
+import type {
+  NavigationIntent,
+  NavigationIntentInput,
+  PageHostProps,
+} from "../pages/PageHostCore.js";
 import { RouteGate } from "../routing/RouteGate.js";
 import {
   applyThemeToDocument,
-  cycleThemePreference,
+  browserThemeStorage,
+  initialCounterTheme,
   resolveTheme,
+  writeStoredThemePreference,
   type ThemePreference,
 } from "../theme.js";
 import { AiPanel } from "./AiPanel.js";
+import { CommandPalette } from "./CommandPalette.js";
+import { lookupCommands } from "./command-palette-model.js";
 import { PinSwitchDialog } from "./PinSwitchDialog.js";
 import { PrintQueuePanel } from "./PrintQueuePanel.js";
+import { ShortcutHelpDialog } from "./ShortcutHelpDialog.js";
+import { shellCommands } from "./shell-commands.js";
+import { ThemeControlContext, useShellShortcuts } from "./shell-shortcuts.js";
 import { Sidebar } from "./Sidebar.js";
 import { TopBar } from "./TopBar.js";
 import { usePrintJobSummary } from "./use-print-job-summary.js";
@@ -51,6 +62,8 @@ export type CounterShellProps = {
 type CounterShellCoreProps = CounterShellProps &
   Readonly<{ PageHostComponent: ComponentType<PageHostProps> }>;
 
+const SIDEBAR_STORAGE_KEY = "ld.counter.sidebar";
+
 const READ_ONLY_COMMAND_PORT: CommandPort = Object.freeze({
   execute: async <T,>(): Promise<
     Readonly<
@@ -71,6 +84,24 @@ function readSystemDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
+function readSidebarExpanded(): boolean {
+  try {
+    return (
+      typeof window !== "undefined" && window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function writeSidebarExpanded(expanded: boolean): void {
+  try {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, expanded ? "1" : "0");
+  } catch {
+    // Storage is a convenience only.
+  }
+}
+
 function connectionFromSession(
   session: SessionView,
   initial: ConnectionStatus | undefined,
@@ -89,7 +120,7 @@ export function CounterShellCore({
   authClient,
   onSessionChange,
   initialConnection,
-  initialTheme = "system",
+  initialTheme,
   initialNav = "workbench",
   systemDark,
   documentRef = null,
@@ -103,13 +134,19 @@ export function CounterShellCore({
   aiPort,
   readOnly = false,
 }: CounterShellCoreProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(readSidebarExpanded);
   const [activeId, setActiveId] = useState<NavItemId>(initialNav);
-  const [themePref, setThemePref] = useState<ThemePreference>(initialTheme);
+  const [themePref, setThemePref] = useState<ThemePreference>(
+    () => initialTheme ?? initialCounterTheme(browserThemeStorage()),
+  );
   const [loading, setLoading] = useState(initialLoadingMs > 0);
   const [pinOpen, setPinOpen] = useState(false);
   const [printQueueOpen, setPrintQueueOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [intent, setIntent] = useState<NavigationIntent | undefined>(undefined);
+  const intentNonce = useRef(0);
 
   const connection = useMemo(
     () => connectionFromSession(session, initialConnection),
@@ -133,88 +170,171 @@ export function CounterShellCore({
     applyThemeToDocument(doc, resolveTheme(themePref, dark));
   }, [themePref, dark, documentRef]);
 
+  // Window / taskbar title follows the page (Electron mirrors document.title).
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.title = `${navLabel(activeId)} · ${session.display.store_name} · 洗衣柜台`;
+  }, [activeId, session.display.store_name]);
+
   useEffect(() => {
     if (initialLoadingMs <= 0) return;
     const timer = setTimeout(() => setLoading(false), initialLoadingMs);
     return () => clearTimeout(timer);
   }, [initialLoadingMs]);
 
+  const setTheme = useCallback((preference: ThemePreference) => {
+    setThemePref(preference);
+    writeStoredThemePreference(browserThemeStorage(), preference);
+  }, []);
+  const themeControl = useMemo(
+    () => Object.freeze({ preference: themePref, setPreference: setTheme }),
+    [setTheme, themePref],
+  );
+
+  const toggleSidebar = useCallback(() => {
+    setExpanded((value) => {
+      writeSidebarExpanded(!value);
+      return !value;
+    });
+  }, []);
+
+  const openIntent = useCallback((next: NavigationIntentInput, target: NavItemId) => {
+    intentNonce.current += 1;
+    setIntent(Object.freeze({ ...next, nonce: intentNonce.current }));
+    setActiveId(target);
+  }, []);
+
+  const commands = useMemo(
+    () =>
+      shellCommands({
+        navItems,
+        readOnly,
+        expanded,
+        onNavigate: setActiveId,
+        onSwitchStaff: () => setPinOpen(true),
+        onOpenPrintQueue: () => setPrintQueueOpen(true),
+        onSetTheme: setTheme,
+        onShowShortcuts: () => setHelpOpen(true),
+        onToggleSidebar: toggleSidebar,
+      }),
+    [expanded, navItems, readOnly, setTheme, toggleSidebar],
+  );
+  const canOpen = useMemo(
+    () =>
+      Object.freeze({
+        pickup: navItems.some((item) => item.id === "pickup") && !readOnly,
+        customers: navItems.some((item) => item.id === "customers"),
+      }),
+    [navItems, readOnly],
+  );
+  const lookups = useCallback(
+    (query: string) =>
+      lookupCommands(
+        query,
+        {
+          onPickupLookup: (key) => openIntent({ kind: "pickup-lookup", key }, "pickup"),
+          onCustomerSearch: (text) =>
+            openIntent({ kind: "customer-search", query: text }, "customers"),
+        },
+        canOpen,
+      ),
+    [canOpen, openIntent],
+  );
+
+  useShellShortcuts({
+    onPalette: () => setPaletteOpen(true),
+    onHelp: () => setHelpOpen(true),
+    onNavDigit: (digit) => {
+      const target = navTargetForDigit(navItems, digit);
+      if (target !== null) setActiveId(target);
+    },
+  });
+
   return (
-    <div
-      className="ld-shell"
-      data-shell="counter"
-      data-nav={activeId}
-      data-role={session.role}
-      data-read-only={readOnly ? "true" : "false"}
-    >
-      <a className="ld-skip-link" href="#main-content">
-        跳到主内容
-      </a>
-      <Sidebar
-        expanded={expanded}
-        activeId={activeId}
-        onSelect={setActiveId}
-        onToggleExpand={() => setExpanded((value) => !value)}
-        items={navItems}
-      />
-      <div className="ld-shell-body">
-        <TopBar
-          connection={connection}
-          themePreference={themePref}
-          onCycleTheme={() => setThemePref((preference) => cycleThemePreference(preference))}
-          printSummary={printSummary}
-          onOpenPrintQueue={() => setPrintQueueOpen(true)}
-          {...(readOnly || aiPort === undefined
-            ? {}
-            : { aiOpen, onToggleAi: () => setAiOpen((value) => !value) })}
-          {...(readOnly ? {} : { onSwitchStaff: () => setPinOpen(true) })}
-          readOnly={readOnly}
+    <ThemeControlContext.Provider value={themeControl}>
+      <div
+        className="ld-shell"
+        data-shell="counter"
+        data-nav={activeId}
+        data-role={session.role}
+        data-read-only={readOnly ? "true" : "false"}
+      >
+        <a className="ld-skip-link" href="#main-content">
+          跳到主内容
+        </a>
+        <Sidebar
+          expanded={expanded}
+          activeId={activeId}
+          onSelect={setActiveId}
+          onToggleExpand={toggleSidebar}
+          items={navItems}
         />
-        {readOnly ? (
-          <div className="ld-offline-read-only" role="status">
-            离线只读：当前显示本机加密缓存，不能开单、收款、取衣或修改资料。
-          </div>
-        ) : null}
-        <RouteGate permission={permission} activeId={activeId} onNavigate={setActiveId}>
-          <PageHostComponent
-            activeId={activeId}
-            loading={loading}
-            onNavigate={setActiveId}
-            session={session}
-            authClient={authClient}
-            commandClient={effectiveCommandClient}
-            queryClient={queryClient}
-            onSessionChange={onSessionChange}
-            {...(offlinePort === undefined ? {} : { offlinePort })}
-            {...(printerPort === undefined || readOnly ? {} : { printerPort })}
-            {...(photoPort === undefined || readOnly ? {} : { photoPort })}
+        <div className="ld-shell-body">
+          <TopBar
+            connection={connection}
+            printSummary={printSummary}
+            onOpenPrintQueue={() => setPrintQueueOpen(true)}
+            onOpenCommand={() => setPaletteOpen(true)}
+            {...(readOnly || aiPort === undefined
+              ? {}
+              : { aiOpen, onToggleAi: () => setAiOpen((value) => !value) })}
+            {...(readOnly ? {} : { onSwitchStaff: () => setPinOpen(true) })}
+            readOnly={readOnly}
           />
-        </RouteGate>
-      </div>
-      <PinSwitchDialog
-        open={pinOpen}
-        onClose={() => setPinOpen(false)}
-        authClient={authClient}
-        currentStaffId={session.session.staff_id}
-        onSwitched={(next) => {
-          onSessionChange(next);
-          setPinOpen(false);
-        }}
-      />
-      <PrintQueuePanel
-        open={printQueueOpen}
-        onClose={() => setPrintQueueOpen(false)}
-        queryClient={queryClient}
-        commandClient={effectiveCommandClient}
-      />
-      {aiPort === undefined ? null : (
-        <AiPanel
-          open={aiOpen}
-          onClose={() => setAiOpen(false)}
-          authSessionId={session.session.session_id}
-          aiPort={aiPort}
+          {readOnly ? (
+            <div className="ld-offline-read-only" role="status">
+              离线只读：当前显示本机加密缓存，不能开单、收款、取衣或修改资料。
+            </div>
+          ) : null}
+          <RouteGate permission={permission} activeId={activeId} onNavigate={setActiveId}>
+            <PageHostComponent
+              activeId={activeId}
+              loading={loading}
+              onNavigate={setActiveId}
+              session={session}
+              authClient={authClient}
+              commandClient={effectiveCommandClient}
+              queryClient={queryClient}
+              onSessionChange={onSessionChange}
+              {...(intent === undefined ? {} : { intent })}
+              {...(offlinePort === undefined ? {} : { offlinePort })}
+              {...(printerPort === undefined || readOnly ? {} : { printerPort })}
+              {...(photoPort === undefined || readOnly ? {} : { photoPort })}
+            />
+          </RouteGate>
+        </div>
+        <PinSwitchDialog
+          open={pinOpen}
+          onClose={() => setPinOpen(false)}
+          authClient={authClient}
+          currentStaffId={session.session.staff_id}
+          onSwitched={(next) => {
+            onSessionChange(next);
+            setPinOpen(false);
+          }}
         />
-      )}
-    </div>
+        <PrintQueuePanel
+          open={printQueueOpen}
+          onClose={() => setPrintQueueOpen(false)}
+          queryClient={queryClient}
+          commandClient={effectiveCommandClient}
+        />
+        <CommandPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          commands={commands}
+          lookups={lookups}
+        />
+        <ShortcutHelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+        {aiPort === undefined ? null : (
+          <AiPanel
+            open={aiOpen}
+            onClose={() => setAiOpen(false)}
+            authSessionId={session.session.session_id}
+            aiPort={aiPort}
+          />
+        )}
+      </div>
+    </ThemeControlContext.Provider>
   );
 }

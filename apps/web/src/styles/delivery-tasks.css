@@ -3,25 +3,6 @@
   gap: 0.75rem;
 }
 
-.ld-delivery-operations__tabs {
-  display: flex;
-  gap: 0.45rem;
-}
-
-.ld-delivery-operations__tabs button {
-  padding: 0.55rem 0.9rem;
-  border: 1px solid var(--lg-border, #d7dde8);
-  border-radius: 999px;
-  background: var(--lg-surface, #fff);
-  color: inherit;
-  cursor: pointer;
-}
-
-.ld-delivery-operations__tabs button[aria-current="page"] {
-  border-color: var(--lg-accent, #3764dd);
-  background: color-mix(in srgb, var(--lg-accent, #3764dd) 12%, transparent);
-}
-
 .ld-delivery-tasks {
   display: grid;
   gap: 1rem;
@@ -41,9 +22,9 @@
 .ld-delivery-tasks__worklist,
 .ld-delivery-tasks__detail {
   padding: 1rem;
-  border: 1px solid var(--lg-border, #d7dde8);
+  border: 1px solid var(--lg-border);
   border-radius: 0.9rem;
-  background: var(--lg-surface, #fff);
+  background: var(--lg-surface);
 }
 
 .ld-delivery-tasks__assignment {
@@ -66,9 +47,9 @@
 .ld-delivery-tasks select {
   min-height: 2.5rem;
   padding: 0.45rem 0.65rem;
-  border: 1px solid var(--lg-border, #c8d0dd);
+  border: 1px solid var(--lg-border);
   border-radius: 0.55rem;
-  background: var(--lg-surface, #fff);
+  background: var(--lg-surface);
   color: inherit;
 }
 
@@ -100,7 +81,7 @@
   width: 100%;
   gap: 0.22rem;
   padding: 0.75rem;
-  border: 1px solid var(--lg-border, #d7dde8);
+  border: 1px solid var(--lg-border);
   border-radius: 0.7rem;
   background: transparent;
   color: inherit;
@@ -109,14 +90,14 @@
 }
 
 .ld-delivery-tasks__rows button.is-selected {
-  border-color: var(--lg-accent, #3764dd);
-  background: color-mix(in srgb, var(--lg-accent, #3764dd) 9%, transparent);
+  border-color: var(--lg-accent);
+  background: color-mix(in srgb, var(--lg-accent) 9%, transparent);
 }
 
 .ld-delivery-tasks__rows span,
 .ld-delivery-tasks__detail dt,
 .ld-delivery-tasks__pending-summary dt {
-  color: var(--lg-muted, #657087);
+  color: var(--lg-muted);
   font-size: 0.875rem;
 }
 
@@ -142,7 +123,7 @@
 .ld-delivery-tasks__action-block {
   margin-top: 1rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--lg-border, #d7dde8);
+  border-top: 1px solid var(--lg-border);
 }
 
 .ld-delivery-tasks__action-block h3 {
@@ -150,7 +131,7 @@
   margin: 0;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 1023px) {
   .ld-delivery-tasks__layout {
     grid-template-columns: 1fr;
   }

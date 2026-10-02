@@ -239,7 +239,10 @@ test("OrderDetailContent SSR shows ticket, money, garments, photo count and thum
   assert.match(html, /20260722-0001/);
   assert.match(html, /data-testid="order-detail-ticket"/);
   assert.match(html, /data-testid="order-detail-phone"/);
-  assert.match(html, /13800000111/);
+  // Counter-safe display: masked by default, revealed only on request.
+  assert.match(html, /138\*\*\*\*0111/);
+  assert.doesNotMatch(html, /13800000111/);
+  assert.match(html, /aria-label="显示完整号码"/);
   assert.match(html, /甲/);
   assert.match(html, /data-testid="order-detail-payable"/);
   assert.match(html, /data-testid="order-detail-paid"/);
@@ -254,7 +257,7 @@ test("OrderDetailContent SSR shows ticket, money, garments, photo count and thum
   assert.match(html, /门店备注/);
   assert.match(html, /data-testid="order-detail-discount-source"/);
   assert.match(html, /金卡 8%/);
-  assert.match(html, /档案快照/);
+  assert.match(html, /顾客档案版本/);
   assert.match(html, />v3</);
   assert.match(html, /data-testid="order-detail-waivers"/);
   assert.match(html, /跳过小票打印、跳过上挂分配/);

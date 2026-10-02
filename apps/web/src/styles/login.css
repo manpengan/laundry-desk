@@ -1,0 +1,126 @@
+/* Login (E1). */
+
+.ld-login {
+  min-height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--lg-ink);
+  font-family: var(--lg-font-sans);
+}
+
+.ld-login__card {
+  width: min(440px, 100%);
+  padding: 32px 32px 28px;
+  border-radius: var(--lg-radius-xl);
+  background: var(--lg-overlay);
+  border: 1px solid var(--lg-card-border);
+  box-shadow: var(--lg-shadow);
+}
+
+.ld-login__header {
+  margin-bottom: 22px;
+}
+
+.ld-login__mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 16px;
+  border-radius: 16px;
+  background: linear-gradient(140deg, var(--lg-accent2), var(--lg-accent-fill));
+  color: var(--lg-accent-ink);
+  box-shadow:
+    0 10px 24px var(--lg-accent-ring),
+    inset 0 1px 0 var(--lg-highlight);
+}
+
+.ld-login__title {
+  margin: 0 0 6px;
+  font-size: var(--lg-fs-xl);
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  color: var(--lg-ink);
+}
+
+.ld-login__hint {
+  margin: 0;
+  font-size: var(--lg-fs-sm);
+  color: var(--lg-ink2);
+}
+
+.ld-login__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* The shared field basis is for horizontal, wrapping field rows. In this
+   column form it becomes a vertical basis and stretches every login field. */
+.ld-login__form > .ld-field {
+  flex: 0 0 auto;
+}
+
+.ld-login__workspace {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ld-login__password {
+  position: relative;
+}
+
+.ld-login__password .ld-input {
+  padding-right: 48px;
+}
+
+.ld-login__reveal {
+  position: absolute;
+  top: 27px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--lg-ink3);
+  cursor: pointer;
+}
+
+.ld-login__reveal:hover {
+  background: var(--lg-leaf-hover);
+  color: var(--lg-ink);
+}
+
+.ld-login__reveal:focus-visible {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 1px;
+}
+
+.ld-login__form > .ld-btn {
+  margin-top: 6px;
+}
+
+.ld-login__error {
+  padding: 10px 12px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-late-bg);
+  color: var(--lg-late-ink);
+  font-size: var(--lg-fs-xs);
+}
+
+@media (max-width: 639px) {
+  .ld-login__card {
+    padding: 24px 20px;
+  }
+
+  .ld-login__workspace {
+    grid-template-columns: 1fr;
+  }
+}

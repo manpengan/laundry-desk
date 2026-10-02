@@ -26,7 +26,7 @@ test("ReceivePage SSR shows form fields and submit", () => {
   assert.match(html, /价目单价/);
   assert.match(html, /首笔收款/);
   assert.match(html, /确认开单/);
-  assert.match(html, /服务端重新定价/);
+  assert.match(html, /系统复核计价/);
   assert.match(html, /暂存挂单/);
   assert.doesNotMatch(html, /还没有价目/);
   assert.doesNotMatch(html, /价目表/);

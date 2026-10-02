@@ -15,9 +15,9 @@
 .ld-delivery-orders__notice {
   margin: 0;
   padding: 0.75rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--lg-warning, #a45b00) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lg-warning) 45%, transparent);
   border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--lg-warning, #a45b00) 10%, transparent);
+  background: color-mix(in srgb, var(--lg-warning) 10%, transparent);
 }
 
 .ld-delivery-orders__layout {
@@ -30,9 +30,9 @@
 .ld-delivery-orders__worklist,
 .ld-delivery-orders__detail {
   padding: 1rem;
-  border: 1px solid var(--lg-border, #d7dde8);
+  border: 1px solid var(--lg-border);
   border-radius: 0.9rem;
-  background: var(--lg-surface, #fff);
+  background: var(--lg-surface);
 }
 
 .ld-delivery-orders__filter,
@@ -45,9 +45,9 @@
 .ld-delivery-orders select {
   min-height: 2.5rem;
   padding: 0.45rem 0.65rem;
-  border: 1px solid var(--lg-border, #c8d0dd);
+  border: 1px solid var(--lg-border);
   border-radius: 0.55rem;
-  background: var(--lg-surface, #fff);
+  background: var(--lg-surface);
   color: inherit;
 }
 
@@ -64,7 +64,7 @@
   width: 100%;
   gap: 0.22rem;
   padding: 0.75rem;
-  border: 1px solid var(--lg-border, #d7dde8);
+  border: 1px solid var(--lg-border);
   border-radius: 0.7rem;
   background: transparent;
   color: inherit;
@@ -73,13 +73,13 @@
 }
 
 .ld-delivery-orders__rows button.is-selected {
-  border-color: var(--lg-accent, #3764dd);
-  background: color-mix(in srgb, var(--lg-accent, #3764dd) 9%, transparent);
+  border-color: var(--lg-accent);
+  background: color-mix(in srgb, var(--lg-accent) 9%, transparent);
 }
 
 .ld-delivery-orders__rows span,
 .ld-delivery-orders__detail dt {
-  color: var(--lg-muted, #657087);
+  color: var(--lg-muted);
   font-size: 0.875rem;
 }
 
@@ -104,7 +104,7 @@
   margin-top: 1rem;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 1023px) {
   .ld-delivery-orders__layout {
     grid-template-columns: 1fr;
   }

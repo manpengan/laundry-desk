@@ -22,7 +22,7 @@
 .ld-shift-history__table-wrap > p {
   margin-top: 4px;
   color: var(--lg-ink2);
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-shift-history__table-wrap {
@@ -33,7 +33,7 @@
 .ld-shift-history table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-shift-history th,

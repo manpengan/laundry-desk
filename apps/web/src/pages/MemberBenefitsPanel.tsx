@@ -251,7 +251,7 @@ export function MemberBenefitsPanel({
           </>
         }
       >
-        <p>服务端已冻结本次参数；确认后将追加可审计记录，历史权益不会被重写。</p>
+        <p>系统已锁定本次参数；确认后将追加可审计记录，历史权益不会被重写。</p>
       </Dialog>
     </section>
   );

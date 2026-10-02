@@ -27,7 +27,7 @@
 .ld-delivery-appointments > p {
   margin-top: 4px;
   color: var(--lg-ink2);
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-delivery-appointments__create {
@@ -42,7 +42,7 @@
   display: block;
   margin-bottom: 6px;
   color: var(--lg-ink2);
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-delivery-appointments select,
@@ -74,7 +74,7 @@
   flex-wrap: wrap;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .ld-delivery-appointments__head,
   .ld-delivery-appointments__row {
     align-items: stretch;

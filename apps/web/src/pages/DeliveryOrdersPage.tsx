@@ -313,7 +313,7 @@ export function DeliveryOrdersPage({
         <div>
           <h1 className="ld-shell-main__title">取送订单</h1>
           <p className="ld-shell-main__hint">
-            预约、配送订单、任务和交付证据彼此独立；本页只推进权威配送订单状态。
+            在这里推进取送订单的状态；预约、配送任务和交付凭证分别单独处理。
           </p>
         </div>
         <Button variant="ghost" type="button" disabled={busy} onClick={() => void loadList()}>
@@ -359,7 +359,7 @@ export function DeliveryOrdersPage({
       <DangerConfirmDialog
         open={visiblePending?.kind === "confirm"}
         title="确认推进取送订单"
-        description="服务端已冻结订单、当前版本和目标状态；继续后将提交一次 CAS 转换。"
+        description="系统已锁定订单、当前版本和目标状态；继续后将提交本次状态变更。"
         summary={
           visiblePending === null ? undefined : (
             <DeliveryOrderPendingSummary pending={visiblePending} />

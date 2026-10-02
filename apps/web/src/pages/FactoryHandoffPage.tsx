@@ -154,7 +154,7 @@ export function FactoryHandoffPage({
         if (isStepUpRequired(response)) {
           const summary = factorySummary(response.error.detail.summary);
           if (summary === null) {
-            toast.push("服务端未返回可核对的交接摘要", "error");
+            toast.push("系统未返回可核对的交接摘要", "error");
             return;
           }
           setPending(
@@ -333,7 +333,7 @@ export function FactoryHandoffPage({
       <DangerConfirmDialog
         open={pending?.kind === "confirm"}
         title="确认店厂交接操作"
-        description="请按服务端冻结的票号、条码、数量与摘要逐项核对。"
+        description="请按系统冻结的票号、条码、数量与摘要逐项核对。"
         summary={
           pending === null ? undefined : <FactoryHandoffConfirmation summary={pending.summary} />
         }

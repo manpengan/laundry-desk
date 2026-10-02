@@ -9,7 +9,7 @@
   color: var(--lg-ink);
   background: var(--lg-surface);
   border-left: 1px solid var(--lg-hair);
-  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--lg-shadow);
   backdrop-filter: blur(18px) saturate(1.5);
   -webkit-backdrop-filter: blur(18px) saturate(1.5);
 }
@@ -38,12 +38,12 @@
   margin: 8px 0;
   padding: 10px;
   border-radius: 12px;
-  background: rgba(120, 120, 128, 0.12);
+  background: var(--lg-done-bg);
 }
 
 .ld-ai-panel__message--user {
   margin-left: 24px;
-  background: rgba(0, 122, 255, 0.12);
+  background: var(--lg-accent-soft);
 }
 
 .ld-ai-panel__message--system,
@@ -61,8 +61,8 @@
   padding: 8px 10px;
   color: inherit;
   text-align: left;
-  background: rgba(0, 122, 255, 0.08);
-  border: 1px solid rgba(0, 122, 255, 0.2);
+  background: var(--lg-accent-soft);
+  border: 1px solid var(--lg-accent-ring);
   border-radius: 10px;
   cursor: pointer;
 }

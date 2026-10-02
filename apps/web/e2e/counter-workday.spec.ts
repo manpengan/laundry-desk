@@ -338,8 +338,14 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   // reauthenticate before loading the server-owned draft.
   await signIn(page);
   await page.locator('[data-nav-id="receive"]').click();
+  // The counter masks other customers' numbers; an explicit reveal proves the row.
+  const maskedRow = page.locator('[data-testid="receive-draft-row"]', {
+    hasText: `${phone.slice(0, 3)}****${phone.slice(-4)}`,
+  });
+  await expect(maskedRow).toBeVisible({ timeout: 15_000 });
+  await maskedRow.getByRole("button", { name: "显示完整号码" }).click();
   const draftRow = page.locator('[data-testid="receive-draft-row"]', { hasText: phone });
-  await expect(draftRow).toBeVisible({ timeout: 15_000 });
+  await expect(draftRow).toBeVisible();
   await draftRow.locator('[data-testid="receive-draft-resume"]').click();
   await expect(page.locator(".ld-toast").last()).toContainText("挂单已完整恢复", {
     timeout: 15_000,
@@ -445,7 +451,7 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   const originalPayment = drawer.locator('[data-testid="payment-ledger-row"]', {
     hasText: "收款",
   });
-  await expect(originalPayment).toContainText("服务端可退");
+  await expect(originalPayment).toContainText("可退");
   await expect(originalPayment).toContainText("¥10.00");
   await originalPayment.locator('[data-testid="payment-refund-open-btn"]').click();
 

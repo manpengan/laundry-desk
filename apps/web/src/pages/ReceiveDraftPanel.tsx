@@ -1,4 +1,4 @@
-import { Button, MoneyText } from "@laundry/ui";
+import { Button, Icon, MaskedPhone, MoneyText } from "@laundry/ui";
 
 import type { OrderListRowView } from "./OrdersList.js";
 
@@ -20,9 +20,19 @@ export function ReceiveDraftPanel({
   onResume,
 }: ReceiveDraftPanelProps) {
   return (
-    <section className="ld-counter-panel ld-counter-drafts" aria-label="未完成挂单">
-      <div className="ld-counter-panel__head">
-        <h2 className="ld-counter-panel__title">未完成挂单</h2>
+    <section
+      className={
+        rows.length === 0 ? "ld-counter-drafts ld-counter-drafts--empty" : "ld-counter-drafts"
+      }
+      aria-label="未完成挂单"
+    >
+      <div className="ld-counter-drafts__head">
+        <h2 className="ld-counter-drafts__title">
+          <Icon name="clock" size={16} />
+          未完成挂单
+          <span className="ld-counter-drafts__count">{rows.length}</span>
+        </h2>
+        {rows.length === 0 ? <span className="ld-counter-drafts__none">暂无可恢复挂单</span> : null}
         <Button
           variant="ghost"
           size="sm"
@@ -33,15 +43,13 @@ export function ReceiveDraftPanel({
           {loading ? "刷新中…" : "刷新"}
         </Button>
       </div>
-      {rows.length === 0 ? (
-        <p className="ld-counter-panel__hint">暂无可恢复挂单</p>
-      ) : (
+      {rows.length === 0 ? null : (
         <ul className="ld-counter-draft-list" data-testid="receive-draft-list">
           {rows.map((row) => (
             <li key={row.order_id} data-testid="receive-draft-row">
-              <span>
+              <span className="ld-counter-draft-list__who">
                 {row.customer_name ?? "散客挂单"}
-                {row.customer_phone === null ? "" : ` · ${row.customer_phone}`}
+                {row.customer_phone === null ? null : <MaskedPhone phone={row.customer_phone} />}
               </span>
               <span>
                 应收 <MoneyText fen={row.payable_cents} size="sm" />

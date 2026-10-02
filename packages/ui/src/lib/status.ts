@@ -18,14 +18,17 @@ export type StatusDescriptor = {
   label: string;
 };
 
+// Must track FulfillmentGarmentStatusSchema and reuse the 生产 page wording, so
+// the same garment reads the same on 取衣、订单详情 and 生产.
 const garment: Record<string, StatusDescriptor> = {
-  received: { tone: "busy", shape: "ring", label: "已收衣" },
-  washing: { tone: "busy", shape: "diamond", label: "洗涤中" },
-  hanging: { tone: "ok", shape: "circle", label: "已上挂" },
-  ready: { tone: "ok", shape: "circle", label: "待取" },
-  delivered: { tone: "neutral", shape: "square", label: "已取" },
-  rework: { tone: "warn", shape: "triangle", label: "返工" },
-  lost: { tone: "danger", shape: "square", label: "丢失" },
+  received: { tone: "busy", shape: "ring", label: "已收" },
+  washing: { tone: "busy", shape: "diamond", label: "加工中" },
+  ready: { tone: "ok", shape: "circle", label: "已完成" },
+  racked: { tone: "ok", shape: "circle", label: "待取" },
+  picked_up: { tone: "neutral", shape: "square", label: "已取" },
+  delivered: { tone: "neutral", shape: "square", label: "已送达" },
+  reworked: { tone: "warn", shape: "triangle", label: "返工" },
+  lost: { tone: "danger", shape: "square", label: "丢损" },
 };
 
 // Must track OrderStatusSchema (draft | open | closed | cancelled). An unknown

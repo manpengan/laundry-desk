@@ -137,12 +137,17 @@ export function PrintQueuePanel({
       onClose={onClose}
       footer={
         <>
+          {/* Not disabled while loading: the dialog refreshes on open and a
+              disabled initial-focus button would drop focus to <body>. */}
           <Button
             variant="secondary"
             size="sm"
             type="button"
-            onClick={() => void refresh()}
-            disabled={loading || busyJobId !== null}
+            onClick={() => {
+              if (!loading) void refresh();
+            }}
+            disabled={busyJobId !== null}
+            aria-busy={loading}
           >
             {loading ? "刷新中…" : "刷新"}
           </Button>

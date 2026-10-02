@@ -224,7 +224,7 @@ test("member tiers, points, punch cards and coupons complete a real PostgreSQL b
   await history.locator('[data-testid="customer-detail-order-btn"]', { hasText: ticket }).click();
   const closedBenefits = page.locator('[data-testid="order-member-benefits"]');
   await closedBenefits.getByRole("button", { name: "领取订单积分" }).click();
-  await expect(page.locator(".ld-toast").last()).toContainText("订单积分已按服务端规则入账", {
+  await expect(page.locator(".ld-toast").last()).toContainText("订单积分已按规则入账", {
     timeout: 15_000,
   });
 

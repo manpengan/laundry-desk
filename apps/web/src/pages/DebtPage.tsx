@@ -2,7 +2,15 @@
  * 工作台欠款催付骨架 — order.list { min_balance_cents: 1, limit: 50 }.
  */
 
-import { Button, MoneyText, StatusBadge, formatMoneyFromFen, useToast } from "@laundry/ui";
+import {
+  Button,
+  Icon,
+  MoneyText,
+  StatusBadge,
+  formatMoneyFromFen,
+  maskPhone,
+  useToast,
+} from "@laundry/ui";
 import { useCallback, useEffect, useState } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
@@ -120,83 +128,99 @@ export function DebtPage({
   );
 
   return (
-    <section className="ld-shell-main lg-card ld-debt" data-testid="debt-section" aria-label="欠款">
-      <h2 className="ld-shell-main__title">欠款</h2>
+    <main className="ld-shell-main ld-debt-page" id="main-content" tabIndex={-1}>
+      <h1 className="ld-shell-main__title">订单与欠款</h1>
       <p className="ld-shell-main__hint">
-        仍有欠款的应收订单（全日期，最多 {DEBT_LIST_LIMIT} 条）。可打开详情/取衣，或生成催付文案。
+        仍有欠款的订单（全部日期，最多 {DEBT_LIST_LIMIT} 条）。点击订单查看详情、补缴或退款。
       </p>
-
-      <div className="ld-orders-form">
-        <div className="ld-orders-form__actions">
+      <section className="ld-section ld-debt" data-testid="debt-section" aria-label="欠款">
+        <div className="ld-section__head">
+          <h2 className="ld-section__title">
+            欠款
+            {loaded ? <span className="ld-section__count">{rows.length}</span> : null}
+          </h2>
           <Button
-            variant="primary"
+            variant="secondary"
+            size="sm"
             type="button"
             onClick={() => void load()}
             disabled={busy}
             data-testid="debt-load-btn"
           >
+            <Icon name="refresh" size={16} />
             {busy ? "加载中…" : loaded ? "刷新欠款" : "加载欠款"}
           </Button>
         </div>
-      </div>
 
-      <ul className="ld-orders-list" data-testid="debt-list">
-        {!loaded ? (
-          <li className="ld-orders-list__empty">点击「加载欠款」查看应收</li>
-        ) : rows.length === 0 ? (
-          <li className="ld-orders-list__empty">暂无欠款订单</li>
-        ) : (
-          rows.map((row) => (
-            <li key={row.order_id} className="ld-orders-list__row" data-testid="debt-row">
-              <div className="ld-debt-row">
-                <button
-                  type="button"
-                  className="ld-orders-list__btn ld-debt-row__main"
-                  onClick={() => setDetailOrderId(row.order_id)}
-                  data-testid="debt-row-detail-btn"
-                >
-                  <div className="ld-orders-list__main">
-                    <span className="ld-orders-list__ticket">{row.ticket_no ?? "挂单"}</span>
-                    <StatusBadge family="order" status={row.status} />
-                  </div>
-                  <div className="ld-orders-list__meta">
-                    <span className="ld-orders-list__name">{row.customer_name ?? "—"}</span>
-                    <span className="ld-orders-list__phone ld-orders-phone-internal">
-                      {row.customer_phone ?? "—"}
-                    </span>
-                  </div>
-                  <div className="ld-orders-list__money">
-                    <span className="ld-orders-list__money-label">欠款</span>
-                    <MoneyText fen={row.balance_cents} size="sm" />
-                  </div>
-                </button>
-                <div className="ld-debt-row__actions">
-                  {onOpenPickup !== undefined ? (
+        <ul className="ld-orders-list" data-testid="debt-list">
+          {!loaded ? (
+            <li className="ld-orders-list__empty">点击「加载欠款」查看应收</li>
+          ) : rows.length === 0 ? (
+            <li className="ld-orders-list__empty">暂无欠款订单</li>
+          ) : (
+            rows.map((row) => (
+              <li key={row.order_id} className="ld-orders-list__row" data-testid="debt-row">
+                <div className="ld-debt-row">
+                  <button
+                    type="button"
+                    className="ld-orders-list__btn ld-debt-row__main"
+                    onClick={() => setDetailOrderId(row.order_id)}
+                    data-testid="debt-row-detail-btn"
+                  >
+                    <div className="ld-orders-list__main">
+                      <span
+                        className={
+                          row.ticket_no === null
+                            ? "ld-orders-list__ticket ld-orders-list__ticket--none"
+                            : "ld-orders-list__ticket"
+                        }
+                      >
+                        {row.ticket_no ?? "未出票"}
+                      </span>
+                      <StatusBadge family="order" status={row.status} />
+                    </div>
+                    <div className="ld-orders-list__meta">
+                      <span className="ld-orders-list__name">{row.customer_name ?? "散客"}</span>
+                      <span className="ld-orders-list__phone ld-orders-phone-internal">
+                        {row.customer_phone === null ? "—" : maskPhone(row.customer_phone)}
+                      </span>
+                    </div>
+                    <div className="ld-orders-list__money">
+                      <span className="ld-orders-list__money-label">欠款</span>
+                      <MoneyText fen={row.balance_cents} size="sm" />
+                    </div>
+                  </button>
+                  <div className="ld-debt-row__actions">
+                    {/* A 挂单 has no garments to hand over yet. */}
+                    {onOpenPickup !== undefined && row.status !== "draft" ? (
+                      <Button
+                        variant="secondary"
+                        type="button"
+                        size="sm"
+                        onClick={() => onOpenPickup(row.order_id)}
+                        data-testid="debt-row-pickup-btn"
+                      >
+                        <Icon name="pickup" size={16} />
+                        取衣
+                      </Button>
+                    ) : null}
                     <Button
                       variant="ghost"
                       type="button"
                       size="sm"
-                      onClick={() => onOpenPickup(row.order_id)}
-                      data-testid="debt-row-pickup-btn"
+                      onClick={() => void onCopyReminder(row)}
+                      data-testid="debt-row-copy-btn"
                     >
-                      取衣
+                      <Icon name="phone" size={16} />
+                      生成催付文案
                     </Button>
-                  ) : null}
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    size="sm"
-                    onClick={() => void onCopyReminder(row)}
-                    data-testid="debt-row-copy-btn"
-                  >
-                    生成催付文案
-                  </Button>
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))
-        )}
-      </ul>
+              </li>
+            ))
+          )}
+        </ul>
+      </section>
 
       <OrderDetailDrawer
         open={detailOrderId !== null}
@@ -217,6 +241,6 @@ export function DebtPage({
             }
           : {})}
       />
-    </section>
+    </main>
   );
 }

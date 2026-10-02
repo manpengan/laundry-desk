@@ -1,0 +1,219 @@
+/* Settings page layout and shared settings forms. */
+
+.ld-settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 360px;
+}
+
+.ld-settings-form__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ld-settings-form__saved {
+  margin: 0;
+  font-size: var(--lg-fs-xs);
+  color: var(--lg-ink2);
+}
+
+.ld-settings-pricing {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 20px 0;
+  padding: 16px;
+}
+
+.ld-settings-pricing__addons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ld-settings-pricing__addon {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr)) auto auto;
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-surface);
+}
+
+.ld-settings-pricing__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+}
+
+@media (max-width: 1023px) {
+  .ld-settings-pricing__addon {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* —— Settings layout: sticky section nav + one card per section —— */
+
+.ld-settings-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.ld-settings-nav {
+  position: sticky;
+  top: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--lg-card-border);
+  border-radius: var(--lg-radius-lg);
+  background: var(--lg-surface);
+  box-shadow: var(--lg-shadow-card);
+}
+
+.ld-settings-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ld-settings-nav__item:hover {
+  background: var(--lg-leaf-hover);
+  color: var(--lg-ink);
+}
+
+.ld-settings-nav__item.is-active {
+  background: var(--lg-accent-soft);
+  color: var(--lg-accent-strong);
+}
+
+.ld-settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.ld-settings-anchor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scroll-margin-top: 84px;
+}
+
+/* Every settings panel reads as one card, whatever markup it brings. */
+.ld-settings-anchor > * {
+  margin: 0;
+  padding: 20px 22px;
+  border: 1px solid var(--lg-card-border);
+  border-radius: var(--lg-radius-lg);
+  background: var(--lg-surface);
+  box-shadow: var(--lg-shadow-card);
+}
+
+.ld-settings-anchor h2 {
+  margin-top: 0;
+  font-size: var(--lg-fs-lg);
+}
+
+.ld-settings-section__head {
+  margin-bottom: 16px;
+}
+
+.ld-settings-section__head h2 {
+  margin: 0 0 4px;
+}
+
+.ld-settings-section__head p {
+  margin: 0;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+}
+
+.ld-settings-appearance__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.ld-settings-appearance__label {
+  min-width: 48px;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+  font-weight: 600;
+}
+
+/* —— 技术支持 (collapsed technician diagnostics) —— */
+
+.ld-settings-printer-smoke > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ld-settings-printer-smoke[open] > summary {
+  margin-bottom: 12px;
+  color: var(--lg-ink);
+}
+
+.ld-settings-printer-smoke__hint,
+.ld-settings-printer-smoke__static-lead,
+.ld-settings-printer-smoke__static-foot {
+  margin: 0 0 10px;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+  line-height: 1.6;
+}
+
+.ld-settings-printer-smoke__code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--lg-surface-2);
+  font-size: var(--lg-fs-xs);
+}
+
+.ld-settings-printer-smoke__cmd {
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-2);
+  color: var(--lg-ink);
+  font-size: var(--lg-fs-xs);
+  line-height: 1.7;
+}
+
+@media (max-width: 1023px) {
+  .ld-settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .ld-settings-nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}

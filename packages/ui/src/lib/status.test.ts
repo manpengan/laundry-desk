@@ -4,10 +4,10 @@ import { resolveStatus } from "./status.js";
 
 describe("status dual encoding", () => {
   it("maps garment statuses to tone+shape", () => {
-    const ready = resolveStatus("garment", "ready");
-    assert.equal(ready.tone, "ok");
-    assert.equal(ready.shape, "circle");
-    assert.equal(ready.label, "待取");
+    const racked = resolveStatus("garment", "racked");
+    assert.equal(racked.tone, "ok");
+    assert.equal(racked.shape, "circle");
+    assert.equal(racked.label, "待取");
   });
 
   it("maps danger states to square shape (not color-only)", () => {
@@ -40,6 +40,24 @@ describe("order status coverage", () => {
       ["cancelled", "已撤销"],
     ] as const) {
       assert.equal(resolveStatus("order", status).label, label);
+    }
+  });
+});
+
+describe("garment status coverage", () => {
+  it("labels every FulfillmentGarmentStatusSchema value in Chinese", () => {
+    // 取衣 once showed a raw "racked" badge because the catalog had drifted.
+    for (const [status, label] of [
+      ["received", "已收"],
+      ["washing", "加工中"],
+      ["ready", "已完成"],
+      ["racked", "待取"],
+      ["picked_up", "已取"],
+      ["delivered", "已送达"],
+      ["reworked", "返工"],
+      ["lost", "丢损"],
+    ] as const) {
+      assert.equal(resolveStatus("garment", status).label, label);
     }
   });
 });

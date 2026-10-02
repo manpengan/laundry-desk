@@ -128,7 +128,7 @@ export function FulfillmentPage({
         if (isStepUpRequired(result)) {
           const summary = readFulfillmentOperationSummary(result.error.detail.summary);
           if (summary === null) {
-            toast.push("服务端未返回可核对的生产操作摘要", "error");
+            toast.push("系统未返回可核对的生产操作摘要", "error");
             return;
           }
           setPending(
@@ -370,7 +370,7 @@ export function FulfillmentPage({
       <DangerConfirmDialog
         open={pending?.kind === "confirm"}
         title="确认批量生产操作"
-        description={pending === null ? "" : `服务端已冻结「${pending.label}」的件清单。`}
+        description={pending === null ? "" : `系统已锁定「${pending.label}」的件清单。`}
         summary={
           pending === null ? undefined : (
             <FulfillmentOperationConfirmation summary={pending.summary} />

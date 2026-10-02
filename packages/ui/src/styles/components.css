@@ -1,4 +1,9 @@
-/* @laundry/ui — base component styles (use with tokens.css) */
+/* @laundry/ui — base component styles (use with tokens.css).
+   Motion budget: only transform / opacity are animated (UI gate). */
+
+@import "./overlays.css";
+@import "./primitives.css";
+@import "./status.css";
 
 .ld-btn {
   display: inline-flex;
@@ -6,16 +11,15 @@
   justify-content: center;
   gap: 8px;
   min-height: 44px;
-  padding: 0 16px;
+  padding: 0 18px;
   border-radius: var(--lg-radius-md);
   border: 1px solid transparent;
-  font-size: 14px;
+  font-size: var(--lg-fs-sm);
   font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
   cursor: pointer;
-  transition:
-    background var(--lg-motion-fast) ease,
-    border-color var(--lg-motion-fast) ease,
-    transform var(--lg-motion-fast) ease;
+  transition: transform var(--lg-motion-fast) var(--lg-ease-out);
 }
 
 .ld-btn:disabled {
@@ -29,37 +33,78 @@
 }
 
 .ld-btn--primary {
-  background: var(--lg-accent);
+  background: var(--lg-accent-fill);
   color: var(--lg-accent-ink);
+  box-shadow:
+    var(--lg-shadow-control),
+    inset 0 1px 0 var(--lg-highlight);
+}
+
+.ld-btn--primary:hover:not(:disabled) {
+  background: var(--lg-accent-fill-hover);
 }
 
 .ld-btn--secondary {
-  background: var(--lg-leaf-hover);
+  background: var(--lg-surface-input);
   color: var(--lg-ink);
-  border-color: var(--lg-line);
+  border-color: var(--lg-hair);
+  box-shadow:
+    var(--lg-shadow-control),
+    inset 0 0 0 1px var(--lg-hair);
 }
 
+.ld-btn--secondary:hover:not(:disabled) {
+  background: var(--lg-surface-2);
+  border-color: var(--lg-field-border);
+}
+
+/* Ghost actions read as actions (accent ink), never as plain labels. */
 .ld-btn--ghost {
   background: transparent;
-  color: var(--lg-ink);
+  color: var(--lg-accent-strong);
+}
+
+.ld-btn--ghost:hover:not(:disabled) {
+  background: var(--lg-accent-soft);
 }
 
 .ld-btn--danger {
   background: var(--lg-late-bg);
   color: var(--lg-late-ink);
+  border-color: color-mix(in srgb, var(--lg-late-ink) 45%, transparent);
+}
+
+.ld-btn--danger:hover:not(:disabled) {
   border-color: var(--lg-late-ink);
 }
 
 .ld-btn--sm {
   min-height: 36px;
   padding: 0 12px;
-  font-size: 13px;
+  border-radius: 10px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-btn--lg {
-  min-height: 48px;
-  padding: 0 20px;
-  font-size: 16px;
+  min-height: 52px;
+  padding: 0 24px;
+  font-size: var(--lg-fs-md);
+}
+
+.ld-btn__kbd {
+  margin-left: 2px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--lg-highlight);
+  font-family: var(--lg-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ld-btn--secondary .ld-btn__kbd,
+.ld-btn--ghost .ld-btn__kbd {
+  background: var(--lg-surface-2);
+  color: var(--lg-ink2);
 }
 
 .ld-input {
@@ -67,23 +112,44 @@
   min-height: 44px;
   padding: 0 12px;
   border-radius: var(--lg-radius-md);
-  border: 1px solid var(--lg-hair);
-  background: var(--lg-surface);
+  border: 1px solid var(--lg-field-border);
+  background: var(--lg-surface-input);
   color: var(--lg-ink);
-  font-size: 16px;
+  font-size: var(--lg-fs-md);
+}
+
+.ld-input:hover:not(:disabled) {
+  border-color: var(--lg-field-border-hover);
 }
 
 .ld-input:focus {
-  outline: 2px solid var(--lg-accent);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--lg-accent);
+  box-shadow: var(--lg-focus-ring);
 }
 
 .ld-input:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .ld-input--error {
   border-color: var(--lg-late-ink);
+}
+
+/* Scanner / quick-lookup fields: large, high-contrast, monospace-friendly. */
+.ld-input--scan {
+  min-height: 56px;
+  padding: 0 16px;
+  font-size: var(--lg-fs-lg);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+@media (forced-colors: active) {
+  .ld-input:focus {
+    outline: 2px solid Highlight;
+  }
 }
 
 /* min-width: 0 lets a field shrink inside a flex row instead of forcing the
@@ -101,20 +167,20 @@
   /* Deterministic so --lg-field-label-offset (19 + 6) stays true: action
      containers in a field row pad by that offset to sit on the input line. */
   line-height: 19px;
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
   font-weight: 600;
   color: var(--lg-ink2);
 }
 
 .ld-field__hint {
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: 6px;
+  font-size: var(--lg-fs-xs);
   color: var(--lg-ink3);
 }
 
 .ld-field-error {
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: 6px;
+  font-size: var(--lg-fs-xs);
   color: var(--lg-late-ink);
 }
 
@@ -122,7 +188,7 @@
   width: 100%;
   overflow: auto;
   border-radius: var(--lg-radius-lg);
-  border: 1px solid var(--lg-hair);
+  border: 1px solid var(--lg-card-border);
   background: var(--lg-surface);
 }
 
@@ -133,7 +199,7 @@
 .ld-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font-size: var(--lg-fs-sm);
 }
 
 .ld-table th,
@@ -144,135 +210,24 @@
 }
 
 .ld-table th {
-  font-size: 12px;
+  position: sticky;
+  top: 0;
+  font-size: var(--lg-fs-2xs);
   font-weight: 700;
   color: var(--lg-ink2);
-  background: var(--lg-leaf);
+  background: var(--lg-surface-2);
 }
 
 .ld-table tbody tr:hover {
   background: var(--lg-accent-soft);
 }
 
-.ld-drawer-backdrop,
-.ld-dialog-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  background: rgba(15, 23, 42, 0.35);
-}
-
-.ld-drawer {
-  position: fixed;
-  top: 0;
-  right: 0;
-  z-index: 50;
-  height: 100%;
-  width: min(420px, 100vw);
-  background: var(--lg-surface);
-  border-left: 1px solid var(--lg-line);
-  box-shadow: var(--lg-shadow);
-  display: flex;
-  flex-direction: column;
-  animation: ld-slide-in var(--lg-motion-base) ease;
-}
-
-.ld-drawer__header,
-.ld-dialog__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--lg-hair);
-  font-weight: 700;
-}
-
-.ld-drawer__body,
-.ld-dialog__body {
-  padding: 16px 20px;
-  overflow: auto;
-  flex: 1;
-}
-
-.ld-dialog-wrap {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-}
-
-.ld-dialog {
-  width: min(480px, 100%);
-  max-height: min(80vh, 720px);
-  overflow: auto;
-  border-radius: var(--lg-radius-lg);
-  background: var(--lg-surface);
-  border: 1px solid var(--lg-line);
-  box-shadow: var(--lg-shadow);
-  animation: ld-fade-in var(--lg-motion-base) ease;
-}
-
-.ld-dialog__footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 12px 20px 16px;
-  border-top: 1px solid var(--lg-hair);
-}
-
-.ld-toast-viewport {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  z-index: 60;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: min(360px, calc(100vw - 32px));
-}
-
-.ld-toast {
-  padding: 12px 14px;
-  border-radius: var(--lg-radius-md);
-  border: 1px solid var(--lg-line);
-  background: var(--lg-glass-hi);
-  box-shadow: var(--lg-shadow-sm);
-  font-size: 14px;
-  animation: ld-fade-in var(--lg-motion-fast) ease;
-}
-
-.ld-toast--success {
-  border-color: var(--lg-ok-ink);
-  color: var(--lg-ok-ink);
-}
-
-.ld-toast--error {
-  border-color: var(--lg-late-ink);
-  color: var(--lg-late-ink);
-}
-
-.ld-toast--warning {
-  border-color: var(--lg-warn-ink);
-  color: var(--lg-warn-ink);
-}
-
-.ld-toast__dismiss {
-  margin-left: 12px;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  color: inherit;
-  font-weight: 700;
-}
-
 .ld-money {
-  font-family: var(--lg-font-mono);
+  font-family: var(--lg-font-sans);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  font-weight: 650;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .ld-money--negative {
@@ -280,19 +235,20 @@
 }
 
 .ld-money--sm {
-  font-size: 14px;
+  font-size: var(--lg-fs-sm);
 }
 
 .ld-money--md {
-  font-size: 16px;
+  font-size: var(--lg-fs-md);
 }
 
 .ld-money--lg {
-  font-size: 20px;
+  font-size: var(--lg-fs-lg);
 }
 
 .ld-money--xl {
-  font-size: 28px;
+  font-size: var(--lg-fs-xl);
+  letter-spacing: -0.01em;
 }
 
 .ld-badge {
@@ -302,7 +258,7 @@
   min-height: 24px;
   padding: 2px 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--lg-fs-2xs);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -339,139 +295,7 @@
   color: var(--lg-done-ink);
 }
 
-@keyframes ld-slide-in {
-  from {
-    transform: translateX(12px);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes ld-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* Skeleton / empty / sync / print indicator */
-.ld-skeleton {
-  display: block;
-  width: 100%;
-  min-height: 12px;
-  background: linear-gradient(
-    90deg,
-    var(--lg-hair) 0%,
-    var(--lg-leaf-hover) 50%,
-    var(--lg-hair) 100%
-  );
-  background-size: 200% 100%;
-  animation: ld-skeleton-shimmer 1.2s ease-in-out infinite;
-}
-
-.ld-skeleton--page-title {
-  width: 40%;
-  min-height: 28px;
-}
-
-.ld-skeleton--sm {
-  border-radius: var(--lg-radius-sm);
-}
-.ld-skeleton--md {
-  border-radius: var(--lg-radius-md);
-}
-.ld-skeleton--lg {
-  border-radius: var(--lg-radius-lg);
-}
-.ld-skeleton--full {
-  border-radius: 999px;
-}
-
-.ld-skeleton-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ld-skeleton-stack .ld-skeleton {
-  min-height: 12px;
-}
-
-.ld-skeleton-stack .ld-skeleton:last-child {
-  width: 72%;
-}
-
-.ld-page-loading__body {
-  margin-top: 16px;
-}
-
-@keyframes ld-skeleton-shimmer {
-  0% {
-    background-position: 100% 0;
-  }
-  100% {
-    background-position: -100% 0;
-  }
-}
-
-.ld-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 32px 20px;
-  text-align: center;
-  color: var(--lg-ink2);
-}
-
-.ld-empty__title {
-  margin: 0;
-  font-size: 18px;
-  color: var(--lg-ink);
-}
-
-.ld-empty__desc {
-  margin: 0;
-  font-size: 14px;
-  max-width: 28rem;
-}
-
-.ld-sync-bar {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  font-size: 14px;
-}
-
-.ld-print-indicator {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  padding: 4px;
-  border-radius: var(--lg-radius-md);
-}
-
-.ld-print-indicator:focus-visible {
-  outline: 2px solid var(--lg-accent);
-  outline-offset: 2px;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .ld-drawer,
-  .ld-dialog,
-  .ld-toast,
   .lg-pressable,
   .lg-ripple,
   .ld-skeleton {

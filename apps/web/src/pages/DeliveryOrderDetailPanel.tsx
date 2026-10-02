@@ -1,4 +1,4 @@
-import { Button } from "@laundry/ui";
+import { Button, EmptyState, Icon } from "@laundry/ui";
 
 import type { DeliveryOrderCancellationReason, DeliveryOrderStatus } from "@laundry/contracts";
 
@@ -33,7 +33,11 @@ export function DeliveryOrderDetailPanel({
   return (
     <section className="ld-delivery-orders__detail" aria-label="取送订单详情">
       {detail === null ? (
-        <p>选择一张取送订单查看权威详情和合法下一步。</p>
+        <EmptyState
+          icon={<Icon name="delivery" size={24} />}
+          title="选择一张取送订单"
+          description="在左侧列表中选中订单后，这里显示详情和下一步操作。"
+        />
       ) : (
         <>
           <div className="ld-delivery-orders__detail-head">

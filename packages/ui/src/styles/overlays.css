@@ -1,0 +1,240 @@
+/* @laundry/ui — overlays: dialog, drawer, toast.
+   Overlay surfaces are near-opaque: page text must never bleed through a modal. */
+
+.ld-drawer-backdrop,
+.ld-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--lg-scrim);
+  /* No backdrop blur: a full-window blur is re-rendered on every frame while a
+     drawer or dialog is open, which is costly on software-rendered PCs. */
+  animation: ld-fade var(--lg-motion-base) var(--lg-ease-out);
+}
+
+.ld-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 50;
+  height: 100%;
+  width: min(480px, 100vw);
+  background: var(--lg-overlay);
+  border-left: 1px solid var(--lg-card-border);
+  box-shadow: var(--lg-shadow);
+  display: flex;
+  flex-direction: column;
+  animation: ld-slide-in var(--lg-motion-base) var(--lg-ease-out);
+}
+
+/* .lg-glass on the drawer keeps its blur but must not reintroduce translucency. */
+.ld-drawer.lg-glass {
+  background: var(--lg-overlay);
+  border: 0;
+  border-left: 1px solid var(--lg-card-border);
+}
+
+.ld-drawer__header,
+.ld-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 60px;
+  padding: 12px 12px 12px 20px;
+  border-bottom: 1px solid var(--lg-hair);
+  font-size: var(--lg-fs-md);
+  font-weight: 700;
+}
+
+.ld-drawer__title,
+.ld-dialog__title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ld-overlay-close {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--lg-ink2);
+  cursor: pointer;
+}
+
+.ld-overlay-close:hover {
+  background: var(--lg-leaf-hover);
+  color: var(--lg-ink);
+}
+
+.ld-overlay-close:focus-visible {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 1px;
+}
+
+.ld-drawer__body,
+.ld-dialog__body {
+  padding: 18px 20px;
+  overflow: auto;
+  overflow-x: hidden;
+  flex: 1;
+}
+
+.ld-dialog-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.ld-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: min(86vh, 760px);
+  overflow: hidden;
+  border-radius: var(--lg-radius-xl);
+  background: var(--lg-overlay);
+  border: 1px solid var(--lg-card-border);
+  box-shadow: var(--lg-shadow);
+  animation: ld-pop-in var(--lg-motion-base) var(--lg-ease-out);
+}
+
+/* .lg-card on dialogs must keep the opaque overlay surface. */
+.ld-dialog.lg-card {
+  background: var(--lg-overlay);
+}
+
+.ld-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--lg-hair);
+  background: var(--lg-surface-2);
+}
+
+/* Top-center under the 64px top bar: clear of the pinned 开单 / 取衣 action
+   bars at the bottom and of panel actions at the sides. Toasts never block
+   the control underneath; only their × button takes the pointer. */
+.ld-toast-viewport {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: min(440px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.ld-toast {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px 12px 16px;
+  border-radius: var(--lg-radius-md);
+  border: 1px solid var(--lg-card-border);
+  border-left: 4px solid var(--lg-accent);
+  background: var(--lg-overlay);
+  box-shadow: var(--lg-shadow-sm);
+  color: var(--lg-ink);
+  font-size: var(--lg-fs-sm);
+  line-height: 1.5;
+  animation: ld-pop-in var(--lg-motion-fast) var(--lg-ease-out);
+}
+
+.ld-toast--success {
+  border-left-color: var(--lg-ok-ink);
+}
+
+.ld-toast--error {
+  border-left-color: var(--lg-late-ink);
+  color: var(--lg-late-ink);
+}
+
+.ld-toast--warning {
+  border-left-color: var(--lg-warn-ink);
+}
+
+.ld-toast__dismiss {
+  flex-shrink: 0;
+  pointer-events: auto;
+  margin-left: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--lg-ink2);
+  font-weight: 700;
+}
+
+.ld-toast__dismiss:hover {
+  background: var(--lg-leaf-hover);
+}
+
+@keyframes ld-slide-in {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes ld-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ld-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Kept for consumers that reference the historical keyframe name. */
+@keyframes ld-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ld-drawer,
+  .ld-dialog,
+  .ld-toast,
+  .ld-drawer-backdrop,
+  .ld-dialog-backdrop {
+    animation: none !important;
+    transition: none !important;
+  }
+}

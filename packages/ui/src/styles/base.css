@@ -1,0 +1,115 @@
+/* @laundry/ui — global base layer. Zero-specificity (:where) so every component
+   class still wins; only fixes browser defaults that broke the counter on Windows. */
+
+/* width:100% + padding + border used to overflow every field by 26px. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--lg-font-sans);
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+html > body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--lg-ink);
+  background: var(--lg-bg);
+}
+
+/* Corner glows live on their own fixed layer, so scrolling never repaints the
+   whole page (background-attachment: fixed does). */
+html > body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(1100px 620px at -6% -12%, var(--lg-canvas-glow-a), transparent 62%),
+    radial-gradient(900px 560px at 108% 112%, var(--lg-canvas-glow-b), transparent 60%);
+}
+
+/* Form controls do not inherit typography by default (13.33px Arial). */
+:where(button, input, select, textarea, optgroup) {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+:where(code, kbd, pre, samp) {
+  font-family: var(--lg-font-mono);
+}
+
+:where(input[type="checkbox"], input[type="radio"]) {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--lg-accent);
+  cursor: pointer;
+}
+
+/* Native selects / textareas that do not opt into a component class still get
+   the field look, so no page renders a raw browser control. */
+:where(select:not([multiple]), textarea) {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--lg-field-border);
+  border-radius: var(--lg-radius-sm);
+  background-color: var(--lg-surface-input);
+  color: var(--lg-ink);
+}
+
+:where(textarea) {
+  line-height: 1.6;
+  resize: vertical;
+}
+
+:where(select:not([multiple]), textarea):hover {
+  border-color: var(--lg-field-border-hover);
+}
+
+:where(select, textarea, input):focus-visible {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 1px;
+}
+
+:where(input, textarea)::placeholder {
+  color: var(--lg-ink3);
+  opacity: 1;
+}
+
+:where(input[type="file"])::file-selector-button {
+  margin-right: 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--lg-field-border);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-surface-input);
+  color: var(--lg-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+::selection {
+  background: var(--lg-accent-ring);
+}
+
+/* Slim, theme-aware scrollbars for dense counter lists (Chromium/Electron). */
+:where(*) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--lg-ink4) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}
