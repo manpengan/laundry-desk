@@ -6,12 +6,16 @@ export type MainWindowHandle = Readonly<{
   ready: Promise<void>;
 }>;
 
-/** Counter-first defaults: three-pane 开单 needs ≥1280; never shrink below 1024. */
+/**
+ * Counter-first defaults: three-pane 开单 needs ≥1280; never shrink below 1024.
+ * The 600px minimum height still fits a 1366×768 screen at 125% scaling, and the
+ * side rail compacts down to 600px without scrolling.
+ */
 export const MAIN_WINDOW_SIZE = Object.freeze({
   width: 1440,
   height: 900,
   minWidth: 1024,
-  minHeight: 680,
+  minHeight: 600,
 });
 
 export function createMainWindow(preloadPath: string, desktopSession: Session): MainWindowHandle {
