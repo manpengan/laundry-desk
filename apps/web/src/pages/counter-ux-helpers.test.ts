@@ -15,7 +15,7 @@ import {
 } from "./catalog-services.js";
 import { isVirtualPrinterQueue, printerQueueLabel, suggestReceiptQueue } from "./printer-queues.js";
 import { insertToken } from "./ReminderTemplateEditor.js";
-import { shouldClaimFocus } from "./use-scan-focus.js";
+import { mayHandOffFocus, shouldClaimFocus } from "./use-scan-focus.js";
 import { isAdvanceFromCustomer, isSubmitChord } from "./use-receive-keyboard.js";
 
 test("scan pages claim focus only from navigation, never from a clerk's control", () => {
@@ -36,6 +36,19 @@ test("scan pages claim focus only from navigation, never from a clerk's control"
   );
   assert.equal(shouldClaimFocus(within("nothing"), root, false), false, "typing elsewhere");
   assert.equal(shouldClaimFocus(body, root, true), false, "modal open");
+});
+
+test("a finished pickup lookup never pulls the caret out of a field being typed in", () => {
+  const field = (name: string | null, typing = true) => ({
+    matches: () => typing,
+    getAttribute: () => name,
+  });
+  const scan = ["pickup-key", "pickup-verification-barcode"];
+  assert.equal(mayHandOffFocus(null, scan), true, "nothing focused");
+  assert.equal(mayHandOffFocus(field(null, false), scan), true, "a button or the page body");
+  assert.equal(mayHandOffFocus(field("pickup-key"), scan), true, "scan → verification");
+  assert.equal(mayHandOffFocus(field("collect-cents"), scan), false, "clerk typing 本次收款");
+  assert.equal(mayHandOffFocus(field(null), scan), false, "unnamed text field");
 });
 
 test("开单 keyboard flow: Ctrl+Enter submits, Enter in customer fields advances", () => {

@@ -19,7 +19,10 @@ import { OrderLookupCandidates, parseOrderLookupRows } from "./OrderLookupCandid
 import { PaymentCollectionDialog } from "./PaymentCollectionDialog.js";
 import { PickupResult } from "./PickupDetails.js";
 import { PickupOrderPanel } from "./PickupOrderPanel.js";
-import { useScanFocus } from "./use-scan-focus.js";
+import { mayHandOffFocus, useScanFocus } from "./use-scan-focus.js";
+
+/** Fields a finished lookup may move the caret out of (never 本次收款 etc.). */
+const PICKUP_SCAN_FIELDS = Object.freeze(["pickup-key", "pickup-verification-barcode"]);
 
 export type PickupPageProps = {
   commandClient: CommandPort;
@@ -260,7 +263,9 @@ export function PickupPage({
   useEffect(() => {
     const root = pageRef.current;
     if (root === null || disabled || (loaded === null && result === null)) return;
-    if (root.ownerDocument.querySelector('[aria-modal="true"]') !== null) return;
+    const doc = root.ownerDocument;
+    if (doc.querySelector('[aria-modal="true"]') !== null) return;
+    if (!mayHandOffFocus(doc.activeElement, PICKUP_SCAN_FIELDS)) return;
     const next =
       root.querySelector<HTMLInputElement>('input[name="pickup-verification-barcode"]') ??
       root.querySelector<HTMLInputElement>('input[name="pickup-key"]');
