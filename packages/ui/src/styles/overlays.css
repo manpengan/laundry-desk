@@ -7,8 +7,8 @@
   inset: 0;
   z-index: 40;
   background: var(--lg-scrim);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  /* No backdrop blur: a full-window blur is re-rendered on every frame while a
+     drawer or dialog is open, which is costly on software-rendered PCs. */
   animation: ld-fade var(--lg-motion-base) var(--lg-ease-out);
 }
 
@@ -121,17 +121,22 @@
   background: var(--lg-surface-2);
 }
 
-/* Top-right, under the 64px top bar: the bottom edge belongs to the pinned
-   开单 / 取衣 action bars, which a toast must never cover. */
+/* Top-center under the 64px top bar: clear of the pinned 开单 / 取衣 action
+   bars at the bottom and of panel actions at the sides. Toasts never block
+   the control underneath; only their × button takes the pointer. */
 .ld-toast-viewport {
   position: fixed;
   top: 76px;
-  right: 20px;
+  left: 50%;
   z-index: 70;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
-  max-width: min(400px, calc(100vw - 32px));
+  width: max-content;
+  max-width: min(440px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 .ld-toast {
@@ -166,6 +171,7 @@
 
 .ld-toast__dismiss {
   flex-shrink: 0;
+  pointer-events: auto;
   margin-left: 4px;
   border: 0;
   border-radius: 6px;

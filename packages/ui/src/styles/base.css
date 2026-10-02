@@ -20,11 +20,20 @@ html > body {
   margin: 0;
   min-height: 100vh;
   color: var(--lg-ink);
+  background: var(--lg-bg);
+}
+
+/* Corner glows live on their own fixed layer, so scrolling never repaints the
+   whole page (background-attachment: fixed does). */
+html > body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background:
     radial-gradient(1100px 620px at -6% -12%, var(--lg-canvas-glow-a), transparent 62%),
-    radial-gradient(900px 560px at 108% 112%, var(--lg-canvas-glow-b), transparent 60%),
-    var(--lg-bg);
-  background-attachment: fixed;
+    radial-gradient(900px 560px at 108% 112%, var(--lg-canvas-glow-b), transparent 60%);
 }
 
 /* Form controls do not inherit typography by default (13.33px Arial). */

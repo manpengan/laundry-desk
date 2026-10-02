@@ -80,8 +80,8 @@ html > body {
   padding: 10px 24px;
   background: var(--lg-glass-hi);
   border-bottom: 1px solid var(--lg-hair);
-  backdrop-filter: blur(18px) saturate(1.4);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .ld-shell-topbar__store {
