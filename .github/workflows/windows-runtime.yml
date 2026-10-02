@@ -89,6 +89,9 @@ jobs:
             [Console]::WriteLine('WINDOWS_COMPANION_SOURCE_CHECKPOINT ' + ($report | ConvertTo-Json -Compress -Depth 4))
           }
           Write-SourceCheckpoint 'before_validation'
+          pnpm.cmd --filter @laundry/platform-fs test
+          if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_PLATFORM_FS_TEST_FAILED' }
+          Write-SourceCheckpoint 'after/platform-fs-tests'
           $trackedTests = @(git.exe ls-files -- 'tools/windows-runtime/*.test.mjs' | Sort-Object)
           if ($LASTEXITCODE -ne 0) { throw 'WINDOWS_COMPANION_TEST_SET_INVALID' }
           $globTests = @(Get-ChildItem -LiteralPath 'tools/windows-runtime' -Filter '*.test.mjs' -File | ForEach-Object { 'tools/windows-runtime/' + $_.Name } | Sort-Object)
