@@ -24,6 +24,9 @@ export function createMainWindow(preloadPath: string, desktopSession: Session): 
     title: "洗衣柜台",
     // Matches the light canvas so the first paint never flashes white.
     backgroundColor: "#f3f4f8",
+    // Windows/Linux would otherwise show Electron's English default menu bar
+    // above the counter; Alt still reveals it and its shortcuts keep working.
+    autoHideMenuBar: true,
     show: false,
     webPreferences: {
       preload: preloadPath,

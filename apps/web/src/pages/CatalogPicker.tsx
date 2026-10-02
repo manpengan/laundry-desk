@@ -119,7 +119,9 @@ export function CatalogPicker({ queryClient, disabled = false, onPick }: Catalog
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent): void => {
       if (event.isComposing || document.querySelector('[aria-modal="true"]') !== null) return;
-      const target = serviceForFunctionKey(event.key, services);
+      // Only bare F-keys: Alt+F4, Ctrl+F5 and friends stay with the system.
+      const bare = !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+      const target = bare ? serviceForFunctionKey(event.key, services) : null;
       if (target !== null) {
         event.preventDefault();
         setService(target);
