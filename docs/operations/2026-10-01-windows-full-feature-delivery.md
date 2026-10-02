@@ -6,6 +6,23 @@
 
 ## 2026-10-02 接续状态
 
+[PR #228](https://github.com/manpengan/laundry-desk/pull/228) 的首轮工作区、macOS 和真实 PostgreSQL
+检查已通过。新接入 Windows CI 的 platform-fs 测试实际为 8 passed、1 failed、0 skipped：
+UTF-8 反射回归及原生打印枚举通过，首次私有目录夹具未通过。
+独立原生只读复核确认同一助手的 CanonicalPath 接受完整路径、拒绝实际 8.3 别名
+（InvalidOperationException / 80131509），Node realpath 将别名解析为完整路径后通过。
+既有合成目录的产品私有权限读回也通过。夹具仅先解析临时目录再创建，生产路径和权限检查不放宽；
+该修正的本地包 7 passed、0 failed、2 Windows skipped，lint/typecheck 退出 0。
+独立 Windows 合成封装逐项持有并验证十份源码与两份助手文件，完整九项测试全部通过，
+0 failed/skipped、原生与 CLI 均退出 0；Windows CI 复跑待完成。
+首次诊断的本地输出解码失败，随后只读复核独立形成上述证据，原合成目录和诊断文件保留。
+
+Windows 11 软件打印环境的单次目录创建已知在 SET_PRIVATE_QA_ACL 失败，尚未开始管理员驱动、
+端口、队列安装或 RAW 提交。只读核对该固定目录为空、QA 所有、未保护 DACL、五条继承 Allow ACE。
+新候选严格匹配五条原生数值规则，只修改该现有目录的 DACL，保留 owner 与原信任代码。
+该候选实际通过三项摘要、两项原生语法及二十项内存回归；未执行候选顶层、原生信任方法或权限写入。
+普通账户单次修复与严格读回继续执行，修复成功前不记为打印环境准备通过。
+
 当前源码为 `828447094fe741ddc2e49c6b938e53194da55a52`，
 [PR #225](https://github.com/manpengan/laundry-desk/pull/225) 已普通合并。
 工作区、macOS、真实 PostgreSQL 与 Windows 四项主线 CI 全绿；

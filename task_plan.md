@@ -52,6 +52,16 @@ UTF-8 修复的完整 workspace:check 已实际 CLI 0；几何测试更改之后
 几何回归已改静态严格 JSDoc 模块，修复实际 authority 导入失败；foundation 57/57、
 几何 4/4、TS/lint/格式新鲜通过，没有门禁豁免。原生编码测试接入 Windows CI。
 
+PR #228 首轮 workspace、macOS、真实 PostgreSQL 已通过；新接入的 Windows platform-fs
+九项测试实际为 8 passed / 1 failed，首次私有目录测试在创建权限前失败。
+独立 Windows 原生复核确认 unchanged CanonicalPath 拒绝实际 8.3 路径别名
+（InvalidOperationException / 80131509），接受完整路径；Node realpath 解析为该完整路径后通过。
+测试夹具只将临时目录先 realpath 再 mkdtemp，生产路径和 ACL 校验保持；
+修正后的完整九项测试已在独立 Windows 合成目录实际全部通过，0 failed/skipped、原生与 CLI 退出 0；
+新 CI 仍待复跑。
+打印环境旧单次创建在 SET_PRIVATE_QA_ACL 失败，现有固定目录为空、QA 所有且有五条继承 ACE；
+仅修复该已存在 QA 目录 DACL 的候选已实际通过 20 项原生内存回归，实机单次采用及读回待完成。
+
 当前补充验证：Edge-agent 540 项通过；离线验收加入控制器失败后停止自动恢复的门禁，
 纯回归与独立安全复审通过，原生 DPAPI 跨重启结果待实机执行。Windows CI 的 87 项原生测试
 全部通过，但模拟用户目录缺少 AppData 导致 PowerShell 缓存写入源码工作目录；实机有限实验
