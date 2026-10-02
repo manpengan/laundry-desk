@@ -1,0 +1,357 @@
+/* Shell overlays: PIN quick-switch, step-up, print queue. */
+
+.ld-pin-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ld-pin-switch__hint {
+  margin: 0;
+  font-size: var(--lg-fs-xs);
+  color: var(--lg-ink2);
+}
+
+.ld-pin-switch__staff {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ld-pin-switch__label {
+  font-size: var(--lg-fs-xs);
+  font-weight: 600;
+  color: var(--lg-ink2);
+}
+
+.ld-pin-switch__error {
+  padding: 10px 12px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-late-bg);
+  color: var(--lg-late-ink);
+  font-size: var(--lg-fs-xs);
+}
+
+.ld-step-up {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ld-step-up__hint {
+  margin: 0;
+  font-size: var(--lg-fs-xs);
+  color: var(--lg-ink2);
+}
+
+.ld-step-up__ref {
+  margin: 0;
+  font-size: var(--lg-fs-2xs);
+  color: var(--lg-ink3);
+  font-family: var(--lg-font-mono);
+}
+
+.ld-step-up__staff {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ld-step-up__label {
+  font-size: var(--lg-fs-xs);
+  font-weight: 600;
+  color: var(--lg-ink2);
+}
+
+.ld-step-up__select {
+  min-height: 40px;
+  border-radius: var(--lg-radius-sm);
+  border: 1px solid var(--lg-hair);
+  background: var(--lg-leaf);
+  color: var(--lg-ink);
+  padding: 8px 10px;
+  font-size: var(--lg-fs-sm);
+}
+
+.ld-step-up__error {
+  padding: 10px 12px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-late-bg);
+  color: var(--lg-late-ink);
+  font-size: var(--lg-fs-xs);
+}
+
+.ld-print-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(360px, 100%);
+  max-height: 360px;
+}
+
+.ld-print-queue__empty {
+  margin: 0;
+  font-size: var(--lg-fs-xs);
+  color: var(--lg-ink2);
+}
+
+.ld-print-queue__error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-late-bg);
+  color: var(--lg-late-ink);
+  font-size: var(--lg-fs-xs);
+}
+
+.ld-print-queue__worker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-leaf);
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-2xs);
+}
+
+.ld-print-queue__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  max-height: 280px;
+}
+
+.ld-print-queue__row {
+  padding: 10px 12px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-leaf);
+  border: 1px solid var(--lg-hair);
+}
+
+.ld-print-queue__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ld-print-queue__ticket {
+  font-size: var(--lg-fs-sm);
+  font-weight: 600;
+  color: var(--lg-ink);
+  font-family: var(--lg-font-mono);
+}
+
+.ld-print-queue__status {
+  font-size: var(--lg-fs-2xs);
+  color: var(--lg-ink2);
+  flex-shrink: 0;
+}
+
+.ld-print-queue__row[data-status="failed"] .ld-print-queue__status {
+  color: var(--lg-late-ink);
+}
+
+.ld-print-queue__row[data-status="queued"] .ld-print-queue__status,
+.ld-print-queue__row[data-status="printing"] .ld-print-queue__status {
+  color: var(--lg-accent);
+}
+
+.ld-print-queue__job-error {
+  margin: 6px 0 0;
+  font-size: var(--lg-fs-2xs);
+  color: var(--lg-late-ink);
+}
+
+.ld-print-queue__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* —— Command palette (Ctrl+K) —— */
+
+/* Centered with auto margins, not translateX(-50%): ld-pop-in animates
+   `transform`, which would otherwise make the palette jump sideways. */
+.ld-command-palette {
+  position: fixed;
+  top: 12vh;
+  right: 0;
+  left: 0;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(70vh, 620px);
+  margin-inline: auto;
+  overflow: hidden;
+  border: 1px solid var(--lg-card-border);
+  border-radius: var(--lg-radius-xl);
+  background: var(--lg-overlay);
+  box-shadow: var(--lg-shadow);
+  animation: ld-pop-in var(--lg-motion-base) var(--lg-ease-out);
+}
+
+.ld-command-palette__search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--lg-hair);
+  color: var(--lg-ink3);
+}
+
+.ld-command-palette__input {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--lg-ink);
+  font-size: var(--lg-fs-lg);
+  outline: none;
+}
+
+/* The whole search row is the focus indicator, not a ring inside the card. */
+.ld-command-palette .ld-command-palette__input:focus-visible {
+  outline: none;
+}
+
+.ld-command-palette__search:focus-within {
+  box-shadow: inset 0 -2px 0 var(--lg-accent);
+}
+
+.ld-command-palette__list {
+  flex: 1;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.ld-command-palette__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 8px 12px;
+  border-radius: var(--lg-radius-md);
+  color: var(--lg-ink);
+  cursor: pointer;
+}
+
+.ld-command-palette__item[aria-selected="true"] {
+  background: var(--lg-accent-soft);
+}
+
+.ld-command-palette__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--lg-surface-2);
+  color: var(--lg-ink2);
+}
+
+.ld-command-palette__item[aria-selected="true"] .ld-command-palette__icon {
+  background: var(--lg-accent-fill);
+  color: var(--lg-accent-ink);
+}
+
+.ld-command-palette__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ld-command-palette__label {
+  overflow: hidden;
+  font-size: var(--lg-fs-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ld-command-palette__hint,
+.ld-command-palette__meta {
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-2xs);
+}
+
+.ld-command-palette__empty {
+  padding: 28px 16px;
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-sm);
+  text-align: center;
+}
+
+.ld-command-palette__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--lg-hair);
+  background: var(--lg-surface-2);
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-2xs);
+}
+
+/* —— Keyboard shortcut reference —— */
+
+.ld-shortcut-help {
+  width: min(600px, 100%);
+}
+
+.ld-shortcut-help__section + .ld-shortcut-help__section {
+  margin-top: 18px;
+}
+
+.ld-shortcut-help__title {
+  margin: 0 0 8px;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-xs);
+  font-weight: 700;
+}
+
+.ld-shortcut-help__list,
+.ld-settings-shortcuts {
+  display: grid;
+  grid-template-columns: minmax(130px, auto) minmax(0, 1fr);
+  gap: 10px 16px;
+  margin: 0;
+  align-items: center;
+}
+
+.ld-shortcut-help__list dt,
+.ld-settings-shortcuts dt {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  color: var(--lg-ink3);
+}
+
+.ld-shortcut-help__list dd,
+.ld-settings-shortcuts dd {
+  margin: 0;
+  font-size: var(--lg-fs-sm);
+}
+
+.ld-shortcut-help__plus {
+  color: var(--lg-ink3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ld-command-palette {
+    animation: none;
+  }
+}

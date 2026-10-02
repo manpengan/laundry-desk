@@ -1,4 +1,5 @@
 import type { DeliveryOrderStatus } from "@laundry/contracts";
+import { EmptyState, Icon } from "@laundry/ui";
 
 import {
   DELIVERY_ORDER_ROUTE_LABELS,
@@ -45,7 +46,13 @@ export function DeliveryOrderWorklist({
         </select>
       </label>
       {!loaded ? <p role="status">正在读取取送订单…</p> : null}
-      {loaded && orders.length === 0 ? <p>当前筛选下没有取送订单。</p> : null}
+      {loaded && orders.length === 0 ? (
+        <EmptyState
+          icon={<Icon name="delivery" size={24} />}
+          title="当前筛选下没有取送订单"
+          description="切换上方的状态筛选，查看其他阶段的订单。"
+        />
+      ) : null}
       <ul className="ld-delivery-orders__rows">
         {orders.map((row) => (
           <li key={row.delivery_order_id}>

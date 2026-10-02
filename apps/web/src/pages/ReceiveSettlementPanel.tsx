@@ -1,4 +1,4 @@
-import { Button, Input, MoneyInput, MoneyText } from "@laundry/ui";
+import { Button, Icon, Input, MoneyInput, MoneyText } from "@laundry/ui";
 
 import type { PaymentMethod } from "./order-form.js";
 import type { PricingPolicyView } from "./pricing-policy-model.js";
@@ -24,6 +24,10 @@ export type ReceiveSettlementPanelProps = Readonly<{
   paymentCents: string;
   paymentMethod: PaymentMethod;
   note: string;
+  phone: string;
+  name: string;
+  onPhoneChange: (value: string) => void;
+  onNameChange: (value: string) => void;
   onPricingChange: (pricing: PricingSelection) => void;
   onPaymentCentsChange: (value: string) => void;
   onPaymentMethodChange: (value: PaymentMethod) => void;
@@ -44,6 +48,10 @@ export function ReceiveSettlementPanel({
   paymentCents,
   paymentMethod,
   note,
+  phone,
+  name,
+  onPhoneChange,
+  onNameChange,
   onPricingChange,
   onPaymentCentsChange,
   onPaymentMethodChange,
@@ -55,8 +63,30 @@ export function ReceiveSettlementPanel({
   return (
     <section className="ld-counter-panel ld-counter-panel--settlement" aria-label="结算">
       <div className="ld-counter-panel__head">
-        <h2 className="ld-counter-panel__title">结算</h2>
+        <h2 className="ld-counter-panel__title">
+          <Icon name="customers" size={18} />
+          客户与结算
+        </h2>
         {draftId === null ? null : <span className="ld-counter-draft">挂单待确认</span>}
+      </div>
+      <div className="ld-receive-customer">
+        <Input
+          name="customer-phone"
+          label="手机号（可选）"
+          inputMode="tel"
+          autoComplete="off"
+          value={phone}
+          onChange={(event) => onPhoneChange(event.target.value)}
+          disabled={busy}
+        />
+        <Input
+          name="customer-name"
+          label="客户姓名（可选）"
+          autoComplete="off"
+          value={name}
+          onChange={(event) => onNameChange(event.target.value)}
+          disabled={busy}
+        />
       </div>
       <div className="ld-counter-adjustments">
         {canDiscount ? (
@@ -70,30 +100,36 @@ export function ReceiveSettlementPanel({
             disabled={busy || !policyReady}
           />
         ) : null}
-        <label className="ld-counter-adjustment-toggle">
-          <input
-            type="checkbox"
-            checked={pricing.urgent}
-            onChange={(event) =>
-              onPricingChange(Object.freeze({ ...pricing, urgent: event.target.checked }))
-            }
-            disabled={busy || !policyReady}
-          />
-          加急（
-          <MoneyText fen={policy.urgent_cents} />）
-        </label>
-        <label className="ld-counter-adjustment-toggle">
-          <input
-            type="checkbox"
-            checked={pricing.freight}
-            onChange={(event) =>
-              onPricingChange(Object.freeze({ ...pricing, freight: event.target.checked }))
-            }
-            disabled={busy || !policyReady}
-          />
-          运费（
-          <MoneyText fen={policy.freight_cents} />）
-        </label>
+        <div className="ld-counter-adjustment-toggles">
+          <label className="ld-counter-adjustment-toggle">
+            <input
+              type="checkbox"
+              checked={pricing.urgent}
+              onChange={(event) =>
+                onPricingChange(Object.freeze({ ...pricing, urgent: event.target.checked }))
+              }
+              disabled={busy || !policyReady}
+            />
+            <span>
+              加急（
+              <MoneyText fen={policy.urgent_cents} />）
+            </span>
+          </label>
+          <label className="ld-counter-adjustment-toggle">
+            <input
+              type="checkbox"
+              checked={pricing.freight}
+              onChange={(event) =>
+                onPricingChange(Object.freeze({ ...pricing, freight: event.target.checked }))
+              }
+              disabled={busy || !policyReady}
+            />
+            <span>
+              运费（
+              <MoneyText fen={policy.freight_cents} />）
+            </span>
+          </label>
+        </div>
       </div>
       <div className="ld-counter-totals" aria-label="本地预览">
         <span>
@@ -105,32 +141,34 @@ export function ReceiveSettlementPanel({
         <span>
           附加 +<MoneyText fen={totals.addon + totals.urgent + totals.freight} />
         </span>
-        <strong>
-          应收预览 <MoneyText fen={totals.payable} />
+        <strong className="ld-counter-totals__payable">
+          应收预览 <MoneyText fen={totals.payable} size="xl" />
         </strong>
       </div>
-      <MoneyInput
-        name="initial-payment"
-        label="首笔收款"
-        valueFen={paymentCents}
-        onChangeFen={onPaymentCentsChange}
-        hint="0 表示欠款，不写 payment 流水"
-        disabled={busy}
-      />
-      <label className="ld-counter-select">
-        <span>付款方式</span>
-        <select
-          value={paymentMethod}
-          onChange={(event) => onPaymentMethodChange(event.target.value as PaymentMethod)}
+      <div className="ld-receive-payment">
+        <MoneyInput
+          name="initial-payment"
+          label="首笔收款"
+          valueFen={paymentCents}
+          onChangeFen={onPaymentCentsChange}
+          hint="填 0 表示先记欠款，取衣时再收"
           disabled={busy}
-        >
-          {PAYMENT_METHODS.map((method) => (
-            <option key={method.value} value={method.value}>
-              {method.label}
-            </option>
-          ))}
-        </select>
-      </label>
+        />
+        <label className="ld-counter-select">
+          <span>付款方式</span>
+          <select
+            value={paymentMethod}
+            onChange={(event) => onPaymentMethodChange(event.target.value as PaymentMethod)}
+            disabled={busy}
+          >
+            {PAYMENT_METHODS.map((method) => (
+              <option key={method.value} value={method.value}>
+                {method.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <Input
         name="note"
         label="备注（可选）"
@@ -138,22 +176,46 @@ export function ReceiveSettlementPanel({
         onChange={(event) => onNoteChange(event.target.value)}
         disabled={busy}
       />
-      <div className="ld-counter-actions">
-        <Button variant="primary" type="button" onClick={onSubmit} disabled={busy || !policyReady}>
-          {busy ? "提交中…" : draftId === null ? "确认开单" : "确认挂单并开单"}
-        </Button>
-        <Button variant="secondary" type="button" onClick={onHold} disabled={busy || !policyReady}>
-          暂存挂单
-        </Button>
-        <Button variant="ghost" type="button" onClick={onReset} disabled={busy}>
-          清空
-        </Button>
-      </div>
       <p className="ld-counter-panel__hint">
         {policyReady
-          ? `计价设置版本 ${policy.version}；预览只作输入反馈，最终金额由服务端权威计算。`
+          ? `金额以确认开单时的价目与计价设置为准（版本 ${policy.version}），系统复核计价后出票。`
           : "计价设置尚未读取成功；为避免错价，开单与挂单已停用。"}
       </p>
+      {/* Checkout bar: pinned to the window bottom so the total and the
+          primary action never scroll away while long tickets are edited. */}
+      <div className="ld-counter-actions">
+        <div className="ld-counter-actions__row">
+          <span className="ld-counter-actions__total">
+            应收
+            <MoneyText fen={totals.payable} size="lg" />
+          </span>
+          <Button
+            variant="secondary"
+            size="sm"
+            type="button"
+            onClick={onHold}
+            disabled={busy || !policyReady}
+          >
+            暂存挂单
+          </Button>
+          <Button variant="ghost" size="sm" type="button" onClick={onReset} disabled={busy}>
+            清空
+          </Button>
+        </div>
+        <Button
+          variant="primary"
+          size="lg"
+          type="button"
+          onClick={onSubmit}
+          disabled={busy || !policyReady}
+          aria-keyshortcuts="Control+Enter"
+        >
+          {busy ? "提交中…" : draftId === null ? "确认开单" : "确认挂单并开单"}
+          <span className="ld-btn__kbd" aria-hidden="true">
+            Ctrl+Enter
+          </span>
+        </Button>
+      </div>
     </section>
   );
 }

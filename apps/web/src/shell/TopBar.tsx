@@ -1,15 +1,21 @@
-import { Button, PrintJobIndicator, SyncStatusBar, type PrintJobSummary } from "@laundry/ui";
+import {
+  Button,
+  Icon,
+  Kbd,
+  PrintJobIndicator,
+  SyncStatusBar,
+  type PrintJobSummary,
+} from "@laundry/ui";
 import type { ConnectionStatus } from "../connection.js";
-import { themePreferenceLabel, type ThemePreference } from "../theme.js";
 
 export type TopBarProps = {
   connection: ConnectionStatus;
-  themePreference: ThemePreference;
-  onCycleTheme: () => void;
   printSummary?: PrintJobSummary;
   onOpenPrintQueue?: () => void;
   /** Open PIN quick-switch when session is present. */
   onSwitchStaff?: () => void;
+  /** Ctrl+K command palette trigger. */
+  onOpenCommand?: () => void;
   aiOpen?: boolean;
   onToggleAi?: () => void;
   readOnly?: boolean;
@@ -17,11 +23,10 @@ export type TopBarProps = {
 
 export function TopBar({
   connection,
-  themePreference,
-  onCycleTheme,
   printSummary = { queued: 0, failed: 0 },
   onOpenPrintQueue,
   onSwitchStaff,
+  onOpenCommand,
   aiOpen = false,
   onToggleAi,
   readOnly = false,
@@ -29,18 +34,34 @@ export function TopBar({
   return (
     <header className="ld-shell-topbar" role="banner">
       <div className="ld-shell-topbar__store">
-        <strong>{connection.storeName}</strong>
+        <strong className="ld-shell-topbar__store-name">{connection.storeName}</strong>
         <span className="ld-shell-topbar__staff">{connection.staffName}</span>
       </div>
+      {onOpenCommand === undefined ? null : (
+        <button
+          type="button"
+          className="ld-shell-command"
+          onClick={onOpenCommand}
+          aria-keyshortcuts="Control+K"
+          title="命令面板（Ctrl+K）"
+        >
+          <Icon name="search" size={18} />
+          <span className="ld-shell-command__text">搜索功能、票号、手机号…</span>
+          <span className="ld-shell-command__keys" aria-hidden="true">
+            <Kbd>Ctrl</Kbd>
+            <Kbd>K</Kbd>
+          </span>
+        </button>
+      )}
       <div className="ld-shell-topbar__status">
         <SyncStatusBar mode={connection.mode} pendingSyncCount={connection.pendingSyncCount} />
       </div>
       <div className="ld-shell-topbar__actions">
-        {readOnly ? <strong aria-label="离线只读">离线只读</strong> : null}
-        {onSwitchStaff ? (
-          <Button variant="secondary" size="sm" type="button" onClick={onSwitchStaff}>
-            切换员工
-          </Button>
+        {readOnly ? (
+          <strong className="ld-shell-topbar__readonly" aria-label="离线只读">
+            <Icon name="lock" size={16} />
+            离线只读
+          </strong>
         ) : null}
         {onToggleAi ? (
           <Button
@@ -59,9 +80,12 @@ export function TopBar({
         ) : (
           <PrintJobIndicator summary={printSummary} />
         )}
-        <Button variant="ghost" size="sm" type="button" onClick={onCycleTheme}>
-          主题：{themePreferenceLabel(themePreference)}
-        </Button>
+        {onSwitchStaff ? (
+          <Button variant="secondary" size="sm" type="button" onClick={onSwitchStaff}>
+            <Icon name="switchUser" size={16} />
+            切换员工
+          </Button>
+        ) : null}
       </div>
     </header>
   );

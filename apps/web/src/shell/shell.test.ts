@@ -153,7 +153,7 @@ test("PageHost pickup with session+commandClient mounts PickupPage form", () => 
     ),
   );
   assert.match(html, /确认取衣/);
-  assert.match(html, /订单 ID/);
+  assert.match(html, /会列出供你选择/);
 });
 
 test("PageHost delivery route mounts the authoritative order worklist", () => {
@@ -171,7 +171,7 @@ test("PageHost delivery route mounts the authoritative order worklist", () => {
       }),
     ),
   );
-  assert.match(html, /本页只推进权威配送订单状态/u);
+  assert.match(html, /在这里推进取送订单的状态/u);
   assert.match(html, /aria-label="取送订单列表"/u);
   assert.match(html, /aria-label="取送订单详情"/u);
 });
@@ -305,7 +305,10 @@ test("the shared field rule carries no flex basis, so column forms are not stret
   assert.doesNotMatch(fieldRule, /\bflex(-basis|-grow)?\s*:/u);
   assert.match(fieldRule, /\bmin-width:\s*0\s*;/u);
 
-  const shell = await readFile(new URL("../../src/styles/shell.css", import.meta.url), "utf8");
+  const shell = await readFile(
+    new URL("../../src/styles/customers-core.css", import.meta.url),
+    "utf8",
+  );
   assert.match(
     shell,
     /\.ld-customers-search > \.ld-field,\s*\n\.ld-customers-form > \.ld-field \{\s*\n\s*flex: 1 1 220px;/u,

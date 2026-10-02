@@ -95,7 +95,7 @@ test("customer portal stylesheet switches from one-column mobile to bounded desk
     "utf8",
   );
   assert.match(css, /\.ld-customer-layout\s*\{[\s\S]*display:\s*grid/iu);
-  assert.match(css, /@media \(min-width: 900px\)/u);
+  assert.match(css, /@media \(min-width: 1024px\)/u);
   assert.match(css, /grid-template-columns:\s*minmax\(280px/iu);
   assert.match(css, /min-height:\s*44px/iu);
 });

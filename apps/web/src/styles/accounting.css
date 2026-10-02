@@ -21,7 +21,7 @@
 .ld-accounting__period,
 .ld-accounting__table-section > p {
   color: var(--lg-ink2);
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-accounting__header p {
@@ -73,7 +73,7 @@
 .ld-accounting__table-wrap table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-accounting__table-wrap th,
@@ -89,7 +89,7 @@
   font-weight: 600;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 767px) {
   .ld-accounting__filters,
   .ld-accounting__actions {
     align-items: stretch;

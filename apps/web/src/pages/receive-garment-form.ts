@@ -14,6 +14,8 @@ export type ReceiveLineDraft = Readonly<{
   category_code: string;
   /** Catalog display price only. Never sent back as an order.receive input. */
   unit_price_cents: number | null;
+  /** Catalog display name only (UI). Never part of the order.receive body. */
+  catalog_name?: string;
   qty: string;
   /** Exactly one editable detail row per physical garment. */
   garments: readonly ReceiveGarmentDraft[];

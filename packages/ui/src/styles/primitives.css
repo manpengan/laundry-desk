@@ -1,0 +1,202 @@
+/* @laundry/ui — shared primitives: icon, tabs, banner, kbd, number pad, masked text. */
+
+.ld-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: -0.15em;
+}
+
+/* —— Segmented tabs: one look for every sub-navigation (delivery, production, settings) —— */
+.ld-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--lg-radius-md);
+  border: 1px solid var(--lg-hair);
+  background: var(--lg-surface-2);
+}
+
+.ld-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ld-tabs__tab:hover {
+  color: var(--lg-ink);
+}
+
+.ld-tabs__tab[aria-selected="true"],
+.ld-tabs__tab[aria-pressed="true"],
+.ld-tabs__tab[aria-checked="true"] {
+  background: var(--lg-surface-input);
+  color: var(--lg-ink);
+  box-shadow:
+    var(--lg-shadow-control),
+    inset 0 0 0 1px var(--lg-hair);
+}
+
+.ld-tabs__tab:focus-visible {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 1px;
+}
+
+.ld-tabs__hint {
+  font-family: var(--lg-font-mono);
+  font-size: 11px;
+  color: var(--lg-ink3);
+}
+
+/* —— Banner: one alert look (info / warn / danger / ok) —— */
+.ld-banner {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--lg-radius-md);
+  border: 1px solid transparent;
+  background: var(--lg-info-bg);
+  color: var(--lg-ink);
+  font-size: var(--lg-fs-sm);
+  line-height: 1.55;
+}
+
+.ld-banner__icon {
+  margin-top: 1px;
+  color: var(--lg-info-ink);
+}
+
+.ld-banner__title {
+  margin: 0 0 2px;
+  font-weight: 700;
+}
+
+.ld-banner p {
+  margin: 0;
+}
+
+.ld-banner--warn {
+  background: var(--lg-warn-bg);
+}
+
+.ld-banner--warn .ld-banner__icon {
+  color: var(--lg-warn-ink);
+}
+
+.ld-banner--danger {
+  background: var(--lg-late-bg);
+}
+
+.ld-banner--danger .ld-banner__icon {
+  color: var(--lg-late-ink);
+}
+
+.ld-banner--ok {
+  background: var(--lg-ok-bg);
+}
+
+.ld-banner--ok .ld-banner__icon {
+  color: var(--lg-ok-ink);
+}
+
+/* —— Keyboard hint —— */
+.ld-kbd {
+  display: inline-flex;
+  align-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid var(--lg-hair);
+  border-bottom-width: 2px;
+  background: var(--lg-surface-input);
+  color: var(--lg-ink2);
+  font-family: var(--lg-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* —— POS number pad (touch counters) —— */
+.ld-numpad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ld-numpad__key {
+  min-height: 52px;
+  border-radius: var(--lg-radius-md);
+  border: 1px solid var(--lg-hair);
+  background: var(--lg-surface-input);
+  color: var(--lg-ink);
+  font-size: var(--lg-fs-lg);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform var(--lg-motion-fast) var(--lg-ease-out);
+}
+
+.ld-numpad__key:active {
+  transform: scale(0.96);
+}
+
+.ld-numpad__key--action {
+  color: var(--lg-accent-strong);
+  font-size: var(--lg-fs-sm);
+}
+
+.ld-numpad__key:focus-visible {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 1px;
+}
+
+/* —— Masked personal data with an explicit reveal toggle —— */
+.ld-masked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--lg-font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ld-masked__toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--lg-ink3);
+  cursor: pointer;
+}
+
+.ld-masked__toggle:hover {
+  background: var(--lg-leaf-hover);
+  color: var(--lg-ink);
+}
+
+.ld-masked__toggle:focus-visible {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ld-numpad__key {
+    transition: none;
+  }
+}

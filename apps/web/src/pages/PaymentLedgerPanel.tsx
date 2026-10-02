@@ -204,7 +204,7 @@ export function PaymentLedgerPanel({
               {payment.refundable_cents > 0 ? (
                 <div className="ld-payment-ledger__refund">
                   <span>
-                    服务端可退 <MoneyText fen={payment.refundable_cents} size="sm" />
+                    可退 <MoneyText fen={payment.refundable_cents} size="sm" />
                   </span>
                   {canRefund ? (
                     <Button
@@ -228,7 +228,7 @@ export function PaymentLedgerPanel({
         </ul>
       )}
       <p className="ld-payment-ledger__hint">
-        流水只追加不修改；可退金额和原支付方式均由服务端账本确定。
+        收付记录只追加不修改；可退金额与原支付方式以系统账目为准。
       </p>
 
       <Dialog
@@ -292,7 +292,7 @@ export function PaymentLedgerPanel({
                 {paymentMethodLabel(pending.body.method)}。
               </p>
               <p>原因：{pending.body.reason}</p>
-              <p>复核后只凭服务端冻结的确认卡执行，不重新提交可变字段。</p>
+              <p>复核后按本确认卡执行，不会再改动任何金额或字段。</p>
             </div>
           }
           onApproved={() => void resume()}

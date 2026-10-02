@@ -1,7 +1,8 @@
-import { MoneyText, StatusBadge } from "@laundry/ui";
+import { Icon, MaskedPhone, MoneyText, StatusBadge } from "@laundry/ui";
 
 import type { PhotoPort } from "../host/photo-port.js";
 import type { OrderGetGarment, OrderGetResult } from "./order-form.js";
+import { serviceLabel } from "./catalog-services.js";
 import { discountPolicyLabel, waiverPolicyLabel } from "./order-policy-labels.js";
 import { PhotoGallery } from "./PhotoGallery.js";
 import type { PhotoMetaRow } from "./photo-list.js";
@@ -37,6 +38,26 @@ export function OrderDetailContent({
   return (
     <>
       <section className="ld-order-detail__summary" aria-label="订单摘要">
+        <div className="ld-order-detail__amounts">
+          <div>
+            <span>应付</span>
+            <strong data-testid="order-detail-payable">
+              <MoneyText fen={order.payable_cents} size="lg" />
+            </strong>
+          </div>
+          <div>
+            <span>已付</span>
+            <strong data-testid="order-detail-paid">
+              <MoneyText fen={order.paid_cents} size="lg" />
+            </strong>
+          </div>
+          <div className={order.balance_cents > 0 ? "is-due" : undefined}>
+            <span>余额</span>
+            <strong data-testid="order-detail-balance">
+              <MoneyText fen={order.balance_cents} size="lg" />
+            </strong>
+          </div>
+        </div>
         <dl className="ld-order-detail__meta">
           <div>
             <dt>票号</dt>
@@ -54,7 +75,7 @@ export function OrderDetailContent({
           </div>
           <div>
             <dt>客户</dt>
-            <dd data-testid="order-detail-name">{order.customer_name ?? "—"}</dd>
+            <dd data-testid="order-detail-name">{order.customer_name ?? "散客"}</dd>
           </div>
           <div>
             <dt>手机</dt>
@@ -62,25 +83,7 @@ export function OrderDetailContent({
               className="ld-order-detail__phone ld-orders-phone-internal"
               data-testid="order-detail-phone"
             >
-              {order.customer_phone ?? "—"}
-            </dd>
-          </div>
-          <div>
-            <dt>应付</dt>
-            <dd data-testid="order-detail-payable">
-              <MoneyText fen={order.payable_cents} />
-            </dd>
-          </div>
-          <div>
-            <dt>已付</dt>
-            <dd data-testid="order-detail-paid">
-              <MoneyText fen={order.paid_cents} />
-            </dd>
-          </div>
-          <div>
-            <dt>余额</dt>
-            <dd data-testid="order-detail-balance">
-              <MoneyText fen={order.balance_cents} />
+              {order.customer_phone === null ? "—" : <MaskedPhone phone={order.customer_phone} />}
             </dd>
           </div>
           <div>
@@ -96,28 +99,33 @@ export function OrderDetailContent({
             </dd>
           </div>
           <div>
-            <dt>折扣来源</dt>
-            <dd data-testid="order-detail-discount-source">{discountPolicyLabel(order)}</dd>
-          </div>
-          <div>
-            <dt>档案快照</dt>
-            <dd>v{order.customer_profile_version}</dd>
-          </div>
-          <div>
-            <dt>运营豁免</dt>
-            <dd data-testid="order-detail-waivers">{waiverPolicyLabel(order)}</dd>
-          </div>
-          <div>
             <dt>附加费用</dt>
             <dd>
               <MoneyText fen={order.addon_cents + order.urgent_cents + order.freight_cents} />
             </dd>
           </div>
           <div>
-            <dt>备注</dt>
-            <dd>{order.note ?? "—"}</dd>
+            <dt>折扣来源</dt>
+            <dd data-testid="order-detail-discount-source">{discountPolicyLabel(order)}</dd>
+          </div>
+          <div>
+            <dt>特殊处理</dt>
+            <dd data-testid="order-detail-waivers">{waiverPolicyLabel(order)}</dd>
           </div>
         </dl>
+        <details className="ld-order-detail__more">
+          <summary>更多信息</summary>
+          <dl className="ld-order-detail__meta">
+            <div>
+              <dt>顾客档案版本</dt>
+              <dd>v{order.customer_profile_version}</dd>
+            </div>
+            <div>
+              <dt>备注</dt>
+              <dd>{order.note ?? "—"}</dd>
+            </div>
+          </dl>
+        </details>
       </section>
       <section className="ld-order-detail__photos" aria-label="照片">
         <div className="ld-order-detail__section-head">
@@ -150,6 +158,7 @@ export function OrderDetailContent({
         </div>
         {onRegisterPhoto !== undefined ? (
           <label className="ld-order-detail__photo-upload">
+            <Icon name="camera" size={16} />
             <span>{registerBusy ? "上传中…" : "上传照片"}</span>
             <input
               type="file"
@@ -209,8 +218,9 @@ function GarmentRow({ garment }: { garment: OrderGetGarment }) {
         <StatusBadge family="garment" status={garment.status} />
         <MoneyText fen={garment.unit_price_cents} size="sm" />
       </div>
-      <span>
-        {garment.service_code || "—"}/{garment.category_code || "—"}
+      <span className="ld-order-detail__garment-kind">
+        {garment.service_code === "" ? "—" : serviceLabel(garment.service_code)} ·{" "}
+        {garment.category_code || "—"}
       </span>
       {details.length === 0 ? null : (
         <span className="ld-order-detail__garment-details">{details.join("；")}</span>

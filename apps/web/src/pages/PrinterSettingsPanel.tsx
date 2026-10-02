@@ -1,7 +1,8 @@
-import { Button, useToast } from "@laundry/ui";
+import { Button, Icon, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import type { PrinterPort, PrinterResult, PrinterStatus } from "../host/printer-port.js";
+import { printerQueueLabel, suggestReceiptQueue } from "./printer-queues.js";
 
 export type PrinterSettingsPanelProps = Readonly<{
   printerPort: PrinterPort;
@@ -27,7 +28,9 @@ export function PrinterSettingsPanel({ printerPort }: PrinterSettingsPanelProps)
         return false;
       }
       setStatus(result.data);
-      setSelectedQueue(result.data.configuredQueue ?? result.data.availableQueues[0] ?? "");
+      setSelectedQueue(
+        suggestReceiptQueue(result.data.configuredQueue ?? null, result.data.availableQueues),
+      );
       return true;
     },
     [toast],
@@ -96,7 +99,7 @@ export function PrinterSettingsPanel({ printerPort }: PrinterSettingsPanelProps)
       <div className="ld-printer-settings__heading">
         <div>
           <h2>系统小票打印机</h2>
-          <p>仅配置本机已安装队列；签名订单票由主进程领取并回执。</p>
+          <p>选择这台电脑上已安装的小票打印机；开单后的小票会自动排队打印。</p>
         </div>
         <span
           className={`ld-printer-settings__state is-${status?.state ?? "loading"}`}
@@ -117,16 +120,20 @@ export function PrinterSettingsPanel({ printerPort }: PrinterSettingsPanelProps)
         disabled={busy || queues.length === 0}
       >
         {queues.length === 0 ? <option value="">未发现可用队列</option> : null}
+        {queues.length > 0 && selectedQueue === "" ? (
+          <option value="">请选择小票打印机</option>
+        ) : null}
         {queues.map((queue) => (
           <option key={queue} value={queue}>
-            {queue}
+            {printerQueueLabel(queue)}
           </option>
         ))}
       </select>
 
       <p className="ld-printer-settings__message">{status?.message ?? "正在读取本机打印状态…"}</p>
       <div className="ld-printer-settings__actions">
-        <Button type="button" onClick={() => void discover()} disabled={busy}>
+        <Button variant="secondary" type="button" onClick={() => void discover()} disabled={busy}>
+          <Icon name="refresh" size={16} />
           刷新队列
         </Button>
         <Button
@@ -137,15 +144,17 @@ export function PrinterSettingsPanel({ printerPort }: PrinterSettingsPanelProps)
         >
           启用所选队列
         </Button>
-        <Button type="button" onClick={() => void configure(null)} disabled={busy}>
-          停用打印
-        </Button>
         <Button
+          variant="secondary"
           type="button"
           onClick={() => void testFixedTicket()}
           disabled={busy || status?.state !== "ready"}
         >
+          <Icon name="printer" size={16} />
           打印固定测试票
+        </Button>
+        <Button variant="ghost" type="button" onClick={() => void configure(null)} disabled={busy}>
+          停用打印
         </Button>
       </div>
       <p className="ld-printer-settings__evidence">

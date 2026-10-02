@@ -6,10 +6,20 @@ export type MainWindowHandle = Readonly<{
   ready: Promise<void>;
 }>;
 
+/** Counter-first defaults: three-pane 开单 needs ≥1280; never shrink below 1024. */
+export const MAIN_WINDOW_SIZE = Object.freeze({
+  width: 1440,
+  height: 900,
+  minWidth: 1024,
+  minHeight: 680,
+});
+
 export function createMainWindow(preloadPath: string, desktopSession: Session): MainWindowHandle {
   const win = new BrowserWindow({
-    width: 960,
-    height: 720,
+    ...MAIN_WINDOW_SIZE,
+    title: "洗衣柜台",
+    // Matches the light canvas so the first paint never flashes white.
+    backgroundColor: "#f3f4f8",
     show: false,
     webPreferences: {
       preload: preloadPath,

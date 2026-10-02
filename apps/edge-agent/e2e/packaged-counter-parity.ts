@@ -572,9 +572,10 @@ export async function runPackagedSettingsParity(page: Page, admin: PackagedAdmin
     timeout: 15_000,
   });
   await expect(printer).toContainText("系统打印后台接单不等于实际出纸");
-  await expect(page.locator('[data-testid="printer-smoke-section"]')).toContainText(
-    "旧版 USB / Windows CLI 诊断",
-  );
+  const printerSupport = page.locator('[data-testid="printer-smoke-section"]');
+  await expect(printerSupport).toContainText("串口 / USB 直连打印机诊断");
+  // Technician diagnostics are collapsed by default for counter staff.
+  await printerSupport.locator("summary").click();
   await expect(page.locator('[data-testid="printer-smoke-cli-hint"]')).toContainText("--validate");
   const setting = `${1_600 + (Number(suffix()) % 200)}`;
   await page.locator('input[name="min-order-cents"]').fill(setting);

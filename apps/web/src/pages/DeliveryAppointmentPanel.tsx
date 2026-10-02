@@ -314,7 +314,7 @@ export function DeliveryAppointmentPanel({
       <div className="ld-delivery-appointments__head">
         <div>
           <h3>顾客取送预约</h3>
-          <p>预约、改期与取消均由服务端重新核对地址归属、策略版本与真实名额。</p>
+          <p>预约、改期与取消都会由系统重新核对地址、取送策略与可约名额。</p>
         </div>
         <Button variant="ghost" type="button" disabled={busy} onClick={() => void load()}>
           重新读取
@@ -365,7 +365,7 @@ export function DeliveryAppointmentPanel({
       <DangerConfirmDialog
         open={currentPending?.kind === "confirm"}
         title="确认取送预约操作"
-        description="服务端已冻结本次预约操作，请核对后继续。"
+        description="系统已锁定本次预约操作，请核对后继续。"
         summary={currentPending === null ? undefined : <p>{currentPending.summary}</p>}
         confirmLabel="确认执行"
         serverConfirmation

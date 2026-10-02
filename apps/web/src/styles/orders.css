@@ -1,0 +1,265 @@
+/* Order lists, debt page and payment ledger. */
+
+.ld-orders {
+  margin-top: 8px;
+}
+
+.ld-orders__title {
+  margin: 0 0 4px;
+  font-size: var(--lg-fs-md);
+  font-weight: 600;
+  color: var(--lg-ink);
+}
+
+.ld-orders__hint {
+  margin: 0 0 14px;
+  font-size: var(--lg-fs-xs);
+  color: var(--lg-ink2);
+}
+
+.ld-orders-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ld-orders-form__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ld-orders-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ld-orders-list__empty {
+  margin: 0;
+  font-size: var(--lg-fs-xs);
+  color: var(--lg-ink2);
+}
+
+.ld-orders-list__row {
+  margin: 0;
+  padding: 0;
+}
+
+.ld-orders-list__btn {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-leaf);
+  border: 1px solid var(--lg-hair);
+  color: var(--lg-ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.ld-orders-list__btn:hover:not(:disabled) {
+  background: var(--lg-leaf-hover);
+}
+
+.ld-orders-list__btn:disabled {
+  cursor: default;
+}
+
+.ld-orders-list__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ld-orders-list__ticket {
+  font-size: var(--lg-fs-sm);
+  font-weight: 600;
+  font-family: var(--lg-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--lg-ink);
+}
+
+.ld-orders-list__ticket--none {
+  font-family: var(--lg-font-sans);
+  font-weight: 500;
+  color: var(--lg-ink3);
+}
+
+.ld-orders-list__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: var(--lg-fs-xs);
+  color: var(--lg-ink2);
+}
+
+.ld-orders-list__phone {
+  font-family: var(--lg-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.ld-orders-list__count {
+  color: var(--lg-ink3);
+}
+
+.ld-orders-list__money {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.ld-orders-list__money-label {
+  font-size: var(--lg-fs-2xs);
+  color: var(--lg-ink3);
+}
+
+.ld-orders-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--lg-hair);
+}
+
+.ld-payment-ledger {
+  padding-top: 12px;
+  border-top: 1px solid var(--lg-hair);
+}
+
+.ld-payment-ledger__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ld-payment-ledger__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  padding: 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-leaf);
+  font-size: var(--lg-fs-xs);
+}
+
+.ld-payment-ledger__main,
+.ld-payment-ledger__money,
+.ld-payment-ledger__refund {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ld-payment-ledger__main span,
+.ld-payment-ledger__hint,
+.ld-payment-ledger__empty,
+.ld-payment-ledger__note {
+  color: var(--lg-ink2);
+}
+
+.ld-payment-ledger__money {
+  justify-self: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.ld-payment-ledger__note,
+.ld-payment-ledger__refund {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.ld-payment-ledger__refund {
+  justify-content: space-between;
+}
+
+.ld-payment-ledger__hint,
+.ld-payment-ledger__empty,
+.ld-payment-ledger__error {
+  margin: 8px 0 0;
+  font-size: var(--lg-fs-2xs);
+}
+
+.ld-payment-ledger__error {
+  color: var(--lg-late-ink);
+}
+
+.ld-payment-ledger__refund-form,
+.ld-payment-ledger__confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ld-payment-ledger__refund-form p,
+.ld-payment-ledger__confirmation p {
+  margin: 0;
+}
+
+/* —— 欠款: one card per order, actions inside the card —— */
+
+.ld-debt .ld-orders-list {
+  gap: 8px;
+}
+
+.ld-debt-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding-right: 10px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-input);
+}
+
+.ld-debt-row:hover {
+  border-color: var(--lg-field-border);
+}
+
+.ld-debt-row .ld-debt-row__main {
+  min-height: 60px;
+  border: 0;
+  background: transparent;
+}
+
+.ld-debt-row .ld-debt-row__main:hover:not(:disabled) {
+  background: transparent;
+}
+
+.ld-debt-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ld-debt .ld-orders-list__money .ld-money {
+  color: var(--lg-late-ink);
+  font-size: var(--lg-fs-md);
+}
+
+@media (max-width: 767px) {
+  .ld-debt-row {
+    grid-template-columns: 1fr;
+    padding: 0 0 10px;
+  }
+
+  .ld-debt-row__actions {
+    justify-content: flex-start;
+    padding: 0 12px;
+  }
+}

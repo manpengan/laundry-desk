@@ -169,7 +169,7 @@ export function DeliveryPolicyPanel({
           result.error.detail.summary,
         );
         if (!summary.success) {
-          toast.push("服务端未返回可核对的完整取送策略，请勿复核", "error");
+          toast.push("系统未返回可核对的完整取送策略，请勿复核", "error");
           setPending(null);
           return;
         }

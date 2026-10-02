@@ -180,7 +180,7 @@ export function NotificationDeliveryPanel({
         if (isStepUpRequired(result)) {
           const summary = result.error.detail.summary;
           if (summary?.kind !== "notification_delivery_batch") {
-            toast.push("服务端未返回可核对的通知批次摘要，请重试", "error");
+            toast.push("系统未返回可核对的通知批次摘要，请重试", "error");
             return;
           }
           setPending(
@@ -355,8 +355,8 @@ export function NotificationDeliveryPanel({
         title="确认创建通知批次"
         description={
           pending?.summary === undefined
-            ? "服务端已冻结本批订单。"
-            : `服务端已冻结 ${pending.summary.order_count} 个订单；近 24 小时风险累计 ${pending.summary.risk_window_order_count} 单。入队不代表发送或送达。`
+            ? "系统已锁定本批订单。"
+            : `系统已锁定 ${pending.summary.order_count} 个订单；近 24 小时风险累计 ${pending.summary.risk_window_order_count} 单。入队不代表发送或送达。`
         }
         summary={pending === null ? undefined : <PendingSummary summary={pending.summary} />}
         confirmLabel="确认入队"

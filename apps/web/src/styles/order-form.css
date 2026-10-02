@@ -3,110 +3,8 @@
 .ld-order-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 920px;
-}
-
-.ld-catalog-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-md);
-  background: var(--lg-leaf);
-}
-
-.ld-catalog-picker__header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.ld-catalog-picker__title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--lg-ink);
-}
-
-.ld-catalog-picker__meta {
-  font-size: 12px;
-  color: var(--lg-ink3);
-}
-
-.ld-catalog-picker__error {
-  margin: 0;
-  font-size: 13px;
-  color: var(--lg-late-ink);
-}
-
-.ld-catalog-picker__empty {
-  margin: 0;
-  font-size: 13px;
-  color: var(--lg-ink3);
-}
-
-.ld-catalog-picker__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  max-height: 160px;
-  overflow: auto;
-}
-
-.ld-catalog-picker__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-sm);
-  background: var(--lg-surface);
-  color: var(--lg-ink);
-  cursor: pointer;
-  font: inherit;
-  transition:
-    transform var(--lg-motion-fast) ease,
-    opacity var(--lg-motion-fast) ease;
-}
-
-.ld-catalog-picker__chip:hover:not(:disabled) {
-  border-color: var(--lg-accent);
-}
-
-.ld-catalog-picker__chip:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.ld-catalog-picker__chip:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.ld-catalog-picker__name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--lg-ink);
-}
-
-.ld-catalog-picker__price {
-  font-size: 12px;
-  color: var(--lg-ink2);
-}
-
-.ld-catalog-picker__mnemonic {
-  font-size: 11px;
-  font-family: ui-monospace, monospace;
-  color: var(--lg-ink3);
-  padding: 1px 4px;
-  border-radius: var(--lg-radius-sm);
-  background: var(--lg-leaf);
-  border: 1px solid var(--lg-hair);
+  gap: 18px;
+  max-width: 1080px;
 }
 
 .ld-order-form__row {
@@ -128,7 +26,7 @@
 
 .ld-order-form__legend {
   padding: 0 4px;
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
   font-weight: 600;
   color: var(--lg-ink2);
 }
@@ -141,7 +39,7 @@
 }
 
 .ld-order-form__line-index {
-  font-size: 12px;
+  font-size: var(--lg-fs-xs);
   color: var(--lg-ink3);
   padding-bottom: 10px;
 }
@@ -157,25 +55,56 @@
   gap: 8px;
 }
 
+/* 取衣: the collect amount and confirm bar float at the window bottom while
+   long orders scroll, so 收款 + 确认取衣 are always one glance apart. */
+.ld-pickup .ld-order-form__actions {
+  position: sticky;
+  bottom: 12px;
+  z-index: 1;
+  align-items: flex-end;
+  padding: 10px 12px;
+  border: 1px solid var(--lg-card-border);
+  border-radius: var(--lg-radius-lg);
+  background: linear-gradient(var(--lg-surface), var(--lg-surface)), var(--lg-bg);
+  box-shadow: var(--lg-shadow-sm);
+}
+
+.ld-pickup .ld-order-form__actions > .ld-field {
+  flex: 0 1 220px;
+  margin-right: 4px;
+}
+
+/* The label carries the "填 0 不收" rule; the dock stays one row tall. */
+.ld-pickup .ld-order-form__actions .ld-field__hint {
+  display: none;
+}
+
 .ld-order-form__load-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
-  align-items: end;
+  align-items: start;
 }
 
+/* Sit on the input line (label 19px + 6px gap), not on its hint. */
 .ld-order-form__load-action {
-  padding-bottom: 2px;
+  padding-top: calc(var(--lg-field-label-offset) + 2px);
 }
 
 .ld-pickup-order {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: 14px;
+  padding: 16px;
   border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-md);
-  background: var(--lg-leaf);
+  border-radius: var(--lg-radius-lg);
+  background: var(--lg-surface-2);
+}
+
+.ld-pickup__empty {
+  border: 1px dashed var(--lg-hair);
+  border-radius: var(--lg-radius-lg);
+  background: var(--lg-surface-2);
 }
 
 .ld-pickup-garments {
@@ -194,7 +123,7 @@
 
 .ld-pickup-garments__title {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--lg-fs-sm);
   font-weight: 600;
   color: var(--lg-ink);
 }
@@ -207,7 +136,7 @@
 
 .ld-pickup-garments__empty {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
   color: var(--lg-ink3);
 }
 
@@ -218,14 +147,19 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 280px;
+  max-height: 360px;
   overflow: auto;
 }
 
 .ld-pickup-garments__item {
   border: 1px solid var(--lg-hair);
-  border-radius: var(--lg-radius-sm);
-  background: var(--lg-surface);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-input);
+}
+
+.ld-pickup-garments__item:has(input:checked) {
+  border-color: var(--lg-accent);
+  box-shadow: inset 0 0 0 1px var(--lg-accent);
 }
 
 .ld-pickup-garments__item--disabled {
@@ -235,8 +169,9 @@
 .ld-pickup-garments__label {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 12px;
+  min-height: 48px;
+  padding: 8px 12px;
   cursor: pointer;
   color: var(--lg-ink);
 }
@@ -246,8 +181,8 @@
 }
 
 .ld-pickup-garments__checkbox {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   accent-color: var(--lg-accent);
   flex-shrink: 0;
 }
@@ -261,26 +196,26 @@
 }
 
 .ld-pickup-garments__barcode {
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
+  font-family: var(--lg-font-mono);
+  font-size: var(--lg-fs-xs);
   color: var(--lg-ink);
   word-break: break-all;
 }
 
 .ld-pickup-garments__meta-line {
-  font-size: 12px;
+  font-size: var(--lg-fs-xs);
   color: var(--lg-ink3);
 }
 
 .ld-pickup-garments__rack,
 .ld-pickup-garments__verification {
-  font-size: 12px;
+  font-size: var(--lg-fs-xs);
   color: var(--lg-accent);
 }
 
 .ld-pickup-garments__meta {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--lg-fs-xs);
   color: var(--lg-ink3);
 }
 
@@ -302,7 +237,7 @@
 
 .ld-order-result__title {
   margin: 0 0 12px;
-  font-size: 16px;
+  font-size: var(--lg-fs-md);
   color: var(--lg-ink);
 }
 
@@ -315,19 +250,19 @@
 
 .ld-order-result__meta dt {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--lg-fs-xs);
   color: var(--lg-ink3);
 }
 
 .ld-order-result__meta dd {
   margin: 4px 0 0;
-  font-size: 14px;
+  font-size: var(--lg-fs-sm);
   color: var(--lg-ink);
 }
 
 .ld-order-result__mono {
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
+  font-family: var(--lg-font-mono);
+  font-size: var(--lg-fs-xs);
   word-break: break-all;
 }
 
@@ -371,7 +306,7 @@
 
 .ld-ticket-preview__title {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--lg-fs-sm);
   font-weight: 600;
   color: var(--lg-ink);
 }
@@ -383,14 +318,14 @@
   border: 1px dashed var(--lg-hair);
   background: var(--lg-leaf);
   color: var(--lg-ink);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-family: var(--lg-font-mono);
+  font-size: var(--lg-fs-xs);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .ld-order-form__line {
     grid-template-columns: 1fr 1fr;
   }
@@ -421,6 +356,6 @@
     border-radius: 0;
     background: transparent;
     color: var(--lg-ink);
-    font-size: 11px;
+    font-size: var(--lg-fs-2xs);
   }
 }

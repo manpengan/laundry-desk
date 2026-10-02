@@ -103,6 +103,11 @@ async function showMainWindow(): Promise<void> {
     if (activeDesktopSession === null) return;
     const handle = createMainWindow(preloadPath, activeDesktopSession);
     const createdWindow = handle.window;
+    // Counters open full screen on first launch; later re-shows keep the
+    // clerk's own size.
+    createdWindow.once("ready-to-show", () => {
+      if (!createdWindow.isDestroyed()) createdWindow.maximize();
+    });
     mainWindow = createdWindow;
     mainWindowReady = handle.ready;
     createdWindow.on("closed", () => {

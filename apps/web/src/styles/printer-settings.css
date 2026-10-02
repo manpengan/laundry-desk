@@ -1,8 +1,7 @@
 .ld-printer-settings {
   display: grid;
   gap: 12px;
-  margin-top: 20px;
-  padding: 18px;
+  padding: 20px;
 }
 
 .ld-printer-settings__heading {
@@ -23,14 +22,15 @@
 .ld-printer-settings__message,
 .ld-printer-settings__evidence {
   color: var(--lg-ink2);
-  font-size: 0.875rem;
+  font-size: var(--lg-fs-sm);
 }
 
 .ld-printer-settings__state {
-  background: var(--lg-leaf);
+  background: var(--lg-done-bg);
+  font-weight: 700;
   border-radius: 999px;
   flex: 0 0 auto;
-  font-size: 0.8125rem;
+  font-size: var(--lg-fs-xs);
   padding: 6px 10px;
 }
 
@@ -43,14 +43,14 @@
 }
 
 .ld-printer-settings__label {
-  font-size: 0.875rem;
+  font-size: var(--lg-fs-sm);
   font-weight: 600;
 }
 
 .ld-printer-settings__select {
-  background: var(--lg-surface);
-  border: 1px solid var(--lg-hair);
-  border-radius: 10px;
+  background: var(--lg-surface-input);
+  border: 1px solid var(--lg-field-border);
+  border-radius: var(--lg-radius-md);
   color: inherit;
   min-height: 44px;
   padding: 0 12px;

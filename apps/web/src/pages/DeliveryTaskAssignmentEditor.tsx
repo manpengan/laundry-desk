@@ -33,7 +33,7 @@ export function DeliveryTaskAssignmentEditor({
     <section className="ld-delivery-tasks__assignment" aria-label="分派配送任务">
       <div>
         <h2>分派待执行配送腿</h2>
-        <p>只列出当前处于待取件或待送回状态的权威配送订单。</p>
+        <p>只列出待取件或待送回的配送订单。</p>
       </div>
       <label>
         配送订单与配送腿

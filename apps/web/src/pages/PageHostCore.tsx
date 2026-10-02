@@ -20,10 +20,19 @@ import type { ReceivePageProps } from "./ReceivePage.js";
 import type { SettingsPageProps } from "./SettingsPage.js";
 import type { StatsPageProps } from "./StatsPage.js";
 
+/** Shell-level "open this page with that lookup" request (command palette). */
+export type NavigationIntentInput =
+  | Readonly<{ kind: "pickup-lookup"; key: string }>
+  | Readonly<{ kind: "customer-search"; query: string }>;
+
+export type NavigationIntent = NavigationIntentInput & Readonly<{ nonce: number }>;
+
 export type PageHostProps = {
   activeId: NavItemId;
   loading?: boolean;
   onNavigate: (id: NavItemId) => void;
+  /** Latest palette lookup; each new nonce reopens the target page with it. */
+  intent?: NavigationIntent;
   /** Required for settings R5 step-up demo and M2 order forms. */
   session?: SessionView;
   authClient?: AuthClient;
@@ -66,7 +75,7 @@ export function hasLocalPrintQueue(printerPort: PrinterPort | undefined): boolea
 
 export function PageLoadingFallback() {
   return (
-    <main className="ld-shell-main lg-card" aria-busy="true" aria-label="加载中">
+    <main className="ld-shell-main" aria-busy="true" aria-label="加载中">
       <Skeleton className="ld-skeleton--page-title" />
       <div className="ld-page-loading__body">
         <Skeleton lines={4} />
@@ -88,10 +97,36 @@ export function PageHostCore({
   offlinePort,
   printerPort,
   onSessionChange,
+  intent,
 }: PageHostCoreProps) {
   const copy = pageCopy(activeId);
   const [pickupOrderId, setPickupOrderId] = useState<string | undefined>(undefined);
   const [pickupLookupKey, setPickupLookupKey] = useState<string | undefined>(undefined);
+  const [customerQuery, setCustomerQuery] = useState<
+    Readonly<{ query: string; customerId?: string }> | undefined
+  >(undefined);
+  // Remount keys: a new lookup must reach a page that may already be open.
+  const [pickupMount, setPickupMount] = useState(0);
+  const [customerMount, setCustomerMount] = useState(0);
+  const [appliedIntent, setAppliedIntent] = useState(0);
+  if (intent !== undefined && intent.nonce !== appliedIntent) {
+    // Derived state during render: no stale page mount with the old key.
+    setAppliedIntent(intent.nonce);
+    if (intent.kind === "pickup-lookup") {
+      setPickupOrderId(undefined);
+      setPickupLookupKey(intent.key);
+      setPickupMount((value) => value + 1);
+    } else {
+      setCustomerQuery(Object.freeze({ query: intent.query }));
+      setCustomerMount((value) => value + 1);
+    }
+  }
+  const openPickupOrder = (orderId: string): void => {
+    setPickupOrderId(orderId);
+    setPickupLookupKey(undefined);
+    setPickupMount((value) => value + 1);
+    onNavigate("pickup");
+  };
   const {
     CounterWorkbench,
     CustomersPage,
@@ -122,6 +157,7 @@ export function PageHostCore({
   if (activeId === "pickup" && session !== undefined && commandClient !== undefined) {
     return (
       <PickupPage
+        key={`pickup-${pickupMount}`}
         commandClient={commandClient}
         {...(queryClient !== undefined ? { queryClient } : {})}
         {...(pickupOrderId !== undefined ? { initialOrderId: pickupOrderId } : {})}
@@ -200,16 +236,17 @@ export function PageHostCore({
   ) {
     return (
       <CustomersPage
+        key={`customers-${customerMount}`}
         queryClient={queryClient}
         commandClient={commandClient}
         {...(authClient === undefined ? {} : { authClient })}
         session={session}
         {...(photoPort === undefined ? {} : { photoPort })}
-        onOpenPickup={(orderId) => {
-          setPickupOrderId(orderId);
-          setPickupLookupKey(undefined);
-          onNavigate("pickup");
-        }}
+        {...(customerQuery === undefined ? {} : { initialQuery: customerQuery.query })}
+        {...(customerQuery?.customerId === undefined
+          ? {}
+          : { initialCustomerId: customerQuery.customerId })}
+        onOpenPickup={openPickupOrder}
       />
     );
   }
@@ -242,11 +279,7 @@ export function PageHostCore({
         {...(authClient !== undefined ? { authClient } : {})}
         session={session}
         {...(photoPort !== undefined ? { photoPort } : {})}
-        onOpenPickup={(orderId) => {
-          setPickupOrderId(orderId);
-          setPickupLookupKey(undefined);
-          onNavigate("pickup");
-        }}
+        onOpenPickup={openPickupOrder}
       />
     );
   }
@@ -256,22 +289,26 @@ export function PageHostCore({
       <CounterWorkbench
         queryClient={queryClient}
         onNavigate={onNavigate}
-        onOpenPickup={(orderId) => {
-          setPickupOrderId(orderId);
-          setPickupLookupKey(undefined);
-          onNavigate("pickup");
-        }}
+        onOpenPickup={openPickupOrder}
         onOpenPickupLookup={(key) => {
           setPickupOrderId(undefined);
           setPickupLookupKey(key);
+          setPickupMount((value) => value + 1);
           onNavigate("pickup");
+        }}
+        onOpenCustomer={(query, customerId) => {
+          setCustomerQuery(
+            Object.freeze({ query, ...(customerId === undefined ? {} : { customerId }) }),
+          );
+          setCustomerMount((value) => value + 1);
+          onNavigate("customers");
         }}
       />
     );
   }
 
   return (
-    <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
+    <main className="ld-shell-main" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">{copy.title}</h1>
       <EmptyState
         title={copy.emptyTitle}

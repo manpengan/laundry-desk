@@ -44,7 +44,7 @@ export function ReconciliationSnapshot({ value }: ReconciliationSnapshotProps) {
     >
       <header className="ld-reconciliation__header">
         <div>
-          <h2>营业日权威快照</h2>
+          <h2>营业日对账快照</h2>
           <p>
             生成于 <time dateTime={value.generated_at}>{value.generated_at}</time>
           </p>
@@ -157,7 +157,7 @@ export function ReconciliationSnapshot({ value }: ReconciliationSnapshotProps) {
           rows={value.edge_replay.decisions.map((row) =>
             Object.freeze({ label: REPLAY_LABELS[row.decision], count: row.count }),
           )}
-          empty="暂无服务端回放记录。"
+          empty="暂无离线补录记录。"
           foot={`需处理 ${value.edge_replay.conflict_count} 项`}
         />
       </div>

@@ -247,7 +247,7 @@ export function CustomerGovernancePanel({
       <DangerConfirmDialog
         open={pending?.kind === "confirm"}
         title="确认修改客户资料"
-        description="服务端已冻结本次资料变更，继续后会写入审计记录。"
+        description="系统已锁定本次资料变更，继续后会写入审计记录。"
         confirmLabel="确认保存"
         serverConfirmation
         busy={busy}

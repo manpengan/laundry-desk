@@ -44,6 +44,7 @@ export { EmptyState, type EmptyStateProps } from "./components/EmptyState.js";
 export {
   SyncStatusBar,
   formatSyncLabel,
+  formatSyncDetail,
   type SyncStatusBarProps,
 } from "./components/SyncStatusBar.js";
 export {
@@ -53,3 +54,25 @@ export {
   type PrintJobIndicatorProps,
   type PrintJobSummary,
 } from "./components/PrintJobIndicator.js";
+export { Icon, ICON_NAMES, type IconName, type IconProps } from "./components/Icon.js";
+export { Tabs, nextEnabledIndex, type TabItem, type TabsProps } from "./components/Tabs.js";
+export {
+  Banner,
+  Kbd,
+  type BannerProps,
+  type BannerTone,
+  type KbdProps,
+} from "./components/Feedback.js";
+export {
+  NumberPad,
+  applyNumberPadKey,
+  type NumberPadKey,
+  type NumberPadProps,
+} from "./components/NumberPad.js";
+export { MaskedPhone, maskPhone, type MaskedPhoneProps } from "./components/MaskedPhone.js";
+export {
+  useFocusTrap,
+  wrapFocusIndex,
+  pickInitialFocus,
+  FOCUSABLE_SELECTOR,
+} from "./lib/focus-trap.js";

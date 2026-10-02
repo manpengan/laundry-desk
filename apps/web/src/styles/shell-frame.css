@@ -1,0 +1,101 @@
+/* Counter page frame, sub-navigation and generic section cards. */
+
+/* —— Page frame: document pages sit on one card; workspace pages (their
+   panels are already cards) sit directly on the canvas. —— */
+
+.ld-shell-main {
+  min-width: 0;
+  margin: 20px 24px 32px;
+  padding: 24px 28px 28px;
+  border: 1px solid var(--lg-card-border);
+  border-radius: var(--lg-radius-xl);
+  background: var(--lg-surface);
+  box-shadow: var(--lg-shadow-card);
+}
+
+.ld-shell-main.ld-workbench,
+.ld-shell-main.ld-receive,
+.ld-shell-main.ld-debt-page,
+.ld-shell-main.ld-customers,
+.ld-shell-main.ld-settings {
+  padding: 4px 0 8px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ld-shell-main__title {
+  margin: 0 0 6px;
+  font-size: var(--lg-fs-xl);
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.ld-shell-main__hint {
+  max-width: 76ch;
+  margin: 0 0 20px;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+}
+
+/* Sub-navigation (取送 / 生产) sits above the page frame, aligned with it. */
+.ld-subnav {
+  padding: 20px 24px 0;
+}
+
+.ld-subnav + .ld-shell-main,
+.ld-subnav + * > .ld-shell-main:first-child {
+  margin-top: 14px;
+}
+
+/* Generic in-page section card (欠款 etc.). */
+.ld-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--lg-card-border);
+  border-radius: var(--lg-radius-lg);
+  background: var(--lg-surface);
+  box-shadow: var(--lg-shadow-card);
+}
+
+.ld-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ld-section__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--lg-fs-lg);
+  font-weight: 700;
+}
+
+.ld-section__count {
+  min-width: 24px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--lg-accent-soft);
+  color: var(--lg-accent-strong);
+  font-size: var(--lg-fs-xs);
+  font-weight: 700;
+  text-align: center;
+}
+
+.ld-shell-demo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.ld-shell-demo-label {
+  font-size: var(--lg-fs-2xs);
+  color: var(--lg-ink3);
+  margin-bottom: 6px;
+}

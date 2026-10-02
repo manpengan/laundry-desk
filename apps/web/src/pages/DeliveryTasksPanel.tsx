@@ -174,7 +174,7 @@ export function DeliveryTasksPanel({
         if (isStepUpRequired(result)) {
           const summary = result.error.detail.summary;
           if (summary?.kind !== "delivery_task_operation") {
-            toast.push("服务端未返回完整的配送任务确认摘要", "error");
+            toast.push("系统未返回完整的配送任务确认摘要", "error");
             return;
           }
           const kind = result.error.code === "POLICY_STEP_UP_REQUIRED" ? "step_up" : "confirm";
@@ -365,7 +365,7 @@ export function DeliveryTasksPanel({
       <DangerConfirmDialog
         open={pending?.kind === "confirm"}
         title="确认配送任务操作"
-        description="以下内容由服务端从当前订单、任务版本和人员归属生成。"
+        description="以下内容由系统从当前订单、任务版本和人员归属生成。"
         summary={
           pending === null ? undefined : <DeliveryTaskPendingSummary summary={pending.summary} />
         }

@@ -369,13 +369,21 @@ test("created test admin completes the installed Windows desktop functional jour
     await capture(page, screenshots.workbench);
 
     await verifyNavigation(page);
-    const theme = page.getByRole("button", { name: /^主题：/u });
-    await theme.click();
-    await expect(theme).toHaveText("主题：浅色");
-    await theme.click();
-    await expect(theme).toHaveText("主题：深色");
-    await theme.click();
-    await expect(theme).toHaveText("主题：跟随系统");
+    // Navigation ends on 设置; theme lives in 设置 → 外观与快捷键 (counter default 浅色).
+    const theme = page.getByRole("radiogroup", { name: "主题" });
+    await expect(theme.getByRole("radio", { name: "浅色" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await theme.getByRole("radio", { name: "深色" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await theme.getByRole("radio", { name: "跟随系统" }).click();
+    await expect(theme.getByRole("radio", { name: "跟随系统" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await theme.getByRole("radio", { name: "浅色" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await page.locator(".ld-print-indicator").click();
     await expect(page.getByRole("dialog", { name: "打印队列" })).toBeVisible({ timeout: 20_000 });
     await page

@@ -349,7 +349,7 @@ export function MemberBenefitDefinitionsPanel({
           </>
         }
       >
-        <p>服务端已冻结本次定义参数。确认后只影响后续发放，不追溯修改既有会员资产。</p>
+        <p>系统已锁定本次定义参数。确认后只影响后续发放，不追溯修改既有会员资产。</p>
       </Dialog>
     </section>
   );

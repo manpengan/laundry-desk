@@ -1,0 +1,375 @@
+/* 开单 (UI spec §4.2): 价目宫格 | 衣物明细 | 客户与结算, settlement always reachable. */
+
+.ld-counter-grid--receive {
+  grid-template-columns: minmax(300px, 1fr) minmax(380px, 1.3fr) minmax(320px, 0.95fr);
+  grid-template-areas: "catalog lines settlement";
+  align-items: start;
+}
+
+/* The catalog follows the clerk down long garment lists. */
+.ld-receive-catalog {
+  position: sticky;
+  top: 80px;
+  grid-area: catalog;
+  max-height: calc(100vh - 96px);
+  overflow: hidden;
+}
+
+.ld-receive-lines {
+  grid-area: lines;
+}
+
+/* Settlement spans the full row height so its checkout bar can stay pinned to
+   the window bottom (see receive-settlement.css). */
+.ld-counter-grid--receive > .ld-counter-panel--settlement {
+  grid-area: settlement;
+  align-self: stretch;
+  padding-bottom: 0;
+}
+
+/* —— Catalog: search, F-key service tabs, tile grid —— */
+
+.ld-catalog-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.ld-receive-catalog .ld-catalog-picker {
+  max-height: calc(100vh - 132px);
+}
+
+.ld-catalog-picker__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ld-catalog-picker__title {
+  margin: 0;
+  font-size: var(--lg-fs-md);
+  font-weight: 700;
+}
+
+.ld-catalog-picker__meta {
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-xs);
+}
+
+.ld-catalog-picker__error,
+.ld-catalog-picker__empty {
+  margin: 0;
+  font-size: var(--lg-fs-sm);
+}
+
+.ld-catalog-picker__error {
+  color: var(--lg-late-ink);
+}
+
+.ld-catalog-picker__empty {
+  color: var(--lg-ink3);
+}
+
+.ld-catalog-picker .ld-tabs {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.ld-catalog-picker__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 8px;
+  min-height: 0;
+  margin: 0;
+  padding: 2px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.ld-catalog-picker__chip {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  min-height: 92px;
+  padding: 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-input);
+  color: var(--lg-ink);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--lg-motion-fast) var(--lg-ease-out);
+}
+
+.ld-catalog-picker__chip:hover:not(:disabled) {
+  border-color: var(--lg-accent);
+  box-shadow: 0 4px 14px var(--lg-accent-soft);
+}
+
+.ld-catalog-picker__chip:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.ld-catalog-picker__chip:focus-visible {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 2px;
+}
+
+.ld-catalog-picker__chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ld-catalog-picker__name {
+  display: -webkit-box;
+  overflow: hidden;
+  padding-right: 18px;
+  font-size: var(--lg-fs-sm);
+  font-weight: 650;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ld-catalog-picker__price {
+  color: var(--lg-accent-strong);
+}
+
+.ld-catalog-picker__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: auto;
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-2xs);
+}
+
+.ld-catalog-picker__mnemonic {
+  font-family: var(--lg-font-mono);
+  text-transform: uppercase;
+}
+
+.ld-catalog-picker__add {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--lg-accent-soft);
+  color: var(--lg-accent-strong);
+}
+
+/* —— Lines —— */
+
+.ld-counter-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ld-counter-line {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-2);
+}
+
+.ld-counter-line--selected {
+  border-color: var(--lg-accent);
+  box-shadow: inset 0 0 0 1px var(--lg-accent);
+}
+
+.ld-counter-line__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.ld-counter-line__index {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--lg-surface-input);
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-2xs);
+  font-weight: 700;
+}
+
+.ld-counter-line__summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--lg-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ld-counter-line__summary strong {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: var(--lg-fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ld-counter-line__summary span {
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-2xs);
+}
+
+.ld-counter-line__price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-2xs);
+}
+
+.ld-counter-line__price strong {
+  color: var(--lg-warn-ink);
+  font-size: var(--lg-fs-xs);
+}
+
+.ld-counter-qty {
+  display: grid;
+  grid-template-columns: 32px 64px 32px;
+  align-items: end;
+  gap: 4px;
+}
+
+.ld-counter-qty .ld-field__label {
+  text-align: center;
+}
+
+.ld-counter-qty .ld-input {
+  min-height: 36px;
+  padding: 0 4px;
+  text-align: center;
+  font-weight: 650;
+}
+
+.ld-counter-qty__step,
+.ld-counter-line__remove {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 36px;
+  border: 1px solid var(--lg-hair);
+  border-radius: 9px;
+  background: var(--lg-surface-input);
+  color: var(--lg-ink2);
+  cursor: pointer;
+}
+
+.ld-counter-line__remove {
+  width: 36px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.ld-counter-qty__step:hover:not(:disabled),
+.ld-counter-line__remove:hover:not(:disabled) {
+  color: var(--lg-ink);
+  border-color: var(--lg-field-border);
+}
+
+.ld-counter-line__remove:hover:not(:disabled) {
+  color: var(--lg-late-ink);
+}
+
+.ld-counter-qty__step:disabled,
+.ld-counter-line__remove:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ld-counter-line__codes > summary {
+  width: max-content;
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-2xs);
+  cursor: pointer;
+}
+
+.ld-counter-line__code-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ld-counter-pieces {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Narrow desktop: catalog above the lines, settlement alongside both. */
+@media (max-width: 1279px) {
+  .ld-counter-grid--receive {
+    grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.85fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "catalog settlement"
+      "lines settlement";
+  }
+
+  .ld-receive-catalog {
+    position: static;
+    max-height: none;
+  }
+
+  .ld-receive-catalog .ld-catalog-picker {
+    max-height: 380px;
+  }
+}
+
+@media (max-width: 1023px) {
+  .ld-counter-grid--receive {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas:
+      "catalog"
+      "lines"
+      "settlement";
+  }
+
+  .ld-receive-catalog .ld-catalog-picker {
+    max-height: 420px;
+  }
+}
+
+@media (max-width: 767px) {
+  .ld-counter-line__head {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .ld-counter-line__code-fields,
+  .ld-counter-piece__fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ld-catalog-picker__chip {
+    transition: none;
+  }
+}

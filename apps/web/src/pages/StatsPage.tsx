@@ -191,7 +191,7 @@ export function StatsPage({
     <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">账目 / 对账</h1>
       <p className="ld-shell-main__hint">
-        服务端统一核对订单、支付账本、交班、打印软件状态与离线回放；历史营业日可追溯。
+        统一核对订单、收付记录、交班、打印状态与离线补录；可查询历史营业日。
       </p>
 
       <AccountingReportPanel
@@ -209,7 +209,7 @@ export function StatsPage({
           onChange={(event) => changeDate(event.target.value)}
           disabled={busy}
           data-testid="stats-date-input"
-          hint="留空时由服务端按门店时区和切日时间确定"
+          hint="留空表示当前营业日"
         />
         <div className="ld-stats-form__actions">
           <Button

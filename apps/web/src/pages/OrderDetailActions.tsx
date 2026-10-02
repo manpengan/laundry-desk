@@ -81,7 +81,7 @@ export function OrderDetailActions({
             status: "server_confirmation",
             confirmRef: result.error.detail.confirm_ref,
           });
-          toast.push("服务端要求再次确认", "info");
+          toast.push("系统要求再次确认", "info");
           return;
         }
         toast.push(result.error.message ?? result.error.code, "error");
@@ -142,7 +142,7 @@ export function OrderDetailActions({
       <DangerConfirmDialog
         open={cancelOpen}
         title="撤销订单"
-        description="撤销会关闭订单，并按服务端规则生成可审计的反向流水。此操作不能撤回。"
+        description="撤销会关闭订单，并生成可审计的冲正记录。此操作不能撤回。"
         confirmLabel={cancelState.status === "server_confirmation" ? "再次确认撤销" : "确认撤销"}
         busy={cancelBusy}
         serverConfirmation={cancelState.status === "server_confirmation"}

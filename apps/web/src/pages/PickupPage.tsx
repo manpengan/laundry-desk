@@ -2,8 +2,8 @@
  * 取衣（order.pickup）— M2 counter form with partial multi-select via order.get.
  */
 
-import { Button, Input, MoneyInput, useToast } from "@laundry/ui";
-import { useCallback, useMemo, useState } from "react";
+import { Button, EmptyState, Icon, Input, MoneyInput, useToast } from "@laundry/ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import {
   buildPickupBody,
@@ -19,6 +19,7 @@ import { OrderLookupCandidates, parseOrderLookupRows } from "./OrderLookupCandid
 import { PaymentCollectionDialog } from "./PaymentCollectionDialog.js";
 import { PickupResult } from "./PickupDetails.js";
 import { PickupOrderPanel } from "./PickupOrderPanel.js";
+import { useScanFocus } from "./use-scan-focus.js";
 
 export type PickupPageProps = {
   commandClient: CommandPort;
@@ -37,7 +38,7 @@ export function PickupPage({
   initialLookupKey,
 }: PickupPageProps) {
   const toast = useToast();
-  const [lookupKey, setLookupKey] = useState(() => initialLookupKey ?? initialOrderId ?? "");
+  const [lookupKey, setLookupKey] = useState(() => initialLookupKey ?? "");
   const [orderId, setOrderId] = useState(() => initialOrderId ?? "");
   const [collectText, setCollectText] = useState("0");
   const [busy, setBusy] = useState(false);
@@ -83,6 +84,7 @@ export function PickupPage({
       }
       setLoaded(parsed);
       setOrderId(parsed.order_id);
+      if (parsed.ticket_no !== null) setLookupKey(parsed.ticket_no);
       setMatches([]);
       const pickableIds = selectAllPickableIds(parsed.garments);
       setSelected(pickableIds);
@@ -97,7 +99,9 @@ export function PickupPage({
     [queryClient, toast],
   );
 
+  const lookupBusyRef = useRef(false);
   const onLoadOrder = useCallback(async () => {
+    if (lookupBusyRef.current) return;
     if (queryClient === undefined) {
       toast.push("查询通道不可用", "error");
       return;
@@ -107,6 +111,7 @@ export function PickupPage({
       toast.push("请输入票号、取件码、衣物条码、手机号或姓名", "error");
       return;
     }
+    lookupBusyRef.current = true;
     setLoadingOrder(true);
     setResult(null);
     try {
@@ -142,9 +147,25 @@ export function PickupPage({
       if (found.length === 1) await loadOrderById(found[0]!.order_id);
       else toast.push(`找到 ${found.length} 张订单，请选择`, "info");
     } finally {
+      lookupBusyRef.current = false;
       setLoadingOrder(false);
     }
   }, [loadOrderById, lookupKey, queryClient, toast]);
+
+  // Opening 取衣 with an order or a lookup (工作台 / 命令面板 / 订单详情) loads it.
+  const pageRef = useRef<HTMLElement | null>(null);
+  useScanFocus(pageRef, 'input[name="pickup-key"]');
+  const autoLoadRef = useRef(false);
+  useEffect(() => {
+    if (autoLoadRef.current || queryClient === undefined) return;
+    autoLoadRef.current = true;
+    if (initialOrderId !== undefined && initialOrderId.length > 0) {
+      setLoadingOrder(true);
+      void loadOrderById(initialOrderId).finally(() => setLoadingOrder(false));
+    } else if (initialLookupKey !== undefined && initialLookupKey.trim().length > 0) {
+      void onLoadOrder();
+    }
+  }, [initialLookupKey, initialOrderId, loadOrderById, onLoadOrder, queryClient]);
 
   const onToggle = useCallback(
     (garmentId: string) => {
@@ -233,32 +254,56 @@ export function PickupPage({
   }, []);
 
   const disabled = busy || loadingOrder;
+
+  // Once a lookup or pickup settles, hand the scanner to the next step:
+  // garment verification when racked pieces need it, else the lookup field.
+  useEffect(() => {
+    const root = pageRef.current;
+    if (root === null || disabled || (loaded === null && result === null)) return;
+    if (root.ownerDocument.querySelector('[aria-modal="true"]') !== null) return;
+    const next =
+      root.querySelector<HTMLInputElement>('input[name="pickup-verification-barcode"]') ??
+      root.querySelector<HTMLInputElement>('input[name="pickup-key"]');
+    next?.focus({ preventScroll: true });
+    if (next?.name === "pickup-key") next.select();
+  }, [disabled, loaded, result]);
   const verificationComplete = verifiedRequired === selectedRacked.length;
 
   return (
-    <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
+    <main ref={pageRef} className="ld-shell-main ld-pickup" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">取衣</h1>
       <p className="ld-shell-main__hint">
-        输入票号、取件码、衣物条码、手机号或姓名后加载件列表，勾选要取的衣物（可部分取）。
+        扫码或输入后按 Enter 查找订单，勾选要取的衣物（可部分取），核对收款后确认取衣。
       </p>
 
       <div className="ld-order-form">
         <div className="ld-order-form__load-row">
           <Input
             name="pickup-key"
+            className="ld-input--scan"
             label="票号 / 取件码 / 条码 / 手机号 / 姓名"
             value={lookupKey}
             onChange={(event) => setLookupKey(event.target.value)}
-            hint="匹配多张订单时须显式选择；订单 ID 仅用于内部跳转"
-            disabled={disabled}
+            hint="同一手机号有多张未取订单时，会列出供你选择"
+            disabled={busy}
+            autoComplete="off"
+            spellCheck={false}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                void onLoadOrder();
+              }
+            }}
           />
           <div className="ld-order-form__load-action">
             <Button
               variant="secondary"
+              size="lg"
               type="button"
               onClick={() => void onLoadOrder()}
               disabled={disabled || queryClient === undefined}
             >
+              <Icon name="search" size={18} />
               {loadingOrder ? "加载中…" : "加载订单"}
             </Button>
           </div>
@@ -271,6 +316,15 @@ export function PickupPage({
             onSelect={(id) => void loadOrderById(id)}
           />
         )}
+
+        {loaded === null && (matches === null || matches.length === 0) && result === null ? (
+          <EmptyState
+            className="ld-pickup__empty"
+            icon={<Icon name="scan" size={26} />}
+            title="等待扫码或输入"
+            description="加载订单后，这里会列出可取衣物、上架位置与应收余额。"
+          />
+        ) : null}
 
         {loaded !== null ? (
           <PickupOrderPanel
@@ -289,18 +343,17 @@ export function PickupPage({
           />
         ) : null}
 
-        <MoneyInput
-          name="collect-cents"
-          label="本次收款"
-          valueFen={collectText}
-          onChangeFen={setCollectText}
-          hint="0 表示不追加收款"
-          disabled={disabled}
-        />
-
         <div className="ld-order-form__actions">
+          <MoneyInput
+            name="collect-cents"
+            label="本次收款（填 0 不收）"
+            valueFen={collectText}
+            onChangeFen={setCollectText}
+            disabled={disabled}
+          />
           <Button
             variant="primary"
+            size="lg"
             type="button"
             onClick={() => void onSubmit()}
             disabled={disabled || !verificationComplete}

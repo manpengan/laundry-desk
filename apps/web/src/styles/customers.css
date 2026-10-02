@@ -46,7 +46,7 @@
 .ld-customer-governance__duplicates p {
   margin-top: 4px;
   color: var(--lg-ink2);
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-customer-privacy {
@@ -74,7 +74,7 @@
 .ld-customer-privacy__head span,
 .ld-customer-privacy__events {
   color: var(--lg-ink2);
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-customer-privacy__blocked {
@@ -136,7 +136,7 @@
 .ld-customer-profile__empty {
   margin-top: 4px;
   color: var(--lg-ink2);
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-customer-profile__base,
@@ -161,7 +161,7 @@
   display: block;
   margin-bottom: 6px;
   color: var(--lg-ink2);
-  font-size: 13px;
+  font-size: var(--lg-fs-xs);
 }
 
 .ld-customer-profile select,
@@ -241,7 +241,7 @@
   justify-self: start;
 }
 
-@media (max-width: 680px) {
+@media (max-width: 767px) {
   .ld-customer-profile__head,
   .ld-customer-profile__collection-head {
     align-items: stretch;

@@ -104,7 +104,9 @@ export function PinSwitchDialog({
       }
     >
       <div className="ld-pin-switch">
-        <p className="ld-pin-switch__hint">选择目标员工并输入其 PIN（4–8 位数字）</p>
+        <p className="ld-pin-switch__hint">
+          选择员工后，请其本人输入 PIN；切换后按该员工的权限操作。
+        </p>
         <label className="ld-pin-switch__staff">
           <span className="ld-pin-switch__label">目标员工</span>
           <select
@@ -130,6 +132,12 @@ export function PinSwitchDialog({
           autoComplete="one-time-code"
           value={pin}
           onChange={(e) => setPin(e.target.value.replace(/\D/gu, "").slice(0, 8))}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              void onSubmit();
+            }
+          }}
           {...(pinError ? { error: pinError } : {})}
           disabled={submitting}
         />

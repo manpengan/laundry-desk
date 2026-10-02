@@ -8,6 +8,7 @@ import { isStepUpRequired } from "../commands/command-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { unwrapQueryResult } from "./customer-model.js";
 import { ManualNotificationConfirmDialog } from "./ManualNotificationConfirmDialog.js";
+import { ReminderTemplateEditor } from "./ReminderTemplateEditor.js";
 import { NotificationDeliveryPanel } from "./NotificationDeliveryPanel.js";
 import {
   copyManualListPhones,
@@ -361,18 +362,11 @@ export function PickupRemindersPage({
             <option value="customer">同顾客合并</option>
           </select>
         </label>
-        <label className="ld-reminders__template">
-          联系话术
-          <textarea
-            value={template}
-            maxLength={256}
-            onChange={(event) => setTemplate(event.target.value)}
-          />
-        </label>
-        <p>
-          支持：<code>{"{{tickets}}"}</code>、<code>{"{{garment_count}}"}</code>、
-          <code>{"{{balance_cents}}"}</code>
-        </p>
+        <ReminderTemplateEditor
+          template={template}
+          onChange={setTemplate}
+          {...(preview[0]?.message === undefined ? {} : { selectionPreview: preview[0].message })}
+        />
         <Button
           variant="primary"
           type="button"

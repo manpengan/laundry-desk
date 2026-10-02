@@ -1,8 +1,30 @@
 .ld-customer-portal {
+  /* Customer-facing palette (distinct from the counter), tokenized here. */
+  --cp-ink: #18211d;
+  --cp-ink-muted: #66736d;
+  --cp-ink-soft: #53625b;
+  --cp-brand: #317258;
+  --cp-brand-ink: #286c51;
+  --cp-brand-deep: #205f47;
+  --cp-brand-fill: #266a50;
+  --cp-danger-ink: #802b2b;
+  --cp-danger-bg: #fff0ef;
+  --cp-bg-a: #edf6f1;
+  --cp-bg-b: #f8f4ea;
+  --cp-surface-2: #f2f7f4;
+  --cp-surface-3: #e8f4ee;
+  --cp-surface-input: #fff;
+  --cp-hair: #e1e9e5;
+  --cp-line: #d7e3dd;
+  --cp-field-border: #b8c9c0;
+  --cp-field-border-strong: #8caf9f;
+  --cp-card-border: rgb(49 114 88 / 16%);
+  --cp-shadow-tint: rgb(31 64 50 / 8%);
+  --cp-surface: rgb(255 255 255 / 88%);
   min-height: 100vh;
   padding: 20px;
-  color: #18211d;
-  background: linear-gradient(145deg, #edf6f1 0%, #f8f4ea 100%);
+  color: var(--cp-ink);
+  background: linear-gradient(145deg, var(--cp-bg-a) 0%, var(--cp-bg-b) 100%);
 }
 
 .ld-customer-header,
@@ -30,7 +52,7 @@
 
 .ld-customer-eyebrow {
   margin: 0 0 4px;
-  color: #317258;
+  color: var(--cp-brand);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -39,10 +61,10 @@
 
 .ld-customer-card {
   padding: 20px;
-  border: 1px solid rgb(49 114 88 / 16%);
+  border: 1px solid var(--cp-card-border);
   border-radius: 20px;
-  background: rgb(255 255 255 / 88%);
-  box-shadow: 0 14px 44px rgb(31 64 50 / 8%);
+  background: var(--cp-surface);
+  box-shadow: 0 14px 44px var(--cp-shadow-tint);
 }
 
 .ld-customer-layout {
@@ -61,7 +83,7 @@
 
 .ld-customer-wallet-balance {
   margin: 12px 0;
-  color: #205f47;
+  color: var(--cp-brand-deep);
   font-size: 28px;
   font-weight: 800;
 }
@@ -76,12 +98,12 @@
   display: grid;
   padding: 10px;
   border-radius: 12px;
-  background: #f2f7f4;
+  background: var(--cp-surface-2);
 }
 
 .ld-customer-benefit-grid small,
 .ld-customer-address-list small {
-  color: #66736d;
+  color: var(--cp-ink-muted);
 }
 
 .ld-customer-profile-form,
@@ -102,7 +124,7 @@
 .ld-customer-profile-form select {
   min-height: 44px;
   padding: 0 10px;
-  border: 1px solid #b8c9c0;
+  border: 1px solid var(--cp-field-border);
   border-radius: 10px;
   background: white;
   font: inherit;
@@ -111,7 +133,7 @@
 .ld-customer-profile-form fieldset {
   margin: 8px 0;
   padding: 12px;
-  border: 1px solid #d7e3dd;
+  border: 1px solid var(--cp-line);
   border-radius: 12px;
 }
 
@@ -134,7 +156,7 @@
 .ld-customer-profile-form button {
   min-height: 44px;
   padding: 0 14px;
-  border: 1px solid #8caf9f;
+  border: 1px solid var(--cp-field-border-strong);
   border-radius: 10px;
   background: white;
   font: inherit;
@@ -143,7 +165,7 @@
 
 .ld-customer-profile-form button[type="submit"] {
   color: white;
-  background: #266a50;
+  background: var(--cp-brand-fill);
 }
 
 .ld-customer-address-list {
@@ -183,9 +205,9 @@
 .ld-customer-form input {
   min-height: 46px;
   padding: 0 12px;
-  border: 1px solid #b8c9c0;
+  border: 1px solid var(--cp-field-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--cp-surface-input);
   font: inherit;
 }
 
@@ -196,7 +218,7 @@
   border: 0;
   border-radius: 12px;
   color: white;
-  background: #266a50;
+  background: var(--cp-brand-fill);
   font: inherit;
   font-weight: 700;
 }
@@ -204,7 +226,7 @@
 .ld-customer-muted,
 .ld-customer-privacy,
 .ld-customer-order-list small {
-  color: #66736d;
+  color: var(--cp-ink-muted);
 }
 
 .ld-customer-privacy {
@@ -216,8 +238,8 @@
   max-width: 1120px;
   padding: 10px 12px;
   border-radius: 10px;
-  color: #802b2b;
-  background: #fff0ef;
+  color: var(--cp-danger-ink);
+  background: var(--cp-danger-bg);
 }
 
 .ld-customer-order-list ul,
@@ -228,7 +250,7 @@
 }
 
 .ld-customer-order-list li + li {
-  border-top: 1px solid #e1e9e5;
+  border-top: 1px solid var(--cp-hair);
 }
 
 .ld-customer-order-list li > button {
@@ -241,7 +263,7 @@
 
 .ld-customer-order-list li > button.is-selected {
   border-radius: 12px;
-  background: #e8f4ee;
+  background: var(--cp-surface-3);
 }
 
 .ld-customer-order-list button span {
@@ -255,7 +277,7 @@
 
 .ld-customer-order-list em,
 .ld-customer-status {
-  color: #286c51;
+  color: var(--cp-brand-ink);
   font-style: normal;
   font-weight: 700;
 }
@@ -263,7 +285,7 @@
 .ld-customer-link-button {
   padding: 6px 0;
   border: 0;
-  color: #286c51;
+  color: var(--cp-brand-ink);
   background: transparent;
   font: inherit;
   font-weight: 700;
@@ -282,11 +304,11 @@
 .ld-customer-totals div {
   padding: 12px;
   border-radius: 12px;
-  background: #f2f7f4;
+  background: var(--cp-surface-2);
 }
 
 .ld-customer-totals dt {
-  color: #66736d;
+  color: var(--cp-ink-muted);
   font-size: 12px;
 }
 
@@ -298,16 +320,16 @@
 .ld-customer-lines li,
 .ld-customer-garments > li {
   padding: 12px 0;
-  border-bottom: 1px solid #e1e9e5;
+  border-bottom: 1px solid var(--cp-hair);
 }
 
 .ld-customer-garments ol {
   margin: 10px 0 0;
-  color: #53625b;
+  color: var(--cp-ink-soft);
   font-size: 13px;
 }
 
-@media (min-width: 900px) {
+@media (min-width: 1024px) {
   .ld-customer-portal {
     padding: 36px;
   }

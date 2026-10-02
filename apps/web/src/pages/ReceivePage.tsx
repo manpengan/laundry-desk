@@ -1,6 +1,6 @@
 import type { TicketPreview } from "@laundry/domain";
-import { Input, useToast } from "@laundry/ui";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useToast } from "@laundry/ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { StaffRole } from "../auth/permissions.js";
 import type { CatalogListItem } from "../commands/query-client.js";
@@ -40,6 +40,8 @@ import {
   type TicketPreviewLineDraft,
 } from "./ticket-preview.js";
 import { notifyReceiveSuccess } from "./ticket-print-enqueue.js";
+import { useReceiveKeyboard } from "./use-receive-keyboard.js";
+import { useScanFocus } from "./use-scan-focus.js";
 
 export { enqueueTicketPrint, notifyReceiveSuccess } from "./ticket-print-enqueue.js";
 
@@ -85,6 +87,8 @@ export function ReceivePage({
     [lines, policy, pricing],
   );
   const canDiscount = role === "admin";
+  const pageRef = useRef<HTMLElement | null>(null);
+  useScanFocus(pageRef, 'input[name="customer-phone"]');
 
   const reloadPolicy = useCallback(async () => {
     if (queryClient === undefined) return;
@@ -304,6 +308,11 @@ export function ReceivePage({
     toast,
   ]);
 
+  useReceiveKeyboard(pageRef, {
+    canSubmit: !busy && policyReady,
+    onSubmit: () => void onSubmit(),
+  });
+
   const onReset = useCallback(() => {
     setPhone("");
     setName("");
@@ -319,10 +328,10 @@ export function ReceivePage({
   }, []);
 
   return (
-    <main className="ld-shell-main lg-card" id="main-content" tabIndex={-1}>
+    <main ref={pageRef} className="ld-shell-main ld-receive" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">开单</h1>
       <p className="ld-shell-main__hint">
-        先选价目，再录件数与结算。提交时由服务端重新定价并写入支付台账。
+        输入手机号后按 Enter → 搜索或点选价目加入衣物 → 核对明细 → 确认开单出票。
       </p>
       {queryClient === undefined ? null : (
         <ReceiveDraftPanel
@@ -335,27 +344,11 @@ export function ReceivePage({
         />
       )}
       <div className="ld-counter-grid ld-counter-grid--receive">
-        <section className="ld-counter-panel" aria-label="客户与价目">
-          <h2 className="ld-counter-panel__title">客户与价目</h2>
-          <Input
-            name="customer-phone"
-            label="手机号（可选）"
-            inputMode="tel"
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            disabled={busy}
-          />
-          <Input
-            name="customer-name"
-            label="客户姓名（可选）"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            disabled={busy}
-          />
-          {queryClient === undefined ? null : (
+        {queryClient === undefined ? null : (
+          <section className="ld-counter-panel ld-receive-catalog" aria-label="价目">
             <CatalogPicker queryClient={queryClient} disabled={busy} onPick={onPickCatalog} />
-          )}
-        </section>
+          </section>
+        )}
         <ReceiveLineEditor
           lines={lines}
           focusedLineKey={focusedLineKey}
@@ -375,6 +368,10 @@ export function ReceivePage({
           paymentCents={paymentCents}
           paymentMethod={paymentMethod}
           note={note}
+          phone={phone}
+          name={name}
+          onPhoneChange={setPhone}
+          onNameChange={setName}
           onPricingChange={setPricing}
           onPaymentCentsChange={setPaymentCents}
           onPaymentMethodChange={setPaymentMethod}
