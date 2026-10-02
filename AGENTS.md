@@ -10,8 +10,13 @@ Windows 定制 EXE，完成安全、安装、打印与实机门禁后交宏发�
 
 **仍然只有 V2 核心是活动代码**：根 `src/`、根 `build:win` 和 v1 SQLite 继续冻结。宏发只作为
 通用 V2 的首个发行 profile、迁移演练与试点对象，不允许在核心 Command/Query、计价、权限或审计中
-恢复客户专用分支。ADR-65 的独立生产环境、离机恢复、告警、容量和真实数据准入继续是试点前置条件；
-`hk-vps-cloud-test` 仍只允许合成数据。
+恢复客户专用分支。
+
+**Cloud 平台已暂停**（[ADR-71](docs/adr/2026-10-02-adr-71-cloud-platform-pause.md)）：自 2026-10-01 起
+不再开发、不再部署 Cloud Web 与阶段 5.1/5.2 Cloud 生产环境；已合入代码与 CI 保留不删，
+`hk-vps-cloud-test` 现状冻结且仍只允许合成数据。恢复须 manpengan 明确裁决并新增 ADR。
+宏发真实数据准入的生产门禁并未取消：ADR-65 的 Cloud 路径暂停后，须另立本机形态生产准入 ADR，
+在此之前不得导入真实顾客数据。
 
 | 角色      | 状态                                         |
 | --------- | -------------------------------------------- |
@@ -25,19 +30,21 @@ Windows 定制 EXE，完成安全、安装、打印与实机门禁后交宏发�
 
 1. [ADR-66：Windows V2 定制桌面版与宏发受控运营试点](docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md)
 2. [Windows 形态 findings 与局域网构建机操作手册](docs/research/2026-08-29-windows-port-findings-and-build-host.md)
-3. [ADR-65：Cloud 生产基线、隔离环境与可恢复性门禁](docs/adr/2026-08-25-adr-65-cloud-production-baseline.md)
-4. [阶段 5 生产化交付计划](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md)
-5. [ADR-64：阶段 5 生产化接续与发布留存归档](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
-6. [ADR-37：Cloud Web 主交付形态与已完成 1–4 基线](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
-7. [ADR-14：通用 V2 本地优先架构基线](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
-8. [ADR-16：边缘运营范围追认与契约面门禁](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md)
+3. [ADR-71：Cloud 平台暂停开发与部署](docs/adr/2026-10-02-adr-71-cloud-platform-pause.md)
+   — 下列 ADR-65/64/37 与 hk-vps 手册的 Cloud 工作已暂停，仅作历史与恢复基线
+4. [ADR-65：Cloud 生产基线、隔离环境与可恢复性门禁](docs/adr/2026-08-25-adr-65-cloud-production-baseline.md)
+5. [阶段 5 生产化交付计划](docs/superpowers/plans/2026-08-17-stage5-productionization-plan.md)
+6. [ADR-64：阶段 5 生产化接续与发布留存归档](docs/adr/2026-08-17-adr-64-stage5-productionization-and-release-retention.md)
+7. [ADR-37：Cloud Web 主交付形态与已完成 1–4 基线](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md)
+8. [ADR-14：通用 V2 本地优先架构基线](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md)
+9. [ADR-16：边缘运营范围追认与契约面门禁](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md)
    — **修订 ADR-14 §4 阶段线**，并规定新增命令/查询必须附 ADR
-9. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
-10. [Claude V2 架构 draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
-11. [Claude V2 Web UI draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
-12. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
-13. [hk-vps 运维手册](docs/operations/2026-08-09-hk-vps-cloud-test.md)
-14. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
+10. [本地优先产品设计](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md)
+11. [Claude V2 架构 draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-architecture.md)
+12. [Claude V2 Web UI draft3.1a](docs/superpowers/specs/2026-07-19-laundry-v2-web-ui-design.md)
+13. [ADR-13：V2-only 升级交付](docs/adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md)
+14. [hk-vps 运维手册](docs/operations/2026-08-09-hk-vps-cloud-test.md)
+15. 若当前环境存在：`~/pro/kb/projects/laundry-desk/status.md`
 
 判断"某能力是否已交付"以 `main` 代码与绿灯门禁为准，不以文档为准；发现文档滞后
 按缺陷订正（ADR-16 §4）。

@@ -6,6 +6,10 @@ Claude（Opus 4.7）在本项目中的入场指引。
 > **Codex** 负责 Windows V2 定制 EXE 与宏发受控试点的设计、实现与验收。本文其余内容保留为历史门禁
 > 参考；Claude 如参与，仅提供非阻塞可选复审，不拥有当前 spec、contracts 或 PR
 > 放行权。
+>
+> **Cloud 平台已暂停（[ADR-71](docs/adr/2026-10-02-adr-71-cloud-platform-pause.md)，2026-10-01 起）**：
+> 不再开发、不再部署 Cloud Web 与 Cloud 生产环境；下方 ADR-37 仅作历史基线。
+> 宏发真实数据准入须另立本机形态生产准入 ADR。
 
 ## 你在这个项目里的角色
 
@@ -17,7 +21,7 @@ Claude（Opus 4.7）在本项目中的入场指引。
 
 1. [`docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md`](docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md) — 当前 Windows/宏发主线裁决
 2. [`docs/research/2026-08-29-windows-port-findings-and-build-host.md`](docs/research/2026-08-29-windows-port-findings-and-build-host.md) — Windows 实机证据
-3. [`docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md`](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) — Cloud Web 主形态与已完成 1–4 基线
+3. [`docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md`](docs/adr/2026-08-10-adr-37-cloud-web-primary-delivery.md) — Cloud Web 已完成 1–4 基线（Cloud 已按 ADR-71 暂停）
 4. [`docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md`](docs/adr/2026-07-25-adr-14-generic-local-first-v2-delivery.md) — 通用 V2 架构基线
 5. [`docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md`](docs/adr/2026-07-31-adr-16-edge-operations-scope-ratification.md) — 契约面新增须附 ADR
 6. [`docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md`](docs/superpowers/specs/2026-07-25-local-first-v2-product-design.md) — 产品设计基线

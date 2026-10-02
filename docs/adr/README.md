@@ -75,6 +75,7 @@
 | [ADR-65](2026-08-25-adr-65-cloud-production-baseline.md)                      | Cloud 生产基线、隔离环境与可恢复性门禁          | **Accepted** 2026-08-27；Stage 5.1 执行准备        |
 | [ADR-66](2026-08-29-adr-66-windows-hongfa-pilot.md)                           | Windows V2 定制桌面版与宏发受控运营试点         | **Accepted** 2026-08-29；Windows/Hongfa 主线       |
 | [ADR-67](2026-08-30-adr-67-windows-native-local-runtime.md)                   | Windows 独立原生 PostgreSQL/Fastify Runtime     | **Accepted** 2026-08-30；W1.5 本地服务闭环         |
+| [ADR-71](2026-10-02-adr-71-cloud-platform-pause.md)                           | Cloud 平台暂停开发与部署                        | **Accepted** 2026-10-02；ADR-37/64/65 Cloud 暂停   |
 
 ## v1 线
 
