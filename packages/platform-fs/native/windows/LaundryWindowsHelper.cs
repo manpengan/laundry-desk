@@ -97,6 +97,11 @@ namespace Laundry.WindowsHelper
         {
             try
             {
+                // Keep this writer for the process lifetime: disposal after RAW acceptance could change its outcome.
+                Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false))
+                {
+                    AutoFlush = true
+                });
                 Dispatch(arguments);
                 return 0;
             }
