@@ -11,7 +11,12 @@ import {
   type Page,
 } from "@playwright/test";
 import { inspectPrivateFile, securePrivateFile } from "@laundry/platform-fs";
+import type { BrowserWindow } from "electron";
 import { yuanText } from "./money-input.js";
+import {
+  assertAsLaunchedGeometry,
+  measureAsLaunchedGeometry,
+} from "./windows-functional-geometry.mjs";
 import {
   fillWindowsCredential,
   loadWindowsBootstrapCredentials,
@@ -200,12 +205,8 @@ async function verifyNavigation(page: Page): Promise<void> {
   }
 }
 
-async function verifyAsLaunchedLayout(page: Page) {
-  await expect(page.locator('[data-shell="counter"]')).toHaveAttribute("data-nav", "workbench");
-  await expect(page.getByRole("heading", { name: "工作台", level: 1 })).toBeVisible({
-    timeout: 20_000,
-  });
-  const layout = await page.evaluate(() => {
+async function readRendererLayout(page: Page) {
+  return await page.evaluate(() => {
     const bounds = (selector: string) => {
       const element = document.querySelector(selector);
       if (!(element instanceof HTMLElement)) return null;
@@ -230,8 +231,47 @@ async function verifyAsLaunchedLayout(page: Page) {
       ),
     });
   });
-  expect(layout.innerWidth).toBeGreaterThanOrEqual(900);
-  expect(layout.innerHeight).toBeGreaterThanOrEqual(640);
+}
+
+async function persistAsLaunchedGeometry(
+  application: ElectronApplication,
+  page: Page,
+  renderer: Pick<Awaited<ReturnType<typeof readRendererLayout>>, "innerWidth" | "innerHeight">,
+  evidenceRoot: string,
+) {
+  const mainWindow = await application.browserWindow(page);
+  const native = await application
+    .evaluate(({ screen }, window: BrowserWindow) => {
+      const bounds = window.getBounds();
+      return {
+        bounds,
+        content: window.getContentBounds(),
+        minimum: window.getMinimumSize(),
+        workArea: screen.getDisplayMatching(bounds).workArea,
+      };
+    }, mainWindow)
+    .finally(() => mainWindow.dispose());
+  const geometry = measureAsLaunchedGeometry(native, renderer);
+  await writeFile(
+    join(evidenceRoot, "as-launched-geometry.json"),
+    `${JSON.stringify(geometry, null, 2)}\n`,
+    { encoding: "utf8", flag: "wx" },
+  );
+  return geometry;
+}
+
+async function verifyAsLaunchedLayout(
+  application: ElectronApplication,
+  page: Page,
+  evidenceRoot: string,
+) {
+  await expect(page.locator('[data-shell="counter"]')).toHaveAttribute("data-nav", "workbench");
+  await expect(page.getByRole("heading", { name: "工作台", level: 1 })).toBeVisible({
+    timeout: 20_000,
+  });
+  const layout = await readRendererLayout(page);
+  const geometry = await persistAsLaunchedGeometry(application, page, layout, evidenceRoot);
+  assertAsLaunchedGeometry(geometry);
   expect(layout.canScrollX).toBe(false);
   expect(layout.sidebar).not.toBeNull();
   expect(layout.sidebar?.left).toBeGreaterThanOrEqual(0);
@@ -248,7 +288,7 @@ async function verifyAsLaunchedLayout(page: Page) {
     expect(bounds?.right).toBeLessThanOrEqual(layout.innerWidth + 1);
     expect(bounds?.bottom).toBeLessThanOrEqual(layout.innerHeight + 1);
   }
-  return layout;
+  return Object.freeze({ ...layout, geometry });
 }
 
 test.setTimeout(360_000);
@@ -365,7 +405,7 @@ test("created test admin completes the installed Windows desktop functional jour
       return await bridge?.health?.get?.();
     });
     expect(health).toEqual({ ok: true, data: { status: "ready" } });
-    layout = await verifyAsLaunchedLayout(page);
+    layout = await verifyAsLaunchedLayout(application, page, evidenceRootReal);
     await capture(page, screenshots.workbench);
 
     await verifyNavigation(page);

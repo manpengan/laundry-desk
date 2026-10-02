@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { link, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { link, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -16,7 +16,7 @@ import {
 } from "./index.js";
 
 test("private files and atomic replacement use the active platform security contract", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "laundry-platform-fs-"));
+  const root = await mkdtemp(join(await realpath(tmpdir()), "laundry-platform-fs-"));
   t.after(async () => await rm(root, { force: true, recursive: true }));
   await securePrivateDirectory(root);
   assert.equal(
