@@ -20,6 +20,9 @@ import type { DesktopStaffCredentialCompleteResult } from "./staff-setup-operati
 import type { DesktopStaffDirectoryResult } from "./staff-directory-operation.js";
 
 export type DesktopHttpTransport = Readonly<{
+  remoteAssistance?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  miniappSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  paymentChannel?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   ai?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   migration?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   notificationSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;

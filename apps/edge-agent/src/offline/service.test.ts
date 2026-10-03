@@ -13,6 +13,7 @@ import type { DesktopHttpTransport } from "../desktop/http-transport.js";
 import type { OfflineCommandRuntime } from "./runtime.js";
 import type { OfflineReadCache } from "./read-cache.js";
 import { createOfflineDesktopService } from "./service.js";
+import { miniappSettingsBody, paymentInputs } from "./online-capability-test-fixtures.js";
 
 const serverUnavailable = DesktopCommandExecuteResultSchema.parse({
   ok: false,
@@ -205,9 +206,30 @@ test("recovery read-only remains immutable across session refreshes and blocks e
     health: 0,
     cacheBind: 0,
     cachePut: 0,
+    remoteAssistance: 0,
+    paymentChannel: 0,
+    miniappSettings: 0,
   };
   const allowed = Object.freeze({ ok: true as const, data: Object.freeze({ accepted: true }) });
   const online = {
+    paymentChannel: {
+      execute: async () => {
+        calls.paymentChannel += 1;
+        return allowed;
+      },
+    },
+    miniappSettings: {
+      execute: async () => {
+        calls.miniappSettings += 1;
+        return allowed;
+      },
+    },
+    remoteAssistance: {
+      execute: async () => {
+        calls.remoteAssistance += 1;
+        return allowed;
+      },
+    },
     auth: {
       login: async () => {
         calls.login += 1;
@@ -312,7 +334,23 @@ test("recovery read-only remains immutable across session refreshes and blocks e
   assert.equal(resultOk(await service.offline.status()), true);
   assert.equal(resultOk(await service.offline.resume()), true);
 
+  assert.ok(service.remoteAssistance);
+  assert.ok(service.paymentChannel);
+  assert.ok(service.miniappSettings);
+  const paymentChannel = service.paymentChannel;
   const blocked = await Promise.all([
+    ...paymentInputs.map((input) => paymentChannel.execute(input)),
+    service.miniappSettings.execute({ operation: "read" }),
+    service.miniappSettings.execute({ operation: "save", body: miniappSettingsBody }),
+    service.remoteAssistance.execute({ operation: "status" }),
+    service.remoteAssistance.execute({
+      operation: "authorize",
+      body: { password: "fixture", consent: true },
+    }),
+    service.remoteAssistance.execute({
+      operation: "revoke",
+      body: { session_id: resumedSession.session.session_id },
+    }),
     service.command.execute({}),
     service.auth.pinChallenge({}),
     service.auth.pinVerify({}),
@@ -352,6 +390,9 @@ test("recovery read-only remains immutable across session refreshes and blocks e
     health: 0,
     cacheBind: 0,
     cachePut: 0,
+    remoteAssistance: 0,
+    paymentChannel: 0,
+    miniappSettings: 0,
   });
 });
 
@@ -363,6 +404,9 @@ type ResumeFixtureOptions = Readonly<{
 }>;
 
 function resumeFixture(options: ResumeFixtureOptions) {
+  let remoteAssistanceCalls = 0;
+  let paymentChannelCalls = 0;
+  let miniappSettingsCalls = 0;
   let cacheResumeCalls = 0;
   let cacheGetCalls = 0;
   let cacheClearCalls = 0;
@@ -370,6 +414,24 @@ function resumeFixture(options: ResumeFixtureOptions) {
   let healthOk = options.healthOk;
   let queryResult = serverUnavailable;
   const online = {
+    paymentChannel: {
+      execute: async () => {
+        paymentChannelCalls += 1;
+        return queued;
+      },
+    },
+    miniappSettings: {
+      execute: async () => {
+        miniappSettingsCalls += 1;
+        return queued;
+      },
+    },
+    remoteAssistance: {
+      execute: async () => {
+        remoteAssistanceCalls += 1;
+        return queued;
+      },
+    },
     auth: {
       login: async () => serverUnavailable,
       refresh: async () =>
@@ -439,6 +501,9 @@ function resumeFixture(options: ResumeFixtureOptions) {
     cacheGetCalls: () => cacheGetCalls,
     cacheClearCalls: () => cacheClearCalls,
     invalidations: () => invalidations,
+    remoteAssistanceCalls: () => remoteAssistanceCalls,
+    paymentChannelCalls: () => paymentChannelCalls,
+    miniappSettingsCalls: () => miniappSettingsCalls,
     setHealthOk: (value: boolean) => {
       healthOk = value;
     },
@@ -480,6 +545,20 @@ test("offline.resume refuses cached state when the server is healthy but authori
 test("disconnected cold start restores a token-free read-only session and exact cached queries", async () => {
   const fixture = resumeFixture({ refreshOk: false, healthOk: false, hasCache: true });
   const resumed = await fixture.service.offline.resume();
+  assert.ok(fixture.service.remoteAssistance);
+  assert.equal(
+    resultOk(await fixture.service.remoteAssistance.execute({ operation: "status" })),
+    false,
+  );
+  assert.equal(fixture.remoteAssistanceCalls(), 0);
+  assert.ok(fixture.service.paymentChannel);
+  assert.ok(fixture.service.miniappSettings);
+  for (const input of paymentInputs)
+    assert.equal(resultOk(await fixture.service.paymentChannel.execute(input)), false);
+  for (const input of [{ operation: "read" }, { operation: "save", body: miniappSettingsBody }])
+    assert.equal(resultOk(await fixture.service.miniappSettings.execute(input)), false);
+  assert.equal(fixture.paymentChannelCalls(), 0);
+  assert.equal(fixture.miniappSettingsCalls(), 0);
   assert.equal(
     (resumed as Readonly<{ ok: boolean; data?: Readonly<{ mode?: string }> }>).data?.mode,
     "offline_read_only",

@@ -101,6 +101,24 @@ export function createOfflineDesktopService(
   };
 
   return Object.freeze({
+    paymentChannel: Object.freeze({
+      execute: (input: unknown) =>
+        isMutationBlocked() || online.paymentChannel === undefined
+          ? Promise.resolve(unavailable())
+          : online.paymentChannel.execute(input),
+    }),
+    miniappSettings: Object.freeze({
+      execute: (input: unknown) =>
+        isMutationBlocked() || online.miniappSettings === undefined
+          ? Promise.resolve(unavailable())
+          : online.miniappSettings.execute(input),
+    }),
+    remoteAssistance: Object.freeze({
+      execute: (input: unknown) =>
+        isMutationBlocked() || online.remoteAssistance === undefined
+          ? Promise.resolve(unavailable())
+          : online.remoteAssistance.execute(input),
+    }),
     notificationSettings: Object.freeze({
       execute: async (input: unknown) =>
         isMutationBlocked() || online.notificationSettings === undefined

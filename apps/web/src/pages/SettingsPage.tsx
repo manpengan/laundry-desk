@@ -11,6 +11,13 @@ import type { PrinterPort } from "../host/printer-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
 import { AiSettingsPanel } from "../ai/AiSettingsPanel.js";
 import type { StoreExportPort } from "../host/store-export-port.js";
+import type { PaymentChannelPort } from "../host/payment-channel-port.js";
+import type { MiniappSettingsPort } from "../host/miniapp-settings-port.js";
+import type { RemoteAssistancePort } from "../host/remote-assistance-port.js";
+import { PaymentChannelPanel } from "./PaymentChannelPanel.js";
+import { MiniappSettingsPanel } from "./MiniappSettingsPanel.js";
+import { MiniappNotificationPanel } from "./MiniappNotificationPanel.js";
+import { RemoteAssistancePanel } from "./RemoteAssistancePanel.js";
 import type { MigrationPort } from "../host/migration-port.js";
 import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
 import { NotificationSettingsPanel } from "./NotificationSettingsPanel.js";
@@ -40,6 +47,9 @@ export type SettingsPageProps = {
   aiSettingsPort?: AiSettingsPort;
   migrationPort?: MigrationPort;
   storeExportPort?: StoreExportPort;
+  paymentChannelPort?: PaymentChannelPort;
+  miniappSettingsPort?: MiniappSettingsPort;
+  remoteAssistancePort?: RemoteAssistancePort;
   notificationSettingsPort?: NotificationSettingsPort;
   onSessionChange?: (session: SessionView | null) => void;
 };
@@ -92,6 +102,9 @@ export function SettingsPage({
   aiSettingsPort,
   migrationPort,
   storeExportPort,
+  paymentChannelPort,
+  miniappSettingsPort,
+  remoteAssistancePort,
   notificationSettingsPort,
   onSessionChange,
 }: SettingsPageProps) {
@@ -103,6 +116,59 @@ export function SettingsPage({
       content: <AppearanceSettingsPanel />,
     },
   ];
+  if (session.role === "admin" && paymentChannelPort !== undefined)
+    sections.push({
+      id: "settings-payments",
+      label: "支付渠道与对账",
+      icon: "settings",
+      content: (
+        <PaymentChannelPanel
+          key={session.session.session_id + ":" + session.session.session_version}
+          port={paymentChannelPort}
+          authClient={authClient}
+          commandClient={commandClient}
+          session={session}
+          {...(queryClient === undefined ? {} : { queryClient })}
+        />
+      ),
+    });
+  if (session.role === "admin" && miniappSettingsPort !== undefined)
+    sections.push({
+      id: "settings-miniapp",
+      label: "顾客微信小程序",
+      icon: "settings",
+      content: (
+        <MiniappSettingsPanel
+          port={miniappSettingsPort}
+          sessionKey={session.session.session_id + ":" + session.session.session_version}
+        />
+      ),
+    });
+  if (session.role === "admin" && remoteAssistancePort !== undefined)
+    sections.push({
+      id: "settings-remote-assistance",
+      label: "远程协助",
+      icon: "settings",
+      content: (
+        <RemoteAssistancePanel
+          port={remoteAssistancePort}
+          sessionKey={`${session.session.session_id}:${session.session.session_version}`}
+        />
+      ),
+    });
+  if (session.role === "admin" && queryClient !== undefined)
+    sections.push({
+      id: "settings-miniapp-notifications",
+      label: "微信订阅提醒",
+      icon: "settings",
+      content: (
+        <MiniappNotificationPanel
+          commandClient={commandClient}
+          queryClient={queryClient}
+          sessionKey={`${session.session.session_id}:${session.session.session_version}`}
+        />
+      ),
+    });
   if (session.role === "admin" && storeExportPort !== undefined)
     sections.push({
       id: "settings-store-export",

@@ -10,6 +10,9 @@ import type { AiPanelPort } from "../host/ai-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
 import type { ScalePort } from "../host/scale-port.js";
 import type { StoreExportPort } from "../host/store-export-port.js";
+import type { PaymentChannelPort } from "../host/payment-channel-port.js";
+import type { MiniappSettingsPort } from "../host/miniapp-settings-port.js";
+import type { RemoteAssistancePort } from "../host/remote-assistance-port.js";
 import type { MigrationPort } from "../host/migration-port.js";
 import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
 import type { OfflinePort } from "../host/offline-port.js";
@@ -54,6 +57,9 @@ export type CounterShellProps = {
   aiSettingsPort?: AiSettingsPort;
   migrationPort?: MigrationPort;
   storeExportPort?: StoreExportPort;
+  paymentChannelPort?: PaymentChannelPort;
+  miniappSettingsPort?: MiniappSettingsPort;
+  remoteAssistancePort?: RemoteAssistancePort;
   scalePort?: ScalePort;
   notificationSettingsPort?: NotificationSettingsPort;
   onSessionChange: (session: SessionView | null) => void;
@@ -145,6 +151,9 @@ export function CounterShellCore({
   aiSettingsPort,
   migrationPort,
   storeExportPort,
+  paymentChannelPort,
+  miniappSettingsPort,
+  remoteAssistancePort,
   scalePort,
   notificationSettingsPort,
   readOnly = false,
@@ -303,6 +312,9 @@ export function CounterShellCore({
           ) : null}
           <RouteGate permission={permission} activeId={activeId} onNavigate={setActiveId}>
             <PageHostComponent
+              {...(paymentChannelPort === undefined ? {} : { paymentChannelPort })}
+              {...(miniappSettingsPort === undefined ? {} : { miniappSettingsPort })}
+              {...(remoteAssistancePort === undefined ? {} : { remoteAssistancePort })}
               {...(migrationPort === undefined ? {} : { migrationPort })}
               {...(scalePort === undefined ? {} : { scalePort })}
               {...(storeExportPort === undefined ? {} : { storeExportPort })}

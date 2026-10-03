@@ -125,6 +125,9 @@ test("registers exactly the fixed desktop capability channels", () => {
   assert.deepEqual(
     [...harness.handlers.keys()],
     [
+      DESKTOP_IPC_CHANNELS.miniappSettings.execute,
+      DESKTOP_IPC_CHANNELS.paymentChannel.execute,
+      DESKTOP_IPC_CHANNELS.remoteAssistance.execute,
       DESKTOP_IPC_CHANNELS.scale.execute,
       DESKTOP_IPC_CHANNELS.storeExport.execute,
       DESKTOP_IPC_CHANNELS.notificationSettings.execute,
@@ -151,6 +154,125 @@ test("registers exactly the fixed desktop capability channels", () => {
       DESKTOP_IPC_CHANNELS.printer.test,
       DESKTOP_IPC_CHANNELS.health.get,
     ],
+  );
+});
+
+test("payment and miniapp IPC reject foreign frames, routing overrides and secret output", async () => {
+  const cases = [
+    {
+      capability: "paymentChannel" as const,
+      channel: DESKTOP_IPC_CHANNELS.paymentChannel.execute,
+      valid: { operation: "settings.get" },
+      invalid: [
+        { operation: "refund", body: {} },
+        { operation: "settings.get", url: "https://attacker.invalid" },
+        { operation: "list", body: { org_id: "10000000-0000-4000-8000-000000000001" } },
+        { operation: "checkout", body: { order_id: "not-a-uuid", channel: "wechat" } },
+      ],
+      output: { custody_available: true, settings: [], privateKey: "must-not-pass" },
+    },
+    {
+      capability: "miniappSettings" as const,
+      channel: DESKTOP_IPC_CHANNELS.miniappSettings.execute,
+      valid: { operation: "read" },
+      invalid: [
+        { operation: "shell", command: "whoami" },
+        { operation: "read", url: "https://attacker.invalid" },
+        { operation: "read", store_id: "10000000-0000-4000-8000-000000000001" },
+        { operation: "save", body: { enabled: true, transactions_enabled: true } },
+      ],
+      output: {
+        custody_available: true,
+        version: 1,
+        enabled: false,
+        transactions_enabled: false,
+        delegated_staff_id: null,
+        app_id: null,
+        credential_present: false,
+        subscription_template_ids: [],
+        eligible_staff: [],
+        app_secret: "must-not-pass",
+      },
+    },
+  ];
+  for (const item of cases) {
+    let calls = 0;
+    const harness = createHarness({
+      ...createService(),
+      [item.capability]: {
+        execute: async () => {
+          calls += 1;
+          return SAFE_FAILURE;
+        },
+      },
+    });
+    const invoke = getHandler(harness, item.channel);
+    for (const invalidSender of [
+      sender({ senderId: 18 }),
+      sender({ mainFrame: false }),
+      sender({ url: "https://attacker.invalid" }),
+      sender({ url: "file:///tmp/index.html" }),
+    ])
+      await assert.rejects(invoke(invalidSender, item.valid), /Desktop operation rejected/u);
+    for (const input of item.invalid)
+      await assert.rejects(invoke(sender(), input), /Desktop operation rejected/u);
+    await assert.rejects(invoke(sender(), item.valid, {}), /Desktop operation rejected/u);
+    assert.equal(calls, 0);
+    assert.deepEqual(await invoke(sender(), item.valid), SAFE_FAILURE);
+    assert.equal(calls, 1);
+    const badOutput = createHarness({
+      ...createService(),
+      [item.capability]: { execute: async () => ({ ok: true, data: item.output }) },
+    });
+    await assert.rejects(
+      getHandler(badOutput, item.channel)(sender(), item.valid),
+      /Desktop operation rejected/u,
+    );
+    assert.doesNotMatch(JSON.stringify(badOutput.errors), /must-not-pass|app_secret|privateKey/u);
+  }
+});
+
+test("remote assistance IPC rejects foreign senders and generic commands before dispatch", async () => {
+  let calls = 0;
+  const harness = createHarness({
+    ...createService(),
+    remoteAssistance: {
+      execute: async () => {
+        calls += 1;
+        return SAFE_FAILURE;
+      },
+    },
+  });
+  const invoke = getHandler(harness, DESKTOP_IPC_CHANNELS.remoteAssistance.execute);
+  for (const invalidSender of [
+    sender({ senderId: 18 }),
+    sender({ mainFrame: false }),
+    sender({ url: "https://example.com" }),
+  ])
+    await assert.rejects(
+      invoke(invalidSender, { operation: "status" }),
+      /Desktop operation rejected/,
+    );
+  for (const input of [
+    { operation: "shell", command: "whoami" },
+    { operation: "status", url: "https://example.com" },
+    { operation: "authorize", body: { password: "fixture", consent: false } },
+  ])
+    await assert.rejects(invoke(sender(), input), /Desktop operation rejected/);
+  assert.equal(calls, 0);
+  assert.deepEqual(await invoke(sender(), { operation: "status" }), SAFE_FAILURE);
+  assert.equal(calls, 1);
+  const invalidOutput = createHarness({
+    ...createService(),
+    remoteAssistance: {
+      execute: async () => ({ ok: true, data: { tunnel_secret: "must-not-pass" } }),
+    },
+  });
+  await assert.rejects(
+    getHandler(invalidOutput, DESKTOP_IPC_CHANNELS.remoteAssistance.execute)(sender(), {
+      operation: "status",
+    }),
+    /Desktop operation rejected/,
   );
 });
 

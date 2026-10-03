@@ -63,9 +63,9 @@ export function createHttpRemoteAssistanceOperation(
         body: JSON.stringify(input),
       },
     );
-    if (options.getAccessToken() !== token) return null;
+    if (!response.ok || options.getAccessToken() !== token) return null;
     const body = await response.text();
-    if (body.length > 32768) return null;
+    if (body.length > 32768 || options.getAccessToken() !== token) return null;
     return JSON.parse(body) as unknown;
   };
 }

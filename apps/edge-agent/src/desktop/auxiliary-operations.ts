@@ -1,4 +1,7 @@
+import { createDesktopPaymentChannelOperation } from "./payment-channel-operation.js";
+import { createDesktopMiniappSettingsOperation } from "./miniapp-settings-operation.js";
 import { createDesktopScaleOperation } from "./scale-operation.js";
+import { createDesktopRemoteAssistanceOperation } from "./remote-assistance-operation.js";
 import { createDesktopAiOperation } from "./ai-operation.js";
 import { createDesktopMigrationOperation } from "./migration-operation.js";
 import { createDesktopNotificationOperation } from "./notification-operation.js";
@@ -11,6 +14,21 @@ export function createDesktopAuxiliaryOperations(
   refreshIfNeeded: (state: AuthState) => Promise<void>,
 ) {
   return Object.freeze({
+    paymentChannel: createDesktopPaymentChannelOperation(
+      dependencies,
+      currentState,
+      refreshIfNeeded,
+    ),
+    miniappSettings: createDesktopMiniappSettingsOperation(
+      dependencies,
+      currentState,
+      refreshIfNeeded,
+    ),
+    remoteAssistance: createDesktopRemoteAssistanceOperation(
+      dependencies,
+      currentState,
+      refreshIfNeeded,
+    ),
     scale: createDesktopScaleOperation(currentState),
     ai: createDesktopAiOperation(dependencies, currentState, refreshIfNeeded),
     migration: createDesktopMigrationOperation(dependencies, currentState, refreshIfNeeded),

@@ -1,3 +1,11 @@
+import {
+  createMiniappSettingsPort,
+  createHttpMiniappSettingsOperation,
+} from "./miniapp-settings-port.js";
+import {
+  createPaymentChannelPort,
+  createHttpPaymentChannelOperation,
+} from "./payment-channel-port.js";
 import { createHttpAuthClient, type HttpAuthCredentialStore } from "../auth/HttpAuthClient.js";
 import { createHttpApprovalPort } from "../ai/approval-port.js";
 import { createHttpCommandClient } from "../commands/command-client.js";
@@ -10,6 +18,10 @@ import { createHttpAiPanelPort } from "./ai-port.js";
 import { createAiSettingsPort, createHttpAiSettingsOperation } from "../ai/settings-port.js";
 import { createStoreExportPort, createHttpStoreExportOperation } from "./store-export-port.js";
 import { createMigrationPort, createHttpMigrationOperation } from "./migration-port.js";
+import {
+  createRemoteAssistancePort,
+  createHttpRemoteAssistanceOperation,
+} from "./remote-assistance-port.js";
 import {
   createNotificationSettingsPort,
   createHttpNotificationSettingsOperation,
@@ -92,6 +104,30 @@ export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
 
   return Object.freeze({
     auth,
+    paymentChannel: createPaymentChannelPort(
+      createHttpPaymentChannelOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
+    miniappSettings: createMiniappSettingsPort(
+      createHttpMiniappSettingsOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
+    remoteAssistance: createRemoteAssistancePort(
+      createHttpRemoteAssistanceOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
     notificationSettings: createNotificationSettingsPort(
       createHttpNotificationSettingsOperation({
         apiBaseUrl: base,

@@ -62,3 +62,37 @@ test("session replacement discards a late authorization response", async () => {
     false,
   );
 });
+
+test("remote assistance rejects non-success HTTP responses even with a valid success envelope", async () => {
+  for (const status of [401, 403, 503]) {
+    const port = createRemoteAssistancePort(
+      createHttpRemoteAssistanceOperation({
+        apiBaseUrl: "http://127.0.0.1:8787",
+        getAccessToken: () => "session",
+        readCsrf: () => "csrf",
+        fetchImpl: async () => new Response(JSON.stringify({ ok: true, data: view }), { status }),
+      }),
+    );
+    assert.equal((await port.status()).ok, false);
+  }
+});
+
+test("remote assistance discards the old session when it changes during body consumption", async () => {
+  let token = "first";
+  class DelayedResponse extends Response {
+    override async text() {
+      const body = await super.text();
+      token = "second";
+      return body;
+    }
+  }
+  const port = createRemoteAssistancePort(
+    createHttpRemoteAssistanceOperation({
+      apiBaseUrl: "http://127.0.0.1:8787",
+      getAccessToken: () => token,
+      readCsrf: () => "csrf",
+      fetchImpl: async () => new DelayedResponse(JSON.stringify({ ok: true, data: view })),
+    }),
+  );
+  assert.equal((await port.status()).ok, false);
+});

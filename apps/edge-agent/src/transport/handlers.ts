@@ -8,7 +8,10 @@ import {
 } from "../desktop/printer-operation.js";
 import { DESKTOP_STAFF_CREDENTIAL_OPERATION } from "../desktop/staff-setup-operation.js";
 import { DESKTOP_STAFF_DIRECTORY_OPERATION } from "../desktop/staff-directory-operation.js";
+import { DESKTOP_PAYMENT_CHANNEL_OPERATION } from "../desktop/payment-channel-operation.js";
+import { DESKTOP_MINIAPP_SETTINGS_OPERATION } from "../desktop/miniapp-settings-operation.js";
 import { DESKTOP_SCALE_OPERATION } from "../desktop/scale-operation.js";
+import { DESKTOP_REMOTE_ASSISTANCE_OPERATION } from "../desktop/remote-assistance-operation.js";
 import { DESKTOP_AI_OPERATION } from "../desktop/ai-operation.js";
 import { DESKTOP_STORE_EXPORT_OPERATION } from "../desktop/store-export-operation.js";
 import { DESKTOP_MIGRATION_OPERATION } from "../desktop/migration-operation.js";
@@ -36,6 +39,9 @@ export type DesktopIpcMainSurface = Readonly<{
 }>;
 
 export type DesktopOperationService = Readonly<{
+  remoteAssistance?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  miniappSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  paymentChannel?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   ai?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   migration?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   notificationSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
@@ -150,6 +156,33 @@ function registerOperation(
 /** Register the exact renderer capability surface; no generic dispatch channel exists. */
 export function registerDesktopOperationHandlers(options: DesktopOperationHandlerOptions): void {
   const { service } = options;
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.miniappSettings.execute,
+    DESKTOP_MINIAPP_SETTINGS_OPERATION,
+    (input) => {
+      if (service.miniappSettings === undefined) throw new Error("MiniappSettings unavailable");
+      return service.miniappSettings.execute(input);
+    },
+  );
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.paymentChannel.execute,
+    DESKTOP_PAYMENT_CHANNEL_OPERATION,
+    (input) => {
+      if (service.paymentChannel === undefined) throw new Error("PaymentChannel unavailable");
+      return service.paymentChannel.execute(input);
+    },
+  );
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.remoteAssistance.execute,
+    DESKTOP_REMOTE_ASSISTANCE_OPERATION,
+    (input) => {
+      if (service.remoteAssistance === undefined) throw new Error("Remote assistance unavailable");
+      return service.remoteAssistance.execute(input);
+    },
+  );
   registerOperation(
     options,
     DESKTOP_IPC_CHANNELS.scale.execute,

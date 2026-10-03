@@ -13,6 +13,9 @@ const REQUIRED_CAPABILITIES = [
   "health",
 ] as const;
 const OPTIONAL_OPERATIONS = [
+  "paymentChannel",
+  "miniappSettings",
+  "remoteAssistance",
   "ai",
   "migration",
   "notificationSettings",

@@ -62,8 +62,17 @@ test("selectHost accepts only the normalized app://local authority with a valid 
   }
 });
 
-test("selectHost accepts only the five named optional operation capabilities", () => {
-  const names = ["ai", "migration", "notificationSettings", "scale", "storeExport"] as const;
+test("selectHost accepts only the named optional operation capabilities", () => {
+  const names = [
+    "ai",
+    "migration",
+    "notificationSettings",
+    "paymentChannel",
+    "miniappSettings",
+    "remoteAssistance",
+    "scale",
+    "storeExport",
+  ] as const;
   const operation = Object.freeze({ execute: async () => ({ ok: false }) });
   const bridge = {
     ...createBridge(),

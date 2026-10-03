@@ -32,6 +32,9 @@ export type DesktopQueryInput = Readonly<{
  * deliberately have no representation here.
  */
 export type LaundryDesktopBridge = Readonly<{
+  remoteAssistance?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  miniappSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  paymentChannel?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   ai?: Readonly<{ execute: (input: DesktopAiInput) => Promise<unknown> }>;
   migration?: Readonly<{ execute: (input: DesktopV1MigrationInput) => Promise<unknown> }>;
   notificationSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
