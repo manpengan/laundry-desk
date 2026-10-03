@@ -91,6 +91,8 @@
 
 - [ADR-84](2026-10-03-adr-84-windows-counter-update.md)：Windows Counter 签名更新与完整性回退；软件、审查和原生解包已验证，完整签名安装更新待验。
 
+- [ADR-88](2026-10-03-adr-88-windows-scale-capture.md)：Windows 电子秤读取及收衣记录；软件与串口发现已验证，实物验收待设备。
+
 ## v1 线
 
 | ADR                                                | 主题            | 状态                                              |

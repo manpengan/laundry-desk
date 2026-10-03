@@ -2,6 +2,7 @@ import type { TicketPreview } from "@laundry/domain";
 import { useToast } from "@laundry/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import type { ScalePort } from "../host/scale-port.js";
 import type { StaffRole } from "../auth/permissions.js";
 import type { CatalogListItem } from "../commands/query-client.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
@@ -54,6 +55,7 @@ export type ReceivePageProps = {
   /** Only the packaged desktop host has a local signed-print queue. */
   queuePrintEnabled?: boolean;
   role?: StaffRole;
+  scalePort?: ScalePort;
 };
 
 export function ReceivePage({
@@ -64,6 +66,7 @@ export function ReceivePage({
   onTicketReady,
   queuePrintEnabled = false,
   role,
+  scalePort,
 }: ReceivePageProps) {
   const toast = useToast();
   const [phone, setPhone] = useState("");
@@ -358,6 +361,7 @@ export function ReceivePage({
           onChange={setLines}
         />
         <ReceiveSettlementPanel
+          {...(scalePort === undefined ? {} : { scalePort })}
           busy={busy}
           policyReady={policyReady}
           canDiscount={canDiscount}

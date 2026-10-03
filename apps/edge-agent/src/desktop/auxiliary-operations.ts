@@ -1,3 +1,4 @@
+import { createDesktopScaleOperation } from "./scale-operation.js";
 import { createDesktopAiOperation } from "./ai-operation.js";
 import { createDesktopMigrationOperation } from "./migration-operation.js";
 import { createDesktopNotificationOperation } from "./notification-operation.js";
@@ -10,6 +11,7 @@ export function createDesktopAuxiliaryOperations(
   refreshIfNeeded: (state: AuthState) => Promise<void>,
 ) {
   return Object.freeze({
+    scale: createDesktopScaleOperation(currentState),
     ai: createDesktopAiOperation(dependencies, currentState, refreshIfNeeded),
     migration: createDesktopMigrationOperation(dependencies, currentState, refreshIfNeeded),
     notificationSettings: createDesktopNotificationOperation(

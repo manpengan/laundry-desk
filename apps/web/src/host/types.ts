@@ -8,6 +8,7 @@ import type { PrinterPort } from "./printer-port.js";
 import type { DeliveryEvidenceMediaPort } from "./delivery-evidence-port.js";
 import type { AiPanelPort } from "./ai-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
+import type { ScalePort } from "./scale-port.js";
 import type { StoreExportPort } from "./store-export-port.js";
 import type { MigrationPort } from "./migration-port.js";
 import type { NotificationSettingsPort } from "./notification-settings-port.js";
@@ -42,6 +43,7 @@ export type AppPorts = Readonly<{
   aiSettings?: AiSettingsPort;
   migration?: MigrationPort;
   storeExport?: StoreExportPort;
+  scale?: ScalePort;
   notificationSettings?: NotificationSettingsPort;
   approval?: ApprovalPort;
   health: HealthPort;

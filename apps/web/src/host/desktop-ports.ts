@@ -29,6 +29,7 @@ import {
 import type { AppPorts, HealthPort, HealthResult } from "./types.js";
 import { createAiSettingsPort } from "../ai/settings-port.js";
 import { createDesktopAiPanelPort } from "../ai/desktop-ai-port.js";
+import { createScalePort } from "./scale-port.js";
 import { createStoreExportPort } from "./store-export-port.js";
 import { createMigrationPort } from "./migration-port.js";
 import { createNotificationSettingsPort } from "./notification-settings-port.js";
@@ -118,6 +119,7 @@ export function createDesktopPorts(bridge: LaundryDesktopBridge): AppPorts {
         });
   return Object.freeze({
     auth,
+    ...(bridge.scale === undefined ? {} : { scale: createScalePort(bridge.scale.execute) }),
     ...(bridge.storeExport === undefined
       ? {}
       : { storeExport: createStoreExportPort(bridge.storeExport.execute) }),

@@ -32,6 +32,7 @@ test("DESKTOP_IPC_CHANNELS is the exact deeply frozen renderer capability map", 
     ai: { execute: "desktop:ai:operation" },
     migration: { execute: "desktop:migration:operation" },
     storeExport: { execute: "desktop:store-export:operation" },
+    scale: { execute: "desktop:scale:operation" },
     notificationSettings: { execute: "desktop:notification:settings" },
     auth: {
       login: "desktop:auth:login",
@@ -89,7 +90,7 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
   );
   const invokedDesktopChannels = Array.from(
     preload.matchAll(
-      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(storeExport\.execute|notificationSettings\.execute|migration\.execute|ai\.execute|auth\.(?:login|refresh|staffDirectory|pinChallenge|pinVerify|credentialComplete|logout)|command\.execute|query\.execute|photo\.(?:upload|read|delete)|offline\.(?:resume|status|resolve)|printer\.(?:discover|status|configure|test)|health\.get)/gu,
+      /ipcRenderer\.invoke\(\s*DESKTOP_IPC_CHANNELS\.(scale\.execute|storeExport\.execute|notificationSettings\.execute|migration\.execute|ai\.execute|auth\.(?:login|refresh|staffDirectory|pinChallenge|pinVerify|credentialComplete|logout)|command\.execute|query\.execute|photo\.(?:upload|read|delete)|offline\.(?:resume|status|resolve)|printer\.(?:discover|status|configure|test)|health\.get)/gu,
     ),
     (match) => match[1],
   );
@@ -102,6 +103,7 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
 
   assert.deepEqual(exposedWorldKeys, ["laundryDesktop"]);
   assert.deepEqual(invokedDesktopChannels, [
+    "scale.execute",
     "storeExport.execute",
     "notificationSettings.execute",
     "migration.execute",
@@ -137,7 +139,7 @@ test("preload exposes only the fixed-channel laundryDesktop bridge", () => {
     "printer.status",
     "health.get",
   ]);
-  assert.equal(preload.match(/ipcRenderer\.invoke\(/gu)?.length, 24);
+  assert.equal(preload.match(/ipcRenderer\.invoke\(/gu)?.length, 25);
   assert.doesNotMatch(preload, /edgeBridge/);
   assert.doesNotMatch(preload, /import\s*\{\s*IPC_CHANNELS\s*\}/u);
   assert.doesNotMatch(

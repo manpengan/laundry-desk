@@ -1,4 +1,7 @@
 import { Button, Icon, Input, MoneyInput, MoneyText } from "@laundry/ui";
+import type { ScalePort } from "../host/scale-port.js";
+import { ScaleCapturePanel } from "./ScaleCapturePanel.js";
+import { appendScaleReading } from "./scale-reading.js";
 
 import type { PaymentMethod } from "./order-form.js";
 import type { PricingPolicyView } from "./pricing-policy-model.js";
@@ -14,6 +17,7 @@ const PAYMENT_METHODS: readonly Readonly<{ value: PaymentMethod; label: string }
 );
 
 export type ReceiveSettlementPanelProps = Readonly<{
+  scalePort?: ScalePort;
   busy: boolean;
   policyReady: boolean;
   canDiscount: boolean;
@@ -38,6 +42,7 @@ export type ReceiveSettlementPanelProps = Readonly<{
 }>;
 
 export function ReceiveSettlementPanel({
+  scalePort,
   busy,
   policyReady,
   canDiscount,
@@ -69,6 +74,18 @@ export function ReceiveSettlementPanel({
         </h2>
         {draftId === null ? null : <span className="ld-counter-draft">挂单待确认</span>}
       </div>
+      {scalePort && (
+        <ScaleCapturePanel
+          port={scalePort}
+          disabled={busy}
+          onApply={(reading) => {
+            const next = appendScaleReading(note, reading);
+            if (next === null) return false;
+            onNoteChange(next);
+            return true;
+          }}
+        />
+      )}
       <div className="ld-receive-customer">
         <Input
           name="customer-phone"

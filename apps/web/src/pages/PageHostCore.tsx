@@ -8,6 +8,7 @@ import type { OfflinePort } from "../host/offline-port.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
+import type { ScalePort } from "../host/scale-port.js";
 import type { StoreExportPort } from "../host/store-export-port.js";
 import type { MigrationPort } from "../host/migration-port.js";
 import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
@@ -49,6 +50,7 @@ export type PageHostProps = {
   aiSettingsPort?: AiSettingsPort;
   migrationPort?: MigrationPort;
   storeExportPort?: StoreExportPort;
+  scalePort?: ScalePort;
   notificationSettingsPort?: NotificationSettingsPort;
   onSessionChange?: (session: SessionView | null) => void;
 };
@@ -107,6 +109,7 @@ export function PageHostCore({
   aiSettingsPort,
   migrationPort,
   storeExportPort,
+  scalePort,
   notificationSettingsPort,
   onSessionChange,
   intent,
@@ -160,6 +163,7 @@ export function PageHostCore({
         commandClient={commandClient}
         role={session.role}
         queuePrintEnabled={hasLocalPrintQueue(printerPort)}
+        {...(scalePort === undefined ? {} : { scalePort })}
         {...(offlinePort !== undefined ? { offlinePort } : {})}
         {...(queryClient !== undefined ? { queryClient } : {})}
       />

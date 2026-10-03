@@ -23,6 +23,7 @@ export type DesktopHttpTransport = Readonly<{
   ai?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   migration?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   notificationSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  scale?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   storeExport?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   auth: Readonly<{
     login: (input: unknown) => Promise<DesktopLoginResult>;

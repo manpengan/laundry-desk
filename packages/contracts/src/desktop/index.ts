@@ -77,4 +77,5 @@ export type {
 } from "./photo-operations.js";
 export * from "./v1-migration.js";
 export * from "./store-export.js";
+export * from "./scale.js";
 export * from "./notification-settings.js";

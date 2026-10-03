@@ -25,6 +25,10 @@ files:
   - dist/desktop/migration-operation.js
   - dist/desktop/notification-operation.js
   - dist/desktop/auxiliary-operations.js
+  - dist/desktop/scale-operation.js
+  - dist/scale/protocol.js
+  - dist/scale/windows-script.js
+  - dist/scale/windows-port.js
   - dist/desktop/store-export-operation.js
   - dist/desktop/device-identity.js
   - dist/desktop/electron-adapter.js
