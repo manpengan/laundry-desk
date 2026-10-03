@@ -1,4 +1,5 @@
 import { PaymentLedgerListInputSchema, createCommandError } from "@laundry/contracts";
+import { queueChannelRefund } from "../payment-channels/refund-store.js";
 import { projectPaymentLedger } from "@laundry/domain";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
@@ -226,6 +227,7 @@ export function registerPaymentCommandHandlers(
   registry.registerHandler("payment.collect", paymentHandler("pay", deps));
   registry.registerHandler("payment.repay", paymentHandler("repay", deps));
   registry.registerHandler("payment.refund", refundHandler(deps));
+  registry.registerHandler("payment.channel.refund", queueChannelRefund);
 }
 
 export function registerPaymentQueryHandlers(

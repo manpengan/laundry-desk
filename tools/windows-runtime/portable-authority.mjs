@@ -3,6 +3,7 @@ import { fail } from "./companion-contract.mjs";
 export const OMIT_PORTABLE_TABLE_DATA = new Set([
   "ai_provider_keys",
   "notification_provider_settings",
+  "payment_channel_settings",
 ]);
 
 function increment(raw) {
@@ -92,6 +93,10 @@ export function resetPortableAuthority(table, values, timestamp) {
       row_version: increment(row.row_version),
     };
   if (table.name === "notification_provider_settings") patch = { enabled: "false" };
+  if (table.name === "payment_channel_intents" && !["paid", "closed"].includes(row.state))
+    patch = { state: "needs_review", checkout_json: null, error_code: "MIGRATED_QUERY_REQUIRED" };
+  if (table.name === "payment_channel_refunds" && !["refunded", "failed"].includes(row.state))
+    patch = { state: "needs_review", error_code: "MIGRATED_QUERY_REQUIRED" };
   if (table.name === "ai_sessions" && ["open", "running"].includes(row.status))
     patch = { status: "cancelled", closed_at: now, updated_at: now };
   if (table.name === "ai_turns" && ["queued", "running"].includes(row.status))

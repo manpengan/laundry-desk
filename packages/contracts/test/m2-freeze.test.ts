@@ -29,6 +29,7 @@ describe("M2 contract surface", () => {
       "payment.collect",
       "payment.repay",
       "payment.refund",
+      "payment.channel.refund",
       // ADR-38: store-scoped server-authoritative urgent/freight/add-on policy.
       "pricing.policy.set",
       // ADR-24: audited dual-basis report export. The paired read query remains
@@ -188,7 +189,7 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.task.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.tasks.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.evidence.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(82);
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(83);
     expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(64);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,

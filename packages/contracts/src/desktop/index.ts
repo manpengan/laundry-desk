@@ -79,3 +79,5 @@ export * from "./v1-migration.js";
 export * from "./store-export.js";
 export * from "./scale.js";
 export * from "./notification-settings.js";
+
+export * from "./payment-channel.js";

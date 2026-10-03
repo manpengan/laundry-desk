@@ -177,6 +177,7 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "payment.collect",
   "payment.repay",
   "payment.refund",
+  "payment.channel.refund",
   "pricing.policy.set",
   "accounting.report.export",
   "reconciliation.export",

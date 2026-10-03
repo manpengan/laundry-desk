@@ -36,6 +36,14 @@ const exclusions = Object.freeze({
   laundry_schema_migrations: "安装版本内部校验账本",
 });
 const omittedColumns: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  payment_channel_settings: ["credential_id", "envelope_json"],
+  payment_channel_intents: [
+    "checkout_json",
+    "idempotency_key",
+    "input_sha256",
+    "customer_session_id",
+  ],
+  payment_channel_refunds: ["idempotency_key"],
   staffs: ["password_hash", "pin_hash", "permission_version"],
   automation_policies: ["active_run_id", "lease_token", "lease_until"],
   notification_provider_settings: ["credential_id", "envelope_json"],

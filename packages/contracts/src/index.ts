@@ -10,6 +10,7 @@ export * from "./edge/index.js";
 export * from "./commands/index.js";
 export * from "./openapi/index.js";
 export * from "./ai/index.js";
+export * from "./payment-channel.js";
 
 // Restricted auth authority modules stay wired to this entry point only. The
 // `auth/` barrel deliberately excludes them so it never becomes a second route

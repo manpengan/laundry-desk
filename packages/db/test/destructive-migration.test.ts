@@ -165,6 +165,7 @@ describe("destructive migration static reject", () => {
       "0072_notification_provider_settings.sql",
       "0073_store_export_requests.sql",
       "0074_ai_assistant_operations.sql",
+      "0075_payment_channels.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

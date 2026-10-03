@@ -80,6 +80,7 @@ const expectedSqlFiles = [
   "0072_notification_provider_settings.sql",
   "0073_store_export_requests.sql",
   "0074_ai_assistant_operations.sql",
+  "0075_payment_channels.sql",
 ] as const;
 
 describe("packages/db migration inventory", () => {

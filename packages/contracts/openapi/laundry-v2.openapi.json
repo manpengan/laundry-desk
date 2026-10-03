@@ -81502,6 +81502,36 @@
         ],
         "type": "object"
       },
+      "input.command.payment.channel.refund": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_cents": {
+            "exclusiveMinimum": 0,
+            "maximum": 5000000,
+            "type": "integer"
+          },
+          "intent_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "customer_request",
+              "duplicate_payment",
+              "service_cancelled",
+              "other"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "amount_cents",
+          "reason"
+        ],
+        "type": "object"
+      },
       "input.command.payment.collect": {
         "additionalProperties": false,
         "properties": {
@@ -89621,6 +89651,58 @@
         "x-laundry-offline-mode": "grant",
         "x-laundry-risk": "R1",
         "x-laundry-version": "0.4.0"
+      }
+    },
+    "/v1/commands/payment.channel.refund": {
+      "post": {
+        "description": "Online R4 refund. Approval reserves refundability and creates one durable merchant refund reference. Never assume a submitted refund has completed. Stable command name: `payment.channel.refund` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_payment_channel_refund",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.payment.channel.refund"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Approve a provider refund request; only a verified provider result appends the refund ledger.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R4",
+        "x-laundry-version": "1.0.0"
       }
     },
     "/v1/commands/payment.collect": {

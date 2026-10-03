@@ -1,4 +1,5 @@
 import { isIP } from "node:net";
+import { evaluateMachineRequest } from "./machine-request-security.js";
 
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -238,6 +239,8 @@ export function evaluateLocalRequest(
   if (hasUntrustedSourceMetadata(input.headers) || !hasAllowedHost(input.headers, policy)) {
     return BAD_REQUEST;
   }
+  const machineDecision = evaluateMachineRequest(input);
+  if (machineDecision !== null) return machineDecision;
   if (SAFE_METHODS.includes(input.method as (typeof SAFE_METHODS)[number])) return ALLOWED;
   if (!hasAllowedOriginPair(input.headers, policy)) return FORBIDDEN;
   if (!hasAllowedContentType(input)) return UNSUPPORTED_MEDIA_TYPE;
@@ -253,6 +256,11 @@ export function registerRequestSecurityHooks(
     if (request.url.split("?", 1)[0]?.startsWith("/api/v2/customer/auth/") === true) {
       reply.header("Cache-Control", "no-store");
     }
+    if (
+      request.url.startsWith("/api/v2/miniapp/") ||
+      request.url.startsWith("/api/v2/payment-channels/")
+    )
+      reply.header("Cache-Control", "no-store");
     const decision = evaluateLocalRequest(
       Object.freeze({ method: request.method, url: request.url, headers: request.headers }),
       policy,
