@@ -150,7 +150,20 @@ test("packaged Windows Counter is a secure Electron desktop with its native help
       };
     });
     expect(renderer).toEqual({
-      bridgeKeys: ["auth", "command", "health", "offline", "photo", "printer", "query"],
+      bridgeKeys: [
+        "ai",
+        "auth",
+        "command",
+        "health",
+        "migration",
+        "notificationSettings",
+        "offline",
+        "photo",
+        "printer",
+        "query",
+        "scale",
+        "storeExport",
+      ],
       electronType: "undefined",
       processType: "undefined",
       requireType: "undefined",

@@ -62,6 +62,47 @@ test("selectHost accepts only the normalized app://local authority with a valid 
   }
 });
 
+test("selectHost accepts only the five named optional operation capabilities", () => {
+  const names = ["ai", "migration", "notificationSettings", "scale", "storeExport"] as const;
+  const operation = Object.freeze({ execute: async () => ({ ok: false }) });
+  const bridge = {
+    ...createBridge(),
+    ...Object.fromEntries(names.map((name) => [name, operation])),
+  };
+  assert.equal(selectHost("app://local/index.html", bridge).kind, "desktop");
+  for (const name of names) {
+    assert.equal(
+      selectHost("app://local/index.html", { ...createBridge(), [name]: operation }).kind,
+      "desktop",
+    );
+    for (const invalid of [
+      null,
+      undefined,
+      {},
+      { execute: "invalid" },
+      { ...operation, fetch: operation.execute },
+    ]) {
+      assert.throws(
+        () => selectHost("app://local/index.html", { ...bridge, [name]: invalid }),
+        /桌面安全桥未就绪/u,
+      );
+    }
+    let reads = 0;
+    const accessor = Object.defineProperty({ ...bridge }, name, {
+      get() {
+        reads++;
+        return operation;
+      },
+    });
+    assert.throws(() => selectHost("app://local/index.html", accessor), /桌面安全桥未就绪/u);
+    assert.equal(reads, 0);
+  }
+  assert.throws(
+    () => selectHost("app://local/index.html", { ...bridge, execute: operation.execute }),
+    /桌面安全桥未就绪/u,
+  );
+});
+
 test("selectHost rejects untrusted app authorities and URL credentials", () => {
   const bridge = createBridge();
   const untrusted = [
