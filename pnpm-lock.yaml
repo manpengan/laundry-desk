@@ -229,6 +229,9 @@ importers:
       '@laundry/domain':
         specifier: file:../../packages/domain
         version: link:../../packages/domain
+      '@laundry/migrate-v1':
+        specifier: file:../../tools/migrate-v1
+        version: link:../../tools/migrate-v1
       '@laundry/platform-fs':
         specifier: file:../../packages/platform-fs
         version: link:../../packages/platform-fs
@@ -364,6 +367,9 @@ importers:
 
   tools/migrate-v1:
     dependencies:
+      '@laundry/platform-fs':
+        specifier: file:../../packages/platform-fs
+        version: link:../../packages/platform-fs
       better-sqlite3:
         specifier: 12.11.1
         version: 12.11.1

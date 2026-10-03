@@ -81,6 +81,7 @@
 
 - [ADR-72](2026-10-03-adr-72-windows-full-feature-delivery.md)：A1–A9/B1–B8 范围与分批交付，Accepted（用户明确授权）。
 - [ADR-73](2026-10-03-adr-73-windows-photo-backup.md)：Windows 照片与数据库联合恢复，实现候选，Windows 验收待执行。
+- [ADR-74](2026-10-03-adr-74-windows-v1-migration.md)：v1 字段保全、受限历史与一次性正式导入，实现候选。
 - [ADR-76](2026-10-03-adr-76-windows-diagnostic-export.md)：Windows 一键脱敏诊断导出，Proposed。
 
 ## v1 线

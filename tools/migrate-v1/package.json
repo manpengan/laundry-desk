@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./plan": {
+      "types": "./dist/plan.d.ts",
+      "default": "./dist/plan.js"
     }
   },
   "scripts": {
@@ -20,6 +24,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
+    "@laundry/platform-fs": "file:../../packages/platform-fs",
     "better-sqlite3": "12.11.1",
     "zod": "4.4.3"
   },

@@ -212,6 +212,18 @@ function hasAllowedContentType(input: RequestSecurityInput): boolean {
   const type = mediaType(input.headers);
   if (type === "application/json") return true;
   const path = input.url?.split("?", 1)[0];
+  if (
+    input.method === "POST" &&
+    type === "application/vnd.laundry.v1-migration" &&
+    input.url === path
+  ) {
+    return (
+      path === "/api/v2/migrations/v1/drafts" ||
+      /^\/api\/v2\/migrations\/v1\/drafts\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/photos\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+        path ?? "",
+      )
+    );
+  }
   return (
     input.method === "POST" &&
     (path === "/api/v2/photos" || path === "/api/v2/delivery-evidence/attachments") &&

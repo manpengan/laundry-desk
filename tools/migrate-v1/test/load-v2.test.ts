@@ -18,6 +18,14 @@ describe("loadV2Migration", () => {
       const report = reconcileMigration(snapshot, plan);
       const loader: V2PostgresMigrationLoader = Object.freeze({
         kind: "v2-postgresql" as const,
+        withExclusiveMaintenance: async <T>(operation: () => Promise<T>) => {
+          calls.push("lock");
+          try {
+            return await operation();
+          } finally {
+            calls.push("unlock");
+          }
+        },
         createBackupPoint: async () => {
           calls.push("backup");
           return Object.freeze({ id: "backup-point-1" });
@@ -27,7 +35,7 @@ describe("loadV2Migration", () => {
         },
       });
       await loadV2Migration(loader, "postgresql://migration@example.test/laundry", plan, report);
-      expect(calls).toEqual(["backup", "apply:backup-point-1"]);
+      expect(calls).toEqual(["lock", "backup", "apply:backup-point-1", "unlock"]);
     } finally {
       await rm(fixture.directory, { force: true, recursive: true });
     }

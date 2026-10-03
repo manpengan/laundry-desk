@@ -3,6 +3,9 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { dirname, join } from "node:path";
+import { createImportDraftStore } from "../data-transfer/import-drafts.js";
+import { registerV1MigrationRoutes } from "../data-transfer/import-routes.js";
 
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
@@ -276,6 +279,12 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     options.edgePrintRateLimiter ?? createEdgePrintRateLimiter(),
   );
   registerPhotoFileRoutes(app, context, options.runtime.photo);
+  if (options.runtime.pool !== null && options.runtime.photo.files !== undefined) {
+    const drafts = await createImportDraftStore(
+      join(dirname(options.runtime.photo.files.rootPath), "import-requests"),
+    );
+    registerV1MigrationRoutes(app, context, drafts);
+  }
   registerDeliveryEvidenceFileRoutes(app, context, options.runtime.deliveryEvidence);
   const byokRuntime = createByokRuntime(
     options.runtime,

@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
 import Database from "better-sqlite3";
+import { securePrivateDirectory, securePrivateFile } from "@laundry/platform-fs";
 import { z } from "zod";
+import { assertSourceColumns } from "./source-columns.js";
+import { extractHistory } from "./extract-history.js";
 
 import type {
   V1Customer,
@@ -148,7 +151,7 @@ async function copyReadOnlySnapshot(sourcePath: string): Promise<{
 }> {
   const source = await assertStandaloneSource(sourcePath);
   const sourceStat = await stat(source);
-  if (!sourceStat.isFile()) {
+  if (!sourceStat.isFile() || sourceStat.size > 64 * 1024 * 1024) {
     throw new V1ExtractionError("v1 source must be a regular SQLite backup file");
   }
 
@@ -157,8 +160,10 @@ async function copyReadOnlySnapshot(sourcePath: string): Promise<{
   const snapshotPath = join(temporaryDirectory, basename(source));
 
   try {
+    await securePrivateDirectory(temporaryDirectory);
     await copyFile(source, snapshotPath);
     await chmod(snapshotPath, SQLITE_FILE_MODE);
+    await securePrivateFile(snapshotPath);
     const [copiedHash, afterHash] = await Promise.all([
       sha256File(snapshotPath),
       sha256File(source),
@@ -190,8 +195,19 @@ function readRows<T>(
   schema: SqliteRowSchema<T>,
 ): readonly T[] {
   assertReadOnlySelect(sql);
-  const rows = database.prepare(sql).all() as unknown[];
-  return Object.freeze(rows.map((row) => schema.parse(row)));
+  const rows: T[] = [];
+  for (const row of database.prepare(sql).iterate()) {
+    if (rows.length >= 100_000) throw new V1ExtractionError("v1 source row limit exceeded");
+    if (
+      Object.values(row as Record<string, unknown>).some(
+        (value) => typeof value === "string" && value.length > 65_536,
+      )
+    ) {
+      throw new V1ExtractionError("v1 source field limit exceeded");
+    }
+    rows.push(schema.parse(row));
+  }
+  return Object.freeze(rows);
 }
 
 function assertSourceTables(database: Database.Database): void {
@@ -279,6 +295,7 @@ type ExtractedRows = Readonly<{
 
 function readSnapshotRows(database: Database.Database): ExtractedRows {
   assertSourceTables(database);
+  assertSourceColumns(database);
   return Object.freeze({
     customers: readRows(
       database,
@@ -327,7 +344,11 @@ export async function extractV1Snapshot(sourcePath: string): Promise<V1Snapshot>
     database.pragma("query_only = ON");
     database.pragma("trusted_schema = OFF");
     assertDatabaseIntegrity(database);
-    return Object.freeze({ sourceBackupSha256: snapshot.sha256, ...readSnapshotRows(database) });
+    return Object.freeze({
+      sourceBackupSha256: snapshot.sha256,
+      ...readSnapshotRows(database),
+      history: extractHistory(database),
+    });
   } catch (error) {
     if (error instanceof V1ExtractionError || error instanceof z.ZodError) throw error;
     throw new V1ExtractionError("unable to read the v1 SQLite source safely");

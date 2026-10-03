@@ -75,3 +75,4 @@ export type {
   DesktopPhotoUploadInput,
   DesktopPhotoUploadResult,
 } from "./photo-operations.js";
+export * from "./v1-migration.js";
