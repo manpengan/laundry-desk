@@ -103,3 +103,28 @@ test("rejects non-HTTPS, credentials, query strings, and redirect responses", as
     /direct successful/u,
   );
 });
+
+test("manifest timeout remains active until the response body completes", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let observed: AbortSignal | undefined;
+  const io = createRuntimeUpdateIo(async (_url, { signal }) => {
+    observed = signal;
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          signal.addEventListener("abort", () => controller.error(new Error("aborted body")), {
+            once: true,
+          });
+        },
+      }),
+    );
+  });
+  const pending = io.fetchManifest("https://updates.example.test/latest.json");
+  const rejected = assert.rejects(pending, /aborted body/u);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(observed?.aborted, false);
+  t.mock.timers.tick(15_001);
+  await rejected;
+  assert.equal(observed?.aborted, true);
+});

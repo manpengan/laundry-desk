@@ -66,6 +66,9 @@ export function prepareRuntimeStartup(
   const snapshot = state.snapshot();
   const pending = snapshot.pending_activation;
   if (pending === null) {
+    if (!snapshot.slots[snapshot.active_slot].healthy) {
+      return Object.freeze({ action: "recovery", capabilities: RUNTIME_RECOVERY_CAPABILITIES });
+    }
     const activePath = snapshot.slots[snapshot.active_slot].app_path;
     return activePath !== null && activePath !== currentAppPath
       ? Object.freeze({ action: "launch", appPath: activePath, activationNonce: null })
@@ -151,6 +154,13 @@ export class RuntimeUpdateController {
       if (!rollback.allowed) {
         return Object.freeze({ status: "failed", reason: rollback.reason });
       }
+      const previousDigest = active.slots[active.active_slot].artifact_sha256;
+      if (
+        previousDigest !== null &&
+        previousDigest !== verified.manifest.authority.rollback?.artifact_sha256
+      ) {
+        return Object.freeze({ status: "failed", reason: "UPDATE_ROLLBACK_ARTIFACT_MISMATCH" });
+      }
       this.options.setPrimaryLeaseBlocked?.(true);
       leaseBlocked = true;
       const queueAfterLeaseBlock = this.options.queueStatus();
@@ -167,7 +177,17 @@ export class RuntimeUpdateController {
         zip.name,
         releaseRoot,
       );
-      const appPath = await this.options.io.extractAndVerifyMacApp(downloaded.path, releaseRoot);
+      const windows = this.options.context.target?.platform === "win32";
+      if (windows && this.options.io.extractAndVerifyWindowsApp === undefined) {
+        return Object.freeze({ status: "failed", reason: "UPDATE_WINDOWS_ADAPTER_REQUIRED" });
+      }
+      const appPath = windows
+        ? await this.options.io.extractAndVerifyWindowsApp!(
+            downloaded.path,
+            releaseRoot,
+            verified.manifest,
+          )
+        : await this.options.io.extractAndVerifyMacApp(downloaded.path, releaseRoot);
       if (!(await this.options.stagedHealth(appPath))) {
         return Object.freeze({ status: "failed", reason: "UPDATE_STAGED_HEALTH_FAILED" });
       }

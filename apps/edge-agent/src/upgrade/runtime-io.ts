@@ -47,6 +47,11 @@ export type RuntimeUpdateIo = Readonly<{
     destinationDirectory: string,
   ) => Promise<Readonly<{ path: string; sha256: string }>>;
   extractAndVerifyMacApp: (zipPath: string, destinationDirectory: string) => Promise<string>;
+  extractAndVerifyWindowsApp?: (
+    zipPath: string,
+    destinationDirectory: string,
+    manifest: SignedReleaseManifest,
+  ) => Promise<string>;
 }>;
 
 function validatedManifestUrl(value: string): URL {
@@ -94,15 +99,17 @@ async function readResponseBytes(response: Response, maximumBytes: number): Prom
   return Buffer.concat(chunks, total);
 }
 
-async function fetchWithTimeout(
+async function fetchWithTimeout<T>(
   fetchImpl: UpdateFetch,
   url: string,
   timeoutMs: number,
-): Promise<Response> {
+  consume: (response: Response) => Promise<T>,
+): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetchImpl(url, { redirect: "manual", signal: controller.signal });
+    const response = await fetchImpl(url, { redirect: "manual", signal: controller.signal });
+    return await consume(response);
   } finally {
     clearTimeout(timer);
   }
@@ -141,45 +148,46 @@ async function downloadVerified(
   const tempPath = join(root, `.${artifact.name}.downloading`);
   assertContained(root, finalPath);
   assertContained(root, tempPath);
-  const response = await fetchWithTimeout(fetchImpl, url, 120_000);
-  if (response.status !== 200 || response.redirected || response.body === null) {
-    throw new Error("Update artifact download failed");
-  }
-  const handle = await open(
-    tempPath,
-    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
-    0o600,
-  );
-  const hash = createHash("sha256");
-  let received = 0;
-  try {
-    await securePrivateFile(tempPath);
-    const reader = response.body.getReader();
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      received += chunk.value.byteLength;
-      if (received > artifact.size_bytes || received > MAX_ARTIFACT_BYTES) {
-        await reader.cancel();
-        throw new Error("Update artifact exceeded signed size");
+  return fetchWithTimeout(fetchImpl, url, 120_000, async (response) => {
+    if (response.status !== 200 || response.redirected || response.body === null) {
+      throw new Error("Update artifact download failed");
+    }
+    const handle = await open(
+      tempPath,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
+      0o600,
+    );
+    const hash = createHash("sha256");
+    let received = 0;
+    try {
+      await securePrivateFile(tempPath);
+      const reader = response.body.getReader();
+      for (;;) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        received += chunk.value.byteLength;
+        if (received > artifact.size_bytes || received > MAX_ARTIFACT_BYTES) {
+          await reader.cancel();
+          throw new Error("Update artifact exceeded signed size");
+        }
+        hash.update(chunk.value);
+        await handle.writeFile(chunk.value);
       }
-      hash.update(chunk.value);
-      await handle.write(chunk.value);
+      await handle.sync();
+      await handle.close();
+      const digest = hash.digest("hex");
+      if (received !== artifact.size_bytes || digest !== artifact.sha256) {
+        throw new Error("Update artifact did not match its signed size and digest");
+      }
+      await replaceFileWriteThrough(tempPath, finalPath);
+      await flushDirectoryDurably(root);
+      return Object.freeze({ path: finalPath, sha256: digest });
+    } catch (error) {
+      await handle.close().catch(() => undefined);
+      await unlink(tempPath).catch(() => undefined);
+      throw error;
     }
-    await handle.sync();
-    await handle.close();
-    const digest = hash.digest("hex");
-    if (received !== artifact.size_bytes || digest !== artifact.sha256) {
-      throw new Error("Update artifact did not match its signed size and digest");
-    }
-    await replaceFileWriteThrough(tempPath, finalPath);
-    await flushDirectoryDurably(root);
-    return Object.freeze({ path: finalPath, sha256: digest });
-  } catch (error) {
-    await handle.close().catch(() => undefined);
-    await unlink(tempPath).catch(() => undefined);
-    throw error;
-  }
+  });
 }
 
 async function extractAndVerifyMacApp(
@@ -233,8 +241,9 @@ export function createRuntimeUpdateIo(fetchImpl: UpdateFetch = fetch): RuntimeUp
   return Object.freeze({
     fetchManifest: async (url) => {
       const fixed = validatedManifestUrl(url).toString();
-      const response = await fetchWithTimeout(fetchImpl, fixed, 15_000);
-      const bytes = await readResponseBytes(response, MAX_MANIFEST_BYTES);
+      const bytes = await fetchWithTimeout(fetchImpl, fixed, 15_000, (response) =>
+        readResponseBytes(response, MAX_MANIFEST_BYTES),
+      );
       return SignedReleaseManifestSchema.parse(JSON.parse(bytes.toString("utf8")) as unknown);
     },
     downloadArtifact: (manifestUrl, authority, artifactName, destinationDirectory) =>

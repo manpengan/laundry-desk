@@ -89,6 +89,8 @@
 
 - [ADR-81](2026-10-03-adr-81-store-business-export.md)：整店业务与照片导出；核心、设置入口与独立审查通过，Runtime 维护入口及 Windows 安装验证接续。
 
+- [ADR-84](2026-10-03-adr-84-windows-counter-update.md)：Windows Counter 签名更新与完整性回退；软件、审查和原生解包已验证，完整签名安装更新待验。
+
 ## v1 线
 
 | ADR                                                | 主题            | 状态                                              |
