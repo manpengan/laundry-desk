@@ -42,8 +42,9 @@ test("requires both explicit real PostgreSQL opt-ins before reading local config
   assert.equal(configReads, 0);
 });
 
-test("queries stable catalog and proves the isolated 0068 to 0069 migration chain", async () => {
+test("verifies the isolated frozen catalog before the current database write gate", async () => {
   const calls = [];
+  const createClient = () => assert.fail("top-level runner must not query the current catalog");
   const evidence = await runReleaseCatalogPgAcceptance({
     environment: ENVIRONMENT,
     ensureConfig: async ({ env }) => {
@@ -53,42 +54,24 @@ test("queries stable catalog and proves the isolated 0068 to 0069 migration chai
         postgresSuperuserPassword: "catalog-test-secret",
       };
     },
-    createClient: (configuration) => {
-      calls.push({ type: "configuration", configuration });
-      return {
-        connect: async () => calls.push({ type: "connect" }),
-        query: async (sql) => {
-          calls.push({ type: "query", sql });
-          return { rows: CATALOG_ROWS };
-        },
-        end: async () => calls.push({ type: "end" }),
-      };
-    },
+    createClient,
     parseEvidence,
     verifyMigrationChain: async (options) => {
-      calls.push({ type: "chain", options });
+      calls.push("chain");
       assert.equal(options.password, "catalog-test-secret");
       assert.equal(options.parseEvidence, parseEvidence);
+      assert.equal(options.createClient, createClient);
+      return { from: { ...EVIDENCE, migrationHead: FROM_HEAD }, to: EVIDENCE };
     },
     verifyWriteGate: async (options) => {
-      calls.push({ type: "write-gate", options });
+      calls.push("write-gate");
       assert.equal(options.adminPassword, "catalog-test-secret");
       assert.equal(options.appPassword, "app-test-secret");
+      assert.equal(options.createClient, createClient);
     },
   });
-
   assert.equal(evidence, EVIDENCE);
-  const configuration = calls[0].configuration;
-  assert.equal(configuration.application_name, "laundry-release-catalog-acceptance");
-  assert.equal(new URL(configuration.connectionString).hostname, "127.0.0.1");
-  assert.equal(new URL(configuration.connectionString).port, "8543");
-  assert.equal(new URL(configuration.connectionString).username, "postgres");
-  assert.equal(new URL(configuration.connectionString).password, "catalog-test-secret");
-  assert.deepEqual(
-    calls.slice(1).map((call) => call.type),
-    ["connect", "query", "chain", "write-gate", "end"],
-  );
-  assert.equal(calls[2].sql, CATALOG_SQL);
+  assert.deepEqual(calls, ["chain", "write-gate"]);
 });
 
 test("isolated acceptance creates, migrates, verifies both heads, and drops its database", async () => {
@@ -111,8 +94,19 @@ test("isolated acceptance creates, migrates, verifies both heads, and drops its 
   const result = await runCatalogMigrationChainAcceptance({
     password: "catalog-test-secret",
     createClient,
-    listMigrationFiles: async () => ["0001_roles.sql", FROM_HEAD, TO_HEAD],
-    loadMigration: async (filename) => `SELECT '${filename}'`,
+    listMigrationFiles: async () => [
+      "0001_roles.sql",
+      FROM_HEAD,
+      TO_HEAD,
+      "0079_miniapp_notifications.sql",
+    ],
+    loadMigration: async (filename) => {
+      assert.ok(
+        filename <= TO_HEAD,
+        "new Windows migrations must remain outside frozen Cloud catalog",
+      );
+      return `SELECT '${filename}'`;
+    },
     parseEvidence: (_source, _policy, state, requireCluster) => {
       assert.equal(state, "stable");
       assert.equal(requireCluster, true);
@@ -132,74 +126,104 @@ test("isolated acceptance creates, migrates, verifies both heads, and drops its 
   assert.equal(clients.size, 2);
 });
 
-test("closes the PostgreSQL client after a catalog query failure", async () => {
-  let closed = false;
-  await assert.rejects(
-    runReleaseCatalogPgAcceptance({
-      environment: ENVIRONMENT,
-      ensureConfig: async () => ({ postgresSuperuserPassword: "catalog-test-secret" }),
-      createClient: () => ({
-        connect: async () => undefined,
-        query: async () => {
-          throw new Error("sensitive database failure");
-        },
-        end: async () => {
-          closed = true;
-        },
+test("missing historical heads and malformed newer filenames fail before connecting", async () => {
+  for (const filenames of [
+    ["0001_roles.sql", TO_HEAD, "0079_miniapp_notifications.sql"],
+    ["0001_roles.sql", FROM_HEAD, TO_HEAD, "z-invalid.sql"],
+  ]) {
+    let connected = false;
+    await assert.rejects(
+      runCatalogMigrationChainAcceptance({
+        password: "catalog-test-secret",
+        createClient: () => ({
+          connect: async () => {
+            connected = true;
+          },
+          end: async () => undefined,
+        }),
+        listMigrationFiles: async () => filenames,
       }),
-      parseEvidence,
-      verifyMigrationChain: async () => undefined,
-      verifyWriteGate: async () => undefined,
-    }),
-    { code: "CLOUD_RELEASE_CATALOG_PG_ACCEPTANCE_FAILED" },
-  );
-  assert.equal(closed, true);
+      (error) =>
+        error.code === "CLOUD_RELEASE_CATALOG_PG_CHAIN_FAILED" &&
+        error.cause?.code === "CLOUD_RELEASE_CATALOG_PG_MIGRATIONS_INVALID",
+    );
+    assert.equal(connected, false);
+  }
 });
 
-test("closes the PostgreSQL client after a partial connection failure", async () => {
-  let closed = false;
-  let queried = false;
-  await assert.rejects(
-    runReleaseCatalogPgAcceptance({
-      environment: ENVIRONMENT,
-      ensureConfig: async () => ({ postgresSuperuserPassword: "catalog-test-secret" }),
-      createClient: () => ({
+for (const failurePoint of ["connect", "query", "end"]) {
+  test(`isolated catalog closes owned resources after a ${failurePoint} failure`, async () => {
+    const events = [];
+    const createClient = (configuration) => {
+      const isMigration = configuration.application_name === "laundry-catalog-migrations";
+      return {
         connect: async () => {
-          throw new Error("sensitive partial connection failure");
+          events.push(isMigration ? "migration-connect" : "admin-connect");
+          if (isMigration && failurePoint === "connect")
+            throw new Error("sensitive connection failure");
         },
-        query: async () => {
-          queried = true;
+        query: async (sql) => {
+          events.push(sql.startsWith("DROP DATABASE") ? "drop-owned" : "query");
+          if (isMigration && failurePoint === "query") throw new Error("sensitive query failure");
+          return sql === CATALOG_SQL ? { rows: CATALOG_ROWS } : { rows: [] };
         },
         end: async () => {
-          closed = true;
+          events.push(isMigration ? "migration-end" : "admin-end");
+          if (isMigration && failurePoint === "end") throw new Error("sensitive cleanup failure");
         },
+      };
+    };
+    const heads = [FROM_HEAD, TO_HEAD];
+    await assert.rejects(
+      runCatalogMigrationChainAcceptance({
+        password: "catalog-test-secret",
+        createClient,
+        listMigrationFiles: async () => ["0001_roles.sql", FROM_HEAD, TO_HEAD],
+        loadMigration: async () => "SELECT 1",
+        parseEvidence: () => ({ migrationHead: heads.shift() }),
+        randomToken: () => "1".repeat(16),
       }),
-      parseEvidence,
-      verifyMigrationChain: async () => undefined,
-      verifyWriteGate: async () => undefined,
-    }),
-    { code: "CLOUD_RELEASE_CATALOG_PG_ACCEPTANCE_FAILED" },
-  );
-  assert.equal(queried, false);
-  assert.equal(closed, true);
-});
+      {
+        code:
+          failurePoint === "end"
+            ? "CLOUD_RELEASE_CATALOG_PG_CLEANUP_FAILED"
+            : "CLOUD_RELEASE_CATALOG_PG_CHAIN_FAILED",
+      },
+    );
+    assert.ok(events.includes("drop-owned"));
+    assert.ok(events.includes("migration-end"));
+    assert.ok(events.includes("admin-end"));
+  });
+}
 
-test("fails closed when the PostgreSQL connection cannot be closed", async () => {
+test("a frozen catalog failure never enters the current database write gate", async () => {
+  let gated = false;
   await assert.rejects(
     runReleaseCatalogPgAcceptance({
       environment: ENVIRONMENT,
       ensureConfig: async () => ({ postgresSuperuserPassword: "catalog-test-secret" }),
-      createClient: () => ({
-        connect: async () => undefined,
-        query: async () => ({ rows: CATALOG_ROWS }),
-        end: async () => {
-          throw new Error("sensitive cleanup failure");
-        },
-      }),
-      parseEvidence,
-      verifyMigrationChain: async () => undefined,
-      verifyWriteGate: async () => undefined,
+      verifyMigrationChain: async () => {
+        throw new Error("catalog rejected");
+      },
+      verifyWriteGate: async () => {
+        gated = true;
+      },
     }),
-    { code: "CLOUD_RELEASE_CATALOG_PG_CLEANUP_FAILED" },
+    { code: "CLOUD_RELEASE_CATALOG_PG_ACCEPTANCE_FAILED" },
+  );
+  assert.equal(gated, false);
+});
+
+test("a current database write gate failure cannot report the historical catalog as success", async () => {
+  await assert.rejects(
+    runReleaseCatalogPgAcceptance({
+      environment: ENVIRONMENT,
+      ensureConfig: async () => ({ postgresSuperuserPassword: "catalog-test-secret" }),
+      verifyMigrationChain: async () => ({ to: EVIDENCE }),
+      verifyWriteGate: async () => {
+        throw new Error("write gate rejected");
+      },
+    }),
+    { code: "CLOUD_RELEASE_CATALOG_PG_ACCEPTANCE_FAILED" },
   );
 });
