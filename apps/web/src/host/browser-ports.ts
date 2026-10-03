@@ -8,6 +8,7 @@ import { createHttpPhotoPort } from "./photo-port.js";
 import { createHttpDeliveryEvidenceMediaPort } from "./delivery-evidence-port.js";
 import { createHttpAiPanelPort } from "./ai-port.js";
 import { createAiSettingsPort, createHttpAiSettingsOperation } from "../ai/settings-port.js";
+import { createStoreExportPort, createHttpStoreExportOperation } from "./store-export-port.js";
 import { createMigrationPort, createHttpMigrationOperation } from "./migration-port.js";
 import {
   createNotificationSettingsPort,
@@ -93,6 +94,14 @@ export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
     auth,
     notificationSettings: createNotificationSettingsPort(
       createHttpNotificationSettingsOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
+    storeExport: createStoreExportPort(
+      createHttpStoreExportOperation({
         apiBaseUrl: base,
         fetchImpl,
         getAccessToken: credentialStore.getAccessToken,

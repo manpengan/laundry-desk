@@ -9,6 +9,7 @@ import {
 import { DESKTOP_STAFF_CREDENTIAL_OPERATION } from "../desktop/staff-setup-operation.js";
 import { DESKTOP_STAFF_DIRECTORY_OPERATION } from "../desktop/staff-directory-operation.js";
 import { DESKTOP_AI_OPERATION } from "../desktop/ai-operation.js";
+import { DESKTOP_STORE_EXPORT_OPERATION } from "../desktop/store-export-operation.js";
 import { DESKTOP_MIGRATION_OPERATION } from "../desktop/migration-operation.js";
 import { DESKTOP_NOTIFICATION_OPERATION } from "../desktop/notification-operation.js";
 
@@ -37,6 +38,7 @@ export type DesktopOperationService = Readonly<{
   ai?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   migration?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   notificationSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  storeExport?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   auth: Readonly<{
     login: (input: unknown) => Promise<unknown>;
     refresh: () => Promise<unknown>;
@@ -146,6 +148,15 @@ function registerOperation(
 /** Register the exact renderer capability surface; no generic dispatch channel exists. */
 export function registerDesktopOperationHandlers(options: DesktopOperationHandlerOptions): void {
   const { service } = options;
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.storeExport.execute,
+    DESKTOP_STORE_EXPORT_OPERATION,
+    (input) => {
+      if (service.storeExport === undefined) throw new Error("Store export unavailable");
+      return service.storeExport.execute(input);
+    },
+  );
   registerOperation(
     options,
     DESKTOP_IPC_CHANNELS.notificationSettings.execute,

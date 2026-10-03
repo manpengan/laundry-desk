@@ -76,4 +76,5 @@ export type {
   DesktopPhotoUploadResult,
 } from "./photo-operations.js";
 export * from "./v1-migration.js";
+export * from "./store-export.js";
 export * from "./notification-settings.js";

@@ -8,6 +8,7 @@ import type { OfflinePort } from "../host/offline-port.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
+import type { StoreExportPort } from "../host/store-export-port.js";
 import type { MigrationPort } from "../host/migration-port.js";
 import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
 import type { NavItemId } from "../nav.js";
@@ -47,6 +48,7 @@ export type PageHostProps = {
   printerPort?: PrinterPort;
   aiSettingsPort?: AiSettingsPort;
   migrationPort?: MigrationPort;
+  storeExportPort?: StoreExportPort;
   notificationSettingsPort?: NotificationSettingsPort;
   onSessionChange?: (session: SessionView | null) => void;
 };
@@ -104,6 +106,7 @@ export function PageHostCore({
   printerPort,
   aiSettingsPort,
   migrationPort,
+  storeExportPort,
   notificationSettingsPort,
   onSessionChange,
   intent,
@@ -269,6 +272,7 @@ export function PageHostCore({
     return (
       <SettingsPage
         {...(migrationPort === undefined ? {} : { migrationPort })}
+        {...(storeExportPort === undefined ? {} : { storeExportPort })}
         {...(notificationSettingsPort === undefined ? {} : { notificationSettingsPort })}
         {...(aiSettingsPort === undefined ? {} : { aiSettingsPort })}
         session={session}

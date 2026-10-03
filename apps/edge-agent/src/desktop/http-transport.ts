@@ -74,9 +74,7 @@ import type { DesktopHttpTransport } from "./http-transport-types.js";
 import { createEdgePrintHttpTransport } from "./print-http-transport.js";
 import { createDesktopRequest, DESKTOP_API_BASE_URL } from "./request-builder.js";
 import { createStaffCredentialCompleteOperation } from "./staff-setup-operation.js";
-import { createDesktopAiOperation } from "./ai-operation.js";
-import { createDesktopMigrationOperation } from "./migration-operation.js";
-import { createDesktopNotificationOperation } from "./notification-operation.js";
+import { createDesktopAuxiliaryOperations } from "./auxiliary-operations.js";
 import {
   createStaffDirectoryGetOperation,
   readDesktopStaffDirectoryResponse,
@@ -748,15 +746,14 @@ export function createDesktopHttpTransport(
   const refreshIfNeeded = async (state: AuthState) => {
     if (needsRefresh(state)) await refreshForState(state);
   };
-  const ai = createDesktopAiOperation(dependencies, () => authState, refreshIfNeeded);
+  const auxiliary = createDesktopAuxiliaryOperations(
+    dependencies,
+    () => authState,
+    refreshIfNeeded,
+  );
+  const { ai } = auxiliary;
   return Object.freeze({
-    ai,
-    migration: createDesktopMigrationOperation(dependencies, () => authState, refreshIfNeeded),
-    notificationSettings: createDesktopNotificationOperation(
-      dependencies,
-      () => authState,
-      refreshIfNeeded,
-    ),
+    ...auxiliary,
     auth: Object.freeze({
       login: (input: unknown) => {
         ai.cancelAll();

@@ -107,6 +107,12 @@ export function createOfflineDesktopService(
           ? unavailable()
           : online.notificationSettings.execute(input),
     }),
+    storeExport: Object.freeze({
+      execute: (input: unknown) =>
+        isMutationBlocked() || online.storeExport === undefined
+          ? Promise.resolve(unavailable())
+          : online.storeExport.execute(input),
+    }),
     migration: Object.freeze({
       execute: async (input: unknown) =>
         isMutationBlocked() || online.migration === undefined

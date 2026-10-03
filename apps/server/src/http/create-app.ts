@@ -5,6 +5,7 @@
 import { randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { createImportDraftStore } from "../data-transfer/import-drafts.js";
+import { registerStoreExportRoutes } from "../data-transfer/store-export-routes.js";
 import { registerV1MigrationRoutes } from "../data-transfer/import-routes.js";
 
 import cookie from "@fastify/cookie";
@@ -285,6 +286,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   );
   registerPhotoFileRoutes(app, context, options.runtime.photo);
   registerNotificationSettingsRoutes(app, context);
+  registerStoreExportRoutes(app, context);
   if (options.runtime.pool !== null && options.runtime.photo.files !== undefined) {
     const drafts = await createImportDraftStore(
       join(dirname(options.runtime.photo.files.rootPath), "import-requests"),

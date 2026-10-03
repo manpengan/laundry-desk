@@ -19,9 +19,6 @@ const EXPECTED_TABLES = Object.freeze([
   "ai_usage_daily",
   "approval_requests",
   "audit_log",
-  "v1_import_batches",
-  "v1_import_legacy_records",
-  "v1_import_requests",
   "automation_policies",
   "automation_policy_usage_daily",
   "backups",
@@ -73,8 +70,8 @@ const EXPECTED_TABLES = Object.freeze([
   "notification_delivery_attempts",
   "notification_delivery_batches",
   "notification_delivery_receipts",
-  "notification_provider_settings",
   "notification_log",
+  "notification_provider_settings",
   "notification_templates",
   "offline_grant_replay_state",
   "offline_grants",
@@ -104,10 +101,14 @@ const EXPECTED_TABLES = Object.freeze([
   "shift_closings",
   "staff_store_roles",
   "staffs",
+  "store_export_requests",
   "store_features",
   "store_pricing_policies",
   "stores",
   "ticket_no_blocks",
+  "v1_import_batches",
+  "v1_import_legacy_records",
+  "v1_import_requests",
 ] as const);
 
 const EXPECTED_GLOBAL_TABLES = Object.freeze(["ai_model_registry", "orgs"] as const);
@@ -152,9 +153,6 @@ const EXPECTED_STORE_TABLES = Object.freeze([
   "ai_action_log",
   "ai_pending_actions",
   "audit_log",
-  "v1_import_batches",
-  "v1_import_legacy_records",
-  "v1_import_requests",
   "automation_policies",
   "automation_policy_usage_daily",
   "batch_garments",
@@ -209,9 +207,13 @@ const EXPECTED_STORE_TABLES = Object.freeze([
   "service_types",
   "shift_closings",
   "staff_store_roles",
+  "store_export_requests",
   "store_features",
   "store_pricing_policies",
   "ticket_no_blocks",
+  "v1_import_batches",
+  "v1_import_legacy_records",
+  "v1_import_requests",
 ] as const);
 
 describe("A3 tenant table matrix", () => {

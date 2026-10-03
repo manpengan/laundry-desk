@@ -10,9 +10,11 @@ import type { OfflinePort } from "../host/offline-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
 import { AiSettingsPanel } from "../ai/AiSettingsPanel.js";
+import type { StoreExportPort } from "../host/store-export-port.js";
 import type { MigrationPort } from "../host/migration-port.js";
 import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
 import { NotificationSettingsPanel } from "./NotificationSettingsPanel.js";
+import { StoreExportPanel } from "./StoreExportPanel.js";
 import { V1MigrationPanel } from "./V1MigrationPanel.js";
 import { AppearanceSettingsPanel } from "./AppearanceSettingsPanel.js";
 import { CatalogMaintenancePanel } from "./CatalogMaintenancePanel.js";
@@ -37,6 +39,7 @@ export type SettingsPageProps = {
   printerPort?: PrinterPort;
   aiSettingsPort?: AiSettingsPort;
   migrationPort?: MigrationPort;
+  storeExportPort?: StoreExportPort;
   notificationSettingsPort?: NotificationSettingsPort;
   onSessionChange?: (session: SessionView | null) => void;
 };
@@ -88,6 +91,7 @@ export function SettingsPage({
   printerPort,
   aiSettingsPort,
   migrationPort,
+  storeExportPort,
   notificationSettingsPort,
   onSessionChange,
 }: SettingsPageProps) {
@@ -99,6 +103,18 @@ export function SettingsPage({
       content: <AppearanceSettingsPanel />,
     },
   ];
+  if (session.role === "admin" && storeExportPort !== undefined)
+    sections.push({
+      id: "settings-store-export",
+      label: "整店业务导出",
+      icon: "settings",
+      content: (
+        <StoreExportPanel
+          port={storeExportPort}
+          sessionKey={session.session.session_id + ":" + session.session.session_version}
+        />
+      ),
+    });
   if (session.role === "admin" && migrationPort !== undefined)
     sections.push({
       id: "settings-migration",

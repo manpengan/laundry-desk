@@ -87,6 +87,8 @@
 - [ADR-77](2026-10-03-adr-77-local-aliyun-sms.md)：Windows 阿里云短信配置、至多一次发送与回执，软件实现与独立审查通过，实机及账户验收待执行。
 - [ADR-78](2026-10-03-adr-78-windows-portable-restore.md)：Windows 加密离机备份与换机恢复，核心已验证，维护入口及实机验收接续。
 
+- [ADR-81](2026-10-03-adr-81-store-business-export.md)：整店业务与照片导出；核心、设置入口与独立审查通过，Runtime 维护入口及 Windows 安装验证接续。
+
 ## v1 线
 
 | ADR                                                | 主题            | 状态                                              |

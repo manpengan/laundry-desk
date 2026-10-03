@@ -63,6 +63,9 @@ try {
     }
   }
   if (!ready) throw new Error("synthetic PostgreSQL did not start");
+  const { ensureStoreExportReaderRole } =
+    await import("../../apps/server/dist/runtime/export-role-bootstrap.js");
+  await ensureStoreExportReaderRole(admin);
   const dir = resolve("packages/db/src/migrations");
   const files = (await readdir(dir)).filter((file) => /^\d{4}_.*\.sql$/u.test(file)).sort();
   for (const file of files) {

@@ -24,6 +24,8 @@ files:
   - dist/desktop/ai-operation.js
   - dist/desktop/migration-operation.js
   - dist/desktop/notification-operation.js
+  - dist/desktop/auxiliary-operations.js
+  - dist/desktop/store-export-operation.js
   - dist/desktop/device-identity.js
   - dist/desktop/electron-adapter.js
   - dist/desktop/edge-authority-transport.js

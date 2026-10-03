@@ -8,6 +8,7 @@ import type { CommandPort, QueryPort } from "../commands/types.js";
 import { createMockConnection, type ConnectionStatus } from "../connection.js";
 import type { AiPanelPort } from "../host/ai-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
+import type { StoreExportPort } from "../host/store-export-port.js";
 import type { MigrationPort } from "../host/migration-port.js";
 import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
 import type { OfflinePort } from "../host/offline-port.js";
@@ -51,6 +52,7 @@ export type CounterShellProps = {
   aiPort?: AiPanelPort;
   aiSettingsPort?: AiSettingsPort;
   migrationPort?: MigrationPort;
+  storeExportPort?: StoreExportPort;
   notificationSettingsPort?: NotificationSettingsPort;
   onSessionChange: (session: SessionView | null) => void;
   initialConnection?: ConnectionStatus;
@@ -140,6 +142,7 @@ export function CounterShellCore({
   aiPort,
   aiSettingsPort,
   migrationPort,
+  storeExportPort,
   notificationSettingsPort,
   readOnly = false,
 }: CounterShellCoreProps) {
@@ -298,6 +301,7 @@ export function CounterShellCore({
           <RouteGate permission={permission} activeId={activeId} onNavigate={setActiveId}>
             <PageHostComponent
               {...(migrationPort === undefined ? {} : { migrationPort })}
+              {...(storeExportPort === undefined ? {} : { storeExportPort })}
               {...(notificationSettingsPort === undefined ? {} : { notificationSettingsPort })}
               {...(aiSettingsPort === undefined ? {} : { aiSettingsPort })}
               activeId={activeId}

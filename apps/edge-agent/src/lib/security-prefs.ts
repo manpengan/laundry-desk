@@ -20,6 +20,7 @@ export const APP_ENTRY_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
 export const DESKTOP_IPC_CHANNELS = Object.freeze({
   ai: Object.freeze({ execute: "desktop:ai:operation" }),
   migration: Object.freeze({ execute: "desktop:migration:operation" }),
+  storeExport: Object.freeze({ execute: "desktop:store-export:operation" }),
   notificationSettings: Object.freeze({ execute: "desktop:notification:settings" }),
   auth: Object.freeze({
     login: "desktop:auth:login",

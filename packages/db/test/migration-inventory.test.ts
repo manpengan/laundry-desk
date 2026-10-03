@@ -78,6 +78,7 @@ const expectedSqlFiles = [
   "0070_windows_v1_import.sql",
   "0071_windows_ai_runtime_settings.sql",
   "0072_notification_provider_settings.sql",
+  "0073_store_export_requests.sql",
 ] as const;
 
 describe("packages/db migration inventory", () => {

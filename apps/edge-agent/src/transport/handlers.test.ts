@@ -125,6 +125,7 @@ test("registers exactly the fixed desktop capability channels", () => {
   assert.deepEqual(
     [...harness.handlers.keys()],
     [
+      DESKTOP_IPC_CHANNELS.storeExport.execute,
       DESKTOP_IPC_CHANNELS.notificationSettings.execute,
       DESKTOP_IPC_CHANNELS.migration.execute,
       DESKTOP_IPC_CHANNELS.ai.execute,

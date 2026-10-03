@@ -43,6 +43,10 @@ import type {
 const EMPTY_DESKTOP_INPUT = Object.freeze({});
 
 const laundryDesktop = Object.freeze({
+  storeExport: Object.freeze({
+    execute: (input: unknown): Promise<unknown> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.storeExport.execute, input),
+  }),
   notificationSettings: Object.freeze({
     execute: (input: unknown): Promise<unknown> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.notificationSettings.execute, input),

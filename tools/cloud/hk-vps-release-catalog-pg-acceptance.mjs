@@ -107,6 +107,12 @@ function migrationDigest(source) {
 async function applyMigration(client, filename, source) {
   let transactionOpen = false;
   try {
+    // Compatibility for the retained migration harness, not a Cloud deployment.
+    if (filename === "0073_store_export_requests.sql") {
+      const { ensureStoreExportReaderRole } =
+        await import("../../apps/server/dist/runtime/export-role-bootstrap.js");
+      await ensureStoreExportReaderRole(client);
+    }
     await client.query("BEGIN");
     transactionOpen = true;
     if (filename !== "0001_roles.sql") await client.query("SET ROLE laundry_owner");

@@ -35,6 +35,7 @@ export type LaundryDesktopBridge = Readonly<{
   ai?: Readonly<{ execute: (input: DesktopAiInput) => Promise<unknown> }>;
   migration?: Readonly<{ execute: (input: DesktopV1MigrationInput) => Promise<unknown> }>;
   notificationSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  storeExport?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   auth: Readonly<{
     login: (input: LoginFormValues) => Promise<unknown>;
     refresh: () => Promise<unknown>;

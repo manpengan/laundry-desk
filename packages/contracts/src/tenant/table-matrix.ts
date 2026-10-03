@@ -150,6 +150,7 @@ const STORE_TABLES = describeTables(
     "v1_import_batches",
     "v1_import_legacy_records",
     "v1_import_requests",
+    "store_export_requests",
     "edge_authority_challenges",
     "edge_devices",
     "offline_grants",
