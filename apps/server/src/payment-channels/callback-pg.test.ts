@@ -1,3 +1,4 @@
+import { createIsolatedPgTestDatabase } from "../db/isolated-pg-test-database.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCipheriv, randomUUID, sign } from "node:crypto";
@@ -26,10 +27,12 @@ const kms: ByokKmsPort = {
 test(
   "raw signed callback crosses the real HTTP parser and app-role transaction exactly once",
   { skip: urls === null },
-  async () => {
+  async (t) => {
     assert.ok(urls);
-    const admin = createPgPool({ connectionString: urls.admin });
-    const pool = createPgPool({ connectionString: urls.app });
+    const database = await createIsolatedPgTestDatabase(urls);
+    t.after(database.close);
+    const admin = createPgPool({ connectionString: database.urls.admin });
+    const pool = createPgPool({ connectionString: database.urls.app });
     const fixture = channelFixture();
     const tenant = {
       orgId: LOCAL_PROFILE.orgId,

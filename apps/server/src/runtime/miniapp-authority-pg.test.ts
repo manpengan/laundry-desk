@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createPgPool, resolvePgUrls } from "../db/pg-pool.js";
+import { createIsolatedPgTestDatabase } from "../db/isolated-pg-test-database.js";
 import { LOCAL_PROFILE } from "../local/profile.js";
 import { deriveMiniappProfileAuthorityKey } from "../customer-miniapp/profile-authority.js";
 import { prepareMiniappProfileAuthority } from "./miniapp-authority-bootstrap.js";
@@ -9,10 +10,12 @@ const urls = resolvePgUrls();
 test(
   "owner authority initialization is idempotent, rotates on secret change and remains app-private",
   { skip: urls === null },
-  async () => {
+  async (t) => {
     assert.ok(urls);
-    const admin = createPgPool({ connectionString: urls.admin, max: 1 });
-    const app = createPgPool({ connectionString: urls.app, max: 1 });
+    const fixture = await createIsolatedPgTestDatabase(urls);
+    t.after(fixture.close);
+    const admin = createPgPool({ connectionString: fixture.urls.admin, max: 1 });
+    const app = createPgPool({ connectionString: fixture.urls.app, max: 1 });
     const first = "synthetic-old-runtime-authority-secret-32-bytes";
     const next = "synthetic-new-runtime-authority-secret-32-bytes";
     try {
