@@ -415,7 +415,15 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   );
   assert.match(
     commissioningPgAcceptance,
-    /assert\.equal\(migrations\.head, "0069_bounded_automation\.sql"\)/u,
+    /migrations\.entries\.some\([\s\S]{0,120}entry\.filename === "0045_store_commissioning_staff_credentials\.sql"/u,
+  );
+  assert.match(
+    commissioningPgAcceptance,
+    /assert\.equal\(result\.rows\[0\]\?\.count, migrations\.entries\.length\)/u,
+  );
+  assert.match(
+    commissioningPgAcceptance,
+    /assert\.equal\(result\.rows\[0\]\?\.head, migrations\.head\)/u,
   );
   assert.match(migrationTest, /"0069_bounded_automation\.sql"/u);
   assert.match(migrationTest, /gap-free lexical order/u);
