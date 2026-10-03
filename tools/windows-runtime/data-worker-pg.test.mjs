@@ -9,63 +9,84 @@ import { pathToFileURL } from "node:url";
 import { runApprovedImport } from "./data-worker.mjs";
 import { exportStore } from "./store-export.mjs";
 
-const server = resolve("apps/server");
-const require = createRequire(join(server, "package.json"));
-const fromServer = (file) => import(pathToFileURL(join(server, "dist", file)).href);
-const { LOCAL_PROFILE } = await fromServer("local/profile.js");
-const { readApprovedMigrationRequest } = await fromServer("data-transfer/import-requests.js");
-const { runApprovedStoreExport } = await fromServer("data-transfer/store-export-worker.js");
-const { createPgPool, resolvePgUrls } = await fromServer("db/pg-pool.js");
-const { securePrivateDirectory, securePrivateFile } = await import(
-  pathToFileURL(require.resolve("@laundry/platform-fs")).href
-);
-const scope = { orgId: LOCAL_PROFILE.orgId, storeId: LOCAL_PROFILE.storeId };
+const enabled = process.env.LAUNDRY_USE_LOCAL_PG === "1";
 
-test("both data workers reject the old incomplete RLS scope before executing SQL", async () => {
-  let queries = 0;
-  let releases = 0;
-  const pool = {
-    connect: async () => ({
-      query: async () => {
-        queries += 1;
-        assert.fail("incomplete scope must not execute SQL");
-      },
-      release: () => {
-        releases += 1;
-      },
-    }),
+// Payload validation runs before the server build. Resolve compiled dependencies
+// only inside explicitly enabled PG callbacks, never during test discovery.
+async function serverContext() {
+  const server = resolve("apps/server");
+  const require = createRequire(join(server, "package.json"));
+  const fromServer = (file) => import(pathToFileURL(join(server, "dist", file)).href);
+  const { LOCAL_PROFILE } = await fromServer("local/profile.js");
+  const { securePrivateDirectory, securePrivateFile } = await import(
+    pathToFileURL(require.resolve("@laundry/platform-fs")).href
+  );
+  const writePrivate = async (path, value) => {
+    await writeFile(path, value, { mode: 0o600, flag: "wx" });
+    await securePrivateFile(path);
   };
-  const root = await realpath(await mkdtemp(join(tmpdir(), "laundry-scope-reject-")));
-  const missingStaff = (error) =>
-    error.code === "TENANT_GUC_INVALID" && error.message === "TenantContext.staffId is required";
-  try {
-    await assert.rejects(readApprovedMigrationRequest(pool, scope, randomUUID()), missingStaff);
-    await assert.rejects(
-      runApprovedStoreExport({
-        maintenancePool: pool,
-        configuredTenant: scope,
-        requestId: randomUUID(),
-        signingSecret: "synthetic-only",
-        destination: join(root, "export"),
-        photos: {},
-      }),
-      missingStaff,
-    );
-    assert.equal(queries, 0);
-    assert.equal(releases, 2);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-async function writePrivate(path, value) {
-  await writeFile(path, value, { mode: 0o600, flag: "wx" });
-  await securePrivateFile(path);
+  return {
+    server,
+    require,
+    fromServer,
+    LOCAL_PROFILE,
+    securePrivateDirectory,
+    writePrivate,
+    scope: { orgId: LOCAL_PROFILE.orgId, storeId: LOCAL_PROFILE.storeId },
+  };
 }
+
+test(
+  "both data workers reject the old incomplete RLS scope before executing SQL",
+  { skip: !enabled },
+  async () => {
+    const { fromServer, scope } = await serverContext();
+    const { readApprovedMigrationRequest } = await fromServer("data-transfer/import-requests.js");
+    const { runApprovedStoreExport } = await fromServer("data-transfer/store-export-worker.js");
+    let queries = 0;
+    let releases = 0;
+    const pool = {
+      connect: async () => ({
+        query: async () => {
+          queries += 1;
+          assert.fail("incomplete scope must not execute SQL");
+        },
+        release: () => {
+          releases += 1;
+        },
+      }),
+    };
+    const root = await realpath(await mkdtemp(join(tmpdir(), "laundry-scope-reject-")));
+    const missingStaff = (error) =>
+      error.code === "TENANT_GUC_INVALID" && error.message === "TenantContext.staffId is required";
+    try {
+      await assert.rejects(readApprovedMigrationRequest(pool, scope, randomUUID()), missingStaff);
+      await assert.rejects(
+        runApprovedStoreExport({
+          maintenancePool: pool,
+          configuredTenant: scope,
+          requestId: randomUUID(),
+          signingSecret: "synthetic-only",
+          destination: join(root, "export"),
+          photos: {},
+        }),
+        missingStaff,
+      );
+      assert.equal(queries, 0);
+      assert.equal(releases, 2);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
 
 /** Only the PG transport URL is mapped to this test's isolated database. The real
  * bridge, server workers, file stores, RLS, signatures and SQL are not replaced. */
-async function payloadFixture(root, urls) {
+async function payloadFixture(
+  root,
+  urls,
+  { server, require, securePrivateDirectory, writePrivate },
+) {
   const payload = join(root, "payload");
   const pg = join(payload, "server/node_modules/pg");
   await mkdir(pg, { recursive: true });
@@ -114,7 +135,7 @@ async function payloadFixture(root, urls) {
   };
 }
 
-async function seedActor(admin) {
+async function seedActor(admin, scope) {
   await admin.query(
     "INSERT INTO orgs(id,code,name,created_at,updated_at) VALUES($1,'worker','Synthetic',now(),now())",
     [scope.orgId],
@@ -165,9 +186,12 @@ function authorizedSession(actor, sessionId) {
 test(
   "real PG Runtime bridges import and export with the approved actor, not the bootstrap scope",
   {
-    skip: process.env.LAUNDRY_USE_LOCAL_PG !== "1",
+    skip: !enabled,
   },
   async () => {
+    const modules = await serverContext();
+    const { fromServer, require, LOCAL_PROFILE, scope } = modules;
+    const { createPgPool, resolvePgUrls } = await fromServer("db/pg-pool.js");
     const { createIsolatedPgTestDatabase } = await fromServer("db/isolated-pg-test-database.js");
     const { createImportDraftStore } = await fromServer("data-transfer/import-drafts.js");
     const { seedMigrationTicket } = await fromServer("data-transfer/import-test-fixture.js");
@@ -183,8 +207,8 @@ test(
     const app = createPgPool({ connectionString: database.urls.app });
     const root = await realpath(await mkdtemp(join(tmpdir(), "laundry-worker-pg-")));
     try {
-      const context = await payloadFixture(root, database.urls);
-      const actor = await seedActor(admin);
+      const context = await payloadFixture(root, database.urls, modules);
+      const actor = await seedActor(admin, scope);
       const migrationRequire = createRequire(require.resolve("@laundry/migrate-v1"));
       const Database = migrationRequire("better-sqlite3");
       const sourcePath = join(root, "source.sqlite");
@@ -208,6 +232,10 @@ test(
         const view = await drafts.create(session, bytes);
         await drafts.uploadPhoto(session, view.draft_id, view.photos[0].id, png);
         const review = await drafts.review(session, view.draft_id);
+        // Use the DB clock inside the allowed TTL, avoiding host/container skew at 10 minutes.
+        const expiry = await admin.query(
+          "SELECT floor(extract(epoch FROM clock_timestamp()+interval '5 minutes')*1000)::bigint AS ms",
+        );
         const ticket = await seedMigrationTicket(admin, {
           ...actor,
           requestId: view.draft_id,
@@ -215,7 +243,7 @@ test(
           sourceSha256: review.source_sha256,
           planSha256: review.plan_sha256,
           photoManifestSha256: review.photos_sha256,
-          expiresAt: Date.now() + 600_000,
+          expiresAt: Number(expiry.rows[0].ms),
           photoAssociationsReviewed: true,
         });
         return { ...view, ...ticket };
