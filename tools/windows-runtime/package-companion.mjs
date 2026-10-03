@@ -54,6 +54,7 @@ const scriptNames = [
   "diagnostic-bundle.mjs",
   "diagnostic-export.mjs",
   "data-options.mjs",
+  "assistance-config.mjs",
   "data-worker.mjs",
   "data-maintenance.mjs",
   "store-export.mjs",

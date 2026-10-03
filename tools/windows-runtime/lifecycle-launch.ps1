@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory=$true)][ValidateSet('install','repair','start','stop','upgrade','rollback','uninstall','status','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule')][string]$Action,
+  [Parameter(Mandatory=$true)][ValidateSet('install','repair','start','stop','upgrade','rollback','uninstall','status','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config')][string]$Action,
   [Parameter(Mandatory=$true)][string]$Payload,
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{64}$')][string]$ManifestDigest,
   [ValidatePattern('^b_[a-f0-9]{32}$')][string]$BackupId,
@@ -67,7 +67,7 @@ try {
     if ($_ -match '["\r\n\x00]') { throw 'WINDOWS_COMPANION_LAUNCH_ARGUMENT_INVALID' }
     '"' + [regex]::Replace($_, '(\\+)$', '$1$1') + '"'
   })
-  $inputProtocol = @('portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule') -ccontains $Action
+  $inputProtocol = @('portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -ccontains $Action
   exit ([LaundryRuntimeNativeLauncher]::Run($Node, ($rendered -join ' '), $Payload, $inputProtocol))
 } catch {
   $code = [string]($_.Exception.GetBaseException().Message)

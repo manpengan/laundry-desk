@@ -11,6 +11,7 @@ export const OPERATOR_HELPERS = Object.freeze([
   "runtime-entry-ui.ps1",
   "runtime-entry-data-ui.ps1",
   "runtime-entry-schedule-ui.ps1",
+  "runtime-entry-assistance-ui.ps1",
   "runtime-entry-install.ps1",
   "runtime-entry-shortcut.ps1",
 ]);
@@ -29,6 +30,7 @@ export const ENTRY_ACTIONS = Object.freeze([
   "backup-drill",
   "backup-health",
   "backup-schedule",
+  "assistance-config",
   "scheduled-backup",
   "restore",
   "maintenance-recover",

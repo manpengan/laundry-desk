@@ -33,6 +33,7 @@ import { dataMaintenance } from "./data-maintenance.mjs";
 import { SCHEDULE_ACTIONS, requireSchedule } from "./schedule-contract.mjs";
 import { scheduledMaintenance, uninstallSchedule } from "./schedule-maintenance.mjs";
 import { schemaMaintenance } from "./upgrade-maintenance.mjs";
+import { configureAssistance, requireAssistanceOptions } from "./assistance-config.mjs";
 
 export const ACTIONS = Object.freeze([
   "install",
@@ -44,6 +45,7 @@ export const ACTIONS = Object.freeze([
   "uninstall",
   "status",
   "diagnostics",
+  "assistance-config",
   ...BACKUP_ACTIONS,
   ...DATA_ACTIONS,
   ...SCHEDULE_ACTIONS,
@@ -57,7 +59,8 @@ export function installationRoot() {
 export async function lifecycle(action, source, expectedDigest, options = {}) {
   if (process.platform !== "win32" || process.arch !== "x64") fail("INSTALL_PLATFORM_INVALID");
   if (!ACTIONS.includes(action)) fail("ARGS_INVALID");
-  if (action === "backup-schedule") requireSchedule(options);
+  if (action === "assistance-config") requireAssistanceOptions(options);
+  else if (action === "backup-schedule") requireSchedule(options);
   else if (DATA_ACTIONS.includes(action)) requireDataOptions(action, options);
   else requireBackupOptions(action, options);
   source = resolve(source);
@@ -204,6 +207,7 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
       };
       if (SCHEDULE_ACTIONS.includes(action))
         return scheduledMaintenance(action, options, maintenanceLifecycle);
+      if (action === "assistance-config") return configureAssistance(options, maintenanceLifecycle);
       if (action === "maintenance-recover" && maintenance?.version === 2)
         return schemaMaintenance(action, maintenance.next, maintenanceLifecycle);
       if (

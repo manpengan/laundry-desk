@@ -89,7 +89,7 @@ const reset = (name, row) =>
 test("cross-machine restore revokes authority and preserves terminal business history", () => {
   assert.deepEqual(
     [...OMIT_PORTABLE_TABLE_DATA],
-    ["ai_provider_keys", "notification_provider_settings"],
+    ["ai_provider_keys", "notification_provider_settings", "payment_channel_settings"],
   );
   const session = reset("sessions", {
     status: "active",
@@ -155,6 +155,35 @@ test("restored live AI credentials become terminal and cannot be reactivated by 
   assert.ok(result.revoked_at);
   const terminal = { status: "superseded", row_version: "4", superseded_at: "2026-01-02" };
   assert.deepEqual(reset("ai_provider_keys", terminal), terminal);
+});
+
+test("restored payment uncertainty requires queries and remote assistance never resumes", () => {
+  const pending = {
+    state: "unknown",
+    checkout_json: '{"code":"expired"}',
+    error_code: null,
+    dispatched_at: "2026-10-03",
+    amount_cents: "1250",
+    merchant_order: "retained",
+  };
+  assert.deepEqual(reset("payment_channel_intents", pending), {
+    ...pending,
+    state: "needs_review",
+    checkout_json: null,
+    error_code: "MIGRATED_QUERY_REQUIRED",
+  });
+  const paid = { state: "paid", provider_order: "settled" };
+  assert.deepEqual(reset("payment_channel_intents", paid), paid);
+  assert.equal(
+    reset("payment_channel_refunds", { state: "pending", error_code: null }).state,
+    "needs_review",
+  );
+  const refunded = { state: "refunded", provider_refund: "settled" };
+  assert.deepEqual(reset("payment_channel_refunds", refunded), refunded);
+  assert.equal(
+    reset("remote_assistance_sessions", { status: "active", revoked_at: null }).status,
+    "revoked",
+  );
 });
 
 function memoryInput(bytes) {

@@ -51,6 +51,10 @@ function Show-RuntimeEntry {
     if ($script:EntryBusy) { return }
     $id = $null; $digest = $null; $inputJson = $null
     try {
+      if ($Verb -ceq 'assistance-config') {
+        $inputJson = Show-RuntimeAssistanceDialog $form
+        if ([string]::IsNullOrEmpty($inputJson)) { return }
+      }
       if ($Verb -ceq 'backup-schedule') {
         $inputJson = Show-RuntimeScheduleDialog $form
         if ([string]::IsNullOrEmpty($inputJson)) { return }
@@ -136,7 +140,7 @@ function Show-RuntimeEntry {
     @('修复服务','repair'), @('创建备份','backup'), @('查看备份','backup-list'),
     @('自动备份设置','backup-schedule'), @('备份提醒与记录','backup-health'), @('立即自动备份','scheduled-backup'),
     @('升级到本包','upgrade'), @('回滚程序','rollback'), @('继续中断维护','maintenance-recover'), @('导出诊断','diagnostics'),
-    @('加密离机备份','portable-export'), @('校验离机备份','portable-inspect'), @('换机恢复','portable-import'), @('执行旧版导入','v1-import'), @('完整门店导出','export-store')
+    @('加密离机备份','portable-export'), @('校验离机备份','portable-inspect'), @('换机恢复','portable-import'), @('执行旧版导入','v1-import'), @('完整门店导出','export-store'), @('远程协助配置','assistance-config')
   )) {
     $button = New-Object Windows.Forms.Button; $button.Text = $entry[0]; $button.Tag = $entry[1]
     $button.AutoSize = $true; $button.Height = 34

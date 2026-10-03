@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('gui','install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule')][string]$Action = 'gui',
+  [ValidateSet('gui','install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config')][string]$Action = 'gui',
   [string]$BackupId,
   [string]$ConfirmationDigest
 )
@@ -37,7 +37,7 @@ function Assert-EntryArguments {
 function Invoke-RuntimeEntryAction {
   param([string]$Verb, [string]$Id, [string]$Confirmation, [string]$InputJson)
   Assert-EntryArguments $Verb $Id $Confirmation
-  if (@('install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule') -cnotcontains $Verb) {
+  if (@('install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -cnotcontains $Verb) {
     throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID'
   }
   if ($Verb -ceq 'install' -or $Verb -ceq 'upgrade') { [void](Install-RuntimeEntry) }
@@ -57,7 +57,7 @@ function Invoke-RuntimeEntryAction {
   $process.StartInfo.CreateNoWindow = $true
   $process.StartInfo.RedirectStandardOutput = $true
   $process.StartInfo.RedirectStandardError = $true
-  $inputProtocol = @('portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule') -ccontains $Verb
+  $inputProtocol = @('portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -ccontains $Verb
   $process.StartInfo.RedirectStandardInput = $inputProtocol
   $inputBytes = $null
   try {
@@ -135,12 +135,13 @@ try {
   . (Join-Path $EntryRoot 'runtime-entry-install.ps1')
   if ($script:EntryInteractive) {
     . (Join-Path $EntryRoot 'runtime-entry-data-ui.ps1')
+    . (Join-Path $EntryRoot 'runtime-entry-assistance-ui.ps1')
     . (Join-Path $EntryRoot 'runtime-entry-schedule-ui.ps1')
     . (Join-Path $EntryRoot 'runtime-entry-ui.ps1')
     Show-RuntimeEntry
   } else {
     $inputJson = $null
-    if (@('portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule') -ccontains $Action) {
+    if (@('portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -ccontains $Action) {
       $inputJson = [LaundryRuntimeEntryTrust]::ReadProtocolInput()
     }
     try { [Console]::Out.WriteLine((Invoke-RuntimeEntryAction $Action $BackupId $ConfirmationDigest $inputJson)) }

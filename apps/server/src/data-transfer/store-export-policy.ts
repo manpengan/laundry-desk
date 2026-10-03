@@ -3,6 +3,8 @@ import type { SqlClient } from "../db/types.js";
 import { STORE_EXPORT_SCHEMA } from "./store-export-schema.js";
 
 const exclusions = Object.freeze({
+  remote_assistance_sessions: "远程协助授权会话",
+  remote_assistance_commands: "远程协助一次性指令",
   ai_circuit_breakers: "运行时熔断状态",
   ai_cost_reservations: "执行中的额度预留；实际用量保存在 ai_usage",
   ai_pending_actions: "待执行命令及授权",

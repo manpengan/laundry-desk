@@ -136,6 +136,8 @@ const STORE_TABLES = describeTables(
     "payment_channel_reconciliations",
     "payment_channel_refunds",
     "payment_channel_settings",
+    "remote_assistance_commands",
+    "remote_assistance_sessions",
     "campaigns",
     "campaign_audience_snapshots",
     "campaign_budget_ledger",

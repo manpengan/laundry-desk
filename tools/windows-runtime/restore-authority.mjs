@@ -24,10 +24,11 @@ const TABLES = new Set([
   "store_export_requests",
   "notification_deliveries",
   "notification_provider_settings",
+  "ai_provider_keys",
   "payment_channel_settings",
   "payment_channel_intents",
   "payment_channel_refunds",
-  "ai_provider_keys",
+  "remote_assistance_sessions",
   "ai_safety_policies",
   "ai_sessions",
   "ai_turns",
@@ -61,7 +62,7 @@ export async function revokeRestoredAuthority(
       // non-nullable. Removing the private configuration forces fresh input;
       // delivery receipts and their reserved/actual costs remain untouched.
       if (["notification_provider_settings", "payment_channel_settings"].includes(table.name)) {
-        const result = await client.query("DELETE FROM public.notification_provider_settings");
+        const result = await client.query(`DELETE FROM public.${identifier(table.name)}`);
         counts[table.name] = result.rowCount;
         continue;
       }

@@ -113,6 +113,10 @@ test(
       );
       const { orgId, storeId, adminStaffId } = LOCAL_PROFILE;
       await pool.query(
+        "INSERT INTO payment_channel_settings(org_id,store_id,channel,version,enabled,app_id,merchant_id,account_fingerprint,credential_id,envelope_json,updated_by) VALUES($1,$2,'wechat',1,true,'wx0000000000000000','123456',$3,$4,'{}',$5)",
+        [orgId, storeId, "a".repeat(64), randomUUID(), adminStaffId],
+      );
+      await pool.query(
         "INSERT INTO ai_provider_keys(id,org_id,provider_code,credential_version,row_version,status,ciphertext,nonce,auth_tag,wrapped_dek,kms_key_id,kms_key_version,envelope_schema_version,last4,created_by_staff_id,created_at,updated_by_staff_id,updated_at,activated_at) VALUES($1,$2,'fixture',1,1,'active',$3,$4,$5,$6,'fixture','1',1,'test',$7,now(),$7,now(),now())",
         [
           randomUUID(),
@@ -141,6 +145,10 @@ test(
       await pool.query(
         "INSERT INTO sessions(id,org_id,store_id,staff_id,device_id,session_version,permission_version,authentication_method,status,created_at) VALUES($1,$2,$3,$4,$5,2,1,'password','active',now())",
         [sessionId, orgId, storeId, adminStaffId, deviceId],
+      );
+      await pool.query(
+        "INSERT INTO remote_assistance_sessions(id,org_id,store_id,actor_id,session_id,session_version,permission_version,approved_at,expires_at,status) VALUES($1,$2,$3,$4,$5,2,1,now(),now()+interval '1 hour','active')",
+        [randomUUID(), orgId, storeId, adminStaffId, sessionId],
       );
       await pool.query(
         "INSERT INTO edge_devices(org_id,store_id,device_id,public_key_spki,public_key_fingerprint,paired_by_staff_id,paired_at,last_seen_at) VALUES($1,$2,$3,$4,$5,$6,now(),now())",
@@ -357,6 +365,10 @@ test(
         "active",
       );
       assert.equal(
+        (await pool.query("SELECT enabled FROM payment_channel_settings")).rows[0].enabled,
+        true,
+      );
+      assert.equal(
         (await pool.query("SELECT enabled FROM notification_provider_settings")).rows[0].enabled,
         true,
       );
@@ -393,6 +405,14 @@ test(
       );
       assert.equal(
         (await pool.query("SELECT status FROM ai_provider_keys")).rows[0].status,
+        "revoked",
+      );
+      assert.equal(
+        (await pool.query("SELECT count(*)::int AS n FROM payment_channel_settings")).rows[0].n,
+        0,
+      );
+      assert.equal(
+        (await pool.query("SELECT status FROM remote_assistance_sessions")).rows[0].status,
         "revoked",
       );
       assert.equal(
@@ -453,7 +473,8 @@ test(
       assert.equal(
         (
           await pool.query(
-            "SELECT count(*)::int AS n FROM audit_log WHERE command='runtime.restore.revoke_authority'",
+            "SELECT count(*)::int AS n FROM audit_log WHERE command='runtime.restore.revoke_authority' AND org_id=$1 AND store_id=$2",
+            [LOCAL_PROFILE.orgId, LOCAL_PROFILE.storeId],
           )
         ).rows[0].n,
         1,

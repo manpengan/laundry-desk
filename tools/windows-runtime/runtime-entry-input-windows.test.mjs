@@ -33,9 +33,14 @@ console.log(JSON.stringify({ assurance: 'development_only',
   return current;
 }
 
-async function runInput(fixture, bytes, { codePage = 437, close = true } = {}) {
+async function runInput(
+  fixture,
+  bytes,
+  { codePage = 437, close = true, action = "portable-inspect" } = {},
+) {
+  assert.ok(["portable-inspect", "assistance-config"].includes(action));
   const entry = join(fixture.output, "runtime-entry.ps1").replaceAll("'", "''");
-  const command = `[Console]::InputEncoding=[Text.Encoding]::GetEncoding(${codePage}); & '${entry}' -Action portable-inspect`;
+  const command = `[Console]::InputEncoding=[Text.Encoding]::GetEncoding(${codePage}); & '${entry}' -Action ${action}`;
   const child = spawn(
     join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
     [
@@ -137,3 +142,18 @@ test("entry input boundary uses raw bounded bytes without a console-codepage dec
   assert.doesNotMatch(entry, /Console\]::In\.ReadBlock/u);
   assert.match(trust, /new UTF8Encoding\(false, true\)\.GetString/u);
 });
+
+test(
+  "WinPS assistance configuration passes secrets only through bounded inherited stdin",
+  windowsOnly,
+  async (t) => {
+    const fixture = await inputFixture(t);
+    const input = Buffer.from(
+      JSON.stringify({ trust: { broker_token: "synthetic-secret-not-in-argv" } }),
+    );
+    const result = await runInput(fixture, input, { action: "assistance-config" });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).sha256, digest(input));
+    assert.doesNotMatch(result.stdout + result.stderr, /synthetic-secret/);
+  },
+);

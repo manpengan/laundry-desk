@@ -93,6 +93,8 @@ export function resetPortableAuthority(table, values, timestamp) {
       row_version: increment(row.row_version),
     };
   if (table.name === "notification_provider_settings") patch = { enabled: "false" };
+  if (["remote_assistance_sessions"].includes(table.name) && row.status === "active")
+    patch = { status: "revoked", revoked_at: now };
   if (table.name === "payment_channel_intents" && !["paid", "closed"].includes(row.state))
     patch = { state: "needs_review", checkout_json: null, error_code: "MIGRATED_QUERY_REQUIRED" };
   if (table.name === "payment_channel_refunds" && !["refunded", "failed"].includes(row.state))
