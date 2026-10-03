@@ -18,7 +18,9 @@ export async function createIsolatedPgTestDatabase(source: ResolvedPgUrls) {
     if (closed) return;
     closed = true;
     try {
-      if (created) await control.query(`DROP DATABASE "${database}" WITH (FORCE)`);
+      // pg-pool can resolve end() before idle sockets emit end. Normal DROP waits for
+      // their graceful disconnect; FORCE can instead emit a fatal idle-client error.
+      if (created) await control.query(`DROP DATABASE "${database}"`);
     } finally {
       await control.end();
     }
