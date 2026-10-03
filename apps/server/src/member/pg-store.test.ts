@@ -14,6 +14,7 @@ import type { TenantContext } from "../db/types.js";
 import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
 import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
 import { createPgMemberStore } from "./pg-store.js";
+import { seedRawMemberBalance } from "./pg-store-test-support.js";
 
 const urls =
   process.env.LAUNDRY_USE_LOCAL_PG === "1" || process.env.LAUNDRY_USE_LOCAL_PG === "true"
@@ -457,56 +458,6 @@ async function openAccountFor(customerId: string): Promise<string> {
   return opened.value.account.account_id;
 }
 
-async function seedRawBalance(
-  accountId: string,
-  principalCents: number,
-  bonusCents: number,
-): Promise<void> {
-  const pool = createPgPool({ connectionString: urls!.app });
-  try {
-    await withPoolClient(pool, async (client) =>
-      withTenantTransaction(client, TENANT, async (tx) => {
-        const bonusRuleId = bonusCents > 0 ? randomUUID() : null;
-        if (bonusRuleId !== null) {
-          await tx.query(
-            `INSERT INTO member_bonus_rules (
-               id, org_id, min_topup_cents, bonus_cents, status,
-               effective_from, updated_at, updated_by_staff_id, note
-             ) VALUES (
-               $1::uuid, $2::uuid, 1, 1, 'retired', now(), now(), $3::uuid, NULL
-             )`,
-            [bonusRuleId, TENANT.orgId, TENANT.staffId],
-          );
-        }
-        await tx.query(
-          `INSERT INTO member_ledger (
-             id, org_id, store_id, account_id, kind,
-             principal_delta_cents, bonus_delta_cents, order_id, tender,
-             bonus_rule_id, staff_id, at, business_date, note
-           ) VALUES (
-             $1::uuid, $2::uuid, $3::uuid, $4::uuid, 'topup',
-             $5::bigint, $6::bigint, NULL, 'cash',
-             $7::uuid, $8::uuid, now(), $9, NULL
-           )`,
-          [
-            randomUUID(),
-            TENANT.orgId,
-            TENANT.storeId,
-            accountId,
-            principalCents,
-            bonusCents,
-            bonusRuleId,
-            TENANT.staffId,
-            BUSINESS_DATE,
-          ],
-        );
-      }),
-    );
-  } finally {
-    await pool.end();
-  }
-}
-
 maybe("a cash top-up persists its tender and only cash reaches the day sum", async () => {
   const customerId = await seedCustomer();
   const accountId = await openAccountFor(customerId);
@@ -655,6 +606,8 @@ maybe("PostgreSQL refuses a settlement row that claims a tender", async () => {
   const accountId = await openAccountFor(customerId);
   const isolatedDate = "2026-08-13";
   const orderId = await seedOrder(customerId, isolatedDate);
+  // Keep the balance valid so the tender CHECK is the first violated invariant.
+  await seedRawMemberBalance(urls!.app, TENANT, accountId, 1_000, 0);
 
   await assert.rejects(
     insertRawLedger({
@@ -735,7 +688,7 @@ maybe("PostgreSQL permits a reversal to restore previously consumed bonus", asyn
 maybe("two concurrent closes settle the account exactly once", async () => {
   const customerId = await seedCustomer();
   const accountId = await openAccountFor(customerId);
-  await seedRawBalance(accountId, 500, 0);
+  await seedRawMemberBalance(urls!.app, TENANT, accountId, 500, 0);
   const input = {
     account_id: accountId,
     expected_customer_id: customerId,
@@ -770,7 +723,7 @@ maybe("PostgreSQL closes a safe-integer bonus with one bigint forfeiture", async
   const customerId = await seedCustomer();
   const accountId = await openAccountFor(customerId);
   const bonus = Number.MAX_SAFE_INTEGER - 1;
-  await seedRawBalance(accountId, 1, bonus);
+  await seedRawMemberBalance(urls!.app, TENANT, accountId, 1, bonus);
 
   const closed = await withStore((store) =>
     store.close({

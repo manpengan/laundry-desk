@@ -425,7 +425,7 @@ test("keeps the recovery-set CI shell block syntactically valid", async () => {
   const workflow = await readRepositoryFile(".github/workflows/v2-integration.yml");
   const start = workflow.indexOf("      - name: Create and restore-drill a private recovery set");
   const end = workflow.indexOf(
-    "      - name: Run server tests against real PostgreSQL with no skips",
+    "      - name: Run server tests against real PostgreSQL with no database skips",
     start,
   );
   assert.ok(start >= 0 && end > start);

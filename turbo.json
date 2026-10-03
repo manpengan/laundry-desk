@@ -53,7 +53,8 @@
         "@laundry/ui#build",
         "@laundry/domain#build"
       ],
-      "outputs": ["dist/**", "dist-spa/**"]
+      "outputs": ["dist/**", "dist-spa/**"],
+      "passThroughEnv": ["NODE_OPTIONS"]
     },
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"],

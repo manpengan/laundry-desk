@@ -69,4 +69,6 @@ jobs:
         run: pnpm run release:candidate:swift:check && pnpm run release:candidate:test
 
       - name: Build, inspect, and smoke unsigned Counter package
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: pnpm run local:mac:software:acceptance
