@@ -31,10 +31,10 @@ async function writeExecutable(path, source) {
   await chmod(path, 0o755);
 }
 
-test("runs the portable acceptance fixture and authority roundtrip against isolated real PG", async () => {
+test("runs portable restore and approved import/export bridges against isolated real PG", async () => {
   const workflow = await readFile(workflowPath, "utf8");
   const start = workflow.indexOf(
-    "      - name: Verify Windows portable restore against real PostgreSQL",
+    "      - name: Verify Windows data maintenance against real PostgreSQL",
   );
   const end = workflow.indexOf(
     "      - name: Run Playwright against real server and PostgreSQL",
@@ -43,7 +43,7 @@ test("runs the portable acceptance fixture and authority roundtrip against isola
   assert.ok(start >= 0 && end > start);
   assert.match(
     workflow.slice(start, end),
-    /run: >-\s+node tools\/data-transfer\/run-pg-fixture\.mjs\s+tools\/windows-runtime\/backup-portable-fixture-pg\.test\.mjs\s+tools\/windows-runtime\/portable-database-pg\.test\.mjs/u,
+    /run: >-\s+node tools\/data-transfer\/run-pg-fixture\.mjs\s+tools\/windows-runtime\/backup-portable-fixture-pg\.test\.mjs\s+tools\/windows-runtime\/portable-database-pg\.test\.mjs\s+tools\/windows-runtime\/data-worker-pg\.test\.mjs/u,
   );
 });
 
