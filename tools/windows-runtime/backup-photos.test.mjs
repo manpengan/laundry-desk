@@ -42,6 +42,23 @@ test("database and photos are one verified v2 backup; restoring bytes retains pr
   await verifyPhotoReferences(context, backup.photos);
 });
 
+test("delivery evidence uses a separate marked live store and flat bound archive keys", async (t) => {
+  const context = await backupFixture(t);
+  const live = await photos(context);
+  const delivery = join(live, "delivery-evidence");
+  await context.io.directory(delivery);
+  await context.io.write(join(delivery, PHOTO_MARKER), PHOTO_MARKER_CONTENT);
+  await context.io.write(join(delivery, keyB), photoB);
+  const backup = await make(context);
+  assert.deepEqual(backup.photos, [row(keyA, photoA), row(`delivery-${keyB}`, photoB)]);
+  await unlink(join(delivery, keyB));
+  await restorePhotos(context, backup);
+  assert.deepEqual(await readFile(join(delivery, keyB)), photoB);
+  await verifyPhotoReferences(context, [row(`delivery-${keyB}`, photoB)]);
+  await context.io.write(join(delivery, "unsafe.txt"), "unexpected");
+  await assert.rejects(inspectLivePhotos(context), /PHOTO_FILE_SET_INVALID/);
+});
+
 test("tampered, missing and additional photo bytes invalidate the entire backup", async (t) => {
   const context = await backupFixture(t);
   await photos(context);

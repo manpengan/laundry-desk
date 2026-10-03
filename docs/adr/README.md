@@ -96,6 +96,9 @@
 - [ADR-82](2026-10-03-adr-82-ai-bounded-operations-and-analysis.md)：经营分析、催取候选与人工确认的受限操作。
 - [ADR-83](2026-10-03-adr-83-garment-vision-assistance.md)：逐次同意、本店照片绑定的视觉辅助与掉标候选比较。
 
+- [ADR-79](2026-10-03-adr-79-windows-scheduled-backups.md)：每日定时备份、留存和恢复演练。
+- [ADR-80](2026-10-03-adr-80-windows-schema-upgrade-rollback.md)：跨迁移程序/数据联合升级回退及还原权限防复活。
+
 ## v1 线
 
 | ADR                                                | 主题            | 状态                                              |

@@ -3,6 +3,50 @@ import assert from "node:assert/strict";
 import { readFile, writeFile, link, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { randomBytes } from "node:crypto";
+
+export async function portableAcceptance(context) {
+  const { scenario, command, root, sql, secretDigest, beforeSecrets } = context;
+  await scenario("encrypted-off-machine-portable-restore-via-native-secret-pipe", async () => {
+    // This synthetic harness table intentionally does not belong to the trusted
+    // migration schema. Remove it for portable export and recreate after this gate.
+    await sql("DROP TABLE public.runtime_acceptance_probe");
+    const original = await sql("SELECT name FROM public.stores ORDER BY id LIMIT 1");
+    const options = {
+      path: join(root, "portable-acceptance.ldbackup"),
+      password: randomBytes(32).toString("hex"),
+    };
+    const exported = await command("portable-export", undefined, undefined, options);
+    assert.equal(exported.status, "portable_exported");
+    const checked = await command("portable-inspect", undefined, undefined, options);
+    assert.equal(checked.sha256, exported.sha256);
+    await assert.rejects(
+      command("portable-import", undefined, undefined, {
+        ...options,
+        confirmation: "0".repeat(64),
+      }),
+      (error) => /PORTABLE_CONFIRMATION_MISMATCH/u.test(error.stderr ?? ""),
+    );
+    assert.equal((await command("status")).status, "running");
+    await sql("UPDATE public.stores SET name = 'synthetic portable mutation'");
+    const restored = await command("portable-import", undefined, undefined, {
+      ...options,
+      confirmation: checked.sha256,
+    });
+    assert.equal(restored.status, "portable_restored");
+    assert.equal(await sql("SELECT name FROM public.stores ORDER BY id LIMIT 1"), original);
+    assert.equal(await sql("SELECT count(*) FROM public.sessions WHERE status = 'active'"), "0");
+    assert.equal(
+      await sql("SELECT count(*) FROM public.edge_devices WHERE status = 'paired'"),
+      "0",
+    );
+    assert.equal(await secretDigest(), beforeSecrets);
+    await sql(
+      "CREATE TABLE public.runtime_acceptance_probe (id integer PRIMARY KEY); INSERT INTO public.runtime_acceptance_probe VALUES (1), (2)",
+    );
+    await unlink(options.path);
+  });
+}
 
 export async function backupAcceptance(context) {
   const {

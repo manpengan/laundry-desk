@@ -7,7 +7,7 @@ export const MAX_PHOTO_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 export const MAX_PHOTOS = 10_000;
 export const MAX_PHOTO_INDEX_BYTES = 2 * 1024 * 1024;
 export const PHOTO_KEY =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/u;
+  /^(?:delivery-)?[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/u;
 const SHA = /^[a-f0-9]{64}$/u;
 
 export function requirePhotoEntry(value) {

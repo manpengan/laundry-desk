@@ -84,6 +84,8 @@ try {
     }
   }
   process.stdout.write(`Applied ${files.length} migrations in isolated synthetic PG.\n`);
+  await admin.end();
+  admin = null;
   const output = await run(
     process.execPath,
     ["--test", "--test-concurrency=1", ...process.argv.slice(2)],

@@ -6,6 +6,14 @@ const execute = promisify(execFile);
 // CI harness only; not part of the distributed payload.
 export function launchCommander({ payload, expectedDigest, env }) {
   async function command(action, source = payload, hash = expectedDigest, options = {}) {
+    const inputProtocol = [
+      "portable-export",
+      "portable-inspect",
+      "portable-import",
+      "v1-import",
+      "export-store",
+      "backup-schedule",
+    ].includes(action);
     const started = Date.now();
     const pending = execute(
       join(env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
@@ -23,7 +31,9 @@ export function launchCommander({ payload, expectedDigest, env }) {
         "-ManifestDigest",
         hash,
         ...(options.backupId ? ["-BackupId", options.backupId] : []),
-        ...(options.confirmation ? ["-ConfirmationDigest", options.confirmation] : []),
+        ...(!inputProtocol && options.confirmation
+          ? ["-ConfirmationDigest", options.confirmation]
+          : []),
       ],
       {
         env: {
@@ -40,6 +50,8 @@ export function launchCommander({ payload, expectedDigest, env }) {
         maxBuffer: 65536,
       },
     );
+    if (inputProtocol) pending.child.stdin.end(JSON.stringify(options));
+    else pending.child.stdin.end();
     let timingBuffer = "";
     pending.child.stderr.on("data", (chunk) => {
       timingBuffer += chunk;

@@ -82,6 +82,22 @@ test(
         "INSERT INTO edge_devices(org_id,store_id,device_id,public_key_spki,public_key_fingerprint,paired_by_staff_id,paired_at,last_seen_at) VALUES($1,$2,$3,$4,$5,$6,now(),now())",
         [org, store, device, "a".repeat(44), "a".repeat(64), staff],
       );
+      const pendingExport = randomUUID(),
+        completedExport = randomUUID();
+      for (const id of [pendingExport, completedExport])
+        await source.query(
+          "INSERT INTO store_export_requests(id,org_id,store_id,actor_id,session_id,session_version,permission_version,policy_sha256,approved_at,expires_at,consumed_at,manifest_sha256,approval_signature) VALUES($1,$2,$3,$4,$5,7,1,$6,now(),now()+interval '10 minutes',CASE WHEN $7 THEN now() ELSE NULL END,CASE WHEN $7 THEN $6 ELSE NULL END,$8)",
+          [
+            id,
+            org,
+            store,
+            staff,
+            session,
+            "d".repeat(64),
+            id === completedExport,
+            `${"A".repeat(86)}==`,
+          ],
+        );
       await source.query(
         "INSERT INTO notification_provider_settings(org_id,store_id,version,enabled,provider,sign_name,template_code,unit_cost_cents,max_batch_cost_cents,credential_id,envelope_json,updated_by) VALUES($1,$2,1,true,'aliyun_sms','Fixture','SMS_1',1,100,$3,$4,$5)",
         [
@@ -152,6 +168,24 @@ test(
         "10000",
       );
       assert.equal((await target.query("SELECT status FROM sessions")).rows[0].status, "revoked");
+      const pendingReceipt = (
+        await target.query(
+          "SELECT revoked_at,consumed_at,manifest_sha256 FROM store_export_requests WHERE id=$1",
+          [pendingExport],
+        )
+      ).rows[0];
+      assert.ok(pendingReceipt.revoked_at);
+      assert.equal(pendingReceipt.consumed_at, null);
+      assert.equal(pendingReceipt.manifest_sha256, null);
+      const completedReceipt = (
+        await target.query(
+          "SELECT revoked_at,consumed_at,manifest_sha256 FROM store_export_requests WHERE id=$1",
+          [completedExport],
+        )
+      ).rows[0];
+      assert.equal(completedReceipt.revoked_at, null);
+      assert.ok(completedReceipt.consumed_at);
+      assert.equal(completedReceipt.manifest_sha256, "d".repeat(64));
       assert.equal(
         (await target.query("SELECT session_version FROM sessions")).rows[0].session_version,
         8,

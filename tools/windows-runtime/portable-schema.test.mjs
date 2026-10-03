@@ -127,13 +127,34 @@ test("unknown SMS outcomes require reconciliation and cannot automatically resen
     last_error_code: null,
     provider_outcome_pending: "true",
     updated_at: "2026-10-03",
+    provider_ref_sha256: "a".repeat(64),
+    reserved_cost_cents: "10",
+    cost_cents: "8",
+    accepted_at: "2026-10-03",
   };
   const result = reset("notification_deliveries", row);
   assert.equal(result.status, "manual_required");
   assert.equal(result.lease_token, null);
   assert.equal(result.provider_outcome_pending, "false");
   assert.equal(result.last_error_code, "RESTORE_REQUIRES_RECONCILIATION");
+  for (const key of ["provider_ref_sha256", "reserved_cost_cents", "cost_cents", "accepted_at"])
+    assert.equal(result[key], row[key]);
   assert.equal(row.status, "sending");
+});
+
+test("restored live AI credentials become terminal and cannot be reactivated by config", () => {
+  const result = reset("ai_provider_keys", {
+    status: "active",
+    row_version: "2",
+    revoked_at: null,
+    created_at: "2026-01-01",
+    updated_at: "2026-01-02",
+  });
+  assert.equal(result.status, "revoked");
+  assert.equal(result.row_version, "3");
+  assert.ok(result.revoked_at);
+  const terminal = { status: "superseded", row_version: "4", superseded_at: "2026-01-02" };
+  assert.deepEqual(reset("ai_provider_keys", terminal), terminal);
 });
 
 function memoryInput(bytes) {

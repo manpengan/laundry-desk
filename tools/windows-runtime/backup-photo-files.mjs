@@ -52,16 +52,24 @@ async function readPhoto(path, platform, expected) {
 export async function inspectLivePhotos(context) {
   const directory = join(context.root, "photos");
   if (!(await photoDirectory(context, directory))) return [];
-  const names = (await readdir(directory)).filter((name) => name !== PHOTO_MARKER);
-  if (
-    names.length > MAX_PHOTOS * 2 ||
-    names.some((name) => !PHOTO_KEY.test(name) && !STAGING.test(name))
-  )
-    fail("BACKUP_PHOTO_FILE_SET_INVALID");
   const entries = [];
-  for (const key of names.filter((name) => PHOTO_KEY.test(name)).sort()) {
-    const { metadata } = await readPhoto(join(directory, key), context.platform);
-    entries.push({ key, ...metadata });
+  for (const prefix of ["", "delivery-"]) {
+    const base = prefix ? join(directory, "delivery-evidence") : directory;
+    if (!(await photoDirectory(context, base))) continue;
+    const names = (await readdir(base)).filter(
+      (name) => name !== PHOTO_MARKER && !(prefix === "" && name === "delivery-evidence"),
+    );
+    if (
+      names.length > MAX_PHOTOS * 2 ||
+      names.some(
+        (name) => (!PHOTO_KEY.test(name) || name.startsWith("delivery-")) && !STAGING.test(name),
+      )
+    )
+      fail("BACKUP_PHOTO_FILE_SET_INVALID");
+    for (const key of names.filter((name) => PHOTO_KEY.test(name)).sort()) {
+      const { metadata } = await readPhoto(join(base, key), context.platform);
+      entries.push({ key: `${prefix}${key}`, ...metadata });
+    }
   }
   return requirePhotoIndex(entries);
 }
@@ -111,7 +119,7 @@ export async function snapshotPhotos(context, directory) {
   const destination = join(directory, "photos");
   await context.io.directory(destination);
   for (const entry of entries)
-    await copyPhoto(context, join(context.root, "photos", entry.key), destination, entry);
+    await copyPhoto(context, livePhotoPath(context, entry.key), destination, entry);
   const bytes = Buffer.from(JSON.stringify(entries));
   if (bytes.length > MAX_PHOTO_INDEX_BYTES) fail("BACKUP_PHOTO_INDEX_INVALID");
   // The normal state reader is intentionally 64 KiB. Photo indexes use a
@@ -161,7 +169,11 @@ export async function readPhotoSnapshot(context, directory, manifest) {
 export async function restorePhotos(context, backup) {
   if (backup.manifest.version === 1) return;
   const directory = join(context.root, "backups", backup.id);
-  const entries = await readPhotoSnapshot(context, directory, backup.manifest.photos);
+  return restorePhotoDirectory(context, directory, backup.manifest.photos);
+}
+
+export async function restorePhotoDirectory(context, directory, manifest) {
+  const entries = await readPhotoSnapshot(context, directory, manifest);
   const destination = join(context.root, "photos");
   await photoDirectory(context, destination, true);
   const existing = await inspectLivePhotos(context);
@@ -178,7 +190,23 @@ export async function restorePhotos(context, backup) {
     fail("BACKUP_SPACE_INSUFFICIENT");
   // Keep existing immutable files for rollback and the safety backup. Startup
   // sweeps unreferenced files only after maintenance is durably idle.
-  for (const entry of entries)
-    await copyPhoto(context, join(directory, "photos", entry.key), destination, entry);
+  for (const entry of entries) {
+    const delivery = entry.key.startsWith("delivery-");
+    const target = delivery ? join(destination, "delivery-evidence") : destination;
+    await photoDirectory(context, target, true);
+    await copyPhoto(
+      context,
+      join(directory, "photos", entry.key),
+      target,
+      delivery ? { ...entry, key: entry.key.slice(9) } : entry,
+    );
+  }
   await verifyPhotoReferences(context, entries);
+}
+
+export function livePhotoPath(context, key) {
+  if (!PHOTO_KEY.test(key)) fail("BACKUP_PHOTO_ENTRY_INVALID");
+  return key.startsWith("delivery-")
+    ? join(context.root, "photos", "delivery-evidence", key.slice(9))
+    : join(context.root, "photos", key);
 }

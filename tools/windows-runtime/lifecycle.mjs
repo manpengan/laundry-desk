@@ -28,6 +28,11 @@ import { BACKUP_ACTIONS, requireBackupOptions } from "./backup-contract.mjs";
 import { readMaintenance } from "./backup-files.mjs";
 import { backupMaintenance } from "./backup-maintenance.mjs";
 import { exportDiagnosticBundle } from "./diagnostic-export.mjs";
+import { DATA_ACTIONS, requireDataOptions } from "./data-options.mjs";
+import { dataMaintenance } from "./data-maintenance.mjs";
+import { SCHEDULE_ACTIONS, requireSchedule } from "./schedule-contract.mjs";
+import { scheduledMaintenance, uninstallSchedule } from "./schedule-maintenance.mjs";
+import { schemaMaintenance } from "./upgrade-maintenance.mjs";
 
 export const ACTIONS = Object.freeze([
   "install",
@@ -40,6 +45,8 @@ export const ACTIONS = Object.freeze([
   "status",
   "diagnostics",
   ...BACKUP_ACTIONS,
+  ...DATA_ACTIONS,
+  ...SCHEDULE_ACTIONS,
 ]);
 export function installationRoot() {
   if (!process.env.LOCALAPPDATA || !/^[A-Za-z]:\\/u.test(process.env.LOCALAPPDATA))
@@ -50,7 +57,9 @@ export function installationRoot() {
 export async function lifecycle(action, source, expectedDigest, options = {}) {
   if (process.platform !== "win32" || process.arch !== "x64") fail("INSTALL_PLATFORM_INVALID");
   if (!ACTIONS.includes(action)) fail("ARGS_INVALID");
-  requireBackupOptions(action, options);
+  if (action === "backup-schedule") requireSchedule(options);
+  else if (DATA_ACTIONS.includes(action)) requireDataOptions(action, options);
+  else requireBackupOptions(action, options);
   source = resolve(source);
   const supplied = await inspectCompanion(source, expectedDigest);
   const platform = await loadPlatform(source);
@@ -179,24 +188,46 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
         fail("PARTIAL_INITIALIZATION");
       }
       const maintenance = await readMaintenance(io, root);
+      const maintenanceLifecycle = {
+        root,
+        io,
+        platform,
+        verify,
+        getState: () => state,
+        stop: async (entry) => {
+          await stop(entry);
+          await save({ ...state, phase: "stopped" });
+        },
+        start,
+        stopRaw: stop,
+        saveState: save,
+      };
+      if (SCHEDULE_ACTIONS.includes(action))
+        return scheduledMaintenance(action, options, maintenanceLifecycle);
+      if (action === "maintenance-recover" && maintenance?.version === 2)
+        return schemaMaintenance(action, maintenance.next, maintenanceLifecycle);
       if (
         maintenance &&
         !["status", "stop", "backup-list", "backup-verify", "maintenance-recover"].includes(action)
       )
         fail("MAINTENANCE_RECOVERY_REQUIRED");
-      if (BACKUP_ACTIONS.includes(action)) {
-        return backupMaintenance(action, options, {
-          root,
-          io,
-          platform,
-          verify,
-          getState: () => state,
-          stop: async (entry) => {
-            await stop(entry);
-            await save({ ...state, phase: "stopped" });
+      if (BACKUP_ACTIONS.includes(action) || DATA_ACTIONS.includes(action)) {
+        return (DATA_ACTIONS.includes(action) ? dataMaintenance : backupMaintenance)(
+          action,
+          options,
+          {
+            root,
+            io,
+            platform,
+            verify,
+            getState: () => state,
+            stop: async (entry) => {
+              await stop(entry);
+              await save({ ...state, phase: "stopped" });
+            },
+            start,
           },
-          start,
-        });
+        );
       }
       if (state.pending) {
         requireCompatible(state.current, state.pending);
@@ -220,6 +251,7 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
           };
       } else if (action === "uninstall") {
         if (state.phase !== "uninstalled") {
+          await uninstallSchedule(maintenanceLifecycle);
           const payload = await stop(state.current);
           await task("remove", payload, state.current);
           // Commit the recovery record before removing only manifest-bound program trees.
@@ -266,7 +298,9 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
         const old = state.current;
         const next = action === "rollback" ? state.previous : reference(supplied, expectedDigest);
         if (!next) fail("ROLLBACK_UNAVAILABLE");
-        requireCompatible(old, next);
+        const schemaChange =
+          old.migrationHead !== next.migrationHead || old.migrations !== next.migrations;
+        if (schemaChange && !["upgrade", "rollback"].includes(action)) fail("UPGRADE_REQUIRED");
         if (["install", "repair"].includes(action) && next.digest !== old.digest)
           fail("UPGRADE_REQUIRED");
         const retained = state.releases.some((entry) => entry.digest === next.digest);
@@ -274,6 +308,7 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
         if (action === "rollback") await verify(next);
         else await stageRelease(root, source, expectedDigest, platform);
         if (!retained) await save({ ...state, releases: [...state.releases, next] });
+        if (schemaChange) return schemaMaintenance(action, next, maintenanceLifecycle);
         await stop(old);
         await save({ ...state, phase: "stopped" });
         const oldState = state;

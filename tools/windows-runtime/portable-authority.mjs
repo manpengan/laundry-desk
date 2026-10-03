@@ -61,6 +61,8 @@ export function resetPortableAuthority(table, values, timestamp) {
       consumed_at_epoch: null,
     };
   if (table.name === "v1_import_requests") patch = { consumed_at: now };
+  if (table.name === "store_export_requests" && row.consumed_at === null)
+    patch = { revoked_at: row.revoked_at ?? now };
   if (
     table.name === "notification_deliveries" &&
     ["queued", "sending", "retry_wait", "accepted"].includes(row.status)
@@ -79,6 +81,17 @@ export function resetPortableAuthority(table, values, timestamp) {
       updated_at: now,
     };
   if (table.name === "ai_safety_policies") patch = { enabled: "false" };
+  if (
+    table.name === "ai_provider_keys" &&
+    ["pending_verification", "active", "invalid"].includes(row.status)
+  )
+    patch = {
+      status: "revoked",
+      revoked_at: now,
+      updated_at: now,
+      row_version: increment(row.row_version),
+    };
+  if (table.name === "notification_provider_settings") patch = { enabled: "false" };
   if (table.name === "ai_sessions" && ["open", "running"].includes(row.status))
     patch = { status: "cancelled", closed_at: now, updated_at: now };
   if (table.name === "ai_turns" && ["queued", "running"].includes(row.status))

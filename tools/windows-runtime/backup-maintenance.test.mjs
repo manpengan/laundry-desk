@@ -169,6 +169,10 @@ async function fixture(
   };
   const dependencies = {
     database,
+    resetAuthority: async () => {
+      events.push("reset-authority");
+      fault("reset-authority");
+    },
     runtimeEnvironment: async () => ({}),
     pgControl: async (action) => {
       postgres = action === "start";
@@ -196,6 +200,7 @@ test("restore creates a verified safety backup before replacing data and respect
   assert.equal(subject.snapshot().postgres, false);
   assert.ok(subject.events.indexOf("dump") < subject.events.indexOf("create"));
   assert.ok(subject.events.indexOf("restore") < subject.events.indexOf("swap"));
+  assert.ok(subject.events.indexOf("reset-authority") < subject.events.indexOf("swap"));
   assert.deepEqual(
     JSON.parse(
       await readFile(
@@ -206,6 +211,24 @@ test("restore creates a verified safety backup before replacing data and respect
     subject.original,
   );
   assert.equal(await readMaintenance(subject.context.io, subject.context.root), null);
+});
+
+test("historical committed restores without authority reset proof stay stopped", async (t) => {
+  const subject = await fixture(t, { failure: "finish" });
+  await assert.rejects(subject.run(), /INJECTED/);
+  const path = join(subject.context.root, "maintenance.json");
+  const value = JSON.parse(await readFile(path, "utf8"));
+  assert.equal(value.authority_reset, true);
+  const legacy = Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== "authority_reset"),
+  );
+  await subject.context.io.write(path, JSON.stringify(legacy));
+  await assert.rejects(
+    subject.run("maintenance-recover", {}),
+    /RESTORE_AUTHORITY_RECOVERY_REQUIRED/,
+  );
+  assert.equal(subject.snapshot().running, false);
+  assert.equal((await readMaintenance(subject.context.io, subject.context.root)).phase, "verified");
 });
 
 for (const failure of ["restore", "swap", "finish"]) {
@@ -353,4 +376,15 @@ test("a backup quiesces writes and resumes only after its maintenance record is 
     subject.original,
   );
   assert.equal(subject.events.includes("swap"), false);
+});
+
+test("a recovery drill restores only a shadow and never switches the current database", async (t) => {
+  const subject = await fixture(t);
+  const result = await subject.run("backup-drill", { backupId: subject.target.id });
+  assert.equal(result.drilled_backup, subject.target.id);
+  assert.deepEqual(subject.snapshot().data, subject.original);
+  assert.equal(subject.snapshot().running, true);
+  assert.equal(subject.events.includes("swap"), false);
+  assert.ok(subject.events.includes("restore"));
+  assert.ok(subject.events.includes("recover"));
 });

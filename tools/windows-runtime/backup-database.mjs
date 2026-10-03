@@ -56,13 +56,15 @@ export function databaseTools(context, dependencies = {}) {
     return Number(value);
   }
   async function photoRows(name) {
-    const count = await sql(name, "SELECT count(*) FROM public.garment_photos");
+    const projection =
+      "SELECT storage_key AS key, byte_size AS size, content_sha256 AS sha256 FROM public.garment_photos UNION ALL SELECT storage_key AS key, byte_size AS size, content_sha256 AS sha256 FROM public.delivery_evidence_attachments";
+    const count = await sql(name, `SELECT count(*) FROM (${projection}) photo_refs`);
     if (!/^[0-9]+$/u.test(count) || Number(count) > MAX_PHOTOS) fail("BACKUP_PHOTO_QUOTA_EXCEEDED");
     const rows = [];
     for (let offset = 0; offset < Number(count); offset += 100) {
       const text = await sql(
         name,
-        `SELECT COALESCE(json_agg(p), '[]'::json)::text FROM (SELECT storage_key AS key, byte_size AS size, content_sha256 AS sha256 FROM public.garment_photos ORDER BY id LIMIT 100 OFFSET ${offset}) p`,
+        `SELECT COALESCE(json_agg(p), '[]'::json)::text FROM (SELECT * FROM (${projection}) photo_refs ORDER BY key LIMIT 100 OFFSET ${offset}) p`,
       );
       let batch;
       try {
