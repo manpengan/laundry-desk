@@ -50,9 +50,21 @@ export const BACKUP_FILES = Object.freeze([
   "scripts/backup-database.mjs",
   "scripts/backup-maintenance.mjs",
 ]);
+// Additive capabilities must not invalidate previously shipped schema-1 releases.
+export const PHOTO_BACKUP_FILES = Object.freeze([
+  "scripts/backup-photo-contract.mjs",
+  "scripts/backup-photo-files.mjs",
+]);
 
 export function supportsBackup(manifest) {
   return BACKUP_FILES.every((path) => manifest.files?.some((file) => file.path === path));
+}
+
+export function supportsPhotoBackup(manifest) {
+  return (
+    supportsBackup(manifest) &&
+    PHOTO_BACKUP_FILES.every((path) => manifest.files?.some((file) => file.path === path))
+  );
 }
 
 export const REQUIRED_FILES = Object.freeze([
@@ -184,6 +196,11 @@ export function requireManifest(value) {
     !supportsBackup(value)
   )
     fail("BACKUP_CAPABILITY_INCOMPLETE");
+  if (
+    value.files.some((entry) => entry.path.startsWith("scripts/backup-photo-")) &&
+    !supportsPhotoBackup(value)
+  )
+    fail("PHOTO_BACKUP_CAPABILITY_INCOMPLETE");
   requireCrtManifestFiles(value.files);
   return value;
 }

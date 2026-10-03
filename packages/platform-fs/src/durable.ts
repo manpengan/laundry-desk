@@ -1,5 +1,5 @@
 import { closeSync, constants, fsyncSync, openSync, renameSync } from "node:fs";
-import { open, rename } from "node:fs/promises";
+import { link, open, rename, unlink } from "node:fs/promises";
 
 import { runWindowsHelper, runWindowsHelperSync } from "./helper-client.js";
 
@@ -60,4 +60,18 @@ export function replaceFileWriteThroughSync(
     return;
   }
   renameSync(source, destination);
+}
+
+/** Publish a staged private file without replacing an existing destination. */
+export async function publishFileNoReplace(
+  source: string,
+  destination: string,
+  options?: PlatformFileOptions,
+): Promise<void> {
+  if (runtimePlatform(options) === "win32") {
+    await runWindowsHelper(["publish-file", source, destination]);
+    return;
+  }
+  await link(source, destination);
+  await unlink(source);
 }

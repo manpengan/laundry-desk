@@ -13,7 +13,6 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { digest } from "./companion-contract.mjs";
-import { databaseTools } from "./backup-database.mjs";
 import { backupFixture, release } from "./backup-test-fixture.mjs";
 import {
   MAX_BACKUPS,
@@ -40,6 +39,8 @@ test("private backups bind bytes, instance, migration and confirmation and conta
   assert.deepEqual(await readdir(join(context.root, "backups", backup.id)), [
     "backup.json",
     "database.dump",
+    "photos",
+    "photos.json",
   ]);
   assert.equal((await readBackup(context, backup.id, backup.digest)).digest, backup.digest);
   assert.equal((await listBackups(context))[0].status, "verified");
@@ -258,17 +259,4 @@ test("native dump readers receive bytes from offset zero after verification", as
   });
   const file = await open(backup.path);
   await file.close();
-});
-
-test("an enabled photo directory blocks database-only backup before any native operation", async (t) => {
-  const context = await backupFixture(t);
-  await mkdir(join(context.root, "photos"), { mode: 0o700 });
-  const database = databaseTools(
-    { ...context, payload: "unused", env: {} },
-    {
-      run: async () => assert.fail("photo refusal must precede native commands"),
-      kit: async () => assert.fail("photo refusal must precede verification"),
-    },
-  );
-  await assert.rejects(database.verify(), /PHOTO_BACKUP_REQUIRED/u);
 });

@@ -4,6 +4,7 @@ import { MAX_BACKUPS, requireBackupOptions, requireMaintenance } from "./backup-
 import { databaseTools } from "./backup-database.mjs";
 import { pgControl } from "./lifecycle-process.mjs";
 import { runtimeEnvironment } from "./lifecycle-environment.mjs";
+import { restorePhotos } from "./backup-photo-files.mjs";
 import {
   backupDirectories,
   backupSpace,
@@ -117,6 +118,7 @@ export async function backupMaintenance(action, options, lifecycle, dependencies
         await save({ ...journal, phase: "restoring", candidate: await database.candidate() });
         await save({ ...journal, candidate: await database.create(journal.candidate) });
         await database.restore(journal.candidate, target);
+        await restorePhotos(context, target);
         await save({ ...journal, phase: "switching" });
         await database.swap(journal.candidate);
         await database.verify();

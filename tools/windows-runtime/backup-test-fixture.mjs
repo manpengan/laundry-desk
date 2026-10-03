@@ -1,4 +1,15 @@
-import { chmod, lstat, mkdir, mkdtemp, open, realpath, rename, rm } from "node:fs/promises";
+import {
+  chmod,
+  link,
+  lstat,
+  mkdir,
+  mkdtemp,
+  open,
+  realpath,
+  rename,
+  rm,
+  unlink,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { storage } from "./lifecycle-storage.mjs";
@@ -34,6 +45,10 @@ export const platform = {
       throw new Error("PRIVATE_DIRECTORY_INVALID");
   },
   replaceFileWriteThrough: rename,
+  publishFileNoReplace: async (source, destination) => {
+    await link(source, destination);
+    await unlink(source);
+  },
   flushDirectoryDurably: async (path) => {
     if (process.platform === "win32") return;
     const file = await open(path);

@@ -1,5 +1,6 @@
 import { exactKeys, fail } from "./companion-contract.mjs";
 import { requireState } from "./lifecycle-storage.mjs";
+import { requirePhotoManifest } from "./backup-photo-contract.mjs";
 
 export const BACKUP_ACTIONS = Object.freeze([
   "backup",
@@ -63,14 +64,14 @@ export function requireBackup(value) {
       "database",
     ]) ||
     value.schema !== "laundry.windows.backup" ||
-    value.version !== 1 ||
+    ![1, 2].includes(value.version) ||
     value.assurance !== "development_only" ||
     !matches(BACKUP_ID, value.id) ||
     !matches(SHA, value.instance_sha256) ||
     typeof value.created_at !== "string" ||
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value.created_at) ||
     !Number.isFinite(Date.parse(value.created_at)) ||
-    value.photos !== "disabled_empty" ||
+    (value.version === 1 && value.photos !== "disabled_empty") ||
     typeof value.postgres_version !== "string" ||
     !/^16\.\d+$/u.test(value.postgres_version) ||
     !exactKeys(value.database, ["size", "sha256"]) ||
@@ -81,6 +82,7 @@ export function requireBackup(value) {
   )
     fail("BACKUP_INVALID");
   requireRelease(value.release);
+  if (value.version === 2) requirePhotoManifest(value.photos);
   return value;
 }
 

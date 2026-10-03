@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { readFile, writeFile, link, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 export async function backupAcceptance(context) {
   const {
@@ -22,23 +23,57 @@ export async function backupAcceptance(context) {
   const { runtimeEnvironment } = await load("lifecycle-environment.mjs");
   const { pgControl } = await load("lifecycle-process.mjs");
   const { databaseTools } = await load("backup-database.mjs");
-  const { createBackup } = await load("backup-files.mjs");
+  const { createBackup, readBackup } = await load("backup-files.mjs");
   let saved;
   let savedManifest;
+  let photo;
+  const photoId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const photoBytes = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aCioAAAAASUVORK5CYII=",
+    "base64",
+  );
   const run = (action, options = {}) => command(action, payload, expectedDigest, options);
   const rejected = (action, options, pattern) =>
     assert.rejects(run(action, options), (error) => pattern.test(error.stderr ?? ""));
   await scenario("managed-backup-and-database-restore", async () => {
+    const { createPhotoFileStore } = await import(
+      pathToFileURL(join(payload, "server/dist/photo/file-store.js")).href
+    );
+    const { parseLocalPhotoStoreDir } = await import(
+      pathToFileURL(join(payload, "server/dist/local/config.js")).href
+    );
+    const fromOldController = parseLocalPhotoStoreDir({
+      LOCALAPPDATA: process.env.LOCALAPPDATA,
+      LAUNDRY_RUNTIME_RELEASE: "0.1.0-win-dev.8",
+    });
+    assert.equal(fromOldController, join(root, "photos"));
+    const files = await createPhotoFileStore({ rootPath: join(root, "photos") });
+    photo = await files.write(photoBytes, "image/png", photoId);
+    await sql(`INSERT INTO public.garment_photos (id, org_id, store_id, garment_id, order_id, kind, storage_key, content_type, content_sha256, byte_size, taken_at, created_by_staff_id)
+      SELECT '${photoId}', s.org_id, s.id, '${photoId}', '${photoId}', 'receive', '${photo.storage_key}', '${photo.content_type}', '${photo.content_sha256}', ${photo.byte_size}, now(), f.id
+      FROM public.stores s JOIN public.staffs f ON f.org_id = s.org_id ORDER BY s.id, f.id LIMIT 1`);
+    assert.equal(
+      await sql(`SELECT count(*) FROM public.garment_photos WHERE id = '${photoId}'`),
+      "1",
+    );
+    assert.equal(
+      (await platform.inspectPrivateDirectory(files.rootPath)).scheme,
+      "windows-dacl-v1",
+    );
     saved = await run("backup");
     const verified = await run("backup-verify", { backupId: saved.backup_id });
     assert.equal(verified.manifest_sha256, saved.manifest_sha256);
     assert.equal((await run("backup-list")).backups.length, 1);
     savedManifest = await readFile(join(root, "backups", saved.backup_id, "backup.json"));
     const metadata = JSON.parse(savedManifest);
-    assert.equal(metadata.photos, "disabled_empty");
+    assert.equal(metadata.version, 2);
+    assert.equal(metadata.photos.count, 1);
+    assert.equal(metadata.photos.total_bytes, photoBytes.length);
     await sql(
       "INSERT INTO public.runtime_acceptance_probe VALUES (3); CREATE TABLE public.post_backup_probe (id integer)",
     );
+    await sql(`DELETE FROM public.garment_photos WHERE id = '${photoId}'`);
+    await files.remove(photo.storage_key, photo.content_sha256);
     const result = await run("restore", {
       backupId: saved.backup_id,
       confirmation: saved.manifest_sha256,
@@ -46,6 +81,11 @@ export async function backupAcceptance(context) {
     assert.equal(result.status, "running");
     assert.equal(await sql("SELECT count(*) FROM public.runtime_acceptance_probe"), "2");
     assert.equal(await sql("SELECT to_regclass('public.post_backup_probe') IS NULL"), "t");
+    assert.equal(
+      await sql(`SELECT content_sha256 FROM public.garment_photos WHERE id = '${photoId}'`),
+      photo.content_sha256,
+    );
+    assert.deepEqual((await files.read(photo)).bytes, photoBytes);
     assert.equal(await secretDigest(), beforeSecrets);
     // Prove the automatically-created safety point contains the pre-restore state.
     await run("restore", {
@@ -53,9 +93,14 @@ export async function backupAcceptance(context) {
       confirmation: result.safety_backup.digest,
     });
     assert.equal(await sql("SELECT count(*) FROM public.runtime_acceptance_probe"), "3");
+    assert.equal(
+      await sql(`SELECT count(*) FROM public.garment_photos WHERE id = '${photoId}'`),
+      "0",
+    );
     assert.equal(await sql("SELECT to_regclass('public.post_backup_probe') IS NOT NULL"), "t");
     await run("restore", { backupId: saved.backup_id, confirmation: saved.manifest_sha256 });
     assert.equal(await sql("SELECT count(*) FROM public.runtime_acceptance_probe"), "2");
+    assert.deepEqual((await files.read(photo)).bytes, photoBytes);
   });
   await scenario("backup-corruption-confirmation-instance-and-version-rejection", async () => {
     const directory = join(root, "backups", saved.backup_id);
@@ -178,10 +223,7 @@ export async function backupAcceptance(context) {
     await io.write(join(root, "maintenance.json"), JSON.stringify(record));
     candidate = await database.create(candidate);
     await io.write(join(root, "maintenance.json"), JSON.stringify({ ...record, candidate }));
-    const target = {
-      path: join(root, "backups", saved.backup_id, "database.dump"),
-      manifest: JSON.parse(savedManifest),
-    };
+    const target = await readBackup(settings, saved.backup_id, saved.manifest_sha256);
     await database.restore(candidate, target);
     await io.write(
       join(root, "maintenance.json"),

@@ -123,23 +123,22 @@ export async function securePhotoStoreRoot(rootPath: string): Promise<string> {
     throw new PhotoFileError("PHOTO_ROOT_INVALID", "photo root must be a real directory");
   }
   const canonical = await realpath(normalized);
-  if (canonical !== normalized) {
+  if (
+    process.platform === "win32"
+      ? canonical.toLowerCase() !== normalized.toLowerCase()
+      : canonical !== normalized
+  ) {
     throw new PhotoFileError("PHOTO_ROOT_INVALID", "photo root must not traverse aliases");
   }
   await establishStoreOwnership(canonical);
   await securePrivateDirectory(canonical);
   await inspectPrivateDirectory(canonical);
-  const handle = await open(
-    canonical,
-    constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0),
-  );
-  try {
-    const opened = await handle.stat();
-    if (!opened.isDirectory() || opened.dev !== metadata.dev || opened.ino !== metadata.ino) {
-      throw new PhotoFileError("PHOTO_ROOT_INVALID", "photo root changed during initialization");
-    }
-  } finally {
-    await handle.close();
+  // Node's POSIX directory open is unsupported on Windows. The platform helper
+  // opens the directory with BACKUP_SEMANTICS + OPEN_REPARSE_POINT, validates its
+  // identity and private DACL, and performs the durable directory flush below.
+  const current = await lstat(canonical);
+  if (!current.isDirectory() || current.dev !== metadata.dev || current.ino !== metadata.ino) {
+    throw new PhotoFileError("PHOTO_ROOT_INVALID", "photo root changed during initialization");
   }
   await flushDirectoryDurably(canonical);
   await assertRealDirectoryChain(canonical);

@@ -4,6 +4,7 @@ export {
   flushDirectoryDurablySync,
   replaceFileWriteThrough,
   replaceFileWriteThroughSync,
+  publishFileNoReplace,
   type PlatformFileOptions,
 } from "./durable.js";
 export {

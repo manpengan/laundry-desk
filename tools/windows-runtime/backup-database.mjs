@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { fail } from "./companion-contract.mjs";
-import { exists } from "./lifecycle-storage.mjs";
 import { kit } from "./lifecycle-database.mjs";
 import { run } from "./lifecycle-process.mjs";
 import { streamPostgres } from "./backup-process.mjs";
 import { backupSpace, withBackupDump } from "./backup-files.mjs";
 import { MAX_BACKUPS } from "./backup-contract.mjs";
+import { MAX_PHOTOS, requirePhotoEntry } from "./backup-photo-contract.mjs";
+import { verifyPhotoReferences } from "./backup-photo-files.mjs";
 
 const CONNECTION = ["--host=127.0.0.1", "--port=8543", "--username=postgres", "--no-password"];
 const DATABASE = /^(?:laundry_v2|postgres|laundry_(?:restore|previous)_[a-f0-9]{32})$/u;
@@ -54,9 +55,29 @@ export function databaseTools(context, dependencies = {}) {
       fail("BACKUP_DATABASE_IDENTITY_INVALID");
     return Number(value);
   }
-  async function verify(name = "laundry_v2") {
+  async function photoRows(name) {
+    const count = await sql(name, "SELECT count(*) FROM public.garment_photos");
+    if (!/^[0-9]+$/u.test(count) || Number(count) > MAX_PHOTOS) fail("BACKUP_PHOTO_QUOTA_EXCEEDED");
+    const rows = [];
+    for (let offset = 0; offset < Number(count); offset += 100) {
+      const text = await sql(
+        name,
+        `SELECT COALESCE(json_agg(p), '[]'::json)::text FROM (SELECT storage_key AS key, byte_size AS size, content_sha256 AS sha256 FROM public.garment_photos ORDER BY id LIMIT 100 OFFSET ${offset}) p`,
+      );
+      let batch;
+      try {
+        batch = JSON.parse(text);
+      } catch {
+        fail("BACKUP_PHOTO_REFERENCE_INVALID");
+      }
+      if (!Array.isArray(batch) || batch.length !== Math.min(100, Number(count) - offset))
+        fail("BACKUP_PHOTO_REFERENCE_INVALID");
+      rows.push(...batch.map(requirePhotoEntry));
+    }
+    return rows;
+  }
+  async function verify(name = "laundry_v2", expectedPhotos) {
     if (!DATABASE.test(name) || name === "postgres") fail("BACKUP_DATABASE_INVALID");
-    if (await exists(join(root, "photos"))) fail("PHOTO_BACKUP_REQUIRED");
     let selected = env;
     if (name !== "laundry_v2") {
       const directory = join(root, "maintenance-secrets");
@@ -77,8 +98,7 @@ export function databaseTools(context, dependencies = {}) {
     );
     if ((await sql(name, `SELECT CASE WHEN ${tables} THEN 'OK' ELSE 'INVALID' END`)) !== "OK")
       fail("BACKUP_TABLES_INVALID");
-    if ((await sql(name, "SELECT count(*) FROM public.garment_photos")) !== "0")
-      fail("PHOTO_BACKUP_REQUIRED");
+    await verifyPhotoReferences(context, await photoRows(name), expectedPhotos);
   }
   async function space() {
     const bytes = await sql("postgres", "SELECT pg_database_size('laundry_v2')::text");
@@ -139,7 +159,7 @@ export function databaseTools(context, dependencies = {}) {
         { input: file },
       );
     });
-    await verify(value.name);
+    await verify(value.name, backup.photos);
   }
   async function assertLayout(value, swapped) {
     const current = await oid("laundry_v2");

@@ -20,6 +20,7 @@ import {
   fail,
   MANIFEST_NAME,
   BACKUP_FILES,
+  PHOTO_BACKUP_FILES,
 } from "./companion-contract.mjs";
 import { inventory, requireRealDirectory } from "./companion-files.mjs";
 import { inspectCompanion } from "./inspect-companion.mjs";
@@ -48,6 +49,8 @@ const scriptNames = [
   "backup-process.mjs",
   "backup-database.mjs",
   "backup-maintenance.mjs",
+  "backup-photo-contract.mjs",
+  "backup-photo-files.mjs",
   "lifecycle-host.ps1",
   "lifecycle-identity.ps1",
   "lifecycle-launch.ps1",
@@ -246,7 +249,11 @@ export async function packageCompanion({
       ),
     );
     const { files } = await inventory(payload);
-    if (BACKUP_FILES.some((path) => !files.some((file) => file.path === path)))
+    if (
+      [...BACKUP_FILES, ...PHOTO_BACKUP_FILES].some(
+        (path) => !files.some((file) => file.path === path),
+      )
+    )
       fail("BACKUP_CAPABILITY_INCOMPLETE");
     console.error("WINDOWS_COMPANION_STAGE_MANIFEST");
     const manifest = canonicalManifest({

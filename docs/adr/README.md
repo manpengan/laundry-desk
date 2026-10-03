@@ -77,6 +77,8 @@
 | [ADR-67](2026-08-30-adr-67-windows-native-local-runtime.md)                   | Windows 独立原生 PostgreSQL/Fastify Runtime     | **Accepted** 2026-08-30；W1.5 本地服务闭环         |
 | [ADR-71](2026-10-02-adr-71-cloud-platform-pause.md)                           | Cloud 平台暂停开发与部署                        | **Accepted** 2026-10-02；ADR-37/64/65 Cloud 暂停   |
 
+- [ADR-73](2026-10-03-adr-73-windows-photo-backup.md)：Windows 照片与数据库联合恢复，实现候选，Windows 验收待执行。
+
 ## v1 线
 
 | ADR                                                | 主题            | 状态                                              |
