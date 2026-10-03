@@ -15,6 +15,7 @@ export const OPERATOR_HELPERS = Object.freeze([
 export const ENTRY_ACTIONS = Object.freeze([
   "install",
   "status",
+  "diagnostics",
   "start",
   "stop",
   "repair",

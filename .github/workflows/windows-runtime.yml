@@ -140,7 +140,7 @@ jobs:
         run: |
           $trustedNode = (Get-Command node.exe).Source
           $acceptance = Join-Path $env:RUNNER_TEMP 'lifecycle-acceptance.mjs'
-          foreach ($name in @('lifecycle-acceptance.mjs','lifecycle-acceptance-command.mjs','backup-acceptance.mjs')) {
+          foreach ($name in @('lifecycle-acceptance.mjs','lifecycle-acceptance-command.mjs','backup-acceptance.mjs','diagnostic-acceptance.mjs')) {
             Copy-Item (Join-Path $env:GITHUB_WORKSPACE "tools/windows-runtime/$name") (Join-Path $env:RUNNER_TEMP $name)
           }
           $hiddenSource = Join-Path $env:RUNNER_TEMP 'laundry-source-unavailable'

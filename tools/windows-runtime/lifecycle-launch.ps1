@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory=$true)][ValidateSet('install','repair','start','stop','upgrade','rollback','uninstall','status','backup','backup-list','backup-verify','restore','maintenance-recover')][string]$Action,
+  [Parameter(Mandatory=$true)][ValidateSet('install','repair','start','stop','upgrade','rollback','uninstall','status','backup','backup-list','backup-verify','restore','maintenance-recover','diagnostics')][string]$Action,
   [Parameter(Mandatory=$true)][string]$Payload,
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{64}$')][string]$ManifestDigest,
   [ValidatePattern('^b_[a-f0-9]{32}$')][string]$BackupId,

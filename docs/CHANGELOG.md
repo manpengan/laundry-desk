@@ -2,7 +2,7 @@
 
 本项目版本记录。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 SemVer。
 
-> **当前路线（2026-08-29 修订）**：[ADR-66](adr/2026-08-29-adr-66-windows-hongfa-pilot.md) 把后续主线切换为活动 V2 Windows 定制 EXE，并以宏发作为首个受控运营试点；[ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 规定 V2 是唯一活动交付线。根 v1 继续冻结；真实顾客数据仍须先通过 ADR-65 的独立 production-candidate、离机恢复、告警、容量与数据授权门禁。
+> **当前路线（2026-10-02 修订）**：[ADR-71](adr/2026-10-02-adr-71-cloud-platform-pause.md) 明确 Windows V2 本地安装版是唯一活动交付线，继续执行 [ADR-66](adr/2026-08-29-adr-66-windows-hongfa-pilot.md) 的宏发发行 profile 与受控试点方向。自 2026-10-01 起，Cloud 平台暂停开发与部署，既有代码与 CI 保留，`hk-vps-cloud-test` 现状冻结且只允许合成数据。真实顾客数据准入须另立本机形态生产准入 ADR；当前 Windows 开发测试只使用合成数据。[ADR-13](adr/2026-07-23-adr-13-v2-only-upgrade-delivery.md) 的 V2-only 边界与根 v1 冻结保持。
 
 ---
 
@@ -12,11 +12,16 @@
 
 _本节记录**面向用户的变化**；纯内部重构与验证性工作不入 CHANGELOG，去向见 `docs/research/` 与 `docs/superpowers/plans/`。_
 
-### Windows 本机照片与联合备份
+### Windows 功能扩展（分批实施）
 
-- Windows Runtime 启用私有照片存储，托管备份将数据库、照片索引与实际照片一起保存、校验和恢复。
-  恢复前创建安全点，旧数据库备份安装包保持可识别；升级后旧登录控制器也能启用同一照片目录。
-  本地回归及独立审查通过，Windows 原生安装态验收待执行，见 [ADR-73](adr/2026-10-03-adr-73-windows-photo-backup.md)。
+- Windows Runtime 启用私有照片存储；新托管备份将数据库、照片索引与实际照片一起保存、校验和恢复，
+  恢复前建立安全点，支持失败后回退。旧版无照片备份和既有数据库备份安装包继续可识别。
+  实现与本地回归已完成，Windows 原生安装态验收待执行，见 [ADR-73](adr/2026-10-03-adr-73-windows-photo-backup.md)。
+- 本地服务维护窗口新增“导出诊断”，保存有摘要校验的私有 JSON 文件；仅含版本、端口/任务、维护和
+  备份统计，不读取顾客数据、密钥或原始日志，不自动上传。Windows 窗口实测待执行，见
+  [ADR-76](adr/2026-10-03-adr-76-windows-diagnostic-export.md)。
+- 全部 A1–A9/B1–B8 的逐项实现、审查与 Windows 状态分别记录在
+  [本轮分批清单](operations/2026-10-03-windows-full-feature-batches.md)；打印机相关暂缓，Cloud 仍暂停。
 
 ### 界面与操作
 
@@ -45,6 +50,19 @@ _本节记录**面向用户的变化**；纯内部重构与验证性工作不入
   Windows 上不再显示英文默认菜单栏（按 Alt 仍可呼出）。
 
 ### 修复
+
+- Windows IME 验收工具针对精确 Electron/Chromium 版本的结束事件信任标记差异增加受限判定，
+  同时审计脚本派发、事件顺序和输入节点；20 项纯回归、类型、lint 与独立 TypeScript 审查通过。
+  实机 IME3 在输入前暴露启动导航冲突，验收启动现先等待登录页加载完成，再安装审计并重载；
+  针对性类型、lint 与格式检查通过，IME4 已在 Windows 11 通用版和宏发版各 1 项实测通过，
+  零失败、跳过或 flaky，控制器和双管道正常关闭；此前失败记录保留。
+  打印验收工具修正固定系统目录大小写误拒绝，20 项本地回归及独立审查通过。
+  两项均为验收工具修正，Windows 软件打印结果仍待实际验证。
+
+- Windows 本地服务管理窗口修正 PowerShell 字符串引号，避免打开窗口时只显示
+  `WINDOWS_RUNTIME_ENTRY_FAILED`。生成脚本已通过 Windows PowerShell 5.1 原生解析回归，
+  修正 `.10` 候选的实际安装与窗口复验尚待完成，状态见
+  [Windows 全功能交付记录](operations/2026-10-01-windows-full-feature-delivery.md)。
 
 - 输入新价目搜索词后，加载期间的回车和点击不再误选上一次结果；取衣页的自动加载与扫码查询
   按最新请求更新，迟到响应不会覆盖新订单、提前解除加载状态或抹掉正在输入的扫码内容。

@@ -27,6 +27,7 @@ import {
 import { BACKUP_ACTIONS, requireBackupOptions } from "./backup-contract.mjs";
 import { readMaintenance } from "./backup-files.mjs";
 import { backupMaintenance } from "./backup-maintenance.mjs";
+import { exportDiagnosticBundle } from "./diagnostic-export.mjs";
 
 export const ACTIONS = Object.freeze([
   "install",
@@ -37,6 +38,7 @@ export const ACTIONS = Object.freeze([
   "rollback",
   "uninstall",
   "status",
+  "diagnostics",
   ...BACKUP_ACTIONS,
 ]);
 export function installationRoot() {
@@ -153,6 +155,22 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
       await save({ ...state, phase: "stopped" });
       await start(entry);
     } else {
+      // Diagnostics must remain available during staged/interrupted maintenance and
+      // must not enter pending-upgrade recovery or mutate service/database state.
+      if (action === "diagnostics") {
+        return exportDiagnosticBundle({
+          root,
+          io,
+          platform,
+          state,
+          probe: async () => {
+            const current = await verify(state.current);
+            const ports = await host("ports", root, current.payload, state.current.digest);
+            const scheduled = await task("inspect", current.payload, state.current);
+            return { ...ports, task: scheduled.exists };
+          },
+        });
+      }
       if (state.phase === "staged") {
         if (action === "stop") {
           await stop(state.current);

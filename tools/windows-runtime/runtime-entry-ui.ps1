@@ -69,11 +69,16 @@ function Show-RuntimeEntry {
       $output.Text = '正在执行，请等待操作结果……'; [Windows.Forms.Application]::DoEvents()
       $text = Invoke-RuntimeEntryAction $Verb $id $digest
       $result = $text | ConvertFrom-Json
-      $states = @{ running = '服务运行中'; stopped = '服务已停止'; initialized = '已初始化'; staged = '初始化未完成'; backups = '已读取备份'; maintenance_required = '维护中断，需要明确恢复' }
+      $states = @{ running = '服务运行中'; stopped = '服务已停止'; initialized = '已初始化'; staged = '初始化未完成'; backups = '已读取备份'; maintenance_required = '维护中断，需要明确恢复'; diagnostic_exported = '已导出脱敏诊断包' }
       $status = if ($result.PSObject.Properties.Name -contains 'status') { [string]$result.status } else { '' }
       $description = if ($states.ContainsKey($status)) { $states[$status] } else { '操作完成，请查看状态确认' }
       $lines = New-Object 'Collections.Generic.List[string]'
       $lines.Add($description)
+      if ($Verb -ceq 'diagnostics' -and $status -ceq 'diagnostic_exported') {
+        $lines.Add('文件：' + [string]$result.path)
+        $lines.Add('SHA256：' + [string]$result.sha256)
+        $lines.Add('仅包含版本、服务、维护和备份摘要；不含顾客资料、密钥或原始日志。文件未上传。')
+      }
       if ($result.PSObject.Properties.Name -contains 'backup_id' -and $result.PSObject.Properties.Name -contains 'manifest_sha256') {
         $lines.Add('备份：' + [string]$result.backup_id); $lines.Add('确认摘要：' + [string]$result.manifest_sha256)
       }
@@ -101,7 +106,7 @@ function Show-RuntimeEntry {
   foreach ($entry in @(
     @('安装本地服务','install'), @('查看状态','status'), @('启动服务','start'), @('停止服务','stop'),
     @('修复服务','repair'), @('创建备份','backup'), @('查看备份','backup-list'),
-    @('升级到本包','upgrade'), @('回滚程序','rollback'), @('继续中断维护','maintenance-recover')
+    @('升级到本包','upgrade'), @('回滚程序','rollback'), @('继续中断维护','maintenance-recover'), @('导出诊断','diagnostics')
   )) {
     $button = New-Object Windows.Forms.Button; $button.Text = $entry[0]; $button.Tag = $entry[1]
     $button.AutoSize = $true; $button.Height = 34

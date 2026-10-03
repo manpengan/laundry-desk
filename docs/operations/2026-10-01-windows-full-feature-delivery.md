@@ -4,7 +4,170 @@
 只使用合成数据；活动 V2 和固定本机服务继续是交付对象，根 V1 冻结。
 打印机目前不可用，实体打印不记为通过。旧 Windows 工作区、数据库、备份及共享服务保留。
 
-## 2026-10-02 接续状态
+## 最新状态：2026-10-03 00:28 UTC
+
+**剩余验收因传输条件受阻，尚未完成。** 连续复核仅得到直连 IPv4，本次 IPv4 例外许可尚未
+收到，已安全停止新的来宾操作。IME4 双发行通过记录保持；Runtime 最后确认仍为
+`0.1.8-win-dev.20261002`，此后没有升级。打印 casefix 第 4–5 步只读校验已提交，尚未收取
+终态；没有创建新的测试根目录，也没有启动新的绑定器、SourceCheck 或打印 Run。
+打印 casefix、完整 `.9` 验收 peer 和 `.10` 候选三个 ISO 已上传宿主机并完成摘要读回，
+仅代表介质准备完成，不代表已在 Windows 部署或通过后续验收。
+恢复接续以[安全停止交接记录](../../dist/windows-f7771d9-20261003/evidence/windows11-final-acceptance-transport-handoff.json)
+为准，先读取原只读操作终态，不重放未知结果的命令。
+后续公开命令见[验收接续材料](../../dist/windows-f7771d9-20261003/acceptance-handoff/README.md)，
+这些材料仅供接续执行，不是通过凭证。
+
+本轮核对本地 `main`、`origin/main` 与 GitHub 均为 `f7771d9`，workspace-check、
+runtime-app-macos、real-postgres、windows-runtime-payload 四项 CI 均为 success。
+这些 CI 属于该主线；未提交修复的针对性验证与完整 CI 分开记录。
+
+Windows 软件验收尚未结束。Windows 10 的 13 项维护覆盖（旧 3 项加新 10 项）、两种安装版的
+四项核心旅程与独立资源保全检查均已完成。Windows 11 的安装、升级和四项核心旅程也已通过，
+IME4 双发行实测现已通过；软件打印、修正 GUI、离线重放、卸载重装、真实托盘、回滚和登录自启
+仍待闭合。
+
+软件打印绑定器正常退出 0。原 SourceCheck 的 `WINDOWS_PRINT_QA_OUTER_PREFLIGHT_FAILED`
+失败保留；测试工具已修正 PowerShell 5.1 advanced function 参数变量与中文源码缺少 BOM
+的问题，新 SourceCheck PID 2540 正常退出 0、输出管道关闭、标准错误为空，结果为 passed，
+`product_started=false`。旧 Run 在业务进入前转为 `UNKNOWN_HOLD`，确认队列为零、捕获文件
+不存在后，Node 与 owner 已按精确进程身份和原句柄受控回收，退出码均为 -1、双输出管道关闭。
+旧现场和恢复标记保留，未重放打印；该回收不计为原测试正常退出或通过。
+已确认测试工具区分大小写比较固定系统目录导致
+前置拒绝，新修正只接受固定 `C:\Windows` 的 ASCII 大小写变化，其余目录与非法输入继续拒绝。
+15 项原绑定器回归及 5 项新增回归共 20 项通过，独立审查通过。公开 seal 探针已在 Windows
+通过，排除 stdin seal 的 BOM 问题；新的 Windows 软件打印仍待实测。
+
+IME4 已在 Windows 11 的 generic 与 hongfa 安装版分别完成真实虚拟键盘输入
+`nihao + Space`，再点击空手机号框。两版各 1 passed、0 failed/skipped/flaky，原生退出码 0，
+控制器和双输出管道正常关闭。每版观察到 14 个事件，可信组合开始 1、可信组合更新 6、组合结束
+总数 1、预期提交总数 1，最终文本符合预期，未保存客户。结束与提交的总数不表述为可信事件数。
+精确 Electron `41.10.6` / Chromium `146.0.7680.216` 版本、脚本派发审计、可信前导事件、
+事件顺序和原节点一致性由已绑定的验收代码强制验证。20 项纯回归、类型、lint、独立 TypeScript
+审查及本地浏览器 15 项审计断言此前已通过；最终介质的 1,305 文件 ISO 回读与产品内容不变均已核对。
+此前组合事件误判、IME3 在 READY 前的 `ERR_ABORTED` 及 IME4 首次英文输入失败均保留，
+本次成功不改写这些失败记录。
+
+本机有限证据：[测试工具验证与独立审查](../../dist/windows-f7771d9-20261003/evidence/ime-test-harness-and-print-guard-review-20261003.json)、
+[打印前置失败的受控回收](../../dist/windows-f7771d9-20261003/evidence/windows11-print-preentry-controlled-recovery.json)、
+[IME3 输入前失败](../../dist/windows-f7771d9-20261003/evidence/windows11-ime3-pre-ready-failed.json)、
+[IME4 双发行实测](../../dist/windows-f7771d9-20261003/evidence/windows11-ime4-both-profiles-passed.json)、
+[IME4 最终介质核对](/private/tmp/ld-ime4-final-_xczkbdh/root-verification.json)。原失败、SourceCheck
+截图、介质核对和新实测结果均已纳入本地 `evidence/index.json`。IME 通过不代表剩余 Windows
+验收已经完成；剩余实机操作当前因传输条件停止，待可用 IPv6 恢复或本次 IPv4 许可明确后接续。
+
+GUI 修复的 8 份生成脚本已通过实际 Windows PowerShell 5.1 解析回归。修正 `.9` 测试介质和
+`0.1.10-win-dev.20261003` 完整候选已逐文件校验；`.10` 用新的发行身份保留旧安装目录，
+仅改变发行元数据与 GUI 入口层，Counter、实际 payload、迁移和 Trust 不变。
+其来源明确为 F 基线加未提交修复，尚未在 Windows 安装，不能称为新的干净 CI 构建或完成版本。
+本地候选及来源证明保存在 `dist/windows-f7771d9-20261003/candidate-runtime10/`。
+
+剩余实际验收按以下范围执行，当前均待结果：
+
+| 范围                   | 剩余验收                                                                |
+| ---------------------- | ----------------------------------------------------------------------- |
+| generic 与 hongfa 各自 | 卸载重装保留状态                                                        |
+| 两版共享的同一 ASAR    | 离线重开与恰好一次重放、真实托盘各执行一次；不写成两个 profile 分别通过 |
+| Runtime 管理窗口       | 修正 `.9` 分发源码入口 GUI、最终 `.10` 安装后快捷方式 GUI               |
+| Runtime 生命周期       | `.9 → .10 → .9 → .10` 升级/回退链，以及最终 `.10` 系统重启后登录自启    |
+| 软件打印               | 固定票、签名合成订单和正常重开不重复打印                                |
+
+原 `.9 → .8 → .9` 和安装后 `.9` GUI 的重复执行计划取消；旧记录按原范围保留。
+
+以下时点保留历史进展；其中尚未完成的描述只代表当时状态，以本节及后续实测为准。
+
+## 2026-10-02 17:48 UTC 修复进行中
+
+尚未完成 Windows 软件验收。原生 Operator GUI 暴露 PowerShell 5.1 语法错误：
+`runtime-entry-ui.ps1:95` 的双引号字符串包含智能双引号，实际 `ParseFile` 报
+`UnexpectedToken`。源码已保持文案修正，并补生成入口及全部 helper 的原生解析回归。
+旧 Runtime ZIP 保留为原构建证据，暂不作为可交付完成版本；修正入口基于同一 F payload，
+明确带未提交源码修复，仍待 Windows 原生解析和 GUI 复验。
+
+两种 Counter 的四项 Windows 11 核心旅程已通过。真实中文已输入，但 IME 事件验收仍失败，
+正在补充有限诊断后定位；升级回滚、离线重放、系统登录自启、卸载重装、托盘和软件打印仍未闭合。
+Windows 10 接续的 start 误判已修复并通过 13 项原函数回归；原服务与数据已独立核验恢复，
+恢复观察器自身的失败保留，秘密 RAM 后比较不可得，剩余维护及业务旅程继续。
+
+18:01 UTC 新增实际结果：PowerShell 5.1 对两个修正入口的 8 份生成脚本全部解析成功，
+原 UI 第 95 行错误精确复现，回归进程退出 0。普通 Windows 11 账户的原生打印助手也已正确
+枚举固定中文测试队列并退出 0，严格 UTF-8 JSON 验证通过；窗口复验和 RAW 提交仍待完成。
+
+18:13 UTC Windows 10 接续已正常完成：剩余 10 项维护全部通过，generic/hongfa 两种安装版的
+Runtime/Functional 四项各 1 passed，零失败、跳过或 flaky。与此前同 F 产物的 3 项合并构成
+13 项维护覆盖，不能表述成单次全 13 项通过。独立终验确认原工作区 HEAD 与 168 项改动、
+原任务定义/权限与健康服务、原 8 份备份 manifest/dump、测试新增 4 份备份及两个 Counter ASAR
+均保持；Companion `.9` stopped/disabled，测试进程已退出。该新运行的六项 RAM 保全检查为真；
+此前失败运行无法完成的秘密比较仍不追认为通过。物理机锁屏，未将其计作可见 GUI 验收。
+
+## 当前状态：2026-10-02 16:47 UTC
+
+本节记录当前源码与实际验收状态，尚未完成全功能验收。下文旧源码、旧产物、失败现场与修复过程
+作为历史保留，不能用旧版通过替代本节当前版本实测。
+[ADR-71](../adr/2026-10-02-adr-71-cloud-platform-pause.md) 已明确 Windows V2 本地安装版是唯一活动
+交付线，Cloud 平台暂停开发部署，既有代码与 CI 保留。真实顾客准入须另立本机形态生产准入 ADR；
+本轮继续只使用合成数据。
+
+当前 `main` 为 `f7771d9e8225de52b899d18be5409b5a799c2d8a`，工作区、macOS、真实 PostgreSQL
+与 Windows 四项 CI 均已通过。Windows 构建批次 `w227m20261002a` 已生成并核验 generic/hongfa
+Counter `0.1.1` 和 Runtime `0.1.8-win-dev.20261002` / `0.1.9-win-dev.20261002`。
+
+| 当前产物               | SHA-256                                                            |
+| ---------------------- | ------------------------------------------------------------------ |
+| generic Counter 安装包 | `f2a958b930079f0274b47b5b9bcc23050882da686a8876557c5d1adec3f39e09` |
+| hongfa Counter 安装包  | `668bd6fb73d15d0bbaa343037445aa0ba622f57e9491ffe2c947637e92c3c911` |
+| Runtime 0.1.8 manifest | `a294f60931142e584664a78ba2342b1c648e2cb9e0c80c90fadb3b40d46120d4` |
+| Runtime 0.1.9 manifest | `0457ee7e4d5928133389ada77546350db21c449a6cb45a8d99c0be04519def6e` |
+
+本机可从仓库工作区的 `dist/windows-f7771d9-20261003/` 领取保留副本；该目录已被 Git 忽略，
+属于 `development_only` 开发产物，安装版验收进行中，不是正式发布渠道。
+目录含两份安装 EXE、两份完整 Runtime ZIP、`delivery.json`、`build-result.json` 与 `README.txt`。
+两份 ZIP 各有 6,439 个文件，写入后已逐成员回读，对照可信构建介质核验大小与 SHA-256；
+完整解压后使用包内入口，不应只复制入口脚本。
+
+| 本地保留的 Runtime ZIP                                                    | 字节数   | SHA-256                                                            |
+| ------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------ |
+| `laundry-runtime-entry-f7771d9-w227m20261002a-0.1.8-win-dev.20261002.zip` | 95314497 | `9222f309fa1934858a4ee1333260b9bd93878432fd28bceaf1896366205623a2` |
+| `laundry-runtime-entry-f7771d9-w227m20261002a-0.1.9-win-dev.20261002.zip` | 95314491 | `8af9d37bdaba1504ea84c89d42dc38798599e329ddc64367f428926c64fe32dc` |
+
+Windows 11 普通账户 Session 1、150% DPI 的安装版已完成两份 NSIS 安装和 Runtime `0.1.4 → 0.1.8`
+升级，三次入口均正常退出 0。两种发行各自的 Runtime 与 Functional 验收共四条核心旅程全部通过，
+每条均为 1 passed、0 failed/skipped/flaky，原生退出码为 0，控制器退出与输出管道关闭已确认。
+这些结果证明柜台主业务旅程及已执行的凭据、偏好、最小化、第二实例和正常关闭重开检查；
+尚不代表所有模块或真实托盘菜单均已实测。
+
+首次中文 IME 验收错误地把 Playwright 启动的 `cmd` 进程 ID 当作 Electron 主进程 ID，
+在输入前被身份检查拒绝；原失败保留。验收代码已改为读取 Electron 主进程自身的 `process.pid`，
+类型、针对性 lint、格式与独立审查通过。修正后的 generic 实机复测已通过身份就绪检查，
+最终仍为 `TEST_NOT_PASSED`，控制器退出与输出管道关闭均已确认。
+实际输入处于英文模式，尚未形成中文 composition 产品缺陷证据；测试输入驱动继续修正，
+两种发行的 IME 验收仍未关闭。
+维护操作界面、真实托盘菜单、DPAPI 离线重开与恰好一次重放、卸载重装保留状态、
+OS 重启后的登录自启、`0.1.8 ↔ 0.1.9` 升级回滚及软件打印链仍待实际完成。
+
+Windows 10 当前版本已完成两份 NSIS 安装与首次 Runtime 升级。13 项维护场景的前三项通过，
+第 4 项 `scheduled-task-start` 以 `WINDOWS_LOCALQA_CONTROLLER_UNCONFIRMED` 失败；
+后续维护场景及四条柜台旅程未执行。原开发服务随后已独立恢复验证为 ready：原 HEAD、
+168 项工作区变更、八份备份的 manifest 与 dump、原任务 XML/SDDL 及两份安装 ASAR 均保留。
+恢复阶段新建的内存快照确认秘密字节前后相同；整轮开始前的秘密字节快照不可用，
+因此不追认为整轮秘密字节保全已获重证。恢复成功不改变原维护失败，也不计为剩余测试通过。
+残留验收控制器已按精确身份受控结束并确认无残留，旧服务保持 ready；
+该终止不计为原 QA 的正常退出或通过。
+
+软件打印验收工具的来源与文件持有保护已在 Windows 原生环境完成 11 项合成探针，
+原生退出 0，两项源码摘要与两项语法检查通过。探针未触碰队列或提交 RAW；实际软件打印链仍待验收。
+
+当前有限结果留存在临时 QA 归档：
+`/private/tmp/laundry-win11-kvm-20261001/agent-latest-f777-core-four-finite-actual-20261002.json` 与
+`/private/tmp/laundry-f777-normal-stop-restore-20261002-__cf1fkw/actual-recovery-result.json`。
+这些临时路径保留实际测试证据；产物保留副本与摘要索引见上述本地 `dist` 目录。
+
+实体打印机目前缺席，软件队列验收不计为实际出纸；当前安装包仍为未签名开发版。
+[ADR-68](../adr/2026-09-30-adr-68-windows-managed-backup-restore.md) 的跨迁移恢复、照片、换机
+及加密外部导出属于后续范围，本轮不扩展这些能力，也不将其标为已完成。
+
+## 历史接续：2026-10-02，8284470 及此前批次
+
+以下保留各历史时点的原始进展与失败事实；其中“当前”“待执行”等表述仅指该历史批次。
 
 [PR #228](https://github.com/manpengan/laundry-desk/pull/228) 的首轮工作区、macOS 和真实 PostgreSQL
 检查已通过。新接入 Windows CI 的 platform-fs 测试实际为 8 passed、1 failed、0 skipped：
@@ -23,7 +186,7 @@ Windows 11 软件打印环境的单次目录创建已知在 SET_PRIVATE_QA_ACL �
 该候选实际通过三项摘要、两项原生语法及二十项内存回归；未执行候选顶层、原生信任方法或权限写入。
 普通账户单次修复与严格读回继续执行，修复成功前不记为打印环境准备通过。
 
-当前源码为 `828447094fe741ddc2e49c6b938e53194da55a52`，
+该历史批次源码为 `828447094fe741ddc2e49c6b938e53194da55a52`，
 [PR #225](https://github.com/manpengan/laundry-desk/pull/225) 已普通合并。
 工作区、macOS、真实 PostgreSQL 与 Windows 四项主线 CI 全绿；
 [Windows run 36936205584](https://github.com/manpengan/laundry-desk/actions/runs/36936205584)
@@ -183,7 +346,7 @@ Windows 原生回归已实际确认旧版 1 failed、新版 1 passed，均仅一
 本次 UTF-8 修复的完整 `workspace:check` 已实际退出 0，覆盖依赖审计、格式、lint、
 类型检查、工作区测试和构建；Windows 原生专项与 PostgreSQL 环境专项的本地跳过单独保留。
 
-## 源码与独立审查
+## 历史源码与独立审查
 
 安装修复的 PR #223 已以普通 merge 合入主线 `59f13c2ccd10527c1cf21b177e1cfa05b04bf949`；依赖审计发现新 GHSA-4mh8-r7rc-xpvc 后，将活动 Server Fastify 精确升级至
 5.12.5，保留原审计策略。CI 的 ACL 合成测试在原 20 秒子进程期限处被终止，仅延长测试预算至
@@ -236,7 +399,7 @@ macOS 检查器也统一读取包元数据，并以旧版本拒绝回归修复�
 子进程回归验证。升级此前没有保存新版 Programs 维护入口；Windows 回归先复现撤走候选包后
 入口不存在，再以安装与升级共用原私有安装流程修复，保留旧入口。
 
-## 当前软件验证
+## 历史软件验证
 
 - 依赖审计：high=0、critical=0，仅原有两项精确例外。
 - Server：1171 项，1069 通过、102 PostgreSQL 环境专项跳过、0 失败。
@@ -252,7 +415,7 @@ macOS 检查器也统一读取包元数据，并以旧版本拒绝回归修复�
 Windows 专项上述入口使用受控合成 launcher，不运行真实数据库或登录任务；
 SSH 令牌不等于普通用户 Session 1，不能据此关闭实机安装与 GUI 门禁。
 
-## 安装版闭环
+## 历史安装版闭环
 
 PR #224 的四项 CI 已通过，普通合并主线为
 `4592e4dc41af5b2ee5ffdeec18601d8b537c08fc`。PR 的自动测试合并源码与最终主线代码树相同，

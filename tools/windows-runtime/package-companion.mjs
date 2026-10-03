@@ -51,6 +51,8 @@ const scriptNames = [
   "backup-maintenance.mjs",
   "backup-photo-contract.mjs",
   "backup-photo-files.mjs",
+  "diagnostic-bundle.mjs",
+  "diagnostic-export.mjs",
   "lifecycle-host.ps1",
   "lifecycle-identity.ps1",
   "lifecycle-launch.ps1",

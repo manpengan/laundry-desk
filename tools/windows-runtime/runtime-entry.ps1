@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('gui','install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','restore','maintenance-recover')][string]$Action = 'gui',
+  [ValidateSet('gui','install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','restore','maintenance-recover','diagnostics')][string]$Action = 'gui',
   [string]$BackupId,
   [string]$ConfirmationDigest
 )
@@ -36,7 +36,7 @@ function Assert-EntryArguments {
 function Invoke-RuntimeEntryAction {
   param([string]$Verb, [string]$Id, [string]$Confirmation)
   Assert-EntryArguments $Verb $Id $Confirmation
-  if (@('install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','restore','maintenance-recover') -cnotcontains $Verb) {
+  if (@('install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','restore','maintenance-recover','diagnostics') -cnotcontains $Verb) {
     throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID'
   }
   if ($Verb -ceq 'install' -or $Verb -ceq 'upgrade') { [void](Install-RuntimeEntry) }

@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { launchCommander } from "./lifecycle-acceptance-command.mjs";
 import { backupAcceptance } from "./backup-acceptance.mjs";
+import { diagnosticAcceptance } from "./diagnostic-acceptance.mjs";
 const execute = promisify(execFile);
 const [payload, expectedDigest, reportFile] = process.argv.slice(2);
 assert.equal(process.platform, "win32");
@@ -140,6 +141,16 @@ try {
     secretDigest,
     beforeSecrets,
     load,
+  });
+  await diagnosticAcceptance({
+    scenario,
+    command,
+    platform,
+    io,
+    root,
+    secretDigest,
+    beforeSecrets,
+    digest,
   });
   const second = await variant("laundry-runtime-second", (value) => {
     value.runtime_release = "0.1.0-win-dev.2";

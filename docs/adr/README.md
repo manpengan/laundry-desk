@@ -77,7 +77,11 @@
 | [ADR-67](2026-08-30-adr-67-windows-native-local-runtime.md)                   | Windows 独立原生 PostgreSQL/Fastify Runtime     | **Accepted** 2026-08-30；W1.5 本地服务闭环         |
 | [ADR-71](2026-10-02-adr-71-cloud-platform-pause.md)                           | Cloud 平台暂停开发与部署                        | **Accepted** 2026-10-02；ADR-37/64/65 Cloud 暂停   |
 
+2026-10-03 Windows 扩展实施：
+
+- [ADR-72](2026-10-03-adr-72-windows-full-feature-delivery.md)：A1–A9/B1–B8 范围与分批交付，Accepted（用户明确授权）。
 - [ADR-73](2026-10-03-adr-73-windows-photo-backup.md)：Windows 照片与数据库联合恢复，实现候选，Windows 验收待执行。
+- [ADR-76](2026-10-03-adr-76-windows-diagnostic-export.md)：Windows 一键脱敏诊断导出，Proposed。
 
 ## v1 线
 
