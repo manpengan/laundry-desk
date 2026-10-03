@@ -160,3 +160,77 @@ test("cancellation during credential refresh prevents opening the stream", async
   assert.equal(((await pending) as { ok: boolean }).ok, false);
   assert.equal(requests, 0);
 });
+
+test("human action confirmation uses only the fixed nonce endpoint", async () => {
+  const requests: DesktopHttpRequest[] = [];
+  const response = { ok: true, data: { command: "garment.rework", executed: true } };
+  const service = createDesktopAiOperation(
+    {
+      async request(request) {
+        requests.push(request);
+        return { statusCode: 200, bodyText: JSON.stringify(response) };
+      },
+    },
+    () => state,
+  );
+  assert.deepEqual(
+    await service.execute({ operation: "actionConfirm", body: { confirm_ref: id } }),
+    response,
+  );
+  assert.equal(requests[0]?.url, "http://127.0.0.1:8787/api/v2/ai/operations/confirm");
+  assert.equal(requests[0]?.headers["X-CSRF-Token"], state.csrfToken);
+  assert.equal(
+    (
+      (await service.execute({
+        operation: "actionConfirm",
+        body: { confirm_ref: id, input: {} },
+      })) as { ok: boolean }
+    ).ok,
+    false,
+  );
+  assert.equal(requests.length, 1);
+});
+
+test("vision operation is strict and logout aborts the same tracked request", async () => {
+  const requests: string[] = [];
+  let aborted = false;
+  const operation = createDesktopAiOperation(
+    {
+      request: async (request) => {
+        requests.push(request.url);
+        await new Promise<void>((resolve) =>
+          request.signal?.addEventListener(
+            "abort",
+            () => {
+              aborted = true;
+              resolve();
+            },
+            { once: true },
+          ),
+        );
+        return {
+          statusCode: 409,
+          bodyText: JSON.stringify({
+            ok: false,
+            error: { code: "RESOURCE_UNAVAILABLE", message: "unavailable" },
+          }),
+        };
+      },
+    },
+    () => state,
+  );
+  const raw = {
+    operation: "visionAnalyze",
+    body: { request_id: id, mode: "assist", image_base64: "eA==", candidates: [], consent: true },
+  };
+  assert.equal(
+    ((await operation.execute({ ...raw, url: "https://arbitrary.invalid" })) as { ok: boolean }).ok,
+    false,
+  );
+  const pending = operation.execute(raw);
+  await new Promise((resolve) => setImmediate(resolve));
+  operation.cancelAll();
+  await pending;
+  assert.equal(aborted, true);
+  assert.deepEqual(requests, ["http://127.0.0.1:8787/api/v2/ai/vision/analyze"]);
+});

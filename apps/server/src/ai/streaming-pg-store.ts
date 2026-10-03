@@ -96,6 +96,7 @@ function eventFromRow(row: EventRow): AiStreamEvent {
       tool: row.tool_name,
       step: row.tool_step,
       outcome: row.tool_outcome,
+      ...(row.text_delta === null ? {} : { preview: JSON.parse(row.text_delta) }),
     });
   }
   if (row.event_type === "done") {
@@ -113,7 +114,11 @@ function eventFromRow(row: EventRow): AiStreamEvent {
 function eventParams(event: AiEventDraft): readonly unknown[] {
   return Object.freeze([
     event.type,
-    event.type === "content_delta" ? event.text : null,
+    event.type === "content_delta"
+      ? event.text
+      : event.type === "tool_result" && event.preview !== undefined
+        ? JSON.stringify(event.preview)
+        : null,
     event.type === "tool_call" || event.type === "tool_result" ? event.tool : null,
     event.type === "tool_call" || event.type === "tool_result" ? event.step : null,
     event.type === "tool_result" ? event.outcome : null,

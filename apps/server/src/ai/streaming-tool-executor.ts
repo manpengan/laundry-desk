@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import {
   AI_ASSISTANT_TOOL_TIMEOUT_MS,
+  AiOperationPreviewSchema,
+  type AiOperationPreview,
   type AiAssistantToolCall,
   type AiAssistantToolResult,
   type AiStreamToolName,
@@ -112,7 +114,9 @@ export async function executeAiTool(
     args: unknown;
     parentSignal: AbortSignal;
   }>,
-): Promise<Readonly<{ message: AiProviderMessage; outcome: ToolOutcome }>> {
+): Promise<
+  Readonly<{ message: AiProviderMessage; outcome: ToolOutcome; preview?: AiOperationPreview }>
+> {
   const startedAt = Date.now();
   const timeoutMs =
     input.name === "synthetic.lookup" ? SYNTHETIC_TOOL_TIMEOUT_MS : AI_ASSISTANT_TOOL_TIMEOUT_MS;
@@ -143,7 +147,19 @@ export async function executeAiTool(
     abortScope.dispose();
   }
   const counts = resultCounts(result);
-  const safeResult = sanitizeAiToolPayload(result);
+  const parsedPreview = AiOperationPreviewSchema.safeParse(
+    (result as Partial<AiAssistantToolResult>).preview,
+  );
+  const preview =
+    outcome === "succeeded" && input.name === "operations.preview" && parsedPreview.success
+      ? parsedPreview.data
+      : undefined;
+  // Confirmation nonces and human summaries stay out of provider messages.
+  const providerResult =
+    typeof result === "object" && result !== null
+      ? Object.fromEntries(Object.entries(result).filter(([key]) => key !== "preview"))
+      : result;
+  const safeResult = sanitizeAiToolPayload(providerResult);
   if (safeResult.blocked) outcome = "failed";
   await input.store.appendToolAttempt({
     attempt: Object.freeze({
@@ -164,5 +180,6 @@ export async function executeAiTool(
   return Object.freeze({
     message: Object.freeze({ role: "tool" as const, content: safeResult.content }),
     outcome,
+    ...(outcome === "succeeded" && preview !== undefined ? { preview } : {}),
   });
 }

@@ -4,9 +4,18 @@ import { ProviderAdapterError, type ProviderFailureCode } from "./provider-types
 export const PROVIDER_TIMEOUT_MS = 10_000;
 export const MAX_DISCOVERED_MODELS = 200;
 export type ExternalProviderToolName =
-  "synthetic_lookup" | "business_summary" | "records_search" | "procedure_troubleshoot";
+  | "synthetic_lookup"
+  | "business_summary"
+  | "records_search"
+  | "procedure_troubleshoot"
+  | "business_trend"
+  | "pickup_candidates"
+  | "operations_preview";
 
 export function toExternalToolName(name: string | undefined): ExternalProviderToolName {
+  if (name === "business.trend") return "business_trend";
+  if (name === "pickup.candidates") return "pickup_candidates";
+  if (name === "operations.preview") return "operations_preview";
   if (name === "synthetic.lookup") return "synthetic_lookup";
   if (name === "business.summary") return "business_summary";
   if (name === "records.search") return "records_search";
@@ -15,6 +24,9 @@ export function toExternalToolName(name: string | undefined): ExternalProviderTo
 }
 
 export function fromExternalToolName(name: string): AiProviderToolName {
+  if (name === "business_trend") return "business.trend";
+  if (name === "pickup_candidates") return "pickup.candidates";
+  if (name === "operations_preview") return "operations.preview";
   if (name === "synthetic_lookup") return "synthetic.lookup";
   if (name === "business_summary") return "business.summary";
   if (name === "records_search") return "records.search";

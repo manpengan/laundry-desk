@@ -164,6 +164,7 @@ describe("destructive migration static reject", () => {
       "0071_windows_ai_runtime_settings.sql",
       "0072_notification_provider_settings.sql",
       "0073_store_export_requests.sql",
+      "0074_ai_assistant_operations.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

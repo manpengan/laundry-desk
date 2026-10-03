@@ -47,7 +47,8 @@ export type SafeAudit = Readonly<{
     | "ai.turn.create"
     | "ai.turn.finish"
     | "ai.safety.reject"
-    | "ai.readonly_tool.execute";
+    | "ai.readonly_tool.execute"
+    | "ai.assistant_tool.execute";
   entityId: string;
   metadata: Readonly<Record<string, number | string>>;
 }>;
@@ -55,7 +56,11 @@ export type SafeAudit = Readonly<{
 export function readonlyToolAudit(attempt: AiToolAttemptRecord): SafeAudit | null {
   if (attempt.toolName === "synthetic.lookup") return null;
   return Object.freeze({
-    command: "ai.readonly_tool.execute",
+    command: ["business.trend", "pickup.candidates", "operations.preview"].includes(
+      attempt.toolName,
+    )
+      ? "ai.assistant_tool.execute"
+      : "ai.readonly_tool.execute",
     entityId: attempt.id,
     metadata: Object.freeze({
       tool_name: attempt.toolName,
@@ -104,5 +109,9 @@ export function publicTurn(turn: MemoryTurn): AiTurnRecord {
 export function eventBytes(
   event: Parameters<AiConversationStore["appendEvent"]>[0]["event"],
 ): number {
-  return event.type === "content_delta" ? Buffer.byteLength(event.text, "utf8") : 0;
+  return event.type === "content_delta"
+    ? Buffer.byteLength(event.text, "utf8")
+    : event.type === "tool_result" && event.preview !== undefined
+      ? Buffer.byteLength(JSON.stringify(event.preview), "utf8")
+      : 0;
 }

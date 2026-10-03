@@ -121,3 +121,6 @@ export {
   DesktopAiCancelResponseSchema,
 } from "./desktop.js";
 export type { DesktopAiInput } from "./desktop.js";
+export * from "./operations.js";
+
+export * from "./vision.js";

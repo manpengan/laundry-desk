@@ -93,6 +93,9 @@
 
 - [ADR-88](2026-10-03-adr-88-windows-scale-capture.md)：Windows 电子秤读取及收衣记录；软件与串口发现已验证，实物验收待设备。
 
+- [ADR-82](2026-10-03-adr-82-ai-bounded-operations-and-analysis.md)：经营分析、催取候选与人工确认的受限操作。
+- [ADR-83](2026-10-03-adr-83-garment-vision-assistance.md)：逐次同意、本店照片绑定的视觉辅助与掉标候选比较。
+
 ## v1 线
 
 | ADR                                                | 主题            | 状态                                              |

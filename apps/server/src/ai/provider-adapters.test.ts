@@ -450,7 +450,7 @@ test("provider failures are bounded and never expose credentials or raw response
   }
 });
 
-test("a truncated provider tool stream fails before emitting a callable event", async () => {
+test("a truncated provider tool stream accounts usage without emitting a callable event", async () => {
   const fixture = sse(
     {
       choices: [
@@ -475,7 +475,9 @@ test("a truncated provider tool stream fails before emitting a callable event", 
     },
   );
   const events = await collect(adapter("deepseek", "deepseek-v4-pro", new QueueHttp([fixture])));
-  assert.deepEqual(events, [{ type: "error", code: "provider_response_invalid" }]);
+  assert.deepEqual(events, [
+    { type: "end", finishReason: "limit", inputTokens: 8, outputTokens: 64 },
+  ]);
 });
 
 test("credential authority zeroes each lease on success and failure", async () => {

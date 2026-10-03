@@ -89,6 +89,10 @@ import { MemoryAiConversationStore } from "../ai/streaming-memory-store.js";
 import { createPgAiConversationStore } from "../ai/streaming-pg-store.js";
 import { createAiStreamingService } from "../ai/streaming-service.js";
 import { createAiRateLimiter, type AiRateLimiter } from "../ai/streaming-rate-limit.js";
+import { registerAssistantOperationRoutes } from "../ai/assistant-operation-routes.js";
+import { registerVisionRoutes } from "../ai/vision-routes.js";
+import { createVisionService } from "../ai/vision-service.js";
+import { createRuntimeVisionProviderResolver } from "../ai/vision-runtime-provider.js";
 import { registerAiStreamingRoutes } from "./ai-streaming-routes.js";
 import { createProviderValidationService } from "../ai/provider-validation-service.js";
 import type { ProviderHttpPort } from "../ai/provider-http.js";
@@ -317,6 +321,18 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     (options.runtime.pool === null
       ? new MemoryAiConversationStore()
       : createPgAiConversationStore(options.runtime.pool));
+  registerAssistantOperationRoutes(app, context);
+  registerVisionRoutes(
+    app,
+    context,
+    options.enableLocalAi === true && byokRuntime.kms !== null
+      ? createVisionService(
+          options.runtime,
+          aiStore,
+          createRuntimeVisionProviderResolver(byokRuntime, options.aiProviderHttp),
+        )
+      : null,
+  );
   registerAiStreamingRoutes(
     app,
     context,

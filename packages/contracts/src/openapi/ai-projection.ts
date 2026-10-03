@@ -7,6 +7,13 @@ import {
   AiTurnCreateRequestSchema,
   AiTurnCreateResponseSchema,
 } from "../ai/streaming.js";
+import { AiOperationConfirmSchema, AiOperationResponseSchema } from "../ai/operations.js";
+import {
+  AiVisionRequestSchema,
+  AiVisionResponseSchema,
+  AiVisionCandidateQuerySchema,
+  AiVisionCandidatesResponseSchema,
+} from "../ai/vision.js";
 import { AiSafetyStatusResponseSchema } from "../ai/safety.js";
 import {
   AiRuntimeConfigRequestSchema,
@@ -147,7 +154,7 @@ function buildAiOperation(row: (typeof AI_STREAMING_OPERATION_MATRIX)[number]): 
     operationId: `ai_${row.operation}`,
     summary: `AI ${row.operation}`,
     description:
-      "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Item 15 exposes only business.summary, records.search, and procedure.troubleshoot through the server registry; no write, free SQL, URL, header, credential, or provider escape hatch.",
+      "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. The finite server registry exposes analysis, masked lookup and R3 operation previews; only a separate human confirmation endpoint can execute. No free SQL, URL, header, credential or provider escape hatch.",
     tags: Object.freeze(["ai"]),
     ...(parameters.length === 0 ? {} : { parameters: Object.freeze(parameters) }),
     ...(requestSchema === null
@@ -223,6 +230,12 @@ export function collectAiOpenApiProjection(toSchema: SchemaConverter): Readonly<
   schemas: Record<string, OpenApiSchemaObject>;
 }> {
   const schemas = {
+    AiVisionRequest: toSchema(AiVisionRequestSchema),
+    AiVisionResponse: toSchema(AiVisionResponseSchema),
+    AiVisionCandidateQuery: toSchema(AiVisionCandidateQuerySchema),
+    AiVisionCandidatesResponse: toSchema(AiVisionCandidatesResponseSchema),
+    AiOperationConfirm: toSchema(AiOperationConfirmSchema),
+    AiOperationResponse: toSchema(AiOperationResponseSchema),
     AiAssistantToolCall: toSchema(AiAssistantToolCallSchema),
     AiAssistantToolResult: toSchema(AiAssistantToolResultSchema),
     AiEventReplayResponse: toSchema(AiEventReplayResponseSchema),
@@ -240,6 +253,33 @@ export function collectAiOpenApiProjection(toSchema: SchemaConverter): Readonly<
     AiProviderValidationResponse: toSchema(AiProviderValidationResponseSchema),
   };
   const paths: Record<string, OpenApiPathItem> = {};
+  for (const [name, input, output] of [
+    ["analyze", "AiVisionRequest", "AiVisionResponse"],
+    ["candidates", "AiVisionCandidateQuery", "AiVisionCandidatesResponse"],
+  ] as const) {
+    paths[`/api/v2/ai/vision/${name}`] = {
+      post: {
+        operationId: `ai_vision_${name}`,
+        summary: `Bounded garment vision ${name}`,
+        description:
+          "Current local tenant, ai_use and order_write only. Candidate lookup is local. Analysis requires explicit outgoing consent; images are re-encoded without metadata, at most two candidate hashes are rechecked, model output is advisory only. Existing AI budget, credentials and cancellation apply.",
+        tags: ["ai"],
+        parameters: [csrfHeader()],
+        requestBody: {
+          required: true,
+          content: { "application/json": jsonContent(schemaRef(input)) },
+        },
+        responses: {
+          "200": successSchemaResponse(output, "Bounded advisory response"),
+          default: failureResponse("Permission, photo, budget or provider failure"),
+        },
+        security: [{ bearerAuth: [], csrfHeader: [] }],
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R0",
+        "x-laundry-classification": "confidential",
+      },
+    };
+  }
   for (const row of AI_STREAMING_OPERATION_MATRIX) {
     const operation = buildAiOperation(row);
     paths[row.path] = Object.freeze(
@@ -252,6 +292,32 @@ export function collectAiOpenApiProjection(toSchema: SchemaConverter): Readonly<
   paths["/api/v2/ai/runtime-config"] = Object.freeze({
     get: runtimeConfigOperation(false),
     post: runtimeConfigOperation(true),
+  });
+  paths["/api/v2/ai/operations/confirm"] = Object.freeze({
+    post: Object.freeze({
+      operationId: "ai_operation_confirm",
+      summary: "Confirm a frozen, bounded assistant operation",
+      description:
+        "Human confirmation only. Revalidates the session, R3 command allowlist, original creator, tenant, permissions and frozen business authority. No model execution capability or automatic messages.",
+      tags: Object.freeze(["ai"]),
+      parameters: Object.freeze([csrfHeader()]),
+      requestBody: Object.freeze({
+        required: true as const,
+        content: Object.freeze({
+          "application/json": jsonContent(schemaRef("AiOperationConfirm")),
+        }),
+      }),
+      responses: Object.freeze({
+        "200": successSchemaResponse("AiOperationResponse", "Confirmed operation"),
+        default: failureResponse("Permission, expiry, state or input failure"),
+      }),
+      security: Object.freeze([
+        Object.freeze({ bearerAuth: Object.freeze([]), csrfHeader: Object.freeze([]) }),
+      ]),
+      "x-laundry-kind": "ai" as const,
+      "x-laundry-risk": "R3" as const,
+      "x-laundry-classification": "confidential" as const,
+    }),
   });
   return Object.freeze({ paths, schemas });
 }

@@ -26,6 +26,12 @@ type Route = Readonly<{
 }>;
 function route(input: DesktopAiInput): Route | null {
   switch (input.operation) {
+    case "visionAnalyze":
+      return { method: "POST", path: "/api/v2/ai/vision/analyze", body: input.body };
+    case "visionCandidates":
+      return { method: "POST", path: "/api/v2/ai/vision/candidates", body: input.body };
+    case "actionConfirm":
+      return { method: "POST", path: "/api/v2/ai/operations/confirm", body: input.body };
     case "models":
       return { method: "GET", path: "/api/v2/ai/models" };
     case "credentials":
@@ -107,9 +113,15 @@ export function createDesktopAiOperation(
       const selected = route(input);
       if (selected === null) return VALIDATION_FAILURE;
       const abort = new AbortController();
-      if (input.operation === "stream") {
-        if (streams.has(input.session_id)) return RESOURCE_FAILURE;
-        streams.set(input.session_id, abort);
+      const streamId =
+        input.operation === "stream"
+          ? input.session_id
+          : input.operation === "visionAnalyze"
+            ? input.body.request_id
+            : null;
+      if (streamId !== null) {
+        if (streams.has(streamId)) return RESOURCE_FAILURE;
+        streams.set(streamId, abort);
       }
       try {
         await refreshIfNeeded(initial);
@@ -143,8 +155,7 @@ export function createDesktopAiOperation(
       } catch {
         return RESOURCE_FAILURE;
       } finally {
-        if (input.operation === "stream" && streams.get(input.session_id) === abort)
-          streams.delete(input.session_id);
+        if (streamId !== null && streams.get(streamId) === abort) streams.delete(streamId);
       }
     },
   });

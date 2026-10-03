@@ -13,6 +13,26 @@ import {
 const TURN_ID = "11111111-1111-4111-8111-111111111111";
 
 describe("Stage 4.5 streaming AI safety contract", () => {
+  it("allows confirmation cards only on successful operations.preview results", () => {
+    const event = {
+      type: "tool_result",
+      cursor: 1,
+      turn_id: TURN_ID,
+      at: "2026-10-03T00:00:00.000Z",
+      tool: "operations.preview",
+      step: 1,
+      outcome: "succeeded",
+      preview: {
+        command: "notification.manual_list.create",
+        confirm_ref: TURN_ID,
+        summary: "准备人工联系清单",
+        expires_at: "2026-10-03T00:05:00.000Z",
+      },
+    };
+    expect(AiStreamEventSchema.safeParse(event).success).toBe(true);
+    expect(AiStreamEventSchema.safeParse({ ...event, tool: "business.trend" }).success).toBe(false);
+    expect(AiStreamEventSchema.safeParse({ ...event, outcome: "failed" }).success).toBe(false);
+  });
   it("keeps a dedicated provider-neutral HTTP surface out of bus definitions", () => {
     expect(AI_STREAMING_OPERATION_MATRIX).toHaveLength(5);
     expect(new Set(AI_STREAMING_OPERATION_MATRIX.map((row) => row.path)).size).toBe(5);

@@ -1,11 +1,13 @@
 import {
   AiSafetyStatusResponseSchema,
+  AiOperationResponseSchema,
   AiSessionCreateResponseSchema,
   AiTurnCreateResponseSchema,
   DesktopAiStreamResponseSchema,
 } from "@laundry/contracts";
 import type { AiPanelPort } from "../host/ai-port.js";
 import type { AiOperationPort } from "./settings-port.js";
+import { createDesktopVisionPort } from "./vision-port.js";
 
 const unavailable = () => ({
   ok: false as const,
@@ -17,6 +19,17 @@ const unavailable = () => ({
 
 export function createDesktopAiPanelPort(operation: AiOperationPort): AiPanelPort {
   return Object.freeze({
+    vision: createDesktopVisionPort(operation),
+    async confirmOperation(confirmRef) {
+      try {
+        const result = AiOperationResponseSchema.safeParse(
+          await operation({ operation: "actionConfirm", body: { confirm_ref: confirmRef } }),
+        );
+        return result.success ? { ok: true, data: result.data.data } : unavailable();
+      } catch {
+        return unavailable();
+      }
+    },
     async getSafetyStatus() {
       try {
         const result = AiSafetyStatusResponseSchema.safeParse(

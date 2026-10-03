@@ -6,6 +6,7 @@ import { estimateCostMicros } from "./safety-guard.js";
 import type { AiConversationStore, AiRequestContext, AiTurnRecord } from "./streaming-store.js";
 
 export type AiRuntimeState = {
+  quarantineUsage?: "usage_unknown" | "outside_contract";
   assistantText: string;
   outputBytes: number;
   eventCount: number;
@@ -37,6 +38,7 @@ export async function finishAiTurn(
     turnId: turn.id,
     context,
     finish: Object.freeze({
+      ...(state.quarantineUsage === undefined ? {} : { quarantineUsage: state.quarantineUsage }),
       status,
       errorCode,
       assistantMessageId: randomUUID(),

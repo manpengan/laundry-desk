@@ -17,6 +17,13 @@ import {
 } from "./provider-connections.js";
 import { AiRuntimeConfigRequestSchema, AiRuntimeConfigResponseSchema } from "./runtime-config.js";
 import { AiSafetyStatusResponseSchema } from "./safety.js";
+import { AiOperationConfirmSchema, AiOperationResponseSchema } from "./operations.js";
+import {
+  AiVisionRequestSchema,
+  AiVisionResponseSchema,
+  AiVisionCandidateQuerySchema,
+  AiVisionCandidatesResponseSchema,
+} from "./vision.js";
 import {
   AiSessionCreateResponseSchema,
   AiTurnCreateRequestSchema,
@@ -27,6 +34,11 @@ import {
 const empty = <T extends string>(operation: T) =>
   z.object({ operation: z.literal(operation) }).strict();
 export const DesktopAiInputSchema = z.discriminatedUnion("operation", [
+  z.object({ operation: z.literal("visionAnalyze"), body: AiVisionRequestSchema }).strict(),
+  z
+    .object({ operation: z.literal("visionCandidates"), body: AiVisionCandidateQuerySchema })
+    .strict(),
+  z.object({ operation: z.literal("actionConfirm"), body: AiOperationConfirmSchema }).strict(),
   empty("models"),
   empty("credentials"),
   empty("config"),
@@ -80,6 +92,9 @@ export const DesktopAiCancelResponseSchema = z
   .object({ ok: z.literal(true), data: z.object({ cancelled: z.literal(true) }).strict() })
   .strict();
 export const DesktopAiResultSchema = z.union([
+  AiVisionResponseSchema,
+  AiVisionCandidatesResponseSchema,
+  AiOperationResponseSchema,
   z.object({ ok: z.literal(false), error: CommandErrorSchema }).strict(),
   AiModelListResponseSchema,
   AiCredentialListResponseSchema,

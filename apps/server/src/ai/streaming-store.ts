@@ -1,5 +1,6 @@
 import type {
   AiSafetyDenialCode,
+  AiOperationPreview,
   AiSafetyStatusView,
   AiSessionView,
   AiStreamEvent,
@@ -65,6 +66,7 @@ export type AiTurnStartResult = Readonly<{
 }>;
 
 export type AiTurnFinish = Readonly<{
+  quarantineUsage?: "usage_unknown" | "outside_contract";
   status: "completed" | "failed" | "cancelled";
   errorCode: Extract<AiStreamEvent, { type: "error" }>["code"] | null;
   assistantMessageId: string;
@@ -83,6 +85,7 @@ export type AiEventDraft =
       tool: AiStreamToolName;
       step: number;
       outcome: "succeeded" | "failed" | "timed_out" | "cancelled";
+      preview?: AiOperationPreview;
     }>
   | Readonly<{
       type: "done";

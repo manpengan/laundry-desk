@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AiOperationDraftSchema, AiOperationPreviewSchema } from "./operations.js";
 
 export const AI_ASSISTANT_MAX_RESULTS = 10;
 export const AI_ASSISTANT_MAX_TOOL_CALLS = 3;
@@ -8,6 +9,9 @@ export const AI_ASSISTANT_TOOL_NAMES = [
   "business.summary",
   "records.search",
   "procedure.troubleshoot",
+  "business.trend",
+  "pickup.candidates",
+  "operations.preview",
 ] as const;
 
 export const AiAssistantToolNameSchema = z.enum(AI_ASSISTANT_TOOL_NAMES);
@@ -32,7 +36,7 @@ export const AiBusinessSummaryArgsSchema = z
   .strict();
 export const AiRecordSearchArgsSchema = z
   .object({
-    scope: z.enum(["orders", "customers"]),
+    scope: z.enum(["orders", "customers", "garments"]),
     query: z.string().trim().min(1).max(64),
     limit: z.number().int().min(1).max(AI_ASSISTANT_MAX_RESULTS).default(5),
   })
@@ -45,6 +49,25 @@ export const AiProcedureTroubleshootArgsSchema = z
   .strict();
 
 export const AiAssistantToolCallSchema = z.discriminatedUnion("tool", [
+  z
+    .object({
+      tool: z.literal("business.trend"),
+      args: z.object({ days: z.union([z.literal(7), z.literal(30)]) }).strict(),
+    })
+    .strict(),
+  z
+    .object({
+      tool: z.literal("pickup.candidates"),
+      args: z
+        .object({
+          min_age_days: z.union([z.literal(30), z.literal(90), z.literal(180)]),
+          unpaid_only: z.boolean(),
+          limit: z.number().int().min(1).max(10),
+        })
+        .strict(),
+    })
+    .strict(),
+  z.object({ tool: z.literal("operations.preview"), args: AiOperationDraftSchema }).strict(),
   z.object({ tool: z.literal("business.summary"), args: AiBusinessSummaryArgsSchema }).strict(),
   z.object({ tool: z.literal("records.search"), args: AiRecordSearchArgsSchema }).strict(),
   z
@@ -60,6 +83,7 @@ export const AiAssistantToolResultSchema = z
     sources: z.array(AiAssistantSourceSchema).min(1).max(3),
     filters: z.array(AiAssistantFilterSchema).max(6),
     items: z.array(z.record(z.string(), SafeScalarSchema)).max(AI_ASSISTANT_MAX_RESULTS),
+    preview: AiOperationPreviewSchema.optional(),
   })
   .strict();
 

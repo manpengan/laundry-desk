@@ -9,12 +9,15 @@ import {
   AiStreamEventSchema,
 } from "../src/index.js";
 
-describe("Item 15 read-only assistant contract", () => {
-  it("freezes exactly three named tools and strict bounded arguments", () => {
+describe("ADR-82 bounded assistant contract", () => {
+  it("freezes six named tools and strict bounded arguments", () => {
     expect(AI_ASSISTANT_TOOL_NAMES).toEqual([
       "business.summary",
       "records.search",
       "procedure.troubleshoot",
+      "business.trend",
+      "pickup.candidates",
+      "operations.preview",
     ]);
     expect(AI_ASSISTANT_MAX_TOOL_CALLS).toBe(3);
     expect(AI_ASSISTANT_MAX_RESULTS).toBe(10);
@@ -33,6 +36,22 @@ describe("Item 15 read-only assistant contract", () => {
     expect(() =>
       AiAssistantToolCallSchema.parse({ tool: "http.get", args: { url: "https://example.com" } }),
     ).toThrow();
+  });
+
+  it("rejects unbounded analysis and direct mutations", () => {
+    for (const call of [
+      { tool: "business.trend", args: { days: 365 } },
+      { tool: "pickup.candidates", args: { min_age_days: 1, unpaid_only: false, limit: 11 } },
+      {
+        tool: "operations.preview",
+        args: { command: "notification.delivery_batch.enqueue", input: {} },
+      },
+      {
+        tool: "operations.preview",
+        args: { command: "garment.rework", input: { garment_ids: [] } },
+      },
+    ])
+      expect(AiAssistantToolCallSchema.safeParse(call).success).toBe(false);
   });
 
   it("requires sources, explicit filters and bounded safe scalar results", () => {
