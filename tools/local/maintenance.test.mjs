@@ -80,7 +80,10 @@ test("restore drill binds shadow migration to the exact repository inventory", a
     .filter((name) => /^\d{4}_[a-z0-9_]+\.sql$/u.test(name))
     .sort();
   assert.ok(files.length >= 72);
-  assert.deepEqual(inventory.map(({ filename }) => filename), files);
+  assert.deepEqual(
+    inventory.map(({ filename }) => filename),
+    files,
+  );
   assert.ok(inventory.every(({ checksum }) => /^[0-9a-f]{64}$/u.test(checksum)));
 
   const migrate = drillMigrateCommand("laundry-ci-test");
