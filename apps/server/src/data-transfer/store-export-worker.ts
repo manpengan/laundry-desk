@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { z } from "zod";
 import type { PgPool } from "../db/pg-pool.js";
+import type { TenantContext } from "../db/types.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
 import { withTenantTransaction } from "../db/tenant-transaction.js";
 import { consumeStoreExport, readStoreExportActor } from "./store-export-requests.js";
@@ -14,7 +15,7 @@ export async function runApprovedStoreExport(
   options: Readonly<{
     maintenancePool: PgPool;
     signingSecret: string;
-    configuredTenant: Readonly<{ orgId: string; storeId: string }>;
+    configuredTenant: TenantContext;
     requestId: string;
     destination: string;
     photos: ExportPhotoReaders;

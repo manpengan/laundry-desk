@@ -71,7 +71,12 @@ export async function runApprovedImport(context, requestId, createBackupPoint) {
       targetDatabaseUrl: url,
       requestRoot: join(context.root, "import-requests"),
       requestId,
-      configuredTenant: { orgId: LOCAL_PROFILE.orgId, storeId: LOCAL_PROFILE.storeId },
+      // Initial RLS scope only; the approved ticket supplies the live actor below.
+      configuredTenant: {
+        orgId: LOCAL_PROFILE.orgId,
+        storeId: LOCAL_PROFILE.storeId,
+        staffId: LOCAL_PROFILE.adminStaffId,
+      },
       withMaintenanceLease: (operation) => operation(),
       createBackupPoint,
       photoFiles: await createPhotoFileStore({ rootPath: join(context.root, "photos") }),

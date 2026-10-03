@@ -49,7 +49,12 @@ export async function exportStore(context, { destination, requestId }) {
       signingSecret: readSecretValue(context.env, "LAUNDRY_ACCESS_TOKEN_SECRET"),
       destination,
       requestId,
-      configuredTenant: { orgId: LOCAL_PROFILE.orgId, storeId: LOCAL_PROFILE.storeId },
+      // Initial RLS scope only; signature/session validation supplies the export actor.
+      configuredTenant: {
+        orgId: LOCAL_PROFILE.orgId,
+        storeId: LOCAL_PROFILE.storeId,
+        staffId: LOCAL_PROFILE.adminStaffId,
+      },
       photos: {
         garment: await createPhotoFileStore({ rootPath: photoRoot }),
         delivery: await createDeliveryEvidenceFileStore(photoRoot),

@@ -266,11 +266,12 @@ jobs:
           NODE
           node tools/local/pg-test-result-gate.mjs /tmp/laundry-server-pg-tests.log
 
-      - name: Verify Windows portable restore against real PostgreSQL
+      - name: Verify Windows data maintenance against real PostgreSQL
         run: >-
           node tools/data-transfer/run-pg-fixture.mjs
           tools/windows-runtime/backup-portable-fixture-pg.test.mjs
           tools/windows-runtime/portable-database-pg.test.mjs
+          tools/windows-runtime/data-worker-pg.test.mjs
 
       - name: Run Playwright against real server and PostgreSQL
         env:
