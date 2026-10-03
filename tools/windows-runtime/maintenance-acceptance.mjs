@@ -56,10 +56,10 @@ export async function maintenanceAcceptance(context) {
     manifest.files = [
       ...manifest.files,
       { path: `migrations/${name}`, size: migration.length, sha256: digest(migration) },
-    ].sort((a, b) => a.path.localeCompare(b.path));
+    ].sort((a, b) => (a.path < b.path ? -1 : 1));
     const migrations = manifest.files
       .filter((file) => /^migrations\/\d{4}_.*\.sql$/u.test(file.path))
-      .sort((a, b) => a.path.localeCompare(b.path));
+      .sort((a, b) => (a.path < b.path ? -1 : 1));
     manifest.migration_head = name;
     manifest.migrations_sha256 = digest(
       migrations.map((file) => `${file.path.slice(11)}\0${file.sha256}\n`).join(""),
