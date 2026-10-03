@@ -292,6 +292,7 @@ test("builds file-linked workspace dependencies before their consumers test", as
   const uiPackage = await readJson("packages/ui/package.json");
   const domainPackage = await readJson("packages/domain/package.json");
   const platformFsPackage = await readJson("packages/platform-fs/package.json");
+  const migrationPackage = await readJson("tools/migrate-v1/package.json");
 
   // web depends on contracts + ui + domain dist types; turbo must build them first.
   const webDepBuild = [
@@ -326,9 +327,14 @@ test("builds file-linked workspace dependencies before their consumers test", as
     `${contractsPackage.name}#build`,
     `${domainPackage.name}#build`,
     `${platformFsPackage.name}#build`,
+    `${migrationPackage.name}#build`,
   ];
   for (const task of ["typecheck", "test", "build"]) {
     assert.deepEqual(turboConfig.tasks[`${serverPackage.name}#${task}`]?.dependsOn, serverDepBuild);
+    assert.deepEqual(turboConfig.tasks[`${migrationPackage.name}#${task}`]?.dependsOn, [
+      "^build",
+      `${platformFsPackage.name}#build`,
+    ]);
   }
 });
 

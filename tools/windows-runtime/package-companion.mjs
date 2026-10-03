@@ -155,7 +155,7 @@ export async function packageCompanion({
     (await run(process.execPath, [pnpmScript, "--version"])) !== "11.15.0"
   )
     fail("RUN_WITH_PNPM_REQUIRED");
-  for (const name of ["platform-fs", "contracts", "domain", "server"]) {
+  for (const name of ["platform-fs", "contracts", "domain", "migrate-v1", "server"]) {
     console.error(`WINDOWS_COMPANION_STAGE_BUILD_${name.toUpperCase().replaceAll("-", "_")}`);
     await run(process.execPath, [pnpmScript, "--filter", `@laundry/${name}`, "build"]);
   }
