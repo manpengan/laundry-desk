@@ -556,6 +556,11 @@ test("created test admin completes the installed Windows desktop functional jour
     await expect(page.getByText(account.displayName, { exact: true })).toBeVisible();
     const restartedMetrics = page.locator('[data-testid="counter-workbench-metrics"]');
     await expect(restartedMetrics).not.toContainText("—", { timeout: 20_000 });
+    await expect(restartedMetrics).toContainText("收款（退款前）");
+    await expect(restartedMetrics).not.toContainText("实收");
+    await expect(
+      page.getByText("含会员余额付款；欠款补缴和冲正请查看账目。", { exact: true }),
+    ).toBeVisible();
     await capture(page, screenshots.restarted);
 
     await switchStaff(page, bootstrap.approverDisplayName, bootstrap.approverPin);
