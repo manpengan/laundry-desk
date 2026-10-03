@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { AUTH_OPERATION_MATRIX } from "../src/auth/operations.js";
 import {
@@ -24,12 +24,14 @@ const snapshotPath = join(packageRoot, OPENAPI_SNAPSHOT_RELATIVE_PATH);
 const loadSnapshotText = (): string => readFileSync(snapshotPath, "utf8");
 
 describe("A7 OpenAPI 3.1 snapshot", () => {
-  // Two independent builds are what proves determinism; the third build this
-  // used to make was redundant. Document cost scales with the contract surface
-  // (399 KB at 33 commands), so keep the count minimal and the budget explicit
-  // rather than relying on vitest's 5s default — see m2-freeze.test.ts.
+  let document: ReturnType<typeof buildLaundryOpenApiDocument>;
+  // These assertions only read the document. Build once for the shared fixture;
+  // determinism still requires a second independent build in its own test.
+  beforeAll(() => {
+    document = buildLaundryOpenApiDocument();
+  }, 10_000);
+
   it("builds a deterministic OpenAPI 3.1 document", { timeout: 10_000 }, () => {
-    const document = buildLaundryOpenApiDocument();
     const first = serializeOpenApiDocument(document);
     const second = serializeOpenApiDocument(buildLaundryOpenApiDocument());
     expect(first).toBe(second);
@@ -46,7 +48,6 @@ describe("A7 OpenAPI 3.1 snapshot", () => {
   });
 
   it("projects AUTH_OPERATION_MATRIX paths and schema ids only", () => {
-    const document = buildLaundryOpenApiDocument();
     const paths = Object.keys(document.paths).sort((left, right) => left.localeCompare(right));
     expect(paths).toEqual(paths.slice().sort((left, right) => left.localeCompare(right)));
 
@@ -63,8 +64,6 @@ describe("A7 OpenAPI 3.1 snapshot", () => {
   });
 
   it("maps M1 first-wave commands and queries to stable bus paths", () => {
-    const document = buildLaundryOpenApiDocument();
-
     for (const name of M1_FIRST_WAVE_COMMAND_NAMES) {
       const path = `/v1/commands/${name}`;
       expect(document.paths[path], path).toBeDefined();
@@ -86,7 +85,6 @@ describe("A7 OpenAPI 3.1 snapshot", () => {
   });
 
   it("references the unified command error envelope components", () => {
-    const document = buildLaundryOpenApiDocument();
     expect(document.components.schemas.CommandError).toBeDefined();
     expect(document.components.schemas.CommandFailureResponse).toBeDefined();
     expect(document.components.schemas.CommandResponse).toBeDefined();
@@ -100,7 +98,7 @@ describe("A7 OpenAPI 3.1 snapshot", () => {
   });
 
   it("matches the committed snapshot exactly", () => {
-    const generated = serializeOpenApiDocument(buildLaundryOpenApiDocument());
+    const generated = serializeOpenApiDocument(document);
     const committed = loadSnapshotText();
     expect(generated).toBe(committed);
   });

@@ -5,6 +5,32 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 
+/** Synthetic parents must satisfy the same garment/order FK as ordinary photos. */
+export async function seedBackupPhotoFixture(sql, id) {
+  assert.match(id, /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u);
+  await sql(`WITH scope AS (
+    SELECT s.org_id, s.id AS store_id, s.timezone, f.id AS staff_id
+    FROM public.stores s JOIN public.staffs f ON f.org_id=s.org_id
+    ORDER BY s.id, f.id LIMIT 1
+  ), parent_order AS (
+    INSERT INTO public.orders (id, org_id, store_id, ticket_no, status,
+      subtotal_cents, payable_cents, paid_cents, balance_cents,
+      created_at, updated_at, created_by_staff_id, business_date)
+    SELECT '${id}', org_id, store_id, 'qa-backup-${id}', 'open',
+      1000, 1000, 0, 1000, now(), now(), staff_id,
+      to_char(now() AT TIME ZONE timezone, 'YYYY-MM-DD') FROM scope
+    RETURNING id, org_id, store_id
+  ), parent_line AS (
+    INSERT INTO public.order_lines (id, org_id, store_id, order_id, line_index,
+      service_code, category_code, unit_price_cents, qty, line_total_cents)
+    SELECT '${id}', org_id, store_id, id, 0, 'wash', 'shirt', 1000, 1, 1000 FROM parent_order
+    RETURNING id, org_id, store_id, order_id
+  ) INSERT INTO public.garments (id, org_id, store_id, order_id, order_line_id, seq,
+      barcode, service_code, category_code, unit_price_cents, status)
+    SELECT '${id}', org_id, store_id, order_id, id, 1, 'qa-backup-${id}',
+      'wash', 'shirt', 1000, 'received' FROM parent_line`);
+}
+
 export async function portableAcceptance(context) {
   const { scenario, command, root, sql, secretDigest, beforeSecrets } = context;
   await scenario("encrypted-off-machine-portable-restore-via-native-secret-pipe", async () => {
@@ -93,6 +119,7 @@ export async function backupAcceptance(context) {
     });
     assert.equal(fromOldController, join(root, "photos"));
     const files = await createPhotoFileStore({ rootPath: join(root, "photos") });
+    await seedBackupPhotoFixture(sql, photoId);
     photo = await files.write(photoBytes, "image/png", photoId);
     await sql(`INSERT INTO public.garment_photos (id, org_id, store_id, garment_id, order_id, kind, storage_key, content_type, content_sha256, byte_size, taken_at, created_by_staff_id)
       SELECT '${photoId}', s.org_id, s.id, '${photoId}', '${photoId}', 'receive', '${photo.storage_key}', '${photo.content_type}', '${photo.content_sha256}', ${photo.byte_size}, now(), f.id

@@ -25,7 +25,9 @@ permissions:
 jobs:
   windows-runtime-payload:
     runs-on: windows-2022
-    timeout-minutes: 90
+    # Native acceptance runs 25 scenarios and 74 serial launcher invocations.
+    # Hosted Windows preparation already takes 15 minutes; reserve the full run.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
