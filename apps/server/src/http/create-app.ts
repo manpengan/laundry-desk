@@ -8,6 +8,7 @@ import { createImportDraftStore } from "../data-transfer/import-drafts.js";
 import { registerStoreExportRoutes } from "../data-transfer/store-export-routes.js";
 import { registerPaymentChannelRoutes } from "../payment-channels/routes.js";
 import { registerRemoteAssistanceRoutes } from "../remote-assistance/routes.js";
+import { registerMiniappRoutes } from "../customer-miniapp/routes.js";
 import { registerV1MigrationRoutes } from "../data-transfer/import-routes.js";
 
 import cookie from "@fastify/cookie";
@@ -294,6 +295,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
   registerNotificationSettingsRoutes(app, context);
   registerStoreExportRoutes(app, context);
   registerRemoteAssistanceRoutes(app, context);
+  registerMiniappRoutes(app, context, options.byokKms ?? null);
   registerPaymentChannelRoutes(app, context, options.byokKms ?? null);
   if (options.runtime.pool !== null && options.runtime.photo.files !== undefined) {
     const drafts = await createImportDraftStore(

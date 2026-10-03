@@ -4,6 +4,8 @@ export const OMIT_PORTABLE_TABLE_DATA = new Set([
   "ai_provider_keys",
   "notification_provider_settings",
   "payment_channel_settings",
+  "miniapp_settings",
+  "miniapp_profile_authority",
 ]);
 
 function increment(raw) {
@@ -93,7 +95,10 @@ export function resetPortableAuthority(table, values, timestamp) {
       row_version: increment(row.row_version),
     };
   if (table.name === "notification_provider_settings") patch = { enabled: "false" };
-  if (["remote_assistance_sessions"].includes(table.name) && row.status === "active")
+  if (
+    ["remote_assistance_sessions", "miniapp_bindings", "miniapp_sessions"].includes(table.name) &&
+    row.status === "active"
+  )
     patch = { status: "revoked", revoked_at: now };
   if (table.name === "payment_channel_intents" && !["paid", "closed"].includes(row.state))
     patch = { state: "needs_review", checkout_json: null, error_code: "MIGRATED_QUERY_REQUIRED" };

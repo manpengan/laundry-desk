@@ -99,6 +99,11 @@
 - [ADR-79](2026-10-03-adr-79-windows-scheduled-backups.md)：每日定时备份、留存和恢复演练。
 - [ADR-80](2026-10-03-adr-80-windows-schema-upgrade-rollback.md)：跨迁移程序/数据联合升级回退及还原权限防复活。
 
+- [ADR-85](2026-10-03-adr-85-payment-channels.md)：微信支付 API v3、支付宝及验签入账、原路退款和对账。
+- [ADR-86](2026-10-03-adr-86-miniapp-delegated-transactions.md)：微信身份、顾客自助交易及限权委托。
+- [ADR-87](2026-10-03-adr-87-native-customer-miniapp.md)：原生微信顾客小程序。
+- [ADR-89](2026-10-03-adr-89-controlled-remote-assistance.md)：可撤销的限时只读远程协助。
+
 ## v1 线
 
 | ADR                                                | 主题            | 状态                                              |

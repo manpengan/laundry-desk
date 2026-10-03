@@ -29,6 +29,9 @@ const TABLES = new Set([
   "payment_channel_intents",
   "payment_channel_refunds",
   "remote_assistance_sessions",
+  "miniapp_settings",
+  "miniapp_bindings",
+  "miniapp_sessions",
   "ai_safety_policies",
   "ai_sessions",
   "ai_turns",
@@ -61,7 +64,11 @@ export async function revokeRestoredAuthority(
       // SMS settings have no terminal credential state and their envelope is
       // non-nullable. Removing the private configuration forces fresh input;
       // delivery receipts and their reserved/actual costs remain untouched.
-      if (["notification_provider_settings", "payment_channel_settings"].includes(table.name)) {
+      if (
+        ["notification_provider_settings", "payment_channel_settings", "miniapp_settings"].includes(
+          table.name,
+        )
+      ) {
         const result = await client.query(`DELETE FROM public.${identifier(table.name)}`);
         counts[table.name] = result.rowCount;
         continue;

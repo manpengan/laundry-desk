@@ -89,7 +89,13 @@ const reset = (name, row) =>
 test("cross-machine restore revokes authority and preserves terminal business history", () => {
   assert.deepEqual(
     [...OMIT_PORTABLE_TABLE_DATA],
-    ["ai_provider_keys", "notification_provider_settings", "payment_channel_settings"],
+    [
+      "ai_provider_keys",
+      "notification_provider_settings",
+      "payment_channel_settings",
+      "miniapp_settings",
+      "miniapp_profile_authority",
+    ],
   );
   const session = reset("sessions", {
     status: "active",
@@ -184,6 +190,8 @@ test("restored payment uncertainty requires queries and remote assistance never 
     reset("remote_assistance_sessions", { status: "active", revoked_at: null }).status,
     "revoked",
   );
+  for (const name of ["miniapp_bindings", "miniapp_sessions"])
+    assert.equal(reset(name, { status: "active", revoked_at: null }).status, "revoked");
 });
 
 function memoryInput(bytes) {

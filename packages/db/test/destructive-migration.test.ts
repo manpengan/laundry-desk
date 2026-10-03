@@ -167,6 +167,8 @@ describe("destructive migration static reject", () => {
       "0074_ai_assistant_operations.sql",
       "0075_payment_channels.sql",
       "0076_remote_assistance.sql",
+      "0077_miniapp_identity.sql",
+      "0078_miniapp_transactions.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
