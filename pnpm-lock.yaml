@@ -193,6 +193,19 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@20.19.43)(@vitest/coverage-v8@4.1.11)(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1))
 
+  apps/customer-miniapp:
+    dependencies:
+      '@laundry/contracts':
+        specifier: file:../../packages/contracts
+        version: link:../../packages/contracts
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      esbuild:
+        specifier: 0.25.12
+        version: 0.25.12
+
   apps/edge-agent:
     dependencies:
       '@laundry/contracts':

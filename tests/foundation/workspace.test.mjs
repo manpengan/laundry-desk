@@ -9,6 +9,7 @@ const workspaceNames = [
   "apps/server",
   "apps/web",
   "apps/edge-agent",
+  "apps/customer-miniapp",
   "packages/contracts",
   "packages/domain",
   "packages/db",
@@ -262,6 +263,7 @@ test("provides compileable shells for every assigned workspace", async () => {
 
 test("lints each active workspace from its package root", async () => {
   const lintScripts = [
+    ["apps/customer-miniapp/package.json", ".ts,.mjs"],
     ["apps/edge-agent/package.json", ".ts,.tsx,.mjs"],
     ["apps/server/package.json", ".ts,.tsx"],
     ["apps/web/package.json", ".ts,.tsx,.mjs"],
