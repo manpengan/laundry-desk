@@ -628,7 +628,7 @@ test("declares v2 as the only active delivery line", async () => {
   );
 
   assert.doesNotMatch(readme, /v1（宏发单店）.*仍在进行|M4\s*∥\s*M5/u);
-  assert.match(readme.slice(0, 800), /产品目标.*规划支持/su);
+  assert.match(readme.slice(0, 800), /产品目标.*当前交付通用 V2.*Windows/su);
   assert.match(readme, /\(docs\/superpowers\/plans\/tasks\/2026-07-21-task-grok-lead\.md\)/u);
   assert.doesNotMatch(changelog, /两条线并行/u);
   assert.doesNotMatch(changelog, /### 已完成（未发版）/u);
