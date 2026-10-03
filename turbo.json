@@ -17,6 +17,18 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "@laundry/customer-miniapp#build": {
+      "dependsOn": ["^build", "@laundry/contracts#build"],
+      "outputs": ["dist/**"]
+    },
+    "@laundry/customer-miniapp#typecheck": {
+      "dependsOn": ["^build", "@laundry/contracts#build"],
+      "outputs": []
+    },
+    "@laundry/customer-miniapp#test": {
+      "dependsOn": ["^build", "@laundry/contracts#build"],
+      "outputs": []
+    },
     "@laundry/web#test": {
       "dependsOn": [
         "^build",

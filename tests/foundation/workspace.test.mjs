@@ -290,6 +290,7 @@ test("builds file-linked workspace dependencies before their consumers test", as
   const edgePackage = await readJson("apps/edge-agent/package.json");
   const serverPackage = await readJson("apps/server/package.json");
   const webPackage = await readJson("apps/web/package.json");
+  const miniappPackage = await readJson("apps/customer-miniapp/package.json");
   const contractsPackage = await readJson("packages/contracts/package.json");
   const uiPackage = await readJson("packages/ui/package.json");
   const domainPackage = await readJson("packages/domain/package.json");
@@ -332,6 +333,10 @@ test("builds file-linked workspace dependencies before their consumers test", as
     `${migrationPackage.name}#build`,
   ];
   for (const task of ["typecheck", "test", "build"]) {
+    assert.deepEqual(turboConfig.tasks[`${miniappPackage.name}#${task}`]?.dependsOn, [
+      "^build",
+      `${contractsPackage.name}#build`,
+    ]);
     assert.deepEqual(turboConfig.tasks[`${serverPackage.name}#${task}`]?.dependsOn, serverDepBuild);
     assert.deepEqual(turboConfig.tasks[`${migrationPackage.name}#${task}`]?.dependsOn, [
       "^build",
