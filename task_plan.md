@@ -2,7 +2,7 @@
 
 1. [x] A1–A9/B1–B8 在范围代码与产品入口实现、独立审查、按功能提交推送；打印除外。
 2. [x] 全工作区门禁与定向真实数据库验证；固定 LOCAL 测试使用独立 fixture，保留 CI 主库。
-3. [ ] 完整真实 PostgreSQL 已通过；接续最终 SHA CI 与双 Windows profile 构建验证。
+3. [ ] 完整真实 PostgreSQL 已通过；`6a1718ee` workspace/macOS CI 通过，两种 Windows profile 与 Runtime 已构建；加密备份验收夹具已修复且真库 4/4，Windows CI 待重跑。
 4. [ ] Windows 原生安装、维护链与 GUI 验收；恢复旧目录/任务/服务，保存摘要与截图。
 5. [ ] 更新精确源码、包摘要和验收记录，列明真实渠道、硬件和正式发行外部条件。
 

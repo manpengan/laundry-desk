@@ -5,6 +5,23 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 
+const PHOTO_FIXTURE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+export async function readPortableFixtureNote(sql) {
+  const order = `FROM public.orders WHERE id = '${PHOTO_FIXTURE_ID}'`;
+  assert.equal(await sql(`SELECT count(*) ${order}`), "1");
+  return sql(`SELECT json_build_object('note', note)::text ${order}`);
+}
+
+export async function mutatePortableFixtureNote(sql) {
+  // LOCAL store identity must stay fixed; restoration mutates only synthetic business data.
+  assert.equal(
+    await sql(`WITH changed AS (UPDATE public.orders SET note = 'synthetic portable mutation'
+      WHERE id = '${PHOTO_FIXTURE_ID}' RETURNING id) SELECT count(*) FROM changed`),
+    "1",
+  );
+}
+
 /** Synthetic parents must satisfy the same garment/order FK as ordinary photos. */
 export async function seedBackupPhotoFixture(sql, id) {
   assert.match(id, /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u);
@@ -37,7 +54,7 @@ export async function portableAcceptance(context) {
     // This synthetic harness table intentionally does not belong to the trusted
     // migration schema. Remove it for portable export and recreate after this gate.
     await sql("DROP TABLE public.runtime_acceptance_probe");
-    const original = await sql("SELECT name FROM public.stores ORDER BY id LIMIT 1");
+    const original = await readPortableFixtureNote(sql);
     const options = {
       path: join(root, "portable-acceptance.ldbackup"),
       password: randomBytes(32).toString("hex"),
@@ -54,13 +71,13 @@ export async function portableAcceptance(context) {
       (error) => /PORTABLE_CONFIRMATION_MISMATCH/u.test(error.stderr ?? ""),
     );
     assert.equal((await command("status")).status, "running");
-    await sql("UPDATE public.stores SET name = 'synthetic portable mutation'");
+    await mutatePortableFixtureNote(sql);
     const restored = await command("portable-import", undefined, undefined, {
       ...options,
       confirmation: checked.sha256,
     });
     assert.equal(restored.status, "portable_restored");
-    assert.equal(await sql("SELECT name FROM public.stores ORDER BY id LIMIT 1"), original);
+    assert.equal(await readPortableFixtureNote(sql), original);
     assert.equal(await sql("SELECT count(*) FROM public.sessions WHERE status = 'active'"), "0");
     assert.equal(
       await sql("SELECT count(*) FROM public.edge_devices WHERE status = 'paired'"),
@@ -98,7 +115,7 @@ export async function backupAcceptance(context) {
   let saved;
   let savedManifest;
   let photo;
-  const photoId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const photoId = PHOTO_FIXTURE_ID;
   const photoBytes = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aCioAAAAASUVORK5CYII=",
     "base64",
