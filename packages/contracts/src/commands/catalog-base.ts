@@ -162,6 +162,8 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.asset.consume",
   "notification.manual_list.create",
   "notification.delivery_batch.enqueue",
+  "notification.wechat.settings.set",
+  "notification.wechat.send",
 ] as const) as readonly [
   "customer.upsert",
   "customer.update",
@@ -222,6 +224,8 @@ export const M2_SKELETON_COMMAND_NAMES = Object.freeze([
   "member.asset.consume",
   "notification.manual_list.create",
   "notification.delivery_batch.enqueue",
+  "notification.wechat.settings.set",
+  "notification.wechat.send",
 ];
 
 /**
@@ -285,6 +289,9 @@ export const M2_CONTRACT_QUERY_NAMES = Object.freeze([
   "notification.delivery.capability.get",
   "notification.delivery_batches.list",
   "notification.delivery_batch.get",
+  "notification.wechat.settings.get",
+  "notification.wechat.preview",
+  "notification.wechat.list",
 ] as const);
 
 export const M2_CONTRACT_DEFINITIONS: readonly (

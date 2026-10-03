@@ -95,6 +95,17 @@ export function resetPortableAuthority(table, values, timestamp) {
       row_version: increment(row.row_version),
     };
   if (table.name === "notification_provider_settings") patch = { enabled: "false" };
+  // Schemas 77/78 predate dispatch and this revocation column. Their binding
+  // and session are independently revoked; preserve that older history.
+  if (table.name === "miniapp_subscriptions" && Object.hasOwn(row, "revoked_at"))
+    patch = { revoked_at: row.revoked_at ?? now };
+  if (table.name === "miniapp_notification_settings")
+    patch = { enabled: "false", version: increment(row.version), updated_at: now };
+  if (
+    table.name === "miniapp_notification_outbox" &&
+    ["queued", "sending", "unknown"].includes(row.state)
+  )
+    patch = { state: "needs_review", error_code: "RESTORED_NO_REDISPATCH", checked_at: now };
   if (
     ["remote_assistance_sessions", "miniapp_bindings", "miniapp_sessions"].includes(table.name) &&
     row.status === "active"

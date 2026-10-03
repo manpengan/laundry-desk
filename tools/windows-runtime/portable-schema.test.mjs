@@ -194,6 +194,48 @@ test("restored payment uncertainty requires queries and remote assistance never 
     assert.equal(reset(name, { status: "active", revoked_at: null }).status, "revoked");
 });
 
+test("restored WeChat consent never replays a dispatch or unconsumes a receipt", () => {
+  const beforeNotifications = { id: "legacy-consent", session_id: "revoked-session" };
+  assert.deepEqual(reset("miniapp_subscriptions", beforeNotifications), beforeNotifications);
+  const consumed = { consumed_at: "2026-10-02", outbox_id: "receipt", revoked_at: null };
+  assert.deepEqual(reset("miniapp_subscriptions", consumed), {
+    ...consumed,
+    revoked_at: "2026-10-03T12:00:00.000Z",
+  });
+  const revoked = { ...consumed, revoked_at: "2026-10-01" };
+  assert.deepEqual(reset("miniapp_subscriptions", revoked), revoked);
+  for (const state of ["queued", "sending", "unknown"]) {
+    const row = {
+      state,
+      dispatched_at: state === "queued" ? null : "2026-10-02",
+      checked_at: null,
+      error_code: null,
+    };
+    assert.deepEqual(reset("miniapp_notification_outbox", row), {
+      ...row,
+      state: "needs_review",
+      error_code: "RESTORED_NO_REDISPATCH",
+      checked_at: "2026-10-03T12:00:00.000Z",
+    });
+  }
+  for (const state of ["accepted", "failed", "cancelled", "needs_review"]) {
+    const row = { state, dispatched_at: "2026-10-02", error_code: "retained" };
+    assert.deepEqual(reset("miniapp_notification_outbox", row), row);
+  }
+  assert.deepEqual(
+    reset("miniapp_notification_settings", {
+      enabled: "true",
+      version: "2",
+      updated_at: "2026-10-02",
+    }),
+    {
+      enabled: "false",
+      version: "3",
+      updated_at: "2026-10-03T12:00:00.000Z",
+    },
+  );
+});
+
 function memoryInput(bytes) {
   return {
     read: async (out, offset, length, position) => ({

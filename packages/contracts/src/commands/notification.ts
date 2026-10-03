@@ -2,6 +2,10 @@ import { z } from "zod";
 
 import { ExactUtcTimestampSchema } from "../edge/primitives.js";
 import {
+  WECHAT_NOTIFICATION_COMMANDS,
+  WECHAT_NOTIFICATION_QUERIES,
+} from "../notification-wechat.js";
+import {
   defineCommand,
   defineQuery,
   type CommandDefinition,
@@ -155,13 +159,24 @@ export const notificationManualListCreateCommand: CommandDefinition<
   hard_limits: { max_batch: 50 },
 });
 
-export const NOTIFICATION_COMMANDS = Object.freeze([notificationManualListCreateCommand] as const);
-export const NOTIFICATION_QUERIES = Object.freeze([pickupReminderListQuery] as const);
+export const NOTIFICATION_COMMANDS = Object.freeze([
+  notificationManualListCreateCommand,
+  ...WECHAT_NOTIFICATION_COMMANDS,
+] as const);
+export const NOTIFICATION_QUERIES = Object.freeze([
+  pickupReminderListQuery,
+  ...WECHAT_NOTIFICATION_QUERIES,
+] as const);
 export const NOTIFICATION_COMMAND_NAMES = Object.freeze([
   "notification.manual_list.create",
+  "notification.wechat.settings.set",
+  "notification.wechat.send",
 ] as const);
 export const NOTIFICATION_QUERY_NAMES = Object.freeze([
   "notification.pickup_reminders.list",
+  "notification.wechat.settings.get",
+  "notification.wechat.preview",
+  "notification.wechat.list",
 ] as const);
 export const NOTIFICATION_DEFINITIONS = Object.freeze([
   ...NOTIFICATION_COMMANDS,

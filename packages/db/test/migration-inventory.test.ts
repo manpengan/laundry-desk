@@ -84,6 +84,7 @@ const expectedSqlFiles = [
   "0076_remote_assistance.sql",
   "0077_miniapp_identity.sql",
   "0078_miniapp_transactions.sql",
+  "0079_miniapp_notifications.sql",
 ] as const;
 
 describe("packages/db migration inventory", () => {

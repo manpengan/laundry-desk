@@ -104,6 +104,8 @@
 - [ADR-87](2026-10-03-adr-87-native-customer-miniapp.md)：原生微信顾客小程序。
 - [ADR-89](2026-10-03-adr-89-controlled-remote-assistance.md)：可撤销的限时只读远程协助。
 
+- [ADR-90](2026-10-03-adr-90-wechat-subscription-notifications.md)：人工确认、单次订阅消费与未知结果防重复发送。
+
 ## v1 线
 
 | ADR                                                | 主题            | 状态                                              |

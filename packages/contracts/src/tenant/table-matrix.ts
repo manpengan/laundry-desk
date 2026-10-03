@@ -133,6 +133,8 @@ const STORE_TABLES = describeTables(
     "notification_delivery_receipts",
     "notification_provider_settings",
     "miniapp_bindings",
+    "miniapp_notification_outbox",
+    "miniapp_notification_settings",
     "miniapp_profile_authority",
     "miniapp_sessions",
     "miniapp_settings",

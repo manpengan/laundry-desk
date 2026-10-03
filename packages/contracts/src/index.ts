@@ -12,6 +12,7 @@ export * from "./openapi/index.js";
 export * from "./ai/index.js";
 export * from "./customer-miniapp.js";
 export * from "./payment-channel.js";
+export * from "./notification-wechat.js";
 
 // Restricted auth authority modules stay wired to this entry point only. The
 // `auth/` barrel deliberately excludes them so it never becomes a second route

@@ -43,6 +43,7 @@ const exclusions = Object.freeze({
   laundry_schema_migrations: "安装版本内部校验账本",
 });
 const omittedColumns: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  miniapp_notification_outbox: ["binding_id", "consent_id"],
   payment_channel_settings: ["credential_id", "envelope_json"],
   payment_channel_intents: [
     "checkout_json",

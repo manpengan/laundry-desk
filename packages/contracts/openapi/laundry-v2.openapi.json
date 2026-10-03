@@ -81122,6 +81122,72 @@
         ],
         "type": "object"
       },
+      "input.command.notification.wechat.send": {
+        "additionalProperties": false,
+        "properties": {
+          "order_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "preview_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "preview_sha256"
+        ],
+        "type": "object"
+      },
+      "input.command.notification.wechat.settings.set": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "miniprogram_state": {
+            "enum": [
+              "developer",
+              "trial",
+              "formal"
+            ],
+            "type": "string"
+          },
+          "status_field": {
+            "pattern": "^phrase[0-9]{1,3}$",
+            "type": "string"
+          },
+          "store_field": {
+            "pattern": "^thing[0-9]{1,3}$",
+            "type": "string"
+          },
+          "template_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "type": "string"
+          },
+          "ticket_field": {
+            "pattern": "^character_string[0-9]{1,3}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_version",
+          "enabled",
+          "template_id",
+          "ticket_field",
+          "store_field",
+          "status_field",
+          "miniprogram_state"
+        ],
+        "type": "object"
+      },
       "input.command.order.cancel": {
         "additionalProperties": false,
         "properties": {
@@ -82838,6 +82904,30 @@
             "type": "boolean"
           }
         },
+        "type": "object"
+      },
+      "input.query.notification.wechat.list": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "input.query.notification.wechat.preview": {
+        "additionalProperties": false,
+        "properties": {
+          "order_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id"
+        ],
+        "type": "object"
+      },
+      "input.query.notification.wechat.settings.get": {
+        "additionalProperties": false,
+        "properties": {},
         "type": "object"
       },
       "input.query.order.get": {
@@ -89445,6 +89535,110 @@
         "x-laundry-version": "0.1.0"
       }
     },
+    "/v1/commands/notification.wechat.send": {
+      "post": {
+        "description": "Consume one accepted subscription after human confirmation. The preview digest binds the exact current ready order and template. No automatic campaigns or retries. Stable command name: `notification.wechat.send` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_notification_wechat_send",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.notification.wechat.send"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "After human confirmation enqueue one ready-order notification using one accepted subscription.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/notification.wechat.settings.set": {
+      "post": {
+        "description": "Configure the store-owned fixed template after human confirmation. No credentials or arbitrary message text are accepted. Stable command name: `notification.wechat.settings.set` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_notification_wechat_settings_set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.notification.wechat.settings.set"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Configure the fixed WeChat pickup subscription template.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "1.0.0"
+      }
+    },
     "/v1/commands/order.cancel": {
       "post": {
         "description": "Cancel one open order only with a non-empty reason. Runtime writes auditable reversals; it never deletes ledger rows. Stable command name: `order.cancel` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -93179,6 +93373,162 @@
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R2",
         "x-laundry-version": "0.1.0"
+      }
+    },
+    "/v1/queries/notification.wechat.list": {
+      "post": {
+        "description": "Return a bounded store-scoped projection for a human operator. No recipient credential is exposed. Stable query name: `notification.wechat.list` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_notification_wechat_list",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.notification.wechat.list"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List the latest fifty notification acknowledgement states; accepted is not proof of delivery.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/notification.wechat.preview": {
+      "post": {
+        "description": "Return a bounded store-scoped projection for a human operator. No recipient credential is exposed. Stable query name: `notification.wechat.preview` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_notification_wechat_preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.notification.wechat.preview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Preview the exact ready-order message and available subscription before confirmation.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/notification.wechat.settings.get": {
+      "post": {
+        "description": "Read non-secret notification template settings. Stable query name: `notification.wechat.settings.get` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_notification_wechat_settings_get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.notification.wechat.settings.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read fixed WeChat notification configuration.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R1",
+        "x-laundry-version": "1.0.0"
       }
     },
     "/v1/queries/order.get": {

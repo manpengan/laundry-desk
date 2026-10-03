@@ -100,6 +100,9 @@ describe("M2 contract surface", () => {
       "notification.manual_list.create",
       // ADR-44: explicit admin enqueue; 11-50 recipients escalate R3 to R4.
       "notification.delivery_batch.enqueue",
+      // ADR-90: explicitly confirmed fixed-template WeChat notifications.
+      "notification.wechat.settings.set",
+      "notification.wechat.send",
       // ADR-46: current-store policy only; does not enable delivery or create bookings.
       "delivery.policy.set",
       // ADR-47: customer/address references, real slot capacity and optimistic lifecycle.
@@ -189,8 +192,17 @@ describe("M2 contract surface", () => {
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.task.get");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.tasks.list");
     expect(M2_CONTRACT_QUERY_NAMES).toContain("delivery.evidence.list");
-    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(83);
-    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(64);
+    // ADR-90: fixed WeChat subscription messages, configuration and receipt queries.
+    expect(M2_CONTRACT_COMMAND_NAMES).toContain("notification.wechat.settings.set");
+    expect(M2_CONTRACT_COMMAND_NAMES).toContain("notification.wechat.send");
+    for (const name of [
+      "notification.wechat.settings.get",
+      "notification.wechat.preview",
+      "notification.wechat.list",
+    ])
+      expect(M2_CONTRACT_QUERY_NAMES).toContain(name);
+    expect(M2_CONTRACT_COMMAND_NAMES).toHaveLength(85);
+    expect(M2_CONTRACT_QUERY_NAMES).toHaveLength(67);
     expect(M2_CONTRACT_DEFINITIONS).toHaveLength(
       M2_CONTRACT_COMMAND_NAMES.length + M2_CONTRACT_QUERY_NAMES.length,
     );
