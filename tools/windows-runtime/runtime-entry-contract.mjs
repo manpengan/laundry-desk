@@ -9,12 +9,16 @@ export const ENTRY_NAME = "runtime-entry.ps1";
 export const COMMAND_NAME = "Laundry Runtime V2.cmd";
 export const OPERATOR_HELPERS = Object.freeze([
   "runtime-entry-ui.ps1",
+  "runtime-entry-data-ui.ps1",
+  "runtime-entry-schedule-ui.ps1",
+  "runtime-entry-assistance-ui.ps1",
   "runtime-entry-install.ps1",
   "runtime-entry-shortcut.ps1",
 ]);
 export const ENTRY_ACTIONS = Object.freeze([
   "install",
   "status",
+  "diagnostics",
   "start",
   "stop",
   "repair",
@@ -23,8 +27,18 @@ export const ENTRY_ACTIONS = Object.freeze([
   "backup",
   "backup-list",
   "backup-verify",
+  "backup-drill",
+  "backup-health",
+  "backup-schedule",
+  "assistance-config",
+  "scheduled-backup",
   "restore",
   "maintenance-recover",
+  "portable-export",
+  "portable-inspect",
+  "portable-import",
+  "v1-import",
+  "export-store",
 ]);
 const SHA = /^[a-f0-9]{64}$/u;
 
@@ -89,7 +103,7 @@ export function requireEntryArguments(action, backupId, confirmation) {
   if (
     action === "restore"
       ? !id || !confirm
-      : action === "backup-verify"
+      : action === "backup-verify" || action === "backup-drill"
         ? !id || confirmation !== undefined
         : backupId !== undefined || confirmation !== undefined
   )

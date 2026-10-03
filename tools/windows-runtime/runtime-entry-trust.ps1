@@ -9,6 +9,8 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Security.Cryptography;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
+using System.Threading;
 using Microsoft.Win32.SafeHandles;
 public static class LaundryRuntimeEntryTrust {
   [StructLayout(LayoutKind.Sequential)] struct FileInfo {
@@ -20,6 +22,15 @@ public static class LaundryRuntimeEntryTrust {
   [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
   static extern SafeFileHandle CreateFileW(string path, uint access, uint share, IntPtr security,
     uint disposition, uint flags, IntPtr template);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  static extern IntPtr GetStdHandle(int kind);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  static extern uint GetFileType(IntPtr handle);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  static extern bool PeekNamedPipe(IntPtr pipe, IntPtr buffer, uint size, IntPtr read,
+    out uint available, IntPtr remaining);
+  [DllImport("kernel32.dll", SetLastError=true)]
+  static extern bool ReadFile(IntPtr file, byte[] buffer, uint size, out uint read, IntPtr overlapped);
   static readonly Dictionary<string, SafeFileHandle> heldDirectories =
     new Dictionary<string, SafeFileHandle>(StringComparer.OrdinalIgnoreCase);
   static Exception Invalid() { return new InvalidOperationException("WINDOWS_RUNTIME_ENTRY_INTEGRITY_FAILED"); }
@@ -115,6 +126,44 @@ public static class LaundryRuntimeEntryTrust {
       }
       return result.ToString();
     });
+  }
+  public static string ReadProtocolInput() {
+    IntPtr input = GetStdHandle(-10);
+    uint type = GetFileType(input);
+    if (input == IntPtr.Zero || input == new IntPtr(-1) || (type != 1 && type != 3))
+      throw new InvalidOperationException("WINDOWS_RUNTIME_ENTRY_INPUT_INVALID");
+    byte[] bytes = new byte[8193], chunk = new byte[8193];
+    int length = 0;
+    Stopwatch deadline = Stopwatch.StartNew();
+    try {
+      while (true) {
+        if (deadline.ElapsedMilliseconds >= 10000)
+          throw new InvalidOperationException("WINDOWS_RUNTIME_ENTRY_INPUT_TIMEOUT");
+        uint available = (uint)(bytes.Length - length);
+        if (type == 3 && !PeekNamedPipe(input, IntPtr.Zero, 0, IntPtr.Zero, out available, IntPtr.Zero)) {
+          int error = Marshal.GetLastWin32Error();
+          if (error == 109 || error == 232) break;
+          throw new InvalidOperationException("WINDOWS_RUNTIME_ENTRY_INPUT_INVALID");
+        }
+        // This entry is the sole reader. Do not block on an empty anonymous pipe:
+        // a caller which never closes stdin must still hit the total deadline.
+        if (available == 0) { Thread.Sleep(10); continue; }
+        uint count;
+        if (!ReadFile(input, chunk, Math.Min(available, (uint)(bytes.Length - length)), out count, IntPtr.Zero)) {
+          int error = Marshal.GetLastWin32Error();
+          if (error == 109 || error == 232) break;
+          throw new InvalidOperationException("WINDOWS_RUNTIME_ENTRY_INPUT_INVALID");
+        }
+        if (count == 0) break;
+        Buffer.BlockCopy(chunk, 0, bytes, length, (int)count);
+        length += (int)count;
+        if (length > 8192) throw new InvalidOperationException("WINDOWS_RUNTIME_ENTRY_ARGS_INVALID");
+      }
+      try { return new UTF8Encoding(false, true).GetString(bytes, 0, length); }
+      catch (DecoderFallbackException) {
+        throw new InvalidOperationException("WINDOWS_RUNTIME_ENTRY_INPUT_INVALID");
+      }
+    } finally { Array.Clear(bytes, 0, bytes.Length); Array.Clear(chunk, 0, chunk.Length); }
   }
   public static void PrivateDirectory(string path) {
     DirectoryPath(path);

@@ -5,6 +5,7 @@ import type {
   StaffCredentialsCompleteInput,
 } from "../auth/types.js";
 import type { PhotoReadVariant, PhotoUploadInput } from "./photo-port.js";
+import type { DesktopAiInput, DesktopV1MigrationInput } from "@laundry/contracts";
 
 export type DesktopCommandInput =
   | Readonly<{
@@ -31,6 +32,14 @@ export type DesktopQueryInput = Readonly<{
  * deliberately have no representation here.
  */
 export type LaundryDesktopBridge = Readonly<{
+  remoteAssistance?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  miniappSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  paymentChannel?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  ai?: Readonly<{ execute: (input: DesktopAiInput) => Promise<unknown> }>;
+  migration?: Readonly<{ execute: (input: DesktopV1MigrationInput) => Promise<unknown> }>;
+  notificationSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  scale?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  storeExport?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   auth: Readonly<{
     login: (input: LoginFormValues) => Promise<unknown>;
     refresh: () => Promise<unknown>;

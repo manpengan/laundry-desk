@@ -183,6 +183,7 @@ function settlementState(
     !accepted &&
     !costInvalid &&
     settlement.outcome !== "permanent_failure" &&
+    settlement.retryAllowed !== false &&
     settlement.attemptNo < 5;
   return Object.freeze({
     status: accepted ? "accepted" : retry ? "retry_wait" : "manual_required",

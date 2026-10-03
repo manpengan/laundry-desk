@@ -1,0 +1,11 @@
+{
+  "pages": ["pages/home/index"],
+  "window": {
+    "navigationBarTitleText": "我的洗护",
+    "navigationBarBackgroundColor": "#f4f7f6",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f4f7f6"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

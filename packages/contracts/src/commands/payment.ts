@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paymentChannelRefundCommand } from "../payment-channel.js";
 
 import {
   defineCommand,
@@ -115,11 +116,12 @@ export const PAYMENT_COMMANDS = Object.freeze([
   paymentCollectCommand,
   paymentRepayCommand,
   paymentRefundCommand,
+  paymentChannelRefundCommand,
 ] as const);
 
 export const PAYMENT_COMMAND_NAMES = Object.freeze(
   PAYMENT_COMMANDS.map((command) => command.name),
-) as readonly ["payment.collect", "payment.repay", "payment.refund"];
+) as readonly ["payment.collect", "payment.repay", "payment.refund", "payment.channel.refund"];
 
 export const PAYMENT_QUERIES: readonly QueryDefinition<z.ZodObject>[] = Object.freeze([
   paymentLedgerListQuery,

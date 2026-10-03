@@ -357,7 +357,23 @@ async function auditDesktopBridge(page: Page): Promise<void> {
     return {
       bridgeValid:
         JSON.stringify(Object.keys(bridge).sort()) ===
-          JSON.stringify(["auth", "command", "health", "offline", "photo", "printer", "query"]) &&
+          JSON.stringify([
+            "ai",
+            "auth",
+            "command",
+            "health",
+            "migration",
+            "miniappSettings",
+            "notificationSettings",
+            "offline",
+            "paymentChannel",
+            "photo",
+            "printer",
+            "query",
+            "remoteAssistance",
+            "scale",
+            "storeExport",
+          ]) &&
         JSON.stringify(Object.keys(bridge.auth).sort()) ===
           JSON.stringify([
             "credentialComplete",
@@ -366,6 +382,7 @@ async function auditDesktopBridge(page: Page): Promise<void> {
             "pinChallenge",
             "pinVerify",
             "refresh",
+            "staffDirectory",
           ]) &&
         Object.keys(bridge.command).join() === "execute" &&
         Object.keys(bridge.query).join() === "execute" &&

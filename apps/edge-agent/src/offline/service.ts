@@ -101,6 +101,52 @@ export function createOfflineDesktopService(
   };
 
   return Object.freeze({
+    paymentChannel: Object.freeze({
+      execute: (input: unknown) =>
+        isMutationBlocked() || online.paymentChannel === undefined
+          ? Promise.resolve(unavailable())
+          : online.paymentChannel.execute(input),
+    }),
+    miniappSettings: Object.freeze({
+      execute: (input: unknown) =>
+        isMutationBlocked() || online.miniappSettings === undefined
+          ? Promise.resolve(unavailable())
+          : online.miniappSettings.execute(input),
+    }),
+    remoteAssistance: Object.freeze({
+      execute: (input: unknown) =>
+        isMutationBlocked() || online.remoteAssistance === undefined
+          ? Promise.resolve(unavailable())
+          : online.remoteAssistance.execute(input),
+    }),
+    notificationSettings: Object.freeze({
+      execute: async (input: unknown) =>
+        isMutationBlocked() || online.notificationSettings === undefined
+          ? unavailable()
+          : online.notificationSettings.execute(input),
+    }),
+    scale: Object.freeze({
+      execute: (input: unknown) =>
+        isMutationBlocked() || online.scale === undefined
+          ? Promise.resolve(unavailable())
+          : online.scale.execute(input),
+    }),
+    storeExport: Object.freeze({
+      execute: (input: unknown) =>
+        isMutationBlocked() || online.storeExport === undefined
+          ? Promise.resolve(unavailable())
+          : online.storeExport.execute(input),
+    }),
+    migration: Object.freeze({
+      execute: async (input: unknown) =>
+        isMutationBlocked() || online.migration === undefined
+          ? unavailable()
+          : online.migration.execute(input),
+    }),
+    ai: Object.freeze({
+      execute: async (input: unknown) =>
+        isMutationBlocked() || online.ai === undefined ? unavailable() : online.ai.execute(input),
+    }),
     auth: Object.freeze({
       login: async (input: unknown) => {
         const result = await online.auth.login(input);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { messageImages } from "./vision-provider-content.js";
 
 import {
   PROVIDER_TIMEOUT_MS,
@@ -53,6 +54,7 @@ const StreamChunkSchema = z
                     z
                       .object({
                         text: z.string().optional(),
+                        thought: z.boolean().optional(),
                         functionCall: z
                           .object({
                             id: z.string().min(1).max(256).optional(),
@@ -78,6 +80,7 @@ const StreamChunkSchema = z
       .object({
         promptTokenCount: z.number().int().nonnegative(),
         candidatesTokenCount: z.number().int().nonnegative().optional(),
+        thoughtsTokenCount: z.number().int().nonnegative().optional(),
       })
       .passthrough()
       .optional(),
@@ -94,6 +97,7 @@ function safeToolResult(content: string): unknown {
 
 function mapMessages(messages: readonly AiProviderMessage[]): readonly unknown[] {
   return messages.map((message) => {
+    const images = messageImages(message);
     if (message.role === "tool") {
       if (message.toolCallId === undefined) {
         throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
@@ -129,7 +133,13 @@ function mapMessages(messages: readonly AiProviderMessage[]): readonly unknown[]
     }
     return Object.freeze({
       role: message.role === "assistant" ? "model" : "user",
-      parts: Object.freeze([{ text: message.content }]),
+      parts: Object.freeze([
+        ...images.flatMap((image, index) => [
+          { text: `Image ${index}:` },
+          { inlineData: { mimeType: image.mediaType, data: image.data } },
+        ]),
+        { text: message.content },
+      ]),
     });
   });
 }
@@ -144,15 +154,19 @@ function headers(credential: Buffer): Readonly<Record<string, string>> {
 function requestBody(request: AiProviderRequest): string {
   return JSON.stringify({
     contents: mapMessages(request.messages),
-    tools: [
-      {
-        functionDeclarations: request.tools.map((tool) => ({
-          name: toExternalToolName(tool.name),
-          description: tool.description,
-          parameters: tool.inputSchema,
-        })),
-      },
-    ],
+    ...(request.tools.length === 0
+      ? {}
+      : {
+          tools: [
+            {
+              functionDeclarations: request.tools.map((tool) => ({
+                name: toExternalToolName(tool.name),
+                description: tool.description,
+                parameters: tool.inputSchema,
+              })),
+            },
+          ],
+        }),
     generationConfig: { maxOutputTokens: request.maxOutputTokens },
   });
 }
@@ -179,12 +193,14 @@ async function* streamWithCredential(
     const chunk = StreamChunkSchema.parse(raw);
     if (chunk.usageMetadata !== undefined) {
       inputTokens = chunk.usageMetadata.promptTokenCount;
-      outputTokens = chunk.usageMetadata.candidatesTokenCount ?? 0;
+      outputTokens =
+        (chunk.usageMetadata.candidatesTokenCount ?? 0) +
+        (chunk.usageMetadata.thoughtsTokenCount ?? 0);
     }
     const candidate = chunk.candidates?.[0];
     if (candidate?.finishReason) finishReason = candidate.finishReason;
     for (const part of candidate?.content?.parts ?? []) {
-      if (part.text) yield Object.freeze({ type: "delta", text: part.text });
+      if (part.text && !part.thought) yield Object.freeze({ type: "delta", text: part.text });
       if (part.functionCall !== undefined) {
         if (call !== null) throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
         call = Object.freeze({
@@ -197,6 +213,10 @@ async function* streamWithCredential(
   }
   if (inputTokens === null || outputTokens === null || finishReason === "") {
     throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
+  }
+  if (finishReason === "MAX_TOKENS") {
+    yield Object.freeze({ type: "end", finishReason: "limit", inputTokens, outputTokens });
+    return;
   }
   let toolEvent: Extract<AiProviderEvent, { type: "tool_call" }> | null = null;
   if (call !== null) {

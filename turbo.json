@@ -17,6 +17,18 @@
       "dependsOn": ["^build"],
       "outputs": []
     },
+    "@laundry/customer-miniapp#build": {
+      "dependsOn": ["^build", "@laundry/contracts#build"],
+      "outputs": ["dist/**"]
+    },
+    "@laundry/customer-miniapp#typecheck": {
+      "dependsOn": ["^build", "@laundry/contracts#build"],
+      "outputs": []
+    },
+    "@laundry/customer-miniapp#test": {
+      "dependsOn": ["^build", "@laundry/contracts#build"],
+      "outputs": []
+    },
     "@laundry/web#test": {
       "dependsOn": [
         "^build",
@@ -41,7 +53,8 @@
         "@laundry/ui#build",
         "@laundry/domain#build"
       ],
-      "outputs": ["dist/**", "dist-spa/**"]
+      "outputs": ["dist/**", "dist-spa/**"],
+      "passThroughEnv": ["NODE_OPTIONS"]
     },
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"],
@@ -82,7 +95,8 @@
         "^build",
         "@laundry/contracts#build",
         "@laundry/domain#build",
-        "@laundry/platform-fs#build"
+        "@laundry/platform-fs#build",
+        "@laundry/migrate-v1#build"
       ]
     },
     "@laundry/server#test": {
@@ -90,7 +104,8 @@
         "^build",
         "@laundry/contracts#build",
         "@laundry/domain#build",
-        "@laundry/platform-fs#build"
+        "@laundry/platform-fs#build",
+        "@laundry/migrate-v1#build"
       ]
     },
     "@laundry/server#build": {
@@ -98,9 +113,22 @@
         "^build",
         "@laundry/contracts#build",
         "@laundry/domain#build",
-        "@laundry/platform-fs#build"
+        "@laundry/platform-fs#build",
+        "@laundry/migrate-v1#build"
       ],
       "outputs": ["dist/**"]
+    },
+    "@laundry/migrate-v1#build": {
+      "dependsOn": ["^build", "@laundry/platform-fs#build"],
+      "outputs": ["dist/**"]
+    },
+    "@laundry/migrate-v1#typecheck": {
+      "dependsOn": ["^build", "@laundry/platform-fs#build"],
+      "outputs": []
+    },
+    "@laundry/migrate-v1#test": {
+      "dependsOn": ["^build", "@laundry/platform-fs#build"],
+      "outputs": []
     }
   }
 }

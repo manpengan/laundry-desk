@@ -3,6 +3,8 @@
  */
 import type {
   DesktopCommandExecuteInput,
+  DesktopAiInput,
+  DesktopV1MigrationInput,
   DesktopCommandExecuteResult,
   DesktopHealthGetResult,
   DesktopLoginInput,
@@ -41,6 +43,38 @@ import type {
 const EMPTY_DESKTOP_INPUT = Object.freeze({});
 
 const laundryDesktop = Object.freeze({
+  paymentChannel: Object.freeze({
+    execute: (input: unknown): Promise<unknown> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.paymentChannel.execute, input),
+  }),
+  miniappSettings: Object.freeze({
+    execute: (input: unknown): Promise<unknown> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.miniappSettings.execute, input),
+  }),
+  remoteAssistance: Object.freeze({
+    execute: (input: unknown): Promise<unknown> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.remoteAssistance.execute, input),
+  }),
+  scale: Object.freeze({
+    execute: (input: unknown): Promise<unknown> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.scale.execute, input),
+  }),
+  storeExport: Object.freeze({
+    execute: (input: unknown): Promise<unknown> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.storeExport.execute, input),
+  }),
+  notificationSettings: Object.freeze({
+    execute: (input: unknown): Promise<unknown> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.notificationSettings.execute, input),
+  }),
+  migration: Object.freeze({
+    execute: (input: DesktopV1MigrationInput): Promise<unknown> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.migration.execute, input),
+  }),
+  ai: Object.freeze({
+    execute: (input: DesktopAiInput): Promise<unknown> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.ai.execute, input),
+  }),
   auth: Object.freeze({
     login: (input: DesktopLoginInput): Promise<DesktopLoginResult> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.auth.login, input),

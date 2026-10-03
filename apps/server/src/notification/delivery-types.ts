@@ -66,12 +66,14 @@ export type NotificationDeliveryStore = Readonly<{
 export type NotificationDeliveryHandlerDeps = Readonly<{
   store: NotificationDeliveryStore;
   capability: NotificationDeliveryCapabilityResult;
+  tenantScope?: Readonly<{ orgId: string; storeId: string }>;
 }>;
 
 export type NotificationProviderSendInput = Readonly<{
   deliveryId: string;
   recipient: string;
   message: string;
+  parameters: Readonly<{ tickets: string; garment_count: string; balance_cents: string }>;
   timeoutMs: number;
   deadline: Date;
   signal: AbortSignal;
@@ -90,6 +92,8 @@ export type NotificationProvider = Readonly<{
   channel: "sms" | "wechat";
   maxBatchSize: number;
   supportsIdempotency: boolean;
+  /** A durable claim is sent once; unknown outcomes require reconciliation, never a resend. */
+  deliverySemantics?: "at_most_once";
   supportsCancellation: boolean;
   supportsReceipts: boolean;
   unitCostCents: number;
@@ -124,6 +128,7 @@ export type NotificationAttemptSettlement = Readonly<{
   costCents: number;
   startedAt: Date;
   completedAt: Date;
+  retryAllowed?: boolean;
 }>;
 
 export type NotificationReceiptInput = Readonly<{

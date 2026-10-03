@@ -233,7 +233,7 @@ export function CounterWorkbench({
             />
             <Metric
               icon="check"
-              label="实收"
+              label="收款（退款前）"
               value={summary === null ? "—" : <MoneyText fen={summary.payment_cents} />}
               onOpen={() => onNavigate("stats")}
             />
@@ -244,6 +244,7 @@ export function CounterWorkbench({
               onOpen={() => onNavigate("orders")}
             />
           </div>
+          <p className="ld-shell-main__hint">含会员余额付款；欠款补缴和冲正请查看账目。</p>
           <h3 className="ld-counter-panel__subtitle">今日待取</h3>
           <ul className="ld-workbench-orders" data-testid="counter-workbench-orders">
             {orders.length === 0 ? (

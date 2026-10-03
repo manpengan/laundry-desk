@@ -7,6 +7,14 @@ import type { ResumePort } from "./desktop-resume-port.js";
 import type { PrinterPort } from "./printer-port.js";
 import type { DeliveryEvidenceMediaPort } from "./delivery-evidence-port.js";
 import type { AiPanelPort } from "./ai-port.js";
+import type { AiSettingsPort } from "../ai/settings-port.js";
+import type { ScalePort } from "./scale-port.js";
+import type { PaymentChannelPort } from "./payment-channel-port.js";
+import type { MiniappSettingsPort } from "./miniapp-settings-port.js";
+import type { RemoteAssistancePort } from "./remote-assistance-port.js";
+import type { StoreExportPort } from "./store-export-port.js";
+import type { MigrationPort } from "./migration-port.js";
+import type { NotificationSettingsPort } from "./notification-settings-port.js";
 
 export type HealthReady = Readonly<{
   status: "ready";
@@ -35,6 +43,14 @@ export type AppPorts = Readonly<{
   resume?: ResumePort;
   printer?: PrinterPort;
   ai?: AiPanelPort;
+  aiSettings?: AiSettingsPort;
+  migration?: MigrationPort;
+  storeExport?: StoreExportPort;
+  scale?: ScalePort;
+  paymentChannel?: PaymentChannelPort;
+  miniappSettings?: MiniappSettingsPort;
+  remoteAssistance?: RemoteAssistancePort;
+  notificationSettings?: NotificationSettingsPort;
   approval?: ApprovalPort;
   health: HealthPort;
 }>;

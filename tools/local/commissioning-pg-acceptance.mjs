@@ -108,13 +108,17 @@ const migrateLegacyVolume = async () => {
   const migrations = await loadMigrationBundle(
     fileURLToPath(new URL("../../packages/db/src/migrations/", import.meta.url)),
   );
-  assert.equal(migrations.head, "0069_bounded_automation.sql");
+  assert.ok(
+    migrations.entries.some(
+      (entry) => entry.filename === "0045_store_commissioning_staff_credentials.sql",
+    ),
+  );
   await applyRuntimeMigrations(adminPool, migrations);
   const result = await adminPool.query(
-    "SELECT count(*)::integer AS count FROM laundry_schema_migrations WHERE filename = $1",
-    [migrations.head],
+    "SELECT count(*)::integer AS count, max(filename) AS head FROM laundry_schema_migrations",
   );
-  assert.equal(result.rows[0]?.count, 1);
+  assert.equal(result.rows[0]?.count, migrations.entries.length);
+  assert.equal(result.rows[0]?.head, migrations.head);
 };
 
 try {

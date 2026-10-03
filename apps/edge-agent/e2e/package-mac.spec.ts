@@ -128,7 +128,23 @@ test("packaged Counter launches with the fixed secure shell and no service crede
       };
     });
     expect(renderer).toEqual({
-      bridgeKeys: ["auth", "command", "health", "offline", "photo", "printer", "query"],
+      bridgeKeys: [
+        "ai",
+        "auth",
+        "command",
+        "health",
+        "migration",
+        "miniappSettings",
+        "notificationSettings",
+        "offline",
+        "paymentChannel",
+        "photo",
+        "printer",
+        "query",
+        "remoteAssistance",
+        "scale",
+        "storeExport",
+      ],
       electronType: "undefined",
       processType: "undefined",
       requireType: "undefined",

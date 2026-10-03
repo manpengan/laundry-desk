@@ -2,6 +2,94 @@
 import assert from "node:assert/strict";
 import { readFile, writeFile, link, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { randomBytes } from "node:crypto";
+
+const PHOTO_FIXTURE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+export async function readPortableFixtureNote(sql) {
+  const order = `FROM public.orders WHERE id = '${PHOTO_FIXTURE_ID}'`;
+  assert.equal(await sql(`SELECT count(*) ${order}`), "1");
+  return sql(`SELECT json_build_object('note', note)::text ${order}`);
+}
+
+export async function mutatePortableFixtureNote(sql) {
+  // LOCAL store identity must stay fixed; restoration mutates only synthetic business data.
+  assert.equal(
+    await sql(`WITH changed AS (UPDATE public.orders SET note = 'synthetic portable mutation'
+      WHERE id = '${PHOTO_FIXTURE_ID}' RETURNING id) SELECT count(*) FROM changed`),
+    "1",
+  );
+}
+
+/** Synthetic parents must satisfy the same garment/order FK as ordinary photos. */
+export async function seedBackupPhotoFixture(sql, id) {
+  assert.match(id, /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u);
+  await sql(`WITH scope AS (
+    SELECT s.org_id, s.id AS store_id, s.timezone, f.id AS staff_id
+    FROM public.stores s JOIN public.staffs f ON f.org_id=s.org_id
+    ORDER BY s.id, f.id LIMIT 1
+  ), parent_order AS (
+    INSERT INTO public.orders (id, org_id, store_id, ticket_no, status,
+      subtotal_cents, payable_cents, paid_cents, balance_cents,
+      created_at, updated_at, created_by_staff_id, business_date)
+    SELECT '${id}', org_id, store_id, 'qa-backup-${id}', 'open',
+      1000, 1000, 0, 1000, now(), now(), staff_id,
+      to_char(now() AT TIME ZONE timezone, 'YYYY-MM-DD') FROM scope
+    RETURNING id, org_id, store_id
+  ), parent_line AS (
+    INSERT INTO public.order_lines (id, org_id, store_id, order_id, line_index,
+      service_code, category_code, unit_price_cents, qty, line_total_cents)
+    SELECT '${id}', org_id, store_id, id, 0, 'wash', 'shirt', 1000, 1, 1000 FROM parent_order
+    RETURNING id, org_id, store_id, order_id
+  ) INSERT INTO public.garments (id, org_id, store_id, order_id, order_line_id, seq,
+      barcode, service_code, category_code, unit_price_cents, status)
+    SELECT '${id}', org_id, store_id, order_id, id, 1, 'qa-backup-${id}',
+      'wash', 'shirt', 1000, 'received' FROM parent_line`);
+}
+
+export async function portableAcceptance(context) {
+  const { scenario, command, root, sql, secretDigest, beforeSecrets } = context;
+  await scenario("encrypted-off-machine-portable-restore-via-native-secret-pipe", async () => {
+    // This synthetic harness table intentionally does not belong to the trusted
+    // migration schema. Remove it for portable export and recreate after this gate.
+    await sql("DROP TABLE public.runtime_acceptance_probe");
+    const original = await readPortableFixtureNote(sql);
+    const options = {
+      path: join(root, "portable-acceptance.ldbackup"),
+      password: randomBytes(32).toString("hex"),
+    };
+    const exported = await command("portable-export", undefined, undefined, options);
+    assert.equal(exported.status, "portable_exported");
+    const checked = await command("portable-inspect", undefined, undefined, options);
+    assert.equal(checked.sha256, exported.sha256);
+    await assert.rejects(
+      command("portable-import", undefined, undefined, {
+        ...options,
+        confirmation: "0".repeat(64),
+      }),
+      (error) => /PORTABLE_CONFIRMATION_MISMATCH/u.test(error.stderr ?? ""),
+    );
+    assert.equal((await command("status")).status, "running");
+    await mutatePortableFixtureNote(sql);
+    const restored = await command("portable-import", undefined, undefined, {
+      ...options,
+      confirmation: checked.sha256,
+    });
+    assert.equal(restored.status, "portable_restored");
+    assert.equal(await readPortableFixtureNote(sql), original);
+    assert.equal(await sql("SELECT count(*) FROM public.sessions WHERE status = 'active'"), "0");
+    assert.equal(
+      await sql("SELECT count(*) FROM public.edge_devices WHERE status = 'paired'"),
+      "0",
+    );
+    assert.equal(await secretDigest(), beforeSecrets);
+    await sql(
+      "CREATE TABLE public.runtime_acceptance_probe (id integer PRIMARY KEY); INSERT INTO public.runtime_acceptance_probe VALUES (1), (2)",
+    );
+    await unlink(options.path);
+  });
+}
 
 export async function backupAcceptance(context) {
   const {
@@ -22,23 +110,59 @@ export async function backupAcceptance(context) {
   const { runtimeEnvironment } = await load("lifecycle-environment.mjs");
   const { pgControl } = await load("lifecycle-process.mjs");
   const { databaseTools } = await load("backup-database.mjs");
-  const { createBackup } = await load("backup-files.mjs");
+  const { createBackup, readBackup } = await load("backup-files.mjs");
+  const { resetRollbackAuthority } = await load("restore-authority.mjs");
   let saved;
   let savedManifest;
+  let photo;
+  const photoId = PHOTO_FIXTURE_ID;
+  const photoBytes = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aCioAAAAASUVORK5CYII=",
+    "base64",
+  );
   const run = (action, options = {}) => command(action, payload, expectedDigest, options);
   const rejected = (action, options, pattern) =>
     assert.rejects(run(action, options), (error) => pattern.test(error.stderr ?? ""));
   await scenario("managed-backup-and-database-restore", async () => {
+    const { createPhotoFileStore } = await import(
+      pathToFileURL(join(payload, "server/dist/photo/file-store.js")).href
+    );
+    const { parseLocalPhotoStoreDir } = await import(
+      pathToFileURL(join(payload, "server/dist/local/config.js")).href
+    );
+    const fromOldController = parseLocalPhotoStoreDir({
+      LOCALAPPDATA: process.env.LOCALAPPDATA,
+      LAUNDRY_RUNTIME_RELEASE: "0.1.0-win-dev.8",
+    });
+    assert.equal(fromOldController, join(root, "photos"));
+    const files = await createPhotoFileStore({ rootPath: join(root, "photos") });
+    await seedBackupPhotoFixture(sql, photoId);
+    photo = await files.write(photoBytes, "image/png", photoId);
+    await sql(`INSERT INTO public.garment_photos (id, org_id, store_id, garment_id, order_id, kind, storage_key, content_type, content_sha256, byte_size, taken_at, created_by_staff_id)
+      SELECT '${photoId}', s.org_id, s.id, '${photoId}', '${photoId}', 'receive', '${photo.storage_key}', '${photo.content_type}', '${photo.content_sha256}', ${photo.byte_size}, now(), f.id
+      FROM public.stores s JOIN public.staffs f ON f.org_id = s.org_id ORDER BY s.id, f.id LIMIT 1`);
+    assert.equal(
+      await sql(`SELECT count(*) FROM public.garment_photos WHERE id = '${photoId}'`),
+      "1",
+    );
+    assert.equal(
+      (await platform.inspectPrivateDirectory(files.rootPath)).scheme,
+      "windows-dacl-v1",
+    );
     saved = await run("backup");
     const verified = await run("backup-verify", { backupId: saved.backup_id });
     assert.equal(verified.manifest_sha256, saved.manifest_sha256);
     assert.equal((await run("backup-list")).backups.length, 1);
     savedManifest = await readFile(join(root, "backups", saved.backup_id, "backup.json"));
     const metadata = JSON.parse(savedManifest);
-    assert.equal(metadata.photos, "disabled_empty");
+    assert.equal(metadata.version, 2);
+    assert.equal(metadata.photos.count, 1);
+    assert.equal(metadata.photos.total_bytes, photoBytes.length);
     await sql(
       "INSERT INTO public.runtime_acceptance_probe VALUES (3); CREATE TABLE public.post_backup_probe (id integer)",
     );
+    await sql(`DELETE FROM public.garment_photos WHERE id = '${photoId}'`);
+    await files.remove(photo.storage_key, photo.content_sha256);
     const result = await run("restore", {
       backupId: saved.backup_id,
       confirmation: saved.manifest_sha256,
@@ -46,6 +170,11 @@ export async function backupAcceptance(context) {
     assert.equal(result.status, "running");
     assert.equal(await sql("SELECT count(*) FROM public.runtime_acceptance_probe"), "2");
     assert.equal(await sql("SELECT to_regclass('public.post_backup_probe') IS NULL"), "t");
+    assert.equal(
+      await sql(`SELECT content_sha256 FROM public.garment_photos WHERE id = '${photoId}'`),
+      photo.content_sha256,
+    );
+    assert.deepEqual((await files.read(photo)).bytes, photoBytes);
     assert.equal(await secretDigest(), beforeSecrets);
     // Prove the automatically-created safety point contains the pre-restore state.
     await run("restore", {
@@ -53,9 +182,14 @@ export async function backupAcceptance(context) {
       confirmation: result.safety_backup.digest,
     });
     assert.equal(await sql("SELECT count(*) FROM public.runtime_acceptance_probe"), "3");
+    assert.equal(
+      await sql(`SELECT count(*) FROM public.garment_photos WHERE id = '${photoId}'`),
+      "0",
+    );
     assert.equal(await sql("SELECT to_regclass('public.post_backup_probe') IS NOT NULL"), "t");
     await run("restore", { backupId: saved.backup_id, confirmation: saved.manifest_sha256 });
     assert.equal(await sql("SELECT count(*) FROM public.runtime_acceptance_probe"), "2");
+    assert.deepEqual((await files.read(photo)).bytes, photoBytes);
   });
   await scenario("backup-corruption-confirmation-instance-and-version-rejection", async () => {
     const directory = join(root, "backups", saved.backup_id);
@@ -178,21 +312,20 @@ export async function backupAcceptance(context) {
     await io.write(join(root, "maintenance.json"), JSON.stringify(record));
     candidate = await database.create(candidate);
     await io.write(join(root, "maintenance.json"), JSON.stringify({ ...record, candidate }));
-    const target = {
-      path: join(root, "backups", saved.backup_id, "database.dump"),
-      manifest: JSON.parse(savedManifest),
-    };
+    const target = await readBackup(settings, saved.backup_id, saved.manifest_sha256);
     await database.restore(candidate, target);
+    await resetRollbackAuthority(settings, candidate.name);
+    const authorizedRecord = { ...record, authority_reset: true };
     await io.write(
       join(root, "maintenance.json"),
-      JSON.stringify({ ...record, phase: "switching", candidate }),
+      JSON.stringify({ ...authorizedRecord, phase: "switching", candidate }),
     );
     await database.swap(candidate);
     if (phase === "verified") {
       await database.verify();
       await io.write(
         join(root, "maintenance.json"),
-        JSON.stringify({ ...record, phase, candidate }),
+        JSON.stringify({ ...authorizedRecord, phase, candidate }),
       );
       await database.finish(candidate); // Simulate death after cleanup, before idle publication.
     }

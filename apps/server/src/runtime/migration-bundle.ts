@@ -3,6 +3,7 @@ import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { PgPool, PgPoolClient } from "../db/pg-pool.js";
+import { ensureStoreExportReaderRole } from "./export-role-bootstrap.js";
 
 const MIGRATION_NAME = /^[0-9]{4}_[a-z0-9_]+\.sql$/u;
 
@@ -107,6 +108,8 @@ export async function applyRuntimeMigrations(
 ): Promise<void> {
   const client = await pool.connect();
   try {
+    if (bundle.entries.some((entry) => entry.filename === "0073_store_export_requests.sql"))
+      await ensureStoreExportReaderRole(client);
     await ensureLedger(client);
     const before = await client.query<LedgerRow>(
       "SELECT filename, checksum FROM public.laundry_schema_migrations ORDER BY filename",

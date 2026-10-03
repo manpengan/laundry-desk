@@ -169,6 +169,7 @@ export function registerM1Handlers(
       "payment.collect",
       "payment.repay",
       "payment.refund",
+      "payment.channel.refund",
     );
   }
 

@@ -1,4 +1,5 @@
 import { AiSafetyStatusViewSchema } from "@laundry/contracts";
+import { randomUUID } from "node:crypto";
 
 import type { PgPool } from "../db/pg-pool.js";
 import { withAiContext } from "./streaming-pg-context.js";
@@ -71,7 +72,13 @@ export function createPgAiSafetyMethods(pool: PgPool): SafetyMethods {
             finish.usage.outputRedactions,
           ],
         );
-        return result.rows[0]?.changed === true;
+        const changed = result.rows[0]?.changed === true;
+        if (changed && finish.quarantineUsage !== undefined)
+          await client.query(
+            "SELECT public.ai_usage_quarantine($1::uuid,$2::uuid,$3::uuid,$4::text)",
+            [input.turnId, input.context.authSessionId, randomUUID(), finish.quarantineUsage],
+          );
+        return changed;
       }),
 
     recordSafetyRejection: async (input) =>

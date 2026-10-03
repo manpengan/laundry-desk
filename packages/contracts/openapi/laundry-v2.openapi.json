@@ -781,6 +781,278 @@
               "args": {
                 "additionalProperties": false,
                 "properties": {
+                  "days": {
+                    "anyOf": [
+                      {
+                        "const": 7,
+                        "type": "number"
+                      },
+                      {
+                        "const": 30,
+                        "type": "number"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "days"
+                ],
+                "type": "object"
+              },
+              "tool": {
+                "const": "business.trend",
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "args"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "properties": {
+                  "limit": {
+                    "maximum": 10,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "min_age_days": {
+                    "anyOf": [
+                      {
+                        "const": 30,
+                        "type": "number"
+                      },
+                      {
+                        "const": 90,
+                        "type": "number"
+                      },
+                      {
+                        "const": 180,
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  "unpaid_only": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "min_age_days",
+                  "unpaid_only",
+                  "limit"
+                ],
+                "type": "object"
+              },
+              "tool": {
+                "const": "pickup.candidates",
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "args"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "command": {
+                        "const": "garment.bulk_transition",
+                        "type": "string"
+                      },
+                      "input": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "garment_ids": {
+                            "items": {
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                              "type": "string"
+                            },
+                            "maxItems": 10,
+                            "minItems": 2,
+                            "type": "array"
+                          },
+                          "note": {
+                            "maxLength": 256,
+                            "type": "string"
+                          },
+                          "target_status": {
+                            "enum": [
+                              "washing",
+                              "ready"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "garment_ids",
+                          "target_status"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "command",
+                      "input"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "command": {
+                        "const": "garment.rework",
+                        "type": "string"
+                      },
+                      "input": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "garment_ids": {
+                            "items": {
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                              "type": "string"
+                            },
+                            "maxItems": 10,
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "reason": {
+                            "maxLength": 256,
+                            "minLength": 1,
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "garment_ids",
+                          "reason"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "command",
+                      "input"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "command": {
+                        "const": "notification.manual_list.create",
+                        "type": "string"
+                      },
+                      "input": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "format": {
+                            "const": "csv",
+                            "type": "string"
+                          },
+                          "garment_statuses": {
+                            "items": {
+                              "enum": [
+                                "ready",
+                                "racked"
+                              ],
+                              "type": "string"
+                            },
+                            "maxItems": 2,
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "group_by": {
+                            "enum": [
+                              "order",
+                              "customer"
+                            ],
+                            "type": "string"
+                          },
+                          "message_template": {
+                            "maxLength": 256,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "min_age_days": {
+                            "anyOf": [
+                              {
+                                "const": 30,
+                                "type": "number"
+                              },
+                              {
+                                "const": 90,
+                                "type": "number"
+                              },
+                              {
+                                "const": 180,
+                                "type": "number"
+                              }
+                            ]
+                          },
+                          "order_ids": {
+                            "items": {
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                              "type": "string"
+                            },
+                            "maxItems": 10,
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "unpaid_only": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "order_ids",
+                          "group_by",
+                          "message_template",
+                          "format",
+                          "min_age_days",
+                          "unpaid_only",
+                          "garment_statuses"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "command",
+                      "input"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "tool": {
+                "const": "operations.preview",
+                "type": "string"
+              }
+            },
+            "required": [
+              "tool",
+              "args"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "args": {
+                "additionalProperties": false,
+                "properties": {
                   "business_date": {
                     "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                     "type": "string"
@@ -819,7 +1091,8 @@
                   "scope": {
                     "enum": [
                       "orders",
-                      "customers"
+                      "customers",
+                      "garments"
                     ],
                     "type": "string"
                   }
@@ -932,6 +1205,41 @@
             },
             "maxItems": 10,
             "type": "array"
+          },
+          "preview": {
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "enum": [
+                  "garment.bulk_transition",
+                  "garment.rework",
+                  "notification.manual_list.create"
+                ],
+                "type": "string"
+              },
+              "confirm_ref": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              },
+              "expires_at": {
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                "type": "string"
+              },
+              "summary": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "command",
+              "confirm_ref",
+              "summary",
+              "expires_at"
+            ],
+            "type": "object"
           },
           "result_count": {
             "maximum": 10,
@@ -1059,7 +1367,10 @@
                               "enum": [
                                 "business.summary",
                                 "records.search",
-                                "procedure.troubleshoot"
+                                "procedure.troubleshoot",
+                                "business.trend",
+                                "pickup.candidates",
+                                "operations.preview"
                               ],
                               "type": "string"
                             }
@@ -1107,6 +1418,41 @@
                           ],
                           "type": "string"
                         },
+                        "preview": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "command": {
+                              "enum": [
+                                "garment.bulk_transition",
+                                "garment.rework",
+                                "notification.manual_list.create"
+                              ],
+                              "type": "string"
+                            },
+                            "confirm_ref": {
+                              "format": "uuid",
+                              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                              "type": "string"
+                            },
+                            "expires_at": {
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                              "type": "string"
+                            },
+                            "summary": {
+                              "maxLength": 1024,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "command",
+                            "confirm_ref",
+                            "summary",
+                            "expires_at"
+                          ],
+                          "type": "object"
+                        },
                         "step": {
                           "maximum": 4,
                           "minimum": 1,
@@ -1122,7 +1468,10 @@
                               "enum": [
                                 "business.summary",
                                 "records.search",
-                                "procedure.troubleshoot"
+                                "procedure.troubleshoot",
+                                "business.trend",
+                                "pickup.candidates",
+                                "operations.preview"
                               ],
                               "type": "string"
                             }
@@ -1296,6 +1645,60 @@
               "session",
               "events",
               "next_cursor"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AiOperationConfirm": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_ref": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirm_ref"
+        ],
+        "type": "object"
+      },
+      "AiOperationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "enum": [
+                  "garment.bulk_transition",
+                  "garment.rework",
+                  "notification.manual_list.create"
+                ],
+                "type": "string"
+              },
+              "csv": {
+                "maxLength": 32768,
+                "type": "string"
+              },
+              "executed": {
+                "const": true,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "command",
+              "executed"
             ],
             "type": "object"
           },
@@ -1506,6 +1909,144 @@
               "selected_model_available",
               "error_code",
               "validated_at"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AiRuntimeConfigRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "input_micros_per_million": {
+            "exclusiveMinimum": 0,
+            "maximum": 1000000000000,
+            "type": "integer"
+          },
+          "model_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}\\p{Zl}\\p{Zp}]+$",
+            "type": "string"
+          },
+          "monthly_limit_micros": {
+            "exclusiveMinimum": 0,
+            "maximum": 9000000000000,
+            "type": "integer"
+          },
+          "output_micros_per_million": {
+            "exclusiveMinimum": 0,
+            "maximum": 1000000000000,
+            "type": "integer"
+          },
+          "provider_code": {
+            "enum": [
+              "deepseek",
+              "anthropic",
+              "gemini"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "provider_code",
+          "model_id",
+          "monthly_limit_micros",
+          "input_micros_per_million",
+          "output_micros_per_million",
+          "expected_version"
+        ],
+        "type": "object"
+      },
+      "AiRuntimeConfigResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "config": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "input_micros_per_million": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000000000,
+                        "type": "integer"
+                      },
+                      "model_id": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "pattern": "^[^\\p{Cc}\\p{Zl}\\p{Zp}]+$",
+                        "type": "string"
+                      },
+                      "monthly_limit_micros": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 9000000000000,
+                        "type": "integer"
+                      },
+                      "output_micros_per_million": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000000000,
+                        "type": "integer"
+                      },
+                      "provider_code": {
+                        "enum": [
+                          "deepseek",
+                          "anthropic",
+                          "gemini"
+                        ],
+                        "type": "string"
+                      },
+                      "version": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "enabled",
+                      "provider_code",
+                      "model_id",
+                      "monthly_limit_micros",
+                      "input_micros_per_million",
+                      "output_micros_per_million",
+                      "version"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "custody_available": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "config",
+              "custody_available"
             ],
             "type": "object"
           },
@@ -1735,7 +2276,10 @@
                     "enum": [
                       "business.summary",
                       "records.search",
-                      "procedure.troubleshoot"
+                      "procedure.troubleshoot",
+                      "business.trend",
+                      "pickup.candidates",
+                      "operations.preview"
                     ],
                     "type": "string"
                   }
@@ -1783,6 +2327,41 @@
                 ],
                 "type": "string"
               },
+              "preview": {
+                "additionalProperties": false,
+                "properties": {
+                  "command": {
+                    "enum": [
+                      "garment.bulk_transition",
+                      "garment.rework",
+                      "notification.manual_list.create"
+                    ],
+                    "type": "string"
+                  },
+                  "confirm_ref": {
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                    "type": "string"
+                  },
+                  "expires_at": {
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+                    "type": "string"
+                  },
+                  "summary": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "command",
+                  "confirm_ref",
+                  "summary",
+                  "expires_at"
+                ],
+                "type": "object"
+              },
               "step": {
                 "maximum": 4,
                 "minimum": 1,
@@ -1798,7 +2377,10 @@
                     "enum": [
                       "business.summary",
                       "records.search",
-                      "procedure.troubleshoot"
+                      "procedure.troubleshoot",
+                      "business.trend",
+                      "pickup.candidates",
+                      "operations.preview"
                     ],
                     "type": "string"
                   }
@@ -1996,6 +2578,312 @@
               "stream_url",
               "replayed",
               "created_at"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AiVisionCandidateQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "AiVisionCandidatesResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "candidates": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "barcode": {
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "photo_id": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
+                    },
+                    "thumbnail_base64": {
+                      "maxLength": 32768,
+                      "minLength": 4,
+                      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+                      "type": "string"
+                    },
+                    "ticket_no": {
+                      "maxLength": 64,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "photo_id",
+                    "sha256",
+                    "ticket_no",
+                    "barcode",
+                    "thumbnail_base64"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 6,
+                "type": "array"
+              },
+              "limit": {
+                "const": 6,
+                "type": "number"
+              }
+            },
+            "required": [
+              "candidates",
+              "limit"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "AiVisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "photo_id": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                  "type": "string"
+                },
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "photo_id",
+                "sha256"
+              ],
+              "type": "object"
+            },
+            "maxItems": 2,
+            "type": "array"
+          },
+          "consent": {
+            "const": true,
+            "type": "boolean"
+          },
+          "image_base64": {
+            "maxLength": 196608,
+            "minLength": 4,
+            "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "assist",
+              "match"
+            ],
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "mode",
+          "image_base64",
+          "candidates",
+          "consent"
+        ],
+        "type": "object"
+      },
+      "AiVisionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "advisory_only": {
+                "const": true,
+                "type": "boolean"
+              },
+              "analysis": {
+                "additionalProperties": false,
+                "properties": {
+                  "category": {
+                    "enum": [
+                      "上衣",
+                      "裤装",
+                      "裙装",
+                      "外套",
+                      "鞋靴",
+                      "家纺",
+                      "其他",
+                      "无法判断"
+                    ],
+                    "type": "string"
+                  },
+                  "colors": {
+                    "items": {
+                      "enum": [
+                        "黑",
+                        "白",
+                        "灰",
+                        "红",
+                        "橙",
+                        "黄",
+                        "绿",
+                        "蓝",
+                        "紫",
+                        "棕",
+                        "米",
+                        "多色",
+                        "无法判断"
+                      ],
+                      "type": "string"
+                    },
+                    "maxItems": 4,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "comparisons": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "candidate_index": {
+                          "maximum": 2,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "reasons": {
+                          "items": {
+                            "enum": [
+                              "颜色",
+                              "形状",
+                              "图案",
+                              "细节",
+                              "清晰度不足"
+                            ],
+                            "type": "string"
+                          },
+                          "maxItems": 3,
+                          "minItems": 1,
+                          "type": "array"
+                        },
+                        "similarity": {
+                          "enum": [
+                            "可能相似",
+                            "不相似",
+                            "无法判断"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "candidate_index",
+                        "similarity",
+                        "reasons"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 2,
+                    "type": "array"
+                  },
+                  "visible_marks": {
+                    "items": {
+                      "enum": [
+                        "可见污渍",
+                        "疑似破损",
+                        "褶皱",
+                        "未见明显问题",
+                        "无法判断"
+                      ],
+                      "type": "string"
+                    },
+                    "maxItems": 4,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "category",
+                  "colors",
+                  "visible_marks",
+                  "comparisons"
+                ],
+                "type": "object"
+              },
+              "candidates": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "photo_id": {
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "photo_id",
+                    "sha256"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 2,
+                "type": "array"
+              },
+              "turn_id": {
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "analysis",
+              "candidates",
+              "turn_id",
+              "advisory_only"
             ],
             "type": "object"
           },
@@ -80234,6 +81122,72 @@
         ],
         "type": "object"
       },
+      "input.command.notification.wechat.send": {
+        "additionalProperties": false,
+        "properties": {
+          "order_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "preview_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "preview_sha256"
+        ],
+        "type": "object"
+      },
+      "input.command.notification.wechat.settings.set": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "miniprogram_state": {
+            "enum": [
+              "developer",
+              "trial",
+              "formal"
+            ],
+            "type": "string"
+          },
+          "status_field": {
+            "pattern": "^phrase[0-9]{1,3}$",
+            "type": "string"
+          },
+          "store_field": {
+            "pattern": "^thing[0-9]{1,3}$",
+            "type": "string"
+          },
+          "template_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "type": "string"
+          },
+          "ticket_field": {
+            "pattern": "^character_string[0-9]{1,3}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_version",
+          "enabled",
+          "template_id",
+          "ticket_field",
+          "store_field",
+          "status_field",
+          "miniprogram_state"
+        ],
+        "type": "object"
+      },
       "input.command.order.cancel": {
         "additionalProperties": false,
         "properties": {
@@ -80611,6 +81565,36 @@
         },
         "required": [
           "lines"
+        ],
+        "type": "object"
+      },
+      "input.command.payment.channel.refund": {
+        "additionalProperties": false,
+        "properties": {
+          "amount_cents": {
+            "exclusiveMinimum": 0,
+            "maximum": 5000000,
+            "type": "integer"
+          },
+          "intent_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "customer_request",
+              "duplicate_payment",
+              "service_cancelled",
+              "other"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "amount_cents",
+          "reason"
         ],
         "type": "object"
       },
@@ -81922,6 +82906,30 @@
         },
         "type": "object"
       },
+      "input.query.notification.wechat.list": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "input.query.notification.wechat.preview": {
+        "additionalProperties": false,
+        "properties": {
+          "order_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id"
+        ],
+        "type": "object"
+      },
+      "input.query.notification.wechat.settings.get": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
       "input.query.order.get": {
         "additionalProperties": false,
         "properties": {
@@ -82556,6 +83564,69 @@
         "x-laundry-version": "1.0.0"
       }
     },
+    "/api/v2/ai/operations/confirm": {
+      "post": {
+        "description": "Human confirmation only. Revalidates the session, R3 command allowlist, original creator, tenant, permissions and frozen business authority. No model execution capability or automatic messages.",
+        "operationId": "ai_operation_confirm",
+        "parameters": [
+          {
+            "description": "Double-submit CSRF proof; must match the readable CSRF cookie value.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiOperationConfirm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiOperationResponse"
+                }
+              }
+            },
+            "description": "Confirmed operation"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission, expiry, state or input failure"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Confirm a frozen, bounded assistant operation",
+        "tags": [
+          "ai"
+        ],
+        "x-laundry-classification": "confidential",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R3"
+      }
+    },
     "/api/v2/ai/provider-connections/validate": {
       "post": {
         "description": "Admin-only, CSRF-protected, rate-limited provider validation. Credential plaintext is never returned.",
@@ -82762,9 +83833,191 @@
         "x-laundry-risk": "R3"
       }
     },
+    "/api/v2/ai/runtime-config": {
+      "get": {
+        "description": "Admin-only organization settings. No credentials are returned. Enabling validates the selected model with the fixed provider host; version CAS and audit are atomic.",
+        "operationId": "ai_runtime_config_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRuntimeConfigResponse"
+                }
+              }
+            },
+            "description": "Current AI configuration"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission or CSRF denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Configuration version or provider unavailable"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read local AI configuration",
+        "tags": [
+          "ai-provider"
+        ],
+        "x-laundry-classification": "confidential",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R0"
+      },
+      "post": {
+        "description": "Admin-only organization settings. No credentials are returned. Enabling validates the selected model with the fixed provider host; version CAS and audit are atomic.",
+        "operationId": "ai_runtime_configure",
+        "parameters": [
+          {
+            "description": "Double-submit CSRF proof; must match the readable CSRF cookie value.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiRuntimeConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRuntimeConfigResponse"
+                }
+              }
+            },
+            "description": "Current AI configuration"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission or CSRF denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Configuration version or provider unavailable"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Configure the local AI provider and budget",
+        "tags": [
+          "ai-provider"
+        ],
+        "x-laundry-classification": "confidential",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R3"
+      }
+    },
     "/api/v2/ai/safety": {
       "get": {
-        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Item 15 exposes only business.summary, records.search, and procedure.troubleshoot through the server registry; no write, free SQL, URL, header, credential, or provider escape hatch.",
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. The finite server registry exposes analysis, masked lookup and R3 operation previews; only a separate human confirmation endpoint can execute. No free SQL, URL, header, credential or provider escape hatch.",
         "operationId": "ai_safety_status",
         "responses": {
           "200": {
@@ -82844,7 +84097,7 @@
     },
     "/api/v2/ai/sessions": {
       "post": {
-        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Item 15 exposes only business.summary, records.search, and procedure.troubleshoot through the server registry; no write, free SQL, URL, header, credential, or provider escape hatch.",
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. The finite server registry exposes analysis, masked lookup and R3 operation previews; only a separate human confirmation endpoint can execute. No free SQL, URL, header, credential or provider escape hatch.",
         "operationId": "ai_session_create",
         "parameters": [
           {
@@ -82957,7 +84210,7 @@
     },
     "/api/v2/ai/sessions/{session_id}/events": {
       "get": {
-        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Item 15 exposes only business.summary, records.search, and procedure.troubleshoot through the server registry; no write, free SQL, URL, header, credential, or provider escape hatch.",
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. The finite server registry exposes analysis, masked lookup and R3 operation previews; only a separate human confirmation endpoint can execute. No free SQL, URL, header, credential or provider escape hatch.",
         "operationId": "ai_events_replay",
         "parameters": [
           {
@@ -83069,7 +84322,7 @@
     },
     "/api/v2/ai/sessions/{session_id}/stream": {
       "get": {
-        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Item 15 exposes only business.summary, records.search, and procedure.troubleshoot through the server registry; no write, free SQL, URL, header, credential, or provider escape hatch.",
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. The finite server registry exposes analysis, masked lookup and R3 operation previews; only a separate human confirmation endpoint can execute. No free SQL, URL, header, credential or provider escape hatch.",
         "operationId": "ai_events_stream",
         "parameters": [
           {
@@ -83171,7 +84424,7 @@
     },
     "/api/v2/ai/sessions/{session_id}/turns": {
       "post": {
-        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. Item 15 exposes only business.summary, records.search, and procedure.troubleshoot through the server registry; no write, free SQL, URL, header, credential, or provider escape hatch.",
+        "description": "Provider-neutral, authenticated, hard-off-by-default AI streaming surface. The finite server registry exposes analysis, masked lookup and R3 operation previews; only a separate human confirmation endpoint can execute. No free SQL, URL, header, credential or provider escape hatch.",
         "operationId": "ai_turn_create",
         "parameters": [
           {
@@ -83283,6 +84536,132 @@
           }
         ],
         "summary": "AI turn_create",
+        "tags": [
+          "ai"
+        ],
+        "x-laundry-classification": "confidential",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R0"
+      }
+    },
+    "/api/v2/ai/vision/analyze": {
+      "post": {
+        "description": "Current local tenant, ai_use and order_write only. Candidate lookup is local. Analysis requires explicit outgoing consent; images are re-encoded without metadata, at most two candidate hashes are rechecked, model output is advisory only. Existing AI budget, credentials and cancellation apply.",
+        "operationId": "ai_vision_analyze",
+        "parameters": [
+          {
+            "description": "Double-submit CSRF proof; must match the readable CSRF cookie value.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiVisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVisionResponse"
+                }
+              }
+            },
+            "description": "Bounded advisory response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission, photo, budget or provider failure"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Bounded garment vision analyze",
+        "tags": [
+          "ai"
+        ],
+        "x-laundry-classification": "confidential",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R0"
+      }
+    },
+    "/api/v2/ai/vision/candidates": {
+      "post": {
+        "description": "Current local tenant, ai_use and order_write only. Candidate lookup is local. Analysis requires explicit outgoing consent; images are re-encoded without metadata, at most two candidate hashes are rechecked, model output is advisory only. Existing AI budget, credentials and cancellation apply.",
+        "operationId": "ai_vision_candidates",
+        "parameters": [
+          {
+            "description": "Double-submit CSRF proof; must match the readable CSRF cookie value.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiVisionCandidateQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiVisionCandidatesResponse"
+                }
+              }
+            },
+            "description": "Bounded advisory response"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission, photo, budget or provider failure"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Bounded garment vision candidates",
         "tags": [
           "ai"
         ],
@@ -88156,6 +89535,110 @@
         "x-laundry-version": "0.1.0"
       }
     },
+    "/v1/commands/notification.wechat.send": {
+      "post": {
+        "description": "Consume one accepted subscription after human confirmation. The preview digest binds the exact current ready order and template. No automatic campaigns or retries. Stable command name: `notification.wechat.send` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_notification_wechat_send",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.notification.wechat.send"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "After human confirmation enqueue one ready-order notification using one accepted subscription.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/commands/notification.wechat.settings.set": {
+      "post": {
+        "description": "Configure the store-owned fixed template after human confirmation. No credentials or arbitrary message text are accepted. Stable command name: `notification.wechat.settings.set` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_notification_wechat_settings_set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.notification.wechat.settings.set"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Configure the fixed WeChat pickup subscription template.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R3",
+        "x-laundry-version": "1.0.0"
+      }
+    },
     "/v1/commands/order.cancel": {
       "post": {
         "description": "Cancel one open order only with a non-empty reason. Runtime writes auditable reversals; it never deletes ledger rows. Stable command name: `order.cancel` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
@@ -88362,6 +89845,58 @@
         "x-laundry-offline-mode": "grant",
         "x-laundry-risk": "R1",
         "x-laundry-version": "0.4.0"
+      }
+    },
+    "/v1/commands/payment.channel.refund": {
+      "post": {
+        "description": "Online R4 refund. Approval reserves refundability and creates one durable merchant refund reference. Never assume a submitted refund has completed. Stable command name: `payment.channel.refund` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "command_payment_channel_refund",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.command.payment.channel.refund"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Approve a provider refund request; only a verified provider result appends the refund ledger.",
+        "tags": [
+          "commands"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "command",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R4",
+        "x-laundry-version": "1.0.0"
       }
     },
     "/v1/commands/payment.collect": {
@@ -91838,6 +93373,162 @@
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R2",
         "x-laundry-version": "0.1.0"
+      }
+    },
+    "/v1/queries/notification.wechat.list": {
+      "post": {
+        "description": "Return a bounded store-scoped projection for a human operator. No recipient credential is exposed. Stable query name: `notification.wechat.list` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_notification_wechat_list",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.notification.wechat.list"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List the latest fifty notification acknowledgement states; accepted is not proof of delivery.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/notification.wechat.preview": {
+      "post": {
+        "description": "Return a bounded store-scoped projection for a human operator. No recipient credential is exposed. Stable query name: `notification.wechat.preview` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_notification_wechat_preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.notification.wechat.preview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Preview the exact ready-order message and available subscription before confirmation.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "pii",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R2",
+        "x-laundry-version": "1.0.0"
+      }
+    },
+    "/v1/queries/notification.wechat.settings.get": {
+      "post": {
+        "description": "Read non-secret notification template settings. Stable query name: `notification.wechat.settings.get` @ 1.0.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "operationId": "query_notification_wechat_settings_get",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/input.query.notification.wechat.settings.get"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command/query envelope"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified A2 command failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read fixed WeChat notification configuration.",
+        "tags": [
+          "queries"
+        ],
+        "x-laundry-classification": "internal",
+        "x-laundry-kind": "query",
+        "x-laundry-offline-mode": "denied",
+        "x-laundry-risk": "R1",
+        "x-laundry-version": "1.0.0"
       }
     },
     "/v1/queries/order.get": {

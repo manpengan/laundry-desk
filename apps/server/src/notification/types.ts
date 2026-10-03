@@ -4,6 +4,7 @@ import type { SqlClient, TenantContext } from "../db/types.js";
 import type { OrderStore } from "../order/types.js";
 import type { NotificationDeliveryHandlerDeps } from "./delivery-types.js";
 import type { NotificationWorkerController } from "./delivery-worker-controller.js";
+import type { ByokKmsPort } from "../ai/byok-kms.js";
 
 export type PickupReminderFilters = Readonly<{
   minAgeDays: 30 | 90 | 180;
@@ -52,6 +53,11 @@ export type NotificationHandlerDeps = Readonly<{
   store: NotificationStore;
   delivery?: NotificationDeliveryHandlerDeps;
   worker?: NotificationWorkerController;
+  externalSettings?: Readonly<{
+    kms: ByokKmsPort;
+    reload: () => Promise<void>;
+    tenant: Readonly<{ orgId: string; storeId: string }>;
+  }>;
   now?: () => Date;
 }>;
 

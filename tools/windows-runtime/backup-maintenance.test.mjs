@@ -1,20 +1,42 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { backupFixture, release } from "./backup-test-fixture.mjs";
 import { backupMaintenance } from "./backup-maintenance.mjs";
 import { createBackup, readMaintenance } from "./backup-files.mjs";
-import { BACKUP_FILES } from "./companion-contract.mjs";
+import { BACKUP_FILES, digest } from "./companion-contract.mjs";
+import { verifyPhotoReferences } from "./backup-photo-files.mjs";
+import { PHOTO_MARKER, PHOTO_MARKER_CONTENT } from "./backup-photo-contract.mjs";
+
+const photoA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png";
+const photoB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.png";
+const photoBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 async function fixture(
   t,
-  { failure, commitFailure, wasRunning = true, legacyController = false, afterSwap } = {},
+  {
+    failure,
+    commitFailure,
+    wasRunning = true,
+    legacyController = false,
+    afterSwap,
+    withPhotos = false,
+  } = {},
 ) {
   const context = await backupFixture(t);
-  const baseline = { orders: 1, cents: 101 };
-  const original = { orders: 2, cents: 202 };
+  const baseline = { orders: 1, cents: 101, ...(withPhotos ? { photo: photoA } : {}) };
+  const original = { orders: 2, cents: 202, ...(withPhotos ? { photo: photoB } : {}) };
+  if (withPhotos) {
+    await context.io.directory(join(context.root, "photos"));
+    await context.io.write(join(context.root, "photos", PHOTO_MARKER), PHOTO_MARKER_CONTENT);
+    await context.io.write(join(context.root, "photos", photoA), photoBytes);
+  }
   const target = await createBackup(context, (file) => file.writeFile(JSON.stringify(baseline)));
+  if (withPhotos) {
+    await unlink(join(context.root, "photos", photoA));
+    await context.io.write(join(context.root, "photos", photoB), photoBytes);
+  }
   const events = [];
   const databases = new Map([[1, original]]);
   let current = 1;
@@ -63,6 +85,14 @@ async function fixture(
     verify: async () => {
       events.push("verify");
       fault("verify");
+      if (withPhotos)
+        await verifyPhotoReferences(context, [
+          {
+            key: databases.get(current).photo,
+            size: photoBytes.length,
+            sha256: digest(photoBytes),
+          },
+        ]);
     },
     dump: async (file) => {
       assert.equal(running, false, "dump must run after writers stop");
@@ -139,6 +169,10 @@ async function fixture(
   };
   const dependencies = {
     database,
+    resetAuthority: async () => {
+      events.push("reset-authority");
+      fault("reset-authority");
+    },
     runtimeEnvironment: async () => ({}),
     pgControl: async (action) => {
       postgres = action === "start";
@@ -166,6 +200,7 @@ test("restore creates a verified safety backup before replacing data and respect
   assert.equal(subject.snapshot().postgres, false);
   assert.ok(subject.events.indexOf("dump") < subject.events.indexOf("create"));
   assert.ok(subject.events.indexOf("restore") < subject.events.indexOf("swap"));
+  assert.ok(subject.events.indexOf("reset-authority") < subject.events.indexOf("swap"));
   assert.deepEqual(
     JSON.parse(
       await readFile(
@@ -177,6 +212,42 @@ test("restore creates a verified safety backup before replacing data and respect
   );
   assert.equal(await readMaintenance(subject.context.io, subject.context.root), null);
 });
+
+test("historical committed restores without authority reset proof stay stopped", async (t) => {
+  const subject = await fixture(t, { failure: "finish" });
+  await assert.rejects(subject.run(), /INJECTED/);
+  const path = join(subject.context.root, "maintenance.json");
+  const value = JSON.parse(await readFile(path, "utf8"));
+  assert.equal(value.authority_reset, true);
+  const legacy = Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== "authority_reset"),
+  );
+  await subject.context.io.write(path, JSON.stringify(legacy));
+  await assert.rejects(
+    subject.run("maintenance-recover", {}),
+    /RESTORE_AUTHORITY_RECOVERY_REQUIRED/,
+  );
+  assert.equal(subject.snapshot().running, false);
+  assert.equal((await readMaintenance(subject.context.io, subject.context.root)).phase, "verified");
+});
+
+for (const failure of ["restore", "swap", "finish"]) {
+  test(`photo/database consistency survives ${failure} interruption without deleting rollback photos`, async (t) => {
+    const subject = await fixture(t, { failure, withPhotos: true });
+    await assert.rejects(subject.run(), /INJECTED/u);
+    assert.equal(subject.snapshot().running, false);
+    const recovered = await subject.run("maintenance-recover", {});
+    assert.equal(recovered.recovered, true);
+    const expected = failure === "finish" ? subject.baseline : subject.original;
+    assert.deepEqual(subject.snapshot().data, expected);
+    assert.deepEqual(
+      await readFile(join(subject.context.root, "photos", expected.photo)),
+      photoBytes,
+    );
+    assert.deepEqual(await readFile(join(subject.context.root, "photos", photoB)), photoBytes);
+    assert.equal(await readMaintenance(subject.context.io, subject.context.root), null);
+  });
+}
 
 test("wrong confirmation refuses before stopping or creating any recovery point", async (t) => {
   const subject = await fixture(t);
@@ -305,4 +376,15 @@ test("a backup quiesces writes and resumes only after its maintenance record is 
     subject.original,
   );
   assert.equal(subject.events.includes("swap"), false);
+});
+
+test("a recovery drill restores only a shadow and never switches the current database", async (t) => {
+  const subject = await fixture(t);
+  const result = await subject.run("backup-drill", { backupId: subject.target.id });
+  assert.equal(result.drilled_backup, subject.target.id);
+  assert.deepEqual(subject.snapshot().data, subject.original);
+  assert.equal(subject.snapshot().running, true);
+  assert.equal(subject.events.includes("swap"), false);
+  assert.ok(subject.events.includes("restore"));
+  assert.ok(subject.events.includes("recover"));
 });

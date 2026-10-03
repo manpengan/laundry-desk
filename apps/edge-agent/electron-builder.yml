@@ -23,6 +23,18 @@ files:
   - dist/transport/electron-session.js
   - dist/transport/handlers.js
   - dist/desktop/auth-intent.js
+  - dist/desktop/ai-operation.js
+  - dist/desktop/migration-operation.js
+  - dist/desktop/notification-operation.js
+  - dist/desktop/auxiliary-operations.js
+  - dist/desktop/scale-operation.js
+  - dist/scale/protocol.js
+  - dist/scale/windows-script.js
+  - dist/scale/windows-port.js
+  - dist/desktop/store-export-operation.js
+  - dist/desktop/payment-channel-operation.js
+  - dist/desktop/miniapp-settings-operation.js
+  - dist/desktop/remote-assistance-operation.js
   - dist/desktop/device-identity.js
   - dist/desktop/electron-adapter.js
   - dist/desktop/edge-authority-transport.js
@@ -91,6 +103,13 @@ files:
   - dist/upgrade/runtime-io.js
   - dist/upgrade/runtime-state.js
   - dist/upgrade/version.js
+  - dist/upgrade/desktop-update.js
+  - dist/upgrade/verified-startup.js
+  - dist/upgrade/runtime-state-recovery.js
+  - dist/upgrade/windows-update-baseline.js
+  - dist/upgrade/windows-update-io.js
+  - dist/upgrade/windows-update-process.js
+  - dist/upgrade/windows-update-script.js
   - dist/preload.cjs
   - package.json
   - "!**/*.test.*"

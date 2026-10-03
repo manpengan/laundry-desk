@@ -1,10 +1,14 @@
 import { lifecycle } from "./lifecycle.mjs";
+import { INPUT_ACTIONS, readDataOptions } from "./data-options.mjs";
+let options;
 try {
   const [action, source, digest, ...extra] = process.argv.slice(2);
-  const expected = action === "restore" ? 2 : action === "backup-verify" ? 1 : 0;
+  const expected =
+    action === "restore" ? 2 : ["backup-verify", "backup-drill"].includes(action) ? 1 : 0;
   if (process.argv.length !== 5 + expected) throw new Error("WINDOWS_COMPANION_ARGS_INVALID");
-  const options =
-    expected === 2
+  options = INPUT_ACTIONS.includes(action)
+    ? await readDataOptions(action)
+    : expected === 2
       ? { backupId: extra[0], confirmation: extra[1] }
       : expected === 1
         ? { backupId: extra[0] }
@@ -29,4 +33,6 @@ try {
       : "WINDOWS_COMPANION_LIFECYCLE_FAILED",
   );
   process.exitCode = 1;
+} finally {
+  if (Buffer.isBuffer(options?.password)) options.password.fill(0);
 }

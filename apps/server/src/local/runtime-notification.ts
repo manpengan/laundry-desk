@@ -12,6 +12,7 @@ import type { NotificationHandlerDeps } from "../notification/types.js";
 import type { OrderStore } from "../order/types.js";
 import type { NotificationProviderMode } from "./config.js";
 import { LOCAL_PROFILE } from "./profile.js";
+import { createWindowsNotificationRuntime } from "../notification/providers/windows-notification-runtime.js";
 
 function withSoftwareWorker(
   store: NotificationHandlerDeps["store"],
@@ -67,11 +68,13 @@ export function createMemoryNotificationRuntime(
   });
 }
 
-export function createPgNotificationRuntime(
+export async function createPgNotificationRuntime(
   pool: PgPool,
   mode: NotificationProviderMode,
-): NotificationHandlerDeps {
+): Promise<NotificationHandlerDeps> {
   const store = createPgNotificationStore();
+  if (process.platform === "win32" && mode === "disabled")
+    return createWindowsNotificationRuntime(pool);
   if (mode === "disabled") return Object.freeze({ store });
   return withSoftwareWorker(store, createPgNotificationDeliveryStore(pool));
 }

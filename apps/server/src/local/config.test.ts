@@ -246,7 +246,7 @@ test("loads signing secrets from container secret files", async (t) => {
 test("photo storage accepts only the dedicated compose mount", () => {
   assert.equal(parseLocalPhotoStoreDir({}), null);
   assert.equal(
-    parseLocalPhotoStoreDir({ LAUNDRY_PHOTO_STORE_DIR: " /var/lib/laundry/photos " }),
+    parseLocalPhotoStoreDir({ LAUNDRY_PHOTO_STORE_DIR: " /var/lib/laundry/photos " }, "linux"),
     "/var/lib/laundry/photos",
   );
   for (const candidate of [
@@ -257,10 +257,64 @@ test("photo storage accepts only the dedicated compose mount", () => {
     "relative/photos",
   ]) {
     assert.throws(
-      () => parseLocalPhotoStoreDir({ LAUNDRY_PHOTO_STORE_DIR: candidate }),
-      /must be \/var\/lib\/laundry\/photos/u,
+      () => parseLocalPhotoStoreDir({ LAUNDRY_PHOTO_STORE_DIR: candidate }, "linux"),
+      /must be the managed photo directory/u,
     );
   }
+});
+
+test("Windows photos are bound to the current user's managed runtime, not arbitrary drive paths", () => {
+  const local = "C:\\Users\\操作员\\AppData\\Local";
+  const root = `${local}\\laundry-desk-v2\\runtime-companion\\photos`;
+  const config = (path: string, appdata = local) =>
+    parseLocalPhotoStoreDir(
+      {
+        LOCALAPPDATA: appdata,
+        LAUNDRY_PHOTO_STORE_DIR: path,
+      },
+      "win32",
+    );
+  assert.equal(config(root), root);
+  assert.equal(config(root.toLowerCase()), root.toLowerCase());
+  for (const path of [
+    "/var/lib/laundry/photos",
+    "C:\\photos",
+    "\\\\server\\share\\photos",
+    `${root}\\..\\secrets`,
+    `${root}:stream`,
+    `${root}.`,
+    "C:photos",
+  ]) {
+    assert.throws(() => config(path), /managed photo directory/u);
+  }
+  assert.throws(() => config(root, "\\\\server\\share"), /managed photo directory/u);
+  assert.throws(() => config(root, `${local}\\..\\Local`), /managed photo directory/u);
+  assert.throws(
+    () => parseLocalPhotoStoreDir({ LAUNDRY_PHOTO_STORE_DIR: root }, "win32"),
+    /managed photo directory/u,
+  );
+});
+
+test("new Windows server retains photos when an old installed login controller omits the new environment variable", () => {
+  const env = {
+    LOCALAPPDATA: "C:\\Users\\synthetic\\AppData\\Local",
+    LAUNDRY_RUNTIME_RELEASE: "0.1.0-win-dev.8",
+  };
+  assert.equal(
+    parseLocalPhotoStoreDir(env, "win32"),
+    `${env.LOCALAPPDATA}\\laundry-desk-v2\\runtime-companion\\photos`,
+  );
+  assert.equal(parseLocalPhotoStoreDir(env, "linux"), null);
+  assert.equal(parseLocalPhotoStoreDir({ LOCALAPPDATA: env.LOCALAPPDATA }, "win32"), null);
+  assert.throws(
+    () => parseLocalPhotoStoreDir({ ...env, LOCALAPPDATA: "\\\\server\\share" }, "win32"),
+    /managed photo directory/u,
+  );
+  assert.throws(
+    () =>
+      parseLocalPhotoStoreDir({ LAUNDRY_RUNTIME_RELEASE: env.LAUNDRY_RUNTIME_RELEASE }, "win32"),
+    /managed photo directory/u,
+  );
 });
 
 test("notification provider stays disabled unless software-only mode is explicit", () => {

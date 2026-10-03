@@ -13,6 +13,7 @@ import { runEmbeddedLanGateway } from "./lan-gateway-command.js";
 import { applyRuntimeRoles, type RuntimeRoleClient } from "./role-bootstrap.js";
 import { resolveRuntimeMigrationsRoot } from "./migration-root.js";
 import { parseRuntimeRelease } from "./runtime-release.js";
+import { prepareMiniappProfileAuthority } from "./miniapp-authority-bootstrap.js";
 
 const COMMANDS = Object.freeze([
   "server",
@@ -151,6 +152,11 @@ const runVerify = async (
     if (requireCommissioned && state !== "commissioned") {
       throw new Error("RUNTIME_COMMISSION_REQUIRED");
     }
+    if (bundle.entries.some((entry) => entry.filename === "0078_miniapp_transactions.sql"))
+      await prepareMiniappProfileAuthority(
+        adminPool,
+        requiredFileSecret("LAUNDRY_ACCESS_TOKEN_SECRET"),
+      );
     return state;
   } finally {
     await Promise.allSettled([adminPool.end(), appPool.end()]);

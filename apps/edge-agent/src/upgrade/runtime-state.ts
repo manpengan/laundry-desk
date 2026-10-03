@@ -24,6 +24,7 @@ import {
 import { z } from "zod";
 
 import { compareVersion, isSemVer } from "./version.js";
+import { rejectActiveSlot } from "./runtime-state-recovery.js";
 
 const SlotSchema = z.strictObject({
   version: z.string().nullable(),
@@ -168,6 +169,10 @@ export class RuntimeUpdateStateStore {
 
   snapshot(): RuntimeUpdateState {
     return this.state;
+  }
+
+  rejectActiveSlot(now: string): void {
+    this.persist(freezeState(rejectActiveSlot(this.state, now)));
   }
 
   standbySlot(): RuntimeSlotName {

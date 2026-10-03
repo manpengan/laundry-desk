@@ -229,7 +229,7 @@ jobs:
       - name: Restart the isolated fixture stack
         run: pnpm local:up -- --bootstrap
 
-      - name: Run server tests against real PostgreSQL with no skips
+      - name: Run server tests against real PostgreSQL with no database skips
         shell: bash
         run: |
           set -euo pipefail
@@ -264,7 +264,14 @@ jobs:
             process.exitCode = code ?? 1;
           });
           NODE
-          ! rg -q '^# skipped [1-9][0-9]*$' /tmp/laundry-server-pg-tests.log
+          node tools/local/pg-test-result-gate.mjs /tmp/laundry-server-pg-tests.log
+
+      - name: Verify Windows data maintenance against real PostgreSQL
+        run: >-
+          node tools/data-transfer/run-pg-fixture.mjs
+          tools/windows-runtime/backup-portable-fixture-pg.test.mjs
+          tools/windows-runtime/portable-database-pg.test.mjs
+          tools/windows-runtime/data-worker-pg.test.mjs
 
       - name: Run Playwright against real server and PostgreSQL
         env:

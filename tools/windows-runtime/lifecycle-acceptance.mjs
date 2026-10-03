@@ -1,4 +1,3 @@
-// Windows CI only. This harness is copied outside the checkout, never shipped in payload.
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { createServer } from "node:net";
@@ -7,7 +6,9 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { launchCommander } from "./lifecycle-acceptance-command.mjs";
-import { backupAcceptance } from "./backup-acceptance.mjs";
+import { backupAcceptance, portableAcceptance } from "./backup-acceptance.mjs";
+import { diagnosticAcceptance } from "./diagnostic-acceptance.mjs";
+import { maintenanceAcceptance, scheduledLauncherAcceptance } from "./maintenance-acceptance.mjs";
 const execute = promisify(execFile);
 const [payload, expectedDigest, reportFile] = process.argv.slice(2);
 assert.equal(process.platform, "win32");
@@ -141,6 +142,33 @@ try {
     beforeSecrets,
     load,
   });
+  await diagnosticAcceptance({
+    scenario,
+    command,
+    platform,
+    io,
+    root,
+    secretDigest,
+    beforeSecrets,
+    digest,
+  });
+  await portableAcceptance({ scenario, command, root, sql, secretDigest, beforeSecrets });
+  await maintenanceAcceptance({
+    scenario,
+    command,
+    root,
+    payload,
+    expectedDigest,
+    variant,
+    sql,
+    digest,
+    canonicalManifest,
+    secretDigest,
+    beforeSecrets,
+    load,
+    io,
+    platform,
+  });
   const second = await variant("laundry-runtime-second", (value) => {
     value.runtime_release = "0.1.0-win-dev.2";
   });
@@ -176,31 +204,16 @@ try {
     assert.equal((await command("start")).manifest_sha256, expectedDigest);
     assert.equal(await sql("SELECT count(*) FROM public.runtime_acceptance_probe"), "2");
   });
-  await scenario("scheduled-launcher-action", async () => {
-    await command("stop");
-    const selected = join(root, "releases", expectedDigest);
-    await host("task-enable", root, selected, expectedDigest);
-    await execute(
-      join(env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "Start-ScheduledTask -TaskName LaundryDeskV2RuntimeCompanion",
-      ],
-      { env, cwd: payload },
-    );
-    await health(root, selected, expectedDigest);
-    await execute(
-      join(env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "$deadline=[DateTime]::UtcNow.AddSeconds(60); while ((Get-ScheduledTask -TaskName LaundryDeskV2RuntimeCompanion).State -eq 'Running') { if ([DateTime]::UtcNow -gt $deadline) { throw 'WINDOWS_COMPANION_TASK_TIMEOUT' }; Start-Sleep -Milliseconds 200 }",
-      ],
-      { env, cwd: payload, timeout: 75000 },
-    );
+  await scheduledLauncherAcceptance({
+    scenario,
+    command,
+    root,
+    expectedDigest,
+    host,
+    execute,
+    env,
+    payload,
+    health,
   });
   await scenario("lock-owner-process-death", async () => {
     const script = `const {withOperationLock}=await import(${JSON.stringify(pathToFileURL(join(payload, "scripts/lifecycle-storage.mjs")).href)}); await withOperationLock(${JSON.stringify(root)},async()=>{console.log('LOCKED');await new Promise(()=>{});});`;
@@ -253,7 +266,7 @@ try {
       "upgrade",
       different.folder,
       different.hash,
-      /MIGRATION_CHANGE_REQUIRES_RESTORE/u,
+      /UPGRADE_MIGRATION_HISTORY_CHANGED/u,
     );
     await writeFile(join(second.folder, "metadata/schema.md"), "tampered");
     await rejected("upgrade", second.folder, second.hash, /INVENTORY_MISMATCH/u);

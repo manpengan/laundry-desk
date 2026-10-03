@@ -46,7 +46,11 @@ import { isRuntimeBusOperationAvailable } from "./runtime-surface-policy.js";
 
 const INTERNAL_ONLY_COMMANDS: ReadonlySet<string> = new Set(["photo.register", "photo.delete"]);
 const IDEMPOTENCY_HEADER_NAME = "idempotency-key";
-const NOTIFICATION_ENQUEUE_COMMAND = "notification.delivery_batch.enqueue";
+const NOTIFICATION_MUTATIONS = new Set([
+  "notification.delivery_batch.enqueue",
+  "notification.wechat.settings.set",
+  "notification.wechat.send",
+]);
 const FACTORY_COMMANDS: ReadonlySet<string> = new Set(FACTORY_HANDOFF_COMMAND_NAMES);
 const FACTORY_QUERIES: ReadonlySet<string> = new Set(FACTORY_HANDOFF_QUERY_NAMES);
 const AUTOMATION_COMMANDS: ReadonlySet<string> = new Set(AUTOMATION_COMMAND_NAMES);
@@ -260,7 +264,7 @@ function registerCommandRoute(
         reply.code(400);
         return fail("VALIDATION_FAILED");
       }
-      if (name === NOTIFICATION_ENQUEUE_COMMAND) {
+      if (NOTIFICATION_MUTATIONS.has(name)) {
         const decision = notificationLimiter.check(
           resolved.session.session_id,
           resolved.session.org_id,

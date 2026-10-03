@@ -1,0 +1,20 @@
+{
+  "name": "@laundry/customer-miniapp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node build.mjs",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --ext .ts,.mjs --max-warnings=0",
+    "test": "pnpm run build && node --test dist/*.test.js"
+  },
+  "dependencies": {
+    "@laundry/contracts": "file:../../packages/contracts",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

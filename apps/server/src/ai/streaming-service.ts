@@ -21,6 +21,7 @@ import {
   type AiRequestContext,
 } from "./streaming-store.js";
 import { detectsPromptInjection, redactAiText } from "./safety-guard.js";
+import type { AiProviderResolver } from "./runtime-provider.js";
 
 export { AI_STREAM_LIMITS } from "./streaming-runner.js";
 
@@ -75,20 +76,26 @@ export function createAiStreamingService(
   options: Readonly<{
     store: AiConversationStore;
     provider: AiProviderPort | null;
+    providerResolver?: AiProviderResolver;
     tool: SyntheticToolPort;
     assistantTool?: ReadonlyAssistantToolPort;
   }>,
 ): AiStreamingService {
-  const requireEnabled = (): AiProviderPort => {
-    if (options.provider === null) {
+  const enabled = options.provider !== null || options.providerResolver !== undefined;
+  const requireEnabled = async (context: AiRequestContext): Promise<AiProviderPort> => {
+    const provider =
+      options.providerResolver === undefined
+        ? options.provider
+        : await options.providerResolver(context);
+    if (provider === null) {
       throw new AiServiceError("AI_UNAVAILABLE");
     }
-    return options.provider;
+    return provider;
   };
   return Object.freeze({
-    enabled: options.provider !== null,
+    enabled,
     async createSession(context) {
-      requireEnabled();
+      await requireEnabled(context);
       return options.store.createSession({
         id: randomUUID(),
         auditId: randomUUID(),
@@ -97,7 +104,7 @@ export function createAiStreamingService(
       });
     },
     async createTurn(sessionId, input, context) {
-      requireEnabled();
+      await requireEnabled(context);
       try {
         const boundedInput = AiTurnCreateRequestSchema.parse(input);
         const redacted = redactAiText(boundedInput.prompt);
@@ -156,13 +163,17 @@ export function createAiStreamingService(
     },
     async getSafetyStatus(context) {
       const status = await options.store.getSafetyStatus(context, new Date());
+      const available =
+        options.providerResolver === undefined
+          ? options.provider !== null
+          : (await options.providerResolver(context)) !== null;
       return Object.freeze({
-        runtime_enabled: options.provider !== null && status.monthly_limit_micros > 0,
+        runtime_enabled: available && status.monthly_limit_micros > 0,
         ...status,
       });
     },
     async runQueuedTurn(sessionId, context, parentSignal, onEvent) {
-      const provider = requireEnabled();
+      const provider = await requireEnabled(context);
       const turn = await options.store.getQueuedTurn(sessionId, context);
       if (turn === null) return;
       const messages = (await options.store.listMessages(sessionId, context)).map((message) =>

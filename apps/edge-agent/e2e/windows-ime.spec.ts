@@ -11,6 +11,13 @@ import {
   type Page,
 } from "@playwright/test";
 import { fillWindowsCredential, loadWindowsRuntimeCredentials } from "./windows-credentials.mjs";
+import {
+  allowsUntrustedNativeImeEnd,
+  captureImeDiagnostics,
+  isAcceptedImeComposition,
+  projectImeDiagnostics,
+} from "./windows-ime-diagnostics.mjs";
+import { installImeDispatchAudit } from "./windows-ime-dispatch-audit.mjs";
 
 const PASSTHROUGH_ENV_KEYS = Object.freeze([
   "PATH",
@@ -35,7 +42,29 @@ type ImeObservation = Readonly<{
   overflow: boolean;
   events: readonly ImeEvent[];
 }>;
-type ProbeWindow = Window & { laundryImeAcceptance?: () => ImeObservation };
+type ProbeWindow = Window & {
+  readonly laundryImeDispatchAudit?: Readonly<{
+    snapshot(
+      target: EventTarget,
+    ): Readonly<{ auditIntact: boolean; scriptDispatchedEvents: number }>;
+    wasScriptDispatched(event: Event): boolean;
+  }>;
+  laundryImeAcceptance?: () => ImeObservation;
+  laundryImeDiagnostic?: () => ImeObservation & {
+    readonly inputConnected: boolean;
+    readonly inputIsCurrent: boolean;
+    readonly auditIntact: boolean;
+    readonly scriptDispatchedEvents: number;
+  };
+};
+type FailureStage =
+  | "launch"
+  | "login"
+  | "observer_setup"
+  | "ready_record"
+  | "composition_wait"
+  | "workbench_navigation"
+  | "evidence_write";
 
 function requiredAbsoluteEnvironment(name: string): string {
   const value = process.env[name];
@@ -82,9 +111,15 @@ async function observeInputMethod(page: Page): Promise<void> {
   await page.evaluate(() => {
     const input = document.querySelector('[data-testid="customers-name-input"]');
     if (!(input instanceof HTMLInputElement)) throw new Error("WINDOWS_IME_INPUT_UNAVAILABLE");
+    const audit = (window as ProbeWindow).laundryImeDispatchAudit;
+    if (audit === undefined || !audit.snapshot(input).auditIntact)
+      throw new Error("WINDOWS_IME_DISPATCH_AUDIT_UNAVAILABLE");
     let events: readonly ImeEvent[] = [];
     let overflow = false;
+    let scriptEventsObserved = 0;
     const record = (event: Event): void => {
+      if (audit.wasScriptDispatched(event))
+        scriptEventsObserved = Math.min(scriptEventsObserved + 1, 65);
       if (events.length >= 64) {
         overflow = true;
         return;
@@ -106,38 +141,49 @@ async function observeInputMethod(page: Page): Promise<void> {
     for (const name of ["compositionstart", "compositionupdate", "compositionend", "input"]) {
       input.addEventListener(name, record);
     }
-    (window as ProbeWindow).laundryImeAcceptance = () =>
+    const observe = (): ImeObservation =>
       Object.freeze({ hasExpectedText: input.value === "你好", overflow, events });
+    (window as ProbeWindow).laundryImeAcceptance = observe;
+    (window as ProbeWindow).laundryImeDiagnostic = () => {
+      const snapshot = audit.snapshot(input);
+      return Object.freeze({
+        ...observe(),
+        inputConnected: input.isConnected,
+        inputIsCurrent: input === document.querySelector('[data-testid="customers-name-input"]'),
+        auditIntact: snapshot.auditIntact,
+        scriptDispatchedEvents: Math.max(snapshot.scriptDispatchedEvents, scriptEventsObserved),
+      });
+    };
   });
 }
 
-async function waitForExternalComposition(page: Page): Promise<ImeObservation> {
+async function waitForExternalComposition(page: Page, versions: unknown): Promise<ImeObservation> {
   try {
-    await page.waitForFunction(
-      () => {
-        const observed = (window as ProbeWindow).laundryImeAcceptance?.();
-        if (observed === undefined || observed.overflow || !observed.hasExpectedText) return false;
-        const trusted = observed.events.filter((event) => event.trusted);
-        return (
-          trusted.some((event) => event.type === "compositionstart") &&
-          trusted.some((event) => event.type === "compositionend" && event.commitsExpectedText) &&
-          trusted.some((event) => event.type === "input" && event.composing)
-        );
-      },
-      undefined,
-      { timeout: EXTERNAL_INPUT_TIMEOUT, polling: 100 },
-    );
-    const observed = await page.evaluate(() => (window as ProbeWindow).laundryImeAcceptance?.());
-    if (observed === undefined || observed.overflow || !observed.hasExpectedText)
+    await expect
+      .poll(
+        async () => {
+          const raw = await page.evaluate(() => (window as ProbeWindow).laundryImeDiagnostic?.());
+          return isAcceptedImeComposition(raw, versions);
+        },
+        { timeout: EXTERNAL_INPUT_TIMEOUT, intervals: [100] },
+      )
+      .toBe(true);
+    const observed = await page.evaluate(() => (window as ProbeWindow).laundryImeDiagnostic?.());
+    if (observed === undefined || !isAcceptedImeComposition(observed, versions))
       throw new Error("WINDOWS_IME_OBSERVATION_UNAVAILABLE");
-    const trusted = observed.events.filter((event) => event.trusted);
-    if (
-      !trusted.some((event) => event.type === "compositionstart") ||
-      !trusted.some((event) => event.type === "compositionend" && event.commitsExpectedText) ||
-      !trusted.some((event) => event.type === "input" && event.composing)
-    )
-      throw new Error("WINDOWS_IME_OBSERVATION_UNAVAILABLE");
-    return observed;
+    await test.info().attach("native-ime-engine-and-audit", {
+      body: JSON.stringify({
+        versions,
+        allowsUntrustedNativeEnd: allowsUntrustedNativeImeEnd(versions),
+        diagnostic: projectImeDiagnostics(observed),
+      }),
+      contentType: "application/json",
+    });
+    return Object.freeze({
+      hasExpectedText: observed.hasExpectedText,
+      overflow: observed.overflow,
+      events: observed.events,
+    });
   } catch {
     // DOM snapshots, raw unexpected input and native diagnostics are excluded from failures.
     throw new Error("WINDOWS_IME_REAL_COMPOSITION_UNVERIFIED");
@@ -153,21 +199,35 @@ test("installed Windows Counter observes external Chinese input-method compositi
   expect(metadata.isFile() && !metadata.isSymbolicLink() && metadata.nlink === 1).toBe(true);
   const readyPath = requiredAbsoluteEnvironment("LAUNDRY_WINDOWS_IME_READY_FILE");
   const evidencePath = requiredAbsoluteEnvironment("LAUNDRY_WINDOWS_IME_EVIDENCE_FILE");
-  if (readyPath.toLowerCase() === evidencePath.toLowerCase())
+  const diagnosticPath = `${evidencePath}.failure.json`;
+  if ([evidencePath, diagnosticPath].some((path) => readyPath.toLowerCase() === path.toLowerCase()))
     throw new Error("WINDOWS_IME_RECORD_PATHS_CONFLICT");
   const credentials = await loadWindowsRuntimeCredentials();
   const runId = randomUUID();
   const userDataPath = await mkdtemp(join(await realpath(tmpdir()), "laundry-win-ime-"));
   let application: ElectronApplication | null = null;
+  let page: Page | null = null;
+  let failureStage: FailureStage = "launch";
   try {
     application = await electron.launch({
       executablePath: executable,
       args: [`--user-data-dir=${userDataPath}`],
       env: credentialFreeEnvironment(),
     });
-    const page = await application.firstWindow();
+    page = await application.firstWindow();
+    const versions = await application.evaluate(() => ({
+      electron: process.versions.electron,
+      chrome: process.versions.chrome,
+    }));
+    failureStage = "observer_setup";
+    await page.waitForURL("app://local/index.html", { waitUntil: "load", timeout: 20_000 });
+    await expect(page.locator('[data-page="login"]')).toBeVisible({ timeout: 20_000 });
+    await page.addInitScript(installImeDispatchAudit);
+    await page.reload();
+    failureStage = "login";
     await login(page, credentials.adminUsername, credentials.adminPassword);
     expect(page.url()).toBe("app://local/index.html");
+    failureStage = "observer_setup";
     await page.locator('[data-nav-id="customers"]').click();
     const input = page.locator('[data-testid="customers-name-input"]');
     await expect(input).toBeVisible();
@@ -175,7 +235,8 @@ test("installed Windows Counter observes external Chinese input-method compositi
     await observeInputMethod(page);
     await input.click();
     await expect(input).toBeFocused();
-    const targetProcessId = application.process().pid;
+    // On Windows Playwright's launched process is the command shell, not Electron's main process.
+    const targetProcessId = await application.evaluate(() => process.pid);
     if (
       targetProcessId === undefined ||
       !Number.isSafeInteger(targetProcessId) ||
@@ -192,6 +253,7 @@ test("installed Windows Counter observes external Chinese input-method compositi
       expected_text: "你好",
       customer_saved: false,
     });
+    failureStage = "ready_record";
     await writeNewRecord(
       readyPath,
       Object.freeze({
@@ -207,8 +269,11 @@ test("installed Windows Counter observes external Chinese input-method compositi
     );
 
     // Keys must come from physical input or the isolated guest's virtual keyboard, outside this test.
-    const observed = await waitForExternalComposition(page);
+    failureStage = "composition_wait";
+    const observed = await waitForExternalComposition(page, versions);
+    failureStage = "workbench_navigation";
     await page.locator('[data-nav-id="workbench"]').click();
+    failureStage = "evidence_write";
     await writeNewRecord(
       evidencePath,
       Object.freeze({ ...common, status: "passed", stage: "composition_verified", observed }),
@@ -217,6 +282,28 @@ test("installed Windows Counter observes external Chinese input-method compositi
     process.stdout.write(
       `${JSON.stringify({ schema_version: 1, run_id: runId, status: "passed", probe: "native_chinese_ime", committed_text: "你好", customer_saved: false })}\n`,
     );
+  } catch (error) {
+    const failurePage = page;
+    const diagnostic = await captureImeDiagnostics(async () => {
+      if (failurePage === null) throw new Error("WINDOWS_IME_PAGE_UNAVAILABLE");
+      return failurePage.evaluate(() => (window as ProbeWindow).laundryImeDiagnostic?.());
+    });
+    try {
+      await writeNewRecord(
+        diagnosticPath,
+        Object.freeze({
+          schema_version: 1,
+          run_id: runId,
+          status: "failed",
+          stage: failureStage,
+          diagnostic,
+        }),
+        "WINDOWS_IME_DIAGNOSTIC_RECORD_WRITE_FAILED",
+      );
+    } catch (diagnosticError) {
+      throw new AggregateError([error, diagnosticError], "WINDOWS_IME_TEST_AND_DIAGNOSTIC_FAILED");
+    }
+    throw error;
   } finally {
     try {
       await application?.close();

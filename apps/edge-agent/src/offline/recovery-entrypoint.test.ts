@@ -12,20 +12,30 @@ test("the Electron entrypoint boots recovery without confirmation or update stag
     'if (mode === "recovery") offlineRuntime.setLeaseIssuanceBlocked',
   );
   const serviceConstruction = source.indexOf("const desktopService = createOfflineDesktopService");
-  const updateStage = source.indexOf("void controller.checkAndStage()");
+  const updateSource = await readFile(
+    resolve(compiledTestDir, "../../src/upgrade/desktop-update.ts"),
+    "utf8",
+  );
+  const updateStage = updateSource.indexOf("await controller.checkAndStage()");
 
   assert.match(source, /async function boot\(mode: BootMode\): Promise<void>/u);
   assert.ok(runtimeConstruction >= 0);
   assert.ok(leaseBlock > runtimeConstruction);
   assert.ok(serviceConstruction > leaseBlock);
   assert.match(source, /\{ recoveryReadOnly: mode === "recovery" \}/u);
-  assert.match(source, /if \(startup\.action === "recovery"\) \{\s*bootMode = "recovery";/u);
+  assert.match(source, /await boot\(updates\.mode\)/u);
+  assert.match(source, /if \(updates\.mode === "normal"\) updates\.confirm\(\)/u);
   assert.match(
-    source,
-    /if \(bootMode === "normal" && updateState !== null && pendingConfirmation !== null\)/u,
+    updateSource,
+    /const mode = startup\.action === "recovery" \? \("recovery" as const\)/u,
   );
-  assert.ok(updateStage > 0);
-  assert.ok(
-    source.lastIndexOf('bootMode === "normal"', updateStage) > source.indexOf("await boot"),
+  assert.match(
+    updateSource,
+    /if \(startup\.action === "continue" && startup\.pendingConfirmation\)/u,
   );
+  const updateGuard = updateSource.indexOf(
+    'if (!config.enabled || mode !== "normal" || !publicKey) return;',
+  );
+  assert.ok(updateGuard > 0);
+  assert.ok(updateStage > updateGuard);
 });

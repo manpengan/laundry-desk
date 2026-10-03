@@ -381,7 +381,11 @@ test("output byte, event, and token budgets persist bounded terminal state", asy
     assert.ok(usage !== undefined);
     assert.ok(usage.outputBytes <= 32_768);
     assert.ok(usage.eventCount <= 256);
-    assert.ok(usage.outputTokens <= 32);
+    const reportedUsage = events.find((event) => event.type === "end");
+    assert.equal(
+      usage.outputTokens,
+      reportedUsage?.type === "end" ? reportedUsage.outputTokens : 32,
+    );
   }
 });
 

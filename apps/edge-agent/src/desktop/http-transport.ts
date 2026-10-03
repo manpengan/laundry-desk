@@ -74,6 +74,7 @@ import type { DesktopHttpTransport } from "./http-transport-types.js";
 import { createEdgePrintHttpTransport } from "./print-http-transport.js";
 import { createDesktopRequest, DESKTOP_API_BASE_URL } from "./request-builder.js";
 import { createStaffCredentialCompleteOperation } from "./staff-setup-operation.js";
+import { createDesktopAuxiliaryOperations } from "./auxiliary-operations.js";
 import {
   createStaffDirectoryGetOperation,
   readDesktopStaffDirectoryResponse,
@@ -742,15 +743,34 @@ export function createDesktopHttpTransport(
       }),
   });
 
+  const refreshIfNeeded = async (state: AuthState) => {
+    if (needsRefresh(state)) await refreshForState(state);
+  };
+  const auxiliary = createDesktopAuxiliaryOperations(
+    dependencies,
+    () => authState,
+    refreshIfNeeded,
+  );
+  const { ai } = auxiliary;
   return Object.freeze({
+    ...auxiliary,
     auth: Object.freeze({
-      login,
+      login: (input: unknown) => {
+        ai.cancelAll();
+        return login(input);
+      },
       refresh,
       staffDirectory,
       pinChallenge,
-      pinVerify,
+      pinVerify: (input: unknown) => {
+        ai.cancelAll();
+        return pinVerify(input);
+      },
       credentialComplete,
-      logout,
+      logout: () => {
+        ai.cancelAll();
+        return logout();
+      },
     }),
     command: Object.freeze({ execute: executeCommand }),
     query: Object.freeze({ execute: executeQuery }),

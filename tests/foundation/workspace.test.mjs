@@ -9,6 +9,7 @@ const workspaceNames = [
   "apps/server",
   "apps/web",
   "apps/edge-agent",
+  "apps/customer-miniapp",
   "packages/contracts",
   "packages/domain",
   "packages/db",
@@ -262,6 +263,7 @@ test("provides compileable shells for every assigned workspace", async () => {
 
 test("lints each active workspace from its package root", async () => {
   const lintScripts = [
+    ["apps/customer-miniapp/package.json", ".ts,.mjs"],
     ["apps/edge-agent/package.json", ".ts,.tsx,.mjs"],
     ["apps/server/package.json", ".ts,.tsx"],
     ["apps/web/package.json", ".ts,.tsx,.mjs"],
@@ -288,10 +290,12 @@ test("builds file-linked workspace dependencies before their consumers test", as
   const edgePackage = await readJson("apps/edge-agent/package.json");
   const serverPackage = await readJson("apps/server/package.json");
   const webPackage = await readJson("apps/web/package.json");
+  const miniappPackage = await readJson("apps/customer-miniapp/package.json");
   const contractsPackage = await readJson("packages/contracts/package.json");
   const uiPackage = await readJson("packages/ui/package.json");
   const domainPackage = await readJson("packages/domain/package.json");
   const platformFsPackage = await readJson("packages/platform-fs/package.json");
+  const migrationPackage = await readJson("tools/migrate-v1/package.json");
 
   // web depends on contracts + ui + domain dist types; turbo must build them first.
   const webDepBuild = [
@@ -326,9 +330,18 @@ test("builds file-linked workspace dependencies before their consumers test", as
     `${contractsPackage.name}#build`,
     `${domainPackage.name}#build`,
     `${platformFsPackage.name}#build`,
+    `${migrationPackage.name}#build`,
   ];
   for (const task of ["typecheck", "test", "build"]) {
+    assert.deepEqual(turboConfig.tasks[`${miniappPackage.name}#${task}`]?.dependsOn, [
+      "^build",
+      `${contractsPackage.name}#build`,
+    ]);
     assert.deepEqual(turboConfig.tasks[`${serverPackage.name}#${task}`]?.dependsOn, serverDepBuild);
+    assert.deepEqual(turboConfig.tasks[`${migrationPackage.name}#${task}`]?.dependsOn, [
+      "^build",
+      `${platformFsPackage.name}#build`,
+    ]);
   }
 });
 
@@ -628,7 +641,7 @@ test("declares v2 as the only active delivery line", async () => {
   );
 
   assert.doesNotMatch(readme, /v1（宏发单店）.*仍在进行|M4\s*∥\s*M5/u);
-  assert.match(readme.slice(0, 800), /产品目标.*规划支持/su);
+  assert.match(readme.slice(0, 800), /产品目标.*当前交付通用 V2.*Windows/su);
   assert.match(readme, /\(docs\/superpowers\/plans\/tasks\/2026-07-21-task-grok-lead\.md\)/u);
   assert.doesNotMatch(changelog, /两条线并行/u);
   assert.doesNotMatch(changelog, /### 已完成（未发版）/u);

@@ -54,6 +54,7 @@ export type V1Setting = Readonly<{
 }>;
 
 export type V1Snapshot = Readonly<{
+  history?: import("./history.js").V1History | undefined;
   sourceBackupSha256: string;
   customers: readonly V1Customer[];
   orders: readonly V1Order[];
@@ -167,6 +168,8 @@ export type MigrationWarning = Readonly<{
 }>;
 
 export type V2MigrationPlan = Readonly<{
+  /** Lossless source fields retained for verified mapping and migration provenance. */
+  sourceSnapshot: V1Snapshot;
   sourceBackupSha256: string;
   customers: readonly MigratedCustomer[];
   orders: readonly MigratedOrder[];

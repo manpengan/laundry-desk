@@ -1,0 +1,12 @@
+{
+  "appid": "touristappid",
+  "projectname": "laundry-customer",
+  "miniprogramRoot": "dist/miniprogram/",
+  "compileType": "miniprogram",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "minified": true,
+    "minifyWXML": true
+  }
+}

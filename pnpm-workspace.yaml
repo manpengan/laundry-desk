@@ -27,3 +27,7 @@ allowBuilds:
   electron-winstaller: false
   esbuild: true
   protobufjs: true
+
+patchedDependencies:
+  braces@3.0.3: patches/braces@3.0.3.patch
+  http-cache-semantics@4.2.0: patches/http-cache-semantics@4.2.0.patch

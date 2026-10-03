@@ -114,6 +114,8 @@ function mapMessages(messages: readonly AiProviderMessage[]): readonly unknown[]
 }
 
 function requestBody(modelId: string, request: AiProviderRequest): string {
+  if (request.messages.some((message) => message.images !== undefined))
+    throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
   const tools = request.tools.map((tool) => ({
     type: "function",
     function: {
@@ -174,6 +176,10 @@ async function* streamWithCredential(
   }
   if (inputTokens === null || outputTokens === null) {
     throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
+  }
+  if (finishReason === "length") {
+    yield Object.freeze({ type: "end", finishReason: "limit", inputTokens, outputTokens });
+    return;
   }
   const hasTool = callId !== "" || callName !== "" || callArgs !== "";
   let toolEvent: Extract<AiProviderEvent, { type: "tool_call" }> | null = null;
