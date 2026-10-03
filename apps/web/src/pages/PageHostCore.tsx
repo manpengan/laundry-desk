@@ -7,6 +7,9 @@ import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { OfflinePort } from "../host/offline-port.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
+import type { AiSettingsPort } from "../ai/settings-port.js";
+import type { MigrationPort } from "../host/migration-port.js";
+import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
 import type { NavItemId } from "../nav.js";
 import type { CounterWorkbenchProps } from "./CounterWorkbench.js";
 import type { CustomersPageProps } from "./CustomersPage.js";
@@ -42,6 +45,9 @@ export type PageHostProps = {
   photoPort?: PhotoPort;
   offlinePort?: OfflinePort;
   printerPort?: PrinterPort;
+  aiSettingsPort?: AiSettingsPort;
+  migrationPort?: MigrationPort;
+  notificationSettingsPort?: NotificationSettingsPort;
   onSessionChange?: (session: SessionView | null) => void;
 };
 
@@ -96,6 +102,9 @@ export function PageHostCore({
   photoPort,
   offlinePort,
   printerPort,
+  aiSettingsPort,
+  migrationPort,
+  notificationSettingsPort,
   onSessionChange,
   intent,
 }: PageHostCoreProps) {
@@ -259,6 +268,9 @@ export function PageHostCore({
   ) {
     return (
       <SettingsPage
+        {...(migrationPort === undefined ? {} : { migrationPort })}
+        {...(notificationSettingsPort === undefined ? {} : { notificationSettingsPort })}
+        {...(aiSettingsPort === undefined ? {} : { aiSettingsPort })}
         session={session}
         authClient={authClient}
         commandClient={commandClient}

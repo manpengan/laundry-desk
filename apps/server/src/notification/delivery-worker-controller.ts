@@ -35,6 +35,7 @@ export type NotificationWorkerControllerOptions = NotificationWorkerOptions &
     pollIntervalMs?: number;
     batchLimit?: number;
     reportFailure?: (report: NotificationWorkerFailureReport) => void;
+    afterCycle?: () => Promise<void>;
   }>;
 
 function positiveInteger(value: number, label: string): number {
@@ -102,6 +103,7 @@ export function createNotificationWorkerController(
   const cycle = async (): Promise<void> => {
     try {
       const outcomes = await drainNotificationQueue(options, batchLimit);
+      await options.afterCycle?.();
       const attention = outcomes.filter((outcome) => outcome.kind === "manual_required");
       update({
         processed_deliveries: snapshot.processed_deliveries + outcomes.length,

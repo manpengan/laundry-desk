@@ -7,6 +7,12 @@ import { createBrowserResumePort } from "./browser-resume-port.js";
 import { createHttpPhotoPort } from "./photo-port.js";
 import { createHttpDeliveryEvidenceMediaPort } from "./delivery-evidence-port.js";
 import { createHttpAiPanelPort } from "./ai-port.js";
+import { createAiSettingsPort, createHttpAiSettingsOperation } from "../ai/settings-port.js";
+import { createMigrationPort, createHttpMigrationOperation } from "./migration-port.js";
+import {
+  createNotificationSettingsPort,
+  createHttpNotificationSettingsOperation,
+} from "./notification-settings-port.js";
 
 export type BrowserPortsOptions = Readonly<{
   apiBaseUrl: string;
@@ -85,6 +91,22 @@ export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
 
   return Object.freeze({
     auth,
+    notificationSettings: createNotificationSettingsPort(
+      createHttpNotificationSettingsOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
+    migration: createMigrationPort(
+      createHttpMigrationOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
     resume: createBrowserResumePort(auth),
     command,
     query,
@@ -106,6 +128,14 @@ export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
       getAccessToken: credentialStore.getAccessToken,
       readCsrf: credentialStore.readCsrf,
     }),
+    aiSettings: createAiSettingsPort(
+      createHttpAiSettingsOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
     approval: createHttpApprovalPort({
       apiBaseUrl: base,
       fetchImpl,

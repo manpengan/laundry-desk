@@ -73,6 +73,7 @@ import { createByokService } from "../ai/byok-service.js";
 import { createAiRuntimeConfigService } from "../ai/runtime-config-service.js";
 import { createRuntimeProviderResolver } from "../ai/runtime-provider.js";
 import { registerAiRuntimeConfigRoutes } from "./ai-runtime-config-routes.js";
+import { registerNotificationSettingsRoutes } from "./notification-settings-routes.js";
 import type { ByokStore } from "../ai/byok-types.js";
 import { registerByokRoutes } from "./byok-routes.js";
 import { createByokMutationRateLimiter, type ByokMutationRateLimiter } from "./byok-rate-limit.js";
@@ -283,6 +284,7 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     options.edgePrintRateLimiter ?? createEdgePrintRateLimiter(),
   );
   registerPhotoFileRoutes(app, context, options.runtime.photo);
+  registerNotificationSettingsRoutes(app, context);
   if (options.runtime.pool !== null && options.runtime.photo.files !== undefined) {
     const drafts = await createImportDraftStore(
       join(dirname(options.runtime.photo.files.rootPath), "import-requests"),

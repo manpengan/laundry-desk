@@ -276,7 +276,10 @@ export async function createPgLocalRuntime(
   const approvalStore = createPgApprovalStore(appPool);
   const stepUpProofStore = createPgStepUpProofStore(appPool);
   const platform = buildPlatform("sql");
-  const notification = notificationRuntime.createPgNotificationRuntime(appPool, notificationMode);
+  const notification = await notificationRuntime.createPgNotificationRuntime(
+    appPool,
+    notificationMode,
+  );
   let runtimeRef: LocalRuntime | null = null;
   const automation = createPgAutomationRuntime(appPool, {
     notification,

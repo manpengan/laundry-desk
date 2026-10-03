@@ -74,6 +74,9 @@ import type { DesktopHttpTransport } from "./http-transport-types.js";
 import { createEdgePrintHttpTransport } from "./print-http-transport.js";
 import { createDesktopRequest, DESKTOP_API_BASE_URL } from "./request-builder.js";
 import { createStaffCredentialCompleteOperation } from "./staff-setup-operation.js";
+import { createDesktopAiOperation } from "./ai-operation.js";
+import { createDesktopMigrationOperation } from "./migration-operation.js";
+import { createDesktopNotificationOperation } from "./notification-operation.js";
 import {
   createStaffDirectoryGetOperation,
   readDesktopStaffDirectoryResponse,
@@ -742,15 +745,35 @@ export function createDesktopHttpTransport(
       }),
   });
 
+  const refreshIfNeeded = async (state: AuthState) => {
+    if (needsRefresh(state)) await refreshForState(state);
+  };
+  const ai = createDesktopAiOperation(dependencies, () => authState, refreshIfNeeded);
   return Object.freeze({
+    ai,
+    migration: createDesktopMigrationOperation(dependencies, () => authState, refreshIfNeeded),
+    notificationSettings: createDesktopNotificationOperation(
+      dependencies,
+      () => authState,
+      refreshIfNeeded,
+    ),
     auth: Object.freeze({
-      login,
+      login: (input: unknown) => {
+        ai.cancelAll();
+        return login(input);
+      },
       refresh,
       staffDirectory,
       pinChallenge,
-      pinVerify,
+      pinVerify: (input: unknown) => {
+        ai.cancelAll();
+        return pinVerify(input);
+      },
       credentialComplete,
-      logout,
+      logout: () => {
+        ai.cancelAll();
+        return logout();
+      },
     }),
     command: Object.freeze({ execute: executeCommand }),
     query: Object.freeze({ execute: executeQuery }),

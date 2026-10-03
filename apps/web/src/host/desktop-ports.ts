@@ -27,6 +27,10 @@ import {
   readCommandOptions,
 } from "./desktop-value-boundary.js";
 import type { AppPorts, HealthPort, HealthResult } from "./types.js";
+import { createAiSettingsPort } from "../ai/settings-port.js";
+import { createDesktopAiPanelPort } from "../ai/desktop-ai-port.js";
+import { createMigrationPort } from "./migration-port.js";
+import { createNotificationSettingsPort } from "./notification-settings-port.js";
 
 export type { LaundryDesktopBridge } from "./desktop-bridge.js";
 
@@ -113,6 +117,20 @@ export function createDesktopPorts(bridge: LaundryDesktopBridge): AppPorts {
         });
   return Object.freeze({
     auth,
+    ...(bridge.migration === undefined
+      ? {}
+      : { migration: createMigrationPort(bridge.migration.execute) }),
+    ...(bridge.notificationSettings === undefined
+      ? {}
+      : {
+          notificationSettings: createNotificationSettingsPort(bridge.notificationSettings.execute),
+        }),
+    ...(bridge.ai === undefined
+      ? {}
+      : {
+          ai: createDesktopAiPanelPort(bridge.ai.execute),
+          aiSettings: createAiSettingsPort(bridge.ai.execute),
+        }),
     command: createCommandPort(bridge),
     query: createQueryPort(bridge),
     photo: createDesktopPhotoPort(bridge),

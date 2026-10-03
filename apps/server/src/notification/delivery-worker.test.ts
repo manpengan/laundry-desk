@@ -57,6 +57,53 @@ const CLAIM: NotificationDeliveryClaim = Object.freeze({
   reservedCostCents: 0,
 });
 
+test("at-most-once provider preserves uncertain outcomes without retry or releasing reservations", async () => {
+  const { settlements, store } = fakeStore(CLAIM, "manual_required");
+  const provider: NotificationProvider = Object.freeze({
+    ...createSoftwareOnlyNotificationProvider(),
+    supportsIdempotency: false,
+    deliverySemantics: "at_most_once",
+    send: async () => {
+      throw new Error("connection lost after provider accepted request");
+    },
+  });
+  const result = await runNotificationWorkerOnce({
+    store,
+    provider,
+    tenant: TENANT,
+    workerId: "once",
+    now: () => NOW,
+  });
+  assert.equal(result.kind, "manual_required");
+  assert.equal(settlements[0]?.outcome, "uncertain");
+  assert.equal(settlements[0]?.retryAllowed, false);
+});
+
+test("a reclaimed at-most-once claim never calls the provider again", async () => {
+  const { settlements, store } = fakeStore({ ...CLAIM, attemptNo: 2 }, "manual_required");
+  let calls = 0;
+  const provider: NotificationProvider = Object.freeze({
+    ...createSoftwareOnlyNotificationProvider(),
+    supportsIdempotency: false,
+    deliverySemantics: "at_most_once",
+    send: async () => {
+      calls++;
+      throw new Error("must not send twice");
+    },
+  });
+  await runNotificationWorkerOnce({
+    store,
+    provider,
+    tenant: TENANT,
+    workerId: "once",
+    now: () => NOW,
+  });
+  assert.equal(calls, 0);
+  assert.equal(settlements[0]?.errorCode, "PROVIDER_PRIOR_OUTCOME_UNKNOWN");
+  assert.equal(settlements[0]?.outcome, "uncertain");
+  assert.equal(settlements[0]?.retryAllowed, false);
+});
+
 function fakeStore(
   claim: NotificationDeliveryClaim | null,
   settlementResult: "accepted" | "retry_wait" | "manual_required" | "stale_lease" = "accepted",

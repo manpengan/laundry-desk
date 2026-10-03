@@ -18,6 +18,9 @@ export const APP_ENTRY_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
 
 /** Renderer-facing IPC capability map. Keep this exact and deeply frozen. */
 export const DESKTOP_IPC_CHANNELS = Object.freeze({
+  ai: Object.freeze({ execute: "desktop:ai:operation" }),
+  migration: Object.freeze({ execute: "desktop:migration:operation" }),
+  notificationSettings: Object.freeze({ execute: "desktop:notification:settings" }),
   auth: Object.freeze({
     login: "desktop:auth:login",
     refresh: "desktop:auth:refresh",

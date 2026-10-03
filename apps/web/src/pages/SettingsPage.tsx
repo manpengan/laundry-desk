@@ -8,6 +8,12 @@ import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { OfflinePort } from "../host/offline-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
+import type { AiSettingsPort } from "../ai/settings-port.js";
+import { AiSettingsPanel } from "../ai/AiSettingsPanel.js";
+import type { MigrationPort } from "../host/migration-port.js";
+import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
+import { NotificationSettingsPanel } from "./NotificationSettingsPanel.js";
+import { V1MigrationPanel } from "./V1MigrationPanel.js";
 import { AppearanceSettingsPanel } from "./AppearanceSettingsPanel.js";
 import { CatalogMaintenancePanel } from "./CatalogMaintenancePanel.js";
 import { CatalogAuditPanel } from "./CatalogAuditPanel.js";
@@ -29,6 +35,9 @@ export type SettingsPageProps = {
   queryClient?: QueryPort;
   offlinePort?: OfflinePort;
   printerPort?: PrinterPort;
+  aiSettingsPort?: AiSettingsPort;
+  migrationPort?: MigrationPort;
+  notificationSettingsPort?: NotificationSettingsPort;
   onSessionChange?: (session: SessionView | null) => void;
 };
 
@@ -77,6 +86,9 @@ export function SettingsPage({
   queryClient,
   offlinePort,
   printerPort,
+  aiSettingsPort,
+  migrationPort,
+  notificationSettingsPort,
   onSessionChange,
 }: SettingsPageProps) {
   const sections: SettingsSection[] = [
@@ -87,6 +99,44 @@ export function SettingsPage({
       content: <AppearanceSettingsPanel />,
     },
   ];
+  if (session.role === "admin" && migrationPort !== undefined)
+    sections.push({
+      id: "settings-migration",
+      label: "旧版数据导入",
+      icon: "settings",
+      content: (
+        <V1MigrationPanel
+          port={migrationPort}
+          sessionKey={`${session.session.session_id}:${session.session.session_version}`}
+        />
+      ),
+    });
+  if (session.role === "admin" && notificationSettingsPort !== undefined)
+    sections.push({
+      id: "settings-notification",
+      label: "阿里云短信",
+      icon: "settings",
+      content: (
+        <NotificationSettingsPanel
+          port={notificationSettingsPort}
+          sessionKey={`${session.session.session_id}:${session.session.session_version}`}
+        />
+      ),
+    });
+  if (session.role === "admin" && aiSettingsPort !== undefined)
+    sections.push({
+      id: "settings-ai",
+      label: "AI 助手与密钥",
+      icon: "settings",
+      content: (
+        <AiSettingsPanel
+          key={session.session.session_id}
+          port={aiSettingsPort}
+          authClient={authClient}
+          staffId={session.session.staff_id}
+        />
+      ),
+    });
   if (queryClient !== undefined) {
     sections.push(
       {

@@ -84,6 +84,7 @@
 - [ADR-74](2026-10-03-adr-74-windows-v1-migration.md)：v1 字段保全、受限历史与一次性正式导入，实现候选。
 - [ADR-75](2026-10-03-adr-75-windows-local-ai-runtime.md)：Windows 本机 AI 托管、运行配置与权限预算接线，实现候选。
 - [ADR-76](2026-10-03-adr-76-windows-diagnostic-export.md)：Windows 一键脱敏诊断导出，Proposed。
+- [ADR-77](2026-10-03-adr-77-local-aliyun-sms.md)：Windows 阿里云短信配置、至多一次发送与回执，软件实现与独立审查通过，实机及账户验收待执行。
 
 ## v1 线
 

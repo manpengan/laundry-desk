@@ -131,6 +131,7 @@ const STORE_TABLES = describeTables(
     "notification_deliveries",
     "notification_delivery_attempts",
     "notification_delivery_receipts",
+    "notification_provider_settings",
     "campaigns",
     "campaign_audience_snapshots",
     "campaign_budget_ledger",

@@ -96,6 +96,11 @@ async function sendWithTimeout(
         deliveryId: claim.deliveryId,
         recipient: claim.candidate.customer_phone,
         message,
+        parameters: Object.freeze({
+          tickets: claim.candidate.ticket_no,
+          garment_count: String(claim.candidate.garment_count),
+          balance_cents: String(claim.candidate.balance_cents),
+        }),
         timeoutMs,
         deadline: new Date(startedAt.getTime() + timeoutMs),
         signal: controller.signal,
@@ -129,7 +134,7 @@ function validatedResult(
 ): NotificationProviderSendResult {
   const invalid = (): NotificationProviderSendResult =>
     Object.freeze({
-      outcome: "permanent_failure",
+      outcome: provider.deliverySemantics === "at_most_once" ? "uncertain" : "permanent_failure",
       errorCode: "PROVIDER_RESULT_INVALID",
       providerRef: null,
       costCents: 0,
@@ -168,7 +173,11 @@ function validatedResult(
     ) {
       return invalid();
     }
-    if (outcome === "uncertain" && !provider.supportsIdempotency) {
+    if (
+      outcome === "uncertain" &&
+      !provider.supportsIdempotency &&
+      provider.deliverySemantics !== "at_most_once"
+    ) {
       return Object.freeze({
         outcome: "permanent_failure",
         errorCode: "PROVIDER_IDEMPOTENCY_UNPROVEN",
@@ -212,8 +221,14 @@ function preflightFailure(
   } catch {
     return "PROVIDER_CONTRACT_INVALID";
   }
-  if (!options.provider.supportsIdempotency) {
+  if (
+    !options.provider.supportsIdempotency &&
+    options.provider.deliverySemantics !== "at_most_once"
+  ) {
     return "PROVIDER_IDEMPOTENCY_UNPROVEN";
+  }
+  if (options.provider.deliverySemantics === "at_most_once" && claim.attemptNo !== 1) {
+    return "PROVIDER_PRIOR_OUTCOME_UNKNOWN";
   }
   if (!options.provider.supportsCancellation) {
     return "PROVIDER_CANCELLATION_UNPROVEN";
@@ -262,6 +277,7 @@ async function settle(
     costCents: result.costCents,
     startedAt,
     completedAt,
+    retryAllowed: options.provider.deliverySemantics !== "at_most_once",
   });
   const kind = await options.store.settleAttempt(options.tenant, settlement);
   return Object.freeze({
@@ -281,11 +297,16 @@ export async function runNotificationWorkerOnce(
     return Object.freeze({ kind: "idle", delivery_id: null, error_code: null });
   }
   const message = renderClaim(claim);
-  const preflight = message === null ? "TARGET_SNAPSHOT_CHANGED" : preflightFailure(options, claim);
+  const preflight =
+    options.provider.deliverySemantics === "at_most_once" && claim.attemptNo > 1
+      ? "PROVIDER_PRIOR_OUTCOME_UNKNOWN"
+      : message === null
+        ? "TARGET_SNAPSHOT_CHANGED"
+        : preflightFailure(options, claim);
   let result: NotificationProviderSendResult;
   if (message === null || preflight !== null) {
     result = Object.freeze({
-      outcome: "permanent_failure" as const,
+      outcome: preflight === "PROVIDER_PRIOR_OUTCOME_UNKNOWN" ? "uncertain" : "permanent_failure",
       errorCode: preflight ?? "TARGET_SNAPSHOT_CHANGED",
       providerRef: null,
       costCents: 0,

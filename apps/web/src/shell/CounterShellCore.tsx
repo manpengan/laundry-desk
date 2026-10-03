@@ -7,6 +7,9 @@ import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { createMockConnection, type ConnectionStatus } from "../connection.js";
 import type { AiPanelPort } from "../host/ai-port.js";
+import type { AiSettingsPort } from "../ai/settings-port.js";
+import type { MigrationPort } from "../host/migration-port.js";
+import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
 import type { OfflinePort } from "../host/offline-port.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
@@ -46,6 +49,9 @@ export type CounterShellProps = {
   offlinePort?: OfflinePort;
   printerPort?: PrinterPort;
   aiPort?: AiPanelPort;
+  aiSettingsPort?: AiSettingsPort;
+  migrationPort?: MigrationPort;
+  notificationSettingsPort?: NotificationSettingsPort;
   onSessionChange: (session: SessionView | null) => void;
   initialConnection?: ConnectionStatus;
   initialTheme?: ThemePreference;
@@ -132,6 +138,9 @@ export function CounterShellCore({
   offlinePort,
   printerPort,
   aiPort,
+  aiSettingsPort,
+  migrationPort,
+  notificationSettingsPort,
   readOnly = false,
 }: CounterShellCoreProps) {
   const [expanded, setExpanded] = useState(readSidebarExpanded);
@@ -288,6 +297,9 @@ export function CounterShellCore({
           ) : null}
           <RouteGate permission={permission} activeId={activeId} onNavigate={setActiveId}>
             <PageHostComponent
+              {...(migrationPort === undefined ? {} : { migrationPort })}
+              {...(notificationSettingsPort === undefined ? {} : { notificationSettingsPort })}
+              {...(aiSettingsPort === undefined ? {} : { aiSettingsPort })}
               activeId={activeId}
               loading={loading}
               onNavigate={setActiveId}

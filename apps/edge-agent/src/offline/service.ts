@@ -101,6 +101,22 @@ export function createOfflineDesktopService(
   };
 
   return Object.freeze({
+    notificationSettings: Object.freeze({
+      execute: async (input: unknown) =>
+        isMutationBlocked() || online.notificationSettings === undefined
+          ? unavailable()
+          : online.notificationSettings.execute(input),
+    }),
+    migration: Object.freeze({
+      execute: async (input: unknown) =>
+        isMutationBlocked() || online.migration === undefined
+          ? unavailable()
+          : online.migration.execute(input),
+    }),
+    ai: Object.freeze({
+      execute: async (input: unknown) =>
+        isMutationBlocked() || online.ai === undefined ? unavailable() : online.ai.execute(input),
+    }),
     auth: Object.freeze({
       login: async (input: unknown) => {
         const result = await online.auth.login(input);

@@ -20,6 +20,7 @@ function settledDelivery(
     !accepted &&
     !costInvalid &&
     settlement.outcome !== "permanent_failure" &&
+    settlement.retryAllowed !== false &&
     current.attemptCount < 5;
   const status = accepted ? "accepted" : retry ? "retry_wait" : "manual_required";
   const errorCode = costInvalid

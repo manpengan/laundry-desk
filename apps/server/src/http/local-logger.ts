@@ -18,6 +18,7 @@ export const LOCAL_LOG_REDACTION_PATHS = Object.freeze([
   "body.token",
   "body.api_key",
   "body.secret",
+  "body.credential",
   "data.password",
   "data.pin",
   "data.access_token",
@@ -26,6 +27,7 @@ export const LOCAL_LOG_REDACTION_PATHS = Object.freeze([
   "data.token",
   "data.api_key",
   "data.secret",
+  "data.credential",
 ] as const);
 
 export type LocalLoggerOptions = Readonly<{

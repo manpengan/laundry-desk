@@ -47,6 +47,11 @@ export function shellPropsFrom(
     commandClient: ports.command,
     queryClient: ports.query,
     photoPort: ports.photo,
+    ...(ports.migration === undefined ? {} : { migrationPort: ports.migration }),
+    ...(ports.notificationSettings === undefined
+      ? {}
+      : { notificationSettingsPort: ports.notificationSettings }),
+    ...(ports.aiSettings === undefined ? {} : { aiSettingsPort: ports.aiSettings }),
     ...(ports.ai === undefined ? {} : { aiPort: ports.ai }),
     ...(ports.offline === undefined ? {} : { offlinePort: ports.offline }),
     ...(ports.printer === undefined ? {} : { printerPort: ports.printer }),

@@ -8,6 +8,7 @@ import {
   type DesktopHttpTransportDependencies,
 } from "./http-transport.js";
 import { executeElectronPhotoRequest } from "./electron-photo-request.js";
+import { isMigrationBinaryUpload } from "./migration-operation.js";
 
 export const DESKTOP_MAX_RESPONSE_BYTES = 512 * 1_024;
 const DESKTOP_MAX_REQUEST_BYTES = 256 * 1_024;
@@ -25,6 +26,7 @@ const ALLOWED_HEADER_NAMES = new Set([
   "content-type",
   "authorization",
   "x-csrf-token",
+  "last-event-id",
 ]);
 const API_URL = new URL(DESKTOP_API_BASE_URL);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -146,6 +148,15 @@ function assertFixedRequestPolicy(request: DesktopHttpRequest): void {
     /[\r\n]/u.test(value),
   );
   const isPost = request.method === "POST";
+  const cursor = request.headers["Last-Event-ID"];
+  if (
+    cursor !== undefined &&
+    (!/^\d{1,15}$/u.test(cursor) ||
+      isPost ||
+      !/^\/api\/v2\/ai\/sessions\/[0-9a-f-]{36}\/stream$/iu.test(url.pathname))
+  ) {
+    throw new Error("Invalid AI stream cursor");
+  }
   const isJsonPost =
     isPost &&
     typeof request.body === "string" &&
@@ -168,7 +179,7 @@ function assertFixedRequestPolicy(request: DesktopHttpRequest): void {
     url.hash !== "" ||
     url.href !== request.url ||
     (request.method !== "GET" && !isPost) ||
-    (isPost && !isJsonPost && !isPhotoPost) ||
+    (isPost && !isJsonPost && !isPhotoPost && !isMigrationBinaryUpload(url, request)) ||
     (!isPost && url.search !== "") ||
     (!isPost && request.body !== undefined)
   ) {
@@ -206,22 +217,39 @@ async function executeRequest(
       return;
     }
 
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
+    const abort = (): void => {
       clientRequest.abort();
-      reject(new Error("Desktop HTTP request timed out"));
-    }, DESKTOP_REQUEST_TIMEOUT_MS);
+      fail(new Error("Desktop request aborted"));
+    };
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      request.signal?.removeEventListener("abort", abort);
+    };
+    const timer = setTimeout(
+      () => {
+        if (settled) return;
+        settled = true;
+        request.signal?.removeEventListener("abort", abort);
+        clientRequest.abort();
+        reject(new Error("Desktop HTTP request timed out"));
+      },
+      request.headers["Last-Event-ID"] === undefined ? DESKTOP_REQUEST_TIMEOUT_MS : 25_000,
+    );
     timer.unref();
 
     const fail = (error: Error): void => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      cleanup();
       reject(error);
     };
 
     clientRequest.once("error", fail);
+    request.signal?.addEventListener("abort", abort, { once: true });
+    if (request.signal?.aborted === true) {
+      abort();
+      return;
+    }
     clientRequest.once("response", (response) => {
       const chunks: Buffer[] = [];
       let bytes = 0;
@@ -255,7 +283,7 @@ async function executeRequest(
           return;
         }
         settled = true;
-        clearTimeout(timer);
+        cleanup();
         resolve(Object.freeze({ statusCode: response.statusCode, bodyText }));
       });
     });

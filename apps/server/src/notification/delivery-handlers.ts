@@ -15,6 +15,7 @@ import {
 import { groupPickupReminders, renderPickupReminder } from "@laundry/domain";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
+import type { TenantContext } from "../db/types.js";
 import { HandlerCommandError } from "../bus/types.js";
 import { DISABLED_NOTIFICATION_CAPABILITY } from "./delivery-provider.js";
 import {
@@ -31,11 +32,20 @@ function requirePermission(permissions: readonly string[] | undefined, permissio
   }
 }
 
-function requireDelivery(deps: NotificationHandlerDeps) {
+function scopedDelivery(deps: NotificationHandlerDeps, tenant: TenantContext) {
   const delivery = deps.delivery;
-  if (delivery === undefined) {
+  if (
+    delivery === undefined ||
+    (delivery.tenantScope !== undefined &&
+      (delivery.tenantScope.orgId !== tenant.orgId ||
+        delivery.tenantScope.storeId !== tenant.storeId))
+  ) {
     throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
   }
+  return delivery;
+}
+function requireDelivery(deps: NotificationHandlerDeps, tenant: TenantContext) {
+  const delivery = scopedDelivery(deps, tenant);
   const assurance = delivery.capability.state;
   if (assurance === "disabled") {
     throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
@@ -94,7 +104,10 @@ function enqueueHandler(deps: NotificationHandlerDeps): CommandHandler {
     requirePermission(context.actor.permissions, "customer_read");
     requirePermission(context.actor.permissions, "notification_send");
     const input = NotificationDeliveryBatchEnqueueInputSchema.parse(context.parsed);
-    const { assurance, delivery, providerCode, unitCost, maxBatchCost } = requireDelivery(deps);
+    const { assurance, delivery, providerCode, unitCost, maxBatchCost } = requireDelivery(
+      deps,
+      context.tenant,
+    );
     const now = nowFrom(deps);
     const estimatedCost = requireNotificationCostBounds({
       orderCount: input.order_ids.length,
@@ -189,7 +202,11 @@ function capabilityHandler(deps: NotificationHandlerDeps): CommandHandler {
     NotificationDeliveryCapabilityInputSchema.parse(context.parsed);
     return Object.freeze({
       result: NotificationDeliveryCapabilityResultSchema.parse(
-        deps.delivery?.capability ?? DISABLED_NOTIFICATION_CAPABILITY,
+        deps.delivery?.tenantScope !== undefined &&
+          (deps.delivery.tenantScope.orgId !== context.tenant.orgId ||
+            deps.delivery.tenantScope.storeId !== context.tenant.storeId)
+          ? DISABLED_NOTIFICATION_CAPABILITY
+          : (deps.delivery?.capability ?? DISABLED_NOTIFICATION_CAPABILITY),
       ),
     });
   };
@@ -200,7 +217,7 @@ function listHandler(deps: NotificationHandlerDeps): CommandHandler {
     requirePermission(context.actor.permissions, "customer_read");
     requirePermission(context.actor.permissions, "notification_send");
     const input = NotificationDeliveryBatchesListInputSchema.parse(context.parsed);
-    const { delivery } = requireDelivery(deps);
+    const delivery = scopedDelivery(deps, context.tenant);
     return Object.freeze({
       result: NotificationDeliveryBatchesListResultSchema.parse({
         batches: await delivery.store.listBatches(
@@ -218,7 +235,7 @@ function getHandler(deps: NotificationHandlerDeps): CommandHandler {
     requirePermission(context.actor.permissions, "customer_read");
     requirePermission(context.actor.permissions, "notification_send");
     const input = NotificationDeliveryBatchGetInputSchema.parse(context.parsed);
-    const { delivery } = requireDelivery(deps);
+    const delivery = scopedDelivery(deps, context.tenant);
     const result = await delivery.store.getBatch(context.client, context.tenant, input.batch_id);
     if (result === null) {
       throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
