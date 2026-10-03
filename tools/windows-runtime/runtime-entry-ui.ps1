@@ -92,7 +92,7 @@ function Show-RuntimeEntry {
     } catch {
       $code = [string]($_.Exception.GetBaseException().Message)
       if ($code -cnotmatch '^WINDOWS_(RUNTIME_ENTRY|COMPANION)_[A-Z_]+$') { $code = 'WINDOWS_RUNTIME_ENTRY_FAILED' }
-      $output.Text = "操作未完成。错误代码：$code`r`n如状态显示维护中断，请查看状态后明确选择“继续中断维护”。"
+      $output.Text = "操作未完成。错误代码：$code`r`n" + '如状态显示维护中断，请查看状态后明确选择“继续中断维护”。'
     } finally {
       $script:EntryBusy = $false; $buttons.Enabled = $true; $recovery.Enabled = $true
       $backupList.Enabled = $true; $confirmation.Enabled = $true

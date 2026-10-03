@@ -17,7 +17,7 @@ import { promisify } from "node:util";
 import { canonicalManifest, digest } from "./companion-contract.mjs";
 import { cleanEnvironment } from "./lifecycle-environment.mjs";
 import { packageRuntimeEntry } from "./package-runtime-entry.mjs";
-import { ENTRY_NAME } from "./runtime-entry-contract.mjs";
+import { ENTRY_NAME, OPERATOR_HELPERS } from "./runtime-entry-contract.mjs";
 import { runtimeEntryFixture } from "./runtime-entry-test-fixture.mjs";
 import {
   shortcutSaveDiagnostic,
@@ -30,6 +30,34 @@ import {
 
 const execute = promisify(execFile);
 const windowsOnly = { skip: process.platform !== "win32", timeout: 120000 };
+
+test(
+  "WinPS 5.1 parses every generated operator script, including the GUI",
+  windowsOnly,
+  async (t) => {
+    const fixture = await runtimeEntryFixture(t);
+    await packageRuntimeEntry(fixture);
+    for (const name of [ENTRY_NAME, ...OPERATOR_HELPERS]) {
+      const bytes = await readFile(join(fixture.output, name));
+      assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf]);
+      await execute(
+        join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe"),
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "$errors=$null; $tokens=$null; [System.Management.Automation.Language.Parser]::ParseFile($env:LAUNDRY_PS_PARSE_FILE,[ref]$tokens,[ref]$errors) | Out-Null; if ($errors.Count -ne 0) { throw 'WINDOWS_RUNTIME_ENTRY_POWERSHELL_SYNTAX_INVALID' }",
+        ],
+        {
+          env: { ...cleanEnvironment(), LAUNDRY_PS_PARSE_FILE: join(fixture.output, name) },
+          timeout: 30000,
+          maxBuffer: 65536,
+          windowsHide: true,
+        },
+      );
+    }
+  },
+);
 
 async function runEntry(fixture, args, env = {}, directory = fixture.output) {
   return execute(
