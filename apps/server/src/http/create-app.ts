@@ -70,6 +70,9 @@ import { registerCustomerPortalRoutes } from "./customer-portal-routes.js";
 import type { ByokKmsPort } from "../ai/byok-kms.js";
 import { createByokRuntime } from "../ai/byok-runtime.js";
 import { createByokService } from "../ai/byok-service.js";
+import { createAiRuntimeConfigService } from "../ai/runtime-config-service.js";
+import { createRuntimeProviderResolver } from "../ai/runtime-provider.js";
+import { registerAiRuntimeConfigRoutes } from "./ai-runtime-config-routes.js";
 import type { ByokStore } from "../ai/byok-types.js";
 import { registerByokRoutes } from "./byok-routes.js";
 import { createByokMutationRateLimiter, type ByokMutationRateLimiter } from "./byok-rate-limit.js";
@@ -121,6 +124,7 @@ export type CreateAppOptions = Readonly<{
   securityEventSink?: SecurityEventSink;
   /** Production injects a non-exportable KMS/OS secret-store adapter; never a raw KEK. */
   byokKms?: ByokKmsPort;
+  enableLocalAi?: boolean;
   /** Focused tests may replace persistence without weakening route policy. */
   byokStore?: ByokStore;
   byokMutationRateLimiter?: ByokMutationRateLimiter;
@@ -298,6 +302,12 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     options.byokMutationRateLimiter ?? createByokMutationRateLimiter(),
     createProviderValidationService(byokRuntime, options.aiProviderHttp),
   );
+  registerAiRuntimeConfigRoutes(
+    app,
+    context,
+    createAiRuntimeConfigService(byokRuntime, options.aiProviderHttp),
+    options.byokMutationRateLimiter ?? createByokMutationRateLimiter(),
+  );
   const aiStore =
     options.aiConversationStore ??
     (options.runtime.pool === null
@@ -309,6 +319,9 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     createAiStreamingService({
       store: aiStore,
       provider: options.aiProvider ?? null,
+      ...(options.enableLocalAi === true && byokRuntime.kms !== null
+        ? { providerResolver: createRuntimeProviderResolver(byokRuntime, options.aiProviderHttp) }
+        : {}),
       tool: options.aiSyntheticTool ?? deterministicSyntheticTool,
       assistantTool: options.aiAssistantTool ?? createReadonlyAssistantTool(options.runtime),
     }),

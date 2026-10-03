@@ -1520,6 +1520,144 @@
         ],
         "type": "object"
       },
+      "AiRuntimeConfigRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "expected_version": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "input_micros_per_million": {
+            "exclusiveMinimum": 0,
+            "maximum": 1000000000000,
+            "type": "integer"
+          },
+          "model_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[^\\p{Cc}\\p{Zl}\\p{Zp}]+$",
+            "type": "string"
+          },
+          "monthly_limit_micros": {
+            "exclusiveMinimum": 0,
+            "maximum": 9000000000000,
+            "type": "integer"
+          },
+          "output_micros_per_million": {
+            "exclusiveMinimum": 0,
+            "maximum": 1000000000000,
+            "type": "integer"
+          },
+          "provider_code": {
+            "enum": [
+              "deepseek",
+              "anthropic",
+              "gemini"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "provider_code",
+          "model_id",
+          "monthly_limit_micros",
+          "input_micros_per_million",
+          "output_micros_per_million",
+          "expected_version"
+        ],
+        "type": "object"
+      },
+      "AiRuntimeConfigResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "additionalProperties": false,
+            "properties": {
+              "config": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "input_micros_per_million": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000000000,
+                        "type": "integer"
+                      },
+                      "model_id": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "pattern": "^[^\\p{Cc}\\p{Zl}\\p{Zp}]+$",
+                        "type": "string"
+                      },
+                      "monthly_limit_micros": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 9000000000000,
+                        "type": "integer"
+                      },
+                      "output_micros_per_million": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000000000,
+                        "type": "integer"
+                      },
+                      "provider_code": {
+                        "enum": [
+                          "deepseek",
+                          "anthropic",
+                          "gemini"
+                        ],
+                        "type": "string"
+                      },
+                      "version": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "enabled",
+                      "provider_code",
+                      "model_id",
+                      "monthly_limit_micros",
+                      "input_micros_per_million",
+                      "output_micros_per_million",
+                      "version"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "custody_available": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "config",
+              "custody_available"
+            ],
+            "type": "object"
+          },
+          "ok": {
+            "const": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "AiSafetyStatusResponse": {
         "additionalProperties": false,
         "properties": {
@@ -82758,6 +82896,188 @@
           "ai-provider"
         ],
         "x-laundry-classification": "secret",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R3"
+      }
+    },
+    "/api/v2/ai/runtime-config": {
+      "get": {
+        "description": "Admin-only organization settings. No credentials are returned. Enabling validates the selected model with the fixed provider host; version CAS and audit are atomic.",
+        "operationId": "ai_runtime_config_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRuntimeConfigResponse"
+                }
+              }
+            },
+            "description": "Current AI configuration"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission or CSRF denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Configuration version or provider unavailable"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Read local AI configuration",
+        "tags": [
+          "ai-provider"
+        ],
+        "x-laundry-classification": "confidential",
+        "x-laundry-kind": "ai",
+        "x-laundry-risk": "R0"
+      },
+      "post": {
+        "description": "Admin-only organization settings. No credentials are returned. Enabling validates the selected model with the fixed provider host; version CAS and audit are atomic.",
+        "operationId": "ai_runtime_configure",
+        "parameters": [
+          {
+            "description": "Double-submit CSRF proof; must match the readable CSRF cookie value.",
+            "in": "header",
+            "name": "x-csrf-token",
+            "required": true,
+            "schema": {
+              "pattern": "^v1\\.[A-Za-z0-9_-]{43,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiRuntimeConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRuntimeConfigResponse"
+                }
+              }
+            },
+            "description": "Current AI configuration"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Permission or CSRF denied"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Configuration version or provider unavailable"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Rate limit exceeded"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandFailureResponse"
+                }
+              }
+            },
+            "description": "Unified failure envelope"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": [],
+            "csrfHeader": []
+          }
+        ],
+        "summary": "Configure the local AI provider and budget",
+        "tags": [
+          "ai-provider"
+        ],
+        "x-laundry-classification": "confidential",
         "x-laundry-kind": "ai",
         "x-laundry-risk": "R3"
       }

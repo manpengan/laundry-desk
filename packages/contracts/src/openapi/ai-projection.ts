@@ -9,6 +9,10 @@ import {
 } from "../ai/streaming.js";
 import { AiSafetyStatusResponseSchema } from "../ai/safety.js";
 import {
+  AiRuntimeConfigRequestSchema,
+  AiRuntimeConfigResponseSchema,
+} from "../ai/runtime-config.js";
+import {
   AI_PROVIDER_OPERATION_MATRIX,
   AiProviderValidateRequestSchema,
   AiProviderValidationIntentRequestSchema,
@@ -223,6 +227,8 @@ export function collectAiOpenApiProjection(toSchema: SchemaConverter): Readonly<
     AiAssistantToolResult: toSchema(AiAssistantToolResultSchema),
     AiEventReplayResponse: toSchema(AiEventReplayResponseSchema),
     AiSafetyStatusResponse: toSchema(AiSafetyStatusResponseSchema),
+    AiRuntimeConfigRequest: toSchema(AiRuntimeConfigRequestSchema),
+    AiRuntimeConfigResponse: toSchema(AiRuntimeConfigResponseSchema),
     AiSessionCreateRequest: toSchema(AiSessionCreateRequestSchema),
     AiSessionCreateResponse: toSchema(AiSessionCreateResponseSchema),
     AiStreamEvent: toSchema(AiStreamEventSchema),
@@ -243,7 +249,49 @@ export function collectAiOpenApiProjection(toSchema: SchemaConverter): Readonly<
   for (const row of AI_PROVIDER_OPERATION_MATRIX) {
     paths[row.path] = Object.freeze({ post: buildProviderOperation(row) });
   }
+  paths["/api/v2/ai/runtime-config"] = Object.freeze({
+    get: runtimeConfigOperation(false),
+    post: runtimeConfigOperation(true),
+  });
   return Object.freeze({ paths, schemas });
+}
+
+function runtimeConfigOperation(write: boolean): OpenApiOperation {
+  return Object.freeze({
+    operationId: write ? "ai_runtime_configure" : "ai_runtime_config_get",
+    summary: write ? "Configure the local AI provider and budget" : "Read local AI configuration",
+    description:
+      "Admin-only organization settings. No credentials are returned. Enabling validates the selected model with the fixed provider host; version CAS and audit are atomic.",
+    tags: Object.freeze(["ai-provider"]),
+    parameters: Object.freeze(write ? [csrfHeader()] : []),
+    ...(write
+      ? {
+          requestBody: Object.freeze({
+            required: true as const,
+            content: Object.freeze({
+              "application/json": jsonContent(schemaRef("AiRuntimeConfigRequest")),
+            }),
+          }),
+        }
+      : {}),
+    responses: Object.freeze({
+      "200": successSchemaResponse("AiRuntimeConfigResponse", "Current AI configuration"),
+      "401": failureResponse("Authentication failed"),
+      "403": failureResponse("Permission or CSRF denied"),
+      "409": failureResponse("Configuration version or provider unavailable"),
+      "429": failureResponse("Rate limit exceeded"),
+      default: failureResponse("Unified failure envelope"),
+    }),
+    security: Object.freeze([
+      Object.freeze({
+        bearerAuth: Object.freeze([]),
+        ...(write ? { csrfHeader: Object.freeze([]) } : {}),
+      }),
+    ]),
+    "x-laundry-kind": "ai" as const,
+    "x-laundry-risk": write ? "R3" : "R0",
+    "x-laundry-classification": "confidential" as const,
+  });
 }
 import type { z } from "zod";
 

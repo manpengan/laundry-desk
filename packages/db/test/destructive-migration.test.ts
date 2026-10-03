@@ -161,6 +161,7 @@ describe("destructive migration static reject", () => {
       "0068_ai_approval_center.sql",
       "0069_bounded_automation.sql",
       "0070_windows_v1_import.sql",
+      "0071_windows_ai_runtime_settings.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });
