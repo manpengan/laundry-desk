@@ -82,7 +82,8 @@
         "^build",
         "@laundry/contracts#build",
         "@laundry/domain#build",
-        "@laundry/platform-fs#build"
+        "@laundry/platform-fs#build",
+        "@laundry/migrate-v1#build"
       ]
     },
     "@laundry/server#test": {
@@ -90,7 +91,8 @@
         "^build",
         "@laundry/contracts#build",
         "@laundry/domain#build",
-        "@laundry/platform-fs#build"
+        "@laundry/platform-fs#build",
+        "@laundry/migrate-v1#build"
       ]
     },
     "@laundry/server#build": {
@@ -98,9 +100,22 @@
         "^build",
         "@laundry/contracts#build",
         "@laundry/domain#build",
-        "@laundry/platform-fs#build"
+        "@laundry/platform-fs#build",
+        "@laundry/migrate-v1#build"
       ],
       "outputs": ["dist/**"]
+    },
+    "@laundry/migrate-v1#build": {
+      "dependsOn": ["^build", "@laundry/platform-fs#build"],
+      "outputs": ["dist/**"]
+    },
+    "@laundry/migrate-v1#typecheck": {
+      "dependsOn": ["^build", "@laundry/platform-fs#build"],
+      "outputs": []
+    },
+    "@laundry/migrate-v1#test": {
+      "dependsOn": ["^build", "@laundry/platform-fs#build"],
+      "outputs": []
     }
   }
 }
