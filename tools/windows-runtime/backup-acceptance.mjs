@@ -68,6 +68,7 @@ export async function backupAcceptance(context) {
   const { pgControl } = await load("lifecycle-process.mjs");
   const { databaseTools } = await load("backup-database.mjs");
   const { createBackup, readBackup } = await load("backup-files.mjs");
+  const { resetRollbackAuthority } = await load("restore-authority.mjs");
   let saved;
   let savedManifest;
   let photo;
@@ -269,16 +270,18 @@ export async function backupAcceptance(context) {
     await io.write(join(root, "maintenance.json"), JSON.stringify({ ...record, candidate }));
     const target = await readBackup(settings, saved.backup_id, saved.manifest_sha256);
     await database.restore(candidate, target);
+    await resetRollbackAuthority(settings, candidate.name);
+    const authorizedRecord = { ...record, authority_reset: true };
     await io.write(
       join(root, "maintenance.json"),
-      JSON.stringify({ ...record, phase: "switching", candidate }),
+      JSON.stringify({ ...authorizedRecord, phase: "switching", candidate }),
     );
     await database.swap(candidate);
     if (phase === "verified") {
       await database.verify();
       await io.write(
         join(root, "maintenance.json"),
-        JSON.stringify({ ...record, phase, candidate }),
+        JSON.stringify({ ...authorizedRecord, phase, candidate }),
       );
       await database.finish(candidate); // Simulate death after cleanup, before idle publication.
     }
