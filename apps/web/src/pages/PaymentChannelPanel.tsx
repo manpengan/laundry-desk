@@ -1,43 +1,37 @@
 import { useState } from "react";
+import { Tabs } from "@laundry/ui";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
-import type { CommandPort, QueryPort } from "../commands/types.js";
+import type { CommandPort } from "../commands/types.js";
 import type { PaymentChannelPort } from "../host/payment-channel-port.js";
 import { PaymentChannelCollection } from "./PaymentChannelCollection.js";
 import { PaymentChannelReconcile } from "./PaymentChannelReconcile.js";
 import { PaymentChannelSettings } from "./PaymentChannelSettings.js";
+
+type PanelTab = "collection" | "reconcile" | "settings";
+const TABS = [
+  { id: "collection", label: "收款记录与退款" },
+  { id: "reconcile", label: "账单核对" },
+  { id: "settings", label: "商户设置" },
+] as const;
+
+/** ADR-85 r1: collection itself happens at pickup; settings keeps records, refunds and setup. */
 export function PaymentChannelPanel(
   props: Readonly<{
     port: PaymentChannelPort;
     authClient: AuthClient;
     commandClient: CommandPort;
-    queryClient?: QueryPort;
     session: SessionView;
   }>,
 ) {
-  const [tab, setTab] = useState<"collection" | "reconcile" | "settings">("collection");
+  const [tab, setTab] = useState<PanelTab>("collection");
   return (
-    <section aria-label="支付渠道与对账" className="space-y-4">
-      <h2>支付渠道与对账</h2>
-      <nav className="flex flex-wrap gap-2" aria-label="支付操作">
-        {(
-          [
-            { key: "collection", label: "收款与退款" },
-            { key: "reconcile", label: "账单核对" },
-            { key: "settings", label: "商户设置" },
-          ] as const
-        ).map((item) => (
-          <button
-            type="button"
-            key={item.key}
-            aria-pressed={tab === item.key}
-            onClick={() => setTab(item.key)}
-            className="rounded border px-3 py-2"
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
+    <section className="ld-settings-section lg-card ld-panel" aria-label="支付渠道与对账">
+      <header className="ld-settings-section__head">
+        <h2>支付渠道与对账</h2>
+        <p>顾客扫码付款在取衣页发起；这里查看收款记录、原路退款、核对商户账单和设置商户。</p>
+      </header>
+      <Tabs<PanelTab> label="支付操作" items={TABS} value={tab} onChange={setTab} />
       <div hidden={tab !== "collection"}>
         <PaymentChannelCollection {...props} />
       </div>

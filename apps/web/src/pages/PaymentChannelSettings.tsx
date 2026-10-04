@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Button, Input } from "@laundry/ui";
 import { PaymentCredentialSchema, type PaymentChannelSettings } from "@laundry/contracts";
 import type { PaymentChannelPort } from "../host/payment-channel-port.js";
 const common = [
@@ -75,69 +76,83 @@ export function PaymentChannelSettings({ port }: Readonly<{ port: PaymentChannel
     } else setMessage(result.error + " 如需更换凭据，请重新填写后提交。");
   };
   return (
-    <section className="space-y-3" aria-label="支付商户设置">
-      <h3>商户设置</h3>
-      <p>凭据由本机服务加密保管，保存后不回显。每次启停或更换需当前管理员密码。</p>
+    <section className="ld-panel" aria-label="支付商户设置">
+      <p className="ld-panel__lead">
+        凭据由本机服务加密保管，保存后不回显。每次启停或更换需当前管理员密码。
+      </p>
       {view && !view.custody_available && (
-        <p role="status">当前服务未启用 Windows 密钥保管，暂不能保存支付凭据。</p>
+        <p className="ld-panel__note ld-panel__note--warn" role="status">
+          当前服务未启用 Windows 密钥保管，暂不能保存支付凭据。
+        </p>
       )}
-      <label>
-        支付渠道{" "}
-        <select
-          value={channel}
-          disabled={busy}
-          onChange={(e) => setChannel(e.target.value === "alipay" ? "alipay" : "wechat")}
-        >
-          <option value="wechat">微信支付</option>
-          <option value="alipay">支付宝</option>
-        </select>
-      </label>
+      <div className="ld-panel__grid">
+        <label className="ld-field">
+          <span className="ld-field__label">支付渠道</span>
+          <select
+            className="ld-input"
+            value={channel}
+            disabled={busy}
+            onChange={(e) => setChannel(e.target.value === "alipay" ? "alipay" : "wechat")}
+          >
+            <option value="wechat">微信支付</option>
+            <option value="alipay">支付宝</option>
+          </select>
+        </label>
+      </div>
       {setting && (
-        <p>
+        <p className="ld-panel__meta">
           已配置商户：{setting.merchant_id}；应用：{setting.app_id}
         </p>
       )}
-      <label className="block">
-        <input
-          type="checkbox"
-          checked={enabled}
-          disabled={busy}
-          onChange={(e) => setEnabled(e.target.checked)}
-        />{" "}
-        启用该渠道
-      </label>
-      {setting && (
-        <label className="block">
+      <div className="ld-panel__actions">
+        <label className="ld-panel__check">
           <input
             type="checkbox"
-            checked={replace}
+            checked={enabled}
             disabled={busy}
-            onChange={(e) => {
-              setReplace(e.target.checked);
-              setValues({});
-            }}
-          />{" "}
-          更换商户凭据
+            onChange={(e) => setEnabled(e.target.checked)}
+          />
+          启用该渠道
         </label>
-      )}
-      {(replace || !setting) &&
-        fields[channel].map((field) => (
-          <label className="block" key={field.key}>
-            {field.label}
-            {field.key.endsWith("Key") && field.key !== "apiV3Key" ? (
-              <textarea
-                className="block w-full rounded border p-2"
-                rows={3}
-                autoComplete="off"
-                spellCheck={false}
-                maxLength={8192}
-                value={values[field.key] ?? ""}
-                disabled={busy}
-                onChange={(e) => setValues((prior) => ({ ...prior, [field.key]: e.target.value }))}
-              />
+        {setting && (
+          <label className="ld-panel__check">
+            <input
+              type="checkbox"
+              checked={replace}
+              disabled={busy}
+              onChange={(e) => {
+                setReplace(e.target.checked);
+                setValues({});
+              }}
+            />
+            更换商户凭据
+          </label>
+        )}
+      </div>
+      {(replace || !setting) && (
+        <div className="ld-panel__grid">
+          {fields[channel].map((field) =>
+            field.key.endsWith("Key") && field.key !== "apiV3Key" ? (
+              <label className="ld-field" key={field.key}>
+                <span className="ld-field__label">{field.label}</span>
+                <textarea
+                  className="ld-input ld-panel__textarea"
+                  rows={3}
+                  autoComplete="off"
+                  spellCheck={false}
+                  maxLength={8192}
+                  value={values[field.key] ?? ""}
+                  disabled={busy}
+                  onChange={(e) =>
+                    setValues((prior) => ({ ...prior, [field.key]: e.target.value }))
+                  }
+                />
+              </label>
             ) : (
-              <input
-                className="block w-full rounded border p-2"
+              <Input
+                key={field.key}
+                name={`payment-${field.key}`}
+                label={field.label}
                 type={field.secret ? "password" : "text"}
                 autoComplete="off"
                 maxLength={512}
@@ -145,30 +160,33 @@ export function PaymentChannelSettings({ port }: Readonly<{ port: PaymentChannel
                 disabled={busy}
                 onChange={(e) => setValues((prior) => ({ ...prior, [field.key]: e.target.value }))}
               />
-            )}
-          </label>
-        ))}
-      <label className="block">
-        当前管理员密码{" "}
-        <input
+            ),
+          )}
+        </div>
+      )}
+      <div className="ld-panel__row">
+        <Input
+          name="payment-settings-password"
+          label="当前管理员密码"
           type="password"
           autoComplete="current-password"
           maxLength={256}
           value={password}
           disabled={busy}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded border p-2"
         />
-      </label>
-      <button
-        type="button"
-        disabled={busy || !view?.custody_available || !password}
-        onClick={() => void save()}
-        className="rounded border px-3 py-2"
-      >
-        保存支付设置
-      </button>
-      {message && <p role="status">{message}</p>}
+        <Button
+          disabled={busy || !view?.custody_available || !password}
+          onClick={() => void save()}
+        >
+          保存支付设置
+        </Button>
+      </div>
+      {message && (
+        <p className="ld-panel__note" role="status">
+          {message}
+        </p>
+      )}
     </section>
   );
 }

@@ -4,7 +4,7 @@ import {
   type ChannelIntent,
   type ChannelRefundInput,
 } from "@laundry/contracts";
-import { MoneyInput, MoneyText } from "@laundry/ui";
+import { Button, MoneyInput, MoneyText } from "@laundry/ui";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
 import type { CommandPort } from "../commands/types.js";
@@ -88,42 +88,50 @@ export function PaymentChannelRefund({
     }
   };
   return (
-    <div className="space-y-2">
+    <div className="ld-panel" aria-label="原路退款">
       <h4>原路退款</h4>
-      <p>需另一位店长现场复核；剩余可退金额及渠道结果由服务端核对。</p>
-      <MoneyInput
-        name="channel-refund-cents"
-        label="申请退款金额"
-        valueFen={amount}
-        onChangeFen={setAmount}
-        disabled={busy || !!pending}
-      />
-      <label>
-        退款原因{" "}
-        <select
-          value={reason}
+      <p className="ld-panel__lead">需另一位店长现场复核；剩余可退金额及渠道结果由服务端核对。</p>
+      <div className="ld-panel__grid">
+        <MoneyInput
+          name="channel-refund-cents"
+          label="申请退款金额"
+          valueFen={amount}
+          onChangeFen={setAmount}
           disabled={busy || !!pending}
-          onChange={(e) => {
-            const parsed = ChannelRefundInputSchema.shape.reason.safeParse(e.target.value);
-            if (parsed.success) setReason(parsed.data);
-          }}
+        />
+        <label className="ld-field">
+          <span className="ld-field__label">退款原因</span>
+          <select
+            className="ld-input"
+            value={reason}
+            disabled={busy || !!pending}
+            onChange={(e) => {
+              const parsed = ChannelRefundInputSchema.shape.reason.safeParse(e.target.value);
+              if (parsed.success) setReason(parsed.data);
+            }}
+          >
+            {Object.entries(reasons).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="ld-panel__actions">
+        <Button
+          variant="danger"
+          disabled={busy || !!pending || !amount}
+          onClick={() => void execute()}
         >
-          {Object.entries(reasons).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button
-        type="button"
-        disabled={busy || !!pending || !amount}
-        onClick={() => void execute()}
-        className="rounded border px-3 py-2"
-      >
-        申请渠道退款
-      </button>
-      {message && <p role="status">{message}</p>}
+          申请渠道退款
+        </Button>
+      </div>
+      {message && (
+        <p className="ld-panel__note" role="status">
+          {message}
+        </p>
+      )}
       {pending && (
         <StepUpConfirmDialog
           open

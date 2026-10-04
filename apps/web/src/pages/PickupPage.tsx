@@ -16,6 +16,8 @@ import {
   type PickupOrderResult,
 } from "./order-form.js";
 import { OrderLookupCandidates, parseOrderLookupRows } from "./OrderLookupCandidates.js";
+import type { PaymentChannelPort } from "../host/payment-channel-port.js";
+import { ChannelCollectCard } from "./ChannelCollectCard.js";
 import { PaymentCollectionDialog } from "./PaymentCollectionDialog.js";
 import { PickupResult } from "./PickupDetails.js";
 import { PickupOrderPanel } from "./PickupOrderPanel.js";
@@ -33,6 +35,8 @@ export type PickupPageProps = {
   initialOrderId?: string;
   /** Prefill a customer-facing lookup key from the workbench scanner input. */
   initialLookupKey?: string;
+  /** WeChat/Alipay QR collection (ADR-85 r1); absent when the host has no channel port. */
+  paymentChannelPort?: PaymentChannelPort;
 };
 
 export function PickupPage({
@@ -40,6 +44,7 @@ export function PickupPage({
   queryClient,
   initialOrderId,
   initialLookupKey,
+  paymentChannelPort,
 }: PickupPageProps) {
   const toast = useToast();
   const [lookupKey, setLookupKey] = useState(() => initialLookupKey ?? "");
@@ -54,6 +59,7 @@ export function PickupPage({
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [verificationBarcode, setVerificationBarcode] = useState("");
   const [verifiedBarcodes, setVerifiedBarcodes] = useState<ReadonlySet<string>>(() => new Set());
+  const [channelRefresh, setChannelRefresh] = useState(0);
   const lookupSeqRef = useRef(0);
 
   const selectedRacked = useMemo(
@@ -228,6 +234,8 @@ export function PickupPage({
       const res = await commandClient.execute<unknown>("order.pickup", built.body);
       if (!res.ok) {
         toast.push(res.error.message ?? res.error.code, "error");
+        // An unfinished QR collection holds the order: show it so staff can resolve it.
+        if (res.error.detail?.reason === "payment_pending") setChannelRefresh((n) => n + 1);
         return;
       }
       const payload = unwrapCommandResult<PickupOrderResult>(res.data);
@@ -325,6 +333,19 @@ export function PickupPage({
             onToggle={onToggle}
             onVerificationBarcodeChange={setVerificationBarcode}
             onVerify={onVerify}
+          />
+        ) : null}
+
+        {loaded !== null && paymentChannelPort !== undefined ? (
+          <ChannelCollectCard
+            port={paymentChannelPort}
+            order={loaded}
+            refreshKey={channelRefresh}
+            disabled={disabled}
+            onPaid={() => {
+              setCollectText("0");
+              void onLoadOrder(loaded.order_id);
+            }}
           />
         ) : null}
 

@@ -187,6 +187,7 @@ export function PageHostCore({
         {...(queryClient !== undefined ? { queryClient } : {})}
         {...(pickupOrderId !== undefined ? { initialOrderId: pickupOrderId } : {})}
         {...(pickupLookupKey !== undefined ? { initialLookupKey: pickupLookupKey } : {})}
+        {...(paymentChannelPort === undefined ? {} : { paymentChannelPort })}
       />
     );
   }
