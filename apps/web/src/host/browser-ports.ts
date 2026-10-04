@@ -73,7 +73,10 @@ function unavailable(message: string): HealthResult {
  */
 export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
   const base = options.apiBaseUrl.replace(/\/$/u, "");
-  const fetchImpl = options.fetchImpl ?? fetch;
+  // Ports receive this inside an options object; keep it callable without a `this` binding.
+  const injected = options.fetchImpl;
+  const fetchImpl: typeof fetch =
+    injected === undefined ? (input, init) => fetch(input, init) : injected;
   const readCsrf = options.readCsrf ?? defaultReadCsrf;
   let accessToken: string | null = null;
   const credentialStore: HttpAuthCredentialStore = Object.freeze({

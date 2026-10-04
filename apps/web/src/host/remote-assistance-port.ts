@@ -43,12 +43,14 @@ export function createHttpRemoteAssistanceOperation(
     readCsrf: () => string | null;
   }>,
 ): Operation {
+  // Call unbound: invoked as a method of options, a bare window.fetch throws Illegal invocation.
+  const { fetchImpl } = options;
   return async (raw) => {
     const input = DesktopRemoteAssistanceInputSchema.parse(raw);
     const token = options.getAccessToken(),
       csrf = options.readCsrf();
     if (!token || !csrf) return null;
-    const response = await options.fetchImpl(
+    const response = await fetchImpl(
       `${options.apiBaseUrl.replace(/\/$/u, "")}/api/v2/remote-assistance`,
       {
         method: "POST",

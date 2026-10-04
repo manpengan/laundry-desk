@@ -80,6 +80,8 @@ export function createHttpMigrationOperation(
     readCsrf: () => string | null;
   }>,
 ): MigrationOperation {
+  // Call unbound: invoked as a method of options, a bare window.fetch throws Illegal invocation.
+  const { fetchImpl } = options;
   return async (raw) => {
     const input = DesktopV1MigrationInputSchema.parse(raw);
     const token = options.getAccessToken();
@@ -98,7 +100,7 @@ export function createHttpMigrationOperation(
         : input.operation === "authorize"
           ? JSON.stringify(input.body)
           : Uint8Array.from(input.bytes);
-    const response = await options.fetchImpl(`${options.apiBaseUrl.replace(/\/$/u, "")}${path}`, {
+    const response = await fetchImpl(`${options.apiBaseUrl.replace(/\/$/u, "")}${path}`, {
       method: body === undefined ? "GET" : "POST",
       credentials: "include",
       redirect: "error",

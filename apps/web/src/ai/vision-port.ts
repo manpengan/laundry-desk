@@ -68,13 +68,15 @@ export function createDesktopVisionPort(operation: AiOperationPort): VisionPort 
   });
 }
 export function createHttpVisionPort(options: HttpAiPanelPortOptions): VisionPort {
+  // Call unbound: invoked as a method of options, a bare window.fetch throws Illegal invocation.
+  const { fetchImpl } = options;
   return createVisionPort(async (input, signal) => {
     if (input.operation !== "visionAnalyze" && input.operation !== "visionCandidates") return null;
     const token = options.getAccessToken();
     const csrf = options.readCsrf();
     if (!token || !csrf || signal.aborted) return null;
     const endpoint = input.operation === "visionAnalyze" ? "analyze" : "candidates";
-    const response = await options.fetchImpl(
+    const response = await fetchImpl(
       `${options.apiBaseUrl.replace(/\/$/u, "")}/api/v2/ai/vision/${endpoint}`,
       {
         method: "POST",

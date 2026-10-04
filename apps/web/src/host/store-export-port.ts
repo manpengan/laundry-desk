@@ -50,12 +50,14 @@ export function createHttpStoreExportOperation(
     readCsrf: () => string | null;
   }>,
 ): Operation {
+  // Call unbound: invoked as a method of options, a bare window.fetch throws Illegal invocation.
+  const { fetchImpl } = options;
   return async (raw) => {
     const input = DesktopStoreExportInputSchema.parse(raw);
     const token = options.getAccessToken();
     const csrf = options.readCsrf();
     if (!token || (input.operation === "authorize" && !csrf)) return null;
-    const response = await options.fetchImpl(
+    const response = await fetchImpl(
       `${options.apiBaseUrl.replace(/\/$/u, "")}/api/v2/store-export`,
       {
         method: input.operation === "preview" ? "GET" : "POST",

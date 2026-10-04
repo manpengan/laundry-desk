@@ -40,12 +40,14 @@ export function createHttpMiniappSettingsOperation(
     readCsrf: () => string | null;
   }>,
 ): Operation {
+  // Call unbound: invoked as a method of options, a bare window.fetch throws Illegal invocation.
+  const { fetchImpl } = options;
   return async (raw) => {
     const input = DesktopMiniappSettingsInputSchema.parse(raw);
     const token = options.getAccessToken(),
       csrf = options.readCsrf();
     if (!token || (input.operation === "save" && !csrf)) return null;
-    const response = await options.fetchImpl(
+    const response = await fetchImpl(
       `${options.apiBaseUrl.replace(/\/$/u, "")}/api/v2/miniapp/settings`,
       {
         method: input.operation === "read" ? "GET" : "POST",

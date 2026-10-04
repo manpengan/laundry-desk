@@ -91,6 +91,8 @@ export function createHttpAiSettingsOperation(
     readCsrf: () => string | null;
   }>,
 ): AiOperationPort {
+  // Call unbound: invoked as a method of options, a bare window.fetch throws Illegal invocation.
+  const { fetchImpl } = options;
   return async (input) => {
     const token = options.getAccessToken();
     if (token === null) return null;
@@ -111,7 +113,7 @@ export function createHttpAiSettingsOperation(
     const body = "body" in input ? input.body : undefined;
     const csrf = options.readCsrf();
     if (body !== undefined && csrf === null) return null;
-    const response = await options.fetchImpl(
+    const response = await fetchImpl(
       `${options.apiBaseUrl.replace(/\/$/u, "")}/api/v2/ai/${path}`,
       {
         method: body === undefined ? "GET" : "POST",
