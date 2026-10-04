@@ -5,7 +5,12 @@ import test from "node:test";
 import { backupFixture } from "./backup-test-fixture.mjs";
 import { createBackup } from "./backup-files.mjs";
 import { DEFAULT_SCHEDULE, requireSchedule } from "./schedule-contract.mjs";
-import { scheduledMaintenance, scheduleConfiguration } from "./schedule-maintenance.mjs";
+import {
+  enableDefaultSchedule,
+  recordOffsiteExport,
+  scheduledMaintenance,
+  scheduleConfiguration,
+} from "./schedule-maintenance.mjs";
 import { pruneBackups } from "./schedule-retention.mjs";
 import { resumePruning } from "./schedule-prune.mjs";
 import { managedScheduleTask } from "./schedule-controller.mjs";
@@ -194,3 +199,37 @@ test("pending upgrade or interrupted maintenance blocks scheduling before prunin
     /MAINTENANCE_RECOVERY_REQUIRED/,
   );
 });
+
+test("an unconfigured installation gets the default daily backup; a saved choice is kept", async (t) => {
+  const f = await fixture(t);
+  const path = join(f.context.root, "backup-schedule.json");
+  await unlink(path);
+  const failing = { ...f.deps, task: async () => fail("WINDOWS_COMPANION_TASK_SCHEDULER_FAILED") };
+  assert.equal(
+    await enableDefaultSchedule(f.lifecycle, failing),
+    "WINDOWS_COMPANION_TASK_SCHEDULER_FAILED",
+  );
+  // A failed registration leaves no placeholder, so the next repair tries again.
+  await assert.rejects(readFile(path, "utf8"), /ENOENT/u);
+  assert.equal(await enableDefaultSchedule(f.lifecycle, f.deps), "enabled");
+  const saved = await scheduleConfiguration(f.context);
+  assert.deepEqual(saved, { ...DEFAULT_SCHEDULE, enabled: true });
+  assert.equal(saved.hour, 3);
+  await f.context.io.write(path, JSON.stringify({ ...DEFAULT_SCHEDULE, enabled: false }));
+  assert.equal(await enableDefaultSchedule(f.lifecycle, f.deps), null);
+  assert.equal((await scheduleConfiguration(f.context)).enabled, false);
+});
+
+test("backup health reminds about an off-machine copy until one is recent", async (t) => {
+  const f = await fixture(t);
+  const health = () => scheduledMaintenance("backup-health", {}, f.lifecycle, f.deps);
+  assert.equal((await health()).alerts.includes("offsite_overdue"), true);
+  await recordOffsiteExport(f.context);
+  assert.equal((await health()).alerts.includes("offsite_overdue"), false);
+  await recordOffsiteExport(f.context, Date.now() - 8 * 86400000);
+  assert.equal((await health()).alerts.includes("offsite_overdue"), true);
+});
+
+function fail(code) {
+  throw new Error(code);
+}

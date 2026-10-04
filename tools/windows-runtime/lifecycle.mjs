@@ -31,7 +31,12 @@ import { exportDiagnosticBundle } from "./diagnostic-export.mjs";
 import { DATA_ACTIONS, requireDataOptions } from "./data-options.mjs";
 import { dataMaintenance } from "./data-maintenance.mjs";
 import { SCHEDULE_ACTIONS, requireSchedule } from "./schedule-contract.mjs";
-import { scheduledMaintenance, uninstallSchedule } from "./schedule-maintenance.mjs";
+import {
+  enableDefaultSchedule,
+  recordOffsiteExport,
+  scheduledMaintenance,
+  uninstallSchedule,
+} from "./schedule-maintenance.mjs";
 import { schemaMaintenance } from "./upgrade-maintenance.mjs";
 import { configureAssistance, requireAssistanceOptions } from "./assistance-config.mjs";
 
@@ -145,6 +150,20 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
         throw error;
       }
     }
+    const maintenanceLifecycle = {
+      root,
+      io,
+      platform,
+      verify,
+      getState: () => state,
+      stop: async (entry) => {
+        await stop(entry);
+        await save({ ...state, phase: "stopped" });
+      },
+      start,
+      stopRaw: stop,
+      saveState: save,
+    };
     if (!state) {
       await io.directory(join(root, "releases"));
       await io.directory(join(root, "logs"));
@@ -191,20 +210,6 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
         fail("PARTIAL_INITIALIZATION");
       }
       const maintenance = await readMaintenance(io, root);
-      const maintenanceLifecycle = {
-        root,
-        io,
-        platform,
-        verify,
-        getState: () => state,
-        stop: async (entry) => {
-          await stop(entry);
-          await save({ ...state, phase: "stopped" });
-        },
-        start,
-        stopRaw: stop,
-        saveState: save,
-      };
       if (SCHEDULE_ACTIONS.includes(action))
         return scheduledMaintenance(action, options, maintenanceLifecycle);
       if (action === "assistance-config") return configureAssistance(options, maintenanceLifecycle);
@@ -216,7 +221,7 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
       )
         fail("MAINTENANCE_RECOVERY_REQUIRED");
       if (BACKUP_ACTIONS.includes(action) || DATA_ACTIONS.includes(action)) {
-        return (DATA_ACTIONS.includes(action) ? dataMaintenance : backupMaintenance)(
+        const result = await (DATA_ACTIONS.includes(action) ? dataMaintenance : backupMaintenance)(
           action,
           options,
           {
@@ -232,6 +237,8 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
             start,
           },
         );
+        if (action === "portable-export") await recordOffsiteExport({ root, io });
+        return result;
       }
       if (state.pending) {
         requireCompatible(state.current, state.pending);
@@ -343,8 +350,13 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
         }
       }
     }
+    const schedule =
+      ["install", "repair", "upgrade"].includes(action) && state.phase === "running"
+        ? await enableDefaultSchedule(maintenanceLifecycle)
+        : null;
     return {
       status: state.phase,
+      ...(schedule === null ? {} : { backup_schedule: schedule }),
       assurance: "development_only",
       source_git_sha: state.current.source,
       manifest_sha256: state.current.digest,

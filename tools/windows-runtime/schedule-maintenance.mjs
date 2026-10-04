@@ -1,6 +1,6 @@
-import { statfs } from "node:fs/promises";
+import { rm, statfs } from "node:fs/promises";
 import { join } from "node:path";
-import { digest, fail } from "./companion-contract.mjs";
+import { digest, exactKeys, fail } from "./companion-contract.mjs";
 import { exists } from "./lifecycle-storage.mjs";
 import { backupMaintenance } from "./backup-maintenance.mjs";
 import { cleanEnvironment } from "./lifecycle-environment.mjs";
@@ -19,6 +19,24 @@ export async function scheduleConfiguration(context) {
 }
 async function history(context) {
   return read(context, "backup-history.json", [], requireScheduleHistory);
+}
+// ADR-91 D-4: local restore points die with the disk; remind until an off-machine copy is recent.
+const OFFSITE_DAYS = 7;
+function requireOffsite(value) {
+  if (
+    !exactKeys(value, ["version", "at"]) ||
+    value.version !== 1 ||
+    typeof value.at !== "string" ||
+    !Number.isFinite(Date.parse(value.at))
+  )
+    fail("OFFSITE_RECORD_INVALID");
+  return value;
+}
+export async function recordOffsiteExport(context, now = Date.now()) {
+  await context.io.write(
+    join(context.root, "offsite-export.json"),
+    JSON.stringify({ version: 1, at: new Date(now).toISOString() }),
+  );
 }
 async function available(context) {
   const space = await statfs(context.root, { bigint: true });
@@ -79,6 +97,9 @@ export async function scheduleHealth(context, now = Date.now(), task = scheduleT
     alerts.push("backup_overdue");
   if (config.enabled && (!drill || now - Date.parse(drill.at) > config.drill_days * 86400000))
     alerts.push("drill_overdue");
+  const offsite = await read(context, "offsite-export.json", null, requireOffsite);
+  if (!offsite || now - Date.parse(offsite.at) > OFFSITE_DAYS * 86400000)
+    alerts.push("offsite_overdue");
   return {
     status: "backup_health",
     config,
@@ -158,6 +179,33 @@ export async function scheduledMaintenance(action, options, lifecycle, dependenc
       : "WINDOWS_COMPANION_BACKUP_RUN_FAILED";
     await save({ ...started, status: "failed", code });
     throw new Error(code);
+  }
+}
+
+/**
+ * ADR-91 D-4: an installation nobody has configured backs up daily at the default
+ * 03:00, outside business hours. A saved choice, including "off", is never overridden.
+ * Returns the outcome for the operator; a failure leaves installation itself intact.
+ */
+export async function enableDefaultSchedule(lifecycle, dependencies = {}) {
+  if (await exists(join(lifecycle.root, "backup-schedule.json"))) return null;
+  try {
+    const health = await scheduledMaintenance(
+      "backup-schedule",
+      { ...DEFAULT_SCHEDULE, enabled: true },
+      lifecycle,
+      dependencies,
+    );
+    return health.config.enabled ? "enabled" : "WINDOWS_COMPANION_BACKUP_SCHEDULE_FAILED";
+  } catch (error) {
+    // Registration writes a disabled placeholder first; drop it so the next install,
+    // repair or upgrade tries again instead of mistaking it for the owner's choice.
+    const path = join(lifecycle.root, "backup-schedule.json");
+    if ((await exists(path)) && !(await scheduleConfiguration(lifecycle)).enabled)
+      await rm(path, { force: true });
+    return /^WINDOWS_COMPANION_[A-Z_]{1,80}$/u.test(error.message)
+      ? error.message
+      : "WINDOWS_COMPANION_BACKUP_SCHEDULE_FAILED";
   }
 }
 

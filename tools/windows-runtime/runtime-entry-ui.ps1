@@ -93,9 +93,13 @@ function Show-RuntimeEntry {
         $lines.Add('自动备份：' + $(if ($result.config.enabled) { '已启用' } else { '已关闭' }))
         $lines.Add('每日时间：' + ('{0:00}:{1:00}' -f $result.config.hour, $result.config.minute))
         $lines.Add('可用空间：' + $result.free_mib + ' MiB')
-        $messages = @{ low_space='剩余空间不足'; interrupted='上次备份中断，请明确恢复维护'; last_run_failed='上次备份失败'; backup_overdue='备份已超过预定间隔'; drill_overdue='恢复演练尚未完成或已逾期'; task_missing='自动备份任务缺失或被禁用，请重新保存设置'; task_unavailable='自动备份任务无法验证，请检查任务或重新保存设置' }
+        $messages = @{ low_space='剩余空间不足'; interrupted='上次备份中断，请明确恢复维护'; last_run_failed='上次备份失败'; backup_overdue='备份已超过预定间隔'; drill_overdue='恢复演练尚未完成或已逾期'; task_missing='自动备份任务缺失或被禁用，请重新保存设置'; task_unavailable='自动备份任务无法验证，请检查任务或重新保存设置'; offsite_overdue='近 7 天没有加密离机备份：请用“加密离机备份”存到 U 盘或 NAS，防止本机硬盘损坏时备份一起丢失' }
         foreach ($alert in $result.alerts) { $lines.Add('提醒：' + $messages[$alert]) }
         if ($null -ne $result.latest) { $lines.Add('最近执行：' + $result.latest.at + ' / ' + $result.latest.status); if ($result.latest.code) { $lines.Add('错误代码：' + $result.latest.code) } }
+      }
+      if ($result.PSObject.Properties.Name -contains 'backup_schedule') {
+        if ($result.backup_schedule -ceq 'enabled') { $lines.Add('自动备份：已默认开启，每天 03:00 执行。请再定期用“加密离机备份”存到 U 盘或 NAS。') }
+        else { $lines.Add('自动备份未能开启（错误代码：' + [string]$result.backup_schedule + '），请在“自动备份设置”里保存一次。') }
       }
       if ($Verb -ceq 'backup-drill') { $lines.Add('影子库恢复与照片一致性验证完成，当前业务数据保持原状。') }
       if (@('portable-export','portable-inspect','portable-import') -ccontains $Verb) {
@@ -140,7 +144,8 @@ function Show-RuntimeEntry {
     @('修复服务','repair'), @('创建备份','backup'), @('查看备份','backup-list'),
     @('自动备份设置','backup-schedule'), @('备份提醒与记录','backup-health'), @('立即自动备份','scheduled-backup'),
     @('升级到本包','upgrade'), @('回滚程序','rollback'), @('继续中断维护','maintenance-recover'), @('导出诊断','diagnostics'),
-    @('加密离机备份','portable-export'), @('校验离机备份','portable-inspect'), @('换机恢复','portable-import'), @('执行旧版导入','v1-import'), @('完整门店导出','export-store'), @('远程协助配置','assistance-config')
+    @('加密离机备份','portable-export'), @('校验离机备份','portable-inspect'), @('换机恢复','portable-import'), @('执行旧版导入','v1-import'), @('完整门店导出','export-store')
+    # ADR-91 D-2: remote assistance stays available to technicians via the CLI action only.
   )) {
     $button = New-Object Windows.Forms.Button; $button.Text = $entry[0]; $button.Tag = $entry[1]
     $button.AutoSize = $true; $button.Height = 34
