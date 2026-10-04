@@ -308,7 +308,11 @@ export class MemoryAiConversationStore implements AiConversationStore {
       input.finish.errorCode,
       input.finish.completedAt,
     );
-    if (input.finish.quarantineUsage !== undefined) this.safetyFor(session.orgId).quarantine();
+    if (input.finish.quarantineUsage !== undefined)
+      this.safetyFor(session.orgId).recordUnknownUsage(
+        input.finish.quarantineUsage,
+        input.finish.completedAt,
+      );
     this.audits = Object.freeze([
       ...this.audits,
       Object.freeze({

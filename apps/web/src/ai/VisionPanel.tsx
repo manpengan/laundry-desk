@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Button, Input } from "@laundry/ui";
 import type { AiVisionCandidate, AiVisionResult } from "@laundry/contracts";
 import type { VisionPort } from "./vision-port.js";
 import { prepareVisionPhoto } from "./vision-image.js";
@@ -88,13 +89,16 @@ export function VisionPanel({ port }: Readonly<{ port: VisionPort }>) {
     else setError(response.error);
   };
   return (
-    <details className="rounded border p-3">
+    <details className="ld-panel__sub ld-panel__advanced">
       <summary>衣物图片辅助 / 掉标找衣</summary>
-      <div className="space-y-3 py-2">
-        <p>仅提供外观建议。请先裁剪掉人物、票据和顾客资料；认领、取衣和衣物信息仍由员工核验。</p>
-        <label>
-          用途{" "}
+      <div className="ld-panel">
+        <p className="ld-panel__lead">
+          仅提供外观建议。请先裁剪掉人物、票据和顾客资料；认领、取衣和衣物信息仍由员工核验。
+        </p>
+        <label className="ld-field">
+          <span className="ld-field__label">用途</span>
           <select
+            className="ld-input"
             disabled={busy}
             value={mode}
             onChange={(event) => {
@@ -106,9 +110,10 @@ export function VisionPanel({ port }: Readonly<{ port: VisionPort }>) {
             <option value="match">掉标候选比较</option>
           </select>
         </label>
-        <label className="block">
-          目标衣物照片{" "}
+        <label className="ld-field">
+          <span className="ld-field__label">目标衣物照片</span>
           <input
+            className="ld-input"
             type="file"
             accept="image/jpeg,image/png,image/webp"
             disabled={busy}
@@ -119,26 +124,33 @@ export function VisionPanel({ port }: Readonly<{ port: VisionPort }>) {
           <img
             src={`data:image/jpeg;base64,${image}`}
             alt="本次目标衣物"
-            className="max-h-40 max-w-full object-contain"
+            className="ld-vision__target"
           />
         )}
         {mode === "match" && (
-          <div className="space-y-2">
-            <label>
-              候选票号或条码{" "}
-              <input
+          <div className="ld-panel">
+            <div className="ld-panel__row">
+              <Input
+                name="vision-candidate-query"
+                label="候选票号或条码"
                 value={query}
                 maxLength={64}
                 disabled={busy}
                 onChange={(event) => setQuery(event.target.value)}
               />
-            </label>
-            <button type="button" disabled={busy || !query.trim()} onClick={() => void search()}>
-              读取本店候选照片
-            </button>
-            <p>最多显示 6 张，请选择至多 2 张比较。查询照片只在本机完成。</p>
+              <Button
+                variant="secondary"
+                disabled={busy || !query.trim()}
+                onClick={() => void search()}
+              >
+                读取本店候选照片
+              </Button>
+            </div>
+            <p className="ld-panel__meta">
+              最多显示 6 张，请选择至多 2 张比较。查询照片只在本机完成。
+            </p>
             {candidates.map((photo) => (
-              <label key={photo.photo_id} className="flex items-center gap-2">
+              <label key={photo.photo_id} className="ld-panel__check">
                 <input
                   type="checkbox"
                   checked={selected.includes(photo.photo_id)}
@@ -155,7 +167,7 @@ export function VisionPanel({ port }: Readonly<{ port: VisionPort }>) {
                 <img
                   src={`data:image/jpeg;base64,${photo.thumbnail_base64}`}
                   alt={`候选衣物 ${photo.barcode}`}
-                  className="h-20 w-20 object-contain"
+                  className="ld-vision__thumb"
                 />
                 <span>
                   {photo.ticket_no} / {photo.barcode}
@@ -164,7 +176,7 @@ export function VisionPanel({ port }: Readonly<{ port: VisionPort }>) {
             ))}
           </div>
         )}
-        <label className="flex items-start gap-2">
+        <label className="ld-panel__check">
           <input
             type="checkbox"
             checked={consent}
@@ -174,30 +186,35 @@ export function VisionPanel({ port }: Readonly<{ port: VisionPort }>) {
           我同意将本次目标照片{mode === "match" ? "及已选候选照片" : ""}发送给已配置的 AI
           供应商进行分析。
         </label>
-        <button
-          type="button"
-          disabled={busy || !consent || !image || (mode === "match" && selected.length === 0)}
-          onClick={() => void analyze()}
-        >
-          分析本次照片
-        </button>
-        {busy && (
-          <button
-            type="button"
-            onClick={() => {
-              generation.current += 1;
-              active.current?.abort();
-              active.current = null;
-              setBusy(false);
-              setError("本次分析已停止。");
-            }}
+        <div className="ld-panel__actions">
+          <Button
+            disabled={busy || !consent || !image || (mode === "match" && selected.length === 0)}
+            onClick={() => void analyze()}
           >
-            停止
-          </button>
+            分析本次照片
+          </Button>
+          {busy && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                generation.current += 1;
+                active.current?.abort();
+                active.current = null;
+                setBusy(false);
+                setError("本次分析已停止。");
+              }}
+            >
+              停止
+            </Button>
+          )}
+        </div>
+        {error && (
+          <p className="ld-panel__note ld-panel__note--warn" role="alert">
+            {error}
+          </p>
         )}
-        {error && <p role="alert">{error}</p>}
         {result && (
-          <div role="status">
+          <div className="ld-panel__note" role="status">
             <p>
               外观建议：{result.analysis.category}；{result.analysis.colors.join("、")}；
               {result.analysis.visible_marks.join("、")}

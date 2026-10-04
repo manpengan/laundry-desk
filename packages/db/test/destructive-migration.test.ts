@@ -170,6 +170,7 @@ describe("destructive migration static reject", () => {
       "0077_miniapp_identity.sql",
       "0078_miniapp_transactions.sql",
       "0079_miniapp_notifications.sql",
+      "0080_ai_usage_quarantine_threshold.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

@@ -40,7 +40,7 @@ export function credentialText(credential: Buffer): string {
     credential.byteLength > 8_192 ||
     credential.some((byte) => byte < 0x21 || byte > 0x7e)
   ) {
-    throw new ProviderAdapterError("PROVIDER_AUTH_REJECTED");
+    throw new ProviderAdapterError("PROVIDER_AUTH_REJECTED", true);
   }
   return credential.toString("ascii");
 }
@@ -60,8 +60,14 @@ const EVENT_CODES: Readonly<
 });
 
 export function providerErrorEvent(error: unknown): AiProviderEvent {
-  const code = error instanceof ProviderAdapterError ? EVENT_CODES[error.code] : "provider_failed";
-  return Object.freeze({ type: "error" as const, code });
+  if (!(error instanceof ProviderAdapterError))
+    return Object.freeze({ type: "error" as const, code: "provider_failed" as const });
+  const code = EVENT_CODES[error.code];
+  return Object.freeze(
+    error.unbilled
+      ? { type: "error" as const, code, unbilled: true as const }
+      : { type: "error" as const, code },
+  );
 }
 
 export function normalizeProviderError(error: unknown): ProviderAdapterError {

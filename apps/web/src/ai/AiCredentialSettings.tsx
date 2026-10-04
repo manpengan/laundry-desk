@@ -121,9 +121,9 @@ export function AiCredentialSettings({
     }
   };
   return (
-    <section aria-label="AI 密钥管理">
+    <section className="ld-panel__sub" aria-label="AI 密钥管理">
       <h3>服务商密钥</h3>
-      <p>
+      <p className="ld-panel__lead">
         密钥只在这台 Windows
         电脑的当前运行账户下解密。更换账户或电脑后需重新录入；配置备份不会导出明文密钥。
       </p>
@@ -136,31 +136,41 @@ export function AiCredentialSettings({
         disabled={busy || pending !== null || !available}
         onChange={(event) => setKey(event.target.value)}
       />
-      <Button
-        disabled={busy || !available || key.length < 8 || pending !== null}
-        onClick={() => void intent()}
-      >
-        保存或轮换密钥（需复核）
-      </Button>
-      <ul>
+      <div className="ld-panel__actions">
+        <Button
+          disabled={busy || !available || key.length < 8 || pending !== null}
+          onClick={() => void intent()}
+        >
+          保存或轮换密钥（需复核）
+        </Button>
+      </div>
+      <ul className="ld-panel__list">
         {items.map((item) => (
-          <li key={item.credential_ref}>
-            {item.provider_code} · 尾号 {item.last4} · {statusLabels[item.status]} · 版本{" "}
-            {item.credential_version}
-            {item.status === "pending_verification" && item.provider_code === provider ? (
-              <Button disabled={busy || !model} onClick={() => void validate(item)}>
-                联网验证并激活
-              </Button>
-            ) : null}
-            {item.status === "active" || item.status === "pending_verification" ? (
-              <Button disabled={busy} onClick={() => void intent(item)}>
-                撤销（需复核）
-              </Button>
-            ) : null}
+          <li className="ld-panel__item" key={item.credential_ref}>
+            <span>
+              {item.provider_code} · 尾号 {item.last4} · {statusLabels[item.status]}
+              <span className="ld-panel__meta"> · 版本 {item.credential_version}</span>
+            </span>
+            <span className="ld-panel__actions">
+              {item.status === "pending_verification" && item.provider_code === provider ? (
+                <Button size="sm" disabled={busy || !model} onClick={() => void validate(item)}>
+                  联网验证并激活
+                </Button>
+              ) : null}
+              {item.status === "active" || item.status === "pending_verification" ? (
+                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void intent(item)}>
+                  撤销（需复核）
+                </Button>
+              ) : null}
+            </span>
           </li>
         ))}
       </ul>
-      <p role="status">{message}</p>
+      {message ? (
+        <p className="ld-panel__note" role="status">
+          {message}
+        </p>
+      ) : null}
       {pending === null ? null : (
         <StepUpConfirmDialog
           open

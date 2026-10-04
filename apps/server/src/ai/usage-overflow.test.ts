@@ -52,47 +52,88 @@ for (const [reported, expected, blocked] of [
     assert.equal(calls, blocked ? 1 : 2);
   });
 
-for (const mode of ["throw", "abort", "missing_end"] as const)
-  test(`unknown usage after ${mode} consumes the whole reservation and blocks another inference`, async () => {
-    const store = new MemoryAiConversationStore();
-    const controller = new AbortController();
-    let calls = 0;
-    const service = createAiStreamingService({
-      store,
-      tool: deterministicSyntheticTool,
-      provider: {
-        kind: "deterministic_fake",
-        async *stream() {
-          calls++;
-          yield { type: "delta", text: "partial streamed result with no usage report" };
-          if (mode === "missing_end") return;
-          if (mode === "abort") controller.abort();
-          throw new Error("fixture interruption");
-        },
+type Mode = "throw" | "abort" | "missing_end" | "unbilled" | "unbilled_after_output";
+function interruptedService(mode: Mode) {
+  const store = new MemoryAiConversationStore();
+  let controller = new AbortController();
+  let calls = 0;
+  const service = createAiStreamingService({
+    store,
+    tool: deterministicSyntheticTool,
+    provider: {
+      kind: "deterministic_fake",
+      async *stream() {
+        calls++;
+        if (mode === "unbilled") {
+          // e.g. HTTP 401 or a refused connection: the provider never ran the request.
+          yield { type: "error", code: "provider_auth_rejected", unbilled: true };
+          return;
+        }
+        yield { type: "delta", text: "partial streamed result with no usage report" };
+        if (mode === "unbilled_after_output")
+          yield { type: "error", code: "provider_unavailable", unbilled: true };
+        if (mode === "missing_end" || mode === "unbilled_after_output") return;
+        if (mode === "abort") controller.abort();
+        throw new Error("fixture interruption");
       },
+    },
+  });
+  const run = async () => {
+    controller = new AbortController();
+    const session = await service.createSession(context);
+    await service.createTurn(
+      session.session_id,
+      { idempotency_key: randomUUID(), prompt: "fixture", max_output_tokens: 64 },
+      context,
+    );
+    await service.runQueuedTurn(session.session_id, context, controller.signal, async () => {
+      return undefined;
     });
-    const run = async (signal: AbortSignal) => {
-      const session = await service.createSession(context);
-      await service.createTurn(
-        session.session_id,
-        { idempotency_key: randomUUID(), prompt: "fixture", max_output_tokens: 64 },
-        context,
-      );
-      await service.runQueuedTurn(session.session_id, context, signal, async () => undefined);
-      return session;
-    };
-    const session = await run(controller.signal);
-    const usage = store.usageSnapshot()[0];
+    return (await service.getSession(session.session_id, context)).status;
+  };
+  return { store, service, run, calls: () => calls };
+}
+
+for (const mode of ["throw", "missing_end", "unbilled_after_output"] as const)
+  test(`unknown usage after ${mode} is debited in full and quarantines only the third time a day`, async () => {
+    const f = interruptedService(mode);
+    assert.equal(await f.run(), "failed");
+    const usage = f.store.usageSnapshot()[0];
     assert.equal(usage?.inputTokens, 20_000);
     assert.equal(usage?.outputTokens, 64);
-    assert.equal(
-      (await service.getSession(session.session_id, context)).status,
-      mode === "abort" ? "cancelled" : "failed",
-    );
-    assert.equal((await service.getSafetyStatus(context)).circuit_state, "open");
-    await run(new AbortController().signal);
-    assert.equal(calls, 1);
+    const quarantined = async () =>
+      (await f.service.getSafetyStatus(context)).circuit_open_until === "9999-12-31T00:00:00.000Z";
+    assert.equal(await quarantined(), false, "one lost stream must not disable the organisation");
+    await f.run();
+    assert.equal(f.calls(), 2);
+    assert.equal(await quarantined(), false);
+    await f.run();
+    assert.equal(await quarantined(), true);
+    await f.run();
+    assert.equal(f.calls(), 3);
   });
+
+test("a staff stop debits the reservation but never quarantines", async () => {
+  const f = interruptedService("abort");
+  for (let index = 0; index < 4; index++) assert.equal(await f.run(), "cancelled");
+  assert.equal(f.calls(), 4);
+  assert.equal(f.store.usageSnapshot()[0]?.inputTokens, 20_000);
+  assert.equal((await f.service.getSafetyStatus(context)).circuit_state, "closed");
+});
+
+test("a request the provider never ran costs nothing and only feeds the circuit breaker", async () => {
+  const f = interruptedService("unbilled");
+  assert.equal(await f.run(), "failed");
+  assert.equal(f.store.usageSnapshot()[0]?.inputTokens, 0);
+  assert.equal(f.store.usageSnapshot()[0]?.estimatedCostMicros, 0);
+  await f.run();
+  await f.run();
+  // Three consecutive failures open the short circuit (minutes), not the quarantine.
+  const status = await f.service.getSafetyStatus(context);
+  assert.equal(status.circuit_state, "open");
+  assert.notEqual(status.circuit_open_until, "9999-12-31T00:00:00.000Z");
+  assert.equal(f.calls(), 3);
+});
 
 test("budget rejection before entering the provider does not charge or quarantine", async () => {
   const store = new MemoryAiConversationStore({

@@ -167,7 +167,9 @@ async function runLoop(
     while (!signal.aborted) {
       let continueWithTool = false;
       const outputRedactor = new AiStreamingRedactor();
+      // ADR-82 r1: owed until the provider reports usage, unless it never ran the call.
       providerPendingUsage = true;
+      let accepted = false;
       for await (const providerEvent of provider.stream({
         messages: Object.freeze(activeMessages),
         tools:
@@ -181,6 +183,9 @@ async function runLoop(
         if (providerEventCount >= AI_STREAM_LIMITS.maxEvents) {
           throw new Error("AI_OUTPUT_LIMIT");
         }
+        if (providerEvent.type === "error" && !accepted && providerEvent.unbilled === true)
+          providerPendingUsage = false;
+        accepted = true;
         if (providerEvent.type === "delta") {
           await persistContent(
             state,
@@ -326,12 +331,14 @@ async function runLoop(
     }
     throw new Error("AI_ABORTED");
   } catch (error) {
+    const errorCode = safeErrorCode(error, signal);
     if (providerPendingUsage && state.quarantineUsage === undefined) {
+      // Usage the provider never reported is debited in full. A staff stop says nothing
+      // about the provider, so only provider-side losses count towards quarantine.
       state.inputTokens = AI_STREAM_LIMITS.maxInputTokens;
       state.outputTokens = turn.maxOutputTokens;
-      state.quarantineUsage = "usage_unknown";
+      if (errorCode !== "AI_ABORTED") state.quarantineUsage = "usage_unknown";
     }
-    const errorCode = safeErrorCode(error, signal);
     try {
       accountForEvent(
         state,

@@ -27,7 +27,7 @@ test("OwnerAiSafetyView exposes hard-off, integer usage, and safety controls", (
   assert.match(html, /data-state="ready"/u);
   assert.match(html, /默认关闭/u);
   assert.match(html, /18 tokens/u);
-  assert.match(html, /39 \/ 500000 微单位/u);
+  assert.match(html, /约 0\.000039 \/ 0\.5 元/u);
   assert.match(html, /已熔断/u);
   assert.match(html, /PII 脱敏开启 · HTTPS 443 白名单/u);
 });

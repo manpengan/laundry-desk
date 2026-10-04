@@ -52,6 +52,8 @@ export type AiProviderEvent =
         | "provider_response_too_large"
         | "provider_network_denied"
         | "provider_failed";
+      /** ADR-82 r1: the provider cannot have run this request; nothing is owed. */
+      unbilled?: true;
     }>;
 
 export type AiProviderRequest = Readonly<{

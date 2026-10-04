@@ -17,10 +17,19 @@ const DEFAULT_POLICY: MemoryAiSafetyPolicy = Object.freeze({
   circuitOpenMs: 300_000,
 });
 
+/** ADR-82 r1: unknown usages tolerated in a rolling day before the runtime is disabled. */
+export const AI_UNKNOWN_USAGE_LIMIT = 3;
+const UNKNOWN_USAGE_WINDOW_MS = 86_400_000;
+
 export class MemoryAiSafetyState {
   private quarantined = false;
-  quarantine(): void {
-    this.quarantined = true;
+  private unknownUsageAt: readonly number[] = [];
+  /** Mirrors public.ai_usage_quarantine: contract breaches disable at once, unknowns at the limit. */
+  recordUnknownUsage(reason: "usage_unknown" | "outside_contract", at: Date): void {
+    const since = at.getTime() - UNKNOWN_USAGE_WINDOW_MS;
+    this.unknownUsageAt = [...this.unknownUsageAt.filter((time) => time > since), at.getTime()];
+    if (reason === "outside_contract" || this.unknownUsageAt.length >= AI_UNKNOWN_USAGE_LIMIT)
+      this.quarantined = true;
   }
   private reservations = new Map<string, Readonly<{ amount: number; month: string }>>();
   private consecutiveProviderFailures = 0;

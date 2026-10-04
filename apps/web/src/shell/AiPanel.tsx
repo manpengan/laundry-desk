@@ -50,6 +50,15 @@ function nextId(): string {
   return globalThis.crypto.randomUUID();
 }
 
+const STOP_REASONS: Readonly<Record<string, string>> = Object.freeze({
+  AI_PROVIDER_FAILED: "服务商暂时不可用或网络中断",
+  AI_ABORTED: "已按要求停止",
+  AI_TOOL_LIMIT: "查询步骤超过上限",
+  AI_TOOL_TIMEOUT: "查询超时",
+  AI_DEADLINE_EXCEEDED: "回答超时",
+  AI_UNAVAILABLE: "AI 当前不可用（预算已用完或暂时熔断）",
+});
+
 function systemText(event: AiStreamEvent): string | null {
   if (event.type === "done" && event.finish_reason === "limit")
     return "回答已达到本次生成上限，内容可能不完整；未执行截断的操作请求。";
@@ -58,8 +67,8 @@ function systemText(event: AiStreamEvent): string | null {
     return `工具 ${event.tool}：${event.outcome}（回答须附来源与筛选条件）`;
   if (event.type === "error")
     return event.code === "AI_OUTPUT_LIMIT"
-      ? "AI 已停止：供应商用量或输出超出本次限制。请检查 AI 配置和供应商账单；用量无法核实时，管理员须重新配置后才能继续。"
-      : `AI 已停止（${event.code}）。如本次未收到用量报告，预留额度已保守结算；管理员核查供应商账单和 AI 配置后可恢复。`;
+      ? "AI 已停止：服务商报告的用量或输出超出本次限制，本次预留额度已全额结算。用量明显异常时系统会停用 AI，管理员核对服务商账单后可在设置里重新启用。"
+      : `AI 已停止：${STOP_REASONS[event.code] ?? "本次没有完成"}。如本次没收到用量报告，预留额度已保守结算；24 小时内 3 次无法核实时系统会停用 AI，管理员核对账单后可在设置里重新启用。`;
   return null;
 }
 
