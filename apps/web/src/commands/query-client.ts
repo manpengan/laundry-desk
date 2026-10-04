@@ -3,6 +3,7 @@
  * Auth headers mirror createHttpCommandClient (Bearer + CSRF + credentials).
  */
 
+import { localizeFailure } from "./error-copy.js";
 import { filterDemoCatalog } from "./mock-catalog.js";
 import { requestFailureResult } from "./request-abort.js";
 import type { CommandFailure, CommandResult, QueryExecutionOptions, QueryPort } from "./types.js";
@@ -47,13 +48,17 @@ function parseFailure(body: unknown): CommandFailure {
         ? { confirm_ref: err.detail.confirm_ref }
         : {}),
       ...(typeof err.detail.message === "string" ? { message: err.detail.message } : {}),
+      ...(typeof err.detail.reason === "string" ? { reason: err.detail.reason } : {}),
+      ...(typeof err.detail.path === "string" ? { path: err.detail.path } : {}),
     });
   }
-  return Object.freeze({
-    code,
-    ...(message !== undefined ? { message } : {}),
-    ...(detail !== undefined ? { detail } : {}),
-  });
+  return localizeFailure(
+    Object.freeze({
+      code,
+      ...(message !== undefined ? { message } : {}),
+      ...(detail !== undefined ? { detail } : {}),
+    }),
+  );
 }
 
 export function createHttpQueryClient(options: HttpQueryClientOptions): QueryPort {

@@ -1,4 +1,5 @@
 import { readConfirmationSummary } from "../commands/confirmation-summary.js";
+import { localizeFailure } from "../commands/error-copy.js";
 import type { CommandErrorDetail, CommandResult } from "../commands/types.js";
 import type { HealthResult } from "./types.js";
 import {
@@ -28,7 +29,9 @@ export function readDesktopFailure(value: unknown): DesktopFailure | null {
 
 function readCommandDetail(value: unknown): CommandErrorDetail | null {
   if (!isRecord(value)) return null;
-  const allowed = ["kind", "confirm_ref", "message", "summary"] as const;
+  // `reason` and `path` belong to the contract's reason/field details; rejecting them
+  // turned every server validation error into a bridge format error.
+  const allowed = ["kind", "confirm_ref", "message", "summary", "reason", "path"] as const;
   const keys = Reflect.ownKeys(value);
   if (
     !keys.every(
@@ -37,7 +40,7 @@ function readCommandDetail(value: unknown): CommandErrorDetail | null {
   ) {
     return null;
   }
-  for (const key of ["kind", "confirm_ref", "message"] as const) {
+  for (const key of ["kind", "confirm_ref", "message", "reason", "path"] as const) {
     if (value[key] !== undefined && typeof value[key] !== "string") return null;
   }
   const summary = value.summary === undefined ? undefined : readConfirmationSummary(value.summary);
@@ -46,6 +49,8 @@ function readCommandDetail(value: unknown): CommandErrorDetail | null {
     ...(typeof value.kind === "string" ? { kind: value.kind } : {}),
     ...(typeof value.confirm_ref === "string" ? { confirm_ref: value.confirm_ref } : {}),
     ...(typeof value.message === "string" ? { message: value.message } : {}),
+    ...(typeof value.reason === "string" ? { reason: value.reason } : {}),
+    ...(typeof value.path === "string" ? { path: value.path } : {}),
     ...(summary === undefined ? {} : { summary }),
   });
 }
@@ -68,11 +73,13 @@ function readCommandFailure<T>(value: unknown): CommandResult<T> | null {
   if (detail === null) return null;
   return Object.freeze({
     ok: false,
-    error: Object.freeze({
-      code: error.code,
-      ...(detail === undefined ? {} : { detail }),
-      ...(typeof error.message === "string" ? { message: error.message } : {}),
-    }),
+    error: localizeFailure(
+      Object.freeze({
+        code: error.code,
+        ...(detail === undefined ? {} : { detail }),
+        ...(typeof error.message === "string" ? { message: error.message } : {}),
+      }),
+    ),
   });
 }
 
