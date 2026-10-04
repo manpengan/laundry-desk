@@ -47,3 +47,13 @@
 - [微信退款指引](https://pay.wechatpay.cn/doc/v3/merchant/4013071031)
 - [支付宝官方 Node SDK v3 签名实现](https://github.com/alipay/alipay-sdk-nodejs-all/blob/master/src/alipay.ts)
 - [支付宝官方 v3 接口与数据模型](https://github.com/alipay/alipay-sdk-java-all/tree/master/v3)
+
+## 修订 r1（2026-10-04，[ADR-91](2026-10-04-adr-91-pr229-remediation.md)）
+
+- 渠道结果分为“未发出 / 被拒绝 / 结果不明”。未发出与被拒绝直接关单，订单不再被锁。
+- 过期加 2 分钟宽限后主动关单：微信 close，支付宝 trade.cancel。自动查询逐步放慢，过期满 24 小时转为需店长核对。
+- 新增管理员“人工核销”，只能判为未收款并关单，需密码与核对依据，留审计。
+- 扫码收款入口移到取衣页，店员可出码、查询和关闭；设置页保留记录、退款、对账和商户配置。
+- 在途收款阻断取衣时，返回 `payment_pending` 的中文说明，不再返回 500。
+- 对账可直接导入微信交易账单与支付宝业务明细，规范 CSV 保留为高级选项。
+- `time_expire` 改为 RFC3339 格式；支付宝全额退款后的 TRADE_CLOSED 通知做幂等处理。

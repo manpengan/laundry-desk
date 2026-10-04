@@ -35,3 +35,14 @@
 - [SendSms](https://help.aliyun.com/zh/sms/developer-reference/api-dysmsapi-2017-05-25-sendsms)
 - [QuerySendDetails](https://help.aliyun.com/zh/sms/developer-reference/api-dysmsapi-2017-05-25-querysenddetails)
 - [ACS3 请求签名](https://help.aliyun.com/zh/sdk/product-overview/v3-request-structure-and-signature)
+
+## 修订 r1（2026-10-04，[ADR-91](2026-10-04-adr-91-pr229-remediation.md)）
+
+- 模板参数改为 `tickets`、`garment_count`、`balance_yuan`（如 `20.00`），不再发送按分计的 `balance_cents`。本地话术两种占位都接受，默认按元。
+- 失败分类：
+  - 未发出：凭据不可用、连接未建立、`isp.SYSTEM_ERROR`。
+  - 被拒绝：HTTP 4xx 或业务码，常见码映射为中文原因。
+  - 结果不明：仅限发出后中断、5xx 或无法解析的成功应答。
+- 未发出与被拒绝释放费用预留，转人工联系并显示原因，不自动重发；结果不明保留预留。
+- 每次没有成功受理，都写一条不含手机号、正文和密钥的结构化日志。
+- 设置页费用按元填写。

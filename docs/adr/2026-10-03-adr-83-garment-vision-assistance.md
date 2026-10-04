@@ -27,3 +27,7 @@
 本地合成测试覆盖真实图片解码和去元数据、照片租户与哈希、权限与 CSRF、同意、取消、模型能力拒绝、严格输出、工具拒绝、重复请求、预算不足、异常用量停用及桌面取消。真实 PostgreSQL 测试验证停用配置与扣账审计的原子性和进程重建后的持续拒绝。本批未使用真实外部密钥，未把本地协议测试计为供应商或 Windows 安装形态验收。
 
 官方接口依据（2026-10-03 核对）：[Anthropic 图片输入](https://platform.claude.com/docs/en/build-with-claude/vision)、[Anthropic 模型能力](https://platform.claude.com/docs/en/api/models/retrieve)、[Gemini 图片型号](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash)、[Gemini generateContent 与用量字段](https://ai.google.dev/api/generate-content)。适配器保持现有固定端点，不接受任意 base URL。
+
+## 修订 r1（2026-10-04，[ADR-91](2026-10-04-adr-91-pr229-remediation.md)）
+
+视觉辅助与助手共用同一运行器，用量扣费与隔离规则随 ADR-82 r1 一并变更。
