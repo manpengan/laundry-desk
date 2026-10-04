@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AiAssistantToolNameSchema } from "./assistant.js";
+import { AiOperationPreviewSchema } from "./operations.js";
 
 export const AI_PROMPT_MAX_CHARS = 8_000;
 export const AI_TURN_MAX_OUTPUT_TOKENS = 1_024;
@@ -71,41 +72,56 @@ export const AiStreamToolNameSchema = z.union([
   AiAssistantToolNameSchema,
 ]);
 
-export const AiStreamEventSchema = z.discriminatedUnion("type", [
-  EventBaseSchema.extend({
-    type: z.literal("content_delta"),
-    text: z.string().min(1).max(4_096),
-  }).strict(),
-  EventBaseSchema.extend({
-    type: z.literal("tool_call"),
-    tool: AiStreamToolNameSchema,
-    step: z.number().int().min(1).max(4),
-  }).strict(),
-  EventBaseSchema.extend({
-    type: z.literal("tool_result"),
-    tool: AiStreamToolNameSchema,
-    step: z.number().int().min(1).max(4),
-    outcome: z.enum(["succeeded", "failed", "timed_out", "cancelled"]),
-  }).strict(),
-  EventBaseSchema.extend({
-    type: z.literal("done"),
-    finish_reason: z.enum(["stop", "limit"]),
-    input_tokens: z.number().int().nonnegative(),
-    output_tokens: z.number().int().nonnegative(),
-  }).strict(),
-  EventBaseSchema.extend({
-    type: z.literal("error"),
-    code: z.enum([
-      "AI_UNAVAILABLE",
-      "AI_ABORTED",
-      "AI_DEADLINE_EXCEEDED",
-      "AI_OUTPUT_LIMIT",
-      "AI_TOOL_LIMIT",
-      "AI_TOOL_TIMEOUT",
-      "AI_PROVIDER_FAILED",
-    ]),
-  }).strict(),
-]);
+export const AiStreamEventSchema = z
+  .discriminatedUnion("type", [
+    EventBaseSchema.extend({
+      type: z.literal("content_delta"),
+      text: z.string().min(1).max(4_096),
+    }).strict(),
+    EventBaseSchema.extend({
+      type: z.literal("tool_call"),
+      tool: AiStreamToolNameSchema,
+      step: z.number().int().min(1).max(4),
+    }).strict(),
+    EventBaseSchema.extend({
+      type: z.literal("tool_result"),
+      tool: AiStreamToolNameSchema,
+      step: z.number().int().min(1).max(4),
+      outcome: z.enum(["succeeded", "failed", "timed_out", "cancelled"]),
+      preview: AiOperationPreviewSchema.optional(),
+    }).strict(),
+    EventBaseSchema.extend({
+      type: z.literal("done"),
+      finish_reason: z.enum(["stop", "limit"]),
+      input_tokens: z.number().int().nonnegative(),
+      output_tokens: z.number().int().nonnegative(),
+    }).strict(),
+    EventBaseSchema.extend({
+      type: z.literal("error"),
+      code: z.enum([
+        "AI_UNAVAILABLE",
+        "AI_ABORTED",
+        "AI_DEADLINE_EXCEEDED",
+        "AI_OUTPUT_LIMIT",
+        "AI_TOOL_LIMIT",
+        "AI_TOOL_TIMEOUT",
+        "AI_PROVIDER_FAILED",
+      ]),
+    }).strict(),
+  ])
+  .superRefine((event, context) => {
+    if (
+      event.type === "tool_result" &&
+      event.preview !== undefined &&
+      (event.tool !== "operations.preview" || event.outcome !== "succeeded")
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["preview"],
+        message: "Preview requires a successful operations.preview result",
+      });
+    }
+  });
 
 export const AiEventReplayQuerySchema = z
   .object({

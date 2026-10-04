@@ -217,7 +217,16 @@ const ErrorDetailSchema = z.discriminatedUnion("kind", [
   z
     .object({
       kind: z.literal("reason"),
-      reason: z.enum(["constraint", "unavailable", "retry_later", "idempotency_conflict"]),
+      reason: z.enum([
+        "constraint",
+        "unavailable",
+        "retry_later",
+        "idempotency_conflict",
+        // ADR-85 r1: an unfinished provider collection/refund holds the order or account.
+        "payment_pending",
+        // ADR-85 r1: provider money must go back through the provider refund.
+        "channel_refund_required",
+      ]),
     })
     .strict(),
   z

@@ -1,10 +1,11 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('gui','install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','restore','maintenance-recover')][string]$Action = 'gui',
+  [ValidateSet('gui','install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config')][string]$Action = 'gui',
   [string]$BackupId,
   [string]$ConfirmationDigest
 )
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version Latest
 $policy = [Environment]::GetEnvironmentVariable('PSExecutionPolicyPreference', 'Process')
 $allowed = @('SystemRoot','WINDIR','TEMP','TMP','LOCALAPPDATA','APPDATA','USERPROFILE','USERNAME','USERDOMAIN')
@@ -27,22 +28,22 @@ function Assert-EntryArguments {
   $hasConfirmation = -not [string]::IsNullOrEmpty($Confirmation)
   if (($hasId -and $Id -cnotmatch '^b_[a-f0-9]{32}$') -or ($hasConfirmation -and $Confirmation -cnotmatch '^[a-f0-9]{64}$') -or
       ($Verb -ceq 'restore' -and (-not $hasId -or -not $hasConfirmation)) -or
-      ($Verb -ceq 'backup-verify' -and (-not $hasId -or $hasConfirmation)) -or
-      ($Verb -cne 'restore' -and $Verb -cne 'backup-verify' -and ($hasId -or $hasConfirmation))) {
+      ((@('backup-verify','backup-drill') -ccontains $Verb) -and (-not $hasId -or $hasConfirmation)) -or
+      ($Verb -cne 'restore' -and (@('backup-verify','backup-drill') -cnotcontains $Verb) -and ($hasId -or $hasConfirmation))) {
     throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID'
   }
 }
 
 function Invoke-RuntimeEntryAction {
-  param([string]$Verb, [string]$Id, [string]$Confirmation)
+  param([string]$Verb, [string]$Id, [string]$Confirmation, [string]$InputJson)
   Assert-EntryArguments $Verb $Id $Confirmation
-  if (@('install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','restore','maintenance-recover') -cnotcontains $Verb) {
+  if (@('install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -cnotcontains $Verb) {
     throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID'
   }
   if ($Verb -ceq 'install' -or $Verb -ceq 'upgrade') { [void](Install-RuntimeEntry) }
   $arguments = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',
     (Join-Path $PayloadRoot 'scripts\lifecycle-launch.ps1'),'-Action',$Verb,'-Payload',$PayloadRoot,'-ManifestDigest',$BoundManifest)
-  if ($Verb -ceq 'restore' -or $Verb -ceq 'backup-verify') { $arguments += @('-BackupId', $Id) }
+  if ($Verb -ceq 'restore' -or (@('backup-verify','backup-drill') -ccontains $Verb)) { $arguments += @('-BackupId', $Id) }
   if ($Verb -ceq 'restore') { $arguments += @('-ConfirmationDigest', $Confirmation) }
   $rendered = @($arguments | ForEach-Object {
     if ($_ -match '["\r\n\x00]') { throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID' }
@@ -56,8 +57,23 @@ function Invoke-RuntimeEntryAction {
   $process.StartInfo.CreateNoWindow = $true
   $process.StartInfo.RedirectStandardOutput = $true
   $process.StartInfo.RedirectStandardError = $true
+  $inputProtocol = @('portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -ccontains $Verb
+  $process.StartInfo.RedirectStandardInput = $inputProtocol
+  $inputBytes = $null
   try {
+    if ($inputProtocol) {
+      if ([string]::IsNullOrEmpty($InputJson)) { throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID' }
+      $inputBytes = (New-Object Text.UTF8Encoding($false, $true)).GetBytes($InputJson)
+      if ($inputBytes.Length -gt 8192) { throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID' }
+    } elseif (-not [string]::IsNullOrEmpty($InputJson)) { throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID' }
     if (-not $process.Start()) { throw 'WINDOWS_RUNTIME_ENTRY_PROCESS_FAILED' }
+    if ($inputProtocol) {
+      $process.StandardInput.BaseStream.Write($inputBytes, 0, $inputBytes.Length)
+      $process.StandardInput.BaseStream.Flush()
+      $process.StandardInput.Close()
+      [Array]::Clear($inputBytes, 0, $inputBytes.Length)
+      $InputJson = $null
+    }
     $output = [LaundryRuntimeEntryTrust]::ReadBounded($process.StandardOutput)
     $errors = [LaundryRuntimeEntryTrust]::ReadBounded($process.StandardError)
     $deadline = [DateTime]::UtcNow.AddMinutes(15)
@@ -79,7 +95,11 @@ function Invoke-RuntimeEntryAction {
     $result = $text | ConvertFrom-Json
     if ($null -eq $result -or $result.assurance -cne 'development_only') { throw 'WINDOWS_RUNTIME_ENTRY_RESULT_INVALID' }
     return $text
-  } finally { $process.Dispose() }
+  } finally {
+    if ($null -ne $inputBytes) { [Array]::Clear($inputBytes, 0, $inputBytes.Length) }
+    $InputJson = $null
+    $process.Dispose()
+  }
 }
 
 try {
@@ -114,9 +134,19 @@ try {
   . (Join-Path $EntryRoot 'runtime-entry-shortcut.ps1')
   . (Join-Path $EntryRoot 'runtime-entry-install.ps1')
   if ($script:EntryInteractive) {
+    . (Join-Path $EntryRoot 'runtime-entry-data-ui.ps1')
+    . (Join-Path $EntryRoot 'runtime-entry-assistance-ui.ps1')
+    . (Join-Path $EntryRoot 'runtime-entry-schedule-ui.ps1')
     . (Join-Path $EntryRoot 'runtime-entry-ui.ps1')
     Show-RuntimeEntry
-  } else { [Console]::Out.WriteLine((Invoke-RuntimeEntryAction $Action $BackupId $ConfirmationDigest)) }
+  } else {
+    $inputJson = $null
+    if (@('portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -ccontains $Action) {
+      $inputJson = [LaundryRuntimeEntryTrust]::ReadProtocolInput()
+    }
+    try { [Console]::Out.WriteLine((Invoke-RuntimeEntryAction $Action $BackupId $ConfirmationDigest $inputJson)) }
+    finally { $inputJson = $null }
+  }
 } catch {
   $code = [string]($_.Exception.GetBaseException().Message)
   if ($code -cnotmatch '^WINDOWS_(RUNTIME_ENTRY|COMPANION)_[A-Z_]+$') { $code = 'WINDOWS_RUNTIME_ENTRY_FAILED' }

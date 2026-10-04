@@ -9,6 +9,8 @@ export type DesktopHttpRequest = Readonly<{
   redirect: "error";
   origin: typeof DESKTOP_REQUEST_ORIGIN;
   body?: string | Uint8Array;
+  /** Main-only request lifetime; never accepted from renderer data. */
+  signal?: AbortSignal;
 }>;
 
 export type DesktopRequestOptions = Readonly<{

@@ -31,6 +31,7 @@ import {
 import { APP_SCHEME } from "./lib/security-prefs.js";
 import { createAppProtocolHandler, registerAppProtocolScheme } from "./protocol.js";
 import { claimPrimaryInstance, onSecondInstance } from "./shell/single-instance.js";
+import { adoptLegacyUserData } from "./shell/user-data-identity.js";
 import { createAppTray } from "./shell/tray.js";
 import {
   configureDesktopSession,
@@ -67,19 +68,8 @@ import { FileGrantSequenceStore } from "./offline/grant-sequence-store.js";
 import { OfflineCommandRuntime } from "./offline/runtime.js";
 import { createOfflineDesktopService } from "./offline/service.js";
 import { OfflineReadCache } from "./offline/read-cache.js";
-import { createRuntimeUpdateIo, loadUpdatePublicKey } from "./upgrade/runtime-io.js";
-import { RuntimeUpdateStateStore } from "./upgrade/runtime-state.js";
-import { resolveUpdateConfiguration } from "./upgrade/update-config.js";
-import {
-  STAGED_HEALTH_ARGUMENT,
-  RuntimeUpdateController,
-  activationNonceFromArguments,
-  launchMacApp,
-  macAppBundlePath,
-  prepareRuntimeStartup,
-  runMacStagedHealth,
-  validateMacAppLaunch,
-} from "./upgrade/runtime-controller.js";
+import { STAGED_HEALTH_ARGUMENT } from "./upgrade/runtime-controller.js";
+import { prepareDesktopUpdate } from "./upgrade/desktop-update.js";
 const distDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = packageRootFromModuleUrl(import.meta.url);
 const spaResourceRoot = spaRootForRuntime({
@@ -97,6 +87,12 @@ let printerRuntime: ConfiguredPrinterRuntime | null = null;
 let offlineQueue: PersistentEncryptedQueue | null = null;
 let offlineRuntime: OfflineCommandRuntime | null = null;
 type BootMode = "normal" | "recovery";
+try {
+  adoptLegacyUserData(app);
+} catch {
+  // The shared directory stays intact for manual recovery; this build pairs afresh.
+  console.error("DESKTOP_LEGACY_USER_DATA_NOT_ADOPTED");
+}
 registerAppProtocolScheme(protocol);
 async function showMainWindow(): Promise<void> {
   if (!mainWindow) {
@@ -290,80 +286,35 @@ async function runApplication(): Promise<void> {
     return;
   }
 
-  let updateState: RuntimeUpdateStateStore | null = null;
-  let pendingConfirmation: Readonly<{ slot: "A" | "B"; nonce: string }> | null = null;
-  let bootMode: BootMode = "normal";
-  if (app.isPackaged && process.platform === "darwin") {
-    const currentAppPath = macAppBundlePath(process.execPath);
-    updateState = new RuntimeUpdateStateStore(join(app.getPath("userData"), "updates"), {
-      currentVersion: app.getVersion(),
-      currentAppPath,
-      minimumSecureVersion: app.getVersion(),
-    });
-    const startup = prepareRuntimeStartup(
-      updateState,
-      currentAppPath,
-      activationNonceFromArguments(process.argv),
-    );
-    if (startup.action === "launch") {
-      await validateMacAppLaunch(currentAppPath, startup.appPath);
-      launchMacApp(startup.appPath, startup.activationNonce);
-      app.quit();
-      return;
-    }
-    if (startup.action === "recovery") {
-      bootMode = "recovery";
-    } else {
-      pendingConfirmation = startup.pendingConfirmation;
-    }
-  }
-
-  await boot(bootMode);
-  if (bootMode === "normal" && updateState !== null && pendingConfirmation !== null) {
-    updateState.confirmActivation(
-      pendingConfirmation.slot,
-      pendingConfirmation.nonce,
-      new Date().toISOString(),
-    );
-  }
-
-  const updateConfiguration = await resolveUpdateConfiguration({
+  const updates = await prepareDesktopUpdate({
     isPackaged: app.isPackaged,
+    platform: process.platform,
+    version: app.getVersion(),
     resourcesPath: process.resourcesPath,
+    userData: app.getPath("userData"),
+    executable: process.execPath,
+    arguments: process.argv,
     env: process.env,
+    releaseInstanceLock: () => app.releaseSingleInstanceLock(),
   });
-  if (
-    bootMode === "normal" &&
-    updateConfiguration.enabled &&
-    updateState !== null &&
-    offlineQueue !== null
-  ) {
-    const publicKey = await loadUpdatePublicKey(
-      join(process.resourcesPath, "update", "update-public-key.pem"),
-    );
-    const controller = new RuntimeUpdateController({
-      manifestUrl: updateConfiguration.manifest_url,
-      publicKey,
-      context: {
-        channel: updateConfiguration.channel,
-        current_version: app.getVersion(),
-        installed_minimum_secure_version: updateState.snapshot().minimum_secure_version,
-        current_local_schema: 3,
-        supported_contracts_majors: [0],
-      },
-      state: updateState,
-      io: createRuntimeUpdateIo(),
-      queueStatus: () => offlineQueue!.status(),
-      stagedHealth: runMacStagedHealth,
-      setPrimaryLeaseBlocked: (blocked) => offlineRuntime?.setLeaseIssuanceBlocked(blocked),
-    });
-    void controller.checkAndStage().then((result) => {
-      console.log("[edge-agent] update check", result);
-    });
+  if (updates.launch !== null) {
+    updates.launch();
+    app.quit();
+    return;
+  }
+  await boot(updates.mode);
+  if (updates.mode === "normal") updates.confirm();
+  if (offlineQueue !== null) {
+    void updates
+      .check(
+        () => offlineQueue!.status(),
+        (blocked) => offlineRuntime?.setLeaseIssuanceBlocked(blocked),
+      )
+      .catch(() => console.error("[edge-agent] update check failed"));
   }
 }
 
-if (!claimPrimaryInstance(app)) {
+if (!process.argv.includes(STAGED_HEALTH_ARGUMENT) && !claimPrimaryInstance(app)) {
   app.quit();
 } else {
   const showMainWindowOrExit = (): void => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_PICKUP_REMINDER_TEMPLATE,
+  formatBalanceYuan,
   groupPickupReminders,
   isPickupReminderTemplate,
   renderPickupReminder,
@@ -55,12 +56,16 @@ describe("pickup reminder domain", () => {
     expect(grouped).toHaveLength(2);
   });
 
-  it("renders only the three frozen placeholders", () => {
+  it("renders only the frozen placeholders, with amounts in 元 by default", () => {
     const [group] = groupPickupReminders(rows, "customer");
     expect(group).toBeDefined();
     expect(renderPickupReminder(DEFAULT_PICKUP_REMINDER_TEMPLATE, group!)).toContain(
-      "T-001、T-002共3件",
+      "T-001、T-002共3件已可取，尚欠5.00元",
     );
+    // A typed legacy template keeps working.
+    expect(renderPickupReminder("欠{{balance_cents}}分", group!)).toBe("欠500分");
+    expect(formatBalanceYuan(2000)).toBe("20.00");
+    expect(formatBalanceYuan(5)).toBe("0.05");
     expect(isPickupReminderTemplate("{{tickets}} / {{unknown}}")).toBe(false);
     expect(() => renderPickupReminder("{{unknown}}", group!)).toThrow(/unsupported/u);
   });

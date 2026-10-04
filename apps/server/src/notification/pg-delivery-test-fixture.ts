@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
-import type { NotificationDeliveryBatchEnqueueResult } from "@laundry/contracts";
+import type {
+  NotificationDeliveryBatchEnqueueResult,
+  NotificationDeliveryCapabilityResult,
+} from "@laundry/contracts";
 
 import { executeCommand } from "../bus/executor.js";
 import { createPgIdempotencyStore } from "../bus/pg-idempotency.js";
@@ -189,6 +192,7 @@ export async function enqueueNotificationBatch(
   orderId: string,
   now: Date,
   deliveryStore: ReturnType<typeof createPgNotificationDeliveryStore>,
+  capability: NotificationDeliveryCapabilityResult = SOFTWARE_ONLY_NOTIFICATION_CAPABILITY,
 ): Promise<NotificationDeliveryBatchEnqueueResult> {
   const pendingStore = createPgPendingActionStore(appPool);
   const idempotencyStore = createPgIdempotencyStore(appPool);
@@ -198,7 +202,7 @@ export async function enqueueNotificationBatch(
         store: createPgNotificationStore(),
         delivery: Object.freeze({
           store: deliveryStore,
-          capability: SOFTWARE_ONLY_NOTIFICATION_CAPABILITY,
+          capability,
         }),
         now: () => now,
       }),
@@ -210,7 +214,7 @@ export async function enqueueNotificationBatch(
     order_ids: Object.freeze([orderId]),
     channel: "sms",
     template_code: "pickup_reminder_v1",
-    max_cost_cents: 0,
+    max_cost_cents: capability.max_batch_cost_cents ?? 0,
     min_age_days: 180,
     unpaid_only: true,
     garment_statuses: Object.freeze(["racked"]),

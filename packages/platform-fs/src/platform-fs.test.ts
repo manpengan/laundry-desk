@@ -11,6 +11,7 @@ import {
   inspectPrivateFile,
   inspectPrivateFileLinks,
   replaceFileWriteThrough,
+  publishFileNoReplace,
   securePrivateDirectory,
   securePrivateFile,
 } from "./index.js";
@@ -44,6 +45,28 @@ test("private files and atomic replacement use the active platform security cont
   await link(current, linked);
   await assert.rejects(() => inspectPrivateFile(current));
   assert.equal((await inspectPrivateFileLinks(current, 2)).scheme, before.scheme);
+});
+
+test("private publication keeps unique identity and refuses to replace a destination", async (t) => {
+  const root = await mkdtemp(join(await realpath(tmpdir()), "laundry-platform-publish-"));
+  t.after(async () => await rm(root, { force: true, recursive: true }));
+  await securePrivateDirectory(root);
+  const staged = join(root, "next.tmp");
+  const final = join(root, "photo.png");
+  await writeFile(staged, "new-photo", { mode: 0o600 });
+  await securePrivateFile(staged);
+  const before = await stat(staged);
+  await publishFileNoReplace(staged, final);
+  const after = await stat(final);
+  assert.equal(after.ino, before.ino);
+  assert.equal(after.nlink, 1);
+  await assert.rejects(stat(staged), { code: "ENOENT" });
+  await inspectPrivateFile(final);
+  await writeFile(staged, "collision", { mode: 0o600 });
+  await securePrivateFile(staged);
+  await assert.rejects(publishFileNoReplace(staged, final));
+  assert.equal(await readFile(final, "utf8"), "new-photo");
+  assert.equal(await readFile(staged, "utf8"), "collision");
 });
 
 test("private-file inspection rejects a broad POSIX mode", async (t) => {

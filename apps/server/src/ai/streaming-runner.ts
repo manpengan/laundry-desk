@@ -80,6 +80,8 @@ async function persistEvent(
 
 function accountForEvent(state: AiRuntimeState, event: AiStreamEvent): void {
   state.eventCount += 1;
+  if (event.type === "tool_result" && event.preview !== undefined)
+    state.outputBytes += Buffer.byteLength(JSON.stringify(event.preview), "utf8");
   if (event.type !== "content_delta") return;
   state.outputBytes += Buffer.byteLength(event.text, "utf8");
   state.assistantText += event.text;
@@ -159,24 +161,31 @@ async function runLoop(
   };
   let activeMessages = [...messages];
   let providerEventCount = 0;
+  let providerPendingUsage = false;
   try {
     if (safety.denialCode !== null) throw new Error(safety.denialCode);
     while (!signal.aborted) {
       let continueWithTool = false;
       const outputRedactor = new AiStreamingRedactor();
+      // ADR-82 r1: owed until the provider reports usage, unless it never ran the call.
+      providerPendingUsage = true;
+      let accepted = false;
       for await (const providerEvent of provider.stream({
         messages: Object.freeze(activeMessages),
         tools:
           assistantTool === undefined
             ? Object.freeze([SYNTHETIC_TOOL_DESCRIPTOR])
             : ASSISTANT_TOOL_DESCRIPTORS,
-        maxOutputTokens: turn.maxOutputTokens,
+        maxOutputTokens: Math.max(1, turn.maxOutputTokens - state.outputTokens),
         signal,
       })) {
         providerEventCount += 1;
         if (providerEventCount >= AI_STREAM_LIMITS.maxEvents) {
           throw new Error("AI_OUTPUT_LIMIT");
         }
+        if (providerEvent.type === "error" && !accepted && providerEvent.unbilled === true)
+          providerPendingUsage = false;
+        accepted = true;
         if (providerEvent.type === "delta") {
           await persistContent(
             state,
@@ -194,15 +203,30 @@ async function runLoop(
         if (providerEvent.type === "end") {
           const nextInputTokens = state.inputTokens + providerEvent.inputTokens;
           const nextOutputTokens = state.outputTokens + providerEvent.outputTokens;
-          if (nextInputTokens > AI_STREAM_LIMITS.maxInputTokens) throw new Error("AI_OUTPUT_LIMIT");
+          if (
+            !Number.isSafeInteger(nextInputTokens) ||
+            !Number.isSafeInteger(nextOutputTokens) ||
+            nextInputTokens < 0 ||
+            nextOutputTokens < 0 ||
+            nextInputTokens > AI_STREAM_LIMITS.maxInputTokens ||
+            nextOutputTokens > AI_STREAM_LIMITS.maxOutputTokens
+          ) {
+            // Usage beyond the storage contract is unknown: debit the entire reservation and quarantine.
+            state.inputTokens = AI_STREAM_LIMITS.maxInputTokens;
+            state.outputTokens = turn.maxOutputTokens;
+            state.quarantineUsage = "outside_contract";
+            throw new Error("AI_OUTPUT_LIMIT");
+          }
+          state.inputTokens = nextInputTokens;
+          state.outputTokens = nextOutputTokens;
+          providerPendingUsage = false;
           if (
             nextOutputTokens > turn.maxOutputTokens ||
             nextOutputTokens > AI_STREAM_LIMITS.maxOutputTokens
           ) {
             throw new Error("AI_OUTPUT_LIMIT");
           }
-          state.inputTokens = nextInputTokens;
-          state.outputTokens = nextOutputTokens;
+          state.finishReason = providerEvent.finishReason === "limit" ? "limit" : "stop";
           continueWithTool = providerEvent.finishReason === "tool_calls";
           continue;
         }
@@ -242,6 +266,12 @@ async function runLoop(
           args: providerEvent.args,
           parentSignal: signal,
         });
+        if (
+          toolResult.preview !== undefined &&
+          state.outputBytes + Buffer.byteLength(JSON.stringify(toolResult.preview), "utf8") >
+            AI_STREAM_LIMITS.maxOutputBytes
+        )
+          throw new Error("AI_OUTPUT_LIMIT");
         accountForEvent(
           state,
           await persistEvent(
@@ -253,6 +283,7 @@ async function runLoop(
               tool: toolName,
               step: state.toolSteps,
               outcome: toolResult.outcome,
+              ...(toolResult.preview === undefined ? {} : { preview: toolResult.preview }),
             },
             onEvent,
           ),
@@ -276,6 +307,7 @@ async function runLoop(
         ];
         continueWithTool = true;
       }
+      if (providerPendingUsage) throw new Error("AI_PROVIDER_FAILED");
       await persistContent(state, store, turn, context, outputRedactor.flush(), onEvent);
       state.outputRedactions += outputRedactor.drainRedactionCount();
       if (continueWithTool) continue;
@@ -300,6 +332,13 @@ async function runLoop(
     throw new Error("AI_ABORTED");
   } catch (error) {
     const errorCode = safeErrorCode(error, signal);
+    if (providerPendingUsage && state.quarantineUsage === undefined) {
+      // Usage the provider never reported is debited in full. A staff stop says nothing
+      // about the provider, so only provider-side losses count towards quarantine.
+      state.inputTokens = AI_STREAM_LIMITS.maxInputTokens;
+      state.outputTokens = turn.maxOutputTokens;
+      if (errorCode !== "AI_ABORTED") state.quarantineUsage = "usage_unknown";
+    }
     try {
       accountForEvent(
         state,

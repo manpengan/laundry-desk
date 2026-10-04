@@ -44,8 +44,13 @@ export type StatsDaySummaryResult = Readonly<{
   payable_cents: number;
   paid_cents: number;
   balance_cents: number;
+  /** Order payments before refunds. */
   payment_cents: number;
   picked_garment_count: number;
+  /** ADR-91 P1-5: 账目 real income for the day (net of refunds); absent without a ledger. */
+  real_income_cents?: number;
+  /** ADR-91 P1-5: 账目 performance income for the day; absent without a ledger. */
+  performance_income_cents?: number;
 }>;
 
 type DaySummaryInput = typeof StatsDaySummaryInputSchema;

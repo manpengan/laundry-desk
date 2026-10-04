@@ -53,6 +53,7 @@ export async function runtimeEnvironment(root, payload, manifest, io) {
     ),
     LAUNDRY_RUNTIME_SCHEMA_SHA256: digest(await readFile(join(payload, "metadata/schema.md"))),
     LAUNDRY_NOTIFICATION_PROVIDER_MODE: "disabled",
+    LAUNDRY_PHOTO_STORE_DIR: join(root, "photos"),
   });
   for (const [name, file] of Object.entries(secretNames)) {
     const path = join(root, "secrets", file);

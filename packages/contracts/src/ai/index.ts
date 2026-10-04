@@ -107,3 +107,20 @@ export type {
   AiAssistantToolName,
   AiAssistantToolResult,
 } from "./assistant.js";
+export {
+  AiRuntimeSettingsSchema,
+  AiRuntimeConfigSchema,
+  AiRuntimeConfigRequestSchema,
+  AiRuntimeConfigResponseSchema,
+} from "./runtime-config.js";
+export type { AiRuntimeConfig, AiRuntimeConfigRequest } from "./runtime-config.js";
+export {
+  DesktopAiInputSchema,
+  DesktopAiResultSchema,
+  DesktopAiStreamResponseSchema,
+  DesktopAiCancelResponseSchema,
+} from "./desktop.js";
+export type { DesktopAiInput } from "./desktop.js";
+export * from "./operations.js";
+
+export * from "./vision.js";

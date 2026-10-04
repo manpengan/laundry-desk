@@ -87,6 +87,8 @@ async function readBounded(response: Response): Promise<Uint8Array | null> {
 }
 
 export function createHttpDeliveryEvidenceMediaPort(options: Options): DeliveryEvidenceMediaPort {
+  // Call unbound: invoked as a method of options, a bare window.fetch throws Illegal invocation.
+  const { fetchImpl } = options;
   const base = options.apiBaseUrl.replace(/\/$/u, "");
   return Object.freeze({
     async upload(input, requestOptions = {}) {
@@ -105,7 +107,7 @@ export function createHttpDeliveryEvidenceMediaPort(options: Options): DeliveryE
         captured_at: String(input.captured_at),
       });
       try {
-        const response = await options.fetchImpl(
+        const response = await fetchImpl(
           `${base}/api/v2/delivery-evidence/attachments?${query.toString()}`,
           {
             method: "POST",
@@ -142,7 +144,7 @@ export function createHttpDeliveryEvidenceMediaPort(options: Options): DeliveryE
       const token = options.getAccessToken();
       if (token === null) return failure("AUTHENTICATION_FAILED", "未登录");
       try {
-        const response = await options.fetchImpl(
+        const response = await fetchImpl(
           `${base}/api/v2/delivery-evidence/attachments/${attachmentId}`,
           {
             credentials: "include",

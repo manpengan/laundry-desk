@@ -30,6 +30,9 @@ export type DaySummaryView = Readonly<{
   balance_cents: number;
   payment_cents: number;
   picked_garment_count: number;
+  /** ADR-91 P1-5: the 账目 report's net receipts and sales for the same day. */
+  real_income_cents?: number;
+  performance_income_cents?: number;
 }>;
 
 export type StatsPageProps = {
@@ -91,6 +94,8 @@ export function parseDaySummary(value: unknown): DaySummaryView | null {
   ) {
     return null;
   }
+  const real_income_cents = asInt(value.real_income_cents);
+  const performance_income_cents = asInt(value.performance_income_cents);
   return Object.freeze({
     business_date: value.business_date,
     order_count,
@@ -100,6 +105,9 @@ export function parseDaySummary(value: unknown): DaySummaryView | null {
     balance_cents,
     payment_cents,
     picked_garment_count,
+    ...(real_income_cents === null || performance_income_cents === null
+      ? {}
+      : { real_income_cents, performance_income_cents }),
   });
 }
 

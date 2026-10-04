@@ -7,7 +7,7 @@ import { useRef } from "react";
 const VARIABLES = Object.freeze([
   Object.freeze({ token: "{{tickets}}", label: "票号" }),
   Object.freeze({ token: "{{garment_count}}", label: "件数" }),
-  Object.freeze({ token: "{{balance_cents}}", label: "欠款（分）" }),
+  Object.freeze({ token: "{{balance_yuan}}", label: "欠款（元）" }),
 ]);
 
 const SAMPLE_GROUP = Object.freeze({

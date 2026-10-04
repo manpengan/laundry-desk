@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { win32 } from "node:path";
 import { BACKUP_ACTIONS, requireBackupOptions } from "./backup-contract.mjs";
+import { DATA_ACTIONS, requireDataOptions } from "./data-options.mjs";
+import { SCHEDULE_ACTIONS, requireSchedule } from "./schedule-contract.mjs";
 
 // Execute the actual state machine with faulting OS/database boundaries. This
 // keeps failure ordering testable without starting Windows processes on macOS.
@@ -27,6 +29,10 @@ function fixture({ stopFailures = 0, startFailure = false, maintenance = null } 
     process: { platform: "win32", arch: "x64", env: { LOCALAPPDATA: "C:\\User\\Local" } },
     BACKUP_ACTIONS,
     requireBackupOptions,
+    DATA_ACTIONS,
+    requireDataOptions,
+    SCHEDULE_ACTIONS,
+    requireSchedule,
     readMaintenance: async () => maintenance,
     backupMaintenance: async () => {
       throw new Error("UNEXPECTED_MAINTENANCE_ENTRY");

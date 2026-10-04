@@ -1,7 +1,9 @@
 import { z } from "zod";
+import type { AiProviderImage } from "./vision-provider-content.js";
 import {
   AI_ASSISTANT_TOOL_NAMES,
   AiAssistantToolCallSchema,
+  AiOperationDraftSchema,
   type AiAssistantToolCall,
   type AiAssistantToolName,
   type AiAssistantToolResult,
@@ -18,6 +20,7 @@ export type AiProviderToolName = "synthetic.lookup" | AiAssistantToolName;
 export type AiProviderMessage = Readonly<{
   role: "user" | "assistant" | "tool";
   content: string;
+  images?: readonly AiProviderImage[];
   toolCallId?: string;
   toolName?: AiProviderToolName;
   toolArgs?: unknown;
@@ -33,7 +36,7 @@ export type AiProviderEvent =
     }>
   | Readonly<{
       type: "end";
-      finishReason: "stop" | "tool_calls";
+      finishReason: "stop" | "tool_calls" | "limit";
       inputTokens: number;
       outputTokens: number;
     }>
@@ -49,6 +52,8 @@ export type AiProviderEvent =
         | "provider_response_too_large"
         | "provider_network_denied"
         | "provider_failed";
+      /** ADR-82 r1: the provider cannot have run this request; nothing is owed. */
+      unbilled?: true;
     }>;
 
 export type AiProviderRequest = Readonly<{
@@ -132,6 +137,23 @@ export const SYNTHETIC_TOOL_DESCRIPTOR = Object.freeze({
 });
 
 const ASSISTANT_INPUT_SCHEMAS = Object.freeze({
+  "operations.preview": z.toJSONSchema(AiOperationDraftSchema),
+  "business.trend": {
+    type: "object",
+    additionalProperties: false,
+    required: ["days"],
+    properties: { days: { enum: [7, 30] } },
+  },
+  "pickup.candidates": {
+    type: "object",
+    additionalProperties: false,
+    required: ["min_age_days", "unpaid_only", "limit"],
+    properties: {
+      min_age_days: { enum: [30, 90, 180] },
+      unpaid_only: { type: "boolean" },
+      limit: { type: "integer", minimum: 1, maximum: 10 },
+    },
+  },
   "business.summary": Object.freeze({
     type: "object",
     additionalProperties: false,
@@ -142,7 +164,7 @@ const ASSISTANT_INPUT_SCHEMAS = Object.freeze({
     additionalProperties: false,
     required: Object.freeze(["scope", "query"]),
     properties: Object.freeze({
-      scope: Object.freeze({ enum: Object.freeze(["orders", "customers"]) }),
+      scope: Object.freeze({ enum: Object.freeze(["orders", "customers", "garments"]) }),
       query: Object.freeze({ type: "string", minLength: 1, maxLength: 64 }),
       limit: Object.freeze({ type: "integer", minimum: 1, maximum: 10 }),
     }),
@@ -164,7 +186,10 @@ export const ASSISTANT_TOOL_DESCRIPTORS = Object.freeze(
   AI_ASSISTANT_TOOL_NAMES.map((name) =>
     Object.freeze({
       name,
-      description: `Execute the bounded read-only ${name} projection.`,
+      description:
+        name === "operations.preview"
+          ? "Prepare an R3 confirmation card only. Never executes or sends messages; the human must confirm independently."
+          : `Execute the bounded read-only ${name} projection.`,
       inputSchema: ASSISTANT_INPUT_SCHEMAS[name],
     }),
   ),

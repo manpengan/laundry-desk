@@ -124,6 +124,9 @@
 /* Top-center under the 64px top bar: clear of the pinned 开单 / 取衣 action
    bars at the bottom and of panel actions at the sides. Toasts never block
    the control underneath; only their × button takes the pointer. */
+/* ADR-91 P1-9: top centre, under the header. Every bottom placement covers a primary
+   action (开单's sticky checkout bar, 取衣's collect bar); toasts now end with their page
+   instead. The viewport passes pointer events through; only a close button is a target. */
 .ld-toast-viewport {
   position: fixed;
   top: 76px;

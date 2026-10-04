@@ -4,6 +4,8 @@ import { MAX_BACKUPS, requireBackupOptions, requireMaintenance } from "./backup-
 import { databaseTools } from "./backup-database.mjs";
 import { pgControl } from "./lifecycle-process.mjs";
 import { runtimeEnvironment } from "./lifecycle-environment.mjs";
+import { restorePhotos } from "./backup-photo-files.mjs";
+import { resetRollbackAuthority } from "./restore-authority.mjs";
 import {
   backupDirectories,
   backupSpace,
@@ -71,7 +73,7 @@ export async function backupMaintenance(action, options, lifecycle, dependencies
     fail("MAINTENANCE_RELEASE_MISMATCH");
   let target;
   if (action !== "maintenance-recover") {
-    if (action === "restore")
+    if (action === "restore" || action === "backup-drill")
       target = await getBackup(context, options.backupId, options.confirmation);
     await backupSpace(root);
     if ((await backupDirectories(root, io, platform)).length >= MAX_BACKUPS)
@@ -86,6 +88,7 @@ export async function backupMaintenance(action, options, lifecycle, dependencies
         target: target ? { id: target.id, digest: target.digest } : null,
         safety: null,
         candidate: null,
+        ...(action === "restore" ? { authority_reset: false } : {}),
       });
     } catch (error) {
       // The durable record could already exist despite a lost write acknowledgement.
@@ -97,6 +100,13 @@ export async function backupMaintenance(action, options, lifecycle, dependencies
   let result;
   try {
     await stop(entry);
+    if (
+      action === "maintenance-recover" &&
+      journal.phase === "verified" &&
+      journal.operation === "restore" &&
+      journal.authority_reset !== true
+    )
+      fail("RESTORE_AUTHORITY_RECOVERY_REQUIRED");
     await control("start", root, payload, env);
     if (action === "maintenance-recover") {
       if (journal.phase === "verified")
@@ -117,6 +127,25 @@ export async function backupMaintenance(action, options, lifecycle, dependencies
         await save({ ...journal, phase: "restoring", candidate: await database.candidate() });
         await save({ ...journal, candidate: await database.create(journal.candidate) });
         await database.restore(journal.candidate, target);
+        if (action === "backup-drill") {
+          await database.recover(journal.candidate);
+          await database.verify();
+          await control("stop", root, payload, env);
+          await save(null);
+          if (wasRunning) await start(entry);
+          return {
+            status: getState().phase,
+            drilled_backup: target.id,
+            assurance: "development_only",
+          };
+        }
+        await (dependencies.resetAuthority ?? resetRollbackAuthority)(
+          context,
+          journal.candidate.name,
+        );
+        await database.verify(journal.candidate.name, target.photos);
+        await save({ ...journal, authority_reset: true });
+        await restorePhotos(context, target);
         await save({ ...journal, phase: "switching" });
         await database.swap(journal.candidate);
         await database.verify();

@@ -29,6 +29,13 @@ const RollbackSchema = z
 export const ReleaseManifestAuthoritySchema = z
   .object({
     protocol_version: z.literal(1),
+    target: z
+      .strictObject({
+        platform: z.literal("win32"),
+        arch: z.literal("x64"),
+        profile: z.enum(["generic", "hongfa"]),
+      })
+      .optional(),
     channel: z.enum(["beta", "stable", "lts"]),
     version: z.string().regex(SEMVER),
     minimum_secure_version: z.string().regex(SEMVER),
@@ -91,6 +98,7 @@ export type ReleaseManifestAuthority = z.infer<typeof ReleaseManifestAuthoritySc
 export type SignedReleaseManifest = z.infer<typeof SignedReleaseManifestSchema>;
 
 export type ReleaseVerificationContext = Readonly<{
+  target?: ReleaseManifestAuthority["target"];
   channel: ReleaseManifestAuthority["channel"];
   current_version: string;
   installed_minimum_secure_version: string;
@@ -112,6 +120,7 @@ function freezeAuthority(authority: ReleaseManifestAuthority): ReleaseManifestAu
   if (rollback !== null) Object.freeze(rollback);
   return Object.freeze({
     ...authority,
+    ...(authority.target === undefined ? {} : { target: Object.freeze({ ...authority.target }) }),
     artifacts,
     rollback,
   });
@@ -155,6 +164,13 @@ function verifyPolicy(
   context: ReleaseVerificationContext,
 ): string | null {
   if (
+    authority.target?.platform !== context.target?.platform ||
+    authority.target?.arch !== context.target?.arch ||
+    authority.target?.profile !== context.target?.profile
+  ) {
+    return "UPDATE_PLATFORM_MISMATCH";
+  }
+  if (
     !isSemVer(context.current_version) ||
     !isSemVer(context.installed_minimum_secure_version) ||
     !Number.isSafeInteger(context.current_local_schema) ||
@@ -180,6 +196,12 @@ function verifyPolicy(
   }
   if (authority.local_schema < context.current_local_schema) {
     return "UPDATE_SCHEMA_DOWNGRADE";
+  }
+  if (
+    authority.target?.platform === "win32" &&
+    authority.local_schema !== context.current_local_schema
+  ) {
+    return "UPDATE_JOINT_SCHEMA_UPGRADE_REQUIRED";
   }
   return null;
 }

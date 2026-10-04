@@ -1,3 +1,5 @@
+import { ensureStoreExportReaderRole } from "./export-role-bootstrap.js";
+
 export type RuntimeRoleClient = Readonly<{
   query: (
     text: string,
@@ -44,6 +46,7 @@ export async function applyRuntimeRoles(
     await client.query(statement);
     await client.query("ALTER DATABASE laundry_v2 OWNER TO laundry_owner");
     await client.query("GRANT CONNECT ON DATABASE laundry_v2 TO laundry_app");
+    await ensureStoreExportReaderRole(client);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);

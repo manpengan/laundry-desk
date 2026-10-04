@@ -1,11 +1,21 @@
+import { formatFen } from "../money.js";
+
+// ADR-77 r1: customers read amounts in 元. {{balance_cents}} stays accepted for typed
+// templates but is no longer offered.
 export const DEFAULT_PICKUP_REMINDER_TEMPLATE =
-  "您好，您的洗衣订单{{tickets}}共{{garment_count}}件已可取，尚欠{{balance_cents}}分，请方便时到店取衣。";
+  "您好，您的洗衣订单{{tickets}}共{{garment_count}}件已可取，尚欠{{balance_yuan}}元，请方便时到店取衣。";
 
 export const PICKUP_REMINDER_PLACEHOLDERS = Object.freeze([
   "{{tickets}}",
   "{{garment_count}}",
+  "{{balance_yuan}}",
   "{{balance_cents}}",
 ] as const);
+
+/** Exact 元 text for integer 分, as SMS variables carry it: 2000 → "20.00". */
+export function formatBalanceYuan(cents: number): string {
+  return formatFen(cents, { showSymbol: false });
+}
 
 export type PickupReminderGroupBy = "order" | "customer";
 
@@ -99,7 +109,10 @@ export function groupPickupReminders(
 export function isPickupReminderTemplate(template: string): boolean {
   const trimmed = template.trim();
   if (trimmed.length === 0 || trimmed.length > 256) return false;
-  const remainder = trimmed.replace(/\{\{(?:tickets|garment_count|balance_cents)\}\}/gu, "");
+  const remainder = trimmed.replace(
+    /\{\{(?:tickets|garment_count|balance_yuan|balance_cents)\}\}/gu,
+    "",
+  );
   return !remainder.match(/\{\{|\}\}/u);
 }
 
@@ -110,11 +123,13 @@ export function renderPickupReminder(template: string, group: PickupReminderGrou
   const values = Object.freeze({
     tickets: group.ticket_nos.join("、"),
     garment_count: String(group.garment_count),
+    balance_yuan: formatBalanceYuan(group.balance_cents),
     balance_cents: String(group.balance_cents),
   });
   return template
     .trim()
     .replace(/\{\{tickets\}\}/gu, values.tickets)
     .replace(/\{\{garment_count\}\}/gu, values.garment_count)
+    .replace(/\{\{balance_yuan\}\}/gu, values.balance_yuan)
     .replace(/\{\{balance_cents\}\}/gu, values.balance_cents);
 }

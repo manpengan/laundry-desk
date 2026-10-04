@@ -122,6 +122,7 @@ namespace Laundry.WindowsHelper
         {
             if (arguments.Length == 2 && arguments[0] == "flush-directory") FlushDirectory(arguments[1]);
             else if (arguments.Length == 3 && arguments[0] == "replace-file") ReplaceFile(arguments[1], arguments[2]);
+            else if (arguments.Length == 3 && arguments[0] == "publish-file") PublishFile(arguments[1], arguments[2]);
             else if (arguments.Length == 2 && arguments[0] == "secure-file") SecureFile(arguments[1]);
             else if (arguments.Length == 2 && arguments[0] == "inspect-private-file") InspectPrivateFile(arguments[1]);
             else if (arguments.Length == 3 && arguments[0] == "inspect-private-file-links") InspectPrivateFileLinks(arguments[1], arguments[2]);
@@ -178,6 +179,27 @@ namespace Laundry.WindowsHelper
             if (File.Exists(destination)) ReadIdentity(destination, false);
             if (!MoveFileEx(source, destination, ReplaceExisting | WriteThrough)) throw new InvalidOperationException();
             ReadIdentity(destination, false);
+            WriteOk();
+        }
+
+        private static void PublishFile(string rawSource, string rawDestination)
+        {
+            string source = CanonicalPath(rawSource);
+            string destination = CanonicalPath(rawDestination);
+            string parent = Path.GetDirectoryName(source);
+            if (!String.Equals(parent, Path.GetDirectoryName(destination), StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException();
+            VerifyPrivateDirectory(parent);
+            VerifyPrivateFile(source, 1);
+            ByHandleFileInformation before = ReadIdentity(source, false);
+            // Omitting REPLACE_EXISTING makes the rename fail atomically on collisions.
+            // Same-directory NTFS rename avoids a transient second hardlink on crash.
+            if (!MoveFileEx(source, destination, WriteThrough)) throw new InvalidOperationException();
+            VerifyPrivateFile(destination, 1);
+            ByHandleFileInformation after = ReadIdentity(destination, false);
+            if (before.VolumeSerialNumber != after.VolumeSerialNumber ||
+                before.FileIndexHigh != after.FileIndexHigh || before.FileIndexLow != after.FileIndexLow)
+                throw new InvalidOperationException();
             WriteOk();
         }
 

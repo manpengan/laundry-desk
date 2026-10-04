@@ -7,6 +7,14 @@ import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { OfflinePort } from "../host/offline-port.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
+import type { AiSettingsPort } from "../ai/settings-port.js";
+import type { ScalePort } from "../host/scale-port.js";
+import type { StoreExportPort } from "../host/store-export-port.js";
+import type { PaymentChannelPort } from "../host/payment-channel-port.js";
+import type { MiniappSettingsPort } from "../host/miniapp-settings-port.js";
+import type { RemoteAssistancePort } from "../host/remote-assistance-port.js";
+import type { MigrationPort } from "../host/migration-port.js";
+import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
 import type { NavItemId } from "../nav.js";
 import type { CounterWorkbenchProps } from "./CounterWorkbench.js";
 import type { CustomersPageProps } from "./CustomersPage.js";
@@ -42,6 +50,14 @@ export type PageHostProps = {
   photoPort?: PhotoPort;
   offlinePort?: OfflinePort;
   printerPort?: PrinterPort;
+  aiSettingsPort?: AiSettingsPort;
+  migrationPort?: MigrationPort;
+  storeExportPort?: StoreExportPort;
+  paymentChannelPort?: PaymentChannelPort;
+  miniappSettingsPort?: MiniappSettingsPort;
+  remoteAssistancePort?: RemoteAssistancePort;
+  scalePort?: ScalePort;
+  notificationSettingsPort?: NotificationSettingsPort;
   onSessionChange?: (session: SessionView | null) => void;
 };
 
@@ -96,6 +112,14 @@ export function PageHostCore({
   photoPort,
   offlinePort,
   printerPort,
+  aiSettingsPort,
+  migrationPort,
+  storeExportPort,
+  paymentChannelPort,
+  miniappSettingsPort,
+  remoteAssistancePort,
+  scalePort,
+  notificationSettingsPort,
   onSessionChange,
   intent,
 }: PageHostCoreProps) {
@@ -148,6 +172,7 @@ export function PageHostCore({
         commandClient={commandClient}
         role={session.role}
         queuePrintEnabled={hasLocalPrintQueue(printerPort)}
+        {...(scalePort === undefined ? {} : { scalePort })}
         {...(offlinePort !== undefined ? { offlinePort } : {})}
         {...(queryClient !== undefined ? { queryClient } : {})}
       />
@@ -162,6 +187,7 @@ export function PageHostCore({
         {...(queryClient !== undefined ? { queryClient } : {})}
         {...(pickupOrderId !== undefined ? { initialOrderId: pickupOrderId } : {})}
         {...(pickupLookupKey !== undefined ? { initialLookupKey: pickupLookupKey } : {})}
+        {...(paymentChannelPort === undefined ? {} : { paymentChannelPort })}
       />
     );
   }
@@ -259,6 +285,13 @@ export function PageHostCore({
   ) {
     return (
       <SettingsPage
+        {...(paymentChannelPort === undefined ? {} : { paymentChannelPort })}
+        {...(miniappSettingsPort === undefined ? {} : { miniappSettingsPort })}
+        {...(remoteAssistancePort === undefined ? {} : { remoteAssistancePort })}
+        {...(migrationPort === undefined ? {} : { migrationPort })}
+        {...(storeExportPort === undefined ? {} : { storeExportPort })}
+        {...(notificationSettingsPort === undefined ? {} : { notificationSettingsPort })}
+        {...(aiSettingsPort === undefined ? {} : { aiSettingsPort })}
         session={session}
         authClient={authClient}
         commandClient={commandClient}

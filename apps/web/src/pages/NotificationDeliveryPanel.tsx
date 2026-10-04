@@ -23,6 +23,7 @@ import {
   notificationCapabilityCopy,
   notificationDeliveredCountLabel,
   notificationDeliveryStatusLabel,
+  notificationErrorText,
   parseNotificationBatchDetail,
   parseNotificationBatchList,
   parseNotificationCapability,
@@ -333,7 +334,7 @@ export function NotificationDeliveryPanel({
                   {notificationDeliveryStatusLabel(delivery.status, detail.batch.assurance)}
                 </span>
                 <span>尝试 {delivery.attempt_count}/5</span>
-                <span>{delivery.last_error_code ?? "无错误码"}</span>
+                <span>{notificationErrorText(delivery.last_error_code)}</span>
               </li>
             ))}
           </ul>

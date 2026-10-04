@@ -77,6 +77,37 @@
 | [ADR-67](2026-08-30-adr-67-windows-native-local-runtime.md)                   | Windows 独立原生 PostgreSQL/Fastify Runtime     | **Accepted** 2026-08-30；W1.5 本地服务闭环         |
 | [ADR-71](2026-10-02-adr-71-cloud-platform-pause.md)                           | Cloud 平台暂停开发与部署                        | **Accepted** 2026-10-02；ADR-37/64/65 Cloud 暂停   |
 
+2026-10-03 Windows 扩展实施：
+
+- [ADR-72](2026-10-03-adr-72-windows-full-feature-delivery.md)：A1–A9/B1–B8 范围与分批交付，Accepted（用户明确授权）。
+- [ADR-73](2026-10-03-adr-73-windows-photo-backup.md)：Windows 照片与数据库联合恢复，实现候选，Windows 验收待执行。
+- [ADR-74](2026-10-03-adr-74-windows-v1-migration.md)：v1 字段保全、受限历史与一次性正式导入，实现候选。
+- [ADR-75](2026-10-03-adr-75-windows-local-ai-runtime.md)：Windows 本机 AI 托管、运行配置与权限预算接线，实现候选。
+- [ADR-76](2026-10-03-adr-76-windows-diagnostic-export.md)：Windows 一键脱敏诊断导出，Proposed。
+- [ADR-77](2026-10-03-adr-77-local-aliyun-sms.md)：Windows 阿里云短信配置、至多一次发送与回执，软件实现与独立审查通过，实机及账户验收待执行。
+- [ADR-78](2026-10-03-adr-78-windows-portable-restore.md)：Windows 加密离机备份与换机恢复，核心已验证，维护入口及实机验收接续。
+
+- [ADR-81](2026-10-03-adr-81-store-business-export.md)：整店业务与照片导出；核心、设置入口与独立审查通过，Runtime 维护入口及 Windows 安装验证接续。
+
+- [ADR-84](2026-10-03-adr-84-windows-counter-update.md)：Windows Counter 签名更新与完整性回退；软件、审查和原生解包已验证，完整签名安装更新待验。
+
+- [ADR-88](2026-10-03-adr-88-windows-scale-capture.md)：Windows 电子秤读取及收衣记录；软件与串口发现已验证，实物验收待设备。
+
+- [ADR-82](2026-10-03-adr-82-ai-bounded-operations-and-analysis.md)：经营分析、催取候选与人工确认的受限操作。
+- [ADR-83](2026-10-03-adr-83-garment-vision-assistance.md)：逐次同意、本店照片绑定的视觉辅助与掉标候选比较。
+
+- [ADR-79](2026-10-03-adr-79-windows-scheduled-backups.md)：每日定时备份、留存和恢复演练。
+- [ADR-80](2026-10-03-adr-80-windows-schema-upgrade-rollback.md)：跨迁移程序/数据联合升级回退及还原权限防复活。
+
+- [ADR-85](2026-10-03-adr-85-payment-channels.md)：微信支付 API v3、支付宝及验签入账、原路退款和对账。
+- [ADR-86](2026-10-03-adr-86-miniapp-delegated-transactions.md)：微信身份、顾客自助交易及限权委托。
+- [ADR-87](2026-10-03-adr-87-native-customer-miniapp.md)：原生微信顾客小程序。
+- [ADR-89](2026-10-03-adr-89-controlled-remote-assistance.md)：可撤销的限时只读远程协助。
+
+- [ADR-90](2026-10-03-adr-90-wechat-subscription-notifications.md)：人工确认、单次订阅消费与未知结果防重复发送。
+
+- [ADR-91](2026-10-04-adr-91-pr229-remediation.md)：PR #229 统一修复（结果三分类、收款不锁单、AI/短信计费、电池与打包身份），以及公网入口、远程协助、电子秤、自动备份四项范围裁决。
+
 ## v1 线
 
 | ADR                                                | 主题            | 状态                                              |

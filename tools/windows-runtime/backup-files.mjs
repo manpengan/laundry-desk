@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { digest, fail } from "./companion-contract.mjs";
 import { requireRealDirectory } from "./companion-files.mjs";
 import { exists } from "./lifecycle-storage.mjs";
+import { readPhotoSnapshot, snapshotPhotos } from "./backup-photo-files.mjs";
 import {
   BACKUP_ID,
   MAX_BACKUPS,
@@ -115,9 +116,6 @@ export async function readBackup(context, id, confirmation) {
   const directory = join(root, "backups", id);
   await requireRealDirectory(directory);
   await platform.inspectPrivateDirectory(directory);
-  const names = (await readdir(directory)).sort();
-  if (JSON.stringify(names) !== JSON.stringify(["backup.json", "database.dump"]))
-    fail("BACKUP_FILE_SET_INVALID");
   const bytes = await io.read(join(directory, "backup.json"));
   const hash = digest(bytes);
   if (confirmation !== undefined && hash !== confirmation) fail("BACKUP_CONFIRMATION_MISMATCH");
@@ -127,6 +125,12 @@ export async function readBackup(context, id, confirmation) {
   } catch {
     fail("BACKUP_INVALID");
   }
+  const names = (await readdir(directory)).sort();
+  const expected =
+    manifest.version === 1
+      ? ["backup.json", "database.dump"]
+      : ["backup.json", "database.dump", "photos", "photos.json"];
+  if (JSON.stringify(names) !== JSON.stringify(expected)) fail("BACKUP_FILE_SET_INVALID");
   if (manifest.id !== id || manifest.instance_sha256 !== instance) fail("BACKUP_INSTANCE_MISMATCH");
   if (
     manifest.release.migrations !== entry.migrations ||
@@ -136,7 +140,9 @@ export async function readBackup(context, id, confirmation) {
     fail("BACKUP_VERSION_MISMATCH");
   const path = join(directory, "database.dump");
   await withBackupDump(path, platform, manifest.database);
-  return { manifest, path, digest: hash, id };
+  const photos =
+    manifest.version === 1 ? [] : await readPhotoSnapshot(context, directory, manifest.photos);
+  return { manifest, path, digest: hash, id, photos };
 }
 
 export async function createBackup(context, dump) {
@@ -166,14 +172,14 @@ export async function createBackup(context, dump) {
   const { metadata } = await withBackupDump(path, platform);
   const manifest = requireBackup({
     schema: "laundry.windows.backup",
-    version: 1,
+    version: 2,
     assurance: "development_only",
     id,
     instance_sha256: instance,
     created_at: new Date().toISOString(),
     release: entry,
     postgres_version: postgresVersion,
-    photos: "disabled_empty",
+    photos: await snapshotPhotos(context, directory),
     database: metadata,
   });
   await io.write(join(directory, "backup.json"), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -202,5 +208,7 @@ export function backupSummary(backup) {
     created_at: backup.manifest.created_at,
     migration_head: backup.manifest.release.migrationHead,
     database_bytes: backup.manifest.database.size,
+    photo_count: backup.manifest.version === 1 ? 0 : backup.manifest.photos.count,
+    photo_bytes: backup.manifest.version === 1 ? 0 : backup.manifest.photos.total_bytes,
   };
 }

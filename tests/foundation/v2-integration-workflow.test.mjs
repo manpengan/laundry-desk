@@ -31,6 +31,22 @@ async function writeExecutable(path, source) {
   await chmod(path, 0o755);
 }
 
+test("runs portable restore and approved import/export bridges against isolated real PG", async () => {
+  const workflow = await readFile(workflowPath, "utf8");
+  const start = workflow.indexOf(
+    "      - name: Verify Windows data maintenance against real PostgreSQL",
+  );
+  const end = workflow.indexOf(
+    "      - name: Run Playwright against real server and PostgreSQL",
+    start,
+  );
+  assert.ok(start >= 0 && end > start);
+  assert.match(
+    workflow.slice(start, end),
+    /run: >-\s+node tools\/data-transfer\/run-pg-fixture\.mjs\s+tools\/windows-runtime\/backup-portable-fixture-pg\.test\.mjs\s+tools\/windows-runtime\/portable-database-pg\.test\.mjs\s+tools\/windows-runtime\/data-worker-pg\.test\.mjs/u,
+  );
+});
+
 test("restores an exact-health server after the write gate fails", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "laundry-v2-integration-workflow-"));
   context.after(() => rm(directory, { recursive: true, force: true }));

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { win32 } from "node:path";
 
 import { readSecretValue } from "./secret-file.js";
 
@@ -210,14 +211,34 @@ export function parseLocalPrintSpoolDir(env: NodeJS.ProcessEnv): string | null {
   return raw;
 }
 
-/** Private durable garment-photo directory. Unset keeps file routes disabled. */
-export function parseLocalPhotoStoreDir(env: NodeJS.ProcessEnv): string | null {
+/** Installed Windows defaults to its private photo root; other runtimes opt in. */
+export function parseLocalPhotoStoreDir(
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+): string | null {
   const raw = env.LAUNDRY_PHOTO_STORE_DIR?.trim();
-  if (raw === undefined || raw.length === 0) return null;
-  if (raw !== "/var/lib/laundry/photos") {
+  // Older installed login controllers do not emit PHOTO_STORE_DIR. Derive the
+  // same private path in the new server so upgrading survives the next login.
+  const installedWindows = platform === "win32" && env.LAUNDRY_RUNTIME_RELEASE !== undefined;
+  if (raw === "" || (raw === undefined && !installedWindows)) return null;
+  const local = env.LOCALAPPDATA;
+  const windowsRoot =
+    platform === "win32" &&
+    local !== undefined &&
+    /^[a-z]:\\/iu.test(local) &&
+    !/[\x00-\x1f<>:"|?*]/u.test(local.slice(2)) &&
+    !local.split("\\").some((part) => part === "." || part === ".." || /[. ]$/u.test(part))
+      ? win32.join(local, "laundry-desk-v2", "runtime-companion", "photos")
+      : null;
+  if (
+    platform === "win32"
+      ? windowsRoot === null ||
+        (raw !== undefined && raw.toLowerCase() !== windowsRoot.toLowerCase())
+      : raw !== "/var/lib/laundry/photos"
+  ) {
     throw new Error(
-      "Invalid local server configuration: LAUNDRY_PHOTO_STORE_DIR must be /var/lib/laundry/photos",
+      "Invalid local server configuration: LAUNDRY_PHOTO_STORE_DIR must be the managed photo directory",
     );
   }
-  return raw;
+  return raw ?? windowsRoot;
 }

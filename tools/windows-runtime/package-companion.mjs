@@ -20,6 +20,7 @@ import {
   fail,
   MANIFEST_NAME,
   BACKUP_FILES,
+  PHOTO_BACKUP_FILES,
 } from "./companion-contract.mjs";
 import { inventory, requireRealDirectory } from "./companion-files.mjs";
 import { inspectCompanion } from "./inspect-companion.mjs";
@@ -48,6 +49,32 @@ const scriptNames = [
   "backup-process.mjs",
   "backup-database.mjs",
   "backup-maintenance.mjs",
+  "backup-photo-contract.mjs",
+  "backup-photo-files.mjs",
+  "diagnostic-bundle.mjs",
+  "diagnostic-export.mjs",
+  "data-options.mjs",
+  "assistance-config.mjs",
+  "data-worker.mjs",
+  "data-maintenance.mjs",
+  "store-export.mjs",
+  "schedule-contract.mjs",
+  "schedule-controller.mjs",
+  "schedule-retention.mjs",
+  "schedule-prune.mjs",
+  "schedule-maintenance.mjs",
+  "schedule-task.ps1",
+  "upgrade-contract.mjs",
+  "upgrade-context.mjs",
+  "upgrade-maintenance.mjs",
+  "upgrade-probe.mjs",
+  "restore-authority.mjs",
+  "rollback-identity.mjs",
+  "portable-container.mjs",
+  "portable-crypto.mjs",
+  "portable-schema.mjs",
+  "portable-authority.mjs",
+  "portable-database.mjs",
   "lifecycle-host.ps1",
   "lifecycle-identity.ps1",
   "lifecycle-launch.ps1",
@@ -150,7 +177,7 @@ export async function packageCompanion({
     (await run(process.execPath, [pnpmScript, "--version"])) !== "11.15.0"
   )
     fail("RUN_WITH_PNPM_REQUIRED");
-  for (const name of ["platform-fs", "contracts", "domain", "server"]) {
+  for (const name of ["platform-fs", "contracts", "domain", "migrate-v1", "server"]) {
     console.error(`WINDOWS_COMPANION_STAGE_BUILD_${name.toUpperCase().replaceAll("-", "_")}`);
     await run(process.execPath, [pnpmScript, "--filter", `@laundry/${name}`, "build"]);
   }
@@ -246,7 +273,11 @@ export async function packageCompanion({
       ),
     );
     const { files } = await inventory(payload);
-    if (BACKUP_FILES.some((path) => !files.some((file) => file.path === path)))
+    if (
+      [...BACKUP_FILES, ...PHOTO_BACKUP_FILES].some(
+        (path) => !files.some((file) => file.path === path),
+      )
+    )
       fail("BACKUP_CAPABILITY_INCOMPLETE");
     console.error("WINDOWS_COMPANION_STAGE_MANIFEST");
     const manifest = canonicalManifest({

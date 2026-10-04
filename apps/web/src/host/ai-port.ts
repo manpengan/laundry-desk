@@ -1,9 +1,12 @@
 import {
   AiSafetyStatusResponseSchema,
+  AiOperationResponseSchema,
+  type AiOperationResult,
   AiStreamEventSchema,
   type AiSafetyStatusView,
   type AiStreamEvent,
 } from "@laundry/contracts";
+import { createHttpVisionPort, type VisionPort } from "../ai/vision-port.js";
 
 const CSRF_HEADER_NAME = "x-csrf-token";
 
@@ -16,6 +19,8 @@ export type AiPanelResult<T> =
   Readonly<{ ok: true; data: T }> | Readonly<{ ok: false; error: AiPanelFailure }>;
 
 export type AiPanelPort = Readonly<{
+  vision?: VisionPort;
+  confirmOperation?(confirmRef: string): Promise<AiPanelResult<AiOperationResult>>;
   getSafetyStatus(): Promise<AiPanelResult<AiSafetyStatusView>>;
   createSession(): Promise<AiPanelResult<Readonly<{ sessionId: string }>>>;
   createTurn(
@@ -158,13 +163,35 @@ async function readSse(
 }
 
 export function createHttpAiPanelPort(options: HttpAiPanelPortOptions): AiPanelPort {
+  // Call unbound: invoked as a method of options, a bare window.fetch throws Illegal invocation.
+  const { fetchImpl } = options;
   const base = options.apiBaseUrl.replace(/\/$/u, "");
   return Object.freeze({
+    vision: createHttpVisionPort(options),
+    async confirmOperation(confirmRef: string) {
+      const requestHeaders = headers(options, true);
+      if (requestHeaders === null) return failure("AUTH", "当前登录已失效");
+      try {
+        const response = await fetchImpl(`${base}/api/v2/ai/operations/confirm`, {
+          method: "POST",
+          credentials: "include",
+          headers: requestHeaders,
+          body: JSON.stringify({ confirm_ref: confirmRef }),
+        });
+        if (!response.ok) return failureFromStatus(response.status);
+        const parsed = AiOperationResponseSchema.safeParse(await response.json());
+        return parsed.success
+          ? { ok: true as const, data: parsed.data.data }
+          : failure("INVALID_RESPONSE", "操作响应格式错误");
+      } catch {
+        return failure("NETWORK", "结果未能确认，请先核对业务状态，勿重复操作");
+      }
+    },
     async getSafetyStatus() {
       const requestHeaders = headers(options);
       if (requestHeaders === null) return failure("AUTH", "当前登录已失效");
       try {
-        const response = await options.fetchImpl(`${base}/api/v2/ai/safety`, {
+        const response = await fetchImpl(`${base}/api/v2/ai/safety`, {
           method: "GET",
           credentials: "include",
           headers: requestHeaders,
@@ -182,7 +209,7 @@ export function createHttpAiPanelPort(options: HttpAiPanelPortOptions): AiPanelP
       const requestHeaders = headers(options, true);
       if (requestHeaders === null) return failure("AUTH", "当前登录已失效");
       try {
-        const response = await options.fetchImpl(`${base}/api/v2/ai/sessions`, {
+        const response = await fetchImpl(`${base}/api/v2/ai/sessions`, {
           method: "POST",
           credentials: "include",
           headers: requestHeaders,
@@ -198,7 +225,7 @@ export function createHttpAiPanelPort(options: HttpAiPanelPortOptions): AiPanelP
       const requestHeaders = headers(options, true);
       if (requestHeaders === null) return failure("AUTH", "当前登录已失效");
       try {
-        const response = await options.fetchImpl(
+        const response = await fetchImpl(
           `${base}/api/v2/ai/sessions/${encodeURIComponent(sessionId)}/turns`,
           {
             method: "POST",
@@ -221,7 +248,7 @@ export function createHttpAiPanelPort(options: HttpAiPanelPortOptions): AiPanelP
       const requestHeaders = headers(options);
       if (requestHeaders === null) return failure("AUTH", "当前登录已失效");
       try {
-        const response = await options.fetchImpl(
+        const response = await fetchImpl(
           `${base}/api/v2/ai/sessions/${encodeURIComponent(sessionId)}/stream`,
           {
             method: "GET",

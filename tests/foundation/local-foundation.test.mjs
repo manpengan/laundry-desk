@@ -208,7 +208,7 @@ test("runs every foundation test from the default workspace test gate", async ()
 
   assert.equal(
     rootPackage.scripts["workspace:test"],
-    "node --test tools/local/*.test.mjs tools/runtime-kit/*.test.mjs tools/windows-runtime/*.test.mjs tests/foundation/*.test.mjs && turbo run test",
+    "turbo run build --filter=@laundry/server && node --test tools/local/*.test.mjs tools/runtime-kit/*.test.mjs tools/remote-assistance/*.test.mjs tools/windows-runtime/*.test.mjs tests/foundation/*.test.mjs && turbo run test",
   );
 });
 
@@ -415,7 +415,15 @@ test("makes Task 3B integration explicit and secret-driven", async () => {
   );
   assert.match(
     commissioningPgAcceptance,
-    /assert\.equal\(migrations\.head, "0069_bounded_automation\.sql"\)/u,
+    /migrations\.entries\.some\([\s\S]{0,120}entry\.filename === "0045_store_commissioning_staff_credentials\.sql"/u,
+  );
+  assert.match(
+    commissioningPgAcceptance,
+    /assert\.equal\(result\.rows\[0\]\?\.count, migrations\.entries\.length\)/u,
+  );
+  assert.match(
+    commissioningPgAcceptance,
+    /assert\.equal\(result\.rows\[0\]\?\.head, migrations\.head\)/u,
   );
   assert.match(migrationTest, /"0069_bounded_automation\.sql"/u);
   assert.match(migrationTest, /gap-free lexical order/u);
@@ -425,7 +433,7 @@ test("keeps the recovery-set CI shell block syntactically valid", async () => {
   const workflow = await readRepositoryFile(".github/workflows/v2-integration.yml");
   const start = workflow.indexOf("      - name: Create and restore-drill a private recovery set");
   const end = workflow.indexOf(
-    "      - name: Run server tests against real PostgreSQL with no skips",
+    "      - name: Run server tests against real PostgreSQL with no database skips",
     start,
   );
   assert.ok(start >= 0 && end > start);
@@ -513,7 +521,7 @@ test("registers the guarded local lifecycle in default workspace gates", async (
   );
   assert.match(
     rootPackage.scripts["workspace:lint"],
-    /eslint tools\/local tools\/windows-runtime tools\/release-candidate tests\/foundation tools\/runtime-kit\/\*\.mjs --ext \.mjs/u,
+    /eslint tools\/local tools\/remote-assistance tools\/windows-runtime tools\/release-candidate tests\/foundation tools\/runtime-kit\/\*\.mjs --ext \.mjs/u,
   );
 });
 

@@ -46,9 +46,9 @@ public static class LaundryRuntimeNativeLauncher {
   [DllImport("kernel32.dll", SetLastError=true)]
   private static extern bool TerminateProcess(IntPtr process, uint code);
 
-  private static IntPtr StandardHandle(int kind) {
-    // The controller has no input protocol. Use NUL instead of caller stdin.
-    IntPtr source = kind == -10 ? IntPtr.Zero : GetStdHandle(kind);
+  private static IntPtr StandardHandle(int kind, bool inputProtocol) {
+    // Only explicitly selected data actions may inherit the bounded stdin protocol.
+    IntPtr source = kind == -10 && !inputProtocol ? IntPtr.Zero : GetStdHandle(kind);
     bool owned = source == IntPtr.Zero || source == new IntPtr(-1);
     if (owned) source = CreateFileW("NUL", kind == -10 ? 0x80000000u : 0x40000000u, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
     if (source == new IntPtr(-1)) throw new InvalidOperationException("WINDOWS_COMPANION_LAUNCH_HANDLE_FAILED");
@@ -61,12 +61,15 @@ public static class LaundryRuntimeNativeLauncher {
   }
 
   public static int Run(string executable, string arguments, string directory) {
+    return Run(executable, arguments, directory, false);
+  }
+  public static int Run(string executable, string arguments, string directory, bool inputProtocol) {
     IntPtr input = IntPtr.Zero, output = IntPtr.Zero, error = IntPtr.Zero;
     IntPtr list = IntPtr.Zero, values = IntPtr.Zero;
     bool initialized = false;
     ProcessInformation process = new ProcessInformation();
     try {
-      input = StandardHandle(-10); output = StandardHandle(-11); error = StandardHandle(-12);
+      input = StandardHandle(-10, inputProtocol); output = StandardHandle(-11, false); error = StandardHandle(-12, false);
       IntPtr size = IntPtr.Zero;
       InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
       if (size == IntPtr.Zero) throw new InvalidOperationException("WINDOWS_COMPANION_LAUNCH_ATTRIBUTES_FAILED");

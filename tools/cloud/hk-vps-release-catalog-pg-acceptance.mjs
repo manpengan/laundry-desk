@@ -82,19 +82,6 @@ function catalogSource(result) {
   return `${result.rows.map((row) => row.value).join("\n")}\n`;
 }
 
-async function closeClient(client, operationError) {
-  try {
-    await client.end();
-  } catch (error) {
-    fail(
-      "CLOUD_RELEASE_CATALOG_PG_CLEANUP_FAILED",
-      operationError === undefined
-        ? error
-        : new AggregateError([operationError, error], "catalog probe and cleanup failed"),
-    );
-  }
-}
-
 async function queryCatalog(client, parseEvidence, requireCluster = false) {
   const result = await client.query(CATALOG_SQL);
   return parseEvidence(catalogSource(result), undefined, "stable", requireCluster);
@@ -163,7 +150,12 @@ export async function runCatalogMigrationChainAcceptance({
         : new AggregateError([cleanupError, error], "multiple catalog cleanup failures");
   };
   try {
-    const files = await listMigrationFiles();
+    // Cloud remains frozen at 0069. Verify its historical golden catalog in
+    // this owned database; newer Windows migrations belong to other CI gates.
+    const available = await listMigrationFiles();
+    if (available.some((name) => !MIGRATION.test(name)))
+      fail("CLOUD_RELEASE_CATALOG_PG_MIGRATIONS_INVALID");
+    const files = available.filter((name) => name <= TO_HEAD);
     assertMigrationFiles(files);
     await admin.connect();
     await admin.query(`CREATE DATABASE ${identifier} OWNER laundry_owner`);
@@ -229,37 +221,22 @@ export async function runReleaseCatalogPgAcceptance({
 } = {}) {
   assertOptIn(environment);
   const config = await ensureConfig({ env: environment });
-  const client = createClient(
-    clientConfiguration(
-      config.postgresSuperuserPassword,
-      PROFILE.services.postgresDatabase,
-      "laundry-release-catalog-acceptance",
-    ),
-  );
-
-  let evidence;
-  let operationError;
   try {
-    await client.connect();
-    evidence = await queryCatalog(client, parseEvidence, true);
-    await verifyMigrationChain({
+    const evidence = await verifyMigrationChain({
       createClient,
       parseEvidence,
       password: config.postgresSuperuserPassword,
     });
+    // The write gate still exercises the current, fully migrated local database.
     await verifyWriteGate({
       adminPassword: config.postgresSuperuserPassword,
       appPassword: config.postgresAppPassword,
       createClient,
     });
+    return evidence.to;
   } catch (error) {
-    operationError = error;
+    fail("CLOUD_RELEASE_CATALOG_PG_ACCEPTANCE_FAILED", error);
   }
-  await closeClient(client, operationError);
-  if (operationError !== undefined || evidence === undefined) {
-    fail("CLOUD_RELEASE_CATALOG_PG_ACCEPTANCE_FAILED", operationError);
-  }
-  return evidence;
 }
 
 async function main() {

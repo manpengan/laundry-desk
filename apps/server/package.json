@@ -22,6 +22,7 @@
     "@fastify/cors": "^11.3.0",
     "@laundry/contracts": "file:../../packages/contracts",
     "@laundry/domain": "file:../../packages/domain",
+    "@laundry/migrate-v1": "file:../../tools/migrate-v1",
     "@laundry/platform-fs": "file:../../packages/platform-fs",
     "@node-rs/argon2": "^2.0.2",
     "fastify": "5.12.5",

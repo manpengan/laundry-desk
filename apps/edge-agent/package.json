@@ -38,7 +38,8 @@
     "update:recovery:drill": "tsc -p tsconfig.json && node dist/upgrade/runtime-recovery-drill-cli.js",
     "printer-smoke": "tsc -p tsconfig.json && node dist/print/printer-smoke-cli.js",
     "printer-pilot:mac": "tsc -p tsconfig.json && node dist/print/mac-printer-pilot-cli.js",
-    "printer-acceptance:mac": "tsc -p tsconfig.json && node dist/print/mac-printer-acceptance-cli.js"
+    "printer-acceptance:mac": "tsc -p tsconfig.json && node dist/print/mac-printer-acceptance-cli.js",
+    "release:update:win": "pnpm --filter @laundry/platform-fs build && pnpm exec turbo run build --filter=@laundry/edge-agent && pnpm run helper:stage:win && pnpm run preload:bundle && node scripts/release-windows-update.mjs"
   },
   "dependencies": {
     "@laundry/contracts": "file:../../packages/contracts",

@@ -17,7 +17,20 @@ const DEFAULT_POLICY: MemoryAiSafetyPolicy = Object.freeze({
   circuitOpenMs: 300_000,
 });
 
+/** ADR-82 r1: unknown usages tolerated in a rolling day before the runtime is disabled. */
+export const AI_UNKNOWN_USAGE_LIMIT = 3;
+const UNKNOWN_USAGE_WINDOW_MS = 86_400_000;
+
 export class MemoryAiSafetyState {
+  private quarantined = false;
+  private unknownUsageAt: readonly number[] = [];
+  /** Mirrors public.ai_usage_quarantine: contract breaches disable at once, unknowns at the limit. */
+  recordUnknownUsage(reason: "usage_unknown" | "outside_contract", at: Date): void {
+    const since = at.getTime() - UNKNOWN_USAGE_WINDOW_MS;
+    this.unknownUsageAt = [...this.unknownUsageAt.filter((time) => time > since), at.getTime()];
+    if (reason === "outside_contract" || this.unknownUsageAt.length >= AI_UNKNOWN_USAGE_LIMIT)
+      this.quarantined = true;
+  }
   private reservations = new Map<string, Readonly<{ amount: number; month: string }>>();
   private consecutiveProviderFailures = 0;
   private circuitOpenUntil: Date | null = null;
@@ -47,7 +60,7 @@ export class MemoryAiSafetyState {
     const denialCode =
       this.policy.monthlyLimitMicros <= 0
         ? ("AI_BUDGET_EXCEEDED" as const)
-        : this.circuitOpenUntil !== null && this.circuitOpenUntil > input.now
+        : this.quarantined || (this.circuitOpenUntil !== null && this.circuitOpenUntil > input.now)
           ? ("AI_CIRCUIT_OPEN" as const)
           : spent + reserved + reservation > this.policy.monthlyLimitMicros
             ? ("AI_BUDGET_EXCEEDED" as const)
@@ -85,7 +98,8 @@ export class MemoryAiSafetyState {
 
   status(usage: readonly AiTurnUsage[], now: Date) {
     const cost = usage.reduce((sum, row) => sum + row.estimatedCostMicros, 0);
-    const open = this.circuitOpenUntil !== null && this.circuitOpenUntil > now;
+    const open =
+      this.quarantined || (this.circuitOpenUntil !== null && this.circuitOpenUntil > now);
     return Object.freeze({
       pii_masking: true as const,
       egress_policy: "https_443_allowlist" as const,
@@ -96,7 +110,11 @@ export class MemoryAiSafetyState {
       monthly_limit_micros: this.policy.monthlyLimitMicros,
       remaining_micros: Math.max(0, this.policy.monthlyLimitMicros - cost),
       circuit_state: open ? ("open" as const) : ("closed" as const),
-      circuit_open_until: open ? (this.circuitOpenUntil?.toISOString() ?? null) : null,
+      circuit_open_until: this.quarantined
+        ? "9999-12-31T00:00:00.000Z"
+        : open
+          ? (this.circuitOpenUntil?.toISOString() ?? null)
+          : null,
     });
   }
 }

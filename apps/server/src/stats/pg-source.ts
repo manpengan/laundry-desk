@@ -6,6 +6,7 @@ import type { PgPool } from "../db/pg-pool.js";
 import { withStoreGucOrCurrent } from "../db/tenant-guc-client.js";
 import type { SqlClient } from "../db/types.js";
 import type { StatsDaySummaryInput, StatsQueryPort } from "./types.js";
+import { createPgAccountingSource } from "../accounting/pg-source.js";
 
 type DaySummaryRow = Readonly<{
   order_count: number | string;
@@ -144,6 +145,25 @@ export function createPgStatsQuery(pool: PgPool): StatsQueryPort {
     cashSummary: async (input: StatsDaySummaryInput) =>
       withStoreGucOrCurrent(pool, { orgId: input.orgId, storeId: input.storeId }, (client) =>
         queryCashSummary(client, input),
+      ),
+    incomeSummary: async (input) =>
+      withStoreGucOrCurrent(
+        pool,
+        { orgId: input.orgId, storeId: input.storeId },
+        async (client) => {
+          const report = await createPgAccountingSource().readReport({
+            client,
+            tenant: { orgId: input.orgId, storeId: input.storeId, staffId: input.staffId },
+            dateFrom: input.businessDate,
+            dateTo: input.businessDate,
+            groupBy: "day",
+            staffId: null,
+          });
+          return Object.freeze({
+            real_income_cents: report.totals.real_income_cents,
+            performance_income_cents: report.totals.performance_income_cents,
+          });
+        },
       ),
   });
 }

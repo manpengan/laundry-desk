@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
+import { validateMigrationSource } from "./validate-source.js";
 
 import type {
   MigratedCustomer,
@@ -369,7 +370,8 @@ function transformSettings(snapshot: V1Snapshot): readonly MigratedSetting[] {
  * Pure v1→v2 mapping. It deliberately has no tenant values or PG client:
  * production tenant context and one transaction come from the v2 loader port.
  */
-export function transformV1Snapshot(snapshot: V1Snapshot): V2MigrationPlan {
+export function transformV1Snapshot(input: V1Snapshot): V2MigrationPlan {
+  const snapshot = validateMigrationSource(input);
   const warnings: MigrationWarning[] = [];
   const state: TransformState = Object.freeze({
     sourceHash: snapshot.sourceBackupSha256,
@@ -387,6 +389,7 @@ export function transformV1Snapshot(snapshot: V1Snapshot): V2MigrationPlan {
     orders.push(migrated);
   }
   return Object.freeze({
+    sourceSnapshot: snapshot,
     sourceBackupSha256: snapshot.sourceBackupSha256,
     customers: transformCustomers(snapshot),
     orders: Object.freeze(orders),

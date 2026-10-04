@@ -433,24 +433,26 @@ test("all adapters normalize tool calls and usage into the typed provider port",
 });
 
 test("provider failures are bounded and never expose credentials or raw responses", async () => {
-  const cases: readonly [ProviderHttpResponse | Error, string][] = [
-    [response(401, "denied"), "provider_auth_rejected"],
-    [response(403, "denied"), "provider_auth_rejected"],
-    [response(429, "limited"), "provider_rate_limited"],
-    [response(503, "down"), "provider_unavailable"],
-    [new ProviderAdapterError("PROVIDER_TIMEOUT"), "provider_timeout"],
-    [new ProviderAdapterError("PROVIDER_ABORTED"), "provider_aborted"],
-    [response(200, "data: not-json\n\n"), "provider_response_invalid"],
-    [response(200, new Uint8Array(1_048_577)), "provider_response_too_large"],
+  // ADR-82 r1: an HTTP error status means the provider produced nothing, so nothing is owed;
+  // a timeout or a broken 2xx stream may already have been billed.
+  const cases: readonly [ProviderHttpResponse | Error, string, boolean][] = [
+    [response(401, "denied"), "provider_auth_rejected", true],
+    [response(403, "denied"), "provider_auth_rejected", true],
+    [response(429, "limited"), "provider_rate_limited", true],
+    [response(503, "down"), "provider_unavailable", true],
+    [new ProviderAdapterError("PROVIDER_TIMEOUT"), "provider_timeout", false],
+    [new ProviderAdapterError("PROVIDER_ABORTED"), "provider_aborted", false],
+    [response(200, "data: not-json\n\n"), "provider_response_invalid", false],
+    [response(200, new Uint8Array(1_048_577)), "provider_response_too_large", false],
   ];
-  for (const [fixture, code] of cases) {
+  for (const [fixture, code, unbilled] of cases) {
     const events = await collect(adapter("deepseek", "deepseek-v4-pro", new QueueHttp([fixture])));
-    assert.deepEqual(events, [{ type: "error", code }]);
+    assert.deepEqual(events, [{ type: "error", code, ...(unbilled ? { unbilled } : {}) }]);
     assert.doesNotMatch(JSON.stringify(events), new RegExp(SECRET, "u"));
   }
 });
 
-test("a truncated provider tool stream fails before emitting a callable event", async () => {
+test("a truncated provider tool stream accounts usage without emitting a callable event", async () => {
   const fixture = sse(
     {
       choices: [
@@ -475,7 +477,9 @@ test("a truncated provider tool stream fails before emitting a callable event", 
     },
   );
   const events = await collect(adapter("deepseek", "deepseek-v4-pro", new QueueHttp([fixture])));
-  assert.deepEqual(events, [{ type: "error", code: "provider_response_invalid" }]);
+  assert.deepEqual(events, [
+    { type: "end", finishReason: "limit", inputTokens: 8, outputTokens: 64 },
+  ]);
 });
 
 test("credential authority zeroes each lease on success and failure", async () => {

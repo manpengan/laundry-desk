@@ -7,8 +7,9 @@ pnpm install --frozen-lockfile
 pnpm run workspace:audit
 ```
 
-`workspace:audit` 直接读取 pnpm registry 的完整审计报告并 fail closed。任何 critical、high、
-low，或未经复审的 moderate 都会失败；已复审例外只允许下列 GHSA、版本、依赖路径和
+`workspace:audit` 直接读取 pnpm registry 的完整审计报告并 fail closed。任何未修复的 critical、
+high、low，或未经复审的 moderate 都会失败；本地安全补丁必须先完成下述完整性与行为验证，
+不作为未修复 HIGH 的豁免。已复审 moderate 例外只允许下列 GHSA、版本、依赖路径和
 production/dev 属性。路径、版本或可达性发生变化时，门禁同样失败，不能用宽泛的包名或
 severity 忽略规则放行。
 
@@ -17,6 +18,37 @@ Vite `6.4.3`、React Router DOM `7.18.2` 与 PostCSS `8.5.23`。Electron-Vite 4/
 要求 Node `>=22.12`，仓库 engine 与 CI 的 Node 22 最新补丁线必须满足该下限。传递依赖
 通过同主版本 override 固定到 `undici@6.28.1/7.29.1`、`fast-uri@3.1.8/4.1.5`、
 `brace-expansion@1.1.21/2.1.7/5.0.12`、`js-yaml@4.3.2`、`nanoid@3.3.18`。
+
+## 2026-10-03 尚无上游发行版的两项安全补丁
+
+PR #229 的 Linux 门禁被两项新进入审计结果的 HIGH 阻断。现场查询 npm registry，
+最新可安装版本仍是 `http-cache-semantics@4.2.0` 和 `braces@3.0.3`；审计报告建议的
+4.2.1/3.0.4 尚不可安装，GitHub 两项公告均列出 Patched versions: None。
+
+- [GHSA-ch52-4w7c-c8xp](https://github.com/advisories/GHSA-ch52-4w7c-c8xp)：
+  对 HTTP 缓存复用限制做本地修复，依据
+  [上游问题 #56](https://github.com/kornelski/http-cache-semantics/issues/56) 与尚未合并的
+  [候选修复 #58](https://github.com/kornelski/http-cache-semantics/pull/58)。
+  在处理 max-stale / stale-while-revalidate 前拒绝 no-store、no-cache、共享 private、
+  proxy-revalidate 及未经 public/immutable 允许的共享 Set-Cookie；保留普通过期条目的
+  max-stale 行为，不把所有 maxAge=0 一律视为禁止复用。
+- [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)：
+  对 brace/parenthesis 解析栈以及 compile、expand、stringify 的 AST 遍历加 128 层硬限，
+  深层模式和外部 AST 在耗尽调用栈前以可识别 SyntaxError 拒绝；普通 glob 与范围展开保持原语义。
+
+补丁保存在 `patches/`，由 pnpm 的精确版本 `patchedDependencies` 与锁文件绑定。
+它们不是新的上游发行版本，也不隐藏原始审计结果：命令显示 `registryHigh=2` 和两个
+`locallyPatched` 标识；`high=0` 指通过验证后未修复的 HIGH 数量。
+
+`tools/local/dependency-patch-policy.mjs` 固定完整 GHSA 元数据、原始依赖路径及 dev 属性、
+补丁 SHA-256 和安装源码 SHA-256。每次审计先核对工作区声明、锁文件补丁及所有相应引用，
+再沿全部允许的实际依赖链加载包，验证版本、源码及漏洞行为回归。缺文件、任意补丁改动、
+未应用补丁、路径扩张、升级元数据漂移或回归失败均拒绝放行。未带验证结果的审计策略调用
+也继续拒绝这两项 HIGH。
+
+本地验证：冻结锁文件安装、审计策略与补丁 14 项测试、ESLint 均通过。Windows 原生安装
+与构建验收仍跟随本批 Windows 交付执行。上游发布修复后应优先升级并删除对应补丁、
+本地识别规则和补丁探针，重新采集完整审计报告；不得把该机制改成宽泛包名忽略规则。
 
 ## 2026-09-29 合并后安全依赖补充
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostgreSQL initdb hook for the two fixed application roles.
+# PostgreSQL initdb hook for fixed application and offline export roles.
 # The generated app password travels only over stdin into a psql variable; it is
 # never embedded in source SQL, a child argv, or a child environment.
 set -euo pipefail
@@ -44,6 +44,18 @@ WHERE NOT EXISTS (
 
 ALTER ROLE laundry_owner
   WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+
+SELECT 'CREATE ROLE laundry_store_exporter NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS'
+WHERE NOT EXISTS (
+  SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'laundry_store_exporter'
+)
+\gexec
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname='laundry_store_exporter'
+    AND (rolcanlogin OR rolsuper OR rolcreatedb OR rolcreaterole OR rolinherit OR rolreplication OR rolbypassrls))
+    OR pg_has_role('laundry_app','laundry_store_exporter','MEMBER')
+  THEN RAISE EXCEPTION 'RUNTIME_EXPORT_ROLE_INVALID'; END IF;
+END $$;
 
 SELECT pg_catalog.format(
   'ALTER ROLE laundry_app WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS',

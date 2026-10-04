@@ -184,6 +184,27 @@ async function garmentProgress(
   });
 }
 
+/** Caller authenticates its customer before setting transaction-local tenant/customer GUCs. */
+export async function readCustomerPortalProjection(
+  client: PgPoolClient,
+  name: string,
+  input: Readonly<Record<string, unknown>>,
+): Promise<CustomerPortalQueryResult | null> {
+  if (name === "customer.self_service.wallet.get") return readPortalWallet(client);
+  if (name === "customer.self_service.benefits.get") return readPortalBenefits(client);
+  if (name === "customer.self_service.profile.get") return readPortalProfile(client);
+  if (name === "customer.self_service.orders.list")
+    return listOrders(client, typeof input.limit === "number" ? input.limit : 20);
+  const orderId = typeof input.order_id === "string" ? input.order_id : null;
+  if (orderId === null) return null;
+  if (name === "customer.self_service.order.get") return getOrder(client, orderId);
+  if (name === "customer.self_service.receipt.get") return getReceipt(client, orderId);
+  if (name === "customer.self_service.garments.list") return listGarments(client, orderId);
+  return name === "customer.self_service.garment.progress" && typeof input.garment_id === "string"
+    ? garmentProgress(client, orderId, input.garment_id)
+    : null;
+}
+
 export function createPgCustomerPortalStore(pool: PgPool): CustomerPortalStore {
   return Object.freeze({
     async createSession(input: CustomerPortalLoginInput, secrets: CustomerPortalSessionSecrets) {
@@ -240,20 +261,7 @@ export function createPgCustomerPortalStore(pool: PgPool): CustomerPortalStore {
           operation: name.slice("customer.self_service.".length),
           resourceId,
         }),
-        async (client) => {
-          if (name === "customer.self_service.wallet.get") return readPortalWallet(client);
-          if (name === "customer.self_service.benefits.get") return readPortalBenefits(client);
-          if (name === "customer.self_service.profile.get") return readPortalProfile(client);
-          if (name === "customer.self_service.orders.list") {
-            return listOrders(client, typeof input.limit === "number" ? input.limit : 20);
-          }
-          if (orderId === null) return null;
-          if (name === "customer.self_service.order.get") return getOrder(client, orderId);
-          if (name === "customer.self_service.receipt.get") return getReceipt(client, orderId);
-          if (name === "customer.self_service.garments.list") return listGarments(client, orderId);
-          const garmentId = typeof input.garment_id === "string" ? input.garment_id : null;
-          return garmentId === null ? null : garmentProgress(client, orderId, garmentId);
-        },
+        (client) => readCustomerPortalProjection(client, name, input),
       );
     },
     async updateProfile(identity, sessionHash, input) {

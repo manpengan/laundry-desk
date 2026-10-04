@@ -83,6 +83,30 @@ function Assert-Task {
   return $task
 }
 
+function Repair-TaskSecurity {
+  $registered = Get-RegisteredRuntimeTask
+  if (-not (Assert-TaskSecurityDescriptor ($registered.GetSecurityDescriptor(5)) $Identity.User.Value -AllowLegacy)) {
+    $sddl = 'O:' + $Identity.User.Value + 'D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;' + $Identity.User.Value + ')'
+    # TASK_DONT_ADD_PRINCIPAL_ACE: all three authorized trustees are already explicit.
+    $registered.SetSecurityDescriptor($sddl, 16)
+  }
+  [void](Assert-TaskSecurityDescriptor ($registered.GetSecurityDescriptor(5)) $Identity.User.Value)
+}
+
+# Store counters are often laptops: the runtime must start, and keep running, on battery.
+# Tasks registered before this rule are repaired the next time they are registered or enabled.
+function Repair-TaskPowerPolicy {
+  param($Task)
+  if (-not $Task.Settings.DisallowStartIfOnBatteries -and -not $Task.Settings.StopIfGoingOnBatteries) {
+    return $Task
+  }
+  $Task.Settings.DisallowStartIfOnBatteries = $false
+  $Task.Settings.StopIfGoingOnBatteries = $false
+  Set-ScheduledTask -InputObject $Task | Out-Null
+  Repair-TaskSecurity
+  return (Assert-Task)
+}
+
 function Inspect-Port {
   param([int]$Port, [string]$Executable)
   # Avoid the slow CIM no-match path. A missing listener has no process to own;
@@ -135,24 +159,19 @@ try {
       if ($null -eq $task) {
         $entry = New-ScheduledTaskAction -Execute $TaskExecutable -Argument $Arguments -WorkingDirectory $Root
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $Identity.Name
-        $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -DisallowHardTerminate -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable
+        $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -DisallowHardTerminate -ExecutionTimeLimit ([TimeSpan]::Zero) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
         $principal = New-ScheduledTaskPrincipal -UserId $Identity.Name -LogonType Interactive -RunLevel Limited
         Register-ScheduledTask -TaskName $TaskName -TaskPath '\' -Action $entry -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
         $task = Assert-Task -AllowLegacyTaskSecurity
       }
-      $registered = Get-RegisteredRuntimeTask
-      if (-not (Assert-TaskSecurityDescriptor ($registered.GetSecurityDescriptor(5)) $Identity.User.Value -AllowLegacy)) {
-        $sddl = 'O:' + $Identity.User.Value + 'D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;' + $Identity.User.Value + ')'
-        # TASK_DONT_ADD_PRINCIPAL_ACE: all three authorized trustees are already explicit.
-        $registered.SetSecurityDescriptor($sddl, 16)
-      }
-      [void](Assert-TaskSecurityDescriptor ($registered.GetSecurityDescriptor(5)) $Identity.User.Value)
-      $task = Assert-Task
+      Repair-TaskSecurity
+      $task = Repair-TaskPowerPolicy (Assert-Task)
       Disable-ScheduledTask -InputObject $task | Out-Null
     }
     'task-disable' { if ($null -ne $task) { Disable-ScheduledTask -InputObject $task | Out-Null } }
     'task-enable' {
       if ($null -eq $task) { throw 'WINDOWS_COMPANION_TASK_MISSING' }
+      $task = Repair-TaskPowerPolicy $task
       Enable-ScheduledTask -InputObject $task | Out-Null
     }
     'task-remove' { if ($null -ne $task) { Unregister-ScheduledTask -InputObject $task -Confirm:$false } }

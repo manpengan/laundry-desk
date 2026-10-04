@@ -166,6 +166,10 @@ maybe(
         storeId: DEMO_STORE_ID,
         businessDate,
       });
+      const scope = { orgId: DEMO_ORG_ID, storeId: DEMO_STORE_ID, businessDate };
+      const incomeSummary = source.incomeSummary;
+      assert.ok(incomeSummary);
+      const incomeBefore = await incomeSummary({ ...scope, staffId: DEMO_STAFF_A_ID });
 
       await adminPool.query(
         `INSERT INTO stores (id, org_id, code, name, created_at, updated_at)
@@ -281,6 +285,14 @@ maybe(
       // Members contribute 1600 of cash principal; both bonus and WeChat stay out.
       // The same-org cash top-up attributed to another store must also stay out.
       assert.equal(after.cash_cents - before.cash_cents, 2_600);
+      // ADR-91 P1-5: the workbench reads 账目's two bases. Orders net 10000 across tenders;
+      // members add 9600 of principal in this store (bonus never counts as income).
+      const incomeAfter = await incomeSummary({ ...scope, staffId: DEMO_STAFF_A_ID });
+      assert.equal(incomeAfter.real_income_cents - incomeBefore.real_income_cents, 19_600);
+      assert.equal(
+        incomeAfter.performance_income_cents - incomeBefore.performance_income_cents,
+        10_000,
+      );
     } catch (error) {
       exerciseFailed = true;
       exerciseFailure = error;

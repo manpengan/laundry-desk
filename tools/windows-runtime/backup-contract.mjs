@@ -1,10 +1,13 @@
 import { exactKeys, fail } from "./companion-contract.mjs";
 import { requireState } from "./lifecycle-storage.mjs";
+import { requirePhotoManifest } from "./backup-photo-contract.mjs";
+import { requireUpgradeJournal } from "./upgrade-contract.mjs";
 
 export const BACKUP_ACTIONS = Object.freeze([
   "backup",
   "backup-list",
   "backup-verify",
+  "backup-drill",
   "restore",
   "maintenance-recover",
 ]);
@@ -19,7 +22,7 @@ export function requireBackupOptions(action, options = {}) {
   const keys =
     action === "restore"
       ? ["backupId", "confirmation"]
-      : action === "backup-verify"
+      : action === "backup-verify" || action === "backup-drill"
         ? ["backupId"]
         : [];
   if (
@@ -63,14 +66,14 @@ export function requireBackup(value) {
       "database",
     ]) ||
     value.schema !== "laundry.windows.backup" ||
-    value.version !== 1 ||
+    ![1, 2].includes(value.version) ||
     value.assurance !== "development_only" ||
     !matches(BACKUP_ID, value.id) ||
     !matches(SHA, value.instance_sha256) ||
     typeof value.created_at !== "string" ||
     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value.created_at) ||
     !Number.isFinite(Date.parse(value.created_at)) ||
-    value.photos !== "disabled_empty" ||
+    (value.version === 1 && value.photos !== "disabled_empty") ||
     typeof value.postgres_version !== "string" ||
     !/^16\.\d+$/u.test(value.postgres_version) ||
     !exactKeys(value.database, ["size", "sha256"]) ||
@@ -81,10 +84,12 @@ export function requireBackup(value) {
   )
     fail("BACKUP_INVALID");
   requireRelease(value.release);
+  if (value.version === 2) requirePhotoManifest(value.photos);
   return value;
 }
 
 export function requireMaintenance(value) {
+  if (value?.version === 2) return requireUpgradeJournal(value);
   if (exactKeys(value, ["version", "phase"]) && value.version === 1 && value.phase === "idle")
     return null;
   if (
@@ -97,11 +102,25 @@ export function requireMaintenance(value) {
       "target",
       "safety",
       "candidate",
+      ...(Object.hasOwn(value ?? {}, "authority_reset") ? ["authority_reset"] : []),
     ]) ||
     value.version !== 1 ||
-    !["backup", "restore"].includes(value.operation) ||
+    ![
+      "backup",
+      "restore",
+      "backup-drill",
+      "portable-export",
+      "portable-import",
+      "v1-import",
+      "export-store",
+    ].includes(value.operation) ||
     !["quiescing", "prepared", "restoring", "switching", "verified"].includes(value.phase) ||
     typeof value.was_running !== "boolean"
+  )
+    fail("MAINTENANCE_STATE_INVALID");
+  if (
+    Object.hasOwn(value, "authority_reset") &&
+    (value.operation !== "restore" || typeof value.authority_reset !== "boolean")
   )
     fail("MAINTENANCE_STATE_INVALID");
   requireRelease(value.release);
@@ -116,7 +135,10 @@ export function requireMaintenance(value) {
   }
   if (
     (value.operation === "backup" && (value.target !== null || value.candidate !== null)) ||
-    (value.operation === "restore" && value.target === null)
+    (["restore", "backup-drill"].includes(value.operation) && value.target === null) ||
+    (["portable-export", "v1-import", "export-store"].includes(value.operation) &&
+      (value.target !== null || value.candidate !== null)) ||
+    (value.operation === "portable-import" && value.target !== null)
   )
     fail("MAINTENANCE_STATE_INVALID");
   if (value.candidate !== null) {

@@ -103,7 +103,7 @@ test("packaging refuses source rebinding, payload tampering, untrusted links and
 
 test("operator action contract requires a selected backup and manual complete restore digest", () => {
   for (const action of ENTRY_ACTIONS.filter(
-    (name) => !["backup-verify", "restore"].includes(name),
+    (name) => !["backup-verify", "backup-drill", "restore"].includes(name),
   )) {
     assert.deepEqual(requireEntryArguments(action), { action });
     assert.throws(() => requireEntryArguments(action, `b_${"a".repeat(32)}`), /ARGS_INVALID/u);
@@ -117,6 +117,10 @@ test("operator action contract requires a selected backup and manual complete re
   });
   assert.deepEqual(requireEntryArguments("backup-verify", id), {
     action: "backup-verify",
+    backupId: id,
+  });
+  assert.deepEqual(requireEntryArguments("backup-drill", id), {
+    action: "backup-drill",
     backupId: id,
   });
   for (const [action, selected, confirmed] of [

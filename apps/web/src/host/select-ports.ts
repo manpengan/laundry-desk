@@ -3,6 +3,39 @@ import type { LaundryDesktopBridge } from "./desktop-ports.js";
 export type HostSelection =
   Readonly<{ kind: "browser" }> | Readonly<{ kind: "desktop"; bridge: LaundryDesktopBridge }>;
 
+const REQUIRED_CAPABILITIES = [
+  "auth",
+  "command",
+  "query",
+  "photo",
+  "offline",
+  "printer",
+  "health",
+] as const;
+const OPTIONAL_OPERATIONS = [
+  "paymentChannel",
+  "miniappSettings",
+  "remoteAssistance",
+  "ai",
+  "migration",
+  "notificationSettings",
+  "scale",
+  "storeExport",
+] as const;
+
+function hasKnownCapabilities(value: Readonly<Record<string, unknown>>): boolean {
+  const allowed: readonly string[] = [...REQUIRED_CAPABILITIES, ...OPTIONAL_OPERATIONS];
+  return (
+    REQUIRED_CAPABILITIES.every((key) => Object.prototype.hasOwnProperty.call(value, key)) &&
+    Reflect.ownKeys(value).every((key) => typeof key === "string" && allowed.includes(key)) &&
+    OPTIONAL_OPERATIONS.every((key) => {
+      if (!Object.prototype.hasOwnProperty.call(value, key)) return true;
+      const operation = readOwnPlainRecord(value, key);
+      return operation !== null && hasExactFunctionSurface(operation, ["execute"]);
+    })
+  );
+}
+
 function isPlainRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
@@ -47,10 +80,7 @@ function hasExactFunctionSurface(
 }
 
 function isDesktopBridge(value: unknown): value is LaundryDesktopBridge {
-  if (
-    !isPlainRecord(value) ||
-    !hasExactOwnKeys(value, ["auth", "command", "query", "photo", "offline", "printer", "health"])
-  ) {
+  if (!isPlainRecord(value) || !hasKnownCapabilities(value)) {
     return false;
   }
   const auth = readOwnPlainRecord(value, "auth");

@@ -69,6 +69,10 @@ export type CommandErrorDetail = Readonly<{
   confirm_ref?: string;
   message?: string;
   summary?: ConfirmationSummary;
+  /** `kind: "reason"` — why a constraint blocked the command. */
+  reason?: string;
+  /** `kind: "field"` — JSON pointer of the invalid input. */
+  path?: string;
 }>;
 
 export type CommandFailure = Readonly<{

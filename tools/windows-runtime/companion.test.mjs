@@ -12,7 +12,9 @@ import {
   requireManifest,
   requirePayloadPath,
   BACKUP_FILES,
+  PHOTO_BACKUP_FILES,
   supportsBackup,
+  supportsPhotoBackup,
 } from "./companion-contract.mjs";
 import { inventory } from "./companion-files.mjs";
 import { inspectCompanion } from "./inspect-companion.mjs";
@@ -82,6 +84,47 @@ test("legacy payloads stay valid while backup capability must be completely mani
     files: full.files.filter((entry) => entry.path !== "scripts/backup-files.mjs"),
   };
   assert.throws(() => requireManifest(partial), /BACKUP_CAPABILITY_INCOMPLETE/u);
+});
+
+test("already published database-only backup payloads remain inspectable by the photo-capable release", async (t) => {
+  const { root, manifest } = await fixture(t);
+  const oldFiles = [
+    "postgres/bin/pg_dump.exe",
+    "postgres/bin/pg_restore.exe",
+    "scripts/backup-contract.mjs",
+    "scripts/backup-files.mjs",
+    "scripts/backup-process.mjs",
+    "scripts/backup-database.mjs",
+    "scripts/backup-maintenance.mjs",
+  ];
+  assert.deepEqual([...BACKUP_FILES], oldFiles);
+  for (const path of oldFiles)
+    await writeFile(join(root, path), path.endsWith(".exe") ? pe() : "old-bound-script");
+  const old = {
+    ...manifest,
+    files: (await inventory(root)).files.filter((entry) => entry.path !== MANIFEST_NAME),
+  };
+  const bytes = canonicalManifest(old);
+  await writeFile(join(root, MANIFEST_NAME), bytes);
+  assert.deepEqual(await inspectCompanion(root, digest(bytes)), old);
+  assert.equal(supportsBackup(old), true);
+  assert.equal(supportsPhotoBackup(old), false);
+  const photos = {
+    ...old,
+    files: [
+      ...old.files,
+      ...PHOTO_BACKUP_FILES.map((path) => ({ path, size: 1, sha256: "a".repeat(64) })),
+    ].sort((a, b) => (a.path < b.path ? -1 : 1)),
+  };
+  assert.equal(supportsPhotoBackup(requireManifest(photos)), true);
+  assert.throws(
+    () =>
+      requireManifest({
+        ...photos,
+        files: photos.files.filter((entry) => entry.path !== PHOTO_BACKUP_FILES[0]),
+      }),
+    /PHOTO_BACKUP_CAPABILITY_INCOMPLETE/u,
+  );
 });
 
 test("payload tampering, removal and extra files fail complete inventory verification", async (t) => {

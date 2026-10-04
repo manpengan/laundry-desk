@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { messageImages } from "./vision-provider-content.js";
 
 import {
   PROVIDER_TIMEOUT_MS,
@@ -73,6 +74,7 @@ const EventSchema = z
 
 function mapMessages(messages: readonly AiProviderMessage[]): readonly unknown[] {
   return messages.map((message) => {
+    const images = messageImages(message);
     if (message.role === "tool") {
       if (message.toolCallId === undefined) {
         throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
@@ -99,7 +101,22 @@ function mapMessages(messages: readonly AiProviderMessage[]): readonly unknown[]
         ]),
       });
     }
-    return Object.freeze({ role: message.role, content: message.content });
+    return Object.freeze({
+      role: message.role,
+      content:
+        images.length === 0
+          ? message.content
+          : [
+              ...images.flatMap((image, index) => [
+                { type: "text", text: `Image ${index}:` },
+                {
+                  type: "image",
+                  source: { type: "base64", media_type: image.mediaType, data: image.data },
+                },
+              ]),
+              { type: "text", text: message.content },
+            ],
+    });
   });
 }
 
@@ -182,6 +199,10 @@ async function* streamWithCredential(
   }
   if (!stopped || inputTokens === null || outputTokens === null) {
     throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
+  }
+  if (stopReason === "max_tokens" || stopReason === "model_context_window_exceeded") {
+    yield Object.freeze({ type: "end", finishReason: "limit", inputTokens, outputTokens });
+    return;
   }
   const hasTool = toolIndex !== null;
   let toolEvent: Extract<AiProviderEvent, { type: "tool_call" }> | null = null;

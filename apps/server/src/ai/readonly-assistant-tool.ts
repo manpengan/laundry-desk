@@ -4,12 +4,15 @@ import {
   type AiAssistantToolResult,
 } from "@laundry/contracts";
 
+import { LOCAL_PROFILE } from "../local/profile.js";
 import { executeQuery } from "../bus/execute-query.js";
 import { createRuntimeBus } from "../bus/runtime.js";
 import { FakeSqlClient } from "../db/fake-client.js";
 import { withPoolClient } from "../db/pg-sql-client.js";
 import type { SqlClient } from "../db/types.js";
 import type { LocalRuntime } from "../local/demo-seed.js";
+import { assistantTrend, assistantPickup } from "./assistant-analysis.js";
+import { previewAssistantOperation } from "./assistant-operations.js";
 import { redactAiText } from "./safety-guard.js";
 import type { ReadonlyAssistantToolPort } from "./streaming-provider.js";
 import type { AiRequestContext } from "./streaming-store.js";
@@ -184,10 +187,80 @@ export function createReadonlyAssistantTool(runtime: LocalRuntime): ReadonlyAssi
   return Object.freeze({
     async execute(call, context, signal) {
       if (signal.aborted) throw new Error("AI_ABORTED");
+      if (
+        ["operations.preview", "pickup.candidates", "business.trend"].includes(call.tool) ||
+        (call.tool === "records.search" && call.args.scope === "garments")
+      ) {
+        if (
+          context.tenant.orgId !== LOCAL_PROFILE.orgId ||
+          context.tenant.storeId !== LOCAL_PROFILE.storeId
+        )
+          throw new Error("AI_TOOL_PERMISSION_DENIED");
+      }
+      if (call.tool === "operations.preview") {
+        const preview = await previewAssistantOperation(runtime, call.args, context, signal);
+        return AiAssistantToolResultSchema.parse({
+          summary: "操作仅已预览，尚未执行。请用户核对独立确认卡。",
+          result_count: 1,
+          sources: [
+            { kind: "document", ref: "document:operations.policy:1", label: "受限操作确认策略" },
+          ],
+          filters: [{ field: "command", value: preview.command }],
+          items: [{ executed: false }],
+          preview,
+        });
+      }
+      if (call.tool === "business.trend") {
+        requirePermission(context, "accounting_read");
+        return assistantTrend(
+          await runQuery(runtime, "reporting.owner_dashboard.get", {}, context),
+          call,
+        );
+      }
+      if (call.tool === "pickup.candidates") {
+        requirePermission(context, "customer_read");
+        return assistantPickup(
+          await runQuery(runtime, "notification.pickup_reminders.list", call.args, context),
+          call,
+        );
+      }
       if (call.tool === "business.summary") {
         requirePermission(context, "accounting_read");
         const raw = await runQuery(runtime, "stats.day.summary", call.args, context);
         return businessResult(raw, call.args.business_date);
+      }
+      if (call.tool === "records.search" && call.args.scope === "garments") {
+        requirePermission(context, "order_write");
+        const raw = await runQuery(
+          runtime,
+          "fulfillment.workbench",
+          { key: call.args.query, limit: call.args.limit },
+          context,
+        );
+        if (!isRecord(raw) || !Array.isArray(raw.garments))
+          throw new Error("AI_TOOL_RESULT_INVALID");
+        const rows = raw.garments.filter(isRecord).slice(0, call.args.limit);
+        return AiAssistantToolResultSchema.parse({
+          summary: `找到 ${rows.length} 件衣物候选，请人工核对条码。`,
+          result_count: rows.length,
+          sources: [
+            { kind: "query", ref: "query:fulfillment.workbench:0.1.0", label: "衣物工作台" },
+          ],
+          filters: [
+            { field: "key", value: "redacted" },
+            { field: "limit", value: String(call.args.limit) },
+          ],
+          items: rows.map((row) => ({
+            garment_id: stringValue(row.garment_id),
+            barcode: stringValue(row.barcode),
+            ticket_no: stringValue(row.ticket_no),
+            status: stringValue(row.status),
+            category_code: stringValue(row.category_code),
+            color: stringValue(row.color),
+            rack_zone: stringValue(row.rack_zone),
+            rack_slot: stringValue(row.rack_slot),
+          })),
+        });
       }
       if (call.tool === "records.search") {
         requirePermission(context, "customer_read");

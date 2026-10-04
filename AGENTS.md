@@ -26,6 +26,8 @@ Windows 定制 EXE，完成安全、安装、打印与实机门禁后交宏发�
 | Gemini    | 退出关键路径；未合分支仅作候选输入           |
 | manpengan | 产品裁决、外部依赖、ADR 签署、最终仲裁       |
 
+2026-10-04：manpengan 单次授权 Claude 统一实施 PR #229 的修复并合入 main（见 [ADR-91](docs/adr/2026-10-04-adr-91-pr229-remediation.md)）。这不改变上表角色；ADR-91“未验证”一节所列各项由 Lead 接续。
+
 ## 入场必读
 
 1. [ADR-66：Windows V2 定制桌面版与宏发受控运营试点](docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md)

@@ -7,10 +7,15 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { link, lstat, open, readdir, unlink } from "node:fs/promises";
+import { lstat, open, readdir, unlink } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 
-import { flushDirectoryDurably, inspectPrivateFile, securePrivateFile } from "@laundry/platform-fs";
+import {
+  flushDirectoryDurably,
+  inspectPrivateFile,
+  publishFileNoReplace,
+  securePrivateFile,
+} from "@laundry/platform-fs";
 
 import { PhotoFileError } from "./file-store-error.js";
 import { securePhotoStoreRoot } from "./file-store-root.js";
@@ -303,8 +308,7 @@ export async function createPhotoFileStore(
         }
         const temporaryPath = await stage(rootPath, storageKey, bytes, newId);
         try {
-          await link(temporaryPath, finalPath);
-          await unlink(temporaryPath);
+          await publishFileNoReplace(temporaryPath, finalPath);
           await inspectPrivateFile(finalPath);
           await flushDirectoryDurably(rootPath);
         } catch (error) {

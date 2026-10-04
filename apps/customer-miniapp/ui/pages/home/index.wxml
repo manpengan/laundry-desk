@@ -1,0 +1,62 @@
+<view class="page">
+  <view class="hero"><text class="eyebrow">LAUNDRY · 洗护服务</text><text class="title">{{public.store_name || '我的洗护'}}</text><text class="muted">订单进度、取送预约与会员权益</text></view>
+  <view wx:if="!configured" class="card empty">门店暂未开通小程序服务，请联系门店。</view>
+  <block wx:else>
+    <view wx:if="error" class="error" role="alert">{{error}}</view>
+    <view wx:if="notice" class="notice" role="status">{{notice}}</view>
+    <view wx:if="!authenticated" class="card">
+      <view class="section-title">查看我的洗护</view><view class="muted">登录后仅展示您的订单和会员资料。首次使用需要授权手机号，与门店已有顾客档案核对。</view>
+      <view class="actions"><button wx:if="!public" bindtap="retry" loading="{{busy}}" disabled="{{busy}}">重新连接门店</button>
+        <button wx:elif="!bindingRequired" class="primary full" bindtap="login" loading="{{busy}}" disabled="{{busy}}">微信登录</button>
+        <button wx:else class="primary full" open-type="getPhoneNumber" bindgetphonenumber="phone" disabled="{{busy}}">授权手机号并登录</button></view>
+    </view>
+    <block wx:else>
+      <view class="tabs"><button class="{{tab === 'orders' ? 'active' : ''}}" data-tab="orders" bindtap="tab">我的订单</button><button class="{{tab === 'appointments' ? 'active' : ''}}" data-tab="appointments" bindtap="tab">取送预约</button><button class="{{tab === 'membership' ? 'active' : ''}}" data-tab="membership" bindtap="tab">会员权益</button></view>
+      <view class="row"><button bindtap="refresh" loading="{{busy}}" disabled="{{busy}}">刷新</button><button bindtap="logout" disabled="{{busy}}">退出登录</button></view>
+      <view wx:if="intent" class="card"><view class="row"><text>付款 {{intentAmount}}</text><text class="badge">{{intentStatus}}</text></view><text class="muted">付款结果以门店核验为准。结果待确认时请查询，避免重复付款。</text><view class="actions"><button bindtap="paymentStatus" disabled="{{busy}}">查询付款结果</button></view></view>
+      <block wx:if="tab === 'orders'">
+        <view wx:if="orders.length === 0" class="card empty">暂时没有洗护订单</view>
+        <view wx:for="orders" wx:key="order_id" class="card">
+          <view class="row"><text>{{item.ticket_no}}</text><text class="badge">{{item.statusText}}</text></view>
+          <view class="muted">{{item.garment_count}} 件衣物 · {{item.created_at}}</view>
+          <view class="row"><text>应付 {{item.payable}}</text><text>已付 {{item.paid}}</text></view>
+          <view wx:if="item.balance_cents > 0" class="row"><text>待付金额</text><text>{{item.balance}}</text></view>
+          <view class="actions"><button data-id="{{item.order_id}}" bindtap="detail" disabled="{{busy}}">衣物与收据</button>
+            <button wx:if="item.status === 'open' &amp;&amp; item.balance_cents > 0" class="primary" data-id="{{item.order_id}}" bindtap="pay" disabled="{{busy || !options.wechat_pay_enabled || !options.delegation_enabled}}">微信支付</button>
+            <button wx:if="item.status === 'open' &amp;&amp; item.balance_cents > 0" data-id="{{item.order_id}}" bindtap="balance" disabled="{{busy || !wallet.balance_cents || !options.delegation_enabled}}">余额支付</button></view>
+          <view wx:if="selectedOrderId === item.order_id" class="divider"><view wx:for="detail" wx:for-item="line" wx:key="index" class="row"><text>{{line.label}}</text><text>{{line.text}}</text></view></view>
+        </view>
+        <view class="card"><view class="section-title">取件提醒</view><view class="muted">您可自愿订阅微信消息，拒绝订阅不影响洗护服务。</view><view class="actions"><button bindtap="subscribe" disabled="{{busy || !public.subscription_template_ids.length}}">订阅取件提醒</button></view></view>
+      </block>
+      <block wx:elif="tab === 'appointments'">
+        <view class="card"><view class="section-title">预约取送</view><text class="muted">预约时间按中国标准时间（UTC+8）显示，以门店确认时段为准。</text>
+          <text class="label">取送方向</text><picker range="{{directions}}" value="{{form.direction}}" data-field="direction" bindchange="input">{{directions[form.direction]}}</picker>
+          <text class="label">取送地址</text><picker range="{{addressLabels}}" value="{{form.addressIndex}}" data-field="addressIndex" bindchange="input">{{addressLabels[form.addressIndex] || '请先添加地址'}}</picker>
+          <text class="label">服务区域与费用</text><picker range="{{areaLabels}}" value="{{form.areaIndex}}" data-field="areaIndex" bindchange="input">{{areaLabels[form.areaIndex] || '暂无可用区域'}}</picker>
+          <text class="label">日期</text><picker mode="date" value="{{form.date}}" data-field="date" bindchange="input">{{form.date || '请选择日期'}}</picker>
+          <text class="label">时间</text><picker mode="time" value="{{form.time}}" data-field="time" bindchange="input">{{form.time || '请选择时间'}}</picker>
+          <view class="actions"><button class="primary full" bindtap="book" disabled="{{busy || !options.delegation_enabled || !options.delivery_policy.accepting_appointments}}">确认预约</button></view>
+        </view>
+        <view class="card"><view class="section-title">添加取送地址</view><text class="label">详细地址</text><textarea value="{{form.address}}" maxlength="256" data-field="address" bindinput="input" placeholder="街道、门牌及楼层" />
+          <text class="label">收件人（选填）</text><input value="{{form.recipient}}" maxlength="64" data-field="recipient" bindinput="input" />
+          <text class="label">联系电话（选填）</text><input type="text" value="{{form.contactPhone}}" maxlength="32" data-field="contactPhone" bindinput="input" />
+          <view class="actions"><button bindtap="saveAddress" disabled="{{busy || !form.address}}">保存地址</button></view></view>
+        <view wx:for="appointments" wx:key="appointment_id" class="card"><view class="row"><text>{{item.directionText}}</text><text class="badge">{{item.statusText}}</text></view><view>{{item.time}}</view><view class="muted">服务费 {{item.fee}}</view><view class="actions"><button wx:if="item.status === 'scheduled'" data-id="{{item.appointment_id}}" bindtap="cancel" disabled="{{busy}}">取消预约</button></view></view>
+      </block>
+      <block wx:else>
+        <view class="card"><view class="section-title">储值余额</view><view class="amount">{{walletBalance}}</view><view class="muted">本金 {{walletPrincipal}} · 赠额 {{walletBonus}}</view>
+          <text class="label">充值金额（元）</text><input type="digit" value="{{form.amount}}" maxlength="8" data-field="amount" bindinput="input" placeholder="请输入充值金额" />
+          <view wx:for="topupRules" wx:key="minimum" class="muted">充 {{item.minimum}} 赠 {{item.bonus}}</view><view class="actions"><button class="primary full" bindtap="topup" disabled="{{busy || !options.wechat_pay_enabled || !options.delegation_enabled}}">微信充值</button></view></view>
+        <view class="card"><view class="section-title">会员权益</view><view class="row"><text>{{benefits.tier.name || '普通会员'}}</text><text>可用积分 {{benefits.available_points || 0}}</text></view>
+          <text class="label">权益使用订单</text><picker range="{{orderLabels}}" bindchange="selectOrder">{{selectedOrderId ? '已选择订单，可重新选择' : '请选择本人未结订单'}}</picker>
+          <text class="label">本次使用积分</text><input type="number" value="{{form.points}}" maxlength="7" data-field="points" bindinput="input" /><view class="actions"><button data-kind="points" bindtap="benefit" disabled="{{busy || !selectedOrderId || !form.points}}">确认使用积分</button></view>
+          <text class="label">次卡本次使用次数</text><input type="number" value="{{form.uses}}" maxlength="2" data-field="uses" bindinput="input" />
+          <view wx:for="punchCards" wx:key="asset_id" class="divider"><view>{{item.name}} · {{item.statusText}}</view><view class="muted">剩余 {{item.remaining_uses}} 次 · {{item.expires_on}} 到期</view><view class="actions"><button data-kind="punch" data-id="{{item.asset_id}}" bindtap="benefit" disabled="{{busy || !selectedOrderId || item.status !== 'active'}}">使用次卡</button></view></view>
+          <view wx:for="coupons" wx:key="asset_id" class="divider"><view>{{item.name}} · {{item.amount}}</view><view class="muted">满 {{item.minimum}} 可用 · {{item.expires_on}} 到期 · {{item.statusText}}</view><view class="actions"><button data-kind="coupon" data-id="{{item.asset_id}}" bindtap="benefit" disabled="{{busy || !selectedOrderId || item.status !== 'active'}}">使用优惠券</button></view></view>
+        </view>
+        <view class="card"><view class="section-title">付款记录</view><view wx:for="paymentRows" wx:key="intent_id" class="row"><text>{{item.amount}} · {{item.status}}</text><button data-id="{{item.intent_id}}" bindtap="selectPayment" disabled="{{busy}}">查看结果</button></view><view wx:if="!paymentRows.length" class="muted">暂无线上付款</view></view>
+        <view class="card"><view class="section-title">最近余额流水</view><view wx:for="walletLedger" wx:key="ledger_id" class="row"><text>{{item.business_date}} · {{item.kindText}}</text><text>{{item.delta}}</text></view><view wx:if="!walletLedger.length" class="muted">暂无流水</view></view>
+      </block>
+    </block>
+  </block>
+</view>

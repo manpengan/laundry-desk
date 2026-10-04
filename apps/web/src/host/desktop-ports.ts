@@ -1,3 +1,5 @@
+import { createMiniappSettingsPort } from "./miniapp-settings-port.js";
+import { createPaymentChannelPort } from "./payment-channel-port.js";
 import type { CommandPort, CommandResult, QueryPort } from "../commands/types.js";
 import {
   createDesktopAuthPort,
@@ -27,6 +29,13 @@ import {
   readCommandOptions,
 } from "./desktop-value-boundary.js";
 import type { AppPorts, HealthPort, HealthResult } from "./types.js";
+import { createAiSettingsPort } from "../ai/settings-port.js";
+import { createDesktopAiPanelPort } from "../ai/desktop-ai-port.js";
+import { createScalePort } from "./scale-port.js";
+import { createRemoteAssistancePort } from "./remote-assistance-port.js";
+import { createStoreExportPort } from "./store-export-port.js";
+import { createMigrationPort } from "./migration-port.js";
+import { createNotificationSettingsPort } from "./notification-settings-port.js";
 
 export type { LaundryDesktopBridge } from "./desktop-bridge.js";
 
@@ -113,6 +122,33 @@ export function createDesktopPorts(bridge: LaundryDesktopBridge): AppPorts {
         });
   return Object.freeze({
     auth,
+    ...(bridge.paymentChannel === undefined
+      ? {}
+      : { paymentChannel: createPaymentChannelPort(bridge.paymentChannel.execute) }),
+    ...(bridge.miniappSettings === undefined
+      ? {}
+      : { miniappSettings: createMiniappSettingsPort(bridge.miniappSettings.execute) }),
+    ...(bridge.remoteAssistance === undefined
+      ? {}
+      : { remoteAssistance: createRemoteAssistancePort(bridge.remoteAssistance.execute) }),
+    ...(bridge.scale === undefined ? {} : { scale: createScalePort(bridge.scale.execute) }),
+    ...(bridge.storeExport === undefined
+      ? {}
+      : { storeExport: createStoreExportPort(bridge.storeExport.execute) }),
+    ...(bridge.migration === undefined
+      ? {}
+      : { migration: createMigrationPort(bridge.migration.execute) }),
+    ...(bridge.notificationSettings === undefined
+      ? {}
+      : {
+          notificationSettings: createNotificationSettingsPort(bridge.notificationSettings.execute),
+        }),
+    ...(bridge.ai === undefined
+      ? {}
+      : {
+          ai: createDesktopAiPanelPort(bridge.ai.execute),
+          aiSettings: createAiSettingsPort(bridge.ai.execute),
+        }),
     command: createCommandPort(bridge),
     query: createQueryPort(bridge),
     photo: createDesktopPhotoPort(bridge),

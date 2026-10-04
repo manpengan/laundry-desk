@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, open, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, open, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
@@ -76,8 +76,14 @@ test("maintenance CLI is bounded and retention deletion is explicit", () => {
 
 test("restore drill binds shadow migration to the exact repository inventory", async () => {
   const inventory = await readMigrationInventory(process.cwd());
-  assert.equal(inventory.length, 69);
-  assert.equal(inventory.at(-1)?.filename, "0069_bounded_automation.sql");
+  const files = (await readdir(join(process.cwd(), "packages/db/src/migrations")))
+    .filter((name) => /^\d{4}_[a-z0-9_]+\.sql$/u.test(name))
+    .sort();
+  assert.ok(files.length >= 72);
+  assert.deepEqual(
+    inventory.map(({ filename }) => filename),
+    files,
+  );
   assert.ok(inventory.every(({ checksum }) => /^[0-9a-f]{64}$/u.test(checksum)));
 
   const migrate = drillMigrateCommand("laundry-ci-test");

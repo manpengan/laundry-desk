@@ -1,0 +1,232 @@
+/* Shared form vocabulary for the operations settings panels (payments, SMS, AI,
+   store export, v1 import) and the pickup QR card. Tokens only (ADR liquid-glass 2.0). */
+
+.ld-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+fieldset.ld-panel {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ld-panel h3 {
+  margin: 0;
+  font-size: var(--lg-fs-md);
+}
+
+.ld-panel h4 {
+  margin: 0;
+  font-size: var(--lg-fs-sm);
+}
+
+.ld-panel__lead {
+  margin: 0;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+  line-height: 1.6;
+}
+
+.ld-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: start;
+  gap: 14px 16px;
+}
+
+.ld-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.ld-panel__row > .ld-field {
+  flex: 1 1 220px;
+}
+
+.ld-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ld-panel__check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  font-size: var(--lg-fs-sm);
+  color: var(--lg-ink);
+}
+
+.ld-panel__textarea {
+  min-height: 88px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: var(--lg-fs-sm);
+  resize: vertical;
+}
+
+.ld-panel__note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-info-bg);
+  color: var(--lg-info-ink);
+  font-size: var(--lg-fs-sm);
+  line-height: 1.5;
+}
+
+.ld-panel__note--warn {
+  background: var(--lg-warn-bg);
+  color: var(--lg-warn-ink);
+}
+
+.ld-panel__note--ok {
+  background: var(--lg-ok-bg);
+  color: var(--lg-ok-ink);
+}
+
+.ld-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ld-panel__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface);
+  font-size: var(--lg-fs-sm);
+}
+
+.ld-panel__item.is-selected {
+  border-color: var(--lg-accent);
+}
+
+.ld-panel__stats {
+  margin: 0;
+}
+
+.ld-panel__stats dt {
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-xs);
+}
+
+.ld-panel__stats dd {
+  margin: 2px 0 0;
+  font-size: var(--lg-fs-md);
+  font-weight: 600;
+}
+
+.ld-panel__meta {
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-xs);
+}
+
+.ld-panel__sub {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-2);
+}
+
+.ld-panel__code {
+  margin: 0;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-surface-2);
+  color: var(--lg-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--lg-fs-xs);
+  user-select: all;
+}
+
+.ld-panel__advanced > summary {
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ld-panel__advanced[open] > summary {
+  margin-bottom: 12px;
+}
+
+/* —— Pickup: provider QR collection (ADR-85 r1) —— */
+
+.ld-channel-collect {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--lg-hair);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-2);
+}
+
+.ld-channel-collect__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ld-channel-collect__head .ld-counter-panel__subtitle {
+  margin: 0;
+}
+
+.ld-channel-collect__due {
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+}
+
+.ld-channel-collect__intent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.ld-channel-collect__intent img {
+  border-radius: var(--lg-radius-sm);
+  background: var(--lg-surface);
+}
+
+.ld-channel-collect__state {
+  margin: 0;
+  font-size: var(--lg-fs-sm);
+  font-weight: 600;
+}
+
+.ld-channel-collect__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ld-channel-collect__note {
+  margin: 0;
+  color: var(--lg-warn-ink);
+  font-size: var(--lg-fs-xs);
+  line-height: 1.5;
+}

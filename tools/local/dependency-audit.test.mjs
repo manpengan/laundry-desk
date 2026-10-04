@@ -105,6 +105,8 @@ test("accepts a clean report and only the two reviewed moderate exceptions", () 
   assert.deepEqual(assertDependencyAuditPolicy(report([])), {
     high: 0,
     critical: 0,
+    registryHigh: 0,
+    locallyPatched: [],
     acceptedExceptions: [],
   });
 
@@ -112,6 +114,8 @@ test("accepts a clean report and only the two reviewed moderate exceptions", () 
   assert.deepEqual(assertDependencyAuditPolicy(report(ids.map((id) => advisory(id)))), {
     high: 0,
     critical: 0,
+    registryHigh: 0,
+    locallyPatched: [],
     acceptedExceptions: [...ids].sort(),
   });
 });

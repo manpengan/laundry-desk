@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory=$true)][ValidateSet('install','repair','start','stop','upgrade','rollback','uninstall','status','backup','backup-list','backup-verify','restore','maintenance-recover')][string]$Action,
+  [Parameter(Mandatory=$true)][ValidateSet('install','repair','start','stop','upgrade','rollback','uninstall','status','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config')][string]$Action,
   [Parameter(Mandatory=$true)][string]$Payload,
   [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{64}$')][string]$ManifestDigest,
   [ValidatePattern('^b_[a-f0-9]{32}$')][string]$BackupId,
@@ -35,8 +35,8 @@ function Get-BoundHash {
 
 try {
   if (($Action -eq 'restore' -and ([string]::IsNullOrEmpty($BackupId) -or [string]::IsNullOrEmpty($ConfirmationDigest))) -or
-      ($Action -eq 'backup-verify' -and ([string]::IsNullOrEmpty($BackupId) -or -not [string]::IsNullOrEmpty($ConfirmationDigest))) -or
-      ($Action -ne 'restore' -and $Action -ne 'backup-verify' -and
+      ((@('backup-verify','backup-drill') -contains $Action) -and ([string]::IsNullOrEmpty($BackupId) -or -not [string]::IsNullOrEmpty($ConfirmationDigest))) -or
+      ($Action -ne 'restore' -and (@('backup-verify','backup-drill') -notcontains $Action) -and
        (-not [string]::IsNullOrEmpty($BackupId) -or -not [string]::IsNullOrEmpty($ConfirmationDigest)))) {
     throw 'WINDOWS_COMPANION_ARGS_INVALID'
   }
@@ -61,13 +61,14 @@ try {
   $Entry = Join-Path $Payload 'scripts\lifecycle-cli.mjs'
   . (Join-Path $PSScriptRoot 'lifecycle-native.ps1')
   $ChildArguments = @($Entry, $Action, $Payload, $ManifestDigest)
-  if ($Action -eq 'restore' -or $Action -eq 'backup-verify') { $ChildArguments += $BackupId }
+  if ($Action -eq 'restore' -or (@('backup-verify','backup-drill') -contains $Action)) { $ChildArguments += $BackupId }
   if ($Action -eq 'restore') { $ChildArguments += $ConfirmationDigest }
   $rendered = @($ChildArguments | ForEach-Object {
     if ($_ -match '["\r\n\x00]') { throw 'WINDOWS_COMPANION_LAUNCH_ARGUMENT_INVALID' }
     '"' + [regex]::Replace($_, '(\\+)$', '$1$1') + '"'
   })
-  exit ([LaundryRuntimeNativeLauncher]::Run($Node, ($rendered -join ' '), $Payload))
+  $inputProtocol = @('portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -ccontains $Action
+  exit ([LaundryRuntimeNativeLauncher]::Run($Node, ($rendered -join ' '), $Payload, $inputProtocol))
 } catch {
   $code = [string]($_.Exception.GetBaseException().Message)
   if ($code -notmatch '^WINDOWS_COMPANION_[A-Z_]+$') { $code = 'WINDOWS_COMPANION_LAUNCH_FAILED' }

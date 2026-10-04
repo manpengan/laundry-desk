@@ -160,6 +160,17 @@ describe("destructive migration static reject", () => {
       "0067_readonly_ai_assistant.sql",
       "0068_ai_approval_center.sql",
       "0069_bounded_automation.sql",
+      "0070_windows_v1_import.sql",
+      "0071_windows_ai_runtime_settings.sql",
+      "0072_notification_provider_settings.sql",
+      "0073_store_export_requests.sql",
+      "0074_ai_assistant_operations.sql",
+      "0075_payment_channels.sql",
+      "0076_remote_assistance.sql",
+      "0077_miniapp_identity.sql",
+      "0078_miniapp_transactions.sql",
+      "0079_miniapp_notifications.sql",
+      "0080_ai_usage_quarantine_threshold.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

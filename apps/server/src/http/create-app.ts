@@ -3,6 +3,14 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { dirname, join } from "node:path";
+import { createImportDraftStore } from "../data-transfer/import-drafts.js";
+import { registerStoreExportRoutes } from "../data-transfer/store-export-routes.js";
+import { registerPaymentChannelRoutes } from "../payment-channels/routes.js";
+import { registerRemoteAssistanceRoutes } from "../remote-assistance/routes.js";
+import { registerMiniappRoutes } from "../customer-miniapp/routes.js";
+import { installWechatNotificationWorker } from "../customer-miniapp/notifications-worker.js";
+import { registerV1MigrationRoutes } from "../data-transfer/import-routes.js";
 
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
@@ -67,6 +75,10 @@ import { registerCustomerPortalRoutes } from "./customer-portal-routes.js";
 import type { ByokKmsPort } from "../ai/byok-kms.js";
 import { createByokRuntime } from "../ai/byok-runtime.js";
 import { createByokService } from "../ai/byok-service.js";
+import { createAiRuntimeConfigService } from "../ai/runtime-config-service.js";
+import { createRuntimeProviderResolver } from "../ai/runtime-provider.js";
+import { registerAiRuntimeConfigRoutes } from "./ai-runtime-config-routes.js";
+import { registerNotificationSettingsRoutes } from "./notification-settings-routes.js";
 import type { ByokStore } from "../ai/byok-types.js";
 import { registerByokRoutes } from "./byok-routes.js";
 import { createByokMutationRateLimiter, type ByokMutationRateLimiter } from "./byok-rate-limit.js";
@@ -81,6 +93,10 @@ import { MemoryAiConversationStore } from "../ai/streaming-memory-store.js";
 import { createPgAiConversationStore } from "../ai/streaming-pg-store.js";
 import { createAiStreamingService } from "../ai/streaming-service.js";
 import { createAiRateLimiter, type AiRateLimiter } from "../ai/streaming-rate-limit.js";
+import { registerAssistantOperationRoutes } from "../ai/assistant-operation-routes.js";
+import { registerVisionRoutes } from "../ai/vision-routes.js";
+import { createVisionService } from "../ai/vision-service.js";
+import { createRuntimeVisionProviderResolver } from "../ai/vision-runtime-provider.js";
 import { registerAiStreamingRoutes } from "./ai-streaming-routes.js";
 import { createProviderValidationService } from "../ai/provider-validation-service.js";
 import type { ProviderHttpPort } from "../ai/provider-http.js";
@@ -118,6 +134,7 @@ export type CreateAppOptions = Readonly<{
   securityEventSink?: SecurityEventSink;
   /** Production injects a non-exportable KMS/OS secret-store adapter; never a raw KEK. */
   byokKms?: ByokKmsPort;
+  enableLocalAi?: boolean;
   /** Focused tests may replace persistence without weakening route policy. */
   byokStore?: ByokStore;
   byokMutationRateLimiter?: ByokMutationRateLimiter;
@@ -276,6 +293,18 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     options.edgePrintRateLimiter ?? createEdgePrintRateLimiter(),
   );
   registerPhotoFileRoutes(app, context, options.runtime.photo);
+  registerNotificationSettingsRoutes(app, context);
+  registerStoreExportRoutes(app, context);
+  registerRemoteAssistanceRoutes(app, context);
+  registerMiniappRoutes(app, context, options.byokKms ?? null);
+  installWechatNotificationWorker(app, options.runtime, options.byokKms ?? null);
+  registerPaymentChannelRoutes(app, context, options.byokKms ?? null);
+  if (options.runtime.pool !== null && options.runtime.photo.files !== undefined) {
+    const drafts = await createImportDraftStore(
+      join(dirname(options.runtime.photo.files.rootPath), "import-requests"),
+    );
+    registerV1MigrationRoutes(app, context, drafts);
+  }
   registerDeliveryEvidenceFileRoutes(app, context, options.runtime.deliveryEvidence);
   const byokRuntime = createByokRuntime(
     options.runtime,
@@ -289,17 +318,38 @@ export async function createLocalApp(options: CreateAppOptions): Promise<Fastify
     options.byokMutationRateLimiter ?? createByokMutationRateLimiter(),
     createProviderValidationService(byokRuntime, options.aiProviderHttp),
   );
+  registerAiRuntimeConfigRoutes(
+    app,
+    context,
+    createAiRuntimeConfigService(byokRuntime, options.aiProviderHttp),
+    options.byokMutationRateLimiter ?? createByokMutationRateLimiter(),
+  );
   const aiStore =
     options.aiConversationStore ??
     (options.runtime.pool === null
       ? new MemoryAiConversationStore()
       : createPgAiConversationStore(options.runtime.pool));
+  registerAssistantOperationRoutes(app, context);
+  registerVisionRoutes(
+    app,
+    context,
+    options.enableLocalAi === true && byokRuntime.kms !== null
+      ? createVisionService(
+          options.runtime,
+          aiStore,
+          createRuntimeVisionProviderResolver(byokRuntime, options.aiProviderHttp),
+        )
+      : null,
+  );
   registerAiStreamingRoutes(
     app,
     context,
     createAiStreamingService({
       store: aiStore,
       provider: options.aiProvider ?? null,
+      ...(options.enableLocalAi === true && byokRuntime.kms !== null
+        ? { providerResolver: createRuntimeProviderResolver(byokRuntime, options.aiProviderHttp) }
+        : {}),
       tool: options.aiSyntheticTool ?? deterministicSyntheticTool,
       assistantTool: options.aiAssistantTool ?? createReadonlyAssistantTool(options.runtime),
     }),

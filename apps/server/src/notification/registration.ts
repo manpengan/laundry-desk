@@ -3,6 +3,10 @@ import type { MutableCommandRegistry } from "../bus/registry.js";
 import { createNotificationDeliveryHandlers } from "./delivery-handlers.js";
 import { createNotificationHandlers } from "./handlers.js";
 import type { NotificationHandlerDeps } from "./types.js";
+import {
+  registerWechatNotificationCommands,
+  registerWechatNotificationQueries,
+} from "../customer-miniapp/notifications-handlers.js";
 
 export function registerNotificationCommands(
   registry: MutableCommandRegistry,
@@ -19,7 +23,11 @@ export function registerNotificationCommands(
     "notification.delivery_batch.enqueue",
     deliveryHandlers["notification.delivery_batch.enqueue"],
   );
-  return Object.freeze(["notification.manual_list.create", "notification.delivery_batch.enqueue"]);
+  return Object.freeze([
+    "notification.manual_list.create",
+    "notification.delivery_batch.enqueue",
+    ...registerWechatNotificationCommands(registry, deps.externalSettings !== undefined),
+  ]);
 }
 
 export function registerNotificationQueries(
@@ -50,5 +58,6 @@ export function registerNotificationQueries(
     "notification.delivery.capability.get",
     "notification.delivery_batches.list",
     "notification.delivery_batch.get",
+    ...registerWechatNotificationQueries(registry, deps.externalSettings !== undefined),
   ]);
 }

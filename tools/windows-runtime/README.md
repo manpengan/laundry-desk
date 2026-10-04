@@ -19,7 +19,7 @@ pnpm.cmd runtime:win:package --source-sha <40-hex-sha> --node-archive <node.zip>
 
 构建器核对源码前后 clean SHA，以锁文件导出 hoisted production Server，验证上游 archive 摘要，
 只提取 Node 可执行文件/许可证及 PostgreSQL bin/lib/share/许可证；ZIP 路径、类型和解压大小有界。
-payload 包含同一 Server、原生依赖、Win32 helper、69 个既有迁移及契约/schema 摘要输入。
+payload 包含同一 Server、原生依赖、Win32 helper、该源码的完整迁移集及契约/schema 摘要输入。
 逐文件清单绑定整个 payload；链接、额外文件、空目录、硬链接、Windows 路径别名和错误 PE 架构均拒绝。
 
 构建时只用 Windows 内置 `expand.exe` 解开经固定摘要验证的 CAB，不执行 Redistributable 或 MSI。
@@ -47,10 +47,10 @@ node.exe tools/windows-runtime/package-runtime-entry.mjs --payload <payload-abso
 选择“安装本地服务”或“升级”后，私有 Programs 目录与开始菜单保留对应发行的独立维护入口；
 升级保留旧入口，撤走原分发后仍可维护。柜台卸载不删除入口或数据库。
 
-界面提供状态、启停、修复、同迁移升级/程序回滚、备份列表/验证/恢复与中断维护恢复。
+界面提供状态、启停、修复、跨迁移联合升级/回退、备份列表/验证/恢复、离机备份、定时维护、数据迁移/导出与中断维护恢复。
 恢复仍要求明确选择一份备份并人工输入完整确认摘要；界面不会默认选择或自动填入确认。
 这是 [ADR-69](../../docs/adr/2026-10-01-adr-69-windows-runtime-operator-entry.md) 的开发版入口，
-当前只允许合成数据，照片和迁移变化仍受既有失败关闭约束。
+当前只允许合成数据；照片、迁移和权限恢复均按可信清单验证，不满足约束时停止操作。
 
 ## 无源码仓库检查
 
@@ -79,7 +79,10 @@ powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <payload
 
 同一入口支持 `status`、`stop`、`start`、`repair`、`upgrade`、`rollback`、`uninstall`。
 `upgrade` 传入新完整包及其外部摘要；`rollback` 选择状态中保留的前一版本。
-只允许迁移头及聚合摘要均一致的升级；不同迁移必须另走数据库恢复方案。
+相同迁移按既有程序升级流程处理；迁移为可信追加且 PostgreSQL 版本一致时，按 ADR-80 先建立
+程序/数据恢复点，在影子库执行新迁移并启动真实服务健康探测，再切换程序与数据库。
+历史迁移被修改、缺失或 PostgreSQL 主版本不匹配时拒绝升级。跨迁移回退使用绑定的升级前快照，
+回退前另存当前数据安全点，不能只替换程序目录。
 
 安装根固定为 `%LOCALAPPDATA%\laundry-desk-v2\runtime-companion`。初始化时创建两个独立合成管理员，
 凭据仅写入私有 `secrets` 下的 `laundry-bootstrap-admin-*` 与 `laundry-bootstrap-approver-*` 文件。
@@ -106,7 +109,7 @@ powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <payload
 ```
 
 `backup` 返回 `backup_id` 和备份 `manifest_sha256`；确认摘要来自所选备份，与发行摘要是不同值。
-托管目录在安装根的 `backups`，每份仅含 custom-format dump 和严格 manifest，使用受保护 DACL。
+托管目录在安装根的 `backups`，每份包含 custom-format dump、严格 manifest 及所引用的照片，使用受保护 DACL。
 绑定实例、迁移、PostgreSQL 版本、大小与 SHA，不接受外部导入路径。恢复先创建安全点，在临时库
 单事务导入并直接校验迁移账本与关键表，再以 OID 绑定的事务切换，避免残留恢复后多余旧表。
 
@@ -115,21 +118,27 @@ verified 之后完成已经验证的恢复。`safety_backup` 保留恢复前的�
 完成时，登录启动、普通启动/修复、升级/回滚和卸载不能绕过记录。原本停止的实例维护后保持停止。
 未标记的临时库不会自动删除，结果会返回 `retained_shadow`。
 
-单 dump 512 MiB、原库预检 2 GiB、托管备份含未完成目录最多 32 份，不自动删除。当前 Windows
-照片能力尚未启用，照片目录存在或照片表非空就阻断；仅允许相同迁移与 PostgreSQL 版本恢复。
+单 dump 512 MiB、原库预检 2 GiB、托管备份含未完成目录最多 32 份。启用每日计划后，按明确
+留存规则清理已校验且不被当前维护/回退记录引用的备份，至少保留最新两份；损坏或未知目录不自动清理。
+Windows 私有照片能力已启用，数据库与照片共同验证/恢复；普通备份恢复仍要求相同迁移和 PostgreSQL 版本。
+恢复保留当前密码、人员停用和角色状态，撤销旧会话/执行授权，AI 密钥和短信设置必须重新配置。
+旧版已完成切换但没有撤权证明的中断记录保持停服，不能靠再次启动绕过。
 当前版与登录 controller 必须都支持备份；旧 controller 返回 `BACKUP_CONTROLLER_UPGRADE_REQUIRED`，
 需先按既有同迁移流程升级到新包，再保留数据卸载并以当前同一发行身份重装，不能手改任务或状态。
-这仍是合成数据开发能力，不代表离机恢复、换机导入、加密导出或真实运营准入已通过。
+维护窗口另提供加密离机归档、换机导入、旧版迁移和整店业务/照片导出；口令和路径经有界 UTF-8
+标准输入传给可信维护进程，不放在命令行。换机导入以可信当前模式逐字段恢复并撤销旧执行权。
+这些软件能力已完成本地和隔离真库回归；完整 Windows 安装态、离机介质和真实运营准入分别验证，
+见[本轮实施清单](../../docs/operations/2026-10-03-windows-full-feature-batches.md)。
 
 ## 后续现场与生产门禁
 
 执行顺序与失败重入矩阵见
 [Windows Runtime companion 后续交付计划](../../docs/superpowers/plans/2026-09-12-windows-runtime-companion-delivery.md)。
 
-- 迁移变化时的程序/数据库联合升级与恢复，以及照片能力启用后的联合备份；
+- 新维护功能在完整 Windows 安装态的程序/数据联合升级回退、照片、定时任务与离机归档证据；
 - Authenticode 或获裁决的受控内部分发策略；
 - 目标 Windows 10/11、中文 IME、150% DPI、三类打印机现场证据；
-- ADR-65 独立生产候选、离机恢复、告警送达、容量与真实数据责任。
+- ADR-71 后续本机生产准入 ADR、离机恢复、告警送达、容量与真实数据责任（Cloud 仍暂停）。
 
 这些现场与生产证据不由 Windows Server CI 替代。Electron 继续不负责数据库生命周期。
 

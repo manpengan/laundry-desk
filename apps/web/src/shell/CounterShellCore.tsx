@@ -1,4 +1,4 @@
-import type { PrintJobSummary } from "@laundry/ui";
+import { useToastPageScope, type PrintJobSummary } from "@laundry/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 
 import type { AuthClient } from "../auth/AuthClient.js";
@@ -7,6 +7,14 @@ import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import { createMockConnection, type ConnectionStatus } from "../connection.js";
 import type { AiPanelPort } from "../host/ai-port.js";
+import type { AiSettingsPort } from "../ai/settings-port.js";
+import type { ScalePort } from "../host/scale-port.js";
+import type { StoreExportPort } from "../host/store-export-port.js";
+import type { PaymentChannelPort } from "../host/payment-channel-port.js";
+import type { MiniappSettingsPort } from "../host/miniapp-settings-port.js";
+import type { RemoteAssistancePort } from "../host/remote-assistance-port.js";
+import type { MigrationPort } from "../host/migration-port.js";
+import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
 import type { OfflinePort } from "../host/offline-port.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
@@ -46,6 +54,14 @@ export type CounterShellProps = {
   offlinePort?: OfflinePort;
   printerPort?: PrinterPort;
   aiPort?: AiPanelPort;
+  aiSettingsPort?: AiSettingsPort;
+  migrationPort?: MigrationPort;
+  storeExportPort?: StoreExportPort;
+  paymentChannelPort?: PaymentChannelPort;
+  miniappSettingsPort?: MiniappSettingsPort;
+  remoteAssistancePort?: RemoteAssistancePort;
+  scalePort?: ScalePort;
+  notificationSettingsPort?: NotificationSettingsPort;
   onSessionChange: (session: SessionView | null) => void;
   initialConnection?: ConnectionStatus;
   initialTheme?: ThemePreference;
@@ -132,10 +148,20 @@ export function CounterShellCore({
   offlinePort,
   printerPort,
   aiPort,
+  aiSettingsPort,
+  migrationPort,
+  storeExportPort,
+  paymentChannelPort,
+  miniappSettingsPort,
+  remoteAssistancePort,
+  scalePort,
+  notificationSettingsPort,
   readOnly = false,
 }: CounterShellCoreProps) {
   const [expanded, setExpanded] = useState(readSidebarExpanded);
   const [activeId, setActiveId] = useState<NavItemId>(initialNav);
+  // ADR-91 P1-9: a toast belongs to the page that raised it.
+  useToastPageScope(activeId);
   const [themePref, setThemePref] = useState<ThemePreference>(
     () => initialTheme ?? initialCounterTheme(browserThemeStorage()),
   );
@@ -288,6 +314,14 @@ export function CounterShellCore({
           ) : null}
           <RouteGate permission={permission} activeId={activeId} onNavigate={setActiveId}>
             <PageHostComponent
+              {...(paymentChannelPort === undefined ? {} : { paymentChannelPort })}
+              {...(miniappSettingsPort === undefined ? {} : { miniappSettingsPort })}
+              {...(remoteAssistancePort === undefined ? {} : { remoteAssistancePort })}
+              {...(migrationPort === undefined ? {} : { migrationPort })}
+              {...(scalePort === undefined ? {} : { scalePort })}
+              {...(storeExportPort === undefined ? {} : { storeExportPort })}
+              {...(notificationSettingsPort === undefined ? {} : { notificationSettingsPort })}
+              {...(aiSettingsPort === undefined ? {} : { aiSettingsPort })}
               activeId={activeId}
               loading={loading}
               onNavigate={setActiveId}

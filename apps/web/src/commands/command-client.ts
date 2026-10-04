@@ -9,6 +9,7 @@ import type {
   CommandResult,
 } from "./types.js";
 import { readConfirmationSummary } from "./confirmation-summary.js";
+import { localizeFailure } from "./error-copy.js";
 import { requestFailureResult } from "./request-abort.js";
 
 /** Matches packages/contracts CSRF_HEADER_NAME. */
@@ -71,15 +72,19 @@ function parseFailure(body: unknown): CommandFailure {
           ? { confirm_ref: err.detail.confirm_ref }
           : {}),
         ...(typeof err.detail.message === "string" ? { message: err.detail.message } : {}),
+        ...(typeof err.detail.reason === "string" ? { reason: err.detail.reason } : {}),
+        ...(typeof err.detail.path === "string" ? { path: err.detail.path } : {}),
         ...(summary === undefined ? {} : { summary }),
       });
     }
   }
-  return Object.freeze({
-    code,
-    ...(message !== undefined ? { message } : {}),
-    ...(detail !== undefined ? { detail } : {}),
-  });
+  return localizeFailure(
+    Object.freeze({
+      code,
+      ...(message !== undefined ? { message } : {}),
+      ...(detail !== undefined ? { detail } : {}),
+    }),
+  );
 }
 
 function isDefinitiveFailure(status: number, body: unknown, failure: CommandFailure): boolean {

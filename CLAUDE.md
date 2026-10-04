@@ -17,6 +17,8 @@ Claude（Opus 4.7）在本项目中的入场指引。
 
 当前实现与设计由 Codex 负责，见 `AGENTS.md` 与 ADR-66。
 
+例外：2026-10-04 manpengan 单次授权 Claude 实施 PR #229 统一修复，见 [ADR-91](docs/adr/2026-10-04-adr-91-pr229-remediation.md)。
+
 ## 入场必读
 
 1. [`docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md`](docs/adr/2026-08-29-adr-66-windows-hongfa-pilot.md) — 当前 Windows/宏发主线裁决

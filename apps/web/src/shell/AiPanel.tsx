@@ -1,7 +1,9 @@
 import { Button } from "@laundry/ui";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { AiStreamEvent } from "@laundry/contracts";
+import { AiOperationCard } from "../ai/AiOperationCard.js";
+import { VisionPanel } from "../ai/VisionPanel.js";
+import type { AiOperationPreview, AiStreamEvent } from "@laundry/contracts";
 
 import type { AiPanelPort } from "../host/ai-port.js";
 
@@ -9,12 +11,14 @@ type PanelMessage = Readonly<{
   id: string;
   role: "user" | "assistant" | "system";
   text: string;
+  preview?: AiOperationPreview;
 }>;
 
 const SUGGESTIONS = Object.freeze([
   "查询今天的经营汇总，并列出来源和筛选条件",
   "按票号或顾客线索检索订单/顾客，隐去个人信息",
-  "帮我按内置规程排查打印问题",
+  "分析最近 7 天经营收入与实际收入，并说明口径",
+  "列出滞留 30 天的催取候选，只准备人工联系清单",
 ]);
 
 export type AiPanelProps = Readonly<{
@@ -46,11 +50,25 @@ function nextId(): string {
   return globalThis.crypto.randomUUID();
 }
 
+const STOP_REASONS: Readonly<Record<string, string>> = Object.freeze({
+  AI_PROVIDER_FAILED: "服务商暂时不可用或网络中断",
+  AI_ABORTED: "已按要求停止",
+  AI_TOOL_LIMIT: "查询步骤超过上限",
+  AI_TOOL_TIMEOUT: "查询超时",
+  AI_DEADLINE_EXCEEDED: "回答超时",
+  AI_UNAVAILABLE: "AI 当前不可用（预算已用完或暂时熔断）",
+});
+
 function systemText(event: AiStreamEvent): string | null {
-  if (event.type === "tool_call") return `正在执行有界只读工具：${event.tool}`;
+  if (event.type === "done" && event.finish_reason === "limit")
+    return "回答已达到本次生成上限，内容可能不完整；未执行截断的操作请求。";
+  if (event.type === "tool_call") return `正在执行有界工具：${event.tool}`;
   if (event.type === "tool_result")
-    return `只读工具 ${event.tool}：${event.outcome}（回答须附来源与筛选条件）`;
-  if (event.type === "error") return `AI 已停止（${event.code}）`;
+    return `工具 ${event.tool}：${event.outcome}（回答须附来源与筛选条件）`;
+  if (event.type === "error")
+    return event.code === "AI_OUTPUT_LIMIT"
+      ? "AI 已停止：服务商报告的用量或输出超出本次限制，本次预留额度已全额结算。用量明显异常时系统会停用 AI，管理员核对服务商账单后可在设置里重新启用。"
+      : `AI 已停止：${STOP_REASONS[event.code] ?? "本次没有完成"}。如本次没收到用量报告，预留额度已保守结算；24 小时内 3 次无法核实时系统会停用 AI，管理员核对账单后可在设置里重新启用。`;
   return null;
 }
 
@@ -73,7 +91,14 @@ function applyEvent(
     ? messages
     : Object.freeze([
         ...messages,
-        Object.freeze({ id: `${assistantId}:${event.cursor}`, role: "system" as const, text }),
+        Object.freeze({
+          id: `${assistantId}:${event.cursor}`,
+          role: "system" as const,
+          text,
+          ...(event.type === "tool_result" && event.preview !== undefined
+            ? { preview: event.preview }
+            : {}),
+        }),
       ]);
 }
 
@@ -214,13 +239,16 @@ export function AiPanel({ open, onClose, authSessionId, aiPort }: AiPanelProps) 
       <header className="ld-ai-panel__header">
         <div>
           <strong>AI 助手</strong>
-          <small>经营 / 检索 / 规程 · 流式生成 · 仅限有界只读工具</small>
+          <small>经营 / 催取 / 规程 · 操作需单独人工确认</small>
         </div>
         <Button type="button" size="sm" variant="secondary" onClick={onClose}>
           关闭
         </Button>
       </header>
       <div className="ld-ai-panel__messages" aria-live="polite">
+        {aiPort.vision === undefined ? null : (
+          <VisionPanel key={authSessionId} port={aiPort.vision} />
+        )}
         {messages.length === 0 ? (
           <div className="ld-ai-panel__empty">
             <p>回答会附只读来源与筛选条件，顾客资料默认脱敏。</p>
@@ -235,7 +263,7 @@ export function AiPanel({ open, onClose, authSessionId, aiPort }: AiPanelProps) 
           </div>
         ) : (
           messages.map((message) => (
-            <p
+            <div
               key={message.id}
               className={`ld-ai-panel__message ld-ai-panel__message--${message.role}`}
             >
@@ -243,7 +271,14 @@ export function AiPanel({ open, onClose, authSessionId, aiPort }: AiPanelProps) 
                 {message.role === "user" ? "你" : message.role === "assistant" ? "AI" : "系统"}
               </strong>
               <span>{message.text || (busy && message.role === "assistant" ? "生成中…" : "")}</span>
-            </p>
+              {message.preview === undefined ? null : (
+                <AiOperationCard
+                  key={`${authSessionId}:${message.preview.confirm_ref}`}
+                  preview={message.preview}
+                  port={aiPort}
+                />
+              )}
+            </div>
           ))
         )}
       </div>

@@ -18,6 +18,7 @@ export type V2MigrationApplyRequest = Readonly<{
  */
 export type V2PostgresMigrationLoader = Readonly<{
   kind: "v2-postgresql";
+  withExclusiveMaintenance?: <T>(operation: () => Promise<T>) => Promise<T>;
   createBackupPoint: (request: V2MigrationLoadRequest) => Promise<Readonly<{ id: string }>>;
   applyIdempotently: (request: V2MigrationApplyRequest) => Promise<void>;
 }>;
@@ -27,6 +28,8 @@ function isLoader(value: unknown): value is V2PostgresMigrationLoader {
   const candidate = value as Record<string, unknown>;
   return (
     candidate.kind === "v2-postgresql" &&
+    (candidate.withExclusiveMaintenance === undefined ||
+      typeof candidate.withExclusiveMaintenance === "function") &&
     typeof candidate.createBackupPoint === "function" &&
     typeof candidate.applyIdempotently === "function"
   );
@@ -54,10 +57,14 @@ export async function loadV2Migration(
   if (!report.isZeroDifference) {
     throw new Error("refusing to apply a migration with reconciliation differences");
   }
-  const backupPoint = await loader.createBackupPoint({
-    targetDatabaseUrl,
-    sourceBackupSha256: plan.sourceBackupSha256,
-  });
-  if (backupPoint.id.length === 0) throw new Error("v2 loader did not create a backup point");
-  await loader.applyIdempotently({ backupPointId: backupPoint.id, plan, report });
+  const apply = async () => {
+    const backupPoint = await loader.createBackupPoint({
+      targetDatabaseUrl,
+      sourceBackupSha256: plan.sourceBackupSha256,
+    });
+    if (backupPoint.id.length === 0) throw new Error("v2 loader did not create a backup point");
+    await loader.applyIdempotently({ backupPointId: backupPoint.id, plan, report });
+  };
+  if (loader.withExclusiveMaintenance) await loader.withExclusiveMaintenance(apply);
+  else await apply();
 }

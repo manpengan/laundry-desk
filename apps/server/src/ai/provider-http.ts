@@ -1,6 +1,7 @@
 import { lookup } from "node:dns/promises";
 import { request as httpsRequest, type RequestOptions } from "node:https";
 
+import { failedBeforeSending } from "../http/unsent-failure.js";
 import { validateAiEgressUrl } from "./safety-guard.js";
 import { ProviderAdapterError } from "./provider-types.js";
 
@@ -44,12 +45,18 @@ export function createPinnedLookup(address: string): NonNullable<RequestOptions[
   };
 }
 
-function mapTransportError(error: unknown, signal: AbortSignal): ProviderAdapterError {
+function mapTransportError(
+  error: unknown,
+  signal: AbortSignal,
+  phase: "connect" | "body" = "body",
+): ProviderAdapterError {
   if (error instanceof ProviderAdapterError) return error;
   if (signal.aborted) return new ProviderAdapterError("PROVIDER_ABORTED");
   const code = error instanceof Error && "code" in error ? String(error.code) : "";
+  if (code === "AI_PROVIDER_TIMEOUT") return new ProviderAdapterError("PROVIDER_TIMEOUT");
   return new ProviderAdapterError(
-    code === "AI_PROVIDER_TIMEOUT" ? "PROVIDER_TIMEOUT" : "NETWORK_ERROR",
+    "NETWORK_ERROR",
+    phase === "connect" && failedBeforeSending(error),
   );
 }
 
@@ -61,17 +68,18 @@ export function createPinnedProviderHttp(
   return Object.freeze({
     async request(input): Promise<ProviderHttpResponse> {
       if (Buffer.byteLength(input.body ?? "", "utf8") > MAX_REQUEST_BYTES) {
-        throw new ProviderAdapterError("PROVIDER_RESPONSE_TOO_LARGE");
+        throw new ProviderAdapterError("PROVIDER_RESPONSE_TOO_LARGE", true);
       }
       let target;
       try {
         target = await validateAiEgressUrl(input.url, allowedHosts, resolveHost);
       } catch {
-        throw new ProviderAdapterError("NETWORK_POLICY_DENIED");
+        throw new ProviderAdapterError("NETWORK_POLICY_DENIED", true);
       }
       const url = new URL(target.url);
       const pinnedAddress = target.addresses[0];
-      if (pinnedAddress === undefined) throw new ProviderAdapterError("NETWORK_POLICY_DENIED");
+      if (pinnedAddress === undefined)
+        throw new ProviderAdapterError("NETWORK_POLICY_DENIED", true);
       try {
         return await new Promise<ProviderHttpResponse>((resolve, reject) => {
           let timedOut = false;
@@ -113,18 +121,20 @@ export function createPinnedProviderHttp(
           request.end();
         });
       } catch (error) {
-        throw mapTransportError(error, input.signal);
+        throw mapTransportError(error, input.signal, "connect");
       }
     },
   });
 }
 
+/** An HTTP error status means the provider produced no output for this request. */
 export function requireSuccessfulResponse(status: number): void {
   if (status >= 200 && status < 300) return;
-  if (status === 401 || status === 403) throw new ProviderAdapterError("PROVIDER_AUTH_REJECTED");
-  if (status === 429) throw new ProviderAdapterError("PROVIDER_RATE_LIMITED");
-  if (status >= 500) throw new ProviderAdapterError("PROVIDER_UNAVAILABLE");
-  throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID");
+  if (status === 401 || status === 403)
+    throw new ProviderAdapterError("PROVIDER_AUTH_REJECTED", true);
+  if (status === 429) throw new ProviderAdapterError("PROVIDER_RATE_LIMITED", true);
+  if (status >= 500) throw new ProviderAdapterError("PROVIDER_UNAVAILABLE", true);
+  throw new ProviderAdapterError("PROVIDER_RESPONSE_INVALID", true);
 }
 
 async function readBoundedBody(

@@ -90,7 +90,9 @@ function New-RuntimeTaskSettings {
     -RestartInterval (New-TimeSpan -Minutes 1) `
     -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -DisallowHardTerminate `
-    -StartWhenAvailable
+    -StartWhenAvailable `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries
 }
 
 function Assert-ExactGitSource {

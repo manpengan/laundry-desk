@@ -1,3 +1,11 @@
+import {
+  createMiniappSettingsPort,
+  createHttpMiniappSettingsOperation,
+} from "./miniapp-settings-port.js";
+import {
+  createPaymentChannelPort,
+  createHttpPaymentChannelOperation,
+} from "./payment-channel-port.js";
 import { createHttpAuthClient, type HttpAuthCredentialStore } from "../auth/HttpAuthClient.js";
 import { createHttpApprovalPort } from "../ai/approval-port.js";
 import { createHttpCommandClient } from "../commands/command-client.js";
@@ -7,6 +15,17 @@ import { createBrowserResumePort } from "./browser-resume-port.js";
 import { createHttpPhotoPort } from "./photo-port.js";
 import { createHttpDeliveryEvidenceMediaPort } from "./delivery-evidence-port.js";
 import { createHttpAiPanelPort } from "./ai-port.js";
+import { createAiSettingsPort, createHttpAiSettingsOperation } from "../ai/settings-port.js";
+import { createStoreExportPort, createHttpStoreExportOperation } from "./store-export-port.js";
+import { createMigrationPort, createHttpMigrationOperation } from "./migration-port.js";
+import {
+  createRemoteAssistancePort,
+  createHttpRemoteAssistanceOperation,
+} from "./remote-assistance-port.js";
+import {
+  createNotificationSettingsPort,
+  createHttpNotificationSettingsOperation,
+} from "./notification-settings-port.js";
 
 export type BrowserPortsOptions = Readonly<{
   apiBaseUrl: string;
@@ -54,7 +73,10 @@ function unavailable(message: string): HealthResult {
  */
 export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
   const base = options.apiBaseUrl.replace(/\/$/u, "");
-  const fetchImpl = options.fetchImpl ?? fetch;
+  // Ports receive this inside an options object; keep it callable without a `this` binding.
+  const injected = options.fetchImpl;
+  const fetchImpl: typeof fetch =
+    injected === undefined ? (input, init) => fetch(input, init) : injected;
   const readCsrf = options.readCsrf ?? defaultReadCsrf;
   let accessToken: string | null = null;
   const credentialStore: HttpAuthCredentialStore = Object.freeze({
@@ -85,6 +107,54 @@ export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
 
   return Object.freeze({
     auth,
+    paymentChannel: createPaymentChannelPort(
+      createHttpPaymentChannelOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
+    miniappSettings: createMiniappSettingsPort(
+      createHttpMiniappSettingsOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
+    remoteAssistance: createRemoteAssistancePort(
+      createHttpRemoteAssistanceOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
+    notificationSettings: createNotificationSettingsPort(
+      createHttpNotificationSettingsOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
+    storeExport: createStoreExportPort(
+      createHttpStoreExportOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
+    migration: createMigrationPort(
+      createHttpMigrationOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
     resume: createBrowserResumePort(auth),
     command,
     query,
@@ -106,6 +176,14 @@ export function createBrowserPorts(options: BrowserPortsOptions): AppPorts {
       getAccessToken: credentialStore.getAccessToken,
       readCsrf: credentialStore.readCsrf,
     }),
+    aiSettings: createAiSettingsPort(
+      createHttpAiSettingsOperation({
+        apiBaseUrl: base,
+        fetchImpl,
+        getAccessToken: credentialStore.getAccessToken,
+        readCsrf: credentialStore.readCsrf,
+      }),
+    ),
     approval: createHttpApprovalPort({
       apiBaseUrl: base,
       fetchImpl,

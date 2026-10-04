@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { AiSafetyStatusView } from "@laundry/contracts";
 
 import type { AiPanelPort } from "../host/ai-port.js";
+import { microsToYuan } from "../ai/ai-money.js";
 
 export function OwnerAiSafetyView({ status }: Readonly<{ status: AiSafetyStatusView }>) {
   return (
@@ -18,7 +19,8 @@ export function OwnerAiSafetyView({ status }: Readonly<{ status: AiSafetyStatusV
       <div>
         <dt>估算成本 / 月限额</dt>
         <dd>
-          {status.estimated_cost_micros} / {status.monthly_limit_micros} 微单位
+          约 {microsToYuan(status.estimated_cost_micros)} /{" "}
+          {microsToYuan(status.monthly_limit_micros)} 元
         </dd>
       </div>
       <div>

@@ -208,6 +208,9 @@ test("PageHost workbench with session+queryClient mounts three-pane counter work
   assert.match(html, /data-testid="counter-workbench-orders"/);
   assert.match(html, />刷新</);
   assert.match(html, /欠款/);
+  assert.match(html, /收款（退款前）/u);
+  assert.match(html, /含会员余额付款；欠款补缴和冲正请查看账目。/u);
+  assert.doesNotMatch(html, /实收/u);
 });
 
 test("PageHost reminder route mounts the explicit manual fallback", () => {

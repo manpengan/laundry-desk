@@ -12,6 +12,7 @@ import type { SessionView } from "../auth/types.js";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
 import type { PrinterPort } from "../host/printer-port.js";
+import type { RemoteAssistancePort } from "../host/remote-assistance-port.js";
 import { PRINTER_PATH_ENV_NAME, SettingsPage } from "./SettingsPage.js";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -38,6 +39,39 @@ const SESSION: SessionView = Object.freeze({
 
 test("PRINTER_PATH_ENV_NAME is LAUNDRY_PRINTER_PATH", () => {
   assert.equal(PRINTER_PATH_ENV_NAME, "LAUNDRY_PRINTER_PATH");
+});
+
+test("remote assistance settings stay hidden; when offered they require an admin and start disabled", () => {
+  const unavailable = async () => ({ ok: false as const, error: "unconfigured" });
+  const remoteAssistancePort: RemoteAssistancePort = {
+    status: unavailable,
+    authorize: unavailable,
+    revoke: unavailable,
+  };
+  const render = (role: SessionView["role"], available: boolean) =>
+    renderToStaticMarkup(
+      createElement(
+        ToastProvider,
+        null,
+        createElement(SettingsPage, {
+          session: { ...SESSION, role },
+          authClient: createMockAuthClient(),
+          commandClient: createMockCommandClient(),
+          publicEntryFeatures,
+          ...(available ? { remoteAssistancePort } : {}),
+        }),
+      ),
+    );
+  let publicEntryFeatures = false;
+  // ADR-91 D-1/D-2: hidden from every host until the public entry is decided.
+  assert.doesNotMatch(render("admin", true), /settings-remote-assistance/u);
+  publicEntryFeatures = true;
+  assert.doesNotMatch(render("admin", false), /开启一小时协助/u);
+  assert.doesNotMatch(render("staff", true), /开启一小时协助/u);
+  const html = render("admin", true);
+  assert.match(html, /settings-remote-assistance/u);
+  assert.match(html, /当前管理员密码/u);
+  assert.match(html, /<button[^>]*disabled=""[^>]*>开启一小时协助/u);
 });
 
 test("SettingsPage SSR keeps the legacy path smoke CLI-only", () => {

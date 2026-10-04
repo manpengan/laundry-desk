@@ -27,7 +27,14 @@ export type ProviderFailureCode =
 export class ProviderAdapterError extends Error {
   override readonly name = "ProviderAdapterError";
 
-  constructor(readonly code: ProviderFailureCode) {
+  /**
+   * ADR-82 r1: true only when the provider cannot have run the request — it never left
+   * this machine, or the provider answered with an HTTP error before any output.
+   */
+  constructor(
+    readonly code: ProviderFailureCode,
+    readonly unbilled = false,
+  ) {
     super(code);
   }
 }

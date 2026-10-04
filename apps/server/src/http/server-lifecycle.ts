@@ -6,6 +6,7 @@ import { createLocalApp, type CreateAppOptions } from "./create-app.js";
 import { resolveCookiePolicy } from "./cookie-policy.js";
 import { createHttpRuntime } from "./http-runtime.js";
 import { safeErrorContext } from "./local-logger.js";
+import { windowsAiRuntimeOptions } from "../ai/windows-ai-runtime.js";
 
 export type LocalHttpApp = Pick<FastifyInstance, "listen" | "close">;
 
@@ -170,6 +171,11 @@ export async function startLocalHttpServer(
     runtime = await dependencies.createRuntime(env);
     app = await dependencies.createApp({
       runtime,
+      ...(await windowsAiRuntimeOptions({
+        platform: process.platform,
+        mode: runtime.mode,
+        listenHost: config.listenHost,
+      })),
       cookiePolicy: resolveCookiePolicy({ secure: config.cookieSecure }),
       hostAuthorities: config.hostAuthorities,
       browserOrigin: config.browserOrigin,

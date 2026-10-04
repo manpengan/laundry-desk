@@ -5,6 +5,8 @@ import { isAbsolute, join } from "node:path";
 
 import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
 import { fillWindowsCredential, loadWindowsRuntimeCredentials } from "./windows-credentials.mjs";
+import { verifyInstalledFeatureSettings } from "./windows-feature-settings.js";
+import { closeWindowAndWaitForApplication } from "./windows-window-close.mjs";
 
 const PASSTHROUGH_ENV_KEYS = Object.freeze([
   "PATH",
@@ -184,6 +186,7 @@ test("installed Windows Counter signs in and restarts against the native Runtime
     await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(credentials.adminDisplayName, { exact: true })).toBeVisible();
     await page.screenshot({ path: screenshot });
+    await verifyInstalledFeatureSettings(page, screenshot);
 
     await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.minimize());
     await expect
@@ -215,13 +218,14 @@ test("installed Windows Counter signs in and restarts against the native Runtime
           }),
       )
       .toEqual({ count: 1, minimized: false, focused: true });
-    const closed = application.waitForEvent("close");
-    await application.evaluate(({ BrowserWindow }) => {
-      const window = BrowserWindow.getAllWindows()[0];
-      if (window === undefined) throw new Error("WINDOWS_MAIN_WINDOW_UNAVAILABLE");
-      setImmediate(() => window.close());
-    });
-    await closed;
+    const closingApplication = application;
+    await closeWindowAndWaitForApplication(closingApplication, () =>
+      closingApplication.evaluate(({ BrowserWindow }) => {
+        const window = BrowserWindow.getAllWindows()[0];
+        if (window === undefined) throw new Error("WINDOWS_MAIN_WINDOW_UNAVAILABLE");
+        setImmediate(() => window.close());
+      }),
+    );
     application = null;
     application = await launchInstalled(executable, userDataPath);
     page = await application.firstWindow();

@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { DEPENDENCY_AUDIT_PATCHES } from "./dependency-patch-policy.mjs";
+import { verifyDependencyPatches } from "./dependency-patch-verifier.mjs";
 
 const MAX_AUDIT_OUTPUT_BYTES = 8 * 1024 * 1024;
 const AUDIT_TIMEOUT_MS = 60_000;
@@ -85,13 +87,17 @@ function actualFindingKeys(advisory, advisoryId) {
   return keys;
 }
 
-function assertAdvisory(advisory) {
+function assertAdvisory(advisory, verifiedPatches) {
   if (!isRecord(advisory) || typeof advisory.github_advisory_id !== "string") {
     fail("DEPENDENCY_AUDIT_ADVISORY_INVALID");
   }
   const advisoryId = advisory.github_advisory_id;
-  const policy = DEPENDENCY_AUDIT_EXCEPTIONS[advisoryId];
+  const localPatch = DEPENDENCY_AUDIT_PATCHES[advisoryId];
+  const policy = localPatch ?? DEPENDENCY_AUDIT_EXCEPTIONS[advisoryId];
   if (policy === undefined) fail(`DEPENDENCY_AUDIT_ADVISORY_UNEXPECTED:${advisoryId}`);
+  if (localPatch && !verifiedPatches.includes(advisoryId)) {
+    fail(`DEPENDENCY_AUDIT_PATCH_UNVERIFIED:${advisoryId}`);
+  }
   if (
     advisory.module_name !== policy.moduleName ||
     advisory.severity !== policy.severity ||
@@ -107,7 +113,7 @@ function assertAdvisory(advisory) {
   return advisoryId;
 }
 
-function assertMetadata(report, advisoryCount) {
+function assertMetadata(report, advisoryCount, patchedCount) {
   const vulnerabilities = report.metadata?.vulnerabilities;
   if (!isRecord(vulnerabilities)) fail("DEPENDENCY_AUDIT_METADATA_INVALID");
   for (const severity of SEVERITIES) {
@@ -118,27 +124,33 @@ function assertMetadata(report, advisoryCount) {
   if (
     vulnerabilities.info !== 0 ||
     vulnerabilities.low !== 0 ||
-    vulnerabilities.high !== 0 ||
+    vulnerabilities.high !== patchedCount ||
     vulnerabilities.critical !== 0 ||
-    vulnerabilities.moderate !== advisoryCount
+    vulnerabilities.moderate !== advisoryCount - patchedCount
   ) {
     fail("DEPENDENCY_AUDIT_METADATA_DRIFT");
   }
 }
 
-export function assertDependencyAuditPolicy(report) {
+export function assertDependencyAuditPolicy(report, verifiedPatches = []) {
   if (!isRecord(report) || !isRecord(report.advisories)) {
     fail("DEPENDENCY_AUDIT_REPORT_INVALID");
   }
-  const advisoryIds = Object.values(report.advisories).map(assertAdvisory);
+  const advisoryIds = Object.values(report.advisories).map((advisory) =>
+    assertAdvisory(advisory, verifiedPatches),
+  );
   if (new Set(advisoryIds).size !== advisoryIds.length) {
     fail("DEPENDENCY_AUDIT_ADVISORY_DUPLICATED");
   }
-  assertMetadata(report, advisoryIds.length);
+  const locallyPatched = advisoryIds.filter((id) => DEPENDENCY_AUDIT_PATCHES[id]);
+  const exceptions = advisoryIds.filter((id) => DEPENDENCY_AUDIT_EXCEPTIONS[id]);
+  assertMetadata(report, advisoryIds.length, locallyPatched.length);
   return Object.freeze({
     high: 0,
     critical: 0,
-    acceptedExceptions: Object.freeze([...advisoryIds].sort()),
+    registryHigh: locallyPatched.length,
+    locallyPatched: Object.freeze([...locallyPatched].sort()),
+    acceptedExceptions: Object.freeze([...exceptions].sort()),
   });
 }
 
@@ -170,7 +182,13 @@ export async function collectPnpmAudit(cwd = process.cwd()) {
 }
 
 export async function runDependencyAudit(cwd = process.cwd()) {
-  return assertDependencyAuditPolicy(await collectPnpmAudit(cwd));
+  let verifiedPatches;
+  try {
+    verifiedPatches = verifyDependencyPatches(cwd);
+  } catch (error) {
+    throw new DependencyAuditError(error.message);
+  }
+  return assertDependencyAuditPolicy(await collectPnpmAudit(cwd), verifiedPatches);
 }
 
 async function main() {
@@ -178,7 +196,7 @@ async function main() {
     const summary = await runDependencyAudit();
     const exceptions = summary.acceptedExceptions.join(",") || "none";
     console.log(
-      `DEPENDENCY_AUDIT_OK high=${summary.high} critical=${summary.critical} exceptions=${exceptions}`,
+      `DEPENDENCY_AUDIT_OK high=${summary.high} critical=${summary.critical} registryHigh=${summary.registryHigh} locallyPatched=${summary.locallyPatched.join(",") || "none"} exceptions=${exceptions}`,
     );
   } catch (error) {
     console.error(error instanceof DependencyAuditError ? error.code : "DEPENDENCY_AUDIT_FAILED");
