@@ -44,7 +44,7 @@ const SupportedTemplateSchema = z
   .refine(
     (template) =>
       !template
-        .replace(/\{\{(?:tickets|garment_count|balance_cents)\}\}/gu, "")
+        .replace(/\{\{(?:tickets|garment_count|balance_yuan|balance_cents)\}\}/gu, "")
         .match(/\{\{|\}\}/u),
     { message: "Template contains an unsupported placeholder" },
   );

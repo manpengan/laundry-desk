@@ -1,20 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAliyunSmsClient, type AliyunSmsSendInput } from "./aliyun-client.js";
+import {
+  createAliyunSmsClient,
+  type AliyunSmsFailureLog,
+  type AliyunSmsSendInput,
+} from "./aliyun-client.js";
 import { signAliyunRequest } from "./aliyun-signature.js";
 
 const credentials = { accessKeyId: "YourAccessKeyId", accessKeySecret: "YourAccessKeySecret" };
+const logged: Parameters<AliyunSmsFailureLog>[0][] = [];
 const fixed = {
   credentials: async () => credentials,
   now: () => new Date("2026-10-03T02:00:00Z"),
   nonce: () => "3156853299f313e23d1673dc12e1703d",
+  log: (entry: Parameters<AliyunSmsFailureLog>[0]) => {
+    logged.push(entry);
+  },
 };
 const input: AliyunSmsSendInput = {
   phone: "13900000000",
   deliveryId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   signName: "合成门店",
   templateCode: "SMS_123456",
-  parameters: { tickets: "TEST-001", garment_count: "2", balance_cents: "300" },
+  parameters: { tickets: "TEST-001", garment_count: "2", balance_yuan: "3.00" },
 };
 const signal = (): AbortSignal => new AbortController().signal;
 
@@ -93,7 +101,86 @@ test("rejection, invalid/missing receipts, redirects and oversized responses fai
   });
   assert.deepEqual(await rejected.send(input, signal()), {
     status: "rejected",
-    code: "ALIYUN_REQUEST_REJECTED",
+    code: "ALIYUN_SIGN_NAME_INVALID",
+  });
+});
+
+test("Aliyun refusals are terminal with an actionable code; only post-send ambiguity is uncertain", async () => {
+  logged.length = 0;
+  const cases: readonly [() => Promise<Response>, string, string][] = [
+    [
+      async () => Response.json({ Code: "InvalidAccessKeyId.NotFound" }, { status: 404 }),
+      "rejected",
+      "ALIYUN_ACCESS_KEY_INVALID",
+    ],
+    [
+      async () => Response.json({ Code: "SignatureDoesNotMatch" }, { status: 400 }),
+      "rejected",
+      "ALIYUN_SECRET_INVALID",
+    ],
+    [
+      async () => Response.json({ Code: "isv.TEMPLATE_MISSING_PARAMETERS" }),
+      "rejected",
+      "ALIYUN_TEMPLATE_PARAMS_INVALID",
+    ],
+    [
+      async () => Response.json({ Code: "isv.AMOUNT_NOT_ENOUGH" }),
+      "rejected",
+      "ALIYUN_BALANCE_INSUFFICIENT",
+    ],
+    [
+      async () => Response.json({ Code: "isv.SOMETHING_NEW" }),
+      "rejected",
+      "ALIYUN_REQUEST_REJECTED",
+    ],
+    [async () => new Response("not json", { status: 400 }), "rejected", "ALIYUN_REQUEST_REJECTED"],
+    [async () => Response.json({ Code: "isp.SYSTEM_ERROR" }), "not_sent", "ALIYUN_SYSTEM_BUSY"],
+    [async () => new Response("busy", { status: 503 }), "uncertain", "ALIYUN_OUTCOME_UNKNOWN"],
+    [
+      async () => {
+        throw Object.assign(new TypeError("fetch failed"), {
+          cause: Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }),
+        });
+      },
+      "not_sent",
+      "ALIYUN_NOT_SENT",
+    ],
+    [
+      async () => {
+        throw Object.assign(new TypeError("fetch failed"), {
+          cause: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
+        });
+      },
+      "uncertain",
+      "ALIYUN_OUTCOME_UNKNOWN",
+    ],
+  ];
+  for (const [respond, status, code] of cases) {
+    const client = createAliyunSmsClient({ ...fixed, fetch: respond });
+    assert.deepEqual(await client.send(input, signal()), { status, code }, code);
+  }
+  const failing = createAliyunSmsClient({
+    ...fixed,
+    credentials: async () => {
+      throw new Error("dpapi unavailable");
+    },
+    fetch: async () => assert.fail("must not send without credentials"),
+  });
+  assert.deepEqual(await failing.send(input, signal()), {
+    status: "not_sent",
+    code: "ALIYUN_CREDENTIAL_UNAVAILABLE",
+  });
+  // Every failure is logged with stage, outcome and codes only.
+  assert.equal(logged.length, cases.length + 1);
+  const text = JSON.stringify(logged);
+  for (const secret of [input.phone, credentials.accessKeySecret, "合成门店", "3.00"])
+    assert.equal(text.includes(secret), false, secret);
+  assert.deepEqual(logged[0], {
+    stage: "response",
+    outcome: "rejected",
+    code: "ALIYUN_ACCESS_KEY_INVALID",
+    http_status: 404,
+    aliyun_code: "InvalidAccessKeyId.NotFound",
   });
 });
 
@@ -106,16 +193,32 @@ test("input validation and cancellation prevent dispatch", async () => {
       return Response.json({ Code: "OK" });
     },
   });
-  await assert.rejects(client.send({ ...input, phone: "13900000000,13800000000" }, signal()));
-  await assert.rejects(
-    client.send(
+  const invalid = { status: "rejected", code: "ALIYUN_INPUT_INVALID" };
+  assert.deepEqual(
+    await client.send({ ...input, phone: "13900000000,13800000000" }, signal()),
+    invalid,
+  );
+  assert.deepEqual(
+    await client.send(
       { ...input, parameters: { ...input.parameters, tickets: "unapproved text\n" } },
       signal(),
     ),
+    invalid,
+  );
+  // An amount in 分 is never sent to a template that reads 元.
+  assert.deepEqual(
+    await client.send(
+      { ...input, parameters: { ...input.parameters, balance_yuan: "300" } },
+      signal(),
+    ),
+    invalid,
   );
   const aborted = new AbortController();
   aborted.abort();
-  assert.equal((await client.send(input, aborted.signal)).status, "uncertain");
+  assert.deepEqual(await client.send(input, aborted.signal), {
+    status: "not_sent",
+    code: "ALIYUN_NOT_SENT",
+  });
   assert.equal(calls, 0);
 });
 

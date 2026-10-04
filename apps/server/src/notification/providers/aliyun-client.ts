@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { failedBeforeSending } from "../../http/unsent-failure.js";
 import { signAliyunRequest, type AliyunCredentials } from "./aliyun-signature.js";
 
 const HOST = "dysmsapi.aliyuncs.com";
@@ -17,10 +18,11 @@ const SendInput = z.strictObject({
     .max(12)
     .regex(/^[\p{L}\p{N}·]+$/u),
   templateCode: TemplateCode,
+  // ADR-77 r1: the approved template reads the balance in 元 ("20.00"), never in 分.
   parameters: z.strictObject({
     tickets: z.string().regex(/^[A-Za-z0-9-]{1,32}$/u),
     garment_count: z.string().regex(/^\d{1,8}$/u),
-    balance_cents: z.string().regex(/^\d{1,12}$/u),
+    balance_yuan: z.string().regex(/^\d{1,10}\.\d{2}$/u),
   }),
 });
 const QueryInput = z.strictObject({
@@ -52,11 +54,53 @@ const Details = z.object({
 });
 export type AliyunSmsSendInput = z.infer<typeof SendInput>;
 export type AliyunSmsQueryInput = z.infer<typeof QueryInput>;
+/**
+ * ADR-91 §2: not_sent never produced a message (it never reached Aliyun, or Aliyun reported
+ * its own failure); rejected is Aliyun's explicit refusal; only a request Aliyun may have
+ * accepted is uncertain.
+ */
 export type AliyunSmsSendResult = Readonly<
   | { status: "accepted"; bizId: string }
-  | { status: "rejected"; code: "ALIYUN_REQUEST_REJECTED" }
+  | { status: "not_sent"; code: string }
+  | { status: "rejected"; code: string }
   | { status: "uncertain"; code: "ALIYUN_OUTCOME_UNKNOWN" }
 >;
+type Outcome = "not_sent" | "rejected" | "uncertain";
+export type AliyunSmsFailureLog = (
+  entry: Readonly<{
+    stage: "prepare" | "send" | "response";
+    outcome: Outcome;
+    code: string;
+    http_status: number | null;
+    aliyun_code: string | null;
+  }>,
+) => void;
+/** Aliyun codes staff can act on; anything else is a generic refusal. */
+const REJECTIONS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^InvalidAccessKeyId(\.|$)/u, "ALIYUN_ACCESS_KEY_INVALID"],
+  [/^(SignatureDoesNotMatch|IncompleteSignature)$/u, "ALIYUN_SECRET_INVALID"],
+  [/^(Forbidden(\.RAM)?|isv\.ACCOUNT_ABNORMAL|isv\.ACCOUNT_NOT_EXISTS)$/u, "ALIYUN_ACCOUNT_DENIED"],
+  [
+    /^isv\.(SMS_SIGNATURE_ILLEGAL|SMS_SIGN_ILLEGAL|SIGN_NAME_ILLEGAL)$/u,
+    "ALIYUN_SIGN_NAME_INVALID",
+  ],
+  [/^isv\.SMS_TEMPLATE_ILLEGAL$/u, "ALIYUN_TEMPLATE_INVALID"],
+  [
+    /^isv\.(TEMPLATE_MISSING_PARAMETERS|TEMPLATE_PARAMS_ILLEGAL|PARAM_LENGTH_LIMIT|INVALID_JSON_PARAM)$/u,
+    "ALIYUN_TEMPLATE_PARAMS_INVALID",
+  ],
+  [/^isv\.(MOBILE_NUMBER_ILLEGAL|MOBILE_COUNT_OVER_LIMIT)$/u, "ALIYUN_PHONE_INVALID"],
+  [/^isv\.(BUSINESS_LIMIT_CONTROL|DAY_LIMIT_CONTROL|MONTH_LIMIT_CONTROL)$/u, "ALIYUN_RATE_LIMITED"],
+  [/^isv\.(AMOUNT_NOT_ENOUGH|OUT_OF_SERVICE)$/u, "ALIYUN_BALANCE_INSUFFICIENT"],
+];
+const rejectionCode = (code: string) =>
+  REJECTIONS.find(([pattern]) => pattern.test(code))?.[1] ?? "ALIYUN_REQUEST_REJECTED";
+const AliyunCode = z.string().regex(/^[A-Za-z0-9_.]{1,64}$/u);
+const defaultFailureLog: AliyunSmsFailureLog = (entry) => {
+  // Structured and free of recipient, message and credential data.
+  const line = { level: "warn", time: new Date().toISOString(), msg: "Aliyun SMS not accepted" };
+  process.stderr.write(`${JSON.stringify({ ...line, ...entry })}\n`);
+};
 type Fetch = (
   url: string,
   init: Readonly<{
@@ -67,8 +111,13 @@ type Fetch = (
   }>,
 ) => Promise<Response>;
 
+/** Reads a direct (2xx or 4xx) answer; callers decide what its status means. */
 async function boundedJson(response: Response): Promise<unknown> {
-  if (!response.ok || response.redirected || response.body === null)
+  const direct =
+    response.status >= 200 &&
+    response.status < 500 &&
+    !(response.status >= 300 && response.status < 400);
+  if (!direct || response.redirected || response.body === null)
     throw new Error("ALIYUN_RESPONSE_INVALID");
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -96,16 +145,15 @@ export function createAliyunSmsClient(
     fetch?: Fetch;
     now?: () => Date;
     nonce?: () => string;
+    log?: AliyunSmsFailureLog;
   }>,
 ) {
-  const request = async (
+  const sign = async (
     action: "SendSms" | "QuerySendDetails",
     parameters: Readonly<Record<string, string>>,
-    signal: AbortSignal,
-  ): Promise<unknown> => {
-    signal.throwIfAborted();
+  ) => {
     const credentials = await options.credentials();
-    const signed = signAliyunRequest({
+    return signAliyunRequest({
       host: HOST,
       action,
       version: "2017-05-25",
@@ -114,40 +162,95 @@ export function createAliyunSmsClient(
       nonce: options.nonce?.() ?? randomUUID(),
       credentials,
     });
-    const boundedSignal = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
-    const response = await (options.fetch ?? fetch)(`https://${HOST}/?${signed.query}`, {
+  };
+  const dispatch = (signed: Awaited<ReturnType<typeof sign>>, signal: AbortSignal) =>
+    (options.fetch ?? fetch)(`https://${HOST}/?${signed.query}`, {
       method: "POST",
       headers: signed.headers,
       redirect: "error",
-      signal: boundedSignal,
+      signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
     });
+  const request = async (
+    action: "SendSms" | "QuerySendDetails",
+    parameters: Readonly<Record<string, string>>,
+    signal: AbortSignal,
+  ): Promise<unknown> => {
+    signal.throwIfAborted();
+    const response = await dispatch(await sign(action, parameters), signal);
+    if (!response.ok) throw new Error("ALIYUN_RESPONSE_INVALID");
     return boundedJson(response);
   };
+  const log = options.log ?? defaultFailureLog;
+  function failure(
+    stage: "prepare" | "send" | "response",
+    outcome: Outcome,
+    code: string,
+    detail: Readonly<{ httpStatus?: number; aliyunCode?: string }> = {},
+  ): AliyunSmsSendResult {
+    const aliyun = AliyunCode.safeParse(detail.aliyunCode);
+    log({
+      stage,
+      outcome,
+      code,
+      http_status: detail.httpStatus ?? null,
+      aliyun_code: aliyun.success ? aliyun.data : null,
+    });
+    return outcome === "uncertain"
+      ? { status: "uncertain", code: "ALIYUN_OUTCOME_UNKNOWN" }
+      : { status: outcome, code };
+  }
+  /** Classifies an answer from Aliyun: the request has reached it. */
+  async function answered(response: Response): Promise<AliyunSmsSendResult> {
+    const httpStatus = response.status;
+    if (httpStatus >= 500)
+      return failure("response", "uncertain", "ALIYUN_OUTCOME_UNKNOWN", { httpStatus });
+    let body: z.infer<typeof SendResult>;
+    try {
+      body = SendResult.parse(await boundedJson(response));
+    } catch {
+      return httpStatus >= 400
+        ? failure("response", "rejected", "ALIYUN_REQUEST_REJECTED", { httpStatus })
+        : failure("response", "uncertain", "ALIYUN_OUTCOME_UNKNOWN", { httpStatus });
+    }
+    const aliyunCode = body.Code;
+    if (aliyunCode === "OK" && httpStatus < 300) {
+      if (body.BizId && /^[A-Za-z0-9^_-]{1,128}$/u.test(body.BizId))
+        return { status: "accepted", bizId: body.BizId };
+      return failure("response", "uncertain", "ALIYUN_OUTCOME_UNKNOWN", { httpStatus });
+    }
+    // Aliyun asks callers to retry its own system errors: the message was not sent.
+    if (aliyunCode === "isp.SYSTEM_ERROR")
+      return failure("response", "not_sent", "ALIYUN_SYSTEM_BUSY", { httpStatus, aliyunCode });
+    return failure("response", "rejected", rejectionCode(aliyunCode), { httpStatus, aliyunCode });
+  }
   return Object.freeze({
     async send(candidate: AliyunSmsSendInput, signal: AbortSignal): Promise<AliyunSmsSendResult> {
-      const input = SendInput.parse(candidate);
+      const parsed = SendInput.safeParse(candidate);
+      if (!parsed.success) return failure("prepare", "rejected", "ALIYUN_INPUT_INVALID");
+      const input = parsed.data;
+      let signed: Awaited<ReturnType<typeof sign>>;
       try {
-        const body = SendResult.parse(
-          await request(
-            "SendSms",
-            {
-              PhoneNumbers: input.phone,
-              SignName: input.signName,
-              TemplateCode: input.templateCode,
-              TemplateParam: JSON.stringify(input.parameters),
-              OutId: input.deliveryId,
-            },
-            signal,
-          ),
-        );
-        if (body.Code !== "OK") return { status: "rejected", code: "ALIYUN_REQUEST_REJECTED" };
-        if (!body.BizId || !/^[A-Za-z0-9^_-]{1,128}$/u.test(body.BizId))
-          throw new Error("ALIYUN_RECEIPT_MISSING");
-        return { status: "accepted", bizId: body.BizId };
+        signed = await sign("SendSms", {
+          PhoneNumbers: input.phone,
+          SignName: input.signName,
+          TemplateCode: input.templateCode,
+          TemplateParam: JSON.stringify(input.parameters),
+          OutId: input.deliveryId,
+        });
       } catch {
-        // SendSms has no provider idempotency. Never retry an ambiguous network outcome here.
-        return { status: "uncertain", code: "ALIYUN_OUTCOME_UNKNOWN" };
+        return failure("prepare", "not_sent", "ALIYUN_CREDENTIAL_UNAVAILABLE");
       }
+      if (signal.aborted) return failure("prepare", "not_sent", "ALIYUN_NOT_SENT");
+      let response: Response;
+      try {
+        response = await dispatch(signed, signal);
+      } catch (error) {
+        // SendSms has no provider idempotency: only a provably unopened connection is retried.
+        return failedBeforeSending(error)
+          ? failure("send", "not_sent", "ALIYUN_NOT_SENT")
+          : failure("send", "uncertain", "ALIYUN_OUTCOME_UNKNOWN");
+      }
+      return answered(response);
     },
     async query(
       candidate: AliyunSmsQueryInput,

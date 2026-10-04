@@ -171,6 +171,34 @@ export function notificationDeliveryStatusLabel(
   return externalLabels[status];
 }
 
+/** ADR-77 r1: why a delivery stopped, in words staff can act on. */
+const ERROR_TEXT: Readonly<Record<string, string>> = Object.freeze({
+  ALIYUN_ACCESS_KEY_INVALID: "AccessKey 无效：请在设置里重新填写阿里云 AccessKey",
+  ALIYUN_SECRET_INVALID: "AccessKey Secret 不正确：请在设置里重新填写",
+  ALIYUN_ACCOUNT_DENIED: "阿里云账号无短信权限或状态异常",
+  ALIYUN_SIGN_NAME_INVALID: "短信签名未通过审核或填写错误",
+  ALIYUN_TEMPLATE_INVALID: "模板编码不存在或未通过审核",
+  ALIYUN_TEMPLATE_PARAMS_INVALID: "模板变量不匹配：模板须使用 tickets、garment_count、balance_yuan",
+  ALIYUN_PHONE_INVALID: "顾客手机号格式不正确",
+  ALIYUN_RATE_LIMITED: "触发阿里云发送频率限制，请稍后再发",
+  ALIYUN_BALANCE_INSUFFICIENT: "阿里云短信余额不足",
+  ALIYUN_REQUEST_REJECTED: "阿里云拒绝了这条短信",
+  ALIYUN_INPUT_INVALID: "票号或金额不符合短信要求，没有发送",
+  ALIYUN_CREDENTIAL_UNAVAILABLE: "本机无法读取短信密钥，没有发送",
+  ALIYUN_NOT_SENT: "网络不可用，短信没有发出",
+  ALIYUN_SYSTEM_BUSY: "阿里云系统繁忙，短信没有发出",
+  ALIYUN_OUTCOME_UNKNOWN: "发送结果不明：请先核对阿里云发送记录，避免重复发送",
+  PROVIDER_CONFIGURATION_CHANGED: "短信设置已变更，本条未发送",
+  PROVIDER_PRIOR_OUTCOME_UNKNOWN: "上次发送结果不明，系统不会重复发送",
+  COST_LIMIT_EXCEEDED: "超出本批费用上限，未发送",
+  TARGET_SNAPSHOT_CHANGED: "订单或顾客信息已变化，未发送",
+});
+
+export function notificationErrorText(code: string | null): string {
+  if (code === null) return "无错误";
+  return ERROR_TEXT[code] ?? `未完成（${code}）`;
+}
+
 export function notificationDeliveredCountLabel(
   assurance: NotificationDeliveryBatchSummary["assurance"],
 ): string {

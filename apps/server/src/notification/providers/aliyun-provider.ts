@@ -3,6 +3,7 @@ import type {
   NotificationDeliveryCapabilityResult,
 } from "@laundry/contracts";
 import { NotificationDeliveryCapabilityResultSchema } from "@laundry/contracts";
+import { formatBalanceYuan } from "@laundry/domain";
 import type { NotificationProvider } from "../delivery-types.js";
 import { DISABLED_NOTIFICATION_CAPABILITY } from "../delivery-provider.js";
 import type { createAliyunSmsClient } from "./aliyun-client.js";
@@ -49,29 +50,39 @@ export function createAliyunNotificationProvider(
           providerRef: null,
           costCents: 0,
         });
+      const cents = input.parameters.balance_cents;
       const result = await client.send(
         {
           phone: input.recipient,
           deliveryId: input.deliveryId,
           signName: settings.sign_name,
           templateCode: settings.template_code,
-          parameters: input.parameters,
+          parameters: {
+            tickets: input.parameters.tickets,
+            garment_count: input.parameters.garment_count,
+            // An unusable amount fails the client's validation as a local rejection.
+            balance_yuan: /^\d{1,12}$/u.test(cents) ? formatBalanceYuan(Number(cents)) : "",
+          },
         },
         input.signal,
       );
-      return result.status === "accepted"
-        ? Object.freeze({
-            outcome: "accepted",
-            errorCode: null,
-            providerRef: result.bizId,
-            costCents: settings.unit_cost_cents,
-          })
-        : Object.freeze({
-            outcome: result.status === "uncertain" ? "uncertain" : "permanent_failure",
-            errorCode: result.code,
-            providerRef: null,
-            costCents: 0,
-          });
+      if (result.status === "accepted")
+        return Object.freeze({
+          outcome: "accepted",
+          errorCode: null,
+          providerRef: result.bizId,
+          costCents: settings.unit_cost_cents,
+        });
+      // ADR-91 §2: a request Aliyun never received, or explicitly refused, ends with its reason
+      // and releases the reservation. At-most-once delivery forbids an automatic resend, so
+      // staff take those orders back to the manual list. Only a request Aliyun may have
+      // accepted stays uncertain and keeps its reservation.
+      return Object.freeze({
+        outcome: result.status === "uncertain" ? "uncertain" : "permanent_failure",
+        errorCode: result.code,
+        providerRef: null,
+        costCents: 0,
+      });
     },
   });
 }
