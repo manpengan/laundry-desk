@@ -4,9 +4,12 @@ import {
   channelClock,
   header,
   parseChannelJson,
+  parseProviderResponse,
+  providerErrorCode,
   requireRsaKey,
   rsaSign,
   rsaVerify,
+  shanghaiTimestamp,
   verifiedTimestamp,
 } from "./protocol.js";
 import { wechatNotification, wechatPayment, wechatRefund } from "./wechat-projections.js";
@@ -21,6 +24,9 @@ import {
   type ChannelHttpResponse,
   type WechatCredential,
 } from "./types.js";
+
+/** WeChat answers for an order/refund that does not exist at all. */
+const NOT_FOUND = new Set(["ORDER_NOT_EXIST", "RESOURCE_NOT_EXISTS"]);
 
 export function verifyWechatResponse(
   response: ChannelHttpResponse,
@@ -37,6 +43,41 @@ export function verifyWechatResponse(
     header(response, "wechatpay-signature"),
     config.platformPublicKey,
   );
+}
+
+function verified(response: ChannelHttpResponse, config: WechatCredential, clock: ChannelClock) {
+  try {
+    verifyWechatResponse(response, config, clock);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Success must be signed. A signed 4xx is a definitive rejection; 401 is the one
+ * unsigned answer accepted as definitive, because WeChat cannot sign for a merchant
+ * whose request it failed to authenticate. Everything else leaves the result unknown.
+ */
+function classifyWechat(
+  response: ChannelHttpResponse,
+  config: WechatCredential,
+  clock: ChannelClock,
+): void {
+  const signed = verified(response, config, clock);
+  if (response.status >= 200 && response.status < 300) {
+    if (!signed) throw new ChannelProtocolError("CHANNEL_SIGNATURE_INVALID");
+    return;
+  }
+  const code = providerErrorCode(response.body);
+  if (!signed) {
+    if (response.status === 401) throw new ChannelProtocolError("CHANNEL_REJECTED", code);
+    throw new ChannelProtocolError("CHANNEL_SIGNATURE_INVALID", code);
+  }
+  if (response.status >= 500) throw new ChannelProtocolError("CHANNEL_TRANSPORT_FAILED", code);
+  if (code !== null && NOT_FOUND.has(code))
+    throw new ChannelProtocolError("CHANNEL_ORDER_NOT_FOUND", code);
+  throw new ChannelProtocolError("CHANNEL_REJECTED", code);
 }
 
 /** Merchant direct mode, API v3 public-key verification; no auto certificate download. */
@@ -71,9 +112,7 @@ export function createWechatAdapter(
         Authorization: `WECHATPAY2-SHA256-RSA2048 mchid="${config.merchantId}",nonce_str="${nonce}",timestamp="${timestamp}",serial_no="${config.merchantSerial}",signature="${signature}"`,
       },
     });
-    verifyWechatResponse(response, config, clock);
-    if (response.status < 200 || response.status >= 300)
-      throw new ChannelProtocolError("CHANNEL_REJECTED");
+    classifyWechat(response, config, clock);
     return response.body === "" ? null : parseChannelJson(response.body);
   };
   return Object.freeze({
@@ -90,25 +129,30 @@ export function createWechatAdapter(
         mchid: config.merchantId,
         description: z.string().min(1).max(100).parse(input.description),
         out_trade_no: input.merchantOrder,
-        time_expire: input.expiresAt.toISOString(),
+        time_expire: shanghaiTimestamp(input.expiresAt),
         notify_url: config.notifyUrl,
         amount: { total: input.amountCents, currency: "CNY" },
         ...(jsapi ? { payer: { openid: input.openId } } : {}),
       });
       if (!jsapi) {
-        const value = z
-          .object({
-            code_url: z
-              .string()
-              .regex(/^weixin:\/\/wxpay\/bizpayurl\?[A-Za-z0-9=&_-]+$/u)
-              .max(1024),
-          })
-          .parse(result).code_url;
+        const value = parseProviderResponse(
+          () =>
+            z
+              .object({
+                code_url: z
+                  .string()
+                  .regex(/^weixin:\/\/wxpay\/bizpayurl\?[A-Za-z0-9=&_-]+$/u)
+                  .max(1024),
+              })
+              .parse(result).code_url,
+        );
         return Object.freeze({ kind: "qr" as const, value });
       }
-      const prepay = z
-        .object({ prepay_id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u) })
-        .parse(result).prepay_id;
+      const prepay = parseProviderResponse(
+        () =>
+          z.object({ prepay_id: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/u) }).parse(result)
+            .prepay_id,
+      );
       const timeStamp = String(Math.floor(clock.nowMs() / 1000));
       const nonceStr = clock.nonce();
       const packageValue = `prepay_id=${prepay}`;
@@ -131,7 +175,7 @@ export function createWechatAdapter(
         "GET",
         `/v3/pay/transactions/out-trade-no/${merchantOrder}?mchid=${config.merchantId}`,
       );
-      const payment = wechatPayment(value, config);
+      const payment = parseProviderResponse(() => wechatPayment(value, config));
       if (payment.merchantOrder !== merchantOrder)
         throw new ChannelProtocolError("CHANNEL_BINDING_MISMATCH");
       return payment;
@@ -141,6 +185,7 @@ export function createWechatAdapter(
       await request("POST", `/v3/pay/transactions/out-trade-no/${merchantOrder}/close`, {
         mchid: config.merchantId,
       });
+      return Object.freeze({ outcome: "closed" as const });
     },
     async refund(input) {
       MerchantOrderSchema.parse(input.merchantOrder);
@@ -149,23 +194,19 @@ export function createWechatAdapter(
       ChannelCentsSchema.parse(input.originalCents);
       if (input.amountCents > input.originalCents)
         throw new ChannelProtocolError("CHANNEL_BINDING_MISMATCH");
-      return wechatRefund(
-        await request("POST", "/v3/refund/domestic/refunds", {
-          out_trade_no: input.merchantOrder,
-          out_refund_no: input.merchantRefund,
-          reason: z.string().trim().min(1).max(80).parse(input.reason),
-          notify_url: config.notifyUrl,
-          amount: { refund: input.amountCents, total: input.originalCents, currency: "CNY" },
-        }),
-        input,
-      );
+      const value = await request("POST", "/v3/refund/domestic/refunds", {
+        out_trade_no: input.merchantOrder,
+        out_refund_no: input.merchantRefund,
+        reason: z.string().trim().min(1).max(80).parse(input.reason),
+        notify_url: config.notifyUrl,
+        amount: { refund: input.amountCents, total: input.originalCents, currency: "CNY" },
+      });
+      return parseProviderResponse(() => wechatRefund(value, input));
     },
     async queryRefund(input) {
       MerchantOrderSchema.parse(input.merchantRefund);
-      return wechatRefund(
-        await request("GET", `/v3/refund/domestic/refunds/${input.merchantRefund}`),
-        input,
-      );
+      const value = await request("GET", `/v3/refund/domestic/refunds/${input.merchantRefund}`);
+      return parseProviderResponse(() => wechatRefund(value, input));
     },
     notification(response) {
       verifyWechatResponse(response, config, clock);

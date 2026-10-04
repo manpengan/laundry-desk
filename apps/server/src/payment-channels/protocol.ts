@@ -56,6 +56,32 @@ export function fen(value: string): number {
     throw new ChannelProtocolError("CHANNEL_RESPONSE_INVALID");
   return cents;
 }
+/** The provider's public error code from an error body; never its free-text message. */
+export function providerErrorCode(body: string): string | null {
+  try {
+    const value = JSON.parse(body) as { code?: unknown; sub_code?: unknown };
+    for (const candidate of [value.sub_code, value.code])
+      if (typeof candidate === "string" && /^[A-Za-z0-9_.]{1,64}$/u.test(candidate))
+        return candidate;
+  } catch {
+    // Not JSON: only the HTTP status is known.
+  }
+  return null;
+}
+/** WeChat documents RFC 3339 seconds with an explicit offset, e.g. 2026-10-04T09:31:02+08:00. */
+export function shanghaiTimestamp(date: Date): string {
+  const local = new Date(date.getTime() + 8 * 60 * 60_000).toISOString();
+  return `${local.slice(0, 19)}+08:00`;
+}
+/** Provider answers that do not match the expected shape are "result unknown", not a crash. */
+export function parseProviderResponse<T>(parse: () => T): T {
+  try {
+    return parse();
+  } catch (error) {
+    if (error instanceof ChannelProtocolError) throw error;
+    throw new ChannelProtocolError("CHANNEL_RESPONSE_INVALID");
+  }
+}
 export function providerDate(value: string): Date {
   const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/u.test(value)
     ? `${value.replace(" ", "T")}+08:00`

@@ -40,6 +40,10 @@ const Refund = z.object({
   refund_status: z.literal("REFUND_SUCCESS").optional(),
 });
 export function alipayRefund(raw: unknown, expected: ChannelRefundInput): ChannelRefund {
+  // An answer without refund fields means Alipay never received this out_request_no;
+  // resubmitting the same reference is idempotent.
+  if (typeof raw === "object" && raw !== null && !("refund_amount" in raw))
+    throw new ChannelProtocolError("CHANNEL_ORDER_NOT_FOUND");
   const value = Refund.parse(raw);
   if (
     value.out_trade_no !== expected.merchantOrder ||

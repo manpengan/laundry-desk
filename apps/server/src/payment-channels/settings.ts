@@ -15,6 +15,7 @@ import { createWechatAdapter } from "./wechat.js";
 import { createAlipayAdapter } from "./alipay.js";
 import {
   ChannelCredentialSchema,
+  type ChannelAdapter,
   type ChannelCredential,
   type ChannelHttp,
   type PaymentChannel,
@@ -62,18 +63,73 @@ export async function readChannelSettings(
     ).rows[0] ?? null
   );
 }
+/** Re-authenticates the current administrator inside the caller's transaction. */
+export async function assertAdminPassword(
+  local: LocalRuntime,
+  auth: AuthorizedSession,
+  client: SqlClient,
+  tenant: TenantContext,
+  password: string,
+): Promise<void> {
+  const actor = (
+    await client.query<{ password_hash: string }>(
+      `SELECT staff.password_hash FROM staffs staff
+        JOIN staff_store_roles role ON role.org_id=staff.org_id AND role.staff_id=staff.id
+        WHERE staff.org_id=$1::uuid AND staff.id=$2::uuid AND staff.is_active AND staff.permission_version=$3
+        AND role.store_id=$4::uuid AND role.is_active AND role.role='admin' FOR SHARE OF staff,role`,
+      [tenant.orgId, tenant.staffId, auth.session.permission_version, tenant.storeId],
+    )
+  ).rows[0];
+  if (
+    actor === undefined ||
+    !(await local.identity.login.passwordPort.verifyPassword(password, actor.password_hash))
+  )
+    throw new ChannelBusinessError("POLICY_DENIED");
+}
 export function accountFingerprint(credential: ChannelCredential) {
   const merchant = credential.channel === "wechat" ? credential.merchantId : credential.sellerId;
   return createHash("sha256")
     .update(`${credential.channel}\n${credential.appId}\n${merchant}`)
     .digest("hex");
 }
+/**
+ * Windows DPAPI decryption starts a PowerShell process; polling must not pay that per
+ * request. Entries are bound to the exact settings version and credential, and expire.
+ */
+const ADAPTER_TTL_MS = 2 * 60_000;
+const adapters = new Map<string, { adapter: ChannelAdapter; expiresAt: number }>();
+
 export async function channelAdapter(
   kms: ByokKmsPort,
   tenant: TenantContext,
   stored: ChannelSettingsRow,
   http?: ChannelHttp,
-) {
+): Promise<ChannelAdapter> {
+  // Injected transports (tests) are never shared through the cache.
+  if (http !== undefined) return decryptAdapter(kms, tenant, stored, http);
+  const key = [
+    tenant.orgId,
+    tenant.storeId,
+    stored.channel,
+    stored.version,
+    stored.credential_id,
+    stored.account_fingerprint,
+  ].join(":");
+  const now = Date.now();
+  const cached = adapters.get(key);
+  if (cached !== undefined && cached.expiresAt > now) return cached.adapter;
+  for (const [entry, value] of adapters) if (value.expiresAt <= now) adapters.delete(entry);
+  const adapter = await decryptAdapter(kms, tenant, stored);
+  adapters.set(key, { adapter, expiresAt: now + ADAPTER_TTL_MS });
+  return adapter;
+}
+
+async function decryptAdapter(
+  kms: ByokKmsPort,
+  tenant: TenantContext,
+  stored: ChannelSettingsRow,
+  http?: ChannelHttp,
+): Promise<ChannelAdapter> {
   const bytes = await decryptCredential(
     kms,
     {
@@ -129,23 +185,7 @@ export function createChannelSettingsService(local: LocalRuntime, kms: ByokKmsPo
         const { client, tenant } = transaction;
         if (!(await requesterAuthorityIsCurrent(runtime, auth, transaction)))
           throw new ChannelBusinessError("POLICY_DENIED");
-        const actor = (
-          await client.query<{ password_hash: string }>(
-            `SELECT staff.password_hash FROM staffs staff
-        JOIN staff_store_roles role ON role.org_id=staff.org_id AND role.staff_id=staff.id
-        WHERE staff.org_id=$1::uuid AND staff.id=$2::uuid AND staff.is_active AND staff.permission_version=$3
-        AND role.store_id=$4::uuid AND role.is_active AND role.role='admin' FOR SHARE OF staff,role`,
-            [tenant.orgId, tenant.staffId, auth.session.permission_version, tenant.storeId],
-          )
-        ).rows[0];
-        if (
-          actor === undefined ||
-          !(await local.identity.login.passwordPort.verifyPassword(
-            input.password,
-            actor.password_hash,
-          ))
-        )
-          throw new ChannelBusinessError("POLICY_DENIED");
+        await assertAdminPassword(local, auth, client, tenant, input.password);
         await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,85))", [
           `${tenant.orgId}:${tenant.storeId}:${input.channel}`,
         ]);

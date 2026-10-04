@@ -14,10 +14,13 @@ import {
   ChannelRefundInputSchema,
   ChannelReconcileInputSchema,
   ChannelReconcileViewSchema,
+  ChannelAvailabilityViewSchema,
+  ChannelResolveInputSchema,
 } from "../payment-channel.js";
 
 export const DesktopPaymentChannelInputSchema = z.discriminatedUnion("operation", [
   z.strictObject({ operation: z.literal("settings.get") }),
+  z.strictObject({ operation: z.literal("available") }),
   z.strictObject({
     operation: z.literal("settings.save"),
     body: PaymentChannelSettingsRequestSchema,
@@ -29,10 +32,12 @@ export const DesktopPaymentChannelInputSchema = z.discriminatedUnion("operation"
   z.strictObject({ operation: z.literal("refunds.list"), body: ChannelListInputSchema }),
   z.strictObject({ operation: z.literal("refunds.status"), body: ChannelRefundIdSchema }),
   z.strictObject({ operation: z.literal("reconcile"), body: ChannelReconcileInputSchema }),
+  z.strictObject({ operation: z.literal("resolve"), body: ChannelResolveInputSchema }),
 ]);
 export const PaymentChannelDataSchemas = Object.freeze({
   "settings.get": PaymentChannelSettingsViewSchema,
   "settings.save": PaymentChannelSettingsViewSchema,
+  available: ChannelAvailabilityViewSchema,
   checkout: ChannelIntentViewSchema,
   status: ChannelIntentViewSchema,
   close: ChannelIntentViewSchema,
@@ -40,6 +45,7 @@ export const PaymentChannelDataSchemas = Object.freeze({
   "refunds.list": ChannelRefundsViewSchema,
   "refunds.status": ChannelRefundViewSchema,
   reconcile: ChannelReconcileViewSchema,
+  resolve: ChannelIntentViewSchema,
 });
 export const DesktopPaymentChannelResultSchema = z.discriminatedUnion("ok", [
   z.strictObject({
@@ -52,6 +58,7 @@ export const DesktopPaymentChannelResultSchema = z.discriminatedUnion("ok", [
       ChannelRefundsViewSchema,
       ChannelRefundInputSchema,
       ChannelReconcileViewSchema,
+      ChannelAvailabilityViewSchema,
     ]),
   }),
   CommandResponseSchema.options[1],
@@ -66,10 +73,15 @@ const paths = Object.freeze({
   "refunds.list": "refunds/list",
   "refunds.status": "refunds/status",
   reconcile: "reconcile",
+  available: "available",
+  resolve: "resolve",
 });
 export function paymentChannelRoute(input: DesktopPaymentChannelInput) {
   return Object.freeze({
-    method: input.operation === "settings.get" ? ("GET" as const) : ("POST" as const),
+    method:
+      input.operation === "settings.get" || input.operation === "available"
+        ? ("GET" as const)
+        : ("POST" as const),
     path: `/api/v2/payment-channels/${paths[input.operation]}`,
   });
 }
@@ -98,7 +110,7 @@ export function paymentChannelResultMatches(
       data.channel === input.body.channel &&
       data.purpose === "order"
     );
-  if (input.operation === "status" || input.operation === "close")
+  if (input.operation === "status" || input.operation === "close" || input.operation === "resolve")
     return "intent_id" in data && data.intent_id === input.body.intent_id;
   if (input.operation === "refunds.status")
     return "refund_id" in data && data.refund_id === input.body.refund_id;

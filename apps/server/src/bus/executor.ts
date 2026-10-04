@@ -14,6 +14,7 @@ import {
   type ChainPortHooks,
 } from "./chain-adapter.js";
 import { writeAuditForOutcome } from "./audit-outcome.js";
+import { businessGuardError } from "./business-guard-error.js";
 import { buildResolvedCommandRequest, resolveConfirmInput } from "./confirm-input.js";
 import {
   abortIdempotencyClaim,
@@ -195,6 +196,8 @@ export async function executeCommand(
     );
     if (error instanceof CommandBusTxnError) return fail(error.commandError);
     if (error instanceof HandlerCommandError) return fail(error.commandError);
+    const guarded = businessGuardError(error);
+    if (guarded !== null) return fail(guarded);
     opts.onUnexpectedError?.(error);
     return fail(createCommandError("TRANSACTION_FAILED"));
   }

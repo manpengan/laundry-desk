@@ -54,9 +54,12 @@ export type ChannelPayment = Readonly<{
   merchantOrder: string;
   providerOrder: string | null;
   state: "pending" | "paid" | "closed";
-  amountCents: number;
+  /** Optional in provider answers for unpaid orders; always present once paid. */
+  amountCents: number | null;
   paidAt: Date | null;
 }>;
+/** Ends an unpaid order: WeChat close, Alipay cancel (which also covers unscanned codes). */
+export type ChannelExpiry = Readonly<{ outcome: "closed" | "retry" }>;
 export type ChannelRefundInput = Readonly<{
   merchantOrder: string;
   merchantRefund: string;
@@ -77,23 +80,39 @@ export type ChannelNotification =
 export type ChannelAdapter = Readonly<{
   checkout(input: ChannelCheckout): Promise<ChannelCheckoutResult>;
   query(merchantOrder: string): Promise<ChannelPayment>;
-  close(merchantOrder: string): Promise<void>;
+  /** Stops an unpaid order from being paid; ORDER_NOT_FOUND means it never existed. */
+  close(merchantOrder: string): Promise<ChannelExpiry>;
   refund(input: ChannelRefundInput): Promise<ChannelRefund>;
   queryRefund(input: ChannelRefundInput): Promise<ChannelRefund>;
   notification(response: ChannelHttpResponse): ChannelNotification;
 }>;
 
+export type ChannelErrorCode =
+  /** The request never left this computer (DNS, connect, TLS or local validation). */
+  | "CHANNEL_NOT_SENT"
+  /** The provider may have received the request; only a query can tell. */
+  | "CHANNEL_TRANSPORT_FAILED"
+  | "CHANNEL_SIGNATURE_INVALID"
+  | "CHANNEL_RESPONSE_INVALID"
+  | "CHANNEL_BINDING_MISMATCH"
+  /** A definitive provider rejection; nothing was created or changed. */
+  | "CHANNEL_REJECTED"
+  /** The provider definitively has no such order/trade/refund. */
+  | "CHANNEL_ORDER_NOT_FOUND";
+
+const PROVIDER_CODE = /^[A-Za-z0-9_.]{1,64}$/u;
+
 /** Deliberately contains no response body, URL, credentials or provider PII. */
 export class ChannelProtocolError extends Error {
+  /** The provider's public error code (e.g. ORDERPAID), never free text. */
+  readonly providerCode: string | null;
   constructor(
-    readonly code:
-      | "CHANNEL_TRANSPORT_FAILED"
-      | "CHANNEL_SIGNATURE_INVALID"
-      | "CHANNEL_RESPONSE_INVALID"
-      | "CHANNEL_BINDING_MISMATCH"
-      | "CHANNEL_REJECTED",
+    readonly code: ChannelErrorCode,
+    providerCode?: unknown,
   ) {
     super(code);
     this.name = "ChannelProtocolError";
+    this.providerCode =
+      typeof providerCode === "string" && PROVIDER_CODE.test(providerCode) ? providerCode : null;
   }
 }

@@ -3402,7 +3402,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -5042,7 +5044,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -6682,7 +6686,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -8322,7 +8328,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -9962,7 +9970,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -11602,7 +11612,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -13242,7 +13254,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -14882,7 +14896,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -16522,7 +16538,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -18162,7 +18180,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -19802,7 +19822,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -21442,7 +21464,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -23082,7 +23106,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -24722,7 +24748,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -26362,7 +26390,9 @@
                           "constraint",
                           "unavailable",
                           "retry_later",
-                          "idempotency_conflict"
+                          "idempotency_conflict",
+                          "payment_pending",
+                          "channel_refund_required"
                         ],
                         "type": "string"
                       }
@@ -28063,7 +28093,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -29703,7 +29735,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -31343,7 +31377,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -32983,7 +33019,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -34623,7 +34661,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -36263,7 +36303,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -37903,7 +37945,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -39543,7 +39587,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -41183,7 +41229,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -42823,7 +42871,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -44463,7 +44513,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -46103,7 +46155,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -47743,7 +47797,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -49383,7 +49439,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -51023,7 +51081,9 @@
                               "constraint",
                               "unavailable",
                               "retry_later",
-                              "idempotency_conflict"
+                              "idempotency_conflict",
+                              "payment_pending",
+                              "channel_refund_required"
                             ],
                             "type": "string"
                           }
@@ -52847,7 +52907,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -54487,7 +54549,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -56127,7 +56191,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -57767,7 +57833,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -59407,7 +59475,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -61047,7 +61117,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -62687,7 +62759,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -64327,7 +64401,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -65967,7 +66043,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -67607,7 +67685,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -69247,7 +69327,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -70887,7 +70969,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -72527,7 +72611,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -74167,7 +74253,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }
@@ -75807,7 +75895,9 @@
                                   "constraint",
                                   "unavailable",
                                   "retry_later",
-                                  "idempotency_conflict"
+                                  "idempotency_conflict",
+                                  "payment_pending",
+                                  "channel_refund_required"
                                 ],
                                 "type": "string"
                               }

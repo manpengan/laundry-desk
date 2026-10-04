@@ -315,9 +315,10 @@ test("production transport pins HTTPS origins, rejects redirects and bounds byte
   });
   assert.equal((await transport(request)).body, "");
   assert.deepEqual(seen, ["https://api.mch.weixin.qq.com/v3/pay/transactions/native"]);
+  // A rejected destination never leaves this computer.
   await assert.rejects(
     transport({ ...request, path: "https://evil.invalid/v3/test" }),
-    /CHANNEL_TRANSPORT_FAILED/u,
+    /CHANNEL_NOT_SENT/u,
   );
   const tooLarge = createChannelHttp(async () => new Response(new Uint8Array(1_048_577)));
   await assert.rejects(tooLarge(request), /CHANNEL_TRANSPORT_FAILED/u);

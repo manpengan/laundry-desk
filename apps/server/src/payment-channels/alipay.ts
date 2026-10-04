@@ -5,6 +5,8 @@ import {
   channelClock,
   header,
   parseChannelJson,
+  parseProviderResponse,
+  providerErrorCode,
   requireRsaKey,
   rsaSign,
   rsaVerify,
@@ -23,6 +25,8 @@ import {
   type ChannelHttpResponse,
 } from "./types.js";
 
+const NOT_FOUND = new Set(["ACQ.TRADE_NOT_EXIST", "TRADE_NOT_EXIST"]);
+
 export function verifyAlipayResponse(
   response: ChannelHttpResponse,
   config: AlipayCredential,
@@ -36,6 +40,33 @@ export function verifyAlipayResponse(
     header(response, "alipay-signature"),
     config.platformPublicKey,
   );
+}
+
+/** Same rule as WeChat: success must be signed; only signed 4xx or unsigned 401 are definitive. */
+function classifyAlipay(
+  response: ChannelHttpResponse,
+  config: AlipayCredential,
+  clock: ChannelClock,
+): void {
+  let signed = true;
+  try {
+    verifyAlipayResponse(response, config, clock);
+  } catch {
+    signed = false;
+  }
+  if (response.status >= 200 && response.status < 300) {
+    if (!signed) throw new ChannelProtocolError("CHANNEL_SIGNATURE_INVALID");
+    return;
+  }
+  const code = providerErrorCode(response.body);
+  if (!signed) {
+    if (response.status === 401) throw new ChannelProtocolError("CHANNEL_REJECTED", code);
+    throw new ChannelProtocolError("CHANNEL_SIGNATURE_INVALID", code);
+  }
+  if (response.status >= 500) throw new ChannelProtocolError("CHANNEL_TRANSPORT_FAILED", code);
+  if (code !== null && NOT_FOUND.has(code))
+    throw new ChannelProtocolError("CHANNEL_ORDER_NOT_FOUND", code);
+  throw new ChannelProtocolError("CHANNEL_REJECTED", code);
 }
 
 /** Direct merchant public-key mode using the official v3 RSA2 wire protocol. */
@@ -62,29 +93,31 @@ export function createAlipayAdapter(
         Authorization: `ALIPAY-SHA256withRSA ${authority},sign=${signature}`,
       },
     });
-    verifyAlipayResponse(response, config, clock);
-    if (response.status < 200 || response.status >= 300)
-      throw new ChannelProtocolError("CHANNEL_REJECTED");
+    classifyAlipay(response, config, clock);
     return parseChannelJson(response.body);
   };
+  const refundQuery = async (merchantOrder: string, merchantRefund: string) =>
+    request("/v3/alipay/trade/fastpay/refund/query", {
+      out_trade_no: merchantOrder,
+      out_request_no: merchantRefund,
+    });
   return Object.freeze({
     async checkout(input) {
       MerchantOrderSchema.parse(input.merchantOrder);
       ChannelCentsSchema.parse(input.amountCents);
-      if (input.openId !== undefined) throw new ChannelProtocolError("CHANNEL_RESPONSE_INVALID");
-      const result = z
-        .object({ out_trade_no: MerchantOrderSchema, qr_code: z.url().max(1024) })
-        .parse(
-          await request("/v3/alipay/trade/precreate", {
-            out_trade_no: input.merchantOrder,
-            total_amount: yuan(input.amountCents),
-            subject: z.string().trim().min(1).max(100).parse(input.description),
-            seller_id: config.sellerId,
-            notify_url: config.notifyUrl,
-            timeout_express: "15m",
-            qr_code_timeout_express: "15m",
-          }),
-        );
+      if (input.openId !== undefined) throw new ChannelProtocolError("CHANNEL_NOT_SENT");
+      const value = await request("/v3/alipay/trade/precreate", {
+        out_trade_no: input.merchantOrder,
+        total_amount: yuan(input.amountCents),
+        subject: z.string().trim().min(1).max(100).parse(input.description),
+        seller_id: config.sellerId,
+        notify_url: config.notifyUrl,
+        timeout_express: "15m",
+        qr_code_timeout_express: "15m",
+      });
+      const result = parseProviderResponse(() =>
+        z.object({ out_trade_no: MerchantOrderSchema, qr_code: z.url().max(1024) }).parse(value),
+      );
       const qr = new URL(result.qr_code);
       if (
         result.out_trade_no !== input.merchantOrder ||
@@ -98,20 +131,25 @@ export function createAlipayAdapter(
     },
     async query(merchantOrder) {
       MerchantOrderSchema.parse(merchantOrder);
-      const payment = alipayPayment(
-        await request("/v3/alipay/trade/query", { out_trade_no: merchantOrder }),
-      );
+      const value = await request("/v3/alipay/trade/query", { out_trade_no: merchantOrder });
+      const payment = parseProviderResponse(() => alipayPayment(value));
       if (payment.merchantOrder !== merchantOrder)
         throw new ChannelProtocolError("CHANNEL_BINDING_MISMATCH");
       return payment;
     },
     async close(merchantOrder) {
       MerchantOrderSchema.parse(merchantOrder);
-      const result = z
-        .object({ out_trade_no: MerchantOrderSchema })
-        .parse(await request("/v3/alipay/trade/close", { out_trade_no: merchantOrder }));
+      // Cancel, not close: a precreated code that was never scanned has no trade to
+      // close, while cancel also voids it (and returns money if the buyer just paid).
+      const value = await request("/v3/alipay/trade/cancel", { out_trade_no: merchantOrder });
+      const result = parseProviderResponse(() =>
+        z
+          .object({ out_trade_no: MerchantOrderSchema, retry_flag: z.enum(["Y", "N"]) })
+          .parse(value),
+      );
       if (result.out_trade_no !== merchantOrder)
         throw new ChannelProtocolError("CHANNEL_BINDING_MISMATCH");
+      return Object.freeze({ outcome: result.retry_flag === "Y" ? "retry" : "closed" });
     },
     async refund(input) {
       MerchantOrderSchema.parse(input.merchantOrder);
@@ -127,24 +165,14 @@ export function createAlipayAdapter(
         refund_reason: z.string().trim().min(1).max(80).parse(input.reason),
       });
       // A successful submission is not completion. Query the exact refund reference.
-      return alipayRefund(
-        await request("/v3/alipay/trade/fastpay/refund/query", {
-          out_trade_no: input.merchantOrder,
-          out_request_no: input.merchantRefund,
-        }),
-        input,
-      );
+      const value = await refundQuery(input.merchantOrder, input.merchantRefund);
+      return parseProviderResponse(() => alipayRefund(value, input));
     },
     async queryRefund(input) {
       MerchantOrderSchema.parse(input.merchantOrder);
       MerchantOrderSchema.parse(input.merchantRefund);
-      return alipayRefund(
-        await request("/v3/alipay/trade/fastpay/refund/query", {
-          out_trade_no: input.merchantOrder,
-          out_request_no: input.merchantRefund,
-        }),
-        input,
-      );
+      const value = await refundQuery(input.merchantOrder, input.merchantRefund);
+      return parseProviderResponse(() => alipayRefund(value, input));
     },
     notification(response) {
       return alipayNotification(response.body, config);

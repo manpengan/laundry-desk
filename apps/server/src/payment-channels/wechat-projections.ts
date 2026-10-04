@@ -27,7 +27,9 @@ const Payment = z.object({
     "USERPAYING",
     "PAYERROR",
   ]),
-  amount: z.object({ total: Amount, currency: z.literal("CNY") }),
+  // The query API documents every amount field as optional; unpaid orders may omit
+  // `currency` (only `payer_currency` is returned). A paid answer must carry `total`.
+  amount: z.object({ total: Amount.optional(), currency: z.literal("CNY").optional() }).optional(),
   success_time: z.string().optional(),
 });
 export function wechatPayment(raw: unknown, config: WechatCredential): ChannelPayment {
@@ -35,7 +37,11 @@ export function wechatPayment(raw: unknown, config: WechatCredential): ChannelPa
   if (value.appid !== config.appId || value.mchid !== config.merchantId)
     throw new ChannelProtocolError("CHANNEL_BINDING_MISMATCH");
   const paid = value.trade_state === "SUCCESS" || value.trade_state === "REFUND";
-  if (paid && (value.transaction_id === undefined || value.success_time === undefined))
+  const total = value.amount?.total ?? null;
+  if (
+    paid &&
+    (value.transaction_id === undefined || value.success_time === undefined || total === null)
+  )
     throw new ChannelProtocolError("CHANNEL_RESPONSE_INVALID");
   return Object.freeze({
     merchantOrder: value.out_trade_no,
@@ -45,7 +51,7 @@ export function wechatPayment(raw: unknown, config: WechatCredential): ChannelPa
       : ["NOTPAY", "USERPAYING"].includes(value.trade_state)
         ? "pending"
         : "closed",
-    amountCents: value.amount.total,
+    amountCents: total,
     paidAt: paid ? providerDate(value.success_time as string) : null,
   });
 }

@@ -6,7 +6,18 @@ import { channelAdapter, readChannelSettings, ChannelBusinessError } from "./set
 import { channelAudit, readIntent } from "./intent-store.js";
 import { readRefund } from "./refund-store.js";
 import { settleChannelRefund } from "./refund-settlement.js";
-import { ChannelProtocolError, type ChannelHttp } from "./types.js";
+import { closeCode } from "./close-undispatched.js";
+import { channelFailure } from "./outcome.js";
+import type {
+  ChannelAdapter,
+  ChannelHttp,
+  ChannelProtocolError,
+  ChannelRefundInput,
+} from "./types.js";
+
+/** Rejections that a later attempt with the same refund reference may still pass. */
+const RETRYABLE = new Set(["NOT_ENOUGH", "FREQUENCY_LIMITED", "SYSTEM_ERROR", "ACQ.SYSTEM_ERROR"]);
+
 export function createChannelRefundService(
   local: LocalRuntime,
   kms: ByokKmsPort | null,
@@ -15,9 +26,81 @@ export function createChannelRefundService(
   const { transact } = createByokRuntime(local, kms);
   const read = (tenant: TenantContext, id: string) =>
     transact(tenant, ({ client }) => readRefund(client, tenant, id));
+  /** Decrypts outside any row lock; the claim below re-checks the same settings version. */
+  const adapterFor = async (tenant: TenantContext, id: string) => {
+    const loaded = await transact(tenant, async ({ client }) => {
+      const refund = await readRefund(client, tenant, id);
+      if (refund === null) throw new ChannelBusinessError("RESOURCE_UNAVAILABLE");
+      const intent = await readIntent(client, tenant, refund.intent_id);
+      if (intent === null) throw new ChannelBusinessError("RESOURCE_UNAVAILABLE");
+      return { intent, settings: await readChannelSettings(client, tenant, intent.channel) };
+    });
+    const { intent, settings } = loaded;
+    if (
+      kms === null ||
+      settings === null ||
+      settings.account_fingerprint !== intent.account_fingerprint
+    )
+      throw new ChannelBusinessError("RESOURCE_UNAVAILABLE");
+    return {
+      adapter: await channelAdapter(kms, tenant, settings, http),
+      version: settings.version,
+    };
+  };
+  const record = (tenant: TenantContext, id: string, state: "unknown" | "failed", code: string) =>
+    transact(tenant, ({ client }) =>
+      client.query(
+        `UPDATE payment_channel_refunds SET state=CASE WHEN $5='failed' THEN 'failed' WHEN state='needs_review' THEN state ELSE 'unknown' END,
+        error_code=$4,checked_at=statement_timestamp()
+        WHERE org_id=$1::uuid AND store_id=$2::uuid AND id=$3::uuid AND state NOT IN ('refunded','failed')`,
+        [tenant.orgId, tenant.storeId, id, code, state],
+      ),
+    );
+  const submit = async (
+    tenant: TenantContext,
+    id: string,
+    adapter: ChannelAdapter,
+    input: ChannelRefundInput,
+    resend: boolean,
+  ) => {
+    // Only a rejected submission proves the refund did not happen; a rejected query does not.
+    let submitted = resend;
+    try {
+      let receipt;
+      if (resend) receipt = await adapter.refund(input);
+      else {
+        try {
+          receipt = await adapter.queryRefund(input);
+        } catch (error) {
+          const failure = channelFailure(error);
+          if (failure.code !== "CHANNEL_ORDER_NOT_FOUND") throw failure;
+          // Refund references are idempotent at both providers: resend a lost submission.
+          submitted = true;
+          receipt = await adapter.refund(input);
+        }
+      }
+      return await transact(tenant, ({ client }) =>
+        settleChannelRefund(client, tenant, local, id, receipt),
+      );
+    } catch (error) {
+      const failure: ChannelProtocolError = channelFailure(error);
+      const definitive =
+        submitted &&
+        failure.code === "CHANNEL_REJECTED" &&
+        (failure.providerCode === null || !RETRYABLE.has(failure.providerCode));
+      await record(
+        tenant,
+        id,
+        definitive ? "failed" : "unknown",
+        definitive ? closeCode("CHANNEL_REJECTED", failure) : failure.code,
+      );
+      return read(tenant, id);
+    }
+  };
   return Object.freeze({
     read,
     async advance(tenant: TenantContext, id: string) {
+      const { adapter, version } = await adapterFor(tenant, id);
       const loaded = await transact(tenant, async ({ client }) => {
         const refund = await readRefund(client, tenant, id, true);
         if (refund === null) throw new ChannelBusinessError("RESOURCE_UNAVAILABLE");
@@ -44,12 +127,11 @@ export function createChannelRefundService(
         if (intent === null) throw new ChannelBusinessError("RESOURCE_UNAVAILABLE");
         const settings = await readChannelSettings(client, tenant, intent.channel, true);
         if (
-          kms === null ||
           settings === null ||
+          settings.version !== version ||
           settings.account_fingerprint !== intent.account_fingerprint
         )
           throw new ChannelBusinessError("RESOURCE_UNAVAILABLE");
-        const adapter = await channelAdapter(kms, tenant, settings, http);
         const dispatch = refund.dispatched_at === null && refund.state === "created";
         if (dispatch) {
           if (!settings.enabled) throw new ChannelBusinessError("RESOURCE_UNAVAILABLE");
@@ -66,7 +148,6 @@ export function createChannelRefundService(
           );
         }
         return {
-          adapter,
           dispatch,
           input: {
             merchantOrder: intent.merchant_order,
@@ -78,23 +159,7 @@ export function createChannelRefundService(
         };
       });
       if (loaded === null) return read(tenant, id);
-      try {
-        const receipt = await (loaded.dispatch
-          ? loaded.adapter.refund(loaded.input)
-          : loaded.adapter.queryRefund(loaded.input));
-        return await transact(tenant, ({ client }) =>
-          settleChannelRefund(client, tenant, local, id, receipt),
-        );
-      } catch (error) {
-        if (!(error instanceof ChannelProtocolError)) throw error;
-        await transact(tenant, ({ client }) =>
-          client.query(
-            `UPDATE payment_channel_refunds SET state=CASE WHEN state='needs_review' THEN state ELSE 'unknown' END,error_code=$4,checked_at=statement_timestamp() WHERE org_id=$1::uuid AND store_id=$2::uuid AND id=$3::uuid AND state NOT IN ('refunded','failed')`,
-            [tenant.orgId, tenant.storeId, id, error.code],
-          ),
-        );
-        return read(tenant, id);
-      }
+      return submit(tenant, id, adapter, loaded.input, loaded.dispatch);
     },
   });
 }

@@ -132,6 +132,21 @@ export const ChannelReconcileInputSchema = z.strictObject({
     .max(10000),
 });
 export const ChannelListInputSchema = z.strictObject({ order_id: z.uuid().optional() });
+/** ADR-85 r1: which channels a collector may offer; no merchant identifiers. */
+export const ChannelAvailabilityViewSchema = z.strictObject({
+  channels: z.array(z.strictObject({ channel: PaymentChannelSchema, enabled: z.boolean() })).max(2),
+  /** Settings, refunds, reconciliation and write-offs stay administrator-only. */
+  can_manage: z.boolean(),
+});
+/**
+ * ADR-85 r1: administrator write-off of an expired intent no provider answer can settle.
+ * Requires the current administrator password and a reason kept in the audit.
+ */
+export const ChannelResolveInputSchema = z.strictObject({
+  intent_id: z.uuid(),
+  note: z.string().trim().min(4).max(200),
+  password: z.string().min(1).max(256),
+});
 export const ChannelRefundIdSchema = z.strictObject({ refund_id: z.uuid() });
 export const ChannelRefundsViewSchema = z.strictObject({
   refunds: z.array(ChannelRefundViewSchema).max(100),

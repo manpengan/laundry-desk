@@ -63,16 +63,25 @@ export async function settleChannelPayment(
   if (intent === null) throw new ChannelBusinessError("RESOURCE_UNAVAILABLE");
   if (
     intent.merchant_order !== payment.merchantOrder ||
-    intent.amount_cents !== payment.amountCents ||
-    (intent.provider_order !== null && payment.providerOrder !== intent.provider_order)
+    (payment.state === "paid" && payment.amountCents === null) ||
+    (payment.amountCents !== null && intent.amount_cents !== payment.amountCents) ||
+    (intent.provider_order !== null &&
+      payment.providerOrder !== null &&
+      payment.providerOrder !== intent.provider_order)
   )
     throw new ChannelProtocolError("CHANNEL_BINDING_MISMATCH");
-  if (
-    (intent.state === "closed" && payment.state === "paid") ||
-    (intent.provider_order !== null && payment.state !== "paid")
-  )
+  // Money reported after a definitive close is an anomaly for reconciliation to surface.
+  if (intent.state === "closed" && payment.state === "paid")
     throw new ChannelProtocolError("CHANNEL_BINDING_MISMATCH");
-  if (intent.state === "paid" || intent.state === "closed") return intent;
+  if (intent.state === "paid") {
+    if (payment.state === "pending") throw new ChannelProtocolError("CHANNEL_BINDING_MISMATCH");
+    // A paid trade later reported closed (Alipay after a full refund) changes nothing here:
+    // refunds are recorded through payment_channel_refunds.
+    return intent;
+  }
+  if (intent.state === "closed") return intent;
+  if (intent.provider_order !== null && payment.state !== "paid")
+    throw new ChannelProtocolError("CHANNEL_BINDING_MISMATCH");
   const actorTenant = Object.freeze({ ...tenant, staffId: intent.actor_id });
   await client.query("SELECT set_config('app.staff_id',$1,true)", [intent.actor_id]);
   if (payment.state !== "paid") {
