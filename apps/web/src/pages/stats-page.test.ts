@@ -51,6 +51,16 @@ test("parseDaySummary accepts documented result shape", () => {
   assert.equal(parseDaySummary(null), null);
 });
 
+test("parseDaySummary keeps the 账目 income pair only when both figures are integers", () => {
+  const income = { real_income_cents: 2000, performance_income_cents: 2100 };
+  assert.deepEqual(parseDaySummary({ ...SAMPLE, ...income }), { ...SAMPLE, ...income });
+  assert.deepEqual(parseDaySummary({ ...SAMPLE, real_income_cents: 2000 }), SAMPLE);
+  assert.deepEqual(
+    parseDaySummary({ ...SAMPLE, real_income_cents: 20.5, performance_income_cents: 2100 }),
+    SAMPLE,
+  );
+});
+
 test("unwrapQueryResult peels bus envelope", () => {
   assert.deepEqual(unwrapQueryResult({ execution: "executed", result: SAMPLE }), SAMPLE);
   assert.deepEqual(unwrapQueryResult(SAMPLE), SAMPLE);

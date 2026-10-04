@@ -40,13 +40,15 @@ function daySummaryHandler(deps: StatsHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
     const input = asRecord(ctx.parsed);
     const businessDate = resolveBusinessDate(input.business_date, deps);
-    const summary = await deps.source.daySummary({
-      orgId: ctx.tenant.orgId,
-      storeId: ctx.tenant.storeId,
-      businessDate,
-    });
+    const scope = { orgId: ctx.tenant.orgId, storeId: ctx.tenant.storeId, businessDate };
+    const summary = await deps.source.daySummary(scope);
+    // The workbench shows the same net receipts as 账目, never a second definition.
+    const income =
+      deps.source.incomeSummary === undefined
+        ? {}
+        : await deps.source.incomeSummary({ ...scope, staffId: ctx.tenant.staffId });
     return Object.freeze({
-      result: Object.freeze({ ...summary }),
+      result: Object.freeze({ ...summary, ...income }),
     });
   };
 }

@@ -18,8 +18,20 @@ export type StatsCashSummary = Readonly<{
   cash_cents: number;
 }>;
 
+/** ADR-91 P1-5: the 账目 report's two bases for one business day, computed by the same code. */
+export type StatsIncomeSummary = Readonly<{
+  /** Money actually received, net of refunds and reversals, including stored-value top-ups. */
+  real_income_cents: number;
+  /** Order settlements of the day in any tender, including member balance. */
+  performance_income_cents: number;
+}>;
+
 /** Read port used by stats.day.summary handler. */
 export type StatsQueryPort = Readonly<{
   daySummary: (input: StatsDaySummaryInput) => Promise<DaySummaryResult>;
   cashSummary: (input: StatsDaySummaryInput) => Promise<StatsCashSummary>;
+  /** Absent in isolated sources without an accounting ledger. */
+  incomeSummary?: (
+    input: StatsDaySummaryInput & Readonly<{ staffId: string }>,
+  ) => Promise<StatsIncomeSummary>;
 }>;
