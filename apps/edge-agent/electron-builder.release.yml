@@ -18,6 +18,7 @@ files:
   - dist/lib/sender.js
   - dist/shell/single-instance.js
   - dist/shell/tray.js
+  - dist/shell/user-data-identity.js
   - dist/transport/electron-session.js
   - dist/transport/handlers.js
   - dist/desktop/auth-intent.js

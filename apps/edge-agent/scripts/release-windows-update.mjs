@@ -149,7 +149,7 @@ export async function releaseWindowsUpdate(env = process.env) {
         extends: join(PACKAGE_ROOT, "electron-builder.yml"),
         ...staged.settings.overrides,
         forceCodeSigning: true,
-        extraMetadata: { version: input.version },
+        extraMetadata: { ...staged.settings.overrides.extraMetadata, version: input.version },
         directories: { output: staging },
         extraResources: [
           { from: "resources/spa", to: "spa" },

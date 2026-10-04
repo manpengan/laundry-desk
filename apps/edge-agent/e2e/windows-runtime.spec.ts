@@ -186,7 +186,7 @@ test("installed Windows Counter signs in and restarts against the native Runtime
     await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(credentials.adminDisplayName, { exact: true })).toBeVisible();
     await page.screenshot({ path: screenshot });
-    await verifyInstalledFeatureSettings(page);
+    await verifyInstalledFeatureSettings(page, screenshot);
 
     await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.minimize());
     await expect

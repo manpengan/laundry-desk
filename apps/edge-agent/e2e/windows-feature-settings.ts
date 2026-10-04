@@ -1,24 +1,41 @@
 import { expect, type Page } from "@playwright/test";
 
-/** Read installed capabilities without enabling providers or sending external requests. */
-export async function verifyInstalledFeatureSettings(page: Page): Promise<void> {
+/**
+ * Read installed capabilities without enabling providers or sending external requests.
+ * ADR-91 P1-8: with a screenshot path, each offered panel is captured beside it as evidence.
+ */
+export async function verifyInstalledFeatureSettings(
+  page: Page,
+  screenshotPath?: string,
+): Promise<void> {
   await page.locator('[data-nav-id="settings"]').click();
   for (const id of [
     "settings-payments",
-    "settings-miniapp",
-    "settings-miniapp-notifications",
-    "settings-remote-assistance",
     "settings-store-export",
     "settings-migration",
     "settings-notification",
     "settings-ai",
   ]) {
-    await expect(page.locator(`#${id}`)).toHaveCount(1);
+    const section = page.locator(`#${id}`);
+    await expect(section).toHaveCount(1);
+    // A panel must open without a failure notice before anyone has used it.
+    await expect(section.locator('[role="alert"]')).toHaveCount(0);
+    if (screenshotPath !== undefined) {
+      await section.scrollIntoViewIfNeeded();
+      await section.screenshot({ path: screenshotPath.replace(/\.png$/u, `-${id}.png`) });
+    }
   }
+  // ADR-91 D-1/D-2: public-entry features stay installed but are not offered.
+  for (const id of [
+    "settings-miniapp",
+    "settings-miniapp-notifications",
+    "settings-remote-assistance",
+  ])
+    await expect(page.locator(`#${id}`)).toHaveCount(0);
   const payment = page.getByRole("region", { name: "支付渠道与对账", exact: true });
   await payment.getByRole("button", { name: "商户设置", exact: true }).click();
   await expect(page.getByRole("region", { name: "支付商户设置" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "顾客小程序配置" })).toHaveCount(1);
+  await expect(page.getByRole("region", { name: "顾客小程序配置" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "阿里云短信设置" })).toHaveCount(1);
 
   const capabilities = await page.evaluate(async () => {

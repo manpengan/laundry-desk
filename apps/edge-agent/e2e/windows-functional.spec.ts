@@ -12,6 +12,7 @@ import {
 } from "@playwright/test";
 import { inspectPrivateFile, securePrivateFile } from "@laundry/platform-fs";
 import type { BrowserWindow } from "electron";
+import { captureMainProcessOutput, evaluateInMain } from "./electron-main.js";
 import { yuanText } from "./money-input.js";
 import {
   assertAsLaunchedGeometry,
@@ -239,18 +240,20 @@ async function persistAsLaunchedGeometry(
   renderer: Pick<Awaited<ReturnType<typeof readRendererLayout>>, "innerWidth" | "innerHeight">,
   evidenceRoot: string,
 ) {
-  const mainWindow = await application.browserWindow(page);
-  const native = await application
-    .evaluate(({ screen }, window: BrowserWindow) => {
-      const bounds = window.getBounds();
-      return {
-        bounds,
-        content: window.getContentBounds(),
-        minimum: window.getMinimumSize(),
-        workArea: screen.getDisplayMatching(bounds).workArea,
-      };
-    }, mainWindow)
-    .finally(() => mainWindow.dispose());
+  const native = await evaluateInMain(application, async () => {
+    const mainWindow = await application.browserWindow(page);
+    return await application
+      .evaluate(({ screen }, window: BrowserWindow) => {
+        const bounds = window.getBounds();
+        return {
+          bounds,
+          content: window.getContentBounds(),
+          minimum: window.getMinimumSize(),
+          workArea: screen.getDisplayMatching(bounds).workArea,
+        };
+      }, mainWindow)
+      .finally(() => mainWindow.dispose());
+  });
   const geometry = measureAsLaunchedGeometry(native, renderer);
   await writeFile(
     join(evidenceRoot, "as-launched-geometry.json"),
@@ -325,6 +328,8 @@ test("created test admin completes the installed Windows desktop functional jour
   });
   const userDataPath = await mkdtemp(join(await realpath(tmpdir()), "laundry-win-functional-"));
   let application: ElectronApplication | null = null;
+  let mainLog: ReturnType<typeof captureMainProcessOutput> | null = null;
+  let passed = false;
   const rendererErrors: string[] = [];
   const serverFailures: string[] = [];
   let ticketNo = "";
@@ -339,6 +344,7 @@ test("created test admin completes the installed Windows desktop functional jour
 
   try {
     application = await launchInstalled(executable, userDataPath);
+    mainLog = captureMainProcessOutput(application);
     let page = await application.firstWindow();
     observe(page);
     if (accountCreatedThisRun) {
@@ -379,8 +385,9 @@ test("created test admin completes the installed Windows desktop functional jour
     await expect(page.getByText(account.displayName, { exact: true })).toBeVisible();
     await expect(page.locator(".ld-toast--error")).toHaveCount(0);
 
-    const desktopSecurity = await application.evaluate(
-      ({ app, BrowserWindow, safeStorage, session }) => {
+    const launched = application;
+    const desktopSecurity = await evaluateInMain(launched, () =>
+      launched.evaluate(({ app, BrowserWindow, safeStorage, session }) => {
         const window = BrowserWindow.getAllWindows()[0];
         if (window === undefined) throw new Error("installed Windows main window is unavailable");
         return Object.freeze({
@@ -390,7 +397,7 @@ test("created test admin completes the installed Windows desktop functional jour
           isPackaged: app.isPackaged,
           platform: process.platform,
         });
-      },
+      }),
     );
     expect(desktopSecurity).toEqual({
       dedicatedSession: true,
@@ -550,16 +557,22 @@ test("created test admin completes the installed Windows desktop functional jour
 
     await closeApplication(application);
     application = await launchInstalled(executable, userDataPath);
+    mainLog = captureMainProcessOutput(application);
     page = await application.firstWindow();
     observe(page);
     await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(account.displayName, { exact: true })).toBeVisible();
     const restartedMetrics = page.locator('[data-testid="counter-workbench-metrics"]');
     await expect(restartedMetrics).not.toContainText("—", { timeout: 20_000 });
-    await expect(restartedMetrics).toContainText("收款（退款前）");
-    await expect(restartedMetrics).not.toContainText("实收");
+    // ADR-91 P1-5: the workbench shows 账目's net receipts and sales, not gross payments.
+    await expect(restartedMetrics).toContainText("今日实收");
+    await expect(restartedMetrics).toContainText("营业额");
+    await expect(restartedMetrics).not.toContainText("退款前");
     await expect(
-      page.getByText("含会员余额付款；欠款补缴和冲正请查看账目。", { exact: true }),
+      page.getByText(
+        "今日实收已扣除退款与冲正，含会员充值，与账目一致；营业额按开单结算，含会员余额付款。",
+        { exact: true },
+      ),
     ).toBeVisible();
     await capture(page, screenshots.restarted);
 
@@ -592,7 +605,10 @@ test("created test admin completes the installed Windows desktop functional jour
     process.stdout.write(
       `${JSON.stringify({ status: "passed", username: account.username, ticket_no: ticketNo, evidence: evidenceRootReal })}\n`,
     );
+    passed = true;
   } finally {
+    // ADR-91 P1-8: a failed run keeps the main-process output beside its screenshots.
+    if (!passed) await mainLog?.save(evidenceRootReal).catch(() => undefined);
     await closeApplication(application);
     await rm(userDataPath, { force: true, recursive: true });
   }

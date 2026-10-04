@@ -129,10 +129,14 @@ export function getWindowsProfileBuildSettings(rawProfile, { packageVersion = "0
     serviceOrigin: profile.service_origin,
     executableFileName: `${profile.display_name}.exe`,
     installerFileName,
+    // ADR-91 P1-7: the packaged name gives each distribution its own ASCII userData,
+    // single-instance lock and per-user install directory.
+    packageName: prefix,
     profileDigest: digest(windowsProfileBytes(profile)),
     overrides: Object.freeze({
       appId: profile.app_id,
       productName: profile.display_name,
+      extraMetadata: Object.freeze({ name: prefix }),
       win: Object.freeze({ icon: "../../build/icon.ico" }),
       nsis: Object.freeze({ artifactName: installerFileName }),
     }),

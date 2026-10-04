@@ -84,6 +84,11 @@ test("allowlisted profiles preserve generic identity and separate Hongfa packagi
   assert.deepEqual(hongfaSettings.overrides.nsis, {
     artifactName: hongfaSettings.installerFileName,
   });
+  // ADR-91 P1-7: separate ASCII package names keep userData, the single-instance lock and
+  // the per-user install directory apart (the Chinese product name cannot name a folder).
+  assert.deepEqual(genericSettings.overrides.extraMetadata, { name: "laundry-desk-v2" });
+  assert.deepEqual(hongfaSettings.overrides.extraMetadata, { name: "laundry-desk-v2-hongfa" });
+  assert.equal(hongfaSettings.packageName, "laundry-desk-v2-hongfa");
 });
 
 test("unknown profile identities and source/profile identity swaps are refused", async () => {

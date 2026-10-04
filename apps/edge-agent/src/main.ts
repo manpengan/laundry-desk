@@ -31,6 +31,7 @@ import {
 import { APP_SCHEME } from "./lib/security-prefs.js";
 import { createAppProtocolHandler, registerAppProtocolScheme } from "./protocol.js";
 import { claimPrimaryInstance, onSecondInstance } from "./shell/single-instance.js";
+import { adoptLegacyUserData } from "./shell/user-data-identity.js";
 import { createAppTray } from "./shell/tray.js";
 import {
   configureDesktopSession,
@@ -86,6 +87,12 @@ let printerRuntime: ConfiguredPrinterRuntime | null = null;
 let offlineQueue: PersistentEncryptedQueue | null = null;
 let offlineRuntime: OfflineCommandRuntime | null = null;
 type BootMode = "normal" | "recovery";
+try {
+  adoptLegacyUserData(app);
+} catch {
+  // The shared directory stays intact for manual recovery; this build pairs afresh.
+  console.error("DESKTOP_LEGACY_USER_DATA_NOT_ADOPTED");
+}
 registerAppProtocolScheme(protocol);
 async function showMainWindow(): Promise<void> {
   if (!mainWindow) {
