@@ -119,15 +119,18 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
     });
   const formatMoney = (cents: number) => (cents / 100).toFixed(2);
   return (
-    <section aria-label="旧版数据迁移" className="space-y-4">
-      <h3 className="text-base font-semibold">旧版数据迁移</h3>
-      <p className="text-sm text-[var(--color-text-secondary)]">
-        选择已停止旧系统并完成检查的SQLite备份。先核对数据和照片，再授权维护程序导入；目标门店必须尚无顾客和订单。
-      </p>
-      <label className="block text-sm">
-        旧版备份文件
+    <section aria-label="旧版数据迁移" className="ld-settings-section lg-card ld-panel">
+      <header className="ld-settings-section__head">
+        <h2>旧版数据导入</h2>
+        <p>
+          选择已停止旧系统并完成检查的 SQLite
+          备份。先核对数据和照片，再授权维护程序导入；目标门店必须尚无顾客和订单。
+        </p>
+      </header>
+      <label className="ld-field">
+        <span className="ld-field__label">旧版备份文件</span>
         <input
-          className="mt-2 block max-w-full"
+          className="ld-input"
           type="file"
           accept=".db,.sqlite,.sqlite3"
           disabled={busy}
@@ -135,13 +138,13 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
         />
       </label>
       {error && (
-        <p role="alert" className="text-sm text-[var(--color-danger)]">
+        <p role="alert" className="ld-panel__note ld-panel__note--warn">
           {error}
         </p>
       )}
       {preview && (
         <>
-          <dl className="grid grid-cols-2 gap-2 text-sm">
+          <dl className="ld-panel__grid ld-panel__stats">
             <div>
               <dt>顾客</dt>
               <dd>{preview.report.target.customers}</dd>
@@ -164,7 +167,7 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
               <dd>{formatMoney(preview.report.target.debtCents)}</dd>
             </div>
           </dl>
-          <p className="text-sm">
+          <p className="ld-panel__note ld-panel__note--ok">
             数量和金额核对：零差异。
             {preview.reassigned_pickup_codes > 0
               ? `有 ${preview.reassigned_pickup_codes} 个重复旧取衣码，将生成唯一新码；旧码保留在历史资料，仍可用原订单号查询。`
@@ -174,15 +177,17 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
               : ""}
           </p>
           {preview.photos.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-sm">
+            <div className="ld-panel__sub">
+              <p className="ld-panel__lead">
                 旧版照片属于整单，导入后关联该单第一件衣物。请按原路径选择照片并核对这种关联。
               </p>
               {preview.photos.map((photo) => (
-                <label key={photo.id} className="block break-all text-sm">
-                  {photo.source_relative_path} {uploaded.includes(photo.id) ? "（已上传）" : ""}
+                <label key={photo.id} className="ld-field">
+                  <span className="ld-field__label">
+                    {photo.source_relative_path} {uploaded.includes(photo.id) ? "（已上传）" : ""}
+                  </span>
                   <input
-                    className="mt-1 block max-w-full"
+                    className="ld-input"
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
                     disabled={busy || uploaded.includes(photo.id) || approved !== null}
@@ -192,7 +197,7 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
               ))}
             </div>
           )}
-          <p className="text-sm">
+          <p className="ld-panel__lead">
             历史资料：员工 {preview.history.staffs} 条、短信 {preview.history.sms} 条、审计{" "}
             {preview.history.audit} 条。 旧账号的 {preview.history.excluded_credentials}{" "}
             份密码凭据不会复制或启用；历史短信不会重发，历史审计不作当前操作账本。
@@ -211,8 +216,8 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
         </>
       )}
       {review && !approved && (
-        <div className="space-y-3">
-          <label className="flex items-start gap-2 text-sm">
+        <div className="ld-panel__sub">
+          <label className="ld-panel__check">
             <input
               type="checkbox"
               checked={confirmed}
@@ -220,38 +225,41 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
             />
             我已核对数量、金额、日期、照片关联和历史资料清除规则，授权导入这份备份。
           </label>
-          <Input
-            type="password"
-            value={password}
-            autoComplete="current-password"
-            aria-label="当前管理员密码"
-            placeholder="输入当前管理员密码"
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          <Button
-            type="button"
-            variant="primary"
-            disabled={busy || !confirmed || !password}
-            onClick={approve}
-          >
-            生成一次性导入授权
-          </Button>
+          <div className="ld-panel__row">
+            <Input
+              name="v1-import-password"
+              label="当前管理员密码"
+              type="password"
+              value={password}
+              autoComplete="current-password"
+              onChange={(event) => setPassword(event.target.value)}
+            />
+            <Button
+              type="button"
+              variant="primary"
+              disabled={busy || !confirmed || !password}
+              onClick={approve}
+            >
+              生成一次性导入授权
+            </Button>
+          </div>
         </div>
       )}
       {approved && (
-        <div role="status" className="space-y-2 rounded border p-3 text-sm">
-          <p>
-            已授权。请在Windows安装与维护窗口选择“导入旧版数据”，输入下面的授权编号。维护程序会先备份，再导入并核对。
+        <div role="status" className="ld-panel__sub">
+          <p className="ld-panel__lead">
+            已授权。请在 Windows
+            维护工具中选择“执行旧版导入”，输入下面的授权编号。维护程序会先备份，再导入并核对。
           </p>
-          <code className="block break-all select-all">{approved.request_id}</code>
-          <p>
+          <p className="ld-panel__code">{approved.request_id}</p>
+          <p className="ld-panel__lead">
             有效至 {new Date(approved.expires_at).toLocaleTimeString("zh-CN")}
             。请保持当前管理员会话有效。
           </p>
         </div>
       )}
       {busy && (
-        <p role="status" className="text-sm">
+        <p role="status" className="ld-panel__meta">
           正在处理，请稍候…
         </p>
       )}

@@ -1,4 +1,4 @@
-import { EmptyState } from "@laundry/ui";
+import { EmptyState, useToastPageScope } from "@laundry/ui";
 import { useState } from "react";
 
 import type { AuthClient } from "../auth/AuthClient.js";
@@ -56,6 +56,7 @@ export function OwnerShell({
   const [loggingOut, setLoggingOut] = useState(false);
   const [drilldownKind, setDrilldownKind] = useState<OwnerDrilldownKind | null>(null);
   const [section, setSection] = useState<OwnerSection>("today");
+  useToastPageScope(section);
   const [aiOpen, setAiOpen] = useState(false);
   const logout = async (): Promise<void> => {
     if (loggingOut) return;

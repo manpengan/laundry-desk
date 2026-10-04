@@ -51,6 +51,12 @@ export type SettingsPageProps = {
   miniappSettingsPort?: MiniappSettingsPort;
   remoteAssistancePort?: RemoteAssistancePort;
   notificationSettingsPort?: NotificationSettingsPort;
+  /**
+   * ADR-91 D-1/D-2: the customer mini program, WeChat subscription reminders and remote
+   * assistance need a filed public HTTPS entry, which ADR-71 has paused. Their panels stay
+   * in the code but no host offers them until an ADR restores that entry.
+   */
+  publicEntryFeatures?: boolean;
   onSessionChange?: (session: SessionView | null) => void;
 };
 
@@ -106,6 +112,7 @@ export function SettingsPage({
   miniappSettingsPort,
   remoteAssistancePort,
   notificationSettingsPort,
+  publicEntryFeatures = false,
   onSessionChange,
 }: SettingsPageProps) {
   const sections: SettingsSection[] = [
@@ -128,11 +135,11 @@ export function SettingsPage({
           authClient={authClient}
           commandClient={commandClient}
           session={session}
-          {...(queryClient === undefined ? {} : { queryClient })}
         />
       ),
     });
-  if (session.role === "admin" && miniappSettingsPort !== undefined)
+  const publicEntry = publicEntryFeatures && session.role === "admin";
+  if (publicEntry && miniappSettingsPort !== undefined)
     sections.push({
       id: "settings-miniapp",
       label: "顾客微信小程序",
@@ -144,7 +151,7 @@ export function SettingsPage({
         />
       ),
     });
-  if (session.role === "admin" && remoteAssistancePort !== undefined)
+  if (publicEntry && remoteAssistancePort !== undefined)
     sections.push({
       id: "settings-remote-assistance",
       label: "远程协助",
@@ -156,7 +163,7 @@ export function SettingsPage({
         />
       ),
     });
-  if (session.role === "admin" && queryClient !== undefined)
+  if (publicEntry && queryClient !== undefined)
     sections.push({
       id: "settings-miniapp-notifications",
       label: "微信订阅提醒",

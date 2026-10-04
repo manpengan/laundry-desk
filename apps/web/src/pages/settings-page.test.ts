@@ -41,7 +41,7 @@ test("PRINTER_PATH_ENV_NAME is LAUNDRY_PRINTER_PATH", () => {
   assert.equal(PRINTER_PATH_ENV_NAME, "LAUNDRY_PRINTER_PATH");
 });
 
-test("remote assistance settings require an admin and a host capability and start disabled", () => {
+test("remote assistance settings stay hidden; when offered they require an admin and start disabled", () => {
   const unavailable = async () => ({ ok: false as const, error: "unconfigured" });
   const remoteAssistancePort: RemoteAssistancePort = {
     status: unavailable,
@@ -57,10 +57,15 @@ test("remote assistance settings require an admin and a host capability and star
           session: { ...SESSION, role },
           authClient: createMockAuthClient(),
           commandClient: createMockCommandClient(),
+          publicEntryFeatures,
           ...(available ? { remoteAssistancePort } : {}),
         }),
       ),
     );
+  let publicEntryFeatures = false;
+  // ADR-91 D-1/D-2: hidden from every host until the public entry is decided.
+  assert.doesNotMatch(render("admin", true), /settings-remote-assistance/u);
+  publicEntryFeatures = true;
   assert.doesNotMatch(render("admin", false), /开启一小时协助/u);
   assert.doesNotMatch(render("staff", true), /开启一小时协助/u);
   const html = render("admin", true);

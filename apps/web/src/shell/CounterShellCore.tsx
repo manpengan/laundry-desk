@@ -1,4 +1,4 @@
-import type { PrintJobSummary } from "@laundry/ui";
+import { useToastPageScope, type PrintJobSummary } from "@laundry/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 
 import type { AuthClient } from "../auth/AuthClient.js";
@@ -160,6 +160,8 @@ export function CounterShellCore({
 }: CounterShellCoreProps) {
   const [expanded, setExpanded] = useState(readSidebarExpanded);
   const [activeId, setActiveId] = useState<NavItemId>(initialNav);
+  // ADR-91 P1-9: a toast belongs to the page that raised it.
+  useToastPageScope(activeId);
   const [themePref, setThemePref] = useState<ThemePreference>(
     () => initialTheme ?? initialCounterTheme(browserThemeStorage()),
   );

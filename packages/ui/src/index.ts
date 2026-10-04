@@ -34,6 +34,7 @@ export {
   ToastProvider,
   ToastView,
   useToast,
+  useToastPageScope,
   type ToastItem,
   type ToastTone,
 } from "./components/Toast.js";
