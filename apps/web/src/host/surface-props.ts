@@ -47,6 +47,7 @@ export function shellPropsFrom(
     commandClient: ports.command,
     queryClient: ports.query,
     photoPort: ports.photo,
+    healthPort: ports.health,
     ...(ports.paymentChannel === undefined ? {} : { paymentChannelPort: ports.paymentChannel }),
     ...(ports.miniappSettings === undefined ? {} : { miniappSettingsPort: ports.miniappSettings }),
     ...(ports.remoteAssistance === undefined

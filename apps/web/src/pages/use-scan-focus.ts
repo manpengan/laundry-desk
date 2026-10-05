@@ -53,13 +53,17 @@ export function mayHandOffFocus(active: FieldProbe | null, scanFields: readonly 
  * Scanner-first pages (工作台、取衣、开单、客户): put the caret in the primary
  * lookup field as soon as the page opens, so a barcode scan is never lost.
  */
-export function useScanFocus(rootRef: RefObject<HTMLElement | null>, selector: string): void {
+export function useScanFocus(
+  rootRef: RefObject<HTMLElement | null>,
+  selector: string,
+  enabled = true,
+): void {
   useEffect(() => {
     const root = rootRef.current;
-    if (root === null) return;
+    if (root === null || !enabled) return;
     const doc = root.ownerDocument;
     const modalOpen = doc.querySelector('[aria-modal="true"]') !== null;
     if (!shouldClaimFocus(doc.activeElement, root, modalOpen)) return;
     root.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true });
-  }, [rootRef, selector]);
+  }, [rootRef, selector, enabled]);
 }

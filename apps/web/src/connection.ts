@@ -1,14 +1,15 @@
 /**
  * Connection strip model for SyncStatusBar.
  * Store/staff labels come from the token-free SessionView after E1 login;
- * mode/pending still mock until Edge bridge heartbeat lands.
+ * Production mode/queue state is sampled from the host health and offline ports.
  */
 
 export type ConnectionMode = "online" | "offline" | "degraded";
 
 export type ConnectionStatus = {
   mode: ConnectionMode;
-  pendingSyncCount: number;
+  pendingSyncCount: number | null;
+  detail?: string;
   /** Human store label for top bar (mock until C6/E1). */
   storeName: string;
   staffName: string;
@@ -34,7 +35,7 @@ export function connectionModeLabel(mode: ConnectionMode): string {
 export function formatConnectionStrip(status: ConnectionStatus): string {
   const mode = connectionModeLabel(status.mode);
   const n = status.pendingSyncCount;
-  const pending = n <= 0 ? "0 笔待同步" : `${n} 笔待同步`;
+  const pending = n === null ? "同步状态未知" : n <= 0 ? "0 笔待同步" : `${n} 笔待同步`;
   return `${mode} · ${pending}`;
 }
 

@@ -2,7 +2,6 @@ import {
   AccessSessionResponseSchema,
   CSRF_COOKIE_NAME,
   CsrfProofSchema,
-  DESKTOP_MAX_JSON_BYTES,
   DesktopCommandExecuteInputSchema,
   DesktopCommandExecuteResultSchema,
   DesktopHealthGetInputSchema,
@@ -44,6 +43,7 @@ import {
   type EdgeQueueEnvelope,
 } from "@laundry/contracts";
 
+import { createDesktopJsonRequester } from "./command-request.js";
 import { createLoginIntentGate } from "./auth-intent.js";
 import { createEdgeAuthorityRequester } from "./edge-authority-transport.js";
 import { createSignedReplayRequest, projectReplayResponse } from "./edge-http.js";
@@ -95,7 +95,6 @@ export type { DesktopHttpTransport } from "./http-transport-types.js";
 
 const LOCAL_CSRF_COOKIE_NAME = "laundry_csrf";
 const CSRF_COOKIE_CANDIDATES = Object.freeze([LOCAL_CSRF_COOKIE_NAME, CSRF_COOKIE_NAME]);
-const RESPONSE_ENCODER = new TextEncoder();
 const ACCESS_REFRESH_SKEW_MS = 30_000;
 
 type AccessOutcome<T extends ResultEnvelope> =
@@ -118,34 +117,10 @@ export function createDesktopHttpTransport(
   let latestAuthIntent = 0;
   let authMutationTail: Promise<void> = Promise.resolve();
 
-  const requestJson = async (
-    method: "GET" | "POST",
-    path: string,
-    options?: Readonly<{
-      body?: Readonly<Record<string, unknown>> | Uint8Array;
-      contentType?: string;
-      accessToken?: string;
-      csrfToken?: string;
-    }>,
-  ): Promise<JsonHttpResponse | null> => {
-    try {
-      const response = await dependencies.request(createDesktopRequest(method, path, options));
-      if (
-        !Number.isInteger(response.statusCode) ||
-        response.statusCode < 100 ||
-        response.statusCode > 599 ||
-        RESPONSE_ENCODER.encode(response.bodyText).byteLength > DESKTOP_MAX_JSON_BYTES
-      ) {
-        return null;
-      }
-      return Object.freeze({
-        statusCode: response.statusCode,
-        payload: JSON.parse(response.bodyText) as unknown,
-      });
-    } catch {
-      return null;
-    }
-  };
+  const requestJson = createDesktopJsonRequester(
+    dependencies.request,
+    () => authState?.sessionView ?? null,
+  );
 
   const readCsrfCookie = async (): Promise<string | null> => {
     let cookies: readonly DesktopCookie[];
@@ -546,6 +521,7 @@ export function createDesktopHttpTransport(
     body: Readonly<Record<string, unknown>> | Uint8Array,
     contentType?: string,
     retryAuthentication = true,
+    operationId?: string,
   ): Promise<T | DesktopFailure> => {
     let state = authState;
     if (state === null) return parseOutput(schema, AUTHENTICATION_FAILURE);
@@ -557,6 +533,7 @@ export function createDesktopHttpTransport(
     const send = (credentials: AuthState) =>
       requestJson("POST", path, {
         body,
+        ...(operationId === undefined ? {} : { operationId }),
         ...(contentType === undefined ? {} : { contentType }),
         accessToken: credentials.accessToken,
         csrfToken: credentials.csrfToken,
@@ -586,6 +563,9 @@ export function createDesktopHttpTransport(
       DesktopCommandExecuteResultSchema,
       `/v1/commands/${name}`,
       commandBody(parsedInput.data),
+      undefined,
+      true,
+      parsedInput.data.operation_id,
     );
   };
 

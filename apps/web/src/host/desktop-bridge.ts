@@ -10,11 +10,13 @@ import type { DesktopAiInput, DesktopV1MigrationInput } from "@laundry/contracts
 export type DesktopCommandInput =
   | Readonly<{
       name: string;
+      operation_id?: string;
       body: unknown;
       confirm_ref?: never;
     }>
   | Readonly<{
       name: string;
+      operation_id?: string;
       confirm_ref: string;
       body?: never;
     }>;

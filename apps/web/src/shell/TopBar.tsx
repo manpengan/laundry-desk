@@ -54,7 +54,11 @@ export function TopBar({
         </button>
       )}
       <div className="ld-shell-topbar__status">
-        <SyncStatusBar mode={connection.mode} pendingSyncCount={connection.pendingSyncCount} />
+        <SyncStatusBar
+          mode={connection.mode}
+          pendingSyncCount={connection.pendingSyncCount}
+          {...(connection.detail === undefined ? {} : { detail: connection.detail })}
+        />
       </div>
       <div className="ld-shell-topbar__actions">
         {readOnly ? (

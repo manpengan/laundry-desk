@@ -41,6 +41,7 @@ files:
   - dist/desktop/edge-authority-transport.js
   - dist/desktop/edge-http.js
   - dist/desktop/electron-photo-request.js
+  - dist/desktop/command-request.js
   - dist/desktop/http-transport.js
   - dist/desktop/http-transport-ports.js
   - dist/desktop/http-transport-support.js

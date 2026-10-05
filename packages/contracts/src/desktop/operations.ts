@@ -183,6 +183,7 @@ const addDefinitionInputIssues = async (
 const DesktopDirectCommandExecuteInputSchema = z
   .strictObject({
     name: DesktopCommandNameSchema,
+    operation_id: z.uuid().optional(),
     body: DesktopJsonObjectSchema,
   })
   .superRefine(async (input, context) => {
@@ -200,6 +201,7 @@ const DesktopDirectCommandExecuteInputSchema = z
 
 const DesktopConfirmedCommandExecuteInputSchema = z.strictObject({
   name: DesktopCommandNameSchema,
+  operation_id: z.uuid().optional(),
   confirm_ref: ConfirmReferenceSchema,
 });
 

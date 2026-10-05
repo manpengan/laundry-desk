@@ -373,3 +373,19 @@
     transition: none;
   }
 }
+
+.ld-receive-complete,
+.ld-receive-uncertain {
+  padding: 20px;
+  margin-block: 16px;
+  border: 1px solid var(--lg-hair);
+  border-radius: 12px;
+  background: var(--lg-surface);
+}
+.ld-receive-complete h2,
+.ld-receive-uncertain h2 {
+  margin-top: 0;
+}
+.ld-receive-uncertain {
+  border-color: var(--lg-late-ink);
+}

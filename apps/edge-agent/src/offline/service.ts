@@ -191,6 +191,16 @@ export function createOfflineDesktopService(
       execute: async (input: unknown) => {
         if (isMutationBlocked()) return unavailable();
         const result = await online.command.execute(input);
+        // A response can be lost after commit. A fresh offline queue key would
+        // execute this receive twice; let its workspace retry the original key.
+        const identifiedReceive =
+          typeof input === "object" &&
+          input !== null &&
+          "name" in input &&
+          input.name === "order.receive" &&
+          "operation_id" in input &&
+          typeof input.operation_id === "string";
+        if (isUnavailable(result) && identifiedReceive) return result;
         if (isUnavailable(result)) {
           const health = await online.health.get();
           if (!health.ok) return offline.queueCommand(input);

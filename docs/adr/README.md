@@ -120,3 +120,5 @@
 2. 新 ADR 编号顺延，文件名 `YYYY-MM-DD-adr-NN-<topic>.md`；建后**在本表登记**。
 3. 状态流转：`Proposed` → manpengan 签署 → `Accepted`；被后续 ADR 取代的标 `Superseded by ADR-NN`。治理类 ADR 在 manpengan 会话书面授权后可由负责人落档为 Accepted 并合入 main。
 4. ADR 正文格式沿用既有：`决策 / 理由 / 否决的备选 / 后果`。
+
+- [ADR-92](2026-10-05-adr-92-counter-operation-identity.md)：柜台操作身份、未确认结果、开单内存工作区与真实连接反馈；新增可选 IPC UUID 字段，不新增命令查询。

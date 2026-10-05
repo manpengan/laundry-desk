@@ -57,6 +57,16 @@ const ids = Object.freeze({
   confirm: "10000000-0000-4000-8000-000000000010",
 });
 
+it("accepts only a UUID operation namespace while keeping transport controls forbidden", async () => {
+  const input = { name: "order.receive", confirm_ref: ids.confirm, operation_id: ids.order };
+  expect((await DesktopCommandExecuteInputSchema.safeParseAsync(input)).success).toBe(true);
+  for (const patch of [{ operation_id: "bad" }, { headers: {} }, { idempotency_key: ids.order }]) {
+    expect(
+      (await DesktopCommandExecuteInputSchema.safeParseAsync({ ...input, ...patch })).success,
+    ).toBe(false);
+  }
+});
+
 const sessionView = Object.freeze({
   session: Object.freeze({
     session_id: ids.session,

@@ -1,4 +1,4 @@
-import { BrowserWindow, type Session } from "electron";
+import { BrowserWindow, dialog, type Session } from "electron";
 import { APP_ENTRY_URL, APP_SCHEME, SECURITY_WEB_PREFERENCES } from "./lib/security-prefs.js";
 
 export type MainWindowHandle = Readonly<{
@@ -43,6 +43,20 @@ export function createMainWindow(preloadPath: string, desktopSession: Session): 
 }
 
 export function applyNavigationGuards(win: BrowserWindow): void {
+  win.webContents.on("will-prevent-unload", (event) => {
+    const choice = dialog.showMessageBoxSync(win, {
+      type: "warning",
+      title: "开单内容尚未保存",
+      message: "当前有未暂存内容或待确认的开单结果。",
+      detail:
+        "建议返回暂存或核对订单与收款记录。继续关闭或刷新会清空本页输入，已经提交的业务不会撤销。",
+      buttons: ["返回检查", "确认后继续"],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (choice === 1) event.preventDefault();
+  });
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event, url) => {
     if (!url.startsWith(`${APP_SCHEME}://`)) {

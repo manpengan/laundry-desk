@@ -44,7 +44,7 @@ function createCommandPort(bridge: LaundryDesktopBridge): CommandPort {
     async execute<T>(
       name: string,
       body?: unknown,
-      options?: Readonly<{ confirmRef?: string }>,
+      options?: Readonly<{ confirmRef?: string; operationId?: string }>,
     ): Promise<CommandResult<T>> {
       const parsedOptions = readCommandOptions(options);
       if (
@@ -54,13 +54,16 @@ function createCommandPort(bridge: LaundryDesktopBridge): CommandPort {
       ) {
         return desktopBridgeError("桌面命令参数格式错误");
       }
+      const operation =
+        parsedOptions.operationId === undefined ? {} : { operation_id: parsedOptions.operationId };
       const input: DesktopCommandInput =
         parsedOptions.confirmRef === undefined
           ? Object.freeze({
               name,
+              ...operation,
               body: body === undefined ? EMPTY_BUSINESS_BODY : body,
             })
-          : Object.freeze({ name, confirm_ref: parsedOptions.confirmRef });
+          : Object.freeze({ name, ...operation, confirm_ref: parsedOptions.confirmRef });
       try {
         return readDesktopCommandResult<T>(await bridge.command.execute(input));
       } catch {

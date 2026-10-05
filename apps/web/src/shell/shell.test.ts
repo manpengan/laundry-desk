@@ -248,7 +248,8 @@ test("App shell SSR includes skip link, sync bar, print indicator when authentic
   );
   assert.match(html, /跳到主内容/);
   assert.match(html, /宏发演示店/);
-  assert.match(html, /离线/);
+  assert.match(html, /正在检查本机服务/);
+  assert.doesNotMatch(html, /全部已同步/);
   assert.match(html, /data-shell="counter"/);
   assert.match(html, /打印/);
   assert.match(html, /切换员工/);

@@ -5,7 +5,7 @@ import type { AuthClient } from "../auth/AuthClient.js";
 import { filterNavItems, permissionContextFrom } from "../auth/permissions.js";
 import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
-import { createMockConnection, type ConnectionStatus } from "../connection.js";
+import { type ConnectionStatus } from "../connection.js";
 import type { AiPanelPort } from "../host/ai-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
 import type { ScalePort } from "../host/scale-port.js";
@@ -43,6 +43,10 @@ import { shellCommands } from "./shell-commands.js";
 import { ThemeControlContext, useShellShortcuts } from "./shell-shortcuts.js";
 import { Sidebar } from "./Sidebar.js";
 import { TopBar } from "./TopBar.js";
+import type { HealthPort } from "../host/types.js";
+import { ReceiveWorkspaceProvider, useReceiveWorkspaceAccess } from "../pages/ReceiveWorkspace.js";
+import { hasReceiveWork } from "../pages/receive-workspace.js";
+import { useLiveConnection } from "./use-live-connection.js";
 import { usePrintJobSummary } from "./use-print-job-summary.js";
 
 export type CounterShellProps = {
@@ -51,6 +55,7 @@ export type CounterShellProps = {
   commandClient: CommandPort;
   queryClient: QueryPort;
   photoPort?: PhotoPort;
+  healthPort?: HealthPort;
   offlinePort?: OfflinePort;
   printerPort?: PrinterPort;
   aiPort?: AiPanelPort;
@@ -118,19 +123,18 @@ function writeSidebarExpanded(expanded: boolean): void {
   }
 }
 
-function connectionFromSession(
-  session: SessionView,
-  initial: ConnectionStatus | undefined,
-): ConnectionStatus {
-  const base = initial ?? createMockConnection();
-  return {
-    ...base,
-    storeName: session.display.store_name,
-    staffName: session.display.staff_name,
-  };
+export function CounterShellCore(props: CounterShellCoreProps) {
+  const scope = props.session.session;
+  return (
+    <ReceiveWorkspaceProvider
+      key={`${scope.org_id}:${scope.store_id}:${scope.session_id}:${scope.staff_id}:${scope.session_version}`}
+    >
+      <CounterShellContent {...props} />
+    </ReceiveWorkspaceProvider>
+  );
 }
 
-export function CounterShellCore({
+function CounterShellContent({
   PageHostComponent,
   session,
   authClient,
@@ -145,6 +149,7 @@ export function CounterShellCore({
   commandClient,
   queryClient,
   photoPort,
+  healthPort,
   offlinePort,
   printerPort,
   aiPort,
@@ -174,10 +179,31 @@ export function CounterShellCore({
   const [intent, setIntent] = useState<NavigationIntent | undefined>(undefined);
   const intentNonce = useRef(0);
 
-  const connection = useMemo(
-    () => connectionFromSession(session, initialConnection),
-    [session, initialConnection],
+  const connection = useLiveConnection(
+    session,
+    initialConnection,
+    healthPort,
+    offlinePort,
+    readOnly,
   );
+  const { store: receiveStore, confirmDiscard } = useReceiveWorkspaceAccess();
+  const openStaffSwitch = useCallback(() => {
+    void (async () => {
+      const current = receiveStore.getSnapshot();
+      if (current.busy || current.phase === "uncertain") {
+        setActiveId("receive");
+        return;
+      }
+      if (
+        hasReceiveWork(current) &&
+        !(await confirmDiscard(
+          "切换员工会清除本会话未暂存的开单内容。需要保留时，请先返回开单页暂存。",
+        ))
+      )
+        return;
+      setPinOpen(true);
+    })();
+  }, [receiveStore, confirmDiscard]);
   const dark = systemDark ?? readSystemDark();
   const printSummary = usePrintJobSummary(
     queryClient,
@@ -237,13 +263,13 @@ export function CounterShellCore({
         readOnly,
         expanded,
         onNavigate: setActiveId,
-        onSwitchStaff: () => setPinOpen(true),
+        onSwitchStaff: openStaffSwitch,
         onOpenPrintQueue: () => setPrintQueueOpen(true),
         onSetTheme: setTheme,
         onShowShortcuts: () => setHelpOpen(true),
         onToggleSidebar: toggleSidebar,
       }),
-    [expanded, navItems, readOnly, setTheme, toggleSidebar],
+    [expanded, navItems, readOnly, setTheme, toggleSidebar, openStaffSwitch],
   );
   const canOpen = useMemo(
     () =>
@@ -304,7 +330,7 @@ export function CounterShellCore({
             {...(readOnly || aiPort === undefined
               ? {}
               : { aiOpen, onToggleAi: () => setAiOpen((value) => !value) })}
-            {...(readOnly ? {} : { onSwitchStaff: () => setPinOpen(true) })}
+            {...(readOnly ? {} : { onSwitchStaff: openStaffSwitch })}
             readOnly={readOnly}
           />
           {readOnly ? (
