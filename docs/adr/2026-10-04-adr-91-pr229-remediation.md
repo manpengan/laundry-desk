@@ -108,8 +108,13 @@ ADR-71 暂停 Cloud 后，需要公网 HTTPS 入口的功能处于不可用状�
   - 安装、修复、升级时，若店主从未保存过备份计划，自动开启每天 03:00 备份。注册失败不留占位文件，下次会再试。
   - 近 7 天没有“加密离机备份”时持续提醒，引导存到 U 盘或 NAS。
 - **P1-7 打包身份**：
-  - 每个发行版打包各自的 ASCII 包名（`laundry-desk-v2`、`laundry-desk-v2-hongfa`），userData、单实例锁和每用户安装目录因此分开。
+  - 每个发行版打包各自的 ASCII 包名（`laundry-desk-v2`、`laundry-desk-v2-hongfa`），userData 和单实例锁因此分开。
+  - 安装目录：
+    - 通用版的 productName 是 ASCII，NSIS 直接用它作目录名，仍为 `laundry-desk V2`。
+    - 宏发版全新安装到 `laundry-desk-v2-hongfa`。
+    - 在旧版上原地升级时，NSIS 沿用注册表里记录的旧目录（宏发为 `@laundryedge-agent`）。这只影响目录名，不影响数据隔离。旧的测试安装要先卸载再装。
   - 通用版首次启动时，通过同卷重命名接管旧的共享目录 `%APPDATA%\@laundry\edge-agent`，保留 ACL 和设备身份。宏发版重新开始，需要重新配对。
+  - 在 Windows 上，Electron 41 第一次调用 `app.getPath("userData")` 就会创建该目录，所以接管的目标路径由 appData 加应用名推导。带 `--user-data-dir` 启动时不接管（PR #232；首版因此从未接管成功）。
 - 维护窗口不再显示“远程协助配置”按钮，CLI 动作保留，供技术人员使用。
 
 ### 7. 界面
@@ -126,6 +131,7 @@ ADR-71 暂停 Cloud 后，需要公网 HTTPS 入口的功能处于不可用状�
 - 已安装形态的验收用例在失败时保存 Electron 主进程日志。evaluate 遇到“执行上下文被销毁”时：
   - 主进程仍存活，等首个窗口后重试一次；
   - 主进程已退出，才判定失败。
+  - 每次重试都写入 `functional-evidence.json` 的 `main_evaluation_retries`，并保存主进程日志，用例通过时也一样（PR #232）。
 - 新功能面板纳入安装态截图，并断言打开时没有告警。
 - winbox 上 29 个遗留的一次性 QA 计划任务已导出 XML 备份后删除；代理、开发 Runtime 与 Companion 任务保留。
 
@@ -162,11 +168,13 @@ ADR-71 暂停 Cloud 后，需要公网 HTTPS 入口的功能处于不可用状�
     - 上午遗留的卡单意向已由 worker 自动关单（`CHANNEL_EXPIRED`）。
   - 短信：`TemplateParam` 为 `balance_yuan:"20.00"`。AccessKey 无效时界面显示“AccessKey 无效…”，预留归零，日志为结构化记录。
   - 0080 由 Windows 安装包里的迁移工具应用。电池策略已在临时任务上验证。
+- **winbox 安装态（2026-10-05，PR #232）**：在 winbox 上构建并安装两个发行版，在会话 1 以非提升权限运行。记录见 [批次文档](../operations/2026-10-03-windows-full-feature-batches.md)。
+  - P1-7：两版的应用名和 userData 各自独立，可以同时运行。首版的旧数据接管从未生效，修复后复验：旧共享目录完整接管，设备身份逐字节相同。
+  - 宏发版和通用版的功能用例各通过两轮。第二轮记录的主进程重试次数为 0，10-03 i1 的失败没有复现。
 - **未验证**：
   - 真实商户、阿里云和 AI 供应商（本批只用替身）。
-  - P1-7 的安装包重命名与宏发安装形态。
-  - 10-03 i1 的宏发功能用例复跑（验收框架已加固，下次 Windows 安装验收时复跑）。
   - 拔电源后重新登录的实测。
+  - Windows 11 与签名安装包。
 
 ## 后果
 
