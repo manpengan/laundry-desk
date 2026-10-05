@@ -24,7 +24,8 @@ export type ChannelCollectCardProps = Readonly<{
   /** Bumped by the page when a command reports an unfinished collection. */
   refreshKey: number;
   disabled: boolean;
-  onPaid: () => void;
+  /** Receives the intent the provider confirmed, so the page can show the new balance. */
+  onPaid: (intent: ChannelIntent) => void;
 }>;
 
 /** Shown only while an open order still owes money. */
@@ -100,7 +101,7 @@ function ChannelCollection({
       if (next.state !== "unknown") attempt.current = null;
       if (next.state === "paid") {
         toast.push(`已收到${CHANNEL_NAMES[next.channel]}付款`, "success");
-        onPaid();
+        onPaid(next);
       }
     },
     [onPaid, toast],

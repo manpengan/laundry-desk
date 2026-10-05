@@ -2,6 +2,7 @@ import type { TicketPreview } from "@laundry/domain";
 import { useToast } from "@laundry/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import type { PaymentChannelPort } from "../host/payment-channel-port.js";
 import type { ScalePort } from "../host/scale-port.js";
 import type { StaffRole } from "../auth/permissions.js";
 import type { CatalogListItem } from "../commands/query-client.js";
@@ -56,6 +57,7 @@ export type ReceivePageProps = {
   queuePrintEnabled?: boolean;
   role?: StaffRole;
   scalePort?: ScalePort;
+  paymentChannelPort?: PaymentChannelPort;
 };
 
 export function ReceivePage({
@@ -67,6 +69,7 @@ export function ReceivePage({
   queuePrintEnabled = false,
   role,
   scalePort,
+  paymentChannelPort,
 }: ReceivePageProps) {
   const toast = useToast();
   const [phone, setPhone] = useState("");
@@ -393,6 +396,7 @@ export function ReceivePage({
         preview={ticketPreview}
         queuePrintEnabled={queuePrintEnabled}
         result={result}
+        {...(paymentChannelPort === undefined ? {} : { paymentChannelPort })}
       />
     </main>
   );

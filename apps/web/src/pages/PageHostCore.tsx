@@ -173,6 +173,7 @@ export function PageHostCore({
         role={session.role}
         queuePrintEnabled={hasLocalPrintQueue(printerPort)}
         {...(scalePort === undefined ? {} : { scalePort })}
+        {...(paymentChannelPort === undefined ? {} : { paymentChannelPort })}
         {...(offlinePort !== undefined ? { offlinePort } : {})}
         {...(queryClient !== undefined ? { queryClient } : {})}
       />

@@ -12,7 +12,11 @@ import {
 } from "@playwright/test";
 import { inspectPrivateFile, securePrivateFile } from "@laundry/platform-fs";
 import type { BrowserWindow } from "electron";
-import { captureMainProcessOutput, evaluateInMain } from "./electron-main.js";
+import {
+  captureMainProcessOutput,
+  evaluateInMain,
+  retriedMainEvaluations,
+} from "./electron-main.js";
 import { yuanText } from "./money-input.js";
 import {
   assertAsLaunchedGeometry,
@@ -555,6 +559,8 @@ test("created test admin completes the installed Windows desktop functional jour
     await expect(page.getByRole("heading", { name: "支付账本" })).toBeVisible();
     await capture(page, screenshots.stats);
 
+    if (retriedMainEvaluations().length > 0)
+      await mainLog.save(evidenceRootReal, "main-process-before-restart.log");
     await closeApplication(application);
     application = await launchInstalled(executable, userDataPath);
     mainLog = captureMainProcessOutput(application);
@@ -596,6 +602,7 @@ test("created test admin completes the installed Windows desktop functional jour
       screenshots: Object.values(screenshots),
       renderer_errors: rendererErrors.length,
       server_failures: serverFailures.length,
+      main_evaluation_retries: retriedMainEvaluations(),
     });
     await writeFile(
       join(evidenceRootReal, "functional-evidence.json"),
@@ -607,8 +614,10 @@ test("created test admin completes the installed Windows desktop functional jour
     );
     passed = true;
   } finally {
-    // ADR-91 P1-8: a failed run keeps the main-process output beside its screenshots.
-    if (!passed) await mainLog?.save(evidenceRootReal).catch(() => undefined);
+    // ADR-91 P1-8: a failed run, or one that needed a retry, keeps the main-process output
+    // beside its screenshots.
+    if (!passed || retriedMainEvaluations().length > 0)
+      await mainLog?.save(evidenceRootReal).catch(() => undefined);
     await closeApplication(application);
     await rm(userDataPath, { force: true, recursive: true });
   }

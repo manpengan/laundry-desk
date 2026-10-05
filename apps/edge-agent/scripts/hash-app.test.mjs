@@ -290,8 +290,12 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
       preloadIndex > graphBuildIndex &&
       builderIndex > preloadIndex,
   );
+  // Staged distribution profiles are bound to one source SHA; a cached copy replayed
+  // into a later build would fail it with WINDOWS_PROFILE_BINDING_INVALID.
   assert.deepEqual(turboJson.tasks["@laundry/edge-agent#build"].outputs, [
     "dist/**",
+    "!dist/profile-*/**",
+    "!dist/windows-profile/**",
     "resources/spa/**",
   ]);
   assert.match(packageMac, /electron-builder\.yml/u);
