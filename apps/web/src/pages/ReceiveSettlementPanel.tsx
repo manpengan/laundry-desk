@@ -19,6 +19,7 @@ const PAYMENT_METHODS: readonly Readonly<{ value: PaymentMethod; label: string }
 export type ReceiveSettlementPanelProps = Readonly<{
   scalePort?: ScalePort;
   busy: boolean;
+  submitBlocked?: boolean;
   policyReady: boolean;
   canDiscount: boolean;
   draftId: string | null;
@@ -44,6 +45,7 @@ export type ReceiveSettlementPanelProps = Readonly<{
 export function ReceiveSettlementPanel({
   scalePort,
   busy,
+  submitBlocked = false,
   policyReady,
   canDiscount,
   draftId,
@@ -224,7 +226,7 @@ export function ReceiveSettlementPanel({
           size="lg"
           type="button"
           onClick={onSubmit}
-          disabled={busy || !policyReady}
+          disabled={busy || !policyReady || submitBlocked}
           aria-keyshortcuts="Control+Enter"
         >
           {busy ? "提交中…" : draftId === null ? "确认开单" : "确认挂单并开单"}

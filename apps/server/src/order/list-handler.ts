@@ -1,123 +1,108 @@
-/**
- * order.list query handler — newest-first store order history.
- */
-
-import { createCommandError } from "@laundry/contracts";
-
+/** Store-scoped, bounded order history; paging preserves access to old settled orders. */
+import { createCommandError, OrderListInputSchema } from "@laundry/contracts";
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
 import type { OrderHandlerDeps } from "./deps.js";
-import type { OrderListSummaryOptions, OrderRecord, OrderStatus } from "./types.js";
+import type { OrderListSummary, OrderListSummaryOptions, OrderRecord } from "./types.js";
 
-const DEFAULT_LIST_LIMIT = 20;
-const MAX_LIST_LIMIT = 50;
-
-function asRecord(parsed: unknown): Readonly<Record<string, unknown>> {
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-  }
-  return parsed as Readonly<Record<string, unknown>>;
-}
-
-function requireNumber(value: unknown): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
-    throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-  }
-  return value;
-}
-
-function optionalStatus(value: unknown): OrderStatus | undefined {
-  if (value === undefined) return undefined;
-  if (value === "draft" || value === "open" || value === "closed" || value === "cancelled") {
-    return value;
-  }
-  throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-}
-
-function listLimit(value: unknown): number {
-  if (value === undefined) return DEFAULT_LIST_LIMIT;
-  const n = requireNumber(value);
-  if (n < 1 || n > MAX_LIST_LIMIT) {
-    throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-  }
-  return n;
-}
-
-function optionalMinBalanceCents(value: unknown): number | undefined {
-  if (value === undefined) return undefined;
-  const n = requireNumber(value);
-  if (n < 0) {
-    throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
-  }
-  return n;
-}
-
-function matchesListFilters(
-  order: OrderRecord,
-  businessDate: string | undefined,
-  status: OrderStatus | undefined,
-  customerPhone: string | undefined,
-  minBalanceCents: number | undefined,
-): boolean {
-  if (status !== undefined && order.status !== status) return false;
-  if (businessDate !== undefined && order.business_date !== businessDate) {
+function matches(order: OrderRecord, options: OrderListSummaryOptions): boolean {
+  if (options.status !== undefined && order.status !== options.status) return false;
+  if (options.businessDate !== undefined && order.business_date !== options.businessDate)
     return false;
-  }
-  if (customerPhone !== undefined && order.customer_phone !== customerPhone) {
+  if (options.customerPhone !== undefined && order.customer_phone !== options.customerPhone)
     return false;
-  }
-  if (minBalanceCents !== undefined && order.balance_cents < minBalanceCents) {
+  if (options.customerId !== undefined && order.customer_id !== options.customerId) return false;
+  if (options.ticketNo !== undefined && order.ticket_no !== options.ticketNo) return false;
+  if (options.minBalanceCents !== undefined && order.balance_cents < options.minBalanceCents)
     return false;
-  }
-  return true;
+  if (options.dateFrom !== undefined && order.business_date < options.dateFrom) return false;
+  if (options.dateTo !== undefined && order.business_date > options.dateTo) return false;
+  const query = options.customerQuery?.toLowerCase();
+  return (
+    query === undefined ||
+    (order.customer_name ?? "").toLowerCase().includes(query) ||
+    (order.customer_phone ?? "").includes(query)
+  );
 }
 
 export function listHandler(deps: OrderHandlerDeps): CommandHandler {
   return async (ctx): Promise<HandlerOutcome> => {
-    const input = asRecord(ctx.parsed);
-    const businessDate = typeof input.business_date === "string" ? input.business_date : undefined;
-    const status = optionalStatus(input.status);
-    const customerPhone =
-      typeof input.customer_phone === "string" && input.customer_phone.length > 0
-        ? input.customer_phone
-        : undefined;
-    const minBalanceCents = optionalMinBalanceCents(input.min_balance_cents);
-    const limit = listLimit(input.limit);
-
-    if (deps.store.listOrderSummaries !== undefined) {
-      const options: OrderListSummaryOptions = Object.freeze({
-        ...(businessDate === undefined ? {} : { businessDate }),
-        ...(status === undefined ? {} : { status }),
-        ...(customerPhone === undefined ? {} : { customerPhone }),
-        ...(minBalanceCents === undefined ? {} : { minBalanceCents }),
-        limit,
-      });
+    const parsed = OrderListInputSchema.safeParse(ctx.parsed);
+    if (!parsed.success) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    const input = parsed.data;
+    if (
+      input.date_from !== undefined &&
+      input.date_to !== undefined &&
+      input.date_from > input.date_to
+    ) {
+      throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    }
+    const options: OrderListSummaryOptions = Object.freeze({
+      ...(input.business_date === undefined ? {} : { businessDate: input.business_date }),
+      ...(input.status === undefined ? {} : { status: input.status }),
+      ...(input.customer_phone === undefined ? {} : { customerPhone: input.customer_phone }),
+      ...(input.min_balance_cents === undefined
+        ? {}
+        : { minBalanceCents: input.min_balance_cents }),
+      ...(input.customer_id === undefined ? {} : { customerId: input.customer_id }),
+      ...(input.ticket_no === undefined ? {} : { ticketNo: input.ticket_no }),
+      ...(input.customer_query === undefined ? {} : { customerQuery: input.customer_query }),
+      ...(input.date_from === undefined ? {} : { dateFrom: input.date_from }),
+      ...(input.date_to === undefined ? {} : { dateTo: input.date_to }),
+      ...(input.ready_for_pickup === undefined ? {} : { readyForPickup: input.ready_for_pickup }),
+      ...(input.offset === undefined ? {} : { offset: input.offset }),
+      limit: input.limit ?? 20,
+    });
+    const extended =
+      input.offset !== undefined ||
+      input.customer_id !== undefined ||
+      input.ticket_no !== undefined ||
+      input.customer_query !== undefined ||
+      input.date_from !== undefined ||
+      input.date_to !== undefined ||
+      input.ready_for_pickup !== undefined;
+    if (extended && deps.store.listOrderPage !== undefined) {
+      const page = await deps.store.listOrderPage(ctx.tenant.orgId, ctx.tenant.storeId, options);
+      return {
+        result: Object.freeze({ ...page, offset: input.offset ?? 0, limit: options.limit }),
+      };
+    }
+    if (!extended && deps.store.listOrderSummaries !== undefined) {
       const orders = await deps.store.listOrderSummaries(
         ctx.tenant.orgId,
         ctx.tenant.storeId,
         options,
       );
-      return Object.freeze({ result: Object.freeze({ orders: Object.freeze([...orders]) }) });
+      return { result: Object.freeze({ orders }) };
     }
-
     if (deps.store.listOrders === undefined) {
-      return Object.freeze({ result: Object.freeze({ orders: Object.freeze([]) }) });
+      throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
     }
-
     const all = await deps.store.listOrders(ctx.tenant.orgId, ctx.tenant.storeId);
-    const filtered = all
-      .filter((order) =>
-        matchesListFilters(order, businessDate, status, customerPhone, minBalanceCents),
-      )
-      .slice()
+    const candidates = all
+      .filter((order) => matches(order, options))
       .sort(
         (a, b) =>
-          b.created_at - a.created_at || (b.ticket_no ?? "").localeCompare(a.ticket_no ?? ""),
-      )
-      .slice(0, limit);
-
-    const rows = [];
-    for (const order of filtered) {
+          b.created_at - a.created_at ||
+          (b.ticket_no ?? "").localeCompare(a.ticket_no ?? "") ||
+          b.order_id.localeCompare(a.order_id),
+      );
+    const filtered = [];
+    for (const order of candidates) {
+      if (options.readyForPickup !== undefined) {
+        const garments = await deps.store.listGarments(
+          ctx.tenant.orgId,
+          ctx.tenant.storeId,
+          order.order_id,
+        );
+        if (garments.some((garment) => garment.status === "racked") !== options.readyForPickup)
+          continue;
+      }
+      filtered.push(order);
+    }
+    const offset = input.offset ?? 0;
+    const rows: OrderListSummary[] = [];
+    for (const order of filtered.slice(offset, offset + options.limit)) {
       const garments = await deps.store.listGarments(
         ctx.tenant.orgId,
         ctx.tenant.storeId,
@@ -138,9 +123,13 @@ export function listHandler(deps: OrderHandlerDeps): CommandHandler {
         }),
       );
     }
-
-    return Object.freeze({
-      result: Object.freeze({ orders: Object.freeze(rows) }),
-    });
+    return {
+      result: Object.freeze({
+        orders: Object.freeze(rows),
+        total: filtered.length,
+        offset,
+        limit: options.limit,
+      }),
+    };
   };
 }

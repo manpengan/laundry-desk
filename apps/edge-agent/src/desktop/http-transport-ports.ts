@@ -3,6 +3,7 @@ import type { DesktopLoginInput } from "@laundry/contracts";
 import type { DeviceRequestSigner } from "./edge-http.js";
 import type { AsyncSchema } from "./http-transport-support.js";
 import type { DesktopHttpRequest } from "./request-builder.js";
+import type { ReceiveRecoveryJournal } from "./receive-recovery-journal.js";
 
 export type DesktopHttpResponse = Readonly<{ statusCode: number; bodyText: string }>;
 export type DesktopPhotoHttpResponse = Readonly<{
@@ -25,4 +26,5 @@ export type DesktopHttpTransportDependencies = Readonly<{
   nowMs?: () => number;
   monotonicNowMs?: () => number;
   loginInputSchema?: AsyncSchema<DesktopLoginInput>;
+  receiveJournal?: ReceiveRecoveryJournal;
 }>;

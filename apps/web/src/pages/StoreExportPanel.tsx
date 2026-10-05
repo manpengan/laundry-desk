@@ -2,19 +2,25 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Input } from "@laundry/ui";
 import type { StoreExportApproved, StoreExportPreview } from "@laundry/contracts";
 import type { StoreExportPort } from "../host/store-export-port.js";
+import type { MaintenancePort } from "../host/maintenance-port.js";
+import { MaintenanceHandoff } from "./MaintenanceHandoff.js";
+
 export function StoreExportPanel({
   port,
   sessionKey,
-}: Readonly<{ port: StoreExportPort; sessionKey: string }>) {
+  maintenancePort,
+}: Readonly<{ port: StoreExportPort; sessionKey: string; maintenancePort?: MaintenancePort }>) {
   const [preview, setPreview] = useState<StoreExportPreview | null>(null);
   const [approved, setApproved] = useState<StoreExportApproved | null>(null);
   const [password, setPassword] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const generation = useRef(0);
+  const generation = useRef(0),
+    pending = useRef(false);
   useEffect(() => {
     generation.current += 1;
+    pending.current = false;
     setPreview(null);
     setApproved(null);
     setPassword("");
@@ -26,32 +32,52 @@ export function StoreExportPanel({
     };
   }, [sessionKey, port]);
   const load = async () => {
+    if (pending.current) return;
     const current = generation.current;
+    pending.current = true;
     setBusy(true);
     setError("");
     setApproved(null);
-    const result = await port.preview();
-    if (current !== generation.current) return;
-    setBusy(false);
-    if (result.ok) setPreview(result.data);
-    else setError(result.error);
+    setPreview(null);
+    try {
+      const result = await port.preview();
+      if (current !== generation.current) return;
+      if (result.ok) setPreview(result.data);
+      else setError(result.error);
+    } catch {
+      if (current === generation.current) setError("读取导出范围失败，请重试。");
+    } finally {
+      if (current === generation.current) {
+        pending.current = false;
+        setBusy(false);
+      }
+    }
   };
   const approve = async () => {
-    if (!preview || !acknowledged || !password || busy) return;
+    if (!preview || !acknowledged || !password || pending.current) return;
     const current = generation.current;
+    pending.current = true;
     setBusy(true);
     setError("");
     const secret = password;
     setPassword("");
-    const result = await port.authorize({
-      password: secret,
-      policy_sha256: preview.policy_sha256,
-      privacy_acknowledged: true,
-    });
-    if (current !== generation.current) return;
-    setBusy(false);
-    if (result.ok) setApproved(result.data);
-    else setError(result.error);
+    try {
+      const result = await port.authorize({
+        password: secret,
+        policy_sha256: preview.policy_sha256,
+        privacy_acknowledged: true,
+      });
+      if (current !== generation.current) return;
+      if (result.ok) setApproved(result.data);
+      else setError(result.error);
+    } catch {
+      if (current === generation.current) setError("导出授权未完成，请重新核对后重试。");
+    } finally {
+      if (current === generation.current) {
+        pending.current = false;
+        setBusy(false);
+      }
+    }
   };
   return (
     <section className="ld-settings-section lg-card ld-panel" aria-label="整店业务导出">
@@ -115,6 +141,13 @@ export function StoreExportPanel({
         <div role="status" className="ld-panel__sub">
           <p className="ld-panel__lead">授权编号（只能使用一次）：</p>
           <p className="ld-panel__code">{approved.request_id}</p>
+          <MaintenanceHandoff
+            key={sessionKey + approved.request_id}
+            {...(maintenancePort === undefined ? {} : { port: maintenancePort })}
+            intent="export-store"
+            requestId={approved.request_id}
+            expiresAt={approved.expires_at}
+          />
           <p className="ld-panel__lead">
             请在 {new Date(approved.expires_at).toLocaleTimeString()} 前打开 Windows
             维护工具，选择“完整门店导出”，粘贴授权编号并选择新的导出文件夹。维护工具会暂停柜台，完成导出与校验后恢复。

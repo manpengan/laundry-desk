@@ -17,6 +17,7 @@ type ParsedGarmentDetail = Readonly<{
 }>;
 
 export type ParsedCounterLine = Readonly<{
+  catalog_code?: string;
   service_code: string;
   category_code: string;
   qty: number;
@@ -25,9 +26,11 @@ export type ParsedCounterLine = Readonly<{
   garments: readonly ParsedGarmentDetail[];
 }>;
 
-export type ServerPricedLine = ParsedCounterLine &
+export type ServerPricedLine = Omit<ParsedCounterLine, "catalog_code"> &
   Readonly<{
     unit_price_cents: number;
+    catalog_name: string | null;
+    catalog_code: string | null;
   }>;
 
 export type InitialPaymentInput = Readonly<{
@@ -75,6 +78,12 @@ export function requireLines(value: unknown): readonly ParsedCounterLine[] {
   return Object.freeze(
     value.map((row) => {
       const line = asRecord(row);
+      const catalogCode = line.catalog_code;
+      if (
+        catalogCode !== undefined &&
+        (typeof catalogCode !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/u.test(catalogCode))
+      )
+        throw invalid();
       const qty = requireNonNegativeInteger(line.qty);
       if (qty < 1) throw invalid();
       const color = optionalText(line.color);
@@ -86,6 +95,7 @@ export function requireLines(value: unknown): readonly ParsedCounterLine[] {
       return Object.freeze({
         service_code: requireString(line.service_code),
         category_code: requireString(line.category_code),
+        ...(catalogCode === undefined ? {} : { catalog_code: catalogCode }),
         qty,
         ...(color === null ? {} : { color }),
         ...(brand === null ? {} : { brand }),
@@ -141,13 +151,26 @@ export async function resolveServerPrices(
     lines.map((line) => {
       const matches = catalog.filter(
         (item) =>
-          item.service_code === line.service_code && item.category_code === line.category_code,
+          item.service_code === line.service_code &&
+          item.category_code === line.category_code &&
+          (line.catalog_code === undefined || item.code === line.catalog_code),
       );
       const prices = new Set(matches.map((item) => item.unit_price_cents));
       if (matches.length === 0 || prices.size !== 1) throw unavailable();
       const item = matches[0];
       if (item === undefined) throw unavailable();
-      return Object.freeze({ ...line, unit_price_cents: item.unit_price_cents });
+      if (
+        matches.some(
+          (candidate) => candidate.name.trim().length === 0 || candidate.name.trim().length > 128,
+        )
+      )
+        throw unavailable();
+      return Object.freeze({
+        ...line,
+        unit_price_cents: item.unit_price_cents,
+        catalog_name: matches.length === 1 ? item.name.trim() : null,
+        catalog_code: matches.length === 1 ? item.code : null,
+      });
     }),
   );
 }

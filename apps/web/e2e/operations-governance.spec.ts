@@ -140,6 +140,7 @@ test("duplicate customers require another staff PIN and leave one active profile
   await expect(matches).toHaveCount(2, { timeout: 15_000 });
   await matches.first().click();
 
+  await page.getByRole("button", { name: "合并与隐私处理", exact: true }).click();
   const governance = page.locator('[aria-label="客户资料治理"]');
   await governance.getByRole("button", { name: "检查重复" }).click();
   await expect(governance.getByLabel("保留客户")).toHaveCount(1, { timeout: 15_000 });
@@ -171,6 +172,7 @@ test("customer export is audited before irreversible anonymization", async ({ pa
   await expect(match).toHaveCount(1, { timeout: 15_000 });
   await match.click();
 
+  await page.getByRole("button", { name: "合并与隐私处理", exact: true }).click();
   const privacy = page.locator('[aria-label="客户隐私与留存"]');
   await expect(privacy.locator('[data-testid="customer-privacy-status"]')).toContainText(
     "活动订单 0",
@@ -225,6 +227,7 @@ test("customer export is audited before irreversible anonymization", async ({ pa
 test("historic shift close is queryable and exported as bounded CSV", async ({ page }) => {
   await signIn(page);
   await page.locator('[data-nav-id="stats"]').click();
+  await page.getByRole("tab", { name: "历史报表与对账" }).click();
   await page.locator('[data-testid="stats-date-input"]').fill(SHIFT_DATE);
   await page.locator('[data-testid="stats-load-btn"]').click();
   const snapshot = page.locator(
@@ -243,6 +246,7 @@ test("historic shift close is queryable and exported as bounded CSV", async ({ p
   expect(reconciliationCsv).toContain('"section","key_1","key_2","value"');
   expect(reconciliationCsv).toContain(`"meta","business_date","","${SHIFT_DATE}"`);
 
+  await page.getByRole("tab", { name: "交班", exact: true }).click();
   const closed = page.locator('[data-testid="shift-closed-status"]');
   const signature = page.locator('[data-testid="shift-signature-input"]');
   await expect(closed.or(signature)).toBeVisible({ timeout: 15_000 });

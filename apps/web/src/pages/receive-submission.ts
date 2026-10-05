@@ -17,6 +17,8 @@ const UNCERTAIN_CODES = new Set([
   "INTERNAL_ERROR",
   "TRANSPORT_UNAVAILABLE",
   "RESOURCE_UNAVAILABLE",
+  "RECOVERY_UNAVAILABLE",
+  "RECOVERY_CONFLICT",
 ]);
 
 /** Lock synchronously before awaiting transport; a completed or unknown operation cannot be resubmitted. */
@@ -32,9 +34,7 @@ export async function submitReceive(
   const input = retry && pending !== null ? pending : body;
   store.patch({ pendingBody: input, retryable: false });
   try {
-    const response = await port.execute<unknown>("order.receive", input, {
-      operationId,
-    });
+    const response = await store.submit(port, input, operationId);
     if (!response.ok) {
       const uncertain =
         response.error.outcomeUnknown === true || UNCERTAIN_CODES.has(response.error.code);
@@ -43,6 +43,7 @@ export async function submitReceive(
         phase: uncertain ? "uncertain" : "editing",
         retryable: uncertain && response.error.code !== "DESKTOP_BRIDGE",
         message: response.error.message ?? "开单未完成，请检查输入",
+        ...(!uncertain ? { operationId: crypto.randomUUID(), pendingBody: null } : {}),
       });
       return null;
     }

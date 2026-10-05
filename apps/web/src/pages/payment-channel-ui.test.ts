@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createElement } from "react";
+import { createElement, useSyncExternalStore } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { ToastProvider } from "@laundry/ui";
 import type { ChannelIntent, DesktopPaymentChannelInput } from "@laundry/contracts";
@@ -12,6 +12,9 @@ import { createPaymentChannelPort } from "../host/payment-channel-port.js";
 import { ChannelCollectCard } from "./ChannelCollectCard.js";
 import { PaymentChannelCollection } from "./PaymentChannelCollection.js";
 import { PaymentChannelReconcile } from "./PaymentChannelReconcile.js";
+import { ReceiveTicketResult } from "./ReceiveTicketResult.js";
+import { createReceiveWorkspace } from "./receive-workspace.js";
+import { confirmReceivePayment } from "./receive-payment.js";
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 const id = "11111111-1111-4111-8111-111111111111";
 const session: SessionView = {
@@ -300,6 +303,63 @@ test("write-off is not offered before the expiry grace has passed", async () => 
   try {
     assert.doesNotMatch(text(renderer), /确认未收款并核销/u);
     assert.match(text(renderer), /关闭未支付订单/u);
+  } finally {
+    await act(() => renderer.unmount());
+  }
+});
+
+test("a customer can prepay by scan right after an order is opened", async () => {
+  const opened = {
+    order_id: id,
+    ticket_no: "20261005-0001",
+    pickup_code: "P1",
+    payable_cents: 3_000,
+    paid_cents: 1_000,
+    balance_cents: 2_000,
+    discount_cents: 0,
+    discount_source: "none" as const,
+    discount_bps: 0,
+    waivers: { skip_ticket_print: false, skip_label_print: false, skip_rack_assignment: false },
+    garment_count: 1,
+    garments: [],
+  };
+  const port = createPaymentChannelPort(async (input) => {
+    if (input.operation === "available") return available;
+    if (input.operation === "list") return { ok: true, data: { intents: [] } };
+    if (input.operation === "checkout")
+      return { ok: true, data: intent({ amount_cents: 2_000, state: "paid", error_code: null }) };
+    return failed;
+  });
+  const store = createReceiveWorkspace();
+  store.patch({ result: opened, phase: "complete" });
+  function Result() {
+    const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
+    return createElement(ReceiveTicketResult, {
+      busy: false,
+      commandClient: createMockCommandClient(),
+      notify: () => undefined,
+      preview: null,
+      queuePrintEnabled: false,
+      result: state.result,
+      paymentChannelPort: port,
+      onPaymentConfirmed: (paid) => confirmReceivePayment(store, paid),
+    });
+  }
+  let renderer!: ReactTestRenderer;
+  await act(async () => {
+    renderer = create(createElement(ToastProvider, null, createElement(Result)));
+  });
+  try {
+    const collect = button(renderer, "微信收款码");
+    await act(async () => {
+      collect();
+    });
+    // The confirmed amount settles the result shown, and the card leaves with the debt.
+    assert.equal(renderer.root.findAllByProps({ "aria-label": "扫码收款" }).length, 0);
+    const html = text(renderer);
+    assert.match(html, /"data-fen":3000/u);
+    assert.match(html, /已收到微信付款/u);
+    assert.doesNotMatch(html, /"data-fen":2000/u);
   } finally {
     await act(() => renderer.unmount());
   }

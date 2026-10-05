@@ -2,15 +2,22 @@ import { Button, Input } from "@laundry/ui";
 import { useEffect, useRef, useState } from "react";
 import {
   V1_MIGRATION_SOURCE_MAX_BYTES,
-  V1_MIGRATION_PHOTO_MAX_BYTES,
   type V1MigrationPreview,
   type V1MigrationReview,
   type V1MigrationApproved,
 } from "@laundry/contracts";
 import type { MigrationPort } from "../host/migration-port.js";
+import { V1MigrationPhotos } from "./V1MigrationPhotos.js";
 
-type Props = Readonly<{ port: MigrationPort; sessionKey: string }>;
-export function V1MigrationPanel({ port, sessionKey }: Props) {
+import type { MaintenancePort } from "../host/maintenance-port.js";
+import { MaintenanceHandoff } from "./MaintenanceHandoff.js";
+
+type Props = Readonly<{
+  port: MigrationPort;
+  sessionKey: string;
+  maintenancePort?: MaintenancePort;
+}>;
+export function V1MigrationPanel({ port, sessionKey, maintenancePort }: Props) {
   const [preview, setPreview] = useState<V1MigrationPreview | null>(null);
   const [review, setReview] = useState<V1MigrationReview | null>(null);
   const [approved, setApproved] = useState<V1MigrationApproved | null>(null);
@@ -19,9 +26,11 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const generation = useRef(0);
+  const generation = useRef(0),
+    pending = useRef(false);
   useEffect(() => {
     generation.current += 1;
+    pending.current = false;
     setPreview(null);
     setReview(null);
     setApproved(null);
@@ -30,8 +39,13 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
     setConfirmed(false);
     setError("");
     setBusy(false);
-  }, [sessionKey]);
+    return () => {
+      generation.current += 1;
+    };
+  }, [sessionKey, port]);
   const run = async (action: (current: () => boolean) => Promise<void>) => {
+    if (pending.current) return;
+    pending.current = true;
     const value = generation.current;
     setBusy(true);
     setError("");
@@ -40,7 +54,10 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
     } catch {
       if (generation.current === value) setError("读取文件失败，请重新选择文件。");
     } finally {
-      if (generation.current === value) setBusy(false);
+      if (generation.current === value) {
+        pending.current = false;
+        setBusy(false);
+      }
     }
   };
   const selectSource = (file: File | undefined) => {
@@ -50,7 +67,9 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
       return;
     }
     void run(async (current) => {
-      const result = await port.draft(new Uint8Array(await file.arrayBuffer()));
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (!current()) return;
+      const result = await port.draft(bytes);
       if (!current()) return;
       if (!result.ok) {
         setError(result.error);
@@ -62,27 +81,6 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
       setUploaded([]);
       setConfirmed(false);
       setPassword("");
-    });
-  };
-  const upload = (photoId: string, file: File | undefined) => {
-    if (!file || !preview) return;
-    if (file.size > V1_MIGRATION_PHOTO_MAX_BYTES) {
-      setError("每张照片不能超过8 MiB。");
-      return;
-    }
-    void run(async (current) => {
-      const result = await port.photo(
-        preview.draft_id,
-        photoId,
-        new Uint8Array(await file.arrayBuffer()),
-      );
-      if (!current()) return;
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setUploaded((previous) => [...previous, photoId]);
-      setReview(null);
     });
   };
   const verify = () =>
@@ -114,7 +112,7 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
         }
         setApproved(result.data);
       } finally {
-        setPassword("");
+        if (current()) setPassword("");
       }
     });
   const formatMoney = (cents: number) => (cents / 100).toFixed(2);
@@ -177,25 +175,24 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
               : ""}
           </p>
           {preview.photos.length > 0 && (
-            <div className="ld-panel__sub">
-              <p className="ld-panel__lead">
-                旧版照片属于整单，导入后关联该单第一件衣物。请按原路径选择照片并核对这种关联。
-              </p>
-              {preview.photos.map((photo) => (
-                <label key={photo.id} className="ld-field">
-                  <span className="ld-field__label">
-                    {photo.source_relative_path} {uploaded.includes(photo.id) ? "（已上传）" : ""}
-                  </span>
-                  <input
-                    className="ld-input"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    disabled={busy || uploaded.includes(photo.id) || approved !== null}
-                    onChange={(event) => upload(photo.id, event.target.files?.[0])}
-                  />
-                </label>
-              ))}
-            </div>
+            <V1MigrationPhotos
+              key={`${sessionKey}:${preview.draft_id}`}
+              draftId={preview.draft_id}
+              photos={preview.photos}
+              uploaded={uploaded}
+              port={port}
+              disabled={busy || approved !== null}
+              onBusyChange={(value) => {
+                setBusy(value);
+                if (value) {
+                  setReview(null);
+                  setConfirmed(false);
+                }
+              }}
+              onUploaded={(id) =>
+                setUploaded((previous) => (previous.includes(id) ? previous : [...previous, id]))
+              }
+            />
           )}
           <p className="ld-panel__lead">
             历史资料：员工 {preview.history.staffs} 条、短信 {preview.history.sms} 条、审计{" "}
@@ -252,6 +249,23 @@ export function V1MigrationPanel({ port, sessionKey }: Props) {
             维护工具中选择“执行旧版导入”，输入下面的授权编号。维护程序会先备份，再导入并核对。
           </p>
           <p className="ld-panel__code">{approved.request_id}</p>
+          <MaintenanceHandoff
+            key={sessionKey + approved.request_id}
+            {...(maintenancePort === undefined ? {} : { port: maintenancePort })}
+            intent="v1-import"
+            requestId={approved.request_id}
+            expiresAt={approved.expires_at}
+          />
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setApproved(null);
+              setConfirmed(false);
+              setPassword("");
+            }}
+          >
+            重新核对导入授权
+          </Button>
           <p className="ld-panel__lead">
             有效至 {new Date(approved.expires_at).toLocaleTimeString("zh-CN")}
             。请保持当前管理员会话有效。

@@ -12,7 +12,11 @@ import {
 } from "@playwright/test";
 import { inspectPrivateFile, securePrivateFile } from "@laundry/platform-fs";
 import type { BrowserWindow } from "electron";
-import { captureMainProcessOutput, evaluateInMain } from "./electron-main.js";
+import {
+  captureMainProcessOutput,
+  evaluateInMain,
+  retriedMainEvaluations,
+} from "./electron-main.js";
 import { yuanText } from "./money-input.js";
 import {
   assertAsLaunchedGeometry,
@@ -57,7 +61,7 @@ const NAVIGATION_CHECKS: readonly NavigationCheck[] = Object.freeze([
   Object.freeze({ id: "pickup", heading: "取衣", level: 1 }),
   Object.freeze({ id: "delivery", heading: "取送订单", level: 1 }),
   Object.freeze({ id: "fulfillment", heading: "生产工作台", level: 1 }),
-  Object.freeze({ id: "orders", heading: "欠款", level: 2 }),
+  Object.freeze({ id: "orders", heading: "全部订单", level: 2 }),
   Object.freeze({ id: "customers", heading: "客户", level: 1 }),
   Object.freeze({ id: "reminders", heading: "催取工作台", level: 1 }),
   Object.freeze({ id: "stats", heading: "账目 / 对账", level: 1 }),
@@ -204,6 +208,22 @@ async function verifyNavigation(page: Page): Promise<void> {
     });
     await expect(page.getByRole("heading", { name: "本地服务尚未就绪" })).toHaveCount(0);
   }
+}
+
+async function selectSettingsSection(page: Page, id: string, label: string): Promise<void> {
+  const navigation = page.getByRole("navigation", { name: "设置分区" });
+  await expect(navigation).toBeVisible();
+  const mobileSelect = navigation.getByRole("combobox", { name: "查看分区" });
+  if (await mobileSelect.isVisible()) {
+    await mobileSelect.selectOption(id);
+  } else {
+    const section = navigation.getByRole("button", { name: label, exact: true });
+    if (id === "settings-printer" && !(await section.isVisible())) {
+      await navigation.getByRole("button", { name: "高级设置", exact: true }).click();
+    }
+    await section.click();
+  }
+  await expect(page.locator(`#${id}`)).toBeVisible();
 }
 
 async function readRendererLayout(page: Page) {
@@ -356,6 +376,7 @@ test("created test admin completes the installed Windows desktop functional jour
     if (accountCreatedThisRun) {
       await login(page, bootstrap.adminUsername, bootstrap.adminPassword);
       await page.locator('[data-nav-id="settings"]').click();
+      await selectSettingsSection(page, "settings-staff", "员工与权限");
       const staffPanel = page.locator('[data-testid="staff-access"]');
       await expect(staffPanel).toBeVisible({ timeout: 20_000 });
       await staffPanel.getByRole("button", { name: "新增员工" }).click();
@@ -423,6 +444,7 @@ test("created test admin completes the installed Windows desktop functional jour
 
     await verifyNavigation(page);
     // Navigation ends on 设置; theme lives in 设置 → 外观与快捷键 (counter default 浅色).
+    await selectSettingsSection(page, "settings-appearance", "外观与快捷键");
     const theme = page.getByRole("radiogroup", { name: "主题" });
     await expect(theme.getByRole("radio", { name: "浅色" })).toHaveAttribute(
       "aria-checked",
@@ -446,6 +468,7 @@ test("created test admin completes the installed Windows desktop functional jour
       .click();
 
     await page.locator('[data-nav-id="settings"]').click();
+    await selectSettingsSection(page, "settings-catalog", "价目维护");
     const catalog = page.locator('[data-testid="catalog-admin"]');
     await catalog.getByRole("button", { name: "新建 / 清空" }).click();
     await catalog.locator('input[name="catalog-code"]').fill(fixtures.catalogCode);
@@ -462,6 +485,7 @@ test("created test admin completes the installed Windows desktop functional jour
     await expect(catalogRow).toContainText("已停用", { timeout: 20_000 });
     await catalogRow.getByRole("button", { name: "启用" }).click();
     await expect(catalogRow).toContainText("在架", { timeout: 20_000 });
+    await selectSettingsSection(page, "settings-printer", "小票打印机");
     const printer = page.locator('[data-testid="printer-settings"]');
     await expect(printer).toBeVisible();
     await printer.getByRole("button", { name: "刷新队列" }).click();
@@ -478,6 +502,7 @@ test("created test admin completes the installed Windows desktop functional jour
     await page.locator('[data-testid="customers-search-input"]').fill(fixtures.customerPhone);
     await page.locator('[data-testid="customers-search-btn"]').click();
     await page.locator('[data-testid="customers-row"]', { hasText: fixtures.customerName }).click();
+    await page.getByRole("button", { name: "客户档案与预约", exact: true }).click();
     const profile = page.locator('[data-testid="customer-profile-panel"]');
     await expect(profile).toBeVisible({ timeout: 20_000 });
     await profile.getByLabel("首选联系渠道").selectOption("wechat");
@@ -576,6 +601,7 @@ test("created test admin completes the installed Windows desktop functional jour
     await capture(page, screenshots.settled);
 
     await page.locator('[data-nav-id="stats"]').click();
+    await page.getByRole("tab", { name: "历史报表与对账" }).click();
     await page.locator('[data-testid="stats-load-btn"]').click();
     await expect(page.locator('[data-testid="reconciliation-snapshot"]')).toBeVisible({
       timeout: 20_000,
@@ -583,6 +609,8 @@ test("created test admin completes the installed Windows desktop functional jour
     await expect(page.getByRole("heading", { name: "支付账本" })).toBeVisible();
     await capture(page, screenshots.stats);
 
+    if (retriedMainEvaluations().length > 0)
+      await mainLog.save(evidenceRootReal, "main-process-before-restart.log");
     await closeApplication(application);
     application = await launchInstalled(executable, userDataPath);
     mainLog = captureMainProcessOutput(application);
@@ -624,6 +652,7 @@ test("created test admin completes the installed Windows desktop functional jour
       screenshots: Object.values(screenshots),
       renderer_errors: rendererErrors.length,
       server_failures: serverFailures.length,
+      main_evaluation_retries: retriedMainEvaluations(),
     });
     await writeFile(
       join(evidenceRootReal, "functional-evidence.json"),
@@ -635,8 +664,10 @@ test("created test admin completes the installed Windows desktop functional jour
     );
     passed = true;
   } finally {
-    // ADR-91 P1-8: a failed run keeps the main-process output beside its screenshots.
-    if (!passed) await mainLog?.save(evidenceRootReal).catch(() => undefined);
+    // ADR-91 P1-8: a failed run, or one that needed a retry, keeps the main-process output
+    // beside its screenshots.
+    if (!passed || retriedMainEvaluations().length > 0)
+      await mainLog?.save(evidenceRootReal).catch(() => undefined);
     await closeApplication(application);
     await rm(userDataPath, { force: true, recursive: true });
   }

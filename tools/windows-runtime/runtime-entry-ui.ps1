@@ -53,15 +53,17 @@ function Show-RuntimeEntry {
     try {
       if ($Verb -ceq 'assistance-config') {
         $inputJson = Show-RuntimeAssistanceDialog $form
-        if ([string]::IsNullOrEmpty($inputJson)) { return }
+        if ([string]::IsNullOrEmpty($inputJson)) { $output.Text = '已取消，尚未执行。一次性授权仍需在有效期内使用。'; return }
       }
       if ($Verb -ceq 'backup-schedule') {
         $inputJson = Show-RuntimeScheduleDialog $form
-        if ([string]::IsNullOrEmpty($inputJson)) { return }
+        if ([string]::IsNullOrEmpty($inputJson)) { $output.Text = '已取消，尚未执行。一次性授权仍需在有效期内使用。'; return }
       }
       if (@('portable-export','portable-inspect','portable-import','v1-import','export-store') -ccontains $Verb) {
-        $inputJson = Show-RuntimeDataDialog $Verb $form
-        if ([string]::IsNullOrEmpty($inputJson)) { return }
+        $requestId = $null
+        if ($null -ne $script:CounterHandoff -and $script:CounterHandoff.intent -ceq $Verb -and $script:CounterHandoff.operation -ceq 'handoff') { $requestId = $script:CounterHandoff.request_id }
+        $inputJson = Show-RuntimeDataDialog $Verb $form $requestId
+        if ([string]::IsNullOrEmpty($inputJson)) { $output.Text = '已取消，尚未执行。一次性授权仍需在有效期内使用。'; return }
       }
       if ($Verb -ceq 'restore' -or $Verb -ceq 'backup-verify' -or $Verb -ceq 'backup-drill') {
         if ($null -eq $backupList.SelectedItem) { throw 'WINDOWS_RUNTIME_ENTRY_BACKUP_SELECTION_REQUIRED' }
@@ -70,17 +72,17 @@ function Show-RuntimeEntry {
           $digest = $confirmation.Text
           Assert-EntryArguments $Verb $id $digest
           $answer = [Windows.Forms.MessageBox]::Show('将恢复所选备份。请确认柜台已退出；系统会先创建恢复前安全点。', '确认恢复', 'YesNo', 'Warning')
-          if ($answer -ne [Windows.Forms.DialogResult]::Yes) { return }
+          if ($answer -ne [Windows.Forms.DialogResult]::Yes) { $output.Text = '已取消，尚未执行。'; return }
         }
       }
       if (@('stop','repair','backup','backup-drill','scheduled-backup','upgrade','rollback','maintenance-recover') -ccontains $Verb) {
         $warning = if ($Verb -ceq 'rollback') { '请先退出柜台。跨数据库结构的回退会同时恢复旧程序和升级前数据；升级后的业务变更只保存在回退前安全备份中，不会自动合并。会话和设备授权将失效，自动化暂停；须重新登录、配对和批准。' } else { '请先退出柜台。此操作可能暂停本地服务，完成后将按既有规则恢复。' }
         $answer = [Windows.Forms.MessageBox]::Show($warning, '确认维护', 'YesNo', 'Information')
-        if ($answer -ne [Windows.Forms.DialogResult]::Yes) { return }
+        if ($answer -ne [Windows.Forms.DialogResult]::Yes) { $output.Text = '已取消，尚未执行。'; return }
       }
       $script:EntryBusy = $true; $buttons.Enabled = $false; $recovery.Enabled = $false
       $backupList.Enabled = $false; $confirmation.Enabled = $false
-      $output.Text = '正在执行，请等待操作结果……'; [Windows.Forms.Application]::DoEvents()
+      $output.Text = '正在执行，请等待操作结果。完成前请勿关闭电脑；维护期间不能重复操作。'; [Windows.Forms.Application]::DoEvents()
       $text = Invoke-RuntimeEntryAction $Verb $id $digest $inputJson
       $inputJson = $null
       $result = $text | ConvertFrom-Json
@@ -93,7 +95,7 @@ function Show-RuntimeEntry {
         $lines.Add('自动备份：' + $(if ($result.config.enabled) { '已启用' } else { '已关闭' }))
         $lines.Add('每日时间：' + ('{0:00}:{1:00}' -f $result.config.hour, $result.config.minute))
         $lines.Add('可用空间：' + $result.free_mib + ' MiB')
-        $messages = @{ low_space='剩余空间不足'; interrupted='上次备份中断，请明确恢复维护'; last_run_failed='上次备份失败'; backup_overdue='备份已超过预定间隔'; drill_overdue='恢复演练尚未完成或已逾期'; task_missing='自动备份任务缺失或被禁用，请重新保存设置'; task_unavailable='自动备份任务无法验证，请检查任务或重新保存设置'; offsite_overdue='近 7 天没有加密离机备份：请用“加密离机备份”存到 U 盘或 NAS，防止本机硬盘损坏时备份一起丢失' }
+        $messages = @{ backup_disabled='自动备份已关闭，请开启并核对下次计划'; low_space='剩余空间不足'; interrupted='上次备份中断，请明确恢复维护'; last_run_failed='上次备份失败'; backup_overdue='备份已超过预定间隔'; drill_overdue='恢复演练尚未完成或已逾期'; task_missing='自动备份任务缺失或被禁用，请重新保存设置'; task_unavailable='自动备份任务无法验证，请检查任务或重新保存设置'; offsite_overdue='近 7 天没有加密离机备份：请用“加密离机备份”存到 U 盘或 NAS，防止本机硬盘损坏时备份一起丢失' }
         foreach ($alert in $result.alerts) { $lines.Add('提醒：' + $messages[$alert]) }
         if ($null -ne $result.latest) { $lines.Add('最近执行：' + $result.latest.at + ' / ' + $result.latest.status); if ($result.latest.code) { $lines.Add('错误代码：' + $result.latest.code) } }
       }
@@ -132,7 +134,11 @@ function Show-RuntimeEntry {
     } catch {
       $code = [string]($_.Exception.GetBaseException().Message)
       if ($code -cnotmatch '^WINDOWS_(RUNTIME_ENTRY|COMPANION)_[A-Z_]+$') { $code = 'WINDOWS_RUNTIME_ENTRY_FAILED' }
-      $output.Text = "操作未完成。错误代码：$code`r`n" + '如状态显示维护中断，请查看状态后明确选择“继续中断维护”。'
+      $help = if ($code -match 'AUTHORIZATION_INVALID|APPROVAL|EXPIRED') { '授权已过期、已使用或会话失效。请回柜台重新核对并生成一次性授权。' }
+        elseif ($code -match 'LOCK|BUSY') { '已有维护正在运行。请等待当前操作完成后重试，不要重复打开操作。' }
+        elseif ($code -match 'ACCESS|PERMISSION|PRIVATE') { '当前用户不能访问维护文件。请使用原安装账户并检查目录权限。' }
+        else { '如状态显示维护中断，请查看状态后明确选择“继续中断维护”。' }
+      $output.Text = "操作未完成。错误代码：$code`r`n" + $help
     } finally {
       $inputJson = $null
       $script:EntryBusy = $false; $buttons.Enabled = $true; $recovery.Enabled = $true
@@ -157,6 +163,16 @@ function Show-RuntimeEntry {
     $button.AutoSize = $true; $button.Height = 34
     $button.add_Click({ & $run ([string]$this.Tag) })
     $recovery.Controls.Add($button)
+  }
+  if ($null -ne $script:CounterHandoff) {
+    $intent = [string]$script:CounterHandoff.intent
+    $output.Text = '已从柜台打开维护入口。请完成确认后执行；一次性授权过期时请回柜台重新授权。'
+    $form.add_Shown({
+      if (@('v1-import','export-store') -ccontains $intent) { & $run $intent }
+      elseif ($intent -ceq 'drill') { & $run 'backup-list'; $output.AppendText([Environment]::NewLine + '请选择一份备份，然后点击“演练所选备份”。') }
+      elseif ($intent -ceq 'backup') { & $run 'backup' }
+      else { & $run 'backup-health' }
+    })
   }
   $form.add_FormClosing({ if ($script:EntryBusy) { $_.Cancel = $true } })
   try { [void]$form.ShowDialog() } finally { $form.Dispose() }

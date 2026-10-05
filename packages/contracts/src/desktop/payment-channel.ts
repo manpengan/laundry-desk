@@ -18,6 +18,15 @@ import {
   ChannelResolveInputSchema,
 } from "../payment-channel.js";
 
+import {
+  ReconciliationHistoryInputSchema,
+  ReconciliationHistoryViewSchema,
+  ReconciliationDetailInputSchema,
+  ReconciliationDetailViewSchema,
+  ReconciliationReviewInputSchema,
+  ReconciliationReviewViewSchema,
+} from "../payment-reconciliation.js";
+
 export const DesktopPaymentChannelInputSchema = z.discriminatedUnion("operation", [
   z.strictObject({ operation: z.literal("settings.get") }),
   z.strictObject({ operation: z.literal("available") }),
@@ -33,6 +42,18 @@ export const DesktopPaymentChannelInputSchema = z.discriminatedUnion("operation"
   z.strictObject({ operation: z.literal("refunds.status"), body: ChannelRefundIdSchema }),
   z.strictObject({ operation: z.literal("reconcile"), body: ChannelReconcileInputSchema }),
   z.strictObject({ operation: z.literal("resolve"), body: ChannelResolveInputSchema }),
+  z.strictObject({
+    operation: z.literal("reconcile.history"),
+    body: ReconciliationHistoryInputSchema,
+  }),
+  z.strictObject({
+    operation: z.literal("reconcile.detail"),
+    body: ReconciliationDetailInputSchema,
+  }),
+  z.strictObject({
+    operation: z.literal("reconcile.review"),
+    body: ReconciliationReviewInputSchema,
+  }),
 ]);
 export const PaymentChannelDataSchemas = Object.freeze({
   "settings.get": PaymentChannelSettingsViewSchema,
@@ -46,6 +67,9 @@ export const PaymentChannelDataSchemas = Object.freeze({
   "refunds.status": ChannelRefundViewSchema,
   reconcile: ChannelReconcileViewSchema,
   resolve: ChannelIntentViewSchema,
+  "reconcile.history": ReconciliationHistoryViewSchema,
+  "reconcile.detail": ReconciliationDetailViewSchema,
+  "reconcile.review": ReconciliationReviewViewSchema,
 });
 export const DesktopPaymentChannelResultSchema = z.discriminatedUnion("ok", [
   z.strictObject({
@@ -59,6 +83,9 @@ export const DesktopPaymentChannelResultSchema = z.discriminatedUnion("ok", [
       ChannelRefundInputSchema,
       ChannelReconcileViewSchema,
       ChannelAvailabilityViewSchema,
+      ReconciliationHistoryViewSchema,
+      ReconciliationDetailViewSchema,
+      ReconciliationReviewViewSchema,
     ]),
   }),
   CommandResponseSchema.options[1],
@@ -75,6 +102,9 @@ const paths = Object.freeze({
   reconcile: "reconcile",
   available: "available",
   resolve: "resolve",
+  "reconcile.history": "reconcile/history",
+  "reconcile.detail": "reconcile/detail",
+  "reconcile.review": "reconcile/review",
 });
 export function paymentChannelRoute(input: DesktopPaymentChannelInput) {
   return Object.freeze({
@@ -117,6 +147,20 @@ export function paymentChannelResultMatches(
   if (input.operation === "list" && input.body.order_id)
     return (
       "intents" in data && data.intents.every((intent) => intent.order_id === input.body.order_id)
+    );
+  if (input.operation === "reconcile.detail")
+    return "summary" in data && data.summary.reconciliation_id === input.body.reconciliation_id;
+  if (input.operation === "reconcile.review")
+    return (
+      "review" in data &&
+      "reconciliation_id" in data &&
+      data.reconciliation_id === input.body.reconciliation_id &&
+      data.index === input.body.index
+    );
+  if (input.operation === "reconcile.history" && input.body.channel)
+    return (
+      "rows" in data &&
+      data.rows.every((row) => "channel" in row && row.channel === input.body.channel)
     );
   return true;
 }

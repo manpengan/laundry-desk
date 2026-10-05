@@ -12,6 +12,7 @@ export * from "./openapi/index.js";
 export * from "./ai/index.js";
 export * from "./customer-miniapp.js";
 export * from "./payment-channel.js";
+export * from "./payment-reconciliation.js";
 export * from "./notification-wechat.js";
 
 // Restricted auth authority modules stay wired to this entry point only. The

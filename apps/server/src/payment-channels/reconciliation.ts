@@ -103,13 +103,20 @@ export async function reconcileChannelBill(client: SqlClient, tenant: TenantCont
       JSON.stringify(mismatches),
     ],
   );
-  await channelAudit(client, tenant, "payment.channel.reconcile", id, {
-    channel: input.channel,
-    business_date: input.business_date,
-    source_sha256: sourceHash,
-    matched_count: matched,
-    mismatch_count: mismatches.length,
-  });
+  await channelAudit(
+    client,
+    tenant,
+    "payment.channel.reconcile",
+    id,
+    {
+      channel: input.channel,
+      business_date: input.business_date,
+      source_sha256: sourceHash,
+      matched_count: matched,
+      mismatch_count: mismatches.length,
+    },
+    "payment_channel_reconciliation",
+  );
   return ChannelReconcileViewSchema.parse({
     reconciliation_id: id,
     source_sha256: sourceHash,

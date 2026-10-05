@@ -14,9 +14,9 @@ export function OwnerMarketingCampaignList({
     <section className="ld-owner-management lg-card">
       <header className="ld-owner-management__header">
         <div>
-          <span className="ld-owner-operations__eyebrow">默认关闭 · 当前门店 · 不发券</span>
+          <span className="ld-owner-operations__eyebrow">当前门店 · 按预算与权限执行</span>
           <h2>营销活动</h2>
-          <p>Item 7 只定义活动、受众、时间窗和预算；发券属于后续独立能力。</p>
+          <p>先配置活动、受众、时间窗与预算，再冻结受众并预览发券；执行前需确认发放范围与费用。</p>
         </div>
         <Button type="button" variant="secondary" onClick={onNew}>
           新建
@@ -48,7 +48,14 @@ export function OwnerMarketingCampaignList({
                       <small>{campaign.code}</small>
                     </button>
                   </th>
-                  <td>{campaign.status}</td>
+                  <td>
+                    {{
+                      draft: "草稿",
+                      scheduled: "已排期",
+                      paused: "已暂停",
+                      cancelled: "已取消",
+                    }[campaign.status] ?? campaign.status}
+                  </td>
                   <td>¥{(campaign.budget_limit_cents / 100).toFixed(2)}</td>
                   <td>{campaign.version}</td>
                 </tr>

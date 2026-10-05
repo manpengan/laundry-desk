@@ -450,3 +450,17 @@
     box-shadow: var(--lg-shadow-dock);
   }
 }
+
+.ld-counter-drafts__details > summary {
+  cursor: pointer;
+  padding: 0.5rem 0;
+  font-weight: 600;
+}
+.ld-counter-drafts__details > summary:focus-visible {
+  outline: 2px solid var(--ld-accent, #087bdf);
+  outline-offset: 3px;
+}
+.ld-counter-drafts__details .ld-counter-draft-list {
+  max-height: min(28dvh, 14rem);
+  overflow-y: auto;
+}

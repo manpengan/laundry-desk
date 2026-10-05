@@ -57,7 +57,7 @@ export const COUNTER_NAV: readonly NavItem[] = [
   {
     id: "orders",
     label: "订单与欠款",
-    shortLabel: "欠款",
+    shortLabel: "订单",
     icon: "orders",
     keywords: "dingdan qiankuan dd qk orders debt",
   },

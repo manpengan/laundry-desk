@@ -44,29 +44,32 @@ export function ReceiveDraftPanel({
         </Button>
       </div>
       {rows.length === 0 ? null : (
-        <ul className="ld-counter-draft-list" data-testid="receive-draft-list">
-          {rows.map((row) => (
-            <li key={row.order_id} data-testid="receive-draft-row">
-              <span className="ld-counter-draft-list__who">
-                {row.customer_name ?? "散客挂单"}
-                {row.customer_phone === null ? null : <MaskedPhone phone={row.customer_phone} />}
-              </span>
-              <span>
-                应收 <MoneyText fen={row.payable_cents} size="sm" />
-              </span>
-              <Button
-                variant="secondary"
-                size="sm"
-                type="button"
-                onClick={() => onResume(row.order_id)}
-                disabled={busy || row.order_id === activeDraftId}
-                data-testid="receive-draft-resume"
-              >
-                {row.order_id === activeDraftId ? "当前挂单" : "恢复编辑"}
-              </Button>
-            </li>
-          ))}
-        </ul>
+        <details className="ld-counter-drafts__details">
+          <summary>查看并恢复挂单（{rows.length}）</summary>
+          <ul className="ld-counter-draft-list" data-testid="receive-draft-list">
+            {rows.map((row) => (
+              <li key={row.order_id} data-testid="receive-draft-row">
+                <span className="ld-counter-draft-list__who">
+                  {row.customer_name ?? "散客挂单"}
+                  {row.customer_phone === null ? null : <MaskedPhone phone={row.customer_phone} />}
+                </span>
+                <span>
+                  应收 <MoneyText fen={row.payable_cents} size="sm" />
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  type="button"
+                  onClick={() => onResume(row.order_id)}
+                  disabled={busy || row.order_id === activeDraftId}
+                  data-testid="receive-draft-resume"
+                >
+                  {row.order_id === activeDraftId ? "当前挂单" : "恢复编辑"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </section>
   );

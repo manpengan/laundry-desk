@@ -18,6 +18,7 @@ import type { RunBenefitMutation } from "./member-benefits-ui-types.js";
 
 export type MemberBenefitsPanelProps = Readonly<{
   customer: CustomerRowView;
+  summaryOnly?: boolean;
   queryClient: QueryPort;
   commandClient: CommandPort;
   session?: SessionView;
@@ -37,6 +38,7 @@ export function MemberBenefitsPanel({
   commandClient,
   session,
   toast,
+  summaryOnly = false,
 }: MemberBenefitsPanelProps) {
   const [benefits, setBenefits] = useState<MemberBenefitsView | null>(null);
   const [catalog, setCatalog] = useState<MemberBenefitCatalogView | null>(null);
@@ -88,6 +90,9 @@ export function MemberBenefitsPanel({
       setCatalog(parsedCatalog);
       setFailed(false);
       setNoAccount(false);
+      setLoaded(true);
+    } catch {
+      setFailed(true);
       setLoaded(true);
     } finally {
       setBusy(false);
@@ -217,42 +222,59 @@ export function MemberBenefitsPanel({
           冻结或关闭账户不能变更、授予或消费权益；储值本金和赠款不会因权益到期而失效。
         </p>
       ) : null}
-      <MemberMembershipPoints
-        key={`membership:${benefits.membership.version}`}
-        benefits={benefits}
-        catalog={catalog}
-        isAdmin={session?.role === "admin"}
-        busy={busy}
-        mutable={mutable}
-        toast={toast}
-        runMutation={runMutation}
-      />
-      <MemberBenefitAssets
-        benefits={benefits}
-        catalog={catalog}
-        isAdmin={session?.role === "admin"}
-        busy={busy}
-        mutable={mutable}
-        toast={toast}
-        runMutation={runMutation}
-      />
-      <Dialog
-        open={pending !== null}
-        title={pending?.title ?? "确认会员权益变更"}
-        onClose={() => setPending(null)}
-        footer={
-          <>
-            <Button variant="ghost" type="button" disabled={busy} onClick={() => setPending(null)}>
-              取消
-            </Button>
-            <Button variant="primary" type="button" disabled={busy} onClick={() => void confirm()}>
-              确认执行
-            </Button>
-          </>
-        }
-      >
-        <p>系统已锁定本次参数；确认后将追加可审计记录，历史权益不会被重写。</p>
-      </Dialog>
+      <p>
+        会员等级：{benefits.membership.tier?.name ?? "未设置"}
+        {benefits.membership.status === "expired" ? "（已到期）" : ""} · 积分：
+        {benefits.points.available_points}
+      </p>
+      <div hidden={summaryOnly}>
+        <MemberMembershipPoints
+          key={`membership:${benefits.membership.version}`}
+          benefits={benefits}
+          catalog={catalog}
+          isAdmin={session?.role === "admin"}
+          busy={busy}
+          mutable={mutable}
+          toast={toast}
+          runMutation={runMutation}
+        />
+        <MemberBenefitAssets
+          benefits={benefits}
+          catalog={catalog}
+          isAdmin={session?.role === "admin"}
+          busy={busy}
+          mutable={mutable}
+          toast={toast}
+          runMutation={runMutation}
+        />
+        <Dialog
+          open={pending !== null}
+          title={pending?.title ?? "确认会员权益变更"}
+          onClose={() => setPending(null)}
+          footer={
+            <>
+              <Button
+                variant="ghost"
+                type="button"
+                disabled={busy}
+                onClick={() => setPending(null)}
+              >
+                取消
+              </Button>
+              <Button
+                variant="primary"
+                type="button"
+                disabled={busy}
+                onClick={() => void confirm()}
+              >
+                确认执行
+              </Button>
+            </>
+          }
+        >
+          <p>系统已锁定本次参数；确认后将追加可审计记录，历史权益不会被重写。</p>
+        </Dialog>
+      </div>
     </section>
   );
 }

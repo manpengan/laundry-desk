@@ -23,7 +23,7 @@ const COPY: Record<NavItemId, PageCopy> = {
   pickup: {
     title: "取衣",
     emptyTitle: "登录后取衣",
-    emptyDescription: "会话就绪后按订单 UUID 取件；件 ID 可留空取全部。",
+    emptyDescription: "登录后可扫描取件码，或按票号、手机号查找订单并核对衣物。",
     actionLabel: "去开单",
   },
   delivery: {
@@ -40,20 +40,20 @@ const COPY: Record<NavItemId, PageCopy> = {
   },
   orders: {
     title: "订单与欠款",
-    emptyTitle: "暂无欠款订单",
-    emptyDescription: "载入后可查看仍有余额的订单，并在详情里补缴或撤销。",
+    emptyTitle: "登录后查询订单",
+    emptyDescription: "可按票号、客户、日期与状态查询全部订单、欠款和待取衣物。",
     actionLabel: "去开单",
   },
   customers: {
     title: "客户",
     emptyTitle: "还没有客户",
-    emptyDescription: "开单时录入手机号会自动建档（种子号段 13800000xxx）。",
+    emptyDescription: "开单时录入手机号可建立客户档案，也可在此新增与查询客户。",
     actionLabel: "新建客户",
   },
   reminders: {
     title: "催取工作台",
     emptyTitle: "催取工作台不可用",
-    emptyDescription: "需要登录并保持本地服务连接，短信与微信渠道尚未接入。",
+    emptyDescription: "请登录并保持本地服务连接；发送短信前需配置门店短信服务并核对发送范围。",
     actionLabel: "返回工作台",
   },
   stats: {
@@ -64,8 +64,8 @@ const COPY: Record<NavItemId, PageCopy> = {
   },
   settings: {
     title: "设置",
-    emptyTitle: "设置项即将接入",
-    emptyDescription: "最低消费等 R5 项已接 step-up PIN 复核；其余价目/打印在 M2 扩展。",
+    emptyTitle: "登录后查看门店设置",
+    emptyDescription: "可配置价目、计价、员工权限及服务接入；重要修改需按门店权限复核。",
     actionLabel: "返回工作台",
   },
 };

@@ -27,18 +27,23 @@ async function signIn(page: Page): Promise<void> {
   await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 15_000 });
 }
 
+function reports(page: Page) {
+  return page.getByRole("tabpanel", { name: "历史报表与对账" });
+}
+
 async function selectRange(page: Page, mode: "history" | "staff"): Promise<void> {
-  await page.locator('[data-testid="accounting-mode"]').selectOption(mode);
-  await page.locator('[data-testid="accounting-date-from"]').fill(BUSINESS_DATE);
-  await page.locator('[data-testid="accounting-date-to"]').fill(BUSINESS_DATE);
-  await page.locator('[data-testid="accounting-load"]').click();
-  await expect(page.locator('[data-testid="accounting-report-result"]')).toBeVisible({
+  await page.getByRole("tab", { name: "历史报表与对账" }).click();
+  await reports(page).locator('[data-testid="accounting-mode"]').selectOption(mode);
+  await reports(page).locator('[data-testid="accounting-date-from"]').fill(BUSINESS_DATE);
+  await reports(page).locator('[data-testid="accounting-date-to"]').fill(BUSINESS_DATE);
+  await reports(page).locator('[data-testid="accounting-load"]').click();
+  await expect(reports(page).locator('[data-testid="accounting-report-result"]')).toBeVisible({
     timeout: 15_000,
   });
 }
 
 function metric(page: Page, label: string) {
-  return page.locator(".ld-accounting .ld-stats-card").filter({ hasText: label }).first();
+  return reports(page).locator(".ld-accounting .ld-stats-card").filter({ hasText: label }).first();
 }
 
 test.beforeAll(async ({ request }) => {
@@ -51,34 +56,38 @@ test("dual-basis day, month, and staff reports export verified real ledger evide
 }) => {
   await signIn(page);
   await page.locator('[data-nav-id="stats"]').click();
-  await expect(page.locator('[data-testid="accounting-report-panel"]')).toBeVisible();
+  await expect(
+    page
+      .getByRole("tabpanel", { name: "经营概览" })
+      .locator('[data-testid="accounting-report-panel"]'),
+  ).toBeVisible();
 
   await selectRange(page, "history");
   await expect(metric(page, "实收").locator('[data-fen="13000"]')).toHaveCount(1);
   await expect(metric(page, "业绩").locator('[data-fen="8000"]')).toHaveCount(1);
   await expect(metric(page, "会员本金现金流").locator('[data-fen="8000"]')).toHaveCount(1);
   await expect(metric(page, "会员余额消费").locator('[data-fen="3000"]')).toHaveCount(1);
-  const daily = page.locator('section[aria-label="营业日汇总"]');
+  const daily = reports(page).locator('section[aria-label="营业日汇总"]');
   await expect(daily).toContainText(BUSINESS_DATE);
 
-  await page.locator('[data-testid="accounting-mode"]').selectOption("month");
-  await page.locator('[data-testid="accounting-month"]').fill("2097-08");
-  await page.locator('[data-testid="accounting-load"]').click();
-  await expect(page.locator('[data-testid="accounting-report-result"]')).toContainText(
+  await reports(page).locator('[data-testid="accounting-mode"]').selectOption("month");
+  await reports(page).locator('[data-testid="accounting-month"]').fill("2097-08");
+  await reports(page).locator('[data-testid="accounting-load"]').click();
+  await expect(reports(page).locator('[data-testid="accounting-report-result"]')).toContainText(
     "2097-08-01 至 2097-08-31",
     { timeout: 15_000 },
   );
   await expect(metric(page, "实收").locator('[data-fen="13000"]')).toHaveCount(1);
 
   await selectRange(page, "staff");
-  const staff = page
+  const staff = reports(page)
     .locator('section[aria-label="职员汇总"] tbody tr')
     .filter({ hasText: "E2E Staff One" });
   await expect(staff).toHaveCount(1);
   await expect(staff.locator('[data-fen="-2000"]')).toHaveCount(2);
   await expect(staff.locator('[data-fen="3000"]')).toHaveCount(2);
 
-  await page.locator('[data-testid="accounting-export"]').click();
+  await reports(page).locator('[data-testid="accounting-export"]').click();
   const confirmation = page.getByRole("dialog", { name: "确认导出账目报表" });
   await expect(confirmation).toBeVisible();
   await expect(confirmation).toContainText("营业日 2097-08-07 至 2097-08-07");

@@ -1,7 +1,9 @@
 import type { TicketPreview } from "@laundry/domain";
-import { Button, MoneyText, useToast } from "@laundry/ui";
+import { Button, useToast } from "@laundry/ui";
 import { useCallback, useMemo, useRef } from "react";
 
+import type { PaymentChannelPort } from "../host/payment-channel-port.js";
+import type { PhotoPort } from "../host/photo-port.js";
 import type { ScalePort } from "../host/scale-port.js";
 import type { StaffRole } from "../auth/permissions.js";
 import type { CatalogListItem } from "../commands/query-client.js";
@@ -12,7 +14,8 @@ import { recoverDraftForm } from "./draft-recovery.js";
 import { applyCatalogPick, ReceiveLineEditor } from "./ReceiveLineEditor.js";
 import { ReceiveProgressPanel } from "./ReceiveProgressPanel.js";
 import { ReceiveDraftPanel } from "./ReceiveDraftPanel.js";
-import { ReceiveTicketResult } from "./ReceiveTicketResult.js";
+import { ReceiveCompletedWorkspace } from "./ReceiveCompletedWorkspace.js";
+import { ReceiveCheckoutShortcut } from "./ReceiveCheckoutShortcut.js";
 import {
   buildReceiveBody,
   parseHoldDraftId,
@@ -46,6 +49,8 @@ export type ReceivePageProps = {
   queuePrintEnabled?: boolean;
   role?: StaffRole;
   scalePort?: ScalePort;
+  paymentChannelPort?: PaymentChannelPort;
+  photoPort?: PhotoPort;
 };
 
 export function ReceivePage({
@@ -57,6 +62,8 @@ export function ReceivePage({
   queuePrintEnabled = false,
   role,
   scalePort,
+  paymentChannelPort,
+  photoPort,
 }: ReceivePageProps) {
   const toast = useToast();
   const {
@@ -71,9 +78,9 @@ export function ReceivePage({
     draftId,
     lines,
     focusedLineKey,
-    busy,
-    result,
-    ticketPreview,
+    busy: submitting,
+    recoveryStatus,
+    recoveryMessage,
     phase,
     setPhone,
     setName,
@@ -88,6 +95,7 @@ export function ReceivePage({
     setResult,
     setTicketPreview,
   } = useReceiveForm();
+  const busy = submitting || recoveryStatus === "loading";
   const { policy, policyReady, draftRows, draftLoading, reloadDrafts } =
     useReceiveResources(queryClient);
   const totals = useMemo(
@@ -296,6 +304,14 @@ export function ReceivePage({
       <p className="ld-shell-main__hint">
         输入手机号后按 Enter → 搜索或点选价目加入衣物 → 核对明细 → 确认开单出票。
       </p>
+      <div className="ld-panel__note" role={recoveryStatus === "error" ? "alert" : "status"}>
+        {recoveryMessage}
+        {recoveryStatus === "error" ? (
+          <Button type="button" variant="secondary" onClick={() => void store.retryRecovery()}>
+            重试恢复
+          </Button>
+        ) : null}
+      </div>
       <ReceiveProgressPanel
         state={store.getSnapshot()}
         store={store}
@@ -350,6 +366,7 @@ export function ReceivePage({
               onPaymentMethodChange={setPaymentMethod}
               onNoteChange={setNote}
               onSubmit={() => void onSubmit()}
+              submitBlocked={recoveryStatus === "error"}
               onHold={() => void onHold()}
               onReset={() => void onReset()}
             />
@@ -357,32 +374,17 @@ export function ReceivePage({
         </>
       )}
       {phase === "editing" ? (
-        <div className="ld-receive-checkout-shortcut">
-          <MoneyText fen={totals.payable} />
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => {
-              const field = pageRef.current?.querySelector<HTMLInputElement>(
-                'input[name="customer-phone"]',
-              );
-              field?.scrollIntoView({ block: "center" });
-              field?.focus({ preventScroll: true });
-            }}
-          >
-            去客户与结算
-          </Button>
-        </div>
+        <ReceiveCheckoutShortcut total={totals.payable} pageRef={pageRef} />
       ) : null}
-      <ReceiveTicketResult
-        lines={lines}
+      <ReceiveCompletedWorkspace
+        store={store}
         busy={busy}
         commandClient={commandClient}
-        notify={toast.push}
-        {...(onTicketReady === undefined ? {} : { onTicketReady })}
-        preview={ticketPreview}
         queuePrintEnabled={queuePrintEnabled}
-        result={result}
+        {...(onTicketReady === undefined ? {} : { onTicketReady })}
+        {...(paymentChannelPort === undefined ? {} : { paymentChannelPort })}
+        {...(photoPort === undefined ? {} : { photoPort })}
+        {...(queryClient === undefined ? {} : { queryClient })}
       />
     </main>
   );

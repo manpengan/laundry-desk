@@ -44,6 +44,7 @@ import {
 } from "@laundry/contracts";
 
 import { createDesktopJsonRequester } from "./command-request.js";
+import { createReceiveRecoveryOperation } from "./receive-recovery-operation.js";
 import { createLoginIntentGate } from "./auth-intent.js";
 import { createEdgeAuthorityRequester } from "./edge-authority-transport.js";
 import { createSignedReplayRequest, projectReplayResponse } from "./edge-http.js";
@@ -120,6 +121,8 @@ export function createDesktopHttpTransport(
   const requestJson = createDesktopJsonRequester(
     dependencies.request,
     () => authState?.sessionView ?? null,
+    undefined,
+    dependencies.receiveJournal,
   );
 
   const readCsrfCookie = async (): Promise<string | null> => {
@@ -555,9 +558,12 @@ export function createDesktopHttpTransport(
   };
 
   const executeCommand = async (input: unknown): Promise<DesktopCommandExecuteResult> => {
+    const originalState = authState;
     const parsedInput = await parseInput(DesktopCommandExecuteInputSchema, input);
     if (!parsedInput.valid)
       return parseOutput(DesktopCommandExecuteResultSchema, VALIDATION_FAILURE);
+    if (originalState === null || authState === null || !isSameSession(originalState, authState))
+      return parseOutput(DesktopCommandExecuteResultSchema, AUTHENTICATION_FAILURE);
     const name = encodeURIComponent(parsedInput.data.name);
     return executeProtected(
       DesktopCommandExecuteResultSchema,
@@ -734,6 +740,24 @@ export function createDesktopHttpTransport(
   const { ai } = auxiliary;
   return Object.freeze({
     ...auxiliary,
+    ...(dependencies.receiveJournal === undefined
+      ? {}
+      : {
+          receiveRecovery: createReceiveRecoveryOperation(
+            dependencies.receiveJournal,
+            () => authState,
+            (body, operationId) =>
+              executeProtected(
+                DesktopCommandExecuteResultSchema,
+                "/v1/commands/order.receive",
+                body,
+                undefined,
+                true,
+                operationId,
+              ),
+            nowMs,
+          ),
+        }),
     auth: Object.freeze({
       login: (input: unknown) => {
         ai.cancelAll();

@@ -13,12 +13,14 @@ const REQUIRED_CAPABILITIES = [
   "health",
 ] as const;
 const OPTIONAL_OPERATIONS = [
+  "receiveRecovery",
   "paymentChannel",
   "miniappSettings",
   "remoteAssistance",
   "ai",
   "migration",
   "notificationSettings",
+  "maintenance",
   "scale",
   "storeExport",
 ] as const;

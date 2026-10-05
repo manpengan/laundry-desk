@@ -48,7 +48,14 @@ const pricedLines = () =>
           { brand: "示例品牌", accessories: ["腰带"] },
         ],
       },
-    ]).map((line) => Object.freeze({ ...line, unit_price_cents: 1_500 })),
+    ]).map((line) =>
+      Object.freeze({
+        ...line,
+        unit_price_cents: 1_500,
+        catalog_name: "测试衬衫",
+        catalog_code: null,
+      }),
+    ),
   );
 
 function customerPolicy(
@@ -123,7 +130,14 @@ test("unknown or inactive add-on codes cannot be priced", () => {
           qty: 1,
           garments: [{ addon_codes: [code] }],
         },
-      ]).map((line) => Object.freeze({ ...line, unit_price_cents: 1_500 })),
+      ]).map((line) =>
+        Object.freeze({
+          ...line,
+          unit_price_cents: 1_500,
+          catalog_name: "测试衬衫",
+          catalog_code: null,
+        }),
+      ),
     );
     assert.throws(
       () => resolveTrustedPricing({}, lines, POLICY, ["order_write"]),
@@ -149,6 +163,8 @@ test("server pricing accepts equal-price aliases but rejects conflicting active 
     lines,
   );
   assert.equal(equalPrices[0]?.unit_price_cents, 1_500);
+  assert.equal(equalPrices[0]?.catalog_name, null);
+  assert.equal(equalPrices[0]?.catalog_code, null);
 
   await assert.rejects(
     resolveServerPrices(

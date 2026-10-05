@@ -81341,6 +81341,10 @@
                   "maxLength": 32,
                   "type": "string"
                 },
+                "catalog_code": {
+                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$",
+                  "type": "string"
+                },
                 "category_code": {
                   "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$",
                   "type": "string"
@@ -81550,6 +81554,10 @@
               "properties": {
                 "brand": {
                   "maxLength": 32,
+                  "type": "string"
+                },
+                "catalog_code": {
+                  "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$",
                   "type": "string"
                 },
                 "category_code": {
@@ -83041,8 +83049,26 @@
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "type": "string"
           },
+          "customer_id": {
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+            "type": "string"
+          },
           "customer_phone": {
             "pattern": "^1[3-9]\\d{9}$",
+            "type": "string"
+          },
+          "customer_query": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "date_from": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "date_to": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "type": "string"
           },
           "limit": {
@@ -83055,6 +83081,14 @@
             "minimum": 0,
             "type": "integer"
           },
+          "offset": {
+            "maximum": 1000000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ready_for_pickup": {
+            "type": "boolean"
+          },
           "status": {
             "enum": [
               "draft",
@@ -83062,6 +83096,11 @@
               "closed",
               "cancelled"
             ],
+            "type": "string"
+          },
+          "ticket_no": {
+            "maxLength": 64,
+            "minLength": 1,
             "type": "string"
           }
         },
@@ -93675,7 +93714,7 @@
     },
     "/v1/queries/order.list": {
       "post": {
-        "description": "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by store business_date, status, exact customer_phone, and/or min_balance_cents (integer fen floor on balance). Debt panel: min_balance_cents=1, limit<=50, omit business_date. Default limit 20, max 50. PII phone masked in audit. Stable query name: `order.list` @ 0.2.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
+        "description": "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by store business_date, status, exact customer_phone, and/or min_balance_cents (integer fen floor on balance). Debt panel: min_balance_cents=1, limit<=50, omit business_date. Explicit offset enables bounded pagination with total, exact ticket/customer_id, literal customer name/phone search, date range and ready_for_pickup (racked garments). Default limit 20, max 50. PII search values masked in audit. Stable query name: `order.list` @ 0.3.0. HTTP body is the registry input (args). C1 wire envelope fields (command, version, idempotency_key, dry_run, mode) wrap this payload at the bus boundary. Responses use the unified A2 CommandResponse envelope.",
         "operationId": "query_order_list",
         "requestBody": {
           "content": {
@@ -93714,7 +93753,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "List recent store orders for workbench / history / receivables browsing.",
+        "summary": "List and paginate store orders for workbench / history / receivables browsing.",
         "tags": [
           "queries"
         ],
@@ -93722,7 +93761,7 @@
         "x-laundry-kind": "query",
         "x-laundry-offline-mode": "denied",
         "x-laundry-risk": "R2",
-        "x-laundry-version": "0.2.0"
+        "x-laundry-version": "0.3.0"
       }
     },
     "/v1/queries/order.lookup": {

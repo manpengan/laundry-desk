@@ -125,6 +125,8 @@ test("registers exactly the fixed desktop capability channels", () => {
   assert.deepEqual(
     [...harness.handlers.keys()],
     [
+      DESKTOP_IPC_CHANNELS.maintenance.execute,
+      DESKTOP_IPC_CHANNELS.receiveRecovery.execute,
       DESKTOP_IPC_CHANNELS.miniappSettings.execute,
       DESKTOP_IPC_CHANNELS.paymentChannel.execute,
       DESKTOP_IPC_CHANNELS.remoteAssistance.execute,
@@ -154,6 +156,42 @@ test("registers exactly the fixed desktop capability channels", () => {
       DESKTOP_IPC_CHANNELS.printer.test,
       DESKTOP_IPC_CHANNELS.health.get,
     ],
+  );
+});
+
+test("receive recovery IPC rejects foreign frames, owner overrides and secret result fields", async () => {
+  let calls = 0;
+  const snapshot = { draft: null, pending_body: null, receipt: null };
+  const harness = createHarness({
+    ...createService(),
+    receiveRecovery: {
+      execute: async () => {
+        calls++;
+        return { ok: true, data: snapshot };
+      },
+    },
+  });
+  const invoke = getHandler(harness, DESKTOP_IPC_CHANNELS.receiveRecovery.execute);
+  const input = {
+    operation: "load",
+    expected_session: {
+      session_id: "11111111-1111-4111-8111-111111111111",
+      session_version: 1,
+    },
+  };
+  await assert.rejects(invoke(sender({ mainFrame: false }), input));
+  await assert.rejects(invoke(sender(), { ...input, staff_id: "other" }));
+  await assert.rejects(invoke(sender(), { ...input, file: "/arbitrary/path" }));
+  assert.equal(calls, 0);
+  assert.deepEqual(await invoke(sender(), input), { ok: true, data: snapshot });
+  const malformed = createHarness({
+    ...createService(),
+    receiveRecovery: {
+      execute: async () => ({ ok: true, data: { ...snapshot, idempotency_key: "secret" } }),
+    },
+  });
+  await assert.rejects(
+    getHandler(malformed, DESKTOP_IPC_CHANNELS.receiveRecovery.execute)(sender(), input),
   );
 });
 

@@ -226,12 +226,14 @@ test("settings templates, search and section switching preserve edits and expose
 }) => {
   await login(page);
   await page.locator('[data-nav-id="settings"]').click();
+  await page.getByRole("button", { name: "价目维护", exact: true }).click();
   await page.getByLabel("从常用品类开始").selectOption("wash_shirt");
   await expect(page.locator('input[name="catalog-name"]')).toHaveValue("水洗衬衫");
   await expect(page.locator('input[name="catalog-price"]')).toHaveValue("");
   await page.locator('input[name="catalog-name"]').fill("测试模板草稿");
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.locator("#settings-staff").scrollIntoViewIfNeeded();
+  await page.getByRole("button", { name: "员工与权限", exact: true }).click();
+  await expect(page.locator("#settings-staff")).toBeVisible();
   await page.getByRole("button", { name: "价目维护", exact: true }).click();
   await expectCatalogHeadingBelowHeader(page);
   await page.locator('input[name="settings-search"]').fill("主题");

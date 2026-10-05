@@ -10,12 +10,14 @@ import { DESKTOP_STAFF_CREDENTIAL_OPERATION } from "../desktop/staff-setup-opera
 import { DESKTOP_STAFF_DIRECTORY_OPERATION } from "../desktop/staff-directory-operation.js";
 import { DESKTOP_PAYMENT_CHANNEL_OPERATION } from "../desktop/payment-channel-operation.js";
 import { DESKTOP_MINIAPP_SETTINGS_OPERATION } from "../desktop/miniapp-settings-operation.js";
+import { DESKTOP_MAINTENANCE_OPERATION } from "../desktop/maintenance-operation.js";
 import { DESKTOP_SCALE_OPERATION } from "../desktop/scale-operation.js";
 import { DESKTOP_REMOTE_ASSISTANCE_OPERATION } from "../desktop/remote-assistance-operation.js";
 import { DESKTOP_AI_OPERATION } from "../desktop/ai-operation.js";
 import { DESKTOP_STORE_EXPORT_OPERATION } from "../desktop/store-export-operation.js";
 import { DESKTOP_MIGRATION_OPERATION } from "../desktop/migration-operation.js";
 import { DESKTOP_NOTIFICATION_OPERATION } from "../desktop/notification-operation.js";
+import { DESKTOP_RECEIVE_RECOVERY_OPERATION } from "../desktop/receive-recovery-operation.js";
 
 export type DesktopFrameSurface = Readonly<{
   url: string;
@@ -39,12 +41,14 @@ export type DesktopIpcMainSurface = Readonly<{
 }>;
 
 export type DesktopOperationService = Readonly<{
+  receiveRecovery?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   remoteAssistance?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   miniappSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   paymentChannel?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   ai?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   migration?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   notificationSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  maintenance?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   scale?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   storeExport?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   auth: Readonly<{
@@ -156,6 +160,24 @@ function registerOperation(
 /** Register the exact renderer capability surface; no generic dispatch channel exists. */
 export function registerDesktopOperationHandlers(options: DesktopOperationHandlerOptions): void {
   const { service } = options;
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.maintenance.execute,
+    DESKTOP_MAINTENANCE_OPERATION,
+    (input) => {
+      if (service.maintenance === undefined) throw new Error("Maintenance unavailable");
+      return service.maintenance.execute(input);
+    },
+  );
+  registerOperation(
+    options,
+    DESKTOP_IPC_CHANNELS.receiveRecovery.execute,
+    DESKTOP_RECEIVE_RECOVERY_OPERATION,
+    (input) => {
+      if (service.receiveRecovery === undefined) throw new Error("Receive recovery unavailable");
+      return service.receiveRecovery.execute(input);
+    },
+  );
   registerOperation(
     options,
     DESKTOP_IPC_CHANNELS.miniappSettings.execute,

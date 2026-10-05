@@ -48,11 +48,13 @@ export function shellPropsFrom(
     queryClient: ports.query,
     photoPort: ports.photo,
     healthPort: ports.health,
+    ...(ports.receiveRecovery === undefined ? {} : { receiveRecoveryPort: ports.receiveRecovery }),
     ...(ports.paymentChannel === undefined ? {} : { paymentChannelPort: ports.paymentChannel }),
     ...(ports.miniappSettings === undefined ? {} : { miniappSettingsPort: ports.miniappSettings }),
     ...(ports.remoteAssistance === undefined
       ? {}
       : { remoteAssistancePort: ports.remoteAssistance }),
+    ...(ports.maintenance === undefined ? {} : { maintenancePort: ports.maintenance }),
     ...(ports.scale === undefined ? {} : { scalePort: ports.scale }),
     ...(ports.storeExport === undefined ? {} : { storeExportPort: ports.storeExport }),
     ...(ports.migration === undefined ? {} : { migrationPort: ports.migration }),

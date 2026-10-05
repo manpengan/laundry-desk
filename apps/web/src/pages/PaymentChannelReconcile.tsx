@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@laundry/ui";
 import type { ChannelReconciliation } from "@laundry/contracts";
+import { ReconciliationHistoryPanel } from "./ReconciliationHistoryPanel.js";
 import type { PaymentChannelPort } from "../host/payment-channel-port.js";
 import {
   decodeStatement,
@@ -12,15 +13,10 @@ const SOURCE_LABELS = {
   wechat: "微信支付交易账单",
   alipay: "支付宝业务明细",
 } as const;
-const labels = {
-  missing_local: "本机缺少流水",
-  missing_provider: "渠道账单缺少流水",
-  amount_mismatch: "金额不同",
-  state_mismatch: "状态不同",
-  reference_mismatch: "流水号不同",
-  duplicate_provider: "渠道流水重复",
-};
-export function PaymentChannelReconcile({ port }: Readonly<{ port: PaymentChannelPort }>) {
+export function PaymentChannelReconcile({
+  port,
+  onOpenOrder,
+}: Readonly<{ port: PaymentChannelPort; onOpenOrder?: (id: string) => void }>) {
   const [channel, setChannel] = useState<"wechat" | "alipay">("wechat");
   const [date, setDate] = useState("");
   const [parsed, setParsed] = useState<ParsedStatement | null>(null);
@@ -61,11 +57,16 @@ export function PaymentChannelReconcile({ port }: Readonly<{ port: PaymentChanne
     const current = generation.current;
     setBusy(true);
     setMessage("");
-    const response = await port.reconcile(input);
-    if (current !== generation.current) return;
-    setBusy(false);
-    if (response.ok) setResult(response.data);
-    else setMessage(response.error);
+    try {
+      const response = await port.reconcile(input);
+      if (current !== generation.current) return;
+      if (response.ok) setResult(response.data);
+      else setMessage(response.error);
+    } catch {
+      if (current === generation.current) setMessage("对账结果未确认，请先查看历史记录再重试。");
+    } finally {
+      if (current === generation.current) setBusy(false);
+    }
   };
   return (
     <section className="ld-panel" aria-label="支付账单对账">
@@ -150,18 +151,13 @@ export function PaymentChannelReconcile({ port }: Readonly<{ port: PaymentChanne
             匹配 {result.matched_count} 笔，差异 {result.mismatches.length} 笔。
           </p>
           <p className="ld-panel__meta">账单校验值：{result.source_sha256}</p>
-          <ul className="ld-panel__list">
-            {result.mismatches.slice(0, 100).map((row, index) => (
-              <li className="ld-panel__item" key={`${row.merchant_order}:${index}`}>
-                {row.merchant_order} · {row.merchant_refund ?? "收款"} · {labels[row.reason]}
-              </li>
-            ))}
-          </ul>
-          {result.mismatches.length > 100 && (
-            <p className="ld-panel__meta">页面显示前 100 条；全部差异已保存在本机对账记录中。</p>
-          )}
         </div>
       )}
+      <ReconciliationHistoryPanel
+        port={port}
+        {...(result ? { latestId: result.reconciliation_id } : {})}
+        {...(onOpenOrder ? { onOpenOrder } : {})}
+      />
     </section>
   );
 }

@@ -1,5 +1,5 @@
 import { Button, cn, Icon, Input, type IconName } from "@laundry/ui";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { StoreSetupChecklist } from "./StoreSetupChecklist.js";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { QueryPort } from "../commands/types.js";
@@ -11,25 +11,13 @@ export type SettingsSection = Readonly<{
   icon: IconName;
   content: ReactNode;
 }>;
-const GROUPS = [
-  { label: "营业设置", ids: ["catalog", "pricing", "delivery", "member", "payments", "staff"] },
-  {
-    label: "设备与数据",
-    ids: ["appearance", "offline", "printer", "store-export", "migration", "support"],
-  },
-  {
-    label: "服务接入",
-    ids: ["notification", "ai", "miniapp", "miniapp-notifications", "remote-assistance"],
-  },
-] as const;
-const KEYWORDS: Readonly<Record<string, string>> = {
-  "settings-catalog": "衣物 价格 单价 模板",
-  "settings-pricing": "加急 运费 附加 折扣",
-  "settings-appearance": "深色 浅色 主题 字体",
-  "settings-notification": "短信 通知 阿里云",
-  "settings-staff": "店员 店长 复核 账号",
-  "settings-payments": "微信 支付宝 收款 商户",
-};
+import {
+  SETTINGS_GROUPS,
+  SETTINGS_KEYWORDS,
+  isAdvancedSection,
+  readSettingsSection,
+  saveSettingsSection,
+} from "./settings-navigation.js";
 export function SettingsLayout({
   sections,
   session,
@@ -41,16 +29,34 @@ export function SettingsLayout({
   authClient: AuthClient;
   queryClient?: QueryPort | undefined;
 }>) {
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(
+    () =>
+      sections.find((section) => section.id === "settings-catalog")?.id ?? sections[0]?.id ?? "",
+  );
+  const sectionIds = sections.map((section) => section.id).join("|");
+  const [preferenceError, setPreferenceError] = useState<string | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  useEffect(() => {
+    const preference = readSettingsSection(sectionIds.split("|").filter(Boolean));
+    setSelected(preference.selected);
+    setAdvancedOpen(isAdvancedSection(preference.selected));
+    setPreferenceError(preference.error);
+    // Read once per signed-in settings workspace; every later selection is checked against current sections.
+  }, [session.session.staff_id, session.session.store_id, sectionIds]);
   const [search, setSearch] = useState("");
   const content = useRef<HTMLDivElement>(null);
   const query = search.trim().toLocaleLowerCase();
   const matching = sections.filter((section) =>
-    `${section.label} ${KEYWORDS[section.id] ?? ""}`.toLocaleLowerCase().includes(query),
+    `${section.label} ${SETTINGS_KEYWORDS[section.id] ?? ""}`.toLocaleLowerCase().includes(query),
   );
   const select = (id: string) => {
+    if (id !== "" && !sections.some((section) => section.id === id)) return;
     setSearch("");
     setSelected(id);
+    if (id !== "") {
+      setPreferenceError(saveSettingsSection(id));
+      if (isAdvancedSection(id)) setAdvancedOpen(true);
+    }
     // Keep every panel mounted so narrowing settings never discards an edited form.
     requestAnimationFrame(() => {
       const target = content.current;
@@ -72,6 +78,7 @@ export function SettingsLayout({
           onSelect={select}
         />
       ) : null}
+      {preferenceError === null ? null : <p role="status">{preferenceError}</p>}
       <div className="ld-settings-layout">
         <nav className="ld-settings-nav" aria-label="设置分区">
           <Input
@@ -81,14 +88,13 @@ export function SettingsLayout({
             value={search}
             onChange={(event) => {
               setSearch(event.target.value);
-              setSelected("");
             }}
           />
           <label className="ld-settings-mobile-select ld-field">
             <span className="ld-field__label">查看分区</span>
             <select
               className="ld-select ld-input"
-              value={selected}
+              value={query.length > 0 ? "" : selected}
               onChange={(event) => select(event.target.value)}
             >
               <option value="">全部设置</option>
@@ -103,12 +109,23 @@ export function SettingsLayout({
             <Button variant="ghost" onClick={() => select("")}>
               查看全部设置
             </Button>
-            {GROUPS.map((group) => {
+            <Button
+              variant="ghost"
+              aria-expanded={advancedOpen || query.length > 0}
+              onClick={() => setAdvancedOpen((value) => !value)}
+            >
+              高级设置
+            </Button>
+            {SETTINGS_GROUPS.map((group) => {
               const items = matching.filter((section) =>
                 group.ids.some((id) => section.id === `settings-${id}`),
               );
               return items.length === 0 ? null : (
-                <div key={group.label} className="ld-settings-nav__group">
+                <div
+                  key={group.label}
+                  className="ld-settings-nav__group"
+                  hidden={group.advanced && !advancedOpen && query.length === 0}
+                >
                   <h2>{group.label}</h2>
                   {items.map((section) => (
                     <button
@@ -131,13 +148,22 @@ export function SettingsLayout({
           </div>
         </nav>
         <div ref={content} className="ld-settings-content" tabIndex={-1} aria-label="设置内容">
+          {query.length === 0 && selected !== "" ? (
+            <p className="ld-settings-selection-hint">
+              当前分区：{sections.find((section) => section.id === selected)?.label}
+              。切换分区会保留未保存的编辑。
+            </p>
+          ) : null}
           {matching.length === 0 ? <p role="status">没有找到相关设置，请换一个关键词。</p> : null}
           {sections.map((section) => (
             <div
               key={section.id}
               id={section.id}
               className="ld-settings-anchor"
-              hidden={!matching.includes(section) || (selected !== "" && selected !== section.id)}
+              hidden={
+                !matching.includes(section) ||
+                (query.length === 0 && selected !== "" && selected !== section.id)
+              }
             >
               {section.content}
             </div>

@@ -116,6 +116,13 @@ test("staff scope clears unadopted scale readings while same-staff navigation re
       buttons("刷新串口")[0]!.props.onClick();
     });
     await act(async () => {
+      // Discovering a port does not select an arbitrary attached device.
+      const serial = renderer!.root.findByProps({ "aria-label": "电子秤串口" });
+      (serial.props.onChange as (event: { target: { value: string } }) => void)({
+        target: { value: "COM7" },
+      });
+    });
+    await act(async () => {
       buttons("读取稳定重量")[0]!.props.onClick();
     });
     assert.equal(buttons("记录到订单").length, 1);

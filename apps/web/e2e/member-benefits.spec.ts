@@ -127,6 +127,10 @@ test("member tiers, points, punch cards and coupons complete a real PostgreSQL b
     catalog.locator('[data-testid="catalog-admin-row"]', { hasText: FIXTURE.catalogCode }),
   ).toBeVisible({ timeout: 15_000 });
 
+  await page
+    .getByRole("navigation", { name: "设置分区" })
+    .getByRole("button", { name: "会员权益", exact: true })
+    .click();
   const definitions = page.locator('[data-testid="benefit-definitions"]');
   await expect(definitions).toBeVisible();
   await saveDefinition(page, "tier");
@@ -145,6 +149,7 @@ test("member tiers, points, punch cards and coupons complete a real PostgreSQL b
   await page.locator('[data-testid="customers-search-btn"]').click();
   await page.locator('[data-testid="customers-row"]', { hasText: FIXTURE.customerName }).click();
 
+  await page.getByRole("button", { name: "会员充值与权益", exact: true }).click();
   const storedValue = page.locator('[aria-label="会员储值"]');
   await storedValue.getByRole("button", { name: "开通会员账户" }).click();
   await expect(page.locator(".ld-toast").last()).toContainText("会员账户已开通", {

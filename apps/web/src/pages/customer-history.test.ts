@@ -29,7 +29,7 @@ test("loads customer orders and keeps only their print references", async () => 
   const client = createMockQueryClient(async <T = unknown>(name: string) => {
     const result =
       name === "order.list"
-        ? { orders: [ORDER] }
+        ? { orders: [ORDER], total: 1, offset: 0, limit: 20 }
         : {
             jobs: [
               PRINT_JOB,
@@ -44,7 +44,13 @@ test("loads customer orders and keeps only their print references", async () => 
 
   const history = await loadCustomerHistory(client, "13800000111");
 
-  assert.deepEqual(history, { orders: [ORDER], printJobs: [PRINT_JOB] });
+  assert.deepEqual(history, {
+    orders: [ORDER],
+    total: 1,
+    offset: 0,
+    limit: 20,
+    printJobs: [PRINT_JOB],
+  });
 });
 
 test("preserves order history when print status is unavailable", async () => {
@@ -54,7 +60,7 @@ test("preserves order history when print status is unavailable", async () => {
           ok: true as const,
           data: Object.freeze({
             execution: "executed",
-            result: Object.freeze({ orders: [ORDER] }),
+            result: Object.freeze({ orders: [ORDER], total: 1, offset: 0, limit: 20 }),
           }) as T,
         })
       : Object.freeze({
@@ -65,6 +71,9 @@ test("preserves order history when print status is unavailable", async () => {
 
   assert.deepEqual(await loadCustomerHistory(client, "13800000111"), {
     orders: [ORDER],
+    total: 1,
+    offset: 0,
+    limit: 20,
     printJobs: null,
   });
 });

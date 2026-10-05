@@ -9,6 +9,7 @@ import type { OfflinePort } from "../host/offline-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
 import { AiSettingsPanel } from "../ai/AiSettingsPanel.js";
+import type { MaintenancePort } from "../host/maintenance-port.js";
 import type { StoreExportPort } from "../host/store-export-port.js";
 import type { PaymentChannelPort } from "../host/payment-channel-port.js";
 import type { MiniappSettingsPort } from "../host/miniapp-settings-port.js";
@@ -20,6 +21,7 @@ import { RemoteAssistancePanel } from "./RemoteAssistancePanel.js";
 import type { MigrationPort } from "../host/migration-port.js";
 import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
 import { NotificationSettingsPanel } from "./NotificationSettingsPanel.js";
+import { BackupHealthPanel } from "./BackupHealthPanel.js";
 import { StoreExportPanel } from "./StoreExportPanel.js";
 import { V1MigrationPanel } from "./V1MigrationPanel.js";
 import { AppearanceSettingsPanel } from "./AppearanceSettingsPanel.js";
@@ -45,6 +47,7 @@ export type SettingsPageProps = {
   printerPort?: PrinterPort;
   aiSettingsPort?: AiSettingsPort;
   migrationPort?: MigrationPort;
+  maintenancePort?: MaintenancePort;
   storeExportPort?: StoreExportPort;
   paymentChannelPort?: PaymentChannelPort;
   miniappSettingsPort?: MiniappSettingsPort;
@@ -68,6 +71,7 @@ export function SettingsPage({
   printerPort,
   aiSettingsPort,
   migrationPort,
+  maintenancePort,
   storeExportPort,
   paymentChannelPort,
   miniappSettingsPort,
@@ -84,6 +88,18 @@ export function SettingsPage({
       content: <AppearanceSettingsPanel />,
     },
   ];
+  sections.push({
+    id: "settings-backup",
+    label: "备份与恢复",
+    icon: "settings",
+    content: (
+      <BackupHealthPanel
+        {...(maintenancePort === undefined ? {} : { port: maintenancePort })}
+        canMaintain={session.role === "admin"}
+        sessionKey={`${session.session.session_id}:${session.session.session_version}`}
+      />
+    ),
+  });
   if (session.role === "admin" && paymentChannelPort !== undefined)
     sections.push({
       id: "settings-payments",
@@ -93,6 +109,7 @@ export function SettingsPage({
         <PaymentChannelPanel
           key={session.session.session_id + ":" + session.session.session_version}
           port={paymentChannelPort}
+          {...(queryClient ? { queryClient } : {})}
           authClient={authClient}
           commandClient={commandClient}
           session={session}
@@ -145,6 +162,7 @@ export function SettingsPage({
       content: (
         <StoreExportPanel
           port={storeExportPort}
+          {...(maintenancePort === undefined ? {} : { maintenancePort })}
           sessionKey={session.session.session_id + ":" + session.session.session_version}
         />
       ),
@@ -157,6 +175,7 @@ export function SettingsPage({
       content: (
         <V1MigrationPanel
           port={migrationPort}
+          {...(maintenancePort === undefined ? {} : { maintenancePort })}
           sessionKey={`${session.session.session_id}:${session.session.session_version}`}
         />
       ),

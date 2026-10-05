@@ -233,3 +233,26 @@ test("backup health reminds about an off-machine copy until one is recent", asyn
 function fail(code) {
   throw new Error(code);
 }
+test("health includes verified manual backup and drill timestamps without private paths", async (t) => {
+  const f = await fixture(t);
+  const { recordBackupHealth } = await import("./backup-health-record.mjs");
+  const { scheduleHealth } = await import("./schedule-maintenance.mjs");
+  const now = Date.parse("2026-10-06T00:00:00.000Z");
+  await recordBackupHealth(f.context, "backup-drill", now - 1000);
+  await recordOffsiteExport(f.context, now - 2000);
+  await managedScheduleTask(f.lifecycle, "register", f.config, f.deps.task);
+  const health = await scheduleHealth(f.lifecycle, now, f.deps.task);
+  assert.equal(health.last_backup_at, "2026-10-05T23:59:59.000Z");
+  assert.equal(health.last_drill_at, "2026-10-05T23:59:59.000Z");
+  assert.equal(health.last_offsite_at, "2026-10-05T23:59:58.000Z");
+  assert.ok(Date.parse(health.next_backup_at) > now);
+  assert.equal(health.alerts.includes("backup_overdue"), false);
+  assert.equal(health.alerts.includes("drill_overdue"), false);
+  await f.context.io.write(
+    join(f.context.root, "backup-schedule.json"),
+    JSON.stringify({ ...f.config, enabled: false }),
+  );
+  const disabled = await scheduleHealth(f.lifecycle, now, f.deps.task);
+  assert.equal(disabled.next_backup_at, null);
+  assert.ok(disabled.alerts.includes("backup_disabled"));
+});

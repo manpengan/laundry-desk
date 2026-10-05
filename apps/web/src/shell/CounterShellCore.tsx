@@ -47,6 +47,8 @@ import { ReceiveWorkspaceProvider, useReceiveWorkspaceAccess } from "../pages/Re
 import { hasReceiveWork } from "../pages/receive-workspace.js";
 import { useLiveConnection } from "./use-live-connection.js";
 import { usePrintJobSummary } from "./use-print-job-summary.js";
+import { readSidebarExpanded, writeSidebarExpanded } from "./sidebar-preference.js";
+import type { ReceiveRecoveryPort } from "../host/receive-recovery-port.js";
 
 export type CounterShellProps = {
   session: SessionView;
@@ -54,6 +56,7 @@ export type CounterShellProps = {
   commandClient: CommandPort;
   queryClient: QueryPort;
   photoPort?: PhotoPort;
+  receiveRecoveryPort?: ReceiveRecoveryPort;
   healthPort?: HealthPort;
   offlinePort?: OfflinePort;
   printerPort?: PrinterPort;
@@ -82,8 +85,6 @@ export type CounterShellProps = {
 type CounterShellCoreProps = CounterShellProps &
   Readonly<{ PageHostComponent: ComponentType<PageHostProps> }>;
 
-const SIDEBAR_STORAGE_KEY = "ld.counter.sidebar";
-
 const READ_ONLY_COMMAND_PORT: CommandPort = Object.freeze({
   execute: async <T,>(): Promise<
     Readonly<
@@ -104,29 +105,14 @@ function readSystemDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-function readSidebarExpanded(): boolean {
-  try {
-    return (
-      typeof window !== "undefined" && window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1"
-    );
-  } catch {
-    return false;
-  }
-}
-
-function writeSidebarExpanded(expanded: boolean): void {
-  try {
-    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, expanded ? "1" : "0");
-  } catch {
-    // Storage is a convenience only.
-  }
-}
-
 export function CounterShellCore(props: CounterShellCoreProps) {
   const scope = props.session.session;
   return (
     <ReceiveWorkspaceProvider
       scope={`${scope.org_id}:${scope.store_id}:${scope.session_id}:${scope.staff_id}:${scope.session_version}`}
+      {...(props.receiveRecoveryPort === undefined ? {} : { recovery: props.receiveRecoveryPort })}
+      session={props.session}
+      query={props.queryClient}
     >
       <CounterShellContent {...props} />
     </ReceiveWorkspaceProvider>
@@ -189,14 +175,20 @@ function CounterShellContent({
   const openStaffSwitch = useCallback(() => {
     void (async () => {
       const current = receiveStore.getSnapshot();
-      if (current.busy || current.phase === "uncertain") {
+      if (
+        current.busy ||
+        current.phase === "uncertain" ||
+        !["browser", "ready"].includes(current.recoveryStatus)
+      ) {
         setActiveId("receive");
         return;
       }
       if (
         hasReceiveWork(current) &&
         !(await confirmDiscard(
-          "切换员工会清除本会话未暂存的开单内容。需要保留时，请先返回开单页暂存。",
+          current.recoveryStatus === "browser"
+            ? "切换员工会清除本会话未暂存的开单内容。需要保留时，请先返回开单页暂存。"
+            : "开单内容已加密保留在本机，切换后仅原员工重新登录可恢复。确认切换员工？",
         ))
       )
         return;

@@ -3,6 +3,7 @@ import { DESKTOP_MAX_JSON_BYTES, type DesktopSessionView } from "@laundry/contra
 import type { DesktopHttpTransportDependencies } from "./http-transport-ports.js";
 import { isRecord, type JsonHttpResponse } from "./http-transport-support.js";
 import { createDesktopRequest, type DesktopRequestOptions } from "./request-builder.js";
+import type { ReceiveRecoveryJournal } from "./receive-recovery-journal.js";
 
 const MAX_UNCONFIRMED_COMMANDS = 128;
 const ENCODER = new TextEncoder();
@@ -27,6 +28,7 @@ export function createDesktopJsonRequester(
   request: DesktopHttpTransportDependencies["request"],
   currentSession: () => DesktopSessionView | null,
   newKey: () => string = randomUUID,
+  receiveJournal?: ReceiveRecoveryJournal,
 ) {
   let activeScope: string | null = null;
   let pending = new Map<string, string>();
@@ -37,7 +39,8 @@ export function createDesktopJsonRequester(
     options?: DesktopRequestOptions,
   ): Promise<JsonHttpResponse | null> => {
     try {
-      const session = currentSession()?.session;
+      const sessionView = currentSession();
+      const session = sessionView?.session;
       const scope =
         session === undefined
           ? null
@@ -60,12 +63,21 @@ export function createDesktopJsonRequester(
       const owned = confirmationRef === null ? pending : confirmations;
       const ownedConfirmations = confirmations;
       const original = createDesktopRequest(method, path, options);
+      const durableReceive =
+        receiveJournal !== undefined &&
+        sessionView !== null &&
+        method === "POST" &&
+        path === "/v1/commands/order.receive" &&
+        options?.operationId !== undefined &&
+        typeof original.body === "string"
+          ? receiveJournal.prepare(sessionView, options.operationId, original.body)
+          : null;
       const fingerprint =
         method === "POST" && path.startsWith("/v1/commands/") && scope !== null
           ? `${path}\n${confirmationRef === null ? `${options?.operationId ?? ""}\n${String(original.body ?? "")}` : confirmationRef}`
           : null;
-      let key: string | undefined;
-      if (fingerprint !== null) {
+      let key: string | undefined = durableReceive?.key;
+      if (fingerprint !== null && durableReceive === null) {
         key = owned.get(fingerprint);
         if (key === undefined) {
           if (owned.size >= MAX_UNCONFIRMED_COMMANDS) return null;
@@ -92,6 +104,14 @@ export function createDesktopJsonRequester(
         statusCode: response.statusCode,
         payload: JSON.parse(response.bodyText) as unknown,
       });
+      if (durableReceive !== null && sessionView !== null && definitive(result)) {
+        receiveJournal!.confirm(
+          sessionView,
+          durableReceive.operation_id,
+          durableReceive.body,
+          result,
+        );
+      }
       if (
         fingerprint !== null &&
         key !== undefined &&

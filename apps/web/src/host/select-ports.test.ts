@@ -64,12 +64,14 @@ test("selectHost accepts only the normalized app://local authority with a valid 
 
 test("selectHost accepts only the named optional operation capabilities", () => {
   const names = [
+    "receiveRecovery",
     "ai",
     "migration",
     "notificationSettings",
     "paymentChannel",
     "miniappSettings",
     "remoteAssistance",
+    "maintenance",
     "scale",
     "storeExport",
   ] as const;

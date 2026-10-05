@@ -103,6 +103,9 @@ export type GarmentDetailRecord = Readonly<{
 }>;
 
 export type OrderLineRecord = Readonly<{
+  /** Server catalog name at receipt; null for legacy rows. */
+  catalog_name?: string | null;
+  catalog_code?: string | null;
   line_index: number;
   service_code: string;
   category_code: string;
@@ -192,6 +195,13 @@ export type OrderListSummaryOptions = Readonly<{
   status?: OrderStatus;
   customerPhone?: string;
   minBalanceCents?: number;
+  customerId?: string;
+  ticketNo?: string;
+  customerQuery?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  readyForPickup?: boolean;
+  offset?: number;
   limit: number;
 }>;
 
@@ -283,6 +293,11 @@ export type OrderStore = Readonly<{
     storeId: string,
     options: OrderListSummaryOptions,
   ) => Promise<readonly OrderListSummary[]>;
+  listOrderPage?: (
+    orgId: string,
+    storeId: string,
+    options: OrderListSummaryOptions,
+  ) => Promise<Readonly<{ orders: readonly OrderListSummary[]; total: number }>>;
   /** Indexed, bounded identifier lookup for the counter pickup flow. */
   lookupOrderSummaries?: (
     orgId: string,

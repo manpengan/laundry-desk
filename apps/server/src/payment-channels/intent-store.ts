@@ -198,10 +198,11 @@ export async function channelAudit(
   command: string,
   entityId: string,
   result: Readonly<Record<string, unknown>>,
+  entity: "payment_channel_intent" | "payment_channel_reconciliation" = "payment_channel_intent",
 ) {
   await client.query(
     `INSERT INTO audit_log(id,org_id,store_id,staff_id,via,command,dry_run,entity,entity_id,after_json,at)
-    VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,'api',$5,false,'payment_channel_intent',$6,$7,statement_timestamp())`,
+    VALUES($1::uuid,$2::uuid,$3::uuid,$4::uuid,'api',$5,false,$8,$6,$7,statement_timestamp())`,
     [
       randomUUID(),
       tenant.orgId,
@@ -210,6 +211,7 @@ export async function channelAudit(
       command,
       entityId,
       JSON.stringify(result),
+      entity,
     ],
   );
 }

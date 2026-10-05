@@ -28,6 +28,10 @@ files:
   - dist/desktop/migration-operation.js
   - dist/desktop/notification-operation.js
   - dist/desktop/auxiliary-operations.js
+  - dist/desktop/maintenance-operation.js
+  - dist/maintenance/runtime-binding.js
+  - dist/maintenance/windows-port.js
+  - dist/maintenance/windows-script.js
   - dist/desktop/scale-operation.js
   - dist/scale/protocol.js
   - dist/scale/windows-script.js
@@ -42,6 +46,8 @@ files:
   - dist/desktop/edge-http.js
   - dist/desktop/electron-photo-request.js
   - dist/desktop/command-request.js
+  - dist/desktop/receive-recovery-journal.js
+  - dist/desktop/receive-recovery-operation.js
   - dist/desktop/http-transport.js
   - dist/desktop/http-transport-ports.js
   - dist/desktop/http-transport-support.js

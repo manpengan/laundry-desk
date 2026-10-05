@@ -1,39 +1,21 @@
-import { Icon, MaskedPhone, MoneyText, StatusBadge } from "@laundry/ui";
+import { MaskedPhone, MoneyText, StatusBadge } from "@laundry/ui";
 
-import type { PhotoPort } from "../host/photo-port.js";
+import type { ReactNode } from "react";
 import type { OrderGetGarment, OrderGetResult } from "./order-form.js";
 import { serviceLabel } from "./catalog-services.js";
 import { discountPolicyLabel, waiverPolicyLabel } from "./order-policy-labels.js";
-import { PhotoGallery } from "./PhotoGallery.js";
-import type { PhotoMetaRow } from "./photo-list.js";
+import { OrderPhotosPanel, type OrderPhotosPanelProps } from "./OrderPhotosPanel.js";
 
-export type OrderDetailContentProps = {
+export type OrderDetailContentProps = Omit<OrderPhotosPanelProps, "order"> & {
   order: OrderGetResult;
-  photos?: readonly PhotoMetaRow[];
-  photoLoading?: boolean;
-  photoError?: string | null;
-  onRetryPhotos?: () => void;
-  onRegisterPhoto?: (file: File) => void;
-  uploadError?: string | null;
-  onRetryUpload?: () => void;
-  onDeletePhoto?: (photoId: string) => Promise<boolean>;
-  registerBusy?: boolean;
-  photoPort?: PhotoPort;
+  photoSection?: ReactNode;
 };
 
 /** Pure detail body, kept separate so the action controller stays compact. */
 export function OrderDetailContent({
   order,
-  photos = [],
-  photoLoading = false,
-  photoError = null,
-  onRetryPhotos,
-  onRegisterPhoto,
-  uploadError = null,
-  onRetryUpload,
-  onDeletePhoto,
-  registerBusy = false,
-  photoPort,
+  photoSection,
+  ...photoProps
 }: OrderDetailContentProps) {
   return (
     <>
@@ -127,63 +109,7 @@ export function OrderDetailContent({
           </dl>
         </details>
       </section>
-      <section className="ld-order-detail__photos" aria-label="照片">
-        <div className="ld-order-detail__section-head">
-          <h3 className="ld-order-detail__section-title">照片</h3>
-          <span className="ld-order-detail__photo-count" data-testid="order-detail-photo-count">
-            {photoLoading || photoError !== null ? "—" : `${photos.length} 张`}
-          </span>
-        </div>
-        <div className="ld-order-detail__photo-strip" data-testid="order-detail-photos">
-          {photoLoading ? (
-            <p className="ld-order-detail__photo-empty">照片加载中…</p>
-          ) : photoError !== null ? (
-            <div className="ld-order-detail__photo-error" role="alert">
-              <p>照片暂时无法加载：{photoError}</p>
-              {onRetryPhotos !== undefined ? (
-                <button type="button" onClick={onRetryPhotos}>
-                  重试照片
-                </button>
-              ) : null}
-            </div>
-          ) : photos.length === 0 ? (
-            <p className="ld-order-detail__photo-empty">暂无照片</p>
-          ) : (
-            <PhotoGallery
-              photos={photos}
-              {...(photoPort === undefined ? {} : { photoPort })}
-              {...(onDeletePhoto === undefined ? {} : { onDelete: onDeletePhoto })}
-            />
-          )}
-        </div>
-        {onRegisterPhoto !== undefined ? (
-          <label className="ld-order-detail__photo-upload">
-            <Icon name="camera" size={16} />
-            <span>{registerBusy ? "上传中…" : "上传照片"}</span>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0];
-                if (file !== undefined) onRegisterPhoto(file);
-                event.currentTarget.value = "";
-              }}
-              disabled={registerBusy || order.garments.length === 0}
-              data-testid="order-detail-register-photo-btn"
-            />
-          </label>
-        ) : null}
-        {uploadError !== null ? (
-          <div className="ld-order-detail__photo-error" role="alert">
-            <p>照片上传失败：{uploadError}</p>
-            {onRetryUpload !== undefined ? (
-              <button type="button" disabled={registerBusy} onClick={onRetryUpload}>
-                重试上传
-              </button>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
+      {photoSection ?? <OrderPhotosPanel key={order.order_id} order={order} {...photoProps} />}
       <section className="ld-order-detail__garments" aria-label="衣物列表">
         <h3 className="ld-order-detail__section-title">衣物</h3>
         {order.garments.length === 0 ? (
@@ -219,8 +145,8 @@ function GarmentRow({ garment }: { garment: OrderGetGarment }) {
         <MoneyText fen={garment.unit_price_cents} size="sm" />
       </div>
       <span className="ld-order-detail__garment-kind">
-        {garment.service_code === "" ? "—" : serviceLabel(garment.service_code)} ·{" "}
-        {garment.category_code || "—"}
+        {garment.catalog_name ??
+          `${serviceLabel(garment.service_code)} · ${garment.category_code || "—"}`}
       </span>
       {details.length === 0 ? null : (
         <span className="ld-order-detail__garment-details">{details.join("；")}</span>

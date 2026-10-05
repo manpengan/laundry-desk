@@ -1,3 +1,4 @@
+import { readBackupHealthRecord } from "./backup-health-record.mjs";
 import { rm, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { digest, exactKeys, fail } from "./companion-contract.mjs";
@@ -81,7 +82,17 @@ export async function scheduleHealth(context, now = Date.now(), task = scheduleT
     latest = records.at(-1);
   const success = records.findLast((record) => record.status === "succeeded");
   const drill = records.findLast((record) => record.status === "succeeded" && record.drilled);
+  const manual = await readBackupHealthRecord(context);
+  const mostRecent = (left, right) =>
+    !left ? right : !right ? left : Date.parse(left) > Date.parse(right) ? left : right;
+  const lastBackup = mostRecent(success?.at ?? null, manual.last_backup_at);
+  const lastDrill = mostRecent(drill?.at ?? null, manual.last_drill_at);
+  const next = new Date(now);
+  next.setHours(config.hour, config.minute, 0, 0);
+  if (next.getTime() <= now) next.setDate(next.getDate() + 1);
   const alerts = [];
+  if (!config.enabled) alerts.push("backup_disabled");
+  if (await readMaintenance(context.io, context.root)) alerts.push("interrupted");
   if (config.enabled) {
     try {
       if (!(await managedScheduleTask(context, "inspect", config, task)).exists)
@@ -91,17 +102,27 @@ export async function scheduleHealth(context, now = Date.now(), task = scheduleT
     }
   }
   if (free < config.minimum_free_mib) alerts.push("low_space");
-  if (latest && latest.status !== "succeeded")
-    alerts.push(latest.status === "started" ? "interrupted" : "last_run_failed");
-  if (config.enabled && (!success || now - Date.parse(success.at) > 2 * 86400000))
+  if (latest && latest.status !== "succeeded") {
+    const alert = latest.status === "started" ? "interrupted" : "last_run_failed";
+    if (!alerts.includes(alert)) alerts.push(alert);
+  }
+  if (config.enabled && (!lastBackup || now - Date.parse(lastBackup) > 2 * 86400000))
     alerts.push("backup_overdue");
-  if (config.enabled && (!drill || now - Date.parse(drill.at) > config.drill_days * 86400000))
+  if (config.enabled && (!lastDrill || now - Date.parse(lastDrill) > config.drill_days * 86400000))
     alerts.push("drill_overdue");
   const offsite = await read(context, "offsite-export.json", null, requireOffsite);
   if (!offsite || now - Date.parse(offsite.at) > OFFSITE_DAYS * 86400000)
     alerts.push("offsite_overdue");
   return {
     status: "backup_health",
+    checked_at: new Date(now).toISOString(),
+    last_backup_at: lastBackup,
+    last_drill_at: lastDrill,
+    last_offsite_at: offsite?.at ?? null,
+    next_backup_at:
+      config.enabled && !alerts.includes("task_missing") && !alerts.includes("task_unavailable")
+        ? next.toISOString()
+        : null,
     config,
     latest: latest ?? null,
     free_mib: free,

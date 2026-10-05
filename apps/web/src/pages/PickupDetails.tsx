@@ -38,7 +38,9 @@ export function PickupGarmentCheckRow({
           data-testid={`pickup-garment-${garment.garment_id}`}
         />
         <span className="ld-pickup-garments__body">
-          <strong>{garmentName(garment.service_code, garment.category_code)}</strong>
+          <strong>
+            {garment.catalog_name ?? garmentName(garment.service_code, garment.category_code)}
+          </strong>
           <span className="ld-pickup-garments__meta-line">
             {[garment.color, garment.brand].filter(Boolean).join(" · ") || "未记录颜色与品牌"} · 第{" "}
             {garment.line_index + 1} 行第 {garment.seq} 件
@@ -113,7 +115,8 @@ export function PickupResult({ result }: Readonly<{ result: PickupResultView }>)
             <li key={id} className="ld-order-result__garment">
               <span>
                 {garment
-                  ? garmentName(garment.service_code, garment.category_code)
+                  ? (garment.catalog_name ??
+                    garmentName(garment.service_code, garment.category_code))
                   : `衣物 ${index + 1}`}
               </span>
               {garment ? (

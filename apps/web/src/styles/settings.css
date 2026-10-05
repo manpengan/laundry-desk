@@ -345,3 +345,12 @@
     overflow-y: auto;
   }
 }
+
+.ld-settings-nav__group[hidden] {
+  display: none;
+}
+.ld-settings-selection-hint {
+  margin: 0 0 12px;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-sm);
+}

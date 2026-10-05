@@ -131,6 +131,18 @@ export function createOfflineDesktopService(
           ? Promise.resolve(unavailable())
           : online.scale.execute(input),
     }),
+    receiveRecovery: Object.freeze({
+      execute: (input: unknown) =>
+        isMutationBlocked() || online.receiveRecovery === undefined
+          ? Promise.resolve({
+              ok: false,
+              error: {
+                code: "RECOVERY_UNAVAILABLE",
+                message: "当前为只读模式，不能恢复或提交开单",
+              },
+            })
+          : online.receiveRecovery.execute(input),
+    }),
     storeExport: Object.freeze({
       execute: (input: unknown) =>
         isMutationBlocked() || online.storeExport === undefined

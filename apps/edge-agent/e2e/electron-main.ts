@@ -27,10 +27,17 @@ export function captureMainProcessOutput(application: ElectronApplication) {
   });
 }
 
+const retriedEvaluations: string[] = [];
+
+/** Main-process evaluations this run retried after a destroyed context, for the evidence. */
+export function retriedMainEvaluations(): readonly string[] {
+  return Object.freeze([...retriedEvaluations]);
+}
+
 /**
  * "Execution context was destroyed" also happens when the main window reloads. Only a
  * main process that has exited is a failure; a live one is asked once more after its
- * first window is available again.
+ * first window is available again, and the retry is recorded so a pass cannot hide it.
  */
 export async function evaluateInMain<R>(
   application: ElectronApplication,
@@ -46,6 +53,7 @@ export async function evaluateInMain<R>(
         `Electron main process exited (code ${String(child.exitCode)}, signal ${String(child.signalCode)})`,
         { cause: error },
       );
+    retriedEvaluations.push(String(error).split("\n")[0] ?? "");
     await application.firstWindow();
     return await run();
   }

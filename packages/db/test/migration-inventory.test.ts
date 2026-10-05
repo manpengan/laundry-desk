@@ -86,6 +86,8 @@ const expectedSqlFiles = [
   "0078_miniapp_transactions.sql",
   "0079_miniapp_notifications.sql",
   "0080_ai_usage_quarantine_threshold.sql",
+  "0081_payment_reconciliation_reviews.sql",
+  "0082_order_catalog_name_snapshot.sql",
 ] as const;
 
 describe("packages/db migration inventory", () => {

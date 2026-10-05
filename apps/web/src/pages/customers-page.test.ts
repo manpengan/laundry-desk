@@ -129,7 +129,7 @@ test("CustomersPage SSR shell shows search + upsert controls", () => {
   assert.doesNotMatch(html, /rgb\(/i);
 });
 
-test("CustomersPage SSR with mock query still renders empty list under SSR", () => {
+test("CustomersPage SSR does not claim an empty result before loading", () => {
   const queryClient = createMockQueryClient(async <T = unknown>(name: string) => {
     if (name === "customer.search") {
       return Object.freeze({
@@ -160,7 +160,8 @@ test("CustomersPage SSR with mock query still renders empty list under SSR", () 
   );
   assert.match(html, /按手机号、姓名或会员标识查找/);
   // useEffect does not run under SSR
-  assert.match(html, /暂无匹配客户/);
+  assert.match(html, /输入条件后搜索客户/);
+  assert.doesNotMatch(html, /暂无匹配客户/);
   assert.doesNotMatch(html, /data-testid="customer-detail"/);
 });
 

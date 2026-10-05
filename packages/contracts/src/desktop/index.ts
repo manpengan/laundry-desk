@@ -83,3 +83,5 @@ export * from "./remote-assistance.js";
 export * from "./miniapp-settings.js";
 
 export * from "./payment-channel.js";
+export * from "./receive-recovery.js";
+export * from "./maintenance.js";

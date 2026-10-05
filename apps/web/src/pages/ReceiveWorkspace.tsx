@@ -14,6 +14,10 @@ import {
   hasReceiveWork,
   type ReceiveWorkspace,
 } from "./receive-workspace.js";
+import type { ReceiveRecoveryPort } from "../host/receive-recovery-port.js";
+import type { QueryPort } from "../commands/types.js";
+import type { SessionView } from "../auth/types.js";
+import { connectReceiveRecovery } from "./receive-recovery.js";
 
 type WorkspaceContext = Readonly<{
   store: ReceiveWorkspace;
@@ -24,9 +28,35 @@ const Context = createContext<WorkspaceContext | null>(null);
 export function ReceiveWorkspaceProvider({
   children,
   scope,
-}: Readonly<{ children: ReactNode; scope: string }>) {
-  const workspace = useMemo(() => ({ scope, store: createReceiveWorkspace() }), [scope]);
+  recovery,
+  session,
+  query,
+}: Readonly<{
+  children: ReactNode;
+  scope: string;
+  recovery?: ReceiveRecoveryPort;
+  session?: SessionView;
+  query?: QueryPort;
+}>) {
+  const workspace = useMemo(() => {
+    const store = createReceiveWorkspace();
+    if (recovery !== undefined)
+      store.patch({ recoveryStatus: "loading", recoveryMessage: "正在读取本机开单恢复记录…" });
+    return { scope, store };
+  }, [scope, recovery]);
   const { store } = workspace;
+  useEffect(() => {
+    if (recovery === undefined || session === undefined || query === undefined) return;
+    return connectReceiveRecovery(
+      store,
+      recovery,
+      {
+        session_id: session.session.session_id,
+        session_version: session.session.session_version,
+      },
+      query,
+    );
+  }, [store, recovery, session, query]);
   const [question, setQuestion] = useState<Readonly<{ scope: string; message: string }> | null>(
     null,
   );

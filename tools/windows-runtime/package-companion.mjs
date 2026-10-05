@@ -49,6 +49,7 @@ const scriptNames = [
   "backup-process.mjs",
   "backup-database.mjs",
   "backup-maintenance.mjs",
+  "backup-health-record.mjs",
   "backup-photo-contract.mjs",
   "backup-photo-files.mjs",
   "diagnostic-bundle.mjs",

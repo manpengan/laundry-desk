@@ -58,6 +58,10 @@ test("bonus tier top-up and R4 principal refund are durable", async ({ page }) =
   await signIn(page);
 
   await page.locator('[data-nav-id="settings"]').click();
+  await page
+    .getByRole("navigation", { name: "设置分区" })
+    .getByRole("button", { name: "会员权益", exact: true })
+    .click();
   const rules = page.locator('[data-testid="member-rules"]');
   await expect(rules).toBeVisible();
   await rules.getByLabel("充满（元）").fill(yuanInput(thresholdCents));
@@ -91,6 +95,7 @@ test("bonus tier top-up and R4 principal refund are durable", async ({ page }) =
   await expect(customer).toHaveCount(1, { timeout: 15_000 });
   await customer.click();
 
+  await page.getByRole("button", { name: "会员充值与权益", exact: true }).click();
   const member = page.locator('[aria-label="会员储值"]');
   await expect(member.getByText("尚未开通会员")).toBeVisible({ timeout: 15_000 });
   await member.getByRole("button", { name: "开通会员账户" }).click();
@@ -148,6 +153,10 @@ test("bonus tier top-up and R4 principal refund are durable", async ({ page }) =
   await expect(refundLedger.first()).toContainText("-" + money(refundCents));
 
   await page.locator('[data-nav-id="settings"]').click();
+  await page
+    .getByRole("navigation", { name: "设置分区" })
+    .getByRole("button", { name: "会员权益", exact: true })
+    .click();
   await ruleRow.getByRole("button", { name: "停用" }).click();
   await expect(ruleConfirmation).toContainText("状态：停用", { timeout: 15_000 });
   await ruleConfirmation.getByRole("button", { name: "确认保存" }).click();

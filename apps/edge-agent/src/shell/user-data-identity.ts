@@ -18,15 +18,21 @@ type Files = Readonly<{
  * adopts the pre-split shared directory once, by a same-volume rename that keeps its
  * private ACLs and device identity; the hongfa build starts fresh and pairs again.
  * Must run before anything opens userData.
+ *
+ * Electron creates the userData directory the first time it is asked for it (Electron
+ * 41 on Windows), so the default location — appData plus the app name — is derived, not
+ * asked for. An explicit --user-data-dir (tests, support sessions) is left alone.
  */
 export function adoptLegacyUserData(
-  app: Pick<App, "getName" | "getPath">,
+  app: Pick<App, "getName" | "getPath" | "commandLine">,
   platform: NodeJS.Platform = process.platform,
   files: Files = { existsSync, renameSync },
 ): "adopted" | "skipped" {
   if (platform !== "win32" || app.getName() !== GENERIC_WINDOWS_APP_NAME) return "skipped";
-  const target = app.getPath("userData");
-  const legacy = join(app.getPath("appData"), LEGACY_SHARED_USER_DATA);
+  if (app.commandLine.hasSwitch("user-data-dir")) return "skipped";
+  const appData = app.getPath("appData");
+  const target = join(appData, app.getName());
+  const legacy = join(appData, LEGACY_SHARED_USER_DATA);
   if (files.existsSync(target) || !files.existsSync(legacy)) return "skipped";
   files.renameSync(legacy, target);
   return "adopted";

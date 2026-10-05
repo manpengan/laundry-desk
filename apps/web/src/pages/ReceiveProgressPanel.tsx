@@ -47,16 +47,22 @@ export function ReceiveProgressPanel({ state, store, confirmDiscard, onReset, on
               重试确认本次开单
             </Button>
           ) : null}
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={state.busy}
-            onClick={() => void finishCheckedOperation()}
-          >
-            已人工核对，结束本次操作
-          </Button>
+          {state.recoveryStatus === "browser" ? (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={state.busy}
+              onClick={() => void finishCheckedOperation()}
+            >
+              已人工核对，结束本次操作
+            </Button>
+          ) : null}
         </div>
-        <p>可先切到工作台核对订单和收款记录。人工结束只清空本页，不新增订单或收款。</p>
+        <p>
+          {state.recoveryStatus === "browser"
+            ? "可先切到工作台核对订单和收款记录。人工结束只清空本页，不新增订单或收款。"
+            : "原开单身份已保存在本机。请连接服务后重试确认；核对成功前将继续保留本单，不会创建新单。"}
+        </p>
       </section>
     );
   return state.dirty ? (

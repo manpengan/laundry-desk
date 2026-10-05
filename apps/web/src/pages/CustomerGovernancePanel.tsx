@@ -18,6 +18,7 @@ type PendingAction = Readonly<{
 
 export type CustomerGovernancePanelProps = Readonly<{
   customer: CustomerRowView;
+  mode?: "all" | "profile" | "merge";
   queryClient: QueryPort;
   commandClient: CommandPort;
   authClient?: AuthClient;
@@ -36,6 +37,7 @@ export function CustomerGovernancePanel({
   session,
   onUpdated,
   onMerged,
+  mode = "all",
 }: CustomerGovernancePanelProps) {
   const toast = useToast();
   const [phone, setPhone] = useState(customer.phone);
@@ -180,70 +182,81 @@ export function CustomerGovernancePanel({
 
   return (
     <section className="ld-customer-governance" aria-label="客户资料治理">
-      <h3>编辑资料</h3>
-      <div className="ld-customer-governance__fields">
-        <Input
-          name="customer-edit-phone"
-          label="手机号"
-          value={phone}
-          onChange={(event) => setPhone(event.target.value)}
-          disabled={busy}
-        />
-        <Input
-          name="customer-edit-name"
-          label="姓名"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          disabled={busy}
-        />
-        <label>
-          <span>内部备注</span>
-          <textarea
-            name="customer-edit-note"
-            value={note}
-            maxLength={256}
-            onChange={(event) => setNote(event.target.value)}
-            disabled={busy}
-          />
-        </label>
-      </div>
-      <Button variant="secondary" type="button" onClick={save} disabled={busy}>
-        保存修改
-      </Button>
-
-      <div className="ld-customer-governance__duplicates">
-        <div>
-          <h3>重复客户</h3>
-          <p>仅显示同名候选，列表手机号保持脱敏；合并需另一位员工现场复核。</p>
-        </div>
-        <Button variant="ghost" type="button" onClick={() => void loadDuplicates()} disabled={busy}>
-          检查重复
-        </Button>
-      </div>
-      {duplicates.length > 0 ? (
-        <div className="ld-customer-governance__merge">
-          <label>
-            <span>保留客户</span>
-            <select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
-              {duplicates.map((candidate) => (
-                <option key={candidate.customer_id} value={candidate.customer_id}>
-                  {candidate.name ?? "未命名"} · {candidate.phone}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Input
-            name="customer-merge-reason"
-            label="合并原因"
-            value={mergeReason}
-            onChange={(event) => setMergeReason(event.target.value)}
-          />
-          <Button variant="danger" type="button" onClick={merge} disabled={busy}>
-            合并到保留客户
+      {mode !== "merge" ? (
+        <>
+          <h3>编辑资料</h3>
+          <div className="ld-customer-governance__fields">
+            <Input
+              name="customer-edit-phone"
+              label="手机号"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              disabled={busy}
+            />
+            <Input
+              name="customer-edit-name"
+              label="姓名"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              disabled={busy}
+            />
+            <label>
+              <span>内部备注</span>
+              <textarea
+                name="customer-edit-note"
+                value={note}
+                maxLength={256}
+                onChange={(event) => setNote(event.target.value)}
+                disabled={busy}
+              />
+            </label>
+          </div>
+          <Button variant="secondary" type="button" onClick={save} disabled={busy}>
+            保存修改
           </Button>
-        </div>
+        </>
       ) : null}
-
+      {mode !== "profile" ? (
+        <>
+          <div className="ld-customer-governance__duplicates">
+            <div>
+              <h3>重复客户</h3>
+              <p>仅显示同名候选，列表手机号保持脱敏；合并需另一位员工现场复核。</p>
+            </div>
+            <Button
+              variant="ghost"
+              type="button"
+              onClick={() => void loadDuplicates()}
+              disabled={busy}
+            >
+              检查重复
+            </Button>
+          </div>
+          {duplicates.length > 0 ? (
+            <div className="ld-customer-governance__merge">
+              <label>
+                <span>保留客户</span>
+                <select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
+                  {duplicates.map((candidate) => (
+                    <option key={candidate.customer_id} value={candidate.customer_id}>
+                      {candidate.name ?? "未命名"} · {candidate.phone}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Input
+                name="customer-merge-reason"
+                label="合并原因"
+                value={mergeReason}
+                onChange={(event) => setMergeReason(event.target.value)}
+              />
+              <Button variant="danger" type="button" onClick={merge} disabled={busy}>
+                合并到保留客户
+              </Button>
+            </div>
+          ) : null}
+        </>
+      ) : null}
       <DangerConfirmDialog
         open={pending?.kind === "confirm"}
         title="确认修改客户资料"

@@ -17,6 +17,8 @@ export type OrderGetLine = Readonly<{
   line_index: number;
   service_code: string;
   category_code: string;
+  catalog_name?: string | null;
+  catalog_code?: string | null;
   unit_price_cents: number;
   qty: number;
   line_total_cents: number;
@@ -34,6 +36,8 @@ export type OrderGetGarment = OrderGetPieceDetail &
     seq: number;
     service_code: string;
     category_code: string;
+    catalog_name?: string | null;
+    catalog_code?: string | null;
     unit_price_cents: number;
     rack_zone: string | null;
     rack_slot: string | null;
@@ -66,6 +70,11 @@ export type OrderGetResult = OrderPolicySnapshotView &
   }>;
 
 const CODE_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}$/u;
+const CATALOG_CODE_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/u;
+function catalogCode(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  return typeof value === "string" && CATALOG_CODE_RE.test(value) ? value : undefined;
+}
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const ORDER_STATUSES = new Set(["draft", "open", "closed", "cancelled"]);
 
@@ -165,6 +174,8 @@ function orderLine(value: unknown): OrderGetLine | null {
     !CODE_RE.test(row.service_code) ||
     typeof row.category_code !== "string" ||
     !CODE_RE.test(row.category_code) ||
+    boundedNullableString(row.catalog_name ?? null, 128) === undefined ||
+    catalogCode(row.catalog_code) === undefined ||
     lineTotal !== unitPrice * qty ||
     !Array.isArray(row.garments) ||
     row.garments.length !== qty
@@ -177,6 +188,8 @@ function orderLine(value: unknown): OrderGetLine | null {
     line_index: lineIndex,
     service_code: row.service_code,
     category_code: row.category_code,
+    catalog_name: boundedNullableString(row.catalog_name ?? null, 128) ?? null,
+    catalog_code: catalogCode(row.catalog_code) ?? null,
     unit_price_cents: unitPrice,
     qty,
     line_total_cents: lineTotal,
@@ -211,6 +224,8 @@ function orderGarment(value: unknown): OrderGetGarment | null {
     !CODE_RE.test(row.service_code) ||
     typeof row.category_code !== "string" ||
     !CODE_RE.test(row.category_code) ||
+    boundedNullableString(row.catalog_name ?? null, 128) === undefined ||
+    catalogCode(row.catalog_code) === undefined ||
     rackZone === undefined ||
     rackSlot === undefined
   ) {
@@ -225,6 +240,8 @@ function orderGarment(value: unknown): OrderGetGarment | null {
     seq,
     service_code: row.service_code,
     category_code: row.category_code,
+    catalog_name: boundedNullableString(row.catalog_name ?? null, 128) ?? null,
+    catalog_code: catalogCode(row.catalog_code) ?? null,
     unit_price_cents: unitPrice,
     rack_zone: rackZone,
     rack_slot: rackSlot,

@@ -214,6 +214,10 @@ async function createBonusTier(
   bonusCents: number,
 ): Promise<Locator> {
   await page.locator('[data-nav-id="settings"]').click();
+  await page
+    .getByRole("navigation", { name: "设置分区" })
+    .getByRole("button", { name: "会员权益", exact: true })
+    .click();
   const rules = page.locator('[data-testid="member-rules"]');
   await expect(rules).toBeVisible({ timeout: 15_000 });
   await rules.getByLabel("充满（元）").fill(yuanInput(thresholdCents));
@@ -248,6 +252,7 @@ async function createMemberCustomer(page: Page, id: string): Promise<Locator> {
   const row = page.locator('[data-testid="customers-row"]', { hasText: name });
   await expect(row).toHaveCount(1, { timeout: 15_000 });
   await row.click();
+  await page.getByRole("button", { name: "会员充值与权益", exact: true }).click();
   const member = page.locator('[aria-label="会员储值"]');
   await expect(member).toBeVisible({ timeout: 15_000 });
   await member.getByRole("button", { name: "开通会员账户" }).click();
@@ -375,6 +380,7 @@ async function mergeDuplicateCustomers(
   const matches = page.locator('[data-testid="customers-row"]', { hasText: name });
   await expect(matches).toHaveCount(2, { timeout: 15_000 });
   await matches.first().click();
+  await page.getByRole("button", { name: "合并与隐私处理", exact: true }).click();
   const governance = page.locator('[aria-label="客户资料治理"]');
   await governance.getByRole("button", { name: "检查重复" }).click();
   await expect(governance.getByLabel("保留客户")).toHaveCount(1, { timeout: 15_000 });
@@ -399,6 +405,7 @@ async function exportAndAnonymizeCustomer(
   const row = page.locator('[data-testid="customers-row"]', { hasText: name });
   await expect(row).toHaveCount(1, { timeout: 15_000 });
   await row.click();
+  await page.getByRole("button", { name: "合并与隐私处理", exact: true }).click();
   const privacy = page.locator('[aria-label="客户隐私与留存"]');
   await expect(privacy.locator('[data-testid="customer-privacy-status"]')).toContainText(
     "活动订单 0",
@@ -474,18 +481,20 @@ async function exportPickupReminders(page: Page, downloadDirectory: string): Pro
 
 async function exportAccountingReport(page: Page, downloadDirectory: string): Promise<void> {
   await page.locator('[data-nav-id="stats"]').click();
-  await expect(page.locator('[data-testid="accounting-report-panel"]')).toBeVisible();
-  await page.locator('[data-testid="accounting-mode"]').selectOption("staff");
-  await page.locator('[data-testid="accounting-date-from"]').fill(FIXTURE.accountingDate);
-  await page.locator('[data-testid="accounting-date-to"]').fill(FIXTURE.accountingDate);
-  await page.locator('[data-testid="accounting-load"]').click();
-  const report = page.locator('[data-testid="accounting-report-result"]');
+  await page.getByRole("tab", { name: "历史报表与对账" }).click();
+  const reports = page.getByRole("tabpanel", { name: "历史报表与对账" });
+  await expect(reports.locator('[data-testid="accounting-report-panel"]')).toBeVisible();
+  await reports.locator('[data-testid="accounting-mode"]').selectOption("staff");
+  await reports.locator('[data-testid="accounting-date-from"]').fill(FIXTURE.accountingDate);
+  await reports.locator('[data-testid="accounting-date-to"]').fill(FIXTURE.accountingDate);
+  await reports.locator('[data-testid="accounting-load"]').click();
+  const report = reports.locator('[data-testid="accounting-report-result"]');
   await expect(report).toBeVisible({ timeout: 15_000 });
   const realIncome = report.locator(".ld-stats-card").filter({ hasText: "实收" }).first();
   const performance = report.locator(".ld-stats-card").filter({ hasText: "业绩" }).first();
   await expect(realIncome.locator('[data-fen="13000"]')).toHaveCount(1);
   await expect(performance.locator('[data-fen="8000"]')).toHaveCount(1);
-  await page.locator('[data-testid="accounting-export"]').click();
+  await reports.locator('[data-testid="accounting-export"]').click();
   const confirmation = page.getByRole("dialog", { name: "确认导出账目报表" });
   await expect(confirmation).toContainText(`营业日 ${FIXTURE.accountingDate}`, {
     timeout: 15_000,
@@ -505,6 +514,7 @@ async function exportAccountingReport(page: Page, downloadDirectory: string): Pr
 
 async function closeAndExportShift(page: Page, downloadDirectory: string): Promise<void> {
   await page.locator('[data-nav-id="stats"]').click();
+  await page.getByRole("tab", { name: "历史报表与对账" }).click();
   await page.locator('[data-testid="stats-date-input"]').fill(SHIFT_DATE);
   await page.locator('[data-testid="stats-load-btn"]').click();
   const snapshot = page.locator(
@@ -518,6 +528,7 @@ async function closeAndExportShift(page: Page, downloadDirectory: string): Promi
   expect(await downloadText(reconciliation, downloadDirectory)).toContain(
     `"meta","business_date","","${SHIFT_DATE}"`,
   );
+  await page.getByRole("tab", { name: "交班", exact: true }).click();
   const signature = page.locator('[data-testid="shift-signature-input"]');
   await expect(signature).toBeVisible({ timeout: 15_000 });
   await signature.fill("packaged macOS 交班");
@@ -554,6 +565,10 @@ export async function runPackagedReportsParity(
 /** Settings parity checks and exercises the current packaged-only device surface. */
 export async function runPackagedSettingsParity(page: Page, admin: PackagedAdmin): Promise<void> {
   await page.locator('[data-nav-id="settings"]').click();
+  await page
+    .getByRole("navigation", { name: "设置分区" })
+    .getByRole("button", { name: "查看全部设置", exact: true })
+    .click();
   await expect(page.locator('[data-testid="catalog-admin"]')).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('[data-testid="member-rules"]')).toBeVisible();
   const staff = page.locator('[data-testid="staff-access"]');

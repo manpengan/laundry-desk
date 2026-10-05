@@ -98,7 +98,10 @@ describe("M2 order.list query", () => {
     expect(orderListQuery.offline_mode).toBe("denied");
     expect(orderListQuery.data_classification).toBe("pii");
     expect(orderListQuery.max_result_rows).toBe(50);
-    expect(orderListQuery.input_redaction).toEqual([{ path: "/customer_phone", strategy: "mask" }]);
+    expect(orderListQuery.input_redaction).toEqual([
+      { path: "/customer_phone", strategy: "mask" },
+      { path: "/customer_query", strategy: "mask" },
+    ]);
     expect(orderListQuery.result_redaction).toEqual([
       { path: "/orders/*/customer_phone", strategy: "mask" },
     ]);

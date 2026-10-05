@@ -1,4 +1,5 @@
 import type { TicketPreview } from "@laundry/domain";
+import type { CommandPort, CommandResult } from "../commands/types.js";
 import {
   newLineDraft,
   type PaymentMethod,
@@ -22,10 +23,13 @@ export type ReceiveWorkspaceState = Readonly<{
   dirty: boolean;
   phase: "editing" | "submitting" | "uncertain" | "complete";
   result: ReceiveOrderResult | null;
+  confirmedPaymentIntentIds: readonly string[];
   ticketPreview: TicketPreview | null;
   message: string;
   pendingBody: Readonly<Record<string, unknown>> | null;
   retryable: boolean;
+  recoveryStatus: "browser" | "loading" | "ready" | "saving" | "error";
+  recoveryMessage: string;
 }>;
 
 export function initialReceiveWorkspace(): ReceiveWorkspaceState {
@@ -44,16 +48,23 @@ export function initialReceiveWorkspace(): ReceiveWorkspaceState {
     dirty: false,
     phase: "editing",
     result: null,
+    confirmedPaymentIntentIds: Object.freeze([]),
     ticketPreview: null,
     message: "",
     pendingBody: null,
     retryable: false,
+    recoveryStatus: "browser",
+    recoveryMessage: "浏览器中的未暂存内容不会在关闭后自动恢复，请使用暂存挂单。",
   });
 }
 
 /** One in-memory workspace per authenticated clerk. Never writes customer data to Web Storage. */
 export function createReceiveWorkspace() {
   let state = initialReceiveWorkspace();
+  let recoveredSubmit:
+    | ((body: Readonly<Record<string, unknown>>, id: string) => Promise<CommandResult<unknown>>)
+    | null = null;
+  let recoveryRetry = async (): Promise<void> => undefined;
   const listeners = new Set<() => void>();
   const publish = (next: ReceiveWorkspaceState): void => {
     state = Object.freeze(next);
@@ -61,6 +72,17 @@ export function createReceiveWorkspace() {
   };
   return Object.freeze({
     getSnapshot: () => state,
+    setRecoverySubmit: (submit: typeof recoveredSubmit) => {
+      recoveredSubmit = submit;
+    },
+    setRecoveryRetry: (retry: typeof recoveryRetry) => {
+      recoveryRetry = retry;
+    },
+    retryRecovery: () => recoveryRetry(),
+    submit: (port: CommandPort, body: Readonly<Record<string, unknown>>, id: string) =>
+      recoveredSubmit === null
+        ? port.execute<unknown>("order.receive", body, { operationId: id })
+        : recoveredSubmit(body, id),
     subscribe: (listener: () => void) => {
       listeners.add(listener);
       return () => {
@@ -78,10 +100,19 @@ export function createReceiveWorkspace() {
       const next = typeof value === "function" ? value(state[key]) : value;
       publish({ ...state, [key]: next, dirty: dirty || state.dirty });
     },
-    reset: () => publish(initialReceiveWorkspace()),
+    reset: () => {
+      if (state.phase === "uncertain" && state.recoveryStatus !== "browser") return;
+      publish({
+        ...initialReceiveWorkspace(),
+        recoveryStatus: state.recoveryStatus,
+        recoveryMessage: state.recoveryMessage,
+      });
+    },
     begin: (retry = false): boolean => {
       if (
         state.busy ||
+        state.recoveryStatus === "loading" ||
+        state.recoveryStatus === "error" ||
         (state.phase !== "editing" && !(retry && state.phase === "uncertain" && state.retryable))
       )
         return false;

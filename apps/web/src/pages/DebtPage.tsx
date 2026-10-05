@@ -1,5 +1,5 @@
 /**
- * 工作台欠款催付骨架 — order.list { min_balance_cents: 1, limit: 50 }.
+ * 统一订单中心：全部、欠款和待取视图，服务端分页。
  */
 
 import {
@@ -16,11 +16,14 @@ import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { PhotoPort } from "../host/photo-port.js";
-import { parseOrderListRows, unwrapQueryResult, type OrderListRowView } from "./OrdersList.js";
+import type { OrderListRowView } from "./OrdersList.js";
 import { OrderDetailDrawer } from "./OrderDetailDrawer.js";
+import { ListLoadNotice } from "./ListLoadNotice.js";
+import { useOrderPage } from "./use-order-page.js";
+import { OrderPagination } from "./OrderPagination.js";
+import { INITIAL_ORDER_FILTER, OrderCenterFilters, orderViewLabel } from "./OrderCenterFilters.js";
 
 const DEBT_LIST_LIMIT = 50;
-const DEBT_MIN_BALANCE_CENTS = 1;
 
 export type DebtPageProps = {
   queryClient: QueryPort;
@@ -76,43 +79,16 @@ export function DebtPage({
   onOpenPickup,
 }: DebtPageProps) {
   const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const [rows, setRows] = useState<readonly OrderListRowView[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const list = useOrderPage(queryClient);
+  const { page, busy, error } = list;
+  const rows = page?.orders ?? [];
+  const loaded = page !== null;
+  const viewLabel = orderViewLabel(list.applied);
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setBusy(true);
-    try {
-      const res = await queryClient.execute<unknown>("order.list", {
-        min_balance_cents: DEBT_MIN_BALANCE_CENTS,
-        limit: DEBT_LIST_LIMIT,
-      });
-      if (!res.ok) {
-        toast.push(res.error.message ?? res.error.code, "error");
-        setRows([]);
-        setLoaded(true);
-        return;
-      }
-      const parsed = parseOrderListRows(unwrapQueryResult(res.data));
-      if (parsed === null) {
-        toast.push("欠款列表无法解析", "error");
-        setRows([]);
-        setLoaded(true);
-        return;
-      }
-      setRows(parsed);
-      setLoaded(true);
-    } finally {
-      setBusy(false);
-    }
-  }, [queryClient, toast]);
-
-  // The workbench already shows an outstanding-balance total, so the data is
-  // ready by the time this page opens; make the operator click only to refresh.
+  const load = list.retry;
   useEffect(() => {
-    void load();
-  }, [load]);
+    void list.load({ ...INITIAL_ORDER_FILTER, offset: 0, limit: DEBT_LIST_LIMIT });
+  }, [list.load]);
 
   const onCopyReminder = useCallback(
     async (row: OrderListRowView) => {
@@ -131,13 +107,17 @@ export function DebtPage({
     <main className="ld-shell-main ld-debt-page" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">订单与欠款</h1>
       <p className="ld-shell-main__hint">
-        仍有欠款的订单（全部日期，最多 {DEBT_LIST_LIMIT} 条）。点击订单查看详情、补缴或退款。
+        按票号、客户、营业日和状态查询完整历史。待取视图仅包含有衣物已上架的订单。
       </p>
-      <section className="ld-section ld-debt" data-testid="debt-section" aria-label="欠款">
+      <OrderCenterFilters
+        busy={busy}
+        onSearch={(body) => void list.load({ ...body, offset: 0, limit: DEBT_LIST_LIMIT })}
+      />
+      <section className="ld-section ld-debt" data-testid="debt-section" aria-label="订单结果">
         <div className="ld-section__head">
           <h2 className="ld-section__title">
-            欠款
-            {loaded ? <span className="ld-section__count">{rows.length}</span> : null}
+            {viewLabel}
+            {page ? <span className="ld-section__count">{page.total}</span> : null}
           </h2>
           <Button
             variant="secondary"
@@ -148,15 +128,36 @@ export function DebtPage({
             data-testid="debt-load-btn"
           >
             <Icon name="refresh" size={16} />
-            {busy ? "加载中…" : loaded ? "刷新欠款" : "加载欠款"}
+            {busy ? "加载中…" : "刷新订单"}
           </Button>
         </div>
+        <ListLoadNotice
+          error={error}
+          loaded={loaded}
+          busy={busy}
+          onRetry={() => void load()}
+          testId="debt-load-error"
+        />
 
+        {busy && loaded ? <p role="status">正在更新；下方暂时保留上次查询结果。</p> : null}
+        {page === null ? null : (
+          <OrderPagination
+            {...page}
+            busy={busy}
+            onPage={(offset) => void list.load({ ...list.applied, offset })}
+          />
+        )}
         <ul className="ld-orders-list" data-testid="debt-list">
-          {!loaded ? (
-            <li className="ld-orders-list__empty">点击「加载欠款」查看应收</li>
+          {rows.length === 0 && error !== null ? (
+            <li className="ld-orders-list__empty">订单信息未能更新</li>
+          ) : !loaded && busy ? (
+            <li className="ld-orders-list__empty">正在加载订单…</li>
+          ) : !loaded ? (
+            <li className="ld-orders-list__empty">正在准备订单列表</li>
           ) : rows.length === 0 ? (
-            <li className="ld-orders-list__empty">暂无欠款订单</li>
+            <li className="ld-orders-list__empty">
+              {(page?.total ?? 0) > 0 ? "当前页已无订单，请返回上一页。" : "暂无符合条件的订单"}
+            </li>
           ) : (
             rows.map((row) => (
               <li key={row.order_id} className="ld-orders-list__row" data-testid="debt-row">
@@ -192,7 +193,7 @@ export function DebtPage({
                   </button>
                   <div className="ld-debt-row__actions">
                     {/* A 挂单 has no garments to hand over yet. */}
-                    {onOpenPickup !== undefined && row.status !== "draft" ? (
+                    {onOpenPickup !== undefined && row.status === "open" ? (
                       <Button
                         variant="secondary"
                         type="button"
@@ -204,16 +205,18 @@ export function DebtPage({
                         取衣
                       </Button>
                     ) : null}
-                    <Button
-                      variant="ghost"
-                      type="button"
-                      size="sm"
-                      onClick={() => void onCopyReminder(row)}
-                      data-testid="debt-row-copy-btn"
-                    >
-                      <Icon name="phone" size={16} />
-                      生成催付文案
-                    </Button>
+                    {row.balance_cents > 0 ? (
+                      <Button
+                        variant="ghost"
+                        type="button"
+                        size="sm"
+                        onClick={() => void onCopyReminder(row)}
+                        data-testid="debt-row-copy-btn"
+                      >
+                        <Icon name="phone" size={16} />
+                        生成催付文案
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               </li>

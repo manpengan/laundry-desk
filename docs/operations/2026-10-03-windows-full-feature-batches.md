@@ -27,6 +27,36 @@
 - 清理了 29 个遗留的一次性 QA 计划任务，XML 备份在 `C:\dev\claude-qa-20261004\task-backup`。
 - 未验证：真实渠道、安装包重命名与宏发安装形态、拔电源后重新登录。
 
+## 2026-10-05 安装态复验（PR #232）
+
+- 环境：
+  - winbox，Windows 10 家庭版 19045，只用合成数据。
+  - 构建目录 `C:\dev\claude-accept-20261005\repo`：从 dacc01b0 的干净 checkout 本地克隆，再拉增量 bundle；pnpm 离线安装。
+  - 服务端：已装 Runtime payload 的私有副本，覆盖同一提交的 server/contracts/domain dist；私有 QA 库端口 18743；网络替身。
+  - 开发 Runtime 测前停止，测后恢复 ready。
+- 构建：
+  - main `72a21e8f` 和 PR 头 `57e6def1` 都构建了通用版和宏发版 NSIS 安装包，构建后工作区干净。
+  - PR 头安装包的 SHA-256 前缀：通用版 `1927c04f`，宏发版 `3d855008`。
+- 打包身份（P1-7）：
+  - 通用版原地升级，目录仍为 `laundry-desk V2`，打包名为 `laundry-desk-v2`。
+  - 宏发版原地升级时沿用旧目录 `@laundryedge-agent`；卸载后全新安装，目录为 `laundry-desk-v2-hongfa`。
+  - 在会话 1 以非提升权限运行：两版的应用名和 userData 各自独立，可以同时运行，各自持有单实例锁。
+- 实测发现并修复了两个问题：
+  - **旧数据接管没有生效**：`72a21e8f` 的通用版首次启动没有接管 `%APPDATA%\@laundry\edge-agent`，而是新建了一个空目录。
+    - 原因：Electron 41 第一次调用 `getPath("userData")` 就会创建该目录（已用最小 Electron 程序确认）。
+    - `1a42d3fa` 修复后复验：旧目录被重命名为 `laundry-desk-v2`，58 个文件全部保留。其中 44 个逐字节相同，其余是 Chromium 启动时改写的缓存、日志和会话文件。设备身份逐字节相同。
+  - **同一 checkout 换提交重建失败**：turbo 缓存把绑定旧 SHA 的暂存 profile 一起还原了出来，构建报 `WINDOWS_PROFILE_BINDING_INVALID`。`57e6def1` 已把暂存目录排除出缓存输出，修复后在同一 checkout 重建成功。
+- 功能用例（会话 1，非提升，一次性计划任务）：
+  - 第 1 轮（新建测试账号）：通用版、宏发版各 1/1 通过，约 1.5 分钟。
+  - 第 2 轮（复用测试账号，`d57f6c75` 起记录主进程重试）：两版各 1/1 通过，`main_evaluation_retries` 为 0。
+  - 两轮都走完 10 个导航页面；DPR 1.5，无横向滚动；渲染错误和服务端 5xx 均为 0。
+  - 10-03 i1 宏发版的失败（Execution context was destroyed）没有复现。第 2 轮也没有发生任何需要重试的上下文销毁。
+  - 中途有一次重跑因复用了证据目录而报 EEXIST，属于脚本问题，相关产物已单独存放。
+- 收尾：
+  - 一次性任务已删除，QA 实例已停止，开发 Runtime 恢复 ready。
+  - 两版保留 PR 头构建的安装。旧共享数据已由通用版接管，原目录备份在 `C:\dev\claude-accept-20261005\preserve`。
+- 并行占用：19:31–20:52 验收暂停期间，另一个会话连到了 8787 上的 QA 服务，在私有 QA 库里开单、退款并新增员工。开发 Runtime 的数据没有被访问；但该会话这段时间的结果针对的是 main 代码和 QA 库。
+
 ## 当前交付状态（2026-10-03 14:14 UTC）
 
 当前产品源码为 `3a6d987d8cb8045ebde142d7a1a98a187c3740d7`。generic/hongfa NSIS 与

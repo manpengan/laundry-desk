@@ -8,6 +8,7 @@ import type { PrinterPort } from "./printer-port.js";
 import type { DeliveryEvidenceMediaPort } from "./delivery-evidence-port.js";
 import type { AiPanelPort } from "./ai-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
+import type { MaintenancePort } from "./maintenance-port.js";
 import type { ScalePort } from "./scale-port.js";
 import type { PaymentChannelPort } from "./payment-channel-port.js";
 import type { MiniappSettingsPort } from "./miniapp-settings-port.js";
@@ -15,6 +16,7 @@ import type { RemoteAssistancePort } from "./remote-assistance-port.js";
 import type { StoreExportPort } from "./store-export-port.js";
 import type { MigrationPort } from "./migration-port.js";
 import type { NotificationSettingsPort } from "./notification-settings-port.js";
+import type { ReceiveRecoveryPort } from "./receive-recovery-port.js";
 
 export type HealthReady = Readonly<{
   status: "ready";
@@ -34,6 +36,7 @@ export type HealthPort = Readonly<{
 
 /** All renderer-visible capabilities. No credential accessor is exposed here. */
 export type AppPorts = Readonly<{
+  receiveRecovery?: ReceiveRecoveryPort;
   auth: AuthPort;
   command: CommandPort;
   query: QueryPort;
@@ -46,6 +49,7 @@ export type AppPorts = Readonly<{
   aiSettings?: AiSettingsPort;
   migration?: MigrationPort;
   storeExport?: StoreExportPort;
+  maintenance?: MaintenancePort;
   scale?: ScalePort;
   paymentChannel?: PaymentChannelPort;
   miniappSettings?: MiniappSettingsPort;

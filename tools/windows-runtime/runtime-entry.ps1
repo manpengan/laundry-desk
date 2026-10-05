@@ -2,7 +2,8 @@
 param(
   [ValidateSet('gui','install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config')][string]$Action = 'gui',
   [string]$BackupId,
-  [string]$ConfirmationDigest
+  [string]$ConfirmationDigest,
+  [string]$CounterHandoffJson
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -108,6 +109,19 @@ try {
     throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID'
   }
   Assert-EntryArguments $Action $BackupId $ConfirmationDigest
+  $script:CounterHandoff = $null
+  if (-not [string]::IsNullOrEmpty($CounterHandoffJson)) {
+    if ($Action -cne 'gui' -or $CounterHandoffJson.Length -gt 1024) { throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID' }
+    $handoff = $CounterHandoffJson | ConvertFrom-Json
+    $keys = @($handoff.PSObject.Properties.Name)
+    if ($handoff.operation -ceq 'open') {
+      if ($keys.Count -ne 2 -or $keys -cnotcontains 'intent' -or @('maintenance','backup','drill') -cnotcontains $handoff.intent) { throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID' }
+    } elseif ($handoff.operation -ceq 'handoff') {
+      if ($keys.Count -ne 3 -or $keys -cnotcontains 'intent' -or $keys -cnotcontains 'request_id' -or @('export-store','v1-import') -cnotcontains $handoff.intent -or $handoff.request_id -cnotmatch '^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$') { throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID' }
+    } else { throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID' }
+    $script:CounterHandoff = $handoff
+    $CounterHandoffJson = $null
+  }
   @@TRUST@@
   $EntryRoot = [LaundryRuntimeEntryTrust]::HoldDirectoryPath($PSScriptRoot)
   $PayloadRoot = [LaundryRuntimeEntryTrust]::HoldDirectoryPath((Join-Path $EntryRoot 'payload'))
@@ -138,6 +152,7 @@ try {
     . (Join-Path $EntryRoot 'runtime-entry-assistance-ui.ps1')
     . (Join-Path $EntryRoot 'runtime-entry-schedule-ui.ps1')
     . (Join-Path $EntryRoot 'runtime-entry-ui.ps1')
+    if ($null -ne $script:CounterHandoff) { [Console]::Out.WriteLine('{"status":"maintenance_opened"}'); [Console]::Out.Flush() }
     Show-RuntimeEntry
   } else {
     $inputJson = $null

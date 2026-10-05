@@ -1,5 +1,5 @@
 /**
- * 日结统计 — stats.day.summary counter surface (M2 skeleton).
+ * 经营概览、交班与历史报表对账；金额口径仍由服务器返回。
  */
 
 import { Button, Input, useToast } from "@laundry/ui";
@@ -19,6 +19,7 @@ import {
 } from "./reconciliation-view.js";
 import { ReconciliationSnapshot } from "./ReconciliationSnapshot.js";
 import { ShiftClosePanel } from "./ShiftClosePanel.js";
+import { StatsSections } from "./StatsSections.js";
 import { ShiftHistoryPanel } from "./ShiftHistoryPanel.js";
 
 export type DaySummaryView = Readonly<{
@@ -141,6 +142,7 @@ export function StatsPage({
   const toast = useToast();
   const [dateText, setDateText] = useState(() => defaultDate ?? "");
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [snapshot, setSnapshot] = useState<ReconciliationView | null>(null);
   const loadRef = useRef<() => Promise<void>>(async () => undefined);
@@ -155,6 +157,7 @@ export function StatsPage({
     const loadGeneration = loadGenerationRef.current + 1;
     loadGenerationRef.current = loadGeneration;
     setSnapshot(null);
+    setLoadError(null);
     setBusy(true);
     try {
       const res = await queryClient.execute<unknown>(
@@ -163,19 +166,25 @@ export function StatsPage({
       );
       if (loadGeneration !== loadGenerationRef.current) return;
       if (!res.ok) {
-        toast.push(res.error.message ?? res.error.code, "error");
+        const message = res.error.message ?? res.error.code;
+        setLoadError(message);
+        toast.push(message, "error");
         setSnapshot(null);
         return;
       }
       const parsed = parseReconciliationView(unwrapQueryResult(res.data));
       if (loadGeneration !== loadGenerationRef.current) return;
       if (parsed === null) {
+        setLoadError("对账快照无法解析");
         toast.push("对账快照无法解析", "error");
         setSnapshot(null);
         return;
       }
       setSnapshot(parsed);
       setDateText(parsed.business_date);
+    } catch {
+      if (loadGeneration === loadGenerationRef.current)
+        setLoadError("对账加载失败，请检查连接后重试。");
     } finally {
       if (loadGeneration === loadGenerationRef.current) setBusy(false);
     }
@@ -186,12 +195,16 @@ export function StatsPage({
   useEffect(() => {
     if (!autoLoad) return;
     void loadRef.current();
+    return () => {
+      loadGenerationRef.current += 1;
+    };
   }, [autoLoad]);
 
   const changeDate = useCallback((value: string) => {
     loadGenerationRef.current += 1;
     setBusy(false);
     setSnapshot(null);
+    setLoadError(null);
     setDateText(value);
   }, []);
 
@@ -202,87 +215,121 @@ export function StatsPage({
         统一核对订单、收付记录、交班、打印状态与离线补录；可查询历史营业日。
       </p>
 
-      <AccountingReportPanel
-        queryClient={queryClient}
-        autoLoad={autoLoad}
-        {...(commandClient === undefined ? {} : { commandClient })}
+      <StatsSections
+        overview={
+          <AccountingReportPanel
+            queryClient={queryClient}
+            autoLoad={autoLoad}
+            allowedModes={["today"]}
+            {...(commandClient === undefined ? {} : { commandClient })}
+          />
+        }
+        reports={
+          <>
+            <AccountingReportPanel
+              queryClient={queryClient}
+              autoLoad={false}
+              initialMode="history"
+              allowedModes={["history", "month", "staff"]}
+              {...(commandClient === undefined ? {} : { commandClient })}
+            />
+            <div className="ld-stats-form">
+              <Input
+                name="business-date"
+                label="营业日"
+                type="date"
+                value={dateText}
+                onChange={(event) => changeDate(event.target.value)}
+                disabled={busy}
+                data-testid="stats-date-input"
+                hint="留空表示当前营业日"
+              />
+              <div className="ld-stats-form__actions">
+                <Button
+                  variant="primary"
+                  type="button"
+                  onClick={() => void load()}
+                  disabled={busy}
+                  data-testid="stats-load-btn"
+                >
+                  {busy ? "加载中…" : "查询对账"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() => {
+                    if (snapshot === null || commandClient === undefined) {
+                      toast.push("请先查询对账快照", "error");
+                      return;
+                    }
+                    void (async () => {
+                      setExporting(true);
+                      try {
+                        const result = await executeReconciliationExport(
+                          commandClient,
+                          snapshot.business_date,
+                        );
+                        if (!result.ok) {
+                          toast.push(result.error.message ?? result.error.code, "error");
+                          return;
+                        }
+                        const exported = parseReconciliationExport(unwrapQueryResult(result.data));
+                        if (exported === null || !(await downloadReconciliationExport(exported))) {
+                          toast.push("对账导出校验失败", "error");
+                          return;
+                        }
+                        toast.push("对账 CSV 已完成完整性校验", "success");
+                      } catch {
+                        toast.push("对账导出失败，请检查连接后重试。", "error");
+                      } finally {
+                        setExporting(false);
+                      }
+                    })();
+                  }}
+                  disabled={busy || exporting || snapshot === null || commandClient === undefined}
+                  data-testid="stats-export-csv-btn"
+                >
+                  {exporting ? "校验导出中…" : "导出审计 CSV"}
+                </Button>
+              </div>
+            </div>
+
+            {loadError === null ? null : <p role="alert">{loadError}</p>}
+            {snapshot === null ? null : <ReconciliationSnapshot value={snapshot} />}
+
+            {offlinePort === undefined ? null : <OfflineConflictPanel offlinePort={offlinePort} />}
+          </>
+        }
+        shift={
+          <>
+            <Input
+              name="shift-business-date"
+              label="交班营业日"
+              type="date"
+              value={dateText}
+              onChange={(event) => changeDate(event.target.value)}
+              disabled={busy}
+              hint="按门店营业日核对交班；可选择日期查看记录。"
+            />
+            {commandClient !== undefined ? (
+              <ShiftClosePanel
+                queryClient={queryClient}
+                commandClient={commandClient}
+                businessDate={snapshot?.business_date ?? dateText}
+                autoLoad={autoLoad}
+                {...(session !== undefined ? { session } : {})}
+                {...(authClient !== undefined ? { authClient } : {})}
+              />
+            ) : null}
+            {dateText.length > 0 ? (
+              <ShiftHistoryPanel queryClient={queryClient} initialDate={dateText} />
+            ) : null}
+            {commandClient === undefined ? (
+              <p role="status">当前连接不支持交班操作，可查看已有交班记录。</p>
+            ) : null}
+          </>
+        }
       />
-
-      <div className="ld-stats-form">
-        <Input
-          name="business-date"
-          label="营业日"
-          type="date"
-          value={dateText}
-          onChange={(event) => changeDate(event.target.value)}
-          disabled={busy}
-          data-testid="stats-date-input"
-          hint="留空表示当前营业日"
-        />
-        <div className="ld-stats-form__actions">
-          <Button
-            variant="primary"
-            type="button"
-            onClick={() => void load()}
-            disabled={busy}
-            data-testid="stats-load-btn"
-          >
-            {busy ? "加载中…" : "查询对账"}
-          </Button>
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={() => {
-              if (snapshot === null || commandClient === undefined) {
-                toast.push("请先查询对账快照", "error");
-                return;
-              }
-              void (async () => {
-                setExporting(true);
-                try {
-                  const result = await executeReconciliationExport(
-                    commandClient,
-                    snapshot.business_date,
-                  );
-                  if (!result.ok) {
-                    toast.push(result.error.message ?? result.error.code, "error");
-                    return;
-                  }
-                  const exported = parseReconciliationExport(unwrapQueryResult(result.data));
-                  if (exported === null || !(await downloadReconciliationExport(exported))) {
-                    toast.push("对账导出校验失败", "error");
-                    return;
-                  }
-                  toast.push("对账 CSV 已完成完整性校验", "success");
-                } finally {
-                  setExporting(false);
-                }
-              })();
-            }}
-            disabled={busy || exporting || snapshot === null || commandClient === undefined}
-            data-testid="stats-export-csv-btn"
-          >
-            {exporting ? "校验导出中…" : "导出审计 CSV"}
-          </Button>
-        </div>
-      </div>
-
-      {snapshot === null ? null : <ReconciliationSnapshot value={snapshot} />}
-
-      {commandClient !== undefined ? (
-        <ShiftClosePanel
-          queryClient={queryClient}
-          commandClient={commandClient}
-          businessDate={snapshot?.business_date ?? dateText}
-          autoLoad={autoLoad}
-          {...(session !== undefined ? { session } : {})}
-          {...(authClient !== undefined ? { authClient } : {})}
-        />
-      ) : null}
-      {dateText.length > 0 ? (
-        <ShiftHistoryPanel queryClient={queryClient} initialDate={dateText} />
-      ) : null}
-      {offlinePort === undefined ? null : <OfflineConflictPanel offlinePort={offlinePort} />}
     </main>
   );
 }

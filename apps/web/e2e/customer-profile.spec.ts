@@ -52,6 +52,10 @@ async function createCatalogAndTier(page: Page): Promise<void> {
     catalog.locator('[data-testid="catalog-admin-row"]', { hasText: FIXTURE.catalogCode }),
   ).toBeVisible({ timeout: 15_000 });
 
+  await page
+    .getByRole("navigation", { name: "设置分区" })
+    .getByRole("button", { name: "会员权益", exact: true })
+    .click();
   const definitions = page.locator('[data-testid="benefit-definitions"]');
   await definitions.getByLabel("类型").selectOption("tier");
   await definitions.getByLabel("代码").fill(FIXTURE.tierCode);
@@ -77,6 +81,7 @@ async function createCustomerAndAssignTier(page: Page): Promise<void> {
   await page.locator('[data-testid="customers-search-btn"]').click();
   await page.locator('[data-testid="customers-row"]', { hasText: FIXTURE.customerName }).click();
 
+  await page.getByRole("button", { name: "会员充值与权益", exact: true }).click();
   const storedValue = page.locator('[aria-label="会员储值"]');
   await storedValue.getByRole("button", { name: "开通会员账户" }).click();
   await expect(page.locator(".ld-toast").last()).toContainText("会员账户已开通", {
@@ -101,6 +106,7 @@ async function createCustomerAndAssignTier(page: Page): Promise<void> {
 }
 
 async function saveExtendedProfile(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "客户档案与预约", exact: true }).click();
   const profile = page.locator('[data-testid="customer-profile-panel"]');
   await expect(profile).toBeVisible({ timeout: 15_000 });
   await profile.getByLabel("称谓 / 性别").selectOption("female");
@@ -218,6 +224,7 @@ test("customer profiles, identifier search, pricing snapshots and waivers comple
   await page.locator('[data-testid="customers-search-input"]').fill(FIXTURE.customerName);
   await page.locator('[data-testid="customers-search-btn"]').click();
   await page.locator('[data-testid="customers-row"]', { hasText: FIXTURE.customerName }).click();
+  await page.getByRole("button", { name: "客户档案与预约", exact: true }).click();
   const profile = page.locator('[data-testid="customer-profile-panel"]');
   const discountPolicy = profile.getByRole("region", { name: "顾客折扣政策" });
   await discountPolicy.getByRole("combobox").selectOption("customer");

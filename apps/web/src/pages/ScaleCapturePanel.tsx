@@ -1,7 +1,8 @@
 import { Button } from "@laundry/ui";
 import { useEffect, useRef, useState } from "react";
-import { ScaleReadInputSchema, type ScaleReading } from "@laundry/contracts";
+import { ScaleReadInputSchema, ScaleReadingSchema, type ScaleReading } from "@laundry/contracts";
 import type { ScalePort } from "../host/scale-port.js";
+import { readScalePreferences, saveScalePreferences } from "./scale-preferences.js";
 
 export function ScaleCapturePanel({
   port,
@@ -12,6 +13,7 @@ export function ScaleCapturePanel({
   disabled: boolean;
   onApply: (reading: ScaleReading) => boolean;
 }>) {
+  const [preferenceMessage, setPreferenceMessage] = useState("");
   const [ports, setPorts] = useState<readonly string[]>([]);
   const [selected, setSelected] = useState("");
   const [baud, setBaud] = useState("2400");
@@ -20,16 +22,38 @@ export function ScaleCapturePanel({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const generation = useRef(0);
-  useEffect(
-    () => () => {
-      generation.current += 1;
-    },
-    [],
-  );
   useEffect(() => {
+    const saved = readScalePreferences();
+    if (saved.value !== null) {
+      setSelected(saved.value.port);
+      setPorts([saved.value.port]);
+      setBaud(String(saved.value.baud));
+      setFraming(saved.value.framing);
+    }
+    setPreferenceMessage(saved.error ?? "");
+  }, []);
+  useEffect(() => {
+    generation.current += 1;
+    setBusy(false);
     setReading(null);
-  }, [selected, baud, framing]);
+    return () => {
+      generation.current += 1;
+    };
+  }, [port, disabled, selected, baud, framing]);
+  useEffect(() => {
+    if (reading === null) return;
+    const remaining = reading.captured_at + 30_000 - Date.now();
+    const timer = setTimeout(
+      () => {
+        setReading(null);
+        setMessage("读数已过期，请重新读取后记录。");
+      },
+      Math.max(0, remaining + 1),
+    );
+    return () => clearTimeout(timer);
+  }, [reading]);
   const run = async (kind: "ports" | "read") => {
+    if (disabled || busy) return;
     const current = ++generation.current;
     setBusy(true);
     setReading(null);
@@ -43,7 +67,10 @@ export function ScaleCapturePanel({
           return;
         }
         setPorts(response.data);
-        setSelected(response.data[0] ?? "");
+        if (!response.data.includes(selected)) {
+          setSelected("");
+          if (selected !== "") setMessage("已保存的串口当前不可用，请重新连接或选择其他串口。");
+        }
         if (response.data.length === 0) setMessage("未发现串口。连接电子秤后刷新。");
       } else {
         const input = ScaleReadInputSchema.safeParse({
@@ -58,8 +85,16 @@ export function ScaleCapturePanel({
         }
         const response = await port.read(input.data);
         if (generation.current !== current) return;
-        if (response.ok) setReading(response.data);
-        else setMessage(response.error);
+        if (!response.ok) {
+          setMessage(response.error);
+          return;
+        }
+        const parsed = ScaleReadingSchema.safeParse(response.data);
+        if (!parsed.success || parsed.data.port !== selected || !fresh(parsed.data)) {
+          setMessage("未取得当前串口的新鲜稳定读数，请重新读取。");
+          return;
+        }
+        setReading(parsed.data);
       }
     } catch {
       if (generation.current === current) setMessage("读取电子秤失败，请重试。");
@@ -76,7 +111,11 @@ export function ScaleCapturePanel({
       </Button>
       <label>
         串口
-        <select value={selected} onChange={(e) => setSelected(e.target.value)}>
+        <select
+          aria-label="电子秤串口"
+          value={selected}
+          onChange={(e) => setSelected(e.target.value)}
+        >
           <option value="">请选择</option>
           {ports.map((name) => (
             <option key={name}>{name}</option>
@@ -85,7 +124,7 @@ export function ScaleCapturePanel({
       </label>
       <label>
         波特率
-        <select value={baud} onChange={(e) => setBaud(e.target.value)}>
+        <select aria-label="电子秤波特率" value={baud} onChange={(e) => setBaud(e.target.value)}>
           {[1200, 2400, 4800, 9600, 19200, 38400].map((value) => (
             <option key={value}>{value}</option>
           ))}
@@ -93,12 +132,33 @@ export function ScaleCapturePanel({
       </label>
       <label>
         数据格式
-        <select value={framing} onChange={(e) => setFraming(e.target.value)}>
+        <select
+          aria-label="电子秤数据格式"
+          value={framing}
+          onChange={(e) => setFraming(e.target.value)}
+        >
           {["7E1", "7O1", "8N1"].map((value) => (
             <option key={value}>{value}</option>
           ))}
         </select>
       </label>
+      <Button
+        type="button"
+        variant="secondary"
+        disabled={!selected}
+        onClick={() => {
+          const error = saveScalePreferences({
+            operation: "read",
+            port: selected,
+            baud: Number(baud),
+            framing,
+          });
+          setPreferenceMessage(error ?? "通信设置已保存在此设备；重量读数不会保存。");
+        }}
+      >
+        保存通信设置
+      </Button>
+      {preferenceMessage && <p role="status">{preferenceMessage}</p>}
       <Button
         type="button"
         variant="secondary"
@@ -114,6 +174,11 @@ export function ScaleCapturePanel({
           <Button
             type="button"
             onClick={() => {
+              if (disabled || !fresh(reading)) {
+                setReading(null);
+                setMessage("读数已过期，请重新读取后记录。");
+                return;
+              }
               if (onApply(reading)) {
                 setReading(null);
                 setMessage("称重已写入订单备注，随开单或挂单保存。");
@@ -130,4 +195,9 @@ export function ScaleCapturePanel({
       {message && <p role="status">{message}</p>}
     </fieldset>
   );
+}
+
+function fresh(reading: ScaleReading): boolean {
+  const age = Date.now() - reading.captured_at;
+  return age >= 0 && age <= 30_000;
 }

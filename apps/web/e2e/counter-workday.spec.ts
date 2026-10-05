@@ -270,6 +270,10 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   await expect(auditList).toContainText("排序");
 
   // --- 柜台计价政策（ADR-38）：由另一位店长 R5 复核 -----------------------
+  await page
+    .getByRole("navigation", { name: "设置分区" })
+    .getByRole("button", { name: "计价设置", exact: true })
+    .click();
   const pricingPanel = page.locator('[data-testid="pricing-settings"]');
   await expect(pricingPanel).toBeVisible();
   const policyStatus = pricingPanel.getByRole("status");
@@ -339,6 +343,7 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   await signIn(page);
   await page.locator('[data-nav-id="receive"]').click();
   // The counter masks other customers' numbers; an explicit reveal proves the row.
+  await page.locator(".ld-counter-drafts__details > summary").click();
   const maskedRow = page.locator('[data-testid="receive-draft-row"]', {
     hasText: `${phone.slice(0, 3)}****${phone.slice(-4)}`,
   });
@@ -420,6 +425,10 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
   // Reprice only after the order is committed. Order detail must continue to
   // render the immutable ¥15.00 service snapshot and original payable total.
   await page.locator('[data-nav-id="settings"]').click();
+  await page
+    .getByRole("navigation", { name: "设置分区" })
+    .getByRole("button", { name: "价目维护", exact: true })
+    .click();
   const committedCatalogRow = page.locator('[data-testid="catalog-admin-row"]', {
     hasText: CATALOG_CODE,
   });

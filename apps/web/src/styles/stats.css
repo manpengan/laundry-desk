@@ -214,3 +214,34 @@
   font-size: var(--lg-fs-2xs);
   color: var(--lg-ink3);
 }
+
+.ld-stats-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--lg-hair);
+  padding-bottom: 12px;
+}
+.ld-stats-tabs button {
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--lg-field-border);
+  border-radius: var(--lg-radius-md);
+  background: var(--lg-surface-input);
+  color: var(--lg-ink);
+  cursor: pointer;
+  font: inherit;
+}
+.ld-stats-tabs button[aria-selected="true"] {
+  border-color: var(--lg-accent);
+  color: var(--lg-accent-strong);
+  background: var(--lg-accent-soft);
+}
+.ld-stats-tabs button:focus-visible {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 2px;
+}
+.ld-stats-section[hidden] {
+  display: none;
+}

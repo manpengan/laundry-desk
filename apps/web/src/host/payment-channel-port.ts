@@ -71,6 +71,27 @@ export function createPaymentChannelPort(operation: Operation) {
         { operation: "refunds.status", body: { refund_id } },
         PaymentChannelDataSchemas["refunds.status"],
       ),
+    reconciliationHistory: (
+      body: Extract<DesktopPaymentChannelInput, { operation: "reconcile.history" }>["body"],
+    ) =>
+      execute(
+        { operation: "reconcile.history", body },
+        PaymentChannelDataSchemas["reconcile.history"],
+      ),
+    reconciliationDetail: (
+      body: Extract<DesktopPaymentChannelInput, { operation: "reconcile.detail" }>["body"],
+    ) =>
+      execute(
+        { operation: "reconcile.detail", body },
+        PaymentChannelDataSchemas["reconcile.detail"],
+      ),
+    reconciliationReview: (
+      body: Extract<DesktopPaymentChannelInput, { operation: "reconcile.review" }>["body"],
+    ) =>
+      execute(
+        { operation: "reconcile.review", body },
+        PaymentChannelDataSchemas["reconcile.review"],
+      ),
     reconcile: (body: Extract<DesktopPaymentChannelInput, { operation: "reconcile" }>["body"]) =>
       execute({ operation: "reconcile", body }, PaymentChannelDataSchemas.reconcile),
   });

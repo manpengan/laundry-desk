@@ -34,6 +34,7 @@ test.beforeAll(async ({ request }) => {
 test("software-only notification batch proves queue state without claiming delivery", async ({
   page,
 }) => {
+  const notificationTicket = requiredEnvironment("LAUNDRY_E2E_NOTIFICATION_TICKET");
   await signIn(page);
   await page.locator('[data-nav-id="reminders"]').click();
 
@@ -43,7 +44,7 @@ test("software-only notification batch proves queue state without claiming deliv
   await expect(panel).not.toContainText(/已发送|送达|通知成功/u);
 
   const row = page.locator('[data-testid="pickup-reminder-row"]', {
-    hasText: "E2E 催取顾客",
+    hasText: notificationTicket,
   });
   await expect(row).toHaveCount(1, { timeout: 15_000 });
   await row.getByRole("checkbox").check();
@@ -59,7 +60,7 @@ test("software-only notification batch proves queue state without claiming deliv
   );
   const detail = page.getByTestId("notification-delivery-detail");
   await expect(detail).toBeVisible({ timeout: 15_000 });
-  await expect(detail).toContainText("E2E-REMINDER-0001");
+  await expect(detail).toContainText(notificationTicket);
 
   await expect
     .poll(
@@ -71,7 +72,7 @@ test("software-only notification batch proves queue state without claiming deliv
     )
     .toContain("软件模拟已接单（未发送）");
 
-  await expect(panel).not.toContainText("13400000000");
+  await expect(panel).not.toContainText("13400000001");
   await expect(panel).not.toContainText("尊敬的");
   await expect(panel).not.toContainText(/已发送|送达|通知成功/u);
   await expect(panel).toContainText("¥0.00");

@@ -31,11 +31,13 @@ import {
 import type { AppPorts, HealthPort, HealthResult } from "./types.js";
 import { createAiSettingsPort } from "../ai/settings-port.js";
 import { createDesktopAiPanelPort } from "../ai/desktop-ai-port.js";
+import { createMaintenancePort } from "./maintenance-port.js";
 import { createScalePort } from "./scale-port.js";
 import { createRemoteAssistancePort } from "./remote-assistance-port.js";
 import { createStoreExportPort } from "./store-export-port.js";
 import { createMigrationPort } from "./migration-port.js";
 import { createNotificationSettingsPort } from "./notification-settings-port.js";
+import { createReceiveRecoveryPort } from "./receive-recovery-port.js";
 
 export type { LaundryDesktopBridge } from "./desktop-bridge.js";
 
@@ -125,6 +127,11 @@ export function createDesktopPorts(bridge: LaundryDesktopBridge): AppPorts {
         });
   return Object.freeze({
     auth,
+    ...(bridge.receiveRecovery === undefined
+      ? {}
+      : {
+          receiveRecovery: createReceiveRecoveryPort(bridge.receiveRecovery.execute),
+        }),
     ...(bridge.paymentChannel === undefined
       ? {}
       : { paymentChannel: createPaymentChannelPort(bridge.paymentChannel.execute) }),
@@ -134,6 +141,9 @@ export function createDesktopPorts(bridge: LaundryDesktopBridge): AppPorts {
     ...(bridge.remoteAssistance === undefined
       ? {}
       : { remoteAssistance: createRemoteAssistancePort(bridge.remoteAssistance.execute) }),
+    ...(bridge.maintenance === undefined
+      ? {}
+      : { maintenance: createMaintenancePort(bridge.maintenance.execute) }),
     ...(bridge.scale === undefined ? {} : { scale: createScalePort(bridge.scale.execute) }),
     ...(bridge.storeExport === undefined
       ? {}
