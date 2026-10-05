@@ -211,7 +211,7 @@ export function ShiftClosePanel({
     <section className="ld-shift-panel" data-testid="shift-close-panel" aria-label="交班日结">
       <h2 className="ld-shift-panel__title">交班 / 日结签字</h2>
       <p className="ld-shift-panel__hint">
-        对营业日 {businessDate} 快照当日汇总并签字确认（R3 确认卡）。同日仅可交班一次。
+        核对营业日 {businessDate} 的汇总金额并签字确认。同日仅可交班一次。
       </p>
 
       {loaded && closing !== null ? (

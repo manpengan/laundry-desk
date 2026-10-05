@@ -118,8 +118,8 @@ export function StaffAccessPanel({
     >
       <h2 className="ld-shell-main__title">员工与权限</h2>
       <p className="ld-shell-main__hint">
-        角色、在职状态及隐私管理员均为 R5 变更；必须由另一位店长 PIN
-        复核，并立即撤销目标员工旧会话。
+        修改角色、在职状态或隐私管理员时，必须由另一位店长输入 PIN
+        复核；修改后，该员工原有的登录状态将立即失效。
       </p>
       <StaffCreatePanel
         currentStaffId={currentStaffId}

@@ -376,11 +376,15 @@ test("late successful responses are persisted only under the original employee",
 
 test("encrypted files contain no customer plaintext and corruption/OS decryption failure blocks loading", (t) => {
   const temporaryDirectory = tmpdir();
-  const canonicalTemporaryDirectory = realpathSync(temporaryDirectory);
-  if (process.platform === "win32")
+  const canonicalTemporaryDirectory = realpathSync.native(temporaryDirectory);
+  if (process.platform === "win32") {
     t.diagnostic(
       `windows_temp_canonicalized=${canonicalTemporaryDirectory.toLowerCase() !== temporaryDirectory.toLowerCase()}`,
     );
+    t.diagnostic(
+      `windows_temp_js_equals_native=${realpathSync(temporaryDirectory).toLowerCase() === canonicalTemporaryDirectory.toLowerCase()}`,
+    );
+  }
   const root = mkdtempSync(join(canonicalTemporaryDirectory, "receive-recovery-"));
   try {
     const journal = new ReceiveRecoveryJournal(root, storage);
@@ -405,7 +409,7 @@ test("encrypted files contain no customer plaintext and corruption/OS decryption
 });
 
 test("unavailable OS encryption blocks prepare before any request", async () => {
-  const root = mkdtempSync(join(realpathSync(tmpdir()), "receive-recovery-"));
+  const root = mkdtempSync(join(realpathSync.native(tmpdir()), "receive-recovery-"));
   try {
     const unavailable = { ...storage, isEncryptionAvailable: () => false };
     const journal = new ReceiveRecoveryJournal(root, unavailable);

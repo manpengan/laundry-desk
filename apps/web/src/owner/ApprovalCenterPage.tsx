@@ -155,7 +155,7 @@ export function ApprovalCenterPage({ approvalPort, currentStaffId }: ApprovalCen
       <header className="ld-approval-center__header">
         <div>
           <h1 id="approval-center-title">异步审批中心</h1>
-          <p>仅处理服务端冻结的 R4 动作；参数、版本或权限变化会拒绝执行。</p>
+          <p>审批以提交时的申请内容为准；内容、数据版本或权限变化后需重新申请。</p>
         </div>
         <div className="ld-approval-center__tabs" role="tablist" aria-label="审批范围">
           {(["pending", "history"] as const).map((value) => (

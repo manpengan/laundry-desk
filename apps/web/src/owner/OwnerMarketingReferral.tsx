@@ -159,7 +159,7 @@ export function OwnerMarketingReferral({
     <section className="ld-owner-management lg-card" aria-label="推荐奖励">
       <header className="ld-owner-management__header">
         <div>
-          <span className="ld-owner-operations__eyebrow">R4 · 结清订单资格 · 活动预算</span>
+          <span className="ld-owner-operations__eyebrow">需复核 · 仅限结清订单 · 活动预算限制</span>
           <h2>推荐奖励</h2>
           <p>奖励发给推荐人的会员账户；被推荐人每个活动最多获得一次推荐归因。</p>
         </div>
