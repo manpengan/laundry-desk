@@ -330,6 +330,51 @@ test("memory seed overrides order-backed empty summary", async () => {
   assert.equal(body.payable_cents, 9900);
 });
 
+test("only accounting_read holders receive the 账目 income figures", async () => {
+  const orderStore = createMemoryOrderStore();
+  const base = createOrderBackedStatsQuery(orderStore);
+  let lookups = 0;
+  const source = Object.freeze({
+    ...base,
+    incomeSummary: async () => {
+      lookups += 1;
+      return Object.freeze({ real_income_cents: 2_000, performance_income_cents: 2_100 });
+    },
+  });
+  const { queryRegistry } = createRegisteredM1Bus({
+    platform: Object.freeze({
+      settings: createMemorySettingsStore(),
+      features: createMemoryFeaturesStore(),
+      audit: createMemoryAuditQueryStore(),
+    }),
+    stats: Object.freeze({ source, now: () => new Date(DAY_EPOCH * 1000) }),
+  });
+  const run = async (actor: ActorContext) => {
+    const listed = await executeQuery(
+      new FakeSqlClient(),
+      TENANT,
+      "stats.day.summary",
+      { business_date: BUSINESS_DATE },
+      { registry: queryRegistry, actor },
+    );
+    assert.equal(listed.ok, true, JSON.stringify(listed));
+    return listed.ok ? (listed.data.result as Record<string, unknown>) : {};
+  };
+  const clerk = await run(CLERK);
+  assert.equal("real_income_cents" in clerk, false);
+  assert.equal("performance_income_cents" in clerk, false);
+  assert.equal(lookups, 0, "a clerk's query must not even read the accounting ledger");
+  const manager = await run(
+    Object.freeze({
+      ...CLERK,
+      permissions: Object.freeze([...(CLERK.permissions ?? []), "accounting_read"]),
+    }),
+  );
+  assert.equal(manager.real_income_cents, 2_000);
+  assert.equal(manager.performance_income_cents, 2_100);
+  assert.equal(lookups, 1);
+});
+
 test("stats.day.summary rejects invalid business_date", async () => {
   const { queryRegistry } = buildBus();
   const listed = await executeQuery(

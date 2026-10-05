@@ -42,9 +42,12 @@ function daySummaryHandler(deps: StatsHandlerDeps): CommandHandler {
     const businessDate = resolveBusinessDate(input.business_date, deps);
     const scope = { orgId: ctx.tenant.orgId, storeId: ctx.tenant.storeId, businessDate };
     const summary = await deps.source.daySummary(scope);
-    // The workbench shows the same net receipts as 账目, never a second definition.
+    // The workbench shows the same net receipts as 账目, never a second definition. They
+    // are accounting figures, so only holders of accounting_read receive them; everyone
+    // else keeps the day summary the counter has always shown.
+    const canReadAccounting = ctx.actor.permissions?.includes("accounting_read") === true;
     const income =
-      deps.source.incomeSummary === undefined
+      deps.source.incomeSummary === undefined || !canReadAccounting
         ? {}
         : await deps.source.incomeSummary({ ...scope, staffId: ctx.tenant.staffId });
     return Object.freeze({

@@ -16,7 +16,9 @@ on:
 jobs:
   real-postgres:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The full workspace check now takes 12–18 minutes and the whole job 25–29 on a
+    # normal runner (2026-10-04, after PR #229); 30 cancelled a slow runner mid-test.
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v7

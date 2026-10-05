@@ -47,9 +47,12 @@ export type StatsDaySummaryResult = Readonly<{
   /** Order payments before refunds. */
   payment_cents: number;
   picked_garment_count: number;
-  /** ADR-91 P1-5: 账目 real income for the day (net of refunds); absent without a ledger. */
+  /**
+   * ADR-91 P1-5: 账目 real income for the day (net of refunds). Present only for callers
+   * holding accounting_read, and only where a ledger exists.
+   */
   real_income_cents?: number;
-  /** ADR-91 P1-5: 账目 performance income for the day; absent without a ledger. */
+  /** ADR-91 P1-5: 账目 performance income for the day; same visibility as real_income_cents. */
   performance_income_cents?: number;
 }>;
 
