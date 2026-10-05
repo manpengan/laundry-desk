@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,7 +9,6 @@ const execFileAsync = promisify(execFile);
 const packageRoot = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const sourcePath = join(packageRoot, "native", "windows", "LaundryWindowsHelper.cs");
 const outputPath = join(packageRoot, "native", "windows", "laundry-windows-helper.exe");
-const digestPath = `${outputPath}.sha256`;
 
 function compilerCandidates(environment) {
   const windowsRoot = environment.WINDIR;
@@ -36,6 +35,22 @@ async function findCompiler(environment) {
   throw new Error("WINDOWS_HELPER_CSC_UNAVAILABLE");
 }
 
+export async function publishWindowsHelper(temporaryPath, outputPath) {
+  const bytes = await readFile(temporaryPath);
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  const digestPath = `${outputPath}.sha256`;
+  const temporaryDigestPath = `${digestPath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryDigestPath, `${digest}\n`, { encoding: "ascii", flag: "wx" });
+    await rename(temporaryPath, outputPath);
+    // pnpm deploy may hardlink the previous sidecar; never rewrite its shared inode.
+    await rename(temporaryDigestPath, digestPath);
+    return digest;
+  } finally {
+    await rm(temporaryDigestPath, { force: true });
+  }
+}
+
 export async function buildWindowsHelper(environment = process.env, platform = process.platform) {
   if (platform !== "win32") return Object.freeze({ built: false });
   const compiler = await findCompiler(environment);
@@ -58,10 +73,7 @@ export async function buildWindowsHelper(environment = process.env, platform = p
       ],
       { windowsHide: true, timeout: 120_000, maxBuffer: 64 * 1024 },
     );
-    const bytes = await readFile(temporaryPath);
-    const digest = createHash("sha256").update(bytes).digest("hex");
-    await rename(temporaryPath, outputPath);
-    await writeFile(digestPath, `${digest}\n`, { encoding: "ascii", flag: "w" });
+    const digest = await publishWindowsHelper(temporaryPath, outputPath);
     return Object.freeze({ built: true, digest });
   } finally {
     await rm(temporaryPath, { force: true });
