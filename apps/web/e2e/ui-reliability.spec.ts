@@ -135,3 +135,37 @@ test("checkout stays reachable in short and narrow windows without covering fiel
   await page.locator('[data-nav-id="settings"]').click();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
+
+test("settings templates, search and section switching preserve edits and expose failed loading", async ({
+  page,
+}) => {
+  await login(page);
+  await page.locator('[data-nav-id="settings"]').click();
+  await page.getByLabel("从常用品类开始").selectOption("wash_shirt");
+  await expect(page.locator('input[name="catalog-name"]')).toHaveValue("水洗衬衫");
+  await expect(page.locator('input[name="catalog-price"]')).toHaveValue("");
+  await page.locator('input[name="catalog-name"]').fill("测试模板草稿");
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.locator("#settings-staff").scrollIntoViewIfNeeded();
+  await page.getByRole("button", { name: "价目维护", exact: true }).click();
+  await expect(page.locator("#settings-catalog h2").first()).toBeInViewport();
+  await page.locator('input[name="settings-search"]').fill("主题");
+  await expect(page.locator("#settings-appearance")).toBeVisible();
+  await expect(page.locator("#settings-catalog")).toBeHidden();
+  await page.locator('input[name="settings-search"]').fill("价目");
+  await expect(page.locator('input[name="catalog-name"]')).toHaveValue("测试模板草稿");
+  await page.locator('input[name="settings-search"]').fill("不存在的设置");
+  await expect(page.getByText("没有找到相关设置，请换一个关键词。")).toBeVisible();
+  await page.locator('input[name="settings-search"]').fill("");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByLabel("查看分区").selectOption("settings-catalog");
+  await expect(page.locator("#settings-appearance")).toBeHidden();
+  await expect(page.locator('input[name="catalog-name"]')).toHaveValue("测试模板草稿");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.route("**/v1/queries/catalog.items.manage.list", (route) => route.abort("failed"));
+  await page.getByRole("button", { name: "刷新列表", exact: true }).click();
+  await expect(
+    page.getByText("价目读取失败，当前列表可能不是最新。请刷新后再操作。"),
+  ).toBeVisible();
+  await expect(page.getByText("还没有价目，先添加一条才能开单")).toBeHidden();
+});

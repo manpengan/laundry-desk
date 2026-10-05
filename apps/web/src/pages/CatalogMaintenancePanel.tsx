@@ -6,6 +6,7 @@
 import { Button, Input, MoneyInput, MoneyText, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { CATALOG_PRESETS, catalogPresetForm } from "./catalog-presets.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import {
   buildCatalogReorderBody,
@@ -30,6 +31,7 @@ export function CatalogMaintenancePanel({
   const [form, setForm] = useState<CatalogFormState>(EMPTY_CATALOG_FORM);
   const [items, setItems] = useState<readonly CatalogFormRow[]>([]);
   const [busy, setBusy] = useState(false);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const loadGeneration = useRef(0);
 
   const patch = useCallback((next: Partial<CatalogFormState>) => {
@@ -40,16 +42,23 @@ export function CatalogMaintenancePanel({
     if (queryClient === undefined) return;
     const generation = loadGeneration.current + 1;
     loadGeneration.current = generation;
-    const res = await queryClient.execute<unknown>("catalog.items.manage.list", { limit: 200 });
-    if (loadGeneration.current !== generation) return;
-    // The query bus wraps handler output in `result`; readCatalogRows also keeps
-    // a malformed payload from ever reaching render as a non-array.
-    if (!res.ok) {
-      toast.push(res.error.message ?? res.error.code, "error");
-      setItems([]);
-      return;
+    setLoadState("loading");
+    try {
+      const res = await queryClient.execute<unknown>("catalog.items.manage.list", { limit: 200 });
+      if (loadGeneration.current !== generation) return;
+      if (!res.ok) {
+        setLoadState("error");
+        toast.push(res.error.message ?? "无法读取价目，请检查连接后刷新", "error");
+        return;
+      }
+      setItems(readCatalogRows(res.data));
+      setLoadState("ready");
+    } catch {
+      if (loadGeneration.current === generation) {
+        setLoadState("error");
+        toast.push("无法读取价目，请检查连接后刷新", "error");
+      }
     }
-    setItems(readCatalogRows(res.data));
   }, [queryClient, toast]);
 
   useEffect(() => {
@@ -83,6 +92,8 @@ export function CatalogMaintenancePanel({
         toast.push(candidate.is_active ? "价目已保存" : "价目已停用", "success");
         setForm(EMPTY_CATALOG_FORM);
         await reload();
+      } catch {
+        toast.push("操作未完成，请检查连接并刷新价目后重试", "error");
       } finally {
         setBusy(false);
       }
@@ -121,6 +132,8 @@ export function CatalogMaintenancePanel({
         }
         toast.push("价目顺序已保存", "success");
         await reload();
+      } catch {
+        toast.push("操作未完成，请检查连接并刷新价目后重试", "error");
       } finally {
         setBusy(false);
       }
@@ -153,9 +166,31 @@ export function CatalogMaintenancePanel({
         </Button>
       </div>
       <p className="ld-shell-main__hint">
-        开单按服务 + 品类从在架价目中取价。停用只下架，不删除历史编码；版本冲突会要求刷新。
+        先选择常用品类，再填写名称和本店单价即可。编码会自动填写；需要自定义时可修改。停用保留历史记录。
       </p>
 
+      <label className="ld-field">
+        <span className="ld-field__label">从常用品类开始</span>
+        <select
+          className="ld-select ld-input"
+          value=""
+          disabled={busy || form.expected_version > 0}
+          onChange={(event) => {
+            const preset = catalogPresetForm(event.target.value);
+            if (preset) setForm(preset);
+          }}
+        >
+          <option value="">选择模板，自动填写名称与编码</option>
+          {CATALOG_PRESETS.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.name}
+            </option>
+          ))}
+        </select>
+        <span className="ld-field__hint">
+          模板不含价格，请填写本店单价；已有价目请在列表中编辑。
+        </span>
+      </label>
       <div className="ld-settings-form">
         <Input
           name="catalog-code"
@@ -273,7 +308,11 @@ export function CatalogMaintenancePanel({
           </li>
         ))}
       </ul>
-      {items.length === 0 ? (
+      {loadState === "error" ? (
+        <p role="alert">价目读取失败，当前列表可能不是最新。请刷新后再操作。</p>
+      ) : null}
+      {loadState === "loading" ? <p role="status">正在读取价目…</p> : null}
+      {loadState === "ready" && items.length === 0 ? (
         <p className="ld-settings-catalog__empty" role="status">
           还没有价目，先添加一条才能开单
         </p>
