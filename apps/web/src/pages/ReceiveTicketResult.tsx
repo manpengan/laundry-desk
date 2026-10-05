@@ -4,7 +4,7 @@ import type { CommandPort } from "../commands/types.js";
 import { ReceiveResult } from "./ReceiveResult.js";
 import { TicketPrintWaiverNotice } from "./TicketPrintWaiverNotice.js";
 import { TicketPreviewPanel } from "./TicketPreviewPanel.js";
-import type { ReceiveOrderResult } from "./order-form.js";
+import type { ReceiveLineDraft, ReceiveOrderResult } from "./order-form.js";
 import { enqueueTicketPrint, type PrintNotification } from "./ticket-print-enqueue.js";
 
 type ReceiveTicketResultProps = Readonly<{
@@ -15,6 +15,7 @@ type ReceiveTicketResultProps = Readonly<{
   preview: TicketPreview | null;
   queuePrintEnabled: boolean;
   result: ReceiveOrderResult | null;
+  lines?: readonly ReceiveLineDraft[];
 }>;
 
 export function ReceiveTicketResult({
@@ -25,6 +26,7 @@ export function ReceiveTicketResult({
   preview,
   queuePrintEnabled,
   result,
+  lines,
 }: ReceiveTicketResultProps) {
   if (result === null) return null;
   const onEnqueuePrint = () =>
@@ -32,7 +34,7 @@ export function ReceiveTicketResult({
 
   return (
     <>
-      <ReceiveResult result={result} />
+      <ReceiveResult result={result} lines={lines} />
       {preview === null ? null : (
         <>
           <TicketPreviewPanel

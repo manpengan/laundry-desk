@@ -67,6 +67,7 @@ test("recoverDraftForm restores the full editable per-piece snapshot", () => {
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.equal(result.value.draft_id, DRAFT.order_id);
+  assert.equal(result.value.lines[0]?.catalog_name, "水洗 · 衬衫");
   assert.equal(result.value.customer_phone, "13800000111");
   assert.equal(result.value.discount_cents, "100");
   assert.equal(result.value.urgent, true);

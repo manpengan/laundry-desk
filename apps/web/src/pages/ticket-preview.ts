@@ -9,6 +9,7 @@ import {
   type TicketPreviewInput,
   type TicketPreviewLine,
 } from "@laundry/domain";
+import { garmentName } from "./garment-labels.js";
 import type { BuiltReceiveLine, ReceiveOrderResult } from "./order-form.js";
 
 /** Parse built receive lines from a successful buildReceiveBody payload. */
@@ -44,15 +45,16 @@ export type BuildTicketPreviewOpts = Readonly<{
 }>;
 
 export type TicketPreviewLineDraft = Readonly<{
+  catalog_name?: string;
   service_code: string;
   category_code: string;
   unit_price_cents: number;
   qty: number;
 }>;
 
-/** service/category → "wash/shirt" display name. */
+/** Chinese catalog label, with a readable fallback for legacy orders. */
 export function ticketLineName(serviceCode: string, categoryCode: string): string {
-  return `${serviceCode}/${categoryCode}`;
+  return garmentName(serviceCode, categoryCode);
 }
 
 export function toTicketPreviewLines(
@@ -61,7 +63,7 @@ export function toTicketPreviewLines(
   return Object.freeze(
     lines.map((line) =>
       Object.freeze({
-        name: ticketLineName(line.service_code, line.category_code),
+        name: line.catalog_name ?? ticketLineName(line.service_code, line.category_code),
         qty: line.qty,
         unit_price_cents: line.unit_price_cents,
       }),

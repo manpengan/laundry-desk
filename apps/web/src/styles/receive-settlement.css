@@ -149,17 +149,15 @@
   padding: 8px 12px;
 }
 
-/* Checkout bar: the settlement column stretches over the whole row, so
-   `margin-top: auto` parks the bar at its bottom and `sticky` keeps the total
-   and the primary action on screen while long tickets scroll. */
+/* Actions have their own space; scrolling fields cannot hide under them. */
 .ld-counter-panel--settlement .ld-counter-actions {
-  position: sticky;
-  bottom: 0;
+  position: static;
+  flex-shrink: 0;
   z-index: 1;
   flex-direction: column;
   flex-wrap: nowrap;
   gap: 10px;
-  margin: auto -18px 0;
+  margin: 0 -18px;
   padding: 12px 18px 16px;
   border-top: 1px solid var(--lg-hair);
   border-radius: 0 0 var(--lg-radius-lg) var(--lg-radius-lg);

@@ -82,6 +82,8 @@ test("retained form, committed-response loss, replay, and identical new cash ord
   expect(keys[0]).toBeTruthy();
   expect(keys[1]).toBe(keys[0]);
   await expect(page.locator(".ld-order-result")).toContainText("¥30.00");
+  await expect(page.locator(".ld-order-result")).toContainText(name);
+  await expect(page.locator(".ld-order-result")).toContainText("白");
   await page.keyboard.press("Control+Enter");
   await page.getByRole("button", { name: "开下一单" }).click();
   await fill();
@@ -105,4 +107,31 @@ test("retained form, committed-response loss, replay, and identical new cash ord
   await expect(page.locator(".ld-sync-bar")).toHaveAttribute("data-mode", "online", {
     timeout: 12_000,
   });
+});
+
+test("checkout stays reachable in short and narrow windows without covering fields", async ({
+  page,
+}) => {
+  await login(page);
+  await page.locator('[data-nav-id="receive"]').click();
+  for (const [width, height] of [
+    [1280, 800],
+    [853, 600],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.locator('[aria-label="结算"]').scrollIntoViewIfNeeded();
+    const fields = await page.locator(".ld-settlement-fields").boundingBox();
+    const actions = await page.locator(".ld-counter-actions").boundingBox();
+    expect(fields).not.toBeNull();
+    expect(actions).not.toBeNull();
+    expect(fields!.y + fields!.height).toBeLessThanOrEqual(actions!.y + 1);
+    await expect(page.getByRole("button", { name: "确认开单", exact: false })).toBeInViewport();
+    await page.locator('input[name="initial-payment"]').fill("1.50");
+    await expect(page.locator('input[name="initial-payment"]')).toBeFocused();
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "去客户与结算" }).click();
+  await expect(page.locator('input[name="customer-phone"]')).toBeFocused();
+  await page.locator('[data-nav-id="settings"]').click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

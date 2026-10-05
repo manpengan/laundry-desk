@@ -110,6 +110,7 @@ export function unwrapCommandResult<T>(data: unknown): T | null {
 }
 
 export type BuiltReceiveLine = Readonly<{
+  catalog_name?: string;
   service_code: string;
   category_code: string;
   unit_price_cents: number;
@@ -238,6 +239,7 @@ export function buildReceiveBody(input: {
       Object.freeze({
         service_code: service,
         category_code: category,
+        ...(line.catalog_name === undefined ? {} : { catalog_name: line.catalog_name }),
         unit_price_cents: line.unit_price_cents,
         qty,
         garments: Object.freeze(garments),
@@ -320,8 +322,14 @@ export function buildReceiveBody(input: {
     ok: true as const,
     body,
     previewLines: Object.freeze(
-      lines.map(({ service_code, category_code, unit_price_cents, qty }) =>
-        Object.freeze({ service_code, category_code, unit_price_cents, qty }),
+      lines.map(({ service_code, category_code, unit_price_cents, qty, catalog_name }) =>
+        Object.freeze({
+          service_code,
+          category_code,
+          unit_price_cents,
+          qty,
+          ...(catalog_name === undefined ? {} : { catalog_name }),
+        }),
       ),
     ),
   });

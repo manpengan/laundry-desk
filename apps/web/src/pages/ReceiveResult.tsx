@@ -1,9 +1,16 @@
 import { MoneyText, StatusBadge } from "@laundry/ui";
 
-import type { ReceiveOrderResult } from "./order-form.js";
+import { garmentName } from "./garment-labels.js";
+import type { ReceiveLineDraft, ReceiveOrderResult } from "./order-form.js";
 import { discountPolicyLabel, waiverPolicyLabel } from "./order-policy-labels.js";
 
-export function ReceiveResult({ result }: { result: ReceiveOrderResult }) {
+export function ReceiveResult({
+  result,
+  lines,
+}: {
+  result: ReceiveOrderResult;
+  lines?: readonly ReceiveLineDraft[] | undefined;
+}) {
   return (
     <section className="ld-order-result" aria-live="polite">
       <h2 className="ld-order-result__title">开单结果</h2>
@@ -56,7 +63,18 @@ export function ReceiveResult({ result }: { result: ReceiveOrderResult }) {
       <ul className="ld-order-result__garments">
         {result.garments.map((garment) => (
           <li key={garment.garment_id} className="ld-order-result__garment">
-            <span className="ld-order-result__mono">{garment.barcode}</span>
+            <span>
+              {lines?.[garment.line_index]?.catalog_name ??
+                (lines?.[garment.line_index]
+                  ? garmentName(
+                      lines[garment.line_index]!.service_code,
+                      lines[garment.line_index]!.category_code,
+                    )
+                  : `第 ${garment.line_index + 1} 行衣物`)}{" "}
+              · 第 {garment.seq} 件
+            </span>
+            <span>{lines?.[garment.line_index]?.garments[garment.seq - 1]?.color}</span>
+            <span className="ld-order-result__mono">条码 {garment.barcode}</span>
             <StatusBadge family="garment" status={garment.status} />
           </li>
         ))}

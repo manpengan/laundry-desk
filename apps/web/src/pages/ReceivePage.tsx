@@ -1,5 +1,5 @@
 import type { TicketPreview } from "@laundry/domain";
-import { useToast } from "@laundry/ui";
+import { Button, MoneyText, useToast } from "@laundry/ui";
 import { useCallback, useMemo, useRef } from "react";
 
 import type { ScalePort } from "../host/scale-port.js";
@@ -356,7 +356,26 @@ export function ReceivePage({
           </div>
         </>
       )}
+      {phase === "editing" ? (
+        <div className="ld-receive-checkout-shortcut">
+          <MoneyText fen={totals.payable} />
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              const field = pageRef.current?.querySelector<HTMLInputElement>(
+                'input[name="customer-phone"]',
+              );
+              field?.scrollIntoView({ block: "center" });
+              field?.focus({ preventScroll: true });
+            }}
+          >
+            去客户与结算
+          </Button>
+        </div>
+      ) : null}
       <ReceiveTicketResult
+        lines={lines}
         busy={busy}
         commandClient={commandClient}
         notify={toast.push}

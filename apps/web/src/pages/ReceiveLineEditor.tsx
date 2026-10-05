@@ -1,6 +1,7 @@
 import { Button, Icon, Input, MoneyText } from "@laundry/ui";
 
 import type { CatalogListItem } from "../commands/query-client.js";
+import { garmentName } from "./garment-labels.js";
 import { serviceLabel } from "./catalog-services.js";
 import { parsePositiveInt } from "./order-form.js";
 import type { PricingPolicyView } from "./pricing-policy-model.js";
@@ -138,7 +139,7 @@ export function ReceiveLineEditor({
                     {line.catalog_name ??
                       (isBlankLine(line)
                         ? "请选择价目"
-                        : `${line.service_code} · ${line.category_code}`)}
+                        : garmentName(line.service_code, line.category_code))}
                   </strong>
                   <span>
                     {isBlankLine(line)

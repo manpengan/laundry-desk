@@ -217,3 +217,31 @@
     flex-wrap: wrap;
   }
 }
+
+.ld-settings-anchor,
+.ld-settings-anchor > *,
+.ld-settings-form {
+  min-width: 0;
+  max-width: 100%;
+}
+.ld-settings-form__actions {
+  flex-wrap: wrap;
+}
+.ld-settings-printer-smoke__code {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 767px) {
+  .ld-settings-anchor > * {
+    padding: 16px 12px;
+  }
+  .ld-settings-nav {
+    padding: 6px;
+  }
+  .ld-settings-nav__item {
+    min-width: 0;
+    padding: 8px;
+  }
+  .ld-settings-pricing__addon {
+    grid-template-columns: 1fr;
+  }
+}
