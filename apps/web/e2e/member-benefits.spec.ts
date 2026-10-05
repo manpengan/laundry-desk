@@ -213,9 +213,29 @@ test("member tiers, points, punch cards and coupons complete a real PostgreSQL b
   });
   await expect(page.locator('[data-testid="order-detail-payable"]')).toContainText("¥10.00");
   await page.locator('[data-testid="order-detail-pickup-btn"]').click();
+  // The detail action auto-loads this order; do not edit its lookup while that load settles.
+  await expect(page.locator('[data-testid="pickup-loaded-ticket"]')).toHaveText(ticket);
   await page.locator('input[name="pickup-key"]').fill(ticket);
-  await page.getByRole("button", { name: "加载订单" }).click();
-  await page.locator('input[name="collect-cents"]').fill(yuanText("1000"));
+  const [lookup] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/v1/queries/order.lookup",
+    ),
+    page.getByRole("button", { name: "加载订单" }).click(),
+  ]);
+  expect(lookup.request().postDataJSON()).toEqual({ key: ticket, status: "open", limit: 20 });
+  const lookupResult: unknown = await lookup.json();
+  expect(lookupResult).toMatchObject({
+    ok: true,
+    data: { result: { orders: [{ ticket_no: ticket }] } },
+  });
+  const collectInput = page.locator('input[name="collect-cents"]');
+  await expect(collectInput).toBeEnabled();
+  await expect(page.locator('[data-testid="pickup-loaded-ticket"]')).toHaveText(ticket);
+  await expect(page.locator('[data-testid="pickup-loaded-balance"]')).toContainText("¥10.00");
+  await expect(page.locator(".ld-pickup-garments__checkbox:checked")).toHaveCount(1);
+  await collectInput.fill(yuanText("1000"));
   await page.getByRole("button", { name: "确认取衣" }).click();
   await expect(page.locator('[data-testid="pickup-ticket"]')).toHaveText(ticket, {
     timeout: 15_000,

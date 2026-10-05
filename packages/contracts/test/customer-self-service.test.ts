@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   CUSTOMER_SELF_SERVICE_QUERIES,
@@ -19,6 +19,12 @@ const ORDER = "11111111-1111-4111-8111-111111111111";
 const GARMENT = "22222222-2222-4222-8222-222222222222";
 
 describe("customer self-service contracts", () => {
+  let document: ReturnType<typeof buildLaundryOpenApiDocument>;
+
+  beforeAll(() => {
+    document = buildLaundryOpenApiDocument();
+  }, 10_000);
+
   it("freezes eight customer-session-only, PII-aware read queries", () => {
     expect(CUSTOMER_SELF_SERVICE_QUERY_NAMES).toEqual([
       "customer.self_service.orders.list",
@@ -192,7 +198,6 @@ describe("customer self-service contracts", () => {
   });
 
   it("documents dedicated customer cookie plus CSRF instead of staff bearer auth", () => {
-    const document = buildLaundryOpenApiDocument();
     const operation = document.paths["/v1/queries/customer.self_service.orders.list"]?.post;
     expect(operation?.security).toEqual([
       {
@@ -225,7 +230,6 @@ describe("customer self-service contracts", () => {
   }, 10_000);
 
   it("publishes complete customer login, resume and logout operations", () => {
-    const document = buildLaundryOpenApiDocument();
     const login = document.paths["/api/v2/customer/auth/login"]?.post;
     const session = document.paths["/api/v2/customer/auth/session"]?.get;
     const logout = document.paths["/api/v2/customer/auth/logout"]?.post;
@@ -290,7 +294,7 @@ describe("customer self-service contracts", () => {
   });
 
   it("publishes the dedicated profile CAS mutation with no-store conflict semantics", () => {
-    const operation = buildLaundryOpenApiDocument().paths["/api/v2/customer/profile"]?.post;
+    const operation = document.paths["/api/v2/customer/profile"]?.post;
     expect(operation?.requestBody?.content["application/json"]?.schema).toEqual({
       $ref: "#/components/schemas/CustomerPortalProfileUpdateInput",
     });
