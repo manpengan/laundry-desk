@@ -49,6 +49,7 @@ ADR-71 暂停 Cloud 后，需要公网 HTTPS 入口的功能处于不可用状�
   - 不提供“判为已收款”的手工入口，只有渠道核实的收款才入账。渠道后台显示已付的，仍由查询自动结算；对账导入也会报告缺失。
 - **收款入口回到业务流程**：
   - 取衣页的扫码卡片由有 `order_write` 权限的店员使用，可调用 `available`、`checkout`、`status`、`list`（必须带 order_id）和 `close`。
+  - 开单成功后，结果区出现同一张卡片，顾客可当场扫码预付；渠道确认的金额会更新结果区的已付与欠款。开单提交本身不改：订单要先存在，才能按欠款出码。
   - 设置页只保留收款记录、原路退款、账单核对、商户设置和人工核销，这些仍只限管理员。
 - **订单锁的错误**：
   - 数据库守卫 `CHANNEL_PAYMENT_PENDING` / `CHANNEL_REFUND_PENDING` 映射为 `RESOURCE_UNAVAILABLE` 加 `reason: payment_pending`。
