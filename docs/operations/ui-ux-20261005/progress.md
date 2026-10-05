@@ -64,3 +64,11 @@
 - 390px 顶栏换行后高度超过原 84px 滚动留白，分区标题被遮挡。设置分区跳转改为实际顶栏高度加 16px。
 - 新断言在 1280px/390px 检查标题处于顶栏下方且可见；4 项可靠性 E2E 通过，类型、lint、构建和独立审查通过。
 - 16f44b88 Windows 构建及软件检查已通过但尚未安装，继续更新为本次最终源码后安装复验。
+
+## 最终 Windows 产物与归档
+
+- 9f66ee13 Windows V2 hongfa 开发版构建、package:inspect:win、NSIS 安装通过。安装 EXE/app.asar 与构建一致，source provenance 和 SPA dedc84bf… 一致；47 个安装 SPA 文件逐项完整性验证通过。
+- 最终包 Session 1 / 150% / 1707×1004 业务功能 1 项通过（1.5 分钟），renderer_errors=0、server_failures=0。原生丢响应回归通过：3 次请求新增 2 单，重试恢复原票号、新单换身份、各收 500 分，离线队列新增 0。
+- 最终包的本机服务断连与恢复通过；原生关闭操作在锁屏状态下自动化未完成，保留待解锁复验，没有计为通过。
+- 20 张最终代码浅深色页面截图无 pageerror、无横向溢出；853 结算操作可达，390 设置标题无遮挡。图文报告全部图片可读，390px 报告无横向溢出。
+- Windows 证据 ZIP 已下载并验证 SHA-256 一致，见 acceptance.md。9f66ee13 的 GitHub Foundation 两项已绿，PG/Windows Runtime 尚在执行。PR #233 保持 draft，不自动合并。
