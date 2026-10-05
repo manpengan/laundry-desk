@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import { defaultSignatureStatus, inspectPackagedWindowsSoftware } from "./inspect-packaged-win.mjs";
 import { loadWindowsProfile, stageWindowsProfile } from "./windows-profile.mjs";
@@ -13,18 +15,44 @@ import { WINDOWS_PACKAGE_VERSION } from "./windows-package-version.mjs";
 const INSTALLER = `laundry-desk-v2-${WINDOWS_PACKAGE_VERSION}-windows-x64-development-only.exe`;
 const HELPER = "laundry-windows-helper.exe";
 const SOURCE_GIT_SHA = "a".repeat(40);
+const SIGNATURE_OUTPUT =
+  "PROCESS_STARTED\r\nMODULE_READY\r\nQUERY_STARTED\r\nQUERY_COMPLETED\r\nNotSigned\r\n";
+
+test("closes a real child stdin so an EOF-dependent signature query can finish", async () => {
+  const execute = promisify(execFile);
+  const script = `process.stdin.resume(); process.stdin.once('end', () => process.stdout.write(${JSON.stringify(SIGNATURE_OUTPUT)}));`;
+  const status = await defaultSignatureStatus(join(tmpdir(), "installer.exe"), {
+    systemRoot: join(tmpdir(), "windows"),
+    run: (_command, _args, options) =>
+      execute(process.execPath, ["-e", script], { ...options, timeout: 2_000 }),
+  });
+  assert.equal(status, "NotSigned");
+});
 
 test("bounds cold-start Authenticode queries without exposing the parent environment", async () => {
   const systemRoot = join(tmpdir(), "windows");
   const path = join(tmpdir(), "installer.exe");
+  let inputClosed = false;
+  let progress = [];
   const status = await defaultSignatureStatus(path, {
     systemRoot,
-    run: async (command, args, options) => {
+    artifactKind: "installer",
+    reportProgress: (event) => {
+      progress = [...progress, event];
+    },
+    run: (command, args, options) => {
       assert.equal(
         command,
         join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
       );
-      assert.deepEqual(args.slice(0, 3), ["-NoProfile", "-NonInteractive", "-Command"]);
+      assert.deepEqual(args.slice(0, 4), ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"]);
+      assert.match(args[4], /\$PSModuleAutoLoadingPreference = 'None'/u);
+      assert.match(
+        args[4],
+        /Import-Module \(\$PSHOME \+ '\\Modules\\Microsoft\.PowerShell\.Security\\Microsoft\.PowerShell\.Security\.psd1'\)/u,
+      );
+      assert.match(args[4], /Microsoft\.PowerShell\.Security\\Get-AuthenticodeSignature/u);
+      assert.match(args[4], /exit 0$/u);
       assert.equal(options.timeout, 60_000);
       assert.equal(options.maxBuffer, 8_192);
       assert.equal(options.windowsHide, true);
@@ -33,31 +61,65 @@ test("bounds cold-start Authenticode queries without exposing the parent environ
         SystemRoot: systemRoot,
         WINDIR: systemRoot,
       });
-      return { stdout: "NotSigned\r\n", stderr: "" };
+      return Object.assign(Promise.resolve({ stdout: SIGNATURE_OUTPUT, stderr: "" }), {
+        child: {
+          stdin: {
+            end: () => {
+              inputClosed = true;
+            },
+          },
+        },
+      });
     },
   });
   assert.equal(status, "NotSigned");
+  assert.equal(inputClosed, true);
+  assert.deepEqual(
+    progress.map(({ stage }) => stage),
+    ["PROCESS_START", "QUERY_COMPLETED", "PROCESS_EXIT"],
+  );
+  for (const event of progress) {
+    assert.deepEqual(Object.keys(event).sort(), ["artifact_kind", "elapsed_ms", "stage"]);
+    assert.equal(event.artifact_kind, "installer");
+    assert.ok(Number.isSafeInteger(event.elapsed_ms) && event.elapsed_ms >= 0);
+  }
 });
 
 test("fails closed with safe reasons for Authenticode timeouts and invalid responses", async () => {
   const systemRoot = join(tmpdir(), "windows");
   const path = join(tmpdir(), "installer.exe");
-  for (const [failure, reason] of [
-    [{ killed: true, code: null, signal: "SIGTERM" }, "TIMEOUT"],
-    [new Error("private process diagnostics"), "QUERY_FAILED"],
+  for (const [failure, reason, lastStage] of [
+    [
+      {
+        killed: true,
+        code: null,
+        signal: "SIGTERM",
+        stdout: "PROCESS_STARTED\nMODULE_READY\nQUERY_STARTED\n",
+      },
+      "TIMEOUT",
+      "QUERY_STARTED",
+    ],
+    [new Error("private process diagnostics"), "QUERY_FAILED", "PROCESS_START"],
   ]) {
+    let progress = [];
     await assert.rejects(
       defaultSignatureStatus(path, {
         systemRoot,
+        reportProgress: (event) => {
+          progress = [...progress, event];
+        },
         run: async () => {
           throw failure;
         },
       }),
       { message: `WINDOWS_PACKAGE_SIGNATURE_${reason}` },
     );
+    assert.equal(progress.at(-1).stage, lastStage);
+    assert.doesNotMatch(JSON.stringify(progress), /private|installer\.exe/u);
   }
   for (const output of [
-    { stdout: "NotSigned\r\n", stderr: "private diagnostic" },
+    { stdout: SIGNATURE_OUTPUT, stderr: "private diagnostic" },
+    { stdout: SIGNATURE_OUTPUT + "UnknownError\n", stderr: "" },
     { stdout: "NotSigned\nUnknownError\n", stderr: "" },
     { stdout: "", stderr: "" },
   ]) {
@@ -149,12 +211,21 @@ async function fixture(t, profileId = "generic") {
 
 test("inspects exact x64 unsigned NSIS, helper and SPA evidence", async (t) => {
   const setup = await fixture(t);
+  let checking = false;
+  let kinds = [];
 
   const evidence = await inspectPackagedWindowsSoftware({
     platform: "win32",
     releaseRoot: setup.releaseRoot,
     expectedGitSha: SOURCE_GIT_SHA,
-    signatureStatus: async () => "NotSigned",
+    signatureStatus: async (_path, { artifactKind }) => {
+      assert.equal(checking, false, "app and installer checks must not overlap");
+      checking = true;
+      kinds = [...kinds, artifactKind];
+      await Promise.resolve();
+      checking = false;
+      return "NotSigned";
+    },
   });
 
   assert.equal(evidence.app_id, "com.laundry-desk.v2");
@@ -166,6 +237,7 @@ test("inspects exact x64 unsigned NSIS, helper and SPA evidence", async (t) => {
   assert.equal(evidence.spa_bundle, setup.bundle);
   assert.match(evidence.app_sha256, /^[0-9a-f]{64}$/u);
   assert.match(evidence.installer_sha256, /^[0-9a-f]{64}$/u);
+  assert.deepEqual(kinds, ["app", "installer"]);
 });
 
 test("Hongfa has separate executable identity with the same fixed V2 resources", async (t) => {
