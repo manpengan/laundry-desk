@@ -96,3 +96,20 @@ Windows 实机 `70ba498f` 两轮构建均在 Runtime deploy 阶段超时，未�
 
 实机安装尚未执行，原服务未停止、旧宏发程序未覆盖。隔离 NSIS 安装的恢复脚本先在自有测试文件和注册表键演练，
 确认备份完整性、注册表值类型及 ACL 恢复，再进入目标候选安装。最新 CI 与实机结果继续在 PR #233 记录。
+
+### Windows 路径夹具修正（2026-10-06 03:37，Asia/Taipei）
+
+`a27640fa` 的目标 Windows Runtime 与 Counter 构建、来源及完整性检查已通过，产品源码树干净，
+SPA 保持 `bf5e0810c4da07cd3a873d92ef74e7e62c285fa23aee5ef5efd14a457f027151`。
+Windows 原生 platform-fs 10/10 通过；桌面测试原为 13/16，三项失败都来自测试使用 `includes("operations/")`，
+在 Windows 反斜杠路径下未命中故障注入或删除目标，生产 journal 的 `path.join` 行为正常。
+
+三处改为按父目录名识别 `operations`，删除前明确断言目标存在且删除成功，所有业务断言保留。
+Windows Counter CI 的 generic profile 追加直接运行已编译的 30 项 helper、文件系统及桌面恢复/维护测试，不重复构建。
+本地 28 通过、2 项 Windows 原生平台跳过，其中桌面 16/16；完整类型、lint、格式、3 项 foundation 检查及独立复审通过。
+后续 Windows 复跑会分别记录测试提交与 `a27640fa` 产品包来源；本次只改测试、CI 和记录，不改包或生产逻辑。
+
+`214f0433` Foundation 与 `a27640fa` 双 profile 安装 CI 已通过。
+`a27640fa` 两项 CI 未取得 hosted runner，等待 15 分钟后 job cancelled、steps 为空；保留其基础设施失败记录，不能计为测试通过。
+NSIS 安装保护在同用户管理员令牌下的合成演练已通过，包括精确注册表值/SDDL、坏备份拒绝覆盖、完整子进程等待；
+原安装仍未改动，实际安装与随后 Limited 权限的业务/UI/备份演练结果继续单独记录。

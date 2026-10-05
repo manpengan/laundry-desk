@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import test from "node:test";
 import {
   createCommandError,
@@ -101,7 +101,7 @@ test("a failed prepare write makes zero HTTP calls and keeps the draft", async (
   const files = memoryFiles();
   const journal = new ReceiveRecoveryJournal("/recovery", storage, files.factory);
   journal.save(session, draft);
-  files.fail((file) => file.includes("operations/"));
+  files.fail((file) => basename(dirname(file)) === "operations");
   let calls = 0;
   const send = createDesktopJsonRequester(
     async () => {
@@ -194,7 +194,7 @@ test("receipt write failure leaves the prepared operation replayable with no new
   };
   files.fail(
     (file, value) =>
-      file.includes("operations/") && Reflect.get(value as object, "response") !== null,
+      basename(dirname(file)) === "operations" && Reflect.get(value as object, "response") !== null,
   );
   const send = createDesktopJsonRequester(request, () => session, undefined, journal);
   assert.equal(await send("POST", path, { body, operationId: draft.operationId }), null);
@@ -274,8 +274,9 @@ test("a missing prepared file cannot silently turn a submitted order back into a
   const journal = new ReceiveRecoveryJournal("/recovery", storage, files.factory);
   journal.save(session, draft);
   journal.prepare(session, draft.operationId, JSON.stringify(body));
-  const path = [...files.data.keys()].find((file) => file.includes("operations/"))!;
-  files.data.delete(path);
+  const path = [...files.data.keys()].find((file) => basename(dirname(file)) === "operations");
+  assert.ok(path, "prepared operation must exist before simulating its removal");
+  assert.equal(files.data.delete(path), true);
   assert.throws(() => journal.load(session), /Missing/u);
   assert.throws(() => journal.save(session, draft), /Missing/u);
 });

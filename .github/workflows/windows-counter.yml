@@ -54,6 +54,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'COUNTER_PACKAGE_FAILED' }
           pnpm.cmd --filter @laundry/edge-agent package:inspect:win
           if ($LASTEXITCODE -ne 0) { throw 'COUNTER_INSPECTION_FAILED' }
+      - name: Check Windows native files and desktop recovery regressions
+        if: matrix.profile == 'generic'
+        run: >-
+          node --test packages/platform-fs/scripts/*.test.mjs
+          "packages/platform-fs/dist/**/*.test.js"
+          apps/edge-agent/dist/desktop/receive-recovery.test.js
+          apps/edge-agent/dist/desktop/maintenance-operation.test.js
       - name: Install NSIS and verify installed source and hashes
         shell: pwsh
         run: ./apps/edge-agent/scripts/ci-install-windows.ps1 -Profile '${{ matrix.profile }}'
