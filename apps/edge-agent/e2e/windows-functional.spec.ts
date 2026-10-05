@@ -555,11 +555,16 @@ test("created test admin completes the installed Windows desktop functional jour
     await capture(page, screenshots.order);
 
     await drawer.locator('[data-testid="order-detail-pickup-btn"]').click();
-    await page.locator('input[name="pickup-key"]').fill(ticketNo);
-    await page.getByRole("button", { name: "加载订单" }).click();
+    // The detail action already loads this order. Let that request settle before
+    // testing an explicit reload, so typing cannot race its ticket prefill.
     await expect(page.locator('[data-testid="pickup-loaded-ticket"]')).toHaveText(ticketNo, {
       timeout: 20_000,
     });
+    await expect(page.locator('input[name="pickup-key"]')).toHaveValue(ticketNo);
+    const reloadOrder = page.getByRole("button", { name: "加载订单" });
+    await reloadOrder.click();
+    await expect(reloadOrder).toBeEnabled();
+    await expect(page.locator('[data-testid="pickup-loaded-ticket"]')).toHaveText(ticketNo);
     await expect(page.locator('[data-testid="pickup-garment-list"]')).toContainText("白");
     await page.locator('input[name="collect-cents"]').fill(yuanText("1600"));
     await page.getByRole("button", { name: "确认取衣" }).click();
