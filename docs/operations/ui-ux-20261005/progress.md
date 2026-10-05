@@ -72,3 +72,11 @@
 - 最终包的本机服务断连与恢复通过；原生关闭操作在锁屏状态下自动化未完成，保留待解锁复验，没有计为通过。
 - 20 张最终代码浅深色页面截图无 pageerror、无横向溢出；853 结算操作可达，390 设置标题无遮挡。图文报告全部图片可读，390px 报告无横向溢出。
 - Windows 证据 ZIP 已下载并验证 SHA-256 一致，见 acceptance.md。9f66ee13 的 GitHub Foundation 两项已绿，PG/Windows Runtime 尚在执行。PR #233 保持 draft，不自动合并。
+
+## Computer Use 接续与 CI 误报修正
+
+- 9f66ee13 的 PostgreSQL 集成及 Playwright 全链路随后通过（run 37311545989）；文档 head 90b431a3 的 PostgreSQL run 37313380288 在 Server 单测失败，不能标为全部 CI 通过。
+- 失败样本的随机审计 UUID 为 `07c18818-623d-47dc-96e5-2c0000da2786`，命中针对整行 JSON 的 `0000` 子串检查，并非实际记录了 PIN。改为检查审计 ID 的 UUIDv4 格式与其余 14 个字段的精确允许列表，同时严格比对固定 SQL。
+- 使用含 `0000/1234` 的合法组织 UUID fixture 稳定复现旧断言失败；修正后目标单测 1/1、Server 构建、ESLint、Prettier 通过。独立 TypeScript 复审确认字段缺失、追加或混入凭据仍会失败，没有削弱安全断言。
+- 新一轮 SSH 核对发现 Windows 安装已变为 PR #232 `57e6def1`，不是本轮 PR #233 的 9f66ee13。实际 app.asar 为 `93c1c1a0e39b0bec409df41ef5ee5ca26e5880a91fa24dd0ca1868ac4882aa9c`；SPA `6077db24e90df3a8182da433d787a682a9cc48dbfafed92959d6011caf510a5e` 的 48 项文件完整性通过。历史 86 分与上轮验收不能直接应用到此安装版。
+- Computer Use 已打开同账号向日葵 DESKTOP-MAN 连接。Windows 原有 AweSunService 已启动，但远控要求验证且未开启免密；已请用户在现有窗口自行完成验证，不索取密码。尚未进入 Windows 应用界面，本轮鼠标、键盘与原生弹窗验收仍待进行。
