@@ -37,3 +37,15 @@ V02–V08 的跨机器/用户、长期运行、实际签名与安装回退、目
 
 O01 全店图像找衣与 O02 自动拉取支付账单沿用原审查中的可选新需求分类。
 本轮范围异步澄清超过 60 秒未获回答，按已说明的默认范围不纳入本轮；未实现，不计为完成或交付。
+
+### 提交与 CI 接续（2026-10-06 02:23，Asia/Taipei）
+
+- `2dad7cd1` 已整合 main `10b55c8e` 并推送，实现 D01–D08/U01–U08，SPA manifest SHA-256 为 `a562523bbde436fd8f568bc3966da73c6c4da68132bfb9fe0e4d79e6383a9fc8`，45 项完整性检查通过。
+- `70ba498f` 修正全新 checkout 的 server 构建依赖；无 dist、无缓存类型检查 6/6。该版本 [Foundation CI](https://github.com/manpengan/laundry-desk/actions/runs/37351534464) 已通过，含 workspace 与 macOS runtime。该版本两项 CI 失败保留原记录，不计通过。
+- `a330cad9` 固定 PowerShell 系统签名模块、关闭 stdin、顺序查询并增加有限诊断；保留签名拒绝策略。联合回归 19/19，独立复核 7/7。Windows 本机对实际 CI app/installer 分别 1015ms/484ms 返回 `NotSigned`，本机结果不替代候选 CI。
+- 安装态恢复用例改验可见界面，并在应用关闭期间独立补缴 500 分；重启需核对原票号、衣物及应付/已付/欠款 1500/500/1000 分。类型、lint 与合成 HTTP 夹具通过，完整 Windows 用例结果另验。
+- 远端 fresh commissioning 发现测试仍按旧导航寻找会员及交班面板。Web/Mac 两份测试各补五行显式导航，全部闭环断言保留；类型、lint、格式与独立复核通过。官方独立空卷 Browser commissioning 1/1，后续客户/工厂/会员/通知 4/4，退出 0。日志 `/private/tmp/ld-commissioning-nav-acceptance.log`；原 QA 按原容器 ID 恢复，PG healthy、API ready。Mac 对应完整打包用例本轮未重跑。
+- Windows 隔离构建当前为 `70ba498f`，此后仅验收/CI 工具变更。首轮 Runtime 生产依赖 deploy 超时，未产生可验收安装包；离线供应链校验已通过，正式构建重试中。原 Windows 服务尚未切换，Session 1 仍锁定。
+
+最新远端运行、候选 Windows 结果与证据索引在 [PR #233](https://github.com/manpengan/laundry-desk/pull/233) 继续记录。
+后续只改测试、CI 或记录时仍分别列明源码 SHA；不得把不同 SHA 写成同一安装包，也不得将失败或待执行写成通过。

@@ -194,15 +194,20 @@ async function completeCredentials(page: Page, password: string, pin: string): P
 
 async function createResetAndVerifyStaff(page: Page): Promise<void> {
   await page.locator('[data-nav-id="settings"]').click();
+  const settingsNavigation = page.getByRole("navigation", { name: "设置分区" });
+  await settingsNavigation.getByRole("button", { name: "员工与权限", exact: true }).click();
   const staffPanel = page.locator('[data-testid="staff-access"]');
   await expect(staffPanel.locator('[data-testid="staff-access-list"] > li')).toHaveCount(2, {
     timeout: 15_000,
   });
   await expect(staffPanel).toContainText(BOOTSTRAP.approverDisplayName);
+  await settingsNavigation.getByRole("button", { name: "会员权益", exact: true }).click();
   await expect(page.getByRole("region", { name: "充值赠送档位" })).toBeVisible();
   await page.locator('[data-nav-id="stats"]').click();
+  await page.getByRole("tab", { name: "交班", exact: true }).click();
   await expect(page.locator('[data-testid="shift-close-panel"]')).toBeVisible();
   await page.locator('[data-nav-id="settings"]').click();
+  await settingsNavigation.getByRole("button", { name: "员工与权限", exact: true }).click();
 
   await staffPanel.getByRole("button", { name: "新增员工" }).click();
   await staffPanel.getByLabel("登录名").fill(NEW_STAFF.username);
