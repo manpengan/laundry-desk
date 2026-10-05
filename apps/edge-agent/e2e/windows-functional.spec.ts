@@ -23,6 +23,14 @@ import {
   measureAsLaunchedGeometry,
 } from "./windows-functional-geometry.mjs";
 import {
+  captureFunctionalFailureDom,
+  closeFunctionalApplication,
+  functionalStage,
+  functionalStep,
+  hasExited,
+  type FunctionalStage,
+} from "./windows-functional-diagnostics.js";
+import {
   fillWindowsCredential,
   loadWindowsBootstrapCredentials,
   loadWindowsFunctionalAccount,
@@ -128,10 +136,6 @@ async function launchInstalled(executable: string, userDataPath: string) {
   });
 }
 
-async function closeApplication(application: ElectronApplication | null): Promise<void> {
-  await application?.close();
-}
-
 async function login(page: Page, username: string, password: string): Promise<void> {
   await expect(page.locator('[data-page="login"]')).toBeVisible({ timeout: 20_000 });
   await page.locator('input[name="org_code"]').fill(ORG_CODE);
@@ -142,16 +146,27 @@ async function login(page: Page, username: string, password: string): Promise<vo
   await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 20_000 });
 }
 
-async function logout(page: Page): Promise<void> {
-  const result = await page.evaluate(async () => {
-    const bridge = (
-      window as Window & { laundryDesktop?: { auth?: { logout?: () => Promise<unknown> } } }
-    ).laundryDesktop;
-    return await bridge?.auth?.logout?.();
-  });
+async function logout(page: Page, phase: "bootstrap" | "final"): Promise<void> {
+  const result = await functionalStep(
+    `logout.${phase}.ipc`,
+    () =>
+      page.evaluate(async () => {
+        const bridge = (
+          window as Window & { laundryDesktop?: { auth?: { logout?: () => Promise<unknown> } } }
+        ).laundryDesktop;
+        return await bridge?.auth?.logout?.();
+      }),
+    20_000,
+  );
   expect(result).toEqual({ ok: true, data: { logged_out: true } });
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.locator('[data-page="login"]')).toBeVisible({ timeout: 20_000 });
+  await functionalStep(`logout.${phase}.reload`, () =>
+    page.reload({ waitUntil: "domcontentloaded", timeout: 10_000 }),
+  );
+  await functionalStep(
+    `logout.${phase}.identity`,
+    () => expect(page.locator('[data-page="login"]')).toBeVisible({ timeout: 20_000 }),
+    20_000,
+  );
 }
 
 async function selectApprover(page: Page, displayName: string, pin: string): Promise<void> {
@@ -166,20 +181,39 @@ async function selectApprover(page: Page, displayName: string, pin: string): Pro
   await dialog.getByRole("button", { name: "确认 PIN" }).click();
 }
 
-async function switchStaff(page: Page, displayName: string, pin: string): Promise<void> {
-  await page.getByRole("button", { name: "切换员工" }).click();
+async function switchStaff(
+  page: Page,
+  displayName: string,
+  pin: string,
+  phase: "approver" | "admin",
+): Promise<void> {
+  await functionalStep(`switch.${phase}.open`, () =>
+    page.getByRole("button", { name: "切换员工" }).click({ timeout: 10_000 }),
+  );
   const dialog = page.getByRole("dialog", { name: "切换员工" });
+  await functionalStep(`switch.${phase}.dialog`, () =>
+    expect(dialog).toBeVisible({ timeout: 10_000 }),
+  );
   const select = dialog.getByRole("combobox", { name: "目标员工" });
   const option = select.locator("option").filter({ hasText: displayName });
-  const value = await option.getAttribute("value");
-  if (value === null) {
-    const available = await select.locator("option").allTextContents();
-    throw new Error(`Windows functional switch target is unavailable: ${available.join(", ")}`);
-  }
-  await select.selectOption(value);
-  await fillWindowsCredential(dialog.getByLabel("PIN"), pin);
-  await dialog.getByRole("button", { name: "确认切换" }).click();
-  await expect(page.getByText(displayName, { exact: true })).toBeVisible({ timeout: 20_000 });
+  const value = await functionalStep(`switch.${phase}.option`, () =>
+    option.getAttribute("value", { timeout: 10_000 }),
+  );
+  if (value === null) throw new Error("Windows functional switch target is unavailable");
+  await functionalStep(`switch.${phase}.select`, () =>
+    select.selectOption(value, { timeout: 10_000 }),
+  );
+  await functionalStep(`switch.${phase}.pin`, () =>
+    fillWindowsCredential(dialog.getByLabel("PIN"), pin),
+  );
+  await functionalStep(`switch.${phase}.submit`, () =>
+    dialog.getByRole("button", { name: "确认切换" }).click({ timeout: 10_000 }),
+  );
+  await functionalStep(
+    `switch.${phase}.identity`,
+    () => expect(page.getByText(displayName, { exact: true })).toBeVisible({ timeout: 20_000 }),
+    20_000,
+  );
 }
 
 async function completeCredentials(page: Page, account: FunctionalAccount): Promise<void> {
@@ -195,8 +229,8 @@ async function completeCredentials(page: Page, account: FunctionalAccount): Prom
   });
 }
 
-async function capture(page: Page, path: string): Promise<void> {
-  await page.screenshot({ path, type: "png" });
+async function capture(page: Page, path: string, stage: FunctionalStage): Promise<void> {
+  await functionalStep(stage, () => page.screenshot({ path, type: "png", timeout: 10_000 }));
 }
 
 async function verifyNavigation(page: Page): Promise<void> {
@@ -356,12 +390,15 @@ test("created test admin completes the installed Windows desktop functional jour
   let application: ElectronApplication | null = null;
   let mainLog: ReturnType<typeof captureMainProcessOutput> | null = null;
   let passed = false;
+  let failed = false;
+  let observedPage: Page | null = null;
   const rendererErrors: string[] = [];
   const serverFailures: string[] = [];
   let ticketNo = "";
   let layout: Awaited<ReturnType<typeof verifyAsLaunchedLayout>> | null = null;
 
   const observe = (page: Page): void => {
+    observedPage = page;
     page.on("pageerror", (error) => rendererErrors.push(error.message));
     page.on("response", (response) => {
       if (response.status() >= 500) serverFailures.push(`${response.status()} ${response.url()}`);
@@ -393,7 +430,7 @@ test("created test admin completes the installed Windows desktop functional jour
       await expect(accountRow).toContainText("店长", { timeout: 20_000 });
       await expect(accountRow).toContainText("在职");
       await persistFunctionalAccount(accountPath, account);
-      await logout(page);
+      await logout(page, "bootstrap");
     }
     await page.locator('input[name="org_code"]').fill(ORG_CODE);
     await page.locator('input[name="store_code"]').fill(STORE_CODE);
@@ -440,7 +477,7 @@ test("created test admin completes the installed Windows desktop functional jour
     });
     expect(health).toEqual({ ok: true, data: { status: "ready" } });
     layout = await verifyAsLaunchedLayout(application, page, evidenceRootReal);
-    await capture(page, screenshots.workbench);
+    await capture(page, screenshots.workbench, "screenshot.workbench");
 
     await verifyNavigation(page);
     // Navigation ends on 设置; theme lives in 设置 → 外观与快捷键 (counter default 浅色).
@@ -492,7 +529,7 @@ test("created test admin completes the installed Windows desktop functional jour
     await expect(page.locator(".ld-toast").last()).toContainText("已刷新本机打印队列", {
       timeout: 20_000,
     });
-    await capture(page, screenshots.settings);
+    await capture(page, screenshots.settings, "screenshot.settings");
 
     await page.locator('[data-nav-id="customers"]').click();
     await page.locator('[data-testid="customers-phone-input"]').fill(fixtures.customerPhone);
@@ -577,7 +614,7 @@ test("created test admin completes the installed Windows desktop functional jour
       timeout: 20_000,
     });
     await expect(drawer.locator('[data-testid="order-detail-balance"]')).toContainText("¥16.00");
-    await capture(page, screenshots.order);
+    await capture(page, screenshots.order, "screenshot.order");
 
     await drawer.locator('[data-testid="order-detail-pickup-btn"]').click();
     // The detail action already loads this order. Let that request settle before
@@ -598,7 +635,7 @@ test("created test admin completes the installed Windows desktop functional jour
     });
     await expect(page.locator(".ld-order-result").last()).toContainText("条码");
     await expect(page.locator(".ld-order-result").last()).toContainText("白");
-    await capture(page, screenshots.settled);
+    await capture(page, screenshots.settled, "screenshot.settled");
 
     await page.locator('[data-nav-id="stats"]').click();
     await page.getByRole("tab", { name: "历史报表与对账" }).click();
@@ -607,11 +644,12 @@ test("created test admin completes the installed Windows desktop functional jour
       timeout: 20_000,
     });
     await expect(page.getByRole("heading", { name: "支付账本" })).toBeVisible();
-    await capture(page, screenshots.stats);
+    await capture(page, screenshots.stats, "screenshot.stats");
 
     if (retriedMainEvaluations().length > 0)
       await mainLog.save(evidenceRootReal, "main-process-before-restart.log");
-    await closeApplication(application);
+    await closeFunctionalApplication(application, "close.restart");
+    application = null;
     application = await launchInstalled(executable, userDataPath);
     mainLog = captureMainProcessOutput(application);
     page = await application.firstWindow();
@@ -630,14 +668,45 @@ test("created test admin completes the installed Windows desktop functional jour
         { exact: true },
       ),
     ).toBeVisible();
-    await capture(page, screenshots.restarted);
+    await capture(page, screenshots.restarted, "screenshot.restarted");
 
-    await switchStaff(page, bootstrap.approverDisplayName, bootstrap.approverPin);
-    await switchStaff(page, account.displayName, account.pin);
-    await logout(page);
+    await switchStaff(page, bootstrap.approverDisplayName, bootstrap.approverPin, "approver");
+    await switchStaff(page, account.displayName, account.pin, "admin");
+    await functionalStep(
+      "receive.final-recovery",
+      async () => {
+        await page.locator('[data-nav-id="receive"]').click({ timeout: 10_000 });
+        await expect(page.locator('[data-shell="counter"]')).toHaveAttribute("data-nav", "receive");
+        await expect(page.getByText("本机开单内容已加密保存", { exact: true })).toBeVisible({
+          timeout: 20_000,
+        });
+        await expect(page.getByRole("heading", { name: "开单已完成", exact: true })).toBeVisible();
+        await expect(page.locator('[data-testid="receive-ticket"]')).toHaveText(ticketNo);
+        const restoredReceipt = page.locator(".ld-order-result").last();
+        await expect(
+          restoredReceipt.getByText("已付", { exact: true }).locator("..").locator("dd"),
+        ).toHaveText("¥20.00");
+        await expect(
+          restoredReceipt.getByText("欠款", { exact: true }).locator("..").locator("dd"),
+        ).toHaveText("¥0.00");
+        await expect(page.getByText("正在核对最新订单金额…", { exact: true })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "重新核对", exact: true })).toHaveCount(0);
+        await expect(page.getByRole("button", { name: "重试恢复", exact: true })).toHaveCount(0);
+        const unload = await page.evaluate(() => {
+          const event = new Event("beforeunload", { cancelable: true });
+          const allowed = window.dispatchEvent(event);
+          return { allowed, prevented: event.defaultPrevented };
+        });
+        expect(unload).toEqual({ allowed: true, prevented: false });
+      },
+      20_000,
+    );
+    await logout(page, "final");
 
     expect(rendererErrors).toEqual([]);
     expect(serverFailures).toEqual([]);
+    await closeFunctionalApplication(application, "close.final");
+    application = null;
     const evidence = Object.freeze({
       status: "passed",
       account: Object.freeze({
@@ -659,16 +728,44 @@ test("created test admin completes the installed Windows desktop functional jour
       `${JSON.stringify(evidence, null, 2)}\n`,
       "utf8",
     );
-    process.stdout.write(
-      `${JSON.stringify({ status: "passed", username: account.username, ticket_no: ticketNo, evidence: evidenceRootReal })}\n`,
-    );
+    process.stdout.write(`${JSON.stringify({ status: "passed" })}\n`);
     passed = true;
+  } catch (error) {
+    failed = true;
+    if (observedPage !== null) {
+      await captureFunctionalFailureDom(observedPage).catch(() =>
+        functionalStage("diagnostics.dom", "failed"),
+      );
+    }
+    throw error;
   } finally {
     // ADR-91 P1-8: a failed run, or one that needed a retry, keeps the main-process output
     // beside its screenshots.
-    if (!passed || retriedMainEvaluations().length > 0)
-      await mainLog?.save(evidenceRootReal).catch(() => undefined);
-    await closeApplication(application);
-    await rm(userDataPath, { force: true, recursive: true });
+    if ((!passed || retriedMainEvaluations().length > 0) && mainLog !== null) {
+      const log = mainLog;
+      await functionalStep("diagnostics.main-log", () => log.save(evidenceRootReal), 2_000).catch(
+        () => undefined,
+      );
+    }
+    let closeFailed = false;
+    let closeError: unknown;
+    if (application !== null && !hasExited(application.process())) {
+      try {
+        await closeFunctionalApplication(application, "close.cleanup");
+      } catch (error) {
+        closeFailed = true;
+        closeError = error;
+      }
+    }
+    if (passed && !closeFailed && (application === null || hasExited(application.process()))) {
+      await functionalStep(
+        "cleanup.private-material",
+        () => rm(userDataPath, { force: true, recursive: true }),
+        5_000,
+      );
+    } else {
+      functionalStage("cleanup.private-material", "retained");
+    }
+    if (closeFailed && !failed) throw closeError;
   }
 });
