@@ -315,7 +315,11 @@ test("builds file-linked workspace dependencies before their consumers test", as
     `${contractsPackage.name}#build`,
     `${platformFsPackage.name}#build`,
   ];
-  assert.deepEqual(turboConfig.tasks[`${edgePackage.name}#typecheck`]?.dependsOn, edgeDepBuild);
+  // Installed Counter E2E imports the synthetic server fixture from compiled output.
+  assert.deepEqual(turboConfig.tasks[`${edgePackage.name}#typecheck`]?.dependsOn, [
+    ...edgeDepBuild,
+    `${serverPackage.name}#build`,
+  ]);
   assert.deepEqual(turboConfig.tasks[`${edgePackage.name}#test`]?.dependsOn, [
     ...edgeDepBuild,
     `${webPackage.name}#test`,

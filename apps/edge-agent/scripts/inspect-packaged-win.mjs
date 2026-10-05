@@ -136,34 +136,44 @@ function parseDisabledUpdateConfig(bytes) {
   }
 }
 
-async function defaultSignatureStatus(path) {
-  const systemRoot = process.env.SystemRoot ?? process.env.WINDIR;
+export async function defaultSignatureStatus(
+  path,
+  { run = execFileAsync, systemRoot = process.env.SystemRoot ?? process.env.WINDIR } = {},
+) {
   if (typeof systemRoot !== "string" || !isAbsolute(systemRoot)) {
     throw new Error("Windows system root is unavailable");
   }
   const powershell = join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-  const result = await execFileAsync(
-    powershell,
-    [
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      "(Get-AuthenticodeSignature -LiteralPath $env:LAUNDRY_INSPECT_PATH).Status.ToString()",
-    ],
-    {
-      encoding: "utf8",
-      env: {
-        LAUNDRY_INSPECT_PATH: path,
-        SystemRoot: systemRoot,
-        WINDIR: systemRoot,
+  let result;
+  try {
+    result = await run(
+      powershell,
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "(Get-AuthenticodeSignature -LiteralPath $env:LAUNDRY_INSPECT_PATH).Status.ToString()",
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          LAUNDRY_INSPECT_PATH: path,
+          SystemRoot: systemRoot,
+          WINDIR: systemRoot,
+        },
+        maxBuffer: 8_192,
+        timeout: 60_000,
+        windowsHide: true,
       },
-      maxBuffer: 8_192,
-      timeout: 15_000,
-      windowsHide: true,
-    },
-  );
+    );
+  } catch (error) {
+    const timedOut = error?.killed === true && error.code === null && error.signal === "SIGTERM";
+    throw new Error(
+      timedOut ? "WINDOWS_PACKAGE_SIGNATURE_TIMEOUT" : "WINDOWS_PACKAGE_SIGNATURE_QUERY_FAILED",
+    );
+  }
   if (result.stderr !== "" || !/^[A-Za-z]+\r?\n?$/u.test(result.stdout)) {
-    throw new Error("Authenticode status output is invalid");
+    throw new Error("WINDOWS_PACKAGE_SIGNATURE_OUTPUT_INVALID");
   }
   return result.stdout.trim();
 }
@@ -327,8 +337,13 @@ if (invoked !== undefined && pathToFileURL(resolve(invoked)).href === import.met
       .then((evidence) =>
         process.stdout.write(`WINDOWS_PACKAGE_SOFTWARE_OK ${JSON.stringify(evidence)}\n`),
       )
-      .catch(() => {
-        process.stderr.write("WINDOWS_PACKAGE_SOFTWARE_FAILED\n");
+      .catch((error) => {
+        const reason = /^WINDOWS_PACKAGE_SIGNATURE_(TIMEOUT|QUERY_FAILED|OUTPUT_INVALID)$/u.test(
+          error?.message,
+        )
+          ? ` ${error.message}`
+          : "";
+        process.stderr.write(`WINDOWS_PACKAGE_SOFTWARE_FAILED${reason}\n`);
         process.exitCode = 1;
       });
   }
