@@ -53,8 +53,13 @@ export function SettingsLayout({
     setSelected(id);
     // Keep every panel mounted so narrowing settings never discards an edited form.
     requestAnimationFrame(() => {
-      content.current?.scrollIntoView({ block: "start" });
-      content.current?.focus({ preventScroll: true });
+      const target = content.current;
+      if (!target) return;
+      const header = target.closest(".ld-shell")?.querySelector(".ld-shell-topbar");
+      // The sticky header wraps on narrow windows; its desktop height is not a safe offset.
+      if (header) target.style.scrollMarginTop = `${header.getBoundingClientRect().height + 16}px`;
+      target.scrollIntoView({ block: "start" });
+      target.focus({ preventScroll: true });
     });
   };
   return (

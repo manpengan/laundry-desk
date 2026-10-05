@@ -34,6 +34,18 @@ async function createCatalog(page: Page, code: string, name: string) {
   await expect(page.locator('[data-testid="catalog-admin-row"]', { hasText: code })).toBeVisible();
 }
 
+async function expectCatalogHeadingBelowHeader(page: Page) {
+  const heading = page.locator("#settings-catalog h2").first();
+  await expect(heading).toBeInViewport();
+  await expect
+    .poll(async () => {
+      const title = await heading.boundingBox();
+      const header = await page.locator(".ld-shell-topbar").boundingBox();
+      return title !== null && header !== null && title.y >= header.y + header.height;
+    })
+    .toBe(true);
+}
+
 test("retained form, committed-response loss, replay, and identical new cash order", async ({
   page,
 }) => {
@@ -221,7 +233,7 @@ test("settings templates, search and section switching preserve edits and expose
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.locator("#settings-staff").scrollIntoViewIfNeeded();
   await page.getByRole("button", { name: "价目维护", exact: true }).click();
-  await expect(page.locator("#settings-catalog h2").first()).toBeInViewport();
+  await expectCatalogHeadingBelowHeader(page);
   await page.locator('input[name="settings-search"]').fill("主题");
   await expect(page.locator("#settings-appearance")).toBeVisible();
   await expect(page.locator("#settings-catalog")).toBeHidden();
@@ -232,6 +244,7 @@ test("settings templates, search and section switching preserve edits and expose
   await page.locator('input[name="settings-search"]').fill("");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByLabel("查看分区").selectOption("settings-catalog");
+  await expectCatalogHeadingBelowHeader(page);
   await expect(page.locator("#settings-appearance")).toBeHidden();
   await expect(page.locator('input[name="catalog-name"]')).toHaveValue("测试模板草稿");
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
