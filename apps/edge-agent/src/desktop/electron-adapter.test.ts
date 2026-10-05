@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import test from "node:test";
+import type { DesktopSessionView } from "@laundry/contracts";
+import { createDesktopJsonRequester } from "./command-request.js";
 
 import {
   createElectronDesktopDependencies,
@@ -118,6 +120,106 @@ test("Electron request pins the dedicated session and all fixed network controls
   assert.equal(options?.origin, DESKTOP_REQUEST_ORIGIN);
   assert.equal(options?.url, VALID_REQUEST.url);
   assert.deepEqual(options?.headers, VALID_REQUEST.headers);
+});
+
+test("main-owned command identity passes the real Electron policy and survives step-up", async () => {
+  const seen: ElectronNetRequestOptions[] = [];
+  const session: DesktopSessionView = {
+    session: {
+      session_id: "session",
+      session_version: 1,
+      org_id: "org",
+      store_id: "store",
+      staff_id: "staff",
+      device_id: "device",
+      permission_version: 1,
+    },
+    role: "admin",
+    features: { pin_quick_switch: true },
+    display: { store_name: "test", staff_name: "admin", org_code: "test", store_code: "test" },
+  };
+  const dependencies = createElectronDesktopDependencies({
+    net: {
+      request(options) {
+        seen.push(options);
+        return new MockRequest(
+          new MockResponse(seen.length === 1 ? 403 : 200, [
+            Buffer.from(
+              JSON.stringify(
+                seen.length === 1
+                  ? {
+                      ok: false,
+                      error: {
+                        code: "POLICY_STEP_UP_REQUIRED",
+                        detail: { confirm_ref: "step-up" },
+                      },
+                    }
+                  : { ok: true, data: {} },
+              ),
+            ),
+          ]),
+        );
+      },
+    },
+    session: createSession().session,
+    deviceId: "00000000-0000-4000-8000-000000000001",
+  });
+  const send = createDesktopJsonRequester(dependencies.request, () => session);
+  const first = await send("POST", "/v1/commands/staff.create", { body: { username: "qa" } });
+  const second = await send("POST", "/v1/commands/staff.create", {
+    body: { confirm_ref: "step-up" },
+  });
+  assert.equal(first?.statusCode, 403);
+  assert.equal(second?.statusCode, 200);
+  assert.equal(seen.length, 2);
+  assert.match(seen[0]!.headers["Idempotency-Key"]!, /^[0-9a-f-]{36}$/u);
+  assert.equal(seen[0]!.headers["Idempotency-Key"], seen[1]!.headers["Idempotency-Key"]);
+});
+
+test("command retry identity rejects unrelated routes and malformed or case-varied values", async () => {
+  let opened = 0;
+  const dependencies = createElectronDesktopDependencies({
+    net: {
+      request() {
+        opened += 1;
+        return new MockRequest(new MockResponse(200, []));
+      },
+    },
+    session: createSession().session,
+    deviceId: "00000000-0000-4000-8000-000000000001",
+  });
+  const key = "00000000-0000-4000-8000-000000000002";
+  const changes: readonly Partial<DesktopHttpRequest>[] = [
+    {
+      url: "https://attacker.invalid/v1/commands/order.receive",
+      headers: { ...VALID_REQUEST.headers, "Idempotency-Key": key },
+    },
+    {
+      url: `${DESKTOP_API_BASE_URL}/v1/commands/order%2Ereceive`,
+      headers: { ...VALID_REQUEST.headers, "Idempotency-Key": key },
+    },
+    {
+      url: `${DESKTOP_API_BASE_URL}/v1/commands/order.receive`,
+      headers: { ...VALID_REQUEST.headers, "Idempotency-Key": key, "idempotency-key": key },
+    },
+    { headers: { ...VALID_REQUEST.headers, "Idempotency-Key": key } },
+    {
+      url: `${DESKTOP_API_BASE_URL}/v1/commands/order.receive`,
+      headers: { ...VALID_REQUEST.headers, "Idempotency-Key": "bad" },
+    },
+    {
+      url: `${DESKTOP_API_BASE_URL}/v1/commands/order.receive`,
+      headers: { ...VALID_REQUEST.headers, "idempotency-key": "bad" },
+    },
+    {
+      method: "GET",
+      url: `${DESKTOP_API_BASE_URL}/health`,
+      headers: { ...VALID_REQUEST.headers, "Idempotency-Key": key },
+    },
+  ];
+  for (const change of changes)
+    await assert.rejects(() => dependencies.request({ ...VALID_REQUEST, ...change }));
+  assert.equal(opened, 0);
 });
 
 test("Electron adapter rejects drifted transport controls before opening a socket", async () => {

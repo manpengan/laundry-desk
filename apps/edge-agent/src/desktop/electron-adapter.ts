@@ -27,6 +27,7 @@ const ALLOWED_HEADER_NAMES = new Set([
   "authorization",
   "x-csrf-token",
   "last-event-id",
+  "idempotency-key",
 ]);
 const API_URL = new URL(DESKTOP_API_BASE_URL);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
@@ -148,6 +149,19 @@ function assertFixedRequestPolicy(request: DesktopHttpRequest): void {
     /[\r\n]/u.test(value),
   );
   const isPost = request.method === "POST";
+  const idempotencyKey = Object.entries(request.headers).find(
+    ([name]) => name.toLowerCase() === "idempotency-key",
+  )?.[1];
+  if (
+    idempotencyKey !== undefined &&
+    (!isPost ||
+      !/^\/v1\/commands\/[a-z][a-z0-9._]*$/u.test(url.pathname) ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+        idempotencyKey,
+      ))
+  ) {
+    throw new Error("Invalid desktop command retry identity");
+  }
   const cursor = request.headers["Last-Event-ID"];
   if (
     cursor !== undefined &&

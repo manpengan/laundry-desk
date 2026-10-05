@@ -32,3 +32,11 @@
 - catalog 读取/提交/排序异常显示中文说明；查询失败保留已有内容并标明可能过期。
 - web 590 单测通过；真实 PostgreSQL Chromium 3 项通过（新增模板、搜索保留草稿、390 宽单区、读取失败）；独立审查指出滚动定位缺口并已补回归。
 - Windows 独立源码目录 C:\dev\ld-ui-ux-20261005 已建立，离线依赖安装完成；原服务/源码未修改。
+
+## Windows 首轮与原生传输修复
+
+- 69ac037d 的全 workspace:check 通过；10 个主页面的浅/深色 20 个浏览器截图无横向溢出、无 pageerror。
+- Windows 69ac037d 原生构建与 package:inspect:win、NSIS 安装通过，安装 EXE 哈希一致、SPA ba3dd5fb… 与 Mac 一致。
+- 首轮安装态功能测试失败于创建员工：命令未到服务器。根因为新增 Idempotency-Key 未加入 Electron adapter 固定请求策略。浏览器与请求器 mock 单测未覆盖这层，故新增真实 adapter 与 requester 联合回归。
+- 新键只允许业务 POST 路径与主进程 UUIDv4；认证/GET/非法键/重复大小写头/外部地址仍拒绝。独立安全审查通过，相关 13 项回归通过；edge-agent 单测 464 通过、2 项非 Windows 平台跳过，另打包脚本 147 项通过。
+- Windows 功能回归补入输入保留、取消员工切换、成功后快捷键防重、衣物颜色/名称和取衣条码检查；记录原生 scaleFactor 与 PID。继续重打包复验，首轮失败不计通过。

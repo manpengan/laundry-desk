@@ -250,11 +250,17 @@ async function persistAsLaunchedGeometry(
           content: window.getContentBounds(),
           minimum: window.getMinimumSize(),
           workArea: screen.getDisplayMatching(bounds).workArea,
+          scaleFactor: screen.getDisplayMatching(bounds).scaleFactor,
+          mainProcessId: process.pid,
         };
       }, mainWindow)
       .finally(() => mainWindow.dispose());
   });
-  const geometry = measureAsLaunchedGeometry(native, renderer);
+  const geometry = Object.freeze({
+    ...measureAsLaunchedGeometry(native, renderer),
+    scaleFactor: native.scaleFactor,
+    mainProcessId: native.mainProcessId,
+  });
   await writeFile(
     join(evidenceRoot, "as-launched-geometry.json"),
     `${JSON.stringify(geometry, null, 2)}\n`,
@@ -494,6 +500,15 @@ test("created test admin completes the installed Windows desktop functional jour
     await page.locator('input[name="customer-phone"]').fill(fixtures.customerPhone);
     await page.locator('input[name="customer-name"]').fill(fixtures.customerName);
     await page.locator('input[name="initial-payment"]').fill(yuanText("500"));
+    await page.getByLabel("第 1 件颜色").fill("白");
+    await page.locator('[data-nav-id="workbench"]').click();
+    await page.locator('[data-nav-id="receive"]').click();
+    await expect(page.locator('input[name="customer-name"]')).toHaveValue(fixtures.customerName);
+    await expect(page.getByLabel("第 1 件颜色")).toHaveValue("白");
+    await expect(page.locator('input[name="initial-payment"]')).toHaveValue("5.00");
+    await page.getByRole("button", { name: "切换员工" }).click();
+    await expect(page.getByRole("dialog", { name: "保护当前开单内容" })).toBeVisible();
+    await page.getByRole("button", { name: "保留，返回操作" }).click();
     await page.getByRole("button", { name: "确认开单" }).click();
     ticketNo = (await page.locator('[data-testid="receive-ticket"]').innerText()).trim();
     expect(ticketNo.length).toBeGreaterThan(0);
@@ -505,6 +520,11 @@ test("created test admin completes the installed Windows desktop functional jour
       receiveResult.getByText("欠款", { exact: true }).locator("..").locator("dd"),
     ).toContainText("¥15.00");
     await expect(page.locator('[data-testid="ticket-print-button"]')).toBeDisabled();
+    await expect(receiveResult).toContainText(fixtures.catalogName);
+    await expect(receiveResult).toContainText("白");
+    await page.keyboard.press("Control+Enter");
+    await expect(page.locator('[data-testid="receive-ticket"]')).toHaveText(ticketNo);
+    await expect(page.getByRole("button", { name: "确认开单", exact: true })).toHaveCount(0);
 
     await page.locator('[data-nav-id="workbench"]').click();
     await page.getByRole("button", { name: "刷新" }).click();
@@ -540,11 +560,14 @@ test("created test admin completes the installed Windows desktop functional jour
     await expect(page.locator('[data-testid="pickup-loaded-ticket"]')).toHaveText(ticketNo, {
       timeout: 20_000,
     });
+    await expect(page.locator('[data-testid="pickup-garment-list"]')).toContainText("白");
     await page.locator('input[name="collect-cents"]').fill(yuanText("1600"));
     await page.getByRole("button", { name: "确认取衣" }).click();
     await expect(page.locator('[data-testid="pickup-ticket"]')).toHaveText(ticketNo, {
       timeout: 20_000,
     });
+    await expect(page.locator(".ld-order-result").last()).toContainText("条码");
+    await expect(page.locator(".ld-order-result").last()).toContainText("白");
     await capture(page, screenshots.settled);
 
     await page.locator('[data-nav-id="stats"]').click();
