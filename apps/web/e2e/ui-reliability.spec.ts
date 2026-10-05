@@ -257,3 +257,51 @@ test("settings templates, search and section switching preserve edits and expose
   ).toBeVisible();
   await expect(page.getByText("还没有价目，先添加一条才能开单")).toBeHidden();
 });
+
+test("narrow counter topbar actions and checkout remain reachable across responsive boundaries", async ({
+  page,
+}) => {
+  await login(page);
+  await page.locator('[data-nav-id="receive"]').click();
+  for (const [theme, label] of [
+    ["light", "浅色"],
+    ["dark", "深色"],
+  ] as const) {
+    await page.keyboard.press("Control+k");
+    await page.getByRole("option", { name: `主题：${label} 操作`, exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    for (const width of [639, 640, 700, 767, 768, 900, 1024]) {
+      await page.setViewportSize({ width, height: 650 });
+      const viewport = await page.evaluate(() => ({
+        clientWidth: document.documentElement.clientWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        scrollHeight: document.documentElement.scrollHeight,
+        clientHeight: document.documentElement.clientHeight,
+      }));
+      expect(viewport.scrollWidth, `${theme} ${width}px horizontal overflow`).toBeLessThanOrEqual(
+        viewport.clientWidth,
+      );
+      if (width === 640) {
+        expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight);
+      }
+      const topbar = page.locator(".ld-shell-topbar");
+      const buttons = topbar.getByRole("button");
+      await expect(buttons).toHaveCount(4);
+      for (const button of await buttons.all()) {
+        await expect(button).toBeInViewport({ ratio: 1 });
+        const box = await button.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.x).toBeGreaterThanOrEqual(0);
+        expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.clientWidth);
+      }
+      const confirm = page.getByRole("button", { name: "确认开单", exact: false });
+      await confirm.scrollIntoViewIfNeeded();
+      await expect(confirm).toBeInViewport({ ratio: 1 });
+      const fields = await page.locator(".ld-settlement-fields").boundingBox();
+      const actions = await page.locator(".ld-counter-actions").boundingBox();
+      expect(fields).not.toBeNull();
+      expect(actions).not.toBeNull();
+      expect(fields!.y + fields!.height).toBeLessThanOrEqual(actions!.y + 1);
+    }
+  }
+});

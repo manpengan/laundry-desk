@@ -49,3 +49,23 @@ O01 全店图像找衣与 O02 自动拉取支付账单沿用原审查中的可�
 
 最新远端运行、候选 Windows 结果与证据索引在 [PR #233](https://github.com/manpengan/laundry-desk/pull/233) 继续记录。
 后续只改测试、CI 或记录时仍分别列明源码 SHA；不得把不同 SHA 写成同一安装包，也不得将失败或待执行写成通过。
+
+### 视觉复查与安装验证接续（2026-10-06 02:47，Asia/Taipei）
+
+`3723c26e` 的 Foundation（workspace 与 macOS Runtime）和 Windows Counter 双 profile CI 均已通过。
+Counter 各有安全 smoke 与登录/订单/重启恢复两项，共 4/4；其实际安装来源为 GitHub PR 合成提交 `c2a44ea7`。
+同工作树官方 Mac 开发包独立空卷 commissioning 1/1 通过，测试前后 app SHA-256 均为
+`4a638daf39267a22ae46ec0cff0fd93f5e7040c0c53b286e043efce6f37a56d9`；使用 mock keychain，不能替代原生安全存储验收。
+
+追加 Web 视觉取证发现 640–680px 顶栏横向溢出：639px 已换行，640px 却仍采用不换行规则。
+640×700 实窗的 `clientWidth=629`、`scrollWidth=674`，切换员工按钮被截断。
+将已有窄屏规则的上限改为 767px 后，640px 实窗 `scrollWidth=clientWidth=629`；
+639/640/700/767/768/900/1024 七种宽度、浅深色和全部四个顶栏按钮均通过边界检查，结算确认可达且不覆盖字段。
+新用例连同原结算/设置回归 3/3；格式、lint、E2E 类型、Web 构建与 SPA 45 项完整性通过。
+8 张取证图及修前/修后状态保存在 `output/project-remediation-20261006/web-visual/visual-review.json`，图 03 为修前失败证据。
+这次 CSS 与 SPA 已变化，后续 Windows 候选必须更新，不能再称 `70ba498f` 与最终产品完全相同。
+
+Windows 实机 `70ba498f` 两轮构建均在 Runtime deploy 阶段超时，未生成可验收候选包，原服务未切换。
+独立部署探针关闭 stdin 后 5.4 秒成功，但随后保持 stdin 打开的对照也在 5.6 秒自然退出；
+因此未把 EOF 当作已证实根因，也未据此修改构建器。正在比较输出目录与 pnpm lifecycle 环境。
+实际安装态、原生交互及长期/外部准入门禁继续保留未验状态，最新结果以 PR #233 的精确 SHA 记录为准。
