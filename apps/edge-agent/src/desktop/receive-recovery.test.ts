@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import test from "node:test";
@@ -367,8 +374,14 @@ test("late successful responses are persisted only under the original employee",
   assert.equal(journal.load(other).draft, null);
 });
 
-test("encrypted files contain no customer plaintext and corruption/OS decryption failure blocks loading", () => {
-  const root = mkdtempSync(join(tmpdir(), "receive-recovery-"));
+test("encrypted files contain no customer plaintext and corruption/OS decryption failure blocks loading", (t) => {
+  const temporaryDirectory = tmpdir();
+  const canonicalTemporaryDirectory = realpathSync(temporaryDirectory);
+  if (process.platform === "win32")
+    t.diagnostic(
+      `windows_temp_canonicalized=${canonicalTemporaryDirectory.toLowerCase() !== temporaryDirectory.toLowerCase()}`,
+    );
+  const root = mkdtempSync(join(canonicalTemporaryDirectory, "receive-recovery-"));
   try {
     const journal = new ReceiveRecoveryJournal(root, storage);
     journal.save(session, draft);
@@ -392,7 +405,7 @@ test("encrypted files contain no customer plaintext and corruption/OS decryption
 });
 
 test("unavailable OS encryption blocks prepare before any request", async () => {
-  const root = mkdtempSync(join(tmpdir(), "receive-recovery-"));
+  const root = mkdtempSync(join(realpathSync(tmpdir()), "receive-recovery-"));
   try {
     const unavailable = { ...storage, isEncryptionAvailable: () => false };
     const journal = new ReceiveRecoveryJournal(root, unavailable);

@@ -113,3 +113,19 @@ Windows Counter CI 的 generic profile 追加直接运行已编译的 30 项 hel
 `a27640fa` 两项 CI 未取得 hosted runner，等待 15 分钟后 job cancelled、steps 为空；保留其基础设施失败记录，不能计为测试通过。
 NSIS 安装保护在同用户管理员令牌下的合成演练已通过，包括精确注册表值/SDDL、坏备份拒绝覆盖、完整子进程等待；
 原安装仍未改动，实际安装与随后 Limited 权限的业务/UI/备份演练结果继续单独记录。
+
+### Windows 原生测试与隔离安装（2026-10-06 04:03，Asia/Taipei）
+
+目标实机保持 `a27640fa` 产品包，使用 `1c3bbec7` 测试源码独立编译后，30 项原生/helper/恢复/维护用例全部通过，无跳过。
+`1c3bbec7` 托管 Windows CI 同组为 29/30，失败发生在加密文件夹具创建私有目录时；先前三处路径判断已通过。
+该夹具直接采用 `tmpdir()`，未满足原生 helper 要求的规范路径契约。与现有 platform-fs 测试一致，
+两个真实文件夹具先对临时目录调用 `realpathSync`，保留全部隐私、损坏文件和禁止请求断言。
+仅增加不含路径的 Windows 布尔诊断，不能据此把旧 CI 的 8.3 路径推断写成已证实根因。
+修后本地 28 通过、2 项 Windows 平台跳过，完整类型、lint、格式及独立复跑通过；生产逻辑与安装包未变。
+
+`a27640fa` 的 PostgreSQL 与双 profile 安装 CI 已通过。目标 Windows 隔离 NSIS 安装真实退出 0，
+使用同用户管理员令牌完成 per-user 安装，不能称为普通权限安装验收。
+安装保护首次还原发现 7 个共享入口的 DACL 自动继承标志漂移；文件内容、注册表值、Owner/Group 与 DACL 字节未变。
+经独立 C# 审查及六例原生 scratch 验证后，只对固定 7 个对象执行原位 DACL 元数据恢复，完整 SDDL 和原程序终验全部精确一致。
+原失败日志保留；最终恢复记录 `exact_original_state_restored=true`、`failed=false`，未重装、删除或复制原程序。
+实际安装来源及五个文件摘要已定稿；后续隔离 Runtime、Limited UI、崩溃恢复与备份演练仍须独立留证并恢复原服务。
