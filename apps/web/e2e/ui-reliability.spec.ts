@@ -19,13 +19,7 @@ async function login(page: Page) {
   await expect(page.locator('[data-shell="counter"]')).toBeVisible();
 }
 
-test("retained form, committed-response loss, replay, and identical new cash order", async ({
-  page,
-}) => {
-  test.setTimeout(90_000);
-  await login(page);
-  const code = `ux_${Date.now().toString(36)}`;
-  const name = `UX 合成衬衫 ${code}`;
+async function createCatalog(page: Page, code: string, name: string) {
   await page.locator('[data-nav-id="settings"]').click();
   for (const [field, value] of Object.entries({
     code,
@@ -38,6 +32,16 @@ test("retained form, committed-response loss, replay, and identical new cash ord
   }
   await page.locator('[data-testid="catalog-save-btn"]').click();
   await expect(page.locator('[data-testid="catalog-admin-row"]', { hasText: code })).toBeVisible();
+}
+
+test("retained form, committed-response loss, replay, and identical new cash order", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await login(page);
+  const code = `ux_${Date.now().toString(36)}`;
+  const name = `UX 合成衬衫 ${code}`;
+  await createCatalog(page, code, name);
   await page.locator('[data-nav-id="receive"]').click();
   const fill = async () => {
     await page.getByRole("option", { name: new RegExp(name, "u") }).click();
@@ -107,6 +111,75 @@ test("retained form, committed-response loss, replay, and identical new cash ord
   await expect(page.locator(".ld-sync-bar")).toHaveAttribute("data-mode", "online", {
     timeout: 12_000,
   });
+});
+
+test("staff switching blocks pending receipts and resets only the receive workspace", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  await login(page);
+  const code = `scope_${Date.now().toString(36)}`;
+  const name = `员工隔离合成衣物 ${code}`;
+  await createCatalog(page, code, name);
+  await page.locator('[data-nav-id="receive"]').click();
+  await page.getByRole("option", { name: new RegExp(name, "u") }).click();
+  await page.locator('input[name="customer-name"]').fill("前一位员工的合成录入");
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let committed = false;
+  let delivered = false;
+  await page.route("**/v1/commands/order.receive", async (route) => {
+    const headers = await route.request().allHeaders();
+    const response = await route.fetch({ headers: { ...headers, "sec-fetch-site": "same-site" } });
+    expect(response.ok()).toBe(true);
+    committed = true;
+    await held;
+    await route.fulfill({ response });
+    delivered = true;
+  });
+  try {
+    await page.getByRole("button", { name: "确认开单", exact: true }).click();
+    await expect.poll(() => committed).toBe(true);
+    await page.getByRole("button", { name: "切换员工" }).click();
+    await expect(page.getByRole("dialog", { name: "切换员工" })).toBeHidden();
+    await expect(page.getByRole("dialog", { name: "保护当前开单内容" })).toBeHidden();
+    await expect(page.getByText("正在确认开单，请稍候…", { exact: true })).toBeVisible();
+    release();
+    await expect.poll(() => delivered).toBe(true);
+    await expect(page.locator('[data-testid="receive-ticket"]')).toBeVisible();
+    await page.getByRole("button", { name: "开下一单" }).click();
+    await page.locator('input[name="customer-name"]').fill("前一位员工的合成录入");
+    await page.getByRole("button", { name: "切换员工" }).click();
+    await page.getByRole("button", { name: "确认后继续", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "切换员工" });
+    await dialog.getByLabel("目标员工").selectOption({ label: "E2E Staff One" });
+    await dialog.locator('input[name="pin"]').fill(required("LAUNDRY_BOOTSTRAP_ADMIN_PIN"));
+    await dialog.getByRole("button", { name: "确认切换" }).click();
+    await expect(page.locator('[data-shell="counter"]')).toHaveAttribute("data-role", "staff");
+    await expect(page.locator('[data-shell="counter"]')).toHaveAttribute("data-nav", "receive");
+    await expect(page.locator('input[name="customer-name"]')).toHaveValue("");
+    await page.locator('input[name="customer-name"]').fill("下一位员工的合成录入");
+    await page.locator('[data-nav-id="workbench"]').click();
+    await page.locator('[data-nav-id="receive"]').click();
+    await expect(page.locator('input[name="customer-name"]')).toHaveValue("下一位员工的合成录入");
+    await expect(page.locator('[data-testid="receive-ticket"]')).toHaveCount(0);
+    await page.getByRole("button", { name: "切换员工" }).click();
+    await page.getByRole("button", { name: "确认后继续", exact: true }).click();
+    const firstStaff = dialog.getByLabel("目标员工").locator("option").first();
+    const targetName = await firstStaff.innerText();
+    await expect(dialog.getByLabel("目标员工")).toHaveValue(
+      (await firstStaff.getAttribute("value")) ?? "",
+    );
+    await dialog.locator('input[name="pin"]').fill(required("LAUNDRY_BOOTSTRAP_ADMIN_PIN"));
+    await dialog.getByRole("button", { name: "确认切换" }).click();
+    await expect(page.locator(".ld-shell-topbar__staff")).toHaveText(targetName);
+    await expect(page.locator('[data-shell="counter"]')).toHaveAttribute("data-nav", "receive");
+    await expect(page.locator('input[name="customer-name"]')).toHaveValue("");
+  } finally {
+    release();
+  }
 });
 
 test("checkout stays reachable in short and narrow windows without covering fields", async ({

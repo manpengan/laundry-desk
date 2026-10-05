@@ -21,9 +21,15 @@ type WorkspaceContext = Readonly<{
 }>;
 const Context = createContext<WorkspaceContext | null>(null);
 
-export function ReceiveWorkspaceProvider({ children }: Readonly<{ children: ReactNode }>) {
-  const [store] = useState(createReceiveWorkspace);
-  const [question, setQuestion] = useState<string | null>(null);
+export function ReceiveWorkspaceProvider({
+  children,
+  scope,
+}: Readonly<{ children: ReactNode; scope: string }>) {
+  const workspace = useMemo(() => ({ scope, store: createReceiveWorkspace() }), [scope]);
+  const { store } = workspace;
+  const [question, setQuestion] = useState<Readonly<{ scope: string; message: string }> | null>(
+    null,
+  );
   const answerRef = useRef<((value: boolean) => void) | null>(null);
   const value = useMemo(
     () =>
@@ -33,10 +39,10 @@ export function ReceiveWorkspaceProvider({ children }: Readonly<{ children: Reac
           new Promise<boolean>((resolve) => {
             answerRef.current?.(false);
             answerRef.current = resolve;
-            setQuestion(message);
+            setQuestion({ scope, message });
           }),
       }),
-    [store],
+    [scope, store],
   );
   const finish = (answer: boolean): void => {
     answerRef.current?.(answer);
@@ -61,7 +67,7 @@ export function ReceiveWorkspaceProvider({ children }: Readonly<{ children: Reac
     <Context.Provider value={value}>
       {children}
       <Dialog
-        open={question !== null}
+        open={question?.scope === scope}
         title="保护当前开单内容"
         onClose={() => finish(false)}
         footer={
@@ -75,7 +81,7 @@ export function ReceiveWorkspaceProvider({ children }: Readonly<{ children: Reac
           </>
         }
       >
-        <p>{question}</p>
+        <p>{question?.scope === scope ? question.message : ""}</p>
       </Dialog>
     </Context.Provider>
   );

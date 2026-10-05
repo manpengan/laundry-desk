@@ -136,6 +136,9 @@ async function saveExtendedProfile(page: Page): Promise<void> {
 
 async function receiveOrder(page: Page): Promise<string> {
   await page.locator('[data-nav-id="receive"]').click();
+  await expect(page.getByRole("heading", { name: "开单", exact: true })).toBeVisible();
+  const nextOrder = page.getByRole("button", { name: "开下一单", exact: true });
+  if (await nextOrder.isVisible()) await nextOrder.click();
   await page
     .locator('[data-testid="catalog-picker"]')
     .getByRole("option", { name: new RegExp(FIXTURE.catalogName, "u") })

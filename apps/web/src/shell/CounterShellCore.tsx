@@ -1,6 +1,5 @@
 import { useToastPageScope, type PrintJobSummary } from "@laundry/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
-
 import type { AuthClient } from "../auth/AuthClient.js";
 import { filterNavItems, permissionContextFrom } from "../auth/permissions.js";
 import type { SessionView } from "../auth/types.js";
@@ -127,7 +126,7 @@ export function CounterShellCore(props: CounterShellCoreProps) {
   const scope = props.session.session;
   return (
     <ReceiveWorkspaceProvider
-      key={`${scope.org_id}:${scope.store_id}:${scope.session_id}:${scope.staff_id}:${scope.session_version}`}
+      scope={`${scope.org_id}:${scope.store_id}:${scope.session_id}:${scope.staff_id}:${scope.session_version}`}
     >
       <CounterShellContent {...props} />
     </ReceiveWorkspaceProvider>
@@ -364,6 +363,7 @@ function CounterShellContent({
           </RouteGate>
         </div>
         <PinSwitchDialog
+          key={`${session.session.staff_id}:${session.session.session_version}`}
           open={pinOpen}
           onClose={() => setPinOpen(false)}
           authClient={authClient}

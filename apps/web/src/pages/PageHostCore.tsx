@@ -169,6 +169,7 @@ export function PageHostCore({
   if (activeId === "receive" && session !== undefined && commandClient !== undefined) {
     return (
       <ReceivePage
+        key={`${session.session.org_id}:${session.session.store_id}:${session.session.session_id}:${session.session.staff_id}:${session.session.session_version}`}
         commandClient={commandClient}
         role={session.role}
         queuePrintEnabled={hasLocalPrintQueue(printerPort)}
