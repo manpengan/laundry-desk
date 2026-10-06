@@ -9,6 +9,7 @@ import type { SessionView } from "../auth/types.js";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
 import { createMockConnection } from "../connection.js";
+import type { MaintenancePort } from "../host/maintenance-port.js";
 import type { AppPorts } from "../host/types.js";
 import { App, shellPropsFrom } from "../App.js";
 import { hasLocalPrintQueue, PageHost } from "../pages/PageHost.js";
@@ -272,6 +273,35 @@ test("CounterShell wires PIN switch affordance", () => {
   );
   assert.match(html, /切换员工/);
   assert.match(html, /data-shell="counter"/);
+});
+
+test("CounterShell hands the desktop maintenance port to the backup settings", () => {
+  const maintenancePort: MaintenancePort = Object.freeze({
+    health: async () => ({ ok: false as const, error: "unused" }),
+    open: async () => ({ ok: true as const, data: true as const }),
+    handoff: async () => ({ ok: true as const, data: true as const }),
+  });
+  const render = (extra: Readonly<{ maintenancePort?: MaintenancePort }>) =>
+    renderToStaticMarkup(
+      createElement(
+        ToastProvider,
+        null,
+        createElement(CounterShell, {
+          session: sampleSession,
+          authClient: createMockAuthClient(),
+          commandClient: createMockCommandClient(),
+          queryClient: createMockQueryClient(),
+          onSessionChange: () => undefined,
+          initialConnection: createMockConnection({ storeName: "宏发演示店" }),
+          initialNav: "settings",
+          ...extra,
+        }),
+      ),
+    );
+  assert.match(render({}), /当前 Web 环境无法读取本机备份状态/);
+  const desktop = render({ maintenancePort });
+  assert.match(desktop, /刷新备份状态/);
+  assert.doesNotMatch(desktop, /当前 Web 环境无法读取本机备份状态/);
 });
 
 test("CounterShell print indicator idle by default (self-managed SSR first paint)", () => {
