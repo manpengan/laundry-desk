@@ -10,8 +10,8 @@ import {
   type ReactNode,
 } from "react";
 import {
+  blocksUnload,
   createReceiveWorkspace,
-  hasReceiveWork,
   type ReceiveWorkspace,
 } from "./receive-workspace.js";
 import type { ReceiveRecoveryPort } from "../host/receive-recovery-port.js";
@@ -82,7 +82,7 @@ export function ReceiveWorkspaceProvider({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const beforeUnload = (event: BeforeUnloadEvent): void => {
-      if (!hasReceiveWork(store.getSnapshot())) return;
+      if (!blocksUnload(store.getSnapshot())) return;
       event.preventDefault();
       event.returnValue = "";
     };

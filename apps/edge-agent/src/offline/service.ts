@@ -9,6 +9,7 @@ import {
 import type { DesktopHttpTransport } from "../desktop/http-transport.js";
 import type { DesktopOperationService } from "../transport/handlers.js";
 import type { OfflineReadCache } from "./read-cache.js";
+import { createOfflineReceiveRecovery } from "./receive-recovery-fallback.js";
 import type { OfflineCommandRuntime } from "./runtime.js";
 
 export type OfflineDesktopServiceOptions = Readonly<{
@@ -131,18 +132,7 @@ export function createOfflineDesktopService(
           ? Promise.resolve(unavailable())
           : online.scale.execute(input),
     }),
-    receiveRecovery: Object.freeze({
-      execute: (input: unknown) =>
-        isMutationBlocked() || online.receiveRecovery === undefined
-          ? Promise.resolve({
-              ok: false,
-              error: {
-                code: "RECOVERY_UNAVAILABLE",
-                message: "当前为只读模式，不能恢复或提交开单",
-              },
-            })
-          : online.receiveRecovery.execute(input),
-    }),
+    receiveRecovery: createOfflineReceiveRecovery(online, offline, isMutationBlocked),
     storeExport: Object.freeze({
       execute: (input: unknown) =>
         isMutationBlocked() || online.storeExport === undefined

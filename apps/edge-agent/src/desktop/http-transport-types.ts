@@ -16,11 +16,15 @@ import type {
 } from "@laundry/contracts";
 
 import type { EdgePrintHttpTransport } from "./print-http-transport.js";
+import type { OfflineReceiveQueue } from "./receive-recovery-operation.js";
 import type { DesktopStaffCredentialCompleteResult } from "./staff-setup-operation.js";
 import type { DesktopStaffDirectoryResult } from "./staff-directory-operation.js";
 
 export type DesktopHttpTransport = Readonly<{
-  receiveRecovery?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  receiveRecovery?: Readonly<{
+    execute: (input: unknown) => Promise<unknown>;
+    queueOffline?: (input: unknown, queue: OfflineReceiveQueue) => Promise<unknown>;
+  }>;
   remoteAssistance?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   miniappSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   paymentChannel?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;

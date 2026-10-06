@@ -3,6 +3,7 @@ import {
   DesktopCommandExecuteInputSchema,
   DesktopCommandNameSchema,
   CURRENT_EDGE_QUEUE_ENVELOPE_VERSION,
+  IdempotencyKeySchema,
   M2_CONTRACT_DEFINITIONS,
   parseEdgeQueueEnvelope,
   type DesktopCommandExecuteResult,
@@ -240,9 +241,21 @@ export class OfflineCommandRuntime {
     }
   }
 
-  async queueCommand(input: unknown): Promise<DesktopCommandExecuteResult> {
+  /**
+   * `idempotencyKey` lets a command that may already have reached the server keep the key
+   * it was sent with, so the replay returns that outcome instead of executing again.
+   */
+  async queueCommand(
+    input: unknown,
+    options: Readonly<{ idempotencyKey?: string }> = {},
+  ): Promise<DesktopCommandExecuteResult> {
     const parsed = await DesktopCommandExecuteInputSchema.safeParseAsync(input);
-    if (!parsed.success || !("body" in parsed.data)) {
+    if (
+      !parsed.success ||
+      !("body" in parsed.data) ||
+      (options.idempotencyKey !== undefined &&
+        !IdempotencyKeySchema.safeParse(options.idempotencyKey).success)
+    ) {
       return offlineQueueRejected(this.onDiagnostic, "input_parse");
     }
     const mode = offlineQueueModeForCommand(parsed.data.name);
@@ -293,7 +306,7 @@ export class OfflineCommandRuntime {
         payload: {
           command: parsed.data.name,
           version,
-          idempotency_key: this.randomId(),
+          idempotency_key: options.idempotencyKey ?? this.randomId(),
           dry_run: false,
           mode: "direct",
           args: parsed.data.body,

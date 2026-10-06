@@ -29,6 +29,17 @@ export function ReceiveProgressPanel({ state, store, confirmDiscard, onReset, on
         </Button>
       </section>
     );
+  if (state.phase === "queued")
+    return (
+      <section className="ld-receive-complete" role="status">
+        <h2>已离线暂存</h2>
+        <p>本机服务暂时连不上，本单已加密暂存在本机，恢复连接后自动开单并生成票号。</p>
+        <p>已登记的现金照常收取，不要再次提交本单；同步进度见顶部状态。</p>
+        <Button type="button" onClick={onReset}>
+          开下一单
+        </Button>
+      </section>
+    );
   if (state.phase === "submitting")
     return (
       <p role="status" aria-live="polite">

@@ -21,6 +21,16 @@ const UNCERTAIN_CODES = new Set([
   "RECOVERY_CONFLICT",
 ]);
 
+/** The desktop offline queue's answer: the receive opens when the local service returns. */
+export function isOfflineQueuedReceive(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Reflect.get(value, "offline_queued") === true &&
+    typeof Reflect.get(value, "queue_id") === "string"
+  );
+}
+
 /** Lock synchronously before awaiting transport; a completed or unknown operation cannot be resubmitted. */
 export async function submitReceive(
   store: ReceiveWorkspace,
@@ -47,7 +57,21 @@ export async function submitReceive(
       });
       return null;
     }
-    const result = parseReceiveOrderResult(unwrapCommandResult(response.data));
+    const accepted = unwrapCommandResult(response.data);
+    if (isOfflineQueuedReceive(accepted)) {
+      // No ticket exists yet; it is issued when the queue replays the receive.
+      store.patch({
+        busy: false,
+        phase: "queued",
+        result: null,
+        draftId: null,
+        dirty: false,
+        message: "",
+        pendingBody: null,
+      });
+      return null;
+    }
+    const result = parseReceiveOrderResult(accepted);
     if (result === null) {
       store.patch({
         busy: false,

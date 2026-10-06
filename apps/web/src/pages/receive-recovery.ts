@@ -8,6 +8,7 @@ import {
 import type { CommandResult, QueryPort } from "../commands/types.js";
 import type { ReceiveRecoveryPort } from "../host/receive-recovery-port.js";
 import { parseOrderGetResult, parseReceiveOrderResult, unwrapCommandResult } from "./order-form.js";
+import { isOfflineQueuedReceive } from "./receive-submission.js";
 import type { ReceiveWorkspace, ReceiveWorkspaceState } from "./receive-workspace.js";
 
 function draftFrom(state: ReceiveWorkspaceState): ReceiveRecoveryDraft {
@@ -106,6 +107,9 @@ export function connectReceiveRecovery(
     if (receipt === null) return failed("原开单结果尚未确认，请使用原开单重试，不要再次收款");
     if (!receipt.ok)
       return { ok: false, error: { code: receipt.error.code, message: receipt.error.message } };
+    // The offline queue holds it: there is no order to read back until it replays.
+    if (isOfflineQueuedReceive(unwrapCommandResult(receipt.data)))
+      return { ok: true, data: receipt.data };
     const result = parseReceiveOrderResult(unwrapCommandResult(receipt.data));
     if (result === null) return failed("原开单结果无法显示，请先核对订单，避免重复开单");
     // A later QR payment may have occurred before the crash. Never expose the old debt as payable.
@@ -154,14 +158,24 @@ export function connectReceiveRecovery(
         const outcome = await currentReceipt(snapshot);
         if (disposed) return;
         if (outcome.ok) {
-          patch = {
-            ...patch,
-            phase: "complete",
-            result: parseReceiveOrderResult(unwrapCommandResult(outcome.data)),
-            dirty: false,
-            retryable: false,
-            message: "已恢复原开单并核对最新金额。",
-          };
+          const accepted = unwrapCommandResult(outcome.data);
+          patch = isOfflineQueuedReceive(accepted)
+            ? {
+                ...patch,
+                phase: "queued",
+                result: null,
+                dirty: false,
+                retryable: false,
+                message: "",
+              }
+            : {
+                ...patch,
+                phase: "complete",
+                result: parseReceiveOrderResult(accepted),
+                dirty: false,
+                retryable: false,
+                message: "已恢复原开单并核对最新金额。",
+              };
         } else if (snapshot.receipt !== null && !snapshot.receipt.ok) {
           patch = {
             ...patch,

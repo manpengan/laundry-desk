@@ -36,6 +36,19 @@ const body = {
   initial_payment: { amount_cents: 1000, method: "cash" as const },
 };
 const empty = (): ReceiveRecoverySnapshot => ({ draft: null, pending_body: null, receipt: null });
+type ReceiverReceipt = NonNullable<ReceiveRecoverySnapshot["receipt"]>;
+const offlineReceipt: ReceiverReceipt = {
+  ok: true,
+  data: {
+    execution: "executed",
+    result: { ...body, offline_queued: true, queue_id: "44444444-4444-4444-8444-444444444444" },
+  },
+};
+const noOrderRead: QueryPort = {
+  execute: async () => {
+    throw new Error("A queued receive has no order to read back yet");
+  },
+};
 test("an unresolved desktop operation cannot be reset into a different identity", () => {
   const store = createReceiveWorkspace();
   store.patch({
@@ -80,7 +93,10 @@ const noFallback: CommandPort = {
     throw new Error("Recovered receive must not use the generic command port");
   },
 };
-function fixture(initial = empty()) {
+function fixture(
+  initial = empty(),
+  submitted: ReceiverReceipt = { ok: true, data: { execution: "executed", result: original } },
+) {
   let snapshot = structuredClone(initial);
   let rejectSave = false;
   const inputs: DesktopReceiveRecoveryInput[] = [];
@@ -93,11 +109,7 @@ function fixture(initial = empty()) {
         snapshot = { ...snapshot, draft: structuredClone(input.draft) };
       }
       if (input.operation === "submit")
-        snapshot = {
-          ...snapshot,
-          pending_body: input.body,
-          receipt: { ok: true, data: { execution: "executed", result: original } },
-        };
+        snapshot = { ...snapshot, pending_body: input.body, receipt: structuredClone(submitted) };
       return { ok: true, data: structuredClone(snapshot) };
     },
   };
@@ -233,4 +245,27 @@ test("browser workspace states the explicit hold boundary and contract rejects s
     }).success,
     false,
   );
+});
+
+test("a receive the offline queue took shows as queued after submitting and after a restart", async () => {
+  const live = fixture({ ...empty(), draft: fixtureDraft() }, offlineReceipt);
+  const store = createReceiveWorkspace();
+  const stop = connectReceiveRecovery(store, live.port, expected, noOrderRead);
+  await setImmediate();
+  assert.equal(await submitReceive(store, noFallback, body), null);
+  assert.equal(store.getSnapshot().phase, "queued");
+  assert.equal(store.getSnapshot().result, null);
+  assert.equal(store.getSnapshot().message, "");
+  stop();
+
+  const restarted = fixture({ draft: fixtureDraft(), pending_body: body, receipt: offlineReceipt });
+  const reopened = createReceiveWorkspace();
+  const stopReopened = connectReceiveRecovery(reopened, restarted.port, expected, noOrderRead);
+  await setImmediate();
+  assert.equal(reopened.getSnapshot().phase, "queued");
+  // The queue owns it now, so the clerk can start the next order with a new identity.
+  reopened.reset();
+  assert.equal(reopened.getSnapshot().phase, "editing");
+  assert.notEqual(reopened.getSnapshot().operationId, operationId);
+  stopReopened();
 });

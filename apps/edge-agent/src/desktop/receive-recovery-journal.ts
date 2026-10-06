@@ -165,6 +165,36 @@ export class ReceiveRecoveryJournal {
     return row;
   }
 
+  hasOperation(session: DesktopSessionView, id: string): boolean {
+    return this.operation(this.scope(session), id) !== null;
+  }
+
+  /** The original key and wire body of a submitted receive whose outcome is still unknown. */
+  unconfirmed(
+    session: DesktopSessionView,
+    id: string,
+  ): Readonly<{ key: string; body: string }> | null {
+    const operation = this.operation(this.scope(session), id);
+    return operation === null || operation.response !== null
+      ? null
+      : Object.freeze({ key: operation.key, body: operation.body });
+  }
+
+  /**
+   * The offline queue took the unknown receive over under its original key, so a replay
+   * after an earlier lost commit returns that order instead of opening a second one.
+   */
+  recordQueued(session: DesktopSessionView, id: string, payload: unknown): void {
+    const scope = this.scope(session);
+    const existing = this.operation(scope, id);
+    if (existing === null || existing.response !== null)
+      throw new ReceiveRecoveryConflict("恢复身份不匹配");
+    const response = { statusCode: 202, payload: CommandResponseSchema.parse(payload) };
+    this.file(this.path(scope, `operations/${id}`)).write(
+      OperationSchema.parse({ ...existing, response }),
+    );
+  }
+
   /** A failed receipt write leaves the original prepared record available for replay. */
   confirm(session: DesktopSessionView, id: string, body: string, response: JsonHttpResponse): void {
     const scope = this.scope(session);

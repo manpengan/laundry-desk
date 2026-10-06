@@ -755,7 +755,6 @@ export function createDesktopHttpTransport(
                 true,
                 operationId,
               ),
-            nowMs,
           ),
         }),
     auth: Object.freeze({

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CommandPort, CommandResult } from "../commands/types.js";
-import { createReceiveWorkspace, hasReceiveWork } from "./receive-workspace.js";
+import { blocksUnload, createReceiveWorkspace, hasReceiveWork } from "./receive-workspace.js";
 import { submitReceive } from "./receive-submission.js";
 import { createHttpCommandClient } from "../commands/command-client.js";
 import type { ReceiveOrderResult } from "./receive-result-model.js";
@@ -160,3 +160,20 @@ for (const resolution of ["retry", "manual"] as const) {
     assert.equal(committed.size, 2);
   });
 }
+
+test("leaving the page blocks unsaved browser work but only unjournaled desktop edits", () => {
+  const state = createReceiveWorkspace().getSnapshot();
+  const blocks = (patch: Partial<typeof state>) => blocksUnload({ ...state, ...patch });
+  // A browser session keeps nothing across a reload.
+  assert.equal(blocks({ dirty: true }), true);
+  assert.equal(blocks({ phase: "uncertain" }), true);
+  assert.equal(blocks({ busy: true }), true);
+  assert.equal(blocks({}), false);
+  // The desktop journal restores saved edits and a pending operation after a reload or restart.
+  for (const phase of ["uncertain", "complete", "submitting"] as const)
+    assert.equal(blocks({ recoveryStatus: "ready", phase, dirty: true, busy: true }), false);
+  for (const recoveryStatus of ["loading", "saving", "error"] as const) {
+    assert.equal(blocks({ recoveryStatus, dirty: true }), true);
+    assert.equal(blocks({ recoveryStatus, phase: "uncertain" }), false);
+  }
+});

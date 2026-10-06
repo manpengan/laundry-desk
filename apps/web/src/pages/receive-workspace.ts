@@ -21,7 +21,8 @@ export type ReceiveWorkspaceState = Readonly<{
   focusedLineKey: string | null;
   busy: boolean;
   dirty: boolean;
-  phase: "editing" | "submitting" | "uncertain" | "complete";
+  /** `queued`: the local service was down and the desktop offline queue took the receive. */
+  phase: "editing" | "submitting" | "uncertain" | "complete" | "queued";
   result: ReceiveOrderResult | null;
   confirmedPaymentIntentIds: readonly string[];
   ticketPreview: TicketPreview | null;
@@ -126,4 +127,14 @@ export type ReceiveWorkspace = ReturnType<typeof createReceiveWorkspace>;
 
 export function hasReceiveWork(state: ReceiveWorkspaceState): boolean {
   return state.dirty || state.busy || state.phase === "uncertain";
+}
+
+/**
+ * Whether leaving the page (reload, window close, quit) would lose work. On the desktop the
+ * encrypted recovery journal restores the saved draft and any pending operation after a
+ * reload or restart, so only edits it has not saved yet block; a browser keeps none of it.
+ */
+export function blocksUnload(state: ReceiveWorkspaceState): boolean {
+  if (state.recoveryStatus === "browser") return hasReceiveWork(state);
+  return state.dirty && state.recoveryStatus !== "ready";
 }

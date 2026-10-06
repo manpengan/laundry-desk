@@ -303,7 +303,7 @@ test("converting a saved server draft may clear its draft id after the durable s
   assert.deepEqual(journal.load(session).receipt, success);
 });
 
-test("stale session callbacks, expired auth and unsupported roles cannot access recovery", async () => {
+test("stale session callbacks and unsupported roles cannot access recovery", async () => {
   const files = memoryFiles();
   const journal = new ReceiveRecoveryJournal("/recovery", storage, files.factory);
   let state: AuthState | null = {
@@ -320,7 +320,6 @@ test("stale session callbacks, expired auth and unsupported roles cannot access 
       submissions++;
       return success;
     },
-    () => 500,
   );
   state = {
     ...state,
@@ -332,11 +331,10 @@ test("stale session callbacks, expired auth and unsupported roles cannot access 
   const rejected = await service.execute({ operation: "save", expected_session: expected, draft });
   assert.equal(rejected.ok, false);
   assert.equal(journal.load(state.sessionView).draft, null);
-  state = { ...state, sessionView: session, expiresAtMs: 499 };
-  assert.equal(
-    (await service.execute({ operation: "load", expected_session: expected })).ok,
-    false,
-  );
+  // An access token that lapsed while the counter sat idle is the same employee: the local
+  // record stays readable, and the submit path refreshes the token itself.
+  state = { ...state, sessionView: session, expiresAtMs: 0 };
+  assert.equal((await service.execute({ operation: "load", expected_session: expected })).ok, true);
   state = {
     ...state,
     expiresAtMs: 1000,
@@ -434,4 +432,101 @@ test("unavailable OS encryption blocks prepare before any request", async () => 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+const sentKey = "77777777-7777-4777-8777-777777777777";
+const submitInput = {
+  operation: "submit",
+  expected_session: expected,
+  operation_id: draft.operationId,
+  body,
+};
+const idle = (): AuthState => ({
+  accessToken: "test",
+  csrfToken: "test",
+  expiresAtMs: 0,
+  sessionView: session,
+});
+const queuedReceipt = {
+  ok: true as const,
+  data: {
+    execution: "executed" as const,
+    result: { ...body, offline_queued: true, queue_id: ids[0] },
+  },
+};
+const lostAnswer = { ok: false as const, error: createCommandError("RESOURCE_UNAVAILABLE") };
+
+test("a receive sent before an outage is queued offline under the key it was sent with", async () => {
+  const files = memoryFiles();
+  const journal = new ReceiveRecoveryJournal("/recovery", storage, files.factory, () => sentKey);
+  journal.save(session, draft);
+  const service = createReceiveRecoveryOperation(journal, idle, async (sent, id) => {
+    journal.prepare(session, id, JSON.stringify(sent)); // the request went out...
+    return lostAnswer; // ...and its answer never came back
+  });
+  assert.equal((await service.execute(submitInput)).ok, false);
+  const queued: [unknown, string][] = [];
+  const handed = await service.queueOffline(submitInput, async (queuedBody, key) => {
+    queued.push([queuedBody, key]);
+    return queuedReceipt;
+  });
+  assert.deepEqual(queued, [[body, sentKey]]);
+  assert.deepEqual(handed?.ok === true ? handed.data.receipt : handed, queuedReceipt);
+  // The receive the queue owns no longer holds up the next order.
+  journal.save(session, { ...draft, operationId: ids[1] });
+});
+
+test("a receive the outage stopped before sending gets its first key in the queue", async () => {
+  const files = memoryFiles();
+  const journal = new ReceiveRecoveryJournal("/recovery", storage, files.factory, () => sentKey);
+  journal.save(session, draft);
+  const service = createReceiveRecoveryOperation(journal, idle, async () => lostAnswer);
+  assert.equal((await service.execute(submitInput)).ok, false);
+  assert.equal(journal.hasOperation(session, draft.operationId), false);
+  const keys: string[] = [];
+  const handed = await service.queueOffline(submitInput, async (_body, key) => {
+    keys.push(key);
+    return queuedReceipt;
+  });
+  assert.deepEqual(keys, [sentKey]);
+  assert.equal(handed?.ok, true);
+  assert.equal(journal.unconfirmed(session, draft.operationId), null);
+});
+
+test("an answered receive is never queued, and a refused queue keeps the original key", async () => {
+  const files = memoryFiles();
+  const journal = new ReceiveRecoveryJournal("/recovery", storage, files.factory, () => sentKey);
+  journal.save(session, draft);
+  let refused = 0;
+  const refuse = async () => {
+    refused++;
+    return lostAnswer;
+  };
+  const answered = createReceiveRecoveryOperation(journal, idle, async (sent, id) => {
+    journal.prepare(session, id, JSON.stringify(sent));
+    journal.confirm(session, id, JSON.stringify(sent), { statusCode: 200, payload: success });
+    return success;
+  });
+  assert.equal((await answered.execute(submitInput)).ok, true);
+  assert.equal(await answered.queueOffline(submitInput, refuse), null);
+  assert.equal(refused, 0);
+
+  const other = new ReceiveRecoveryJournal(
+    "/recovery",
+    storage,
+    memoryFiles().factory,
+    () => sentKey,
+  );
+  other.save(session, draft);
+  const lost = createReceiveRecoveryOperation(other, idle, async (sent, id) => {
+    other.prepare(session, id, JSON.stringify(sent));
+    return lostAnswer;
+  });
+  await lost.execute(submitInput);
+  assert.equal(await lost.queueOffline(submitInput, refuse), null);
+  assert.equal(refused, 1);
+  assert.deepEqual(other.unconfirmed(session, draft.operationId), {
+    key: sentKey,
+    body: JSON.stringify(body),
+  });
 });

@@ -18,6 +18,7 @@ files:
   - dist/lib/sender.js
   - dist/shell/single-instance.js
   - dist/shell/tray.js
+  - dist/shell/unload-guard.js
   - dist/shell/user-data-identity.js
   - dist/transport/electron-session.js
   - dist/transport/handlers.js
@@ -101,6 +102,7 @@ files:
   - dist/offline/read-authority.js
   - dist/offline/read-cache-file.js
   - dist/offline/read-cache.js
+  - dist/offline/receive-recovery-fallback.js
   - dist/offline/runtime.js
   - dist/offline/service.js
   - dist/upgrade/release-manifest.js
