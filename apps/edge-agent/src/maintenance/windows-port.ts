@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { lstat, realpath } from "node:fs/promises";
 import type { DesktopMaintenanceInput } from "@laundry/contracts";
 import { RUNTIME_MAINTENANCE_BINDING } from "./runtime-binding.js";
-import { MAINTENANCE_BOOTSTRAP } from "./windows-script.js";
+import { maintenanceCommand } from "./windows-script.js";
 const POWERSHELL = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
 export async function runWindowsMaintenance(
   input: DesktopMaintenanceInput,
@@ -35,9 +35,7 @@ export async function runWindowsMaintenance(
         "-ExecutionPolicy",
         "Bypass",
         "-EncodedCommand",
-        Buffer.from(binding.trust_script + "\n" + MAINTENANCE_BOOTSTRAP, "utf16le").toString(
-          "base64",
-        ),
+        Buffer.from(maintenanceCommand(binding.trust_script), "utf16le").toString("base64"),
       ],
       {
         shell: false,

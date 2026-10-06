@@ -46,5 +46,8 @@ test("the fixed native bootstrap fits the Windows command-line bound", async () 
   ).replaceAll("LaundryRuntimeEntryTrust", "LaundryCounterMaintenanceTrust");
   const script = await readFile(resolve("src/maintenance/windows-script.ts"), "utf8");
   const source = script.slice(script.indexOf("String.raw`") + 11, script.lastIndexOf("`"));
-  assert.ok(Buffer.from(trust + "\n" + source, "utf16le").toString("base64").length < 32000);
+  const prelude = "$ProgressPreference = 'SilentlyContinue'\n";
+  assert.ok(script.includes(JSON.stringify(prelude).slice(1, -1)));
+  const command = prelude + trust + "\n" + source;
+  assert.ok(Buffer.from(command, "utf16le").toString("base64").length < 32000);
 });
