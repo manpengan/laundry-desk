@@ -155,6 +155,10 @@ test.beforeAll(async ({ request }) => {
 test("counter takes, refunds, and settles an order on the server-owned ledger", async ({
   page,
 }) => {
+  // A whole workday: catalog upkeep, two step-up reviews, receive, refund and pickup. The
+  // default 30 s is a single-step budget; on a busy runner this journey ran out of it
+  // mid-flow (main 10b55c8e, PR #234). Each step keeps its own 15 s expectation limit.
+  test.setTimeout(90_000);
   const receiveRequests: ReceiveRequest[] = [];
   const refundRequests: RefundRequest[] = [];
   page.on("request", (request) => {
