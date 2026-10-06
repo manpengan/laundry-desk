@@ -7,8 +7,8 @@ const MAX_AUDIT_OUTPUT_BYTES = 8 * 1024 * 1024;
 const AUDIT_TIMEOUT_MS = 60_000;
 const SEVERITIES = Object.freeze(["info", "low", "moderate", "high", "critical"]);
 
-function finding(version, dev, path) {
-  return Object.freeze({ version, dev, optional: false, bundled: false, path });
+function finding(version, dev, path, optional = false) {
+  return Object.freeze({ version, dev, optional, bundled: false, path });
 }
 
 export const DEPENDENCY_AUDIT_EXCEPTIONS = Object.freeze({
@@ -38,6 +38,28 @@ export const DEPENDENCY_AUDIT_EXCEPTIONS = Object.freeze({
     findings: Object.freeze([
       finding("8.3.2", false, ".>exceljs>uuid"),
       finding("9.0.1", false, ".>tencentcloud-sdk-nodejs-sms>tencentcloud-sdk-nodejs-common>uuid"),
+    ]),
+  }),
+  // Build-time only: the optional proxy agent of electron-builder's Electron download logs
+  // its own fixed messages. No 1.1.4 is published yet (2026-10-06); upgrade, then drop this.
+  "GHSA-hp3w-g68c-fv3c": Object.freeze({
+    moduleName: "sprintf-js",
+    severity: "moderate",
+    vulnerableVersions: "<=1.1.3",
+    patchedVersions: ">=1.1.4",
+    findings: Object.freeze([
+      finding(
+        "1.1.3",
+        true,
+        ".>electron-builder>app-builder-lib>@electron/get>global-agent>roarr>sprintf-js",
+        true,
+      ),
+      finding(
+        "1.1.3",
+        true,
+        ".>electron-builder>dmg-builder>app-builder-lib>@electron/get>global-agent>roarr>sprintf-js",
+        true,
+      ),
     ]),
   }),
 });

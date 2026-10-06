@@ -19,6 +19,20 @@ Vite `6.4.3`、React Router DOM `7.18.2` 与 PostCSS `8.5.23`。Electron-Vite 4/
 通过同主版本 override 固定到 `undici@6.28.1/7.29.1`、`fast-uri@3.1.8/4.1.5`、
 `brace-expansion@1.1.21/2.1.7/5.0.12`、`js-yaml@4.3.2`、`nanoid@3.3.18`。
 
+## 2026-10-06 新增两项公告
+
+PR #233 的 Linux 门禁在依赖审计阶段失败。原因是两项新进入审计结果的公告，与当时的代码改动无关。
+
+- [GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)（HIGH）：
+  - `source-map-js@1.2.1` 的拒绝服务问题，路径经 postcss/vite/vitest，都是开发依赖。
+  - npm 已发布修复版 1.2.2，用同主版本 override `source-map-js@^1.0.0 → 1.2.2` 升级。
+  - 锁文件只有这一个包变化。
+- [GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c)（moderate）：
+  - `sprintf-js@1.1.3` 精度说明符无上限导致的拒绝服务。
+  - 只出现在 `electron-builder → @electron/get → global-agent → roarr` 这条可选的开发依赖链上。这是打包机下载 Electron 时的代理日志，格式串由代码固定，不接收外部输入；也不进入安装包。
+  - 现场查询 npm，最新版本仍是 1.1.3，修复版 1.1.4 尚未发布，所以按精确版本、路径和 dev/optional 属性登记为复审例外。
+  - 1.1.4 发布后应升级并删除该例外。
+
 ## 2026-10-03 尚无上游发行版的两项安全补丁
 
 PR #229 的 Linux 门禁被两项新进入审计结果的 HIGH 阻断。现场查询 npm registry，
