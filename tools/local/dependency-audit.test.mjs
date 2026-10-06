@@ -98,10 +98,32 @@ test("keeps the reviewed exception inventory exact and review-visible", () => {
         },
       ],
     },
+    "GHSA-hp3w-g68c-fv3c": {
+      moduleName: "sprintf-js",
+      severity: "moderate",
+      vulnerableVersions: "<=1.1.3",
+      patchedVersions: ">=1.1.4",
+      findings: [
+        {
+          version: "1.1.3",
+          dev: true,
+          optional: true,
+          bundled: false,
+          path: ".>electron-builder>app-builder-lib>@electron/get>global-agent>roarr>sprintf-js",
+        },
+        {
+          version: "1.1.3",
+          dev: true,
+          optional: true,
+          bundled: false,
+          path: ".>electron-builder>dmg-builder>app-builder-lib>@electron/get>global-agent>roarr>sprintf-js",
+        },
+      ],
+    },
   });
 });
 
-test("accepts a clean report and only the two reviewed moderate exceptions", () => {
+test("accepts a clean report and only the reviewed moderate exceptions", () => {
   assert.deepEqual(assertDependencyAuditPolicy(report([])), {
     high: 0,
     critical: 0,
