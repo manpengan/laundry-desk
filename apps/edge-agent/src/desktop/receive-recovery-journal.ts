@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import {
@@ -47,6 +48,8 @@ export type RecoveryFile = Readonly<{
 }>;
 type FileFactory = (path: string) => RecoveryFile;
 
+const SCOPE_NAME_LENGTH = 32;
+
 export class ReceiveRecoveryConflict extends Error {}
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -67,8 +70,20 @@ export class ReceiveRecoveryJournal {
     const { org_id, store_id, staff_id, device_id } = session.session;
     return ScopeSchema.parse({ org_id, store_id, staff_id, device_id });
   }
+  /**
+   * Half the digest still separates every org/store/staff/device on one machine, and each
+   * record repeats its scope. With the whole digest, a profile folder name of 18 or more
+   * characters pushed the hongfa build's deepest staging file past the Windows helper's
+   * 259-character limit, and every receive on that machine failed.
+   */
   private path(scope: Scope, part: string): string {
-    return join(this.root, hash(JSON.stringify(scope)), part);
+    const digest = hash(JSON.stringify(scope));
+    const directory = join(this.root, digest.slice(0, SCOPE_NAME_LENGTH));
+    // A scope written before 2026-10-06 keeps its records, keys and private ACL: one
+    // same-volume rename. Until that succeeds every access fails closed, never empty.
+    const legacy = join(this.root, digest);
+    if (!existsSync(directory) && existsSync(legacy)) renameSync(legacy, directory);
+    return join(directory, part);
   }
   private workspace(scope: Scope) {
     const raw = this.file(this.path(scope, "workspace")).read();

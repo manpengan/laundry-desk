@@ -20,6 +20,21 @@ const failure = (
   message: string,
 ): DesktopReceiveRecoveryResult => ({ ok: false, error: { code, message } });
 
+const CODE = /^[A-Z][A-Z0-9_]{2,63}$/u;
+/** Names and codes along the cause chain. Messages can carry local paths, so they stay out. */
+function errorTrail(error: unknown): string[] {
+  const trail: string[] = [];
+  let current = error;
+  while (current instanceof Error && trail.length < 4) {
+    const code = Reflect.get(current, "code");
+    const detail =
+      typeof code === "string" ? code : CODE.test(current.message) ? current.message : "";
+    trail.push(detail === "" ? current.name : `${current.name}:${detail}`);
+    current = current.cause;
+  }
+  return trail;
+}
+
 /** Queues one receive body under the given idempotency key; the offline runtime owns it. */
 export type OfflineReceiveQueue = (
   body: Readonly<Record<string, unknown>>,
@@ -87,12 +102,13 @@ export function createReceiveRecoveryOperation(
           data: journal.load(state.sessionView),
         });
       } catch (error) {
-        return error instanceof ReceiveRecoveryConflict
-          ? failure("RECOVERY_CONFLICT", error.message)
-          : failure(
-              "RECOVERY_UNAVAILABLE",
-              "本机开单恢复记录无法安全读写，已暂停开单；请检查磁盘或联系管理员",
-            );
+        if (error instanceof ReceiveRecoveryConflict)
+          return failure("RECOVERY_CONFLICT", error.message);
+        console.error("[edge-agent] receive recovery unavailable", { errors: errorTrail(error) });
+        return failure(
+          "RECOVERY_UNAVAILABLE",
+          "本机开单恢复记录无法安全读写，已暂停开单；请检查磁盘或联系管理员",
+        );
       }
     },
 
@@ -127,7 +143,8 @@ export function createReceiveRecoveryOperation(
           ok: true,
           data: journal.load(state.sessionView),
         });
-      } catch {
+      } catch (error) {
+        console.error("[edge-agent] receive offline handoff failed", { errors: errorTrail(error) });
         return null;
       }
     },

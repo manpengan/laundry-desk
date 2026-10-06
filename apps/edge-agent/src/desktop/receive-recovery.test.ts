@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   mkdtempSync,
   readFileSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -19,6 +21,7 @@ import { createDesktopJsonRequester } from "./command-request.js";
 import { ReceiveRecoveryJournal, type RecoveryFile } from "./receive-recovery-journal.js";
 import { createReceiveRecoveryOperation } from "./receive-recovery-operation.js";
 import type { AuthState } from "./http-transport-support.js";
+import { longestCachePath } from "../offline/read-cache-file.js";
 import type { SafeStorageSurface } from "../queue/safe-storage-kek.js";
 import type { DesktopHttpRequest } from "./request-builder.js";
 
@@ -529,4 +532,63 @@ test("an answered receive is never queued, and a refused queue keeps the origina
     key: sentKey,
     body: JSON.stringify(body),
   });
+});
+
+test("the deepest recovery file stays within the Windows helper limit for a long profile", () => {
+  // A 40-character profile folder, e.g. a 20-character account name with a domain suffix.
+  const root = ["C:", "Users", "p".repeat(40), "AppData", "Roaming", "laundry-desk-v2-hongfa"]
+    .concat(["edge-state", "receive-recovery"])
+    .join("\\");
+  const files = memoryFiles();
+  const journal = new ReceiveRecoveryJournal(root, storage, files.factory);
+  journal.save(session, draft);
+  journal.prepare(session, draft.operationId, JSON.stringify(body));
+  const lengths = [...files.data.keys()].map((part) => longestCachePath(part).length);
+  assert.equal(lengths.length, 2);
+  assert.ok(Math.max(...lengths) <= 259, `deepest recovery path: ${Math.max(...lengths)}`);
+});
+
+test("a scope journaled under the whole digest is adopted with its unconfirmed key", () => {
+  const root = mkdtempSync(join(realpathSync.native(tmpdir()), "receive-recovery-"));
+  try {
+    const journal = new ReceiveRecoveryJournal(root, storage);
+    journal.save(session, draft);
+    const sent = journal.prepare(session, draft.operationId, JSON.stringify(body));
+    const { org_id, store_id, staff_id, device_id } = session.session;
+    const digest = createHash("sha256")
+      .update(JSON.stringify({ org_id, store_id, staff_id, device_id }))
+      .digest("hex");
+    assert.deepEqual(readdirSync(root), [digest.slice(0, 32)]);
+    // The layout every build before 2026-10-06 wrote.
+    renameSync(join(root, digest.slice(0, 32)), join(root, digest));
+    const upgraded = new ReceiveRecoveryJournal(root, storage);
+    assert.equal(upgraded.load(session).draft?.operationId, draft.operationId);
+    assert.deepEqual(upgraded.unconfirmed(session, draft.operationId), {
+      key: sent.key,
+      body: sent.body,
+    });
+    assert.deepEqual(readdirSync(root), [digest.slice(0, 32)]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an unreadable journal fails closed and logs error names and codes, never paths", async (t) => {
+  const logged = t.mock.method(console, "error", () => undefined);
+  const journal = new ReceiveRecoveryJournal("/recovery", storage, (part) => ({
+    read: () => {
+      const denied = Object.assign(new Error(`Command failed: helper.exe ${part}`), {
+        code: "EPERM",
+      });
+      const helper = new Error("WINDOWS_HELPER_EXECUTION_FAILED", { cause: denied });
+      throw new Error("Invalid offline read cache staging file", { cause: helper });
+    },
+    write: () => undefined,
+  }));
+  const operation = createReceiveRecoveryOperation(journal, idle, async () => success);
+  const result = await operation.execute({ operation: "load", expected_session: expected });
+  assert.equal(result.ok ? null : result.error.code, "RECOVERY_UNAVAILABLE");
+  const lines = JSON.stringify(logged.mock.calls.map((call) => call.arguments));
+  assert.match(lines, /"Error","Error:WINDOWS_HELPER_EXECUTION_FAILED","Error:EPERM"/u);
+  assert.doesNotMatch(lines, /workspace|helper\.exe|staging file/u);
 });

@@ -41,6 +41,23 @@ const CacheFileSchema = z.strictObject({
   auth_tag: z.base64(),
 });
 const STAGING_NAME = /^\.offline-read-cache\.[a-f0-9]{24}\.staging$/u;
+const stagingName = (id: string) => `.offline-read-cache.${id}.staging`;
+
+/**
+ * The longest path a cache directory holds: an atomic write's staging file. The Windows
+ * helper that secures it rejects any full path of 260 characters or more.
+ */
+export function longestCachePath(root: string): string {
+  return join(root, stagingName("0".repeat(24)));
+}
+
+function discardOwnStaging(path: string): void {
+  try {
+    unlinkSync(path);
+  } catch {
+    // Already renamed into place, or never removable; the caller reports the write failure.
+  }
+}
 
 function assertContained(root: string, candidate: string): void {
   const rel = relative(root, candidate);
@@ -238,10 +255,7 @@ export class OfflineReadCacheFile {
   }
 
   private atomicWrite(file: z.output<typeof CacheFileSchema>): void {
-    const staging = join(
-      this.root,
-      `.offline-read-cache.${randomBytes(12).toString("hex")}.staging`,
-    );
+    const staging = join(this.root, stagingName(randomBytes(12).toString("hex")));
     assertContained(this.root, staging);
     const fd = openSync(
       staging,
@@ -249,13 +263,20 @@ export class OfflineReadCacheFile {
       0o600,
     );
     try {
-      securePrivateFileSync(staging);
-      writeFileSync(fd, `${JSON.stringify(file)}\n`, "utf8");
-      fsyncSync(fd);
-    } finally {
-      closeSync(fd);
+      try {
+        securePrivateFileSync(staging);
+        writeFileSync(fd, `${JSON.stringify(file)}\n`, "utf8");
+        fsyncSync(fd);
+      } finally {
+        closeSync(fd);
+      }
+      replaceFileWriteThroughSync(staging, this.path);
+    } catch (error) {
+      // This write created the staging file exclusively. Left behind, one the helper cannot
+      // inspect would fail every later open of this directory, so no retry could succeed.
+      discardOwnStaging(staging);
+      throw error;
     }
-    replaceFileWriteThroughSync(staging, this.path);
     this.syncRoot();
   }
 
