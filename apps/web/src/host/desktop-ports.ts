@@ -31,11 +31,13 @@ import {
 import type { AppPorts, HealthPort, HealthResult } from "./types.js";
 import { createAiSettingsPort } from "../ai/settings-port.js";
 import { createDesktopAiPanelPort } from "../ai/desktop-ai-port.js";
+import { createMaintenancePort } from "./maintenance-port.js";
 import { createScalePort } from "./scale-port.js";
 import { createRemoteAssistancePort } from "./remote-assistance-port.js";
 import { createStoreExportPort } from "./store-export-port.js";
 import { createMigrationPort } from "./migration-port.js";
 import { createNotificationSettingsPort } from "./notification-settings-port.js";
+import { createReceiveRecoveryPort } from "./receive-recovery-port.js";
 
 export type { LaundryDesktopBridge } from "./desktop-bridge.js";
 
@@ -44,7 +46,7 @@ function createCommandPort(bridge: LaundryDesktopBridge): CommandPort {
     async execute<T>(
       name: string,
       body?: unknown,
-      options?: Readonly<{ confirmRef?: string }>,
+      options?: Readonly<{ confirmRef?: string; operationId?: string }>,
     ): Promise<CommandResult<T>> {
       const parsedOptions = readCommandOptions(options);
       if (
@@ -54,13 +56,16 @@ function createCommandPort(bridge: LaundryDesktopBridge): CommandPort {
       ) {
         return desktopBridgeError("桌面命令参数格式错误");
       }
+      const operation =
+        parsedOptions.operationId === undefined ? {} : { operation_id: parsedOptions.operationId };
       const input: DesktopCommandInput =
         parsedOptions.confirmRef === undefined
           ? Object.freeze({
               name,
+              ...operation,
               body: body === undefined ? EMPTY_BUSINESS_BODY : body,
             })
-          : Object.freeze({ name, confirm_ref: parsedOptions.confirmRef });
+          : Object.freeze({ name, ...operation, confirm_ref: parsedOptions.confirmRef });
       try {
         return readDesktopCommandResult<T>(await bridge.command.execute(input));
       } catch {
@@ -122,6 +127,11 @@ export function createDesktopPorts(bridge: LaundryDesktopBridge): AppPorts {
         });
   return Object.freeze({
     auth,
+    ...(bridge.receiveRecovery === undefined
+      ? {}
+      : {
+          receiveRecovery: createReceiveRecoveryPort(bridge.receiveRecovery.execute),
+        }),
     ...(bridge.paymentChannel === undefined
       ? {}
       : { paymentChannel: createPaymentChannelPort(bridge.paymentChannel.execute) }),
@@ -131,6 +141,9 @@ export function createDesktopPorts(bridge: LaundryDesktopBridge): AppPorts {
     ...(bridge.remoteAssistance === undefined
       ? {}
       : { remoteAssistance: createRemoteAssistancePort(bridge.remoteAssistance.execute) }),
+    ...(bridge.maintenance === undefined
+      ? {}
+      : { maintenance: createMaintenancePort(bridge.maintenance.execute) }),
     ...(bridge.scale === undefined ? {} : { scale: createScalePort(bridge.scale.execute) }),
     ...(bridge.storeExport === undefined
       ? {}

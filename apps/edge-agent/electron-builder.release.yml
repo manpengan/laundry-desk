@@ -18,6 +18,7 @@ files:
   - dist/lib/sender.js
   - dist/shell/single-instance.js
   - dist/shell/tray.js
+  - dist/shell/unload-guard.js
   - dist/shell/user-data-identity.js
   - dist/transport/electron-session.js
   - dist/transport/handlers.js
@@ -26,6 +27,10 @@ files:
   - dist/desktop/migration-operation.js
   - dist/desktop/notification-operation.js
   - dist/desktop/auxiliary-operations.js
+  - dist/desktop/maintenance-operation.js
+  - dist/maintenance/runtime-binding.js
+  - dist/maintenance/windows-port.js
+  - dist/maintenance/windows-script.js
   - dist/desktop/scale-operation.js
   - dist/scale/protocol.js
   - dist/scale/windows-script.js
@@ -39,6 +44,9 @@ files:
   - dist/desktop/edge-authority-transport.js
   - dist/desktop/edge-http.js
   - dist/desktop/electron-photo-request.js
+  - dist/desktop/command-request.js
+  - dist/desktop/receive-recovery-journal.js
+  - dist/desktop/receive-recovery-operation.js
   - dist/desktop/http-transport.js
   - dist/desktop/http-transport-ports.js
   - dist/desktop/http-transport-support.js
@@ -94,6 +102,7 @@ files:
   - dist/offline/read-authority.js
   - dist/offline/read-cache-file.js
   - dist/offline/read-cache.js
+  - dist/offline/receive-recovery-fallback.js
   - dist/offline/runtime.js
   - dist/offline/service.js
   - dist/upgrade/release-manifest.js

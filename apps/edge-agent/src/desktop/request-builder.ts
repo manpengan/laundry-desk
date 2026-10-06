@@ -14,6 +14,8 @@ export type DesktopHttpRequest = Readonly<{
 }>;
 
 export type DesktopRequestOptions = Readonly<{
+  /** Main-only namespace; never forwarded in the HTTP body or headers. */
+  operationId?: string;
   body?: Readonly<Record<string, unknown>> | Uint8Array;
   contentType?: string;
   accessToken?: string;

@@ -107,7 +107,7 @@ export const catalogItemsGetQuery: QueryDefinition<GetInput> = defineQuery({
 
 export const CatalogItemUpsertInputSchema = z.strictObject({
   code: CatalogItemCodeSchema,
-  name: z.string().min(1).max(64),
+  name: z.string().trim().min(1).max(64),
   service_code: CatalogTaxonomyCodeSchema,
   category_code: CatalogTaxonomyCodeSchema,
   /** Integer fen only; floats and negatives are rejected at the boundary. */

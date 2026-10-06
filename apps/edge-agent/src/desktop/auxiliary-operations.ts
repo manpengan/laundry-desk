@@ -1,5 +1,6 @@
 import { createDesktopPaymentChannelOperation } from "./payment-channel-operation.js";
 import { createDesktopMiniappSettingsOperation } from "./miniapp-settings-operation.js";
+import { createDesktopMaintenanceOperation } from "./maintenance-operation.js";
 import { createDesktopScaleOperation } from "./scale-operation.js";
 import { createDesktopRemoteAssistanceOperation } from "./remote-assistance-operation.js";
 import { createDesktopAiOperation } from "./ai-operation.js";
@@ -29,6 +30,7 @@ export function createDesktopAuxiliaryOperations(
       currentState,
       refreshIfNeeded,
     ),
+    maintenance: createDesktopMaintenanceOperation(currentState),
     scale: createDesktopScaleOperation(currentState),
     ai: createDesktopAiOperation(dependencies, currentState, refreshIfNeeded),
     migration: createDesktopMigrationOperation(dependencies, currentState, refreshIfNeeded),

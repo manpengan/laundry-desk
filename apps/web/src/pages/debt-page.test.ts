@@ -67,8 +67,8 @@ test("DebtPage SSR shell shows load control and empty prompt", () => {
   assert.match(html, /data-testid="debt-section"/);
   assert.match(html, /data-testid="debt-load-btn"/);
   assert.match(html, /data-testid="debt-list"/);
-  assert.match(html, /加载欠款/);
-  assert.match(html, /点击「加载欠款」查看应收/);
+  assert.match(html, /刷新订单/);
+  assert.match(html, /正在准备订单列表/);
   assert.doesNotMatch(html, /#ff0000/i);
   assert.doesNotMatch(html, /rgb\(/i);
 });

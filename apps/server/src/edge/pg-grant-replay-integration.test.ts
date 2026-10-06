@@ -567,3 +567,91 @@ test(
     }
   },
 );
+
+test(
+  "real PG offline replay under a lost online request's key returns its result without executing again",
+  { skip: urls === null },
+  async () => {
+    assert.ok(urls);
+    const adminPool = createPgPool({ connectionString: urls.admin });
+    const appPool = createPgPool({ connectionString: urls.app, max: 6 });
+    try {
+      await seedPgTestIdentityFixture(adminPool);
+      await clearFixture(adminPool);
+      const deviceKeys = generateKeyPairSync("ed25519");
+      const authorityService = createEdgeAuthorityService({
+        store: createPgAuthorityStore(appPool),
+        randomUUID,
+        keyPair: generateKeyPairSync("ed25519"),
+      });
+      const issuerSession = session(DEMO_STAFF_A_ID, "Fixture Staff A");
+      const challengeInput = Object.freeze({
+        request_nonce: randomUUID(),
+        device_public_key_spki: deviceKeys.publicKey
+          .export({ type: "spki", format: "der" })
+          .toString("base64url"),
+        request_primary: false,
+      });
+      const challenge = await authorityService.challenge(issuerSession, challengeInput);
+      assert.ok(challenge);
+      const issued = await authorityService.issue(
+        issuerSession,
+        authorityRequest(deviceKeys.privateKey, challenge, challengeInput),
+      );
+      assert.ok(issued);
+      const authority: GrantAuthority = Object.freeze({
+        grantId: issued.offline_grant.payload.grant_id,
+        issuedAt: issued.offline_grant.payload.issued_at,
+        notAfter: issued.offline_grant.payload.not_after,
+      });
+
+      // The counter's online request committed, but its answer never came back.
+      const key = randomUUID();
+      const request = replayRequest(deviceKeys.privateKey, authority, {
+        sequence: 1,
+        idempotencyKey: key,
+      });
+      const payload = request.payload.envelope.payload;
+      if (payload.mode !== "direct") throw new Error("expected a direct command");
+      const online = await withPoolClient(appPool, (sql) =>
+        executeCommand(
+          sql,
+          Object.freeze({ orgId: DEMO_ORG_ID, storeId: DEMO_STORE_ID, staffId: DEMO_STAFF_A_ID }),
+          payload.command,
+          payload.args,
+          {
+            registry: createProbeRegistry(),
+            actor: Object.freeze({
+              staffId: DEMO_STAFF_A_ID,
+              deviceId: DEVICE_ID,
+              via: "ui",
+              permissions: permissionsForAuthority({ role: "admin", is_privacy_admin: false }),
+            }),
+            version: payload.version,
+            dryRun: false,
+            idempotencyKey: key,
+            idempotencyStore: createPgIdempotencyStore(appPool),
+          },
+        ),
+      );
+      assert.ok(online.ok);
+
+      // The offline queue then replays the same receive under the key it was sent with.
+      const replayed = await executePrepared(
+        appPool,
+        await prepareRequired(appPool, session(PG_TEST_STAFF_B_ID, "Fixture Staff B"), request),
+      );
+      assert.equal(replayed.disposition, "applied");
+      assert.deepEqual(replayed.result, online);
+      const probes = await adminPool.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM settings WHERE id = $1::uuid",
+        [key],
+      );
+      assert.equal(probes.rows[0]?.count, "1");
+    } finally {
+      await clearFixture(adminPool);
+      await appPool.end();
+      await adminPool.end();
+    }
+  },
+);

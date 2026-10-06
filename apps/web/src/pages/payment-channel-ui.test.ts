@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createElement } from "react";
+import { createElement, useSyncExternalStore } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { ToastProvider } from "@laundry/ui";
 import type { ChannelIntent, DesktopPaymentChannelInput } from "@laundry/contracts";
@@ -13,6 +13,8 @@ import { ChannelCollectCard } from "./ChannelCollectCard.js";
 import { PaymentChannelCollection } from "./PaymentChannelCollection.js";
 import { PaymentChannelReconcile } from "./PaymentChannelReconcile.js";
 import { ReceiveTicketResult } from "./ReceiveTicketResult.js";
+import { createReceiveWorkspace } from "./receive-workspace.js";
+import { confirmReceivePayment } from "./receive-payment.js";
 Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 const id = "11111111-1111-4111-8111-111111111111";
 const session: SessionView = {
@@ -328,23 +330,24 @@ test("a customer can prepay by scan right after an order is opened", async () =>
       return { ok: true, data: intent({ amount_cents: 2_000, state: "paid", error_code: null }) };
     return failed;
   });
+  const store = createReceiveWorkspace();
+  store.patch({ result: opened, phase: "complete" });
+  function Result() {
+    const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
+    return createElement(ReceiveTicketResult, {
+      busy: false,
+      commandClient: createMockCommandClient(),
+      notify: () => undefined,
+      preview: null,
+      queuePrintEnabled: false,
+      result: state.result,
+      paymentChannelPort: port,
+      onPaymentConfirmed: (paid) => confirmReceivePayment(store, paid),
+    });
+  }
   let renderer!: ReactTestRenderer;
   await act(async () => {
-    renderer = create(
-      createElement(
-        ToastProvider,
-        null,
-        createElement(ReceiveTicketResult, {
-          busy: false,
-          commandClient: createMockCommandClient(),
-          notify: () => undefined,
-          preview: null,
-          queuePrintEnabled: false,
-          result: opened,
-          paymentChannelPort: port,
-        }),
-      ),
-    );
+    renderer = create(createElement(ToastProvider, null, createElement(Result)));
   });
   try {
     const collect = button(renderer, "微信收款码");

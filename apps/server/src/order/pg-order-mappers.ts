@@ -75,6 +75,8 @@ export type OrderRow = {
 };
 
 export type OrderLineRow = {
+  catalog_name?: string | null;
+  catalog_code?: string | null;
   id: string;
   org_id: string;
   store_id: string;
@@ -144,6 +146,8 @@ export function asGarmentStatus(value: string): GarmentStatus {
 export function mapOrderLine(row: OrderLineRow): OrderLineRecord {
   return Object.freeze({
     line_index: row.line_index,
+    catalog_name: row.catalog_name ?? null,
+    catalog_code: row.catalog_code ?? null,
     service_code: row.service_code,
     category_code: row.category_code,
     unit_price_cents: row.unit_price_cents,

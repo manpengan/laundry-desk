@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 
 import type { PhotoPort, PhotoReadVariant } from "../host/photo-port.js";
 import type { PhotoMetaRow } from "./photo-list.js";
+import type { OrderGetGarment } from "./order-form.js";
+import { photoGarmentLabel, photoKindLabel } from "./order-photo-labels.js";
 
 type ImageState =
   | Readonly<{ status: "loading" }>
@@ -79,26 +81,37 @@ function PhotoImage({
     );
   }
   return onOpen === undefined ? (
-    <img src={state.url} alt={`${photo.kind} 照片`} />
+    <img src={state.url} alt={`${photoKindLabel(photo.kind)} 照片`} />
   ) : (
     <button type="button" className="ld-photo-image__open" onClick={onOpen}>
-      <img src={state.url} alt={`${photo.kind} 照片缩略图`} />
+      <img src={state.url} alt={`${photoKindLabel(photo.kind)} 照片缩略图`} />
     </button>
   );
 }
 
 export function PhotoGallery({
   photos,
+  garments = [],
   photoPort,
   onDelete,
 }: Readonly<{
   photos: readonly PhotoMetaRow[];
+  garments?: readonly OrderGetGarment[];
   photoPort?: PhotoPort;
   onDelete?: (photoId: string) => Promise<boolean>;
 }>) {
   const [selected, setSelected] = useState<PhotoMetaRow | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+
+  const garmentLabel = (photo: PhotoMetaRow) => {
+    const garment = garments.find((item) => item.garment_id === photo.garment_id);
+    return garment === undefined ? "衣物信息暂不可用" : photoGarmentLabel(garment);
+  };
+  const visibleSelected =
+    selected === null
+      ? null
+      : (photos.find((photo) => photo.photo_id === selected.photo_id) ?? null);
 
   const closeViewer = () => {
     if (deleteBusy) return;
@@ -127,7 +140,7 @@ export function PhotoGallery({
             key={photo.photo_id}
             className="ld-order-detail__photo-thumb"
             data-testid="order-detail-photo-thumb"
-            title={`${photo.kind} · ${photo.content_type}`}
+            title={`${garmentLabel(photo)} / ${photoKindLabel(photo.kind)}`}
           >
             <PhotoImage
               photo={photo}
@@ -135,15 +148,19 @@ export function PhotoGallery({
               variant="thumbnail"
               onOpen={() => setSelected(photo)}
             />
-            <span className="ld-order-detail__photo-kind">{photo.kind}</span>
+            <span className="ld-order-detail__photo-kind">{photoKindLabel(photo.kind)}</span>
+            <span>{garmentLabel(photo)}</span>
             <span className="ld-order-detail__photo-bytes">{photo.byte_size} B</span>
           </li>
         ))}
       </ul>
-      {selected !== null ? (
+      {visibleSelected !== null ? (
         <div className="ld-photo-viewer" role="dialog" aria-modal="true" aria-label="查看照片">
           <div className="ld-photo-viewer__body">
-            <PhotoImage photo={selected} photoPort={photoPort} variant="original" />
+            <p>
+              {garmentLabel(visibleSelected)} / {photoKindLabel(visibleSelected.kind)}
+            </p>
+            <PhotoImage photo={visibleSelected} photoPort={photoPort} variant="original" />
             <div className="ld-photo-viewer__actions">
               {onDelete !== undefined ? (
                 confirmingDelete ? (

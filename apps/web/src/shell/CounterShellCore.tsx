@@ -1,11 +1,10 @@
 import { useToastPageScope, type PrintJobSummary } from "@laundry/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
-
 import type { AuthClient } from "../auth/AuthClient.js";
 import { filterNavItems, permissionContextFrom } from "../auth/permissions.js";
 import type { SessionView } from "../auth/types.js";
 import type { CommandPort, QueryPort } from "../commands/types.js";
-import { createMockConnection, type ConnectionStatus } from "../connection.js";
+import { type ConnectionStatus } from "../connection.js";
 import type { AiPanelPort } from "../host/ai-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
 import type { ScalePort } from "../host/scale-port.js";
@@ -43,7 +42,13 @@ import { shellCommands } from "./shell-commands.js";
 import { ThemeControlContext, useShellShortcuts } from "./shell-shortcuts.js";
 import { Sidebar } from "./Sidebar.js";
 import { TopBar } from "./TopBar.js";
+import type { HealthPort } from "../host/types.js";
+import { ReceiveWorkspaceProvider, useReceiveWorkspaceAccess } from "../pages/ReceiveWorkspace.js";
+import { hasReceiveWork } from "../pages/receive-workspace.js";
+import { useLiveConnection } from "./use-live-connection.js";
 import { usePrintJobSummary } from "./use-print-job-summary.js";
+import { readSidebarExpanded, writeSidebarExpanded } from "./sidebar-preference.js";
+import type { ReceiveRecoveryPort } from "../host/receive-recovery-port.js";
 
 export type CounterShellProps = {
   session: SessionView;
@@ -51,6 +56,8 @@ export type CounterShellProps = {
   commandClient: CommandPort;
   queryClient: QueryPort;
   photoPort?: PhotoPort;
+  receiveRecoveryPort?: ReceiveRecoveryPort;
+  healthPort?: HealthPort;
   offlinePort?: OfflinePort;
   printerPort?: PrinterPort;
   aiPort?: AiPanelPort;
@@ -78,8 +85,6 @@ export type CounterShellProps = {
 type CounterShellCoreProps = CounterShellProps &
   Readonly<{ PageHostComponent: ComponentType<PageHostProps> }>;
 
-const SIDEBAR_STORAGE_KEY = "ld.counter.sidebar";
-
 const READ_ONLY_COMMAND_PORT: CommandPort = Object.freeze({
   execute: async <T,>(): Promise<
     Readonly<
@@ -100,37 +105,21 @@ function readSystemDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-function readSidebarExpanded(): boolean {
-  try {
-    return (
-      typeof window !== "undefined" && window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1"
-    );
-  } catch {
-    return false;
-  }
+export function CounterShellCore(props: CounterShellCoreProps) {
+  const scope = props.session.session;
+  return (
+    <ReceiveWorkspaceProvider
+      scope={`${scope.org_id}:${scope.store_id}:${scope.session_id}:${scope.staff_id}:${scope.session_version}`}
+      {...(props.receiveRecoveryPort === undefined ? {} : { recovery: props.receiveRecoveryPort })}
+      session={props.session}
+      query={props.queryClient}
+    >
+      <CounterShellContent {...props} />
+    </ReceiveWorkspaceProvider>
+  );
 }
 
-function writeSidebarExpanded(expanded: boolean): void {
-  try {
-    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, expanded ? "1" : "0");
-  } catch {
-    // Storage is a convenience only.
-  }
-}
-
-function connectionFromSession(
-  session: SessionView,
-  initial: ConnectionStatus | undefined,
-): ConnectionStatus {
-  const base = initial ?? createMockConnection();
-  return {
-    ...base,
-    storeName: session.display.store_name,
-    staffName: session.display.staff_name,
-  };
-}
-
-export function CounterShellCore({
+function CounterShellContent({
   PageHostComponent,
   session,
   authClient,
@@ -145,6 +134,7 @@ export function CounterShellCore({
   commandClient,
   queryClient,
   photoPort,
+  healthPort,
   offlinePort,
   printerPort,
   aiPort,
@@ -174,10 +164,37 @@ export function CounterShellCore({
   const [intent, setIntent] = useState<NavigationIntent | undefined>(undefined);
   const intentNonce = useRef(0);
 
-  const connection = useMemo(
-    () => connectionFromSession(session, initialConnection),
-    [session, initialConnection],
+  const connection = useLiveConnection(
+    session,
+    initialConnection,
+    healthPort,
+    offlinePort,
+    readOnly,
   );
+  const { store: receiveStore, confirmDiscard } = useReceiveWorkspaceAccess();
+  const openStaffSwitch = useCallback(() => {
+    void (async () => {
+      const current = receiveStore.getSnapshot();
+      if (
+        current.busy ||
+        current.phase === "uncertain" ||
+        !["browser", "ready"].includes(current.recoveryStatus)
+      ) {
+        setActiveId("receive");
+        return;
+      }
+      if (
+        hasReceiveWork(current) &&
+        !(await confirmDiscard(
+          current.recoveryStatus === "browser"
+            ? "切换员工会清除本会话未暂存的开单内容。需要保留时，请先返回开单页暂存。"
+            : "开单内容已加密保留在本机，切换后仅原员工重新登录可恢复。确认切换员工？",
+        ))
+      )
+        return;
+      setPinOpen(true);
+    })();
+  }, [receiveStore, confirmDiscard]);
   const dark = systemDark ?? readSystemDark();
   const printSummary = usePrintJobSummary(
     queryClient,
@@ -237,13 +254,13 @@ export function CounterShellCore({
         readOnly,
         expanded,
         onNavigate: setActiveId,
-        onSwitchStaff: () => setPinOpen(true),
+        onSwitchStaff: openStaffSwitch,
         onOpenPrintQueue: () => setPrintQueueOpen(true),
         onSetTheme: setTheme,
         onShowShortcuts: () => setHelpOpen(true),
         onToggleSidebar: toggleSidebar,
       }),
-    [expanded, navItems, readOnly, setTheme, toggleSidebar],
+    [expanded, navItems, readOnly, setTheme, toggleSidebar, openStaffSwitch],
   );
   const canOpen = useMemo(
     () =>
@@ -304,7 +321,7 @@ export function CounterShellCore({
             {...(readOnly || aiPort === undefined
               ? {}
               : { aiOpen, onToggleAi: () => setAiOpen((value) => !value) })}
-            {...(readOnly ? {} : { onSwitchStaff: () => setPinOpen(true) })}
+            {...(readOnly ? {} : { onSwitchStaff: openStaffSwitch })}
             readOnly={readOnly}
           />
           {readOnly ? (
@@ -338,6 +355,7 @@ export function CounterShellCore({
           </RouteGate>
         </div>
         <PinSwitchDialog
+          key={`${session.session.staff_id}:${session.session.session_version}`}
           open={pinOpen}
           onClose={() => setPinOpen(false)}
           authClient={authClient}

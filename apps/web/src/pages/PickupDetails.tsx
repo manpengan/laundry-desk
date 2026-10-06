@@ -1,6 +1,7 @@
 import { MoneyText, StatusBadge } from "@laundry/ui";
 
-import type { OrderGetGarment, PickupOrderResult } from "./order-form.js";
+import { garmentName } from "./garment-labels.js";
+import type { OrderGetResult, OrderGetGarment, PickupOrderResult } from "./order-form.js";
 
 export function PickupGarmentCheckRow({
   garment,
@@ -37,10 +38,18 @@ export function PickupGarmentCheckRow({
           data-testid={`pickup-garment-${garment.garment_id}`}
         />
         <span className="ld-pickup-garments__body">
-          <span className="ld-pickup-garments__barcode">{garment.barcode}</span>
+          <strong>
+            {garment.catalog_name ?? garmentName(garment.service_code, garment.category_code)}
+          </strong>
           <span className="ld-pickup-garments__meta-line">
-            L{garment.line_index + 1}·#{garment.seq}
+            {[garment.color, garment.brand].filter(Boolean).join(" · ") || "未记录颜色与品牌"} · 第{" "}
+            {garment.line_index + 1} 行第 {garment.seq} 件
           </span>
+          <span className="ld-pickup-garments__barcode">条码 {garment.barcode}</span>
+          {garment.accessories.length > 0 ? (
+            <span>随衣附件：{garment.accessories.join("、")}</span>
+          ) : null}
+          {garment.defects.length > 0 ? <span>收衣备注：{garment.defects.join("、")}</span> : null}
           {garment.rack_zone === null ? null : (
             <span className="ld-pickup-garments__rack">
               货架 {garment.rack_zone}-{garment.rack_slot}
@@ -59,7 +68,15 @@ export function PickupGarmentCheckRow({
   );
 }
 
-export function PickupResult({ result }: Readonly<{ result: PickupOrderResult }>) {
+export type PickupResultView = PickupOrderResult &
+  Readonly<{ garments?: readonly OrderGetGarment[] }>;
+export function withPickupDetails(
+  result: PickupOrderResult,
+  order: OrderGetResult | null,
+): PickupResultView {
+  return Object.freeze({ ...result, garments: order?.garments ?? [] });
+}
+export function PickupResult({ result }: Readonly<{ result: PickupResultView }>) {
   return (
     <section className="ld-order-result" aria-live="polite">
       <h2 className="ld-order-result__title">取衣结果</h2>
@@ -92,11 +109,28 @@ export function PickupResult({ result }: Readonly<{ result: PickupOrderResult }>
         </div>
       </dl>
       <ul className="ld-order-result__garments">
-        {result.picked_garment_ids.map((id) => (
-          <li key={id} className="ld-order-result__garment">
-            <span className="ld-order-result__mono">{id}</span>
-          </li>
-        ))}
+        {result.picked_garment_ids.map((id, index) => {
+          const garment = result.garments?.find((item) => item.garment_id === id);
+          return (
+            <li key={id} className="ld-order-result__garment">
+              <span>
+                {garment
+                  ? (garment.catalog_name ??
+                    garmentName(garment.service_code, garment.category_code))
+                  : `衣物 ${index + 1}`}
+              </span>
+              {garment ? (
+                <>
+                  <span>
+                    {garment.color} {garment.brand}
+                  </span>
+                  <span className="ld-order-result__mono">条码 {garment.barcode}</span>
+                </>
+              ) : null}
+              <span>已交付</span>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

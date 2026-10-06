@@ -114,6 +114,14 @@ describe("ADR-15/39 catalog maintenance commands", () => {
     await expect(parseContractInput(catalogItemUpsertCommand, valid)).resolves.toMatchObject({
       code: "wash_shirt",
     });
+    await expect(
+      parseContractInput(catalogItemUpsertCommand, { ...valid, name: "  水洗衬衫  " }),
+    ).resolves.toMatchObject({ name: "水洗衬衫" });
+    for (const name of [" ", "\t\n", ""]) {
+      await expect(
+        parseContractInput(catalogItemUpsertCommand, { ...valid, name }),
+      ).rejects.toThrow();
+    }
     for (const badPrice of [15.5, -1, 2_147_483_648]) {
       await expect(
         parseContractInput(catalogItemUpsertCommand, { ...valid, unit_price_cents: badPrice }),

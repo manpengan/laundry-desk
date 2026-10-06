@@ -216,6 +216,7 @@ test("a picked-up order with debt is settled by standalone repayment", async ({ 
 test("the stats page loads a day summary for the counter", async ({ page }) => {
   await signIn(page);
   await page.locator('[data-nav-id="stats"]').click();
+  await page.getByRole("tab", { name: "历史报表与对账" }).click();
   await page.locator('[data-testid="stats-load-btn"]').click();
   const snapshot = page.locator('[data-testid="reconciliation-snapshot"]');
   await expect(snapshot).toBeVisible({ timeout: 15_000 });
@@ -227,6 +228,7 @@ test("a historic empty business day can be closed without freezing today's count
 }) => {
   await signIn(page);
   await page.locator('[data-nav-id="stats"]').click();
+  await page.getByRole("tab", { name: "历史报表与对账" }).click();
   await page.locator('[data-testid="stats-date-input"]').fill(ISOLATED_SHIFT_DATE);
   await page.locator('[data-testid="stats-load-btn"]').click();
 
@@ -236,6 +238,7 @@ test("a historic empty business day can be closed without freezing today's count
   await expect(snapshot).toBeVisible({ timeout: 15_000 });
   await expect(snapshot).toContainText("暂无支付流水");
 
+  await page.getByRole("tab", { name: "交班", exact: true }).click();
   const closed = page.locator('[data-testid="shift-closed-status"]');
   const form = page.locator('[data-testid="shift-signature-input"]');
   await expect(closed.or(form)).toBeVisible({ timeout: 15_000 });

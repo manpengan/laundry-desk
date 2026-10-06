@@ -10,11 +10,13 @@ import type { DesktopAiInput, DesktopV1MigrationInput } from "@laundry/contracts
 export type DesktopCommandInput =
   | Readonly<{
       name: string;
+      operation_id?: string;
       body: unknown;
       confirm_ref?: never;
     }>
   | Readonly<{
       name: string;
+      operation_id?: string;
       confirm_ref: string;
       body?: never;
     }>;
@@ -32,12 +34,14 @@ export type DesktopQueryInput = Readonly<{
  * deliberately have no representation here.
  */
 export type LaundryDesktopBridge = Readonly<{
+  receiveRecovery?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   remoteAssistance?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   miniappSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   paymentChannel?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   ai?: Readonly<{ execute: (input: DesktopAiInput) => Promise<unknown> }>;
   migration?: Readonly<{ execute: (input: DesktopV1MigrationInput) => Promise<unknown> }>;
   notificationSettings?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
+  maintenance?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   scale?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   storeExport?: Readonly<{ execute: (input: unknown) => Promise<unknown> }>;
   auth: Readonly<{

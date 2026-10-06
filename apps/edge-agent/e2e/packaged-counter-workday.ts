@@ -140,6 +140,7 @@ async function selectPackagedMember(page: Page): Promise<Locator> {
   });
   await expect(customer).toHaveCount(1, { timeout: 15_000 });
   await customer.click();
+  await page.getByRole("button", { name: "会员充值与权益", exact: true }).click();
   const member = page.locator('[aria-label="会员储值"]');
   await expect(member).toBeVisible({ timeout: 15_000 });
   return member;
@@ -199,6 +200,7 @@ async function assertPackagedMemberSettlement(page: Page): Promise<void> {
   const member = await selectPackagedMember(page);
   await expect(member).toContainText(PACKAGED_MEMBER.remainingBalance, { timeout: 15_000 });
   await page.locator('[data-nav-id="stats"]').click();
+  await page.getByRole("tab", { name: "历史报表与对账" }).click();
   await page.locator('[data-testid="stats-load-btn"]').click();
   const snapshot = page.locator('[data-testid="reconciliation-snapshot"]');
   await expect(snapshot).toBeVisible({ timeout: 15_000 });

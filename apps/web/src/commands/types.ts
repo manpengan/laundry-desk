@@ -77,6 +77,8 @@ export type CommandErrorDetail = Readonly<{
 
 export type CommandFailure = Readonly<{
   code: string;
+  /** Transport did not establish whether the command committed. */
+  outcomeUnknown?: boolean;
   detail?: CommandErrorDetail;
   message?: string;
 }>;
@@ -85,6 +87,8 @@ export type CommandResult<T = unknown> =
   Readonly<{ ok: true; data: T }> | Readonly<{ ok: false; error: CommandFailure }>;
 
 export type CommandExecutionOptions = Readonly<{
+  /** One UI operation: retries retain it; an explicitly new operation changes it. */
+  operationId?: string;
   confirmRef?: string;
   /** Abort transport when the owning session/scope is replaced. */
   signal?: AbortSignal;

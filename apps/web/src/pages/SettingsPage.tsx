@@ -1,7 +1,6 @@
 /** Store administration plus device-local desktop capabilities. */
 
-import { cn, Icon, type IconName } from "@laundry/ui";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { SettingsLayout, type SettingsSection } from "./SettingsLayout.js";
 
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
@@ -10,6 +9,7 @@ import type { OfflinePort } from "../host/offline-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
 import { AiSettingsPanel } from "../ai/AiSettingsPanel.js";
+import type { MaintenancePort } from "../host/maintenance-port.js";
 import type { StoreExportPort } from "../host/store-export-port.js";
 import type { PaymentChannelPort } from "../host/payment-channel-port.js";
 import type { MiniappSettingsPort } from "../host/miniapp-settings-port.js";
@@ -21,6 +21,7 @@ import { RemoteAssistancePanel } from "./RemoteAssistancePanel.js";
 import type { MigrationPort } from "../host/migration-port.js";
 import type { NotificationSettingsPort } from "../host/notification-settings-port.js";
 import { NotificationSettingsPanel } from "./NotificationSettingsPanel.js";
+import { BackupHealthPanel } from "./BackupHealthPanel.js";
 import { StoreExportPanel } from "./StoreExportPanel.js";
 import { V1MigrationPanel } from "./V1MigrationPanel.js";
 import { AppearanceSettingsPanel } from "./AppearanceSettingsPanel.js";
@@ -46,6 +47,7 @@ export type SettingsPageProps = {
   printerPort?: PrinterPort;
   aiSettingsPort?: AiSettingsPort;
   migrationPort?: MigrationPort;
+  maintenancePort?: MaintenancePort;
   storeExportPort?: StoreExportPort;
   paymentChannelPort?: PaymentChannelPort;
   miniappSettingsPort?: MiniappSettingsPort;
@@ -60,44 +62,6 @@ export type SettingsPageProps = {
   onSessionChange?: (session: SessionView | null) => void;
 };
 
-type SettingsSection = Readonly<{
-  id: string;
-  label: string;
-  icon: IconName;
-  content: ReactNode;
-}>;
-
-function scrollBehavior(): ScrollBehavior {
-  const reduce =
-    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  return reduce ? "auto" : "smooth";
-}
-
-/** Scroll-spy: highlight the section nearest the top of the viewport. */
-function useActiveSection(ids: readonly string[]): string | null {
-  const [active, setActive] = useState<string | null>(ids[0] ?? null);
-  const key = ids.join("|");
-  useEffect(() => {
-    if (typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top);
-        const first = visible[0]?.target.id;
-        if (first !== undefined) setActive(first);
-      },
-      { rootMargin: "-20% 0px -65% 0px" },
-    );
-    for (const id of key.split("|")) {
-      const element = document.getElementById(id);
-      if (element !== null) observer.observe(element);
-    }
-    return () => observer.disconnect();
-  }, [key]);
-  return active;
-}
-
 export function SettingsPage({
   session,
   authClient,
@@ -107,6 +71,7 @@ export function SettingsPage({
   printerPort,
   aiSettingsPort,
   migrationPort,
+  maintenancePort,
   storeExportPort,
   paymentChannelPort,
   miniappSettingsPort,
@@ -123,6 +88,18 @@ export function SettingsPage({
       content: <AppearanceSettingsPanel />,
     },
   ];
+  sections.push({
+    id: "settings-backup",
+    label: "备份与恢复",
+    icon: "settings",
+    content: (
+      <BackupHealthPanel
+        {...(maintenancePort === undefined ? {} : { port: maintenancePort })}
+        canMaintain={session.role === "admin"}
+        sessionKey={`${session.session.session_id}:${session.session.session_version}`}
+      />
+    ),
+  });
   if (session.role === "admin" && paymentChannelPort !== undefined)
     sections.push({
       id: "settings-payments",
@@ -132,6 +109,7 @@ export function SettingsPage({
         <PaymentChannelPanel
           key={session.session.session_id + ":" + session.session.session_version}
           port={paymentChannelPort}
+          {...(queryClient ? { queryClient } : {})}
           authClient={authClient}
           commandClient={commandClient}
           session={session}
@@ -184,6 +162,7 @@ export function SettingsPage({
       content: (
         <StoreExportPanel
           port={storeExportPort}
+          {...(maintenancePort === undefined ? {} : { maintenancePort })}
           sessionKey={session.session.session_id + ":" + session.session.session_version}
         />
       ),
@@ -196,6 +175,7 @@ export function SettingsPage({
       content: (
         <V1MigrationPanel
           port={migrationPort}
+          {...(maintenancePort === undefined ? {} : { maintenancePort })}
           sessionKey={`${session.session.session_id}:${session.session.session_version}`}
         />
       ),
@@ -325,42 +305,18 @@ export function SettingsPage({
     content: <PrinterSupportPanel />,
   });
 
-  const active = useActiveSection(sections.map((section) => section.id));
-  const contentRef = useRef<HTMLDivElement | null>(null);
-
   return (
     <main className="ld-shell-main ld-settings" id="main-content" tabIndex={-1}>
       <h1 className="ld-shell-main__title">设置</h1>
       <p className="ld-shell-main__hint">
         计价、价目、员工等高风险修改需另一位店长现场复核，所有修改都会留下审计记录。
       </p>
-      <div className="ld-settings-layout">
-        <nav className="ld-settings-nav" aria-label="设置分区">
-          {sections.map((section) => (
-            <button
-              key={section.id}
-              type="button"
-              className={cn("ld-settings-nav__item", active === section.id && "is-active")}
-              aria-current={active === section.id ? "true" : undefined}
-              onClick={() =>
-                contentRef.current
-                  ?.querySelector(`#${section.id}`)
-                  ?.scrollIntoView({ behavior: scrollBehavior(), block: "start" })
-              }
-            >
-              <Icon name={section.icon} size={18} />
-              {section.label}
-            </button>
-          ))}
-        </nav>
-        <div ref={contentRef} className="ld-settings-content">
-          {sections.map((section) => (
-            <div key={section.id} id={section.id} className="ld-settings-anchor">
-              {section.content}
-            </div>
-          ))}
-        </div>
-      </div>
+      <SettingsLayout
+        sections={sections}
+        session={session}
+        authClient={authClient}
+        queryClient={queryClient}
+      />
     </main>
   );
 }

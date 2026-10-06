@@ -26,6 +26,8 @@ export const orderLines = pgTable(
     lineIndex: integer("line_index").notNull(),
     serviceCode: text("service_code").notNull(),
     categoryCode: text("category_code").notNull(),
+    catalogName: text("catalog_name"),
+    catalogCode: text("catalog_code"),
     unitPriceCents: integer("unit_price_cents").notNull(),
     qty: integer("qty").notNull(),
     lineTotalCents: integer("line_total_cents").notNull(),

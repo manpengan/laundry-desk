@@ -7,6 +7,7 @@
  * hashes. No credential is logged or placed in SQL text.
  */
 import { createRequire } from "node:module";
+import { randomUUID } from "node:crypto";
 
 import { loadLocalConfig } from "../../../tools/local/config.mjs";
 
@@ -42,6 +43,8 @@ const REMINDER_FIXTURE = Object.freeze({
   name: "E2E 催取顾客",
   phone: "13400000000",
   ticket: "E2E-REMINDER-0001",
+  pickupCode: "E2ER0001",
+  barcode: "E2E-REMINDER-GARMENT",
 });
 
 const ACCOUNTING_FIXTURE = Object.freeze({
@@ -145,8 +148,7 @@ async function enableMemberFeature(client) {
   );
 }
 
-async function seedReminderFixture(client) {
-  const row = REMINDER_FIXTURE;
+async function seedReminderFixture(client, row = REMINDER_FIXTURE) {
   await client.query(
     `INSERT INTO customers (id, org_id, phone, name, note, created_at, updated_at)
      VALUES ($1::uuid, $2::uuid, $3, $4, 'Playwright pickup reminder fixture',
@@ -163,7 +165,7 @@ async function seedReminderFixture(client) {
        paid_cents, balance_cents, business_date, created_at, updated_at,
        created_by_staff_id
      ) VALUES (
-       $1::uuid, $2::uuid, $3::uuid, $4, 'E2ER0001', 'open', $5::uuid,
+       $1::uuid, $2::uuid, $3::uuid, $4, $9, 'open', $5::uuid,
        $6, $7, 'Playwright pickup reminder fixture', 1234, 1234,
        0, 0, 0, 0, 1234, 0, 1234,
        to_char((now() - interval '200 days') AT TIME ZONE 'UTC', 'YYYY-MM-DD'),
@@ -173,7 +175,17 @@ async function seedReminderFixture(client) {
        customer_phone = EXCLUDED.customer_phone, customer_name = EXCLUDED.customer_name,
        paid_cents = 0, balance_cents = 1234,
        created_at = now() - interval '200 days', updated_at = now()`,
-    [row.orderId, ORG_ID, STORE_ID, row.ticket, row.customerId, row.phone, row.name, ADMIN_ID],
+    [
+      row.orderId,
+      ORG_ID,
+      STORE_ID,
+      row.ticket,
+      row.customerId,
+      row.phone,
+      row.name,
+      ADMIN_ID,
+      row.pickupCode,
+    ],
   );
   await client.query(
     `INSERT INTO order_lines (
@@ -191,11 +203,11 @@ async function seedReminderFixture(client) {
        service_code, category_code, unit_price_cents, color, brand, status,
        rack_zone, rack_slot, racked_at, racked_by_staff_id
      ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, 1,
-       'E2E-REMINDER-GARMENT', 'wash', 'coat', 1234, 'blue', 'e2e',
+       $7, 'wash', 'coat', 1234, 'blue', 'e2e',
        'racked', 'E2E', '001', now() - interval '190 days', $6::uuid)
      ON CONFLICT (id) DO UPDATE SET status = 'racked', rack_zone = 'E2E', rack_slot = '001',
        racked_at = now() - interval '190 days', racked_by_staff_id = EXCLUDED.racked_by_staff_id`,
-    [row.garmentId, ORG_ID, STORE_ID, row.orderId, row.lineId, ADMIN_ID],
+    [row.garmentId, ORG_ID, STORE_ID, row.orderId, row.lineId, ADMIN_ID, row.barcode],
   );
 }
 
@@ -320,6 +332,20 @@ export default async function globalSetup() {
       await seedStaff(client, staff);
     }
     await seedReminderFixture(client);
+    const notificationOrderId = randomUUID();
+    const notificationTicket = `E2E-NOTIFY-${notificationOrderId}`;
+    await seedReminderFixture(client, {
+      customerId: "66666666-6666-4666-8666-666666666665",
+      orderId: notificationOrderId,
+      lineId: randomUUID(),
+      garmentId: randomUUID(),
+      name: "E2E 自动通知顾客",
+      phone: "13400000001",
+      ticket: notificationTicket,
+      pickupCode: notificationOrderId.replaceAll("-", "").slice(0, 8).toUpperCase(),
+      barcode: `E2E-NOTIFY-GARMENT-${notificationOrderId}`,
+    });
+    process.env.LAUNDRY_E2E_NOTIFICATION_TICKET = notificationTicket;
     await seedAccountingFixture(client);
     await client.query("COMMIT");
   } catch (error) {

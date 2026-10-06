@@ -21,6 +21,7 @@ test("keeps browser and Electron acceptance sources inside canonical quality gat
     "e2e/**/*.ts",
     "playwright.electron.commissioning.config.ts",
     "playwright.electron.package.config.ts",
+    "playwright.electron.windows-ci.config.ts",
     "playwright.electron.windows-functional.config.ts",
     "playwright.electron.windows-ime.config.ts",
     "playwright.electron.windows-offline.config.ts",

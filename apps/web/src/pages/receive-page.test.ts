@@ -123,7 +123,7 @@ test("after successful receive, ticket-preview shows ticket_no", () => {
   assert.match(html, /data-testid="ticket-preview"/);
   assert.match(html, /20260722-0042/);
   assert.match(html, /打印小票/);
-  assert.match(html, /wash\/shirt/);
+  assert.match(html, /水洗 · 衬衫/);
   assert.match(html, /¥15\.00/);
 });
 

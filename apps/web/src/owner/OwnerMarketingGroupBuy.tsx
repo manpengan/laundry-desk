@@ -231,7 +231,7 @@ export function OwnerMarketingGroupBuy({
     <section className="ld-owner-management lg-card" aria-label="团购券登记与核销">
       <header className="ld-owner-management__header">
         <div>
-          <span className="ld-owner-operations__eyebrow">R4 · 单次核销 · 摘要存储</span>
+          <span className="ld-owner-operations__eyebrow">需复核 · 每个券码仅可核销一次</span>
           <h2>团购券</h2>
           <p>原始券码仅在本机生成域分离摘要；服务端、确认卡和审计均不保存原码。</p>
         </div>

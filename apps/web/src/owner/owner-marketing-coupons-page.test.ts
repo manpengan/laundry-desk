@@ -105,7 +105,7 @@ test("Owner marketing exposes bounded issuance and audited correction without a 
   );
 
   assert.match(html, /批量发券/u);
-  assert.match(html, /服务端资格/u);
+  assert.match(html, /发券前校验资格/u);
   assert.match(html, /核销冲正/u);
   assert.match(html, /发起冲正复核/u);
   assert.match(html, /推荐奖励/u);

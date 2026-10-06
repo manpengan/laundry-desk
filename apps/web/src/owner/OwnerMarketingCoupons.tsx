@@ -277,7 +277,9 @@ export function OwnerMarketingCoupons({
     <section className="ld-owner-management lg-card" aria-label="活动批量发券">
       <header className="ld-owner-management__header">
         <div>
-          <span className="ld-owner-operations__eyebrow">R4 · 服务端资格 · 预算最坏值占用</span>
+          <span className="ld-owner-operations__eyebrow">
+            需复核 · 发券前校验资格 · 按最高优惠额预留预算
+          </span>
           <h2>批量发券</h2>
           <p>只使用已冻结受众；发放前会重新计算名单，非有效会员自动排除。</p>
         </div>

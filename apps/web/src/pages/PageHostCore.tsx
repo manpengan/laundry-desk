@@ -9,6 +9,7 @@ import type { PhotoPort } from "../host/photo-port.js";
 import type { PrinterPort } from "../host/printer-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
 import type { ScalePort } from "../host/scale-port.js";
+import type { MaintenancePort } from "../host/maintenance-port.js";
 import type { StoreExportPort } from "../host/store-export-port.js";
 import type { PaymentChannelPort } from "../host/payment-channel-port.js";
 import type { MiniappSettingsPort } from "../host/miniapp-settings-port.js";
@@ -52,6 +53,7 @@ export type PageHostProps = {
   printerPort?: PrinterPort;
   aiSettingsPort?: AiSettingsPort;
   migrationPort?: MigrationPort;
+  maintenancePort?: MaintenancePort;
   storeExportPort?: StoreExportPort;
   paymentChannelPort?: PaymentChannelPort;
   miniappSettingsPort?: MiniappSettingsPort;
@@ -114,6 +116,7 @@ export function PageHostCore({
   printerPort,
   aiSettingsPort,
   migrationPort,
+  maintenancePort,
   storeExportPort,
   paymentChannelPort,
   miniappSettingsPort,
@@ -169,10 +172,12 @@ export function PageHostCore({
   if (activeId === "receive" && session !== undefined && commandClient !== undefined) {
     return (
       <ReceivePage
+        key={`${session.session.org_id}:${session.session.store_id}:${session.session.session_id}:${session.session.staff_id}:${session.session.session_version}`}
         commandClient={commandClient}
         role={session.role}
         queuePrintEnabled={hasLocalPrintQueue(printerPort)}
         {...(scalePort === undefined ? {} : { scalePort })}
+        {...(photoPort === undefined ? {} : { photoPort })}
         {...(paymentChannelPort === undefined ? {} : { paymentChannelPort })}
         {...(offlinePort !== undefined ? { offlinePort } : {})}
         {...(queryClient !== undefined ? { queryClient } : {})}
@@ -290,6 +295,7 @@ export function PageHostCore({
         {...(miniappSettingsPort === undefined ? {} : { miniappSettingsPort })}
         {...(remoteAssistancePort === undefined ? {} : { remoteAssistancePort })}
         {...(migrationPort === undefined ? {} : { migrationPort })}
+        {...(maintenancePort === undefined ? {} : { maintenancePort })}
         {...(storeExportPort === undefined ? {} : { storeExportPort })}
         {...(notificationSettingsPort === undefined ? {} : { notificationSettingsPort })}
         {...(aiSettingsPort === undefined ? {} : { aiSettingsPort })}

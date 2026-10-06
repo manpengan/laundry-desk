@@ -112,6 +112,18 @@ test("an unavailable command is queued only after the health boundary is also un
   assert.equal(fixture.queueCalls(), 1);
 });
 
+test("an identified receive with an unknown online outcome never creates a second offline write", async () => {
+  const fixture = serviceFixture(false);
+  const input = {
+    name: "order.receive",
+    operation_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    body: {},
+  };
+  assert.deepEqual(await fixture.service.command.execute(input), serverUnavailable);
+  assert.deepEqual(await fixture.service.command.execute(input), serverUnavailable);
+  assert.equal(fixture.queueCalls(), 0);
+});
+
 test("discard is locally acknowledged only after the audited R3 confirmation hop", async () => {
   const inputs: unknown[] = [];
   const confirmRef = "00000000-0000-4000-8000-000000000099";

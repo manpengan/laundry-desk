@@ -142,7 +142,7 @@ test("records the active V2 file size policy", async () => {
 test("keeps the deferred Windows release workflow manual", async () => {
   const workflow = await readRepositoryFile(".github/workflows/build.yml");
 
-  assert.match(workflow, /^name: Build\/Release$/mu);
+  assert.match(workflow, /^name: Legacy V1 Build \(manual archive only\)$/mu);
   assert.match(workflow, /^  workflow_dispatch:$/mu);
   assert.doesNotMatch(workflow, /^  (?:push|pull_request):/mu);
 });

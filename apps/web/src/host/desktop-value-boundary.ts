@@ -48,17 +48,21 @@ export function isOperationName(value: unknown): value is string {
   );
 }
 
-export function readCommandOptions(value: unknown): Readonly<{ confirmRef?: string }> | null {
+export function readCommandOptions(
+  value: unknown,
+): Readonly<{ confirmRef?: string; operationId?: string }> | null {
   if (value === undefined) return Object.freeze({});
   if (!isRecord(value)) return null;
   const keys = Reflect.ownKeys(value);
-  if (keys.length === 0) return Object.freeze({});
-  if (keys.length !== 1 || keys[0] !== "confirmRef") return null;
-  const descriptor = Object.getOwnPropertyDescriptor(value, "confirmRef");
-  if (descriptor === undefined || !("value" in descriptor) || !isUuid(descriptor.value)) {
-    return null;
+  if (keys.some((key) => key !== "confirmRef" && key !== "operationId")) return null;
+  const result: { confirmRef?: string; operationId?: string } = {};
+  for (const key of ["confirmRef", "operationId"] as const) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined) continue;
+    if (!("value" in descriptor) || !isUuid(descriptor.value)) return null;
+    result[key] = descriptor.value;
   }
-  return Object.freeze({ confirmRef: descriptor.value });
+  return Object.freeze(result);
 }
 
 function isCredentialBoundaryKey(key: string): boolean {

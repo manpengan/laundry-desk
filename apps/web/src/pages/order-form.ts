@@ -110,6 +110,8 @@ export function unwrapCommandResult<T>(data: unknown): T | null {
 }
 
 export type BuiltReceiveLine = Readonly<{
+  catalog_name?: string;
+  catalog_code?: string;
   service_code: string;
   category_code: string;
   unit_price_cents: number;
@@ -191,6 +193,15 @@ export function buildReceiveBody(input: {
     const line = input.lines[i]!;
     const service = line.service_code.trim();
     const category = line.category_code.trim();
+    if (
+      line.catalog_code !== undefined &&
+      !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/u.test(line.catalog_code)
+    ) {
+      return Object.freeze({
+        ok: false as const,
+        message: `第 ${i + 1} 行价目标识无效，请重新选择`,
+      });
+    }
     if (!isValidCode(service) || !isValidCode(category)) {
       return Object.freeze({
         ok: false as const,
@@ -238,6 +249,8 @@ export function buildReceiveBody(input: {
       Object.freeze({
         service_code: service,
         category_code: category,
+        ...(line.catalog_name === undefined ? {} : { catalog_name: line.catalog_name }),
+        ...(line.catalog_code === undefined ? {} : { catalog_code: line.catalog_code }),
         unit_price_cents: line.unit_price_cents,
         qty,
         garments: Object.freeze(garments),
@@ -295,8 +308,14 @@ export function buildReceiveBody(input: {
 
   const body = Object.freeze({
     lines: Object.freeze(
-      lines.map(({ service_code, category_code, qty, garments }) =>
-        Object.freeze({ service_code, category_code, qty, garments }),
+      lines.map(({ service_code, category_code, qty, garments, catalog_code }) =>
+        Object.freeze({
+          service_code,
+          category_code,
+          qty,
+          garments,
+          ...(catalog_code === undefined ? {} : { catalog_code }),
+        }),
       ),
     ),
     discount_cents: discountCents,
@@ -320,8 +339,16 @@ export function buildReceiveBody(input: {
     ok: true as const,
     body,
     previewLines: Object.freeze(
-      lines.map(({ service_code, category_code, unit_price_cents, qty }) =>
-        Object.freeze({ service_code, category_code, unit_price_cents, qty }),
+      lines.map(
+        ({ service_code, category_code, unit_price_cents, qty, catalog_name, catalog_code }) =>
+          Object.freeze({
+            service_code,
+            category_code,
+            unit_price_cents,
+            qty,
+            ...(catalog_name === undefined ? {} : { catalog_name }),
+            ...(catalog_code === undefined ? {} : { catalog_code }),
+          }),
       ),
     ),
   });

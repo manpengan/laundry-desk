@@ -46,14 +46,14 @@ const lines = Object.freeze([
   }),
 ]);
 
-test("ticketLineName joins service/category", () => {
-  assert.equal(ticketLineName("wash", "shirt"), "wash/shirt");
+test("ticketLineName translates known service and category", () => {
+  assert.equal(ticketLineName("wash", "shirt"), "水洗 · 衬衫");
 });
 
 test("toTicketPreviewLines maps drafts", () => {
   const mapped = toTicketPreviewLines(lines);
   assert.equal(mapped.length, 1);
-  assert.equal(mapped[0]?.name, "wash/shirt");
+  assert.equal(mapped[0]?.name, "水洗 · 衬衫");
   assert.equal(mapped[0]?.qty, 2);
   assert.equal(mapped[0]?.unit_price_cents, 1500);
 });
@@ -69,7 +69,7 @@ test("buildTicketPreviewInputFromReceive maps money + ticket_no", () => {
   assert.equal(input.payable_cents, 3000);
   assert.equal(input.paid_cents, 1000);
   assert.equal(input.balance_cents, 2000);
-  assert.equal(input.lines[0]?.name, "wash/shirt");
+  assert.equal(input.lines[0]?.name, "水洗 · 衬衫");
 });
 
 test("buildReceiveTicketPreview renders halfwidth yen and ticket_no", () => {
@@ -97,4 +97,9 @@ test("formatReceiveDateLabel is YYYY-MM-DD", () => {
 
 test("triggerBrowserPrint is a no-op without window.print", () => {
   assert.doesNotThrow(() => triggerBrowserPrint());
+});
+
+test("ticket preview preserves the selected custom catalog name", () => {
+  const custom = toTicketPreviewLines([{ ...lines[0]!, catalog_name: "真丝衬衫精洗" }]);
+  assert.equal(custom[0]?.name, "真丝衬衫精洗");
 });

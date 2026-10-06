@@ -5,6 +5,14 @@
   gap: 0.75rem;
 }
 
+.ld-settings-catalog__list {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
 /* Text columns may shrink (settings sits beside its section nav), so the
    row never pushes its action buttons past the window edge at 1024px. */
 .ld-settings-catalog__row {
@@ -50,6 +58,6 @@
 @media (max-width: 1023px) {
   .ld-settings-catalog__row,
   .ld-catalog-audit__row {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

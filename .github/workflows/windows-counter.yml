@@ -1,0 +1,79 @@
+name: V2 Windows Counter Installed
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - "apps/edge-agent/**"
+      - "apps/server/**"
+      - "packages/**"
+      - "tools/local/**"
+      - "tools/windows-runtime/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - ".github/workflows/windows-counter.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  counter-installed:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [generic, hongfa]
+    env:
+      LAUNDRY_WINDOWS_DISTRIBUTION_PROFILE: ${{ matrix.profile }}
+      LAUNDRY_WINDOWS_BUILD_GIT_SHA: ${{ github.sha }}
+      PLAYWRIGHT_NO_COPY_PROMPT: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.23.2
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.0
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm.cmd install --frozen-lockfile
+      - name: Build the active V2 server and Counter NSIS
+        shell: pwsh
+        run: |
+          pnpm.cmd exec turbo run build --filter=@laundry/server
+          if ($LASTEXITCODE -ne 0) { throw 'COUNTER_SERVER_BUILD_FAILED' }
+          pnpm.cmd --filter @laundry/edge-agent package:win
+          if ($LASTEXITCODE -ne 0) { throw 'COUNTER_PACKAGE_FAILED' }
+          pnpm.cmd --filter @laundry/edge-agent package:inspect:win
+          if ($LASTEXITCODE -ne 0) { throw 'COUNTER_INSPECTION_FAILED' }
+      - name: Check Windows native files and desktop recovery regressions
+        if: matrix.profile == 'generic'
+        run: >-
+          node --test packages/platform-fs/scripts/*.test.mjs
+          "packages/platform-fs/dist/**/*.test.js"
+          apps/edge-agent/dist/desktop/receive-recovery.test.js
+          apps/edge-agent/dist/desktop/maintenance-operation.test.js
+      - name: Install NSIS and verify installed source and hashes
+        shell: pwsh
+        run: ./apps/edge-agent/scripts/ci-install-windows.ps1 -Profile '${{ matrix.profile }}'
+      - name: Check installed Electron security and missing-service UX
+        run: pnpm.cmd --filter @laundry/edge-agent package:smoke:win
+      - name: Check installed login and synthetic order restart recovery
+        run: pnpm.cmd exec playwright test -c apps/edge-agent/playwright.electron.windows-ci.config.ts
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-counter-${{ matrix.profile }}-development-only
+          path: |
+            apps/edge-agent/release/${{ matrix.profile }}/*-windows-x64-development-only.exe
+            apps/edge-agent/test-results/windows-package/desktop-smoke.png
+            ${{ runner.temp }}/counter-installed-${{ matrix.profile }}.json
+          if-no-files-found: warn

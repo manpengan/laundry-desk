@@ -65,6 +65,8 @@ function holdHandler(deps: OrderHandlerDeps): CommandHandler {
           line_index: lineIndex,
           service_code: line.service_code,
           category_code: line.category_code,
+          catalog_name: line.catalog_name,
+          catalog_code: line.catalog_code,
           unit_price_cents: line.unit_price_cents,
           qty: line.qty,
           line_total_cents: lineTotalCents(line.unit_price_cents, line.qty),

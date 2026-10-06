@@ -152,7 +152,7 @@ export function createHttpCommandClient(options: HttpCommandClientOptions): Comm
       try {
         const fingerprint =
           execOptions.confirmRef === undefined
-            ? requestFingerprint(name, body)
+            ? `${execOptions.operationId ?? ""}\n${requestFingerprint(name, body)}`
             : `confirm\n${execOptions.confirmRef}`;
         const pendingKeys =
           execOptions.confirmRef === undefined ? uncertainDirectKeys : confirmationKeys;
@@ -182,7 +182,10 @@ export function createHttpCommandClient(options: HttpCommandClientOptions): Comm
         if (definitive && typeof confirmRef === "string" && confirmRef.length > 0) {
           rememberBounded(confirmationKeys, `confirm\n${confirmRef}`, idempotencyKey);
         }
-        return Object.freeze({ ok: false as const, error: failure });
+        return Object.freeze({
+          ok: false as const,
+          error: definitive ? failure : Object.freeze({ ...failure, outcomeUnknown: true }),
+        });
       } catch {
         return requestFailureResult(execOptions.signal);
       }

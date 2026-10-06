@@ -14,7 +14,7 @@ import {
 } from "./accounting-report-model.js";
 import { AccountingReportView as AccountingReportResultView } from "./AccountingReportView.js";
 
-type ReportMode = "today" | "history" | "month" | "staff";
+export type ReportMode = "today" | "history" | "month" | "staff";
 type ReportBody = Readonly<{
   date_from?: string;
   date_to?: string;
@@ -26,6 +26,8 @@ export type AccountingReportPanelProps = Readonly<{
   queryClient: QueryPort;
   commandClient?: CommandPort;
   autoLoad?: boolean;
+  initialMode?: ReportMode;
+  allowedModes?: readonly ReportMode[];
 }>;
 
 function selectionBody(
@@ -86,9 +88,13 @@ export function AccountingReportPanel({
   queryClient,
   commandClient,
   autoLoad = true,
+  initialMode = "today",
+  allowedModes = ["today", "history", "month", "staff"],
 }: AccountingReportPanelProps) {
   const toast = useToast();
-  const [mode, setMode] = useState<ReportMode>("today");
+  const [mode, setMode] = useState<ReportMode>(
+    allowedModes.includes(initialMode) ? initialMode : (allowedModes[0] ?? "today"),
+  );
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [month, setMonth] = useState("");
@@ -119,6 +125,8 @@ export function AccountingReportPanel({
         return;
       }
       setReport(parsed);
+    } catch {
+      toast.push("账目报表加载失败，请检查连接后重试。", "error");
     } finally {
       setBusy(false);
     }
@@ -192,17 +200,21 @@ export function AccountingReportPanel({
             className="ld-input"
             value={mode}
             onChange={(event) => {
-              setMode(event.target.value as ReportMode);
+              const next = event.target.value as ReportMode;
+              if (!allowedModes.includes(next)) return;
+              setMode(next);
               setReport(null);
               setPending(null);
             }}
             disabled={busy}
             data-testid="accounting-mode"
           >
-            <option value="today">今日账目</option>
-            <option value="history">往日 / 日期范围</option>
-            <option value="month">月结</option>
-            <option value="staff">职员业绩</option>
+            {allowedModes.includes("today") ? <option value="today">今日账目</option> : null}
+            {allowedModes.includes("history") ? (
+              <option value="history">往日 / 日期范围</option>
+            ) : null}
+            {allowedModes.includes("month") ? <option value="month">月结</option> : null}
+            {allowedModes.includes("staff") ? <option value="staff">职员业绩</option> : null}
           </select>
         </label>
         {mode === "month" ? (

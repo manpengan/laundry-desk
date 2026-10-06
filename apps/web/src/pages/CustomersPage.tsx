@@ -10,16 +10,13 @@ import type { CommandPort, QueryPort } from "../commands/types.js";
 import type { PhotoPort } from "../host/photo-port.js";
 import type { PrintJobView } from "../shell/print-jobs.js";
 import { CustomerWorkspace } from "./CustomerWorkspace.js";
-import { loadCustomerHistory } from "./customer-history.js";
-import {
-  parseCustomerDetail,
-  parseCustomerRows,
-  type CustomerRowView,
-  unwrapQueryResult,
-} from "./customer-model.js";
+import { ListLoadNotice } from "./ListLoadNotice.js";
+import { parseCustomerRows, type CustomerRowView, unwrapQueryResult } from "./customer-model.js";
 import { OrderDetailDrawer } from "./OrderDetailDrawer.js";
 import type { OrderListRowView } from "./OrdersList.js";
 import { useScanFocus } from "./use-scan-focus.js";
+import { useCustomerSelection } from "./use-customer-selection.js";
+import { useRetainedQueryList } from "./use-retained-query-list.js";
 
 export {
   formatCustomerUpdatedAt,
@@ -49,6 +46,7 @@ export type CustomersPageProps = {
 };
 
 const PHONE_RE = /^1[3-9]\d{9}$/u;
+const readCustomerList = (value: unknown) => parseCustomerRows(unwrapQueryResult(value));
 
 export function CustomersPage({
   queryClient,
@@ -68,57 +66,42 @@ export function CustomersPage({
   const [queryText, setQueryText] = useState(() => initialQuery ?? "");
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [rows, setRows] = useState<readonly CustomerRowView[]>([]);
-  const [selected, setSelected] = useState<CustomerRowView | null>(() => initialSelected ?? null);
-  const [orderRows, setOrderRows] = useState<readonly OrderListRowView[]>(
-    () => initialOrders ?? Object.freeze([]),
-  );
-  const [printJobs, setPrintJobs] = useState<readonly PrintJobView[] | null>(
-    () => initialPrintJobs ?? null,
-  );
+  const [saving, setSaving] = useState(false);
+  const list = useRetainedQueryList(queryClient, "customer.search", readCustomerList, {
+    unavailable: "客户搜索失败，请检查连接后重试。",
+    invalid: "客户列表返回格式无效，请重试。",
+  });
+  const selection = useCustomerSelection({
+    queryClient,
+    initialSelected,
+    initialOrders,
+    initialPrintJobs,
+    notify: toast.push,
+  });
+  const { selected, orders: orderRows, printJobs, ordersBusy } = selection;
+  const { rows } = list;
+  const busy = saving || list.busy;
   const [detailOrderId, setDetailOrderId] = useState<string | null>(null);
-  const [ordersBusy, setOrdersBusy] = useState(false);
-  const searchRef = useRef<() => Promise<readonly CustomerRowView[]>>(async () => []);
+  const searchRef = useRef<() => Promise<readonly CustomerRowView[] | null>>(async () => null);
   const pendingSelectRef = useRef<string | undefined>(initialCustomerId);
+  const selectionIntentRef = useRef(0);
+  const currentSelectionIntent = selectionIntentRef.current;
   const pageRef = useRef<HTMLElement | null>(null);
   useScanFocus(pageRef, 'input[name="customer-query"]');
 
-  // The search field never locks (it keeps the scanner's caret); the latest
-  // request wins so a slow earlier search cannot overwrite newer results.
-  const searchSeq = useRef(0);
-  const search = useCallback(async (): Promise<readonly CustomerRowView[]> => {
-    const seq = ++searchSeq.current;
-    setBusy(true);
-    try {
-      const body: Record<string, unknown> = { limit: 20 };
-      const q = queryText.trim();
-      if (q.length > 0) body.query = q;
-      const res = await queryClient.execute<unknown>("customer.search", body);
-      if (seq !== searchSeq.current) return [];
-      if (!res.ok) {
-        toast.push(res.error.message ?? res.error.code, "error");
-        setRows([]);
-        return [];
-      }
-      const parsed = parseCustomerRows(unwrapQueryResult(res.data));
-      if (parsed === null) {
-        toast.push("客户列表无法解析", "error");
-        setRows([]);
-        return [];
-      }
-      setRows(parsed);
-      return parsed;
-    } finally {
-      if (seq === searchSeq.current) setBusy(false);
-    }
-  }, [queryClient, queryText, toast]);
+  const search = useCallback(() => {
+    const query = queryText.trim();
+    return list.load({ limit: 20, ...(query.length === 0 ? {} : { query }) });
+  }, [list.load, queryText]);
 
   searchRef.current = search;
 
   useEffect(() => {
     if (!autoLoad) return;
+    let active = true;
+    const intent = selectionIntentRef.current;
     void searchRef.current().then((found) => {
+      if (!active || found === null || intent !== selectionIntentRef.current) return;
       const wanted = pendingSelectRef.current;
       pendingSelectRef.current = undefined;
       const match =
@@ -129,74 +112,28 @@ export function CustomersPage({
           : found.find((row) => row.customer_id === wanted);
       if (match !== undefined) void selectRef.current(match);
     });
+    return () => {
+      active = false;
+    };
   }, [autoLoad, initialQuery]);
 
-  useEffect(() => {
-    if (selected === null) {
-      setOrdersBusy(false);
-      return;
-    }
-    let cancelled = false;
-    setOrdersBusy(true);
-    void loadCustomerHistory(queryClient, selected.phone)
-      .then((history) => {
-        if (cancelled) return;
-        if (history === null) {
-          toast.push("客户历史暂时无法加载", "error");
-          setOrderRows([]);
-          setPrintJobs(null);
-          return;
-        }
-        setOrderRows(history.orders);
-        setPrintJobs(history.printJobs);
-      })
-      .finally(() => {
-        if (!cancelled) setOrdersBusy(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [queryClient, selected, toast]);
-
   const selectCustomer = useCallback(
-    async (row: CustomerRowView) => {
-      setBusy(true);
-      setOrderRows([]);
-      setPrintJobs(null);
-      setOrdersBusy(true);
+    (row: CustomerRowView) => {
+      selectionIntentRef.current += 1;
       setDetailOrderId(null);
-      try {
-        const result = await queryClient.execute<unknown>("customer.get", {
-          customer_id: row.customer_id,
-        });
-        if (!result.ok) {
-          toast.push(result.error.message ?? result.error.code, "error");
-          setOrdersBusy(false);
-          return;
-        }
-        const detail = parseCustomerDetail(unwrapQueryResult(result.data));
-        if (detail === null) {
-          toast.push("客户详情无法解析", "error");
-          setOrdersBusy(false);
-          return;
-        }
-        setSelected(detail);
-      } finally {
-        setBusy(false);
-      }
+      return selection.select(row);
     },
-    [queryClient, toast],
+    [selection.select],
   );
 
   const selectRef = useRef(selectCustomer);
   selectRef.current = selectCustomer;
 
   const closeDetail = useCallback(() => {
-    setSelected(null);
-    setOrderRows([]);
-    setPrintJobs(null);
+    selectionIntentRef.current += 1;
+    selection.close();
     setDetailOrderId(null);
-  }, []);
+  }, [selection.close]);
 
   const onUpsert = useCallback(async () => {
     const p = phone.trim();
@@ -204,7 +141,7 @@ export function CustomersPage({
       toast.push("请输入 11 位手机号（1[3-9]…）", "error");
       return;
     }
-    setBusy(true);
+    setSaving(true);
     try {
       const body: Record<string, unknown> = { phone: p };
       const n = name.trim();
@@ -218,8 +155,10 @@ export function CustomersPage({
       setPhone("");
       setName("");
       await search();
+    } catch {
+      toast.push("客户保存失败，请检查连接后重试。", "error");
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
   }, [commandClient, name, phone, search, toast]);
 
@@ -259,6 +198,13 @@ export function CustomersPage({
           </Button>
         </div>
       </div>
+      <ListLoadNotice
+        error={list.error}
+        loaded={list.loaded}
+        busy={list.busy}
+        onRetry={() => void search()}
+        testId="customers-search-error"
+      />
 
       <form
         className="ld-customers-form"
@@ -303,10 +249,24 @@ export function CustomersPage({
         </div>
       </form>
 
-      <div className={selected === null ? "ld-customers-layout" : "ld-customers-layout is-open"}>
+      <div
+        className={
+          selected === null && !selection.loading && selection.error === null
+            ? "ld-customers-layout"
+            : "ld-customers-layout is-open"
+        }
+      >
         <ul className="ld-customers-list" data-testid="customers-list" aria-label="客户列表">
           {rows.length === 0 ? (
-            <li className="ld-customers-list__empty">暂无匹配客户</li>
+            <li className="ld-customers-list__empty">
+              {list.error !== null
+                ? "客户列表未能更新"
+                : list.busy
+                  ? "正在搜索客户…"
+                  : list.loaded
+                    ? "暂无匹配客户"
+                    : "输入条件后搜索客户"}
+            </li>
           ) : (
             rows.map((row) => (
               <li key={row.customer_id} className="ld-customers-list__row">
@@ -334,7 +294,26 @@ export function CustomersPage({
         </ul>
 
         <div className="ld-customers-workspace">
-          {selected === null ? (
+          {selection.loading || selection.error !== null ? (
+            <section aria-label="客户详情" aria-busy={selection.loading}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={closeDetail}
+                data-testid="customer-detail-close"
+              >
+                关闭
+              </Button>
+              {selection.loading ? <p role="status">正在读取客户档案…</p> : null}
+              <ListLoadNotice
+                error={selection.error}
+                loaded={false}
+                busy={selection.loading}
+                onRetry={() => void selection.retry()}
+                testId="customer-detail-error"
+              />
+            </section>
+          ) : selected === null ? (
             <EmptyState
               icon={<Icon name="customers" size={26} />}
               title="选择一位客户"
@@ -342,6 +321,11 @@ export function CustomersPage({
             />
           ) : (
             <CustomerWorkspace
+              key={selected.customer_id}
+              ordersPage={selection.ordersPage}
+              ordersError={selection.ordersError}
+              onOrdersPage={(offset) => void selection.loadOrders(offset)}
+              onOrdersRetry={() => void selection.retryOrders()}
               customer={selected}
               orders={orderRows}
               printJobs={printJobs}
@@ -354,8 +338,12 @@ export function CustomersPage({
               onClose={closeDetail}
               onOpenOrder={setDetailOrderId}
               {...(onOpenPickup === undefined ? {} : { onOpenPickup })}
-              onReselect={() => void selectCustomer(selected)}
+              onReselect={() => {
+                if (currentSelectionIntent === selectionIntentRef.current)
+                  void selectCustomer(selected);
+              }}
               onRemoved={() => {
+                if (currentSelectionIntent !== selectionIntentRef.current) return;
                 closeDetail();
                 void search();
               }}

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { recoverDraftForm } from "./draft-recovery.js";
 import type { OrderGetResult } from "./order-read-model.js";
+import { parseOrderGetResult } from "./order-read-model.js";
 
 const DRAFT: OrderGetResult = Object.freeze({
   order_id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
@@ -67,6 +68,7 @@ test("recoverDraftForm restores the full editable per-piece snapshot", () => {
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.equal(result.value.draft_id, DRAFT.order_id);
+  assert.equal(result.value.lines[0]?.catalog_name, "水洗 · 衬衫");
   assert.equal(result.value.customer_phone, "13800000111");
   assert.equal(result.value.discount_cents, "100");
   assert.equal(result.value.urgent, true);
@@ -93,4 +95,29 @@ test("recoverDraftForm rejects a financially stale draft snapshot", () => {
   const stale = Object.freeze({ ...DRAFT, balance_cents: DRAFT.payable_cents - 1 });
   const result = recoverDraftForm(stale);
   assert.equal(result.ok, false);
+});
+
+test("server draft reading and recovery preserve exact catalog identity and historical name", () => {
+  const raw = {
+    ...DRAFT,
+    lines: DRAFT.lines.map((line) => ({
+      ...line,
+      catalog_code: "selected-shirt",
+      catalog_name: "收衣时衬衫名称",
+    })),
+  };
+  const parsed = parseOrderGetResult(raw);
+  assert.ok(parsed);
+  const result = recoverDraftForm(parsed);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.value.lines[0]?.catalog_code, "selected-shirt");
+  assert.equal(result.value.lines[0]?.catalog_name, "收衣时衬衫名称");
+  assert.equal(
+    parseOrderGetResult({
+      ...raw,
+      lines: raw.lines.map((line) => ({ ...line, catalog_code: "bad identity" })),
+    }),
+    null,
+  );
 });

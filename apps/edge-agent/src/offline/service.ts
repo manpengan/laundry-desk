@@ -9,6 +9,7 @@ import {
 import type { DesktopHttpTransport } from "../desktop/http-transport.js";
 import type { DesktopOperationService } from "../transport/handlers.js";
 import type { OfflineReadCache } from "./read-cache.js";
+import { createOfflineReceiveRecovery } from "./receive-recovery-fallback.js";
 import type { OfflineCommandRuntime } from "./runtime.js";
 
 export type OfflineDesktopServiceOptions = Readonly<{
@@ -131,6 +132,7 @@ export function createOfflineDesktopService(
           ? Promise.resolve(unavailable())
           : online.scale.execute(input),
     }),
+    receiveRecovery: createOfflineReceiveRecovery(online, offline, isMutationBlocked),
     storeExport: Object.freeze({
       execute: (input: unknown) =>
         isMutationBlocked() || online.storeExport === undefined
@@ -191,6 +193,16 @@ export function createOfflineDesktopService(
       execute: async (input: unknown) => {
         if (isMutationBlocked()) return unavailable();
         const result = await online.command.execute(input);
+        // A response can be lost after commit. A fresh offline queue key would
+        // execute this receive twice; let its workspace retry the original key.
+        const identifiedReceive =
+          typeof input === "object" &&
+          input !== null &&
+          "name" in input &&
+          input.name === "order.receive" &&
+          "operation_id" in input &&
+          typeof input.operation_id === "string";
+        if (isUnavailable(result) && identifiedReceive) return result;
         if (isUnavailable(result)) {
           const health = await online.health.get();
           if (!health.ok) return offline.queueCommand(input);

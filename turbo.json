@@ -71,7 +71,12 @@
       "outputs": ["dist/**"]
     },
     "@laundry/edge-agent#typecheck": {
-      "dependsOn": ["^build", "@laundry/contracts#build", "@laundry/platform-fs#build"]
+      "dependsOn": [
+        "^build",
+        "@laundry/contracts#build",
+        "@laundry/platform-fs#build",
+        "@laundry/server#build"
+      ]
     },
     "@laundry/edge-agent#test": {
       "dependsOn": [

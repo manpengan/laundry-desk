@@ -18,11 +18,13 @@ export const APP_ENTRY_URL = `${APP_SCHEME}://${APP_HOST}/index.html`;
 
 /** Renderer-facing IPC capability map. Keep this exact and deeply frozen. */
 export const DESKTOP_IPC_CHANNELS = Object.freeze({
+  receiveRecovery: Object.freeze({ execute: "desktop:receive-recovery:operation" }),
   paymentChannel: Object.freeze({ execute: "desktop:payment-channel:operation" }),
   miniappSettings: Object.freeze({ execute: "desktop:miniapp-settings:operation" }),
   remoteAssistance: Object.freeze({ execute: "desktop:remote-assistance:operation" }),
   ai: Object.freeze({ execute: "desktop:ai:operation" }),
   migration: Object.freeze({ execute: "desktop:migration:operation" }),
+  maintenance: Object.freeze({ execute: "desktop:maintenance:operation" }),
   scale: Object.freeze({ execute: "desktop:scale:operation" }),
   storeExport: Object.freeze({ execute: "desktop:store-export:operation" }),
   notificationSettings: Object.freeze({ execute: "desktop:notification:settings" }),

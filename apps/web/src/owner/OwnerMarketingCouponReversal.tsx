@@ -149,7 +149,9 @@ export function OwnerMarketingCouponReversal({
     <section className="ld-owner-management lg-card" aria-label="优惠券核销冲正">
       <header className="ld-owner-management__header">
         <div>
-          <span className="ld-owner-operations__eyebrow">R4 · 双向审计 · 仅未付款开放订单</span>
+          <span className="ld-owner-operations__eyebrow">
+            需复核 · 保留操作记录 · 仅限未付款且未完结的订单
+          </span>
           <h2>核销冲正</h2>
           <p>仅可冲正活动发放券；原核销和冲正证据都会保留。</p>
         </div>

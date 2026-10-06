@@ -90,6 +90,7 @@ async function openCustomer(page: Page, customerName: string) {
   const row = page.locator('[data-testid="customers-row"]', { hasText: customerName });
   await expect(row).toHaveCount(1, { timeout: 15_000 });
   await row.click();
+  await page.getByRole("button", { name: "会员充值与权益", exact: true }).click();
   const member = page.locator('[aria-label="会员储值"]');
   await expect(member).toBeVisible({ timeout: 15_000 });
   return member;
@@ -113,6 +114,10 @@ test("staff freeze, admin unfreeze and R4 close remain durable", async ({ page }
   await signIn(page);
 
   await page.locator('[data-nav-id="settings"]').click();
+  await page
+    .getByRole("navigation", { name: "设置分区" })
+    .getByRole("button", { name: "会员权益", exact: true })
+    .click();
   const rules = page.locator('[data-testid="member-rules"]');
   await expect(rules).toBeVisible();
   await rules.getByLabel("充满（元）").fill(yuanInput(thresholdCents));
@@ -279,6 +284,10 @@ test("staff freeze, admin unfreeze and R4 close remain durable", async ({ page }
   }
 
   await page.locator('[data-nav-id="settings"]').click();
+  await page
+    .getByRole("navigation", { name: "设置分区" })
+    .getByRole("button", { name: "会员权益", exact: true })
+    .click();
   await expect(ruleRow).toHaveCount(1, { timeout: 15_000 });
   await ruleRow.getByRole("button", { name: "停用" }).click();
   await expect(ruleConfirmation).toContainText("状态：停用", { timeout: 15_000 });

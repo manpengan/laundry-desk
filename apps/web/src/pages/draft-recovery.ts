@@ -1,3 +1,4 @@
+import { garmentName } from "./garment-labels.js";
 import type { OrderGetResult } from "./order-read-model.js";
 import type { ReceiveLineDraft } from "./receive-garment-form.js";
 
@@ -35,6 +36,8 @@ export function recoverDraftForm(order: OrderGetResult): RecoverDraftResult {
       key: `draft-${order.order_id}-line-${line.line_index}`,
       service_code: line.service_code,
       category_code: line.category_code,
+      catalog_name: line.catalog_name ?? garmentName(line.service_code, line.category_code),
+      ...(line.catalog_code == null ? {} : { catalog_code: line.catalog_code }),
       unit_price_cents: line.unit_price_cents,
       qty: String(line.qty),
       garments: Object.freeze(

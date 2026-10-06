@@ -1,0 +1,1 @@
+import{s}from"./catalog-services-CVA7XYaS.js";const r=Object.freeze({shirt:"衬衫",tshirt:"T恤",t_shirt:"T恤",trousers:"长裤",pants:"裤子",coat:"外套",jacket:"夹克",suit:"西装",dress:"连衣裙",skirt:"裙子",sweater:"毛衣",down:"羽绒服",down_jacket:"羽绒服",shoes:"鞋子",blanket:"毛毯",quilt:"被子",curtain:"窗帘",bedding:"床品"});function i(e,t){return`${s(e)} · ${r[t.toLowerCase()]??`衣物（${t}）`}`}export{i as g};

@@ -1,6 +1,7 @@
 import { Button, Icon, Input, MoneyText } from "@laundry/ui";
 
 import type { CatalogListItem } from "../commands/query-client.js";
+import { garmentName } from "./garment-labels.js";
 import { serviceLabel } from "./catalog-services.js";
 import { parsePositiveInt } from "./order-form.js";
 import type { PricingPolicyView } from "./pricing-policy-model.js";
@@ -33,13 +34,14 @@ function updateLine(
   );
 }
 
-/** Manual code edits drop the catalog price and the catalog display name. */
+/** Manual taxonomy edits invalidate the selected catalog identity, name and price. */
 function manualCodePatch(
   line: ReceiveLineDraft,
   patch: Pick<Partial<ReceiveLineDraft>, "service_code" | "category_code">,
 ): ReceiveLineDraft {
-  const { catalog_name: _dropped, ...rest } = line;
-  void _dropped;
+  const { catalog_name: _name, catalog_code: _code, ...rest } = line;
+  void _name;
+  void _code;
   return Object.freeze({ ...rest, ...patch, unit_price_cents: null });
 }
 
@@ -54,6 +56,7 @@ function lineFromCatalog(item: CatalogListItem, index: number): ReceiveLineDraft
     category_code: item.category_code,
     unit_price_cents: item.unit_price_cents,
     catalog_name: item.name,
+    catalog_code: item.code,
   });
 }
 
@@ -85,6 +88,7 @@ export function applyCatalogPick(
     category_code: item.category_code,
     unit_price_cents: item.unit_price_cents,
     catalog_name: item.name,
+    catalog_code: item.code,
   };
   const target =
     (focusedKey === null ? undefined : lines.find((line) => line.key === focusedKey)) ??
@@ -138,7 +142,7 @@ export function ReceiveLineEditor({
                     {line.catalog_name ??
                       (isBlankLine(line)
                         ? "请选择价目"
-                        : `${line.service_code} · ${line.category_code}`)}
+                        : garmentName(line.service_code, line.category_code))}
                   </strong>
                   <span>
                     {isBlankLine(line)

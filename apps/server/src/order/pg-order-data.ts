@@ -166,8 +166,8 @@ export async function insertOrderChildren(
       `INSERT INTO order_lines (
          id, org_id, store_id, order_id, line_index,
          service_code, category_code, unit_price_cents, qty, line_total_cents,
-         color, brand, garment_details_json
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)`,
+         color, brand, garment_details_json, catalog_name, catalog_code
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,$15)`,
       [
         lineId,
         order.org_id,
@@ -182,6 +182,8 @@ export async function insertOrderChildren(
         line.color,
         line.brand,
         JSON.stringify(line.garment_details ?? []),
+        line.catalog_name ?? null,
+        line.catalog_code ?? null,
       ],
     );
   }
@@ -248,7 +250,7 @@ export async function loadOrder(
   const linesResult = await client.query<OrderLineRow>(
     `SELECT id::text, org_id::text, store_id::text, order_id::text, line_index,
             service_code, category_code, unit_price_cents, qty, line_total_cents,
-            color, brand, garment_details_json
+            color, brand, garment_details_json, catalog_name, catalog_code
      FROM order_lines
      WHERE org_id = $1::uuid AND store_id = $2::uuid AND order_id = $3::uuid
      ORDER BY line_index ASC`,

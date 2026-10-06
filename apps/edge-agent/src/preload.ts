@@ -43,6 +43,10 @@ import type {
 const EMPTY_DESKTOP_INPUT = Object.freeze({});
 
 const laundryDesktop = Object.freeze({
+  receiveRecovery: Object.freeze({
+    execute: (input: unknown): Promise<unknown> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.receiveRecovery.execute, input),
+  }),
   paymentChannel: Object.freeze({
     execute: (input: unknown): Promise<unknown> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.paymentChannel.execute, input),
@@ -54,6 +58,10 @@ const laundryDesktop = Object.freeze({
   remoteAssistance: Object.freeze({
     execute: (input: unknown): Promise<unknown> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.remoteAssistance.execute, input),
+  }),
+  maintenance: Object.freeze({
+    execute: (input: unknown): Promise<unknown> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.maintenance.execute, input),
   }),
   scale: Object.freeze({
     execute: (input: unknown): Promise<unknown> =>

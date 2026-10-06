@@ -19,7 +19,7 @@ import { OrderLookupCandidates, parseOrderLookupRows } from "./OrderLookupCandid
 import type { PaymentChannelPort } from "../host/payment-channel-port.js";
 import { ChannelCollectCard } from "./ChannelCollectCard.js";
 import { PaymentCollectionDialog } from "./PaymentCollectionDialog.js";
-import { PickupResult } from "./PickupDetails.js";
+import { PickupResult, withPickupDetails, type PickupResultView } from "./PickupDetails.js";
 import { PickupOrderPanel } from "./PickupOrderPanel.js";
 import { PickupLookupForm } from "./PickupLookupForm.js";
 import { mayHandOffFocus, useScanFocus } from "./use-scan-focus.js";
@@ -54,7 +54,7 @@ export function PickupPage({
   const [loadingOrder, setLoadingOrder] = useState(false);
   const [loaded, setLoaded] = useState<OrderGetResult | null>(null);
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
-  const [result, setResult] = useState<PickupOrderResult | null>(null);
+  const [result, setResult] = useState<PickupResultView | null>(null);
   const [matches, setMatches] = useState<ReturnType<typeof parseOrderLookupRows>>([]);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [verificationBarcode, setVerificationBarcode] = useState("");
@@ -243,7 +243,7 @@ export function PickupPage({
         toast.push("取衣成功但结果无法解析", "error");
         return;
       }
-      setResult(payload);
+      setResult(withPickupDetails(payload, loaded));
       toast.push(`取衣完成 ${payload.ticket_no ?? payload.order_id}`, "success");
       // Clear selection of picked items; keep summary until reset.
       setSelected(new Set());
@@ -252,7 +252,7 @@ export function PickupPage({
     } finally {
       setBusy(false);
     }
-  }, [collectText, commandClient, orderId, selected, toast, verifiedBarcodes]);
+  }, [collectText, commandClient, loaded, orderId, selected, toast, verifiedBarcodes]);
 
   const onReset = useCallback(() => {
     setLookupKey("");

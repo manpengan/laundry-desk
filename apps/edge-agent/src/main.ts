@@ -68,6 +68,7 @@ import { FileGrantSequenceStore } from "./offline/grant-sequence-store.js";
 import { OfflineCommandRuntime } from "./offline/runtime.js";
 import { createOfflineDesktopService } from "./offline/service.js";
 import { OfflineReadCache } from "./offline/read-cache.js";
+import { ReceiveRecoveryJournal } from "./desktop/receive-recovery-journal.js";
 import { STAGED_HEALTH_ARGUMENT } from "./upgrade/runtime-controller.js";
 import { prepareDesktopUpdate } from "./upgrade/desktop-update.js";
 const distDir = dirname(fileURLToPath(import.meta.url));
@@ -153,8 +154,8 @@ async function boot(mode: BootMode): Promise<void> {
     store: new FileQueueStore(edgeStateRoot),
   });
   console.log("[edge-agent] encrypted offline queue ready", offlineQueue.status());
-  const desktopTransport = createDesktopHttpTransport(
-    createElectronDesktopDependencies({
+  const desktopTransport = createDesktopHttpTransport({
+    ...createElectronDesktopDependencies({
       net: net as unknown as ElectronDesktopDependencyOptions["net"],
       session: desktopSession as unknown as ElectronDesktopDependencyOptions["session"],
       deviceId,
@@ -163,7 +164,11 @@ async function boot(mode: BootMode): Promise<void> {
         signBytes: (message: Uint8Array) => deviceKey.signBytes(message),
       }),
     }),
-  );
+    receiveJournal: new ReceiveRecoveryJournal(
+      join(edgeStateRoot, "receive-recovery"),
+      safeStorage,
+    ),
+  });
   const persistentAuthorityTrust = new SafeStorageAuthorityTrustStore(edgeStateRoot, safeStorage);
   let trustedPrintAuthority: KeyObject | null = null;
   const authorityTrust: AuthorityTrustStore = Object.freeze({

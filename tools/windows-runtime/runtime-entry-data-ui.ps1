@@ -1,5 +1,5 @@
 function Show-RuntimeDataDialog {
-  param([string]$Verb, [Windows.Forms.Form]$Owner)
+  param([string]$Verb, [Windows.Forms.Form]$Owner, [string]$RequestId)
   $dialog = New-Object Windows.Forms.Form
   $dialog.Text = @{ 'portable-export'='加密离机备份'; 'portable-inspect'='校验离机备份'; 'portable-import'='换机恢复'; 'v1-import'='执行已批准的旧版导入'; 'export-store'='完整门店数据导出' }[$Verb]
   $dialog.ClientSize = New-Object Drawing.Size(650, 350)
@@ -16,6 +16,7 @@ function Show-RuntimeDataDialog {
   $dialog.Controls.Add($pathLabel)
   $path = New-Object Windows.Forms.TextBox; $path.SetBounds(16, 108, 505, 28); $path.MaxLength = 240
   $dialog.Controls.Add($path)
+  if ($Verb -ceq 'v1-import' -and $RequestId) { $path.Text = $RequestId }
   if ($Verb -cne 'v1-import' -and $Verb -cne 'export-store') {
     $browse = New-Object Windows.Forms.Button; $browse.SetBounds(531, 107, 96, 30); $browse.Text = '选择文件'
     $browse.add_Click({
@@ -26,8 +27,17 @@ function Show-RuntimeDataDialog {
     })
     $dialog.Controls.Add($browse)
   }
+  if ($Verb -ceq 'export-store') {
+    $browse = New-Object Windows.Forms.Button; $browse.SetBounds(531, 107, 96, 30); $browse.Text = '选择目录'
+    $browse.add_Click({
+      $picker = New-Object Windows.Forms.FolderBrowserDialog; $picker.Description = '选择存放导出的父目录；系统会创建一个新子目录。'
+      try { if ($picker.ShowDialog($dialog) -eq [Windows.Forms.DialogResult]::OK) { $path.Text = [IO.Path]::Combine($picker.SelectedPath, 'Laundry-export-' + [DateTime]::Now.ToString('yyyyMMdd-HHmmss')) } }
+      finally { $picker.Dispose() }
+    }); $dialog.Controls.Add($browse)
+  }
   $secretLabel = New-Object Windows.Forms.Label; $secretLabel.SetBounds(16, 148, 600, 24); $secretLabel.Text = '备份口令'
   $secret = New-Object Windows.Forms.TextBox; $secret.SetBounds(16, 175, 610, 28); $secret.UseSystemPasswordChar = $true; $secret.MaxLength = 256
+  if ($Verb -ceq 'export-store' -and $RequestId) { $secret.Text = $RequestId }
   if ($Verb -ceq 'export-store') { $secretLabel.Text = '批准请求编号'; $secret.UseSystemPasswordChar = $false; $secret.MaxLength = 36 }
   $confirmLabel = New-Object Windows.Forms.Label; $confirmLabel.SetBounds(16, 216, 610, 24)
   $confirmLabel.Text = if ($Verb -ceq 'portable-import') { '输入校验结果的完整 64 位 SHA256 摘要' } else { '再次输入口令' }

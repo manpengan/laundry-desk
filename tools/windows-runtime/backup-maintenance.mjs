@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { recordBackupHealth } from "./backup-health-record.mjs";
 import { digest, fail, supportsBackup } from "./companion-contract.mjs";
 import { MAX_BACKUPS, requireBackupOptions, requireMaintenance } from "./backup-contract.mjs";
 import { databaseTools } from "./backup-database.mjs";
@@ -133,6 +134,7 @@ export async function backupMaintenance(action, options, lifecycle, dependencies
           await control("stop", root, payload, env);
           await save(null);
           if (wasRunning) await start(entry);
+          await recordBackupHealth(context, "backup-drill");
           return {
             status: getState().phase,
             drilled_backup: target.id,
@@ -169,5 +171,6 @@ export async function backupMaintenance(action, options, lifecycle, dependencies
     throw error;
   }
   if (wasRunning) await start(entry);
+  if (action === "backup") await recordBackupHealth(context, "backup");
   return { ...result, status: getState().phase, assurance: "development_only" };
 }

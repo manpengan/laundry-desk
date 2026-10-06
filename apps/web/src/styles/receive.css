@@ -19,12 +19,16 @@
   grid-area: lines;
 }
 
-/* Settlement spans the full row height so its checkout bar can stay pinned to
-   the window bottom (see receive-settlement.css). */
+/* Settlement owns a scrolling field area and a separate, always-visible action row. */
 .ld-counter-grid--receive > .ld-counter-panel--settlement {
   grid-area: settlement;
-  align-self: stretch;
+  align-self: start;
+  position: sticky;
+  top: 80px;
+  height: max(360px, calc(100dvh - 260px));
   padding-bottom: 0;
+  gap: 0;
+  overflow: hidden;
 }
 
 /* —— Catalog: search, F-key service tabs, tile grid —— */
@@ -342,7 +346,7 @@
   }
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 767px) {
   .ld-counter-grid--receive {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: none;
@@ -372,4 +376,91 @@
   .ld-catalog-picker__chip {
     transition: none;
   }
+}
+
+.ld-receive-complete,
+.ld-receive-uncertain {
+  padding: 20px;
+  margin-block: 16px;
+  border: 1px solid var(--lg-hair);
+  border-radius: 12px;
+  background: var(--lg-surface);
+}
+.ld-receive-complete h2,
+.ld-receive-uncertain h2 {
+  margin-top: 0;
+}
+.ld-receive-uncertain {
+  border-color: var(--lg-late-ink);
+}
+
+.ld-settlement-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 0 4px 16px 0;
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .ld-counter-grid--receive {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  }
+  .ld-receive-catalog .ld-catalog-picker {
+    max-height: 250px;
+  }
+  .ld-counter-piece__fields {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 767px) {
+  .ld-counter-grid--receive > .ld-counter-panel--settlement {
+    position: static;
+    height: auto;
+    overflow: visible;
+  }
+  .ld-settlement-fields {
+    overflow: visible;
+  }
+  .ld-receive {
+    padding-bottom: 76px !important;
+  }
+}
+
+.ld-receive-checkout-shortcut {
+  display: none;
+}
+@media (max-width: 767px) {
+  .ld-receive-checkout-shortcut {
+    position: fixed;
+    bottom: 12px;
+    right: 16px;
+    left: 104px;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--lg-hair);
+    border-radius: 12px;
+    background: var(--lg-surface-input);
+    box-shadow: var(--lg-shadow-dock);
+  }
+}
+
+.ld-counter-drafts__details > summary {
+  cursor: pointer;
+  padding: 0.5rem 0;
+  font-weight: 600;
+}
+.ld-counter-drafts__details > summary:focus-visible {
+  outline: 2px solid var(--ld-accent, #087bdf);
+  outline-offset: 3px;
+}
+.ld-counter-drafts__details .ld-counter-draft-list {
+  max-height: min(28dvh, 14rem);
+  overflow-y: auto;
 }

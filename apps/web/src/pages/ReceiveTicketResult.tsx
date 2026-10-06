@@ -1,4 +1,4 @@
-import { useState } from "react";
+import type { ChannelIntent } from "@laundry/contracts";
 import type { TicketPreview } from "@laundry/domain";
 
 import type { CommandPort } from "../commands/types.js";
@@ -7,7 +7,7 @@ import { ChannelCollectCard } from "./ChannelCollectCard.js";
 import { ReceiveResult } from "./ReceiveResult.js";
 import { TicketPrintWaiverNotice } from "./TicketPrintWaiverNotice.js";
 import { TicketPreviewPanel } from "./TicketPreviewPanel.js";
-import type { ReceiveOrderResult } from "./order-form.js";
+import type { ReceiveLineDraft, ReceiveOrderResult } from "./order-form.js";
 import { enqueueTicketPrint, type PrintNotification } from "./ticket-print-enqueue.js";
 
 type ReceiveTicketResultProps = Readonly<{
@@ -18,10 +18,12 @@ type ReceiveTicketResultProps = Readonly<{
   preview: TicketPreview | null;
   queuePrintEnabled: boolean;
   result: ReceiveOrderResult | null;
+  lines?: readonly ReceiveLineDraft[];
   paymentChannelPort?: PaymentChannelPort;
+  onPaymentConfirmed: (intent: ChannelIntent) => void;
+  hasChannelPayment?: boolean;
+  paymentReady?: boolean;
 }>;
-
-type Collected = Readonly<{ order_id: string; amount_cents: number }>;
 
 export function ReceiveTicketResult({
   busy,
@@ -31,40 +33,33 @@ export function ReceiveTicketResult({
   preview,
   queuePrintEnabled,
   result,
+  lines,
   paymentChannelPort,
+  onPaymentConfirmed,
+  hasChannelPayment = false,
+  paymentReady = true,
 }: ReceiveTicketResultProps) {
-  const [collected, setCollected] = useState<Collected | null>(null);
   if (result === null) return null;
   const onEnqueuePrint = () =>
     enqueueTicketPrint(commandClient, result.order_id, result.ticket_no, notify);
-  // ADR-91 P1-1: a customer who prepays at drop-off scans right after the order opens;
-  // the provider-confirmed amount is what the order now has paid.
-  const paid = collected?.order_id === result.order_id ? collected.amount_cents : 0;
-  const shown =
-    paid === 0
-      ? result
-      : Object.freeze({
-          ...result,
-          paid_cents: result.paid_cents + paid,
-          balance_cents: Math.max(0, result.balance_cents - paid),
-        });
 
   return (
     <>
-      <ReceiveResult result={shown} />
-      {paymentChannelPort === undefined ? null : (
+      <ReceiveResult result={result} lines={lines} />
+      {paymentChannelPort === undefined || !paymentReady ? null : (
         <ChannelCollectCard
           port={paymentChannelPort}
-          order={{ order_id: shown.order_id, status: "open", balance_cents: shown.balance_cents }}
+          order={{ order_id: result.order_id, status: "open", balance_cents: result.balance_cents }}
           refreshKey={0}
           disabled={busy}
-          onPaid={(intent) =>
-            setCollected({ order_id: result.order_id, amount_cents: intent.amount_cents })
-          }
+          onPaid={onPaymentConfirmed}
         />
       )}
       {preview === null ? null : (
         <>
+          {hasChannelPayment ? (
+            <p role="note">以下为开单时的小票，不包含后续扫码付款；最新金额见上方开单结果。</p>
+          ) : null}
           <TicketPreviewPanel
             key={result.order_id}
             preview={preview}

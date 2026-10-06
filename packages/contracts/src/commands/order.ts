@@ -54,6 +54,11 @@ export const OrderReceiveLineSchema = z
   .strictObject({
     service_code: ServiceCodeSchema,
     category_code: CategoryCodeSchema,
+    /** Stable selected price-list identity; old queued clients may omit it. */
+    catalog_code: z
+      .string()
+      .regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/u)
+      .optional(),
     qty: z.number().int().positive().max(50),
     /** Compatibility-only common values used when an old client omits garments. */
     color: z.string().max(32).optional(),
@@ -145,6 +150,15 @@ export const OrderListInputSchema = z.strictObject({
    * Debt workbench uses `1` (positive balance). Omit = no balance floor.
    */
   min_balance_cents: NonNegCentsSchema.optional(),
+  customer_id: z.uuid().optional(),
+  ticket_no: z.string().trim().min(1).max(64).optional(),
+  customer_query: z.string().trim().min(1).max(64).optional(),
+  date_from: BusinessDateSchema.optional(),
+  date_to: BusinessDateSchema.optional(),
+  /** Has at least one racked garment ready for handover. */
+  ready_for_pickup: z.boolean().optional(),
+  /** Explicit offset opts into a page response with total; maximum one million rows. */
+  offset: z.number().int().min(0).max(1_000_000).optional(),
   /** Hard row cap (handler default 20; must not exceed max_result_rows 50). */
   limit: z.number().int().positive().max(50).optional(),
 });
@@ -319,10 +333,10 @@ export const orderGetQuery: QueryDefinition<GetInput> = defineQuery({
 /** 订单列表：工作台/历史/欠款浏览；按营业日、状态、手机号、最低余额筛选，最新优先。 */
 export const orderListQuery: QueryDefinition<ListInput> = defineQuery({
   name: "order.list",
-  version: "0.2.0",
-  description: "List recent store orders for workbench / history / receivables browsing.",
+  version: "0.3.0",
+  description: "List and paginate store orders for workbench / history / receivables browsing.",
   description_llm:
-    "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by store business_date, status, exact customer_phone, and/or min_balance_cents (integer fen floor on balance). Debt panel: min_balance_cents=1, limit<=50, omit business_date. Default limit 20, max 50. PII phone masked in audit.",
+    "Return store orders newest-first: order_id, ticket_no, status, customer_phone/name, payable/paid/balance cents, created_at, optional garment_count. Filter by store business_date, status, exact customer_phone, and/or min_balance_cents (integer fen floor on balance). Debt panel: min_balance_cents=1, limit<=50, omit business_date. Explicit offset enables bounded pagination with total, exact ticket/customer_id, literal customer name/phone search, date range and ready_for_pickup (racked garments). Default limit 20, max 50. PII search values masked in audit.",
   input: OrderListInputSchema,
   risk: "R2",
   invariants: [],
@@ -330,7 +344,10 @@ export const orderListQuery: QueryDefinition<ListInput> = defineQuery({
   sideEffects: [],
   offline_mode: "denied",
   data_classification: "pii",
-  input_redaction: [{ path: "/customer_phone", strategy: "mask" }],
+  input_redaction: [
+    { path: "/customer_phone", strategy: "mask" },
+    { path: "/customer_query", strategy: "mask" },
+  ],
   result_redaction: [{ path: "/orders/*/customer_phone", strategy: "mask" }],
   max_result_rows: 50,
 });

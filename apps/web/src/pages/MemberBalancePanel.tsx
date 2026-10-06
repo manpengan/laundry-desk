@@ -26,6 +26,7 @@ import { MEMBER_TOPUP_METHODS, MemberTopupConfirmation } from "./MemberTopupConf
 
 export type MemberBalancePanelProps = Readonly<{
   customer: CustomerRowView;
+  summaryOnly?: boolean;
   queryClient: QueryPort;
   commandClient: CommandPort;
   authClient?: AuthClient;
@@ -72,6 +73,7 @@ export function MemberBalancePanel({
   authClient,
   session,
   toast,
+  summaryOnly = false,
 }: MemberBalancePanelProps) {
   const [view, setView] = useState<MemberAccountView | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -98,6 +100,8 @@ export function MemberBalancePanel({
       setView(parseMemberAccountView(unwrapQueryResult(result.data), customer.customer_id));
       setFailed(false);
       setLoaded(true);
+    } catch {
+      setFailed(true);
     } finally {
       setBusy(false);
     }
@@ -276,96 +280,98 @@ export function MemberBalancePanel({
         </p>
       ) : null}
 
-      {account.status === "active" ? (
-        <div className="ld-member-panel__topup">
-          <Input
-            label="充值金额（元）"
-            value={amount}
-            inputMode="decimal"
-            onChange={(event) => setAmount(event.target.value)}
-            disabled={busy}
-          />
-          <label className="ld-member-panel__method">
-            <span>收款方式</span>
-            <select
-              value={method}
-              onChange={(event) => setMethod(event.target.value as MemberTenderView)}
+      <div hidden={summaryOnly}>
+        {account.status === "active" ? (
+          <div className="ld-member-panel__topup">
+            <Input
+              label="充值金额（元）"
+              value={amount}
+              inputMode="decimal"
+              onChange={(event) => setAmount(event.target.value)}
               disabled={busy}
-            >
-              {MEMBER_TOPUP_METHODS.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Button onClick={() => void topup()} disabled={busy}>
-            充值
-          </Button>
-        </div>
-      ) : null}
-
-      <MemberRefundForm
-        accountId={account.account_id}
-        accountStatus={account.status}
-        refundableCents={account.principal_cents}
-        commandClient={commandClient}
-        {...(authClient === undefined ? {} : { authClient })}
-        {...(session === undefined ? {} : { session })}
-        toast={toast}
-        onCompleted={load}
-      />
-
-      <MemberLifecyclePanel
-        customer={customer}
-        account={account}
-        commandClient={commandClient}
-        {...(authClient === undefined ? {} : { authClient })}
-        {...(session === undefined ? {} : { session })}
-        toast={toast}
-        onCompleted={load}
-      />
-
-      <ul className="ld-member-panel__ledger">
-        {view.recent.length === 0 ? (
-          <li className="ld-member-panel__hint">暂无储值流水</li>
-        ) : (
-          view.recent.map((row) => (
-            <li key={row.ledger_id} className="ld-member-panel__row">
-              <span>{ledgerLabel(row.kind)}</span>
-              <MoneyText fen={row.principal_delta_cents + row.bonus_delta_cents} />
-              <span className="ld-member-panel__date">{row.business_date}</span>
-            </li>
-          ))
-        )}
-      </ul>
-
-      <Dialog
-        open={pendingTopup !== null}
-        title="确认会员充值"
-        onClose={() => {
-          if (!busy) setPendingTopup(null);
-        }}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setPendingTopup(null)} disabled={busy}>
-              取消
+            />
+            <label className="ld-member-panel__method">
+              <span>收款方式</span>
+              <select
+                value={method}
+                onChange={(event) => setMethod(event.target.value as MemberTenderView)}
+                disabled={busy}
+              >
+                {MEMBER_TOPUP_METHODS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button onClick={() => void topup()} disabled={busy}>
+              充值
             </Button>
-            <Button
-              variant="primary"
-              onClick={() => void confirmTopup()}
-              disabled={busy}
-              data-testid="member-topup-confirm"
-            >
-              {busy ? "充值中…" : "确认充值"}
-            </Button>
-          </>
-        }
-      >
-        {pendingTopup === null ? null : (
-          <MemberTopupConfirmation method={pendingTopup.method} summary={pendingTopup.summary} />
-        )}
-      </Dialog>
+          </div>
+        ) : null}
+
+        <MemberRefundForm
+          accountId={account.account_id}
+          accountStatus={account.status}
+          refundableCents={account.principal_cents}
+          commandClient={commandClient}
+          {...(authClient === undefined ? {} : { authClient })}
+          {...(session === undefined ? {} : { session })}
+          toast={toast}
+          onCompleted={load}
+        />
+
+        <MemberLifecyclePanel
+          customer={customer}
+          account={account}
+          commandClient={commandClient}
+          {...(authClient === undefined ? {} : { authClient })}
+          {...(session === undefined ? {} : { session })}
+          toast={toast}
+          onCompleted={load}
+        />
+
+        <ul className="ld-member-panel__ledger">
+          {view.recent.length === 0 ? (
+            <li className="ld-member-panel__hint">暂无储值流水</li>
+          ) : (
+            view.recent.map((row) => (
+              <li key={row.ledger_id} className="ld-member-panel__row">
+                <span>{ledgerLabel(row.kind)}</span>
+                <MoneyText fen={row.principal_delta_cents + row.bonus_delta_cents} />
+                <span className="ld-member-panel__date">{row.business_date}</span>
+              </li>
+            ))
+          )}
+        </ul>
+
+        <Dialog
+          open={pendingTopup !== null}
+          title="确认会员充值"
+          onClose={() => {
+            if (!busy) setPendingTopup(null);
+          }}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setPendingTopup(null)} disabled={busy}>
+                取消
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => void confirmTopup()}
+                disabled={busy}
+                data-testid="member-topup-confirm"
+              >
+                {busy ? "充值中…" : "确认充值"}
+              </Button>
+            </>
+          }
+        >
+          {pendingTopup === null ? null : (
+            <MemberTopupConfirmation method={pendingTopup.method} summary={pendingTopup.summary} />
+          )}
+        </Dialog>
+      </div>
     </section>
   );
 }

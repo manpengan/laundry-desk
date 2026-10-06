@@ -148,3 +148,6 @@ Migrations must not contain `DROP TABLE`, `TRUNCATE`, `DROP COLUMN`, or
 - **Cloud counter trust** (0047, [ADR-38](../../../../docs/adr/2026-08-11-adr-38-cloud-counter-trust-closure.md)): store-scoped pricing policy with RLS, authoritative order pricing selections/snapshots, and persistent per-piece draft/formal garment details
 - Still deferred: writable AI tools and remaining matrix tables
   (see `DEFERRED_V2_TABLES_NOTE` in `@laundry/db`)
+
+- **Payment reconciliation review** (0081, ADR-93): immutable bill history and tenant-scoped optimistic review annotations; no financial writes.
+- **Order catalog snapshot** (0082, ADR-95): server-derived display name and selected catalog code on receipt lines; ambiguous legacy choices remain null; exporter projection updated.

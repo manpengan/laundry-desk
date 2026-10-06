@@ -36,6 +36,11 @@ import { channelIntentView, insertIntent, type ChannelIntent } from "./intent-st
 import { createChannelRefundService } from "./refund-service.js";
 import { channelRefundView, type ChannelRefundRow } from "./refund-store.js";
 import { reconcileChannelBill } from "./reconciliation.js";
+import {
+  listReconciliations,
+  readReconciliation,
+  reviewReconciliation,
+} from "./reconciliation-history.js";
 import { installChannelWorker } from "./worker.js";
 import { registerChannelCallbacks } from "./callback-routes.js";
 
@@ -49,6 +54,9 @@ type Path =
   | "refunds/list"
   | "refunds/status"
   | "reconcile"
+  | "reconcile/history"
+  | "reconcile/detail"
+  | "reconcile/review"
   | "resolve";
 /** Collecting by code is counter work, like cash: it follows order_write (ADR-85 r1). */
 const COLLECTOR_PATHS: ReadonlySet<Path> = new Set([
@@ -147,6 +155,14 @@ export function registerPaymentChannelRoutes(
           throw new ChannelBusinessError("POLICY_DENIED");
         return reconcileChannelBill(tx.client, tenant, body);
       });
+    if (path === "reconcile/history" || path === "reconcile/detail" || path === "reconcile/review")
+      return runtime.transact(tenant, async (tx) => {
+        if (!(await requesterAuthorityIsCurrent(runtime, auth, tx)))
+          throw new ChannelBusinessError("POLICY_DENIED");
+        if (path === "reconcile/history") return listReconciliations(tx.client, tenant, body);
+        if (path === "reconcile/detail") return readReconciliation(tx.client, tenant, body);
+        return reviewReconciliation(tx.client, tenant, body);
+      });
     const input = ChannelListInputSchema.parse(body);
     // Staff see the collections of the order in front of them, not the store's history.
     if (!isAdmin(auth) && input.order_id === undefined)
@@ -181,6 +197,9 @@ export function registerPaymentChannelRoutes(
     "refunds/list",
     "refunds/status",
     "reconcile",
+    "reconcile/history",
+    "reconcile/detail",
+    "reconcile/review",
     "resolve",
   ];
   for (const path of paths)
