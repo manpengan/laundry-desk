@@ -1,7 +1,13 @@
+/**
+ * Redirected PowerShell writes progress records to stderr as CLIXML, and any stderr fails the
+ * maintenance call. The trust script's first Add-Type loads a module and reports progress while
+ * doing so (on a Windows 10 counter, on every call), so progress is off before it runs.
+ */
+const PRELUDE = "$ProgressPreference = 'SilentlyContinue'\n";
+
 /** The binding pins the installed entry. All handoff data is bounded stdin JSON, never shell source. */
 export const MAINTENANCE_BOOTSTRAP = String.raw`
 $ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version Latest
 $held = $null
 try {
@@ -21,3 +27,8 @@ finally {
   [LaundryCounterMaintenanceTrust]::ReleaseDirectories()
 }
 `;
+
+/** The whole -EncodedCommand source: prelude, the pinned trust script, then the bootstrap. */
+export function maintenanceCommand(trustScript: string): string {
+  return PRELUDE + trustScript + "\n" + MAINTENANCE_BOOTSTRAP;
+}

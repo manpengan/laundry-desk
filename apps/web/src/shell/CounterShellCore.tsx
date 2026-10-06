@@ -9,6 +9,7 @@ import type { AiPanelPort } from "../host/ai-port.js";
 import type { AiSettingsPort } from "../ai/settings-port.js";
 import type { ScalePort } from "../host/scale-port.js";
 import type { StoreExportPort } from "../host/store-export-port.js";
+import type { MaintenancePort } from "../host/maintenance-port.js";
 import type { PaymentChannelPort } from "../host/payment-channel-port.js";
 import type { MiniappSettingsPort } from "../host/miniapp-settings-port.js";
 import type { RemoteAssistancePort } from "../host/remote-assistance-port.js";
@@ -63,6 +64,7 @@ export type CounterShellProps = {
   aiPort?: AiPanelPort;
   aiSettingsPort?: AiSettingsPort;
   migrationPort?: MigrationPort;
+  maintenancePort?: MaintenancePort;
   storeExportPort?: StoreExportPort;
   paymentChannelPort?: PaymentChannelPort;
   miniappSettingsPort?: MiniappSettingsPort;
@@ -140,6 +142,7 @@ function CounterShellContent({
   aiPort,
   aiSettingsPort,
   migrationPort,
+  maintenancePort,
   storeExportPort,
   paymentChannelPort,
   miniappSettingsPort,
@@ -335,6 +338,7 @@ function CounterShellContent({
               {...(miniappSettingsPort === undefined ? {} : { miniappSettingsPort })}
               {...(remoteAssistancePort === undefined ? {} : { remoteAssistancePort })}
               {...(migrationPort === undefined ? {} : { migrationPort })}
+              {...(maintenancePort === undefined ? {} : { maintenancePort })}
               {...(scalePort === undefined ? {} : { scalePort })}
               {...(storeExportPort === undefined ? {} : { storeExportPort })}
               {...(notificationSettingsPort === undefined ? {} : { notificationSettingsPort })}

@@ -10,6 +10,12 @@ function Show-RuntimeEntry {
   $form.AutoScaleMode = 'Dpi'
   $form.Font = New-Object Drawing.Font('Microsoft YaHei UI', 10)
   $script:EntryBusy = $false
+  # A launcher that starts this process hidden (the Counter does, so that no console appears)
+  # makes Windows hide the first window the process shows, which is this form. Show it again.
+  if ($null -eq ('LaundryRuntimeEntry.Window' -as [type])) {
+    Add-Type -Namespace LaundryRuntimeEntry -Name Window -MemberDefinition '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);'
+  }
+  $form.add_Shown({ [void][LaundryRuntimeEntry.Window]::ShowWindow($form.Handle, 5); $form.Activate() })
 
   $intro = New-Object Windows.Forms.Label
   $intro.SetBounds(18, 16, 760, 65)

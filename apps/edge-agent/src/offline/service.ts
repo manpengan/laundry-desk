@@ -133,6 +133,10 @@ export function createOfflineDesktopService(
           : online.scale.execute(input),
     }),
     receiveRecovery: createOfflineReceiveRecovery(online, offline, isMutationBlocked),
+    // Local Runtime maintenance never goes through the server, and it is how a store repairs
+    // a stopped service, so read-only or offline mode does not block it. The operation itself
+    // re-checks the session and role.
+    ...(online.maintenance === undefined ? {} : { maintenance: online.maintenance }),
     storeExport: Object.freeze({
       execute: (input: unknown) =>
         isMutationBlocked() || online.storeExport === undefined
