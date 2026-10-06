@@ -19,6 +19,16 @@ Vite `6.4.3`、React Router DOM `7.18.2` 与 PostCSS `8.5.23`。Electron-Vite 4/
 通过同主版本 override 固定到 `undici@6.28.1/7.29.1`、`fast-uri@3.1.8/4.1.5`、
 `brace-expansion@1.1.21/2.1.7/5.0.12`、`js-yaml@4.3.2`、`nanoid@3.3.18`。
 
+## 2026-10-07 sharp 新公告
+
+PR #235 的 Linux 门禁在依赖审计阶段失败，原因是一项新进入审计结果的公告，与代码改动无关；main 也同样受影响。
+
+- [GHSA-wq5f-xc86-pv6w](https://github.com/advisories/GHSA-wq5f-xc86-pv6w)（HIGH）：
+  - `sharp@0.35.4` 内置的 librsvg 有漏洞（CVE-2026-96889）。它是服务端的生产依赖（`apps/server → sharp`），用于照片处理和 AI 视觉。
+  - npm 已发布修复版 0.35.5，直接升级服务端依赖；锁文件只有 sharp 及其各平台 `@img/*` 预编译包变化。
+  - 本机复核：审计通过；涉及 sharp 的服务端照片与视觉测试 19/19 通过，载入的 librsvg 为 2.63.2。
+  - Windows Runtime 发行包会带上新版 sharp，由 Windows Runtime 工作流验收。
+
 ## 2026-10-06 新增两项公告
 
 PR #233 的 Linux 门禁在依赖审计阶段失败。原因是两项新进入审计结果的公告，与当时的代码改动无关。
