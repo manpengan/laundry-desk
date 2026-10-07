@@ -61,6 +61,7 @@ jobs:
           "packages/platform-fs/dist/**/*.test.js"
           apps/edge-agent/dist/desktop/receive-recovery.test.js
           apps/edge-agent/dist/desktop/maintenance-operation.test.js
+          apps/edge-agent/scripts/windows-functional-evidence.test.mjs
       - name: Install NSIS and verify installed source and hashes
         shell: pwsh
         run: ./apps/edge-agent/scripts/ci-install-windows.ps1 -Profile '${{ matrix.profile }}'
