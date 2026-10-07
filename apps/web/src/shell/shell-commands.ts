@@ -1,4 +1,5 @@
 import { navShortcutKey, type NavItem, type NavItemId } from "../nav.js";
+import { paletteKeywords, paletteLabel, THEME_PALETTES, type ThemePalette } from "../appearance.js";
 import type { ThemePreference } from "../theme.js";
 import type { PaletteCommand } from "./command-palette-model.js";
 
@@ -10,6 +11,7 @@ export type ShellCommandDeps = Readonly<{
   onSwitchStaff: () => void;
   onOpenPrintQueue: () => void;
   onSetTheme: (preference: ThemePreference) => void;
+  onSetPalette: (palette: ThemePalette) => void;
   onShowShortcuts: () => void;
   onToggleSidebar: () => void;
 }>;
@@ -74,6 +76,16 @@ export function shellCommands(deps: ShellCommandDeps): readonly PaletteCommand[]
       keywords: "zhuti xitong system theme",
       run: () => deps.onSetTheme("system"),
     }),
+    ...THEME_PALETTES.map((palette) =>
+      Object.freeze({
+        id: `action:palette-${palette}`,
+        label: `配色：${paletteLabel(palette)}`,
+        group: "操作" as const,
+        icon: "sparkles" as const,
+        keywords: `peise zhuti ps palette ${paletteKeywords(palette)}`,
+        run: () => deps.onSetPalette(palette),
+      }),
+    ),
     Object.freeze({
       id: "action:sidebar",
       label: deps.expanded ? "收起侧栏" : "展开侧栏",

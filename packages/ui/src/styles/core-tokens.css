@@ -1,0 +1,260 @@
+/* Core design tokens. Light values are the 晴空 (sky) palette; themes.css
+   overrides the palette seeds, so derived tokens below must use var(). */
+
+:root {
+  /* —— Typography：显式 Windows / macOS 中文栈，避免回退到新宋体 —— */
+  --lg-font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC",
+    "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", system-ui,
+    sans-serif;
+  --lg-font-mono:
+    "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, ui-monospace,
+    "Microsoft YaHei UI", "PingFang SC", monospace;
+  --lg-fs-2xs: 12px;
+  --lg-fs-xs: 13px;
+  --lg-fs-sm: 14px;
+  --lg-fs-md: 16px;
+  --lg-fs-lg: 20px;
+  --lg-fs-xl: 28px;
+  --lg-fs-2xl: 40px;
+
+  /* —— Canvas & surfaces —— */
+  --lg-bg: #f3f4f8;
+  --lg-canvas-glow-a: color-mix(in srgb, var(--lg-accent) 9%, transparent);
+  --lg-canvas-glow-b: color-mix(in srgb, var(--lg-aurora-4) 20%, transparent);
+  --lg-surface: rgba(255, 255, 255, 0.88);
+  --lg-surface-2: #f6f7fa;
+  --lg-surface-input: #ffffff;
+  --lg-overlay: rgba(255, 255, 255, 0.96);
+  --lg-scrim: rgba(15, 23, 42, 0.42);
+  --lg-card-border: rgba(15, 23, 42, 0.09);
+
+  /* —— Ink —— */
+  --lg-ink: #1d1d1f;
+  --lg-ink2: rgba(29, 29, 31, 0.74);
+  --lg-ink3: rgba(29, 29, 31, 0.66);
+  --lg-ink4: rgba(29, 29, 31, 0.4);
+
+  /* —— Accent —— */
+  --lg-accent: #0071e3;
+  --lg-accent2: #3d9bff;
+  --lg-accent-strong: #0062c4;
+  --lg-accent-fill: #0071e3;
+  --lg-accent-fill-hover: #0062c4;
+  --lg-accent-soft: color-mix(in srgb, var(--lg-accent) 10%, transparent);
+  --lg-accent-ring: color-mix(in srgb, var(--lg-accent) 34%, transparent);
+  --lg-accent-ink: #ffffff;
+
+  /* —— Fields —— */
+  --lg-field-border: #8e8e93;
+  --lg-field-border-hover: #6e6e73;
+
+  /* —— Glass (rails / bars only; cards stay opaque for legibility) —— */
+  --lg-glass-hi: rgba(255, 255, 255, 0.72);
+  --lg-glass: rgba(255, 255, 255, 0.52);
+  --lg-glass-lo: rgba(255, 255, 255, 0.36);
+  --lg-leaf: rgba(255, 255, 255, 0.6);
+  --lg-leaf-hover: rgba(15, 23, 42, 0.05);
+  --lg-line: rgba(255, 255, 255, 0.9);
+  --lg-hair: rgba(20, 30, 60, 0.1);
+  --lg-inner-hi: rgba(255, 255, 255, 0.95);
+  --lg-spec: rgba(255, 255, 255, 0.55);
+
+  /* —— Elevation —— */
+  --lg-shadow: 0 30px 80px rgba(24, 39, 75, 0.16);
+  --lg-shadow-sm: 0 12px 32px rgba(24, 39, 75, 0.1);
+  --lg-shadow-xs: 0 2px 8px rgba(24, 39, 75, 0.07);
+  --lg-shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 20px rgba(16, 24, 40, 0.05);
+  --lg-shadow-control: 0 1px 2px rgba(16, 24, 40, 0.08);
+  --lg-shadow-dock: 0 -12px 28px -20px rgba(16, 24, 40, 0.35);
+  --lg-highlight: rgba(255, 255, 255, 0.35);
+
+  /* —— Aurora backdrop + liquid glass rim (ADR-99); palettes recolour the aurora —— */
+  --lg-aurora-1: rgba(84, 160, 255, 0.46);
+  --lg-aurora-2: rgba(72, 210, 235, 0.36);
+  --lg-aurora-3: rgba(170, 146, 255, 0.34);
+  --lg-aurora-4: rgba(255, 186, 140, 0.32);
+  --lg-noise-op: 0.035;
+  --lg-glass-blur: 24px;
+  --lg-glass-rim: rgba(255, 255, 255, 0.9);
+  --lg-glass-shade: rgba(15, 23, 42, 0.05);
+  --lg-scroll-edge: rgba(15, 23, 42, 0.1);
+
+  /* —— Status（ink on its own bg ≥ 4.5:1） —— */
+  --lg-ok-bg: rgba(52, 199, 89, 0.16);
+  --lg-ok-ink: #1d7a35;
+  --lg-busy-bg: rgba(0, 113, 227, 0.12);
+  --lg-busy-ink: #0058c7;
+  --lg-late-bg: rgba(255, 59, 48, 0.13);
+  --lg-late-ink: #c22318;
+  --lg-done-bg: rgba(120, 120, 128, 0.14);
+  --lg-done-ink: #5e5e63;
+  --lg-info-bg: var(--lg-busy-bg);
+  --lg-info-ink: var(--lg-busy-ink);
+  --lg-warn-bg: rgba(255, 159, 10, 0.16);
+  --lg-warn-ink: #8a5300;
+
+  /* —— Shape & motion —— */
+  --lg-radius-sm: 8px;
+  --lg-radius-md: 12px;
+  --lg-radius-lg: 16px;
+  --lg-radius-xl: 20px;
+  /* .ld-field__label line-height (19px) + its margin-bottom (6px). Action
+     containers in a field row pad-top by this to sit on the input line. */
+  --lg-field-label-offset: 25px;
+  --lg-motion-fast: 150ms;
+  --lg-motion-base: 250ms;
+  --lg-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* ADR liquid-glass motion table; data-motion tiers retune these in aurora.css. */
+  --lg-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --lg-ease-magnet: cubic-bezier(0.3, 1.35, 0.45, 1);
+  --lg-dur-magnet: 450ms;
+  --lg-dur-pop: var(--lg-motion-base);
+  --lg-ease-pop: var(--lg-ease-out);
+  --lg-focus-ring: 0 0 0 3px var(--lg-accent-ring);
+
+  /* Aliases for names older page styles already reference. They used to be
+     undefined, which silently dropped radii (0px), paper fills and danger ink. */
+  --lg-radius: var(--lg-radius-md);
+  --lg-paper: var(--lg-surface-input);
+  --lg-border: var(--lg-hair);
+  --lg-muted: var(--lg-ink3);
+  --lg-danger: var(--lg-late-ink);
+  --lg-success: var(--lg-ok-ink);
+  --lg-warning: var(--lg-warn-ink);
+  color: var(--lg-ink);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --lg-bg: #0b0c10;
+    --lg-canvas-glow-a: color-mix(in srgb, var(--lg-accent) 14%, transparent);
+    --lg-canvas-glow-b: color-mix(in srgb, var(--lg-aurora-3) 34%, transparent);
+    --lg-surface: color-mix(in srgb, var(--lg-accent) 5%, rgba(30, 33, 43, 0.88));
+    --lg-surface-2: rgba(255, 255, 255, 0.045);
+    --lg-surface-input: rgba(9, 10, 14, 0.55);
+    --lg-overlay: color-mix(in srgb, var(--lg-accent) 4%, rgba(28, 31, 40, 0.97));
+    --lg-scrim: rgba(0, 0, 0, 0.55);
+    --lg-card-border: rgba(255, 255, 255, 0.09);
+    --lg-ink: #f5f5f7;
+    --lg-ink2: rgba(245, 245, 247, 0.76);
+    --lg-ink3: rgba(245, 245, 247, 0.62);
+    --lg-ink4: rgba(245, 245, 247, 0.38);
+    --lg-accent: #0a84ff;
+    --lg-accent2: #57b1ff;
+    --lg-accent-strong: #57b1ff;
+    --lg-accent-fill: #0a6cd6;
+    --lg-accent-fill-hover: #0a5fbd;
+    --lg-accent-soft: color-mix(in srgb, var(--lg-accent) 18%, transparent);
+    --lg-accent-ring: color-mix(in srgb, var(--lg-accent) 45%, transparent);
+    --lg-field-border: #7c7c86;
+    --lg-field-border-hover: #9a9aa3;
+    --lg-glass-hi: rgba(44, 48, 62, 0.58);
+    --lg-glass: rgba(24, 26, 34, 0.5);
+    --lg-glass-lo: rgba(16, 18, 26, 0.36);
+    --lg-leaf: rgba(255, 255, 255, 0.06);
+    --lg-leaf-hover: rgba(255, 255, 255, 0.08);
+    --lg-line: rgba(255, 255, 255, 0.13);
+    --lg-hair: rgba(255, 255, 255, 0.09);
+    --lg-inner-hi: rgba(255, 255, 255, 0.16);
+    --lg-spec: rgba(255, 255, 255, 0.17);
+    --lg-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+    --lg-shadow-sm: 0 12px 32px rgba(0, 0, 0, 0.4);
+    --lg-shadow-xs: 0 2px 8px rgba(0, 0, 0, 0.35);
+    --lg-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+    --lg-shadow-control: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --lg-shadow-dock: 0 -12px 28px -18px rgba(0, 0, 0, 0.7);
+    --lg-highlight: rgba(255, 255, 255, 0.12);
+    --lg-aurora-1: rgba(10, 132, 255, 0.3);
+    --lg-aurora-2: rgba(0, 186, 214, 0.18);
+    --lg-aurora-3: rgba(124, 92, 255, 0.24);
+    --lg-aurora-4: rgba(255, 128, 84, 0.12);
+    --lg-noise-op: 0.05;
+    --lg-glass-rim: rgba(255, 255, 255, 0.2);
+    --lg-glass-shade: rgba(0, 0, 0, 0.28);
+    --lg-scroll-edge: rgba(0, 0, 0, 0.4);
+    --lg-ok-bg: rgba(48, 209, 88, 0.18);
+    --lg-ok-ink: #4cd964;
+    --lg-busy-bg: rgba(10, 132, 255, 0.2);
+    --lg-busy-ink: #6cb2ff;
+    --lg-late-bg: rgba(255, 69, 58, 0.2);
+    --lg-late-ink: #ff8078;
+    --lg-done-bg: rgba(120, 120, 128, 0.24);
+    --lg-done-ink: #b1b1b6;
+    --lg-warn-bg: rgba(255, 159, 10, 0.18);
+    --lg-warn-ink: #f0a838;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --lg-bg: #0b0c10;
+  --lg-canvas-glow-a: color-mix(in srgb, var(--lg-accent) 14%, transparent);
+  --lg-canvas-glow-b: color-mix(in srgb, var(--lg-aurora-3) 34%, transparent);
+  --lg-surface: color-mix(in srgb, var(--lg-accent) 5%, rgba(30, 33, 43, 0.88));
+  --lg-surface-2: rgba(255, 255, 255, 0.045);
+  --lg-surface-input: rgba(9, 10, 14, 0.55);
+  --lg-overlay: color-mix(in srgb, var(--lg-accent) 4%, rgba(28, 31, 40, 0.97));
+  --lg-scrim: rgba(0, 0, 0, 0.55);
+  --lg-card-border: rgba(255, 255, 255, 0.09);
+  --lg-ink: #f5f5f7;
+  --lg-ink2: rgba(245, 245, 247, 0.76);
+  --lg-ink3: rgba(245, 245, 247, 0.62);
+  --lg-ink4: rgba(245, 245, 247, 0.38);
+  --lg-accent: #0a84ff;
+  --lg-accent2: #57b1ff;
+  --lg-accent-strong: #57b1ff;
+  --lg-accent-fill: #0a6cd6;
+  --lg-accent-fill-hover: #0a5fbd;
+  --lg-accent-soft: color-mix(in srgb, var(--lg-accent) 18%, transparent);
+  --lg-accent-ring: color-mix(in srgb, var(--lg-accent) 45%, transparent);
+  --lg-field-border: #7c7c86;
+  --lg-field-border-hover: #9a9aa3;
+  --lg-glass-hi: rgba(44, 48, 62, 0.58);
+  --lg-glass: rgba(24, 26, 34, 0.5);
+  --lg-glass-lo: rgba(16, 18, 26, 0.36);
+  --lg-leaf: rgba(255, 255, 255, 0.06);
+  --lg-leaf-hover: rgba(255, 255, 255, 0.08);
+  --lg-line: rgba(255, 255, 255, 0.13);
+  --lg-hair: rgba(255, 255, 255, 0.09);
+  --lg-inner-hi: rgba(255, 255, 255, 0.16);
+  --lg-spec: rgba(255, 255, 255, 0.17);
+  --lg-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  --lg-shadow-sm: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --lg-shadow-xs: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --lg-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+  --lg-shadow-control: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --lg-shadow-dock: 0 -12px 28px -18px rgba(0, 0, 0, 0.7);
+  --lg-highlight: rgba(255, 255, 255, 0.12);
+  --lg-aurora-1: rgba(10, 132, 255, 0.3);
+  --lg-aurora-2: rgba(0, 186, 214, 0.18);
+  --lg-aurora-3: rgba(124, 92, 255, 0.24);
+  --lg-aurora-4: rgba(255, 128, 84, 0.12);
+  --lg-noise-op: 0.05;
+  --lg-glass-rim: rgba(255, 255, 255, 0.2);
+  --lg-glass-shade: rgba(0, 0, 0, 0.28);
+  --lg-scroll-edge: rgba(0, 0, 0, 0.4);
+  --lg-ok-bg: rgba(48, 209, 88, 0.18);
+  --lg-ok-ink: #4cd964;
+  --lg-busy-bg: rgba(10, 132, 255, 0.2);
+  --lg-busy-ink: #6cb2ff;
+  --lg-late-bg: rgba(255, 69, 58, 0.2);
+  --lg-late-ink: #ff8078;
+  --lg-done-bg: rgba(120, 120, 128, 0.24);
+  --lg-done-ink: #b1b1b6;
+  --lg-info-bg: var(--lg-busy-bg);
+  --lg-info-ink: var(--lg-busy-ink);
+  --lg-warn-bg: rgba(255, 159, 10, 0.18);
+  --lg-warn-ink: #f0a838;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --lg-motion-fast: 0ms;
+    --lg-motion-base: 0ms;
+  }
+}

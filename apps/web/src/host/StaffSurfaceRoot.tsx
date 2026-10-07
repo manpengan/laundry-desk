@@ -1,4 +1,4 @@
-import { installLiquidGlass, ToastProvider } from "@laundry/ui";
+import { AuroraBackdrop, installLiquidGlass, ToastProvider } from "@laundry/ui";
 import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
 import type { LoginFormValues, SessionView } from "../auth/types.js";
@@ -40,11 +40,13 @@ export function StaffSurfaceRoot({
   >(loginInitialForm);
 
   useEffect(() => {
-    if (enableLiquidGlass && typeof document !== "undefined") installLiquidGlass();
+    if (!enableLiquidGlass || typeof document === "undefined") return undefined;
+    return installLiquidGlass();
   }, [enableLiquidGlass]);
 
   return (
     <ToastProvider>
+      {enableLiquidGlass ? <AuroraBackdrop /> : null}
       {session === null ? (
         <LoginPage
           authClient={loginPortFrom(auth)}

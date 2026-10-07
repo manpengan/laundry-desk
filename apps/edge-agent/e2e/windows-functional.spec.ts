@@ -480,9 +480,19 @@ test("created test admin completes the installed Windows desktop functional jour
     await capture(page, screenshots.workbench, "screenshot.workbench");
 
     await verifyNavigation(page);
-    // Navigation ends on 设置; theme lives in 设置 → 外观与快捷键 (counter default 浅色).
+    // Navigation ends on 设置; appearance lives in 设置 → 外观与快捷键 (default 晴空 · 浅色).
     await selectSettingsSection(page, "settings-appearance", "外观与快捷键");
-    const theme = page.getByRole("radiogroup", { name: "主题" });
+    const palette = page.getByRole("radiogroup", { name: "主题配色" });
+    await expect(palette.getByRole("radio", { name: "晴空" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await palette.getByRole("radio", { name: "海盐" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-palette", "sea");
+    await palette.getByRole("radio", { name: "晴空" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-palette", "sky");
+    await expect(page.locator("html")).toHaveAttribute("data-motion", /^(full|calm|off)$/u);
+    const theme = page.getByRole("radiogroup", { name: "明暗" });
     await expect(theme.getByRole("radio", { name: "浅色" })).toHaveAttribute(
       "aria-checked",
       "true",

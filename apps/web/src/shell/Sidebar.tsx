@@ -1,4 +1,5 @@
-import { cn, Icon } from "@laundry/ui";
+import { cn, Icon, useMagneticIndicator } from "@laundry/ui";
+import { useRef } from "react";
 import { COUNTER_NAV, navShortcutKey, type NavItem, type NavItemId } from "../nav.js";
 
 export type SidebarProps = {
@@ -17,6 +18,10 @@ export function Sidebar({
   onToggleExpand,
   items = COUNTER_NAV,
 }: SidebarProps) {
+  const navRef = useRef<HTMLElement>(null);
+  const pillRef = useRef<HTMLSpanElement>(null);
+  // 磁性焦点: one glass pill glides to the active page (decorative only).
+  const pillReady = useMagneticIndicator(navRef, pillRef, ".ld-shell-navitem--active", activeId);
   return (
     <aside
       className={cn("ld-shell-sidebar", expanded && "ld-shell-sidebar--open")}
@@ -28,7 +33,14 @@ export function Sidebar({
         </span>
         {expanded ? <span className="ld-shell-brand__name">洗衣柜台</span> : null}
       </div>
-      <nav className="ld-shell-sidebar__nav">
+      <nav
+        ref={navRef}
+        className="ld-shell-sidebar__nav"
+        data-pill={pillReady ? "ready" : undefined}
+      >
+        <span ref={pillRef} className="ld-shell-navpill" aria-hidden="true">
+          <span />
+        </span>
         {items.map((item, index) => {
           const key = navShortcutKey(index);
           const active = activeId === item.id;
@@ -36,7 +48,7 @@ export function Sidebar({
             <button
               key={item.id}
               type="button"
-              className={cn("ld-shell-navitem", active && "ld-shell-navitem--active")}
+              className={cn("ld-shell-navitem lg-pressable", active && "ld-shell-navitem--active")}
               onClick={() => onSelect(item.id)}
               title={key === null ? item.label : `${item.label}（Alt+${key}）`}
               aria-current={active ? "page" : undefined}

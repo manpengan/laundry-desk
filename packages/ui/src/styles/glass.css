@@ -1,0 +1,94 @@
+/* Liquid glass materials (ADR 2026-07-18 §2.3, ADR-99).
+   Rails and bars use real glass; content cards use .lg-card (no blur) so a
+   screen never stacks more than a handful of backdrop-filter layers. */
+
+.lg-glass {
+  background: linear-gradient(
+    135deg,
+    var(--lg-glass-hi) 0%,
+    var(--lg-glass) 42%,
+    var(--lg-glass-lo) 100%
+  );
+  border: 1px solid var(--lg-line);
+  box-shadow:
+    var(--lg-shadow),
+    inset 0 1px 0 var(--lg-glass-rim),
+    inset 0 -1px 0 var(--lg-glass-shade);
+  backdrop-filter: blur(var(--lg-glass-blur)) saturate(1.8);
+  -webkit-backdrop-filter: blur(var(--lg-glass-blur)) saturate(1.8);
+}
+
+.lg-card {
+  background: var(--lg-surface);
+  border: 1px solid var(--lg-card-border);
+  box-shadow:
+    var(--lg-shadow-card),
+    inset 0 1px 0 var(--lg-inner-hi);
+  border-radius: var(--lg-radius-lg);
+}
+
+/* 镜面追光: installLiquidGlass moves --mx/--my; only opacity animates. */
+.lg-spec {
+  position: relative;
+}
+
+.lg-spec::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(
+    260px circle at var(--mx, 50%) var(--my, -60px),
+    var(--lg-spec),
+    transparent 62%
+  );
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+:root[data-motion="full"] .lg-spec:hover::before {
+  opacity: 1;
+}
+
+.lg-spec > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* 液态涟漪: press 0.965, spring back; the ripple itself is gated in JS. */
+.lg-pressable {
+  position: relative;
+  overflow: hidden;
+  transform: translateZ(0);
+  transition: transform 0.5s var(--lg-ease-spring);
+}
+
+.lg-pressable:active {
+  transform: scale(0.965);
+  transition-duration: 0.08s;
+}
+
+.lg-ripple {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--lg-spec) 0%, transparent 70%);
+  transform: scale(0);
+  opacity: 0.9;
+  animation: lg-rip 0.62s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+
+@keyframes lg-rip {
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .lg-glass {
+    background: var(--lg-glass-hi);
+  }
+}

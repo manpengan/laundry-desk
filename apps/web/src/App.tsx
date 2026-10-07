@@ -54,9 +54,8 @@ export function App({
   >(loginInitialForm);
 
   useEffect(() => {
-    if (enableLiquidGlass && typeof document !== "undefined") {
-      installLiquidGlass();
-    }
+    if (!enableLiquidGlass || typeof document === "undefined") return undefined;
+    return installLiquidGlass();
   }, [enableLiquidGlass]);
 
   return (
