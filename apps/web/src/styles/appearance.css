@@ -1,0 +1,141 @@
+/* ADR-99: 设置 → 外观 theme cards, and page-level motion that only runs at
+   <html data-motion="full"> (transform/opacity only). */
+
+/* —— 主题配色: each card carries its own data-palette, so the preview shows that
+   palette's canvas, aurora and accent while the page keeps the active one. —— */
+
+.ld-theme-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+  gap: 12px;
+  margin: 4px 0 20px;
+}
+
+.ld-theme-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 8px 10px;
+  border: 1px solid var(--lg-card-border);
+  border-radius: var(--lg-radius-lg);
+  background: var(--lg-surface-input);
+  color: var(--lg-ink);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--lg-motion-fast) var(--lg-ease-out);
+}
+
+.ld-theme-card:hover {
+  transform: translateY(-2px);
+}
+
+.ld-theme-card[aria-checked="true"] {
+  border-color: var(--lg-accent);
+  box-shadow: 0 0 0 3px var(--lg-accent-ring);
+}
+
+.ld-theme-card__preview {
+  position: relative;
+  display: block;
+  height: 76px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  border-radius: 10px;
+  background:
+    radial-gradient(80% 100% at 0% 0%, var(--lg-aurora-1), transparent 70%),
+    radial-gradient(80% 100% at 100% 0%, var(--lg-aurora-2), transparent 70%),
+    radial-gradient(80% 100% at 25% 100%, var(--lg-aurora-3), transparent 70%),
+    radial-gradient(80% 100% at 100% 100%, var(--lg-aurora-4), transparent 70%), var(--lg-bg);
+  box-shadow: inset 0 0 0 1px var(--lg-hair);
+}
+
+.ld-theme-card__rail,
+.ld-theme-card__panel {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  border-radius: 6px;
+}
+
+.ld-theme-card__rail {
+  left: 8px;
+  width: 16px;
+  background: var(--lg-glass);
+  box-shadow: inset 0 0 0 1px var(--lg-line);
+}
+
+.ld-theme-card__panel {
+  right: 10px;
+  left: 32px;
+  background: var(--lg-surface);
+  box-shadow: inset 0 1px 0 var(--lg-inner-hi);
+}
+
+.ld-theme-card__chip {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  width: 46%;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--lg-accent2), var(--lg-accent-fill));
+}
+
+.ld-theme-card__name {
+  font-size: var(--lg-fs-sm);
+  font-weight: 700;
+}
+
+.ld-theme-card__note {
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-2xs);
+}
+
+.ld-theme-card__check {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--lg-accent-fill);
+  color: var(--lg-accent-ink);
+  box-shadow: 0 2px 8px var(--lg-accent-ring);
+}
+
+.ld-theme-card:focus-visible {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 2px;
+}
+
+.ld-settings-appearance__note {
+  flex-basis: 100%;
+  margin: -8px 0 0 62px;
+  color: var(--lg-ink3);
+  font-size: var(--lg-fs-xs);
+}
+
+/* —— Page entrance: the page rises in; workbench panels follow in a stagger. —— */
+
+:root[data-motion="full"] .ld-shell-main:not([aria-busy="true"]) {
+  animation: lg-rise 300ms var(--lg-ease-out) backwards;
+}
+
+:root[data-motion="full"] .ld-counter-grid > * {
+  animation: lg-rise 420ms var(--lg-ease-out) backwards;
+}
+
+:root[data-motion="full"] .ld-counter-grid > :nth-child(2) {
+  animation-delay: 60ms;
+}
+
+:root[data-motion="full"] .ld-counter-grid > :nth-child(3) {
+  animation-delay: 120ms;
+}
+
+:root[data-motion="off"] .ld-shell-topbar::after {
+  animation: none;
+}

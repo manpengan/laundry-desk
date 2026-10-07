@@ -1,5 +1,6 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "../lib/cn.js";
+import { useMagneticIndicator } from "../lib/magnetic-indicator.js";
 
 export type TabItem<T extends string> = Readonly<{
   id: T;
@@ -38,6 +39,8 @@ export function nextEnabledIndex(
   return current;
 }
 
+const SELECTED_TAB = '.ld-tabs__tab[aria-pressed="true"], .ld-tabs__tab[aria-checked="true"]';
+
 export function Tabs<T extends string>({
   items,
   value,
@@ -47,6 +50,10 @@ export function Tabs<T extends string>({
   className,
 }: TabsProps<T>) {
   const radio = mode === "radio";
+  const groupRef = useRef<HTMLDivElement>(null);
+  const thumbRef = useRef<HTMLSpanElement>(null);
+  // 磁性焦点: one glass thumb glides to the selected tab (decorative only).
+  const thumbReady = useMagneticIndicator(groupRef, thumbRef, SELECTED_TAB, String(value));
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (!radio) return;
@@ -70,11 +77,16 @@ export function Tabs<T extends string>({
 
   return (
     <div
+      ref={groupRef}
       className={cn("ld-tabs", className)}
       role={radio ? "radiogroup" : "group"}
       aria-label={label}
       onKeyDown={onKeyDown}
+      data-thumb={thumbReady ? "ready" : undefined}
     >
+      <span ref={thumbRef} className="ld-tabs__thumb" aria-hidden="true">
+        <span />
+      </span>
       {items.map((item) => {
         const selected = item.id === value;
         return (

@@ -32,16 +32,42 @@
   outline-offset: 2px;
 }
 
+/* Full motion: release springs back (ADR 2026-07-18 §2.4); calm keeps it brisk. */
+:root[data-motion="full"] .ld-btn {
+  transition: transform 0.5s var(--lg-ease-spring);
+}
+
+:root[data-motion="full"] .ld-btn:active {
+  transition-duration: 0.08s;
+}
+
+/* Both gradient stops keep accent-ink at ≥ 4.5:1 (theme-contrast.test.ts). */
 .ld-btn--primary {
-  background: var(--lg-accent-fill);
+  background: linear-gradient(180deg, var(--lg-accent-fill), var(--lg-accent-fill-hover));
   color: var(--lg-accent-ink);
   box-shadow:
+    0 6px 16px -8px var(--lg-accent-ring),
     var(--lg-shadow-control),
     inset 0 1px 0 var(--lg-highlight);
 }
 
 .ld-btn--primary:hover:not(:disabled) {
   background: var(--lg-accent-fill-hover);
+}
+
+/* A light band sweeps across a primary action on hover (transform only). */
+:root[data-motion="full"] .ld-btn--primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, var(--lg-highlight) 50%, transparent 65%);
+  transform: translateX(-120%);
+}
+
+:root[data-motion="full"] .ld-btn--primary:hover:not(:disabled)::after {
+  transform: translateX(120%);
+  transition: transform 0.9s var(--lg-ease-out);
 }
 
 .ld-btn--secondary {

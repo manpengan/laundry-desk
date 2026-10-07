@@ -1,6 +1,7 @@
 /** Shared renderer entry for local Vite and the Electron app://local host. */
 import type { ComponentType } from "react";
 import { createRoot } from "react-dom/client";
+import { bootAppearance } from "../src/appearance.js";
 import { createMockConnection } from "../src/connection.js";
 import {
   appSurfaceFromPathname,
@@ -56,6 +57,8 @@ const surface =
   host.kind === "browser" ? appSurfaceFromPathname(window.location.pathname) : "counter";
 const ports =
   host.kind === "desktop" ? createDesktopPorts(host.bridge) : createBrowserPorts({ apiBaseUrl });
+// Staff surfaces wear the stored theme from the first frame; the customer page has its own.
+if (surface !== "customer") bootAppearance();
 
 async function loadStaffSurfaceApp(
   selectedSurface: AppSurface,
@@ -90,7 +93,7 @@ async function start(): Promise<void> {
       <SurfaceApp
         ports={ports}
         connection={createMockConnection({ mode: readOnly ? "offline" : "online" })}
-        enableLiquidGlass={host.kind === "browser"}
+        enableLiquidGlass
         initialSession={resumed.ok ? resumed.session : null}
         readOnly={readOnly}
       />

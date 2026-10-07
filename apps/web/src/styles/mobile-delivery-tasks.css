@@ -216,7 +216,7 @@
   padding: 14px;
   border: 1px solid var(--lg-line);
   border-radius: var(--lg-radius-lg);
-  background: var(--lg-glass-hi);
+  background: var(--lg-surface);
   box-shadow: var(--lg-shadow-sm);
 }
 

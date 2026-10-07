@@ -2,6 +2,15 @@
 
 export { tokens, colors, radii, shadows, fontSize, motion, spacing } from "./tokens/index.js";
 export { installLiquidGlass } from "./installLiquidGlass.js";
+export { AuroraBackdrop } from "./components/AuroraBackdrop.js";
+export {
+  useMagneticIndicator,
+  flipStartTransform,
+  restingTransform,
+  sameBox,
+  type IndicatorBox,
+} from "./lib/magnetic-indicator.js";
+export { useCountUp, countUpValue, easeOutCubic, type CountUpOptions } from "./lib/count-up.js";
 export { cn } from "./lib/cn.js";
 export {
   formatFenToYuan,

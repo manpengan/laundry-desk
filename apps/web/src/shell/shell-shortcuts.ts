@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef } from "react";
 
+import type { MotionPreference, ResolvedMotion, ThemePalette } from "../appearance.js";
 import type { ThemePreference } from "../theme.js";
 
 export type ShellShortcut =
@@ -55,10 +56,17 @@ export function useShellShortcuts(handlers: ShellShortcutHandlers): void {
   }, []);
 }
 
-/** Theme control shared between the shell and Settings → 外观. */
+/** Appearance control shared between the shell and Settings → 外观 (ADR-99). */
 export type ThemeControl = Readonly<{
+  /** Light / dark / follow the system. */
   preference: ThemePreference;
   setPreference: (preference: ThemePreference) => void;
+  palette: ThemePalette;
+  setPalette: (palette: ThemePalette) => void;
+  motion: MotionPreference;
+  /** What the device actually runs: system reduce-motion and software rendering win. */
+  resolvedMotion: ResolvedMotion;
+  setMotion: (motion: MotionPreference) => void;
 }>;
 
 export const ThemeControlContext = createContext<ThemeControl | null>(null);

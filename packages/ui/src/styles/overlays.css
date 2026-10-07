@@ -103,7 +103,7 @@
   background: var(--lg-overlay);
   border: 1px solid var(--lg-card-border);
   box-shadow: var(--lg-shadow);
-  animation: ld-pop-in var(--lg-motion-base) var(--lg-ease-out);
+  animation: ld-pop-in var(--lg-dur-pop) var(--lg-ease-pop);
 }
 
 /* .lg-card on dialogs must keep the opaque overlay surface. */
@@ -156,7 +156,7 @@
   color: var(--lg-ink);
   font-size: var(--lg-fs-sm);
   line-height: 1.5;
-  animation: ld-pop-in var(--lg-motion-fast) var(--lg-ease-out);
+  animation: ld-pop-in var(--lg-dur-pop) var(--lg-ease-pop);
 }
 
 .ld-toast--success {

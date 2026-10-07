@@ -1,0 +1,173 @@
+/* 呼吸背景 and motion tiers (ADR-99).
+   <html data-motion> is "full" | "calm" | "off". Full drifts four soft colour
+   fields behind the glass; calm keeps them still (software-rendered PCs);
+   off removes every animation. Only transform/opacity ever animate, and the
+   layer is fixed, so scrolling never repaints it. */
+
+.lg-aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+
+.lg-aurora__blob {
+  position: absolute;
+  width: 68vmax;
+  height: 68vmax;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--lg-aurora-1), transparent);
+}
+
+/* Fields sit on the corners, so the glass rail and bar always have colour behind
+   them while the middle, where cards and text live, stays calm. */
+.lg-aurora__blob:nth-child(1) {
+  top: -28vmax;
+  left: -26vmax;
+}
+
+.lg-aurora__blob:nth-child(2) {
+  top: -34vmax;
+  right: -28vmax;
+  background-image: radial-gradient(closest-side, var(--lg-aurora-2), transparent);
+}
+
+.lg-aurora__blob:nth-child(3) {
+  bottom: -30vmax;
+  left: -36vmax;
+  background-image: radial-gradient(closest-side, var(--lg-aurora-3), transparent);
+}
+
+.lg-aurora__blob:nth-child(4) {
+  right: -26vmax;
+  bottom: -34vmax;
+  background-image: radial-gradient(closest-side, var(--lg-aurora-4), transparent);
+}
+
+/* Static film grain hides gradient banding on 8-bit panels; rastered once. */
+.lg-aurora__grain {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: var(--lg-noise-op);
+}
+
+:root[data-motion="full"] .lg-aurora__blob {
+  will-change: transform;
+  animation: lg-drift-a 34s ease-in-out -6s infinite alternate;
+}
+
+:root[data-motion="full"] .lg-aurora__blob:nth-child(2) {
+  animation-name: lg-drift-b;
+  animation-duration: 29s;
+  animation-delay: -12s;
+}
+
+:root[data-motion="full"] .lg-aurora__blob:nth-child(3) {
+  animation-name: lg-drift-c;
+  animation-duration: 38s;
+  animation-delay: -19s;
+}
+
+:root[data-motion="full"] .lg-aurora__blob:nth-child(4) {
+  animation-name: lg-drift-d;
+  animation-duration: 26s;
+  animation-delay: -3s;
+}
+
+@keyframes lg-drift-a {
+  50% {
+    transform: translate3d(9vmax, 6vmax, 0) scale(1.12);
+  }
+  100% {
+    transform: translate3d(3vmax, 13vmax, 0) scale(0.94);
+  }
+}
+
+@keyframes lg-drift-b {
+  50% {
+    transform: translate3d(-10vmax, 8vmax, 0) scale(1.08);
+  }
+  100% {
+    transform: translate3d(-4vmax, 15vmax, 0) scale(1.16);
+  }
+}
+
+@keyframes lg-drift-c {
+  50% {
+    transform: translate3d(10vmax, -12vmax, 0) scale(1.1);
+  }
+  100% {
+    transform: translate3d(4vmax, -20vmax, 0) scale(0.92);
+  }
+}
+
+@keyframes lg-drift-d {
+  50% {
+    transform: translate3d(-8vmax, -10vmax, 0) scale(1.14);
+  }
+  100% {
+    transform: translate3d(-15vmax, -4vmax, 0) scale(1);
+  }
+}
+
+/* Shared entrance for pages and panels (opacity + transform only). */
+@keyframes lg-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+}
+
+:root[data-motion="full"] {
+  --lg-dur-pop: 420ms;
+  --lg-ease-pop: cubic-bezier(0.3, 1.35, 0.5, 1);
+}
+
+:root[data-motion="calm"] {
+  --lg-dur-magnet: 220ms;
+  --lg-ease-magnet: var(--lg-ease-out);
+}
+
+:root[data-motion="off"] {
+  --lg-motion-fast: 0ms;
+  --lg-motion-base: 0ms;
+  --lg-dur-magnet: 0ms;
+}
+
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after {
+  animation-duration: 1ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0ms !important;
+  transition-delay: 0ms !important;
+}
+
+/* Theme switches cross-fade through a view transition. The live page stays
+   clickable underneath, so automation and fast hands never lose a click. */
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 380ms;
+  animation-timing-function: var(--lg-ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-aurora__blob {
+    animation: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .lg-aurora {
+    display: none;
+  }
+}

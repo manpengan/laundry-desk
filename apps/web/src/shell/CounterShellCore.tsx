@@ -25,14 +25,7 @@ import type {
   PageHostProps,
 } from "../pages/PageHostCore.js";
 import { RouteGate } from "../routing/RouteGate.js";
-import {
-  applyThemeToDocument,
-  browserThemeStorage,
-  initialCounterTheme,
-  resolveTheme,
-  writeStoredThemePreference,
-  type ThemePreference,
-} from "../theme.js";
+import type { ThemePreference } from "../theme.js";
 import { AiPanel } from "./AiPanel.js";
 import { CommandPalette } from "./CommandPalette.js";
 import { lookupCommands } from "./command-palette-model.js";
@@ -43,6 +36,7 @@ import { shellCommands } from "./shell-commands.js";
 import { ThemeControlContext, useShellShortcuts } from "./shell-shortcuts.js";
 import { Sidebar } from "./Sidebar.js";
 import { TopBar } from "./TopBar.js";
+import { useAppearance } from "./use-appearance.js";
 import type { HealthPort } from "../host/types.js";
 import { ReceiveWorkspaceProvider, useReceiveWorkspaceAccess } from "../pages/ReceiveWorkspace.js";
 import { hasReceiveWork } from "../pages/receive-workspace.js";
@@ -102,11 +96,6 @@ const READ_ONLY_COMMAND_PORT: CommandPort = Object.freeze({
     }),
 });
 
-function readSystemDark(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
-
 export function CounterShellCore(props: CounterShellCoreProps) {
   const scope = props.session.session;
   return (
@@ -155,9 +144,7 @@ function CounterShellContent({
   const [activeId, setActiveId] = useState<NavItemId>(initialNav);
   // ADR-91 P1-9: a toast belongs to the page that raised it.
   useToastPageScope(activeId);
-  const [themePref, setThemePref] = useState<ThemePreference>(
-    () => initialTheme ?? initialCounterTheme(browserThemeStorage()),
-  );
+  const themeControl = useAppearance({ initialTheme, systemDark, documentRef });
   const [loading, setLoading] = useState(initialLoadingMs > 0);
   const [pinOpen, setPinOpen] = useState(false);
   const [printQueueOpen, setPrintQueueOpen] = useState(false);
@@ -198,7 +185,6 @@ function CounterShellContent({
       setPinOpen(true);
     })();
   }, [receiveStore, confirmDiscard]);
-  const dark = systemDark ?? readSystemDark();
   const printSummary = usePrintJobSummary(
     queryClient,
     readOnly ? Object.freeze({ queued: 0, failed: 0 }) : printSummaryProp,
@@ -209,12 +195,6 @@ function CounterShellContent({
     [session.role, session.features],
   );
   const navItems = useMemo(() => filterNavItems(permission), [permission]);
-
-  useEffect(() => {
-    const doc = documentRef ?? (typeof document !== "undefined" ? document : null);
-    if (!doc) return;
-    applyThemeToDocument(doc, resolveTheme(themePref, dark));
-  }, [themePref, dark, documentRef]);
 
   // Window / taskbar title follows the page (Electron mirrors document.title).
   useEffect(() => {
@@ -227,15 +207,6 @@ function CounterShellContent({
     const timer = setTimeout(() => setLoading(false), initialLoadingMs);
     return () => clearTimeout(timer);
   }, [initialLoadingMs]);
-
-  const setTheme = useCallback((preference: ThemePreference) => {
-    setThemePref(preference);
-    writeStoredThemePreference(browserThemeStorage(), preference);
-  }, []);
-  const themeControl = useMemo(
-    () => Object.freeze({ preference: themePref, setPreference: setTheme }),
-    [setTheme, themePref],
-  );
 
   const toggleSidebar = useCallback(() => {
     setExpanded((value) => {
@@ -259,11 +230,12 @@ function CounterShellContent({
         onNavigate: setActiveId,
         onSwitchStaff: openStaffSwitch,
         onOpenPrintQueue: () => setPrintQueueOpen(true),
-        onSetTheme: setTheme,
+        onSetTheme: themeControl.setPreference,
+        onSetPalette: themeControl.setPalette,
         onShowShortcuts: () => setHelpOpen(true),
         onToggleSidebar: toggleSidebar,
       }),
-    [expanded, navItems, readOnly, setTheme, toggleSidebar, openStaffSwitch],
+    [expanded, navItems, readOnly, themeControl, toggleSidebar, openStaffSwitch],
   );
   const canOpen = useMemo(
     () =>

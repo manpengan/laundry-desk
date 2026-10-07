@@ -196,7 +196,7 @@
   border-radius: var(--lg-radius-xl);
   background: var(--lg-overlay);
   box-shadow: var(--lg-shadow);
-  animation: ld-pop-in var(--lg-motion-base) var(--lg-ease-out);
+  animation: ld-pop-in var(--lg-dur-pop) var(--lg-ease-pop);
 }
 
 .ld-command-palette__search {

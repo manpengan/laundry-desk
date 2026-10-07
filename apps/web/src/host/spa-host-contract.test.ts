@@ -62,9 +62,16 @@ test("login smoke proves blank fields and loads credentials before navigation", 
   }
 });
 
-test("desktop host disables dynamic Liquid Glass styles under the app CSP", async () => {
+test("both hosts run Liquid Glass and wear the stored appearance from the first frame", async () => {
   const hostEntry = await readWebFile("host/main.tsx");
 
-  assert.match(hostEntry, /enableLiquidGlass=\{host\.kind === "browser"\}/u);
-  assert.doesNotMatch(hostEntry, /\benableLiquidGlass\s*\/>/u);
+  // ADR-99: installLiquidGlass only writes CSSOM properties, which the desktop
+  // app:// CSP allows (packages/ui liquid-glass.test.ts pins that).
+  assert.match(hostEntry, /^\s+enableLiquidGlass$/mu);
+  assert.doesNotMatch(hostEntry, /enableLiquidGlass=\{host\.kind/u);
+  assert.match(hostEntry, /if \(surface !== "customer"\) bootAppearance\(\);/u);
+  assert.ok(
+    hostEntry.indexOf("bootAppearance();") < hostEntry.indexOf("reactRoot.render("),
+    "appearance is applied before React renders",
+  );
 });

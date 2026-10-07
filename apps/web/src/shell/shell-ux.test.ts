@@ -156,6 +156,7 @@ test("shell commands hide staff switching in read-only mode and list every page"
     onSwitchStaff: noop,
     onOpenPrintQueue: noop,
     onSetTheme: noop,
+    onSetPalette: noop,
     onShowShortcuts: noop,
     onToggleSidebar: noop,
   };
@@ -165,6 +166,30 @@ test("shell commands hide staff switching in read-only mode and list every page"
   assert.ok(live.some((entry) => entry.id === "action:switch-staff"));
   assert.ok(!readOnly.some((entry) => entry.id === "action:switch-staff"));
   assert.equal(live.find((entry) => entry.id === "nav:settings")?.shortcut, "Alt+0");
+});
+
+test("palette commands switch each of the six themes, read-only included", () => {
+  const picked: string[] = [];
+  const commands = shellCommands({
+    navItems: COUNTER_NAV,
+    expanded: false,
+    readOnly: true,
+    onNavigate: noop,
+    onSwitchStaff: noop,
+    onOpenPrintQueue: noop,
+    onSetTheme: noop,
+    onSetPalette: (palette) => picked.push(palette),
+    onShowShortcuts: noop,
+    onToggleSidebar: noop,
+  });
+  const palettes = commands.filter((entry) => entry.id.startsWith("action:palette-"));
+  assert.deepEqual(
+    palettes.map((entry) => entry.label),
+    ["配色：晴空", "配色：海盐", "配色：青竹", "配色：樱花", "配色：暖阳", "配色：极光"],
+  );
+  for (const entry of palettes) entry.run();
+  assert.deepEqual(picked, ["sky", "sea", "bamboo", "sakura", "amber", "aurora"]);
+  assert.match(palettes[1]?.keywords ?? "", /haiyan/u);
 });
 
 test("counter theme defaults to light and survives a blocked store", () => {

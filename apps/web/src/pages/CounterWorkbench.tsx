@@ -5,7 +5,6 @@ import {
   EmptyState,
   Icon,
   Input,
-  MoneyText,
   NumberPad,
   StatusBadge,
   useToast,
@@ -26,6 +25,7 @@ import {
   type OrderListRowView,
 } from "./OrdersList.js";
 import { parseOrderLookupRows } from "./OrderLookupCandidates.js";
+import { RollingCount, RollingMoney } from "./rolling-figures.js";
 import {
   parseDaySummary,
   unwrapQueryResult as unwrapStats,
@@ -220,14 +220,14 @@ export function CounterWorkbench({
             <Metric
               icon="receive"
               label="收衣"
-              value={summary === null ? "—" : summary.order_count}
+              value={summary === null ? "—" : <RollingCount value={summary.order_count} />}
               unit="单"
               onOpen={() => onNavigate("stats")}
             />
             <Metric
               icon="shirt"
               label="衣物"
-              value={summary === null ? "—" : summary.garment_count}
+              value={summary === null ? "—" : <RollingCount value={summary.garment_count} />}
               unit="件"
               onOpen={() => onNavigate("stats")}
             />
@@ -237,13 +237,13 @@ export function CounterWorkbench({
                 <Metric
                   icon="check"
                   label="今日实收"
-                  value={<MoneyText fen={summary.real_income_cents} />}
+                  value={<RollingMoney fen={summary.real_income_cents} />}
                   onOpen={() => onNavigate("stats")}
                 />
                 <Metric
                   icon="stats"
                   label="营业额"
-                  value={<MoneyText fen={summary.performance_income_cents} />}
+                  value={<RollingMoney fen={summary.performance_income_cents} />}
                   onOpen={() => onNavigate("stats")}
                 />
               </>
@@ -251,14 +251,14 @@ export function CounterWorkbench({
               <Metric
                 icon="check"
                 label="收款（退款前）"
-                value={summary === null ? "—" : <MoneyText fen={summary.payment_cents} />}
+                value={summary === null ? "—" : <RollingMoney fen={summary.payment_cents} />}
                 onOpen={() => onNavigate("stats")}
               />
             )}
             <Metric
               icon="alertCircle"
               label="欠款"
-              value={summary === null ? "—" : <MoneyText fen={summary.balance_cents} />}
+              value={summary === null ? "—" : <RollingMoney fen={summary.balance_cents} />}
               onOpen={() => onNavigate("orders")}
             />
           </div>
@@ -375,7 +375,7 @@ function Metric({
   onOpen: () => void;
 }>) {
   return (
-    <button type="button" className="ld-workbench-metric" onClick={onOpen}>
+    <button type="button" className="ld-workbench-metric lg-spec" onClick={onOpen}>
       <span className="ld-workbench-metric__label">
         <Icon name={icon} size={16} />
         {label}
