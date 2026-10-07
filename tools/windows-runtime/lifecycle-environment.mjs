@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { digest, fail } from "./companion-contract.mjs";
+import { digest, fail, supportsPhotoBackup } from "./companion-contract.mjs";
 import { readFile } from "node:fs/promises";
 
 export function cleanEnvironment(source = process.env) {
@@ -39,6 +39,15 @@ export const secretNames = Object.freeze({
   ),
 });
 
+export function photoEnvironment(env, root, manifest) {
+  // Managed Windows photos and their backup capability shipped together. Older
+  // verified payloads must retain their original disabled file-store setting.
+  return {
+    ...Object.fromEntries(Object.entries(env).filter(([key]) => key !== "LAUNDRY_PHOTO_STORE_DIR")),
+    ...(supportsPhotoBackup(manifest) ? { LAUNDRY_PHOTO_STORE_DIR: join(root, "photos") } : {}),
+  };
+}
+
 export async function runtimeEnvironment(root, payload, manifest, io) {
   const env = cleanEnvironment();
   Object.assign(env, {
@@ -53,7 +62,6 @@ export async function runtimeEnvironment(root, payload, manifest, io) {
     ),
     LAUNDRY_RUNTIME_SCHEMA_SHA256: digest(await readFile(join(payload, "metadata/schema.md"))),
     LAUNDRY_NOTIFICATION_PROVIDER_MODE: "disabled",
-    LAUNDRY_PHOTO_STORE_DIR: join(root, "photos"),
   });
   for (const [name, file] of Object.entries(secretNames)) {
     const path = join(root, "secrets", file);
@@ -63,5 +71,5 @@ export async function runtimeEnvironment(root, payload, manifest, io) {
   }
   env.PGPASSFILE = join(root, "secrets/pgpass.conf");
   await io.read(env.PGPASSFILE);
-  return env;
+  return photoEnvironment(env, root, manifest);
 }
