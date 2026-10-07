@@ -8,7 +8,7 @@ import { sha256Hex, type SpaManifest } from "./lib/integrity.js";
 import { createAppProtocolHandler, registerAppProtocolScheme } from "./protocol.js";
 
 const CSP =
-  "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'none'";
+  "default-src 'self'; script-src 'self'; img-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'none'";
 
 test("registers exactly one fixed privileged app scheme", () => {
   let registered: CustomScheme[] | null = null;
@@ -103,4 +103,21 @@ test("app protocol never emits unsafe CSP directives", () => {
 
   assert.equal(csp, CSP);
   assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval/);
+});
+
+test("photo blob URLs are allowed only for images, without enabling remote connections", () => {
+  const { spaRoot, manifest } = makeSpa();
+  const handle = createAppProtocolHandler(spaRoot, manifest);
+  const response = handle(new Request("app://local/index.html"));
+  const directives = new Map(
+    (response.headers.get("content-security-policy") ?? "").split(";").map((value) => {
+      const [name, ...sources] = value.trim().split(/\s+/u);
+      return [name, sources];
+    }),
+  );
+
+  assert.deepEqual(directives.get("img-src"), ["'self'", "blob:"]);
+  assert.deepEqual(directives.get("script-src"), ["'self'"]);
+  assert.deepEqual(directives.get("connect-src"), ["'none'"]);
+  assert.deepEqual(directives.get("object-src"), ["'none'"]);
 });

@@ -5,6 +5,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
+import { expectPackagedPhotoBlob } from "./packaged-photo-policy.js";
 
 const REPOSITORY_ROOT = resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 const PACKAGE_ROOT = join(REPOSITORY_ROOT, "apps", "edge-agent");
@@ -97,6 +98,7 @@ test("packaged Counter launches with the fixed secure shell and no service crede
       timeout: 15_000,
     });
     expect(page.url()).toBe("app://local/index.html");
+    await expectPackagedPhotoBlob(page);
 
     const shell = await application.evaluate(({ BrowserWindow, session }) => {
       const windows = BrowserWindow.getAllWindows();

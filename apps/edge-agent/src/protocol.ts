@@ -11,7 +11,7 @@ import {
 import { APP_SCHEME } from "./lib/security-prefs.js";
 
 const CONTENT_SECURITY_POLICY =
-  "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'none'";
+  "default-src 'self'; script-src 'self'; img-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'none'";
 
 type VerifiedAsset = Readonly<{
   body: ArrayBuffer;
