@@ -1,7 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { randomBytes, randomInt } from "node:crypto";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   _electron as electron,
@@ -18,6 +20,7 @@ import {
   retriedMainEvaluations,
 } from "./electron-main.js";
 import { yuanText } from "./money-input.js";
+import { completeFunctionalEvidence } from "./windows-functional-completion.mjs";
 import {
   assertAsLaunchedGeometry,
   measureAsLaunchedGeometry,
@@ -49,6 +52,15 @@ const PASSTHROUGH_ENV_KEYS = Object.freeze([
 const ORG_CODE = "local";
 const STORE_CODE = "main";
 const WRONG_PASSWORD_PROBE = "intentionally-wrong-windows-qa-password";
+const EVIDENCE_SCRIPT = fileURLToPath(
+  new URL("../scripts/windows-functional-evidence.mjs", import.meta.url),
+);
+const EVIDENCE_PROCESS = Object.freeze({
+  encoding: "utf8" as const,
+  timeout: 60_000,
+  maxBuffer: 4096,
+  windowsHide: true,
+});
 
 type FunctionalAccount = Readonly<{
   username: string;
@@ -358,7 +370,7 @@ test.setTimeout(360_000);
 
 test("created test admin completes the installed Windows desktop functional journey", async () => {
   expect(process.platform).toBe("win32");
-  const executable = await realpath(requiredAbsoluteEnvironment("LAUNDRY_WINDOWS_INSTALLED_EXE"));
+  const executable = requiredAbsoluteEnvironment("LAUNDRY_WINDOWS_INSTALLED_EXE");
   const bootstrap = await loadWindowsBootstrapCredentials();
   const accountPath = requiredAbsoluteEnvironment("LAUNDRY_WINDOWS_FUNCTIONAL_ACCOUNT_FILE");
   if (resolve(dirname(accountPath)).toLowerCase() !== bootstrap.privateRoot.toLowerCase()) {
@@ -367,6 +379,9 @@ test("created test admin completes the installed Windows desktop functional jour
   const evidenceRoot = requiredAbsoluteEnvironment("LAUNDRY_WINDOWS_FUNCTIONAL_EVIDENCE_DIR");
   await mkdir(evidenceRoot, { recursive: true });
   const evidenceRootReal = await realpath(evidenceRoot);
+  const evidenceArguments = [executable, evidenceRootReal];
+  const begin = [EVIDENCE_SCRIPT, "begin", ...evidenceArguments];
+  const startDigest = execFileSync(process.execPath, begin, EVIDENCE_PROCESS).trim();
   const existingAccount = await loadWindowsFunctionalAccount(accountPath);
   const account = existingAccount ?? createFunctionalAccount();
   const accountCreatedThisRun = existingAccount === null;
@@ -389,7 +404,7 @@ test("created test admin completes the installed Windows desktop functional jour
   const userDataPath = await mkdtemp(join(await realpath(tmpdir()), "laundry-win-functional-"));
   let application: ElectronApplication | null = null;
   let mainLog: ReturnType<typeof captureMainProcessOutput> | null = null;
-  let passed = false;
+  let journeyCompleted = false;
   let failed = false;
   let observedPage: Page | null = null;
   const rendererErrors: string[] = [];
@@ -718,7 +733,7 @@ test("created test admin completes the installed Windows desktop functional jour
     await closeFunctionalApplication(application, "close.final");
     application = null;
     const evidence = Object.freeze({
-      status: "passed",
+      status: "observed",
       account: Object.freeze({
         username: account.username,
         display_name: account.displayName,
@@ -734,12 +749,11 @@ test("created test admin completes the installed Windows desktop functional jour
       main_evaluation_retries: retriedMainEvaluations(),
     });
     await writeFile(
-      join(evidenceRootReal, "functional-evidence.json"),
+      join(evidenceRootReal, "functional-observations.json"),
       `${JSON.stringify(evidence, null, 2)}\n`,
-      "utf8",
+      { encoding: "utf8", flag: "wx" },
     );
-    process.stdout.write(`${JSON.stringify({ status: "passed" })}\n`);
-    passed = true;
+    journeyCompleted = true;
   } catch (error) {
     failed = true;
     if (observedPage !== null) {
@@ -751,7 +765,7 @@ test("created test admin completes the installed Windows desktop functional jour
   } finally {
     // ADR-91 P1-8: a failed run, or one that needed a retry, keeps the main-process output
     // beside its screenshots.
-    if ((!passed || retriedMainEvaluations().length > 0) && mainLog !== null) {
+    if ((!journeyCompleted || retriedMainEvaluations().length > 0) && mainLog !== null) {
       const log = mainLog;
       await functionalStep("diagnostics.main-log", () => log.save(evidenceRootReal), 2_000).catch(
         () => undefined,
@@ -767,15 +781,19 @@ test("created test admin completes the installed Windows desktop functional jour
         closeError = error;
       }
     }
-    if (passed && !closeFailed && (application === null || hasExited(application.process()))) {
-      await functionalStep(
+    if (!journeyCompleted || closeFailed) functionalStage("cleanup.private-material", "retained");
+    if (closeFailed && !failed) throw closeError;
+  }
+  await completeFunctionalEvidence(
+    () =>
+      functionalStep(
         "cleanup.private-material",
         () => rm(userDataPath, { force: true, recursive: true }),
         5_000,
-      );
-    } else {
-      functionalStage("cleanup.private-material", "retained");
-    }
-    if (closeFailed && !failed) throw closeError;
-  }
+      ),
+    () => {
+      const finish = [EVIDENCE_SCRIPT, "finish", ...evidenceArguments, startDigest];
+      execFileSync(process.execPath, finish, EVIDENCE_PROCESS);
+    },
+  );
 });
