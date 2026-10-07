@@ -99,6 +99,7 @@ files:
   - dist/offline/grant-sequence-store.js
   - dist/offline/offline-command-policy.js
   - dist/offline/offline-results.js
+  - dist/offline/query-operation.js
   - dist/offline/read-authority.js
   - dist/offline/read-cache-file.js
   - dist/offline/read-cache.js
