@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { PhotoPort, PhotoReadVariant } from "../host/photo-port.js";
 import type { PhotoMetaRow } from "./photo-list.js";
@@ -8,7 +8,7 @@ import { photoGarmentLabel, photoKindLabel } from "./order-photo-labels.js";
 type ImageState =
   | Readonly<{ status: "loading" }>
   | Readonly<{ status: "error"; message: string }>
-  | Readonly<{ status: "ready"; url: string }>;
+  | Readonly<{ status: "ready"; url: string; onError: () => void }>;
 
 function usePhotoUrl(
   photoPort: PhotoPort | undefined,
@@ -16,10 +16,21 @@ function usePhotoUrl(
   variant: PhotoReadVariant,
   retry: number,
 ): ImageState {
-  const [state, setState] = useState<ImageState>({ status: "loading" });
+  const request = useMemo(
+    () => ({ photoPort, photoId, variant, retry }),
+    [photoPort, photoId, variant, retry],
+  );
+  const [snapshot, setSnapshot] = useState<Readonly<{
+    request: typeof request;
+    state: ImageState;
+  }> | null>(null);
   useEffect(() => {
+    const { photoPort, photoId, variant } = request;
     let cancelled = false;
     let objectUrl: string | null = null;
+    const setState = (state: ImageState) => {
+      if (!cancelled) setSnapshot({ request, state });
+    };
     setState({ status: "loading" });
     if (photoPort === undefined) {
       setState({ status: "error", message: "照片预览不可用" });
@@ -40,7 +51,11 @@ function usePhotoUrl(
             type: result.data.content_type,
           }),
         );
-        setState({ status: "ready", url: objectUrl });
+        setState({
+          status: "ready",
+          url: objectUrl,
+          onError: () => setState({ status: "error", message: "照片显示失败，请重试" }),
+        });
       },
       () => {
         if (!cancelled) setState({ status: "error", message: "照片读取失败" });
@@ -50,8 +65,8 @@ function usePhotoUrl(
       cancelled = true;
       if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
     };
-  }, [photoId, photoPort, retry, variant]);
-  return state;
+  }, [request]);
+  return snapshot?.request === request ? snapshot.state : { status: "loading" };
 }
 
 function PhotoImage({
@@ -81,10 +96,14 @@ function PhotoImage({
     );
   }
   return onOpen === undefined ? (
-    <img src={state.url} alt={`${photoKindLabel(photo.kind)} 照片`} />
+    <img src={state.url} alt={`${photoKindLabel(photo.kind)} 照片`} onError={state.onError} />
   ) : (
     <button type="button" className="ld-photo-image__open" onClick={onOpen}>
-      <img src={state.url} alt={`${photoKindLabel(photo.kind)} 照片缩略图`} />
+      <img
+        src={state.url}
+        alt={`${photoKindLabel(photo.kind)} 照片缩略图`}
+        onError={state.onError}
+      />
     </button>
   );
 }

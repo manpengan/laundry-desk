@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
+import { expectPackagedPhotoBlob } from "./packaged-photo-policy.js";
 
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const RELEASE_ROOT = join(PACKAGE_ROOT, "release");
@@ -111,6 +112,7 @@ test("packaged Windows Counter is a secure Electron desktop with its native help
       timeout: 20_000,
     });
     expect(page.url()).toBe("app://local/index.html");
+    await expectPackagedPhotoBlob(page);
 
     const main = await application.evaluate(({ app, BrowserWindow, safeStorage, session }) => {
       const windows = BrowserWindow.getAllWindows();

@@ -77,11 +77,31 @@ export async function openPackagedDebtOrder(page: Page, key: string): Promise<Lo
   return drawer;
 }
 
+async function expectDecodedPhoto(image: Locator): Promise<void> {
+  await expect(image).toBeVisible();
+  await expect
+    .poll(() =>
+      image.evaluate(
+        (node) =>
+          node instanceof HTMLImageElement &&
+          node.complete &&
+          node.naturalWidth > 0 &&
+          node.naturalHeight > 0,
+      ),
+    )
+    .toBe(true);
+}
+
 async function registerDurablePhoto(page: Page, ticketNo: string): Promise<void> {
   const drawer = await openPackagedDebtOrder(page, ticketNo);
   const photoCount = drawer.locator('[data-testid="order-detail-photo-count"]');
   const photoInput = drawer.locator('[data-testid="order-detail-register-photo-btn"]');
   await expect(photoCount).toHaveText("0 张", { timeout: 15_000 });
+  const target = drawer.getByRole("combobox", { name: "照片对应衣物", exact: true });
+  await expect(target).toHaveValue("");
+  await expect(photoInput).toBeDisabled();
+  await expect(target.locator("option")).toHaveCount(3);
+  await target.selectOption({ index: 2 });
   await expect(photoInput).toBeEnabled();
   await photoInput.setInputFiles({
     name: "mac-receive.jpg",
@@ -94,6 +114,16 @@ async function registerDurablePhoto(page: Page, ticketNo: string): Promise<void>
   await expect(photoCount).toHaveText("1 张", {
     timeout: 15_000,
   });
+  const thumbnail = drawer.getByRole("img", { name: "收衣 照片缩略图", exact: true });
+  await expectDecodedPhoto(thumbnail);
+  await thumbnail.click();
+  const viewer = page.getByRole("dialog", { name: "查看照片", exact: true });
+  await expectDecodedPhoto(viewer.getByRole("img", { name: "收衣 照片", exact: true }));
+  await viewer.getByRole("button", { name: "关闭照片", exact: true }).click();
+  await drawer.locator('[data-testid="order-detail-close-btn"]').click();
+  await openPackagedDebtOrder(page, ticketNo);
+  await expect(photoCount).toHaveText("1 张");
+  await expectDecodedPhoto(thumbnail);
   await drawer.locator('[data-testid="order-detail-close-btn"]').click();
 }
 
