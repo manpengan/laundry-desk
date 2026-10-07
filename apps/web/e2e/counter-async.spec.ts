@@ -176,7 +176,7 @@ test("late automatic pickup loading cannot replace a newer scan or end its loadi
     releaseFirst.resolve();
     await (await firstResponse).finished();
     await renderSettled(page);
-    await expect(loaded).toHaveText(ORDERS[1]!.ticket_no);
+    await expect(loaded).toHaveCount(0);
     await expect(scan).toHaveValue(ORDERS[2]!.ticket_no);
     await expect(page.getByRole("button", { name: "加载中…", exact: true })).toBeDisabled();
     releaseLast.resolve();
