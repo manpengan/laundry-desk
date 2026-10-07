@@ -113,6 +113,13 @@ export class OfflineReadCache {
   }
 
   bind(sessionInput: DesktopSessionView, authority: VerifiedOfflineReadAuthority): void {
+    this.writeState(this.boundState(sessionInput, authority));
+  }
+
+  private boundState(
+    sessionInput: DesktopSessionView,
+    authority: VerifiedOfflineReadAuthority,
+  ): CacheState {
     const session = DesktopSessionViewSchema.parse(sessionInput);
     const nowMs = this.readNow();
     if (!this.verifyAuthority(session, authority, nowMs)) {
@@ -130,7 +137,7 @@ export class OfflineReadCache {
       previous !== null && sameSession(previous.session_view, session)
         ? previous.entries
         : Object.freeze([]);
-    this.writeState({
+    return CacheStateSchema.parse({
       version: 1,
       session_view: session,
       server_public_key_spki: authority.serverPublicKeySpki,
@@ -158,19 +165,57 @@ export class OfflineReadCache {
     const session = DesktopSessionViewSchema.parse(sessionInput);
     const state = this.readUsableState(session);
     if (state === null) return false;
-    const identity = queryIdentity(parsedInput.data);
+    const next = this.withEntry(state, parsedInput.data, parsedResult.data);
+    if (next === null) return false;
+    this.writeState(next);
+    return true;
+  }
+
+  async bindAndPut(
+    session: DesktopSessionView,
+    authority: VerifiedOfflineReadAuthority,
+    input: unknown,
+    resultInput: unknown,
+    isSessionCurrent: () => boolean,
+  ): Promise<boolean> {
+    const parsedInput = await DesktopQueryExecuteInputSchema.safeParseAsync(input);
+    const parsedResult = DesktopQueryExecuteResultSchema.safeParse(resultInput);
+    if (!isSessionCurrent()) return false;
+    // Re-read the protected file after parsing; never retain decrypted state across requests.
+    const state = this.boundState(session, authority);
+    const nowMs = this.readNow();
+    const next =
+      this.isUsable(state, session, nowMs) &&
+      parsedInput.success &&
+      parsedResult.success &&
+      parsedResult.data.ok &&
+      queryNames.has(parsedInput.data.name)
+        ? this.withEntry(state, parsedInput.data, parsedResult.data, nowMs)
+        : null;
+    if (!isSessionCurrent()) return false;
+    // Even uncacheable queries must persist the refreshed grant and clock checkpoint.
+    this.writeState(next ?? state);
+    return next !== null;
+  }
+
+  private withEntry(
+    state: CacheState,
+    input: unknown,
+    result: unknown,
+    nowMs = this.readNow(),
+  ): CacheState | null {
+    const identity = queryIdentity(input);
     const entry = CacheEntrySchema.parse({
       query_key: identity.key,
       canonical_request: identity.canonical,
-      result: parsedResult.data,
-      cached_at_ms: this.readNow(),
+      result,
+      cached_at_ms: nowMs,
     });
-    if (jsonBytes(entry) > MAX_ENTRY_BYTES) return false;
+    if (jsonBytes(entry) > MAX_ENTRY_BYTES) return null;
     const retained = state.entries.filter((candidate) => candidate.query_key !== identity.key);
     const entries = this.fitEntries([...retained, entry], state);
-    if (!entries.some((candidate) => candidate.query_key === identity.key)) return false;
-    this.writeState({ ...state, last_seen_wall_ms: entry.cached_at_ms, entries });
-    return true;
+    if (!entries.some((candidate) => candidate.query_key === identity.key)) return null;
+    return CacheStateSchema.parse({ ...state, last_seen_wall_ms: entry.cached_at_ms, entries });
   }
 
   async get(
@@ -218,7 +263,8 @@ export class OfflineReadCache {
     const ordered = [...entries].sort((a, b) => a.cached_at_ms - b.cached_at_ms);
     while (
       ordered.length > 0 &&
-      jsonBytes({ ...state, entries: ordered }) > MAX_CACHE_PLAINTEXT_BYTES
+      (ordered.length > MAX_ENTRIES ||
+        jsonBytes({ ...state, entries: ordered }) > MAX_CACHE_PLAINTEXT_BYTES)
     ) {
       ordered.shift();
     }
