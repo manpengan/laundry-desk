@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
 import { createMockAuthClient } from "../auth/AuthClient.js";
@@ -13,7 +13,9 @@ import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
 import type { PrinterPort } from "../host/printer-port.js";
 import type { RemoteAssistancePort } from "../host/remote-assistance-port.js";
-import { PRINTER_PATH_ENV_NAME, SettingsPage } from "./SettingsPage.js";
+import { PRINTER_PATH_ENV_NAME, SettingsPage, type SettingsPageProps } from "./SettingsPage.js";
+
+Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -37,68 +39,114 @@ const SESSION: SessionView = Object.freeze({
   }),
 });
 
+async function inspectSection(
+  id: string | null,
+  overrides: Partial<SettingsPageProps>,
+  inspect: (renderer: ReactTestRenderer, output: string) => void,
+) {
+  const previousRaf = Reflect.get(globalThis, "requestAnimationFrame");
+  Reflect.set(globalThis, "requestAnimationFrame", (callback: () => void) => {
+    callback();
+    return 1;
+  });
+  let renderer!: ReactTestRenderer;
+  try {
+    await act(async () => {
+      renderer = create(
+        createElement(
+          ToastProvider,
+          null,
+          createElement(SettingsPage, {
+            session: SESSION,
+            authClient: createMockAuthClient(),
+            commandClient: createMockCommandClient(),
+            ...overrides,
+          }),
+        ),
+      );
+    });
+    if (id !== null) {
+      assert.equal(renderer.root.findByProps({ id }).props.hidden, true);
+      assert.equal(renderer.root.findByProps({ id }).children.length, 0);
+      await act(async () => {
+        const select = renderer.root
+          .findByProps({ className: "ld-settings-mobile-select ld-field" })
+          .findByType("select");
+        (select.props.onChange as (event: { target: { value: string } }) => void)({
+          target: { value: id },
+        });
+      });
+      assert.equal(renderer.root.findByProps({ id }).props.hidden, false);
+    }
+    inspect(renderer, JSON.stringify(renderer.toJSON()));
+  } finally {
+    if (renderer) await act(async () => renderer.unmount());
+    if (previousRaf === undefined) Reflect.deleteProperty(globalThis, "requestAnimationFrame");
+    else Reflect.set(globalThis, "requestAnimationFrame", previousRaf);
+  }
+}
+
 test("PRINTER_PATH_ENV_NAME is LAUNDRY_PRINTER_PATH", () => {
   assert.equal(PRINTER_PATH_ENV_NAME, "LAUNDRY_PRINTER_PATH");
 });
 
-test("remote assistance settings stay hidden; when offered they require an admin and start disabled", () => {
+test("remote assistance settings stay hidden; when offered they require an admin and start disabled", async () => {
   const unavailable = async () => ({ ok: false as const, error: "unconfigured" });
   const remoteAssistancePort: RemoteAssistancePort = {
     status: unavailable,
     authorize: unavailable,
     revoke: unavailable,
   };
-  const render = (role: SessionView["role"], available: boolean) =>
-    renderToStaticMarkup(
-      createElement(
-        ToastProvider,
-        null,
-        createElement(SettingsPage, {
-          session: { ...SESSION, role },
-          authClient: createMockAuthClient(),
-          commandClient: createMockCommandClient(),
-          publicEntryFeatures,
-          ...(available ? { remoteAssistancePort } : {}),
-        }),
-      ),
-    );
-  let publicEntryFeatures = false;
   // ADR-91 D-1/D-2: hidden from every host until the public entry is decided.
-  assert.doesNotMatch(render("admin", true), /settings-remote-assistance/u);
-  publicEntryFeatures = true;
-  assert.doesNotMatch(render("admin", false), /开启一小时协助/u);
-  assert.doesNotMatch(render("staff", true), /开启一小时协助/u);
-  const html = render("admin", true);
-  assert.match(html, /settings-remote-assistance/u);
-  assert.match(html, /当前管理员密码/u);
-  assert.match(html, /<button[^>]*disabled=""[^>]*>开启一小时协助/u);
+  for (const [role, publicEntryFeatures, available] of [
+    ["admin", false, true],
+    ["admin", true, false],
+    ["staff", true, true],
+  ] as const) {
+    await inspectSection(
+      null,
+      {
+        session: { ...SESSION, role },
+        publicEntryFeatures,
+        ...(available ? { remoteAssistancePort } : {}),
+      },
+      (renderer) => {
+        assert.equal(renderer.root.findAllByProps({ id: "settings-remote-assistance" }).length, 0);
+      },
+    );
+  }
+  await inspectSection(
+    "settings-remote-assistance",
+    { publicEntryFeatures: true, remoteAssistancePort },
+    (renderer, output) => {
+      assert.match(output, /当前管理员密码/u);
+      const enable = renderer.root
+        .findAllByType("button")
+        .find((node) => node.children.join("") === "开启一小时协助");
+      assert.ok(enable);
+      assert.equal(enable.props.disabled, true);
+    },
+  );
 });
 
-test("SettingsPage SSR keeps the legacy path smoke CLI-only", () => {
-  const html = renderToStaticMarkup(
-    createElement(
-      ToastProvider,
-      null,
-      createElement(SettingsPage, {
-        session: SESSION,
-        authClient: createMockAuthClient(),
-        commandClient: createMockCommandClient(),
-      }),
-    ),
-  );
-
-  assert.match(html, /串口 \/ USB 直连打印机诊断/);
-  assert.match(html, /data-testid="printer-smoke-section"/);
-  assert.match(html, /data-testid="printer-smoke-static"/);
-  assert.match(html, /LAUNDRY_PRINTER_PATH/);
-  assert.match(html, /printer-smoke/);
-  assert.match(html, /--validate/);
-  assert.match(html, /COM3/);
-  assert.match(html, /LPT1/);
-  assert.match(html, /USB001/);
-  assert.doesNotMatch(html, /data-testid="printer-smoke-run"/);
-  assert.doesNotMatch(html, /#ff0000/i);
-  assert.doesNotMatch(html, /rgb\(/i);
+test("visiting technical support keeps the legacy printer path smoke CLI-only", async () => {
+  await inspectSection("settings-support", {}, (renderer, output) => {
+    assert.match(output, /串口 \/ USB 直连打印机诊断/u);
+    assert.ok(renderer.root.findByProps({ "data-testid": "printer-smoke-section" }));
+    assert.ok(renderer.root.findByProps({ "data-testid": "printer-smoke-static" }));
+    for (const text of [
+      "LAUNDRY_PRINTER_PATH",
+      "printer-smoke",
+      "--validate",
+      "COM3",
+      "LPT1",
+      "USB001",
+    ]) {
+      assert.ok(output.includes(text), text);
+    }
+    assert.equal(renderer.root.findAllByProps({ "data-testid": "printer-smoke-run" }).length, 0);
+    assert.doesNotMatch(output, /#ff0000|rgb\(/iu);
+  });
 });
 
 test("SettingsPage source cannot reconnect renderer printer smoke", () => {
@@ -107,7 +155,7 @@ test("SettingsPage source cannot reconnect renderer printer smoke", () => {
   assert.match(source, /--validate/u);
 });
 
-test("SettingsPage exposes admin system-printer configuration without claiming physical acceptance", () => {
+test("visiting printer settings exposes admin configuration without claiming physical acceptance", async () => {
   const unavailable = Object.freeze({
     ok: false as const,
     error: Object.freeze({ code: "UNAVAILABLE", message: "not loaded" }),
@@ -118,92 +166,61 @@ test("SettingsPage exposes admin system-printer configuration without claiming p
     configure: async () => unavailable,
     testFixedTicket: async () => unavailable,
   });
-  const html = renderToStaticMarkup(
-    createElement(
-      ToastProvider,
-      null,
-      createElement(SettingsPage, {
-        session: SESSION,
-        authClient: createMockAuthClient(),
-        commandClient: createMockCommandClient(),
-        printerPort,
-      }),
-    ),
-  );
-
-  assert.match(html, /data-testid="printer-settings"/u);
-  assert.match(html, /系统小票打印机/u);
-  assert.match(html, /启用所选队列/u);
-  assert.match(html, /打印固定测试票/u);
-  assert.match(html, /XP-58.*仍须现场验收/u);
+  await inspectSection("settings-printer", { printerPort }, (renderer, output) => {
+    assert.ok(renderer.root.findByProps({ "data-testid": "printer-settings" }));
+    assert.match(output, /系统小票打印机/u);
+    assert.match(output, /启用所选队列/u);
+    assert.match(output, /打印固定测试票/u);
+    assert.match(output, /XP-58.*仍须现场验收/u);
+  });
 });
 
-test("member feature flag gates the complete bonus-rule settings surface", () => {
-  const render = (memberEnabled: boolean) =>
-    renderToStaticMarkup(
-      createElement(
-        ToastProvider,
-        null,
-        createElement(SettingsPage, {
-          session: {
-            ...SESSION,
-            features: Object.freeze({ ...FULL_STORE_FEATURES, member_enabled: memberEnabled }),
-          },
-          authClient: createMockAuthClient(),
-          commandClient: createMockCommandClient(),
-          queryClient: createMockQueryClient(),
-        }),
-      ),
-    );
-
-  assert.doesNotMatch(render(false), /data-testid="member-rules"/);
-  assert.match(render(true), /data-testid="member-rules"/);
+test("member feature flag gates navigation and the complete bonus-rule settings surface", async () => {
+  await inspectSection(
+    null,
+    {
+      session: { ...SESSION, features: { ...FULL_STORE_FEATURES, member_enabled: false } },
+      queryClient: createMockQueryClient(),
+    },
+    (renderer) => {
+      assert.equal(renderer.root.findAllByProps({ id: "settings-member" }).length, 0);
+    },
+  );
+  await inspectSection("settings-member", { queryClient: createMockQueryClient() }, (renderer) => {
+    assert.ok(renderer.root.findByProps({ "data-testid": "member-rules" }));
+  });
 });
 
-test("settings replaces the inert minimum-order demo with store pricing authority", () => {
-  const html = renderToStaticMarkup(
-    createElement(
-      ToastProvider,
-      null,
-      createElement(SettingsPage, {
-        session: SESSION,
-        authClient: createMockAuthClient(),
-        commandClient: createMockCommandClient(),
-        queryClient: createMockQueryClient(),
-      }),
-    ),
+test("visiting pricing settings exposes store pricing authority instead of the minimum-order demo", async () => {
+  await inspectSection(
+    "settings-pricing",
+    { queryClient: createMockQueryClient() },
+    (renderer, output) => {
+      assert.ok(renderer.root.findByProps({ "data-testid": "pricing-settings" }));
+      assert.match(output, /柜台计价设置/u);
+      assert.match(output, /加急固定费/u);
+      assert.match(output, /添加附加项/u);
+      assert.doesNotMatch(output, /最低消费/u);
+    },
   );
-
-  assert.match(html, /data-testid="pricing-settings"/u);
-  assert.match(html, /柜台计价设置/u);
-  assert.match(html, /加急固定费/u);
-  assert.match(html, /添加附加项/u);
-  assert.doesNotMatch(html, /最低消费/u);
 });
 
-test("settings exposes delivery policy configuration and a truthful feature-off quote boundary", () => {
-  const html = renderToStaticMarkup(
-    createElement(
-      ToastProvider,
-      null,
-      createElement(SettingsPage, {
-        session: {
-          ...SESSION,
-          features: Object.freeze({ ...FULL_STORE_FEATURES, delivery_enabled: false }),
-        },
-        authClient: createMockAuthClient(),
-        commandClient: createMockCommandClient(),
-        queryClient: createMockQueryClient(),
-      }),
-    ),
+test("visiting delivery settings exposes policy configuration and a truthful feature-off quote boundary", async () => {
+  await inspectSection(
+    "settings-delivery",
+    {
+      session: { ...SESSION, features: { ...FULL_STORE_FEATURES, delivery_enabled: false } },
+      queryClient: createMockQueryClient(),
+    },
+    (renderer, output) => {
+      assert.ok(renderer.root.findByProps({ "data-testid": "delivery-policy-settings" }));
+      assert.match(output, /服务区域与运费/u);
+      assert.match(output, /每周取送时段/u);
+      assert.match(output, /保存取送策略/u);
+      assert.ok(renderer.root.findByProps({ "data-testid": "delivery-policy-quote" }));
+      assert.match(output, /不查询已占名额、不保留容量，也不创建预约/u);
+      assert.match(output, /本店取送功能当前关闭/u);
+      assert.doesNotMatch(output, /启用取送功能/u);
+    },
   );
-
-  assert.match(html, /data-testid="delivery-policy-settings"/u);
-  assert.match(html, /服务区域与运费/u);
-  assert.match(html, /每周取送时段/u);
-  assert.match(html, /保存取送策略/u);
-  assert.match(html, /data-testid="delivery-policy-quote"/u);
-  assert.match(html, /不查询已占名额、不保留容量，也不创建预约/u);
-  assert.match(html, /本店取送功能当前关闭/u);
-  assert.doesNotMatch(html, /启用取送功能/u);
 });

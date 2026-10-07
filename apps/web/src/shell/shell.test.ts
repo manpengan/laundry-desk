@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createElement } from "react";
+import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { ToastProvider } from "@laundry/ui";
@@ -13,6 +13,7 @@ import type { MaintenancePort } from "../host/maintenance-port.js";
 import type { AppPorts } from "../host/types.js";
 import { App, shellPropsFrom } from "../App.js";
 import { hasLocalPrintQueue, PageHost } from "../pages/PageHost.js";
+import { saveSettingsSection } from "../pages/settings-navigation.js";
 import { CounterShell } from "./CounterShell.js";
 
 const sampleSession: SessionView = Object.freeze({
@@ -49,6 +50,28 @@ function appPorts(): AppPorts {
       get: async () => ({ ok: true as const, data: { status: "ready" as const } }),
     }),
   });
+}
+
+function renderSettingsSection(section: string, element: ReactNode): string {
+  const values = new Map<string, string>();
+  const localStorage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+  };
+  assert.equal(saveSettingsSection(section, localStorage), null);
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { localStorage, matchMedia: () => ({ matches: false }) },
+  });
+  try {
+    return renderToStaticMarkup(element);
+  } finally {
+    if (previousWindow === undefined) Reflect.deleteProperty(globalThis, "window");
+    else Object.defineProperty(globalThis, "window", previousWindow);
+  }
 }
 
 test("App shell mapping preserves the exact injected auth, command, and query ports", () => {
@@ -115,28 +138,34 @@ test("PageHost settings forwards the desktop printer port to the admin panel", (
     ok: false as const,
     error: Object.freeze({ code: "UNAVAILABLE", message: "not loaded" }),
   });
-  const html = renderToStaticMarkup(
-    createElement(
-      ToastProvider,
-      null,
-      createElement(PageHost, {
-        activeId: "settings",
-        onNavigate: () => undefined,
-        session: sampleSession,
-        authClient: createMockAuthClient(),
-        commandClient: createMockCommandClient(),
-        printerPort: Object.freeze({
-          discover: async () => unavailable,
-          status: async () => unavailable,
-          configure: async () => unavailable,
-          testFixedTicket: async () => unavailable,
+  const printerPort = Object.freeze({
+    discover: async () => unavailable,
+    status: async () => unavailable,
+    configure: async () => unavailable,
+    testFixedTicket: async () => unavailable,
+  });
+  const render = (role: SessionView["role"], available = true) =>
+    renderSettingsSection(
+      "settings-printer",
+      createElement(
+        ToastProvider,
+        null,
+        createElement(PageHost, {
+          activeId: "settings",
+          onNavigate: () => undefined,
+          session: { ...sampleSession, role },
+          authClient: createMockAuthClient(),
+          commandClient: createMockCommandClient(),
+          ...(available ? { printerPort } : {}),
         }),
-      }),
-    ),
-  );
+      ),
+    );
+  const html = render("admin");
 
   assert.match(html, /data-testid="printer-settings"/u);
   assert.match(html, /系统小票打印机/u);
+  assert.doesNotMatch(render("staff"), /settings-printer|data-testid="printer-settings"/u);
+  assert.doesNotMatch(render("admin", false), /settings-printer|data-testid="printer-settings"/u);
 });
 
 test("PageHost pickup with session+commandClient mounts PickupPage form", () => {
@@ -281,13 +310,17 @@ test("CounterShell hands the desktop maintenance port to the backup settings", (
     open: async () => ({ ok: true as const, data: true as const }),
     handoff: async () => ({ ok: true as const, data: true as const }),
   });
-  const render = (extra: Readonly<{ maintenancePort?: MaintenancePort }>) =>
-    renderToStaticMarkup(
+  const render = (
+    extra: Readonly<{ maintenancePort?: MaintenancePort }>,
+    role: SessionView["role"] = "admin",
+  ) =>
+    renderSettingsSection(
+      "settings-backup",
       createElement(
         ToastProvider,
         null,
         createElement(CounterShell, {
-          session: sampleSession,
+          session: { ...sampleSession, role },
           authClient: createMockAuthClient(),
           commandClient: createMockCommandClient(),
           queryClient: createMockQueryClient(),
@@ -301,7 +334,11 @@ test("CounterShell hands the desktop maintenance port to the backup settings", (
   assert.match(render({}), /当前 Web 环境无法读取本机备份状态/);
   const desktop = render({ maintenancePort });
   assert.match(desktop, /刷新备份状态/);
+  assert.match(desktop, /打开维护程序/);
   assert.doesNotMatch(desktop, /当前 Web 环境无法读取本机备份状态/);
+  const staff = render({ maintenancePort }, "staff");
+  assert.match(staff, /data-route-gate="denied" data-denied-nav="settings"/u);
+  assert.doesNotMatch(staff, /刷新备份状态|打开维护程序|创建本机备份|>恢复演练</u);
 });
 
 test("CounterShell print indicator idle by default (self-managed SSR first paint)", () => {

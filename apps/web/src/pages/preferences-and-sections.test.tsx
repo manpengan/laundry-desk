@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createElement, useState } from "react";
+import { createElement, useEffect, useState } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { ToastProvider } from "@laundry/ui";
 import { createMockAuthClient } from "../auth/AuthClient.js";
 import type { SessionView } from "../auth/types.js";
 import { createMockQueryClient } from "../commands/query-client.js";
+import { createMockCommandClient } from "../commands/command-client.js";
+import type { QueryExecutionOptions, QueryPort } from "../commands/types.js";
 import { SettingsLayout, type SettingsSection } from "./SettingsLayout.js";
+import { SettingsPage } from "./SettingsPage.js";
 import { readSettingsSection, saveSettingsSection } from "./settings-navigation.js";
 import { StatsPage } from "./StatsPage.js";
 import {
@@ -85,6 +88,215 @@ function selectSection(renderer: ReactTestRenderer, id: string) {
     }) => void
   )({ target: { value: id } });
 }
+function searchSettings(renderer: ReactTestRenderer, value: string) {
+  (
+    renderer.root.findByProps({ name: "settings-search" }).props.onChange as (event: {
+      target: { value: string };
+    }) => void
+  )({ target: { value } });
+}
+function ReadingPanel({ id, read }: Readonly<{ id: string; read: (id: string) => void }>) {
+  useEffect(() => read(id), [id, read]);
+  return id === "settings-catalog" ? <Draft /> : <span>{id}</span>;
+}
+function readingSections(read: (id: string) => void): readonly SettingsSection[] {
+  return [...sections, { id: "settings-printer", label: "打印机", icon: "settings" as const }].map(
+    (section) => ({ ...section, content: <ReadingPanel id={section.id} read={read} /> }),
+  );
+}
+
+test("settings mount only the saved section, search matches and explicitly requested panels", async () => {
+  const saved = storage();
+  saveSettingsSection("settings-appearance", saved);
+  const restore = installStorage(saved);
+  const reads: string[] = [];
+  const available = readingSections((id) => {
+    reads.push(id);
+  });
+  let renderer!: ReactTestRenderer;
+  try {
+    await act(async () => {
+      renderer = create(
+        <SettingsLayout
+          sections={available}
+          session={SESSION}
+          authClient={createMockAuthClient()}
+        />,
+      );
+    });
+    assert.deepEqual(
+      reads,
+      ["settings-appearance"],
+      "saved appearance must not first read catalog",
+    );
+    assert.equal(renderer.root.findByProps({ id: "settings-catalog" }).props.hidden, true);
+    await act(async () => searchSettings(renderer, "旧版"));
+    assert.deepEqual(reads, ["settings-appearance", "settings-migration"]);
+    assert.equal(renderer.root.findByProps({ id: "settings-migration" }).props.hidden, false);
+    await act(async () => searchSettings(renderer, "没有匹配项"));
+    assert.equal(reads.length, 2);
+    await act(async () => searchSettings(renderer, ""));
+    assert.equal(reads.length, 2, "clearing search must not mount all panels");
+    assert.equal(renderer.root.findByProps({ id: "settings-appearance" }).props.hidden, false);
+    await act(async () => selectSection(renderer, "settings-migration"));
+    assert.equal(reads.length, 2, "visiting a search result must reuse its mounted panel");
+    await act(async () => click(renderer, "查看全部设置"));
+    assert.deepEqual([...reads].sort(), available.map((section) => section.id).sort());
+    assert.ok(
+      available.every((section) => !renderer.root.findByProps({ id: section.id }).props.hidden),
+    );
+    await act(async () => selectSection(renderer, "settings-appearance"));
+    await act(async () => click(renderer, "查看全部设置"));
+    assert.equal(reads.length, available.length, "returning must not repeat mount-time reads");
+  } finally {
+    if (renderer) await act(async () => renderer.unmount());
+    restore();
+  }
+});
+
+test("opening saved appearance reads only the setup overview until business sections are visited", async () => {
+  const saved = storage();
+  saveSettingsSection("settings-appearance", saved);
+  const restore = installStorage(saved);
+  const reads: string[] = [];
+  const mockQuery = createMockQueryClient();
+  const queryClient: QueryPort = {
+    execute<T>(name: string, body?: unknown, options?: QueryExecutionOptions) {
+      reads.push(name);
+      return mockQuery.execute<T>(name, body, options);
+    },
+  };
+  let renderer!: ReactTestRenderer;
+  const select = (id: string) => {
+    const navigation = renderer.root
+      .findByProps({ className: "ld-settings-mobile-select ld-field" })
+      .findByType("select");
+    (navigation.props.onChange as (event: { target: { value: string } }) => void)({
+      target: { value: id },
+    });
+  };
+  try {
+    await act(async () => {
+      renderer = create(
+        <ToastProvider>
+          <SettingsPage
+            session={{ ...SESSION, role: "admin", features: { member_enabled: true } }}
+            authClient={createMockAuthClient()}
+            commandClient={createMockCommandClient()}
+            queryClient={queryClient}
+          />
+        </ToastProvider>,
+      );
+    });
+    assert.deepEqual(reads, ["catalog.items.list", "pricing.policy.get"]);
+    await act(async () => select("settings-catalog"));
+    assert.deepEqual(reads.slice(2), ["catalog.items.manage.list", "catalog.audit.list"]);
+    await act(async () => select("settings-pricing"));
+    assert.deepEqual(reads.slice(4), ["pricing.policy.get"]);
+    await act(async () => select("settings-appearance"));
+    await act(async () => select("settings-catalog"));
+    assert.equal(reads.length, 5, "returning to visited panels must not repeat initial reads");
+  } finally {
+    if (renderer) await act(async () => renderer.unmount());
+    restore();
+  }
+});
+
+const scopeChanges: ReadonlyArray<readonly [string, Partial<SessionView["session"]>]> = [
+  ["session", { session_id: "another-session" }],
+  ["session revision", { session_version: 2 }],
+  ["staff", { staff_id: "another-staff" }],
+  ["store", { store_id: "another-store" }],
+  ["organization", { org_id: "another-org" }],
+  ["permissions", { permission_version: 2 }],
+];
+for (const [label, changes] of scopeChanges) {
+  test(`settings isolate visited panels and drafts after changing ${label}`, async () => {
+    const restore = installStorage(storage());
+    const reads: string[] = [];
+    const available = readingSections((id) => {
+      reads.push(id);
+    });
+    const authClient = createMockAuthClient();
+    let renderer!: ReactTestRenderer;
+    try {
+      await act(async () => {
+        renderer = create(
+          <SettingsLayout sections={available} session={SESSION} authClient={authClient} />,
+        );
+      });
+      await act(async () => {
+        (
+          renderer.root.findByProps({ "aria-label": "测试草稿" }).props.onChange as (event: {
+            currentTarget: { value: string };
+          }) => void
+        )({ currentTarget: { value: "旧工作区草稿" } });
+        selectSection(renderer, "settings-appearance");
+      });
+      await act(async () => {
+        renderer.update(
+          <SettingsLayout
+            sections={available}
+            session={{ ...SESSION, session: { ...SESSION.session, ...changes } }}
+            authClient={authClient}
+          />,
+        );
+      });
+      assert.deepEqual(reads, ["settings-catalog", "settings-appearance", "settings-appearance"]);
+      assert.equal(renderer.root.findAllByProps({ "aria-label": "测试草稿" }).length, 0);
+      await act(async () => selectSection(renderer, "settings-catalog"));
+      assert.equal(renderer.root.findByProps({ "aria-label": "测试草稿" }).props.value, "");
+    } finally {
+      if (renderer) await act(async () => renderer.unmount());
+      restore();
+    }
+  });
+}
+
+test("settings revalidate saved selection and discard visited panels when allowed sections change", async () => {
+  const restore = installStorage(storage());
+  const reads: string[] = [];
+  const available = readingSections((id) => {
+    reads.push(id);
+  });
+  const authClient = createMockAuthClient();
+  let renderer!: ReactTestRenderer;
+  try {
+    await act(async () => {
+      renderer = create(
+        <SettingsLayout sections={available} session={SESSION} authClient={authClient} />,
+      );
+    });
+    await act(async () => selectSection(renderer, "settings-migration"));
+    await act(async () => {
+      renderer.update(
+        <SettingsLayout
+          sections={available.filter((section) => section.id !== "settings-migration")}
+          session={SESSION}
+          authClient={authClient}
+        />,
+      );
+    });
+    assert.deepEqual(reads, ["settings-catalog", "settings-migration", "settings-catalog"]);
+    assert.equal(renderer.root.findAllByProps({ id: "settings-migration" }).length, 0);
+    assert.equal(renderer.root.findByProps({ id: "settings-catalog" }).props.hidden, false);
+    await act(async () => {
+      renderer.update(
+        <SettingsLayout sections={available} session={SESSION} authClient={authClient} />,
+      );
+    });
+    assert.deepEqual(reads, [
+      "settings-catalog",
+      "settings-migration",
+      "settings-catalog",
+      "settings-migration",
+    ]);
+    assert.equal(renderer.root.findByProps({ id: "settings-catalog" }).props.hidden, true);
+  } finally {
+    if (renderer) await act(async () => renderer.unmount());
+    restore();
+  }
+});
 
 test("settings remember only a currently permitted section and fall back to common settings", () => {
   const saved = storage();
