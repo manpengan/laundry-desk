@@ -103,6 +103,10 @@ async function horizontalOverflow(page: Page): Promise<Readonly<Record<string, u
   return page.evaluate(() => {
     const clientWidth = document.documentElement.clientWidth;
     const offenders = Array.from(document.querySelectorAll<HTMLElement>("body *"))
+      // The skip link parks off-screen by design. The aurora backdrop (ADR-99) is a
+      // fixed, overflow-clipped decorative layer whose colour fields outgrow the
+      // viewport on purpose; scrollWidth below still proves it never scrolls.
+      .filter((element) => !element.matches("a.ld-skip-link") && !element.closest(".lg-aurora"))
       .map((element) => {
         const bounds = element.getBoundingClientRect();
         return {
@@ -110,9 +114,7 @@ async function horizontalOverflow(page: Page): Promise<Readonly<Record<string, u
           label: `${element.tagName.toLowerCase()}.${Array.from(element.classList).join(".")}`,
         };
       })
-      .filter(({ bounds, label }) =>
-        label === "a.ld-skip-link" ? false : bounds.right + scrollX > clientWidth + 1,
-      )
+      .filter(({ bounds }) => bounds.right + scrollX > clientWidth + 1)
       .slice(0, 12)
       .map(
         ({ bounds, label }) =>
