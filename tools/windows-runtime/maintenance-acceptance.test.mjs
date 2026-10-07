@@ -46,12 +46,17 @@ test("cross-schema acceptance builds an ordinal canonical candidate before launc
   let launches = 0;
   await assert.rejects(
     maintenanceAcceptance({
+      root: folder,
       // This regression executes the real candidate builder, stopping before any service action.
       scenario: async (name, action) => {
         if (name === "cross-schema-shadow-upgrade-and-paired-snapshot-rollback") await action();
       },
       variant: async () => ({ folder, hash: digest(originalBytes) }),
       command: async (action, source, hash) => {
+        if (action === "backup-schedule") {
+          await writeFile(join(folder, "backup-schedule.json"), JSON.stringify({ enabled: false }));
+          return;
+        }
         launches += 1;
         assert.equal(action, "upgrade");
         assert.equal(source, folder);
