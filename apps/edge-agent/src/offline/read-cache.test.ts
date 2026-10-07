@@ -282,3 +282,366 @@ test("a successful staff or tenant switch replaces prior cached projections and 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("online binding and projection persist once and retain other committed query keys", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-cache-combined-"));
+  let writes = 0;
+  const storage = {
+    ...safeStorage,
+    encryptString: (value: string) => {
+      writes += 1;
+      return safeStorage.encryptString(value);
+    },
+  };
+  const now = () => new Date("2026-07-30T01:00:00.000Z");
+  const session = sessionOf();
+  const second = { name: "order.list", body: { status: "closed", limit: 20 } };
+  try {
+    const cache = createCache(root, now, storage);
+    assert.equal(
+      await cache.bindAndPut(
+        session,
+        authorityFor(session),
+        orderListInput,
+        orderListResult,
+        () => true,
+      ),
+      true,
+    );
+    assert.equal(writes, 1);
+    // Another instance's completed write must be visible; no decrypted in-memory snapshot.
+    const other = createCache(root, now, storage);
+    assert.equal(
+      await other.bindAndPut(session, authorityFor(session), second, orderListResult, () => true),
+      true,
+    );
+    assert.equal(writes, 2);
+    const third = { name: "order.list", body: { status: "open", limit: 10 } };
+    assert.equal(
+      await cache.bindAndPut(session, authorityFor(session), third, orderListResult, () => true),
+      true,
+    );
+    assert.equal(writes, 3);
+    const reopened = createCache(root, now);
+    assert.equal(reopened.resume()?.cachedQueryCount, 3);
+    for (const input of [orderListInput, second, third])
+      assert.deepEqual(await reopened.get(session, input), orderListResult);
+    assert.doesNotMatch(
+      await readFile(join(root, "offline-read-cache.json"), "utf8"),
+      /order\.list|13800000001|offline_grant/u,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("uncacheable online results still refresh full session, grant and clock checkpoint", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-cache-bound-"));
+  let nowMs = Date.parse("2026-07-30T01:00:00.000Z");
+  try {
+    const original = sessionOf(),
+      cache = createCache(root, () => new Date(nowMs));
+    await cache.bindAndPut(
+      original,
+      authorityFor(original),
+      orderListInput,
+      orderListResult,
+      () => true,
+    );
+    const refreshed = DesktopSessionViewSchema.parse({
+      ...original,
+      role: "admin",
+      display: { ...original.display, staff_name: "新显示名" },
+      features: { member_enabled: false },
+    });
+    nowMs += 1_000;
+    const renewed = authorityFor(refreshed, "2026-07-30T00:01:00.000Z", "2026-07-30T12:01:00.000Z");
+    assert.equal(
+      await cache.bindAndPut(
+        refreshed,
+        renewed,
+        { name: "customer.duplicates", body: { customer_id: STAFF_ID } },
+        orderListResult,
+        () => true,
+      ),
+      false,
+    );
+    assert.deepEqual(cache.resume()?.sessionView, refreshed);
+    assert.equal(cache.resume()?.grantNotAfter, "2026-07-30T12:01:00.000Z");
+    nowMs += 1_000;
+    const oversized = {
+      ok: true,
+      data: { execution: "executed", result: { blob: "x".repeat(330 * 1024) } },
+    };
+    assert.equal(
+      await cache.bindAndPut(refreshed, renewed, orderListInput, oversized, () => true),
+      false,
+    );
+    assert.deepEqual(await cache.get(refreshed, orderListInput), orderListResult);
+    nowMs -= 500;
+    await assert.rejects(
+      cache.bindAndPut(refreshed, renewed, orderListInput, orderListResult, () => true),
+      /wall-clock rollback/u,
+    );
+    assert.equal(cache.resume(), null);
+    nowMs = Date.parse("2026-07-30T12:01:00.000Z");
+    await assert.rejects(
+      cache.bindAndPut(refreshed, renewed, orderListInput, orderListResult, () => true),
+      /authority is invalid/u,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("combined write drops old identity entries and rejects a forged grant before pinning", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-cache-identity-"));
+  const now = () => new Date("2026-07-30T01:00:00.000Z");
+  try {
+    const first = sessionOf(),
+      cache = createCache(root, now);
+    await cache.bindAndPut(first, authorityFor(first), orderListInput, orderListResult, () => true);
+    const second = sessionOf({
+      session_id: "81a2eed0-a6c3-493c-a3a7-20bf94b1d678",
+      staff_id: "91a2eed0-a6c3-493c-a3a7-20bf94b1d678",
+      permission_version: 4,
+    });
+    const nextInput = { name: "order.list", body: { status: "closed", limit: 20 } };
+    await cache.bindAndPut(second, authorityFor(second), nextInput, orderListResult, () => true);
+    assert.equal(await cache.get(first, orderListInput), null);
+    assert.equal(await cache.get(second, orderListInput), null);
+    assert.deepEqual(await cache.get(second, nextInput), orderListResult);
+    let pinCalls = 0;
+    const untrusted = new OfflineReadCache({
+      rootPath: root,
+      now,
+      safeStorage,
+      authorityTrust: {
+        accept: () => {
+          pinCalls += 1;
+          return true;
+        },
+      },
+    });
+    const grant = authorityFor(second);
+    await assert.rejects(
+      untrusted.bindAndPut(
+        second,
+        { ...grant, offlineGrant: { ...grant.offlineGrant, sig: "A".repeat(86) } },
+        nextInput,
+        orderListResult,
+        () => true,
+      ),
+      /authority is invalid/u,
+    );
+    assert.equal(pinCalls, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("combined writes reread tampered and deleted files and reject a linked destination", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-cache-file-change-"));
+  const now = () => new Date("2026-07-30T01:00:00.000Z");
+  try {
+    const session = sessionOf(),
+      cache = createCache(root, now),
+      path = join(root, "offline-read-cache.json");
+    await cache.bindAndPut(
+      session,
+      authorityFor(session),
+      orderListInput,
+      orderListResult,
+      () => true,
+    );
+    const old = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    await writeFile(
+      path,
+      JSON.stringify({ ...old, auth_tag: Buffer.alloc(16).toString("base64") }),
+    );
+    assert.equal(await cache.get(session, orderListInput), null);
+    const next = { name: "order.list", body: { status: "closed", limit: 20 } };
+    await cache.bindAndPut(session, authorityFor(session), next, orderListResult, () => true);
+    assert.equal(await cache.get(session, orderListInput), null);
+    assert.deepEqual(await cache.get(session, next), orderListResult);
+    await rm(path);
+    assert.equal(cache.resume(), null);
+    await cache.bindAndPut(
+      session,
+      authorityFor(session),
+      orderListInput,
+      orderListResult,
+      () => true,
+    );
+    assert.equal(await cache.get(session, next), null);
+    await rm(path);
+    const target = join(root, "untouched.json");
+    await writeFile(target, "untouched");
+    await symlink(target, path);
+    await assert.rejects(
+      cache.bindAndPut(session, authorityFor(session), orderListInput, orderListResult, () => true),
+      /Invalid offline read cache/u,
+    );
+    assert.equal(await readFile(target, "utf8"), "untouched");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("combined writes cannot repopulate after logout during schema parsing or before commit", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-cache-stale-"));
+  try {
+    const session = sessionOf(),
+      cache = createCache(root, () => new Date("2026-07-30T01:00:00.000Z"));
+    await cache.bindAndPut(
+      session,
+      authorityFor(session),
+      orderListInput,
+      orderListResult,
+      () => true,
+    );
+    let active = true;
+    const pending = cache.bindAndPut(
+      session,
+      authorityFor(session),
+      orderListInput,
+      orderListResult,
+      () => active,
+    );
+    active = false;
+    cache.clear();
+    assert.equal(await pending, false);
+    assert.equal(cache.resume(), null);
+    let calls = 0;
+    assert.equal(
+      await cache.bindAndPut(
+        session,
+        authorityFor(session),
+        orderListInput,
+        orderListResult,
+        () => ++calls === 1,
+      ),
+      false,
+    );
+    assert.equal(calls, 2);
+    assert.equal(cache.resume(), null);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("switching identity keeps a future checkpoint and does not cache a rolled-back query", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-cache-switch-clock-"));
+  let nowMs = Date.parse("2026-07-30T02:00:00.000Z");
+  try {
+    const cache = createCache(root, () => new Date(nowMs)),
+      first = sessionOf();
+    await cache.bindAndPut(first, authorityFor(first), orderListInput, orderListResult, () => true);
+    nowMs -= 60_000;
+    const next = sessionOf({
+      session_id: "81a2eed0-a6c3-493c-a3a7-20bf94b1d678",
+      staff_id: "91a2eed0-a6c3-493c-a3a7-20bf94b1d678",
+    });
+    assert.equal(
+      await cache.bindAndPut(next, authorityFor(next), orderListInput, orderListResult, () => true),
+      false,
+    );
+    assert.equal(cache.resume(), null);
+    nowMs += 30_000;
+    await assert.rejects(
+      cache.bindAndPut(next, authorityFor(next), orderListInput, orderListResult, () => true),
+      /wall-clock rollback/u,
+    );
+    nowMs += 30_000;
+    assert.equal(
+      await cache.bindAndPut(next, authorityFor(next), orderListInput, orderListResult, () => true),
+      true,
+    );
+    assert.equal(await cache.get(first, orderListInput), null);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("failed combined encryption preserves the prior protected cache and permits recovery", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-cache-write-failure-"));
+  let failed = false;
+  const storage = {
+    ...safeStorage,
+    encryptString: (text: string) => {
+      if (failed) throw new Error("Synthetic OS storage error");
+      return safeStorage.encryptString(text);
+    },
+  };
+  try {
+    const session = sessionOf(),
+      now = () => new Date("2026-07-30T01:00:00.000Z"),
+      cache = createCache(root, now, storage);
+    await cache.bindAndPut(
+      session,
+      authorityFor(session),
+      orderListInput,
+      orderListResult,
+      () => true,
+    );
+    const path = join(root, "offline-read-cache.json"),
+      prior = await readFile(path);
+    const next = { name: "order.list", body: { status: "closed", limit: 20 } };
+    failed = true;
+    await assert.rejects(
+      cache.bindAndPut(session, authorityFor(session), next, orderListResult, () => true),
+      /Synthetic OS storage error/u,
+    );
+    assert.deepEqual(await readFile(path), prior);
+    failed = false;
+    assert.deepEqual(await cache.get(session, orderListInput), orderListResult);
+    assert.equal(await cache.get(session, next), null);
+    assert.equal(
+      await cache.bindAndPut(session, authorityFor(session), next, orderListResult, () => true),
+      true,
+    );
+    assert.deepEqual(await createCache(root, now).get(session, next), orderListResult);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a full query cache evicts its oldest entry while persisting the renewed grant", async () => {
+  const root = await mkdtemp(join(tmpdir(), "laundry-cache-capacity-"));
+  let nowMs = Date.parse("2026-07-30T01:00:00.000Z");
+  const inputAt = (offset: number) => ({
+    name: "order.list",
+    body: { status: "open", offset, limit: 20 },
+  });
+  try {
+    const session = sessionOf(),
+      cache = createCache(root, () => new Date(nowMs));
+    for (let index = 0; index < 128; index += 1) {
+      nowMs += 1;
+      assert.equal(
+        await cache.bindAndPut(
+          session,
+          authorityFor(session),
+          inputAt(index),
+          orderListResult,
+          () => true,
+        ),
+        true,
+      );
+    }
+    nowMs += 1;
+    const renewed = authorityFor(session, "2026-07-30T00:01:00.000Z", "2026-07-30T12:01:00.000Z");
+    assert.equal(
+      await cache.bindAndPut(session, renewed, inputAt(128), orderListResult, () => true),
+      true,
+    );
+    const resumed = createCache(root, () => new Date(nowMs)).resume();
+    assert.equal(resumed?.cachedQueryCount, 128);
+    assert.equal(resumed?.grantNotAfter, "2026-07-30T12:01:00.000Z");
+    assert.equal(await cache.get(session, inputAt(0)), null);
+    assert.deepEqual(await cache.get(session, inputAt(1)), orderListResult);
+    assert.deepEqual(await cache.get(session, inputAt(128)), orderListResult);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

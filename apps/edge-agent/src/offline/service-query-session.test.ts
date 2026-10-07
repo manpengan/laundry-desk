@@ -48,14 +48,16 @@ function deferred() {
 type Stage = "query" | "maintenance" | "health" | "cache-read" | "cache-write";
 type Transition = "switch-staff" | "logout" | "new-session" | "refresh";
 
-function fixture() {
+function fixture(combined = false, recoveryReadOnly = false) {
   let pausedStage: Stage | null = null;
   let remoteAvailable = true;
+  let failCacheWrite = false;
   let refreshedSession: DesktopSessionView | null = null;
   const started = deferred();
   const gate = deferred();
   const transitioned = deferred();
   const writes: DesktopSessionView[] = [];
+  const cacheCalls: string[] = [];
   const reads: DesktopSessionView[] = [];
   const reconciled: Array<DesktopSessionView | null> = [];
   const pause = async (stage: Stage) => {
@@ -94,7 +96,7 @@ function fixture() {
       return true;
     },
     replay: async () => undefined,
-    exportReadAuthority: () => null,
+    exportReadAuthority: () => (combined ? Object.freeze({}) : null),
     reconcileSession: (session: DesktopSessionView | null) => {
       reconciled.push(session);
       if (reconciled.length > 1) transitioned.release();
@@ -103,7 +105,26 @@ function fixture() {
     clearReadAuthority: () => undefined,
   } as unknown as OfflineCommandRuntime;
   const cache = {
+    bind: () => {
+      cacheCalls.push("bind");
+    },
+    bindAndPut: async (
+      session: DesktopSessionView,
+      _authority: unknown,
+      _input: unknown,
+      _result: unknown,
+      isCurrent: () => boolean,
+    ) => {
+      cacheCalls.push("bindAndPut");
+      await pause("cache-write");
+      if (!isCurrent()) return false;
+      if (failCacheWrite) throw new Error("Synthetic persistence failure");
+      writes.push(session);
+      return true;
+    },
     put: async (session: DesktopSessionView) => {
+      cacheCalls.push("put");
+      if (failCacheWrite) throw new Error("Synthetic persistence failure");
       writes.push(session);
       await pause("cache-write");
       return true;
@@ -120,13 +141,17 @@ function fixture() {
       grantNotAfter: "2026-07-30T12:00:00.000Z",
     }),
   } as unknown as OfflineReadCache;
-  const service = createOfflineDesktopService(online, runtime, cache);
+  const service = createOfflineDesktopService(online, runtime, cache, { recoveryReadOnly });
   return {
     service,
     online,
     writes,
+    cacheCalls,
     reads,
     reconciled,
+    setCacheFailure: (failed: boolean) => {
+      failCacheWrite = failed;
+    },
     pauseAt: (stage: Stage) => {
       pausedStage = stage;
       remoteAvailable = stage !== "health" && stage !== "cache-read";
@@ -217,4 +242,59 @@ test("unchanged online and offline queries retain their original cache identity"
   assert.deepEqual(await pending, answer);
   assert.deepEqual(f.writes, [originalSession]);
   assert.deepEqual(f.reads, [originalSession]);
+});
+
+for (const transition of ["switch-staff", "logout", "new-session", "refresh"] as const) {
+  test(`combined query persistence cannot cross ${transition} during schema parsing`, async () => {
+    const f = fixture(true);
+    await f.service.auth.login(originalSession);
+    f.pauseAt("cache-write");
+    const pending = f.service.query.execute(input);
+    await f.started;
+    const changed = await f.transition(transition);
+    f.release();
+    assert.deepEqual(await pending, {
+      ok: false,
+      error: createCommandError("RESOURCE_UNAVAILABLE", { kind: "reason", reason: "retry_later" }),
+    });
+    if (changed && typeof changed === "object" && "pending" in changed) await changed.pending;
+    assert.deepEqual(
+      f.writes,
+      [],
+      "stale queries must not bind or persist after the async boundary",
+    );
+  });
+}
+
+test("concurrent resumed queries keep both fused updates and restore write permission", async () => {
+  const f = fixture(true);
+  await f.service.offline.resume();
+  f.pauseAt("cache-write");
+  const first = f.service.query.execute(input);
+  await f.started;
+  const second = f.service.query.execute(input);
+  f.release();
+  assert.deepEqual(await Promise.all([first, second]), [answer, answer]);
+  assert.deepEqual(f.writes, [originalSession, originalSession]);
+  assert.deepEqual(await f.service.command.execute({}), answer);
+});
+
+for (const combined of [false, true]) {
+  test(`cache persistence failure preserves online success with authority=${combined}`, async () => {
+    const f = fixture(combined);
+    await f.service.auth.login(originalSession);
+    f.setCacheFailure(true);
+    assert.deepEqual(await f.service.query.execute(input), answer);
+    assert.deepEqual(f.writes, []);
+    f.setCacheFailure(false);
+    assert.deepEqual(await f.service.query.execute(input), answer);
+    assert.deepEqual(f.writes, [originalSession]);
+  });
+}
+
+test("recovery read-only queries never invoke either persistence path or authority binding", async () => {
+  const f = fixture(true, true);
+  await f.service.auth.login(originalSession);
+  assert.deepEqual(await f.service.query.execute(input), answer);
+  assert.deepEqual(f.cacheCalls, []);
 });

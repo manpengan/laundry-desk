@@ -9,7 +9,7 @@ import {
 import type { DesktopHttpTransport } from "../desktop/http-transport.js";
 import type { DesktopOperationService } from "../transport/handlers.js";
 import type { OfflineReadCache } from "./read-cache.js";
-import { createOfflineQueryOperation } from "./query-operation.js";
+import { createOfflineQueryOperation, type QueryCacheUpdate } from "./query-operation.js";
 import { createOfflineReceiveRecovery } from "./receive-recovery-fallback.js";
 import type { OfflineCommandRuntime } from "./runtime.js";
 
@@ -72,7 +72,7 @@ export function createOfflineDesktopService(
     }
   };
 
-  const maintain = (): Promise<void> => {
+  const maintain = (updateCache?: QueryCacheUpdate): Promise<void> => {
     const current = session;
     const revision = sessionRevision;
     if (recoveryReadOnly || current === null) return Promise.resolve();
@@ -89,6 +89,10 @@ export function createOfflineDesktopService(
         return;
       }
       const authority = offline.exportReadAuthority(current);
+      if (updateCache !== undefined) {
+        await updateCache(current, authority);
+        return;
+      }
       if (authority === null) return;
       try {
         cache.bind(current, authority);
