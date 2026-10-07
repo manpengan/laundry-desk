@@ -1,8 +1,6 @@
-/**
- * 取衣（order.pickup）— M2 counter form with partial multi-select via order.get.
- */
+/** 取衣（order.pickup）— M2 counter form with partial multi-select via order.get. */
 
-import { Button, EmptyState, Icon, MoneyInput, useToast } from "@laundry/ui";
+import { EmptyState, Icon, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CommandPort, QueryPort } from "../commands/types.js";
 import {
@@ -22,10 +20,8 @@ import { PaymentCollectionDialog } from "./PaymentCollectionDialog.js";
 import { PickupResult, withPickupDetails, type PickupResultView } from "./PickupDetails.js";
 import { PickupOrderPanel } from "./PickupOrderPanel.js";
 import { PickupLookupForm } from "./PickupLookupForm.js";
-import { mayHandOffFocus, useScanFocus } from "./use-scan-focus.js";
-
-/** Fields a finished lookup may move the caret out of (never 本次收款 etc.). */
-const PICKUP_SCAN_FIELDS = Object.freeze(["pickup-key", "pickup-verification-barcode"]);
+import { PickupActions } from "./PickupActions.js";
+import { usePickupScanFocus } from "./use-pickup-scan-focus.js";
 
 export type PickupPageProps = {
   commandClient: CommandPort;
@@ -48,7 +44,6 @@ export function PickupPage({
 }: PickupPageProps) {
   const toast = useToast();
   const [lookupKey, setLookupKey] = useState(() => initialLookupKey ?? "");
-  const [orderId, setOrderId] = useState(() => initialOrderId ?? "");
   const [collectText, setCollectText] = useState("0");
   const [busy, setBusy] = useState(false);
   const [loadingOrder, setLoadingOrder] = useState(false);
@@ -61,6 +56,43 @@ export function PickupPage({
   const [verifiedBarcodes, setVerifiedBarcodes] = useState<ReadonlySet<string>>(() => new Set());
   const [channelRefresh, setChannelRefresh] = useState(0);
   const lookupSeqRef = useRef(0);
+  const activeOrderRef = useRef<string | null>(null);
+  const submittingRef = useRef(false);
+  const pendingPaymentReloadRef = useRef<string | null>(null);
+  const autoLoadRef = useRef(false);
+
+  useEffect(
+    () => () => {
+      lookupSeqRef.current += 1;
+      activeOrderRef.current = null;
+      pendingPaymentReloadRef.current = null;
+      autoLoadRef.current = false;
+    },
+    [],
+  );
+  const clearDraft = useCallback(() => {
+    activeOrderRef.current = null;
+    pendingPaymentReloadRef.current = null;
+    setLoaded(null);
+    setCollectText("0");
+    setSelected(new Set());
+    setVerifiedBarcodes(new Set());
+    setVerificationBarcode("");
+    setPaymentOpen(false);
+  }, []);
+
+  const onLookupChange = useCallback(
+    (value: string) => {
+      if (submittingRef.current) return;
+      lookupSeqRef.current += 1;
+      clearDraft();
+      setLookupKey(value);
+      setLoadingOrder(false);
+      setMatches([]);
+      setResult(null);
+    },
+    [clearDraft],
+  );
 
   const selectedRacked = useMemo(
     () =>
@@ -72,39 +104,34 @@ export function PickupPage({
   const verifiedRequired = selectedRacked.filter((garment) =>
     verifiedBarcodes.has(garment.barcode.toUpperCase()),
   ).length;
+  const verificationComplete = verifiedRequired === selectedRacked.length;
+  const pickableIds = useMemo(() => selectAllPickableIds(loaded?.garments ?? []), [loaded]);
+  const hasSelection =
+    loaded?.status === "open" &&
+    selected.size > 0 &&
+    [...selected].every((id) => pickableIds.has(id));
 
   const loadOrderById = useCallback(
-    async (id: string, seq: number, inputAtRequest: string) => {
+    async (id: string, seq: number) => {
       if (queryClient === undefined) return;
       const res = await queryClient.execute<unknown>("order.get", { order_id: id });
       if (seq !== lookupSeqRef.current) return;
       if (!res.ok) {
         toast.push(res.error.message ?? res.error.code, "error");
-        setLoaded(null);
-        setSelected(new Set());
-        setVerifiedBarcodes(new Set());
         return;
       }
       const payload = unwrapCommandResult(res.data);
       const parsed = parseOrderGetResult(payload);
       if (parsed === null) {
         toast.push("订单结果无法解析", "error");
-        setLoaded(null);
-        setSelected(new Set());
-        setVerifiedBarcodes(new Set());
         return;
       }
       setLoaded(parsed);
-      setOrderId(parsed.order_id);
-      const ticket = parsed.ticket_no;
-      if (ticket !== null) {
-        setLookupKey((current) => (current === inputAtRequest ? ticket : current));
-      }
+      activeOrderRef.current = parsed.order_id;
+      if (parsed.ticket_no !== null) setLookupKey(parsed.ticket_no);
       setMatches([]);
       const pickableIds = selectAllPickableIds(parsed.garments);
       setSelected(pickableIds);
-      setVerifiedBarcodes(new Set());
-      setVerificationBarcode("");
       if (pickableIds.size === 0) {
         toast.push("订单已加载，但没有可取衣物", "info");
       } else {
@@ -116,6 +143,7 @@ export function PickupPage({
 
   const onLoadOrder = useCallback(
     async (overrideKey?: string) => {
+      if (submittingRef.current) return;
       if (queryClient === undefined) {
         toast.push("查询通道不可用", "error");
         return;
@@ -126,11 +154,13 @@ export function PickupPage({
         return;
       }
       const seq = (lookupSeqRef.current += 1);
+      clearDraft();
+      setMatches([]);
       setLoadingOrder(true);
       setResult(null);
       try {
         if (isValidUuid(key)) {
-          await loadOrderById(key, seq, lookupKey);
+          await loadOrderById(key, seq);
           return;
         }
         const res = await queryClient.execute<unknown>("order.lookup", {
@@ -141,9 +171,6 @@ export function PickupPage({
         if (seq !== lookupSeqRef.current) return;
         if (!res.ok) {
           toast.push(res.error.message ?? res.error.code, "error");
-          setLoaded(null);
-          setSelected(new Set());
-          setVerifiedBarcodes(new Set());
           return;
         }
         const found = parseOrderLookupRows(unwrapCommandResult(res.data));
@@ -154,30 +181,32 @@ export function PickupPage({
         setMatches(found);
         if (found.length === 0) {
           toast.push("未找到匹配订单；请核对输入", "error");
-          setLoaded(null);
-          setSelected(new Set());
-          setVerifiedBarcodes(new Set());
           return;
         }
-        if (found.length === 1) await loadOrderById(found[0]!.order_id, seq, lookupKey);
+        if (found.length === 1) await loadOrderById(found[0]!.order_id, seq);
         else toast.push(`找到 ${found.length} 张订单，请选择`, "info");
       } finally {
         if (seq === lookupSeqRef.current) setLoadingOrder(false);
       }
     },
-    [loadOrderById, lookupKey, queryClient, toast],
+    [clearDraft, loadOrderById, lookupKey, queryClient, toast],
   );
 
   // Opening 取衣 with an order or a lookup (工作台 / 命令面板 / 订单详情) loads it.
   const pageRef = useRef<HTMLElement | null>(null);
-  useScanFocus(pageRef, 'input[name="pickup-key"]');
-  const autoLoadRef = useRef(false);
   useEffect(() => {
     if (autoLoadRef.current || queryClient === undefined) return;
     autoLoadRef.current = true;
     const initialKey = initialOrderId ?? initialLookupKey;
     if (initialKey !== undefined && initialKey.trim().length > 0) void onLoadOrder(initialKey);
   }, [initialLookupKey, initialOrderId, onLoadOrder, queryClient]);
+
+  const onChannelPaid = useCallback(() => {
+    if (loaded === null || activeOrderRef.current !== loaded.order_id) return;
+    setCollectText("0");
+    if (submittingRef.current) pendingPaymentReloadRef.current = loaded.order_id;
+    else void onLoadOrder(loaded.order_id);
+  }, [loaded, onLoadOrder]);
 
   const onToggle = useCallback(
     (garmentId: string) => {
@@ -218,8 +247,17 @@ export function PickupPage({
   }, [selectedRacked, toast, verificationBarcode]);
 
   const onSubmit = useCallback(async () => {
+    if (
+      submittingRef.current ||
+      loadingOrder ||
+      loaded === null ||
+      activeOrderRef.current !== loaded.order_id ||
+      !hasSelection ||
+      !verificationComplete
+    )
+      return;
     const built = buildPickupBody({
-      order_id: orderId,
+      order_id: loaded.order_id,
       collect_cents: collectText,
       garment_ids: [...selected],
       verification_barcodes: [...verifiedBarcodes],
@@ -229,6 +267,7 @@ export function PickupPage({
       toast.push(built.message, "error");
       return;
     }
+    submittingRef.current = true;
     setBusy(true);
     try {
       const res = await commandClient.execute<unknown>("order.pickup", built.body);
@@ -238,52 +277,38 @@ export function PickupPage({
         if (res.error.detail?.reason === "payment_pending") setChannelRefresh((n) => n + 1);
         return;
       }
+      // A confirmed success must never leave its payment draft available for retry.
+      clearDraft();
       const payload = unwrapCommandResult<PickupOrderResult>(res.data);
       if (payload === null || typeof payload.order_id !== "string") {
-        toast.push("取衣成功但结果无法解析", "error");
+        toast.push("取衣已提交，但结果无法解析，请重新查询订单", "error");
         return;
       }
       setResult(withPickupDetails(payload, loaded));
       toast.push(`取衣完成 ${payload.ticket_no ?? payload.order_id}`, "success");
-      // Clear selection of picked items; keep summary until reset.
-      setSelected(new Set());
-      setVerifiedBarcodes(new Set());
-      setLoaded(null);
     } finally {
+      submittingRef.current = false;
       setBusy(false);
+      const reloadId = pendingPaymentReloadRef.current;
+      pendingPaymentReloadRef.current = null;
+      if (reloadId !== null && activeOrderRef.current === reloadId) void onLoadOrder(reloadId);
     }
-  }, [collectText, commandClient, loaded, orderId, selected, toast, verifiedBarcodes]);
-
-  const onReset = useCallback(() => {
-    setLookupKey("");
-    setOrderId("");
-    setCollectText("0");
-    setLoaded(null);
-    setSelected(new Set());
-    setResult(null);
-    setMatches([]);
-    setPaymentOpen(false);
-    setVerificationBarcode("");
-    setVerifiedBarcodes(new Set());
-  }, []);
+  }, [
+    clearDraft,
+    collectText,
+    commandClient,
+    hasSelection,
+    loaded,
+    loadingOrder,
+    onLoadOrder,
+    selected,
+    toast,
+    verificationComplete,
+    verifiedBarcodes,
+  ]);
 
   const disabled = busy || loadingOrder;
-
-  // Once a lookup or pickup settles, hand the scanner to the next step:
-  // garment verification when racked pieces need it, else the lookup field.
-  useEffect(() => {
-    const root = pageRef.current;
-    if (root === null || disabled || (loaded === null && result === null)) return;
-    const doc = root.ownerDocument;
-    if (doc.querySelector('[aria-modal="true"]') !== null) return;
-    if (!mayHandOffFocus(doc.activeElement, PICKUP_SCAN_FIELDS)) return;
-    const next =
-      root.querySelector<HTMLInputElement>('input[name="pickup-verification-barcode"]') ??
-      root.querySelector<HTMLInputElement>('input[name="pickup-key"]');
-    next?.focus({ preventScroll: true });
-    if (next?.name === "pickup-key") next.select();
-  }, [disabled, loaded, result]);
-  const verificationComplete = verifiedRequired === selectedRacked.length;
+  usePickupScanFocus(pageRef, disabled, loaded, result);
 
   return (
     <main ref={pageRef} className="ld-shell-main ld-pickup" id="main-content" tabIndex={-1}>
@@ -298,7 +323,7 @@ export function PickupPage({
           busy={busy}
           loading={loadingOrder}
           queryAvailable={queryClient !== undefined}
-          onChange={setLookupKey}
+          onChange={onLookupChange}
           onLookup={() => void onLoadOrder()}
         />
 
@@ -342,44 +367,22 @@ export function PickupPage({
             order={loaded}
             refreshKey={channelRefresh}
             disabled={disabled}
-            onPaid={() => {
-              setCollectText("0");
-              void onLoadOrder(loaded.order_id);
-            }}
+            onPaid={onChannelPaid}
           />
         ) : null}
 
-        <div className="ld-order-form__actions">
-          <MoneyInput
-            name="collect-cents"
-            label="本次收款（填 0 不收）"
-            valueFen={collectText}
-            onChangeFen={setCollectText}
-            disabled={disabled}
-          />
-          <Button
-            variant="primary"
-            size="lg"
-            type="button"
-            onClick={() => void onSubmit()}
-            disabled={disabled || !verificationComplete}
-          >
-            {busy ? "提交中…" : "确认取衣"}
-          </Button>
-          {loaded !== null && loaded.status === "open" && loaded.balance_cents > 0 ? (
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => setPaymentOpen(true)}
-              disabled={disabled}
-            >
-              独立收款 / 补缴
-            </Button>
-          ) : null}
-          <Button variant="ghost" type="button" onClick={onReset} disabled={disabled}>
-            清空
-          </Button>
-        </div>
+        <PickupActions
+          collectText={collectText}
+          onCollectChange={setCollectText}
+          busy={busy}
+          disabled={disabled}
+          canCollect={hasSelection}
+          verificationComplete={verificationComplete}
+          canPaySeparately={loaded !== null && loaded.status === "open" && loaded.balance_cents > 0}
+          onSubmit={() => void onSubmit()}
+          onPayment={() => setPaymentOpen(true)}
+          onReset={() => onLookupChange("")}
+        />
       </div>
 
       {result === null ? null : <PickupResult result={result} />}
