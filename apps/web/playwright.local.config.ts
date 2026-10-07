@@ -19,7 +19,8 @@ export default defineConfig({
   retries: 0,
   use: {
     baseURL: LOCAL_WEB_URL,
-    trace: "on-first-retry",
+    // Raw traces include authentication traffic. CI uploads only allowlisted diagnostics.
+    trace: process.env.CI ? "off" : "retain-on-failure",
     headless: true,
   },
   webServer: {

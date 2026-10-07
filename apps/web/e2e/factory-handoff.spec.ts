@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { yuanText } from "./money-input.js";
+import { pickCatalogItem } from "./catalog-picker.js";
 
 const WEB = "http://127.0.0.1:5173";
 const API = "http://127.0.0.1:8787";
@@ -51,10 +52,7 @@ async function createCatalogAndOrder(page: Page): Promise<string> {
   ).toBeVisible({ timeout: 15_000 });
 
   await page.locator('[data-nav-id="receive"]').click();
-  await page
-    .locator('[data-testid="catalog-picker"]')
-    .getByRole("option", { name: new RegExp(FIXTURE.catalogName, "u") })
-    .click();
+  await pickCatalogItem(page, FIXTURE.catalogName);
   await page.getByLabel("数量").fill("2");
   await page.locator('input[name="customer-phone"]').fill(FIXTURE.customerPhone);
   await page.locator('input[name="customer-name"]').fill(FIXTURE.customerName);

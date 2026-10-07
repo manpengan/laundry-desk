@@ -302,6 +302,10 @@ jobs:
           path: |
             /tmp/laundry-compose.log
             /tmp/laundry-server-pg-tests.log
+            apps/web/test-results/**/attachments/catalog-fixture-response-*.json
+            apps/web/test-results/**/attachments/standalone-repayment-response-*.json
+            apps/web/test-results/**/attachments/points-policy-fixture-*.json
+          retention-days: 7
           if-no-files-found: ignore
 
       - name: Stop compose

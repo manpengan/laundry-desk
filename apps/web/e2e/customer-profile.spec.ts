@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { yuanText } from "./money-input.js";
+import { pickCatalogItem } from "./catalog-picker.js";
 
 const WEB = "http://127.0.0.1:5173";
 const API = "http://127.0.0.1:8787";
@@ -145,10 +146,7 @@ async function receiveOrder(page: Page): Promise<string> {
   await expect(page.getByRole("heading", { name: "开单", exact: true })).toBeVisible();
   const nextOrder = page.getByRole("button", { name: "开下一单", exact: true });
   if (await nextOrder.isVisible()) await nextOrder.click();
-  await page
-    .locator('[data-testid="catalog-picker"]')
-    .getByRole("option", { name: new RegExp(FIXTURE.catalogName, "u") })
-    .click();
+  await pickCatalogItem(page, FIXTURE.catalogName);
   await page.locator('input[name="customer-phone"]').fill(FIXTURE.customerPhone);
   await page.locator('input[name="customer-name"]').fill(FIXTURE.customerName);
   await page.getByRole("button", { name: "确认开单" }).click();

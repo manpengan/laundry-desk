@@ -1,5 +1,8 @@
+import { writeFile } from "node:fs/promises";
+
 import { expect, test, type Page, type Request } from "@playwright/test";
 import { yuanText } from "./money-input.js";
+import { pickCatalogItem } from "./catalog-picker.js";
 
 const WEB = "http://127.0.0.1:5173";
 const API = "http://127.0.0.1:8787";
@@ -95,6 +98,48 @@ async function saveDefinition(
   await confirmDefinition(page);
 }
 
+/** Reuse only an equivalent organization-wide singleton; never overwrite an existing rule. */
+async function ensurePointsPolicy(page: Page): Promise<void> {
+  const panel = page.locator('[data-testid="benefit-definitions"]');
+  // The new tier appears only after the server catalog reload has completed.
+  await expect(panel.getByRole("listitem").filter({ hasText: FIXTURE.tierCode })).toBeVisible();
+  await expect(panel.getByLabel("类型")).toBeEnabled();
+  const policy = panel.getByRole("listitem").filter({
+    has: page.getByText("积分规则", { exact: true }),
+  });
+  const mode = (await policy.count()) === 0 ? "created" : "reused";
+  if (mode === "created") await saveDefinition(page, "points_policy");
+  await expect(policy).toHaveCount(1);
+  await policy.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(panel.getByLabel("类型")).toHaveValue("points_policy");
+  const evidence = {
+    phase: "points-policy-fixture",
+    mode,
+    active: (await policy.getByRole("button", { name: "停用", exact: true }).count()) === 1,
+    unitMatches: (await panel.getByLabel("每满金额（元）").inputValue()) === "1.00",
+    pointsMatch: (await panel.getByLabel("每档积分").inputValue()) === "1",
+    daysMatch: (await panel.getByLabel("有效天数").inputValue()) === "30",
+  };
+  const evidencePath = test.info().outputPath("points-policy-fixture.json");
+  await writeFile(evidencePath, JSON.stringify(evidence), { mode: 0o600 });
+  await test.info().attach("points-policy-fixture", {
+    path: evidencePath,
+    contentType: "application/json",
+  });
+  expect(
+    evidence,
+    "Existing points policy must match the isolated fixture; it is never overwritten",
+  ).toEqual({
+    phase: "points-policy-fixture",
+    mode,
+    active: true,
+    unitMatches: true,
+    pointsMatch: true,
+    daysMatch: true,
+  });
+  await panel.getByRole("button", { name: "取消编辑", exact: true }).click();
+}
+
 async function confirmBenefitMutation(page: Page, title: string): Promise<void> {
   const dialog = page.getByRole("dialog", { name: title });
   await expect(dialog).toBeVisible({ timeout: 15_000 });
@@ -134,7 +179,7 @@ test("member tiers, points, punch cards and coupons complete a real PostgreSQL b
   const definitions = page.locator('[data-testid="benefit-definitions"]');
   await expect(definitions).toBeVisible();
   await saveDefinition(page, "tier");
-  await saveDefinition(page, "points_policy");
+  await ensurePointsPolicy(page);
   await saveDefinition(page, "punch_type");
   await saveDefinition(page, "coupon_type");
   for (const text of [FIXTURE.tierCode, "积分规则", FIXTURE.punchCode, FIXTURE.couponCode]) {
@@ -191,10 +236,7 @@ test("member tiers, points, punch cards and coupons complete a real PostgreSQL b
   await expect(assets).toContainText(FIXTURE.couponName, { timeout: 15_000 });
 
   await page.locator('[data-nav-id="receive"]').click();
-  await page
-    .locator('[data-testid="catalog-picker"]')
-    .getByRole("option", { name: new RegExp(FIXTURE.catalogName, "u") })
-    .click();
+  await pickCatalogItem(page, FIXTURE.catalogName);
   await page.locator('input[name="customer-phone"]').fill(FIXTURE.customerPhone);
   await page.locator('input[name="customer-name"]').fill(FIXTURE.customerName);
   await page.getByRole("button", { name: "确认开单" }).click();
