@@ -164,6 +164,14 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
       stopRaw: stop,
       saveState: save,
     };
+    async function finishSchemaMaintenance(verb, next, initializeSchedule) {
+      const result = await schemaMaintenance(verb, next, maintenanceLifecycle);
+      const schedule =
+        initializeSchedule && state.phase === "running"
+          ? await enableDefaultSchedule(maintenanceLifecycle)
+          : null;
+      return schedule === null ? result : { ...result, backup_schedule: schedule };
+    }
     if (!state) {
       await io.directory(join(root, "releases"));
       await io.directory(join(root, "logs"));
@@ -214,7 +222,11 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
         return scheduledMaintenance(action, options, maintenanceLifecycle);
       if (action === "assistance-config") return configureAssistance(options, maintenanceLifecycle);
       if (action === "maintenance-recover" && maintenance?.version === 2)
-        return schemaMaintenance(action, maintenance.next, maintenanceLifecycle);
+        return finishSchemaMaintenance(
+          action,
+          maintenance.next,
+          maintenance.operation === "schema-upgrade" && maintenance.phase === "verified",
+        );
       if (
         maintenance &&
         !["status", "stop", "backup-list", "backup-verify", "maintenance-recover"].includes(action)
@@ -319,7 +331,7 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
         if (action === "rollback") await verify(next);
         else await stageRelease(root, source, expectedDigest, platform);
         if (!retained) await save({ ...state, releases: [...state.releases, next] });
-        if (schemaChange) return schemaMaintenance(action, next, maintenanceLifecycle);
+        if (schemaChange) return finishSchemaMaintenance(action, next, action === "upgrade");
         await stop(old);
         await save({ ...state, phase: "stopped" });
         const oldState = state;

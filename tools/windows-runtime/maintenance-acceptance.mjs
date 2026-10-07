@@ -1,6 +1,6 @@
 // Synthetic Windows acceptance only; this harness is never shipped as a payload tool.
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export async function maintenanceAcceptance(context) {
@@ -66,8 +66,13 @@ export async function maintenanceAcceptance(context) {
     );
     const bytes = canonicalManifest(manifest);
     await writeFile(join(changed.folder, "runtime-payload.json"), bytes);
+    // Reproduce an older, never-configured installation. Only this isolated
+    // synthetic acceptance root is edited; unregister the known task first.
+    await command("backup-schedule", undefined, undefined, { ...config, enabled: false });
+    await unlink(join(root, "backup-schedule.json"));
     const upgraded = await command("upgrade", changed.folder, digest(bytes));
     assert.equal(upgraded.schema_transition, "upgrade");
+    assert.equal(upgraded.backup_schedule, "enabled");
     assert.equal(
       await sql("SELECT count(*) FROM public.runtime_upgrade_acceptance", changed.folder),
       "1",
@@ -99,6 +104,9 @@ export async function maintenanceAcceptance(context) {
     assert.equal(safety.digest, rolledBack.safety_backup.digest);
     assert.equal(await secretDigest(), beforeSecrets);
     const health = await command("backup-health");
+    assert.equal(health.config.enabled, true);
+    assert.equal(health.config.hour, 3);
+    assert.equal(health.config.minute, 0);
     assert.equal(health.alerts.includes("task_missing"), false);
     assert.equal(health.alerts.includes("task_unavailable"), false);
   });

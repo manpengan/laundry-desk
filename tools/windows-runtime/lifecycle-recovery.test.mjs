@@ -11,13 +11,21 @@ import { SCHEDULE_ACTIONS, requireSchedule } from "./schedule-contract.mjs";
 const source = await readFile(new URL("./lifecycle.mjs", import.meta.url), "utf8");
 const body = source.replace(/import [\s\S]*? from "[^"\n]+";\n/g, "").replace(/export /g, "");
 
-function fixture({ stopFailures = 0, startFailure = false, maintenance = null } = {}) {
+function fixture({
+  stopFailures = 0,
+  startFailure = false,
+  maintenance = null,
+  schemaChange = false,
+  phase = "running",
+  scheduleResult = "enabled",
+} = {}) {
   const old = { digest: "old" };
-  const next = { digest: "next" };
+  const next = { digest: "next", ...(schemaChange ? { migrationHead: "0070_next.sql" } : {}) };
+  const scheduleEvents = [];
   let state = {
-    phase: "running",
+    phase,
     current: old,
-    previous: null,
+    previous: schemaChange ? next : null,
     controller: old,
     pending: null,
     releases: [old, next],
@@ -34,6 +42,18 @@ function fixture({ stopFailures = 0, startFailure = false, maintenance = null } 
     SCHEDULE_ACTIONS,
     requireSchedule,
     readMaintenance: async () => maintenance,
+    schemaMaintenance: async (action, target, context) => {
+      const committed = action !== "maintenance-recover" || maintenance.phase === "verified";
+      await context.saveState({ ...state, current: committed ? target : old, phase });
+      scheduleEvents.push("schema-complete");
+      return { status: phase, schema_transition: action, committed };
+    },
+    enableDefaultSchedule: async (context) => {
+      assert.equal(context.getState().phase, "running");
+      assert.equal(context.getState().current.digest, "next");
+      scheduleEvents.push("default-schedule");
+      return scheduleResult;
+    },
     backupMaintenance: async () => {
       throw new Error("UNEXPECTED_MAINTENANCE_ENTRY");
     },
@@ -58,7 +78,7 @@ function fixture({ stopFailures = 0, startFailure = false, maintenance = null } 
       },
     }),
     readState: async () => structuredClone(state),
-    reference: (_manifest, digest) => ({ digest }),
+    reference: (manifest, digest) => ({ ...manifest, digest }),
     requireCompatible: () => {},
     requireState: (value) => value,
     withOperationLock: async (_root, action) => action(),
@@ -103,6 +123,7 @@ function fixture({ stopFailures = 0, startFailure = false, maintenance = null } 
   return {
     run: (action) => lifecycle(action, "C:\\distribution", "next"),
     snapshot: () => ({ state: structuredClone(state), postgres, api }),
+    scheduleEvents,
     allowStop: () => {
       remainingStops = 0;
     },
@@ -157,4 +178,54 @@ test("pending data maintenance blocks normal startup, repair, upgrade and uninst
   await subject.run("stop");
   assert.equal(subject.snapshot().api, null);
   assert.equal(subject.snapshot().postgres, null);
+});
+
+test("a running cross-schema upgrade initializes an unconfigured backup schedule after commit", async () => {
+  const subject = fixture({ schemaChange: true });
+  const result = await subject.run("upgrade");
+  assert.equal(result.backup_schedule, "enabled");
+  assert.deepEqual(subject.scheduleEvents, ["schema-complete", "default-schedule"]);
+});
+
+test("cross-schema completion preserves saved schedule choices and reports registration failure", async () => {
+  for (const scheduleResult of [null, "WINDOWS_COMPANION_BACKUP_SCHEDULE_FAILED"]) {
+    const subject = fixture({ schemaChange: true, scheduleResult });
+    const result = await subject.run("upgrade");
+    assert.equal(result.backup_schedule, scheduleResult ?? undefined);
+    assert.equal(subject.snapshot().state.current.digest, "next");
+    assert.equal(subject.snapshot().state.phase, "running");
+  }
+});
+
+test("stopped upgrades and rollbacks do not initialize default backups", async () => {
+  for (const [action, phase] of [
+    ["upgrade", "stopped"],
+    ["rollback", "running"],
+  ]) {
+    const subject = fixture({ schemaChange: true, phase });
+    const result = await subject.run(action);
+    assert.equal(result.backup_schedule, undefined);
+    assert.deepEqual(subject.scheduleEvents, ["schema-complete"]);
+  }
+});
+
+test("recovery initializes defaults only for a committed upgrade that resumes running", async () => {
+  for (const operation of ["schema-upgrade", "schema-rollback"]) {
+    for (const journalPhase of ["verified", "switching"]) {
+      for (const phase of ["running", "stopped"]) {
+        const subject = fixture({
+          phase,
+          maintenance: { version: 2, operation, phase: journalPhase, next: { digest: "next" } },
+        });
+        const result = await subject.run("maintenance-recover");
+        const enabled =
+          operation === "schema-upgrade" && journalPhase === "verified" && phase === "running";
+        assert.equal(result.backup_schedule, enabled ? "enabled" : undefined);
+        assert.deepEqual(
+          subject.scheduleEvents,
+          enabled ? ["schema-complete", "default-schedule"] : ["schema-complete"],
+        );
+      }
+    }
+  }
 });
