@@ -106,7 +106,7 @@ async function readBounded(path, maximumBytes) {
 }
 
 async function verifySpaTree(root, paths) {
-  const expected = new Set([...paths, "manifest.json"]);
+  const expected = new Set(paths);
   const directories = new Set(
     paths.flatMap((path) => {
       const parts = path.split("/");
@@ -151,10 +151,6 @@ async function inspectSpa(resourcesPath) {
     requireValue(actual.sha256 === entry.sha256 && actual.size === entry.bytes, "SPA_FILE_INVALID");
   }
   await verifySpaTree(root, Object.keys(manifest.entries));
-  requireValue(
-    (await readBounded(join(root, "manifest.json"), 256 * 1024)).equals(bytes),
-    "SPA_MANIFEST_INVALID",
-  );
   requireValue(
     (await readBounded(join(spa, "manifest.json"), 256 * 1024)).equals(bytes),
     "SPA_CHANGED",

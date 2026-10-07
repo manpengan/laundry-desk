@@ -7,6 +7,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   realpath,
   rm,
   symlink,
@@ -17,9 +18,9 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
-import { serializeCanonicalManifest } from "../dist/lib/integrity.js";
 import { completeFunctionalEvidence } from "../e2e/windows-functional-completion.mjs";
 import { stageWindowsProfile } from "./windows-profile.mjs";
+import { syncSpa } from "./sync-spa.mjs";
 import {
   beginFunctionalEvidence,
   finishFunctionalEvidence,
@@ -74,18 +75,16 @@ async function fixture(t, profileId = "generic") {
     }),
   );
   const html = Buffer.from("<!doctype html><title>Installed fixture</title>");
-  const manifest = serializeCanonicalManifest({
-    version: 1,
-    entries: {
-      "index.html": { sha256: hash(html), bytes: html.length, mime: "text/html; charset=utf-8" },
-    },
-  });
+  const spaSource = join(root, "spa-source");
   const spaRoot = join(resources, "spa");
+  await mkdir(join(spaSource, "assets"), { recursive: true });
+  await writeFile(join(spaSource, "index.html"), html);
+  await writeFile(join(spaSource, "assets/app.js"), "document.title = 'Installed fixture';\n");
+  // Use the actual packaging protocol: one top-level manifest points to a
+  // content-addressed bundle containing only the listed resources.
+  await syncSpa({ sourcePath: spaSource, targetPath: spaRoot });
+  const manifest = await readFile(join(spaRoot, "manifest.json"));
   const bundleRoot = join(spaRoot, "bundles", hash(manifest));
-  await mkdir(bundleRoot, { recursive: true });
-  await writeFile(join(spaRoot, "manifest.json"), manifest);
-  await writeFile(join(bundleRoot, "manifest.json"), manifest);
-  await writeFile(join(bundleRoot, "index.html"), html);
   for (const file of [RUNNER_SPEC, RUNNER_HELPER]) {
     await mkdir(dirname(join(repositoryRoot, file)), { recursive: true });
     await writeFile(join(repositoryRoot, file), "// tracked test runner fixture\n");
@@ -118,6 +117,7 @@ async function fixture(t, profileId = "generic") {
     resources,
     provenancePath,
     bundleRoot,
+    spaSource,
     git,
   };
 }
@@ -136,6 +136,8 @@ async function observations(value) {
 
 test("finished evidence binds actual installation, independent Git runner and UTC interval", async (t) => {
   const value = await fixture(t, "hongfa");
+  assert.deepEqual((await readdir(value.bundleRoot)).sort(), ["assets", "index.html"]);
+  await assert.rejects(readFile(join(value.bundleRoot, "manifest.json")), { code: "ENOENT" });
   const startDigest = await beginFunctionalEvidence(value);
   await observations(value);
   const resultDigest = await finishFunctionalEvidence({ ...value, startDigest });
@@ -145,6 +147,11 @@ test("finished evidence binds actual installation, independent Git runner and UT
   assert.equal(result.status, "passed");
   assert.equal(result.installation.source_git_sha, SOURCE);
   assert.equal(result.installation.profile_id, "hongfa");
+  assert.equal(result.installation.spa.entry_count, 2);
+  assert.equal(
+    result.installation.spa.bundle_sha256,
+    hash(await readFile(join(value.resources, "spa/manifest.json"))),
+  );
   assert.equal(result.installation.executable_sha256, hash(await readFile(value.executable)));
   assert.equal(
     result.installation.asar_sha256,
@@ -228,14 +235,58 @@ test("malformed and oversized provenance and noncanonical SPA metadata are refus
   await assert.rejects(inspectFunctionalInstallation(value), /SPA_MANIFEST_INVALID/u);
 });
 
-test("unexpected SPA files and a changed bundle manifest are refused", async (t) => {
+test("unexpected SPA files, directories and even a matching bundle manifest are refused", async (t) => {
   const value = await fixture(t);
   const extra = join(value.bundleRoot, "unexpected.txt");
   await writeFile(extra, "unlisted asset");
   await assert.rejects(inspectFunctionalInstallation(value), /SPA_TREE_INVALID/u);
   await rm(extra);
-  await writeFile(join(value.bundleRoot, "manifest.json"), "{}");
-  await assert.rejects(inspectFunctionalInstallation(value), /SPA_MANIFEST_INVALID/u);
+  const directory = join(value.bundleRoot, "unlisted-directory");
+  await mkdir(directory);
+  await assert.rejects(inspectFunctionalInstallation(value), /SPA_TREE_INVALID/u);
+  await rm(directory, { recursive: true });
+  await writeFile(
+    join(value.bundleRoot, "manifest.json"),
+    await readFile(join(value.resources, "spa/manifest.json")),
+  );
+  await assert.rejects(inspectFunctionalInstallation(value), /SPA_TREE_INVALID/u);
+});
+
+test("missing and hardlinked SPA assets cannot satisfy the active manifest", async (t) => {
+  const value = await fixture(t);
+  const asset = join(value.bundleRoot, "assets/app.js");
+  const bytes = await readFile(asset);
+  await rm(asset);
+  await assert.rejects(inspectFunctionalInstallation(value), { code: "ENOENT" });
+  await writeFile(asset, bytes);
+  const alias = join(value.evidenceRoot, "shared.js");
+  await link(asset, alias);
+  await assert.rejects(inspectFunctionalInstallation(value), /FILE_INVALID/u);
+});
+
+test("a linked SPA resource directory cannot redirect verified assets", async (t) => {
+  const value = await fixture(t);
+  const assets = join(value.bundleRoot, "assets");
+  const outside = join(value.evidenceRoot, "redirected-assets");
+  await cp(assets, outside, { recursive: true });
+  await rm(assets, { recursive: true });
+  await symlink(outside, assets, process.platform === "win32" ? "junction" : "dir");
+  await assert.rejects(inspectFunctionalInstallation(value), /DIRECTORY_INVALID/u);
+});
+
+test("changing the canonical SPA pointer to another valid bundle cannot finish an active run", async (t) => {
+  const value = await fixture(t);
+  const startDigest = await beginFunctionalEvidence(value);
+  await observations(value);
+  await writeFile(join(value.spaSource, "assets/app.js"), "document.title = 'Changed bundle';\n");
+  await syncSpa({ sourcePath: value.spaSource, targetPath: join(value.resources, "spa") });
+  await assert.rejects(
+    finishFunctionalEvidence({ ...value, startDigest }),
+    /INSTALLATION_CHANGED/u,
+  );
+  await assert.rejects(readFile(join(value.evidenceRoot, "functional-evidence.json")), {
+    code: "ENOENT",
+  });
 });
 
 test("hardlinked provenance and a linked installation parent cannot be accepted", async (t) => {
