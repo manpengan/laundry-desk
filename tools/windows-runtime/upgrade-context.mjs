@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { digest, fail } from "./companion-contract.mjs";
-import { runtimeEnvironment } from "./lifecycle-environment.mjs";
+import { photoEnvironment, runtimeEnvironment } from "./lifecycle-environment.mjs";
 import { serverEnvironment } from "./lifecycle-database.mjs";
 import { run } from "./lifecycle-process.mjs";
 import { restorePhotoDirectory } from "./backup-photo-files.mjs";
@@ -40,7 +40,7 @@ export async function shadowEnvironment(context, name) {
   }
   return env;
 }
-export async function probeShadow(context, name, backup) {
+export async function probeShadow(context, name, backup, dependencies = {}) {
   const env = await shadowEnvironment(context, name);
   await withPortableStage(context, async (directory) => {
     const parent = join(directory, "laundry-desk-v2");
@@ -52,12 +52,12 @@ export async function probeShadow(context, name, backup) {
       join(context.root, "backups", backup.id),
       backup.manifest.photos,
     );
-    const selected = {
-      ...serverEnvironment(env),
-      LOCALAPPDATA: directory,
-      LAUNDRY_PHOTO_STORE_DIR: join(scratch, "photos"),
-    };
-    const result = await run(
+    const selected = photoEnvironment(
+      { ...serverEnvironment(env), LOCALAPPDATA: directory },
+      scratch,
+      context.manifest,
+    );
+    const result = await (dependencies.run ?? run)(
       join(context.payload, "node/node.exe"),
       [
         join(context.toolsPayload ?? context.payload, "scripts/upgrade-probe.mjs"),
