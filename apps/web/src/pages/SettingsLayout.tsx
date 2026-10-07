@@ -1,5 +1,5 @@
 import { Button, cn, Icon, Input, type IconName } from "@laundry/ui";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { StoreSetupChecklist } from "./StoreSetupChecklist.js";
 import type { AuthClient } from "../auth/AuthClient.js";
 import type { QueryPort } from "../commands/types.js";
@@ -18,46 +18,60 @@ import {
   readSettingsSection,
   saveSettingsSection,
 } from "./settings-navigation.js";
-export function SettingsLayout({
-  sections,
-  session,
-  authClient,
-  queryClient,
-}: Readonly<{
+type SettingsLayoutProps = Readonly<{
   sections: readonly SettingsSection[];
   session: SessionView;
   authClient: AuthClient;
   queryClient?: QueryPort | undefined;
-}>) {
-  const [selected, setSelected] = useState(
-    () =>
-      sections.find((section) => section.id === "settings-catalog")?.id ?? sections[0]?.id ?? "",
+}>;
+export function SettingsLayout(props: SettingsLayoutProps) {
+  const { session } = props.session;
+  const workspaceKey = JSON.stringify([
+    session.session_id,
+    session.session_version,
+    session.org_id,
+    session.store_id,
+    session.staff_id,
+    session.device_id,
+    session.permission_version,
+    props.session.role,
+    props.sections.map((section) => section.id),
+  ]);
+  return <SettingsWorkspace key={workspaceKey} {...props} />;
+}
+function matchesSearch(section: SettingsSection, query: string): boolean {
+  return `${section.label} ${SETTINGS_KEYWORDS[section.id] ?? ""}`
+    .toLocaleLowerCase()
+    .includes(query);
+}
+function SettingsWorkspace({ sections, session, authClient, queryClient }: SettingsLayoutProps) {
+  // Resolve the permitted preference before mounting any panel or starting its reads.
+  const [initialPreference] = useState(() =>
+    readSettingsSection(sections.map((section) => section.id)),
   );
-  const sectionIds = sections.map((section) => section.id).join("|");
-  const [preferenceError, setPreferenceError] = useState<string | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  useEffect(() => {
-    const preference = readSettingsSection(sectionIds.split("|").filter(Boolean));
-    setSelected(preference.selected);
-    setAdvancedOpen(isAdvancedSection(preference.selected));
-    setPreferenceError(preference.error);
-    // Read once per signed-in settings workspace; every later selection is checked against current sections.
-  }, [session.session.staff_id, session.session.store_id, sectionIds]);
+  const [selected, setSelected] = useState(initialPreference.selected);
+  const [preferenceError, setPreferenceError] = useState(initialPreference.error);
+  const [advancedOpen, setAdvancedOpen] = useState(isAdvancedSection(initialPreference.selected));
+  const [visited, setVisited] = useState<readonly string[]>(() =>
+    initialPreference.selected === "" ? [] : [initialPreference.selected],
+  );
   const [search, setSearch] = useState("");
   const content = useRef<HTMLDivElement>(null);
   const query = search.trim().toLocaleLowerCase();
-  const matching = sections.filter((section) =>
-    `${section.label} ${SETTINGS_KEYWORDS[section.id] ?? ""}`.toLocaleLowerCase().includes(query),
-  );
+  const matching = sections.filter((section) => matchesSearch(section, query));
+  const visit = (ids: readonly string[]) => {
+    setVisited((previous) => [...new Set([...previous, ...ids])]);
+  };
   const select = (id: string) => {
     if (id !== "" && !sections.some((section) => section.id === id)) return;
     setSearch("");
     setSelected(id);
+    visit(id === "" ? sections.map((section) => section.id) : [id]);
     if (id !== "") {
       setPreferenceError(saveSettingsSection(id));
       if (isAdvancedSection(id)) setAdvancedOpen(true);
     }
-    // Keep every panel mounted so narrowing settings never discards an edited form.
+    // Already visited panels stay mounted so narrowing settings preserves edited forms.
     requestAnimationFrame(() => {
       const target = content.current;
       if (!target) return;
@@ -87,7 +101,16 @@ export function SettingsLayout({
             placeholder="如：价目、短信、主题"
             value={search}
             onChange={(event) => {
-              setSearch(event.target.value);
+              const value = event.target.value;
+              const nextQuery = value.trim().toLocaleLowerCase();
+              setSearch(value);
+              if (nextQuery !== "") {
+                visit(
+                  sections
+                    .filter((section) => matchesSearch(section, nextQuery))
+                    .map((section) => section.id),
+                );
+              }
             }}
           />
           <label className="ld-settings-mobile-select ld-field">
@@ -165,7 +188,7 @@ export function SettingsLayout({
                 (query.length === 0 && selected !== "" && selected !== section.id)
               }
             >
-              {section.content}
+              {visited.includes(section.id) ? section.content : null}
             </div>
           ))}
         </div>

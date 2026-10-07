@@ -10,6 +10,7 @@
  */
 import { expect, test, type Locator, type Page, type Request } from "@playwright/test";
 import { yuanText } from "./money-input.js";
+import { pickCatalogItem } from "./catalog-picker.js";
 
 const exactLocalUrl = (name: "LAUNDRY_WEB_URL" | "LAUNDRY_API_URL", expected: string): string => {
   const configured = process.env[name];
@@ -280,6 +281,10 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
     .click();
   const pricingPanel = page.locator('[data-testid="pricing-settings"]');
   await expect(pricingPanel).toBeVisible();
+  // The panel first renders version 0; its save button unlocks after the real policy loads.
+  await expect(
+    pricingPanel.getByRole("button", { name: "保存计价设置", exact: true }),
+  ).toBeEnabled();
   const policyStatus = pricingPanel.getByRole("status");
   const versionMatch = /当前版本 (\d+)/u.exec((await policyStatus.textContent()) ?? "");
   expect(versionMatch).not.toBeNull();
@@ -308,11 +313,7 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
 
   // --- 开单 ---------------------------------------------------------------
   await page.locator('[data-nav-id="receive"]').click();
-  const picker = page.locator('[data-testid="catalog-picker"]');
-  await expect(picker).toBeVisible();
-
-  // A visible chip proves the seeded price list actually reached the browser.
-  await picker.getByRole("option", { name: new RegExp(CATALOG_ITEM_NAME, "u") }).click();
+  await pickCatalogItem(page, CATALOG_ITEM_NAME);
 
   await page.getByLabel("数量").fill(String(QTY));
   await page.getByLabel("第 1 件颜色").fill("白");

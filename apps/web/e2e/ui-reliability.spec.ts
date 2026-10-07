@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { pickCatalogItem } from "./catalog-picker.js";
 
 const required = (key: string): string => {
   const value = process.env[key];
@@ -56,7 +57,7 @@ test("retained form, committed-response loss, replay, and identical new cash ord
   await createCatalog(page, code, name);
   await page.locator('[data-nav-id="receive"]').click();
   const fill = async () => {
-    await page.getByRole("option", { name: new RegExp(name, "u") }).click();
+    await pickCatalogItem(page, name);
     await page.locator('input[name="customer-name"]').fill("UI 合成顾客");
     await page.locator('input[name="initial-payment"]').fill("10.00");
     await page.getByLabel("第 1 件颜色").fill("白");
@@ -134,7 +135,7 @@ test("staff switching blocks pending receipts and resets only the receive worksp
   const name = `员工隔离合成衣物 ${code}`;
   await createCatalog(page, code, name);
   await page.locator('[data-nav-id="receive"]').click();
-  await page.getByRole("option", { name: new RegExp(name, "u") }).click();
+  await pickCatalogItem(page, name);
   await page.locator('input[name="customer-name"]').fill("前一位员工的合成录入");
   let release = () => {};
   const held = new Promise<void>((resolve) => {

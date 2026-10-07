@@ -3,8 +3,12 @@
  * server-only: hold, cancel, standalone repayment, order list/detail and the
  * stats page and an isolated historic-day shift close.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
+
+import { expect, test, type Page, type Response } from "@playwright/test";
 import { yuanText } from "./money-input.js";
+import { pickCatalogItem } from "./catalog-picker.js";
 
 const exactLocalUrl = (name: "LAUNDRY_WEB_URL" | "LAUNDRY_API_URL", expected: string): string => {
   const configured = process.env[name];
@@ -32,14 +36,52 @@ const LOGIN = Object.freeze({
   password: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD"),
 });
 
-/** Own code and category so this spec never competes with the workday spec. */
-const CATALOG = Object.freeze({
-  code: "e2e_followup_coat",
-  name: "E2E 干洗大衣",
-  service: "dry",
-  category: "e2ecoat",
-  priceCents: "2000",
-});
+/** Every order journey creates its own item; expected_version=0 must really succeed. */
+function newCatalogItem() {
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 16);
+  return Object.freeze({
+    code: `e2e_followup_${suffix}`,
+    name: `E2E 干洗大衣 ${suffix}`,
+    service: "dry",
+    category: `e2e_${suffix}`,
+    priceCents: "2000",
+  });
+}
+type CatalogItem = ReturnType<typeof newCatalogItem>;
+
+/** Preserve only bounded status metadata; auth headers and request bodies stay private. */
+async function expectCommandSuccess(response: Response, evidenceName: string): Promise<void> {
+  const decoded = await response.json().then(
+    (body: unknown) => ({ body, parseFailed: false }),
+    () => ({ body: null, parseFailed: true }),
+  );
+  const envelope = typeof decoded.body === "object" && decoded.body !== null ? decoded.body : {};
+  const ok = "ok" in envelope && envelope.ok === true;
+  const error = "error" in envelope ? envelope.error : null;
+  const errorCode =
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    /^[A-Z_]{1,80}$/u.test(error.code)
+      ? error.code
+      : null;
+  const evidence = { status: response.status(), ok, errorCode, parseFailed: decoded.parseFailed };
+  const evidencePath = test.info().outputPath(`${evidenceName}.json`);
+  await writeFile(evidencePath, JSON.stringify({ phase: evidenceName, ...evidence }), {
+    mode: 0o600,
+  });
+  await test.info().attach(evidenceName, {
+    path: evidencePath,
+    contentType: "application/json",
+  });
+  expect(evidence, `${evidenceName} must succeed`).toEqual({
+    status: 200,
+    ok: true,
+    errorCode: null,
+    parseFailed: false,
+  });
+}
 const ISOLATED_SHIFT_DATE = "1999-12-31";
 
 async function signIn(page: Page): Promise<void> {
@@ -54,27 +96,38 @@ async function signIn(page: Page): Promise<void> {
 }
 
 /** order.receive prices from the catalog, so every spec must seed its own. */
-async function ensureCatalogItem(page: Page): Promise<void> {
+async function ensureCatalogItem(page: Page): Promise<CatalogItem> {
+  const catalog = newCatalogItem();
   await page.locator('[data-nav-id="settings"]').click();
   const panel = page.locator('[data-testid="catalog-admin"]');
   await expect(panel).toBeVisible({ timeout: 15_000 });
-  await page.locator('input[name="catalog-code"]').fill(CATALOG.code);
-  await page.locator('input[name="catalog-name"]').fill(CATALOG.name);
-  await page.locator('input[name="catalog-service"]').fill(CATALOG.service);
-  await page.locator('input[name="catalog-category"]').fill(CATALOG.category);
-  await page.locator('input[name="catalog-price"]').fill(yuanText(CATALOG.priceCents));
+  await page.locator('input[name="catalog-code"]').fill(catalog.code);
+  await page.locator('input[name="catalog-name"]').fill(catalog.name);
+  await page.locator('input[name="catalog-service"]').fill(catalog.service);
+  await page.locator('input[name="catalog-category"]').fill(catalog.category);
+  await page.locator('input[name="catalog-price"]').fill(yuanText(catalog.priceCents));
+  const saveResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/v1/commands/catalog.item.upsert",
+  );
   await page.locator('[data-testid="catalog-save-btn"]').click();
+  await expectCommandSuccess(await saveResponse, "catalog-fixture-response");
   await expect(
-    panel.locator('[data-testid="catalog-admin-row"]', { hasText: CATALOG.name }),
+    panel.locator('[data-testid="catalog-admin-row"]', { hasText: catalog.name }),
   ).toBeVisible({ timeout: 15_000 });
+  return catalog;
 }
 
 /** Fill the receive form without submitting; the caller decides hold vs receive. */
-async function fillReceiveForm(page: Page, phone: string, paymentCents: string): Promise<void> {
+async function fillReceiveForm(
+  page: Page,
+  catalog: CatalogItem,
+  phone: string,
+  paymentCents: string,
+): Promise<void> {
   await page.locator('[data-nav-id="receive"]').click();
-  const picker = page.locator('[data-testid="catalog-picker"]');
-  await expect(picker).toBeVisible();
-  await picker.getByRole("option", { name: new RegExp(CATALOG.name, "u") }).click();
+  await pickCatalogItem(page, catalog.name);
   await page.locator('input[name="customer-phone"]').fill(phone);
   await page.locator('input[name="customer-name"]').fill("E2E 跟进顾客");
   await page.locator('input[name="initial-payment"]').fill(yuanText(paymentCents));
@@ -87,8 +140,8 @@ test.beforeAll(async ({ request }) => {
 
 test("a held draft is listed as 挂单 with no ticket number", async ({ page }) => {
   await signIn(page);
-  await ensureCatalogItem(page);
-  await fillReceiveForm(page, `137${Date.now().toString().slice(-8)}`, "0");
+  const catalog = await ensureCatalogItem(page);
+  await fillReceiveForm(page, catalog, `137${Date.now().toString().slice(-8)}`, "0");
 
   await page.getByRole("button", { name: "暂存挂单" }).click();
 
@@ -112,8 +165,8 @@ test("a held draft is listed as 挂单 with no ticket number", async ({ page }) 
 
 test("an open order is cancelled with a reason and a second confirmation", async ({ page }) => {
   await signIn(page);
-  await ensureCatalogItem(page);
-  await fillReceiveForm(page, `136${Date.now().toString().slice(-8)}`, "0");
+  const catalog = await ensureCatalogItem(page);
+  await fillReceiveForm(page, catalog, `136${Date.now().toString().slice(-8)}`, "0");
   await page.getByRole("button", { name: "确认开单" }).click();
 
   const ticketCell = page.locator('[data-testid="receive-ticket"]');
@@ -171,8 +224,8 @@ test("an open order is cancelled with a reason and a second confirmation", async
 
 test("a picked-up order with debt is settled by standalone repayment", async ({ page }) => {
   await signIn(page);
-  await ensureCatalogItem(page);
-  await fillReceiveForm(page, `138${Date.now().toString().slice(-8)}`, "500");
+  const catalog = await ensureCatalogItem(page);
+  await fillReceiveForm(page, catalog, `138${Date.now().toString().slice(-8)}`, "500");
   await page.getByRole("button", { name: "确认开单" }).click();
 
   const ticketCell = page.locator('[data-testid="receive-ticket"]');
@@ -205,8 +258,19 @@ test("a picked-up order with debt is settled by standalone repayment", async ({ 
   await expect(drawer).toBeVisible({ timeout: 15_000 });
   await expect(drawer.locator('[data-testid="order-detail-balance"]')).toContainText("¥15.00");
   await drawer.locator('[data-testid="order-detail-payment-btn"]').click();
-  await page.locator('input[name="payment-amount-cents"]').fill(yuanText("1500"));
+  // The dialog initializes the default amount after opening. Wait for that load
+  // before filling, so a concurrent prop update cannot insert a second amount.
+  const amount = page.locator('input[name="payment-amount-cents"]');
+  await expect(amount).toHaveValue(yuanText("1500"));
+  await amount.fill(yuanText("1500"));
+  await expect(amount).toHaveValue(yuanText("1500"));
+  const repaymentResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/v1/commands/payment.repay",
+  );
   await page.getByRole("button", { name: "确认补缴" }).click();
+  await expectCommandSuccess(await repaymentResponse, "standalone-repayment-response");
 
   await expect(drawer.locator('[data-testid="order-detail-balance"]')).toContainText("¥0.00", {
     timeout: 15_000,

@@ -34,6 +34,7 @@ import { isGrantCommandBodyAllowed, offlineQueueModeForCommand } from "./offline
 import {
   observeOfflineDiagnostic,
   offlineQueueRejected,
+  offlineResourceFailure,
   offlineQueuedSuccess,
   offlineRuntimeStatus,
   resolveOfflineRuntime,
@@ -247,7 +248,7 @@ export class OfflineCommandRuntime {
    */
   async queueCommand(
     input: unknown,
-    options: Readonly<{ idempotencyKey?: string }> = {},
+    options: Readonly<{ idempotencyKey?: string; isSessionCurrent?: () => boolean }> = {},
   ): Promise<DesktopCommandExecuteResult> {
     const parsed = await DesktopCommandExecuteInputSchema.safeParseAsync(input);
     if (
@@ -257,6 +258,10 @@ export class OfflineCommandRuntime {
         !IdempotencyKeySchema.safeParse(options.idempotencyKey).success)
     ) {
       return offlineQueueRejected(this.onDiagnostic, "input_parse");
+    }
+    // Validate the caller scope after async parsing, before any durable queue side effect.
+    if (options.isSessionCurrent?.() === false) {
+      return offlineResourceFailure();
     }
     const mode = offlineQueueModeForCommand(parsed.data.name);
     if (mode === null || !isGrantCommandBodyAllowed(parsed.data.name, parsed.data.body)) {

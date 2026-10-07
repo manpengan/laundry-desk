@@ -9,6 +9,7 @@ import {
 import type { DesktopHttpTransport } from "../desktop/http-transport.js";
 import type { DesktopOperationService } from "../transport/handlers.js";
 import type { OfflineReadCache } from "./read-cache.js";
+import { createOfflineQueryOperation } from "./query-operation.js";
 import { createOfflineReceiveRecovery } from "./receive-recovery-fallback.js";
 import type { OfflineCommandRuntime } from "./runtime.js";
 
@@ -196,7 +197,11 @@ export function createOfflineDesktopService(
     command: Object.freeze({
       execute: async (input: unknown) => {
         if (isMutationBlocked()) return unavailable();
+        const current = session;
+        const revision = sessionRevision;
+        const isCurrent = () => session === current && sessionRevision === revision;
         const result = await online.command.execute(input);
+        if (!isCurrent()) return unavailable();
         // A response can be lost after commit. A fresh offline queue key would
         // execute this receive twice; let its workspace retry the original key.
         const identifiedReceive =
@@ -209,74 +214,38 @@ export function createOfflineDesktopService(
         if (isUnavailable(result) && identifiedReceive) return result;
         if (isUnavailable(result)) {
           const health = await online.health.get();
-          if (!health.ok) return offline.queueCommand(input);
+          if (!isCurrent()) return unavailable();
+          if (!health.ok) {
+            const queued = await offline.queueCommand(input, { isSessionCurrent: isCurrent });
+            return isCurrent() ? queued : unavailable();
+          }
         }
         if (result.ok) await maintain();
-        return result;
+        return isCurrent() ? result : unavailable();
       },
     }),
-    query: Object.freeze({
-      execute: async (input: unknown) => {
-        const querySession = session;
-        const queryRevision = sessionRevision;
-        const queryWasReadOnly = offlineReadOnly;
-        const discardObservedReadOnlySession = (): void => {
-          if (
-            queryWasReadOnly &&
-            offlineReadOnly &&
-            session === querySession &&
-            sessionRevision === queryRevision
-          ) {
-            discardReadCache();
-          }
-        };
-        const result = await online.query.execute(input);
-        if (result.ok) {
-          if (
-            queryWasReadOnly &&
-            offlineReadOnly &&
-            session === querySession &&
-            sessionRevision === queryRevision &&
-            querySession !== null
-          ) {
-            replaceSession(querySession, false);
-          }
-          await maintain();
-          const current = session;
-          if (!recoveryReadOnly && current !== null) {
-            try {
-              await cache.put(current, input, result);
-            } catch (error) {
-              console.error("[edge-agent] offline read cache update failed", {
-                errorName: error instanceof Error ? error.name : "UnknownError",
-              });
-            }
-          }
-          return result;
-        }
-        if (!isUnavailable(result)) {
-          discardObservedReadOnlySession();
-          return result;
-        }
-        const health = await online.health.get();
-        if (health.ok) {
-          discardObservedReadOnlySession();
-          return result;
-        }
+    query: createOfflineQueryOperation(online, cache, {
+      recoveryReadOnly,
+      maintain,
+      unavailable,
+      captureSession: () => {
         const current = session;
-        if (current !== null) {
-          try {
-            const cached = await cache.get(current, input);
-            if (cached !== null) {
-              return cached;
-            }
-          } catch (error) {
-            console.error("[edge-agent] offline read cache lookup failed", {
-              errorName: error instanceof Error ? error.name : "UnknownError",
-            });
-          }
-        }
-        return result;
+        const revision = sessionRevision;
+        const wasReadOnly = offlineReadOnly;
+        const isCurrent = () => session === current && sessionRevision === revision;
+        return Object.freeze({
+          session: current,
+          isCurrent,
+          promoteOnline: () => {
+            if (!isCurrent() || !wasReadOnly || !offlineReadOnly || current === null) return;
+            // Only the mode changes: concurrent queries still belong to this session.
+            offlineReadOnly = false;
+            offline.reconcileSession(current);
+          },
+          discardReadOnly: () => {
+            if (isCurrent() && wasReadOnly && offlineReadOnly) discardReadCache();
+          },
+        });
       },
     }),
     photo: Object.freeze({
