@@ -22,9 +22,10 @@ const channelPort = new URLSearchParams(location.search).has("channels")
   ? createPaymentChannelPort(({ operation, body }) => port("channel").execute(operation, body))
   : undefined;
 const root = createRoot(document.getElementById("root"));
-export function unmount() {
-  root.unmount();
-}
+const unmountButton = document.createElement("button");
+unmountButton.textContent = "卸载测试页面";
+unmountButton.addEventListener("click", () => root.unmount());
+document.body.append(unmountButton);
 root.render(
   createElement(
     ToastProvider,

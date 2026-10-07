@@ -447,10 +447,7 @@ for (const outcome of ["failed", "succeeded", "unmounted"] as const) {
       await expect(ui.money).toHaveValue("0.00");
       expect(gets).toBe(1);
       if (outcome === "unmounted") {
-        await page.evaluate(async (path) => {
-          const harness = await import(path);
-          harness.unmount();
-        }, "/e2e/pickup-state-harness.mjs");
+        await page.getByRole("button", { name: "卸载测试页面", exact: true }).click();
       }
       const response = page.waitForResponse("**/__pickup_state/command/order.pickup");
       release.resolve();
