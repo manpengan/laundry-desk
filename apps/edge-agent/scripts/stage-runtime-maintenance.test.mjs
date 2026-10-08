@@ -51,3 +51,17 @@ test("the fixed native bootstrap fits the Windows command-line bound", async () 
   const command = prelude + trust + "\n" + source;
   assert.ok(Buffer.from(command, "utf16le").toString("base64").length < 32000);
 });
+test("the counter looks for the Runtime under the root its installer uses", async () => {
+  const installer = await readFile(
+    resolve("../../tools/windows-runtime/runtime-entry-install.ps1"),
+    "utf8",
+  );
+  const script = await readFile(resolve("src/maintenance/windows-script.ts"), "utf8");
+  const rooted = "-cnotmatch '^[A-Za-z]:\\\\'";
+  assert.ok(installer.includes(`$env:LOCALAPPDATA ${rooted}`));
+  assert.ok(installer.includes("DirectoryPath($env:LOCALAPPDATA)"));
+  assert.ok(installer.includes("Join-Path $programs 'Laundry Desk Runtime V2'"));
+  assert.ok(script.includes("$local = $env:LOCALAPPDATA\n"));
+  assert.ok(script.includes(`$local ${rooted}`));
+  assert.ok(script.includes("'Programs','Laundry Desk Runtime V2',$q.manifest_sha256"));
+});
