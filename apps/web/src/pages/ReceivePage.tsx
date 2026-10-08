@@ -96,7 +96,7 @@ export function ReceivePage({
     setTicketPreview,
   } = useReceiveForm();
   const busy = submitting || recoveryStatus === "loading";
-  const { policy, policyReady, draftRows, draftLoading, reloadDrafts } =
+  const { policy, policyReady, reloadPolicy, draftRows, draftLoading, reloadDrafts } =
     useReceiveResources(queryClient);
   const totals = useMemo(
     () => previewReceiveTotals(lines, pricing, policy),
@@ -349,6 +349,7 @@ export function ReceivePage({
               {...(scalePort === undefined ? {} : { scalePort })}
               busy={busy}
               policyReady={policyReady}
+              onRetryPolicy={reloadPolicy}
               canDiscount={canDiscount}
               draftId={draftId}
               pricing={pricing}
