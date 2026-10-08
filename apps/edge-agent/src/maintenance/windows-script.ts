@@ -5,15 +5,19 @@
  */
 const PRELUDE = "$ProgressPreference = 'SilentlyContinue'\n";
 
-/** The binding pins the installed entry. All handoff data is bounded stdin JSON, never shell source. */
+/**
+ * The binding pins the installed entry. All handoff data is bounded stdin JSON, never shell source.
+ * The Runtime installer roots its install at %LOCALAPPDATA% (ADR-69), so the lookup reads the same
+ * variable with the same check; the known-folder API ignores a redirected LOCALAPPDATA.
+ */
 export const MAINTENANCE_BOOTSTRAP = String.raw`
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $held = $null
 try {
   $q = [LaundryCounterMaintenanceTrust]::ReadProtocolInput() | ConvertFrom-Json
-  $local = [Environment]::GetFolderPath('LocalApplicationData')
-  if ([string]::IsNullOrWhiteSpace($local) -or -not [IO.Path]::IsPathRooted($local)) { throw 'path' }
+  $local = $env:LOCALAPPDATA
+  if ([string]::IsNullOrWhiteSpace($local) -or $local -cnotmatch '^[A-Za-z]:\\' -or -not [IO.Path]::IsPathRooted($local)) { throw 'path' }
   $root = [IO.Path]::Combine($local,'Programs','Laundry Desk Runtime V2',$q.manifest_sha256)
   [void][LaundryCounterMaintenanceTrust]::HoldDirectoryPath($root)
   [LaundryCounterMaintenanceTrust]::AssertPrivateDirectory($root)
