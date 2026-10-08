@@ -48,10 +48,20 @@ function deferredRead() {
   return { promise, resolve };
 }
 
-async function mount(port: PhotoPort, photos: readonly PhotoMetaRow[] = [PHOTO]) {
+async function mount(
+  port: PhotoPort,
+  photos: readonly PhotoMetaRow[] = [PHOTO],
+  onDelete?: (photoId: string) => Promise<boolean>,
+) {
   let renderer!: ReactTestRenderer;
   await act(async () => {
-    renderer = create(createElement(PhotoGallery, { photos, photoPort: port }));
+    renderer = create(
+      createElement(PhotoGallery, {
+        photos,
+        photoPort: port,
+        ...(onDelete === undefined ? {} : { onDelete }),
+      }),
+    );
   });
   return renderer;
 }
@@ -163,6 +173,69 @@ test("original decode failure and retry leave the thumbnail usable", async (cont
     urls.revoked.mock.calls.map((call) => call.arguments),
     [["blob:photo-2"], ["blob:photo-3"], ["blob:photo-1"]],
   );
+});
+
+test("viewer Escape consumes the ancestor key event and releases only the original", async (context) => {
+  const urls = mockUrls(context);
+  const renderer = await mount(photoPort(async () => READ_SUCCESS));
+  try {
+    await act(async () => openPhoto(renderer));
+    const viewer = renderer.root.findByProps({ role: "dialog" });
+    const event = {
+      key: "Escape",
+      preventDefault: context.mock.fn(),
+      stopPropagation: context.mock.fn(),
+    };
+    await act(async () => {
+      (viewer.props.onKeyDown as (keyEvent: typeof event) => void)(event);
+    });
+    assert.equal(event.preventDefault.mock.callCount(), 1);
+    assert.equal(event.stopPropagation.mock.callCount(), 1);
+    assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 0);
+    assert.equal(renderer.root.findByType("img").props.src, "blob:photo-1");
+    assert.deepEqual(
+      urls.revoked.mock.calls.map((call) => call.arguments),
+      [["blob:photo-2"]],
+    );
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test("Escape cannot dismiss a viewer while its confirmed deletion is pending", async (context) => {
+  mockUrls(context);
+  let finishDelete!: (removed: boolean) => void;
+  const pending = new Promise<boolean>((resolve) => {
+    finishDelete = resolve;
+  });
+  const remove = context.mock.fn(async () => pending);
+  const renderer = await mount(
+    photoPort(async () => READ_SUCCESS),
+    [PHOTO],
+    remove,
+  );
+  try {
+    await act(async () => openPhoto(renderer));
+    const viewer = renderer.root.findByProps({ role: "dialog" });
+    await act(async () => click(viewer, "删除照片"));
+    await act(async () => click(viewer, "确认删除"));
+    assert.equal(remove.mock.callCount(), 1);
+    assert.equal(viewer.findByProps({ className: "ld-photo-viewer__close" }).props.disabled, true);
+    const event = {
+      key: "Escape",
+      preventDefault: context.mock.fn(),
+      stopPropagation: context.mock.fn(),
+    };
+    await act(async () => {
+      (viewer.props.onKeyDown as (keyEvent: typeof event) => void)(event);
+    });
+    assert.equal(event.stopPropagation.mock.callCount(), 1);
+    assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 1);
+    await act(async () => finishDelete(true));
+    assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 0);
+  } finally {
+    await act(async () => renderer.unmount());
+  }
 });
 
 test("switching the selected original hides the prior image and ignores its late error", async (context) => {

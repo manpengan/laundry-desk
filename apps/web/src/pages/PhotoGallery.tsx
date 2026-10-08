@@ -4,6 +4,7 @@ import type { PhotoPort, PhotoReadVariant } from "../host/photo-port.js";
 import type { PhotoMetaRow } from "./photo-list.js";
 import type { OrderGetGarment } from "./order-form.js";
 import { photoGarmentLabel, photoKindLabel } from "./order-photo-labels.js";
+import { PhotoViewer } from "./PhotoViewer.js";
 
 type ImageState =
   | Readonly<{ status: "loading" }>
@@ -174,49 +175,44 @@ export function PhotoGallery({
         ))}
       </ul>
       {visibleSelected !== null ? (
-        <div className="ld-photo-viewer" role="dialog" aria-modal="true" aria-label="查看照片">
-          <div className="ld-photo-viewer__body">
-            <p>
-              {garmentLabel(visibleSelected)} / {photoKindLabel(visibleSelected.kind)}
-            </p>
-            <PhotoImage photo={visibleSelected} photoPort={photoPort} variant="original" />
-            <div className="ld-photo-viewer__actions">
-              {onDelete !== undefined ? (
-                confirmingDelete ? (
-                  <div className="ld-photo-viewer__confirm" role="alert">
-                    <span>删除后不可恢复，确认删除？</span>
-                    <button
-                      type="button"
-                      disabled={deleteBusy}
-                      onClick={() => void deleteSelected()}
-                    >
-                      {deleteBusy ? "删除中…" : "确认删除"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={deleteBusy}
-                      onClick={() => setConfirmingDelete(false)}
-                    >
-                      取消
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" onClick={() => setConfirmingDelete(true)}>
-                    删除照片
+        <PhotoViewer onClose={closeViewer}>
+          <p>
+            {garmentLabel(visibleSelected)} / {photoKindLabel(visibleSelected.kind)}
+          </p>
+          <PhotoImage photo={visibleSelected} photoPort={photoPort} variant="original" />
+          <div className="ld-photo-viewer__actions">
+            {onDelete !== undefined ? (
+              confirmingDelete ? (
+                <div className="ld-photo-viewer__confirm" role="alert">
+                  <span>删除后不可恢复，确认删除？</span>
+                  <button type="button" disabled={deleteBusy} onClick={() => void deleteSelected()}>
+                    {deleteBusy ? "删除中…" : "确认删除"}
                   </button>
-                )
-              ) : null}
-              <button
-                type="button"
-                className="ld-photo-viewer__close"
-                disabled={deleteBusy}
-                onClick={closeViewer}
-              >
-                关闭照片
-              </button>
-            </div>
+                  <button
+                    type="button"
+                    disabled={deleteBusy}
+                    onClick={() => setConfirmingDelete(false)}
+                  >
+                    取消
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setConfirmingDelete(true)}>
+                  删除照片
+                </button>
+              )
+            ) : null}
+            <button
+              type="button"
+              className="ld-photo-viewer__close"
+              disabled={deleteBusy}
+              data-autofocus=""
+              onClick={closeViewer}
+            >
+              关闭照片
+            </button>
           </div>
-        </div>
+        </PhotoViewer>
       ) : null}
     </>
   );
