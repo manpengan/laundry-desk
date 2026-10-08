@@ -15,6 +15,7 @@ import {
 import { COUNTER_SHORTCUTS } from "../shell/ShortcutHelpDialog.js";
 import { useThemeControl, type ThemeControl } from "../shell/shell-shortcuts.js";
 import { THEME_PREFERENCES, themePreferenceLabel, type ThemePreference } from "../theme.js";
+import { MotionSelfTest } from "./MotionSelfTest.js";
 
 export function AppearanceSettingsPanel() {
   const theme = useThemeControl();
@@ -68,6 +69,7 @@ function AppearanceControls({ theme }: Readonly<{ theme: ThemeControl }>) {
           onChange={theme.setMotion}
         />
         <p className="ld-settings-appearance__note">{motionNote(theme)}</p>
+        <MotionSelfTest theme={theme} />
       </div>
     </>
   );

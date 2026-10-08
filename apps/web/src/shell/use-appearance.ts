@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { flushSync } from "react-dom";
 
 import {
   applyAppearanceToDocument,
@@ -9,6 +8,7 @@ import {
   readReducedMotion,
   readSystemDark,
   resolveMotion,
+  syncThemeColor,
   writeStoredMotion,
   writeStoredPalette,
   type MotionEnvironment,
@@ -24,22 +24,7 @@ import {
   type ThemePreference,
 } from "../theme.js";
 import type { ThemeControl } from "./shell-shortcuts.js";
-
-type ViewTransitionDocument = Document & { startViewTransition?: (update: () => void) => unknown };
-
-/**
- * Theme switches cross-fade through a view transition at full motion only; the
- * update runs inside flushSync so the new snapshot already carries the new
- * data-* attributes (applied by the layout effect below).
- */
-export function runThemeTransition(motion: ResolvedMotion, update: () => void): void {
-  const doc = (typeof document === "undefined" ? null : document) as ViewTransitionDocument | null;
-  if (motion !== "full" || typeof doc?.startViewTransition !== "function") {
-    update();
-    return;
-  }
-  doc.startViewTransition(() => flushSync(update));
-}
+import { runThemeTransition } from "./theme-transition.js";
 
 /** Re-evaluates a media query on change (system theme / reduce motion). */
 function useMediaQuery(query: string, read: () => boolean, fixed?: boolean): boolean {
@@ -83,7 +68,9 @@ export function useAppearance({ initialTheme, systemDark, documentRef }: Appeara
 
   useLayoutEffect(() => {
     const doc = documentRef ?? (typeof document !== "undefined" ? document : null);
-    if (doc !== null) applyAppearanceToDocument(doc, { theme, palette, motion: resolvedMotion });
+    if (doc === null) return;
+    applyAppearanceToDocument(doc, { theme, palette, motion: resolvedMotion });
+    if (typeof document !== "undefined" && doc === document) syncThemeColor(document);
   }, [theme, palette, resolvedMotion, documentRef]);
 
   return useAppearanceControl(

@@ -118,6 +118,17 @@
   font-size: var(--lg-fs-xs);
 }
 
+.ld-settings-appearance__test {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-left: 62px;
+  color: var(--lg-ink2);
+  font-size: var(--lg-fs-xs);
+}
+
 /* —— Page entrance: the page rises in; workbench panels follow in a stagger. —— */
 
 :root[data-motion="full"] .ld-shell-main:not([aria-busy="true"]) {

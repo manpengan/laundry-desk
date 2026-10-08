@@ -42,6 +42,15 @@ test("外观 offers six palette cards, light/dark and motion as radio groups", (
   assert.doesNotMatch(html, /\sstyle=/u);
 });
 
+test("the smoothness self-test is offered, but never against system reduce-motion", () => {
+  const html = render(control());
+  assert.match(html, /class="ld-settings-appearance__test" aria-live="polite"/u);
+  assert.match(html, /<button[^>]*>检测流畅度<\/button>/u);
+  assert.doesNotMatch(html, /<button[^>]*>改用节能<\/button>/u, "no advice before a measurement");
+  const reduced = render(control({ motion: "auto", resolvedMotion: "off" }));
+  assert.match(reduced, /<button[^>]*disabled=""[^>]*>检测流畅度<\/button>/u);
+});
+
 test("without a shell theme control only the shortcut reference renders", () => {
   const html = render(null);
   assert.doesNotMatch(html, /radiogroup/u);
