@@ -144,6 +144,25 @@ export function applyAppearanceToDocument(
   dataset.motion = appearance.motion;
 }
 
+/**
+ * Mirrors the painted canvas colour into <meta name="theme-color">. The desktop
+ * main process follows it (did-change-theme-color) for the native window
+ * background, so a dark theme never flashes the light frame around show/resize.
+ */
+export function syncThemeColor(doc: Document): void {
+  const view = doc.defaultView;
+  if (view === null) return;
+  const color = view.getComputedStyle(doc.documentElement).getPropertyValue("--lg-bg").trim();
+  if (!/^#[0-9a-f]{6}$/iu.test(color)) return;
+  let meta = doc.head.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (meta === null) {
+    meta = doc.createElement("meta");
+    meta.name = "theme-color";
+    doc.head.append(meta);
+  }
+  if (meta.content !== color) meta.content = color;
+}
+
 const SOFTWARE_RENDERER = /swiftshader|llvmpipe|softpipe|basic render|software|\bwarp\b/iu;
 let softwareRenderingCache: boolean | null = null;
 
@@ -210,4 +229,5 @@ export function bootAppearance(doc: Document | null = globalDocument()): void {
     palette: initialPalette(storage),
     motion: resolveMotion(motion, readMotionEnvironment(motion)),
   });
+  syncThemeColor(doc);
 }

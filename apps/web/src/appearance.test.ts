@@ -15,6 +15,7 @@ import {
   parsePalette,
   probeSoftwareRendering,
   resolveMotion,
+  syncThemeColor,
   THEME_PALETTES,
   writeStoredMotion,
   writeStoredPalette,
@@ -144,4 +145,29 @@ test("software rendering is recognised from the WebGL renderer", () => {
     },
   } as unknown as Pick<Document, "createElement">;
   assert.equal(probeSoftwareRendering(throwing), true);
+});
+
+function themeColorDocument(canvas: string) {
+  const metas: { name: string; content: string }[] = [];
+  const doc = {
+    defaultView: { getComputedStyle: () => ({ getPropertyValue: () => canvas }) },
+    documentElement: {},
+    head: {
+      querySelector: () => metas[0] ?? null,
+      append: (meta: { name: string; content: string }) => metas.push(meta),
+    },
+    createElement: () => ({ name: "", content: "" }),
+  } as unknown as Document;
+  return { doc, metas };
+}
+
+test("the painted canvas colour is mirrored into a single theme-color meta", () => {
+  const { doc, metas } = themeColorDocument(" #0c0a14 ");
+  syncThemeColor(doc);
+  syncThemeColor(doc);
+  assert.deepEqual(metas, [{ name: "theme-color", content: "#0c0a14" }]);
+
+  const derived = themeColorDocument("color-mix(in srgb, red 5%, blue)");
+  syncThemeColor(derived.doc);
+  assert.deepEqual(derived.metas, [], "only a literal #rrggbb reaches the window");
 });

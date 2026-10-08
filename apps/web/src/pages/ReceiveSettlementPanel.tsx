@@ -21,6 +21,8 @@ export type ReceiveSettlementPanelProps = Readonly<{
   busy: boolean;
   submitBlocked?: boolean;
   policyReady: boolean;
+  /** Reads the pricing policy again now (it also retries by itself). */
+  onRetryPolicy?: () => void;
   canDiscount: boolean;
   draftId: string | null;
   pricing: PricingSelection;
@@ -47,6 +49,7 @@ export function ReceiveSettlementPanel({
   busy,
   submitBlocked = false,
   policyReady,
+  onRetryPolicy,
   canDiscount,
   draftId,
   pricing,
@@ -199,7 +202,12 @@ export function ReceiveSettlementPanel({
         <p className="ld-counter-panel__hint">
           {policyReady
             ? `金额以确认开单时的价目与计价设置为准（版本 ${policy.version}），系统复核计价后出票。`
-            : "计价设置尚未读取成功；为避免错价，开单与挂单已停用。"}
+            : "计价设置尚未读取成功；为避免错价，开单与挂单已停用，正在自动重试。"}
+          {policyReady || onRetryPolicy === undefined ? null : (
+            <Button variant="ghost" size="sm" type="button" onClick={onRetryPolicy}>
+              重新读取
+            </Button>
+          )}
         </p>
       </div>
       <div className="ld-counter-actions">
