@@ -41,3 +41,16 @@ test("host entry delegates selection and gates lazy surfaces behind ServiceGate"
     /surface === ["']customer["'][\s\S]*await import\(["'][^"']+CustomerSurfaceApp\.js["']\)[\s\S]*<CustomerSurfaceApp\s+apiBaseUrl=\{apiBaseUrl\}/u,
   );
 });
+
+test("only the desktop host binds the login workspace", async () => {
+  const source = await readHostEntry();
+
+  assert.match(
+    source,
+    /import\s+\{\s*DESKTOP_LOGIN_WORKSPACE\s*\}\s+from\s+["'][^"']+desktop-login-workspace\.js["'];/u,
+  );
+  assert.match(
+    source,
+    /\{\.\.\.\(host\.kind === "desktop" \? \{ loginWorkspace: DESKTOP_LOGIN_WORKSPACE \} : \{\}\)\}/u,
+  );
+});

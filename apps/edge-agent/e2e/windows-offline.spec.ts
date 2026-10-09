@@ -184,8 +184,7 @@ test("installed Windows DPAPI queue survives an offline restart and replays exac
     expect(page.url()).toBe("app://local/index.html");
     await assertNativeStorage(application);
     await expect(page.locator('[data-page="login"]')).toBeVisible({ timeout: 20_000 });
-    await page.locator('input[name="org_code"]').fill("local");
-    await page.locator('input[name="store_code"]').fill("main");
+    await expect(page.locator('input[name="org_code"], input[name="store_code"]')).toHaveCount(0);
     await fillWindowsCredential(page.locator('input[name="username"]'), credentials.adminUsername);
     await fillWindowsCredential(page.locator('input[name="password"]'), credentials.adminPassword);
     await page.getByRole("button", { name: "登录" }).click();

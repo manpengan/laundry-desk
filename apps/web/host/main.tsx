@@ -10,6 +10,7 @@ import {
 } from "../src/host/app-surface.js";
 import { resolveBrowserApiBaseUrl } from "../src/host/browser-api-base.js";
 import { createBrowserPorts } from "../src/host/browser-ports.js";
+import { DESKTOP_LOGIN_WORKSPACE } from "../src/host/desktop-login-workspace.js";
 import { createDesktopPorts, type LaundryDesktopBridge } from "../src/host/desktop-ports.js";
 import { selectHost } from "../src/host/select-ports.js";
 import { ServiceGate } from "../src/host/ServiceGate.js";
@@ -96,6 +97,7 @@ async function start(): Promise<void> {
         enableLiquidGlass
         initialSession={resumed.ok ? resumed.session : null}
         readOnly={readOnly}
+        {...(host.kind === "desktop" ? { loginWorkspace: DESKTOP_LOGIN_WORKSPACE } : {})}
       />
     </ServiceGate>,
   );

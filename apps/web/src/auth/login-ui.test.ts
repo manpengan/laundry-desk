@@ -8,6 +8,8 @@ import { App } from "../App.js";
 import { createMockConnection } from "../connection.js";
 import { createMockCommandClient } from "../commands/command-client.js";
 import { createMockQueryClient } from "../commands/query-client.js";
+import { CounterSurfaceApp } from "../host/CounterSurfaceApp.js";
+import { DESKTOP_LOGIN_WORKSPACE } from "../host/desktop-login-workspace.js";
 import type { AppPorts } from "../host/types.js";
 import { LoginPage } from "../pages/LoginPage.js";
 import { PinSwitchDialog } from "../shell/PinSwitchDialog.js";
@@ -82,6 +84,40 @@ test("LoginPage SSR renders required fields", () => {
   assert.match(html, /密码/);
   assert.match(html, /type="password"/);
   assert.match(html, /登录/);
+});
+
+test("LoginPage with a bound workspace asks only for username and password", () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      ToastProvider,
+      null,
+      createElement(LoginPage, {
+        authClient: createMockAuthClient(),
+        onSuccess: () => undefined,
+        workspace: DESKTOP_LOGIN_WORKSPACE,
+      }),
+    ),
+  );
+  assert.match(html, /data-page="login"/);
+  assert.doesNotMatch(html, /name="org_code"|name="store_code"|机构代码|门店代码/u);
+  assert.match(html, /name="username"/);
+  assert.match(html, /name="password"/);
+  assert.match(html, /使用员工账号进入柜台/);
+});
+
+test("Counter surface threads the desktop workspace into its login", () => {
+  const render = (bound: boolean) =>
+    renderToStaticMarkup(
+      createElement(CounterSurfaceApp, {
+        ports: appPorts(),
+        enableLiquidGlass: false,
+        initialSession: null,
+        ...(bound ? { loginWorkspace: DESKTOP_LOGIN_WORKSPACE } : {}),
+      }),
+    );
+
+  assert.doesNotMatch(render(true), /name="org_code"|name="store_code"/u);
+  assert.match(render(false), /name="org_code"[\s\S]*name="store_code"/u);
 });
 
 test("login column fields do not inherit the shared horizontal flex basis", async () => {

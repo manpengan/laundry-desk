@@ -150,8 +150,7 @@ async function launchInstalled(executable: string, userDataPath: string) {
 
 async function login(page: Page, username: string, password: string): Promise<void> {
   await expect(page.locator('[data-page="login"]')).toBeVisible({ timeout: 20_000 });
-  await page.locator('input[name="org_code"]').fill(ORG_CODE);
-  await page.locator('input[name="store_code"]').fill(STORE_CODE);
+  await expect(page.locator('input[name="org_code"], input[name="store_code"]')).toHaveCount(0);
   await fillWindowsCredential(page.locator('input[name="username"]'), username);
   await fillWindowsCredential(page.locator('input[name="password"]'), password);
   await page.getByRole("button", { name: "登录" }).click();
@@ -447,8 +446,7 @@ test("created test admin completes the installed Windows desktop functional jour
       await persistFunctionalAccount(accountPath, account);
       await logout(page, "bootstrap");
     }
-    await page.locator('input[name="org_code"]').fill(ORG_CODE);
-    await page.locator('input[name="store_code"]').fill(STORE_CODE);
+    await expect(page.locator('input[name="org_code"], input[name="store_code"]')).toHaveCount(0);
     await page.locator('input[name="username"]').fill(account.username);
     const passwordInput = page.locator('input[name="password"]');
     await passwordInput.fill(WRONG_PASSWORD_PROBE);

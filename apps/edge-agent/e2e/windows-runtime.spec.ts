@@ -178,8 +178,7 @@ test("installed Windows Counter signs in and restarts against the native Runtime
     });
     expect(health).toEqual({ ok: true, data: { status: "ready" } });
 
-    await page.locator('input[name="org_code"]').fill("local");
-    await page.locator('input[name="store_code"]').fill("main");
+    await expect(page.locator('input[name="org_code"], input[name="store_code"]')).toHaveCount(0);
     await fillWindowsCredential(page.locator('input[name="username"]'), credentials.adminUsername);
     await fillWindowsCredential(page.locator('input[name="password"]'), credentials.adminPassword);
     await page.getByRole("button", { name: "登录" }).click();

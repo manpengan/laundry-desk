@@ -7,6 +7,7 @@ export function MobileTaskSurfaceApp({
   ports,
   enableLiquidGlass,
   initialSession,
+  loginWorkspace,
 }: StaffSurfaceAppProps) {
   return (
     <StaffSurfaceRoot
@@ -15,6 +16,7 @@ export function MobileTaskSurfaceApp({
       loginHint="使用当前门店员工账号进入我的任务"
       {...(enableLiquidGlass === undefined ? {} : { enableLiquidGlass })}
       {...(initialSession === undefined ? {} : { initialSession })}
+      {...(loginWorkspace === undefined ? {} : { loginWorkspace })}
       renderAuthenticated={({ session, onSessionChange }) => (
         <MobileTaskShell
           key={mobileTaskSessionScope(session)}

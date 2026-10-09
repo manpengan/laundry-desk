@@ -7,6 +7,7 @@ export function OwnerSurfaceApp({
   ports,
   enableLiquidGlass,
   initialSession,
+  loginWorkspace,
 }: StaffSurfaceAppProps) {
   return (
     <StaffSurfaceRoot
@@ -15,6 +16,7 @@ export function OwnerSurfaceApp({
       loginHint="使用管理员账号进入经营看板"
       {...(enableLiquidGlass === undefined ? {} : { enableLiquidGlass })}
       {...(initialSession === undefined ? {} : { initialSession })}
+      {...(loginWorkspace === undefined ? {} : { loginWorkspace })}
       renderAuthenticated={({ session, onSessionChange, setLoginInitialForm }) => (
         <OwnerShell
           {...ownerShellPropsFrom(session, ports, onSessionChange, async (selection) => {

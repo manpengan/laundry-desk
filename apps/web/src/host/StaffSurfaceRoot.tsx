@@ -1,6 +1,7 @@
 import { AuroraBackdrop, installLiquidGlass, ToastProvider } from "@laundry/ui";
 import { useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 
+import type { LoginWorkspace } from "../auth/login-memory.js";
 import type { LoginFormValues, SessionView } from "../auth/types.js";
 import { LoginPage } from "../pages/LoginPage.js";
 import type { AppPorts } from "./types.js";
@@ -16,6 +17,8 @@ type StaffSurfaceRootProps = Readonly<{
   enableLiquidGlass?: boolean;
   initialSession?: SessionView | null;
   loginInitialForm?: Partial<LoginFormValues>;
+  /** Host-bound 机构 / 门店代码; the login then asks only for the staff account. */
+  loginWorkspace?: LoginWorkspace;
   loginTitle?: string;
   loginHint?: string;
   renderAuthenticated: (state: StaffSurfaceState) => ReactNode;
@@ -30,6 +33,7 @@ export function StaffSurfaceRoot({
   enableLiquidGlass = true,
   initialSession = null,
   loginInitialForm,
+  loginWorkspace,
   loginTitle,
   loginHint,
   renderAuthenticated,
@@ -51,6 +55,7 @@ export function StaffSurfaceRoot({
         <LoginPage
           authClient={loginPortFrom(auth)}
           onSuccess={onSessionChange}
+          {...(loginWorkspace === undefined ? {} : { workspace: loginWorkspace })}
           {...(loginTitle === undefined ? {} : { title: loginTitle })}
           {...(loginHint === undefined ? {} : { hint: loginHint })}
           {...(activeLoginInitialForm === undefined ? {} : { initialForm: activeLoginInitialForm })}

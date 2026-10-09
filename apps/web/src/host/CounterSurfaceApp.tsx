@@ -10,12 +10,14 @@ export function CounterSurfaceApp({
   enableLiquidGlass,
   initialSession,
   readOnly = false,
+  loginWorkspace,
 }: StaffSurfaceAppProps) {
   return (
     <StaffSurfaceRoot
       auth={ports.auth}
       {...(enableLiquidGlass === undefined ? {} : { enableLiquidGlass })}
       {...(initialSession === undefined ? {} : { initialSession })}
+      {...(loginWorkspace === undefined ? {} : { loginWorkspace })}
       renderAuthenticated={({ session, onSessionChange }) => (
         <LazyCounterShell
           {...shellPropsFrom(
