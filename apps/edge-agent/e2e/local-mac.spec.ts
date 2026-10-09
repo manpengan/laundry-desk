@@ -52,8 +52,6 @@ const DOWNLOAD_PATH = join(USER_DATA_PATH, "downloads");
 const CONFIG_PATH = requiredEnvironment("LAUNDRY_LOCAL_CONFIG_DIR");
 const COMPOSE_PROJECT = requiredEnvironment("COMPOSE_PROJECT_NAME");
 const LOGIN = Object.freeze({
-  orgCode: requiredEnvironment("LAUNDRY_LOCAL_ORG_CODE"),
-  storeCode: requiredEnvironment("LAUNDRY_LOCAL_STORE_CODE"),
   username: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_USERNAME"),
   displayName: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME"),
   password: requiredSecretEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD"),
@@ -219,8 +217,7 @@ async function waitForHealth(expected: "ready" | "down"): Promise<void> {
 }
 
 async function signIn(page: Page): Promise<void> {
-  await page.locator('input[name="org_code"]').fill(LOGIN.orgCode);
-  await page.locator('input[name="store_code"]').fill(LOGIN.storeCode);
+  await expect(page.locator('input[name="org_code"], input[name="store_code"]')).toHaveCount(0);
   await page.locator('input[name="username"]').fill(LOGIN.username);
   await page.locator('input[name="password"]').fill(LOGIN.password);
   await page.getByRole("button", { name: "登录" }).click();

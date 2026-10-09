@@ -38,8 +38,6 @@ function requiredSecretEnvironment(name: string): string {
 const APP_PATH = requiredEnvironment("LAUNDRY_MAC_APP_PATH");
 const USER_DATA_PATH = requiredEnvironment("LAUNDRY_MAC_USER_DATA_DIR");
 const BOOTSTRAP = Object.freeze({
-  orgCode: requiredEnvironment("LAUNDRY_LOCAL_ORG_CODE"),
-  storeCode: requiredEnvironment("LAUNDRY_LOCAL_STORE_CODE"),
   adminUsername: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_USERNAME"),
   adminDisplayName: requiredEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME"),
   adminPassword: requiredSecretEnvironment("LAUNDRY_BOOTSTRAP_ADMIN_PASSWORD"),
@@ -94,8 +92,7 @@ function assertOwnedInputs(): void {
 
 async function submitLogin(page: Page, username: string, password: string): Promise<void> {
   await expect(page.locator('[data-page="login"]')).toBeVisible({ timeout: 15_000 });
-  await page.locator('input[name="org_code"]').fill(BOOTSTRAP.orgCode);
-  await page.locator('input[name="store_code"]').fill(BOOTSTRAP.storeCode);
+  await expect(page.locator('input[name="org_code"], input[name="store_code"]')).toHaveCount(0);
   await page.locator('input[name="username"]').fill(username);
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "登录" }).click();

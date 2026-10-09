@@ -1,10 +1,11 @@
 import { Button, Icon, Input, useToast } from "@laundry/ui";
 import { useCallback, useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import type { AuthClient } from "../auth/AuthClient.js";
+import { initialLoginForm } from "../auth/login-form.js";
 import {
   browserLoginStorage,
-  readLoginWorkspace,
   rememberLoginWorkspace,
+  type LoginWorkspace,
 } from "../auth/login-memory.js";
 import type { LoginFormValues, SessionView } from "../auth/types.js";
 import { hasLoginFieldErrors, validateLoginForm } from "../auth/validate-login.js";
@@ -14,41 +15,22 @@ export type LoginPageProps = {
   onSuccess: (session: SessionView) => void;
   /** Optional prefill (local host demo only — never bake secrets into library defaults). */
   initialForm?: Partial<LoginFormValues>;
+  /** Host-bound 机构 / 门店代码; when set, both code fields are hidden. */
+  workspace?: LoginWorkspace;
   title?: string;
   hint?: string;
 };
-
-const EMPTY_FORM: LoginFormValues = {
-  org_code: "",
-  store_code: "",
-  username: "",
-  password: "",
-};
-
-function mergeForm(initial?: Partial<LoginFormValues>): LoginFormValues {
-  const remembered = readLoginWorkspace(browserLoginStorage());
-  const base =
-    remembered === null
-      ? EMPTY_FORM
-      : { ...EMPTY_FORM, org_code: remembered.org_code, store_code: remembered.store_code };
-  if (initial === undefined) return base;
-  return {
-    org_code: initial.org_code ?? base.org_code,
-    store_code: initial.store_code ?? base.store_code,
-    username: initial.username ?? "",
-    password: initial.password ?? "",
-  };
-}
 
 export function LoginPage({
   authClient,
   onSuccess,
   initialForm,
+  workspace,
   title = "柜台登录",
-  hint = "使用机构 / 门店代码与员工账号进入柜台",
+  hint,
 }: LoginPageProps) {
   const toast = useToast();
-  const [form, setForm] = useState<LoginFormValues>(() => mergeForm(initialForm));
+  const [form, setForm] = useState<LoginFormValues>(() => initialLoginForm(initialForm, workspace));
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof LoginFormValues, string>>>(
     {},
   );
@@ -56,7 +38,10 @@ export function LoginPage({
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
-  const workspaceKnown = form.org_code.length > 0 && form.store_code.length > 0;
+  const workspaceBound = workspace !== undefined;
+  const workspaceKnown = workspaceBound || (form.org_code.length > 0 && form.store_code.length > 0);
+  const shownHint =
+    hint ?? (workspaceBound ? "使用员工账号进入柜台" : "使用机构 / 门店代码与员工账号进入柜台");
 
   useEffect(() => {
     if (typeof document !== "undefined") document.title = `${title} · 洗衣柜台`;
@@ -74,13 +59,17 @@ export function LoginPage({
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       setFormError(null);
-      const errors = validateLoginForm(form);
+      const credentials = Object.freeze(
+        workspace === undefined
+          ? { ...form }
+          : { ...form, org_code: workspace.org_code, store_code: workspace.store_code },
+      );
+      const errors = validateLoginForm(credentials);
       setFieldErrors(errors);
       if (hasLoginFieldErrors(errors)) {
         toast.push("请完善登录信息", "warning");
         return;
       }
-      const credentials = Object.freeze({ ...form });
       setForm((previous) => ({ ...previous, password: "" }));
       setShowPassword(false);
       setSubmitting(true);
@@ -90,13 +79,13 @@ export function LoginPage({
           setFormError(result.error.message);
           return;
         }
-        rememberLoginWorkspace(browserLoginStorage(), credentials);
+        if (workspace === undefined) rememberLoginWorkspace(browserLoginStorage(), credentials);
         onSuccess(result.data);
       } finally {
         setSubmitting(false);
       }
     },
-    [authClient, form, onSuccess, toast],
+    [authClient, form, onSuccess, toast, workspace],
   );
 
   return (
@@ -107,30 +96,32 @@ export function LoginPage({
             <Icon name="shirt" size={26} strokeWidth={2} />
           </span>
           <h1 className="ld-login__title">{title}</h1>
-          <p className="ld-login__hint">{hint}</p>
+          <p className="ld-login__hint">{shownHint}</p>
         </header>
         <form className="ld-login__form" onSubmit={(e) => void onSubmit(e)} noValidate>
-          <div className="ld-login__workspace">
-            <Input
-              name="org_code"
-              label="机构代码"
-              autoComplete="organization"
-              value={form.org_code}
-              onChange={(e) => setField("org_code", e.target.value)}
-              {...(fieldErrors.org_code ? { error: fieldErrors.org_code } : {})}
-              disabled={submitting}
-              autoFocus={!workspaceKnown}
-            />
-            <Input
-              name="store_code"
-              label="门店代码"
-              autoComplete="off"
-              value={form.store_code}
-              onChange={(e) => setField("store_code", e.target.value)}
-              {...(fieldErrors.store_code ? { error: fieldErrors.store_code } : {})}
-              disabled={submitting}
-            />
-          </div>
+          {workspaceBound ? null : (
+            <div className="ld-login__workspace">
+              <Input
+                name="org_code"
+                label="机构代码"
+                autoComplete="organization"
+                value={form.org_code}
+                onChange={(e) => setField("org_code", e.target.value)}
+                {...(fieldErrors.org_code ? { error: fieldErrors.org_code } : {})}
+                disabled={submitting}
+                autoFocus={!workspaceKnown}
+              />
+              <Input
+                name="store_code"
+                label="门店代码"
+                autoComplete="off"
+                value={form.store_code}
+                onChange={(e) => setField("store_code", e.target.value)}
+                {...(fieldErrors.store_code ? { error: fieldErrors.store_code } : {})}
+                disabled={submitting}
+              />
+            </div>
+          )}
           <Input
             name="username"
             label="用户名"

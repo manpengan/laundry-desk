@@ -54,8 +54,7 @@ test("installed Counter logs in, creates a synthetic order and retains recovery 
     const page = await application.firstWindow();
     if (firstLogin) {
       await expect(page.locator('[data-page="login"]')).toBeVisible({ timeout: 30_000 });
-      await page.locator('input[name="org_code"]').fill("local");
-      await page.locator('input[name="store_code"]').fill("main");
+      await expect(page.locator('input[name="org_code"], input[name="store_code"]')).toHaveCount(0);
       await fillWindowsCredential(page.locator('input[name="username"]'), "admin");
       await fillWindowsCredential(page.locator('input[name="password"]'), DEMO_PASSWORD);
       await page.getByRole("button", { name: "登录", exact: true }).click();
