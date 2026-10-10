@@ -1,9 +1,72 @@
 # Windows 同源候选验收 · 2026-10-07
 
+> 2026-10-10 补交的历史记录：下文的候选、分支、CI、进行中状态及清单截止于 2026-10-08 09:50（台北）。后续 `5db094aa` / `5587b003` 的失败、分项通过及恢复见[Windows 10 续验](../pilot-readiness-20261008/windows-acceptance.md)；本次 GitHub 输入 `c815bc7f` 与分支处置依据见[工作区核对](../workspace-reconciliation-20261010.md)。本轮整理没有复跑 Windows 测试或升级常驻服务。
+
 本页记录目标机器的实际候选及验收边界。工作过程、失败尝试和 CI 链接见 [进度](progress.md)；
 生产准入条件见 [本机准入手册](../project-remediation-20261006/local-admission.md)。
 
-## 照片预览修复（本地通过，Windows 新包待验）
+## 照片查看器视口修复 `9719af1b`（PR #243 已合并，专项复验继续）
+
+PR #243 的五项 CI 全部成功，已于 `00:57:57Z` 普通合并为 main `fad33482fbf623cebc6870de0653700119b76594`。
+远端 main 与 Windows 产品 `9719af1b` 的完整文件树相同（`d3407adf0af817e817111c4b4e8805a97008b832`）。
+真实 PostgreSQL 服务 1306 通过、1 项平台跳过；维护 4/4、commissioning 1/1、真实服务浏览器 44/44。
+合并时开放 PR 为零。新 main `fad33482` 的 Foundation、Counter、真实 PostgreSQL 均成功；Runtime 原生生命周期仍执行中；实机完整专项继续。
+
+`990c7c74` 的 `run-b993f838` 已真实通过当前 Runtime 2/2、双安装包 smoke、Limited v2 和宏发基础功能。
+但照片原图查看器在玻璃抽屉内被裁切，关闭按钮落在屏幕外，`d03-photo-viewer-close` 失败。
+两张 Blob 照片已成功解码，未见 CSP 或错误提示；图片显示修复有效，但完整照片操作尚未验收。
+12 份原始 JSON、3 张 PNG 已核对大小和摘要，13 项未执行结果保持缺失。
+独立 after 于 `00:04:12.359Z` 确认原服务 PID 22732 ready、三任务及双安装精确恢复、QA 残留为零。
+
+新局部修复将查看器挂载到页面顶层，限制视口尺寸，并接入独立焦点与嵌套 Esc 行为。
+真实浏览器使用生产玻璃 Drawer/CSS 复现旧版几何失败；修复后 1707×1004、1024×600、375×360
+关闭和确认操作，以及焦点/两层 Esc 共 4/4 通过。该结果不是 Windows 新包验收，后续五组须等待新 main 流程成功。
+
+新 Windows `0.1.17-win-dev.20261008` 已于 `00:31:42.450Z` 构建完成，源码 exact clean。
+7 份原始构建 JSON 已逐字节与摘要核对，Runtime/两个 Counter 的来源、内置 SPA 和入口绑定一致。
+最终 repo helper 于全部原生测试结束后读取；它不替代两个已安装 Counter 各自的 helper 校验。
+双 NSIS 已分别于 `00:33:52Z`、`00:36:56Z` 实际完成。8 份原始安装记录已核对摘要和大小；
+初次恢复失败记录保留，随后原安装入口各 7/7 精确修复并取得最终恢复成功记录。
+`run-6a0f187f` 新 main10 测试于 `00:43:10Z` 启动，D03 和两种小窗口真实通过；
+随后 D04 在 `new-identical-operation` 阶段失败，整轮未通过，后续专项保持未执行。
+`01:00:56.993Z` 独立 after 确认原服务 PID 4636 ready、三任务与双原安装精确恢复、QA 残留零。
+原始记录见 `windows-9719af1b/build-raw/` 与 `windows-9719af1b/dual-nsis-raw/`。
+
+新源前置检查 8 份原件已复核：78 个实际部署文件摘要一致、45 项 PS5/30 项 JS、52 项纯契约、
+High 与 Limited 各 native 0/7（真实 Int32，Session 1）通过。两套安装树的 EXE/ASAR/helper 和
+45 个 SPA 资源均匹配。原生测试共执行 40 次全部通过，其中 helper 4 项重复，独立用例计数不叠加。
+这些前置检查不替代后续专项业务 UI；见 `windows-9719af1b/main10-preflight-raw/`。
+
+| 9719 新源产物                    | SHA-256                                                            |
+| -------------------------------- | ------------------------------------------------------------------ |
+| Runtime manifest                 | `1d21766696fbff9397b99d6472d143db61657a5506544e41855e73fc918b825e` |
+| Runtime 入口                     | `2c81bc9a3b4c9cecdb36993cfb78ffb9ff3f122b4885b3139ba529a44e8a3333` |
+| 构建全部原生测试后的 repo helper | `8318a9669b49b46fd656f06f154915e13c833fc5b0d880c69b67c8c39eddd5eb` |
+| generic NSIS                     | `715e748f312a3a8f703c389b32233eda1c1cb4382bdefc31518824dc70ae40fa` |
+| generic EXE                      | `1e2f084c607c60378f17c415801039ca7625f32bfa57074c5b438de270ac3d16` |
+| generic 安装后 app.asar          | `c7d12f94f5a01bafd3c1023b5eb3a40d8a5e35f9c2fc9e9bf5110ed456be341e` |
+| hongfa NSIS                      | `677a0c14045e7b4f7650c258f8587646c2f8e550693f0e2b47293a764950f980` |
+| hongfa EXE                       | `8e356cc9ba23721e0612073e08320fe272cacd329fcae6392f4ff7ae329a72be` |
+| hongfa 安装后 app.asar           | `1a553b3ad987c1fb528dd38a588ab4c4aeb84997569772e5cd041d8cc6f121e6` |
+
+### 新包已取得的实际分项与 D04 失败
+
+- 当前 Runtime 两项实际恢复通过（00:48:41 UTC）：1 单、1 照片、默认备份开启，真实删除照片元数据与文件后完整恢复，并完成影子演练；不包含跨 schema 升级、成对回退、旧控制器重装。
+- 双 Counter 在 Limited Session 1 的 package smoke、同源 Runtime 入口绑定、普通权限 start/status 和宏发基础业务通过。
+- D03 通过（00:57:38 UTC）：实际给第二件衣物上传 270B 合成 JPEG，第一件照片数0、第二件1；缩略图与原图解码2×2，正常点击关闭并重开订单后仍存在。root 核对4份JSON和8张PNG，并实际查看原图弹窗完整边界和可见关闭按钮、重开缩略图及小窗口焦点。
+- 1024×600 和 1280×800 实际 content size 下，挂单结算输入可聚焦、命中、确认按钮可操作、无横向溢出；系统 DPI 仍150%，没有测多 DPI 或 IME，也未把挂单提交成订单。
+- D04 于00:58:57 UTC失败，原固定码为 `D04_CHECK_FAILED`，阶段 `new-identical-operation`；旧 catch 未保留原异常，不能据此归因于产品或强杀 helper。原13份终态JSON、4+8份照片原件及原环境独立恢复均已下载逐摘要核验。
+- 独立 D04 诊断 `run-64fe4489` 于01:26:57 UTC通过：强杀后同用户恢复、原操作恰好1单1付款500分、再次同内容开单使用新键，三阶段数据库集合核对通过。01:28:49独立after确认原PID14168 ready、三任务与双安装精确恢复、残留零。10份终态和5份私有原件已逐摘要复核；该独立链不替代完整main，旧失败根因仍未确定。新main11保留完整原执行顺序并加入私有诊断，后续五组仍严格要求main11成功前序。
+
+原件分别位于 `windows-9719af1b/run-6a0f187f/{runtime-raw,shared-runtime-raw,additional-raw,final-raw}/`。
+
+独立诊断原件见 `windows-9719af1b/run-64fe4489/{preflight-raw,runtime-raw,final-raw,private-checkpoints}/`；完整main11冻结载体见 `reviewed-harness/9719-main11/`。
+
+### Win11 资源重新确认
+
+2026-10-08 01:17:51 UTC已重新实测Tailscale直连公网IPv6并以固定主机密钥登录Linux，旧IPv4路径阻塞已解除。精确Laundry Win11 QA的QEMU PID65511、名称和磁盘身份匹配；一次无按键/无点击的鼠标移动唤醒显示后，01:27:50截图确认laundrytest桌面已解锁、PowerShell空提示。旧安装仍非本轮9719/.17，仅确认资源可用；其后只读确认Win11 Build26300、Session1普通令牌及旧Runtime 0.1.8运行中；用户随后指定完成Windows10即结束，Win11不再继续安装或测试。另一台virsh win11虚拟机未启动或改动。
+
+## 照片预览修复 `990c7c74`（已合并，旧实机轮次保留）
 
 `run-ae526778` 的 additional 旅程在第二件衣物上传后停止；原错误没有保存具体断言，不能追认其唯一原因。
 源码确认生产 `app://` 安全策略未允许图片 Blob，而图库使用 Blob URL。相同 Electron 41.10.6、
@@ -15,7 +78,43 @@
 图库增加缩略图、原图的显示失败提示与重试，旧请求、旧错误事件和切换员工后的 PhotoPort 不得污染当前图像；
 在重试、切换和卸载时回收地址。打包测试补充实际 `app://` 图片解码、第二件衣物绑定、原图和重新打开后的解码断言。
 Web 全量 684/684；Edge 脚本 168/168、单元 550 通过/2 平台跳过；类型、lint、格式、45 项 SPA
-同步与独立 TypeScript/安全审查通过。尚未将本修复标为 Windows 实机通过。
+同步与独立 TypeScript/安全审查通过。产品已通过 PR #242 普通合并，HEAD `990c7c74` 五项 CI 全绿：
+双 Windows 安装包安全/Blob 解码与登录重启各 1/1，generic 原生 52/52、macOS 安装包 1/1；
+真 PostgreSQL 服务 1306 通过/1 平台跳过、维护 4/4、空库浏览器 commissioning 1/1、
+浏览器 40/40（29 真实服务旅程及 11 取衣 DOM 夹具）。原始日志已核对，摘要记录在
+`output/windows-release-closure-20261007/ci/pr242-990c7c74.json`。
+
+目标 Windows 的独立新目录为 `C:\dev\ld-release-20261008-photo`，源码 exact clean，
+Runtime 标识 `0.1.16-win-dev.20261008`；22:33:04 UTC 构建成功，双隔离 NSIS 安装及原入口恢复通过。
+实机 UI 专项尚未标为通过。main `36710895` 与测试来源 `990c7c74` 文件树完全一致；
+合并后的 main CI 与目标 Windows 验收分别继续，旧失败记录保留。
+
+| 990 历史 Windows 产物 | SHA-256                                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime manifest      | `a7caf22ea1af3666238c62c30a571564002ac9f98db1a3702cfb382b8b706b1a`                                                                      |
+| Runtime 入口          | `364bca2a215693b536ca6077c915124c905d6ac07ad4d782fa56e6a0c34f7137`                                                                      |
+| generic NSIS / ASAR   | `b82783248e498d6f50f9a63ded766d0ab81daa77778d7410928c58bf1cfe82b1` / `a1454129b2fd9f1eeaff324dde5df26c02b1c2a8d7f0446a34d8d653a2191560` |
+| hongfa NSIS / ASAR    | `4a217bfc003585df5bce5d7fab9e33dd01a81965ac052fb12a0a6efd8afb35ba` / `1a3df9b48eb864e81abdbda4deec0230e79fdf9df66207b959fc4d2b09c51fb6` |
+| 内置 SPA（45 个资源） | `d22fd188b9c6479d9021d1c339e3e7f2b783b4423ea7f7df7a3843ec220111c3`                                                                      |
+
+7 份构建、8 份双 NSIS 原始回执已独立核对大小与摘要，见
+`output/windows-release-closure-20261007/windows-990c7c74/build-raw/` 和 `dual-nsis-raw/`。
+构建末次原生测试重新编译后的 repo helper 摘要为
+`8588dba5dc1ee48698456962c38ed3917e9e9c7c4be47d60533d28a6e1a75b5a`；
+它与两份已安装 Counter 各自的 helper 摘要分别校验，不混用早期构建值。
+
+`run-47c13d7c` 的双安装包 smoke 与当前 Runtime 两项恢复里程碑通过，后者实际删除照片元数据和文件后恢复。
+Highest 控制器的 stop、Limited worker 的 start/status 均原生退出 0，父控制器因任务时间判断持续等待；
+该轮经精确任务取消后明确失败，未进入实际业务 UI，原环境须独立恢复。
+此失败及未知状态守卫保留，新 v2 控制器以唯一回执及真实文件/PID 链判断完成；
+Windows 20 项 PowerShell 解析、9 项 JS 语法和 52 项纯契约已通过，尚不代表后续业务通过。
+
+恢复 v1 在读取证据时因路径缺少版本后缀失败，未执行服务动作；原错误及远端路径核对保留。
+窄修 v2 于 23:43:37 UTC 完成独立恢复；23:43:34 的只读 after 确认原服务 PID 5632 ready，
+三项任务的存在性/XML/SDDL/启用状态、两套原安装均精确一致，测试进程/UI 任务/QA 目录引用均零。
+真实 native stop 退出 0 且 nonce/PID 链匹配，26 份既有失败与支持证据保持；旧完成 worker 仍 Disabled。
+六份原始回执已逐字节/SHA 独立核验，见 `windows-990c7c74/run-47c13d7c/recovery-v2-raw/`。
+这是原环境恢复证明，`run-47c13d7c` 的 UI 结论仍为失败，后续使用新 main9 轮次。
 
 ## 取衣金额草稿修复 `352f69f5`（新包构建完成，UI 接续）
 
@@ -29,7 +128,7 @@ Web 全量 684/684；Edge 脚本 168/168、单元 550 通过/2 平台跳过；�
 Web 全量 679/679、完整 Web typecheck/lint 与 45 项 SPA 同步校验通过。新包 generic 基础业务通过、专项接续，
 不能把下节旧包结果算作本轮修复的 Windows 验收。
 
-产品修复已提交推送为 `352f69f582299f98ed6a7dcbbeb318d866f20d73`，PR #241。
+产品修复已提交推送为 `352f69f582299f98ed6a7dcbbeb318d866f20d73`，PR #241 已普通合并。
 首轮 CI 的认证入口导入门禁拒绝测试夹具 `import(path)`；`c5eeb80d` 改为真实页面按钮触发卸载，
 保留全部行为断言与原门禁，生产代码不变。修正后本地 foundation 11/11、DOM 11/11、
 Web 类型/lint 和独立审查通过；原失败保留。新 HEAD 五项 CI 已全绿，Windows 专项继续。
@@ -63,7 +162,13 @@ generic / hongfa 安装后 ASAR 分别为
 该专项 Counter。原 stderr 未保留，不将候选根因写成已证实的唯一异常。只读对照另外证明同一进程在
 Highest 下可读 exe/argv，而 Limited 下这两项为空；服务令牌层级正在校正。finally 因
 `PICKUP_PREFLIGHT_CONTROLLER_UNCONFIRMED` 拒绝恢复，原失败及 attention 保留；截至该记录，
-原环境仍待独立恢复，不把上一轮 after 作为本轮已恢复证明。
+当时原环境未恢复，原失败和 attention 没有撤销。随后恢复 v1 在 XML 预检失败，v2 实际停止 QA
+但退出码复合门禁失败；原退出码未记录，未追认为成功。窄续段 v3 不重复 QA stop/start，
+于 22:22:08 UTC 完成原任务及服务恢复，独立 after 检查原 PID 1536、程序入口、任务
+XML/SDDL/启用状态、双原安装精确一致，测试进程/任务引用均零。18 份既有失败证据保持。
+5 份原始 JSON 已逐尺寸/SHA 独立复核，目录为
+`output/windows-release-closure-20261007/windows-352f69f5/run-c3409477/recovery-v3-raw/`。
+恢复完成不代表该次 Pickup 专项通过。
 
 ## 查询优化候选 `a2ab1d9c`（双版本基础业务通过，专项接续）
 
@@ -383,7 +488,7 @@ Counter 安装器当前 `NotSigned`；构建与功能通过不改变开发保证
 
 ## 尚需外部资源或决定
 
-Win11、第二台机器与不同 SID 的恢复、约定周期的备份观察、正式签名或受控分发决定、
+Win11 QA现已可访问；用户指定本轮完成Windows10即结束，Win11最新版本验收保留为本轮范围外。第二台物理机器与不同 SID 的恢复、约定周期的备份观察、正式签名或受控分发决定、
 已启用外部渠道及实物设备、普通店长和辅助技术参与者、ADR-98 签署均未关闭。
 逐项条件与通过标准保留在本机准入手册，不以当前构建、CI 或同机自动化结果替代。
 
