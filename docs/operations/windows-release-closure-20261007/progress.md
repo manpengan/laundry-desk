@@ -1,6 +1,8 @@
 # 进度
 
-更新时间：2026-10-07 22:08（台北）。
+> 2026-10-10 补交的历史记录：下文的候选、分支、CI、进行中状态及清单截止于 2026-10-08 09:50（台北）。后续 `5db094aa` / `5587b003` 的失败、分项通过及恢复见[Windows 10 续验](../pilot-readiness-20261008/windows-acceptance.md)；本次 GitHub 输入 `c815bc7f` 与分支处置依据见[工作区核对](../workspace-reconciliation-20261010.md)。本轮整理没有复跑 Windows 测试或升级常驻服务。
+
+历史记录更新时间：2026-10-08 09:41（台北）。
 
 ## 2026-10-07 入场
 
@@ -196,3 +198,170 @@ Pickup 首版仪器误选 undici 通道，经独立审查确认当前 Electron �
 新 Windows 根为 `C:\dev\ld-release-20261008-pickup`，Runtime 发行标识 `0.1.14-win-dev.20261008`。32 份脚本已固定最终来源及依赖摘要；root 和独立审查分别重算每份原始与最终摘要、确认机械替换后全文相等，唯一额外校验是把 `read-cache.js` 纳入两个实际 ASAR 的逐字节证明。新安装和各项业务尚未记为通过，旧候选及失败证据继续保留。
 
 main `1055ed0e` 的 PostgreSQL CI 已成功，下载日志确认服务 1306 通过/1 平台跳过、维护 4/4、浏览器 29/29、空卷 commissioning 1/1；Foundation、Counter 同样已绿，Runtime 仍待终态。
+
+## 2026-10-08 04:30（台北）：查询修复合并、实机 Runtime 与取衣状态修复
+
+PR #240 HEAD `713efb69` 的五项检查通过后，于 2026-10-07 19:10:09 UTC 普通合并为 main `07164f832e62688d55e08044f5641fb646fd623f`。未删除分支、未绕过保护。该 main 的 Foundation、双 Counter 与 PostgreSQL 已成功；Runtime `37672432293` 于 21:07:45 UTC 成功，原始日志逐项核对 25 个独立场景全通过。较早 main `1055ed0e` 的 Runtime `37657840000` 已成功，原始日志确认 25 个独立场景全通过，两个版本分别记录。
+
+产品 `a2ab1d9c` 的 Runtime `0.1.14` 和双 Counter 于 18:41:09 UTC 同源构建完成，原生 36 项独立回归通过；双 NSIS、7/7 原入口精确恢复及实际安装树绑定通过。`run-f5cea3c7` 的当前 Runtime 恢复与双 profile 基础业务通过，原 5 秒取衣重载断言通过，没有另测精确耗时。additional 在首窗等待前读取窗口几何而失败，原现场没有几何值，续验仅调整等待顺序并保留判据。finally 与独立 after 均通过。
+
+`run-6559fd3a` 的提交前草稿强杀在读取 `$LASTEXITCODE` 时报错，不能证明实际强杀成功；离线阶段未运行。`run-b6c9271e` 的空 Runtime 安装被旧 helper 的严格 stderr 判据拒绝，迁移及第二实例未运行。源码确认直接生命周期程序会输出计时协议，后续仅识别固定格式的已知成功计时，非零退出和未知诊断继续失败。两轮原环境均精确恢复，安全失败回执已独立核对。
+
+完整 Runtime `run-320a8f46` 于 19:52:59 UTC 五项里程碑全通过：真实旧版 0069 基线、升级 0082、程序与数据库成对回退、保留数据卸载重装、备份后真实删除照片元数据/文件并恢复及影子演练。19:55:31 finally、20:03:45 独立 after 通过，原服务/任务/双安装精确恢复、残留为零。5 份原始 JSON 尺寸和 SHA 已复核。
+
+坏备份 `run-04f2a968` 的前置 Runtime 恢复通过，专项在 preflight 报 `MGUI_COMMAND_FAILED`，尚未执行业务负例。原 stderr 未记录，不能追认为计时输出冲突。20:14:38 finally、20:15:45 独立 after 通过，6 份原始 JSON 已独立核验。新 helper 保留所有命令成功及负例判据，只增加安全诊断和严格计时协议识别。
+
+实际取衣结算截图发现上一单 16.00 元金额与确认按钮残留；下一单和部分取衣重载会继承该金额，DOM 回归还复现同刻点击发出两次命令。直接在已清空选衣的结单页重按会被旧校验拒绝，不声称已经发生重复收款。产品修复 `352f69f5` 将金额、选衣与活动订单共同失效，增加同步提交锁，处理到账/提交竞态，并在已确认成功但回执无法解析时清除草稿。
+
+修复前 7 场景 6 项失败；修复及相邻行为三轮 36/36，新增回执异常后最终 DOM 11/11，Web 全量 679/679、完整类型/lint、SPA 45 项资源和独立审查通过。PR #241 已创建并推送。首轮 workspace 认证导入门禁发现测试夹具 `import(path)`，测试提交 `c5eeb80d` 改为真实 DOM 按钮卸载 React 页面，保留全部行为断言；本地 foundation 11/11 和 DOM 11/11 再次通过。此时新 HEAD 的 Foundation、双 Counter 已通过，PostgreSQL 仍运行。
+
+Windows 新产品固定为 `352f69f5`、Runtime `0.1.15-win-dev.20261008`，20:23:51 UTC 在独立根 `C:\dev\ld-release-20261008-final-ui`、Session 1 普通令牌开始构建。源码准备原脚本尾部因旧 runner 的 PowerShell 模块缓存触发 clean 检查；只归档已知摘要、4641 字节的生成文件，另立 continuation 回执，不将原失败改记成功。尚未报告新包安装或 UI 通过。
+
+### 05:20 接续：新包安装与脚本工作目录隔离
+
+新产品 `352f69f5` 构建于 20:30:39 UTC 完成，双 NSIS 于 20:37:32 / 20:39:06 完成，原入口各 7/7 精确恢复，实际双 ASAR 绑定 manifest `95e8a4ec` 与入口 `af2f7574`。构建 7 份、安装 8 份及 runner/preflight 3 份原始 JSON 已逐尺寸/SHA 独立复核。PR #241 最终 HEAD `c5eeb80d` 五项 CI 全绿；真库服务 1306 通过、1 平台跳过，维护 4/4、空库 commissioning 1/1，浏览器 40/40（既有服务旅程 29、新 DOM 夹具 11）。
+
+`run-a70e1b64` 当前 Runtime 恢复、校验与照片演练于 20:55:24 UTC 通过，generic 完整基础业务于 21:01:31 通过。随后 Pickup 专项在 preflight 报 `UI_BUSINESS_FAILED`，没有专项业务结果；hongfa 未执行。21:02:11 finally 与 21:05:50 独立 after 确认原环境精确恢复、残留 0。5 份 final 原始 JSON 已独立复核。
+
+该来源树中唯一生成文件 `Microsoft/Windows/PowerShell/ModuleAnalysisCache` 为 4641 字节、SHA `47aa13be80f6357a57f13df6943ccc88246379a0c79b08bf5b277a1b55787136`，20:51:02 已创建，会触发严格源码洁净检查。原失败没有保存更细的异常码，不能追认它为唯一首错。21:12:24 按固定路径/摘要/尺寸归档保留后源码恢复 clean。续验使用单独新脚本，把生命周期 PowerShell 和业务外部进程工作目录移到已验证的私有证据目录；保留 `GIT_CLEAN`、所有业务断言、超时与原 finally，不忽略生成文件。Pickup v2 本地 17 项契约、9 JS 语法及独立审查通过，实机重试待执行。
+
+新 generic 的 6 张合成业务截图已逐摘要核对并目视；取衣结单明确显示金额 0.00、确认禁用、已付 20.00/余额 0.00/交付 1 件。截图不替代连续点击、部分取衣、真实拒绝后重试和全账本专项断言。当前 a2ab `run-ae526778` main-v6 已于 21:12:32 启动，正在串行接续专项。
+
+## 05:48 接续：照片 CSP 修复与服务权限隔离
+
+照片实机失败后，独立 Electron 41.10.6 复现证明旧 app:// 策略拦截 Blob 图像；图片专用允许项修复解码，未放宽脚本和网络策略。图库失败重试、旧异步结果隔离及 URL 回收完成，Web 684/684、Edge 718 通过/2 平台跳过、类型/lint/格式与独立 TypeScript/安全审查通过，内置 SPA 45 项同步。当前分支 `codex/windows-photo-render-20261008`，新的 Runtime 0.1.16 候选准备中，尚未实机验收。
+
+`run-ae526778` 的 hongfa 基础业务通过，additional 在第二件衣物上传后失败；原详细断言未保留。该轮 21:26:26 UTC 独立 after 确认原环境精确恢复，11 份原始 JSON 已复核。
+
+新的 `352f69f5` / `run-c3409477` 于 21:38:50 UTC 在 Pickup preflight 的真实 Runtime status 阶段失败；原 stderr 未保留。只读配对诊断证明同一服务进程的 exe/argv 在 Highest 可读、Limited 为空，不能简单取消身份门禁。finally 的 attention 守卫拒绝恢复，原环境尚未恢复；正在按端口精确进程身份、任务/Counter/维护零残留、专用夹具 SQL 零计数、原任务与安装基线摘要五项核验后执行独立恢复。原 attention 与失败回执保留。
+
+## 06:22 接续：照片修复推送、恢复脚本兼容性修正
+
+照片产品提交 `990c7c745f9936c3a72f596965b7abb70095e65d` 已推送至 [PR #242](https://github.com/manpengan/laundry-desk/pull/242)。新 SPA 摘要 `d22fd188b9c6479d9021d1c339e3e7f2b783b4423ea7f7df7a3843ec220111c3`。双 Windows 安装包 CI 已通过，实际 app:// Blob JPEG 解码断言包含其中；macOS 安装包和 workspace-check 同样成功，真 PostgreSQL 仍在运行。这些 GitHub runner 结果不能替代目标 Windows 实机。
+
+`run-c3409477` 恢复 v1 在任务 XML 预检失败且未产生恢复变更。诊断确认 Windows 导出的默认启用任务省略 Enabled 节点；v2 严格兼容该形式后，22:11:37 UTC 前置检查通过，实际 QA stop 输出 stopped。其退出码复合检查失败，原退出码未保留，不能推断为零。22:13:23 只读记录确认 QA state stopped、pending null、维护 idle、8787/8543 无监听、两个 QA 任务 Disabled；原服务尚未启动。
+
+新 v3 只从已停止状态恢复任务及启动原 Development 服务，不重复 QA stop/start。它保留 18 份原始失败及相关回执，并要求 Disabled XML 仅通过唯一 Enabled 节点变换就精确匹配原 hash；实际无进程、端口及其他任务门禁再次核验。独立审查通过，Windows PS5 解析 4/4、纯契约 25/25 于 22:21:08 通过，22:21:21 单次启动；此记录时仍待终态及独立 after。
+
+新 990 四组专项脚本完成结构审查，补齐私有工作目录及普通权限服务启动的不确定状态守卫，业务断言保持。它们仍是待绑定新产物的草稿，尚未执行，不计为产品通过。
+
+### 06:29 接续：原环境恢复与新候选实际构建
+
+v3 于 22:22:08.685 UTC passed，独立 after 于 22:22:08.631 passed：原服务 PID 1536 ready，原入口/Node/launcher 摘要、3 个任务存在性及 XML/SDDL/启用状态、双原安装 program/registry/shortcut/cache 全部一致，测试进程/UI 任务/QA 引用均为零。18 份旧失败与 attention 保留，未重复 QA stop。5 份原始回执已逐 size/SHA 与恢复/after 关联独立核验；这不是 Pickup 业务通过。
+
+PR #242 HEAD `990c7c74` 五项 CI 现已全绿，真 PostgreSQL 服务 1306 通过/1 平台跳过、维护 4/4、空库浏览器 commissioning 1/1、浏览器 40/40。Foundation 与 Counter 原日志同样下载核对，原生 52/52、双 profile 安装安全/Blob 解码及登录重启各 1/1、macOS 安装包 1/1。
+
+990 Windows 源于 22:25:22 exact clean，旧 352/939 来源也 clean；22:25:37 Session 1 实际构建 PID 13704 启动，22:25:57 进入 Runtime 构建，尚未取得完成结果。仅复用已锁定 runner，不重编译或改动 runner 来源。新机验收从双安装包缺服务 smoke、当前 Runtime 恢复到 hongfa 功能/照片/尺寸/崩溃/维护/视觉/原生窗口，再接双 profile Pickup 与其余专项。
+
+### 06:48 接续：双安装完成与最终 helper 绑定
+
+990 同源 Runtime 与双 Counter 于 22:33:04 UTC 构建成功，Runtime 摘要 `a7caf22ea1af3666238c62c30a571564002ac9f98db1a3702cfb382b8b706b1a`。通用版与宏发版隔离 NSIS 分别于 22:36:58、22:39:21 UTC 完成原安装入口恢复，两组各 7 项对象经原位 DACL 修复后精确复核；初始 restore=false 的历史记录仍保留。8 份安装原始 JSON 已逐字节与 SHA 核验，不计作业务 UI 通过。
+
+测试预检先后拦截两个 harness 问题：诊断 catch 的生成器转义造成 PowerShell 解析失败；以及主机 repo helper 在构建末次重编译后，与早期取到的哈希不一致。两次均未启动新的 QA 业务流程。旧脚本、错误与对应 manifest 已保留；最终 repo helper `8588dba5dc1ee48698456962c38ed3917e9e9c7c4be47d60533d28a6e1a75b5a` 与 sidecar、clean source 已复核，双安装包各自 helper 摘要单独绑定。共享模块 revision3 与四组父脚本完成机械哈希重绑定及独立复审，仍须 Windows 解析和两种权限的原生退出码实测。
+
+U07 空店迁移脚本补齐实际相邻照片夹具及维护 UI 依赖；用真实 native backup 建立 idle 维护记录，备份前后核对 9 张业务/导入表全空，再进入迁移。未知结果由父流程独立闭锁。汇总器收紧关键布尔、空库和双前序成功判定，避免矛盾子回执汇总为通过。上述属于验收脚本修订，尚未计入实机通过。
+
+### 06:54 接续：产品修复普通合并，主线 CI 与实机并行
+
+PR #241 在精确 HEAD `c5eeb80d` 五项 CI 全绿和独立审查后，于 22:53:14 UTC 普通合并为 `c0775430`；PR #242 在精确 HEAD `990c7c74` 五绿和独立审查后，于 22:53:46 UTC 普通合并为 `36710895f27b7a6a319953ca675393ec0c3bb43d`。没有 squash/rebase、绕过门禁或删除分支。回读开放 PR 为 0，`git diff 990c7c74 origin/main` 全树为空。主线四个工作流已启动，尚未取得终态；目标 Windows 仍按真实 provenance `990c7c74` 记录，不冒充 main 的新提交标识。
+
+实机测试启动脚本的正斜杠路径被 helper 的 CanonicalPath 预检拒绝，错误发生在探针任务注册之前；已保留原 stderr、空目录和载体。独立源码核对后，仅将载体专属目录规范为精确本机路径，未修改 helper 或共享模块。Highest Session 1 的 native 0/7 探针已通过，Limited 探针与业务回归继续。产品已合并和 Windows 专项通过分开记账。
+
+后续验收文档在新分支 `codex/windows-release-closure-20261008` 整理，工作区原 6 份文档修改完整保留。
+
+### 07:24 接续：主线真库通过，Limited 调度等待失败保留
+
+main `36710895` 的 Foundation 与双 Counter 工作流均成功；真实 PostgreSQL 工作流于 23:23:10 UTC 成功。最终服务测试 1306 通过、1 项 Windows DPAPI 跨身份平台跳过，日志有数据库零跳过核验；真实数据库维护 4/4、空库 commissioning 浏览器 1/1、服务浏览器 40/40。Windows Runtime payload 工作流此时仍在执行无仓库验收，尚未记为通过。
+
+990 的 `run-47c13d7c` 通过共享模块 25 项纯契约、两种权限的 native 0/7 探针、双安装包 smoke，以及当前 Runtime 的真实备份/校验/删除照片元数据与文件/恢复和演练两项里程碑。上述不重复声称本轮覆盖旧 schema、成对回退或旧控制器。
+
+Highest 控制器的 stop、Limited worker 的 start/status 均原生退出 0，但父控制器持续等待。只读证据显示 Scheduler LastRunTime 比已写入的 stopped-ready 时间早约 17 秒，原跨时钟比较不能满足；没有证据确定系统改时或该差异的唯一原因。23:17:22 UTC 在核验精确 nonce、原始回执摘要、已退出 worker、父进程身份和运行时身份后，仅禁用本轮已结束的专属 worker 任务，使父守卫正常失败退出。23:17:24 operation 明确失败，23:17:51 确认三个控制器进程均不存在；未强杀、未伪造成功、未重放任务。
+
+原 finally 按未知状态守卫保留隔离 QA 服务，原服务此时仍停，须按本轮 1 单 1 照片现场独立恢复，不复用之前空库恢复假设。共享控制器新 v2 保留完整 request/nonce/source/三次 native action 的真实 PID、退出码和文件摘要链，仅将跨时钟比较改为诊断，并使用单调经过时间约束等待；Queued 和尚未运行窗口只能继续等待。52 项纯契约和新父脚本仍待 Windows 验证，本轮不计作 UI 业务通过。
+
+### 07:42 接续：新控制器预检与独立恢复路径修正
+
+新 main9 的 30 个部署文件摘要/尺寸、Windows PS5 20 项解析、9 项 JS 语法和 shared v2 的 52 项纯契约通过，原始回执已独立复核；未进入新的 QA。新 Pickup 的 33 个文件引用、31 个依赖摘要及独立审查通过，本地 19/19 行为契约、9 项 JS 语法与严格 lint 通过，实机结果仍待执行。各专项沿用原业务断言，使用新文件路径，旧稿未覆盖。
+
+恢复 v1 的 5 项 PS5 解析和 37 项纯契约通过，23:34:09 UTC 单次启动后于 23:34:12 在 frozen_receipts 预检失败，尚未禁用 QA 任务或停止服务。原异常和 23:38:43 的 30 路径只读清单共同确认：六个 worker 证据路径漏了目录名中的 `-v1`；前 18 项及六个正确目录下的实际文件均存在、摘要匹配，六个错误路径不存在。原 v1 为 Ready/exit 1、实例与进程均零，原 failed/attention 均保留。
+
+新恢复 v2 仅纠正六路径并固定旧恢复失败原件及旧执行终态，26 项证据绑定、原生退出码与 nonce/PID、停止后进程/端口清空、原任务/服务恢复及独立 after 守卫保持。停止前两次 SQL 核对 1 张订单、0 笔付款、1 张照片和夹具 fingerprint，停止后核对照片字节；不声称停止后又进行了 SQL 检查。新版本已独立审查，尚待本机校验与真实执行。原环境此时仍待恢复，不能将预检绿灯记为恢复完成。
+
+### 07:48 接续：原环境恢复闭环
+
+恢复 v2 的新 5 项 PS5 解析、37 项纯契约和 26 项实际远端摘要核验通过，23:42:35 UTC 单次启动，23:43:37 结果 passed。真实 stop native int 0，nonce/PID 与请求相符；23:43:34 独立 after 确认原服务 PID 5632 ready、原三任务及双安装精确一致、测试进程/UI 任务/QA 目录引用均为零。恢复任务最终 Ready/exit 0/实例零；旧 main8 failed、attention 与 Disabled worker 保留。六份原始回执含 UTF-16 stdout 按原字节归档核验，未重编码。
+
+新 shared v2 的双权限原生 0/7 探针载体完成机械改名与解码 payload 独审，恢复后串行验证；之后从新 fresh-before 进入 main9。恢复完成不代表旧 UI 轮次通过。
+
+### 08:02 接续：新轮次突破等待点并进入业务
+
+新 `run-b993f838` 于 23:48:11 UTC 启动，fresh-before 原服务 PID 5632 ready，990 产品及 939/7248 runner 来源树 clean。shared v2 双权限的实际 native 0/7 探针、30 文件绑定、20 项 PS5 解析、9 项 JS 语法及 52 项纯契约均通过。新 Runtime 两项恢复里程碑于 23:53:11 完成，实际删除照片元数据和文件后恢复；4 份原始回执已独立核验，不覆盖跨 schema 或成对回退。
+
+shared v2 于 23:56:37 真正 completed/pass：普通权限 start/status 的真实退出码均为 0，worker 摘要及 PID 链与父回执匹配，High 后验通过；单调等待 56,208 ms、24 次轮询。6 份原始 JSON 已按远端大小与 SHA 独立复核，未用旧失败轮次代替。后续五组 148 个引用对应 87 个唯一文件，部署摘要逐项匹配、Windows PS5 46 项与 JS 37 项语法通过，只准备环境，没有并发开启业务窗口。
+
+2026-10-08 00:00:45 UTC，宏发基础 functional 通过，保留原 5 秒取衣重载断言，6 张截图生成。additional 照片和尺寸专项此时仍运行，其余专项与最终原环境恢复尚未取得本轮终态。
+
+### 2026-10-08 08:04 后：main9 照片查看器裁切，原环境已恢复
+
+- `run-b993f838` 在 `d03-photo-viewer-close` 失败。两张 blob 照片已解码为 2×2，CSP 与错误提示为空；实际截图显示查看器被玻璃抽屉裁切，右侧关闭按钮落在窗口外。旧脚本未保留原异常栈，因此不推断具体 Playwright timeout。
+- 已独立校验 final-raw 12 份原始 JSON 与 3 张 PNG 的 SHA-256/字节数。Runtime 2/2、双 package、Limited v2、hongfa functional 通过；D03 未完成，后续 13 项缺失不得计为通过，另外五组成功前序未满足且未启动。
+- `00:04:12.359Z` 独立只读 after 通过：原服务 PID 22732 / ready，3 个任务和双安装精确恢复，本轮进程、UI 任务及 QA 引用均为 0。
+- 新分支 `codex/photo-viewer-viewport-20261008` 修复局部查看器 portal、视口边界及嵌套键盘行为，补真实浏览器回归；修复后须重建新 Windows 安装包并从 main 全流程重验。
+
+### 2026-10-08 08:18：查看器修复推送 PR #243
+
+- 产品 `9719af1b4f00016520e6ebfbef5cd7b765595d53` 已提交推送；[PR #243](https://github.com/manpengan/laundry-desk/pull/243) 已关联任务。六份累计验收文档保持未暂存，待最终实机结论再单独提交。
+- Web 全量 686/686，类型/lint/构建/格式通过，桌面 SPA 45 项同步和校验通过，manifest `f2eeb3eebd35470ac0c0cbe06d9d1cdade4a38aea6412ac10e6e7c6cd3e0c9e4`。独立 TypeScript 审查及相关 7 项图库行为回归通过。
+- Chromium 完整生产玻璃抽屉下旧版 1707×1004 明确出现关闭按钮 `withinViewport=false`、`receivesPointer=false`；修复后 3 个尺寸和焦点/嵌套 Esc 共 4/4。原日志归档 `output/windows-release-closure-20261007/photo-viewer-regression/`。
+- 新 Windows 根目录计划 `C:\dev\ld-release-20261008-viewport`，Runtime `0.1.17-win-dev.20261008`。构建与六组独立验收脚本按新源重绑定中，尚未计为安装版通过。
+
+### 2026-10-08 08:29：新源实机构建及安装脚本复核
+
+- 新构建于 `00:24:49.005Z` 实际启动，PID 16808 / Session 1 Limited；`00:25:27.981Z` 原始 live 回执已 root 复核，Runtime 构建阶段、任务 Running、无 failure/final。`00:27:57Z` 后进入 generic Counter 构建，Runtime/入口已产出；最终 helper 摘要仍须等原生测试结束后读取。
+- source/build 5 份脚本逐字机械重绑定独立核验，bundle SHA `303561598579d57bbbb20ec4451a910a82b3a0987639dda5f0e324a35aa10e3b`，Git bundle 来源 `9719af1b` 验证通过。
+- common/install/operation/runners 20 个唯一文件、21 处引用经独立审查与全量摘要/逆映射核对；Windows 实际 13 项 PowerShell 解析与 6 项 JS 语法通过。新源 939 只读 runner reuse 完成，旧编译器/runner未重建。安装入口仅执行两套安装 phase，旧未部署 qa 分支不作为 main10 入口。
+- PR #243 的通用与宏发 Windows、macOS 三项已终态成功并核日志；CI实际checkout为 synthetic merge `d686c4ef`，其父为 main `36710895` 与 PR HEAD `9719af1b`，树 `d3407adf0af817e817111c4b4e8805a97008b832` 与产品 HEAD 完全相同。工作区/真实 PostgreSQL 尚未终态。
+
+### 08:46 接续：新候选安装与前置检查完成，main10 执行中
+
+`9719af1b` 的双 NSIS 于 00:33:52 / 00:36:56 UTC 完成，各 7 项原安装入口及 ACL 精确恢复；首次恢复失败与最终修复回执共 8 份原件全部保留并校验。安装后 app.asar 分别为 generic `c7d12f94f5a01bafd3c1023b5eb3a40d8a5e35f9c2fc9e9bf5110ed456be341e`、hongfa `1a553b3ad987c1fb528dd38a588ab4c4aeb84997569772e5cd041d8cc6f121e6`，与 EXE 摘要分开记录。
+
+独立复核 final QA 的 78 个文件与实际部署逐项一致，45 项 PS5 解析、30 项 JS 语法、52 项纯契约、High/Low Session 1 的真实 native 0/7 全通过；双安装树的 45 个 SPA 资源和 helper/EXE/ASAR 来源一致。Windows 原生测试数值投影与保留的原始结果逐字段相等，共执行 40 次（helper 4 项重复，不重复计为独立用例）。939 和 7248 runner 只读重新绑定产品来源，未假称本轮重新编译。
+
+main10 `run-6a0f187f` 于 00:43:10 UTC 单次启动，执行前原服务 PID 22732 ready；前置 8 份原件见 `windows-9719af1b/main10-preflight-raw/`。Pickup v5 的 33 个文件、31 个依赖摘要及实际双安装来源已完成两方核对与独立审查；须在 main10 成功且原环境独立恢复后，再依序执行 Pickup、业务补充、强杀/离线恢复、坏备份负例和 U07，不能据脚本预检关闭业务项。
+
+### 08:58 接续：PR #243 五绿普通合并，当前开放 PR 清零
+
+精确 HEAD `9719af1b4f00016520e6ebfbef5cd7b765595d53` 的五项检查全部成功。PostgreSQL 原日志核实：1307 总项中 1306 通过、1 非数据库平台跳过，并有 `PG_DATABASE_TESTS_VERIFIED`；真实数据库维护 4/4、fresh commissioning 1/1、真实服务器与 PostgreSQL 浏览器 44/44。CI 构建来源为合成 merge `d686c4ef3c231e631b2a27f4255e4a3053ef169a`，其父提交是367与9719，完整树与产品相同。
+
+00:57:57 UTC 通过普通 merge 合并 PR #243，产生 main `fad33482fbf623cebc6870de0653700119b76594`，parents 为367和9719。root fetch 后核对完整 tree `d3407adf0af817e817111c4b4e8805a97008b832` 相同、无文件差异；开放 PR 为零。未 squash/rebase、未删除分支、未绕过门禁。当前验收文档分支已快进至该 main，六份既有文档改动逐摘要保留。
+
+[Foundation](https://github.com/manpengan/laundry-desk/actions/runs/37706970364)、[PostgreSQL](https://github.com/manpengan/laundry-desk/actions/runs/37706970362)、[Counter](https://github.com/manpengan/laundry-desk/actions/runs/37706970340) 全部成功。新 main 四组 CI 单独监控，实机仍沿来源9719和现有 run 执行，不重标候选来源或把合并当作完整 UI 验收。
+
+### 09:04 接续：照片实机通过，D04 后段失败及恢复均保留
+
+`run-6a0f187f` 的D03于00:57:38 UTC通过，宏发基础功能00:56:27通过。root核验4份JSON与8张PNG，查看真实照片弹窗、重开订单与1024×600焦点截图：关闭和删除按钮均在视口内，原图已解码；第二件绑定及正常关闭重开断言通过。1024×600、1280×800两种content尺寸通过，保持150%DPI，不外推多DPI或IME。
+
+随后D04在 `new-identical-operation` 阶段报 `D04_CHECK_FAILED`，00:58:57记录失败，00:59:26 controller失败终态。原catch只留下固定总码，私有146B日志也只有该码，没有原异常或database-checkpoints；无法唯一判因。新诊断只准备细分该阶段和受限私有异常，不先改生产、不削弱业务断言、不覆盖旧冻结脚本。
+
+原finally确认服务恢复，无维护/窗口/柜台残留或恢复错误。01:00:56.993 UTC独立after核实原服务PID4636 ready、三任务XML/SDDL/启用状态与双原安装完全一致，测试进程/UI任务/QA引用均零。13份终态JSON逐大小与SHA复核归档；后续generic业务、维护、视觉、原生关窗等未完成，不记通过。main10失败不作为后续五组成功前序。
+
+### 09:41 接续：独立D04通过，完整main11重验；Win11资源恢复
+
+独立 D04 诊断 `run-64fe4489` 于01:26:57 UTC通过：强杀后同用户恢复、原操作恰好1单1付款500分、再次同内容开单使用新键，三阶段数据库集合核对通过。01:28:49独立after确认原PID14168 ready、三任务与双安装精确恢复、残留零。10份终态和5份私有原件已逐摘要复核；该独立链不替代完整main，旧失败根因仍未确定。新main11保留完整原执行顺序并加入私有诊断，后续五组仍严格要求main11成功前序。
+
+root与独立审查均核对main11的30个文件、4个PS载体精确变换、a159诊断JS同体、原finally及ZIP摘要；保留双包→Runtime→基础功能→照片/挂单小窗→D04→维护→视觉→原生关闭顺序。Pickup新载体33引用、15个自有文件机械重绑定及原安装摘要均复核，实际执行仍等待完整main11成功和独立恢复。
+
+新 main `fad33482` 的 Foundation、Counter、真实 PostgreSQL 均成功；Runtime 原生生命周期仍执行中。旧main367的25场景日志已独立核验，分别归档，不转记为新main通过。
+
+2026-10-08 01:17:51 UTC已重新实测Tailscale直连公网IPv6并以固定主机密钥登录Linux，旧IPv4路径阻塞已解除。精确Laundry Win11 QA的QEMU PID65511、名称和磁盘身份匹配；一次无按键/无点击的鼠标移动唤醒显示后，01:27:50截图确认laundrytest桌面已解锁、PowerShell空提示。旧安装仍非本轮9719/.17，仅确认资源可用；当前开始只读清点并准备隔离安装。另一台virsh win11虚拟机未启动或改动。
+
+### 09:50 范围收敛：完成Windows10后结束
+
+用户明确指定Windows10测试完即结束。停止Win11后续传输、安装与测试，只完成已在途只读命令的终态确认；旧Runtime、VM和介质均未更改。Windows10现有main11及五组专项继续，失败先定位和恢复，不盲目重跑；最终验收文档按实际结果提交推送并普通合并。
+
+main11 `run-ec3424fb` 于01:38:58 UTC启动。实际30pins/20PS5/9JS、三源clean和双安装摘要核验通过。4份Runtime原件已独立复核：双package、当前版真实数据库与照片删除恢复、同源入口通过；shared-v2于01:47:37完成，普通权限start/status及端口进程身份通过。主轮UI继续。
+
+## 2026-10-10 工作区记录补交
+
+此前六份未提交记录已随本次整理补交，原始文件、差异补丁及全部 Git 引用已在仓库外备份。上文“当前”“在跑”只保留当时状态，不表示本轮正在执行。后续验收已转交并记录在[Windows 10 续验](../pilot-readiness-20261008/windows-acceptance.md)：`5db094aa` 的 D04 两轮通过但维护刷新失败，修复后的 `5587b003` 主流程三轮失败，维护单项诊断仍有窗口就绪失败；各轮恢复均按原记录保留。GitHub 输入已到 `c815bc7f`，本轮仅整理、核对与合入记录，没有新增实机通过结论。
