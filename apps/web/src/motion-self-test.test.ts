@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { applyAppearanceToDocument } from "./appearance.js";
 
 import {
   frameReportText,
@@ -32,27 +33,67 @@ function fakeClock() {
   const frames: ((now: number) => void)[] = [];
   const timers: (() => void)[] = [];
   let cancelled = 0;
+  let now = 0;
   return {
     frames,
     timers,
+    tick: (at: number) => {
+      now = at;
+      frames.shift()?.(at);
+    },
+    finish: (at: number) => {
+      now = at;
+      timers.shift()?.();
+    },
     cancelled: () => cancelled,
     clock: {
       requestAnimationFrame: (tick: (now: number) => void) => frames.push(tick),
       cancelAnimationFrame: () => void (cancelled += 1),
       setTimeout: (run: () => void) => timers.push(run),
-    } as unknown as Pick<Window, "requestAnimationFrame" | "cancelAnimationFrame" | "setTimeout">,
+      performance: { now: () => now },
+    } as unknown as Parameters<typeof measureFrames>[0],
   };
 }
 
 test("sampling ends on its timer even when frames stop", async () => {
   const fake = fakeClock();
   const sampled = measureFrames(fake.clock, SELF_TEST_MS);
-  fake.frames.shift()?.(1000);
-  fake.frames.shift()?.(1016);
-  fake.frames.shift()?.(1050);
-  fake.timers.shift()?.();
-  assert.deepEqual(await sampled, [16, 34]);
+  fake.tick(1000);
+  fake.tick(1016);
+  fake.tick(1050);
+  fake.finish(3000);
+  assert.deepEqual(await sampled, { deltas: [1000, 16, 34], trailingMs: 1950 });
   assert.equal(fake.cancelled(), 1);
+});
+
+test("leading, trailing and total frame starvation count against the entire sampling window", async () => {
+  for (const times of [[0, 16], [2984, 3000], []]) {
+    const fake = fakeClock();
+    const sampled = measureFrames(fake.clock, SELF_TEST_MS);
+    for (const at of times) fake.tick(at);
+    fake.finish(SELF_TEST_MS);
+    const sample = await sampled;
+    const report = summarizeFrames(sample.deltas, sample.trailingMs);
+    assert.equal(report.frames, times.length);
+    assert.equal(report.fps, Math.round((times.length * 1000) / SELF_TEST_MS));
+    assert.equal(report.verdict, "slow");
+    assert.ok(report.worstMs >= 2984);
+    assert.ok(report.slowShare > 0);
+  }
+});
+
+test("a delayed timeout uses actual elapsed time, while steady frames remain smooth", async () => {
+  for (const end of [3000, 6000]) {
+    const fake = fakeClock();
+    const sampled = measureFrames(fake.clock, SELF_TEST_MS);
+    for (let index = 1; index <= 180; index++) fake.tick((index * 3000) / 180);
+    fake.finish(end);
+    const sample = await sampled;
+    const report = summarizeFrames(sample.deltas, sample.trailingMs);
+    assert.equal(report.frames, 180);
+    assert.equal(report.fps, end === 3000 ? 60 : 30);
+    assert.equal(report.verdict, end === 3000 ? "smooth" : "slow");
+  }
 });
 
 function fakeDocument(motion: string | undefined) {
@@ -68,11 +109,11 @@ function fakeDocument(motion: string | undefined) {
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 async function drive(fake: ReturnType<typeof fakeClock>, during?: () => void) {
-  fake.timers.shift()?.(); // warm-up elapses
+  fake.finish(SELF_TEST_WARMUP_MS);
   await settle();
   during?.();
-  fake.frames.shift()?.(0);
-  fake.timers.shift()?.(); // sampling window ends
+  fake.tick(SELF_TEST_WARMUP_MS + 16);
+  fake.finish(SELF_TEST_WARMUP_MS + SELF_TEST_MS);
   await settle();
 }
 
@@ -90,4 +131,28 @@ test("the self-test runs at full motion and hands the tier back", async () => {
   await second;
   assert.equal(changed.dataset.motion, "off", "a setting changed meanwhile wins");
   assert.ok(SELF_TEST_WARMUP_MS < SELF_TEST_MS);
+});
+
+test("selecting standard during a calm self-test keeps standard when the test ends", async () => {
+  const view = fakeDocument("calm");
+  const report = runMotionSelfTest(view.doc);
+  await drive(view.fake, () => {
+    // The same path used by useAppearance when the user changes the preference.
+    applyAppearanceToDocument(view.doc, { theme: "light", palette: "sky", motion: "full" });
+  });
+  await report;
+  assert.equal(view.dataset.motion, "full");
+});
+
+test("system reduced motion and the latest appearance win over the temporary preview", async () => {
+  for (const motion of ["off", "calm", "full"] as const) {
+    const view = fakeDocument("calm");
+    const report = runMotionSelfTest(view.doc);
+    await drive(view.fake, () => {
+      applyAppearanceToDocument(view.doc, { theme: "dark", palette: "sea", motion: "full" });
+      applyAppearanceToDocument(view.doc, { theme: "dark", palette: "sea", motion });
+    });
+    await report;
+    assert.equal(view.dataset.motion, motion);
+  }
 });

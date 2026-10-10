@@ -7,6 +7,7 @@ export const FOCUSABLE_SELECTOR = [
   'input:not([disabled]):not([type="hidden"])',
   "select:not([disabled])",
   "textarea:not([disabled])",
+  'details > summary:first-of-type:not([tabindex="-1"])',
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
@@ -33,10 +34,21 @@ export function pickInitialFocus(candidates: readonly FocusCandidate[]): number 
   return candidates.length > 0 ? 0 : -1;
 }
 
+function hiddenByClosedDetails(element: HTMLElement): boolean {
+  for (let parent = element.parentElement; parent !== null; parent = parent.parentElement) {
+    if (!parent.matches("details:not([open])")) continue;
+    const summary = Array.from(parent.children).find((child) => child.tagName === "SUMMARY");
+    if (summary === undefined || !summary.contains(element)) return true;
+  }
+  return false;
+}
+
 function focusables(container: HTMLElement): HTMLElement[] {
   const active = container.ownerDocument.activeElement;
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-    (element) => element.getClientRects().length > 0 || element === active,
+    (element) =>
+      !hiddenByClosedDetails(element) &&
+      (element.getClientRects().length > 0 || element === active),
   );
 }
 
