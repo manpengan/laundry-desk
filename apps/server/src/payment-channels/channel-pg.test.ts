@@ -33,7 +33,7 @@ const kms: ByokKmsPort = {
 test(
   "real PG channel settlement reserves orders, isolates tenants and applies one ledger with its audit",
   { skip: urls === null },
-  async () => {
+  async (t) => {
     assert.ok(urls);
     const admin = createPgPool({ connectionString: urls.admin });
     const pool = createPgPool({ connectionString: urls.app });
@@ -155,11 +155,13 @@ test(
         ),
         /CHANNEL_BINDING_MISMATCH/u,
       );
+      const paymentClock = t.mock.method(Date, "now", () => Date.parse("2026-10-02T12:00:00Z"));
       const results = await Promise.all(
         [1, 2, 3].map(() =>
           transact((client) => settleChannelPayment(client, tenant, local, intent.id, payment)),
         ),
       );
+      paymentClock.mock.restore();
       assert.ok(results.every((row) => row.state === "paid"));
       assert.equal(new Set(results.map((row) => row.payment_id)).size, 1);
       const counts = await admin.query<{
@@ -257,6 +259,7 @@ test(
         ),
         /CHANNEL_BINDING_MISMATCH/u,
       );
+      const refundClock = t.mock.method(Date, "now", () => Date.parse("2026-10-03T12:00:00Z"));
       const refunded = await Promise.all(
         [1, 2].map(() =>
           transact((client) =>
@@ -264,6 +267,7 @@ test(
           ),
         ),
       );
+      refundClock.mock.restore();
       assert.ok(refunded.every((row) => row.state === "refunded"));
       assert.equal(new Set(refunded.map((row) => row.payment_id)).size, 1);
       assert.equal(
@@ -298,6 +302,40 @@ test(
       );
       assert.equal(reconciliation.matched_count, 2);
       assert.equal(reconciliation.mismatches.length, 0);
+      const refundBillRow = {
+        merchant_order: intent.merchant_order,
+        provider_order: payment.providerOrder,
+        amount_cents: 300,
+        kind: "refund",
+        merchant_refund: receipt.merchantRefund,
+      };
+      const refundOnly = await transact((client) =>
+        reconcileChannelBill(client, tenant, {
+          channel: "wechat",
+          business_date: "2026-10-03",
+          rows: [refundBillRow],
+        }),
+      );
+      assert.equal(refundOnly.matched_count, 1);
+      assert.deepEqual(refundOnly.mismatches, [], "yesterday's payment is not due in today's bill");
+      const missingPayment = await transact((client) =>
+        reconcileChannelBill(client, tenant, {
+          channel: "wechat",
+          business_date: "2026-10-02",
+          rows: [refundBillRow],
+        }),
+      );
+      assert.deepEqual(
+        missingPayment.mismatches,
+        [
+          {
+            merchant_order: intent.merchant_order,
+            merchant_refund: null,
+            reason: "missing_provider",
+          },
+        ],
+        "a payment belonging to the requested day must still be reported when absent",
+      );
       const accountId = randomUUID();
       await transact((client) =>
         client.query(

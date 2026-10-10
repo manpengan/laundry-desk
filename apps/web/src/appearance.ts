@@ -134,10 +134,30 @@ export type AppliedAppearance = Readonly<{
   motion: ResolvedMotion;
 }>;
 
+const appearanceVersions = new WeakMap<HTMLElement, number>();
+
+/** Restore a temporary motion tier only while it still owns the appearance. */
+export function previewMotion(
+  doc: Pick<Document, "documentElement">,
+  motion: ResolvedMotion,
+): () => void {
+  const root = doc.documentElement;
+  const version = appearanceVersions.get(root);
+  const previous = root.dataset.motion;
+  root.dataset.motion = motion;
+  return () => {
+    if (appearanceVersions.get(root) !== version || root.dataset.motion !== motion) return;
+    if (previous === undefined) delete root.dataset.motion;
+    else root.dataset.motion = previous;
+  };
+}
+
 export function applyAppearanceToDocument(
   doc: Pick<Document, "documentElement">,
   appearance: AppliedAppearance,
 ): void {
+  const root = doc.documentElement;
+  appearanceVersions.set(root, (appearanceVersions.get(root) ?? 0) + 1);
   const { dataset } = doc.documentElement;
   dataset.theme = appearance.theme;
   dataset.palette = appearance.palette;

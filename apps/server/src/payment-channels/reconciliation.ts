@@ -33,7 +33,7 @@ export async function reconcileChannelBill(client: SqlClient, tenant: TenantCont
       tenant.storeId,
       input.channel,
       input.business_date,
-      input.rows.map((r) => r.merchant_order),
+      input.rows.filter((r) => r.kind === "payment").map((r) => r.merchant_order),
       input.rows.flatMap((r) => (r.merchant_refund === null ? [] : [r.merchant_refund])),
     ],
   );

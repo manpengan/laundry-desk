@@ -4,12 +4,14 @@
  * measurement instead of the "auto" GPU heuristic alone. Renderer-only.
  */
 
+import { previewMotion } from "./appearance.js";
+
 export type FrameVerdict = "smooth" | "borderline" | "slow";
 
 export type FrameReport = Readonly<{
   frames: number;
   fps: number;
-  /** Share of frames slower than SLOW_FRAME_MS (0…1). */
+  /** Share of slow intervals (0…1), including a stalled final interval. */
   slowShare: number;
   worstMs: number;
   verdict: FrameVerdict;
@@ -21,13 +23,16 @@ export const SELF_TEST_MS = 3000;
 /** Lets the drift animations start before sampling. */
 export const SELF_TEST_WARMUP_MS = 300;
 
-/** Pure: summary and verdict for a list of frame intervals in milliseconds. */
-export function summarizeFrames(deltas: readonly number[]): FrameReport {
+/** Include the final uncompleted interval in elapsed time without counting another frame. */
+export function summarizeFrames(deltas: readonly number[], trailingMs = 0): FrameReport {
   const frames = deltas.length;
-  const total = deltas.reduce((sum, delta) => sum + delta, 0);
+  const total = deltas.reduce((sum, delta) => sum + delta, trailingMs);
   const fps = total > 0 ? (frames * 1000) / total : 0;
+  const stalled = trailingMs > SLOW_FRAME_MS ? 1 : 0;
   const slowShare =
-    frames > 0 ? deltas.filter((delta) => delta > SLOW_FRAME_MS).length / frames : 1;
+    frames > 0
+      ? (deltas.filter((delta) => delta > SLOW_FRAME_MS).length + stalled) / (frames + stalled)
+      : 1;
   const verdict: FrameVerdict =
     fps >= 55 && slowShare <= 0.05
       ? "smooth"
@@ -38,7 +43,7 @@ export function summarizeFrames(deltas: readonly number[]): FrameReport {
     frames,
     fps: Math.round(fps),
     slowShare,
-    worstMs: frames > 0 ? Math.round(Math.max(...deltas)) : 0,
+    worstMs: Math.round(Math.max(trailingMs, ...deltas)),
     verdict,
   });
 }
@@ -54,23 +59,29 @@ export function frameReportText(report: FrameReport): string {
   return `平均 ${report.fps} 帧/秒，慢帧 ${slow}%：${VERDICT_TEXT[report.verdict]}`;
 }
 
-type FrameClock = Pick<Window, "requestAnimationFrame" | "cancelAnimationFrame" | "setTimeout">;
+type FrameClock = Pick<
+  Window,
+  "requestAnimationFrame" | "cancelAnimationFrame" | "setTimeout" | "performance"
+>;
 
-/** Frame intervals for `durationMs`; a timer ends it even if frames stop. */
-export function measureFrames(clock: FrameClock, durationMs: number): Promise<number[]> {
+type FrameSample = Readonly<{ deltas: readonly number[]; trailingMs: number }>;
+
+/** Include time before the first frame and after the last; use the actual timer completion. */
+export function measureFrames(clock: FrameClock, durationMs: number): Promise<FrameSample> {
   return new Promise((resolve) => {
     const deltas: number[] = [];
-    let last = -1;
+    let last = clock.performance.now();
     let frame = 0;
-    const tick = (now: number): void => {
-      if (last >= 0) deltas.push(now - last);
+    const tick = (): void => {
+      const now = clock.performance.now();
+      deltas.push(now - last);
       last = now;
       frame = clock.requestAnimationFrame(tick);
     };
     frame = clock.requestAnimationFrame(tick);
     clock.setTimeout(() => {
       clock.cancelAnimationFrame(frame);
-      resolve(deltas);
+      resolve({ deltas, trailingMs: clock.performance.now() - last });
     }, durationMs);
   });
 }
@@ -82,16 +93,12 @@ export function measureFrames(clock: FrameClock, durationMs: number): Promise<nu
 export async function runMotionSelfTest(doc: Document): Promise<FrameReport> {
   const view = doc.defaultView;
   if (view === null) return summarizeFrames([]);
-  const root = doc.documentElement;
-  const previous = root.dataset.motion;
-  root.dataset.motion = "full";
+  const restoreMotion = previewMotion(doc, "full");
   try {
     await new Promise((resolve) => view.setTimeout(resolve, SELF_TEST_WARMUP_MS));
-    return summarizeFrames(await measureFrames(view, SELF_TEST_MS));
+    const sample = await measureFrames(view, SELF_TEST_MS);
+    return summarizeFrames(sample.deltas, sample.trailingMs);
   } finally {
-    if (root.dataset.motion === "full") {
-      if (previous === undefined) delete root.dataset.motion;
-      else root.dataset.motion = previous;
-    }
+    restoreMotion();
   }
 }
