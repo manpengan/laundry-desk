@@ -1,18 +1,18 @@
 {
   "version": 1,
   "entries": {
-    "assets/AccountingReportPanel-Da5EK7u3.js": {
-      "sha256": "7137379ccb5245733b4f105ebb0f3ae60bd5501830c6eebc2eadf332af60bda6",
+    "assets/AccountingReportPanel-vxQh1xed.js": {
+      "sha256": "93d0c3d9432705f61d8e3f568584b399123c69aaaf03d1e242edd56f9edeadff",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 13796
     },
-    "assets/CounterSurfaceApp-CVwf6xwV.js": {
-      "sha256": "635b67c3c5e879dd38173eade27278bd6d364e80fa2925064c6dd3d9c214a2ad",
+    "assets/CounterSurfaceApp-D5I-Q2D1.js": {
+      "sha256": "c3b798bfcc3c20b812eddf1ee42f95a723b365c865e2339227485c1f1974319d",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 65413
     },
-    "assets/CounterWorkbench-ur1n-GDw.js": {
-      "sha256": "9a310ae627aa0c81f94b7809c90eebe93613fe2824d9fd008f6c89ec31be8a5a",
+    "assets/CounterWorkbench-CshiUGVA.js": {
+      "sha256": "8c38304b4f41269a689d442e067ef12a830902b2f7173004a9fccf33fed709fb",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 8291
     },
@@ -21,63 +21,63 @@
       "mime": "text/javascript; charset=utf-8",
       "bytes": 23335
     },
-    "assets/CustomersPage-BZRmBjBQ.js": {
-      "sha256": "c00bf10e5a68bbe44fc94365225f1e6bcc825011e2d95c912716c9bf9980715e",
+    "assets/CustomersPage-C30xDoas.js": {
+      "sha256": "f88c0e7883b7a33d69eaf2a4cacfce0d374d8ef8e2a7ee571d1da0423fdf4721",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 77774
     },
-    "assets/DangerConfirmDialog-CS8NHTfL.js": {
-      "sha256": "f695f929728bc13b63bf6cee038552bd1ead25c35454ef72f2994524ef3d298d",
+    "assets/DangerConfirmDialog-BkHrIs8u.js": {
+      "sha256": "45add36a465410af2edf1d8cbe4ca21b928b5b9ddd9cfb915cd6c8374d5e777b",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 1008
     },
-    "assets/DebtPage-D3DU4iEy.js": {
-      "sha256": "4d0a81d053d963f5bf39c73f7f4f71d889b30a8f5a7a27f82aa34482721e5bb2",
+    "assets/DebtPage-C__TFV2J.js": {
+      "sha256": "4c8927b6db342c6e0a40746237f02a775bb634cddbe7e0e334c5451d2da746ff",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 7196
     },
-    "assets/DeliveryOperationsPage-oJfrChSR.js": {
-      "sha256": "41838b9cde424a925806aa3c5d2622933b5865fc881c44bc80dcee8f9427eec1",
+    "assets/DeliveryOperationsPage-D8QH7qIX.js": {
+      "sha256": "d820d24eff1df2886c37eeb2caf1cd679333abe01b24b10378d2ec7da4d702c6",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 23917
     },
-    "assets/FulfillmentHubPage-Bf-zJl5K.js": {
-      "sha256": "714fe0cdac3d064726107a03cc860278a112e711c6f473a4322fe4d01c2d4baf",
+    "assets/FulfillmentHubPage-zO4crUAZ.js": {
+      "sha256": "2ee91f8794440bd7048b067fb536ac571575eead84aed62d25eec8e82321bbec",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 26907
     },
-    "assets/MobileTaskSurfaceApp-BeaULoGv.js": {
-      "sha256": "53cb68ed8e29082c45155247814fabdf6996779cb47df3008dd3a91725118225",
+    "assets/MobileTaskSurfaceApp-CRpiwfIs.js": {
+      "sha256": "5b9da99cab8120b56426693070ffa27567b5746bc32e28867348ac499652b640",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 38364
     },
-    "assets/OfflineConflictPanel-BpJq-BGW.js": {
-      "sha256": "409e49099c734c2e8661f5f7d774fa3ae08fceaa2fa2c41cd062dd512c50fa8c",
+    "assets/OfflineConflictPanel-DHh5n_ME.js": {
+      "sha256": "7aca2ccf1cf92d543d80cd997dbb163a0b20434d2ef6b384aa2cddc42bd521c0",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 1820
     },
-    "assets/OrderDetailDrawer-CC15EFwY.js": {
-      "sha256": "6820ad61410f46c8201b15f45c7e462f756996ab43518d591b0e0d7c0914e70a",
+    "assets/OrderDetailDrawer-CQcoFslt.js": {
+      "sha256": "f6268baae418fd4406e689c872e89ea4ec5cbd92ed83f649378e950716cd4cda",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 36637
     },
-    "assets/OrderLookupCandidates-DEYf8VNe.js": {
-      "sha256": "ec88fbbe9bf984d6cc44e330d265be0884ff0692311f9992a2c3904582b5f069",
+    "assets/OrderLookupCandidates-D5SO2_AN.js": {
+      "sha256": "f8d787d18bcda947a5fa4ade757ef3852705f1243410f349a7755d4edcef10bb",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 1624
     },
-    "assets/OrdersList-CCJw25T7.js": {
-      "sha256": "c3b5df8bcf47accb357c3fb386bf5306e847de537d2682301d8180c062776dbf",
+    "assets/OrdersList-B-vW_HmF.js": {
+      "sha256": "ef6e4f6797259cc8460e06f6b0981fd9fc46d6660cd877a94c3d31c973b38ed9",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 1107
     },
-    "assets/OwnerSurfaceApp-BzUtNXgq.js": {
-      "sha256": "e95c5de8e00d79919046bf41dd10cb1608c06390ee5958b7ab48b395a6e95fe0",
+    "assets/OwnerSurfaceApp-DmXXZtEF.js": {
+      "sha256": "dd7429a4c8ea50fe4dca0c059b6a914c3037bb084c63590b89b332e240cd92f9",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 100894
     },
-    "assets/PaymentCollectionDialog-C6uEmn0L.js": {
-      "sha256": "1af7ae4e1cf8044dd881f8bf1fc37985d0a2d931c027e87a7188939e1d4bd281",
+    "assets/PaymentCollectionDialog-BFC-d3Sk.js": {
+      "sha256": "8e6cead5b97abf9036cebc4376f138f2b50474a2cae39f74c72764e10b2cb93c",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 8721
     },
@@ -86,43 +86,43 @@
       "mime": "text/javascript; charset=utf-8",
       "bytes": 28038
     },
-    "assets/PickupPage-DOzdQFQp.js": {
-      "sha256": "2f56007f9f108d53d0f3e8249bf3f731428ef3edded3f79c91604705e484adad",
+    "assets/PickupPage-7Y0O3w48.js": {
+      "sha256": "390df6e1c1d91bd8335c1c2660f53a0458779e1b47ea64dad87ecd9bc182c92b",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 14998
     },
-    "assets/PickupRemindersPage-DuGlEPHD.js": {
-      "sha256": "88ba18591d68f57ef75661cef8e27af6d41619abcc44e2dbf59a05885ed3d6a2",
+    "assets/PickupRemindersPage-DyZ8j44j.js": {
+      "sha256": "5fca55e40b98236fb419f101678af5a6a8acc8b635c3ca6020ae1aad5dde9252",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 24990
     },
-    "assets/ReceivePage-7_BHp4UI.js": {
-      "sha256": "457fb4268d2b300e32afabe376b1aac6eaf51266ab302ced0045b2b21dac5fad",
+    "assets/ReceivePage-NOae2nH4.js": {
+      "sha256": "05d57004cc646d04842c099f065345028f85b3291d5c73613c65c28fbce7423b",
       "mime": "text/javascript; charset=utf-8",
-      "bytes": 42817
+      "bytes": 42904
     },
-    "assets/SettingsPage-sIj2UPlq.js": {
-      "sha256": "64cccb3b21f054c347d8f792c976190b31f9eab9ee758573ad784f29e17a59f4",
+    "assets/SettingsPage-qhS3WmYt.js": {
+      "sha256": "1c7855c144b66d7b7df3690d6da9facca7926ebcaa6a14ec4e728b31445feb1e",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 137399
     },
-    "assets/StaffAccessPanel-GjDHUMTD.js": {
-      "sha256": "856ee0f48957ca32fc4bf4a95295c7b939ceefe417e5b33051a820b3ffff8793",
+    "assets/StaffAccessPanel-CpBQXw55.js": {
+      "sha256": "76b994a74298ad4737724bc7485b30123d4b94ff5bf9deed0766194aaefe600a",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 15163
     },
-    "assets/StaffSurfaceRoot-C-UKxMZo.js": {
-      "sha256": "d3686f4b4cf114aa9d2f173037a5fd84cd8caf9e88371cce61b309b3e3ec73eb",
+    "assets/StaffSurfaceRoot-jCS6BVWA.js": {
+      "sha256": "acd523c179308abc44ef68ec1b295152d85a57f0746b8e609dcbeae8face0fd3",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 5250
     },
-    "assets/StatsPage-C6t1PVTh.js": {
-      "sha256": "2141561fabbb4106bd2491cb7a50fe82816e717bea4a37ff58919a24250c3d4c",
+    "assets/StatsPage-DlOze46z.js": {
+      "sha256": "41c0ed4b54282456231e57715b3d725fbfc0dd4b43cdcb9a5295bfef59efa37c",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 26022
     },
-    "assets/StepUpConfirmDialog-BExoBFB4.js": {
-      "sha256": "084a379109566b64b17539e2088e44d94799e3bb7e27ac5438952847c82e27ca",
+    "assets/StepUpConfirmDialog-DiGfOzM7.js": {
+      "sha256": "6904d82e6ff211bf9c68130e5d3e17ae775c492733361082e54c2bb2c86b37ba",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 3342
     },
@@ -156,13 +156,13 @@
       "mime": "text/javascript; charset=utf-8",
       "bytes": 628
     },
-    "assets/garment-labels-BHhXSwrN.js": {
-      "sha256": "de0f7bc3e135e9eccb4993972fcfbafeb1e455928d200ecab58fafba5e39fed7",
+    "assets/garment-labels-DendrStL.js": {
+      "sha256": "e4126310d2dbb0713c31521319415800efbee2eeb3152cf30dbaa59f7da45a47",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 3611
     },
-    "assets/index-D1B5wiCq.js": {
-      "sha256": "a5f78da3101fe46e0bb812aad46d60e7c6b825d68dfbb0aa7523715b6275e043",
+    "assets/index-CPOupgAi.js": {
+      "sha256": "95c7b17cab7a5f7f8157d43d356b01cc0bf9fd5646a5c7f6081e60e3e34317f2",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 87141
     },
@@ -181,15 +181,15 @@
       "mime": "text/javascript; charset=utf-8",
       "bytes": 4404
     },
-    "assets/laundry-ui-4ks_D7gf.js": {
-      "sha256": "c6cb1562a2f04f8fce0279b89d0752d416aee857ae0c437d4530773d916efd85",
-      "mime": "text/javascript; charset=utf-8",
-      "bytes": 22478
-    },
     "assets/laundry-ui-B6ADf9ax.css": {
       "sha256": "f7d2316be2d3ff3c4effe7b35b4c135d6579ca6715f1cf0b9ee8ae046f69bf81",
       "mime": "text/css; charset=utf-8",
       "bytes": 32440
+    },
+    "assets/laundry-ui-hThBklPK.js": {
+      "sha256": "5deaa43e595ac0a5ab7ec5318a4acec9505a57a240679c41a2ffb05aa415718e",
+      "mime": "text/javascript; charset=utf-8",
+      "bytes": 22768
     },
     "assets/react-runtime-CboAbldv.js": {
       "sha256": "209e7bb61125223642551ed58cf9bccdf2ff8c78ba6ea2fd0085803bedcf48cd",
@@ -201,13 +201,13 @@
       "mime": "text/javascript; charset=utf-8",
       "bytes": 785
     },
-    "assets/surface-props-BCmpqXKU.js": {
-      "sha256": "3868ec34475f5c6f143b2647c7d90931ac20f1db8e24981b4993ca5a93591524",
+    "assets/surface-props-BeoFQCcP.js": {
+      "sha256": "27f48f42b7c4602a4d9c82dfad71e036af936834676243d5b82468d62625a072",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 14425
     },
-    "assets/use-order-page-BQJHkX9H.js": {
-      "sha256": "a3709eb7f1f42b1f8247bc604e4a40147b6471b50bb1df401b2e2f75bb2b658e",
+    "assets/use-order-page-C062AmrD.js": {
+      "sha256": "98472576b6f341cc0a8a4e13241fa6c333c4aedbc60cbdc2cc1ddc8dc12a7edb",
       "mime": "text/javascript; charset=utf-8",
       "bytes": 2540
     },
@@ -222,7 +222,7 @@
       "bytes": 76334
     },
     "index.html": {
-      "sha256": "bd9acda7835d1d6565839f0ce13bc17c2d10fcf2204cacdd0dab94b472702c7d",
+      "sha256": "bc1551aeee31e667c325b5ef6a5d40e7c4b54970ee5efea2a1545acbb0fa994d",
       "mime": "text/html; charset=utf-8",
       "bytes": 828
     }

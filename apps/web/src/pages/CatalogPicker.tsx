@@ -101,6 +101,9 @@ export function CatalogPicker({ queryClient, disabled = false, onPick }: Catalog
       const payload = unwrapCommandResult<{ items?: unknown; total?: unknown }>(res.data);
       const next = parseCatalogItems(payload?.items);
       setItems(next);
+      setService((current) =>
+        current === "all" || next.some((item) => item.service_code === current) ? current : "all",
+      );
       setTotal(typeof payload?.total === "number" ? payload.total : next.length);
       setLoadedQuery(text);
       setState("ready");
@@ -201,6 +204,7 @@ export function CatalogPicker({ queryClient, disabled = false, onPick }: Catalog
         spellCheck={false}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing) return;
+          if (event.ctrlKey || event.metaKey || event.altKey) return;
           if (event.key === "Enter") {
             event.preventDefault();
             if (canPick && visible[0] !== undefined) {
