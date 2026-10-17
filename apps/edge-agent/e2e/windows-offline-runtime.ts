@@ -184,7 +184,9 @@ export async function bindOfflineRuntime() {
     // Reuse only the SHA-bound entry's native no-follow trust implementation; no new C# interop.
     const trust = boundEntryTrust(bytes, entrySha);
     const action = async (verb: "status" | "start" | "stop") => {
-      const script = `$ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
+      // Redirected PowerShell writes progress records to stderr as CLIXML when the trust Add-Type loads a module
+      // (on the Windows 10 build host, on every call), and any stderr marks the controller unconfirmed.
+      const script = `$ProgressPreference='SilentlyContinue'; $ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
 ${trust}
 $held=$null; $child=$null; $started=$false; $confirmed=$false; $failed=$false; $text=$null
 try {
