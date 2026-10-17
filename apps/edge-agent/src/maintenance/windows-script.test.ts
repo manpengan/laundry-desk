@@ -14,22 +14,21 @@ test("progress is off before the trust script's first command runs", () => {
 test("the maintenance window runs in its own process so quitting the Counter leaves it open", () => {
   // Node's kill-on-close job ends the Counter's children when it quits; grandchildren leave that job.
   const gui = MAINTENANCE_BOOTSTRAP.slice(MAINTENANCE_BOOTSTRAP.indexOf("  else {"));
-  assert.ok(gui.includes("[Diagnostics.Process]::Start($psi)"));
+  assert.ok(gui.includes("$p=[Diagnostics.Process]::Start($w)"));
   assert.doesNotMatch(gui, /& \$entry -Action gui/u);
-  // The handoff, which can carry an approval request id, goes over stdin and never onto a command line.
+  // The handoff can carry an approval request id: it goes over stdin, and the window's command line
+  // holds only fixed code.
+  const launcher = /GetBytes\('(.*)'\)\)\n/u.exec(gui)?.[1] ?? "";
   assert.ok(
-    gui.includes(
-      "-EncodedCommand ' + [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($launcher))",
+    launcher.startsWith(
+      "$r=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadLine()))",
     ),
   );
-  assert.ok(gui.includes("$window.StandardInput.WriteLine("));
-  assert.doesNotMatch(
-    MAINTENANCE_BOOTSTRAP.match(/\$launcher = '.*'\n/u)?.[0] ?? "",
-    /request_id|\$q\b/u,
-  );
+  assert.doesNotMatch(launcher, /request_id|\$q\b|\$entry/u);
+  assert.ok(gui.includes("$p.StandardInput.WriteLine("));
   // The verified entry stays held until the window confirms it opened.
   assert.ok(
-    MAINTENANCE_BOOTSTRAP.indexOf("[Console]::Out.WriteLine($opened.Result)") <
+    MAINTENANCE_BOOTSTRAP.indexOf("[Console]::Out.WriteLine($o.Result)") <
       MAINTENANCE_BOOTSTRAP.indexOf("finally {"),
   );
 });
