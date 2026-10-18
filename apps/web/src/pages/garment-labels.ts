@@ -20,7 +20,17 @@ const CATEGORIES: Readonly<Record<string, string>> = Object.freeze({
   curtain: "窗帘",
   bedding: "床品",
 });
+/** Stable category label, or null for a code without one. */
+export function knownCategoryLabel(category: string): string | null {
+  return CATEGORIES[category.toLowerCase()] ?? null;
+}
+
+/** Stable category label; unknown codes stay visible verbatim. */
+export function categoryLabel(category: string): string {
+  return knownCategoryLabel(category) ?? `衣物（${category}）`;
+}
+
 /** Historical orders lack a catalog-name snapshot; never infer it from a current price list. */
 export function garmentName(service: string, category: string): string {
-  return `${serviceLabel(service)} · ${CATEGORIES[category.toLowerCase()] ?? `衣物（${category}）`}`;
+  return `${serviceLabel(service)} · ${categoryLabel(category)}`;
 }

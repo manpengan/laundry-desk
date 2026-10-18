@@ -218,29 +218,42 @@ test("PageHost loading exposes aria-busy skeleton", () => {
   assert.match(html, /ld-skeleton/);
 });
 
-test("PageHost workbench with session+queryClient mounts three-pane counter workbench", () => {
-  const html = renderToStaticMarkup(
+function renderWorkbench(role: "admin" | "staff"): string {
+  return renderToStaticMarkup(
     createElement(
       ToastProvider,
       null,
       createElement(PageHost, {
         activeId: "workbench",
         onNavigate: () => undefined,
-        session: sampleSession,
+        session: Object.freeze({ ...sampleSession, role }),
         queryClient: createMockQueryClient(),
       }),
     ),
   );
-  assert.match(html, /工作台/);
-  assert.match(html, /快捷取衣/);
-  assert.match(html, /今日看板/);
-  assert.match(html, /顾客速查/);
-  assert.match(html, /data-testid="counter-workbench-orders"/);
-  assert.match(html, />刷新</);
-  assert.match(html, /欠款/);
-  assert.match(html, /收款（退款前）/u);
-  assert.match(html, /含会员余额付款；欠款补缴和冲正请查看账目。/u);
-  assert.doesNotMatch(html, /实收/u);
+}
+
+test("PageHost workbench mounts the scan-first counter home (ADR-100)", () => {
+  const html = renderWorkbench("admin");
+  assert.match(html, /<h1 class="ld-shell-main__title">工作台<\/h1>/u);
+  assert.match(html, /name="quick-pickup"/u);
+  assert.match(html, /aria-label="扫码与快捷操作"/u);
+  assert.match(html, /data-testid="counter-workbench-metrics"/u);
+  assert.match(html, /data-testid="counter-workbench-orders"/u);
+  assert.match(html, /aria-label="刷新"/u);
+  assert.match(html, /今日实收/u);
+  assert.match(html, /营业额/u);
+  assert.match(html, /工作队列/u);
+  assert.doesNotMatch(html, /快捷取衣|顾客速查/u);
+  assert.doesNotMatch(html, /\sstyle=/u);
+});
+
+test("PageHost workbench gives counter staff the day's work instead of money", () => {
+  const html = renderWorkbench("staff");
+  assert.match(html, /未取件订单/u);
+  assert.match(html, /超 30 天未取/u);
+  assert.match(html, /欠款订单/u);
+  assert.doesNotMatch(html, /今日实收|营业额/u);
 });
 
 test("PageHost reminder route mounts the explicit manual fallback", () => {

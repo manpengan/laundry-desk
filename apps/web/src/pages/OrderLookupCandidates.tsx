@@ -4,7 +4,7 @@ import { Button, MoneyText, StatusBadge } from "@laundry/ui";
 
 import { parseOrderListRows, type OrderListRowView } from "./OrdersList.js";
 
-const MATCH_LABELS = Object.freeze({
+export const ORDER_MATCH_LABELS = Object.freeze({
   ticket_no: "票号",
   pickup_code: "取件码",
   garment_barcode: "衣物条码",
@@ -12,7 +12,7 @@ const MATCH_LABELS = Object.freeze({
   customer_name: "客户姓名",
 });
 
-export type OrderLookupMatchKind = keyof typeof MATCH_LABELS;
+export type OrderLookupMatchKind = keyof typeof ORDER_MATCH_LABELS;
 
 export type OrderLookupRowView = OrderListRowView &
   Readonly<{
@@ -25,7 +25,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isMatchKind(value: unknown): value is OrderLookupMatchKind {
-  return typeof value === "string" && value in MATCH_LABELS;
+  return typeof value === "string" && value in ORDER_MATCH_LABELS;
 }
 
 export function parseOrderLookupRows(value: unknown): readonly OrderLookupRowView[] | null {
@@ -70,7 +70,7 @@ export function OrderLookupCandidates({
               disabled={disabled}
             >
               <span>{order.ticket_no ?? "挂单"}</span>
-              <span> · {MATCH_LABELS[order.matched_by]}</span>
+              <span> · {ORDER_MATCH_LABELS[order.matched_by]}</span>
               <span> · {order.customer_name ?? order.customer_phone ?? "散客"}</span>
               {order.pickup_code === null ? null : <span> · {order.pickup_code}</span>}
               <StatusBadge family="order" status={order.status} />
