@@ -239,6 +239,7 @@ export function createOfflineDesktopService(
         const isCurrent = () => session === current && sessionRevision === revision;
         return Object.freeze({
           session: current,
+          readOnly: wasReadOnly,
           isCurrent,
           promoteOnline: () => {
             if (!isCurrent() || !wasReadOnly || !offlineReadOnly || current === null) return;
@@ -247,7 +248,8 @@ export function createOfflineDesktopService(
             offline.reconcileSession(current);
           },
           discardReadOnly: () => {
-            if (isCurrent() && wasReadOnly && offlineReadOnly) discardReadCache();
+            // A concurrent query may already have promoted this same resumed session.
+            if (isCurrent() && wasReadOnly) discardReadCache();
           },
         });
       },
