@@ -2,6 +2,11 @@ import { spawn } from "node:child_process";
 
 const MAXIMUM_OUTPUT = 65_536;
 const OUTER_TIMEOUT_MS = 1_050_000;
+// The script embeds the entry's trust implementation and does not fit the Windows command-line limit once
+// UTF-16 base64 encoded (about 34,800 characters against 32,767), so PowerShell never started. Only this fixed
+// loader goes on the command line; the script follows on stdin as base64 UTF-8.
+const LOADER =
+  "$ProgressPreference='SilentlyContinue'; & ([scriptblock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String([Console]::In.ReadToEnd()))))";
 
 /** @param {string} script @param {string} powershell @param {Readonly<Record<string, string>>} environment */
 export async function boundedController(script, powershell, environment) {
@@ -13,10 +18,14 @@ export async function boundedController(script, powershell, environment) {
       "-ExecutionPolicy",
       "Bypass",
       "-EncodedCommand",
-      Buffer.from(script, "utf16le").toString("base64"),
+      Buffer.from(LOADER, "utf16le").toString("base64"),
     ],
-    { env: environment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
+    { env: environment, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] },
   );
+  child.stdin.on("error", () => {
+    /* A wrapper that exits early is reported through close. */
+  });
+  child.stdin.end(Buffer.from(script, "utf8").toString("base64"));
   return await new Promise((resolveOutput, reject) => {
     /** @type {readonly Buffer[]} */
     let output = [];
