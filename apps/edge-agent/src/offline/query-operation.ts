@@ -1,15 +1,40 @@
 import type { DesktopQueryExecuteResult, DesktopSessionView } from "@laundry/contracts";
 
 import type { DesktopHttpTransport } from "../desktop/http-transport.js";
+import { authorityMatchesSession, bindAuthoritySession } from "./authority-session.js";
 import type { VerifiedOfflineReadAuthority } from "./read-authority.js";
 import type { OfflineReadCache } from "./read-cache.js";
 
 type QuerySessionScope = Readonly<{
   session: DesktopSessionView | null;
+  readOnly: boolean;
   isCurrent: () => boolean;
   promoteOnline: () => void;
   discardReadOnly: () => void;
 }>;
+
+async function queryOnline(
+  online: DesktopHttpTransport,
+  scope: QuerySessionScope,
+  input: unknown,
+  unavailable: () => DesktopQueryExecuteResult,
+): Promise<DesktopQueryExecuteResult> {
+  if (scope.readOnly) {
+    if (scope.session === null) return unavailable();
+    // Cold restart restores a verified cache session, never an in-memory access token.
+    const refreshed = await online.auth.refresh();
+    if (!scope.isCurrent()) return unavailable();
+    if (!refreshed.ok) return refreshed;
+    if (!authorityMatchesSession(bindAuthoritySession(scope.session), refreshed.data)) {
+      // logout invalidates transport credentials synchronously, before clearing read-only mode.
+      const loggedOut = online.auth.logout();
+      scope.discardReadOnly();
+      await loggedOut;
+      return unavailable();
+    }
+  }
+  return online.query.execute(input);
+}
 
 export type QueryCacheUpdate = (
   session: DesktopSessionView,
@@ -31,7 +56,7 @@ export function createOfflineQueryOperation(
   return Object.freeze({
     execute: async (input: unknown) => {
       const scope = options.captureSession();
-      const result = await online.query.execute(input);
+      const result = await queryOnline(online, scope, input, options.unavailable);
       if (!scope.isCurrent()) return options.unavailable();
       if (result.ok) {
         scope.promoteOnline();

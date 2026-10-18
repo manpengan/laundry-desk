@@ -45,7 +45,7 @@ function deferred() {
   return { promise, release };
 }
 
-type Stage = "query" | "maintenance" | "health" | "cache-read" | "cache-write";
+type Stage = "refresh" | "query" | "maintenance" | "health" | "cache-read" | "cache-write";
 type Transition = "switch-staff" | "logout" | "new-session" | "refresh";
 
 function fixture(combined = false, recoveryReadOnly = false) {
@@ -72,8 +72,10 @@ function fixture(combined = false, recoveryReadOnly = false) {
         ok: true,
         data: { session_view: session, staff_directory: [] },
       }),
-      refresh: async () =>
-        refreshedSession === null ? unavailable : { ok: true, data: refreshedSession },
+      refresh: async () => {
+        await pause("refresh");
+        return refreshedSession === null ? unavailable : { ok: true, data: refreshedSession };
+      },
       logout: async () => ({ ok: true, data: { logged_out: true } }),
     },
     query: {
@@ -152,6 +154,9 @@ function fixture(combined = false, recoveryReadOnly = false) {
     setCacheFailure: (failed: boolean) => {
       failCacheWrite = failed;
     },
+    refreshOriginalSession: () => {
+      refreshedSession = originalSession;
+    },
     pauseAt: (stage: Stage) => {
       pausedStage = stage;
       remoteAvailable = stage !== "health" && stage !== "cache-read";
@@ -182,11 +187,21 @@ function fixture(combined = false, recoveryReadOnly = false) {
   };
 }
 
-for (const stage of ["query", "maintenance", "health", "cache-read", "cache-write"] as const) {
+for (const stage of [
+  "refresh",
+  "query",
+  "maintenance",
+  "health",
+  "cache-read",
+  "cache-write",
+] as const) {
   for (const transition of ["switch-staff", "logout", "new-session", "refresh"] as const) {
     test(`a query cannot cross ${transition} while awaiting ${stage}`, async () => {
       const f = fixture();
-      await f.service.auth.login(originalSession);
+      if (stage === "refresh") {
+        await f.service.offline.resume();
+        f.refreshOriginalSession();
+      } else await f.service.auth.login(originalSession);
       f.pauseAt(stage);
       const pending = f.service.query.execute(input);
       await f.started;
@@ -216,6 +231,7 @@ for (const stage of ["query", "maintenance", "health", "cache-read", "cache-writ
 test("one resumed session can promote concurrently to online without invalidating its own queries", async () => {
   const f = fixture();
   await f.service.offline.resume();
+  f.refreshOriginalSession();
   assert.deepEqual(await f.service.command.execute({}), {
     ok: false,
     error: createCommandError("RESOURCE_UNAVAILABLE", { kind: "reason", reason: "retry_later" }),
@@ -244,6 +260,77 @@ test("unchanged online and offline queries retain their original cache identity"
   assert.deepEqual(f.reads, [originalSession]);
 });
 
+test("a concurrent identity rejection also discards an already promoted resumed session", async () => {
+  const queryGate = deferred();
+  const refreshGate = deferred();
+  const secondRefreshStarted = deferred();
+  let refreshCount = 0;
+  let cacheReads = 0;
+  let cacheClears = 0;
+  let loggedOut = false;
+  const online = {
+    auth: {
+      refresh: async () => {
+        refreshCount += 1;
+        if (refreshCount === 1) return unavailable;
+        if (refreshCount === 2) return { ok: true, data: originalSession };
+        secondRefreshStarted.release();
+        await refreshGate.promise;
+        return { ok: true, data: { ...originalSession, role: "admin" } };
+      },
+      logout: async () => {
+        loggedOut = true;
+        return { ok: true, data: { logged_out: true } };
+      },
+    },
+    health: { get: async () => unavailable },
+    query: {
+      execute: async () => {
+        await queryGate.promise;
+        return answer;
+      },
+    },
+  } as unknown as DesktopHttpTransport;
+  const runtime = {
+    refreshAuthority: async () => false,
+    replay: async () => undefined,
+    exportReadAuthority: () => null,
+    invalidateContinuity: () => undefined,
+    clearReadAuthority: () => undefined,
+    reconcileSession: () => undefined,
+  } as unknown as OfflineCommandRuntime;
+  const cache = {
+    resume: () => ({
+      sessionView: originalSession,
+      cachedQueryCount: 1,
+      grantNotAfter: "2099-01-01T00:00:00Z",
+    }),
+    put: async () => true,
+    get: async () => {
+      cacheReads += 1;
+      return answer;
+    },
+    clear: () => {
+      cacheClears += 1;
+    },
+  } as unknown as OfflineReadCache;
+  const service = createOfflineDesktopService(online, runtime, cache);
+  await service.offline.resume();
+  const first = service.query.execute(input);
+  const second = service.query.execute(input);
+  await secondRefreshStarted.promise;
+  queryGate.release();
+  assert.deepEqual(await first, answer);
+  refreshGate.release();
+  assert.deepEqual(await second, {
+    ok: false,
+    error: createCommandError("RESOURCE_UNAVAILABLE", { kind: "reason", reason: "retry_later" }),
+  });
+  assert.equal(loggedOut, true);
+  assert.equal(cacheClears, 1);
+  assert.equal(cacheReads, 0);
+});
+
 for (const transition of ["switch-staff", "logout", "new-session", "refresh"] as const) {
   test(`combined query persistence cannot cross ${transition} during schema parsing`, async () => {
     const f = fixture(true);
@@ -269,6 +356,7 @@ for (const transition of ["switch-staff", "logout", "new-session", "refresh"] as
 test("concurrent resumed queries keep both fused updates and restore write permission", async () => {
   const f = fixture(true);
   await f.service.offline.resume();
+  f.refreshOriginalSession();
   f.pauseAt("cache-write");
   const first = f.service.query.execute(input);
   await f.started;
