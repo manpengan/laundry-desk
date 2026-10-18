@@ -507,8 +507,30 @@ test("counter takes, refunds, and settles an order on the server-owned ledger", 
 
   // --- 取衣 + 补款 --------------------------------------------------------
   await drawer.locator('[data-testid="order-detail-pickup-btn"]').click();
+  // Finish the detail action's automatic load before editing the lookup input.
+  await expect(page.locator('[data-testid="pickup-loaded-ticket"]')).toHaveText(ticketNo, {
+    timeout: 15_000,
+  });
+  await expect(page.locator('input[name="pickup-key"]')).toHaveValue(ticketNo);
   await page.locator('input[name="pickup-key"]').fill(ticketNo);
-  await page.getByRole("button", { name: "加载订单" }).click();
+  const [pickupLookup] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/v1/queries/order.lookup",
+    ),
+    page.getByRole("button", { name: "加载订单" }).click(),
+  ]);
+  expect(pickupLookup.request().postDataJSON()).toEqual({
+    key: ticketNo,
+    status: "open",
+    limit: 20,
+  });
+  const pickupLookupResult: unknown = await pickupLookup.json();
+  expect(pickupLookupResult).toMatchObject({
+    ok: true,
+    data: { result: { orders: [{ ticket_no: ticketNo }] } },
+  });
 
   await expect(page.locator('[data-testid="pickup-loaded-ticket"]')).toHaveText(ticketNo, {
     timeout: 15_000,
