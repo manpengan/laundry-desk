@@ -424,6 +424,7 @@ function resumeFixture(options: ResumeFixtureOptions) {
   let cacheClearCalls = 0;
   let invalidations = 0;
   let healthOk = options.healthOk;
+  let refreshOk = options.refreshOk;
   let queryResult = serverUnavailable;
   const online = {
     paymentChannel: {
@@ -447,7 +448,7 @@ function resumeFixture(options: ResumeFixtureOptions) {
     auth: {
       login: async () => serverUnavailable,
       refresh: async () =>
-        options.refreshOk
+        refreshOk
           ? { ok: true as const, data: resumedSession }
           : DesktopCommandExecuteResultSchema.parse({
               ok: false,
@@ -518,6 +519,9 @@ function resumeFixture(options: ResumeFixtureOptions) {
     miniappSettingsCalls: () => miniappSettingsCalls,
     setHealthOk: (value: boolean) => {
       healthOk = value;
+    },
+    setRefreshOk: (value: boolean) => {
+      refreshOk = value;
     },
     setQueryError: (code: "AUTHENTICATION_FAILED" | "RESOURCE_UNAVAILABLE") => {
       queryResult = DesktopCommandExecuteResultSchema.parse({
@@ -608,6 +612,7 @@ test("a resumed read-only session is discarded after an explicit query rejection
   const fixture = resumeFixture({ refreshOk: false, healthOk: false, hasCache: true });
   await fixture.service.offline.resume();
   fixture.setQueryError("AUTHENTICATION_FAILED");
+  fixture.setRefreshOk(true);
 
   const rejected = await fixture.service.query.execute({ name: "order.list", body: {} });
   assert.equal(

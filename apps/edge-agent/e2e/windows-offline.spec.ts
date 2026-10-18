@@ -118,12 +118,16 @@ async function customerRows(page: Page, name: string) {
   return rows.data.customers;
 }
 
-async function assertDenied(page: Page, input: unknown): Promise<void> {
+async function assertDenied(
+  page: Page,
+  input: unknown,
+  expectedCodes: readonly string[] = ["RESOURCE_UNAVAILABLE"],
+): Promise<void> {
   const parsed = DesktopCommandExecuteResultSchema.safeParse(await desktop(page, "command", input));
   if (!parsed.success) throw new Error("WINDOWS_OFFLINE_COMMAND_INVALID");
   expect(parsed.data.ok).toBe(false);
   if (parsed.data.ok) throw new Error("WINDOWS_OFFLINE_FORBIDDEN_WRITE_ACCEPTED");
-  expect(parsed.data.error.code).toBe("RESOURCE_UNAVAILABLE");
+  expect(expectedCodes).toContain(parsed.data.error.code);
 }
 
 async function assertNativeStorage(application: ElectronApplication): Promise<void> {
@@ -216,15 +220,24 @@ test("installed Windows DPAPI queue survives an offline restart and replays exac
     await page.waitForURL("app://local/index.html", { timeout: 20_000 });
     expect(page.url()).toBe("app://local/index.html");
     await assertNativeStorage(application);
-    // Boot may resume a read-only cache or show the service gate. IPC status remains observable.
+    // A cold process has no authenticated session until the read-only cache resumes.
     await queueCount(page, 1);
-    await assertDenied(page, {
+    const deniedCustomer = {
       name: "customer.upsert",
       body: {
         phone: `137${phone.slice(3)}`,
         name: "Denied after offline restart",
       },
-    });
+    };
+    const coldStartCodes = ["AUTHENTICATION_FAILED", "RESOURCE_UNAVAILABLE"] as const;
+    await assertDenied(page, deniedCustomer, coldStartCodes);
+    await assertDenied(page, deniedCatalog, coldStartCodes);
+    const resumed = DesktopOfflineResumeResultSchema.parse(await desktop(page, "resume"));
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) throw new Error("WINDOWS_OFFLINE_READ_ONLY_RESUME_REJECTED");
+    expect(resumed.data.mode).toBe("offline_read_only");
+    expect(await customerRows(page, customerName)).toEqual([]);
+    await assertDenied(page, deniedCustomer);
     await assertDenied(page, deniedCatalog);
     await queueCount(page, 1);
     afterSnapshot = await sealedQueueSnapshot(userData, [customerName, phone]);
@@ -236,12 +249,13 @@ test("installed Windows DPAPI queue survives an offline restart and replays exac
     runtimeNeedsStart = false;
     await resumeOnline(page);
     await queueCount(page, 0);
-    await resumeOnline(page);
-    await queueCount(page, 0);
     const persisted = await customerRows(page, customerName);
     expect(persisted.length).toBe(1);
     expect(persisted[0]?.name).toBe(customerName);
     expect(persisted[0]?.version).toBe(1);
+    await resumeOnline(page);
+    await queueCount(page, 0);
+    expect(await customerRows(page, customerName)).toEqual(persisted);
     // Reload applies the online resume view to the ordinary UI without creating another command.
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.locator('[data-shell="counter"]')).toBeVisible({ timeout: 20_000 });

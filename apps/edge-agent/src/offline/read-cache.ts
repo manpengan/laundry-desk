@@ -101,6 +101,15 @@ function queryIdentity(input: unknown): Readonly<{ canonical: string; key: strin
   });
 }
 
+function hasCurrentGrantTime(state: CacheState, nowMs: number): boolean {
+  const grant = state.offline_grant.payload;
+  return (
+    nowMs >= state.last_seen_wall_ms &&
+    nowMs >= Date.parse(grant.issued_at) &&
+    nowMs < Date.parse(grant.not_after)
+  );
+}
+
 export class OfflineReadCache {
   private readonly file: OfflineReadCacheFile;
   private readonly authorityTrust: AuthorityTrustStore;
@@ -121,11 +130,11 @@ export class OfflineReadCache {
     authority: VerifiedOfflineReadAuthority,
   ): CacheState {
     const session = DesktopSessionViewSchema.parse(sessionInput);
+    const previous = this.tryReadState();
     const nowMs = this.readNow();
     if (!this.verifyAuthority(session, authority, nowMs)) {
       throw new Error("Offline read authority is invalid");
     }
-    const previous = this.tryReadState();
     if (
       previous !== null &&
       sameSession(previous.session_view, session) &&
@@ -185,7 +194,10 @@ export class OfflineReadCache {
     const state = this.boundState(session, authority);
     const nowMs = this.readNow();
     const next =
-      this.isUsable(state, session, nowMs) &&
+      // boundState freshly verified authority after reading the protected cache. No await
+      // intervenes; recheck the clock without repeating the same protected trust-file read.
+      sameSession(state.session_view, session) &&
+      hasCurrentGrantTime(state, nowMs) &&
       parsedInput.success &&
       parsedResult.success &&
       parsedResult.data.ok &&
