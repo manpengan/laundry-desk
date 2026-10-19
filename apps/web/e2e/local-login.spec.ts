@@ -146,7 +146,7 @@ test("AI assistant can be closed from a narrow counter viewport", async ({ page 
   await expect(trigger).toBeFocused();
 
   releaseWorkbench();
-  await expect(page.getByLabel("票号 / 取件码 / 条码 / 手机号 / 姓名")).toBeVisible();
+  await expect(page.locator('input[name="quick-pickup"]')).toBeVisible();
   await expect(trigger).toBeFocused();
 
   await trigger.click();

@@ -328,6 +328,7 @@ export function PageHostCore({
     return (
       <CounterWorkbench
         queryClient={queryClient}
+        session={session}
         onNavigate={onNavigate}
         onOpenPickup={openPickupOrder}
         onOpenPickupLookup={(key) => {

@@ -6,7 +6,8 @@ export const WEB_BUNDLE_BUDGETS = Object.freeze({
   maxChunkBytes: 500 * 1024,
   maxInitialJsBytes: 700 * 1024,
   maxTotalJsBytes: 1500 * 1024,
-  maxTotalCssBytes: 160 * 1024,
+  // ADR-100: the scan-first workbench added ~12 KiB of page CSS; 16 KiB more keeps ~5 KiB headroom.
+  maxTotalCssBytes: 176 * 1024,
 });
 
 export class WebBundleBudgetError extends Error {

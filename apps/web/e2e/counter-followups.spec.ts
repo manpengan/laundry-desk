@@ -146,7 +146,7 @@ test("a held draft is listed as 挂单 with no ticket number", async ({ page }) 
   await page.getByRole("button", { name: "暂存挂单" }).click();
 
   // 订单与欠款 is the only route that reaches the order detail drawer; the
-  // workbench list is 今日待取 and its rows open pickup instead.
+  // workbench 工作队列 rows open pickup instead.
   await page.locator('[data-nav-id="orders"]').click();
   await page.locator('[data-testid="debt-load-btn"]').click();
   const held = page.locator('[data-testid="debt-row"]').filter({ hasText: "挂单" }).first();
