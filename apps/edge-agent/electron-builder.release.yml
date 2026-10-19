@@ -104,6 +104,8 @@ files:
   - dist/offline/read-authority.js
   - dist/offline/read-cache-file.js
   - dist/offline/read-cache.js
+  - dist/offline/read-cache-identity.js
+  - dist/offline/read-cache-writer.js
   - dist/offline/receive-recovery-fallback.js
   - dist/offline/runtime.js
   - dist/offline/service.js

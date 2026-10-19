@@ -9,12 +9,13 @@ import {
   type DesktopQueryExecuteResult,
   type DesktopSessionView,
 } from "@laundry/contracts";
-import { createHash, createPublicKey, verify } from "node:crypto";
+import { createPublicKey, verify } from "node:crypto";
 import { z } from "zod";
 
 import type { AuthorityTrustStore } from "../pairing/authority-trust.js";
 import type { SafeStorageSurface } from "../queue/safe-storage-kek.js";
 import type { VerifiedOfflineReadAuthority } from "./read-authority.js";
+import { queryIdentity } from "./read-cache-identity.js";
 import { MAX_CACHE_PLAINTEXT_BYTES, OfflineReadCacheFile } from "./read-cache-file.js";
 
 export const OFFLINE_READ_QUERY_NAMES = Object.freeze([
@@ -53,6 +54,23 @@ const CacheStateSchema = z.strictObject({
 type CacheState = z.output<typeof CacheStateSchema>;
 type CacheEntry = z.output<typeof CacheEntrySchema>;
 
+/** One successful online query to remember. */
+export type CacheItem = Readonly<{ input: unknown; result: unknown }>;
+type ParsedItem = Readonly<{ input: unknown; result: DesktopQueryExecuteResult }> | null;
+
+/** Cacheable, successful queries keep their parsed shape; anything else becomes null. */
+async function parseItems(items: readonly CacheItem[]): Promise<readonly ParsedItem[]> {
+  return Promise.all(
+    items.map(async (item) => {
+      const input = await DesktopQueryExecuteInputSchema.safeParseAsync(item.input);
+      const result = DesktopQueryExecuteResultSchema.safeParse(item.result);
+      return input.success && result.success && result.data.ok && queryNames.has(input.data.name)
+        ? Object.freeze({ input: input.data, result: result.data })
+        : null;
+    }),
+  );
+}
+
 export type OfflineReadResume = Readonly<{
   sessionView: DesktopSessionView;
   cachedQueryCount: number;
@@ -70,15 +88,6 @@ function jsonBytes(value: unknown): number {
   return Buffer.byteLength(JSON.stringify(value), "utf8");
 }
 
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  return `{${Object.keys(value)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(Reflect.get(value, key))}`)
-    .join(",")}}`;
-}
-
 function sameSession(left: DesktopSessionView, right: DesktopSessionView): boolean {
   const a = left.session;
   const b = right.session;
@@ -91,14 +100,6 @@ function sameSession(left: DesktopSessionView, right: DesktopSessionView): boole
     a.device_id === b.device_id &&
     a.permission_version === b.permission_version
   );
-}
-
-function queryIdentity(input: unknown): Readonly<{ canonical: string; key: string }> {
-  const canonical = canonicalJson(input);
-  return Object.freeze({
-    canonical,
-    key: createHash("sha256").update(canonical, "utf8").digest("hex"),
-  });
 }
 
 function hasCurrentGrantTime(state: CacheState, nowMs: number): boolean {
@@ -156,28 +157,20 @@ export class OfflineReadCache {
     });
   }
 
-  async put(
-    sessionInput: DesktopSessionView,
-    input: unknown,
-    resultInput: unknown,
-  ): Promise<boolean> {
-    const parsedInput = await DesktopQueryExecuteInputSchema.safeParseAsync(input);
-    const parsedResult = DesktopQueryExecuteResultSchema.safeParse(resultInput);
-    if (
-      !parsedInput.success ||
-      !parsedResult.success ||
-      !parsedResult.data.ok ||
-      !queryNames.has(parsedInput.data.name)
-    ) {
-      return false;
-    }
+  async put(sessionInput: DesktopSessionView, input: unknown, resultInput: unknown) {
+    return (await this.putMany(sessionInput, [{ input, result: resultInput }])) === 1;
+  }
+
+  /** One protected read and one write for a batch; returns how many entries were stored. */
+  async putMany(sessionInput: DesktopSessionView, items: readonly CacheItem[]): Promise<number> {
+    const parsed = await parseItems(items);
     const session = DesktopSessionViewSchema.parse(sessionInput);
     const state = this.readUsableState(session);
-    if (state === null) return false;
-    const next = this.withEntry(state, parsedInput.data, parsedResult.data);
-    if (next === null) return false;
-    this.writeState(next);
-    return true;
+    if (state === null) return 0;
+    const nowMs = this.readNow();
+    const [next, stored] = this.withEntries(state, parsed, nowMs);
+    if (stored > 0) this.writeState(next);
+    return stored;
   }
 
   async bindAndPut(
@@ -187,27 +180,48 @@ export class OfflineReadCache {
     resultInput: unknown,
     isSessionCurrent: () => boolean,
   ): Promise<boolean> {
-    const parsedInput = await DesktopQueryExecuteInputSchema.safeParseAsync(input);
-    const parsedResult = DesktopQueryExecuteResultSchema.safeParse(resultInput);
-    if (!isSessionCurrent()) return false;
+    const items = [{ input, result: resultInput }];
+    return (await this.bindAndPutMany(session, authority, items, isSessionCurrent)) === 1;
+  }
+
+  /** bindAndPut for a batch: the protected file is read, verified and written once. */
+  async bindAndPutMany(
+    session: DesktopSessionView,
+    authority: VerifiedOfflineReadAuthority,
+    items: readonly CacheItem[],
+    isSessionCurrent: () => boolean,
+  ): Promise<number> {
+    const parsed = await parseItems(items);
+    if (!isSessionCurrent()) return 0;
     // Re-read the protected file after parsing; never retain decrypted state across requests.
     const state = this.boundState(session, authority);
+    // boundState freshly verified authority after reading the protected cache. No await
+    // intervenes; recheck the clock without repeating the same protected trust-file read.
     const nowMs = this.readNow();
-    const next =
-      // boundState freshly verified authority after reading the protected cache. No await
-      // intervenes; recheck the clock without repeating the same protected trust-file read.
-      sameSession(state.session_view, session) &&
-      hasCurrentGrantTime(state, nowMs) &&
-      parsedInput.success &&
-      parsedResult.success &&
-      parsedResult.data.ok &&
-      queryNames.has(parsedInput.data.name)
-        ? this.withEntry(state, parsedInput.data, parsedResult.data, nowMs)
-        : null;
-    if (!isSessionCurrent()) return false;
+    const [next, stored] =
+      sameSession(state.session_view, session) && hasCurrentGrantTime(state, nowMs)
+        ? this.withEntries(state, parsed, nowMs)
+        : [state, 0];
+    if (!isSessionCurrent()) return 0;
     // Even uncacheable queries must persist the refreshed grant and clock checkpoint.
-    this.writeState(next ?? state);
-    return next !== null;
+    this.writeState(next);
+    return stored;
+  }
+
+  private withEntries(
+    state: CacheState,
+    parsed: readonly ParsedItem[],
+    nowMs: number,
+  ): readonly [CacheState, number] {
+    let next = state;
+    let stored = 0;
+    for (const item of parsed) {
+      const candidate = item === null ? null : this.withEntry(next, item.input, item.result, nowMs);
+      if (candidate === null) continue;
+      next = candidate;
+      stored += 1;
+    }
+    return [next, stored];
   }
 
   private withEntry(

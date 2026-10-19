@@ -314,19 +314,24 @@ export type StageView = Readonly<{
 
 export const PRODUCTION_PAGE = 100;
 
-/** The four production stages the side card draws, left to right. */
+/**
+ * The four production stages the side card draws, left to right. When 已收件 and 洗涤中 come
+ * from one shared page, `earlyPageFull` marks both as at-least counts.
+ */
 export function productionStages(
   received: number,
   washing: number,
   ready: number,
   pickedToday: number,
+  earlyPageFull?: boolean,
 ): readonly StageView[] {
-  const stage = (key: StageView["key"], label: string, count: number, bounded: boolean) =>
-    Object.freeze({ key, label, count, capped: bounded && count >= PRODUCTION_PAGE });
+  const stage = (key: StageView["key"], label: string, count: number, full: boolean) =>
+    Object.freeze({ key, label, count, capped: full });
+  const early = (count: number) => earlyPageFull ?? count >= PRODUCTION_PAGE;
   return Object.freeze([
-    stage("received", "已收件", received, true),
-    stage("washing", "洗涤中", washing, true),
-    stage("ready", "待取", ready, true),
+    stage("received", "已收件", received, early(received)),
+    stage("washing", "洗涤中", washing, early(washing)),
+    stage("ready", "待取", ready, ready >= PRODUCTION_PAGE),
     stage("picked", "今日已取", pickedToday, false),
   ]);
 }

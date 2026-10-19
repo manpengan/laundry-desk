@@ -22,6 +22,7 @@ import {
 import {
   debtAging,
   groupGarmentsByOrder,
+  PRODUCTION_PAGE,
   productionStages,
   receiptTimes,
   rhythmView,
@@ -101,18 +102,21 @@ async function loadOldest(queryClient: QueryPort, filter: OrderFilter): Promise<
   return Object.freeze({ orders: Object.freeze([...rows].reverse()), total: first.total });
 }
 
+/** Two bounded reads: garments ready to hand over, and garments still being processed. */
 async function loadProduction(queryClient: QueryPort, apply: (patch: Patch) => void) {
-  const [ready, received, washing] = await Promise.all([
+  const [ready, early] = await Promise.all([
     loadGarments(queryClient, ["ready", "racked"]),
-    loadGarments(queryClient, ["received"]),
-    loadGarments(queryClient, ["washing"]),
+    loadGarments(queryClient, ["received", "washing"]),
   ]);
-  apply({
-    groups: groupGarmentsByOrder([...(ready ?? []), ...(washing ?? []), ...(received ?? [])]),
+  apply({ groups: groupGarmentsByOrder([...(ready ?? []), ...(early ?? [])]) });
+  if (ready === null || early === null) return null;
+  const washing = early.filter((row) => row.status === "washing").length;
+  return Object.freeze({
+    received: early.length - washing,
+    washing,
+    ready: ready.length,
+    earlyPageFull: early.length >= PRODUCTION_PAGE,
   });
-  return ready === null || received === null || washing === null
-    ? null
-    : ([received.length, washing.length, ready.length] as const);
 }
 
 async function loadDayDetails(
@@ -221,7 +225,13 @@ export function useWorkbenchData(queryClient: QueryPort, options: WorkbenchOptio
       stages:
         counts === null || summary === null
           ? null
-          : productionStages(counts[0], counts[1], counts[2], summary.picked_garment_count),
+          : productionStages(
+              counts.received,
+              counts.washing,
+              counts.ready,
+              summary.picked_garment_count,
+              counts.earlyPageFull,
+            ),
       busy: false,
       refreshedAt: Date.now(),
     });

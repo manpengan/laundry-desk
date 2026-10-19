@@ -195,6 +195,12 @@ test("production stages, bounded counts and segment widths", () => {
       ["picked", 21, false],
     ],
   );
+  const shared = productionStages(60, 40, 2, 0, true);
+  assert.deepEqual(
+    shared.map((stage) => stage.capped),
+    [true, true, false, false],
+    "one full shared page makes both early stages at-least counts",
+  );
   assert.equal(boundedCount(100, true), "100+");
   assert.equal(boundedCount(9, false), "9");
   assert.deepEqual(segmentWidths([1, 1, 2]), [25, 25, 50]);
