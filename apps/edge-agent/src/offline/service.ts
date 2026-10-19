@@ -9,12 +9,15 @@ import {
 import type { DesktopHttpTransport } from "../desktop/http-transport.js";
 import type { DesktopOperationService } from "../transport/handlers.js";
 import type { OfflineReadCache } from "./read-cache.js";
+import { OfflineReadCacheWriter } from "./read-cache-writer.js";
 import { createOfflineQueryOperation, type QueryCacheUpdate } from "./query-operation.js";
 import { createOfflineReceiveRecovery } from "./receive-recovery-fallback.js";
 import type { OfflineCommandRuntime } from "./runtime.js";
 
 export type OfflineDesktopServiceOptions = Readonly<{
   recoveryReadOnly?: boolean;
+  /** Batches query results into the read cache; tests pass one to flush deterministically. */
+  cacheWriter?: OfflineReadCacheWriter;
 }>;
 
 function isUnavailable(
@@ -30,6 +33,7 @@ export function createOfflineDesktopService(
   options: OfflineDesktopServiceOptions = {},
 ): DesktopOperationService {
   const recoveryReadOnly = options.recoveryReadOnly === true;
+  const writer = options.cacheWriter ?? new OfflineReadCacheWriter(cache);
   let session: DesktopSessionView | null = null;
   let offlineReadOnly = false;
   let sessionRevision = 0;
@@ -63,6 +67,7 @@ export function createOfflineDesktopService(
     offline.invalidateContinuity();
     offline.clearReadAuthority();
     replaceSession(null, false);
+    writer.discard();
     try {
       cache.clear();
     } catch (error) {
@@ -228,7 +233,7 @@ export function createOfflineDesktopService(
         return isCurrent() ? result : unavailable();
       },
     }),
-    query: createOfflineQueryOperation(online, cache, {
+    query: createOfflineQueryOperation(online, cache, writer, {
       recoveryReadOnly,
       maintain,
       unavailable,

@@ -4,6 +4,7 @@ import type { DesktopHttpTransport } from "../desktop/http-transport.js";
 import { authorityMatchesSession, bindAuthoritySession } from "./authority-session.js";
 import type { VerifiedOfflineReadAuthority } from "./read-authority.js";
 import type { OfflineReadCache } from "./read-cache.js";
+import type { OfflineReadCacheWriter } from "./read-cache-writer.js";
 
 type QuerySessionScope = Readonly<{
   session: DesktopSessionView | null;
@@ -51,6 +52,7 @@ type OfflineQueryOptions = Readonly<{
 export function createOfflineQueryOperation(
   online: DesktopHttpTransport,
   cache: OfflineReadCache,
+  writer: OfflineReadCacheWriter,
   options: OfflineQueryOptions,
 ): Readonly<{ execute: (input: unknown) => Promise<DesktopQueryExecuteResult> }> {
   return Object.freeze({
@@ -68,14 +70,14 @@ export function createOfflineQueryOperation(
             !scope.isCurrent()
           )
             return;
-          try {
-            if (authority === null) await cache.put(scope.session, input, result);
-            else await cache.bindAndPut(scope.session, authority, input, result, scope.isCurrent);
-          } catch (error) {
-            console.error("[edge-agent] offline read cache update failed", {
-              errorName: error instanceof Error ? error.name : "UnknownError",
-            });
-          }
+          // The page's burst of queries shares one protected write (see OfflineReadCacheWriter).
+          writer.enqueue({
+            session: scope.session,
+            authority,
+            input,
+            result,
+            isSessionCurrent: scope.isCurrent,
+          });
         });
         return scope.isCurrent() ? result : options.unavailable();
       }
@@ -91,6 +93,9 @@ export function createOfflineQueryOperation(
       }
       if (scope.session !== null) {
         try {
+          // Results still waiting for their batch must be readable once the service is gone.
+          await writer.flush();
+          if (!scope.isCurrent()) return options.unavailable();
           const cached = await cache.get(scope.session, input);
           if (!scope.isCurrent()) return options.unavailable();
           if (cached !== null) return cached;

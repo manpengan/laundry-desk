@@ -9,7 +9,8 @@ import {
 } from "@laundry/contracts";
 
 import type { DesktopHttpTransport } from "../desktop/http-transport.js";
-import type { OfflineReadCache } from "./read-cache.js";
+import type { CacheItem, OfflineReadCache } from "./read-cache.js";
+import { OfflineReadCacheWriter } from "./read-cache-writer.js";
 import type { OfflineCommandRuntime } from "./runtime.js";
 import { createOfflineDesktopService } from "./service.js";
 
@@ -131,6 +132,26 @@ function fixture(combined = false, recoveryReadOnly = false) {
       await pause("cache-write");
       return true;
     },
+    bindAndPutMany: async (
+      session: DesktopSessionView,
+      _authority: unknown,
+      items: readonly CacheItem[],
+      isCurrent: () => boolean,
+    ) => {
+      cacheCalls.push("bindAndPut");
+      await pause("cache-write");
+      if (!isCurrent()) return 0;
+      if (failCacheWrite) throw new Error("Synthetic persistence failure");
+      writes.push(...items.map(() => session));
+      return items.length;
+    },
+    putMany: async (session: DesktopSessionView, items: readonly CacheItem[]) => {
+      cacheCalls.push("put");
+      if (failCacheWrite) throw new Error("Synthetic persistence failure");
+      writes.push(...items.map(() => session));
+      await pause("cache-write");
+      return items.length;
+    },
     get: async (session: DesktopSessionView) => {
       reads.push(session);
       await pause("cache-read");
@@ -143,9 +164,14 @@ function fixture(combined = false, recoveryReadOnly = false) {
       grantNotAfter: "2026-07-30T12:00:00.000Z",
     }),
   } as unknown as OfflineReadCache;
-  const service = createOfflineDesktopService(online, runtime, cache, { recoveryReadOnly });
+  const cacheWriter = new OfflineReadCacheWriter(cache, 0);
+  const service = createOfflineDesktopService(online, runtime, cache, {
+    recoveryReadOnly,
+    cacheWriter,
+  });
   return {
     service,
+    flush: () => cacheWriter.flush(),
     online,
     writes,
     cacheCalls,
@@ -187,14 +213,7 @@ function fixture(combined = false, recoveryReadOnly = false) {
   };
 }
 
-for (const stage of [
-  "refresh",
-  "query",
-  "maintenance",
-  "health",
-  "cache-read",
-  "cache-write",
-] as const) {
+for (const stage of ["refresh", "query", "maintenance", "health", "cache-read"] as const) {
   for (const transition of ["switch-staff", "logout", "new-session", "refresh"] as const) {
     test(`a query cannot cross ${transition} while awaiting ${stage}`, async () => {
       const f = fixture();
@@ -228,6 +247,25 @@ for (const stage of [
   }
 }
 
+for (const transition of ["switch-staff", "logout", "new-session", "refresh"] as const) {
+  test(`a batched cache write cannot cross ${transition}`, async () => {
+    const f = fixture();
+    await f.service.auth.login(originalSession);
+    f.pauseAt("cache-write");
+    // Persistence is batched after the answer, so the query itself completes first.
+    assert.deepEqual(await f.service.query.execute(input), answer);
+    await f.started;
+    const changed = await f.transition(transition);
+    f.release();
+    await f.flush();
+    if (changed && typeof changed === "object" && "pending" in changed) await changed.pending;
+    assert.ok(
+      f.writes.every((session) => session === originalSession),
+      "old data must not be written under a replacement session",
+    );
+  });
+}
+
 test("one resumed session can promote concurrently to online without invalidating its own queries", async () => {
   const f = fixture();
   await f.service.offline.resume();
@@ -244,6 +282,7 @@ test("one resumed session can promote concurrently to online without invalidatin
   assert.deepEqual(await first, answer);
   assert.deepEqual(second, answer);
   assert.deepEqual(await f.service.command.execute({}), answer);
+  await f.flush();
   assert.deepEqual(f.writes, [originalSession, originalSession]);
 });
 
@@ -306,6 +345,7 @@ test("a concurrent identity rejection also discards an already promoted resumed 
       grantNotAfter: "2099-01-01T00:00:00Z",
     }),
     put: async () => true,
+    putMany: async (_session: unknown, items: readonly CacheItem[]) => items.length,
     get: async () => {
       cacheReads += 1;
       return answer;
@@ -314,7 +354,9 @@ test("a concurrent identity rejection also discards an already promoted resumed 
       cacheClears += 1;
     },
   } as unknown as OfflineReadCache;
-  const service = createOfflineDesktopService(online, runtime, cache);
+  const service = createOfflineDesktopService(online, runtime, cache, {
+    cacheWriter: new OfflineReadCacheWriter(cache, 0),
+  });
   await service.offline.resume();
   const first = service.query.execute(input);
   const second = service.query.execute(input);
@@ -336,14 +378,11 @@ for (const transition of ["switch-staff", "logout", "new-session", "refresh"] as
     const f = fixture(true);
     await f.service.auth.login(originalSession);
     f.pauseAt("cache-write");
-    const pending = f.service.query.execute(input);
+    assert.deepEqual(await f.service.query.execute(input), answer);
     await f.started;
     const changed = await f.transition(transition);
     f.release();
-    assert.deepEqual(await pending, {
-      ok: false,
-      error: createCommandError("RESOURCE_UNAVAILABLE", { kind: "reason", reason: "retry_later" }),
-    });
+    await f.flush();
     if (changed && typeof changed === "object" && "pending" in changed) await changed.pending;
     assert.deepEqual(
       f.writes,
@@ -363,6 +402,7 @@ test("concurrent resumed queries keep both fused updates and restore write permi
   const second = f.service.query.execute(input);
   f.release();
   assert.deepEqual(await Promise.all([first, second]), [answer, answer]);
+  await f.flush();
   assert.deepEqual(f.writes, [originalSession, originalSession]);
   assert.deepEqual(await f.service.command.execute({}), answer);
 });
@@ -373,9 +413,11 @@ for (const combined of [false, true]) {
     await f.service.auth.login(originalSession);
     f.setCacheFailure(true);
     assert.deepEqual(await f.service.query.execute(input), answer);
+    await f.flush();
     assert.deepEqual(f.writes, []);
     f.setCacheFailure(false);
     assert.deepEqual(await f.service.query.execute(input), answer);
+    await f.flush();
     assert.deepEqual(f.writes, [originalSession]);
   });
 }
