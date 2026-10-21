@@ -2,7 +2,8 @@
 
 本工具实现 [ADR-67](../../docs/adr/2026-08-30-adr-67-windows-native-local-runtime.md) 的独立运行文件打包
 与无源码仓库加载验证，当前只产出 `development_only` payload。
-包内新增独立安装生命周期入口，可创建合成数据库、私有凭据及登录任务，仍不允许作为宏发真实运营包。现有
+包内独立安装生命周期可创建合成数据库、私有凭据及登录任务；显式“初始化全新空库”可由操作者设置两位管理员，
+当前仍只允许合成验证，不因此成为宏发真实运营包。现有
 `install-development-runtime.ps1` 仍是依赖构建机源码的开发工具。
 
 ## 构建
@@ -44,7 +45,7 @@ node.exe tools/windows-runtime/package-runtime-entry.mjs --payload <payload-abso
 
 分发目录包含 Laundry Runtime V2.cmd、固定绑定的 PowerShell 入口与完整 payload。
 先核对可信构建记录的入口与发行摘要，再双击 CMD；界面无需手填发行摘要、源码路径或环境变量。
-选择“安装本地服务”或“升级”后，私有 Programs 目录与开始菜单保留对应发行的独立维护入口；
+选择“安装本地服务”、“初始化全新空库”或“升级”后，私有 Programs 目录与开始菜单保留对应发行的独立维护入口；
 升级保留旧入口，撤走原分发后仍可维护。柜台卸载不删除入口或数据库。
 
 界面提供状态、启停、修复、跨迁移联合升级/回退、备份列表/验证/恢复、离机备份、定时维护、数据迁移/导出与中断维护恢复。
@@ -84,9 +85,18 @@ powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File <payload
 历史迁移被修改、缺失或 PostgreSQL 主版本不匹配时拒绝升级。跨迁移回退使用绑定的升级前快照，
 回退前另存当前数据安全点，不能只替换程序目录。
 
-安装根固定为 `%LOCALAPPDATA%\laundry-desk-v2\runtime-companion`。初始化时创建两个独立合成管理员，
+安装根固定为 `%LOCALAPPDATA%\laundry-desk-v2\runtime-companion`。默认 `install` 创建两个独立合成管理员，
 凭据仅写入私有 `secrets` 下的 `laundry-bootstrap-admin-*` 与 `laundry-bootstrap-approver-*` 文件。
 登录任务使用固定包内 Node，并读取持久化版本指针；无需源码、系统 Node/pnpm、Docker 或 WSL。
+
+显式 `install-store` 由受信 GUI 遮罩输入并确认两人的用户名、显示名、长密码与 PIN；有界 UTF-8 stdin
+传入后复用 Server 的 BootstrapInputSchema。仅允许全新根，已有 QA、卸载保留根和半初始化均硬拒绝，
+不提供清空/转换；本轮 noLegacy，不读取或导入 v1。初始化运行原角色、迁移和事务 bootstrap，严格
+`verify-commissioned` 通过且 `bootstrap-input` 私有一次性文件清理完成后才注册任务、启动。
+运行密钥继续私有保存；普通启动不再依赖管理员初始化凭据。清理/验证失败保持失败，半初始化不自动重建。
+结果仍是 `development_only`、`admission=pending`，仅表示技术初始化；ADR-98 签署与真实使用独立。
+详细操作、失败处理和自动化输入边界见[现场初始化材料](../../docs/operations/windows-store-initialization-20261021/onsite.md)
+与 [ADR-101](../../docs/adr/2026-10-21-adr-101-windows-empty-store-initialization.md)。
 
 首次安装在创建状态、凭据和数据库前运行原生依赖预检；缺少 DLL 或工具版本不匹配时停止安装。
 
@@ -137,7 +147,7 @@ Windows 私有照片能力已启用，数据库与照片共同验证/恢复；�
 
 - 新维护功能在完整 Windows 安装态的程序/数据联合升级回退、照片、定时任务与离机归档证据；
 - Authenticode 或获裁决的受控内部分发策略；
-- 目标 Windows 10/11、中文 IME、150% DPI、三类打印机现场证据；
+- 目标 Windows 10/11、中文 IME、150% DPI 现场证据；打印继续暂缓，未计为通过；
 - ADR-71 后续本机生产准入 ADR、离机恢复、告警送达、容量与真实数据责任（Cloud 仍暂停）。
 
 这些现场与生产证据不由 Windows Server CI 替代。Electron 继续不负责数据库生命周期。

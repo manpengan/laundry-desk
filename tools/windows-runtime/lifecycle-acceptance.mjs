@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { cp, readFile, writeFile, readdir, lstat } from "node:fs/promises";
+import { cp, readFile, writeFile, lstat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -9,6 +9,7 @@ import { launchCommander } from "./lifecycle-acceptance-command.mjs";
 import { backupAcceptance, portableAcceptance } from "./backup-acceptance.mjs";
 import { diagnosticAcceptance } from "./diagnostic-acceptance.mjs";
 import { maintenanceAcceptance, scheduledLauncherAcceptance } from "./maintenance-acceptance.mjs";
+import * as storeAcceptance from "./store-initialization-acceptance.mjs";
 const execute = promisify(execFile);
 const [payload, expectedDigest, reportFile] = process.argv.slice(2);
 assert.equal(process.platform, "win32");
@@ -27,6 +28,7 @@ const manifest = JSON.parse(await readFile(join(payload, "runtime-payload.json")
 const scenarios = [];
 let activePayload = payload;
 let activeDigest = expectedDigest;
+let storeInitialized = false;
 const command = launchCommander({ payload, expectedDigest, env });
 async function rejected(action, source, hash, pattern) {
   await assert.rejects(command(action, source, hash), (error) => pattern.test(error.stderr ?? ""));
@@ -34,15 +36,11 @@ async function rejected(action, source, hash, pattern) {
 async function scenario(name, action) {
   const started = Date.now();
   await action();
+  if (storeInitialized) await storeAcceptance.requireStoreInitializationInvariant(root, io);
   scenarios.push({ scenario: name, status: "passed", elapsed_ms: Date.now() - started });
   console.log(JSON.stringify(scenarios.at(-1)));
 }
-async function secretDigest() {
-  const names = (await readdir(join(root, "secrets"))).sort();
-  return digest(
-    Buffer.concat(await Promise.all(names.map((name) => readFile(join(root, "secrets", name))))),
-  );
-}
+const secretDigest = () => storeAcceptance.runtimeSecretDigest(root, digest);
 async function sql(statement, source = activePayload) {
   const options = {
     env: { ...env, PGPASSFILE: join(root, "secrets/pgpass.conf") },
@@ -84,7 +82,6 @@ async function variant(name, update) {
   await writeFile(join(folder, "runtime-payload.json"), bytes);
   return { folder, hash: digest(bytes) };
 }
-let beforeSecrets;
 try {
   await scenario("fresh-port-conflict", async () => {
     const server = createServer();
@@ -111,15 +108,18 @@ try {
       postgres: false,
     });
   });
-  await scenario("install-real-database", async () => {
-    assert.equal((await command("install")).status, "running");
-    assert.equal(await sql("SHOW data_checksums"), "on");
-    assert.equal(await sql("SHOW password_encryption"), "scram-sha-256");
-    await sql(
-      "CREATE TABLE public.runtime_acceptance_probe (id integer PRIMARY KEY); INSERT INTO public.runtime_acceptance_probe VALUES (1), (2)",
-    );
-    beforeSecrets = await secretDigest();
+  const beforeSecrets = await storeAcceptance.storeInitializationAcceptance({
+    scenario,
+    command,
+    root,
+    payload,
+    io,
+    load,
+    manifest,
+    sql,
+    secretDigest,
   });
+  storeInitialized = true;
   await scenario("stop-start-repair", async () => {
     assert.equal((await command("stop")).status, "stopped");
     assert.equal((await command("start")).status, "running");

@@ -8,6 +8,7 @@ import {
   withOperationLock,
   requireCompatible,
   requireState,
+  requireStateSchema,
 } from "./lifecycle-storage.mjs";
 import { cleanEnvironment } from "./lifecycle-environment.mjs";
 
@@ -61,7 +62,15 @@ test("persistent state rejects extra authority, malformed paths and missing cont
     releases: [entry],
   };
   assert.equal(requireState(state), state);
+  const operatorState = { ...state, schema: 2 };
+  assert.equal(requireState(operatorState), operatorState);
+  assert.doesNotThrow(() =>
+    requireStateSchema(operatorState, { ...operatorState, phase: "running" }),
+  );
+  assert.throws(() => requireStateSchema(operatorState, state), /STATE_SCHEMA_CHANGE_REJECTED/u);
+  assert.throws(() => requireStateSchema(state, operatorState), /STATE_SCHEMA_CHANGE_REJECTED/u);
   for (const changed of [
+    ...[0, 3, "1", "2", null].map((schema) => ({ ...state, schema })),
     { ...state, controller: null },
     { ...state, releases: [] },
     { ...state, releases: [entry, entry] },

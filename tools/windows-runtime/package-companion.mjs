@@ -39,6 +39,8 @@ const scriptNames = [
   "smoke-companion.mjs",
   "lifecycle-cli.mjs",
   "lifecycle.mjs",
+  "lifecycle-install.mjs",
+  "store-initialization.mjs",
   "lifecycle-storage.mjs",
   "lifecycle-environment.mjs",
   "lifecycle-process.mjs",

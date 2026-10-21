@@ -13,11 +13,29 @@ high、low，或未经复审的 moderate 都会失败；本地安全补丁必须
 production/dev 属性。路径、版本或可达性发生变化时，门禁同样失败，不能用宽泛的包名或
 severity 忽略规则放行。
 
-当前安全版本线为 Electron `41.10.6`、Electron-Vite `4.0.1`、根 Vite `7.3.6`、Web
-Vite `6.4.3`、React Router DOM `7.18.2` 与 PostCSS `8.5.23`。Electron-Vite 4/Vite 7
+当前安全版本线为 Electron `41.10.6`、Electron-Vite `4.0.1`、根 Vite `7.3.7`、Web
+Vite `6.4.4`、React Router DOM `7.18.2` 与 PostCSS `8.5.23`。Electron-Vite 4/Vite 7
 要求 Node `>=22.12`，仓库 engine 与 CI 的 Node 22 最新补丁线必须满足该下限。传递依赖
 通过同主版本 override 固定到 `undici@6.28.1/7.29.1`、`fast-uri@3.1.8/4.1.5`、
 `brace-expansion@1.1.21/2.1.7/5.0.12`、`js-yaml@4.3.2`、`nanoid@3.3.18`。
+
+## 2026-10-21 Vite 内置 launch-editor 安全更新
+
+PR #255 在依赖审计阶段被 10 月 20 日进入 GitHub Advisory Database 的公告阻断。
+完整审计确认三项公告都命中 Vite 的两个开发依赖分支：Web 使用 `6.4.3`，根、Contracts、
+Vitest 与 Electron-Vite 使用 `7.3.6`；同主版本修复分别为 `6.4.4` 与 `7.3.7`。
+
+- [GHSA-698v-4r3x-3vcv](https://github.com/vitejs/launch-editor/security/advisories/GHSA-698v-4r3x-3vcv)（moderate）：Windows 编辑器启动参数未转义 `%`，可能触发命令注入。
+- [GHSA-r825-w8mm-5pxw](https://github.com/vitejs/launch-editor/security/advisories/GHSA-r825-w8mm-5pxw)（moderate）：文件路径可能被部分编辑器识别为命令行选项；Vite 路径受影响条件涉及 WSL。
+- [GHSA-587h-7wmj-h5pm](https://github.com/vitejs/launch-editor/security/advisories/GHSA-587h-7wmj-h5pm)（HIGH）：Windows 路径存在检查可被绕过，并可与 `%` 转义缺陷组合利用。
+
+仅更新根、Web 与 Contracts 的 Vite 补丁版本及锁文件内相应引用；不改变审计策略、历史例外
+或本地安全补丁。Vite 内置这段 launch-editor 代码，因此需要升级 Vite 自身。
+锁文件更新后，Windows 构建与验收须绑定新的锁文件摘要和候选，不能沿用旧包的验收结论。
+
+本地验证：冻结锁文件安装、`pnpm peers check` 与 `workspace:audit` 通过，既有审计/补丁/
+工作区回归 `25/25`、Contracts `856/856` 通过，Web 类型检查、Vite 构建与产物预算通过。
+此次验证不包含新候选的 Windows 实机验收。
 
 ## 2026-10-07 sharp 新公告
 

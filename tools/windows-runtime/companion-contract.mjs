@@ -55,6 +55,18 @@ export const PHOTO_BACKUP_FILES = Object.freeze([
   "scripts/backup-photo-contract.mjs",
   "scripts/backup-photo-files.mjs",
 ]);
+export const STORE_INITIALIZATION_FILES = Object.freeze([
+  "scripts/store-initialization.mjs",
+  "scripts/lifecycle-install.mjs",
+  "server/dist/local/bootstrap-model.js",
+  "server/dist/local/profile.js",
+]);
+
+export function supportsStoreInitialization(manifest) {
+  return STORE_INITIALIZATION_FILES.every((path) =>
+    manifest.files?.some((file) => file.path === path),
+  );
+}
 
 export function supportsBackup(manifest) {
   return BACKUP_FILES.every((path) => manifest.files?.some((file) => file.path === path));
@@ -202,6 +214,13 @@ export function requireManifest(value) {
   )
     fail("PHOTO_BACKUP_CAPABILITY_INCOMPLETE");
   requireCrtManifestFiles(value.files);
+  if (
+    value.files.some((entry) =>
+      ["scripts/store-initialization.mjs", "scripts/lifecycle-install.mjs"].includes(entry.path),
+    ) &&
+    !supportsStoreInitialization(value)
+  )
+    fail("STORE_INITIALIZATION_CAPABILITY_INCOMPLETE");
   return value;
 }
 

@@ -98,6 +98,23 @@ test("backup metadata failures produce counts, without reading dump/photo conten
   assert.doesNotMatch(JSON.stringify(invalid), /customer-secret|PII-secret/u);
 });
 
+test("setup cleanup diagnostic uses a closed marker without reading leftover private input", async (t) => {
+  const context = await fixture(t, "staged");
+  const secret = "PRIVATE_SETUP_PASSWORD_AND_UNKNOWN_FILENAME";
+  const input = join(context.root, "bootstrap-input");
+  await mkdir(input, { mode: 0o700 });
+  await writeFile(join(input, "unknown.txt"), secret, { mode: 0o600 });
+  const receipt = await exportDiagnosticBundle({ ...context, setupInputCleanup: "failed" });
+  const bytes = await readFile(receipt.path, "utf8");
+  assert.equal(receipt.setup_input_cleanup, "failed");
+  assert.equal(JSON.parse(bytes).runtime.setup_input_cleanup, "failed");
+  assert.doesNotMatch(bytes, /PRIVATE_SETUP|unknown\.txt|bootstrap-input/u);
+  assert.equal(await readFile(join(input, "unknown.txt"), "utf8"), secret);
+  const unsafe = await collectDiagnosticBundle({ ...context, setupInputCleanup: secret });
+  assert.equal(unsafe.runtime.setup_input_cleanup, "not_checked");
+  assert.equal(JSON.stringify(unsafe).includes(secret), false);
+});
+
 test("diagnostic exports never overlay existing user files and stop at the bounded limit", async (t) => {
   const context = await fixture(t);
   const directory = join(context.root, "diagnostics");

@@ -88,6 +88,9 @@ export async function collectDiagnosticBundle(context) {
       previous: state.previous ? { ...state.previous } : null,
       pending_update: state.pending !== null,
       release_count: state.releases.length,
+      setup_input_cleanup: ["cleared", "failed"].includes(context.setupInputCleanup)
+        ? context.setupInputCleanup
+        : "not_checked",
     },
     services,
     maintenance,

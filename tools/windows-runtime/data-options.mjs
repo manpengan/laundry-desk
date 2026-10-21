@@ -2,6 +2,7 @@ import { exactKeys, fail } from "./companion-contract.mjs";
 import { requirePortablePassword } from "./portable-crypto.mjs";
 import { requireSchedule } from "./schedule-contract.mjs";
 import { requireAssistanceOptions } from "./assistance-config.mjs";
+import { requireStoreInput } from "./store-initialization.mjs";
 
 export const DATA_ACTIONS = Object.freeze([
   "portable-export",
@@ -11,6 +12,7 @@ export const DATA_ACTIONS = Object.freeze([
   "export-store",
 ]);
 export const INPUT_ACTIONS = Object.freeze([
+  "install-store",
   ...DATA_ACTIONS,
   "backup-schedule",
   "assistance-config",
@@ -84,11 +86,13 @@ export async function readDataOptions(action, stream = process.stdin) {
         ? { ...value, password: Buffer.from(value.password, "utf8") }
         : value;
     try {
-      return action === "assistance-config"
-        ? requireAssistanceOptions(options)
-        : action === "backup-schedule"
-          ? requireSchedule(options)
-          : requireDataOptions(action, options);
+      return action === "install-store"
+        ? requireStoreInput(options)
+        : action === "assistance-config"
+          ? requireAssistanceOptions(options)
+          : action === "backup-schedule"
+            ? requireSchedule(options)
+            : requireDataOptions(action, options);
     } catch (error) {
       if (Buffer.isBuffer(options?.password)) options.password.fill(0);
       throw error;
