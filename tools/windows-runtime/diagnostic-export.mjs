@@ -50,5 +50,6 @@ export async function exportDiagnosticBundle(context) {
     sha256: digest(bytes),
     bytes: bytes.length,
     privacy: bundle.privacy.policy,
+    setup_input_cleanup: bundle.runtime.setup_input_cleanup,
   };
 }

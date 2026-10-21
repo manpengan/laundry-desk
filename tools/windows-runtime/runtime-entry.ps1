@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [ValidateSet('gui','install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config')][string]$Action = 'gui',
+  [ValidateSet('gui','install','install-store','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config')][string]$Action = 'gui',
   [string]$BackupId,
   [string]$ConfirmationDigest,
   [string]$CounterHandoffJson
@@ -38,10 +38,16 @@ function Assert-EntryArguments {
 function Invoke-RuntimeEntryAction {
   param([string]$Verb, [string]$Id, [string]$Confirmation, [string]$InputJson)
   Assert-EntryArguments $Verb $Id $Confirmation
-  if (@('install','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -cnotcontains $Verb) {
+  if (@('install','install-store','status','start','stop','repair','upgrade','rollback','backup','backup-list','backup-verify','backup-drill','backup-health','scheduled-backup','restore','maintenance-recover','diagnostics','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -cnotcontains $Verb) {
     throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID'
   }
-  if ($Verb -ceq 'install' -or $Verb -ceq 'upgrade') { [void](Install-RuntimeEntry) }
+  if ($Verb -ceq 'install-store') {
+    # The lifecycle repeats this check under its operation lock.
+    $storeRoot = Join-Path $env:LOCALAPPDATA 'laundry-desk-v2\runtime-companion'
+    try { [void][IO.File]::GetAttributes($storeRoot); throw 'WINDOWS_COMPANION_STORE_REQUIRES_NEW_INSTANCE' }
+    catch [IO.FileNotFoundException] { }
+    catch [IO.DirectoryNotFoundException] { }
+  }
   $arguments = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',
     (Join-Path $PayloadRoot 'scripts\lifecycle-launch.ps1'),'-Action',$Verb,'-Payload',$PayloadRoot,'-ManifestDigest',$BoundManifest)
   if ($Verb -ceq 'restore' -or (@('backup-verify','backup-drill') -ccontains $Verb)) { $arguments += @('-BackupId', $Id) }
@@ -58,7 +64,7 @@ function Invoke-RuntimeEntryAction {
   $process.StartInfo.CreateNoWindow = $true
   $process.StartInfo.RedirectStandardOutput = $true
   $process.StartInfo.RedirectStandardError = $true
-  $inputProtocol = @('portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -ccontains $Verb
+  $inputProtocol = @('install-store','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -ccontains $Verb
   $process.StartInfo.RedirectStandardInput = $inputProtocol
   $inputBytes = $null
   try {
@@ -67,6 +73,7 @@ function Invoke-RuntimeEntryAction {
       $inputBytes = (New-Object Text.UTF8Encoding($false, $true)).GetBytes($InputJson)
       if ($inputBytes.Length -gt 8192) { throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID' }
     } elseif (-not [string]::IsNullOrEmpty($InputJson)) { throw 'WINDOWS_RUNTIME_ENTRY_ARGS_INVALID' }
+    if (@('install','install-store','upgrade') -ccontains $Verb) { [void](Install-RuntimeEntry) }
     if (-not $process.Start()) { throw 'WINDOWS_RUNTIME_ENTRY_PROCESS_FAILED' }
     if ($inputProtocol) {
       $process.StandardInput.BaseStream.Write($inputBytes, 0, $inputBytes.Length)
@@ -95,6 +102,7 @@ function Invoke-RuntimeEntryAction {
     }
     $result = $text | ConvertFrom-Json
     if ($null -eq $result -or $result.assurance -cne 'development_only') { throw 'WINDOWS_RUNTIME_ENTRY_RESULT_INVALID' }
+    if ($Verb -ceq 'install-store' -and ($result.status -cne 'running' -or $result.initialization -cne 'operator_new_empty' -or $result.admission -cne 'pending')) { throw 'WINDOWS_RUNTIME_ENTRY_RESULT_INVALID' }
     return $text
   } finally {
     if ($null -ne $inputBytes) { [Array]::Clear($inputBytes, 0, $inputBytes.Length) }
@@ -151,12 +159,13 @@ try {
     . (Join-Path $EntryRoot 'runtime-entry-data-ui.ps1')
     . (Join-Path $EntryRoot 'runtime-entry-assistance-ui.ps1')
     . (Join-Path $EntryRoot 'runtime-entry-schedule-ui.ps1')
+    . (Join-Path $EntryRoot 'runtime-entry-store-ui.ps1')
     . (Join-Path $EntryRoot 'runtime-entry-ui.ps1')
     if ($null -ne $script:CounterHandoff) { [Console]::Out.WriteLine('{"status":"maintenance_opened"}'); [Console]::Out.Flush() }
     Show-RuntimeEntry
   } else {
     $inputJson = $null
-    if (@('portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -ccontains $Action) {
+    if (@('install-store','portable-export','portable-inspect','portable-import','v1-import','export-store','backup-schedule','assistance-config') -ccontains $Action) {
       $inputJson = [LaundryRuntimeEntryTrust]::ReadProtocolInput()
     }
     try { [Console]::Out.WriteLine((Invoke-RuntimeEntryAction $Action $BackupId $ConfirmationDigest $inputJson)) }

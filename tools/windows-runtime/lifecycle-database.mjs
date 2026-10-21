@@ -6,7 +6,7 @@ import { pgControl, run } from "./lifecycle-process.mjs";
 import { fail } from "./companion-contract.mjs";
 
 const random = () => randomBytes(32).toString("base64url");
-export async function initializeSecrets(root, io) {
+export async function initializeSecrets(root, io, { syntheticIdentities = true } = {}) {
   const folder = join(root, "secrets");
   if (await exists(folder)) fail("PARTIAL_INITIALIZATION");
   await io.directory(folder);
@@ -25,7 +25,7 @@ export async function initializeSecrets(root, io) {
   do {
     pins[1] = String(randomInt(100000, 1000000));
   } while (pins[0] === pins[1]);
-  for (const [index, role] of ["ADMIN", "APPROVER"].entries()) {
+  for (const [index, role] of (syntheticIdentities ? ["ADMIN", "APPROVER"] : []).entries()) {
     for (const [field, value] of Object.entries({
       USERNAME: `${role.toLowerCase()}-win-dev`,
       DISPLAY_NAME: `Windows Dev ${role}`,
@@ -47,10 +47,22 @@ export function kit(payload, command, env, root) {
   );
 }
 
-export async function initializeDatabase(root, payload, manifest, io, platform) {
+export async function initializeDatabase(
+  root,
+  payload,
+  manifest,
+  io,
+  platform,
+  options = {},
+  dependencies = {},
+) {
   if (await exists(join(root, "postgres-data"))) fail("PARTIAL_INITIALIZATION");
-  const env = await runtimeEnvironment(root, payload, manifest, io);
-  await run(
+  const execute = dependencies.run ?? run;
+  const control = dependencies.pgControl ?? pgControl;
+  const command = dependencies.kit ?? kit;
+  const bootstrapDirectory = options.bootstrapDirectory ?? join(root, "secrets");
+  const env = await runtimeEnvironment(root, payload, manifest, io, { bootstrapDirectory });
+  await execute(
     join(payload, "postgres/bin/initdb.exe"),
     [
       `--pgdata=${join(root, "postgres-data")}`,
@@ -68,18 +80,23 @@ export async function initializeDatabase(root, payload, manifest, io, platform) 
   await platform.securePrivateDirectory(join(root, "postgres-data"));
   await platform.inspectPrivateDirectory(join(root, "postgres-data"));
   await platform.flushDirectoryDurably(root);
-  await pgControl("start", root, payload, env);
+  await control("start", root, payload, env);
   try {
-    await run(
+    await execute(
       join(payload, "postgres/bin/createdb.exe"),
       ["--host=127.0.0.1", "--port=8543", "--username=postgres", "--no-password", "laundry_v2"],
       env,
       root,
     );
-    for (const command of ["roles", "migrate", "bootstrap", "verify"])
-      await kit(payload, command, env, root);
+    for (const name of [
+      "roles",
+      "migrate",
+      "bootstrap",
+      options.requireCommissioned ? "verify-commissioned" : "verify",
+    ])
+      await command(payload, name, env, root);
   } finally {
-    await pgControl("stop", root, payload, env);
+    await control("stop", root, payload, env);
   }
 }
 

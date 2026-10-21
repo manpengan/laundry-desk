@@ -30,7 +30,7 @@ function Show-RuntimeEntry {
   $output.Multiline = $true; $output.ReadOnly = $true; $output.ScrollBars = 'Vertical'
   $output.SetBounds(18, 440, 760, 210)
   $output.Anchor = 'Top,Bottom,Left,Right'
-  $output.Text = '请选择“查看状态”；首次使用请选择“安装本地服务”。备份前先退出柜台。'
+  $output.Text = '请选择“查看状态”；合成测试可选“安装本地服务”，自主设置两位管理员可选“初始化全新空库”。备份前先退出柜台。'
   $form.Controls.Add($output)
 
   $backupLabel = New-Object Windows.Forms.Label
@@ -57,6 +57,10 @@ function Show-RuntimeEntry {
     if ($script:EntryBusy) { return }
     $id = $null; $digest = $null; $inputJson = $null
     try {
+      if ($Verb -ceq 'install-store') {
+        $inputJson = Show-RuntimeStoreDialog $form
+        if ([string]::IsNullOrEmpty($inputJson)) { $output.Text = '已取消，尚未创建实例。'; return }
+      }
       if ($Verb -ceq 'assistance-config') {
         $inputJson = Show-RuntimeAssistanceDialog $form
         if ([string]::IsNullOrEmpty($inputJson)) { $output.Text = '已取消，尚未执行。一次性授权仍需在有效期内使用。'; return }
@@ -97,6 +101,7 @@ function Show-RuntimeEntry {
       $description = if ($states.ContainsKey($status)) { $states[$status] } else { '操作完成，请查看状态确认' }
       $lines = New-Object 'Collections.Generic.List[string]'
       $lines.Add($description)
+      if ($Verb -ceq 'install-store') { $lines.Add('空库技术初始化完成，一次性账号输入已清除。当前仍是开发候选；正式业务准入待签署。') }
       if (@('backup-health','backup-schedule','scheduled-backup') -ccontains $Verb -and $result.status -ceq 'backup_health') {
         $lines.Add('自动备份：' + $(if ($result.config.enabled) { '已启用' } else { '已关闭' }))
         $lines.Add('每日时间：' + ('{0:00}:{1:00}' -f $result.config.hour, $result.config.minute))
@@ -118,6 +123,9 @@ function Show-RuntimeEntry {
       if ($Verb -ceq 'v1-import') { $lines.Add('已应用批准请求：' + [string]$result.request_id) }
       if ($Verb -ceq 'export-store') { $lines.Add('门店数据和照片已导出。请按清单校验后妥善保管。'); $lines.Add('目录：' + [string]$result.destination); $lines.Add('清单 SHA256：' + [string]$result.manifest_sha256) }
       if ($Verb -ceq 'diagnostics' -and $status -ceq 'diagnostic_exported') {
+        if ($result.PSObject.Properties.Name -contains 'setup_input_cleanup' -and $result.setup_input_cleanup -ceq 'failed') {
+          $lines.Add('初始化输入尚未安全清理；诊断包已导出，请继续处理清理问题，暂勿启动服务。')
+        }
         $lines.Add('文件：' + [string]$result.path)
         $lines.Add('SHA256：' + [string]$result.sha256)
         $lines.Add('仅包含版本、服务、维护和备份摘要；不含顾客资料、密钥或原始日志。文件未上传。')
@@ -140,7 +148,10 @@ function Show-RuntimeEntry {
     } catch {
       $code = [string]($_.Exception.GetBaseException().Message)
       if ($code -cnotmatch '^WINDOWS_(RUNTIME_ENTRY|COMPANION)_[A-Z_]+$') { $code = 'WINDOWS_RUNTIME_ENTRY_FAILED' }
-      $help = if ($code -match 'AUTHORIZATION_INVALID|APPROVAL|EXPIRED') { '授权已过期、已使用或会话失效。请回柜台重新核对并生成一次性授权。' }
+      $help = if ($code -match 'STORE_REQUIRES_NEW_INSTANCE') { '此 Windows 用户已有实例。请保留现有数据，不要删除或清空后重试。' }
+        elseif ($code -match 'STORE_INPUT_CLEANUP_FAILED') { '一次性输入清理未完成，初始化不能视为成功。请保留现场并联系维护人员；可用“停止服务”受控停机。' }
+        elseif ($code -match 'STORE_INPUT_INVALID') { '请核对两位管理员的账号、长密码、PIN 及独立身份要求。' }
+        elseif ($code -match 'AUTHORIZATION_INVALID|APPROVAL|EXPIRED') { '授权已过期、已使用或会话失效。请回柜台重新核对并生成一次性授权。' }
         elseif ($code -match 'LOCK|BUSY') { '已有维护正在运行。请等待当前操作完成后重试，不要重复打开操作。' }
         elseif ($code -match 'ACCESS|PERMISSION|PRIVATE') { '当前用户不能访问维护文件。请使用原安装账户并检查目录权限。' }
         else { '如状态显示维护中断，请查看状态后明确选择“继续中断维护”。' }
@@ -152,7 +163,7 @@ function Show-RuntimeEntry {
     }
   }
   foreach ($entry in @(
-    @('安装本地服务','install'), @('查看状态','status'), @('启动服务','start'), @('停止服务','stop'),
+    @('安装本地服务','install'), @('初始化全新空库','install-store'), @('查看状态','status'), @('启动服务','start'), @('停止服务','stop'),
     @('修复服务','repair'), @('创建备份','backup'), @('查看备份','backup-list'),
     @('自动备份设置','backup-schedule'), @('备份提醒与记录','backup-health'), @('立即自动备份','scheduled-backup'),
     @('升级到本包','upgrade'), @('回滚程序','rollback'), @('继续中断维护','maintenance-recover'), @('导出诊断','diagnostics'),

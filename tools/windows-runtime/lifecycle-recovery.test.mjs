@@ -5,6 +5,13 @@ import { win32 } from "node:path";
 import { BACKUP_ACTIONS, requireBackupOptions } from "./backup-contract.mjs";
 import { DATA_ACTIONS, requireDataOptions } from "./data-options.mjs";
 import { SCHEDULE_ACTIONS, requireSchedule } from "./schedule-contract.mjs";
+import {
+  requireFreshStore,
+  requireStoreInput,
+  requireStoreRuntime,
+} from "./store-initialization.mjs";
+import { STORE_INITIALIZATION_FILES } from "./companion-contract.mjs";
+import { requireStateSchema } from "./lifecycle-storage.mjs";
 
 // Execute the actual state machine with faulting OS/database boundaries. This
 // keeps failure ordering testable without starting Windows processes on macOS.
@@ -18,11 +25,18 @@ function fixture({
   schemaChange = false,
   phase = "running",
   scheduleResult = "enabled",
+  inputCleanupFailure = false,
+  stateSchema = 1,
+  unsupportedSource = false,
+  unsupportedEntry = null,
 } = {}) {
   const old = { digest: "old" };
   const next = { digest: "next", ...(schemaChange ? { migrationHead: "0070_next.sql" } : {}) };
   const scheduleEvents = [];
+  const mutations = [];
+  const diagnosticContexts = [];
   let state = {
+    schema: stateSchema,
     phase,
     current: old,
     previous: schemaChange ? next : null,
@@ -41,7 +55,24 @@ function fixture({
     requireDataOptions,
     SCHEDULE_ACTIONS,
     requireSchedule,
-    readMaintenance: async () => maintenance,
+    requireFreshStore,
+    requireStoreInput,
+    requireStoreRuntime,
+    requireStateSchema,
+    validateStoreInput: async (_payload, _manifest, value) => value,
+    clearStoreInput: async () => {
+      if (inputCleanupFailure)
+        throw new Error(`WINDOWS_COMPANION_STORE_INPUT_CLEANUP_FAILED ${inputCleanupFailure}`);
+    },
+    exportDiagnosticBundle: async (context) => {
+      diagnosticContexts.push(context);
+      await context.probe();
+      return { status: "diagnostic_exported", setup_input_cleanup: context.setupInputCleanup };
+    },
+    readMaintenance: async () =>
+      maintenance?.version === 2
+        ? { ...maintenance, old_state: maintenance.old_state ?? structuredClone(state) }
+        : maintenance,
     schemaMaintenance: async (action, target, context) => {
       const committed = action !== "maintenance-recover" || maintenance.phase === "verified";
       await context.saveState({ ...state, current: committed ? target : old, phase });
@@ -64,7 +95,10 @@ function fixture({
     ...Object.fromEntries(
       ["dirname", "join", "resolve", "relative", "isAbsolute"].map((key) => [key, win32[key]]),
     ),
-    inspectCompanion: async () => next,
+    inspectCompanion: async () => ({
+      ...next,
+      files: unsupportedSource ? [] : STORE_INITIALIZATION_FILES.map((path) => ({ path })),
+    }),
     requireRealDirectory: async () => {},
     fail: (code) => {
       throw new Error(code);
@@ -74,6 +108,7 @@ function fixture({
     storage: () => ({
       directory: async () => {},
       write: async (_path, json) => {
+        mutations.push("save-state");
         state = JSON.parse(json);
       },
     }),
@@ -82,10 +117,21 @@ function fixture({
     requireCompatible: () => {},
     requireState: (value) => value,
     withOperationLock: async (_root, action) => action(),
-    stageRelease: async () => {},
-    verifyRelease: async (_root, entry) => ({ payload: entry.digest, manifest: {} }),
+    stageRelease: async () => {
+      mutations.push("stage-release");
+    },
+    verifyRelease: async (_root, entry) => ({
+      payload: entry.digest,
+      manifest: {
+        files:
+          entry.digest === unsupportedEntry
+            ? []
+            : STORE_INITIALIZATION_FILES.map((path) => ({ path })),
+      },
+    }),
     removeBoundPrograms: async () => {},
     host: async (action, _root, payload) => {
+      if (!["ports", "task-inspect"].includes(action)) mutations.push(action);
       if (action.startsWith("task-")) return { exists: true };
       if ((postgres && postgres !== payload) || (api && api !== payload))
         throw new Error("WINDOWS_COMPANION_PROCESS_CONFLICT");
@@ -95,6 +141,7 @@ function fixture({
     },
     health: async () => {},
     pgControl: async (action, _root, payload) => {
+      mutations.push(`postgres-${action}`);
       if (action === "start") {
         postgres = payload;
         if (payload === "next" && startFailure)
@@ -108,12 +155,12 @@ function fixture({
       }
     },
     startServer: async (_root, payload) => {
+      mutations.push("start-server");
       api = payload;
     },
     runtimeEnvironment: async () => ({}),
     cleanEnvironment: () => ({}),
-    initializeDatabase: async () => {},
-    initializeSecrets: async () => {},
+    installFreshRuntime: async () => assert.fail("existing instance entered fresh installation"),
     kit: async () => {},
     serverEnvironment: (value) => value,
   };
@@ -121,9 +168,11 @@ function fixture({
     ...Object.values(mocks),
   );
   return {
-    run: (action) => lifecycle(action, "C:\\distribution", "next"),
+    run: (action, options) => lifecycle(action, "C:\\distribution", "next", options),
     snapshot: () => ({ state: structuredClone(state), postgres, api }),
     scheduleEvents,
+    mutations,
+    diagnosticContexts,
     allowStop: () => {
       remainingStops = 0;
     },
@@ -138,6 +187,106 @@ function assertOldRunning(subject) {
   assert.equal(postgres, "old");
   assert.equal(api, "old");
 }
+
+test("install-store refuses a live QA root before staging, stopping, credential access or task changes", async () => {
+  const subject = fixture({ inputCleanupFailure: true });
+  const before = subject.snapshot();
+  await assert.rejects(
+    subject.run("install-store", {
+      version: 1,
+      mode: "new_empty",
+      admin: {
+        username: "synthetic-owner",
+        displayName: "Owner",
+        password: "Synthetic-owner-only",
+        pin: "123456",
+      },
+      approver: {
+        username: "synthetic-reviewer",
+        displayName: "Reviewer",
+        password: "Synthetic-reviewer-only",
+        pin: "654321",
+      },
+    }),
+    /STORE_REQUIRES_NEW_INSTANCE/u,
+  );
+  assert.deepEqual(subject.snapshot(), before);
+  assert.deepEqual(subject.scheduleEvents, []);
+});
+
+test("a private input cleanup error blocks startup but still permits an explicit identity-checked stop", async () => {
+  const subject = fixture({ inputCleanupFailure: true });
+  await assert.rejects(subject.run("start"), /STORE_INPUT_CLEANUP_FAILED/u);
+  assertOldRunning(subject);
+  await assert.rejects(subject.run("stop"), /STORE_INPUT_CLEANUP_FAILED/u);
+  assert.equal(subject.snapshot().api, null);
+  assert.equal(subject.snapshot().postgres, null);
+  assert.equal(subject.snapshot().state.current.digest, "old");
+  assert.deepEqual(subject.scheduleEvents, []);
+});
+
+test("cleanup failure keeps staged and running diagnostics available without service or state changes", async () => {
+  const secret = "private-password-C:\\private-input\\unknown.txt";
+  for (const phase of ["staged", "running"]) {
+    const subject = fixture({ phase, inputCleanupFailure: secret });
+    const before = subject.snapshot();
+    const result = await subject.run("diagnostics");
+    assert.equal(result.status, "diagnostic_exported");
+    assert.equal(result.setup_input_cleanup, "failed");
+    assert.deepEqual(subject.snapshot(), before);
+    assert.deepEqual(subject.mutations, []);
+    assert.deepEqual(subject.scheduleEvents, []);
+    assert.equal(subject.diagnosticContexts.length, 1);
+    assert.equal(JSON.stringify(subject.diagnosticContexts[0]).includes(secret), false);
+    assert.equal(JSON.stringify(result).includes(secret), false);
+  }
+});
+
+test("operator instances refuse legacy source and rollback targets before staging or service changes", async () => {
+  for (const action of ["install", "repair", "upgrade", "start"]) {
+    const subject = fixture({ stateSchema: 2, unsupportedSource: true });
+    const before = subject.snapshot();
+    await assert.rejects(subject.run(action), /STORE_RUNTIME_VERSION_REQUIRED/u);
+    assert.deepEqual(subject.snapshot(), before);
+    assert.deepEqual(subject.mutations, []);
+  }
+  for (const [action, options] of [
+    ["rollback", { schemaChange: true, unsupportedEntry: "next" }],
+    ["stop", { unsupportedEntry: "old" }],
+  ]) {
+    const subject = fixture({ stateSchema: 2, ...options });
+    const before = subject.snapshot();
+    await assert.rejects(subject.run(action), /STORE_RUNTIME_VERSION_REQUIRED/u);
+    assert.deepEqual(subject.snapshot(), before);
+    assert.deepEqual(subject.mutations, []);
+  }
+});
+
+test("operator state remains version two through supported upgrade, rollback and restart", async () => {
+  const subject = fixture({ stateSchema: 2 });
+  for (const action of ["upgrade", "rollback", "stop", "start"]) {
+    await subject.run(action);
+    assert.equal(subject.snapshot().state.schema, 2);
+  }
+  assertOldRunning(subject);
+});
+
+test("a recovery journal cannot downgrade an operator instance before recovery begins", async () => {
+  const subject = fixture({
+    stateSchema: 2,
+    maintenance: {
+      version: 2,
+      operation: "schema-upgrade",
+      phase: "verified",
+      old_state: { schema: 1 },
+    },
+  });
+  const before = subject.snapshot();
+  await assert.rejects(subject.run("maintenance-recover"), /STATE_SCHEMA_CHANGE_REJECTED/u);
+  assert.deepEqual(subject.snapshot(), before);
+  assert.deepEqual(subject.mutations, []);
+  assert.deepEqual(subject.scheduleEvents, []);
+});
 
 test("candidate cleanup failure stops the candidate before restoring the old version", async () => {
   const subject = fixture({ stopFailures: 1 });

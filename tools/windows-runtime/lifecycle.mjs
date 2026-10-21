@@ -11,6 +11,7 @@ import {
   readState,
   reference,
   requireCompatible,
+  requireStateSchema,
   requireState,
   storage,
   withOperationLock,
@@ -18,12 +19,15 @@ import {
 import { stageRelease, verifyRelease, removeBoundPrograms } from "./lifecycle-release.mjs";
 import { host, health, pgControl, startServer } from "./lifecycle-process.mjs";
 import { runtimeEnvironment, cleanEnvironment } from "./lifecycle-environment.mjs";
+import { kit, serverEnvironment } from "./lifecycle-database.mjs";
+import { installFreshRuntime } from "./lifecycle-install.mjs";
 import {
-  initializeDatabase,
-  initializeSecrets,
-  kit,
-  serverEnvironment,
-} from "./lifecycle-database.mjs";
+  clearStoreInput,
+  requireStoreInput,
+  requireStoreRuntime,
+  requireFreshStore,
+  validateStoreInput,
+} from "./store-initialization.mjs";
 import { BACKUP_ACTIONS, requireBackupOptions } from "./backup-contract.mjs";
 import { readMaintenance } from "./backup-files.mjs";
 import { backupMaintenance } from "./backup-maintenance.mjs";
@@ -42,6 +46,7 @@ import { configureAssistance, requireAssistanceOptions } from "./assistance-conf
 
 export const ACTIONS = Object.freeze([
   "install",
+  "install-store",
   "repair",
   "start",
   "stop",
@@ -64,12 +69,15 @@ export function installationRoot() {
 export async function lifecycle(action, source, expectedDigest, options = {}) {
   if (process.platform !== "win32" || process.arch !== "x64") fail("INSTALL_PLATFORM_INVALID");
   if (!ACTIONS.includes(action)) fail("ARGS_INVALID");
-  if (action === "assistance-config") requireAssistanceOptions(options);
+  if (action === "install-store") requireStoreInput(options);
+  else if (action === "assistance-config") requireAssistanceOptions(options);
   else if (action === "backup-schedule") requireSchedule(options);
   else if (DATA_ACTIONS.includes(action)) requireDataOptions(action, options);
   else requireBackupOptions(action, options);
   source = resolve(source);
   const supplied = await inspectCompanion(source, expectedDigest);
+  const storeInput =
+    action === "install-store" ? await validateStoreInput(source, supplied, options) : null;
   const platform = await loadPlatform(source);
   const io = storage(platform);
   const root = installationRoot();
@@ -80,7 +88,8 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
   // Lock before creating/inspecting mutable installation state.
   return withOperationLock(root, async () => {
     const existed = await exists(root);
-    if (!existed && action !== "install") fail("NOT_INSTALLED");
+    requireFreshStore(action, existed);
+    if (!existed && !["install", "install-store"].includes(action)) fail("NOT_INSTALLED");
     if (!existed) {
       const preflightEntry = reference(supplied, expectedDigest);
       if ((await host("task-inspect", root, source, preflightEntry.digest)).exists)
@@ -97,13 +106,19 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
     }
     await io.directory(root);
     let state = await readState(io, root);
+    requireStoreRuntime(state, supplied);
     const verified = new Map();
     async function verify(entry) {
-      if (!verified.has(entry.digest)) verified.set(entry.digest, await verifyRelease(root, entry));
+      if (!verified.has(entry.digest)) {
+        const bound = await verifyRelease(root, entry);
+        requireStoreRuntime(state, bound.manifest);
+        verified.set(entry.digest, bound);
+      }
       return verified.get(entry.digest);
     }
     if (!state && existed) fail("UNOWNED_INSTALLATION");
     const save = async (next) => {
+      requireStateSchema(state, next);
       await io.write(join(root, "state.json"), JSON.stringify(requireState(next)));
       state = next;
     };
@@ -164,6 +179,20 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
       stopRaw: stop,
       saveState: save,
     };
+    let setupInputCleanup = "not_checked";
+    if (state) {
+      try {
+        await clearStoreInput(root, platform);
+        setupInputCleanup = "cleared";
+      } catch (error) {
+        // Retain only a fixed diagnostic marker, never the error or input path.
+        if (action === "diagnostics") setupInputCleanup = "failed";
+        else {
+          if (action === "stop") await stop(state.pending ?? state.current);
+          throw error;
+        }
+      }
+    }
     async function finishSchemaMaintenance(verb, next, initializeSchedule) {
       const result = await schemaMaintenance(verb, next, maintenanceLifecycle);
       const schedule =
@@ -173,26 +202,10 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
       return schedule === null ? result : { ...result, backup_schedule: schedule };
     }
     if (!state) {
-      await io.directory(join(root, "releases"));
-      await io.directory(join(root, "logs"));
-      const staged = await stageRelease(root, source, expectedDigest, platform);
-      const entry = reference(staged.manifest, expectedDigest);
-      await save({
-        schema: 1,
-        assurance: "development_only",
-        phase: "staged",
-        current: entry,
-        previous: null,
-        controller: entry,
-        pending: null,
-        releases: [entry],
-      });
-      await initializeSecrets(root, io);
-      await initializeDatabase(root, staged.payload, staged.manifest, io, platform);
-      await save({ ...state, phase: "initialized" });
-      await task("register", staged.payload, entry);
-      await save({ ...state, phase: "stopped" });
-      await start(entry);
+      await installFreshRuntime(
+        { root, source, expectedDigest, platform, io, save, task, start },
+        storeInput,
+      );
     } else {
       // Diagnostics must remain available during staged/interrupted maintenance and
       // must not enter pending-upgrade recovery or mutate service/database state.
@@ -202,6 +215,7 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
           io,
           platform,
           state,
+          setupInputCleanup,
           probe: async () => {
             const current = await verify(state.current);
             const ports = await host("ports", root, current.payload, state.current.digest);
@@ -218,6 +232,7 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
         fail("PARTIAL_INITIALIZATION");
       }
       const maintenance = await readMaintenance(io, root);
+      if (maintenance?.version === 2) requireStateSchema(state, maintenance.old_state);
       if (SCHEDULE_ACTIONS.includes(action))
         return scheduledMaintenance(action, options, maintenanceLifecycle);
       if (action === "assistance-config") return configureAssistance(options, maintenanceLifecycle);
@@ -363,11 +378,15 @@ export async function lifecycle(action, source, expectedDigest, options = {}) {
       }
     }
     const schedule =
-      ["install", "repair", "upgrade"].includes(action) && state.phase === "running"
+      ["install", "install-store", "repair", "upgrade"].includes(action) &&
+      state.phase === "running"
         ? await enableDefaultSchedule(maintenanceLifecycle)
         : null;
     return {
       status: state.phase,
+      ...(action === "install-store"
+        ? { initialization: "operator_new_empty", admission: "pending" }
+        : {}),
       ...(schedule === null ? {} : { backup_schedule: schedule }),
       assurance: "development_only",
       source_git_sha: state.current.source,

@@ -23,13 +23,15 @@ export function cleanEnvironment(source = process.env) {
   return env;
 }
 
-export const secretNames = Object.freeze({
+export const runtimeSecretNames = Object.freeze({
   DATABASE_ADMIN_URL: "database-admin-url",
   DATABASE_URL: "database-url",
   LAUNDRY_APP_PASSWORD: "postgres-app-password",
   LAUNDRY_ACCESS_TOKEN_SECRET: "access-token-secret",
   LAUNDRY_CSRF_PROOF_SECRET: "csrf-proof-secret",
-  ...Object.fromEntries(
+});
+export const bootstrapSecretNames = Object.freeze(
+  Object.fromEntries(
     ["ADMIN", "APPROVER"].flatMap((role) =>
       ["USERNAME", "DISPLAY_NAME", "PASSWORD", "PIN"].map((field) => {
         const name = `LAUNDRY_BOOTSTRAP_${role}_${field}`;
@@ -37,7 +39,8 @@ export const secretNames = Object.freeze({
       }),
     ),
   ),
-});
+);
+export const secretNames = Object.freeze({ ...runtimeSecretNames, ...bootstrapSecretNames });
 
 export function photoEnvironment(env, root, manifest) {
   // Managed Windows photos and their backup capability shipped together. Older
@@ -48,7 +51,7 @@ export function photoEnvironment(env, root, manifest) {
   };
 }
 
-export async function runtimeEnvironment(root, payload, manifest, io) {
+export async function runtimeEnvironment(root, payload, manifest, io, { bootstrapDirectory } = {}) {
   const env = cleanEnvironment();
   Object.assign(env, {
     NODE_ENV: "production",
@@ -63,8 +66,19 @@ export async function runtimeEnvironment(root, payload, manifest, io) {
     LAUNDRY_RUNTIME_SCHEMA_SHA256: digest(await readFile(join(payload, "metadata/schema.md"))),
     LAUNDRY_NOTIFICATION_PROVIDER_MODE: "disabled",
   });
-  for (const [name, file] of Object.entries(secretNames)) {
-    const path = join(root, "secrets", file);
+  const files = [
+    ...Object.entries(runtimeSecretNames).map(([name, file]) => [
+      name,
+      join(root, "secrets", file),
+    ]),
+    ...(bootstrapDirectory
+      ? Object.entries(bootstrapSecretNames).map(([name, file]) => [
+          name,
+          join(bootstrapDirectory, file),
+        ])
+      : []),
+  ];
+  for (const [name, path] of files) {
     const value = await io.read(path);
     if (!value || /[\r\n\0]/u.test(value)) fail("SECRET_INVALID");
     env[`${name}_FILE`] = path;

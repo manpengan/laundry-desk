@@ -25,7 +25,7 @@ permissions:
 jobs:
   windows-runtime-payload:
     runs-on: windows-2022
-    # Native acceptance runs 25 scenarios and 74 serial launcher invocations.
+    # Native acceptance runs 26 scenarios, including fresh operator initialization.
     # Hosted Windows preparation already takes 15 minutes; reserve the full run.
     timeout-minutes: 180
     steps:
@@ -142,7 +142,7 @@ jobs:
         run: |
           $trustedNode = (Get-Command node.exe).Source
           $acceptance = Join-Path $env:RUNNER_TEMP 'lifecycle-acceptance.mjs'
-          foreach ($name in @('lifecycle-acceptance.mjs','lifecycle-acceptance-command.mjs','backup-acceptance.mjs','diagnostic-acceptance.mjs','maintenance-acceptance.mjs')) {
+          foreach ($name in @('lifecycle-acceptance.mjs','lifecycle-acceptance-command.mjs','store-initialization-acceptance.mjs','backup-acceptance.mjs','diagnostic-acceptance.mjs','maintenance-acceptance.mjs')) {
             Copy-Item (Join-Path $env:GITHUB_WORKSPACE "tools/windows-runtime/$name") (Join-Path $env:RUNNER_TEMP $name)
           }
           $hiddenSource = Join-Path $env:RUNNER_TEMP 'laundry-source-unavailable'

@@ -72,3 +72,10 @@ WinForms 提供安装、状态、启停、修复、固定包同迁移升级/程�
 manifest/bootstrap/helper 篡改、硬链接/junction 拒绝、私有 Programs 安装及删除原分发后仍能调用入口。
 测试使用显式合成 launcher，绝不执行合成 PE；真实 PostgreSQL、Session 1 WinForms 和源码撤走后
 维护闭环由目标 Windows 验收单独提供。
+
+## 2026-10-21：全新空库的操作者身份输入
+
+[ADR-101](2026-10-21-adr-101-windows-empty-store-initialization.md) 增加显式 `install-store` 与遮罩双人输入。
+旧 `install` 的随机合成身份仍用于既有验收；操作者路径不再只能依赖该合成凭据。新增 helper 同样逐文件绑定，
+不是以最初的“两个辅助脚本”数量作为固定上限。已有实例在发布维护入口前即拒绝，生命周期锁内再次核对；
+一次性输入清理与严格初始化验证完成后才启动。技术实现与 ADR-98 真实准入继续分开。

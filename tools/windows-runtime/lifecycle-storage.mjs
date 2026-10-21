@@ -114,6 +114,7 @@ export function storage(platform, fault = async () => {}) {
 }
 
 export function requireState(value) {
+  // Version 2 has no persistent personal bootstrap files; old controllers must reject it.
   if (
     !exactKeys(value, [
       "schema",
@@ -128,7 +129,7 @@ export function requireState(value) {
     !Array.isArray(value.releases) ||
     value.releases.length < 1 ||
     value.releases.length > 16 ||
-    value.schema !== 1 ||
+    ![1, 2].includes(value.schema) ||
     value.assurance !== "development_only" ||
     !["staged", "initialized", "stopped", "running", "uninstalled"].includes(value.phase)
   )
@@ -180,6 +181,10 @@ export function reference(manifest, expectedDigest) {
 export function requireCompatible(current, next) {
   if (current.migrationHead !== next.migrationHead || current.migrations !== next.migrations)
     fail("MIGRATION_CHANGE_REQUIRES_RESTORE");
+}
+
+export function requireStateSchema(previous, next) {
+  if (previous && previous.schema !== next.schema) fail("STATE_SCHEMA_CHANGE_REJECTED");
 }
 
 export async function readState(io, root) {
