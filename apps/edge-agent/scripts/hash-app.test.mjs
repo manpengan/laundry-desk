@@ -283,13 +283,17 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
     "pnpm exec turbo run build --filter=@laundry/edge-agent",
   );
   const preloadIndex = packageMac.indexOf("pnpm run preload:bundle");
+  // Electron 42 fetches its binary on first use; electronDist must exist before packaging.
+  const electronDistIndex = packageMac.indexOf("pnpm run electron:dist");
   const builderIndex = packageMac.indexOf("electron-builder");
   assert.ok(
     platformBuildIndex >= 0 &&
       graphBuildIndex > platformBuildIndex &&
       preloadIndex > graphBuildIndex &&
-      builderIndex > preloadIndex,
+      electronDistIndex > preloadIndex &&
+      builderIndex > electronDistIndex,
   );
+  assert.equal(packageJson.scripts["electron:dist"], "node scripts/ensure-electron-dist.mjs");
   // Staged distribution profiles are bound to one source SHA; a cached copy replayed
   // into a later build would fail it with WINDOWS_PROFILE_BINDING_INVALID.
   assert.deepEqual(turboJson.tasks["@laundry/edge-agent#build"].outputs, [
@@ -310,13 +314,15 @@ test("V2 packaging is generic, unsigned, whitelisted, and independent of frozen 
   );
   const helperStageIndex = packageWin.indexOf("pnpm run helper:stage:win");
   const winPreloadIndex = packageWin.indexOf("pnpm run preload:bundle");
+  const winElectronDistIndex = packageWin.indexOf("pnpm run electron:dist");
   const winBuilderIndex = packageWin.indexOf("node scripts/build-windows-profile.mjs");
   assert.ok(
     winPlatformBuildIndex >= 0 &&
       winGraphBuildIndex > winPlatformBuildIndex &&
       helperStageIndex > winGraphBuildIndex &&
       winPreloadIndex > helperStageIndex &&
-      winBuilderIndex > winPreloadIndex,
+      winElectronDistIndex > winPreloadIndex &&
+      winBuilderIndex > winElectronDistIndex,
   );
   assert.match(packageWin, /build-windows-profile\.mjs/u);
   assert.doesNotMatch(packageWin, /hongfa|publish|root|src\//iu);
