@@ -8,6 +8,9 @@ Electron 壳：`app://` 内置 SPA、断网冷启动、ADR-01 安全基线、单
 `prune-packaged-spa.mjs` 收敛，仓库侧为崩溃安全刻意保留。动手前先读
 [`docs/spa-bundle-retention.md`](docs/spa-bundle-retention.md)。
 
+Windows 构建入口、Electron 二进制准备和同源 Runtime 要求见
+[`docs/windows-packaging.md`](docs/windows-packaging.md)。
+
 ## 安全基线（九项）
 
 | 项                       | 位置                                      |

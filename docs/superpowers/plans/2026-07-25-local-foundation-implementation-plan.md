@@ -978,7 +978,7 @@ Run:
 ```bash
 pnpm install --lockfile-only
 pnpm install --frozen-lockfile
-pnpm rebuild electron
+pnpm exec install-electron
 node --test tests/foundation/local-foundation.test.mjs
 pnpm --filter @laundry/edge-agent exec electron --version
 git diff -- pnpm-lock.yaml
@@ -1266,7 +1266,7 @@ Run:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm rebuild electron
+pnpm exec install-electron
 pnpm workspace:check
 LAUNDRY_BOOTSTRAP_ADMIN_USERNAME=admin \
 LAUNDRY_BOOTSTRAP_ADMIN_DISPLAY_NAME="Local Administrator" \

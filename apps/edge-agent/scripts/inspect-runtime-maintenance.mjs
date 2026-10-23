@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   runtimeMaintenanceBinding,
@@ -18,7 +18,7 @@ export async function inspectRuntimeMaintenanceBinding({
 }) {
   const binding = await runtimeMaintenanceBinding({ entryDirectory, expectedGitSha });
   // Read the packaged bytes as data. Never import/evaluate code from the artifact under review.
-  const bytes = loadAsar().extractFile(asarPath, "dist/maintenance/runtime-binding.js");
+  const bytes = loadAsar().extractFile(asarPath, join("dist", "maintenance", "runtime-binding.js"));
   if (!bytes.equals(Buffer.from(renderRuntimeMaintenanceBinding(binding))))
     throw new Error("MAINTENANCE_BINDING_PACKAGED_MISMATCH");
   return Object.freeze({

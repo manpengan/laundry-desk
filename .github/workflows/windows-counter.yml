@@ -49,6 +49,11 @@ jobs:
           run_install: false
       - name: Install locked dependencies
         run: pnpm.cmd install --frozen-lockfile
+      - name: Check Electron preparation and static Runtime binding on Windows
+        if: matrix.profile == 'generic'
+        run: >-
+          node --test apps/edge-agent/scripts/prepare-windows-electron.test.mjs
+          apps/edge-agent/scripts/inspect-runtime-maintenance.test.mjs
       - uses: actions/download-artifact@v8
         with:
           name: windows-runtime-development-payload
