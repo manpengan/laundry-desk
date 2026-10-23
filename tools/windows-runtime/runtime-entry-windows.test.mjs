@@ -11,7 +11,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import { canonicalManifest, digest } from "./companion-contract.mjs";
@@ -379,5 +379,50 @@ test(
       );
     }
     assert.equal(JSON.stringify(matrix).includes(fixture.root), false);
+  },
+);
+
+test(
+  "an overlong published entry is refused before any Programs, shortcut or existing-data mutation",
+  windowsOnly,
+  async (t) => {
+    const fixture = await runtimeEntryFixture(t);
+    await packageRuntimeEntry(fixture);
+    const deepest = "payload/server/node_modules/@laundry/platform-fs/native/windows";
+    const localBase = join(fixture.root, "L");
+    const baseLength = join(
+      localBase,
+      "Programs/Laundry Desk Runtime V2",
+      fixture.manifestSha,
+      deepest,
+    ).length;
+    const extra = 254 - baseLength;
+    assert.ok(
+      extra > 1,
+      "the normal fixture root must leave room for the exact legacy 254-character boundary",
+    );
+    const local = join(localBase, "x".repeat(extra - 1));
+    const menu = join(fixture.root, "Roaming/Microsoft/Windows/Start Menu/Programs");
+    const user = join(fixture.root, "UserProfile");
+    await mkdir(local, { recursive: true });
+    await mkdir(menu, { recursive: true });
+    await mkdir(join(user, "Desktop"), { recursive: true });
+    const sentinel = join(local, "existing-data.txt");
+    await writeFile(sentinel, "preserve prior data");
+    const destination = join(local, "Programs/Laundry Desk Runtime V2", fixture.manifestSha);
+    assert.equal(join(destination, deepest).length, 254);
+    assert.equal(join(dirname(destination), ".stage-" + "a".repeat(32), deepest).length, 229);
+    await assert.rejects(
+      runEntry(fixture, ["-Action", "install"], {
+        LOCALAPPDATA: local,
+        APPDATA: join(fixture.root, "Roaming"),
+        USERPROFILE: user,
+      }),
+      (error) => error.stderr.trim() === "WINDOWS_RUNTIME_ENTRY_INSTALL_PATH_TOO_LONG",
+    );
+    assert.deepEqual(await readdir(local), ["existing-data.txt"]);
+    assert.deepEqual(await readdir(menu), []);
+    assert.deepEqual(await readdir(join(user, "Desktop")), []);
+    assert.equal(await readFile(sentinel, "utf8"), "preserve prior data");
   },
 );

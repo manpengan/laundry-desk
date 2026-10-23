@@ -217,7 +217,7 @@ test("declares pnpm workspaces and Turborepo at the repository root", async () =
   assert.match(rootPackage.packageManager, /^pnpm@\d+\.\d+\.\d+$/);
   assert.equal(rootPackage.devDependencies["@typescript-eslint/eslint-plugin"], "^7.5.0");
   assert.equal(rootPackage.devDependencies["@typescript-eslint/parser"], "^7.5.0");
-  assert.equal(rootPackage.devDependencies.vitest, "4.1.11");
+  assert.equal(rootPackage.devDependencies.vitest, "4.1.12");
   assert.deepEqual(rootPackage.workspaces, ["apps/*", "packages/*"]);
   assert.match(
     rootPackage.scripts["workspace:format:check"],

@@ -10,6 +10,10 @@ import { promisify } from "node:util";
 import { defaultSignatureStatus, inspectPackagedWindowsSoftware } from "./inspect-packaged-win.mjs";
 import { loadWindowsProfile, stageWindowsProfile } from "./windows-profile.mjs";
 import { cp } from "node:fs/promises";
+import { loadAsar } from "./inspect-runtime-maintenance.mjs";
+import { stageRuntimeMaintenance } from "./stage-runtime-maintenance.mjs";
+import { runtimeEntryFixture } from "../../../tools/windows-runtime/runtime-entry-test-fixture.mjs";
+import { packageRuntimeEntry } from "../../../tools/windows-runtime/package-runtime-entry.mjs";
 import { WINDOWS_PACKAGE_VERSION } from "./windows-package-version.mjs";
 
 const INSTALLER = `laundry-desk-v2-${WINDOWS_PACKAGE_VERSION}-windows-x64-development-only.exe`;
@@ -179,7 +183,6 @@ async function fixture(t, profileId = "generic") {
     writeFile(join(releaseRoot, "win-unpacked", appName), x64PeFixture()),
     writeFile(join(releaseRoot, installerName), "fixture installer\n"),
     writeFile(join(releaseRoot, installerName + ".blockmap"), "fixture blockmap\n"),
-    writeFile(join(resources, "app.asar"), "fixture asar\n"),
     writeFile(
       join(resources, "update", "update-config.json"),
       '{"schema_version":1,"enabled":false}\n',
@@ -206,7 +209,25 @@ async function fixture(t, profileId = "generic") {
     targetRoot: join(root, "windows-profile"),
   });
   await cp(staged.targetRoot, join(resources, "distribution-profile"), { recursive: true });
-  return { bundle, helperDigest, helperRoot, provenanceRoot, releaseRoot, resources };
+  const runtime = await runtimeEntryFixture(t);
+  await packageRuntimeEntry(runtime);
+  const code = join(root, "code");
+  await mkdir(join(code, "dist/maintenance"), { recursive: true });
+  await stageRuntimeMaintenance({
+    packageRoot: code,
+    entryDirectory: runtime.output,
+    expectedGitSha: SOURCE_GIT_SHA,
+  });
+  await loadAsar().createPackage(code, join(resources, "app.asar"));
+  return {
+    bundle,
+    helperDigest,
+    helperRoot,
+    provenanceRoot,
+    releaseRoot,
+    resources,
+    runtimeEntryDirectory: runtime.output,
+  };
 }
 
 test("inspects exact x64 unsigned NSIS, helper and SPA evidence", async (t) => {
@@ -217,6 +238,7 @@ test("inspects exact x64 unsigned NSIS, helper and SPA evidence", async (t) => {
   const evidence = await inspectPackagedWindowsSoftware({
     platform: "win32",
     releaseRoot: setup.releaseRoot,
+    runtimeEntryDirectory: setup.runtimeEntryDirectory,
     expectedGitSha: SOURCE_GIT_SHA,
     signatureStatus: async (_path, { artifactKind }) => {
       assert.equal(checking, false, "app and installer checks must not overlap");
@@ -246,6 +268,7 @@ test("Hongfa has separate executable identity with the same fixed V2 resources",
     platform: "win32",
     profileId: "hongfa",
     releaseRoot: setup.releaseRoot,
+    runtimeEntryDirectory: setup.runtimeEntryDirectory,
     expectedGitSha: SOURCE_GIT_SHA,
     signatureStatus: async () => "NotSigned",
   });
@@ -260,6 +283,7 @@ test("Hongfa has separate executable identity with the same fixed V2 resources",
       platform: "win32",
       profileId: "hongfa",
       releaseRoot: setup.releaseRoot,
+      runtimeEntryDirectory: setup.runtimeEntryDirectory,
       expectedGitSha: SOURCE_GIT_SHA,
       signatureStatus: async () => "NotSigned",
     }),
@@ -275,6 +299,7 @@ test("rejects helper tampering and signed or unknown development-only artifacts"
       inspectPackagedWindowsSoftware({
         platform: "win32",
         releaseRoot: tampered.releaseRoot,
+        runtimeEntryDirectory: tampered.runtimeEntryDirectory,
         expectedGitSha: SOURCE_GIT_SHA,
         signatureStatus: async () => "NotSigned",
       }),
@@ -288,6 +313,7 @@ test("rejects helper tampering and signed or unknown development-only artifacts"
         inspectPackagedWindowsSoftware({
           platform: "win32",
           releaseRoot: signed.releaseRoot,
+          runtimeEntryDirectory: signed.runtimeEntryDirectory,
           expectedGitSha: SOURCE_GIT_SHA,
           signatureStatus: async () => status,
         }),
@@ -303,6 +329,7 @@ test("rejects missing, stale, or helper-detached build provenance", async (t) =>
       inspectPackagedWindowsSoftware({
         platform: "win32",
         releaseRoot: missingExpectation.releaseRoot,
+        runtimeEntryDirectory: missingExpectation.runtimeEntryDirectory,
         signatureStatus: async () => "NotSigned",
       }),
     /PROVENANCE_EXPECTATION_INVALID/u,
@@ -314,6 +341,7 @@ test("rejects missing, stale, or helper-detached build provenance", async (t) =>
       inspectPackagedWindowsSoftware({
         platform: "win32",
         releaseRoot: stale.releaseRoot,
+        runtimeEntryDirectory: stale.runtimeEntryDirectory,
         expectedGitSha: "b".repeat(40),
         signatureStatus: async () => "NotSigned",
       }),
@@ -332,6 +360,7 @@ test("rejects missing, stale, or helper-detached build provenance", async (t) =>
       inspectPackagedWindowsSoftware({
         platform: "win32",
         releaseRoot: detached.releaseRoot,
+        runtimeEntryDirectory: detached.runtimeEntryDirectory,
         expectedGitSha: SOURCE_GIT_SHA,
         signatureStatus: async () => "NotSigned",
       }),

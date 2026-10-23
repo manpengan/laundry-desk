@@ -11,10 +11,10 @@ import { lookupOrderSummaries } from "./pg-order-lookup.js";
 import {
   appendPaymentTxn,
   applyPickupTxn,
-  cancelOrderTxn,
   insertInitialPayment,
   replaceDraftTxn,
 } from "./pg-order-operations.js";
+import { cancelOrderTxn } from "./pg-order-cancel.js";
 import { listPaymentRows } from "./pg-payment-rows.js";
 import { appendRefundTxn } from "./pg-order-refund.js";
 import type { OrderRecord, OrderStore } from "./types.js";

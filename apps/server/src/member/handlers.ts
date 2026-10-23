@@ -150,7 +150,8 @@ export function createMemberHandlers(
     // Ledger first: it takes the account lock and refuses an overdraw before any
     // order row moves. Both writes share this transaction, so a later order-side
     // rejection rolls the debit back with it.
-    const debited = await resolveStore(deps, context).spend({
+    const memberStore = resolveStore(deps, context);
+    const debited = await memberStore.spend({
       account_id: accountId,
       store_id: context.tenant.storeId,
       order_id: orderId,
@@ -176,6 +177,14 @@ export function createMemberHandlers(
       business_date: businessDate,
     });
     if (settled === null) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
+    await memberStore.linkPayment({
+      account_id: accountId,
+      ledger_id: debited.value.ledger_id,
+      payment_id: settled.payment.payment_id,
+      store_id: context.tenant.storeId,
+      order_id: orderId,
+      amount_cents: amountCents,
+    });
 
     return Object.freeze({
       result: Object.freeze({

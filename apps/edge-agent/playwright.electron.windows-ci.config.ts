@@ -3,7 +3,7 @@ import { defineConfig } from "@playwright/test";
 process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1";
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "windows-installed-ci.spec.ts",
+  testMatch: ["windows-installed-ci.spec.ts", "windows-installed-maintenance-ci.spec.ts"],
   timeout: 120_000,
   globalTimeout: 180_000,
   workers: 1,

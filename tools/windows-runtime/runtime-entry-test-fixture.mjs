@@ -30,7 +30,12 @@ function syntheticPe() {
 }
 
 export async function runtimeEntryFixture(t) {
-  const root = await mkdtemp(join(await realpath(tmpdir()), "ld-entry-"));
+  // A harness may redirect TEMP to a deep evidence directory. The ordinary-install
+  // fixture uses the account's regular temp root; path-limit cases opt into depth explicitly.
+  const temporary =
+    process.platform === "win32" ? join(process.env.LOCALAPPDATA, "Temp") : tmpdir();
+  await mkdir(temporary, { recursive: true });
+  const root = await mkdtemp(join(await realpath(temporary), "ld-entry-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const payload = join(root, "source");
   await mkdir(payload);

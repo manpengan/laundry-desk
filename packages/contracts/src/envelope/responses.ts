@@ -226,6 +226,10 @@ const ErrorDetailSchema = z.discriminatedUnion("kind", [
         "payment_pending",
         // ADR-85 r1: provider money must go back through the provider refund.
         "channel_refund_required",
+        "member_account_closed",
+        "member_payment_unlinked",
+        "coupon_payment_history",
+        "future_business_date",
       ]),
     })
     .strict(),

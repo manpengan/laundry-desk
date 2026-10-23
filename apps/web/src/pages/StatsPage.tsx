@@ -309,7 +309,7 @@ export function StatsPage({
               value={dateText}
               onChange={(event) => changeDate(event.target.value)}
               disabled={busy}
-              hint="按门店营业日核对交班；可选择日期查看记录。"
+              hint="只能交班今天或更早的门店营业日；营业日按服务器的门店时区与换日时间判断。"
             />
             {commandClient !== undefined ? (
               <ShiftClosePanel

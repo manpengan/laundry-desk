@@ -9,6 +9,10 @@ import {
   planRepayPayment,
 } from "@laundry/domain";
 import { randomUUID } from "node:crypto";
+import {
+  createMemoryTransactionMap,
+  createMemoryTransactionList,
+} from "../db/memory-transaction-collections.js";
 
 import type {
   FixedCouponDiscountInput,
@@ -24,7 +28,10 @@ import type {
   PickupApplyOptions,
   PickupApplyResult,
 } from "./types.js";
-import { planMemoryOrderCancellation } from "./memory-order-cancel.js";
+import {
+  planMemoryOrderCancellation,
+  requireBalanceCancellationAdapter,
+} from "./memory-order-cancel.js";
 import { isGarmentAvailableAtStore } from "./garment-custody.js";
 import { requireVerifiedRackBarcodes } from "./pickup-verification.js";
 
@@ -32,10 +39,10 @@ const key = (orgId: string, storeId: string, orderId: string): string =>
   `${orgId}|${storeId}|${orderId}`;
 
 export class MemoryOrderStore implements OrderStore {
-  private readonly orders = new Map<string, OrderRecord>();
-  private readonly garments = new Map<string, GarmentRecord[]>();
-  private readonly payments: LedgerPaymentRow[] = [];
-  private readonly ticketSeq = new Map<string, number>();
+  private readonly orders = createMemoryTransactionMap<string, OrderRecord>();
+  private readonly garments = createMemoryTransactionMap<string, readonly GarmentRecord[]>();
+  private readonly payments = createMemoryTransactionList<LedgerPaymentRow>();
+  private readonly ticketSeq = createMemoryTransactionMap<string, number>();
 
   async insertOrder(
     order: OrderRecord,
@@ -47,12 +54,9 @@ export class MemoryOrderStore implements OrderStore {
       throw new Error(`Order already exists: ${order.order_id}`);
     }
     this.orders.set(k, Object.freeze({ ...order, lines: Object.freeze([...order.lines]) }));
-    this.garments.set(
-      k,
-      garments.map((g) => Object.freeze({ ...g })),
-    );
+    this.garments.set(k, Object.freeze(garments.map((g) => Object.freeze({ ...g }))));
     if (initialPayment !== undefined) {
-      this.payments.push(
+      this.payments.append(
         Object.freeze({ ...initialPayment.payment, business_date: initialPayment.business_date }),
       );
     }
@@ -69,12 +73,9 @@ export class MemoryOrderStore implements OrderStore {
     if (existing === undefined && options?.requireExisting === true) return false;
     if (existing !== undefined && existing.status !== "draft") return false;
     this.orders.set(k, Object.freeze({ ...order, lines: Object.freeze([...order.lines]) }));
-    this.garments.set(
-      k,
-      garments.map((garment) => Object.freeze({ ...garment })),
-    );
+    this.garments.set(k, Object.freeze(garments.map((garment) => Object.freeze({ ...garment }))));
     if (initialPayment !== undefined) {
-      this.payments.push(
+      this.payments.append(
         Object.freeze({ ...initialPayment.payment, business_date: initialPayment.business_date }),
       );
     }
@@ -151,7 +152,7 @@ export class MemoryOrderStore implements OrderStore {
       updated_at: nowEpoch,
     });
     this.orders.set(k, nextOrder);
-    this.garments.set(k, nextGarments);
+    this.garments.set(k, Object.freeze(nextGarments));
 
     if (collectCents > 0) {
       if (options?.staffId === undefined || options.staffId.length === 0) {
@@ -167,7 +168,7 @@ export class MemoryOrderStore implements OrderStore {
         at: nowEpoch,
         method: options.method ?? "cash",
       });
-      this.payments.push(
+      this.payments.append(
         Object.freeze({ ...payment, business_date: options.businessDate ?? order.business_date }),
       );
     }
@@ -226,7 +227,7 @@ export class MemoryOrderStore implements OrderStore {
     });
     this.orders.set(k, next);
     const payment = Object.freeze({ ...plan.payment, business_date: input.business_date });
-    this.payments.push(payment);
+    this.payments.append(payment);
     return Object.freeze({ order: next, payment });
   }
 
@@ -273,7 +274,7 @@ export class MemoryOrderStore implements OrderStore {
       business_date: input.business_date,
     });
     this.orders.set(k, next);
-    this.payments.push(payment);
+    this.payments.append(payment);
     return Object.freeze({ order: next, payment });
   }
 
@@ -288,6 +289,12 @@ export class MemoryOrderStore implements OrderStore {
       order.customer_id !== input.customer_id ||
       order.paid_cents !== 0 ||
       order.discount_cents !== 0 ||
+      this.payments.some(
+        (row) =>
+          row.org_id === input.org_id &&
+          row.store_id === input.store_id &&
+          row.order_id === input.order_id,
+      ) ||
       order.original_cents < input.min_order_cents
     ) {
       return null;
@@ -314,7 +321,7 @@ export class MemoryOrderStore implements OrderStore {
     staffId: string,
     at: number,
     businessDate: string,
-    beforeCommit?: () => Promise<void>,
+    beforeCommit?: (reversals: readonly LedgerPaymentRow[]) => Promise<void>,
   ): Promise<OrderRecord | null> {
     const k = key(orgId, storeId, orderId);
     const order = this.orders.get(k);
@@ -340,8 +347,10 @@ export class MemoryOrderStore implements OrderStore {
       businessDate,
     });
     if (cancellation === null) return null;
-    await beforeCommit?.();
-    this.payments.push(...cancellation.reversals);
+    requireBalanceCancellationAdapter(cancellation, beforeCommit);
+    await beforeCommit?.(cancellation.reversals);
+    if (this.orders.get(k) !== order) throw new Error("Order changed during cancellation");
+    this.payments.append(...cancellation.reversals);
     this.orders.set(k, cancellation.order);
     return cancellation.order;
   }
@@ -358,7 +367,7 @@ export class MemoryOrderStore implements OrderStore {
   clear(): void {
     this.orders.clear();
     this.garments.clear();
-    this.payments.length = 0;
+    this.payments.clear();
     this.ticketSeq.clear();
   }
 }

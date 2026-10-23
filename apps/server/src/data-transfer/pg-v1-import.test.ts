@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,10 +37,14 @@ test(
     const admin = createPgPool({ connectionString: urls.admin });
     const app = createPgPool({ connectionString: urls.app });
     const dir = await realpath(await mkdtemp(join(tmpdir(), "laundry-v1-fixture-")));
+    const failureTrigger = `test_reject_v1_audit_${randomUUID().replaceAll("-", "")}`;
     try {
       const tenant = await seedMigrationTenant(admin);
       const other = await seedMigrationTenant(admin);
-      const snapshot = migrationFixture();
+      const snapshot = {
+        ...migrationFixture(),
+        sourceBackupSha256: randomBytes(32).toString("hex"),
+      };
       const plan = transformV1Snapshot(snapshot);
       const report = reconcileMigration(snapshot, plan);
       const { planSha256 } = validateMigrationPlan(plan, report);
@@ -209,7 +213,7 @@ test(
       );
       // Fail at the audit boundary: no earlier business/receipt rows may commit.
       const failureTenant = await seedMigrationTenant(admin);
-      const failedSnapshot = { ...snapshot, sourceBackupSha256: "b".repeat(64) };
+      const failedSnapshot = { ...snapshot, sourceBackupSha256: randomBytes(32).toString("hex") };
       const failedPlan = transformV1Snapshot(failedSnapshot);
       const failedReport = reconcileMigration(failedSnapshot, failedPlan);
       const failedPhotos = await reviewMigrationPhotos(failedPlan, join(dir, "source"));
@@ -232,10 +236,18 @@ test(
           verified: true as const,
         }),
       });
-      await admin.query(`CREATE FUNCTION test_reject_v1_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
-      IF NEW.org_id='${failureTenant.orgId}'::uuid THEN RAISE EXCEPTION 'synthetic audit failure'; END IF; RETURN NEW; END $$`);
+      await admin.query(`CREATE FUNCTION ${failureTrigger}() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'synthetic audit failure'; END $$`);
       await admin.query(
-        "CREATE TRIGGER test_reject_v1_audit BEFORE INSERT ON audit_log FOR EACH ROW EXECUTE FUNCTION test_reject_v1_audit()",
+        `CREATE TRIGGER ${failureTrigger} BEFORE INSERT ON audit_log FOR EACH ROW
+         WHEN (NEW.org_id = '${failureTenant.orgId}'::uuid)
+         EXECUTE FUNCTION ${failureTrigger}()`,
+      );
+      // Failure injection is restricted to its own tenant, even while another test writes.
+      await admin.query(
+        `INSERT INTO audit_log (id, org_id, store_id, staff_id, via, command, at)
+         VALUES ($1, $2, $3, $4, 'ui', 'fixture.other_tenant', now())`,
+        [randomUUID(), other.orgId, other.storeId, other.staffId],
       );
       await assert.rejects(
         loadV2Migration(failure, urls.app, failedPlan, failedReport),
@@ -247,9 +259,14 @@ test(
       );
       assert.equal(Number(empty.rows[0].count), 0);
     } finally {
-      await app.end();
-      await admin.end();
-      await rm(dir, { recursive: true, force: true });
+      try {
+        await admin.query(`DROP TRIGGER IF EXISTS ${failureTrigger} ON audit_log`);
+        await admin.query(`DROP FUNCTION IF EXISTS ${failureTrigger}()`);
+      } finally {
+        await app.end();
+        await admin.end();
+        await rm(dir, { recursive: true, force: true });
+      }
     }
   },
 );

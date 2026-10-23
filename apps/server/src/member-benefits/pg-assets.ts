@@ -284,6 +284,14 @@ export async function consumePgCoupon(
     return rejectPgBenefit("coupon_order_already_discounted");
   }
   const original = benefitInteger(order.original_cents, "order original amount");
+  // The order lock also serializes payments. Net zero after a refund is not an unpaid order:
+  // changing its payable amount would invalidate replay of the historical payment ledger.
+  const payments = await client.query(
+    `SELECT 1 FROM payments
+      WHERE org_id = $1::uuid AND store_id = $2::uuid AND order_id = $3::uuid LIMIT 1`,
+    [tenant.orgId, input.store_id, input.order_id],
+  );
+  if (payments.rows.length > 0) return rejectPgBenefit("coupon_payment_history");
   if (
     order.status !== "open" ||
     benefitInteger(order.paid_cents, "order paid amount") !== 0 ||

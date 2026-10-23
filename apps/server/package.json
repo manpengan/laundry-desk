@@ -25,7 +25,7 @@
     "@laundry/migrate-v1": "file:../../tools/migrate-v1",
     "@laundry/platform-fs": "file:../../packages/platform-fs",
     "@node-rs/argon2": "^2.0.2",
-    "fastify": "5.12.5",
+    "fastify": "5.12.6",
     "pg": "^8.22.0",
     "sharp": "0.35.5",
     "zod": "4.4.3"

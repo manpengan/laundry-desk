@@ -18,14 +18,18 @@ on:
       - "pnpm-workspace.yaml"
       - "turbo.json"
       - ".github/workflows/windows-counter.yml"
+      - ".github/workflows/windows-runtime.yml"
 
 permissions:
   contents: read
 
 jobs:
+  runtime:
+    uses: ./.github/workflows/windows-runtime.yml
   counter-installed:
+    needs: runtime
     runs-on: windows-2022
-    timeout-minutes: 45
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -45,6 +49,18 @@ jobs:
           run_install: false
       - name: Install locked dependencies
         run: pnpm.cmd install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-runtime-development-payload
+          path: ${{ runner.temp }}/paired-runtime
+      - name: Bind the same-source Runtime entry
+        shell: pwsh
+        run: |
+          $entry = Join-Path $env:RUNNER_TEMP 'paired-runtime/laundry-runtime-operator-entry'
+          $evidence = Get-Content -LiteralPath (Join-Path $entry 'release-evidence.json') -Raw | ConvertFrom-Json
+          if ($evidence.source_git_sha -cne $env:GITHUB_SHA -or $evidence.assurance -cne 'development_only') { throw 'COUNTER_RUNTIME_SOURCE_MISMATCH' }
+          "LAUNDRY_WINDOWS_RUNTIME_ENTRY=$entry" >> $env:GITHUB_ENV
+          "LAUNDRY_MANIFEST_SHA256=$($evidence.manifest_sha256)" >> $env:GITHUB_ENV
       - name: Build the active V2 server and Counter NSIS
         shell: pwsh
         run: |
@@ -68,7 +84,16 @@ jobs:
       - name: Check installed Electron security and missing-service UX
         run: pnpm.cmd --filter @laundry/edge-agent package:smoke:win
       - name: Check installed login and synthetic order restart recovery
-        run: pnpm.cmd exec playwright test -c apps/edge-agent/playwright.electron.windows-ci.config.ts
+        run: pnpm.cmd exec playwright test -c apps/edge-agent/playwright.electron.windows-ci.config.ts windows-installed-ci.spec.ts
+      - name: Install the paired native Runtime with synthetic data
+        shell: pwsh
+        run: ./apps/edge-agent/scripts/ci-runtime-pair.ps1 -Action install
+      - name: Verify installed Counter backup health and maintenance window
+        run: pnpm.cmd exec playwright test -c apps/edge-agent/playwright.electron.windows-ci.config.ts windows-installed-maintenance-ci.spec.ts
+      - name: Stop and unregister the synthetic Runtime
+        if: always() && env.LAUNDRY_RUNTIME_PAIR_INSTALLED == 'true'
+        shell: pwsh
+        run: ./apps/edge-agent/scripts/ci-runtime-pair.ps1 -Action uninstall
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -77,4 +102,5 @@ jobs:
             apps/edge-agent/release/${{ matrix.profile }}/*-windows-x64-development-only.exe
             apps/edge-agent/test-results/windows-package/desktop-smoke.png
             ${{ runner.temp }}/counter-installed-${{ matrix.profile }}.json
+            ${{ runner.temp }}/counter-maintenance-${{ matrix.profile }}.json
           if-no-files-found: warn

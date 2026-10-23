@@ -31,8 +31,8 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "4.1.11",
+    "@vitest/coverage-v8": "4.1.12",
     "vite": "^7.3.7",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   }
 }

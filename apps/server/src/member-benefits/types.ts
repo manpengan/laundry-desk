@@ -170,6 +170,7 @@ export type MemberBenefitRejectReason =
   | "insufficient_uses"
   | "coupon_already_redeemed"
   | "coupon_order_invalid"
+  | "coupon_payment_history"
   | "coupon_order_already_discounted";
 
 export type MemberBenefitOutcome<TValue> =

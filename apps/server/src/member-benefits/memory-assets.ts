@@ -129,6 +129,13 @@ export async function consumeMemoryCoupon(
     return rejectBenefit("order_customer_mismatch");
   }
   if (order.discount_cents !== 0) return rejectBenefit("coupon_order_already_discounted");
+  const payments = await context.orderStore.listPayments?.(
+    context.orgId,
+    input.store_id,
+    input.order_id,
+  );
+  if (payments === undefined) return rejectBenefit("coupon_order_invalid");
+  if (payments.length > 0) return rejectBenefit("coupon_payment_history");
   if (
     order.status !== "open" ||
     order.paid_cents !== 0 ||

@@ -179,28 +179,33 @@ export function MemberOrderBenefitsPanel({
         eligibleCoupons.length === 0 ? (
           <p className="ld-member-panel__hint">暂无满足最低金额且未到期的优惠券。</p>
         ) : (
-          <ul className="ld-benefit-assets">
-            {eligibleCoupons.map((coupon) => (
-              <li key={coupon.asset_id}>
-                <span>
-                  {coupon.name}：减 <MoneyText fen={coupon.discount_cents} />
-                  ，满 <MoneyText fen={coupon.min_order_cents} /> 可用，到期 {coupon.expires_on}
-                </span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={busy || benefits.account_status !== "active"}
-                  onClick={() => void consumeCoupon(coupon.asset_id)}
-                  data-testid="order-coupon-consume"
-                >
-                  核销
-                </Button>
-              </li>
-            ))}
-          </ul>
+          <div>
+            <p className="ld-member-panel__hint">
+              优惠券须在首次收款前使用；已全额退款的订单也不能补用。
+            </p>
+            <ul className="ld-benefit-assets">
+              {eligibleCoupons.map((coupon) => (
+                <li key={coupon.asset_id}>
+                  <span>
+                    {coupon.name}：减 <MoneyText fen={coupon.discount_cents} />
+                    ，满 <MoneyText fen={coupon.min_order_cents} /> 可用，到期 {coupon.expires_on}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={busy || benefits.account_status !== "active"}
+                    onClick={() => void consumeCoupon(coupon.asset_id)}
+                    data-testid="order-coupon-consume"
+                  >
+                    核销
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )
       ) : (
-        <p className="ld-member-panel__hint">优惠券仅可用于未收款、无既有折扣的进行中订单。</p>
+        <p className="ld-member-panel__hint">优惠券仅可用于从未收款、无既有折扣的进行中订单。</p>
       )}
     </section>
   );

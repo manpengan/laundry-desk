@@ -163,7 +163,8 @@ test("shift.history returns frozen closings newest first within the bounded rang
 });
 
 test("closing a historical day never carries float backward from a future closing", async () => {
-  const bus = buildBus();
+  // Both entries are historical relative to the server clock.
+  const bus = buildBus(() => Math.floor(Date.parse("2024-08-01T12:00:00Z") / 1_000));
   const future = await closeWithConfirm(bus, {
     business_date: "2024-07-31",
     signature_name: "未来班次",
@@ -186,6 +187,49 @@ test("closing a historical day never carries float backward from a future closin
   assert.equal(result.opening_float_cents, 0);
   assert.equal(result.expected_cash_cents, 0);
   assert.equal(result.cash_difference_cents, 0);
+});
+
+test("future shift is refused even after an earlier closing and does not lock the future day", async () => {
+  const locks: string[] = [];
+  const bus = buildBus(
+    () => DAY_EPOCH,
+    async (_client, _tenant, date) => {
+      locks.push(date);
+    },
+  );
+  assert.equal(
+    (
+      await closeWithConfirm(bus, {
+        business_date: "2024-07-21",
+        signature_name: "昨日班次",
+      })
+    ).ok,
+    true,
+  );
+  for (const business_date of ["2024-07-23", "2099-12-31"]) {
+    const result = await closeWithConfirm(bus, { business_date, signature_name: "不应交班" });
+    assert.equal(result.ok, false);
+    if (result.ok) assert.fail("future closing accepted");
+    assert.equal(result.error.code, "VALIDATION_FAILED");
+    assert.deepEqual("detail" in result.error ? result.error.detail : undefined, {
+      kind: "reason",
+      reason: "future_business_date",
+    });
+    assert.equal(
+      await bus.shiftStore.getByBusinessDate(TENANT.orgId, TENANT.storeId, business_date),
+      null,
+    );
+  }
+  assert.deepEqual(locks, ["2024-07-21"]);
+  assert.equal(
+    (
+      await closeWithConfirm(bus, {
+        business_date: BUSINESS_DATE,
+        signature_name: "今日班次",
+      })
+    ).ok,
+    true,
+  );
 });
 
 test("shift.close without confirm_ref is blocked with POLICY_CONFIRMATION_REQUIRED", async () => {

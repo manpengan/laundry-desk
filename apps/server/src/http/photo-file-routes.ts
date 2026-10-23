@@ -7,6 +7,7 @@ import { DEFAULT_MAX_PHOTO_BYTES, PhotoFileError } from "../photo/file-store.js"
 import type { PhotoHandlerDeps } from "../photo/handlers.js";
 import { createPhotoThumbnail, normalizePhoto } from "../photo/image-processing.js";
 import type { PhotoRecord } from "../photo/types.js";
+import { registerPhotoUpload } from "../photo/upload-registration.js";
 import {
   fail,
   requireCsrf,
@@ -146,7 +147,6 @@ export function registerPhotoFileRoutes(
   );
 
   app.post("/api/v2/photos", async (request, reply) => {
-    let installed: Awaited<ReturnType<typeof files.write>> | null = null;
     try {
       const resolved = await resolveSession(context.runtime, request);
       if (resolved === null) {
@@ -179,41 +179,52 @@ export function registerPhotoFileRoutes(
         return fail("VALIDATION_FAILED");
       }
       const normalized = await normalizePhoto(request.body, declaredType);
-      installed = await files.write(
-        normalized.bytes,
-        normalized.content_type,
-        query.data.upload_id,
-      );
-      const result = await executeTrustedSessionCommand(
-        context,
-        resolved,
-        "photo.register",
-        Object.freeze({
-          order_id: query.data.order_id,
-          garment_id: query.data.garment_id,
-          kind: query.data.kind,
-          storage_key: installed.storage_key,
-          content_type: installed.content_type,
-          content_sha256: installed.content_sha256,
-          byte_size: installed.byte_size,
-          ...(query.data.taken_at === undefined ? {} : { taken_at: query.data.taken_at }),
-        }),
-        Object.freeze({
-          idempotencyKey: query.data.upload_id,
-          onUnexpectedError: (error: unknown) =>
-            request.log.error(safeErrorContext(error), "photo register execution failed"),
-        }),
-      );
-      if (!result.ok) {
-        await files.remove(installed.storage_key, installed.content_sha256);
-        installed = null;
-        applyCommandErrorStatus(reply, result.error.code);
-      }
-      return result;
+      return await registerPhotoUpload(files, {
+        bytes: normalized.bytes,
+        contentType: normalized.content_type,
+        uploadId: query.data.upload_id,
+        referencedKeys: () =>
+          photo.store.listStorageKeys(resolved.session.org_id, resolved.session.store_id),
+        onCleanupDeferred: (error) =>
+          request.log.error(safeErrorContext(error), "photo upload cleanup deferred"),
+        register: async (installed) => {
+          // Normalization and queued uploads may outlive the original authority.
+          const current = await resolveSession(context.runtime, request);
+          if (current === null) {
+            reply.code(401);
+            return fail("AUTHENTICATION_FAILED");
+          }
+          if (!isConfiguredRuntimeTenant(current)) {
+            reply.code(404);
+            return fail("RESOURCE_UNAVAILABLE");
+          }
+          const currentCsrf = await requireCsrf(context, request, reply, current.session);
+          if (currentCsrf !== true) return currentCsrf;
+          const result = await executeTrustedSessionCommand(
+            context,
+            current,
+            "photo.register",
+            Object.freeze({
+              order_id: query.data.order_id,
+              garment_id: query.data.garment_id,
+              kind: query.data.kind,
+              storage_key: installed.storage_key,
+              content_type: installed.content_type,
+              content_sha256: installed.content_sha256,
+              byte_size: installed.byte_size,
+              ...(query.data.taken_at === undefined ? {} : { taken_at: query.data.taken_at }),
+            }),
+            Object.freeze({
+              idempotencyKey: query.data.upload_id,
+              onUnexpectedError: (error: unknown) =>
+                request.log.error(safeErrorContext(error), "photo register execution failed"),
+            }),
+          );
+          if (!result.ok) applyCommandErrorStatus(reply, result.error.code);
+          return result;
+        },
+      });
     } catch (error) {
-      if (installed !== null) {
-        await files.remove(installed.storage_key, installed.content_sha256).catch(() => undefined);
-      }
       if (error instanceof PhotoFileError) return applyPhotoError(reply, error);
       request.log.error(safeErrorContext(error), "photo upload failed");
       reply.code(500);

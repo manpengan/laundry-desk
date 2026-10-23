@@ -23,7 +23,9 @@ foreach ($relative in $files) {
 }
 $binding = Get-Content -LiteralPath (Join-Path $target 'resources/distribution-profile/binding.json') -Raw | ConvertFrom-Json
 if ($binding.source_git_sha -cne $env:GITHUB_SHA -or $binding.assurance -cne 'development_only') { throw 'COUNTER_SOURCE_BINDING_MISMATCH' }
-$report = [ordered]@{ source_git_sha=$env:GITHUB_SHA; profile=$Profile; assurance='development_only'; installer_sha256=(Get-FileHash -LiteralPath $installers[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant(); installed=$hashes }
+$maintenance = node.exe (Join-Path $PSScriptRoot 'inspect-runtime-maintenance.mjs') (Join-Path $target 'resources/app.asar') | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or $maintenance.manifest_sha256 -cne $env:LAUNDRY_MANIFEST_SHA256) { throw 'COUNTER_INSTALLED_RUNTIME_BINDING_MISMATCH' }
+$report = [ordered]@{ runtime_maintenance=$maintenance; source_git_sha=$env:GITHUB_SHA; profile=$Profile; assurance='development_only'; installer_sha256=(Get-FileHash -LiteralPath $installers[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant(); installed=$hashes }
 $report | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP "counter-installed-$Profile.json") -Encoding UTF8
 "LAUNDRY_WINDOWS_APP_ROOT=$target" >> $env:GITHUB_ENV
 "LAUNDRY_WINDOWS_INSTALLED_EXE=$installedExe" >> $env:GITHUB_ENV

@@ -151,7 +151,8 @@ test("replays one upload id only for identical normalized bytes", async () => {
   const first = await store.write(JPEG, "image/jpeg", PHOTO_A);
   const replay = await store.write(Buffer.from(JPEG), "image/jpeg", PHOTO_A);
 
-  assert.deepEqual(replay, first);
+  assert.equal(first.created, true);
+  assert.deepEqual(replay, { ...first, created: false });
   assert.equal(first.storage_key, `${PHOTO_A}.jpg`);
   assert.equal((await readdir(store.rootPath)).filter((name) => name.endsWith(".jpg")).length, 1);
   await assert.rejects(

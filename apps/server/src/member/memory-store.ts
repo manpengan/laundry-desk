@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { createMemoryMemberMap } from "./memory-transaction-map.js";
+import { createMemoryMemberCancellation } from "./memory-order-cancellation.js";
 
 import type {
   CustomerMemberAccountMergeOutcome,
@@ -39,15 +41,18 @@ const reject = <T>(reason: MemberRejectReason): MemberOutcome<T> =>
  * In-memory member store for unit tests and the memory runtime.
  *
  * It mirrors the PostgreSQL store's *decisions* (idempotent open, no overdraw,
- * append-only ledger) but not its locking: a single-threaded map needs none.
+ * append-only ledger). Transactions stage snapshots and reject conflicting
+ * commits so concurrent commands cannot spend uncommitted stored value.
  */
 export function createMemoryMemberStore(seed: MemoryMemberSeed): MemoryMemberStore {
   const newId = seed.newId ?? randomUUID;
-  const customers = new Set(seed.customerIds);
-  const accounts = new Map<string, MemberAccountRecord>();
-  const byCustomer = new Map<string, string>();
-  const ledger = new Map<string, MemberLedgerRow[]>();
-  const bonusRules = new Map<string, MemberBonusRuleRecord>();
+  const customers = createMemoryMemberMap<string, boolean>(
+    seed.customerIds.map((id) => [id, true]),
+  );
+  const accounts = createMemoryMemberMap<string, MemberAccountRecord>();
+  const byCustomer = createMemoryMemberMap<string, string>();
+  const ledger = createMemoryMemberMap<string, readonly MemberLedgerRow[]>();
+  const bonusRules = createMemoryMemberMap<string, MemberBonusRuleRecord>();
 
   const activeBonusRules = (): readonly BonusRule[] =>
     [...bonusRules.values()]
@@ -68,8 +73,7 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemoryMemberSto
     row: MemberLedgerRow,
   ): MemberOutcome<MemberLedgerAppendResult> => {
     const rows = ledger.get(accountId) ?? [];
-    rows.push(row);
-    ledger.set(accountId, rows);
+    ledger.set(accountId, [...rows, row]);
     return Object.freeze({
       ok: true as const,
       value: Object.freeze({
@@ -111,11 +115,12 @@ export function createMemoryMemberStore(seed: MemoryMemberSeed): MemoryMemberSto
       byCustomer.set(targetCustomerId, sourceAccountId);
     }
     customers.delete(sourceCustomerId);
-    customers.add(targetCustomerId);
+    customers.set(targetCustomerId, true);
     return sourceAccountId === undefined ? "no_account" : "relinked";
   };
 
   return Object.freeze({
+    ...createMemoryMemberCancellation({ accounts, ledger, newId }),
     mergeCustomerMemberAccount,
     openAccount: async (input: MemberOpenInput): Promise<MemberOutcome<MemberOpenResult>> => {
       if (!customers.has(input.customer_id)) return reject("customer_not_found");

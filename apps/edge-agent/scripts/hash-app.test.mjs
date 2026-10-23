@@ -378,6 +378,10 @@ test("Windows package evidence uses Electron, DPAPI and a credential-free fixed 
     join(packageRoot, "scripts", "inspect-packaged-win.mjs"),
     "utf8",
   );
+  const signatureInspector = await readFile(
+    join(packageRoot, "scripts", "inspect-windows-signature.mjs"),
+    "utf8",
+  );
   const packageJson = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
 
   assert.match(config, /trace:\s*"off"/u);
@@ -389,7 +393,12 @@ test("Windows package evidence uses Electron, DPAPI and a credential-free fixed 
   assert.match(smoke, /test-results["',\s\n]+windows-package["',\s\n]+desktop-smoke\.png/u);
   assert.match(smoke, /printer-config\.json/u);
   assert.doesNotMatch(smoke, /Object\.entries\(process\.env\)|--use-mock-keychain/u);
-  assert.match(inspector, /Get-AuthenticodeSignature/u);
+  assert.match(
+    inspector,
+    /import \{ defaultSignatureStatus \} from "\.\/inspect-windows-signature\.mjs"/u,
+  );
+  assert.match(inspector, /options\.signatureStatus \?\? defaultSignatureStatus/u);
+  assert.match(signatureInspector, /Get-AuthenticodeSignature/u);
   assert.match(inspector, /0x8664/u);
   assert.match(inspector, /development-only/u);
   assert.equal(packageJson.scripts["package:inspect:win"], "node scripts/inspect-packaged-win.mjs");

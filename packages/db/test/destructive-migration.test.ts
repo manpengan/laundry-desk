@@ -173,6 +173,7 @@ describe("destructive migration static reject", () => {
       "0080_ai_usage_quarantine_threshold.sql",
       "0081_payment_reconciliation_reviews.sql",
       "0082_order_catalog_name_snapshot.sql",
+      "0083_member_payment_links.sql",
     ]);
     expect(() => assertExpandFriendlyMigrations(migrations)).not.toThrow();
   });

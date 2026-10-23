@@ -1,3 +1,4 @@
+import type { MemberCancellationInput, MemberPaymentLinkInput } from "./cancellation-types.js";
 import type { MemberBalance } from "./balance.js";
 import type { MemberAccountStatus } from "@laundry/domain";
 import type { BonusMatch } from "./bonus.js";
@@ -27,6 +28,7 @@ export type MemberTender = "cash" | "wechat" | "alipay" | "other";
 
 export type MemberLedgerRow = Readonly<{
   ledger_id: string;
+  ref_ledger_id?: string | null;
   kind: MemberLedgerKind;
   principal_delta_cents: number;
   bonus_delta_cents: number;
@@ -192,6 +194,8 @@ export type MemberOutcome<TValue> =
   Readonly<{ ok: true; value: TValue }> | Readonly<{ ok: false; reason: MemberRejectReason }>;
 
 export type MemberStore = Readonly<{
+  linkPayment: (input: MemberPaymentLinkInput) => Promise<void>;
+  reverseOrderPayments: (input: MemberCancellationInput) => Promise<void>;
   openAccount: (input: MemberOpenInput) => Promise<MemberOutcome<MemberOpenResult>>;
   getByCustomer: (customerId: string, limit: number) => Promise<MemberAccountView | null>;
   getById: (accountId: string, limit: number) => Promise<MemberAccountView | null>;

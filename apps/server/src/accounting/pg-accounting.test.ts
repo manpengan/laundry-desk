@@ -9,8 +9,6 @@ import { withPoolClient } from "../db/pg-sql-client.js";
 import { withTenantTransaction } from "../db/tenant-transaction.js";
 import type { TenantContext } from "../db/types.js";
 import { createRegisteredM1Bus } from "../handlers/register-m1.js";
-import { DEMO_ADMIN_ID, DEMO_ORG_ID, DEMO_STAFF_A_ID, DEMO_STORE_ID } from "../local/demo-ids.js";
-import { seedPgTestIdentityFixture } from "../local/pg-test-fixture.js";
 import { createPgAccountingSource } from "./pg-source.js";
 
 const urls =
@@ -19,19 +17,61 @@ const urls =
     : null;
 const maybe = urls === null ? test.skip : test;
 const BUSINESS_DATE = "2098-08-07";
-const OTHER_STORE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbc";
+const ORG_ID = randomUUID();
+const STORE_ID = randomUUID();
+const ADMIN_ID = randomUUID();
+const STAFF_ID = randomUUID();
+const OTHER_STORE_ID = randomUUID();
 
 const TENANT: TenantContext = Object.freeze({
-  orgId: DEMO_ORG_ID,
-  storeId: DEMO_STORE_ID,
-  staffId: DEMO_ADMIN_ID,
+  orgId: ORG_ID,
+  storeId: STORE_ID,
+  staffId: ADMIN_ID,
 });
 const ACTOR: ActorContext = Object.freeze({
-  staffId: DEMO_ADMIN_ID,
+  staffId: ADMIN_ID,
   deviceId: null,
   via: "ui",
   permissions: Object.freeze(["accounting_read", "ledger_export"]),
 });
+
+async function seedAccountingIdentity(pool: PgPool): Promise<void> {
+  await pool.query(
+    "INSERT INTO orgs (id, code, name, created_at, updated_at) VALUES ($1::uuid, $1::text, 'Accounting fixture', now(), now())",
+    [ORG_ID],
+  );
+  await pool.query(
+    "INSERT INTO stores (id, org_id, code, name, timezone, created_at, updated_at) VALUES ($1, $2, 'accounting', 'Accounting fixture', 'UTC', now(), now())",
+    [STORE_ID, ORG_ID],
+  );
+  for (const [id, username] of [
+    [ADMIN_ID, "admin"],
+    [STAFF_ID, "staff"],
+  ]) {
+    await pool.query(
+      "INSERT INTO staffs (id, org_id, username, password_hash, display_name, created_at, updated_at) VALUES ($1, $2, $3, 'test-only', $3, now(), now())",
+      [id, ORG_ID, username],
+    );
+  }
+}
+
+async function cleanupAccountingFixture(pool: PgPool): Promise<void> {
+  for (const table of [
+    "member_ledger",
+    "member_bonus_rules",
+    "member_accounts",
+    "payments",
+    "orders",
+    "customer_profiles",
+    "customers",
+    "staffs",
+    "stores",
+    "customer_privacy_hmac_keys",
+  ]) {
+    await pool.query(`DELETE FROM ${table} WHERE org_id = $1::uuid`, [ORG_ID]);
+  }
+  await pool.query("DELETE FROM orgs WHERE id = $1::uuid", [ORG_ID]);
+}
 
 function fictionalPhone(): string {
   const suffix = BigInt(`0x${randomUUID().replaceAll("-", "").slice(0, 8)}`) % 100_000_000n;
@@ -47,19 +87,19 @@ async function seedOtherStore(adminPool: PgPool): Promise<void> {
       `INSERT INTO stores (id, org_id, code, name, timezone, created_at, updated_at)
        VALUES ($1::uuid, $2::uuid, 'other-report', 'Other report store', 'UTC', now(), now())
        ON CONFLICT (id) DO NOTHING`,
-      [OTHER_STORE_ID, DEMO_ORG_ID],
+      [OTHER_STORE_ID, ORG_ID],
     );
     const customerId = randomUUID();
     const accountId = randomUUID();
     await client.query(
       `INSERT INTO customers (id, org_id, phone, name, created_at, updated_at)
        VALUES ($1::uuid, $2::uuid, $3, 'Other store member', now(), now())`,
-      [customerId, DEMO_ORG_ID, fictionalPhone()],
+      [customerId, ORG_ID, fictionalPhone()],
     );
     await client.query(
       `INSERT INTO member_accounts (id, org_id, customer_id, status, opened_at, opened_store_id)
        VALUES ($1::uuid, $2::uuid, $3::uuid, 'active', now(), $4::uuid)`,
-      [accountId, DEMO_ORG_ID, customerId, OTHER_STORE_ID],
+      [accountId, ORG_ID, customerId, OTHER_STORE_ID],
     );
     await client.query(
       `INSERT INTO member_ledger (
@@ -67,7 +107,7 @@ async function seedOtherStore(adminPool: PgPool): Promise<void> {
          bonus_delta_cents, staff_id, at, business_date, tender
        ) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'topup', 99999,
                  0, $5::uuid, now(), $6, 'cash')`,
-      [randomUUID(), DEMO_ORG_ID, OTHER_STORE_ID, accountId, DEMO_ADMIN_ID, BUSINESS_DATE],
+      [randomUUID(), ORG_ID, OTHER_STORE_ID, accountId, ADMIN_ID, BUSINESS_DATE],
     );
     await client.query("COMMIT");
   } catch (error) {
@@ -91,12 +131,12 @@ async function seedCurrentStore(appPool: PgPool): Promise<string> {
       await tx.query(
         `INSERT INTO customers (id, org_id, phone, name, created_at, updated_at)
          VALUES ($1::uuid, $2::uuid, $3, 'Accounting member', now(), now())`,
-        [customerId, DEMO_ORG_ID, fictionalPhone()],
+        [customerId, ORG_ID, fictionalPhone()],
       );
       await tx.query(
         `INSERT INTO member_accounts (id, org_id, customer_id, status, opened_at, opened_store_id)
          VALUES ($1::uuid, $2::uuid, $3::uuid, 'active', now(), $4::uuid)`,
-        [accountId, DEMO_ORG_ID, customerId, DEMO_STORE_ID],
+        [accountId, ORG_ID, customerId, STORE_ID],
       );
       await tx.query(
         `INSERT INTO orders (
@@ -107,11 +147,11 @@ async function seedCurrentStore(appPool: PgPool): Promise<string> {
                    8000, 8000, 8000, 0, now(), now(), $6::uuid, $7)`,
         [
           orderId,
-          DEMO_ORG_ID,
-          DEMO_STORE_ID,
+          ORG_ID,
+          STORE_ID,
           `ACC-${orderId.slice(0, 8)}`,
           customerId,
-          DEMO_ADMIN_ID,
+          ADMIN_ID,
           BUSINESS_DATE,
         ],
       );
@@ -128,13 +168,13 @@ async function seedCurrentStore(appPool: PgPool): Promise<string> {
             $8::uuid, now(), $6, $7::uuid)`,
         [
           cashPaymentId,
-          DEMO_ORG_ID,
-          DEMO_STORE_ID,
+          ORG_ID,
+          STORE_ID,
           orderId,
-          DEMO_ADMIN_ID,
+          ADMIN_ID,
           BUSINESS_DATE,
           balancePaymentId,
-          DEMO_STAFF_A_ID,
+          STAFF_ID,
           reversalPaymentId,
         ],
       );
@@ -146,7 +186,7 @@ async function seedCurrentStore(appPool: PgPool): Promise<string> {
            $1::uuid, $2::uuid, 10000, 1000, 'active',
            now(), now(), $3::uuid, 'Accounting fixture'
          )`,
-        [bonusRuleId, DEMO_ORG_ID, DEMO_ADMIN_ID],
+        [bonusRuleId, ORG_ID, ADMIN_ID],
       );
       await tx.query(
         `INSERT INTO member_ledger (
@@ -162,13 +202,13 @@ async function seedCurrentStore(appPool: PgPool): Promise<string> {
             $8::uuid, now(), $6, NULL, NULL)`,
         [
           randomUUID(),
-          DEMO_ORG_ID,
-          DEMO_STORE_ID,
+          ORG_ID,
+          STORE_ID,
           accountId,
-          DEMO_ADMIN_ID,
+          ADMIN_ID,
           BUSINESS_DATE,
           randomUUID(),
-          DEMO_STAFF_A_ID,
+          STAFF_ID,
           randomUUID(),
           orderId,
           bonusRuleId,
@@ -179,28 +219,14 @@ async function seedCurrentStore(appPool: PgPool): Promise<string> {
   return bonusRuleId;
 }
 
-async function retireFixtureBonusRule(appPool: PgPool, bonusRuleId: string): Promise<void> {
-  await withPoolClient(appPool, (client) =>
-    withTenantTransaction(client, TENANT, async (tx) => {
-      await tx.query(
-        `UPDATE member_bonus_rules
-         SET status = 'retired', updated_at = now()
-         WHERE id = $1::uuid AND org_id = $2::uuid`,
-        [bonusRuleId, TENANT.orgId],
-      );
-    }),
-  );
-}
-
 maybe("real PG accounting report keeps dual bases and excludes another store", async () => {
   assert.ok(urls);
   const adminPool = createPgPool({ connectionString: urls.admin });
   const appPool = createPgPool({ connectionString: urls.app });
-  let bonusRuleId: string | null = null;
   try {
-    await seedPgTestIdentityFixture(adminPool);
+    await seedAccountingIdentity(adminPool);
     await seedOtherStore(adminPool);
-    bonusRuleId = await seedCurrentStore(appPool);
+    await seedCurrentStore(appPool);
     const { queryRegistry } = createRegisteredM1Bus({
       accounting: Object.freeze({
         source: createPgAccountingSource(),
@@ -235,10 +261,11 @@ maybe("real PG accounting report keeps dual bases and excludes another store", a
     assert.ok(report.rows.some((row) => row.real_income_cents === 15_000));
     assert.ok(report.rows.some((row) => row.performance_income_cents === 0));
   } finally {
-    if (bonusRuleId !== null) {
-      await retireFixtureBonusRule(appPool, bonusRuleId);
+    try {
+      await cleanupAccountingFixture(adminPool);
+    } finally {
+      await adminPool.end();
+      await appPool.end();
     }
-    await adminPool.end();
-    await appPool.end();
   }
 });

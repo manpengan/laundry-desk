@@ -2,6 +2,7 @@ name: V2 Windows Runtime Payload
 
 on:
   workflow_dispatch:
+  workflow_call:
   push:
     branches: [main]
   pull_request:
@@ -185,7 +186,6 @@ jobs:
         with:
           name: windows-runtime-development-payload
           path: |
-            ${{ runner.temp }}/laundry-no-repo-runtime
             ${{ runner.temp }}/runtime-build-result.json
             ${{ runner.temp }}/runtime-lifecycle-result.json
             ${{ runner.temp }}/laundry-runtime-operator-entry

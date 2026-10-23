@@ -12,6 +12,10 @@ import {
   seedMiniappNotifications,
   assertMiniappNotificationsRevoked,
 } from "./miniapp-notification-restore-fixture.mjs";
+import {
+  seedMemberPayment,
+  assertMemberPaymentPreserved,
+} from "./member-payment-restore-fixture.mjs";
 
 const require = createRequire(resolve("apps/server/package.json"));
 const { Client } = require("pg");
@@ -45,6 +49,7 @@ test(
         const client = new Client({ connectionString: url.href });
         await client.connect();
         clients.push(client);
+        await client.query("SET TimeZone='UTC'");
         await client.query("GRANT ALL ON SCHEMA public TO laundry_owner");
         await client.query(
           "CREATE TABLE laundry_schema_migrations(filename text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())",
@@ -116,6 +121,7 @@ test(
       );
       const injected = "中文'); DROP TABLE orgs; --\n\\.\nCOPY sneaky FROM PROGRAM 'evil';";
       const notifications = await seedMiniappNotifications(source, { org, store, staff });
+      const memberPayment = await seedMemberPayment(source, { org, store, staff });
       await source.query(
         "INSERT INTO portable_fixture(parent_id,content,bytes,exact) VALUES(1,$1,$2,$3)",
         [injected, Buffer.from([0, 1, 255]), "9223372036854775806"],
@@ -131,10 +137,12 @@ test(
       }
       assert.equal(inventory.counts.notification_provider_settings, 0);
       assert.equal(inventory.counts.ai_provider_keys, 0);
+      assert.equal(inventory.counts.member_payment_links, 1);
       assert.equal((await readFile(path, "utf8")).includes("must-not-be-exported"), false);
       // The same reset must hold for local snapshot restoration with triggers active.
       await revokeRestoredAuthority(source, names[0], await readRollbackIdentity(source));
       await assertMiniappNotificationsRevoked(source, notifications);
+      await assertMemberPaymentPreserved(source, memberPayment);
       const input = await open(path, "r");
       const expected = { inventory, migrations };
       try {
@@ -171,6 +179,7 @@ test(
         )
       ).rows[0];
       await assertMiniappNotificationsRevoked(target, notifications);
+      await assertMemberPaymentPreserved(target, memberPayment);
       assert.equal(row.content, injected);
       assert.deepEqual(row.bytes, Buffer.from([0, 1, 255]));
       assert.equal(row.exact, "9223372036854775806");

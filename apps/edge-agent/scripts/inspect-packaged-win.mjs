@@ -1,9 +1,7 @@
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, readdir, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
@@ -20,14 +18,16 @@ import {
 } from "./windows-profile.mjs";
 import { WINDOWS_PACKAGE_VERSION } from "./windows-package-version.mjs";
 
+import { defaultSignatureStatus } from "./inspect-windows-signature.mjs";
+import { inspectRuntimeMaintenanceBinding } from "./inspect-runtime-maintenance.mjs";
+export { defaultSignatureStatus } from "./inspect-windows-signature.mjs";
+
 const PACKAGE_VERSION = WINDOWS_PACKAGE_VERSION;
 const HELPER = "laundry-windows-helper.exe";
 const PROVENANCE = "windows-source.json";
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const RELEASE_ROOT = join(PACKAGE_ROOT, "release");
 const SHA256 = /^[0-9a-f]{64}$/u;
-const execFileAsync = promisify(execFile);
-const SIGNATURE_STAGES = ["PROCESS_STARTED", "MODULE_READY", "QUERY_STARTED", "QUERY_COMPLETED"];
 
 function isWithin(root, candidate) {
   const child = relative(root, candidate);
@@ -135,90 +135,6 @@ function parseDisabledUpdateConfig(bytes) {
   ) {
     throw new Error("packaged development update configuration must be exactly disabled");
   }
-}
-
-export async function defaultSignatureStatus(
-  path,
-  {
-    run = execFileAsync,
-    systemRoot = process.env.SystemRoot ?? process.env.WINDIR,
-    artifactKind = "artifact",
-    reportProgress = () => {},
-  } = {},
-) {
-  if (typeof systemRoot !== "string" || !isAbsolute(systemRoot)) {
-    throw new Error("Windows system root is unavailable");
-  }
-  if (!["app", "installer", "artifact"].includes(artifactKind)) throw new Error("Invalid artifact");
-  const powershell = join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-  const started = performance.now();
-  const report = (stage) =>
-    reportProgress({
-      artifact_kind: artifactKind,
-      stage,
-      elapsed_ms: Math.round(performance.now() - started),
-    });
-  const reportLastStage = (stdout = "") => {
-    const lines = stdout.split(/\r?\n/u);
-    report(SIGNATURE_STAGES.findLast((stage) => lines.includes(stage)) ?? "PROCESS_START");
-  };
-  report("PROCESS_START");
-  let result;
-  try {
-    const request = run(
-      powershell,
-      [
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        [
-          "$ErrorActionPreference = 'Stop'",
-          "$ProgressPreference = 'SilentlyContinue'",
-          "[Console]::Out.WriteLine('PROCESS_STARTED')",
-          "$PSModuleAutoLoadingPreference = 'None'",
-          "Import-Module ($PSHOME + '\\Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1') -ErrorAction Stop",
-          "[Console]::Out.WriteLine('MODULE_READY')",
-          "[Console]::Out.WriteLine('QUERY_STARTED')",
-          "$status = (Microsoft.PowerShell.Security\\Get-AuthenticodeSignature -LiteralPath $env:LAUNDRY_INSPECT_PATH -ErrorAction Stop).Status.ToString()",
-          "[Console]::Out.WriteLine('QUERY_COMPLETED')",
-          "[Console]::Out.WriteLine($status)",
-          "exit 0",
-        ].join("; "),
-      ],
-      {
-        encoding: "utf8",
-        env: {
-          LAUNDRY_INSPECT_PATH: path,
-          SystemRoot: systemRoot,
-          WINDIR: systemRoot,
-        },
-        maxBuffer: 8_192,
-        timeout: 60_000,
-        windowsHide: true,
-      },
-    );
-    request.child?.stdin?.end();
-    result = await request;
-  } catch (error) {
-    reportLastStage(typeof error?.stdout === "string" ? error.stdout : "");
-    const timedOut = error?.killed === true && error.code === null && error.signal === "SIGTERM";
-    throw new Error(
-      timedOut ? "WINDOWS_PACKAGE_SIGNATURE_TIMEOUT" : "WINDOWS_PACKAGE_SIGNATURE_QUERY_FAILED",
-    );
-  }
-  reportLastStage(result.stdout);
-  const lines = result.stdout.trimEnd().split(/\r?\n/u);
-  if (
-    result.stderr !== "" ||
-    lines.length !== 5 ||
-    !SIGNATURE_STAGES.every((stage, index) => lines[index] === stage) ||
-    !/^[A-Za-z]+$/u.test(lines[4])
-  ) {
-    throw new Error("WINDOWS_PACKAGE_SIGNATURE_OUTPUT_INVALID");
-  }
-  report("PROCESS_EXIT");
-  return lines[4];
 }
 
 async function canonicalReleaseRoot(releaseRoot) {
@@ -340,6 +256,11 @@ export async function inspectPackagedWindowsSoftware(options = {}) {
   }
   verifySpaIntegrity(activeBundleRootFromSpaRoot(spaPath, loaded.bundleId), loaded.manifest);
 
+  const runtimeBinding = await inspectRuntimeMaintenanceBinding({
+    asarPath: join(resourcesPath, "app.asar"),
+    entryDirectory: options.runtimeEntryDirectory ?? process.env.LAUNDRY_WINDOWS_RUNTIME_ENTRY,
+    expectedGitSha: provenance.source_git_sha,
+  });
   const reportProgress = options.reportSignatureProgress;
   const appSignature = await signatureStatus(executablePath, {
     artifactKind: "app",
@@ -362,6 +283,7 @@ export async function inspectPackagedWindowsSoftware(options = {}) {
     provenance_sha256: createHash("sha256").update(provenanceBytes).digest("hex"),
     profile_id: profileId,
     profile_sha256: packagedProfile.digest,
+    runtime_maintenance: runtimeBinding,
     runtime_guide_sha256: createHash("sha256").update(guide).digest("hex"),
     signatures: "NotSigned",
     source_git_sha: provenance.source_git_sha,

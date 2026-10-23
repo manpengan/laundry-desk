@@ -1,3 +1,4 @@
+import type { MemoryMemberMap } from "./memory-transaction-map.js";
 import { planMemberLifecycle } from "@laundry/domain";
 
 import type { MemberBalance } from "./balance.js";
@@ -13,8 +14,8 @@ import type {
 } from "./types.js";
 
 type MemoryLifecycleState = Readonly<{
-  accounts: Map<string, MemberAccountRecord>;
-  ledger: Map<string, MemberLedgerRow[]>;
+  accounts: MemoryMemberMap<string, MemberAccountRecord>;
+  ledger: MemoryMemberMap<string, readonly MemberLedgerRow[]>;
   newId: () => string;
   balanceOf: (accountId: string) => MemberBalance;
 }>;
@@ -62,7 +63,7 @@ function closeRows(
   refundedPrincipal: number,
   forfeitedBonus: number,
 ): Readonly<{ refundId: string | null; forfeitId: string | null }> {
-  const rows = state.ledger.get(input.account_id) ?? [];
+  const rows = [...(state.ledger.get(input.account_id) ?? [])];
   let refundId: string | null = null;
   let forfeitId: string | null = null;
   if (refundedPrincipal > 0) {

@@ -279,7 +279,7 @@ export type OrderStore = Readonly<{
     staffId: string,
     at: number,
     businessDate: string,
-    beforeCommit?: () => Promise<void>,
+    beforeCommit?: (reversals: readonly LedgerPaymentRow[]) => Promise<void>,
   ) => Promise<OrderRecord | null>;
   nextTicketSeq: (orgId: string, storeId: string, dayKey: string) => Promise<number>;
   /**

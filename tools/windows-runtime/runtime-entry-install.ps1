@@ -105,14 +105,7 @@ function Install-RuntimeEntry {
       $env:USERPROFILE -cnotmatch '^[A-Za-z]:\\') { throw 'WINDOWS_RUNTIME_ENTRY_INSTALL_ROOT_INVALID' }
   $local = [LaundryRuntimeEntryTrust]::DirectoryPath($env:LOCALAPPDATA)
   $programs = Join-Path $local 'Programs'
-  if (-not [IO.Directory]::Exists($programs)) { [void][IO.Directory]::CreateDirectory($programs) }
-  [void][LaundryRuntimeEntryTrust]::DirectoryPath($programs)
   $parent = Join-Path $programs 'Laundry Desk Runtime V2'
-  if ([IO.Directory]::Exists($parent)) { [LaundryRuntimeEntryTrust]::AssertPrivateDirectory($parent) }
-  else {
-    [void][IO.Directory]::CreateDirectory($parent)
-    [LaundryRuntimeEntryTrust]::PrivateDirectory($parent)
-  }
   $release = Join-Path $parent $BoundManifest
   $stage = 'INVENTORY'
   $selfInfo = New-Object IO.FileInfo((Join-Path $EntryRoot 'runtime-entry.ps1'))
@@ -120,6 +113,19 @@ function Install-RuntimeEntry {
   $expected += @{ path = 'payload/runtime-payload.json'; size = $manifestSize; sha256 = $BoundManifest }
   foreach ($entry in $Manifest.files) {
     $expected += @{ path = ('payload/' + $entry.path); size = $entry.size; sha256 = $entry.sha256 }
+  }
+  # Validate the final digest directory before creating Programs or copying any payload.
+  # A .stage-GUID name is 25 characters shorter than the published SHA-256 name.
+  foreach ($entry in $expected) {
+    $destinationDirectory = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath((Join-Path $release $entry.path)))
+    if ($destinationDirectory.Length -gt 240) { throw 'WINDOWS_RUNTIME_ENTRY_INSTALL_PATH_TOO_LONG' }
+  }
+  if (-not [IO.Directory]::Exists($programs)) { [void][IO.Directory]::CreateDirectory($programs) }
+  [void][LaundryRuntimeEntryTrust]::DirectoryPath($programs)
+  if ([IO.Directory]::Exists($parent)) { [LaundryRuntimeEntryTrust]::AssertPrivateDirectory($parent) }
+  else {
+    [void][IO.Directory]::CreateDirectory($parent)
+    [LaundryRuntimeEntryTrust]::PrivateDirectory($parent)
   }
   if ([IO.Directory]::Exists($release)) {
     $stage = 'EXISTING'

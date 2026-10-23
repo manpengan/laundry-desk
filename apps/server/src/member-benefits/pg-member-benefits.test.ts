@@ -109,6 +109,7 @@ async function cleanupFixture(fixture: Fixture): Promise<void> {
       "member_punch_types",
       "member_points_policies",
       "member_tiers",
+      "member_payment_links",
       "member_ledger",
       "member_accounts",
       "shift_closings",

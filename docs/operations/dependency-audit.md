@@ -13,11 +13,23 @@ high、low，或未经复审的 moderate 都会失败；本地安全补丁必须
 production/dev 属性。路径、版本或可达性发生变化时，门禁同样失败，不能用宽泛的包名或
 severity 忽略规则放行。
 
-当前安全版本线为 Electron `41.10.6`、Electron-Vite `4.0.1`、根 Vite `7.3.7`、Web
+当前安全版本线为 Electron `42.11.9`、Electron-Vite `4.0.1`、根 Vite `7.3.7`、Web
 Vite `6.4.4`、React Router DOM `7.18.2` 与 PostCSS `8.5.23`。Electron-Vite 4/Vite 7
 要求 Node `>=22.12`，仓库 engine 与 CI 的 Node 22 最新补丁线必须满足该下限。传递依赖
 通过同主版本 override 固定到 `undici@6.28.1/7.29.1`、`fast-uri@3.1.8/4.1.5`、
 `brace-expansion@1.1.21/2.1.7/5.0.12`、`js-yaml@4.3.2`、`nanoid@3.3.18`。
+
+## 2026-10-23 全面审查依赖修复
+
+本次审查发现新增公告阻断依赖门禁。根与 Edge Agent 的 Electron 统一升级到 `42.11.9`，
+Server Fastify 升级到 `5.12.6`，所有 Vitest/coverage 同步到 `4.1.12`，同步锁文件与版本回归。
+官方公告依据包括 [Electron](https://github.com/electron/electron/security/advisories/GHSA-x562-297c-g43g)、
+[Vitest](https://github.com/vitest-dev/vitest/security/advisories/GHSA-qxg6-89mg-rqv8) 与
+[Fastify](https://github.com/fastify/fastify/security/advisories/GHSA-389g-gv7q-r4x8)。
+
+新鲜 `workspace:audit` 通过，未修复 high/critical 均为 0；registry 中两项 HIGH 仍由原有完整性及行为探针验证补丁。
+两个已复审 moderate（esbuild、uuid）例外保持精确匹配，未新增例外或降低失败级别。
+Electron 跨主版本需要新的 Windows 输入、安装与维护验收；不得继承旧版实机结果，也不将旧版 IME 特例扩到新引擎。
 
 ## 2026-10-21 Vite 内置 launch-editor 安全更新
 

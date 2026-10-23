@@ -44,6 +44,10 @@ function requirePermission(context: Parameters<CommandHandler>[0], permission: s
 
 function refusal(reason: MemberBenefitRejectReason): HandlerCommandError {
   switch (reason) {
+    case "coupon_payment_history":
+      return new HandlerCommandError(
+        createCommandError("INVARIANT_FAILED", { kind: "reason", reason }),
+      );
     case "account_not_found":
     case "definition_not_found":
     case "order_not_found":

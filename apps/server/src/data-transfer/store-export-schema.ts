@@ -65,6 +65,7 @@ export const STORE_EXPORT_SCHEMA = [
   "member_bonus_rules|id:uuid|org_id:uuid|min_topup_cents:integer|bonus_cents:integer|status:text|effective_from:timestamp with time zone|updated_at:timestamp with time zone|updated_by_staff_id:uuid|note:text",
   "member_ledger|id:uuid|org_id:uuid|store_id:uuid|account_id:uuid|kind:text|principal_delta_cents:bigint|bonus_delta_cents:bigint|order_id:uuid|ref_ledger_id:uuid|staff_id:uuid|at:timestamp with time zone|business_date:text|note:text|ledger_seq:bigint|tender:text|bonus_rule_id:uuid",
   "member_memberships|org_id:uuid|account_id:uuid|tier_id:uuid|tier_code:text|tier_name:text|tier_level:integer|valid_until:date|version:integer|updated_at:timestamp with time zone|updated_store_id:uuid|updated_by_staff_id:uuid|reason:text|tier_definition_version:integer|tier_discount_bps:integer",
+  "member_payment_links|org_id:uuid|store_id:uuid|payment_id:uuid|ledger_id:uuid",
   "member_points_policies|id:uuid|org_id:uuid|unit_cents:integer|points_per_unit:integer|valid_days:integer|status:text|version:integer|updated_at:timestamp with time zone|updated_by_staff_id:uuid|note:text",
   "member_punch_types|id:uuid|org_id:uuid|code:text|name:text|total_uses:integer|valid_days:integer|status:text|version:integer|updated_at:timestamp with time zone|updated_by_staff_id:uuid|note:text",
   "member_tiers|id:uuid|org_id:uuid|code:text|name:text|level:integer|status:text|version:integer|updated_at:timestamp with time zone|updated_by_staff_id:uuid|note:text|discount_bps:integer",

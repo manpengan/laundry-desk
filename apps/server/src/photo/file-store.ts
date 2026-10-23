@@ -42,6 +42,7 @@ export type StoredPhoto = Readonly<{
 }>;
 
 export type PhotoFile = StoredPhoto & Readonly<{ bytes: Buffer }>;
+export type PhotoWrite = StoredPhoto & Readonly<{ created: boolean }>;
 
 export type PhotoFileSweep = Readonly<{
   removed: number;
@@ -52,7 +53,7 @@ export type PhotoFileSweep = Readonly<{
 
 export type PhotoFileStore = Readonly<{
   rootPath: string;
-  write: (bytes: Buffer, declaredType: string, storageId?: string) => Promise<StoredPhoto>;
+  write: (bytes: Buffer, declaredType: string, storageId?: string) => Promise<PhotoWrite>;
   read: (metadata: StoredPhoto) => Promise<PhotoFile>;
   remove: (storageKey: string, expectedSha256: string) => Promise<boolean>;
   sweepOrphans: (referencedKeys: ReadonlySet<string>, nowMs?: number) => Promise<PhotoFileSweep>;
@@ -295,6 +296,7 @@ export async function createPhotoFileStore(
             );
           }
           return Object.freeze({
+            created: false,
             storage_key: storageKey,
             content_type: contentType,
             content_sha256: sha256(bytes),
@@ -316,6 +318,7 @@ export async function createPhotoFileStore(
           throw error;
         }
         return Object.freeze({
+          created: true,
           storage_key: storageKey,
           content_type: contentType,
           content_sha256: sha256(bytes),

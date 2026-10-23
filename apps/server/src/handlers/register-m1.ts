@@ -53,6 +53,7 @@ import { registerStatsQueryHandlers, type StatsHandlerDeps } from "../stats/hand
 import type { MemberRuntimeDeps } from "../member/handlers.js";
 import * as memberRegistration from "../member/registration.js";
 import type { MemberBenefitsRuntimeDeps } from "../member-benefits/types.js";
+import { withMemberBalanceCancellation } from "../member/order-cancellation.js";
 import { withMemberBenefitCouponCancellation } from "../member-benefits/order-cancellation.js";
 import { prepareNotificationDeliveryRisk } from "../notification/delivery-confirmation.js";
 import { processPendingActionStore } from "../pending-actions/process-store.js";
@@ -155,7 +156,7 @@ export function registerM1Handlers(
 
   if (deps.order !== undefined) {
     const orderWithCouponCancellation = withMemberBenefitCouponCancellation(
-      deps.order,
+      withMemberBalanceCancellation(deps.order, deps.member),
       deps.memberBenefits,
     );
     registerOrderCommandHandlers(registry, deps.order);

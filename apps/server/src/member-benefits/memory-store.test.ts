@@ -74,7 +74,23 @@ async function setup() {
   if (!otherAccount.ok) throw new Error(otherAccount.reason);
   const orderStore = createMemoryOrderStore();
   await orderStore.insertOrder(order(ORDER_ID, CUSTOMER_ID, "closed", 3_000), []);
-  await orderStore.insertOrder(order(COUPON_ORDER_ID, CUSTOMER_ID, "open", 0), []);
+  await orderStore.insertOrder(order(COUPON_ORDER_ID, CUSTOMER_ID, "open", 0), [
+    {
+      garment_id: newId(),
+      order_id: COUPON_ORDER_ID,
+      org_id: ORG_ID,
+      store_id: STORE_ID,
+      line_index: 0,
+      seq: 1,
+      barcode: "COUPON-GARMENT",
+      service_code: "wash",
+      category_code: "shirt",
+      unit_price_cents: 3_000,
+      color: null,
+      brand: null,
+      status: "received",
+    },
+  ]);
   return Object.freeze({
     memberStore,
     orderStore,
@@ -380,3 +396,116 @@ describe("ADR-41 memory member benefits", () => {
     );
   });
 });
+
+for (const paid of [1_000, 3_000]) {
+  it(`refuses coupons after ${paid} cents are refunded without damaging the ledger`, async () => {
+    const runtime = await setup();
+    const definition = await runtime.store.upsertDefinition({
+      staff_id: STAFF_ID,
+      at: evidence.at,
+      definition: {
+        kind: "coupon_type",
+        expected_version: 0,
+        code: "refund",
+        name: "退款回归",
+        discount_cents: 500,
+        min_order_cents: 1_000,
+        valid_days: 30,
+        status: "active",
+      },
+    });
+    assert.ok(definition.ok);
+    assert.ok(definition.value.definition.kind === "coupon_type");
+    const grant = await runtime.store.grantAsset({
+      ...evidence,
+      asset_kind: "coupon",
+      account_id: runtime.accountId,
+      definition_id: definition.value.definition.definition_id,
+      reason: "合成回归",
+    });
+    assert.ok(grant.ok);
+    const assetId = grant.value.benefits.coupons[0]!.asset_id;
+    const payment = await runtime.orderStore.appendPayment({
+      ...evidence,
+      org_id: ORG_ID,
+      order_id: COUPON_ORDER_ID,
+      amount_cents: paid,
+      method: "cash",
+      kind: "pay",
+      note: null,
+    });
+    assert.ok(payment);
+    assert.ok(
+      await runtime.orderStore.appendRefund({
+        ...evidence,
+        org_id: ORG_ID,
+        order_id: COUPON_ORDER_ID,
+        amount_cents: paid,
+        expected_method: "cash",
+        ref_payment_id: payment.payment.payment_id,
+        reason: "全额退回本次收款",
+      }),
+    );
+    const before = await runtime.orderStore.getOrder(ORG_ID, STORE_ID, COUPON_ORDER_ID);
+    const ledger = await runtime.orderStore.listPayments(ORG_ID, STORE_ID, COUPON_ORDER_ID);
+    assert.deepEqual(
+      await runtime.store.consumeCoupon({
+        ...evidence,
+        asset_id: assetId,
+        order_id: COUPON_ORDER_ID,
+      }),
+      { ok: false, reason: "coupon_payment_history" },
+    );
+    assert.deepEqual(await runtime.orderStore.getOrder(ORG_ID, STORE_ID, COUPON_ORDER_ID), before);
+    assert.deepEqual(
+      await runtime.orderStore.listPayments(ORG_ID, STORE_ID, COUPON_ORDER_ID),
+      ledger,
+    );
+    // The atomic write guard also refuses callers that bypass the benefits pre-check.
+    assert.equal(
+      await runtime.orderStore.applyFixedCouponDiscount({
+        ...evidence,
+        org_id: ORG_ID,
+        order_id: COUPON_ORDER_ID,
+        customer_id: CUSTOMER_ID,
+        discount_cents: 500,
+        min_order_cents: 1_000,
+      }),
+      null,
+    );
+    assert.ok(
+      await runtime.orderStore.appendPayment({
+        ...evidence,
+        org_id: ORG_ID,
+        order_id: COUPON_ORDER_ID,
+        amount_cents: 3_000,
+        method: "cash",
+        kind: "pay",
+        note: null,
+      }),
+    );
+    assert.ok(
+      await runtime.orderStore.cancelOpenOrder(
+        ORG_ID,
+        STORE_ID,
+        COUPON_ORDER_ID,
+        "退款后仍可撤单",
+        STAFF_ID,
+        evidence.at,
+        evidence.business_date,
+      ),
+    );
+    // Refusal did not spend the coupon: a different, never-paid order can use it.
+    await runtime.orderStore.insertOrder(order(REUSED_COUPON_ORDER_ID, CUSTOMER_ID, "open", 0), []);
+    assert.equal(
+      (
+        await runtime.store.consumeCoupon({
+          ...evidence,
+          asset_id: assetId,
+          order_id: REUSED_COUPON_ORDER_ID,
+        })
+      ).ok,
+      true,
+    );
+  });
+}

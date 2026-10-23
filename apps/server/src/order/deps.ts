@@ -2,6 +2,7 @@
  * Order handler dependency bag (shared by command/query handlers).
  */
 
+import type { MemberCancellationInput } from "../member/cancellation-types.js";
 import type { CustomerStore } from "../customer/types.js";
 import type { CustomerOrderPolicyResolver } from "../customer-profile/order-policy.js";
 import type { CatalogStore } from "../catalog/memory-catalog.js";
@@ -30,6 +31,7 @@ export type OrderHandlerDeps = Readonly<{
   /** PG transaction-scoped serialization shared with shift.close. */
   lockBusinessDay?: BusinessDayLockPort;
   /** Append-only coupon return composed into order.cancel before persistence. */
+  balanceCancellation?: (input: MemberCancellationInput) => Promise<void>;
   couponCancellation?: (
     client: SqlClient,
     tenant: TenantContext,

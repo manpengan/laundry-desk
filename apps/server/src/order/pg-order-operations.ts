@@ -1,11 +1,5 @@
 /** PostgreSQL order mutations that also maintain the append-only payment ledger. */
-import {
-  buildPayPayment,
-  buildReversalPayment,
-  planCancel,
-  planCollectPayment,
-  planRepayPayment,
-} from "@laundry/domain";
+import { buildPayPayment, planCollectPayment, planRepayPayment } from "@laundry/domain";
 
 import type { SqlClient } from "../db/types.js";
 import { assertPickupPlanMatchesCurrentRows, markGarmentsPickedUp } from "./pg-garment-pickup.js";
@@ -310,79 +304,5 @@ export async function appendPaymentTxn(
       updated_at: input.at,
     }),
     payment: plan.payment,
-  });
-}
-
-export async function cancelOrderTxn(
-  client: SqlClient,
-  orgId: string,
-  storeId: string,
-  orderId: string,
-  reason: string,
-  staffId: string,
-  at: number,
-  businessDate: string,
-  newId: () => string,
-  beforeCommit?: () => Promise<void>,
-): Promise<OrderRecord | null> {
-  const order = await loadOrder(client, orgId, storeId, orderId, true);
-  if (order === null || order.status !== "open") return null;
-  const garments = await loadGarments(client, orgId, storeId, orderId, true);
-  if (
-    garments.some(
-      (garment) =>
-        !isGarmentAvailableAtStore(garment) ||
-        garment.status === "picked_up" ||
-        garment.status === "delivered",
-    )
-  ) {
-    return null;
-  }
-  const payments = await listPaymentRows(client, orgId, storeId, orderId);
-  const plan = planCancel({
-    status: order.status,
-    reason,
-    payable_cents: order.payable_cents,
-    payments,
-  });
-  if (!plan.ok) return null;
-  const reversals: LedgerPaymentRow[] = [];
-  for (const target of plan.reversal_targets) {
-    const source = payments.find((payment) => payment.payment_id === target.payment_id);
-    if (source === undefined) return null;
-    reversals.push(
-      Object.freeze({
-        ...buildReversalPayment({
-          payment_id: newId(),
-          org_id: orgId,
-          store_id: storeId,
-          order_id: orderId,
-          amount_cents: target.amount_cents,
-          staff_id: staffId,
-          at,
-          method: source.method,
-          ref_payment_id: source.payment_id,
-          reason: plan.reason,
-        }),
-        business_date: businessDate,
-      }),
-    );
-  }
-  await beforeCommit?.();
-  for (const reversal of reversals) {
-    await insertLedgerPayment(client, reversal, businessDate);
-  }
-  await client.query(
-    `UPDATE orders
-     SET status = 'cancelled', paid_cents = 0, balance_cents = 0, updated_at = $4
-     WHERE org_id = $1::uuid AND store_id = $2::uuid AND id = $3::uuid`,
-    [orgId, storeId, orderId, epochToDate(at)],
-  );
-  return Object.freeze({
-    ...order,
-    status: "cancelled",
-    paid_cents: 0,
-    balance_cents: 0,
-    updated_at: at,
   });
 }

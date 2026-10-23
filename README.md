@@ -55,7 +55,7 @@ Fastify + Policy + Audit + PostgreSQL 16 / FORCE RLS
 
 ## 技术栈
 
-Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 · PostgreSQL 16 · Drizzle · React 19 · Vite · Electron 41 · Vitest · Playwright
+Node.js 22 · pnpm 11 · Turborepo · TypeScript strict · Zod 4 · Fastify 5 · PostgreSQL 16 · Drizzle · React 19 · Vite · Electron 42 · Vitest · Playwright
 
 ## 当前交付顺序
 

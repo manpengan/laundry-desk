@@ -34,7 +34,8 @@ export type LedgerDbRow = Readonly<{
 }>;
 
 export type InsertLedgerValues = Readonly<{
-  kind: "topup" | "pay" | "refund" | "bonus_forfeit";
+  kind: "topup" | "pay" | "refund" | "bonus_forfeit" | "reversal";
+  refLedgerId?: string;
   principal: number;
   bonus: number;
   orderId: string | null;
@@ -181,11 +182,11 @@ export async function insertMemberLedger(
     `INSERT INTO member_ledger (
        id, org_id, store_id, account_id, kind,
        principal_delta_cents, bonus_delta_cents, order_id, tender, bonus_rule_id,
-       staff_id, at, business_date, note
+       staff_id, at, business_date, note, ref_ledger_id
      ) VALUES (
        $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5,
        $6::bigint, $7::bigint, $8::uuid, $9, $10::uuid,
-       $11::uuid, to_timestamp($12), $13, $14
+       $11::uuid, to_timestamp($12), $13, $14, $15::uuid
      )`,
     [
       ledgerId,
@@ -202,6 +203,7 @@ export async function insertMemberLedger(
       values.at,
       values.businessDate,
       values.note,
+      values.refLedgerId ?? null,
     ],
   );
   return Object.freeze({

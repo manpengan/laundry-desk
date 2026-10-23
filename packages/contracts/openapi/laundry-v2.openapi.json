@@ -3404,7 +3404,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -5046,7 +5050,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -6688,7 +6696,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -8330,7 +8342,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -9972,7 +9988,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -11614,7 +11634,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -13256,7 +13280,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -14898,7 +14926,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -16540,7 +16572,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -18182,7 +18218,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -19824,7 +19864,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -21466,7 +21510,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -23108,7 +23156,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -24750,7 +24802,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -26392,7 +26448,11 @@
                           "retry_later",
                           "idempotency_conflict",
                           "payment_pending",
-                          "channel_refund_required"
+                          "channel_refund_required",
+                          "member_account_closed",
+                          "member_payment_unlinked",
+                          "coupon_payment_history",
+                          "future_business_date"
                         ],
                         "type": "string"
                       }
@@ -28095,7 +28155,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -29737,7 +29801,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -31379,7 +31447,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -33021,7 +33093,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -34663,7 +34739,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -36305,7 +36385,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -37947,7 +38031,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -39589,7 +39677,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -41231,7 +41323,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -42873,7 +42969,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -44515,7 +44615,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -46157,7 +46261,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -47799,7 +47907,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -49441,7 +49553,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -51083,7 +51199,11 @@
                               "retry_later",
                               "idempotency_conflict",
                               "payment_pending",
-                              "channel_refund_required"
+                              "channel_refund_required",
+                              "member_account_closed",
+                              "member_payment_unlinked",
+                              "coupon_payment_history",
+                              "future_business_date"
                             ],
                             "type": "string"
                           }
@@ -52909,7 +53029,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -54551,7 +54675,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -56193,7 +56321,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -57835,7 +57967,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -59477,7 +59613,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -61119,7 +61259,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -62761,7 +62905,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -64403,7 +64551,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -66045,7 +66197,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -67687,7 +67843,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -69329,7 +69489,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -70971,7 +71135,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -72613,7 +72781,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -74255,7 +74427,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }
@@ -75897,7 +76073,11 @@
                                   "retry_later",
                                   "idempotency_conflict",
                                   "payment_pending",
-                                  "channel_refund_required"
+                                  "channel_refund_required",
+                                  "member_account_closed",
+                                  "member_payment_unlinked",
+                                  "coupon_payment_history",
+                                  "future_business_date"
                                 ],
                                 "type": "string"
                               }

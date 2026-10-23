@@ -185,17 +185,31 @@ function cancelHandler(deps: OrderHandlerDeps): CommandHandler {
       ctx.actor.staffId,
       now,
       businessDate,
-      deps.couponCancellation === undefined
-        ? undefined
-        : async () => {
-            await deps.couponCancellation!(ctx.client, ctx.tenant, {
-              order_id: orderId,
-              store_id: ctx.tenant.storeId,
-              staff_id: ctx.actor.staffId,
-              at: now,
-              reason,
-            });
-          },
+      async (reversals) => {
+        if (
+          ctx.client.memoryTransaction === true &&
+          deps.balanceCancellation === undefined &&
+          reversals.some((row) => row.method === "balance")
+        ) {
+          throw new HandlerCommandError(createCommandError("RESOURCE_UNAVAILABLE"));
+        }
+        await deps.couponCancellation?.(ctx.client, ctx.tenant, {
+          order_id: orderId,
+          store_id: ctx.tenant.storeId,
+          staff_id: ctx.actor.staffId,
+          at: now,
+          reason,
+        });
+        await deps.balanceCancellation?.({
+          order_id: orderId,
+          store_id: ctx.tenant.storeId,
+          staff_id: ctx.actor.staffId,
+          at: now,
+          business_date: businessDate,
+          reason,
+          reversals,
+        });
+      },
     );
     if (order === null) throw new HandlerCommandError(createCommandError("VALIDATION_FAILED"));
     return Object.freeze({

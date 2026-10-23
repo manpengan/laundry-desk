@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import {
+  linkPgMemberPayment,
+  lockMemberOrder,
+  reversePgMemberOrderPayments,
+} from "./pg-order-cancellation.js";
 
 import { allocateSpend } from "./balance.js";
 import { matchBonusRule } from "./bonus.js";
@@ -60,6 +65,8 @@ export function createPgMemberStore(
   };
 
   return Object.freeze({
+    linkPayment: (input) => linkPgMemberPayment(client, tenant, input),
+    reverseOrderPayments: (input) => reversePgMemberOrderPayments(client, tenant, input, newId),
     openAccount: async (input: MemberOpenInput): Promise<MemberOutcome<MemberOpenResult>> => {
       // Stabilise the customer identity before looking for or inserting an
       // account. customer.merge takes FOR UPDATE on this row, so either the
@@ -201,6 +208,7 @@ export function createPgMemberStore(
     },
 
     spend: async (input: MemberSpendInput): Promise<MemberOutcome<MemberLedgerAppendResult>> => {
+      await lockMemberOrder(client, tenant, input.order_id);
       const locked = await lockAccount(input.account_id);
       if (!locked.ok) return locked as MemberOutcome<MemberLedgerAppendResult>;
       const orderResult = await client.query<Readonly<{ customer_id: string | null }>>(

@@ -47,6 +47,11 @@ export async function clearWorkdayFixture(pool: Pool): Promise<void> {
     const orderIds = `SELECT id FROM orders
       WHERE org_id = $1::uuid AND store_id = $2::uuid AND business_date = $3`;
     await client.query(
+      `DELETE FROM member_payment_links WHERE org_id = $1::uuid AND store_id = $2::uuid
+       AND payment_id IN (SELECT id FROM payments WHERE order_id IN (${orderIds}))`,
+      scope,
+    );
+    await client.query(
       `DELETE FROM member_ledger
         WHERE org_id = $1::uuid AND account_id IN (
           SELECT id FROM member_accounts WHERE org_id = $1::uuid AND customer_id IN (

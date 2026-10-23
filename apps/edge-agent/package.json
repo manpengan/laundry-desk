@@ -48,7 +48,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "electron": "41.10.6",
+    "electron": "42.11.9",
     "proper-lockfile": "4.1.2"
   }
 }

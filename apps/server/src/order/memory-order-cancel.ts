@@ -57,3 +57,15 @@ export function planMemoryOrderCancellation(input: {
     reversals: Object.freeze(reversals),
   });
 }
+
+export function requireBalanceCancellationAdapter(
+  cancellation: MemoryOrderCancellation,
+  beforeCommit: ((reversals: readonly LedgerPaymentRow[]) => Promise<void>) | undefined,
+): void {
+  if (
+    beforeCommit === undefined &&
+    cancellation.reversals.some((row) => row.method === "balance")
+  ) {
+    throw new Error("Balance cancellation requires the linked member adapter");
+  }
+}

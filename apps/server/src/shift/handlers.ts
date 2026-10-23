@@ -3,7 +3,7 @@
  */
 
 import { BusinessDateSchema, createCommandError } from "@laundry/contracts";
-import { businessDayStart } from "@laundry/domain";
+import { businessDayAt, businessDayStart } from "@laundry/domain";
 
 import type { CommandHandler, HandlerOutcome } from "../bus/types.js";
 import { HandlerCommandError } from "../bus/types.js";
@@ -86,6 +86,19 @@ function closeHandler(deps: ShiftHandlerDeps): CommandHandler {
     const signatureName = requireSignatureName(input.signature_name);
     const note = typeof input.note === "string" ? input.note : undefined;
     const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
+    const currentDay = businessDayAt(
+      new Date(now * 1_000),
+      deps.timeZone ?? "UTC",
+      deps.rolloverHour ?? 0,
+    ).business_date;
+    if (businessDate > currentDay) {
+      throw new HandlerCommandError(
+        createCommandError("VALIDATION_FAILED", {
+          kind: "reason",
+          reason: "future_business_date",
+        }),
+      );
+    }
 
     await deps.lockBusinessDay?.(ctx.client, ctx.tenant, businessDate);
     const summary = await deps.stats.daySummary({

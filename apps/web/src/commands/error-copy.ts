@@ -30,6 +30,12 @@ const REASON_COPY: Readonly<Record<string, string>> = Object.freeze({
   payment_pending:
     "该订单或会员账户有尚未结束的扫码收款或退款，请先在取衣页的“扫码收款”里查询结果或关闭收款",
   channel_refund_required: "这笔钱是微信或支付宝扫码收的，请使用原路退款",
+  member_account_closed:
+    "原付款会员账户已关闭，无法原路退回储值。请联系店长核对退卡与订单结算，撤单尚未执行",
+  member_payment_unlinked:
+    "无法核实原储值付款与会员分录的对应关系。请联系店长核对会员账本，撤单尚未执行",
+  coupon_payment_history: "该订单已有收退款记录，不能再使用优惠券；原订单和优惠券均未改变",
+  future_business_date: "不能提前交班，请选择今天或更早的门店营业日",
   retry_later: "暂时无法完成，请稍后重试",
   idempotency_conflict: "同一次提交的内容前后不一致，请刷新后重试",
 });

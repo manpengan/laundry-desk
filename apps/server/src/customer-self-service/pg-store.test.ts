@@ -285,6 +285,7 @@ async function cleanup(client: PgPoolClient): Promise<void> {
       "member_points_policies",
       "member_memberships",
       "member_tiers",
+      "member_payment_links",
       "member_ledger",
       "member_accounts",
       "customer_addresses",

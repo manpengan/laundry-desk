@@ -1,5 +1,7 @@
 # 进度
 
+> 2026-10-23 修订：本记录是旧候选的历史证据。全面审查后账务、照片、交班、Runtime 配对及 Electron 依赖已修改，不能用于证明新包通过。当前验证见[整改进度](../audit-remediation-20261023/progress.md)，技术决策见[ADR-102](../../adr/2026-10-23-adr-102-audit-remediation.md)。
+
 - 2026-10-18：核对远端 main 为 84cf3ce7，PR #249 已合并且 CI 全绿。PR #250 仅更新验收记录、CI 全绿待并。
 - 新建独立工作区，保留 laundry-desk-wt-ui 的未提交工作台改动。
 - 原候选 pilot6 b13eae13 / Runtime 0.1.23；离线错误码、经营读取/复核、升级后启动需继续。
