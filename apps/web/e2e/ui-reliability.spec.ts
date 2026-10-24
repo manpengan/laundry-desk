@@ -70,6 +70,8 @@ test("retained form, committed-response loss, replay, and identical new cash ord
   await page.getByRole("button", { name: "切换员工" }).click();
   await expect(page.getByRole("dialog", { name: "保护当前开单内容" })).toBeVisible();
   await page.getByRole("button", { name: "保留，返回操作" }).click();
+  await expect(page.getByRole("dialog", { name: "保护当前开单内容" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "确认开单", exact: true })).toBeEnabled();
 
   const keys: string[] = [];
   let loseResponse = true;
