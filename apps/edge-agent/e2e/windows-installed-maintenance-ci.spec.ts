@@ -102,8 +102,19 @@ test("installed paired Counter reads backup health and opens a maintenance windo
     else await navigation.getByRole("button", { name: "备份与恢复", exact: true }).click();
     const panel = page.getByRole("region", { name: "备份与恢复", exact: true });
     await panel.getByRole("button", { name: "刷新备份状态", exact: true }).click();
-    await expect(panel.getByText("状态核对时间", { exact: true })).toBeVisible({ timeout: 40_000 });
-    await expect(panel.locator('[role="alert"]')).toHaveCount(0);
+    // Screenshots stay off in this gate; on failure report the panel's own visible copy instead.
+    const panelText = async () => (await panel.innerText()).replace(/\s+/gu, " ").slice(0, 800);
+    const checkedAt = panel.getByText("状态核对时间", { exact: true });
+    const alert = panel.locator('[role="alert"]');
+    try {
+      await expect(checkedAt.or(alert).first()).toBeVisible({ timeout: 40_000 });
+    } catch (error) {
+      throw new Error(`COUNTER_BACKUP_HEALTH_NOT_SHOWN ${await panelText()}`, { cause: error });
+    }
+    if ((await alert.count()) > 0) {
+      throw new Error(`COUNTER_BACKUP_HEALTH_ALERT ${await panelText()}`);
+    }
+    await expect(checkedAt).toBeVisible();
     await panel.getByRole("button", { name: "打开维护程序", exact: true }).click();
     await expect(
       panel.getByText("维护窗口已打开，请在窗口中确认操作。完成后回到此处刷新状态。", {

@@ -154,7 +154,7 @@
     "recharts": "^3.8.1",
     "tailwind-merge": "^2.3.0",
     "tencentcloud-sdk-nodejs-sms": "^4.0.0",
-    "zod": "^4.3.6",
+    "zod": "^4.6.7",
     "zustand": "^4.5.0"
   },
   "devDependencies": {
@@ -176,7 +176,7 @@
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.0",
     "drizzle-kit": "^0.31.10",
-    "electron": "42.11.9",
+    "electron": "42.11.18",
     "electron-builder": "26.15.3",
     "electron-vite": "4.0.1",
     "eslint": "^8.57.0",
