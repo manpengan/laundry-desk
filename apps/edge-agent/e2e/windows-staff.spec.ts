@@ -23,7 +23,6 @@ import {
   expectIdentity,
   expectSecretCleared,
   loginStaff,
-  openSettings,
   resetStaffCredentials,
   switchStaff,
   type StaffAccount,
@@ -165,13 +164,12 @@ test("installed staff can open receive, cannot list staff or open maintenance, a
         await expect(
           page.getByRole("heading", { name: "开单", level: 1, exact: true }),
         ).toBeVisible();
-        await openSettings(page, "backup");
-        const panel = page.getByRole("region", { name: "备份与恢复", exact: true });
-        await expect(
-          panel.getByRole("button", { name: "刷新备份状态", exact: true }),
-        ).toBeVisible();
+        for (const id of ["settings", "stats"]) {
+          await expect(page.locator(`[data-nav-id="${id}"]`)).toHaveCount(0);
+        }
+        await expect(page.getByRole("region", { name: "备份与恢复", exact: true })).toHaveCount(0);
         for (const name of ["打开维护程序", "创建本机备份", "恢复演练"]) {
-          await expect(panel.getByRole("button", { name, exact: true })).toHaveCount(0);
+          await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
         }
         expect(await staffAccessResult(page)).toBe("PERMISSION_DENIED");
         await expectMaintenanceDenied(page);
@@ -222,6 +220,8 @@ test("installed staff can open receive, cannot list staff or open maintenance, a
         staff_without_privacy_grant: true,
         admin_staff_list_allowed: true,
         staff_receive_screen_visible: true,
+        staff_settings_navigation_hidden: true,
+        staff_stats_navigation_hidden: true,
         staff_maintenance_controls_hidden: true,
         staff_access_list_permission_denied: true,
         staff_maintenance_open_authentication_failed: true,
