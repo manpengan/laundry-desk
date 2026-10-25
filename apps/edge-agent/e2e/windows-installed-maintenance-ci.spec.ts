@@ -1,64 +1,21 @@
-import { execFile } from "node:child_process";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { promisify } from "node:util";
 import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
 import { fillWindowsCredential, loadWindowsRuntimeCredentials } from "./windows-credentials.mjs";
 
-const execute = promisify(execFile);
-const TITLE = "Laundry Desk V2 · 本地服务安装与维护";
-type NativeWindow = Readonly<{ id: number; started: string }>;
-async function maintenanceWindows(close?: NativeWindow): Promise<readonly NativeWindow[]> {
-  const result = await execute(
-    join(process.env.SystemRoot!, "System32/WindowsPowerShell/v1.0/powershell.exe"),
-    [
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      `
-      $ErrorActionPreference='Stop'
-      $items=@(Get-Process -Name powershell -ErrorAction SilentlyContinue | Where-Object { $_.SessionId -eq (Get-Process -Id $PID).SessionId -and $_.MainWindowTitle -ceq $env:LAUNDRY_TEST_WINDOW_TITLE })
-      if($env:LAUNDRY_TEST_CLOSE_ID){
-        $target=@($items | Where-Object { $_.Id.ToString() -ceq $env:LAUNDRY_TEST_CLOSE_ID -and $_.StartTime.ToUniversalTime().Ticks.ToString() -ceq $env:LAUNDRY_TEST_CLOSE_STARTED })
-        if($target.Count -ne 1 -or -not $target[0].CloseMainWindow() -or -not $target[0].WaitForExit(10000)){throw 'COUNTER_MAINTENANCE_CLOSE_FAILED'}
-        $items=@()
-      }
-      ConvertTo-Json -Compress -InputObject @($items | ForEach-Object { @{id=$_.Id; started=$_.StartTime.ToUniversalTime().Ticks.ToString()} })
-    `,
-    ],
-    {
-      env: {
-        ...process.env,
-        LAUNDRY_TEST_WINDOW_TITLE: TITLE,
-        LAUNDRY_TEST_CLOSE_ID: close ? String(close.id) : "",
-        LAUNDRY_TEST_CLOSE_STARTED: close?.started ?? "",
-      },
-      windowsHide: true,
-      timeout: 20_000,
-      maxBuffer: 8192,
-    },
-  );
-  const value: unknown = JSON.parse(result.stdout);
-  if (
-    !Array.isArray(value) ||
-    value.some(
-      (item: unknown) =>
-        typeof item !== "object" ||
-        item === null ||
-        !("id" in item) ||
-        !Number.isSafeInteger(item.id) ||
-        !("started" in item) ||
-        typeof item.started !== "string",
-    )
-  )
-    throw new Error("COUNTER_MAINTENANCE_WINDOW_RESULT_INVALID");
-  return value as NativeWindow[];
-}
+import {
+  closeMaintenanceWindow,
+  maintenanceWindows,
+  type NativeWindow,
+} from "./windows-maintenance-native.js";
+import "./windows-maintenance-close-regression.js";
 
 // This gate uses an installed native PostgreSQL Runtime and the actual Counter IPC path.
 // It does not perform physical-store/operator acceptance or mutate non-CI installations.
 test("installed paired Counter reads backup health and opens a maintenance window that survives Counter exit", async () => {
+  // Two separately verified health reads can each consume the bounded 90-second native budget.
+  test.setTimeout(240_000);
   expect(process.platform).toBe("win32");
   expect(process.env.GITHUB_ACTIONS).toBe("true");
   expect(process.env.LAUNDRY_RUNTIME_PAIR_INSTALLED).toBe("true");
@@ -71,6 +28,7 @@ test("installed paired Counter reads backup health and opens a maintenance windo
   const before = await maintenanceWindows();
   let application: ElectronApplication | null = null;
   let ownedWindow: NativeWindow | undefined;
+  const failures: unknown[] = [];
   const env = Object.fromEntries(
     [
       "PATH",
@@ -107,7 +65,7 @@ test("installed paired Counter reads backup health and opens a maintenance windo
     const checkedAt = panel.getByText("状态核对时间", { exact: true });
     const alert = panel.locator('[role="alert"]');
     try {
-      await expect(checkedAt.or(alert).first()).toBeVisible({ timeout: 40_000 });
+      await expect(checkedAt.or(alert).first()).toBeVisible({ timeout: 100_000 });
     } catch (error) {
       throw new Error(`COUNTER_BACKUP_HEALTH_NOT_SHOWN ${await panelText()}`, { cause: error });
     }
@@ -131,27 +89,49 @@ test("installed paired Counter reads backup health and opens a maintenance windo
     for (let check = 0; check < 3; check++) {
       expect(await maintenanceWindows()).toContainEqual(ownedWindow);
     }
-    await writeFile(
-      join(process.env.RUNNER_TEMP!, `counter-maintenance-${profile}.json`),
-      JSON.stringify(
-        {
-          source_git_sha: process.env.GITHUB_SHA,
-          runtime_manifest_sha256: process.env.LAUNDRY_MANIFEST_SHA256,
-          profile,
-          assurance: "development_only",
-          environment: "CI_only_not_target_host_acceptance",
-          backup_health_read_from_installed_counter: true,
-          native_maintenance_window_opened: true,
-          maintenance_survived_counter_exit: true,
-        },
-        null,
-        2,
-      ) + "\n",
-      { flag: "wx" },
-    );
+  } catch (error) {
+    failures.push(error);
   } finally {
-    await application?.close();
-    if (ownedWindow) await maintenanceWindows(ownedWindow);
-    await rm(userData, { recursive: true, force: true });
+    try {
+      await application?.close();
+    } catch (error) {
+      failures.push(error);
+    }
+    if (ownedWindow) {
+      try {
+        await closeMaintenanceWindow(ownedWindow);
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    try {
+      await rm(userData, { recursive: true, force: true });
+    } catch (error) {
+      failures.push(error);
+    }
   }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(failures, "COUNTER_MAINTENANCE_ACCEPTANCE_AND_CLEANUP_FAILED", {
+      cause: failures[0],
+    });
+  await writeFile(
+    join(process.env.RUNNER_TEMP!, `counter-maintenance-${profile}.json`),
+    JSON.stringify(
+      {
+        source_git_sha: process.env.GITHUB_SHA,
+        runtime_manifest_sha256: process.env.LAUNDRY_MANIFEST_SHA256,
+        profile,
+        assurance: "development_only",
+        environment: "CI_only_not_target_host_acceptance",
+        backup_health_read_from_installed_counter: true,
+        native_maintenance_window_opened: true,
+        maintenance_survived_counter_exit: true,
+        native_maintenance_window_closed: true,
+      },
+      null,
+      2,
+    ) + "\n",
+    { flag: "wx" },
+  );
 });

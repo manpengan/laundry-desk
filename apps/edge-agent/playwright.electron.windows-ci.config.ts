@@ -5,7 +5,7 @@ export default defineConfig({
   testDir: "./e2e",
   testMatch: ["windows-installed-ci.spec.ts", "windows-installed-maintenance-ci.spec.ts"],
   timeout: 120_000,
-  globalTimeout: 180_000,
+  globalTimeout: 300_000,
   workers: 1,
   retries: 0,
   forbidOnly: Boolean(process.env.CI),
