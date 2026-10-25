@@ -1,6 +1,7 @@
 appId: com.laundry-desk.v2
 productName: laundry-desk V2
 asar: true
+beforePack: ./scripts/packaged-imports.mjs
 afterPack: ./scripts/prune-packaged-spa.mjs
 forceCodeSigning: true
 
@@ -31,6 +32,7 @@ files:
   - dist/desktop/maintenance-operation.js
   - dist/maintenance/runtime-binding.js
   - dist/maintenance/windows-port.js
+  - dist/maintenance/windows-response.js
   - dist/maintenance/windows-script.js
   - dist/desktop/scale-operation.js
   - dist/scale/protocol.js

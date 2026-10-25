@@ -1,7 +1,13 @@
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
+import {
+  _electron as electron,
+  expect,
+  test,
+  type ElectronApplication,
+  type Page,
+} from "@playwright/test";
 import { fillWindowsCredential, loadWindowsRuntimeCredentials } from "./windows-credentials.mjs";
 
 import {
@@ -10,6 +16,11 @@ import {
   type NativeWindow,
 } from "./windows-maintenance-native.js";
 import "./windows-maintenance-close-regression.js";
+import {
+  MaintenanceDiagnosticError,
+  maintenanceFailure,
+  observeMaintenancePage,
+} from "./windows-maintenance-diagnostics.mjs";
 
 // This gate uses an installed native PostgreSQL Runtime and the actual Counter IPC path.
 // It does not perform physical-store/operator acceptance or mutate non-CI installations.
@@ -28,6 +39,8 @@ test("installed paired Counter reads backup health and opens a maintenance windo
   const before = await maintenanceWindows();
   let application: ElectronApplication | null = null;
   let ownedWindow: NativeWindow | undefined;
+  let observedPage: Page | undefined;
+  let observation: ReturnType<typeof observeMaintenancePage> | undefined;
   const failures: unknown[] = [];
   const env = Object.fromEntries(
     [
@@ -48,6 +61,8 @@ test("installed paired Counter reads backup health and opens a maintenance windo
       env,
     });
     const page = await application.firstWindow();
+    observedPage = page;
+    observation = observeMaintenancePage(page);
     await expect(page.locator('[data-page="login"]')).toBeVisible({ timeout: 30_000 });
     await fillWindowsCredential(page.locator('input[name="username"]'), credentials.adminUsername);
     await fillWindowsCredential(page.locator('input[name="password"]'), credentials.adminPassword);
@@ -60,17 +75,20 @@ test("installed paired Counter reads backup health and opens a maintenance windo
     else await navigation.getByRole("button", { name: "备份与恢复", exact: true }).click();
     const panel = page.getByRole("region", { name: "备份与恢复", exact: true });
     await panel.getByRole("button", { name: "刷新备份状态", exact: true }).click();
-    // Screenshots stay off in this gate; on failure report the panel's own visible copy instead.
-    const panelText = async () => (await panel.innerText()).replace(/\s+/gu, " ").slice(0, 800);
     const checkedAt = panel.getByText("状态核对时间", { exact: true });
     const alert = panel.locator('[role="alert"]');
     try {
       await expect(checkedAt.or(alert).first()).toBeVisible({ timeout: 100_000 });
     } catch (error) {
-      throw new Error(`COUNTER_BACKUP_HEALTH_NOT_SHOWN ${await panelText()}`, { cause: error });
+      throw await maintenanceFailure("COUNTER_BACKUP_HEALTH_NOT_SHOWN", error, page, observation);
     }
     if ((await alert.count()) > 0) {
-      throw new Error(`COUNTER_BACKUP_HEALTH_ALERT ${await panelText()}`);
+      throw await maintenanceFailure(
+        "COUNTER_BACKUP_HEALTH_ALERT",
+        new Error("COUNTER_BACKUP_HEALTH_ALERT"),
+        page,
+        observation,
+      );
     }
     await expect(checkedAt).toBeVisible();
     await panel.getByRole("button", { name: "打开维护程序", exact: true }).click();
@@ -90,8 +108,22 @@ test("installed paired Counter reads backup health and opens a maintenance windo
       expect(await maintenanceWindows()).toContainEqual(ownedWindow);
     }
   } catch (error) {
-    failures.push(error);
+    failures.push(
+      observedPage && !(error instanceof MaintenanceDiagnosticError)
+        ? await maintenanceFailure(
+            "COUNTER_MAINTENANCE_FLOW_FAILED",
+            error,
+            observedPage,
+            observation,
+          )
+        : error,
+    );
   } finally {
+    try {
+      observation?.dispose();
+    } catch (error) {
+      failures.push(error);
+    }
     try {
       await application?.close();
     } catch (error) {
