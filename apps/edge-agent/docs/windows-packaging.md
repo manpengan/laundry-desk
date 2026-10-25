@@ -28,3 +28,16 @@ Electron 42 的 npm 包提供 `install-electron` 命令，但没有 postinstall�
 Windows CI 在打包前运行准备器的缺失二进制/失败退出回归，以及真实 ASAR 的 Runtime 配对回归。
 ASAR 内部提取路径使用宿主平台分隔符，避免 Windows 把存在的 `runtime-binding.js` 误判为缺失。
 完整的打包检查、安装验证、业务验收仍需分别通过；准备成功不代表运营准入。
+
+两种安装器实际安装校验完成后，可用
+[`package-delivery.mjs`](../../../tools/windows-runtime/README.md#聚合完整-windows-交付目录)
+与配套 Runtime 聚合完整交付目录。该工具读取来自可信构建记录的安装回执摘要，核对源码、
+发行 profile、Runtime 绑定及安装器字节；输出中文操作说明、发行索引与 `SHA256SUMS`。
+它不会重新执行安装，也不会把开发候选改成已获准运营的发行版。
+
+普通店员安装态专项使用 `pnpm --filter @laundry/edge-agent runtime:staff:win`。
+执行器须先绑定实际安装的 EXE、同源合成 Runtime 和普通权限 Windows 会话，并设置
+`LAUNDRY_WINDOWS_STAFF_ACCEPTANCE=synthetic-isolated`、`LAUNDRY_WINDOWS_INSTALLED_EXE`、
+`LAUNDRY_WINDOWS_RUNTIME_SECRETS_DIR` 与全新绝对路径 `LAUNDRY_WINDOWS_STAFF_EVIDENCE_FILE`。
+该专项验证双人复核创建/重置店员、收衣入口、管理查询与维护入口拒绝，以及旧凭据失效；
+证据仅记录计数与布尔值，不等同于完整权限矩阵。测试枚举和静态检查不能替代实机执行。
