@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import test from "node:test";
-import { launchCommander } from "./lifecycle-acceptance-command.mjs";
+import { launchCommander, storeAcceptanceFailure } from "./lifecycle-acceptance-command.mjs";
 import { syntheticStoreInput } from "./store-initialization-acceptance.mjs";
 
 function fixture(reply) {
@@ -119,4 +119,90 @@ test("stdin transport failure cannot be reported as successful initialization", 
   });
   for (const value of [...Object.values(input.admin), ...Object.values(input.approver)])
     assert.equal(JSON.stringify(test.logs).includes(value), false);
+});
+
+test("failed initialization preserves only bounded public producer diagnostics and the primary code", () => {
+  const js = {
+    code: "ENOENT",
+    cause_code: null,
+    message_code: null,
+    frames: ["lifecycle-release.mjs:78:4"],
+  };
+  const native = {
+    code: "PathNotFound,Microsoft.PowerShell.Commands.GetItemCommand",
+    frames: ["lifecycle-host.ps1:115"],
+  };
+  const original = Object.assign(new Error("Command failed: C:\\private-user\\runtime.ps1"), {
+    stdout: "private-output",
+    stderr: [
+      "unstructured-private-message",
+      `WINDOWS_COMPANION_DIAGNOSTIC ${JSON.stringify(native)}`,
+      `WINDOWS_COMPANION_DIAGNOSTIC ${JSON.stringify(js)}`,
+      "WINDOWS_COMPANION_RELEASE_STAGE_FAILED",
+      "",
+    ].join("\n"),
+  });
+  const result = storeAcceptanceFailure(original);
+  assert.equal(result.message, "WINDOWS_COMPANION_RELEASE_STAGE_FAILED");
+  assert.equal(result.cause, undefined);
+  assert.equal(result.stdout, undefined);
+  assert.equal(
+    result.stderr,
+    [
+      `WINDOWS_COMPANION_DIAGNOSTIC ${JSON.stringify(native)}`,
+      `WINDOWS_COMPANION_DIAGNOSTIC ${JSON.stringify(js)}`,
+      result.message,
+    ].join("\n"),
+  );
+  assert.equal(JSON.stringify(result).includes("private"), false);
+  const primary = storeAcceptanceFailure({
+    ...original,
+    message: "WINDOWS_COMPANION_PRIMARY_FAILED",
+  });
+  assert.equal(primary.message, "WINDOWS_COMPANION_PRIMARY_FAILED");
+});
+
+test("diagnostic rejection excludes unknown fields, arbitrary text, absolute frames and oversized records", () => {
+  const valid = {
+    code: "ENOENT",
+    cause_code: null,
+    message_code: null,
+    frames: ["lifecycle.mjs:1:2"],
+  };
+  const rejected = [
+    null,
+    [],
+    { ...valid, private: "must-not-publish" },
+    { ...valid, code: "arbitrary private message" },
+    { ...valid, cause_code: { message: "private" } },
+    { ...valid, frames: ["C:\\private-user\\lifecycle.mjs:1:2"] },
+    { ...valid, frames: ["/private-user/lifecycle.mjs:1:2"] },
+    { ...valid, frames: ["other-module.mjs:1:2"] },
+    { ...valid, frames: Array(6).fill("lifecycle.mjs:1:2") },
+    { code: "E".repeat(121), frames: ["lifecycle-host.ps1:1"] },
+    { ...valid, code: "E".repeat(2050) },
+  ];
+  const lines = rejected.map((value) => `WINDOWS_COMPANION_DIAGNOSTIC ${JSON.stringify(value)}`);
+  lines.push("WINDOWS_COMPANION_DIAGNOSTIC {invalid-json}");
+  const result = storeAcceptanceFailure({ message: "raw-private", stderr: lines.join("\n") });
+  assert.equal(result.stderr, "WINDOWS_COMPANION_STORE_ACCEPTANCE_FAILED");
+  assert.equal(storeAcceptanceFailure({ stderr: "x".repeat(65537) }).stderr, result.stderr);
+  const many = Array(20)
+    .fill(`WINDOWS_COMPANION_DIAGNOSTIC ${JSON.stringify(valid)}`)
+    .join("\n");
+  assert.equal(storeAcceptanceFailure({ stderr: many }).stderr.split("\n").length, 9);
+});
+
+test("raw and JSON-escaped input secrets never enter reconstructed diagnostics", () => {
+  const secret = "qa-private-owner";
+  for (const value of [
+    { message: secret },
+    { stdout: secret },
+    { stderr: secret },
+    { stderr: 'WINDOWS_COMPANION_DIAGNOSTIC {"code":"qa-\\u0070rivate-owner","frames":[]}' },
+  ]) {
+    assert.throws(() => storeAcceptanceFailure(value, [secret]), {
+      message: "WINDOWS_COMPANION_STORE_ACCEPTANCE_SECRET_OUTPUT",
+    });
+  }
 });

@@ -27,6 +27,7 @@ test("keeps browser and Electron acceptance sources inside canonical quality gat
     "playwright.electron.windows-offline.config.ts",
     "playwright.electron.windows-package.config.ts",
     "playwright.electron.windows-runtime.config.ts",
+    "playwright.electron.windows-staff.config.ts",
     "playwright.electron.config.ts",
   ]);
   assert.equal(webPackage.scripts.lint, "eslint . --ext .ts,.tsx,.mjs --max-warnings=0");

@@ -4,6 +4,7 @@ import { lstat, open, readFile, readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { storeAcceptanceFailure } from "./lifecycle-acceptance-command.mjs";
 
 function requireResult(condition, code) {
   if (!condition) throw new Error(`WINDOWS_COMPANION_STORE_ACCEPTANCE_${code}`);
@@ -293,10 +294,7 @@ export async function storeInitializationAcceptance(context, dependencies = {}) 
     );
     return beforeSecrets;
   } catch (error) {
-    const code = /^WINDOWS_COMPANION_[A-Z_]+$/u.test(error.message)
-      ? error.message
-      : "WINDOWS_COMPANION_STORE_ACCEPTANCE_FAILED";
-    throw new Error(code);
+    throw storeAcceptanceFailure(error, [input.admin, input.approver].flatMap(Object.values));
   } finally {
     input = null;
   }

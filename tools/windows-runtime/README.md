@@ -35,6 +35,66 @@ payload 包含同一 Server、原生依赖、Win32 helper、该源码的完整�
 `manifest_sha256`，必须通过可信的构建记录单独传递。清单内的自报摘要不能替代外部预期摘要。
 检查器验证的是包的完整性，不是发布者签名或安装授权。
 
+## 聚合完整 Windows 交付目录
+
+`package-delivery.mjs` 将同源 Runtime 中文入口和完整 payload、generic/hongfa 两种 NSIS、
+已安装文件校验回执及中文安装/升级/恢复说明聚合到一个全新目录。它不执行待分发二进制，
+也不重新运行安装验收；所有结果仍为 `development_only`。
+
+先从可信构建记录取得固定源码 SHA、Runtime manifest SHA、`release-evidence.json` SHA，
+以及两份 `counter-installed-<profile>.json` 的 SHA。这两份回执由
+`apps/edge-agent/scripts/ci-install-windows.ps1` 生成，现有 Windows Counter CI artifact 已上传。
+不要从待验目录的自报清单直接接受来源身份；外部摘要来自受信构建/CI 传递链，不是数字签名。
+
+建立一个本地输入 JSON（所有路径必须为绝对路径；不复制此输入文件到交付物）：
+
+```json
+{
+  "schema": "laundry.windows.delivery-input",
+  "version": 1,
+  "source_git_sha": "<40-hex-sha>",
+  "runtime_entry": {
+    "directory": "C:\\delivery-input\\laundry-runtime-operator-entry",
+    "evidence_sha256": "<external-64-hex>",
+    "manifest_sha256": "<external-64-hex>"
+  },
+  "counters": {
+    "generic": {
+      "installer": "C:\\delivery-input\\generic.exe",
+      "installed_report": "C:\\delivery-input\\counter-installed-generic.json",
+      "report_sha256": "<external-64-hex>"
+    },
+    "hongfa": {
+      "installer": "C:\\delivery-input\\hongfa.exe",
+      "installed_report": "C:\\delivery-input\\counter-installed-hongfa.json",
+      "report_sha256": "<external-64-hex>"
+    }
+  }
+}
+```
+
+```powershell
+node.exe tools/windows-runtime/package-delivery.mjs --input C:\delivery-input\input.json --output C:\delivery\laundry-v2-candidate
+```
+
+工具核对 Runtime 全量文件、入口与辅助文件、Counter 的安装器字节、源码/profile/Runtime 配对。
+报告含未知字段、Runtime 多余文件/空目录、路径别名/链接、跨源码混配、摘要不符或输出已存在均拒绝。
+输出清单仅由获准输入与本工具生成的固定字节构成；写索引、写校验单和返回前均核对封闭库存，
+不会把输出目录中并发加入的文件或目录纳入新清单。
+回执证明的是安装时的文件配对；它不替代业务、IME、离机恢复或运营准入证据。
+
+目录内 `delivery-index.json` 记录发行身份与逐文件摘要；`SHA256SUMS` 另包含发行索引摘要，
+校验单自身不自包含。CLI 返回索引与校验单 SHA，应单独保存在可信交付记录中。
+需要 ZIP 时，对完整目录执行一次压缩并把 ZIP 摘要另行交付，例如：
+
+```powershell
+Compress-Archive -LiteralPath C:\delivery\laundry-v2-candidate -DestinationPath C:\delivery\laundry-v2-candidate.zip
+Get-FileHash -LiteralPath C:\delivery\laundry-v2-candidate.zip -Algorithm SHA256
+```
+
+压缩包不是额外的验收结论。分发前应解压到新目录并核对全部 `SHA256SUMS`；用户在运行任何
+入口前先核对从可信渠道取得的 ZIP 或发行索引摘要。交付目录不附带数据库、私人凭据或用户状态。
+
 ## 中文安装与维护入口
 
 在同一可信构建记录上，为完整 payload 生成独立入口：

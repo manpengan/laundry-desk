@@ -199,6 +199,45 @@ test("missing commissioning, false success and raw private failures never produc
   }
 });
 
+test("initialization exec failure reaches the harness as sanitized diagnostics without a passed scenario", async (t) => {
+  const diagnostic =
+    'WINDOWS_COMPANION_DIAGNOSTIC {"code":"ENOENT","cause_code":null,"message_code":null,"frames":["lifecycle-release.mjs:78:4"]}';
+  const { context, reports } = await fixture(t, {
+    command: async () => {
+      throw Object.assign(new Error("Command failed: C:\\private-user\\launcher.ps1"), {
+        stdout: "raw-private-output",
+        stderr: `${diagnostic}\nWINDOWS_COMPANION_RELEASE_STAGE_FAILED\n`,
+      });
+    },
+  });
+  await assert.rejects(storeInitializationAcceptance(context), (error) => {
+    assert.equal(error.message, "WINDOWS_COMPANION_RELEASE_STAGE_FAILED");
+    assert.equal(error.stderr, `${diagnostic}\n${error.message}`);
+    assert.equal(error.cause, undefined);
+    assert.equal(error.stdout, undefined);
+    assert.equal(JSON.stringify(error).includes("private"), false);
+    return true;
+  });
+  assert.deepEqual(reports, []);
+});
+
+test("initialization rejects escaped input identities even inside an otherwise valid diagnostic", async (t) => {
+  const { context, reports } = await fixture(t, {
+    command: async (_action, _source, _sha, input) => {
+      const escaped = [...input.admin.username]
+        .map((char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`)
+        .join("");
+      throw Object.assign(new Error("Command failed"), {
+        stderr: `WINDOWS_COMPANION_DIAGNOSTIC {"code":"${escaped}","frames":[]}`,
+      });
+    },
+  });
+  await assert.rejects(storeInitializationAcceptance(context), {
+    message: "WINDOWS_COMPANION_STORE_ACCEPTANCE_SECRET_OUTPUT",
+  });
+  assert.deepEqual(reports, []);
+});
+
 test("a refused reinstall cannot alter state, runtime secret contents or names, or the existing SQL probe", async (t) => {
   for (const mutation of ["state", "secret", "secret-name", "probe"]) {
     const { context, reports } = await fixture(t);
