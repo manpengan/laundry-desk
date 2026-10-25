@@ -21,7 +21,7 @@ pnpm.cmd --filter @laundry/edge-agent package:inspect:win
 pnpm.cmd --filter @laundry/edge-agent electron:prepare:win
 ```
 
-Electron 42.11.9 的 npm 包提供 `install-electron` 命令，但没有 postinstall。
+Electron 42 的 npm 包提供 `install-electron` 命令，但没有 postinstall。
 `pnpm install --frozen-lockfile` 与 `pnpm rebuild electron` 本身不会创建缺失的 Electron binary；
 不能据此认定 Counter 的构建输入已齐全。
 

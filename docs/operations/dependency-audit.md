@@ -13,11 +13,23 @@ high、low，或未经复审的 moderate 都会失败；本地安全补丁必须
 production/dev 属性。路径、版本或可达性发生变化时，门禁同样失败，不能用宽泛的包名或
 severity 忽略规则放行。
 
-当前安全版本线为 Electron `42.11.9`、Electron-Vite `4.0.1`、根 Vite `7.3.7`、Web
+当前安全版本线为 Electron `42.11.18`、Zod `4.6.7`、Electron-Vite `4.0.1`、根 Vite `7.3.7`、Web
 Vite `6.4.4`、React Router DOM `7.18.2` 与 PostCSS `8.5.23`。Electron-Vite 4/Vite 7
 要求 Node `>=22.12`，仓库 engine 与 CI 的 Node 22 最新补丁线必须满足该下限。传递依赖
-通过同主版本 override 固定到 `undici@6.28.1/7.29.1`、`fast-uri@3.1.8/4.1.5`、
+通过同主版本 override 固定到 `undici@6.29.1/7.30.1`、`fast-uri@3.1.9/4.2.3`、
 `brace-expansion@1.1.21/2.1.7/5.0.12`、`js-yaml@4.3.2`、`nanoid@3.3.18`。
+
+## 2026-10-25 新增公告修复
+
+main `e26a2191` 的 workspace-check 与 real-postgres 因新公告失败（`GHSA-mrhx-c7xc-m3w5`）。同时 registry 新增：
+Zod `<4.6.6` 校验超大受约束集合可耗尽内存（HIGH，生产依赖）、Electron `<42.11.16` 的 eMudhra 中间证书缓解
+（`GHSA-jr5w-w6x2-84p9`，HIGH）、undici EventSource/内容编码拒绝服务与 SRI 绕过（含 HIGH，构建工具链）、
+fast-uri 多项 URI 解析问题（`@fastify/*` 与构建工具链）。处理：
+
+- 所有 Zod 声明统一到 `4.6.7`；根与 Edge Agent 的 Electron 升到 `42.11.18`。
+- 沿用既有同主版本 override，把 undici 升到 `6.29.1/7.30.1`、fast-uri 升到 `3.1.9/4.2.3`；不新增例外。
+- Zod 4.6 的 ISO 日期时间要求包含秒（4.4 允许 `HH:MM`），OpenAPI 快照随之更新，另有两处等价的 JSON Schema 写法变化。
+  客户端与服务端产生的时间均经 `toISOString()` 或带秒格式化，现有调用不受影响。
 
 ## 2026-10-23 全面审查依赖修复
 
